@@ -1,5 +1,5 @@
 #include <windows.h>
-#include <windowsx.h> // Required for mouse coordinate macros
+#include <windowsx.h>
 #include "AppState.h"
 #include "FileHandler.h"
 #include "WicDecoder.h"
@@ -11,6 +11,7 @@ AppState g_app;
 
 LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) {
     switch (message) {
+
         case WM_KEYDOWN: {
             bool shift = (GetKeyState(VK_SHIFT)   & 0x8000) != 0;
             bool ctrl  = (GetKeyState(VK_CONTROL) & 0x8000) != 0;
@@ -60,7 +61,7 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) 
                 return 0;
             }
 
-            // Image navigation
+            // Navigation + zoom
             if (!g_app.playlist.empty()) {
                 switch (wParam) {
                     case VK_LEFT:
@@ -78,18 +79,18 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) 
                             LoadImageIndex(hWnd, (g_app.currentIndex + 1) % g_app.playlist.size());
                         InvalidateRect(hWnd, nullptr, FALSE);
                         break;
-                    case VK_ADD:      // numpad +
-                    case VK_OEM_PLUS: // normal +/=
+                    case VK_ADD:
+                    case VK_OEM_PLUS:
                         g_app.viewport.zoom *= 1.1f;
                         InvalidateRect(hWnd, nullptr, FALSE);
                         break;
-                    case VK_SUBTRACT: // numpad -
-                    case VK_OEM_MINUS: // normal -
+                    case VK_SUBTRACT:
+                    case VK_OEM_MINUS:
                         g_app.viewport.zoom *= 0.9f;
                         InvalidateRect(hWnd, nullptr, FALSE);
                         break;
-                    case VK_NUMPAD0:  // numpad 0
-                    case '0':         // normal 0
+                    case VK_NUMPAD0:
+                    case '0':
                         g_app.viewport.zoom    = 1.0f;
                         g_app.viewport.offsetX = 0.0f;
                         g_app.viewport.offsetY = 0.0f;
@@ -104,7 +105,6 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) 
             return TRUE;
 
         case WM_NCHITTEST: {
-            // No resize in fullscreen
             if (g_app.isFullscreen) return HTCLIENT;
 
             POINT pt = { GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam) };
@@ -146,26 +146,52 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) 
             InvalidateRect(hWnd, nullptr, FALSE);
             return 0;
         }
-        case WM_MBUTTONDOWN:
-            g_app.viewport.zoom    = 1.0f;
-            g_app.viewport.offsetX = 0.0f;
-            g_app.viewport.offsetY = 0.0f;
+
+        // Left click: 2x zoom + pan while held, restore all on release
+        case WM_LBUTTONDOWN:
+            SetCursor(NULL);
+            g_app.savedZoom    = g_app.viewport.zoom;
+            g_app.savedOffsetX = g_app.viewport.offsetX;
+            g_app.savedOffsetY = g_app.viewport.offsetY;
+            g_app.viewport.zoom *= 2.0f;
+            g_app.viewport.lastMouse = { GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam) };
+            g_app.viewport.isDragging = true;
+            SetCapture(hWnd);
             InvalidateRect(hWnd, nullptr, FALSE);
             return 0;
 
-        case WM_LBUTTONDOWN:
-            g_app.viewport.isDragging = true;
-            g_app.viewport.lastMouse = { GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam) };
+        case WM_LBUTTONUP:
+            SetCursor(LoadCursor(nullptr, IDC_ARROW));
+            g_app.viewport.zoom    = g_app.savedZoom;
+            g_app.viewport.offsetX = g_app.savedOffsetX;
+            g_app.viewport.offsetY = g_app.savedOffsetY;
+            g_app.viewport.isDragging = false;
+            ReleaseCapture();
+            InvalidateRect(hWnd, nullptr, FALSE);
+            return 0;
+
+        // Middle mouse: pan on drag, reset zoom on click
+        case WM_MBUTTONDOWN:
+            g_app.isMidDragging = true;
+            g_app.hasMidMoved   = false;
+            g_app.lastMidMouse  = { GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam) };
             SetCapture(hWnd);
             return 0;
 
-        case WM_LBUTTONUP:
-            g_app.viewport.isDragging = false;
+        case WM_MBUTTONUP:
+            if (!g_app.hasMidMoved) {
+                g_app.viewport.zoom    = 1.0f;
+                g_app.viewport.offsetX = 0.0f;
+                g_app.viewport.offsetY = 0.0f;
+                InvalidateRect(hWnd, nullptr, FALSE);
+            }
+            g_app.isMidDragging = false;
+            g_app.hasMidMoved   = false;
             ReleaseCapture();
             return 0;
 
+        // Right mouse: window drag (disabled in fullscreen)
         case WM_RBUTTONDOWN: {
-            // No window drag in fullscreen
             if (g_app.isFullscreen) return 0;
             g_app.isWindowDragging = true;
             POINT pt = { GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam) };
@@ -181,7 +207,7 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) 
             return 0;
 
         case WM_MOUSEMOVE: {
-            // 1. Viewport Panning (LMB)
+            // 1. Left mouse pan (while 2x zoom held)
             if (g_app.viewport.isDragging) {
                 POINT curMouse = { GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam) };
                 g_app.viewport.offsetX += (curMouse.x - g_app.viewport.lastMouse.x);
@@ -189,7 +215,16 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) 
                 g_app.viewport.lastMouse = curMouse;
                 InvalidateRect(hWnd, nullptr, FALSE);
             }
-            // 2. Window Moving (RMB)
+            // 2. Middle mouse pan
+            else if (g_app.isMidDragging) {
+                POINT curMouse = { GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam) };
+                g_app.hasMidMoved = true;
+                g_app.viewport.offsetX += (curMouse.x - g_app.lastMidMouse.x);
+                g_app.viewport.offsetY += (curMouse.y - g_app.lastMidMouse.y);
+                g_app.lastMidMouse = curMouse;
+                InvalidateRect(hWnd, nullptr, FALSE);
+            }
+            // 3. Right mouse window move
             else if (g_app.isWindowDragging) {
                 POINT curMouse = { GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam) };
                 ClientToScreen(hWnd, &curMouse);
