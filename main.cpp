@@ -1,26 +1,71 @@
 #include <windows.h>
 #include <windowsx.h>
+#include <dwmapi.h>
+#include <shellapi.h> // <-- Added for command line parsing
+#include <string>     // <-- Added for wstring
+#include "HelpWindow.h"
 #include "AppState.h"
 #include "FileHandler.h"
 #include "WicDecoder.h"
 #include "Renderer.h"
 #include "DpiAwareInit.h"
-#include <dwmapi.h>
 #include "Constants.h"
 #include "resources/resource.h"
+#include "RegistrySetup.h"
 
 AppState g_app;
 
 LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) {
     switch (message) {
 
+        case WM_COPYDATA: {
+            COPYDATASTRUCT* cds = (COPYDATASTRUCT*)lParam;
+            if (cds->dwData == 1) { // 1 is our custom ID for "Load this image"
+                LPCWSTR filePath = (LPCWSTR)cds->lpData;
+
+                // --- 1. LOAD THE NEW IMAGE ---
+                OpenSpecificImage(hWnd, filePath);
+
+
+                // --- 2. WAKE UP & CENTER ---
+                g_app.viewport.zoom    = 1.0f;
+                g_app.viewport.offsetX = 0.0f;
+                g_app.viewport.offsetY = 0.0f;
+
+                ShowWindow(hWnd, SW_RESTORE);
+                SetForegroundWindow(hWnd); // Bring to front
+                InvalidateRect(hWnd, nullptr, FALSE);
+            }
+            return TRUE;
+        }
+
         case WM_KEYDOWN: {
             bool shift = (GetKeyState(VK_SHIFT)   & 0x8000) != 0;
             bool ctrl  = (GetKeyState(VK_CONTROL) & 0x8000) != 0;
 
-            // Quit
-            if (wParam == VK_ESCAPE || (wParam == 'W' && ctrl)) {
+            // True Hard Quit (Ctrl + Q) to flush from RAM completely
+            if (wParam == 'Q' && ctrl) {
                 PostQuitMessage(0);
+                return 0;
+            }
+            if (wParam == VK_F1) {
+                UI::ToggleHelpWindow();
+                return 0;
+            }
+            // Hide to RAM instead of quitting (Esc or Ctrl + W)
+            if (wParam == VK_ESCAPE || (wParam == 'W' && ctrl)) {
+                ShowWindow(hWnd, SW_HIDE);
+                return 0;
+            }
+
+            // Open a New Blank Window (Ctrl + N)
+            if (wParam == 'N' && ctrl) {
+                wchar_t exePath[MAX_PATH];
+                GetModuleFileNameW(nullptr, exePath, MAX_PATH);
+
+                SetEnvironmentVariableW(L"QIV_NEW_INSTANCE", L"1");
+                ShellExecuteW(nullptr, L"open", exePath, nullptr, nullptr, SW_SHOW);
+                SetEnvironmentVariableW(L"QIV_NEW_INSTANCE", nullptr);
                 return 0;
             }
 
@@ -151,8 +196,6 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) 
             return 0;
         }
 
-        // Left click: 2x zoom + pan while held, restore all on release
-            // Left mouse: window drag (disabled in fullscreen)
         case WM_LBUTTONDOWN: {
             if (g_app.isFullscreen) return 0;
             g_app.isWindowDragging = true;
@@ -179,7 +222,6 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) 
         }
 
         case WM_MBUTTONUP: {
-            // If it was just a click without dragging, restore and center
             if (!g_app.hasMidMoved) {
                 g_app.viewport.zoom    = 1.0f;
                 g_app.viewport.offsetX = 0.0f;
@@ -190,11 +232,9 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) 
                     int winW = MulDiv(Config::BASE_WIDTH, dpi, 96);
                     int winH = MulDiv(Config::BASE_HEIGHT, dpi, 96);
 
-                    // Get current monitor to ensure it centers on the correct screen
                     MONITORINFO mi = { sizeof(mi) };
                     GetMonitorInfo(MonitorFromWindow(hWnd, MONITOR_DEFAULTTONEAREST), &mi);
 
-                    // Center within the monitor's work area
                     int posX = mi.rcWork.left + ((mi.rcWork.right - mi.rcWork.left) - winW) / 2;
                     int posY = mi.rcWork.top + ((mi.rcWork.bottom - mi.rcWork.top) - winH) / 2;
 
@@ -209,7 +249,7 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) 
             ReleaseCapture();
             return 0;
         }
-            // Right click: 2x zoom + pan while held, restore all on release
+
         case WM_RBUTTONDOWN:
             SetCursor(NULL);
             g_app.savedZoom    = g_app.viewport.zoom;
@@ -233,14 +273,12 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) 
             return 0;
 
         case WM_MOUSEMOVE: {
-            // 1. Left mouse pan (while 2x zoom held)
             if (g_app.viewport.isDragging) {
                 POINT curMouse = { GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam) };
                 g_app.viewport.offsetX -= (curMouse.x - g_app.viewport.lastMouse.x);
                 g_app.viewport.offsetY -= (curMouse.y - g_app.viewport.lastMouse.y);
                 g_app.viewport.lastMouse = curMouse;
 
-                // Clamp to image bounds
                 RECT rc;
                 GetClientRect(hWnd, &rc);
                 float winW = (float)(rc.right  - rc.left);
@@ -258,7 +296,6 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) 
 
                 InvalidateRect(hWnd, nullptr, FALSE);
             }
-            // 2. Middle mouse window resize
             else if (g_app.isMidDragging) {
                 POINT curMouse = { GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam) };
                 ClientToScreen(hWnd, &curMouse);
@@ -280,7 +317,6 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) 
                 g_app.lastMidMouse = curMouse;
                 InvalidateRect(hWnd, nullptr, FALSE);
             }
-            // 3. Right mouse window move
             else if (g_app.isWindowDragging) {
                 POINT curMouse = { GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam) };
                 ClientToScreen(hWnd, &curMouse);
@@ -316,6 +352,11 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) 
         case WM_ERASEBKGND:
             return 1;
 
+        case WM_CLOSE:
+            // Intercept the Top-Right 'X' button. Hide instead of destroy.
+            ShowWindow(hWnd, SW_HIDE);
+            return 0;
+
         case WM_DESTROY:
             PostQuitMessage(0);
             return 0;
@@ -334,23 +375,89 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE, LPSTR, int nCmdShow) {
     CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED | COINIT_DISABLE_OLE1DDE);
     CoCreateInstance(CLSID_WICImagingFactory, nullptr, CLSCTX_INPROC_SERVER, IID_PPV_ARGS(&g_app.wicFactory));
 
+    // Check registry and auto-start rules
+    System::RegisterAppForOpenWith();
+    System::EnableRunOnStartup();
+
+    // --- SINGLE INSTANCE & RAM RESIDENT LOGIC ---
+    bool bypassMutex = (GetAsyncKeyState(VK_SHIFT) & 0x8000) != 0;
+    if (GetEnvironmentVariableW(L"QIV_NEW_INSTANCE", nullptr, 0) > 0) {
+        bypassMutex = true;
+    }
+
+    std::wstring mutexName = L"QuickImageViewer_SingleInstanceMutex";
+    if (bypassMutex) {
+        // Randomize Mutex to force Windows to spawn a new memory instance
+        mutexName += std::to_wstring(GetTickCount());
+    }
+
+    HANDLE hMutex = CreateMutexW(NULL, TRUE, mutexName.c_str());
+    if (GetLastError() == ERROR_ALREADY_EXISTS) {
+        // App is already running in RAM. Pass the file to it.
+        HWND hExistingWnd = FindWindowW(L"FastStoneCloneWIC", nullptr);
+        if (hExistingWnd) {
+            int argc;
+            LPWSTR* argv = CommandLineToArgvW(GetCommandLineW(), &argc);
+            if (argc > 1) {
+                COPYDATASTRUCT cds;
+                cds.dwData = 1;
+                cds.cbData = (wcslen(argv[1]) + 1) * sizeof(wchar_t);
+                cds.lpData = (PVOID)argv[1];
+                SendMessageW(hExistingWnd, WM_COPYDATA, (WPARAM)NULL, (LPARAM)&cds);
+            }
+            LocalFree(argv);
+        }
+        ReleaseMutex(hMutex);
+        return 0; // Close this duplicate process instantly
+    }
+    // --------------------------------------------
+
     WNDCLASSW wc{ 0 };
     wc.lpfnWndProc = WndProc;
     wc.hInstance = hInstance;
     wc.lpszClassName = L"FastStoneCloneWIC";
     wc.hCursor = LoadCursor(nullptr, IDC_ARROW);
-    wc.hIcon = LoadIcon(hInstance, MAKEINTRESOURCE(IDI_APP_ICON));  //resources icon
+    wc.hIcon = LoadIcon(hInstance, MAKEINTRESOURCE(IDI_APP_ICON));
     RegisterClassW(&wc);
 
     HWND hWnd = CreateViewerWindow(hInstance, wc.lpszClassName);
-
-    // Apply DWM style before showing to avoid Win8 border flash
+    UI::InitHelpWindow(hInstance, hWnd);
     DWORD corner = 2; // DWMWCP_ROUND
     DwmSetWindowAttribute(hWnd, 33, &corner, sizeof(corner));
 
-    ShowWindow(hWnd, nCmdShow);
-    UpdateWindow(hWnd);
-    OpenInitialImage(hWnd);
+    // --- CHECK FOR STARTUP FLAGS & HANDLE SHOWING ---
+    bool startHidden = false;
+    bool hasImage = false;
+
+    int argc;
+    LPWSTR* argv = CommandLineToArgvW(GetCommandLineW(), &argc);
+    if (argc > 1) {
+        std::wstring firstArg = argv[1];
+        if (firstArg == L"-background") {
+            startHidden = true; // Windows booted us in the background
+        } else {
+            hasImage = true;    // Windows passed us a file via Open With
+        }
+    }
+
+    if (startHidden) {
+        // Hide in RAM instantly, wait for a WM_COPYDATA message
+        ShowWindow(hWnd, SW_HIDE);
+    } else {
+        // Normal launch
+        ShowWindow(hWnd, nCmdShow);
+        UpdateWindow(hWnd);
+
+        if (hasImage) {
+            OpenSpecificImage(hWnd, argv[1]);
+            // Example: OpenSpecificImage(hWnd, argv[1]);
+        } else {
+            // Double clicked the raw .exe, open the initial dialog/folder
+            OpenInitialImage(hWnd);
+        }
+    }
+    LocalFree(argv);
+    // ------------------------------------------------
 
     MSG msg{};
     while (GetMessage(&msg, nullptr, 0, 0)) {
