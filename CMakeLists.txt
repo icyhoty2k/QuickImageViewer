@@ -11,16 +11,20 @@ add_executable(QuickImageViewer WIN32
         FileHandler.cpp
         WicDecoder.cpp
         Renderer.cpp
+        RegistrySetup.cpp
         AppState.h
         FileHandler.h
         WicDecoder.h
         Renderer.h
+        RegistrySetup.h
         app.manifest
         DpiAwareInit.cpp
         DpiAwareInit.h
         Constants.h
         resources/resource.h
         resources/resource.rc
+        HelpWindow.cpp
+        HelpWindow.h
 
 )
 
@@ -32,4 +36,6 @@ target_link_libraries(QuickImageViewer PRIVATE
         windowscodecs
         gdi32
         dwmapi
+        advapi32  # <-- ADD THIS (For Registry editing)
+        shell32   # <-- ADD THIS (For telling Windows to refresh)
 )
