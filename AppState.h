@@ -8,6 +8,7 @@
 #include <memory>
 
 struct ViewportState {
+
     float zoom    = 1.0f;
     float offsetX = 0.0f;
     float offsetY = 0.0f;
@@ -19,6 +20,9 @@ struct AppState {
     Microsoft::WRL::ComPtr<IWICImagingFactory> wicFactory;
     std::unique_ptr<IImageRenderer> renderer;
     HBITMAP hDIB = nullptr;
+    float dpiScale = 1.0f;
+    int screenW = 0;
+    int screenH = 0;
     int imgWidth  = 0;
     int imgHeight = 0;
     std::vector<std::wstring> playlist;
