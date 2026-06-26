@@ -372,13 +372,19 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) 
         case WM_ERASEBKGND:
             return 1;
 
-        case WM_CLOSE:
+        case WM_CLOSE: {
+            // Force exit if a debugger is attached, or if we are in Debug build
+            if (IsDebuggerPresent()) {
+                PostQuitMessage(0);
+            } else {
 #ifdef DEBUG_BUILD
-            DestroyWindow(hWnd);
+                PostQuitMessage(0);
 #else
-            ShowWindow(hWnd, SW_HIDE);
+                ShowWindow(hWnd, SW_HIDE);
 #endif
+            }
             return 0;
+        }
 
         case WM_DESTROY:
             PostQuitMessage(0);
@@ -438,7 +444,15 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE, LPSTR, int nCmdShow) {
         g_app.renderer = std::make_unique<RendererGDI>();
         g_app.renderer->Initialize(hWnd);
     }
-
+    // --- ADD THE DEBUG CHECK HERE ---
+    if (g_app.renderer) {
+        if (dynamic_cast<RendererD2D*>(g_app.renderer.get())) {
+            OutputDebugStringW(L"RENDERER: Using Direct2D (GPU Acceleration Active)\n");
+        } else {
+            OutputDebugStringW(L"RENDERER: Using GDI (Fallback Mode)\n");
+        }
+    }
+    // --------------------------------
     // Register Drag/Drop and Help
     RegisterDragDrop(hWnd, (g_pDropTarget = new DropTarget(hWnd)));
     UI::InitHelpWindow(hInstance, hWnd);
@@ -452,14 +466,33 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE, LPSTR, int nCmdShow) {
     LocalFree(argv);
 
     MSG msg{};
-    while (GetMessage(&msg, nullptr, 0, 0)) { TranslateMessage(&msg); DispatchMessage(&msg); }
+    while (GetMessage(&msg, nullptr, 0, 0)) {
+        TranslateMessage(&msg);
+        DispatchMessage(&msg);
+    }
 
-    // Cleanup
+    // 11. --- CRITICAL CLEANUP ---
+    // The message loop has exited; this is where we safely destroy
+    // resources before the process fully terminates.
     g_app.renderer.reset();
-    g_app.wicFactory.Reset();
-    RevokeDragDrop(hWnd);
-    if (g_pDropTarget) g_pDropTarget->Release();
-    CoUninitialize();
 
-    return static_cast<int>(msg.wParam);
+    if (g_app.wicFactory) {
+        g_app.wicFactory.Reset();
+    }
+
+    if (g_pDropTarget) {
+        RevokeDragDrop(hWnd);
+        g_pDropTarget->Release();
+        g_pDropTarget = nullptr;
+    }
+
+    DestroyWindow(hWnd);
+
+    // Optional: Unregister the class for total cleanliness
+    UnregisterClassW(L"FastStoneCloneWIC", hInstance);
+
+    CoUninitialize();
+    OleUninitialize();
+
+    return static_cast<int>(msg.wParam); // WinMain concludes here
 }
