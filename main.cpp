@@ -5,6 +5,7 @@
 #include "WicDecoder.h"
 #include "Renderer.h"
 #include "DpiAwareInit.h"
+#include <dwmapi.h>
 
 AppState g_app;
 
@@ -23,11 +24,20 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) 
             RECT rc;
             GetWindowRect(hWnd, &rc);
 
-            const int border = 8; // Resize sensitivity area in pixels
-            if (pt.y < rc.top + border) return HTTOP;
-            if (pt.y >= rc.bottom - border) return HTBOTTOM;
-            if (pt.x < rc.left + border) return HTLEFT;
-            if (pt.x >= rc.right - border) return HTRIGHT;
+            const int border = 8;
+            bool top = pt.y < rc.top + border;
+            bool bottom = pt.y >= rc.bottom - border;
+            bool left = pt.x < rc.left + border;
+            bool right = pt.x >= rc.right - border;
+
+            if (top && left) return HTTOPLEFT;
+            if (top && right) return HTTOPRIGHT;
+            if (bottom && left) return HTBOTTOMLEFT;
+            if (bottom && right) return HTBOTTOMRIGHT;
+            if (top) return HTTOP;
+            if (bottom) return HTBOTTOM;
+            if (left) return HTLEFT;
+            if (right) return HTRIGHT;
 
             return HTCLIENT;
         }
@@ -115,16 +125,28 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) 
             EndPaint(hWnd, &ps);
             return 0;
         }
+        case WM_CREATE: {
+            BOOL value = TRUE;
+            // Enable rounded corners (DWMWA_WINDOW_CORNER_PREFERENCE = 33)
+            DwmSetWindowAttribute(hWnd, 33, &value, sizeof(value));
+            return 0;
+        }
         case WM_NCCALCSIZE: {
             if (wParam == TRUE) {
-                // We expand the client area to cover the entire window rect.
-                // This hides the system-drawn frame/line.
+                // Inflate the rectangle by 1 pixel to allow the DWM compositor
+                // to render the shadow and rounded corners correctly.
                 NCCALCSIZE_PARAMS* pParams = (NCCALCSIZE_PARAMS*)lParam;
-                pParams->rgrc[0] = pParams->rgrc[1];
+                InflateRect(&pParams->rgrc[0], 1, 1);
                 return 0;
             }
             return DefWindowProcW(hWnd, message, wParam, lParam);
         }
+
+        case WM_NCPAINT:
+            return 0; // Prevents the OS from drawing the caption bar
+
+        case WM_ERASEBKGND:
+            return 1; // Prevents flicker
 
         case WM_DESTROY:
             PostQuitMessage(0);
