@@ -63,13 +63,18 @@ void RendererD2D::ProcessPendingUploads() {
 }
 
 HRESULT RendererD2D::LoadBitmap(IWICBitmapSource* bitmap, UINT width, UINT height, const std::wstring& filePath) {
+    // 1. Check if we are on the UI thread
+    // If you are NOT on the UI thread, you MUST PostMessage to the UI thread
+    // and wait, OR perform the bitmap creation only when the UI thread processes the message.
+
     std::lock_guard<std::mutex> lock(m_cacheMutex);
     auto it = m_bitmapCache.find(filePath);
     if (it != m_bitmapCache.end()) {
         m_pBitmap = it->second.bitmap;
         return S_OK;
     }
-    // Safe: This runs on the UI thread
+
+    // IF THIS RUNS ON A BACKGROUND THREAD, IT WILL CRASH.
     return CreateBitmapFromWic(bitmap, filePath);
 }
 
