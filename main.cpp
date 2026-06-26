@@ -374,6 +374,12 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) 
 }
 
 int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE, LPSTR, int nCmdShow) {
+    // 1. Initialize OLE first (Critical for Drag and Drop)
+    HRESULT hr = OleInitialize(nullptr);
+    if (FAILED(hr)) {
+        // Handle error: Could not initialize OLE
+        return 0;
+    }
     typedef BOOL(WINAPI *SETDPI)(DPI_AWARENESS_CONTEXT);
     if (HMODULE hU32 = GetModuleHandleW(L"user32.dll")) {
         if (auto setDpi = reinterpret_cast<SETDPI>(GetProcAddress(hU32, "SetProcessDpiAwarenessContext"))) {
