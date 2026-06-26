@@ -9,7 +9,7 @@
 
 AppState g_app;
 static constexpr float ZOOM_STEP        = 1.1f;  // +/- keys and ctrl+wheel
-static constexpr float ZOOM_LMB         = 2.0f;  // left click zoom multiplier
+static constexpr float ZOOM_LMB         = 3.0f;  // left click zoom multiplier
 
 LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) {
     switch (message) {
@@ -81,14 +81,16 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) 
                             LoadImageIndex(hWnd, (g_app.currentIndex + 1) % g_app.playlist.size());
                         InvalidateRect(hWnd, nullptr, FALSE);
                         break;
+                    case VK_UP:
                     case VK_ADD:
                     case VK_OEM_PLUS:
-                        g_app.viewport.zoom *= 1.1f;
+                        g_app.viewport.zoom *= ZOOM_STEP;
                         InvalidateRect(hWnd, nullptr, FALSE);
                         break;
+                    case VK_DOWN:
                     case VK_SUBTRACT:
                     case VK_OEM_MINUS:
-                        g_app.viewport.zoom *= 0.9f;
+                        g_app.viewport.zoom /= ZOOM_STEP;
                         InvalidateRect(hWnd, nullptr, FALSE);
                         break;
                     case VK_NUMPAD0:
@@ -130,7 +132,7 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) 
 
             return HTCLIENT;
         }
-
+        case WM_SIZE:
         case WM_SIZING:
             InvalidateRect(hWnd, nullptr, FALSE);
             return TRUE;
@@ -139,7 +141,7 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) 
             if (g_app.playlist.empty()) return 0;
             int zDelta = GET_WHEEL_DELTA_WPARAM(wParam);
             if (GET_KEYSTATE_WPARAM(wParam) & MK_CONTROL) {
-                g_app.viewport.zoom *= (zDelta > 0) ? 1.1f : 0.9f;
+                g_app.viewport.zoom *= (zDelta > 0) ? ZOOM_STEP : (1.0f / ZOOM_STEP);
             } else {
                 int step = (zDelta < 0) ? 1 : -1;
                 int newIdx = (g_app.currentIndex + step + g_app.playlist.size()) % g_app.playlist.size();
@@ -150,50 +152,8 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) 
         }
 
         // Left click: 2x zoom + pan while held, restore all on release
-        case WM_LBUTTONDOWN:
-            SetCursor(NULL);
-            g_app.savedZoom    = g_app.viewport.zoom;
-            g_app.savedOffsetX = g_app.viewport.offsetX;
-            g_app.savedOffsetY = g_app.viewport.offsetY;
-            g_app.viewport.zoom *= 2.0f;
-            g_app.viewport.lastMouse = { GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam) };
-            g_app.viewport.isDragging = true;
-            SetCapture(hWnd);
-            InvalidateRect(hWnd, nullptr, FALSE);
-            return 0;
-
-        case WM_LBUTTONUP:
-            SetCursor(LoadCursor(nullptr, IDC_ARROW));
-            g_app.viewport.zoom    = g_app.savedZoom;
-            g_app.viewport.offsetX = g_app.savedOffsetX;
-            g_app.viewport.offsetY = g_app.savedOffsetY;
-            g_app.viewport.isDragging = false;
-            ReleaseCapture();
-            InvalidateRect(hWnd, nullptr, FALSE);
-            return 0;
-
-        // Middle mouse: pan on drag, reset zoom on click
-        case WM_MBUTTONDOWN:
-            g_app.isMidDragging = true;
-            g_app.hasMidMoved   = false;
-            g_app.lastMidMouse  = { GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam) };
-            SetCapture(hWnd);
-            return 0;
-
-        case WM_MBUTTONUP:
-            if (!g_app.hasMidMoved) {
-                g_app.viewport.zoom    = 1.0f;
-                g_app.viewport.offsetX = 0.0f;
-                g_app.viewport.offsetY = 0.0f;
-                InvalidateRect(hWnd, nullptr, FALSE);
-            }
-            g_app.isMidDragging = false;
-            g_app.hasMidMoved   = false;
-            ReleaseCapture();
-            return 0;
-
-        // Right mouse: window drag (disabled in fullscreen)
-        case WM_RBUTTONDOWN: {
+            // Left mouse: window drag (disabled in fullscreen)
+        case WM_LBUTTONDOWN: {
             if (g_app.isFullscreen) return 0;
             g_app.isWindowDragging = true;
             POINT pt = { GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam) };
@@ -203,9 +163,73 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) 
             return 0;
         }
 
-        case WM_RBUTTONUP:
+        case WM_LBUTTONUP:
             g_app.isWindowDragging = false;
             ReleaseCapture();
+            return 0;
+
+        case WM_MBUTTONDOWN: {
+            g_app.isMidDragging = true;
+            g_app.hasMidMoved   = false;
+            POINT pt = { GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam) };
+            ClientToScreen(hWnd, &pt);
+            g_app.lastMidMouse  = pt;
+            SetCapture(hWnd);
+            return 0;
+        }
+
+        case WM_MBUTTONUP: {
+            // If it was just a click without dragging, restore and center
+            if (!g_app.hasMidMoved) {
+                g_app.viewport.zoom    = 1.0f;
+                g_app.viewport.offsetX = 0.0f;
+                g_app.viewport.offsetY = 0.0f;
+
+                if (!g_app.isFullscreen) {
+                    UINT dpi = GetDpiForWindow(hWnd);
+                    int winW = MulDiv(1200, dpi, 96);
+                    int winH = MulDiv(800, dpi, 96);
+
+                    // Get current monitor to ensure it centers on the correct screen
+                    MONITORINFO mi = { sizeof(mi) };
+                    GetMonitorInfo(MonitorFromWindow(hWnd, MONITOR_DEFAULTTONEAREST), &mi);
+
+                    // Center within the monitor's work area
+                    int posX = mi.rcWork.left + ((mi.rcWork.right - mi.rcWork.left) - winW) / 2;
+                    int posY = mi.rcWork.top + ((mi.rcWork.bottom - mi.rcWork.top) - winH) / 2;
+
+                    SetWindowPos(hWnd, nullptr, posX, posY, winW, winH,
+                                 SWP_NOZORDER | SWP_NOACTIVATE);
+                }
+                InvalidateRect(hWnd, nullptr, FALSE);
+            }
+
+            g_app.isMidDragging = false;
+            g_app.hasMidMoved   = false;
+            ReleaseCapture();
+            return 0;
+        }
+            // Right click: 2x zoom + pan while held, restore all on release
+        case WM_RBUTTONDOWN:
+            SetCursor(NULL);
+            g_app.savedZoom    = g_app.viewport.zoom;
+            g_app.savedOffsetX = g_app.viewport.offsetX;
+            g_app.savedOffsetY = g_app.viewport.offsetY;
+            g_app.viewport.zoom *= ZOOM_LMB;
+            g_app.viewport.lastMouse = { GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam) };
+            g_app.viewport.isDragging = true;
+            SetCapture(hWnd);
+            InvalidateRect(hWnd, nullptr, FALSE);
+            return 0;
+
+        case WM_RBUTTONUP:
+            SetCursor(LoadCursor(nullptr, IDC_ARROW));
+            g_app.viewport.zoom    = g_app.savedZoom;
+            g_app.viewport.offsetX = g_app.savedOffsetX;
+            g_app.viewport.offsetY = g_app.savedOffsetY;
+            g_app.viewport.isDragging = false;
+            ReleaseCapture();
+            InvalidateRect(hWnd, nullptr, FALSE);
             return 0;
 
         case WM_MOUSEMOVE: {
@@ -234,12 +258,25 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) 
 
                 InvalidateRect(hWnd, nullptr, FALSE);
             }
-            // 2. Middle mouse pan
+            // 2. Middle mouse window resize
             else if (g_app.isMidDragging) {
                 POINT curMouse = { GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam) };
+                ClientToScreen(hWnd, &curMouse);
                 g_app.hasMidMoved = true;
-                g_app.viewport.offsetX += (curMouse.x - g_app.lastMidMouse.x);
-                g_app.viewport.offsetY += (curMouse.y - g_app.lastMidMouse.y);
+
+                if (!g_app.isFullscreen) {
+                    int dx = curMouse.x - g_app.lastMidMouse.x;
+                    int dy = curMouse.y - g_app.lastMidMouse.y;
+
+                    RECT rc;
+                    GetWindowRect(hWnd, &rc);
+
+                    SetWindowPos(hWnd, nullptr, 0, 0,
+                                 (rc.right - rc.left) + dx,
+                                 (rc.bottom - rc.top) + dy,
+                                 SWP_NOMOVE | SWP_NOZORDER | SWP_NOACTIVATE | SWP_NOCOPYBITS);
+                }
+
                 g_app.lastMidMouse = curMouse;
                 InvalidateRect(hWnd, nullptr, FALSE);
             }
