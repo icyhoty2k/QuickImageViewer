@@ -5,7 +5,7 @@ set(CMAKE_CXX_STANDARD 23)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 set(SOURCES
-        main.cpp
+        AppMain.cpp
         FileHandler.cpp
         WicDecoder.cpp
         RegistrySetup.cpp
@@ -24,8 +24,9 @@ add_executable(QuickImageViewer WIN32 ${SOURCES})
 
 # 2. NOW define the definitions for that target
 target_compile_definitions(QuickImageViewer PRIVATE
-        $<$<CONFIG:Debug>:DEBUG_BUILD>
         NOMINMAX
+        $<$<CONFIG:Debug>:_DEBUG>
+        $<$<CONFIG:Release>:NDEBUG>
 )
 
 # 3. Link libraries

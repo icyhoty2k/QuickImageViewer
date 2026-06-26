@@ -8,35 +8,7 @@
 
 extern AppState g_app;
 
-static LPARAM s_lastClickParam = 0;
 
-void MouseHandler::HandleClickStart(HWND hWnd, UINT message, LPARAM lParam) {
-    s_lastClickParam = lParam;
-
-    // 1. If it's a drag action, trigger it immediately (no timer)
-    if (IsDragAction(message)) {
-        HandleButtonDown(hWnd, message, lParam);
-        return;
-    }
-
-    // 2. Otherwise, check if it's the zoom button
-    bool isZoomButton = (Config::SWAP_MOUSE_BUTTONS ? (message == WM_RBUTTONDOWN) : (message == WM_LBUTTONDOWN));
-
-    if (isZoomButton) {
-        SetTimer(hWnd, 1, 150, nullptr);
-    } else {
-        HandleButtonDown(hWnd, message, lParam);
-    }
-}
-
-void MouseHandler::HandleClickTimer(HWND hWnd) {
-    KillTimer(hWnd, 1);
-    if (GetKeyState(VK_LBUTTON) & 0x8000 || GetKeyState(VK_RBUTTON) & 0x8000) {
-        // Trigger the zoom logic
-        // We pass the saved param
-        HandleButtonDown(hWnd, WM_LBUTTONDOWN, s_lastClickParam);
-    }
-}
 void MouseHandler::HandleButtonDown(HWND hWnd, UINT message, LPARAM lParam) {
     if (message == WM_MBUTTONDOWN) {
         g_app.isMidDragging = true;
@@ -100,20 +72,16 @@ void MouseHandler::HandleButtonUp(HWND hWnd, UINT message, LPARAM lParam) {
             g_app.viewport.offsetX = 0.0f;
             g_app.viewport.offsetY = 0.0f;
 
-            // 2. CENTER WINDOW ON SCREEN
-            int screenW = GetSystemMetrics(SM_CXSCREEN);
-            int screenH = GetSystemMetrics(SM_CYSCREEN);
+            // 2. Calculate DPI-scaled dimensions
+            int targetW = (int)(Config::BASE_WIDTH * g_app.dpiScale);
+            int targetH = (int)(Config::BASE_HEIGHT * g_app.dpiScale);
 
-            RECT rc;
-            GetWindowRect(hWnd, &rc);
-            int winW = rc.right - rc.left;
-            int winH = rc.bottom - rc.top;
-
-            // Move the window to the exact center of the primary monitor
+            // 3. Center and RESIZE the window
             SetWindowPos(hWnd, NULL,
-                (screenW - winW) / 2,
-                (screenH - winH) / 2,
-                0, 0, SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE);
+                 (g_app.screenW - targetW) / 2,
+                 (g_app.screenH - targetH) / 2,
+                 targetW, targetH,
+                 SWP_NOZORDER | SWP_NOACTIVATE | SWP_FRAMECHANGED);
 
             InvalidateRect(hWnd, nullptr, FALSE);
         }

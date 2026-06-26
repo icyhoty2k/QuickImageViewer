@@ -19,6 +19,4 @@ namespace MouseHandler {
     void HandleButtonUp(HWND hWnd, UINT message, LPARAM lParam);
     void HandleMouseMove(HWND hWnd, LPARAM lParam);
     void HandleMouseWheel(HWND hWnd, WPARAM wParam, LPARAM lParam);
-    void HandleClickStart(HWND hWnd, UINT message, LPARAM lParam);
-    void HandleClickTimer(HWND hWnd);
 }
