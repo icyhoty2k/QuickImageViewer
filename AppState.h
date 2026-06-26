@@ -4,6 +4,8 @@
 #include <wrl/client.h>
 #include <vector>
 #include <string>
+#include "Renderer/IRenderer.h"
+#include <memory>
 
 struct ViewportState {
     float zoom    = 1.0f;
@@ -15,6 +17,7 @@ struct ViewportState {
 
 struct AppState {
     Microsoft::WRL::ComPtr<IWICImagingFactory> wicFactory;
+    std::unique_ptr<IImageRenderer> renderer;
     HBITMAP hDIB = nullptr;
     int imgWidth  = 0;
     int imgHeight = 0;

@@ -1,8 +1,9 @@
 #include <windows.h>
 #include <windowsx.h>
 #include <dwmapi.h>
-#include <shellapi.h> // <-- Added for command line parsing
-#include <string>     // <-- Added for wstring
+#include <shellapi.h> // Parsing command line arguments
+#include <string>     // Handling string paths
+#include <memory>     // Needed for std::unique_ptr for renderer management
 #include "HelpWindow.h"
 #include "AppState.h"
 #include "FileHandler.h"
@@ -13,14 +14,17 @@
 #include "resources/resource.h"
 #include "RegistrySetup.h"
 #include "DropTarget.h"
+#include "Renderer/RendererD2D.h"
+#include "Renderer/RendererGDI.h"
 
-
+// Global application state
 AppState g_app;
 DropTarget* g_pDropTarget = nullptr;
 
 LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) {
     switch (message) {
 
+        // Handle file paths sent from other instances of the viewer
         case WM_COPYDATA: {
             COPYDATASTRUCT* cds = (COPYDATASTRUCT*)lParam;
             if (cds->dwData == 1) { // 1 is our custom ID for "Load this image"
@@ -28,7 +32,6 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) 
 
                 // --- 1. LOAD THE NEW IMAGE ---
                 OpenSpecificImage(hWnd, filePath);
-
 
                 // --- 2. WAKE UP & CENTER ---
                 g_app.viewport.zoom    = 1.0f;
@@ -186,8 +189,13 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) 
 
             return HTCLIENT;
         }
+
+        // Window size changed: Update renderer
         case WM_SIZE:
         case WM_SIZING:
+            if (g_app.renderer) {
+                g_app.renderer->Resize(LOWORD(lParam), HIWORD(lParam));
+            }
             InvalidateRect(hWnd, nullptr, FALSE);
             return TRUE;
 
@@ -344,10 +352,13 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) 
             return 0;
         }
 
+        // PAINT: Using the polymorphic renderer
         case WM_PAINT: {
             PAINTSTRUCT ps;
-            HDC hdc = BeginPaint(hWnd, &ps);
-            RenderViewport(hWnd, hdc);
+            BeginPaint(hWnd, &ps);
+            if (g_app.renderer) {
+                g_app.renderer->Render();
+            }
             EndPaint(hWnd, &ps);
             return 0;
         }
@@ -363,10 +374,8 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) 
 
         case WM_CLOSE:
 #ifdef DEBUG_BUILD
-            // In Debug: Destroy the window, which eventually triggers WM_DESTROY and exits
             DestroyWindow(hWnd);
 #else
-            // In Release: Just hide it to keep it resident in RAM
             ShowWindow(hWnd, SW_HIDE);
 #endif
             return 0;
@@ -379,12 +388,10 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) 
 }
 
 int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE, LPSTR, int nCmdShow) {
-    // 1. Initialize OLE first (Critical for Drag and Drop)
-    HRESULT hr = OleInitialize(nullptr);
-    if (FAILED(hr)) {
-        // Handle error: Could not initialize OLE
-        return 0;
-    }
+    // 1. Initialize OLE
+    if (FAILED(OleInitialize(nullptr))) return 0;
+
+    // Set DPI awareness
     typedef BOOL(WINAPI *SETDPI)(DPI_AWARENESS_CONTEXT);
     if (HMODULE hU32 = GetModuleHandleW(L"user32.dll")) {
         if (auto setDpi = reinterpret_cast<SETDPI>(GetProcAddress(hU32, "SetProcessDpiAwarenessContext"))) {
@@ -395,100 +402,60 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE, LPSTR, int nCmdShow) {
     CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED | COINIT_DISABLE_OLE1DDE);
     CoCreateInstance(CLSID_WICImagingFactory, nullptr, CLSCTX_INPROC_SERVER, IID_PPV_ARGS(&g_app.wicFactory));
 
-    // Check registry and auto-start rules
+    // Register and startup
     System::RegisterAppForOpenWith();
     System::EnableRunOnStartup();
 
     // --- SINGLE INSTANCE & RAM RESIDENT LOGIC ---
     bool bypassMutex = (GetAsyncKeyState(VK_SHIFT) & 0x8000) != 0;
-    if (GetEnvironmentVariableW(L"QIV_NEW_INSTANCE", nullptr, 0) > 0) {
-        bypassMutex = true;
-    }
-
-    std::wstring mutexName = L"QuickImageViewer_SingleInstanceMutex";
-    if (bypassMutex) {
-        // Randomize Mutex to force Windows to spawn a new memory instance
-        mutexName += std::to_wstring(GetTickCount());
-    }
-
+    if (GetEnvironmentVariableW(L"QIV_NEW_INSTANCE", nullptr, 0) > 0) bypassMutex = true;
+    std::wstring mutexName = L"QuickImageViewer_SingleInstanceMutex" + (bypassMutex ? std::to_wstring(GetTickCount()) : L"");
     HANDLE hMutex = CreateMutexW(NULL, TRUE, mutexName.c_str());
     if (GetLastError() == ERROR_ALREADY_EXISTS) {
-        // App is already running in RAM. Pass the file to it.
         HWND hExistingWnd = FindWindowW(L"FastStoneCloneWIC", nullptr);
         if (hExistingWnd) {
-            int argc;
-            LPWSTR* argv = CommandLineToArgvW(GetCommandLineW(), &argc);
+            int argc; LPWSTR* argv = CommandLineToArgvW(GetCommandLineW(), &argc);
             if (argc > 1) {
-                COPYDATASTRUCT cds;
-                cds.dwData = 1;
-                cds.cbData = (wcslen(argv[1]) + 1) * sizeof(wchar_t);
-                cds.lpData = (PVOID)argv[1];
-                SendMessageW(hExistingWnd, WM_COPYDATA, (WPARAM)NULL, (LPARAM)&cds);
+                COPYDATASTRUCT cds{ 1, (DWORD)(wcslen(argv[1]) + 1) * sizeof(wchar_t), (PVOID)argv[1] };
+                SendMessageW(hExistingWnd, WM_COPYDATA, 0, (LPARAM)&cds);
             }
             LocalFree(argv);
         }
         ReleaseMutex(hMutex);
-        return 0; // Close this duplicate process instantly
+        return 0;
     }
-    // --------------------------------------------
 
     WNDCLASSW wc{ 0 };
-    wc.lpfnWndProc = WndProc;
-    wc.hInstance = hInstance;
-    wc.lpszClassName = L"FastStoneCloneWIC";
-    wc.hCursor = LoadCursor(nullptr, IDC_ARROW);
-    wc.hIcon = LoadIcon(hInstance, MAKEINTRESOURCE(IDI_APP_ICON));
+    wc.lpfnWndProc = WndProc; wc.hInstance = hInstance; wc.lpszClassName = L"FastStoneCloneWIC";
+    wc.hCursor = LoadCursor(nullptr, IDC_ARROW); wc.hIcon = LoadIcon(hInstance, MAKEINTRESOURCE(IDI_APP_ICON));
     RegisterClassW(&wc);
 
     HWND hWnd = CreateViewerWindow(hInstance, wc.lpszClassName);
-    // Register the drop target
+
+    // Initialize Renderer (D2D with GDI fallback)
+    g_app.renderer = std::make_unique<RendererD2D>();
+    if (FAILED(g_app.renderer->Initialize(hWnd))) {
+        g_app.renderer = std::make_unique<RendererGDI>();
+        g_app.renderer->Initialize(hWnd);
+    }
+
+    // Register Drag/Drop and Help
     RegisterDragDrop(hWnd, (g_pDropTarget = new DropTarget(hWnd)));
-    //Init help window
     UI::InitHelpWindow(hInstance, hWnd);
     DWORD corner = 2; // DWMWCP_ROUND
     DwmSetWindowAttribute(hWnd, 33, &corner, sizeof(corner));
 
-    // --- CHECK FOR STARTUP FLAGS & HANDLE SHOWING ---
-    bool startHidden = false;
-    bool hasImage = false;
-
-    int argc;
-    LPWSTR* argv = CommandLineToArgvW(GetCommandLineW(), &argc);
-    if (argc > 1) {
-        std::wstring firstArg = argv[1];
-        if (firstArg == L"-background") {
-            startHidden = true; // Windows booted us in the background
-        } else {
-            hasImage = true;    // Windows passed us a file via Open With
-        }
-    }
-
-    if (startHidden) {
-        // Hide in RAM instantly, wait for a WM_COPYDATA message
-        ShowWindow(hWnd, SW_HIDE);
-    } else {
-        // Normal launch
-        ShowWindow(hWnd, nCmdShow);
-        UpdateWindow(hWnd);
-
-        if (hasImage) {
-            OpenSpecificImage(hWnd, argv[1]);
-            // Example: OpenSpecificImage(hWnd, argv[1]);
-        } else {
-            // Double clicked the raw .exe, open the initial dialog/folder
-            OpenInitialImage(hWnd);
-        }
-    }
+    // Handle startup arguments
+    int argc; LPWSTR* argv = CommandLineToArgvW(GetCommandLineW(), &argc);
+    if (argc > 1 && std::wstring(argv[1]) == L"-background") ShowWindow(hWnd, SW_HIDE);
+    else { ShowWindow(hWnd, nCmdShow); UpdateWindow(hWnd); if (argc > 1) OpenSpecificImage(hWnd, argv[1]); else OpenInitialImage(hWnd); }
     LocalFree(argv);
-    // ------------------------------------------------
 
     MSG msg{};
-    while (GetMessage(&msg, nullptr, 0, 0)) {
-        TranslateMessage(&msg);
-        DispatchMessage(&msg);
-    }
+    while (GetMessage(&msg, nullptr, 0, 0)) { TranslateMessage(&msg); DispatchMessage(&msg); }
 
-    if (g_app.hDIB) DeleteObject(g_app.hDIB);
+    // Cleanup
+    g_app.renderer.reset();
     g_app.wicFactory.Reset();
     RevokeDragDrop(hWnd);
     if (g_pDropTarget) g_pDropTarget->Release();
