@@ -6,14 +6,6 @@
 #pragma comment(lib, "d2d1.lib")
 #pragma comment(lib, "dwrite.lib")
 
-RendererD2D::RendererD2D() = default;
-
-RendererD2D::~RendererD2D() {
-    m_pBitmap.Reset();
-    m_pRenderTarget.Reset();
-    m_pFactory.Reset();
-    m_bitmapCache.clear();
-}
 
 HRESULT RendererD2D::Initialize(HWND hwnd) {
     m_hwnd = hwnd;
@@ -65,7 +57,12 @@ void RendererD2D::ProcessPendingUploads() {
     while (!m_pendingUploads.empty()) {
         auto upload = std::move(m_pendingUploads.front());
         m_pendingUploads.pop();
-        CreateBitmapFromWic_Locked(upload.converter.Get(), upload.filePath);
+        HRESULT hr = CreateBitmapFromWic_Locked(upload.converter.Get(), upload.filePath);
+        if (FAILED(hr))
+        {
+            // TODO: log the failure
+        }
+
     }
 }
 
@@ -109,6 +106,20 @@ HRESULT RendererD2D::PreloadBitmap(const std::wstring& filePath) {
     if (FAILED(decoder->GetFrame(0, &frame))) return E_FAIL;
 
     Microsoft::WRL::ComPtr<IWICFormatConverter> converter;
+    HRESULT hr = g_app.wicFactory->CreateFormatConverter(&converter);
+    if (FAILED(hr))
+        return hr;
+
+    hr = converter->Initialize(
+        frame.Get(),
+        GUID_WICPixelFormat32bppPBGRA,
+        WICBitmapDitherTypeNone,
+        nullptr,
+        0.0f,
+        WICBitmapPaletteTypeCustom);
+
+    if (FAILED(hr))
+        return hr;
     g_app.wicFactory->CreateFormatConverter(&converter);
     converter->Initialize(frame.Get(), GUID_WICPixelFormat32bppPBGRA, WICBitmapDitherTypeNone, nullptr, 0.0f, WICBitmapPaletteTypeCustom);
 

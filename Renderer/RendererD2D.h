@@ -13,8 +13,8 @@
 class RendererD2D final : public IImageRenderer
 {
 public:
-    RendererD2D();
-    ~RendererD2D() override;
+    RendererD2D() = default;
+    ~RendererD2D() override = default;
 
     [[nodiscard]] HRESULT Initialize(HWND hwnd) override;
     void Resize(UINT width, UINT height) override;
