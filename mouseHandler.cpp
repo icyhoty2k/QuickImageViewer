@@ -4,9 +4,39 @@
 #include "WicDecoder.h"
 #include <windowsx.h>
 #include <algorithm>
+#include <cmath>
 
 extern AppState g_app;
 
+static LPARAM s_lastClickParam = 0;
+
+void MouseHandler::HandleClickStart(HWND hWnd, UINT message, LPARAM lParam) {
+    s_lastClickParam = lParam;
+
+    // 1. If it's a drag action, trigger it immediately (no timer)
+    if (IsDragAction(message)) {
+        HandleButtonDown(hWnd, message, lParam);
+        return;
+    }
+
+    // 2. Otherwise, check if it's the zoom button
+    bool isZoomButton = (Config::SWAP_MOUSE_BUTTONS ? (message == WM_RBUTTONDOWN) : (message == WM_LBUTTONDOWN));
+
+    if (isZoomButton) {
+        SetTimer(hWnd, 1, 150, nullptr);
+    } else {
+        HandleButtonDown(hWnd, message, lParam);
+    }
+}
+
+void MouseHandler::HandleClickTimer(HWND hWnd) {
+    KillTimer(hWnd, 1);
+    if (GetKeyState(VK_LBUTTON) & 0x8000 || GetKeyState(VK_RBUTTON) & 0x8000) {
+        // Trigger the zoom logic
+        // We pass the saved param
+        HandleButtonDown(hWnd, WM_LBUTTONDOWN, s_lastClickParam);
+    }
+}
 void MouseHandler::HandleButtonDown(HWND hWnd, UINT message, LPARAM lParam) {
     if (message == WM_MBUTTONDOWN) {
         g_app.isMidDragging = true;
@@ -27,11 +57,35 @@ void MouseHandler::HandleButtonDown(HWND hWnd, UINT message, LPARAM lParam) {
         SetCapture(hWnd);
     }
     else if (IsViewControlAction(message)) {
+        if (g_app.viewport.isDragging) return;
         SetCursor(NULL);
+
+        // 1. Save state
         g_app.savedZoom = g_app.viewport.zoom;
-        // Do NOT save offsetX/Y here if we want to keep the current position as the base
+        g_app.savedOffsetX = g_app.viewport.offsetX;
+        g_app.savedOffsetY = g_app.viewport.offsetY;
+
+        // 2. Get mouse position and window center
+        POINT pt = { GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam) };
+        RECT rc;
+        GetClientRect(hWnd, &rc);
+        float centerX = (rc.right - rc.left) / 2.0f;
+        float centerY = (rc.bottom - rc.top) / 2.0f;
+
+        // 3. Calculate how far the mouse is from the center
+        float dx = (float)pt.x - centerX;
+        float dy = (float)pt.y - centerY;
+
+        // 4. Apply temporary zoom
         g_app.viewport.zoom *= Config::ZOOM_CLICK;
-        g_app.viewport.lastMouse = { GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam) };
+
+        // 5. Shift the offset to keep the clicked point at the center
+        // We adjust the offset by the distance moved, scaled by the zoom difference
+        g_app.viewport.offsetX = (g_app.savedOffsetX - dx) ;
+        g_app.viewport.offsetY = (g_app.savedOffsetY - dy) ;
+
+        // 6. Start dragging
+        g_app.viewport.lastMouse = pt;
         g_app.viewport.isDragging = true;
         SetCapture(hWnd);
         InvalidateRect(hWnd, nullptr, FALSE);
@@ -41,9 +95,26 @@ void MouseHandler::HandleButtonDown(HWND hWnd, UINT message, LPARAM lParam) {
 void MouseHandler::HandleButtonUp(HWND hWnd, UINT message, LPARAM lParam) {
     if (message == WM_MBUTTONUP) {
         if (!g_app.hasMidMoved) {
+            // 1. Reset Zoom and Pan
             g_app.viewport.zoom = 1.0f;
             g_app.viewport.offsetX = 0.0f;
             g_app.viewport.offsetY = 0.0f;
+
+            // 2. CENTER WINDOW ON SCREEN
+            int screenW = GetSystemMetrics(SM_CXSCREEN);
+            int screenH = GetSystemMetrics(SM_CYSCREEN);
+
+            RECT rc;
+            GetWindowRect(hWnd, &rc);
+            int winW = rc.right - rc.left;
+            int winH = rc.bottom - rc.top;
+
+            // Move the window to the exact center of the primary monitor
+            SetWindowPos(hWnd, NULL,
+                (screenW - winW) / 2,
+                (screenH - winH) / 2,
+                0, 0, SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE);
+
             InvalidateRect(hWnd, nullptr, FALSE);
         }
         g_app.isMidDragging = false;
@@ -58,8 +129,12 @@ void MouseHandler::HandleButtonUp(HWND hWnd, UINT message, LPARAM lParam) {
     }
     else if (IsViewControlAction(message)) {
         SetCursor(LoadCursor(nullptr, IDC_ARROW));
-        // Reset ONLY the zoom level, keep the new pan offsets!
+
+        // Restore zoom and pan
         g_app.viewport.zoom = g_app.savedZoom;
+        g_app.viewport.offsetX = g_app.savedOffsetX;
+        g_app.viewport.offsetY = g_app.savedOffsetY;
+
         g_app.viewport.isDragging = false;
         ReleaseCapture();
         InvalidateRect(hWnd, nullptr, FALSE);
@@ -84,29 +159,30 @@ void MouseHandler::HandleMouseMove(HWND hWnd, LPARAM lParam) {
     else if (g_app.viewport.isDragging) {
         POINT curMouse = { GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam) };
 
-        // Calculate raw movement
-        float dx = (float)(curMouse.x - g_app.viewport.lastMouse.x);
-        float dy = (float)(curMouse.y - g_app.viewport.lastMouse.y);
+        float dx = (float)(g_app.viewport.lastMouse.x - curMouse.x);
+        float dy = (float)(g_app.viewport.lastMouse.y - curMouse.y);
 
-        // Update offsets by delta
-        g_app.viewport.offsetX -= dx;
-        g_app.viewport.offsetY -= dy;
+        // Update Position using addition
+        g_app.viewport.offsetX += dx;
+        g_app.viewport.offsetY += dy;
         g_app.viewport.lastMouse = curMouse;
 
-        // Constraint Logic: Ensure the viewport stays within bounds
-        RECT rc; GetClientRect(hWnd, &rc);
-        float winW = (float)(rc.right - rc.left);
-        float winH = (float)(rc.bottom - rc.top);
+        // Constraint Logic
+        if (g_app.imgWidth > 0 && g_app.imgHeight > 0) {
+            RECT rc; GetClientRect(hWnd, &rc);
+            float winW = (float)(rc.right - rc.left);
+            float winH = (float)(rc.bottom - rc.top);
 
-        float base = std::min(winW / (float)g_app.imgWidth, winH / (float)g_app.imgHeight);
-        float renderW = (float)g_app.imgWidth * base * g_app.viewport.zoom;
-        float renderH = (float)g_app.imgHeight * base * g_app.viewport.zoom;
+            float base = std::min(winW / (float)g_app.imgWidth, winH / (float)g_app.imgHeight);
+            float renderW = (float)g_app.imgWidth * base * g_app.viewport.zoom;
+            float renderH = (float)g_app.imgHeight * base * g_app.viewport.zoom;
 
-        float maxOffX = std::max(0.0f, (renderW - winW) / 2.0f);
-        float maxOffY = std::max(0.0f, (renderH - winH) / 2.0f);
+            float maxOffX = std::max(0.0f, (renderW - winW) / 2.0f);
+            float maxOffY = std::max(0.0f, (renderH - winH) / 2.0f);
 
-        g_app.viewport.offsetX = std::max(-maxOffX, std::min(maxOffX, g_app.viewport.offsetX));
-        g_app.viewport.offsetY = std::max(-maxOffY, std::min(maxOffY, g_app.viewport.offsetY));
+            g_app.viewport.offsetX = std::max(-maxOffX, std::min(maxOffX, g_app.viewport.offsetX));
+            g_app.viewport.offsetY = std::max(-maxOffY, std::min(maxOffY, g_app.viewport.offsetY));
+        }
 
         InvalidateRect(hWnd, nullptr, FALSE);
     }
