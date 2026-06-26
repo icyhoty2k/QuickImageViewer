@@ -16,7 +16,15 @@ add_executable(QuickImageViewer WIN32
         app.manifest
         DpiAwareInit.cpp
         DpiAwareInit.h
+
 )
 
 # Link the target to WIC and GDI32 instead of GDI+
-target_link_libraries(QuickImageViewer PRIVATE user32 comdlg32 windowscodecs gdi32)
+# 2. Add dwmapi to target_link_libraries
+target_link_libraries(QuickImageViewer PRIVATE
+        user32
+        comdlg32
+        windowscodecs
+        gdi32
+        dwmapi
+)
