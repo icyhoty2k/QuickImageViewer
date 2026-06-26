@@ -1,9 +1,12 @@
 #include "WicDecoder.h"
 #include "AppState.h"
+#include "WorkerThread.h"
 
 using Microsoft::WRL::ComPtr;
 
 void LoadImageIndex(HWND hWnd, int index) {
+    // 1. Clear previous background work to pivot to the new image
+    g_decoderWorker.ClearQueue();
     if (index < 0 || index >= static_cast<int>(g_app.playlist.size())) return;
 
     g_app.currentIndex = index;
@@ -32,7 +35,9 @@ void LoadImageIndex(HWND hWnd, int index) {
     // 2. Preload the next image in the playlist
     int nextIndex = index + 1;
     if (nextIndex < static_cast<int>(g_app.playlist.size())) {
-        g_app.renderer->PreloadBitmap(g_app.playlist[nextIndex]);
+        g_decoderWorker.PushTask([nextIndex]() {
+     g_app.renderer->PreloadBitmap(g_app.playlist[nextIndex]);
+ });
     }
     g_app.viewport = ViewportState{}; 
     InvalidateRect(hWnd, nullptr, FALSE);

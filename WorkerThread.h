@@ -47,6 +47,11 @@ public:
         }
         m_cv.notify_one();
     }
+    void ClearQueue() {
+        std::lock_guard<std::mutex> lock(m_queueMutex);
+        std::queue<std::function<void()>> empty;
+        std::swap(m_queue, empty);
+    }
 
 private:
     std::thread m_thread;

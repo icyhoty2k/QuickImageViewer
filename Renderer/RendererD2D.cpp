@@ -1,6 +1,6 @@
 #include "RendererD2D.h"
 #include "../AppState.h"
-#include "../Constants.h" // Ensure access to your config
+#include "../Constants.h"
 #include <algorithm>
 
 #pragma comment(lib, "d2d1.lib")
@@ -34,53 +34,77 @@ void RendererD2D::Resize(UINT width, UINT height) {
     if (m_pRenderTarget) m_pRenderTarget->Resize(D2D1::SizeU(width, height));
 }
 
-HRESULT RendererD2D::LoadBitmap(IWICBitmapSource* bitmap, UINT width, UINT height, const std::wstring& filePath) {
+// UI THREAD ONLY: Uploads decoded data to VRAM
+HRESULT RendererD2D::CreateBitmapFromWic(IWICBitmapSource* bitmap, const std::wstring& filePath) {
     if (!m_pRenderTarget) return E_FAIL;
 
-    // 1. Check Cache
-    std::lock_guard<std::mutex> lock(m_cacheMutex); // Ensure thread safety for background preloading
-
-    auto it = m_bitmapCache.find(filePath);
-    if (it != m_bitmapCache.end()) {
-        m_pBitmap = it->second.bitmap;
-        m_lruList.erase(it->second.lruIt);
-        m_lruList.push_front(filePath);
-        it->second.lruIt = m_lruList.begin();
-        return S_OK;
-    }
-
-    // 2. Cache Miss: Create new GPU resource
     Microsoft::WRL::ComPtr<ID2D1Bitmap> newBitmap;
     HRESULT hr = m_pRenderTarget->CreateBitmapFromWicBitmap(bitmap, nullptr, newBitmap.GetAddressOf());
     if (FAILED(hr)) return hr;
 
-    // 3. Evict oldest if full using your Constants.h value
+    std::lock_guard<std::mutex> lock(m_cacheMutex);
     if (m_lruList.size() >= Config::VRAM_CACHE_IMAGES_COUNT) {
         m_bitmapCache.erase(m_lruList.back());
         m_lruList.pop_back();
     }
-
-    // 4. Update cache
     m_lruList.push_front(filePath);
     m_bitmapCache[filePath] = { newBitmap, m_lruList.begin() };
-    m_pBitmap = newBitmap;
-
     return S_OK;
 }
+
+// UI THREAD ONLY: Drain the queue of images decoded in the background
+void RendererD2D::ProcessPendingUploads() {
+    std::lock_guard<std::mutex> lock(m_cacheMutex);
+    while (!m_pendingUploads.empty()) {
+        auto upload = m_pendingUploads.front();
+        CreateBitmapFromWic(upload.converter.Get(), upload.filePath);
+        m_pendingUploads.pop();
+    }
+}
+
+HRESULT RendererD2D::LoadBitmap(IWICBitmapSource* bitmap, UINT width, UINT height, const std::wstring& filePath) {
+    std::lock_guard<std::mutex> lock(m_cacheMutex);
+    auto it = m_bitmapCache.find(filePath);
+    if (it != m_bitmapCache.end()) {
+        m_pBitmap = it->second.bitmap;
+        return S_OK;
+    }
+    // Safe: This runs on the UI thread
+    return CreateBitmapFromWic(bitmap, filePath);
+}
+
+// BACKGROUND THREAD: Performs I/O and Decoding only
 HRESULT RendererD2D::PreloadBitmap(const std::wstring& filePath) {
     // 1. Thread-safe check
     {
         std::lock_guard<std::mutex> lock(m_cacheMutex);
-        if (m_bitmapCache.find(filePath) != m_bitmapCache.end()) {
-            return S_OK; // Already cached
-        }
+        if (m_bitmapCache.find(filePath) != m_bitmapCache.end()) return S_OK;
     }
-    // 2. Here you will eventually trigger your background WIC decoder
+
+    // 2. Decode using the global factory
+    Microsoft::WRL::ComPtr<IWICBitmapDecoder> decoder;
+    if (FAILED(g_app.wicFactory->CreateDecoderFromFilename(
+        filePath.c_str(), nullptr, GENERIC_READ, WICDecodeMetadataCacheOnDemand, &decoder))) return E_FAIL;
+
+    Microsoft::WRL::ComPtr<IWICBitmapFrameDecode> frame;
+    if (FAILED(decoder->GetFrame(0, &frame))) return E_FAIL;
+
+    Microsoft::WRL::ComPtr<IWICFormatConverter> converter;
+    g_app.wicFactory->CreateFormatConverter(&converter);
+    converter->Initialize(frame.Get(), GUID_WICPixelFormat32bppPBGRA, WICBitmapDitherTypeNone, nullptr, 0.0f, WICBitmapPaletteTypeCustom);
+
+    // 3. Hand-off: Push to queue and signal UI
+    {
+        std::lock_guard<std::mutex> lock(m_cacheMutex);
+        m_pendingUploads.push({filePath, converter});
+    }
+    PostMessage(m_hwnd, WM_USER + 1, 0, 0);
+
     return S_OK;
 }
+
 HRESULT RendererD2D::Render() {
     if (!m_pRenderTarget) return E_FAIL;
-
     m_pRenderTarget->BeginDraw();
     m_pRenderTarget->Clear(m_clearColor);
 
@@ -88,18 +112,13 @@ HRESULT RendererD2D::Render() {
         D2D1_SIZE_F rtSize = m_pRenderTarget->GetSize();
         float imageW = (float)m_pBitmap->GetSize().width;
         float imageH = (float)m_pBitmap->GetSize().height;
-
         float base = (std::min)(rtSize.width / imageW, rtSize.height / imageH);
         float z = (g_app.viewport.zoom <= 0.0f) ? 1.0f : g_app.viewport.zoom;
-
         float renderW = imageW * base * z;
         float renderH = imageH * base * z;
-
         float left = (rtSize.width - renderW) / 2.0f + g_app.viewport.offsetX;
         float top = (rtSize.height - renderH) / 2.0f + g_app.viewport.offsetY;
-
         m_pRenderTarget->DrawBitmap(m_pBitmap.Get(), D2D1::RectF(left, top, left + renderW, top + renderH));
     }
-    
     return m_pRenderTarget->EndDraw();
 }
