@@ -14,6 +14,8 @@ constexpr auto is_image_ext = [](const std::wstring& ext) -> bool {
 };
 
 void OpenInitialImage(HWND hWnd) {
+    g_app.isDialogVisible = true; // Block Esc processing
+
     wchar_t szFile[MAX_PATH] = { 0 };
     OPENFILENAMEW ofn{};
     ofn.lStructSize = sizeof(ofn);
@@ -23,7 +25,10 @@ void OpenInitialImage(HWND hWnd) {
     ofn.lpstrFilter = L"Images\0*.jpg;*.jpeg;*.png;*.bmp;*.webp\0";
     ofn.Flags = OFN_PATHMUSTEXIST | OFN_FILEMUSTEXIST;
 
-    if (GetOpenFileNameW(&ofn)) {
+    bool success = GetOpenFileNameW(&ofn);
+    g_app.isDialogVisible = false; // Always clear the flag immediately after the dialog closes
+
+    if (success) {
         fs::path filePath(szFile);
         g_app.playlist = fs::directory_iterator(filePath.parent_path())
             | std::views::filter([](const auto& e) { return e.is_regular_file() && is_image_ext(e.path().extension().wstring()); })
@@ -32,11 +37,15 @@ void OpenInitialImage(HWND hWnd) {
 
         auto it = std::ranges::find(g_app.playlist, filePath.wstring());
         if (it != g_app.playlist.end()) {
-            extern void LoadImageIndex(HWND, int); // Forward declare from WicDecoder
+            extern void LoadImageIndex(HWND, int);
             LoadImageIndex(hWnd, static_cast<int>(std::distance(g_app.playlist.begin(), it)));
         }
     } else {
-        PostQuitMessage(0);
+        // Only quit if we were at initial startup, not if F2 was pressed
+        // You can check if the playlist is empty to decide:
+        if (g_app.playlist.empty()) {
+            PostQuitMessage(0);
+        }
     }
 }
 void OpenSpecificImage(HWND hWnd, const std::wstring& filePathStr) {

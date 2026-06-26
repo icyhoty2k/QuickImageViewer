@@ -15,7 +15,7 @@ namespace UI {
                 GetClientRect(hWnd, &rc);
 
                 // Dark background
-                HBRUSH hBrush = CreateSolidBrush(RGB(24, 25, 38)); // Sleek dark slate
+                HBRUSH hBrush = CreateSolidBrush(RGB(24, 24, 24)); // Sleek dark slate
                 FillRect(hdc, &rc, hBrush);
                 DeleteObject(hBrush);
 

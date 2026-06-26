@@ -39,6 +39,8 @@ struct AppState {
     // Fullscreen
     bool isFullscreen = false;
     RECT savedWindowRect = {0, 0, 0, 0};
+
+    bool isDialogVisible = false;
 };
 
 // Global state shared across files

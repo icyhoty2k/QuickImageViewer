@@ -12,8 +12,11 @@
 #include "Constants.h"
 #include "resources/resource.h"
 #include "RegistrySetup.h"
+#include "DropTarget.h"
+
 
 AppState g_app;
+DropTarget* g_pDropTarget = nullptr;
 
 LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) {
     switch (message) {
@@ -48,8 +51,14 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) 
                 PostQuitMessage(0);
                 return 0;
             }
+            // Toggle Help Menu (F1)
             if (wParam == VK_F1) {
                 UI::ToggleHelpWindow();
+                return 0;
+            }
+            // Open File Dialog (F2)
+            if (wParam == VK_F2) {
+                OpenInitialImage(hWnd);
                 return 0;
             }
             // Hide to RAM instead of quitting (Esc or Ctrl + W)
@@ -421,6 +430,9 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE, LPSTR, int nCmdShow) {
     RegisterClassW(&wc);
 
     HWND hWnd = CreateViewerWindow(hInstance, wc.lpszClassName);
+    // Register the drop target
+    RegisterDragDrop(hWnd, (g_pDropTarget = new DropTarget(hWnd)));
+    //Init help window
     UI::InitHelpWindow(hInstance, hWnd);
     DWORD corner = 2; // DWMWCP_ROUND
     DwmSetWindowAttribute(hWnd, 33, &corner, sizeof(corner));
@@ -467,6 +479,8 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE, LPSTR, int nCmdShow) {
 
     if (g_app.hDIB) DeleteObject(g_app.hDIB);
     g_app.wicFactory.Reset();
+    RevokeDragDrop(hWnd);
+    if (g_pDropTarget) g_pDropTarget->Release();
     CoUninitialize();
 
     return static_cast<int>(msg.wParam);

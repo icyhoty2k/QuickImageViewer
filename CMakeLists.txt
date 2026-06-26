@@ -25,6 +25,8 @@ add_executable(QuickImageViewer WIN32
         resources/resource.rc
         HelpWindow.cpp
         HelpWindow.h
+        DropTarget.cpp
+        DropTarget.h
 
 )
 
