@@ -29,7 +29,11 @@ void LoadImageIndex(HWND hWnd, int index) {
     if (g_app.renderer) {
         g_app.renderer->LoadBitmap(converter.Get(), width, height, currentPath);
     }
-
+    // 2. Preload the next image in the playlist
+    int nextIndex = index + 1;
+    if (nextIndex < static_cast<int>(g_app.playlist.size())) {
+        g_app.renderer->PreloadBitmap(g_app.playlist[nextIndex]);
+    }
     g_app.viewport = ViewportState{}; 
     InvalidateRect(hWnd, nullptr, FALSE);
 }
