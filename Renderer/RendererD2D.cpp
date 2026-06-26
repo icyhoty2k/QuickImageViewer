@@ -1,32 +1,26 @@
 #include "RendererD2D.h"
-#include <d2d1.h>
 #include "../AppState.h"
+#include "../Constants.h" // Ensure access to your config
+#include <algorithm>
 
-// Link the required libraries directly to ensure the linker finds them
 #pragma comment(lib, "d2d1.lib")
 #pragma comment(lib, "dwrite.lib")
 
 RendererD2D::RendererD2D() = default;
 
 RendererD2D::~RendererD2D() {
-    // Release COM pointers manually (though ComPtr does this, it's good practice for clarity)
     m_pBitmap.Reset();
     m_pRenderTarget.Reset();
     m_pFactory.Reset();
+    m_bitmapCache.clear();
 }
 
-// Create D2D Factory and Render Target
 HRESULT RendererD2D::Initialize(HWND hwnd) {
     m_hwnd = hwnd;
-
-    // Create the Direct2D factory
     HRESULT hr = D2D1CreateFactory(D2D1_FACTORY_TYPE_SINGLE_THREADED, m_pFactory.GetAddressOf());
-
     if (SUCCEEDED(hr)) {
         RECT rc;
         GetClientRect(m_hwnd, &rc);
-
-        // Create the window render target
         hr = m_pFactory->CreateHwndRenderTarget(
             D2D1::RenderTargetProperties(),
             D2D1::HwndRenderTargetProperties(m_hwnd, D2D1::SizeU(rc.right - rc.left, rc.bottom - rc.top)),
@@ -36,25 +30,54 @@ HRESULT RendererD2D::Initialize(HWND hwnd) {
     return hr;
 }
 
-// Update the render target size when window is resized
 void RendererD2D::Resize(UINT width, UINT height) {
-    if (m_pRenderTarget) {
-        m_pRenderTarget->Resize(D2D1::SizeU(width, height));
-    }
+    if (m_pRenderTarget) m_pRenderTarget->Resize(D2D1::SizeU(width, height));
 }
 
-// Convert the WIC bitmap into a GPU-side D2D Bitmap
-HRESULT RendererD2D::LoadBitmap(IWICBitmapSource* bitmap, UINT width, UINT height) {
+HRESULT RendererD2D::LoadBitmap(IWICBitmapSource* bitmap, UINT width, UINT height, const std::wstring& filePath) {
     if (!m_pRenderTarget) return E_FAIL;
 
-    // Clear old bitmap before creating new one
-    m_pBitmap.Reset();
+    // 1. Check Cache
+    std::lock_guard<std::mutex> lock(m_cacheMutex); // Ensure thread safety for background preloading
 
-    // Create D2D bitmap directly from the WIC source
-    return m_pRenderTarget->CreateBitmapFromWicBitmap(bitmap, nullptr, m_pBitmap.GetAddressOf());
+    auto it = m_bitmapCache.find(filePath);
+    if (it != m_bitmapCache.end()) {
+        m_pBitmap = it->second.bitmap;
+        m_lruList.erase(it->second.lruIt);
+        m_lruList.push_front(filePath);
+        it->second.lruIt = m_lruList.begin();
+        return S_OK;
+    }
+
+    // 2. Cache Miss: Create new GPU resource
+    Microsoft::WRL::ComPtr<ID2D1Bitmap> newBitmap;
+    HRESULT hr = m_pRenderTarget->CreateBitmapFromWicBitmap(bitmap, nullptr, newBitmap.GetAddressOf());
+    if (FAILED(hr)) return hr;
+
+    // 3. Evict oldest if full using your Constants.h value
+    if (m_lruList.size() >= Config::VRAM_CACHE_IMAGES_COUNT) {
+        m_bitmapCache.erase(m_lruList.back());
+        m_lruList.pop_back();
+    }
+
+    // 4. Update cache
+    m_lruList.push_front(filePath);
+    m_bitmapCache[filePath] = { newBitmap, m_lruList.begin() };
+    m_pBitmap = newBitmap;
+
+    return S_OK;
 }
-
-// Render the bitmap to the screen using Direct2D
+HRESULT RendererD2D::PreloadBitmap(const std::wstring& filePath) {
+    // 1. Thread-safe check
+    {
+        std::lock_guard<std::mutex> lock(m_cacheMutex);
+        if (m_bitmapCache.find(filePath) != m_bitmapCache.end()) {
+            return S_OK; // Already cached
+        }
+    }
+    // 2. Here you will eventually trigger your background WIC decoder
+    return S_OK;
+}
 HRESULT RendererD2D::Render() {
     if (!m_pRenderTarget) return E_FAIL;
 
@@ -63,16 +86,10 @@ HRESULT RendererD2D::Render() {
 
     if (m_pBitmap) {
         D2D1_SIZE_F rtSize = m_pRenderTarget->GetSize();
-
-        // Calculate aspect ratio
         float imageW = (float)m_pBitmap->GetSize().width;
         float imageH = (float)m_pBitmap->GetSize().height;
 
-        float ratioX = rtSize.width / imageW;
-        float ratioY = rtSize.height / imageH;
-        float base = (std::min)(ratioX, ratioY);
-
-        // Apply zoom. Ensure zoom is at least 1.0f if the struct reset failed
+        float base = (std::min)(rtSize.width / imageW, rtSize.height / imageH);
         float z = (g_app.viewport.zoom <= 0.0f) ? 1.0f : g_app.viewport.zoom;
 
         float renderW = imageW * base * z;
@@ -81,8 +98,7 @@ HRESULT RendererD2D::Render() {
         float left = (rtSize.width - renderW) / 2.0f + g_app.viewport.offsetX;
         float top = (rtSize.height - renderH) / 2.0f + g_app.viewport.offsetY;
 
-        D2D1_RECT_F destRect = D2D1::RectF(left, top, left + renderW, top + renderH);
-        m_pRenderTarget->DrawBitmap(m_pBitmap.Get(), destRect);
+        m_pRenderTarget->DrawBitmap(m_pBitmap.Get(), D2D1::RectF(left, top, left + renderW, top + renderH));
     }
     
     return m_pRenderTarget->EndDraw();
