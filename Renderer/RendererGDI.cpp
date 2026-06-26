@@ -33,7 +33,7 @@ void RendererGDI::Resize(UINT width, UINT height) {
 }
 
 // Create a DIB section from the WIC bitmap source
-HRESULT RendererGDI::LoadBitmap(IWICBitmapSource* bitmap, UINT width, UINT height) {
+HRESULT RendererGDI::LoadBitmap(IWICBitmapSource* bitmap, UINT width, UINT height, const std::wstring& /*filePath*/) {
     m_imageWidth = width;
     m_imageHeight = height;
 
@@ -102,6 +102,9 @@ HRESULT RendererGDI::Render() {
 
     return S_OK;
 }
+HRESULT RendererGDI::PreloadBitmap(const std::wstring& /*filePath*/) {
+    return S_OK; // GDI does not use a VRAM cache, so no-op
+}
 
 // Allocate the double-buffer surface
 HRESULT RendererGDI::CreateBackBuffer(UINT width, UINT height) {
@@ -127,4 +130,5 @@ void RendererGDI::DestroyBackBuffer() {
         DeleteObject(m_backBitmap);
         m_backBitmap = nullptr;
     }
+
 }

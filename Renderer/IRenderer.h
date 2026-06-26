@@ -1,36 +1,48 @@
-// Renderer/IImageRenderer.h
 #pragma once
 
 #include <windows.h>
 #include <wincodec.h>
+#include <string>
+#include "../Constants.h"
 
+/// Base interface for image rendering strategies.
+/// Implementations must handle bitmap loading, scaling, and painting.
 class IImageRenderer
 {
 public:
     IImageRenderer() = default;
     virtual ~IImageRenderer() = default;
 
+    // Disable copy/move to enforce unique renderer ownership
     IImageRenderer(const IImageRenderer&) = delete;
     IImageRenderer& operator=(const IImageRenderer&) = delete;
     IImageRenderer(IImageRenderer&&) = delete;
     IImageRenderer& operator=(IImageRenderer&&) = delete;
 
-    /// Initialize the renderer for the specified window.
+    /// Initialize the renderer resources for the specified window handle.
     [[nodiscard]]
     virtual HRESULT Initialize(HWND hwnd) = 0;
 
-    /// Called whenever the client area size changes.
+    /// Update internal buffers when the client area changes dimensions.
     virtual void Resize(UINT width, UINT height) = 0;
 
-    /// Loads a decoded WIC bitmap into the renderer.
-    /// Ownership of the bitmap remains with the caller.
+    /// Loads a decoded WIC bitmap into the renderer's pipeline.
+    /// @param bitmap Source WIC bitmap for processing.
+    /// @param width Width of the source image.
+    /// @param height Height of the source image.
+    /// @param filePath The absolute path used for identifying cached GPU resources.
     [[nodiscard]]
     virtual HRESULT LoadBitmap(
         IWICBitmapSource* bitmap,
         UINT width,
-        UINT height) = 0;
+        UINT height,
+        const std::wstring& filePath) = 0;
 
-    /// Paints the current image.
+    /// Paints the active bitmap to the target surface.
     [[nodiscard]]
     virtual HRESULT Render() = 0;
+
+    /// support background preloading
+    [[nodiscard]] virtual HRESULT PreloadBitmap(const std::wstring& filePath) = 0;
+
 };

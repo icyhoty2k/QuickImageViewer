@@ -40,11 +40,12 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) 
         // Handle file paths sent from other instances of the viewer
         case WM_COPYDATA: {
             COPYDATASTRUCT* cds = (COPYDATASTRUCT*)lParam;
-            if (cds->dwData == 1) { // 1 is our custom ID for "Load this image"
-                LPCWSTR filePath = (LPCWSTR)cds->lpData;
+            if (cds->dwData == 1) {
+                // Create a local copy to ensure safety even if processing takes time
+                std::wstring safePath((LPCWSTR)cds->lpData);
 
                 // --- 1. LOAD THE NEW IMAGE ---
-                OpenSpecificImage(hWnd, filePath);
+                OpenSpecificImage(hWnd, safePath.c_str());
 
                 // --- 2. WAKE UP & CENTER ---
                 g_app.viewport.zoom    = 1.0f;
@@ -361,11 +362,16 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE, LPSTR, int nCmdShow) {
     std::wstring mutexName = L"QuickImageViewer_SingleInstanceMutex" + (bypassMutex ? std::to_wstring(GetTickCount()) : L"");
     HANDLE hMutex = CreateMutexW(NULL, TRUE, mutexName.c_str());
     if (GetLastError() == ERROR_ALREADY_EXISTS) {
-        HWND hExistingWnd = FindWindowW(L"FastStoneCloneWIC", nullptr);
+        HWND hExistingWnd = FindWindowW(Config::WINDOW_CLASS_NAME, nullptr);
         if (hExistingWnd) {
             int argc; LPWSTR* argv = CommandLineToArgvW(GetCommandLineW(), &argc);
             if (argc > 1) {
-                COPYDATASTRUCT cds{ 1, (DWORD)(wcslen(argv[1]) + 1) * sizeof(wchar_t), (PVOID)argv[1] };
+                // Safe, non-aggregate initialization
+                COPYDATASTRUCT cds;
+                cds.dwData = 1;
+                cds.cbData = (DWORD)((wcslen(argv[1]) + 1) * sizeof(wchar_t));
+                cds.lpData = (void*)argv[1];
+
                 SendMessageW(hExistingWnd, WM_COPYDATA, 0, (LPARAM)&cds);
             }
             LocalFree(argv);
@@ -375,7 +381,7 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE, LPSTR, int nCmdShow) {
     }
 
     WNDCLASSW wc{ 0 };
-    wc.lpfnWndProc = WndProc; wc.hInstance = hInstance; wc.lpszClassName = L"FastStoneCloneWIC";
+    wc.lpfnWndProc = WndProc; wc.hInstance = hInstance; wc.lpszClassName = Config::WINDOW_CLASS_NAME;
     wc.style = CS_DBLCLKS;
     wc.hCursor = LoadCursor(nullptr, IDC_ARROW); wc.hIcon = LoadIcon(hInstance, MAKEINTRESOURCE(IDI_APP_ICON));
     RegisterClassW(&wc);
@@ -433,10 +439,8 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE, LPSTR, int nCmdShow) {
         g_pDropTarget = nullptr;
     }
 
-    DestroyWindow(hWnd);
-
     // Optional: Unregister the class for total cleanliness
-    UnregisterClassW(L"FastStoneCloneWIC", hInstance);
+    UnregisterClassW(Config::WINDOW_CLASS_NAME, hInstance);
 
     CoUninitialize();
     OleUninitialize();
