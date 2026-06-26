@@ -27,12 +27,14 @@
 
 #include "Renderer/RendererD2D.h"
 #include "Renderer/RendererGDI.h"
-
+#include "WorkerThread.h"
 
 // Global application state
 AppState g_app;
 DropTarget* g_pDropTarget = nullptr;
-
+// Define the storage for the globals exactly once in your entry point file
+WorkerThread g_ioWorker;
+WorkerThread g_decoderWorker;
 
 LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) {
     switch (message) {
