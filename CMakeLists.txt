@@ -15,6 +15,8 @@ set(SOURCES
         resources/resource.rc
         Renderer/RendererGDI.cpp
         Renderer/RendererD2D.cpp
+        MouseHandler.h
+        mouseHandler.cpp
 )
 
 # 1. Define the executable first
@@ -23,6 +25,7 @@ add_executable(QuickImageViewer WIN32 ${SOURCES})
 # 2. NOW define the definitions for that target
 target_compile_definitions(QuickImageViewer PRIVATE
         $<$<CONFIG:Debug>:DEBUG_BUILD>
+        NOMINMAX
 )
 
 # 3. Link libraries
