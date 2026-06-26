@@ -7,9 +7,10 @@ namespace Config {
     constexpr const wchar_t* APP_VERSION      = L"1.0.0"; // major.minor.patch
 
     static constexpr float ZOOM_STEP          = 1.1f;  // +/- keys and ctrl+wheel
-    static constexpr float ZOOM_LMB           = 3.0f;  // left click zoom multiplier
+    static constexpr float ZOOM_CLICK           = 3.0f;  // left click zoom multiplier
 
     constexpr int BASE_WIDTH                  = 1200;
     constexpr int BASE_HEIGHT                 = 800;
 
+    inline bool SWAP_MOUSE_BUTTONS = true; // Set this to true to swap Left and Right mouse button functions
 }

@@ -1,3 +1,18 @@
+#ifndef NOMINMAX
+#define NOMINMAX
+#endif
+#include <dwmapi.h>
+#include <intsafe.h>
+#include <uxtheme.h>
+
+#include "AppState.h"
+#include "Constants.h"
+#include "DropTarget.h"
+#include "FileHandler.h"
+#include "HelpWindow.h"
+#include "MouseHandler.h"
+#include "WicDecoder.h"
+
 #include <windows.h>
 #include <windowsx.h>
 #include <dwmapi.h>
@@ -8,7 +23,6 @@
 #include "AppState.h"
 #include "FileHandler.h"
 #include "WicDecoder.h"
-#include "Renderer.h"
 #include "DpiAwareInit.h"
 #include "Constants.h"
 #include "resources/resource.h"
@@ -16,6 +30,7 @@
 #include "DropTarget.h"
 #include "Renderer/RendererD2D.h"
 #include "Renderer/RendererGDI.h"
+#include "MouseHandler.h"
 
 // Global application state
 AppState g_app;
@@ -199,158 +214,30 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) 
             InvalidateRect(hWnd, nullptr, FALSE);
             return TRUE;
 
-        case WM_MOUSEWHEEL: {
-            if (g_app.playlist.empty()) return 0;
-            int zDelta = GET_WHEEL_DELTA_WPARAM(wParam);
-            if (GET_KEYSTATE_WPARAM(wParam) & MK_CONTROL) {
-                g_app.viewport.zoom *= (zDelta > 0) ? Config::ZOOM_STEP : (1.0f / Config::ZOOM_STEP);
-            } else {
-                int step = (zDelta < 0) ? 1 : -1;
-                int newIdx = (g_app.currentIndex + step + g_app.playlist.size()) % g_app.playlist.size();
-                LoadImageIndex(hWnd, newIdx);
-            }
-            InvalidateRect(hWnd, nullptr, FALSE);
+            // --- CLEAN MOUSE HANDLERS ---
+        case WM_LBUTTONDOWN:
+        case WM_RBUTTONDOWN:
+            MouseHandler::HandleButtonDown(hWnd, message, lParam);
             return 0;
-        }
-
-        case WM_LBUTTONDOWN: {
-            if (g_app.isFullscreen) return 0;
-            g_app.isWindowDragging = true;
-            POINT pt = { GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam) };
-            ClientToScreen(hWnd, &pt);
-            g_app.lastWindowMouse = pt;
-            SetCapture(hWnd);
-            return 0;
-        }
 
         case WM_LBUTTONUP:
-            g_app.isWindowDragging = false;
-            ReleaseCapture();
-            return 0;
-
-        case WM_MBUTTONDOWN: {
-            g_app.isMidDragging = true;
-            g_app.hasMidMoved   = false;
-            POINT pt = { GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam) };
-            ClientToScreen(hWnd, &pt);
-            g_app.lastMidMouse  = pt;
-            SetCapture(hWnd);
-            return 0;
-        }
-
-        case WM_MBUTTONUP: {
-            if (!g_app.hasMidMoved) {
-                g_app.viewport.zoom    = 1.0f;
-                g_app.viewport.offsetX = 0.0f;
-                g_app.viewport.offsetY = 0.0f;
-
-                if (!g_app.isFullscreen) {
-                    UINT dpi = GetDpiForWindow(hWnd);
-                    int winW = MulDiv(Config::BASE_WIDTH, dpi, 96);
-                    int winH = MulDiv(Config::BASE_HEIGHT, dpi, 96);
-
-                    MONITORINFO mi = { sizeof(mi) };
-                    GetMonitorInfo(MonitorFromWindow(hWnd, MONITOR_DEFAULTTONEAREST), &mi);
-
-                    int posX = mi.rcWork.left + ((mi.rcWork.right - mi.rcWork.left) - winW) / 2;
-                    int posY = mi.rcWork.top + ((mi.rcWork.bottom - mi.rcWork.top) - winH) / 2;
-
-                    SetWindowPos(hWnd, nullptr, posX, posY, winW, winH,
-                                 SWP_NOZORDER | SWP_NOACTIVATE);
-                }
-                InvalidateRect(hWnd, nullptr, FALSE);
-            }
-
-            g_app.isMidDragging = false;
-            g_app.hasMidMoved   = false;
-            ReleaseCapture();
-            return 0;
-        }
-
-        case WM_RBUTTONDOWN:
-            SetCursor(NULL);
-            g_app.savedZoom    = g_app.viewport.zoom;
-            g_app.savedOffsetX = g_app.viewport.offsetX;
-            g_app.savedOffsetY = g_app.viewport.offsetY;
-            g_app.viewport.zoom *= Config::ZOOM_LMB;
-            g_app.viewport.lastMouse = { GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam) };
-            g_app.viewport.isDragging = true;
-            SetCapture(hWnd);
-            InvalidateRect(hWnd, nullptr, FALSE);
-            return 0;
-
         case WM_RBUTTONUP:
-            SetCursor(LoadCursor(nullptr, IDC_ARROW));
-            g_app.viewport.zoom    = g_app.savedZoom;
-            g_app.viewport.offsetX = g_app.savedOffsetX;
-            g_app.viewport.offsetY = g_app.savedOffsetY;
-            g_app.viewport.isDragging = false;
-            ReleaseCapture();
-            InvalidateRect(hWnd, nullptr, FALSE);
+            MouseHandler::HandleButtonUp(hWnd, message, lParam);
             return 0;
 
-        case WM_MOUSEMOVE: {
-            if (g_app.viewport.isDragging) {
-                POINT curMouse = { GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam) };
-                g_app.viewport.offsetX -= (curMouse.x - g_app.viewport.lastMouse.x);
-                g_app.viewport.offsetY -= (curMouse.y - g_app.viewport.lastMouse.y);
-                g_app.viewport.lastMouse = curMouse;
-
-                RECT rc;
-                GetClientRect(hWnd, &rc);
-                float winW = (float)(rc.right  - rc.left);
-                float winH = (float)(rc.bottom - rc.top);
-
-                float base    = min(winW / g_app.imgWidth, winH / g_app.imgHeight);
-                float renderW = g_app.imgWidth  * base * g_app.viewport.zoom;
-                float renderH = g_app.imgHeight * base * g_app.viewport.zoom;
-
-                float maxOffX = max(0.0f, (renderW - winW) / 2.0f);
-                float maxOffY = max(0.0f, (renderH - winH) / 2.0f);
-
-                g_app.viewport.offsetX = max(-maxOffX, min(maxOffX, g_app.viewport.offsetX));
-                g_app.viewport.offsetY = max(-maxOffY, min(maxOffY, g_app.viewport.offsetY));
-
-                InvalidateRect(hWnd, nullptr, FALSE);
-            }
-            else if (g_app.isMidDragging) {
-                POINT curMouse = { GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam) };
-                ClientToScreen(hWnd, &curMouse);
-                g_app.hasMidMoved = true;
-
-                if (!g_app.isFullscreen) {
-                    int dx = curMouse.x - g_app.lastMidMouse.x;
-                    int dy = curMouse.y - g_app.lastMidMouse.y;
-
-                    RECT rc;
-                    GetWindowRect(hWnd, &rc);
-
-                    SetWindowPos(hWnd, nullptr, 0, 0,
-                                 (rc.right - rc.left) + dx,
-                                 (rc.bottom - rc.top) + dy,
-                                 SWP_NOMOVE | SWP_NOZORDER | SWP_NOACTIVATE | SWP_NOCOPYBITS);
-                }
-
-                g_app.lastMidMouse = curMouse;
-                InvalidateRect(hWnd, nullptr, FALSE);
-            }
-            else if (g_app.isWindowDragging) {
-                POINT curMouse = { GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam) };
-                ClientToScreen(hWnd, &curMouse);
-
-                int dx = curMouse.x - g_app.lastWindowMouse.x;
-                int dy = curMouse.y - g_app.lastWindowMouse.y;
-
-                RECT rc;
-                GetWindowRect(hWnd, &rc);
-
-                SetWindowPos(hWnd, nullptr, rc.left + dx, rc.top + dy, 0, 0,
-                             SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE);
-
-                g_app.lastWindowMouse = curMouse;
-            }
+        case WM_MOUSEMOVE:
+            MouseHandler::HandleMouseMove(hWnd, lParam);
             return 0;
-        }
+
+        case WM_MBUTTONDOWN:
+        case WM_MBUTTONUP:
+            // Since you moved this logic to HandleButtonDown/Up, call them here too
+            if (message == WM_MBUTTONDOWN) MouseHandler::HandleButtonDown(hWnd, message, lParam);
+            else MouseHandler::HandleButtonUp(hWnd, message, lParam);
+            return 0;
+        case WM_MOUSEWHEEL:
+            MouseHandler::HandleMouseWheel(hWnd, wParam, lParam);
+            return 0;
 
         // PAINT: Using the polymorphic renderer
         case WM_PAINT: {
