@@ -38,17 +38,7 @@ WorkerThread g_decoderWorker;
 
 LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) {
     switch (message) {
-        case WM_USER + 1: {
-            // Cast to check if we are using the D2D renderer
-            RendererD2D* pD2D = dynamic_cast<RendererD2D*>(g_app.renderer.get());
 
-            if (pD2D) {
-                // Only process if it is the D2D renderer
-                pD2D->ProcessPendingUploads();
-                InvalidateRect(hWnd, nullptr, FALSE);
-            }
-            return 0;
-        }
         // Handle file paths sent from other instances of the viewer
         case WM_COPYDATA: {
             COPYDATASTRUCT* cds = (COPYDATASTRUCT*)lParam;
