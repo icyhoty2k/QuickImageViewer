@@ -8,6 +8,8 @@
 #include <dwmapi.h>
 
 AppState g_app;
+static constexpr float ZOOM_STEP        = 1.1f;  // +/- keys and ctrl+wheel
+static constexpr float ZOOM_LMB         = 2.0f;  // left click zoom multiplier
 
 LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) {
     switch (message) {
@@ -210,9 +212,26 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) 
             // 1. Left mouse pan (while 2x zoom held)
             if (g_app.viewport.isDragging) {
                 POINT curMouse = { GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam) };
-                g_app.viewport.offsetX += (curMouse.x - g_app.viewport.lastMouse.x);
-                g_app.viewport.offsetY += (curMouse.y - g_app.viewport.lastMouse.y);
+                g_app.viewport.offsetX -= (curMouse.x - g_app.viewport.lastMouse.x);
+                g_app.viewport.offsetY -= (curMouse.y - g_app.viewport.lastMouse.y);
                 g_app.viewport.lastMouse = curMouse;
+
+                // Clamp to image bounds
+                RECT rc;
+                GetClientRect(hWnd, &rc);
+                float winW = (float)(rc.right  - rc.left);
+                float winH = (float)(rc.bottom - rc.top);
+
+                float base    = min(winW / g_app.imgWidth, winH / g_app.imgHeight);
+                float renderW = g_app.imgWidth  * base * g_app.viewport.zoom;
+                float renderH = g_app.imgHeight * base * g_app.viewport.zoom;
+
+                float maxOffX = max(0.0f, (renderW - winW) / 2.0f);
+                float maxOffY = max(0.0f, (renderH - winH) / 2.0f);
+
+                g_app.viewport.offsetX = max(-maxOffX, min(maxOffX, g_app.viewport.offsetX));
+                g_app.viewport.offsetY = max(-maxOffY, min(maxOffY, g_app.viewport.offsetY));
+
                 InvalidateRect(hWnd, nullptr, FALSE);
             }
             // 2. Middle mouse pan
