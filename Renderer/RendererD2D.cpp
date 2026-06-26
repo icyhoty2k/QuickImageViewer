@@ -34,15 +34,20 @@ void RendererD2D::Resize(UINT width, UINT height) {
     if (m_pRenderTarget) m_pRenderTarget->Resize(D2D1::SizeU(width, height));
 }
 
-// UI THREAD ONLY: Uploads decoded data to VRAM
+// UI THREAD ONLY: Uploads decoded data to VRAM. Caller must NOT hold m_cacheMutex.
 HRESULT RendererD2D::CreateBitmapFromWic(IWICBitmapSource* bitmap, const std::wstring& filePath) {
+    std::lock_guard<std::mutex> lock(m_cacheMutex);
+    return CreateBitmapFromWic_Locked(bitmap, filePath);
+}
+
+// UI THREAD ONLY: Internal version — caller must already hold m_cacheMutex.
+HRESULT RendererD2D::CreateBitmapFromWic_Locked(IWICBitmapSource* bitmap, const std::wstring& filePath) {
     if (!m_pRenderTarget) return E_FAIL;
 
     Microsoft::WRL::ComPtr<ID2D1Bitmap> newBitmap;
     HRESULT hr = m_pRenderTarget->CreateBitmapFromWicBitmap(bitmap, nullptr, newBitmap.GetAddressOf());
     if (FAILED(hr)) return hr;
 
-    std::lock_guard<std::mutex> lock(m_cacheMutex);
     if (m_lruList.size() >= Config::VRAM_CACHE_IMAGES_COUNT) {
         m_bitmapCache.erase(m_lruList.back());
         m_lruList.pop_back();
@@ -52,30 +57,36 @@ HRESULT RendererD2D::CreateBitmapFromWic(IWICBitmapSource* bitmap, const std::ws
     return S_OK;
 }
 
-// UI THREAD ONLY: Drain the queue of images decoded in the background
+// UI THREAD ONLY: Drain the queue of images decoded in the background.
 void RendererD2D::ProcessPendingUploads() {
+    // Drain the pending queue under lock, then upload outside to avoid deadlock
+    // (CreateBitmapFromWic_Locked is called while the lock is already held here)
     std::lock_guard<std::mutex> lock(m_cacheMutex);
     while (!m_pendingUploads.empty()) {
-        auto upload = m_pendingUploads.front();
-        CreateBitmapFromWic(upload.converter.Get(), upload.filePath);
+        auto upload = std::move(m_pendingUploads.front());
         m_pendingUploads.pop();
+        CreateBitmapFromWic_Locked(upload.converter.Get(), upload.filePath);
     }
 }
 
 HRESULT RendererD2D::LoadBitmap(IWICBitmapSource* bitmap, UINT width, UINT height, const std::wstring& filePath) {
-    // 1. Check if we are on the UI thread
-    // If you are NOT on the UI thread, you MUST PostMessage to the UI thread
-    // and wait, OR perform the bitmap creation only when the UI thread processes the message.
-
     std::lock_guard<std::mutex> lock(m_cacheMutex);
+
     auto it = m_bitmapCache.find(filePath);
     if (it != m_bitmapCache.end()) {
+        // Cache hit: promote in LRU and set as active
+        m_lruList.splice(m_lruList.begin(), m_lruList, it->second.lruIt);
         m_pBitmap = it->second.bitmap;
         return S_OK;
     }
 
-    // IF THIS RUNS ON A BACKGROUND THREAD, IT WILL CRASH.
-    return CreateBitmapFromWic(bitmap, filePath);
+    // Cache miss: decode into VRAM now (UI thread only)
+    HRESULT hr = CreateBitmapFromWic_Locked(bitmap, filePath);
+    if (SUCCEEDED(hr)) {
+        // The new bitmap was just inserted at the front of the LRU list
+        m_pBitmap = m_bitmapCache[filePath].bitmap;
+    }
+    return hr;
 }
 
 // BACKGROUND THREAD: Performs I/O and Decoding only
