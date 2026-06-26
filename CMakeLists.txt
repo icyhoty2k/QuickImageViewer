@@ -15,6 +15,9 @@ set(SOURCES
         HelpWindow.cpp
         DropTarget.cpp
         resources/resource.rc
+        Renderer/IRenderer.h
+        Renderer/RendererGDI.cpp
+        Renderer/RendererGDI.h
 )
 
 # 2. Add the executable
