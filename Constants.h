@@ -21,7 +21,10 @@ namespace Config {
 
 
 
-// =============================================================================
+    // Custom window messages
+    constexpr UINT WM_QIV_PENDING_UPLOADS = WM_USER + 1; // Posted by background decoder thread
+
+    // =============================================================================
     constexpr const wchar_t* APP_NAME          = BASE_NAME;
     constexpr const wchar_t* WINDOW_CLASS_NAME = BASE_NAME;
 }
