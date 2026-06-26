@@ -39,12 +39,11 @@ WorkerThread g_decoderWorker;
 LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) {
     switch (message) {
         case WM_USER + 1: {
-            // 1. Attempt to cast the interface pointer to the D2D implementation
-            // This safely checks if the current renderer is actually RendererD2D
+            // Cast to check if we are using the D2D renderer
             RendererD2D* pD2D = dynamic_cast<RendererD2D*>(g_app.renderer.get());
 
-            // 2. Only call the method if the cast succeeded
             if (pD2D) {
+                // Only process if it is the D2D renderer
                 pD2D->ProcessPendingUploads();
                 InvalidateRect(hWnd, nullptr, FALSE);
             }
