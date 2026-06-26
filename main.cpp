@@ -6,10 +6,10 @@
 #include "Renderer.h"
 #include "DpiAwareInit.h"
 #include <dwmapi.h>
+#include "Constants.h"
+#include "resources/resource.h"
 
 AppState g_app;
-static constexpr float ZOOM_STEP        = 1.1f;  // +/- keys and ctrl+wheel
-static constexpr float ZOOM_LMB         = 3.0f;  // left click zoom multiplier
 
 LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) {
     switch (message) {
@@ -84,13 +84,13 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) 
                     case VK_UP:
                     case VK_ADD:
                     case VK_OEM_PLUS:
-                        g_app.viewport.zoom *= ZOOM_STEP;
+                        g_app.viewport.zoom *= Config::ZOOM_STEP;
                         InvalidateRect(hWnd, nullptr, FALSE);
                         break;
                     case VK_DOWN:
                     case VK_SUBTRACT:
                     case VK_OEM_MINUS:
-                        g_app.viewport.zoom /= ZOOM_STEP;
+                        g_app.viewport.zoom /= Config::ZOOM_STEP;
                         InvalidateRect(hWnd, nullptr, FALSE);
                         break;
                     case VK_NUMPAD0:
@@ -141,7 +141,7 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) 
             if (g_app.playlist.empty()) return 0;
             int zDelta = GET_WHEEL_DELTA_WPARAM(wParam);
             if (GET_KEYSTATE_WPARAM(wParam) & MK_CONTROL) {
-                g_app.viewport.zoom *= (zDelta > 0) ? ZOOM_STEP : (1.0f / ZOOM_STEP);
+                g_app.viewport.zoom *= (zDelta > 0) ? Config::ZOOM_STEP : (1.0f / Config::ZOOM_STEP);
             } else {
                 int step = (zDelta < 0) ? 1 : -1;
                 int newIdx = (g_app.currentIndex + step + g_app.playlist.size()) % g_app.playlist.size();
@@ -187,8 +187,8 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) 
 
                 if (!g_app.isFullscreen) {
                     UINT dpi = GetDpiForWindow(hWnd);
-                    int winW = MulDiv(1200, dpi, 96);
-                    int winH = MulDiv(800, dpi, 96);
+                    int winW = MulDiv(Config::BASE_WIDTH, dpi, 96);
+                    int winH = MulDiv(Config::BASE_HEIGHT, dpi, 96);
 
                     // Get current monitor to ensure it centers on the correct screen
                     MONITORINFO mi = { sizeof(mi) };
@@ -215,7 +215,7 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) 
             g_app.savedZoom    = g_app.viewport.zoom;
             g_app.savedOffsetX = g_app.viewport.offsetX;
             g_app.savedOffsetY = g_app.viewport.offsetY;
-            g_app.viewport.zoom *= ZOOM_LMB;
+            g_app.viewport.zoom *= Config::ZOOM_LMB;
             g_app.viewport.lastMouse = { GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam) };
             g_app.viewport.isDragging = true;
             SetCapture(hWnd);
@@ -339,6 +339,7 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE, LPSTR, int nCmdShow) {
     wc.hInstance = hInstance;
     wc.lpszClassName = L"FastStoneCloneWIC";
     wc.hCursor = LoadCursor(nullptr, IDC_ARROW);
+    wc.hIcon = LoadIcon(hInstance, MAKEINTRESOURCE(IDI_APP_ICON));  //resources icon
     RegisterClassW(&wc);
 
     HWND hWnd = CreateViewerWindow(hInstance, wc.lpszClassName);
