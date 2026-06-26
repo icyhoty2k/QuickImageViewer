@@ -1,12 +1,9 @@
-cmake_minimum_required(VERSION 3.20) # Corrected version
+cmake_minimum_required(VERSION 3.20)
 project(QuickImageViewer)
 
 set(CMAKE_CXX_STANDARD 23)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
-# 1. Source files (Only .cpp and .rc files)
-# DO NOT include headers (.h) in set(SOURCES ...).
-# CMake finds them automatically.
 set(SOURCES
         main.cpp
         FileHandler.cpp
@@ -20,10 +17,15 @@ set(SOURCES
         Renderer/RendererD2D.cpp
 )
 
-# 2. Add the executable
+# 1. Define the executable first
 add_executable(QuickImageViewer WIN32 ${SOURCES})
 
-# 3. Link libraries (Ensure d2d1 and dwrite are here)
+# 2. NOW define the definitions for that target
+target_compile_definitions(QuickImageViewer PRIVATE
+        $<$<CONFIG:Debug>:DEBUG_BUILD>
+)
+
+# 3. Link libraries
 target_link_libraries(QuickImageViewer PRIVATE
         d2d1
         dwrite
