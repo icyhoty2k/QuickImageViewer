@@ -50,10 +50,7 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) 
                 OpenSpecificImage(hWnd, safePath.c_str());
 
                 // --- 2. WAKE UP & CENTER ---
-                g_app.viewport.zoom    = 1.0f;
-                g_app.viewport.offsetX = 0.0f;
-                g_app.viewport.offsetY = 0.0f;
-
+                // (viewport already reset inside LoadImageIndex via OpenSpecificImage)
                 ShowWindow(hWnd, SW_RESTORE);
                 SetForegroundWindow(hWnd); // Bring to front
                 InvalidateRect(hWnd, nullptr, FALSE);
@@ -233,10 +230,6 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) 
 
         case WM_MBUTTONDOWN:
         case WM_MBUTTONUP:
-            if (g_app.viewport.isDragging) {
-                MouseHandler::HandleButtonUp(hWnd, message, lParam);
-            }
-            // Since you moved this logic to HandleButtonDown/Up, call them here too
             if (message == WM_MBUTTONDOWN) MouseHandler::HandleButtonDown(hWnd, message, lParam);
             else MouseHandler::HandleButtonUp(hWnd, message, lParam);
             return 0;
@@ -446,6 +439,12 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE, LPSTR, int nCmdShow) {
 
     CoUninitialize();
     OleUninitialize();
+
+    // Release the single-instance mutex
+    if (hMutex) {
+        ReleaseMutex(hMutex);
+        CloseHandle(hMutex);
+    }
 
     return static_cast<int>(msg.wParam); // WinMain concludes here
 }

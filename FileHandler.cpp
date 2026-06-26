@@ -35,6 +35,9 @@ void OpenInitialImage(HWND hWnd) {
             | std::views::transform([](const auto& e) { return e.path().wstring(); })
             | std::ranges::to<std::vector<std::wstring>>();
 
+        // Sort alphabetically so arrow-key navigation matches Explorer order
+        std::ranges::sort(g_app.playlist);
+
         auto it = std::ranges::find(g_app.playlist, filePath.wstring());
         if (it != g_app.playlist.end()) {
             extern void LoadImageIndex(HWND, int);
@@ -61,6 +64,9 @@ void OpenSpecificImage(HWND hWnd, const std::wstring& filePathStr) {
         | std::views::filter([](const auto& e) { return e.is_regular_file() && is_image_ext(e.path().extension().wstring()); })
         | std::views::transform([](const auto& e) { return e.path().wstring(); })
         | std::ranges::to<std::vector<std::wstring>>();
+
+    // Sort alphabetically so arrow-key navigation matches Explorer order
+    std::ranges::sort(g_app.playlist);
 
     // Find the image in the playlist and load it
     auto it = std::ranges::find(g_app.playlist, filePath.wstring());

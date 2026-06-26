@@ -117,7 +117,7 @@ HRESULT RendererD2D::PreloadBitmap(const std::wstring& filePath) {
         std::lock_guard<std::mutex> lock(m_cacheMutex);
         m_pendingUploads.push({filePath, converter});
     }
-    PostMessage(m_hwnd, WM_USER + 1, 0, 0);
+    PostMessage(m_hwnd, Config::WM_QIV_PENDING_UPLOADS, 0, 0);
 
     return S_OK;
 }
