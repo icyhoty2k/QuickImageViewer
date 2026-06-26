@@ -16,8 +16,10 @@ HWND CreateViewerWindow(HINSTANCE hInstance, const wchar_t* className) {
     int posY = (screenH - winH) / 2;
 
     return CreateWindowExW(
-       0, className, L"Viewer", WS_OVERLAPPEDWINDOW, // Keep this style
-       posX, posY, winW, winH,
-       nullptr, nullptr, hInstance, nullptr
-   );
+        WS_EX_APPWINDOW,
+        className, L"Viewer",
+        WS_POPUP,
+        posX, posY, winW, winH,
+        nullptr, nullptr, hInstance, nullptr
+    );
 }

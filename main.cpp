@@ -11,33 +11,120 @@ AppState g_app;
 
 LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) {
     switch (message) {
-        case WM_KEYDOWN:
-            // Check for ESC key OR (W key AND Ctrl is held down)
-            if (wParam == VK_ESCAPE || (wParam == 'W' && (GetKeyState(VK_CONTROL) & 0x8000))) {
+        case WM_KEYDOWN: {
+            bool shift = (GetKeyState(VK_SHIFT)   & 0x8000) != 0;
+            bool ctrl  = (GetKeyState(VK_CONTROL) & 0x8000) != 0;
+
+            // Quit
+            if (wParam == VK_ESCAPE || (wParam == 'W' && ctrl)) {
                 PostQuitMessage(0);
+                return 0;
+            }
+
+            // Fullscreen toggle: F, F11, Enter, Ctrl+Shift+T
+            if (wParam == VK_F11 || wParam == 'F' || wParam == VK_RETURN ||
+                (wParam == 'T' && ctrl && shift)) {
+
+                if (!g_app.isFullscreen) {
+                    GetWindowRect(hWnd, &g_app.savedWindowRect);
+                    MONITORINFO mi = { sizeof(mi) };
+                    GetMonitorInfo(MonitorFromWindow(hWnd, MONITOR_DEFAULTTONEAREST), &mi);
+                    SetWindowPos(hWnd, HWND_TOPMOST,
+                        mi.rcMonitor.left, mi.rcMonitor.top,
+                        mi.rcMonitor.right  - mi.rcMonitor.left,
+                        mi.rcMonitor.bottom - mi.rcMonitor.top,
+                        SWP_FRAMECHANGED);
+                    DWMNCRENDERINGPOLICY policy = DWMNCRP_DISABLED;
+                    DwmSetWindowAttribute(hWnd, DWMWA_NCRENDERING_POLICY, &policy, sizeof(policy));
+                    DWORD corner = 1; // DWMWCP_DONOTROUND
+                    DwmSetWindowAttribute(hWnd, 33, &corner, sizeof(corner));
+                    MARGINS margins = { 0, 0, 0, 0 };
+                    DwmExtendFrameIntoClientArea(hWnd, &margins);
+                    g_app.isFullscreen = true;
+                } else {
+                    SetWindowPos(hWnd, HWND_NOTOPMOST,
+                        g_app.savedWindowRect.left,
+                        g_app.savedWindowRect.top,
+                        g_app.savedWindowRect.right  - g_app.savedWindowRect.left,
+                        g_app.savedWindowRect.bottom - g_app.savedWindowRect.top,
+                        SWP_FRAMECHANGED);
+                    DWMNCRENDERINGPOLICY policy = DWMNCRP_ENABLED;
+                    DwmSetWindowAttribute(hWnd, DWMWA_NCRENDERING_POLICY, &policy, sizeof(policy));
+                    DWORD corner = 2; // DWMWCP_ROUND
+                    DwmSetWindowAttribute(hWnd, 33, &corner, sizeof(corner));
+                    MARGINS margins = { 1, 1, 1, 1 };
+                    DwmExtendFrameIntoClientArea(hWnd, &margins);
+                    g_app.isFullscreen = false;
+                }
+                InvalidateRect(hWnd, nullptr, FALSE);
+                return 0;
+            }
+
+            // Image navigation
+            if (!g_app.playlist.empty()) {
+                switch (wParam) {
+                    case VK_LEFT:
+                        LoadImageIndex(hWnd, (g_app.currentIndex - 1 + g_app.playlist.size()) % g_app.playlist.size());
+                        InvalidateRect(hWnd, nullptr, FALSE);
+                        break;
+                    case VK_RIGHT:
+                        LoadImageIndex(hWnd, (g_app.currentIndex + 1) % g_app.playlist.size());
+                        InvalidateRect(hWnd, nullptr, FALSE);
+                        break;
+                    case VK_SPACE:
+                        if (shift)
+                            LoadImageIndex(hWnd, (g_app.currentIndex - 1 + g_app.playlist.size()) % g_app.playlist.size());
+                        else
+                            LoadImageIndex(hWnd, (g_app.currentIndex + 1) % g_app.playlist.size());
+                        InvalidateRect(hWnd, nullptr, FALSE);
+                        break;
+                    case VK_ADD:      // numpad +
+                    case VK_OEM_PLUS: // normal +/=
+                        g_app.viewport.zoom *= 1.1f;
+                        InvalidateRect(hWnd, nullptr, FALSE);
+                        break;
+                    case VK_SUBTRACT: // numpad -
+                    case VK_OEM_MINUS: // normal -
+                        g_app.viewport.zoom *= 0.9f;
+                        InvalidateRect(hWnd, nullptr, FALSE);
+                        break;
+                    case VK_NUMPAD0:  // numpad 0
+                    case '0':         // normal 0
+                        g_app.viewport.zoom    = 1.0f;
+                        g_app.viewport.offsetX = 0.0f;
+                        g_app.viewport.offsetY = 0.0f;
+                        InvalidateRect(hWnd, nullptr, FALSE);
+                        break;
+                }
             }
             return 0;
+        }
 
-        // --- NEW: Resize logic ---
+        case WM_NCACTIVATE:
+            return TRUE;
+
         case WM_NCHITTEST: {
+            // No resize in fullscreen
+            if (g_app.isFullscreen) return HTCLIENT;
+
             POINT pt = { GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam) };
             RECT rc;
             GetWindowRect(hWnd, &rc);
 
             const int border = 8;
-            bool top = pt.y < rc.top + border;
+            bool top    = pt.y <  rc.top    + border;
             bool bottom = pt.y >= rc.bottom - border;
-            bool left = pt.x < rc.left + border;
-            bool right = pt.x >= rc.right - border;
+            bool left   = pt.x <  rc.left   + border;
+            bool right  = pt.x >= rc.right  - border;
 
-            if (top && left) return HTTOPLEFT;
-            if (top && right) return HTTOPRIGHT;
-            if (bottom && left) return HTBOTTOMLEFT;
+            if (top    && left)  return HTTOPLEFT;
+            if (top    && right) return HTTOPRIGHT;
+            if (bottom && left)  return HTBOTTOMLEFT;
             if (bottom && right) return HTBOTTOMRIGHT;
-            if (top) return HTTOP;
-            if (bottom) return HTBOTTOM;
-            if (left) return HTLEFT;
-            if (right) return HTRIGHT;
+            if (top)             return HTTOP;
+            if (bottom)          return HTBOTTOM;
+            if (left)            return HTLEFT;
+            if (right)           return HTRIGHT;
 
             return HTCLIENT;
         }
@@ -45,7 +132,6 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) 
         case WM_SIZING:
             InvalidateRect(hWnd, nullptr, FALSE);
             return TRUE;
-        // -------------------------
 
         case WM_MOUSEWHEEL: {
             if (g_app.playlist.empty()) return 0;
@@ -60,6 +146,12 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) 
             InvalidateRect(hWnd, nullptr, FALSE);
             return 0;
         }
+        case WM_MBUTTONDOWN:
+            g_app.viewport.zoom    = 1.0f;
+            g_app.viewport.offsetX = 0.0f;
+            g_app.viewport.offsetY = 0.0f;
+            InvalidateRect(hWnd, nullptr, FALSE);
+            return 0;
 
         case WM_LBUTTONDOWN:
             g_app.viewport.isDragging = true;
@@ -67,16 +159,15 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) 
             SetCapture(hWnd);
             return 0;
 
-
         case WM_LBUTTONUP:
             g_app.viewport.isDragging = false;
             ReleaseCapture();
             return 0;
 
-            // --- RBUTTON Window Move Logic ---
         case WM_RBUTTONDOWN: {
+            // No window drag in fullscreen
+            if (g_app.isFullscreen) return 0;
             g_app.isWindowDragging = true;
-            // Get mouse pos, convert to screen coords immediately
             POINT pt = { GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam) };
             ClientToScreen(hWnd, &pt);
             g_app.lastWindowMouse = pt;
@@ -84,13 +175,11 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) 
             return 0;
         }
 
-        case WM_RBUTTONUP: {
+        case WM_RBUTTONUP:
             g_app.isWindowDragging = false;
             ReleaseCapture();
             return 0;
-        }
 
-            // --- Combined MouseMove logic ---
         case WM_MOUSEMOVE: {
             // 1. Viewport Panning (LMB)
             if (g_app.viewport.isDragging) {
@@ -118,6 +207,7 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) 
             }
             return 0;
         }
+
         case WM_PAINT: {
             PAINTSTRUCT ps;
             HDC hdc = BeginPaint(hWnd, &ps);
@@ -125,28 +215,15 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) 
             EndPaint(hWnd, &ps);
             return 0;
         }
-        case WM_CREATE: {
-            BOOL value = TRUE;
-            // Enable rounded corners (DWMWA_WINDOW_CORNER_PREFERENCE = 33)
-            DwmSetWindowAttribute(hWnd, 33, &value, sizeof(value));
+
+        case WM_NCCALCSIZE:
             return 0;
-        }
-        case WM_NCCALCSIZE: {
-            if (wParam == TRUE) {
-                // Inflate the rectangle by 1 pixel to allow the DWM compositor
-                // to render the shadow and rounded corners correctly.
-                NCCALCSIZE_PARAMS* pParams = (NCCALCSIZE_PARAMS*)lParam;
-                InflateRect(&pParams->rgrc[0], 1, 1);
-                return 0;
-            }
-            return DefWindowProcW(hWnd, message, wParam, lParam);
-        }
 
         case WM_NCPAINT:
-            return 0; // Prevents the OS from drawing the caption bar
+            return 0;
 
         case WM_ERASEBKGND:
-            return 1; // Prevents flicker
+            return 1;
 
         case WM_DESTROY:
             PostQuitMessage(0);
@@ -174,6 +251,10 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE, LPSTR, int nCmdShow) {
     RegisterClassW(&wc);
 
     HWND hWnd = CreateViewerWindow(hInstance, wc.lpszClassName);
+
+    // Apply DWM style before showing to avoid Win8 border flash
+    DWORD corner = 2; // DWMWCP_ROUND
+    DwmSetWindowAttribute(hWnd, 33, &corner, sizeof(corner));
 
     ShowWindow(hWnd, nCmdShow);
     UpdateWindow(hWnd);
