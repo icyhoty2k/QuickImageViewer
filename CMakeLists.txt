@@ -3,6 +3,8 @@ project(QuickImageViewer)
 
 set(CMAKE_CXX_STANDARD 23)
 
+enable_language(RC) # <-- FIX 1: Tell CMake to compile resource files
+
 # Force a GUI application rather than a console window
 add_executable(QuickImageViewer WIN32
         main.cpp
@@ -16,6 +18,9 @@ add_executable(QuickImageViewer WIN32
         app.manifest
         DpiAwareInit.cpp
         DpiAwareInit.h
+        Constants.h
+        resources/resource.h
+        resources/resource.rc
 
 )
 

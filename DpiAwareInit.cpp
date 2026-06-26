@@ -1,4 +1,5 @@
 #include "DpiAwareInit.h"
+#include  "Constants.h"
 
 HWND CreateViewerWindow(HINSTANCE hInstance, const wchar_t* className) {
     int baseLogicalW = 1200;
@@ -16,10 +17,10 @@ HWND CreateViewerWindow(HINSTANCE hInstance, const wchar_t* className) {
     int posY = (screenH - winH) / 2;
 
     return CreateWindowExW(
-        WS_EX_APPWINDOW,
-        className, L"Viewer",
-        WS_POPUP,
-        posX, posY, winW, winH,
-        nullptr, nullptr, hInstance, nullptr
-    );
+           WS_EX_APPWINDOW,
+           className, Config::APP_TASKBAR_NAME,
+           WS_POPUP,
+           posX, posY, winW, winH,
+           nullptr, nullptr, hInstance, nullptr
+       );
 }
