@@ -12,7 +12,7 @@ void RenderViewport(HWND hWnd, HDC hdc) {
     HBITMAP hbmMem = CreateCompatibleBitmap(hdc, winW, winH);
     HBITMAP hbmOld = static_cast<HBITMAP>(SelectObject(hdcMem, hbmMem));
 
-    HBRUSH bgBrush = CreateSolidBrush(RGB(15, 15, 15));
+    HBRUSH bgBrush = CreateSolidBrush(RGB(20, 20, 20));
     FillRect(hdcMem, &rect, bgBrush);
     DeleteObject(bgBrush);
 
