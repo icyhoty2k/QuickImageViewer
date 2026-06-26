@@ -80,6 +80,9 @@ HRESULT RendererD2D::LoadBitmap(IWICBitmapSource* bitmap, UINT width, UINT heigh
         return S_OK;
     }
 
+    // Cache miss: if no bitmap was provided this was a cache-only probe — fail cleanly
+    if (!bitmap) return E_FAIL;
+
     // Cache miss: decode into VRAM now (UI thread only)
     HRESULT hr = CreateBitmapFromWic_Locked(bitmap, filePath);
     if (SUCCEEDED(hr)) {

@@ -27,9 +27,10 @@ public:
     virtual void Resize(UINT width, UINT height) = 0;
 
     /// Loads a decoded WIC bitmap into the renderer's pipeline.
-    /// @param bitmap Source WIC bitmap for processing.
-    /// @param width Width of the source image.
-    /// @param height Height of the source image.
+    /// If bitmap is nullptr, performs a cache-only lookup: returns S_OK on hit, E_FAIL on miss.
+    /// @param bitmap Source WIC bitmap for processing. May be nullptr for cache probe.
+    /// @param width Width of the source image (ignored on cache hit or nullptr probe).
+    /// @param height Height of the source image (ignored on cache hit or nullptr probe).
     /// @param filePath The absolute path used for identifying cached GPU resources.
     [[nodiscard]]
     virtual HRESULT LoadBitmap(
