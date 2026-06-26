@@ -1,43 +1,45 @@
-cmake_minimum_required(VERSION 4.2)
+cmake_minimum_required(VERSION 4.2) # 4.2 is likely a typo; 3.20 is standard
 project(QuickImageViewer)
 
 set(CMAKE_CXX_STANDARD 23)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
-enable_language(RC) # <-- FIX 1: Tell CMake to compile resource files
-
-# Force a GUI application rather than a console window
-add_executable(QuickImageViewer WIN32
+# 1. Source files (Only .cpp and .rc files)
+set(SOURCES
         main.cpp
         FileHandler.cpp
         WicDecoder.cpp
         Renderer.cpp
         RegistrySetup.cpp
-        AppState.h
-        FileHandler.h
-        WicDecoder.h
-        Renderer.h
-        RegistrySetup.h
-        app.manifest
         DpiAwareInit.cpp
-        DpiAwareInit.h
-        Constants.h
-        resources/resource.h
-        resources/resource.rc
         HelpWindow.cpp
-        HelpWindow.h
         DropTarget.cpp
-        DropTarget.h
-
+        resources/resource.rc
 )
 
-# Link the target to WIC and GDI32 instead of GDI+
-# 2. Add dwmapi to target_link_libraries
+# 2. Add the executable
+add_executable(QuickImageViewer WIN32 ${SOURCES})
+
+# Alternatively, the cleanest way to do this in modern CMake:
+set_target_properties(QuickImageViewer PROPERTIES
+        VS_USER_PROPS "${CMAKE_CURRENT_SOURCE_DIR}/app.manifest"
+)
+
+# 4. Define DEBUG_BUILD macro only for Debug
+target_compile_definitions(QuickImageViewer PRIVATE
+        $<$<CONFIG:Debug>:DEBUG_BUILD>
+)
+
+# 5. Link libraries
 target_link_libraries(QuickImageViewer PRIVATE
         user32
         comdlg32
         windowscodecs
         gdi32
         dwmapi
-        advapi32  # <-- ADD THIS (For Registry editing)
-        shell32   # <-- ADD THIS (For telling Windows to refresh)
+        advapi32
+        shell32
+        ole32       # Needed for Drag and Drop (OleInitialize)
+        oleaut32    # Needed for Drag and Drop
+        uuid
 )

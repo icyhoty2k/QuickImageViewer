@@ -362,8 +362,13 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) 
             return 1;
 
         case WM_CLOSE:
-            // Intercept the Top-Right 'X' button. Hide instead of destroy.
+#ifdef DEBUG_BUILD
+            // In Debug: Destroy the window, which eventually triggers WM_DESTROY and exits
+            DestroyWindow(hWnd);
+#else
+            // In Release: Just hide it to keep it resident in RAM
             ShowWindow(hWnd, SW_HIDE);
+#endif
             return 0;
 
         case WM_DESTROY:
