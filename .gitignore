@@ -1,0 +1,12 @@
+Plaintext
+# CMake build files
+/build/
+
+# IDE files
+.idea/
+*.suo
+
+# Compiled objects
+*.obj
+*.exe
+*.pdb
