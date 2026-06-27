@@ -1,6 +1,6 @@
 # 🖼️ QuickImageViewer (QIV)
 
-A high-performance, ultra-lightweight image viewer designed for speed and direct hardware control. Built with native C++ and Win32 APIs, QIV delivers 90%+ feature parity with legacy viewers at a fraction of the footprint (176 KB) while supporting modern formats like WebP and JPEG XL.
+A high-performance, ultra-lightweight image viewer designed for speed and direct hardware control. Built with native C++ and Win32 APIs, QIV delivers 90%+ feature parity with legacy viewers at a fraction of the footprint (178 KB) while supporting modern formats like WebP and JPEG XL.
 
 ---
 
