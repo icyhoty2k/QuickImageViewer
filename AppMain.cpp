@@ -304,7 +304,41 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) 
             MouseHandler::HandleMouseWheel(hWnd, wParam, lParam);
             return 0;
         }
+        case WM_MOUSEHWHEEL: {
+            bool isRmbDown = (GetKeyState(VK_RBUTTON) & 0x8000) != 0;
+            int hDelta = GET_WHEEL_DELTA_WPARAM(wParam);
 
+            if (isRmbDown) {
+                // 1. Get current window rect
+                RECT rc;
+                GetWindowRect(hWnd, &rc);
+                int currentW = rc.right - rc.left;
+                int currentH = rc.bottom - rc.top;
+
+                // 2. Define resize step (adjust for sensitivity)
+                int resizeStep = (hDelta > 0) ? 20 : -20;
+                int newW = currentW + resizeStep;
+                int newH = currentH + (resizeStep * (currentH / (float) currentW)); // Maintain aspect ratio
+
+                // 3. Calculate new centered position
+                int newX = rc.left - (resizeStep / 2);
+                int newY = rc.top - (resizeStep / 2);
+
+                // 4. Apply resize and position
+                SetWindowPos(hWnd, nullptr, newX, newY, newW, newH, SWP_NOZORDER | SWP_NOACTIVATE | SWP_NOCOPYBITS);
+                InvalidateRect(hWnd, nullptr, FALSE);
+                return 0;
+            }
+
+            // Existing Opacity Logic if RMB is NOT held
+            if (hDelta > 0) {
+                g_app.opacity = std::min(255, g_app.opacity + Config::OPACITY_STEP);
+            } else {
+                g_app.opacity = std::max(10, g_app.opacity - Config::OPACITY_STEP);
+            }
+            SetLayeredWindowAttributes(hWnd, 0, g_app.opacity, LWA_ALPHA);
+            return 0;
+        }
         case WM_LBUTTONDBLCLK: {
             // 1. Defer painting to prevent jitter
             SendMessageW(hWnd, WM_SETREDRAW, FALSE, 0);

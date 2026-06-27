@@ -24,6 +24,7 @@ struct AppState {
     std::unique_ptr<IImageRenderer> renderer;
     HBITMAP hDIB = nullptr;
     float dpiScale = 1.0f;
+    bool isRmbDown = false;
     BYTE opacity = 255;
     int screenW = 0;
     int screenH = 0;

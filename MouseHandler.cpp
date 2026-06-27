@@ -4,12 +4,31 @@
 #include "WicDecoder.h"
 #include <windowsx.h>
 #include <algorithm>
-#include <cmath>
+#include <shlobj_core.h>
+#include <shtypes.h>
 
 extern AppState g_app;
 
 
 void MouseHandler::HandleButtonDown(HWND hWnd, UINT message, LPARAM lParam) {
+    // Track RMB state
+    if (message == WM_RBUTTONDOWN) {
+        g_app.isRmbDown = true;
+    }
+
+    // New logic: If RMB is down and we receive a Left Click
+    if (message == WM_LBUTTONDOWN && g_app.isRmbDown) {
+        if (!g_app.playlist.empty() && g_app.currentIndex >= 0) {
+            const std::wstring &path = g_app.playlist[g_app.currentIndex];
+            PIDLIST_ABSOLUTE pidl = ILCreateFromPathW(path.c_str());
+            if (pidl) {
+                g_app.isRmbDown = false;
+                SHOpenFolderAndSelectItems(pidl, 0, nullptr, 0);
+                ILFree(pidl);
+            }
+        }
+        return; // Handled
+    }
     if (message == WM_MBUTTONDOWN) {
         g_app.isMidDragging = true;
         g_app.hasMidMoved = false;
@@ -64,6 +83,9 @@ void MouseHandler::HandleButtonDown(HWND hWnd, UINT message, LPARAM lParam) {
 }
 
 void MouseHandler::HandleButtonUp(HWND hWnd, UINT message, LPARAM lParam) {
+    if (message == WM_RBUTTONUP) {
+        g_app.isRmbDown = false;
+    }
     if (message == WM_MBUTTONUP) {
         if (!g_app.hasMidMoved) {
             // 1. Reset Zoom and Pan
@@ -170,13 +192,25 @@ void MouseHandler::HandleMouseMove(HWND hWnd, LPARAM lParam) {
 
 void MouseHandler::HandleMouseWheel(HWND hWnd, WPARAM wParam, LPARAM lParam) {
     if (g_app.playlist.empty()) return;
+
+    // Check if RMB is held down (0x8000 indicates the key is down)
+    bool isRmbDown = (GetKeyState(VK_RBUTTON) & 0x8000) != 0;
+
     int zDelta = GET_WHEEL_DELTA_WPARAM(wParam);
-    if (GET_KEYSTATE_WPARAM(wParam) & MK_CONTROL) {
+
+    if (isRmbDown) {
+        // Zoom logic when RMB is held
         g_app.viewport.zoom *= (zDelta > 0) ? Config::ZOOM_STEP : (1.0f / Config::ZOOM_STEP);
+        InvalidateRect(hWnd, nullptr, FALSE);
+    } else if (GET_KEYSTATE_WPARAM(wParam) & MK_CONTROL) {
+        // Existing Ctrl+Scroll zoom logic
+        g_app.viewport.zoom *= (zDelta > 0) ? Config::ZOOM_STEP : (1.0f / Config::ZOOM_STEP);
+        InvalidateRect(hWnd, nullptr, FALSE);
     } else {
+        // Default: Image navigation
         int step = (zDelta < 0) ? 1 : -1;
         int newIdx = (g_app.currentIndex + step + (int) g_app.playlist.size()) % (int) g_app.playlist.size();
         LoadImageIndex(hWnd, newIdx);
+        InvalidateRect(hWnd, nullptr, FALSE);
     }
-    InvalidateRect(hWnd, nullptr, FALSE);
 }
