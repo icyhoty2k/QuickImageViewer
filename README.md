@@ -1,44 +1,64 @@
-QuickImageViewer
-A lightweight, high-performance image viewer built for speed and direct control. Designed for users who prefer lean, efficient code without unnecessary abstractions.
+# 🖼️ QuickImageViewer (QIV)
 
-Key Features
-Performance-Focused: Leverages native Windows Imaging Component (WIC) for fast decoding.
+**Looking for a lightweight WebP viewer for Windows that doesn't sacrifice performance?** 
 
-No-Magic Architecture: Modular, explicit C++ design for maintainability and direct control.
+**QuickImageViewer (QIV)** is a **fast image viewer built with C++** and native Win32 APIs, designed for users who demand speed and direct control. Whether you need a **portable image viewer with no install** required, or simply want to escape the bloat of modern software, QIV provides a seamless experience for modern formats like WebP, JPEG XL, and JPEG. 
 
-Open: Licensed under AGPLv3 to ensure the project and its future improvements remain free and open to everyone.
+It delivers 90%+ feature parity with legacy viewers at a fraction of the footprint (178 KB).
 
-Building the Project
-This project uses CMake. To build it, ensure you have a C++ compiler (like MSVC or MinGW) and CMake installed.
+---
 
-Clone the repository:
+## 📸 Preview
 
-Bash
-git clone https://github.com/icyhoty2k/QuickImageViewer.git
-Navigate to the project folder:
+| Main Interface | Shortcuts & Integration |
+| :--- | :--- |
+| ![Application](Screenshot_App.png) | ![Shortcuts](Screenshot_Shortcuts.png) |
 
-Bash
+---
+
+## 🚀 Download
+You can download the latest version of the viewer from the **[Releases page](https://github.com/icyhoty2k/PosMan/releases/latest)**.
+
+> *Built with native C++ for maximum efficiency (178 KB).*
+
+---
+
+## ✨ Features
+* **⚡ Extreme Efficiency:** 178 KB footprint with near-instant startup.
+* **🧳 Portable:** Fully self-contained; runs perfectly from any folder or USB drive with no installation required.
+* **👻 Service-Like Persistence:** Stays resident in RAM and "ghosts" into the background (Esc to hide), ready for instant recall.
+* **🩹 Self-Healing:** Automatically manages its own registry paths and file associations—just run it once after moving to any location.
+* **🛠️ Zero-Magic Design:** Native WIC-based decoding, explicit state management, and direct Windows API calls for maximum transparency and speed.
+* **🧠 Smart Resource Management:** Caches images in VRAM and preloads neighbors for a stutter-free browsing experience.
+
+---
+
+## 📖 Installation & Usage
+Simply download the latest binary from the **[Releases page](https://github.com/icyhoty2k/PosMan/releases/latest)**.
+
+**💡 Note:** If you move the executable to a new folder, run it once. The application will automatically detect the path change, self-heal the registry settings, and restore file associations.
+
+---
+
+## 🏗️ Architecture
+Designed for developers who value imperative, explicit code over declarative abstractions:
+
+* **`main.cpp`** : Application lifecycle and instance management.
+* **`WicDecoder.cpp`** : Low-level WIC image decoding.
+* **`RendererD2D/GDI.cpp`** : Hardware-accelerated (Direct2D) or fallback (GDI) rendering.
+* **`AppState.h`** : Centralized, queryable system state.
+
+---
+
+## ⚙️ Build
+Requires [CMake](https://cmake.org/) and an [MSVC](https://visualstudio.microsoft.com/) compiler.
+
+```bash
+git clone [https://github.com/icyhoty2k/QuickImageViewer.git](https://github.com/icyhoty2k/QuickImageViewer.git)
 cd QuickImageViewer
-Build with CMake:
-
-Bash
-mkdir build
-cd build
+mkdir build && cd build
 cmake ..
-cmake --build .
-Project Structure
-main.cpp: Entry point and application lifecycle management.
-
-WicDecoder.cpp: Native WIC-based image decoding logic.
-
-Renderer.cpp: Viewport rendering and display operations.
-
-FileHandler.cpp: Low-level filesystem and I/O management.
-
-AppState.h: Centralized application state.
-
-Contributing
-Contributions are welcome! Please see CONTRIBUTING.md for guidelines on how to submit features and fixes.
-
-License
-This project is licensed under the GNU Affero General Public License v3.0 (AGPLv3). See the LICENSE file for details.
+cmake --build . --config Release
+```
+## 📜 License
+Licensed under the **[GNU Affero General Public License v3.0 (AGPLv3)](LICENSE)**. See the [LICENSE](LICENSE) file for full details.
