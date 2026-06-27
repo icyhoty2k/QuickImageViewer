@@ -10,16 +10,21 @@
 #include <queue>
 #include "../Constants.h"
 
-class RendererD2D final : public IImageRenderer
-{
+class RendererD2D final : public IImageRenderer {
 public:
     RendererD2D() = default;
+
     ~RendererD2D() override = default;
 
     [[nodiscard]] HRESULT Initialize(HWND hwnd) override;
+
     void Resize(UINT width, UINT height) override;
-    [[nodiscard]] HRESULT LoadBitmap(IWICBitmapSource* bitmap, UINT width, UINT height, const std::wstring& filePath) override;
-    [[nodiscard]] HRESULT PreloadBitmap(const std::wstring& filePath) override;
+
+    [[nodiscard]] HRESULT
+    LoadBitmap(IWICBitmapSource *bitmap, UINT width, UINT height, const std::wstring &filePath) override;
+
+    [[nodiscard]] HRESULT PreloadBitmap(const std::wstring &filePath) override;
+
     [[nodiscard]] HRESULT Render() override;
 
     // UI THREAD: Processes the background-decoded images
@@ -41,9 +46,10 @@ private:
     Microsoft::WRL::ComPtr<ID2D1HwndRenderTarget> m_pRenderTarget;
     Microsoft::WRL::ComPtr<ID2D1Bitmap> m_pBitmap;
 
-    HRESULT CreateBitmapFromWic(IWICBitmapSource* bitmap, const std::wstring& filePath);
+    HRESULT UploadAndCacheBitmap(IWICBitmapSource *bitmap, const std::wstring &filePath);
+
     // Internal version — caller must already hold m_cacheMutex
-    HRESULT CreateBitmapFromWic_Locked(IWICBitmapSource* bitmap, const std::wstring& filePath);
+    HRESULT UploadAndCacheBitmap_Locked(IWICBitmapSource *bitmap, const std::wstring &filePath);
 
     // Cache management
     std::unordered_map<std::wstring, CachedBitmap> m_bitmapCache;
