@@ -71,6 +71,28 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) 
                 }
                 return 0;
             }
+            if (wParam == 'H') {
+                g_app.viewport.flippedH = !g_app.viewport.flippedH;
+                InvalidateRect(hWnd, nullptr, FALSE);
+                return 0;
+            }
+            if (wParam == 'V') {
+                g_app.viewport.flippedV = !g_app.viewport.flippedV;
+                InvalidateRect(hWnd, nullptr, FALSE);
+                return 0;
+            }
+            // Rotate Image: R (Clockwise) or Ctrl+R (Counter-Clockwise)
+            if (wParam == 'R') {
+                if (shift) {
+                    // Counter-Clockwise
+                    g_app.viewport.rotation = (g_app.viewport.rotation - 90 + 360) % 360;
+                } else {
+                    // Clockwise
+                    g_app.viewport.rotation = (g_app.viewport.rotation + 90) % 360;
+                }
+                InvalidateRect(hWnd, nullptr, FALSE);
+                return 0;
+            }
             // True Hard Quit (Ctrl + Q) to flush from RAM completely
             if (wParam == 'Q' && ctrl) {
                 PostQuitMessage(0);
@@ -242,9 +264,38 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) 
             if (message == WM_MBUTTONDOWN) MouseHandler::HandleButtonDown(hWnd, message, lParam);
             else MouseHandler::HandleButtonUp(hWnd, message, lParam);
             return 0;
-        case WM_MOUSEWHEEL:
+        case WM_MOUSEWHEEL: {
+            // Check if Shilft is held down
+            bool isShiftDown = (GetKeyState(VK_SHIFT) & 0x8000) != 0;
+
+            // Check for Middle Mouse button scroll (Standard wheel)
+            // Note: If you want to restrict this specifically to Middle Mouse Scroll:
+            // Windows WM_MOUSEWHEEL usually reports the wheel delta.
+            // If you need to verify middle button is held, check GetKeyState(VK_MBUTTON).
+
+            if (isShiftDown) {
+                int delta = GET_WHEEL_DELTA_WPARAM(wParam);
+
+                // Adjust opacity (stepping by 15 for a smooth fade feel)
+                if (delta > 0) {
+                    g_app.opacity = (g_app.opacity + Config::OPACITY_STEP > 255)
+                                        ? 255
+                                        : (g_app.opacity + Config::OPACITY_STEP);
+                } else {
+                    g_app.opacity = (g_app.opacity - Config::OPACITY_STEP < 10)
+                                        ? 10
+                                        : (g_app.opacity - Config::OPACITY_STEP);
+                }
+
+                // Apply to the window
+                SetLayeredWindowAttributes(hWnd, 0, g_app.opacity, LWA_ALPHA);
+                return 0; // Handled
+            }
+
+            // Fallback to standard zoom
             MouseHandler::HandleMouseWheel(hWnd, wParam, lParam);
             return 0;
+        }
 
         case WM_LBUTTONDBLCLK: {
             // 1. Defer painting to prevent jitter
@@ -397,6 +448,8 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE, LPSTR, int nCmdShow) {
     RegisterClassW(&wc);
 
     HWND hWnd = CreateViewerWindow(hInstance, wc.lpszClassName);
+    SetWindowLongW(hWnd, GWL_EXSTYLE, GetWindowLongW(hWnd, GWL_EXSTYLE) | WS_EX_LAYERED);
+    SetLayeredWindowAttributes(hWnd, 0, g_app.opacity, LWA_ALPHA);
     UINT dpi = GetDpiForWindow(hWnd);
     g_app.dpiScale = (float) dpi / 96.0f; // Calculate scale factor once
     g_app.screenW = GetSystemMetrics(SM_CXSCREEN);

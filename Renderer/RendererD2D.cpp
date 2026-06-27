@@ -179,24 +179,41 @@ HRESULT RendererD2D::Render() {
 
     if (m_pBitmap) {
         const auto size = m_pBitmap->GetSize();
-        const float imageW = size.width;
-        const float imageH = size.height;
-
         const D2D1_SIZE_F rtSize = m_pRenderTarget->GetSize();
-        const float base = std::min(rtSize.width / imageW, rtSize.height / imageH);
+        const D2D1_POINT_2F center = D2D1::Point2F(rtSize.width / 2.0f, rtSize.height / 2.0f);
+
+        // Calculate basic geometry
+        const float base = std::min(rtSize.width / size.width, rtSize.height / size.height);
         const float z = (g_app.viewport.zoom <= 0.0f) ? 1.0f : g_app.viewport.zoom;
-        const float renderW = imageW * base * z;
-        const float renderH = imageH * base * z;
+        const float renderW = size.width * base * z;
+        const float renderH = size.height * base * z;
         const float left = (rtSize.width - renderW) / 2.0f + g_app.viewport.offsetX;
         const float top = (rtSize.height - renderH) / 2.0f + g_app.viewport.offsetY;
 
+        // Combine transformations
+        // 1. Start with Identity
+        D2D1_MATRIX_3X2_F transform = D2D1::Matrix3x2F::Identity();
+
+        // 2. Apply flip horizontal if needed (scale X by -1, relative to center)
+        if (g_app.viewport.flippedH) {
+            transform = transform * D2D1::Matrix3x2F::Scale(-1.0f, 1.0f, center);
+        }
+        // 2. Apply flip vertical if needed (scale Y by -1, relative to center)
+        if (g_app.viewport.flippedV) {
+            transform = transform * D2D1::Matrix3x2F::Scale(1.0f, -1.0f, center);
+        }
+
+        // 3. Apply rotation (relative to center)
+        transform = transform * D2D1::Matrix3x2F::Rotation((float) g_app.viewport.rotation, center);
+
+        m_pRenderTarget->SetTransform(transform);
         m_pRenderTarget->DrawBitmap(m_pBitmap.Get(), D2D1::RectF(left, top, left + renderW, top + renderH));
+        m_pRenderTarget->SetTransform(D2D1::Matrix3x2F::Identity());
     }
 
     HRESULT hr = m_pRenderTarget->EndDraw();
 
     if (hr == D2DERR_RECREATE_TARGET) {
-        // Clear all resources linked to the dead target
         m_pBitmap.Reset();
         m_bitmapCache.clear();
         m_lruList.clear();
