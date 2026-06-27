@@ -9,21 +9,35 @@
 
 HRESULT RendererD2D::Initialize(HWND hwnd) {
     m_hwnd = hwnd;
+
+    // 1. Create the D2D Factory FIRST
     if (!m_pFactory) {
-        HRESULT hr = D2D1CreateFactory(
-            D2D1_FACTORY_TYPE_SINGLE_THREADED,
-            m_pFactory.GetAddressOf());
-        if (FAILED(hr))
-            return hr;
+        HRESULT hr = D2D1CreateFactory(D2D1_FACTORY_TYPE_SINGLE_THREADED, m_pFactory.GetAddressOf());
+        if (FAILED(hr)) return hr;
     }
+
+    // 2. Create the DWrite Factory
+    if (FAILED(DWriteCreateFactory(DWRITE_FACTORY_TYPE_SHARED, __uuidof(IDWriteFactory),
+        reinterpret_cast<IUnknown**>(m_pDWriteFactory.GetAddressOf())))) {
+        return E_FAIL;
+    }
+
+    // 3. Setup Text Format
+    m_pDWriteFactory->CreateTextFormat(L"Segoe UI", nullptr, DWRITE_FONT_WEIGHT_NORMAL,
+                                       DWRITE_FONT_STYLE_NORMAL, DWRITE_FONT_STRETCH_NORMAL, 12.0f, L"en-us", &m_pTextFormat);
+
+    // 4. Create the Render Target
     RECT rc{};
     GetClientRect(hwnd, &rc);
-    return m_pFactory->CreateHwndRenderTarget(
+    HRESULT hr = m_pFactory->CreateHwndRenderTarget(
         D2D1::RenderTargetProperties(),
-        D2D1::HwndRenderTargetProperties(
-            hwnd,
-            D2D1::SizeU(rc.right - rc.left, rc.bottom - rc.top)),
+        D2D1::HwndRenderTargetProperties(hwnd, D2D1::SizeU(rc.right - rc.left, rc.bottom - rc.top)),
         m_pRenderTarget.GetAddressOf());
+
+    if (FAILED(hr)) return hr;
+
+    // 5. Create Brush (Requires active RenderTarget)
+    return m_pRenderTarget->CreateSolidColorBrush(D2D1::ColorF(D2D1::ColorF::LightGreen), &m_pTextBrush);
 }
 
 void RendererD2D::Resize(UINT width, UINT height) {
@@ -209,6 +223,19 @@ HRESULT RendererD2D::Render() {
         m_pRenderTarget->SetTransform(transform);
         m_pRenderTarget->DrawBitmap(m_pBitmap.Get(), D2D1::RectF(left, top, left + renderW, top + renderH));
         m_pRenderTarget->SetTransform(D2D1::Matrix3x2F::Identity());
+        if (!g_app.playlist.empty() && g_app.showOverlayInfoText) {
+            // 1. Get the current path
+            std::wstring fullPath = g_app.playlist[g_app.currentIndex];
+
+            // 2. Extract filename (everything after the last backslash)
+            std::wstring fileName = fullPath.substr(fullPath.find_last_of(L"\\/") + 1);
+
+            // 3. Format the display string
+            std::wstring text = std::to_wstring(g_app.currentIndex + 1) + L" / " +
+                                std::to_wstring(g_app.playlist.size()) + L" - " + fileName;
+            D2D1_RECT_F layoutRect = D2D1::RectF(0 + 15.0f, 0 + 6.0f, rtSize.width - 10.0f, rtSize.height - 10.0f);
+            m_pRenderTarget->DrawText(text.c_str(), (UINT32) text.length(), m_pTextFormat.Get(), layoutRect, m_pTextBrush.Get());
+        }
     }
 
     HRESULT hr = m_pRenderTarget->EndDraw();

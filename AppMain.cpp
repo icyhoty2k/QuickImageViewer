@@ -121,7 +121,11 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) 
                 }
                 return 0;
             }
-
+            if (wParam == 'N' && !ctrl) {
+                g_app.showOverlayInfoText = !g_app.showOverlayInfoText;
+                InvalidateRect(hWnd, nullptr, FALSE); // Redraw to hide/show text
+                return 0;
+            }
             // Open a New Blank Window (Ctrl + N)
             if (wParam == 'N' && ctrl) {
                 wchar_t exePath[MAX_PATH];

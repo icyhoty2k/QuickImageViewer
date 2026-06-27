@@ -8,6 +8,7 @@
 #include <string>
 #include <mutex>
 #include <queue>
+#include <dwrite.h>
 #include "../Constants.h"
 
 class RendererD2D final : public IImageRenderer {
@@ -29,6 +30,10 @@ public:
 
     // UI THREAD: Processes the background-decoded images
     void ProcessPendingUploads();
+
+    Microsoft::WRL::ComPtr<IDWriteFactory> m_pDWriteFactory;
+    Microsoft::WRL::ComPtr<IDWriteTextFormat> m_pTextFormat;
+    Microsoft::WRL::ComPtr<ID2D1SolidColorBrush> m_pTextBrush;
 
 private:
     struct CachedBitmap {
