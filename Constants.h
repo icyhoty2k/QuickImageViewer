@@ -20,7 +20,7 @@ namespace Config {
 
     //==========================Cache optimization====================================
     constexpr const int VRAM_CACHE_IMAGES_COUNT = 30;
-    constexpr const int PRELOAD_LOOKASIDE_COUNT = 1;
+    constexpr const int PRELOAD_LOOKASIDE_COUNT = 3;
     //==========================Cache optimization====================================
 
 
