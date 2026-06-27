@@ -1,3 +1,7 @@
+## Preview
+![Application Screenshot](Screenshot_App.png)
+## Preview
+![Settings Screenshot](Screenshot_Shortcuts.png)
 QuickImageViewer
 A lightweight, high-performance image viewer built for speed and direct control. Designed for users who prefer lean, efficient code without unnecessary abstractions.
 
