@@ -151,7 +151,7 @@ HRESULT RendererD2D::PreloadBitmap(const std::wstring &filePath) {
 
     // 2. Decode using the global factory
     Microsoft::WRL::ComPtr<IWICBitmapDecoder> decoder;
-    if (FAILED(g_app.wicFactory->CreateDecoderFromFilename(
+    if (FAILED(g_decoderWorker.wicFactory->CreateDecoderFromFilename(
         filePath.c_str(), nullptr, GENERIC_READ, WICDecodeMetadataCacheOnDemand, &decoder)))
         return E_FAIL;
 
@@ -159,7 +159,7 @@ HRESULT RendererD2D::PreloadBitmap(const std::wstring &filePath) {
     if (FAILED(decoder->GetFrame(0, &frame))) return E_FAIL;
 
     Microsoft::WRL::ComPtr<IWICFormatConverter> converter;
-    HRESULT hr = g_app.wicFactory->CreateFormatConverter(&converter);
+    HRESULT hr = g_decoderWorker.wicFactory->CreateFormatConverter(&converter);
     if (FAILED(hr))
         return hr;
 
