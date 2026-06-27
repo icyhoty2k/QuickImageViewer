@@ -22,7 +22,7 @@ void OpenInitialImage(HWND hWnd) {
     ofn.hwndOwner = hWnd;
     ofn.lpstrFile = szFile;
     ofn.nMaxFile = sizeof(szFile);
-    ofn.lpstrFilter = L"Images\0*.jpg;*.jpeg;*.png;*.bmp;*.webp\0";
+    ofn.lpstrFilter = L"Images\0*.jpg;*.jpeg;*.png;*.bmp;*.webp;*.gif;*.tiff\0";
     ofn.Flags = OFN_PATHMUSTEXIST | OFN_FILEMUSTEXIST;
 
     bool success = GetOpenFileNameW(&ofn);
