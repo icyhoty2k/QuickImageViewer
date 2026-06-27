@@ -263,6 +263,7 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) 
             InvalidateRect(hWnd, nullptr, FALSE);
             return TRUE;
         // --- CLEAN MOUSE HANDLERS ---
+   
         case WM_LBUTTONDOWN:
         case WM_RBUTTONDOWN:
             // This is the direct entry point for zoom and drag
