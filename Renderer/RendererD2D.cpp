@@ -2,10 +2,11 @@
 #include "../AppState.h"
 #include "../Constants.h"
 #include <algorithm>
-
+#include "../WorkerThread.h"
 #pragma comment(lib, "d2d1.lib")
 #pragma comment(lib, "dwrite.lib")
 
+extern WorkerThread g_decoderWorker;
 
 HRESULT RendererD2D::Initialize(HWND hwnd) {
     m_hwnd = hwnd;
@@ -252,6 +253,12 @@ HRESULT RendererD2D::Render() {
             D2D1::RenderTargetProperties(),
             D2D1::HwndRenderTargetProperties(m_hwnd, D2D1::SizeU(rc.right - rc.left, rc.bottom - rc.top)),
             m_pRenderTarget.GetAddressOf());
+
+        // Recreate device-dependent brush — old one is invalid after target loss
+        if (SUCCEEDED(hr)) {
+            m_pTextBrush.Reset();
+            m_pRenderTarget->CreateSolidColorBrush(D2D1::ColorF(D2D1::ColorF::LightGreen), &m_pTextBrush);
+        }
     }
     return hr;
 }
