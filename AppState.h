@@ -25,6 +25,7 @@ struct AppState {
     HBITMAP hDIB = nullptr;
     float dpiScale = 1.0f;
     bool isRmbDown = false;
+    bool showOverlayInfoText = false;
     BYTE opacity = 255;
     int screenW = 0;
     int screenH = 0;
