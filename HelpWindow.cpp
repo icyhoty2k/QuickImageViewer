@@ -2,6 +2,7 @@
 #include "Constants.h"
 #include <string>
 #include <dwmapi.h>
+#include <algorithm>
 
 namespace UI {
     HWND g_hHelpWnd = nullptr;
@@ -21,8 +22,8 @@ namespace UI {
                 DeleteObject(hBrush);
 
                 UINT dpi = GetDpiForWindow(hWnd);
-                int padding = MulDiv(25, dpi, 96);
-                int fontSize = MulDiv(20, dpi, 96);
+                int padding = MulDiv(20, dpi, 96);
+                int fontSize = MulDiv(16, dpi, 96);
 
                 HFONT hFont = CreateFontW(fontSize, 0, 0, 0, FW_NORMAL, FALSE, FALSE, FALSE,
                                           DEFAULT_CHARSET, OUT_OUTLINE_PRECIS,
@@ -31,31 +32,42 @@ namespace UI {
                 HFONT hOldFont = (HFONT) SelectObject(hdc, hFont);
                 SetBkMode(hdc, TRANSPARENT);
 
-                // Lambda to draw a two-tone line: [Key] : [Description]
-                int y = padding;
+                int y = padding + MulDiv(20, dpi, 96);
+
+                // Standard shortcut line helper
                 auto DrawLine = [&](const std::wstring &key, const std::wstring &desc) {
                     RECT lineRect = {rc.left + padding, y, rc.right - padding, y + fontSize + 5};
-
-                    // Draw Key (Gold/Yellow)
                     SetTextColor(hdc, RGB(255, 204, 0));
                     DrawTextW(hdc, key.c_str(), -1, &lineRect, DT_LEFT);
-
-                    // Draw Description (Light Grey)
                     SetTextColor(hdc, RGB(220, 220, 220));
-                    lineRect.left += MulDiv(230, dpi, 96); // Constant tab offset
+                    lineRect.left += MulDiv(150, dpi, 96);
                     DrawTextW(hdc, desc.c_str(), -1, &lineRect, DT_LEFT);
+                    y += fontSize + 5;
+                };
 
-                    y += fontSize + 10;
+                // Specialized helper for System Integration (Two-tone coloring)
+                auto DrawSystemLine = [&](const std::wstring &label, const std::wstring &desc) {
+                    RECT labelRect = {rc.left + padding, y, rc.right - padding, y + fontSize + 5};
+                    SetTextColor(hdc, RGB(100, 200, 255)); // Blue Label
+                    DrawTextW(hdc, label.c_str(), -1, &labelRect, DT_LEFT);
+
+                    RECT descRect = {rc.left + padding + MulDiv(100, dpi, 96), y, rc.right - padding, y + fontSize + 5};
+                    SetTextColor(hdc, RGB(200, 200, 200)); // Grey Description
+                    DrawTextW(hdc, desc.c_str(), -1, &descRect, DT_LEFT);
+                    y += fontSize + 5;
                 };
 
                 // Draw Header
                 SetTextColor(hdc, RGB(100, 200, 255));
+                DrawTextW(hdc, fullTitle.c_str(), -1, &rc, DT_CENTER);
+                y += fontSize / 2;
 
                 SetTextColor(hdc, RGB(100, 200, 255));
-                DrawTextW(hdc, fullTitle.c_str(), -1, &rc, DT_CENTER);
-                y += fontSize * 2;
+                RECT sysRect2 = {rc.left + padding, y, rc.right - padding, rc.bottom};
+                DrawTextW(hdc, L"Keyboard and mouse shortcuts :", -1, &sysRect2, DT_LEFT);
+                y += fontSize + 20;
 
-                // Render explicit shortcuts
+                // Render shortcuts
                 DrawLine(L"Left/Right", L": Previous / Next image in folder");
                 DrawLine(L"Space/Shift+Space", L": Next / Previous image in folder");
                 DrawLine(L"Wheel Scroll", L": Next / Previous image in folder");
@@ -63,27 +75,40 @@ namespace UI {
                 DrawLine(L"R / Ctrl+R", L": Rotate image 90° Clockwise / Counter");
                 DrawLine(L"H", L": Flip image Horizontally");
                 DrawLine(L"V", L": Flip image Vertically");
-                y += fontSize / 2; // Spacer
-                // --- NEW SECTION: Opacity ---
+                y += fontSize / 2;
                 DrawLine(L"Shift + Wheel", L": Adjust Window/Image Opacity");
-                y += fontSize / 2; // Spacer
+                y += fontSize / 2;
                 DrawLine(L"Up/Down", L": Zoom image In / Out");
                 DrawLine(L"Ctrl + Wheel", L": Zoom image In / Out");
                 DrawLine(L"Numpad 0", L": Reset zoom and opacity and center image");
                 DrawLine(L"Right Click", L": 2x Quick zoom and toggle pan");
-                y += fontSize / 2; // Spacer
+                y += fontSize / 2;
                 DrawLine(L"F11 / Enter", L": Toggle Fullscreen mode");
                 DrawLine(L"Left Click Drag", L": Pan image view");
                 DrawLine(L"Middle Drag", L": Resize window dimensions");
                 DrawLine(L"Middle Click", L": Reset window and center image");
-                y += fontSize / 2; // Spacer
+                y += fontSize / 2;
                 DrawLine(L"Ctrl+N", L": Open new viewer instance");
                 DrawLine(L"Esc / Ctrl+W", L": Hide window to background");
-                DrawLine(L"Ctrl+Q", L": Quit application process");
+                DrawLine(L"Ctrl+Q", L": Quit application process and kill background process");
                 DrawLine(L"F1", L": Toggle help menu");
                 DrawLine(L"ESC", L": Hide help menu");
 
-                // --- FOOTER: Version and Creator ---
+                y += fontSize + 1;
+                SetTextColor(hdc, RGB(100, 200, 255));
+                RECT sysRect = {rc.left + padding, y, rc.right - padding, rc.bottom};
+                DrawTextW(hdc, L"System Integration & Healing:", -1, &sysRect, DT_LEFT);
+                y += fontSize + 20;
+
+                // Render colored System Integration lines
+                DrawSystemLine(L"Self-Healing:", L": Auto checks self path on every launch, updates windows registry");
+                DrawSystemLine(L"Auto-Start:", L": Enabled (runs hidden in background/cached, faster image show)");
+                DrawSystemLine(L"Associations:", L": Auto-checks associations common image formats on every launch");
+                DrawSystemLine(L"Cache:", L": Caches last 30 images in VRAM/RAM and preload next/previous image in folder");
+                DrawSystemLine(L"Move instructions:", L": Quit all instances Ctrl+Q, check Task Manager/background app/ EndTask");
+                DrawSystemLine(L"Relocation:", L": After moving QIV.exe, kill all background instances, run(exec) once to update registry");
+
+                // --- FOOTER: Name and Copyright ---
                 int footerSize = MulDiv(14, dpi, 96);
                 HFONT hFooterFont = CreateFontW(footerSize, 0, 0, 0, FW_LIGHT, FALSE, FALSE, FALSE,
                                                 DEFAULT_CHARSET, OUT_OUTLINE_PRECIS,
@@ -92,7 +117,7 @@ namespace UI {
                 SelectObject(hdc, hFooterFont);
                 SetTextColor(hdc, RGB(120, 120, 120));
 
-                std::wstring footer = std::wstring(Config::APP_CREATOR) + L" | " + Config::APP_HELP_FOOTER;
+                std::wstring footer = std::wstring(L" ") + Config::APP_CREATOR + L" | " + Config::APP_HELP_FOOTER;
                 RECT footerRect = {rc.left, rc.bottom - padding, rc.right, rc.bottom};
                 DrawTextW(hdc, footer.c_str(), -1, &footerRect, DT_CENTER | DT_BOTTOM);
 
@@ -104,9 +129,7 @@ namespace UI {
             }
 
             case WM_KEYDOWN:
-                if (wParam == VK_ESCAPE || wParam == VK_F1) {
-                    ShowWindow(hWnd, SW_HIDE);
-                }
+                if (wParam == VK_ESCAPE || wParam == VK_F1) ShowWindow(hWnd, SW_HIDE);
                 return 0;
 
             case WM_CLOSE:
@@ -116,13 +139,10 @@ namespace UI {
         return DefWindowProcW(hWnd, message, wParam, lParam);
     }
 
-
     void ToggleHelpWindow() {
         if (!g_hHelpWnd) return;
-
-        if (IsWindowVisible(g_hHelpWnd)) {
-            ShowWindow(g_hHelpWnd, SW_HIDE);
-        } else {
+        if (IsWindowVisible(g_hHelpWnd)) ShowWindow(g_hHelpWnd, SW_HIDE);
+        else {
             HWND hParent = GetWindow(g_hHelpWnd, GW_OWNER);
             if (hParent) {
                 RECT rcParent, rcHelp;
@@ -131,9 +151,7 @@ namespace UI {
                 int x = rcParent.left + ((rcParent.right - rcParent.left) - (rcHelp.right - rcHelp.left)) / 2;
                 int y = rcParent.top + ((rcParent.bottom - rcParent.top) - (rcHelp.bottom - rcHelp.top)) / 2;
                 SetWindowPos(g_hHelpWnd, HWND_TOPMOST, x, y, 0, 0, SWP_NOSIZE | SWP_SHOWWINDOW);
-            } else {
-                ShowWindow(g_hHelpWnd, SW_SHOW);
-            }
+            } else ShowWindow(g_hHelpWnd, SW_SHOW);
             SetForegroundWindow(g_hHelpWnd);
         }
     }
@@ -147,33 +165,19 @@ namespace UI {
         RegisterClassW(&wc);
 
         UINT dpi = GetDpiForWindow(hParent);
-        int winW = MulDiv(600, dpi, 96);
-        int winH = MulDiv(750, dpi, 96);
+        int winW = MulDiv(640, dpi, 96);
+        int winH = MulDiv(760, dpi, 96);
 
-        // Removed WS_EX_LAYERED to keep it solid 255
-        g_hHelpWnd = CreateWindowExW(
-            WS_EX_TOOLWINDOW | WS_EX_TOPMOST,
-            wc.lpszClassName,
-            Config::APP_TASKBAR_NAME,
-            WS_POPUP | WS_CAPTION | WS_BORDER,
-            0, 0, winW, winH,
-            hParent, nullptr, hInstance, nullptr
-        );
+        g_hHelpWnd = CreateWindowExW(WS_EX_TOOLWINDOW | WS_EX_TOPMOST, wc.lpszClassName, Config::APP_TASKBAR_NAME,
+                                     WS_POPUP | WS_CAPTION | WS_BORDER, 0, 0, winW, winH, hParent, nullptr, hInstance,
+                                     nullptr);
 
-        // 1. Force Dark Mode
         BOOL darkMode = TRUE;
         DwmSetWindowAttribute(g_hHelpWnd, 20, &darkMode, sizeof(darkMode));
-
-        // 2. Rounded corners
         DWORD corner = 2;
         DwmSetWindowAttribute(g_hHelpWnd, 33, &corner, sizeof(corner));
-
-        // 3. Caption Color to ensure clean integration
         COLORREF darkColor = RGB(24, 24, 24);
         DwmSetWindowAttribute(g_hHelpWnd, 35, &darkColor, sizeof(darkColor));
-
-        // 4. Force frame recalculation
-        SetWindowPos(g_hHelpWnd, nullptr, 0, 0, 0, 0,
-                     SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | SWP_FRAMECHANGED);
+        SetWindowPos(g_hHelpWnd, nullptr, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | SWP_FRAMECHANGED);
     }
 }
