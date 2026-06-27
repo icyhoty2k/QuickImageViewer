@@ -110,7 +110,15 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) 
             }
             // Hide to RAM instead of quitting (Esc or Ctrl + W)
             if (wParam == VK_ESCAPE || (wParam == 'W' && ctrl)) {
-                ShowWindow(hWnd, SW_HIDE);
+                // Check if this is the "main" instance
+                // A simple way is to check if it's the first window created
+                // or use a flag in your AppState.
+                if (g_app.GetInstanceCount() <= 1) {
+                    ShowWindow(hWnd, SW_HIDE);
+                } else {
+                    // This is a disposable instance: kill it completely
+                    PostQuitMessage(0);
+                }
                 return 0;
             }
 
@@ -448,6 +456,9 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE, LPSTR, int nCmdShow) {
     RegisterClassW(&wc);
 
     HWND hWnd = CreateViewerWindow(hInstance, wc.lpszClassName);
+    // Identify if this instance is the primary one
+    // If QIV_NEW_INSTANCE is set, this is a secondary (disposable) instance
+
     SetWindowLongW(hWnd, GWL_EXSTYLE, GetWindowLongW(hWnd, GWL_EXSTYLE) | WS_EX_LAYERED);
     SetLayeredWindowAttributes(hWnd, 0, g_app.opacity, LWA_ALPHA);
     UINT dpi = GetDpiForWindow(hWnd);

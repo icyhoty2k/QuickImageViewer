@@ -52,7 +52,23 @@ struct AppState {
     RECT savedWindowRect = {0, 0, 0, 0};
 
     bool isDialogVisible = false;
+
+    // Helper to count active instances of this specific class
+    int GetInstanceCount() const {
+        int count = 0;
+        EnumWindows([](HWND hwnd, LPARAM lParam) -> BOOL {
+            wchar_t className[256];
+            if (GetClassNameW(hwnd, className, 256)) {
+                if (wcscmp(className, Config::WINDOW_CLASS_NAME) == 0) {
+                    (*(int *) lParam)++;
+                }
+            }
+            return TRUE;
+        }, (LPARAM) &count);
+        return count;
+    }
 };
+
 
 // Global state shared across files
 extern AppState g_app;
