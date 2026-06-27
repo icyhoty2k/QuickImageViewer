@@ -15,12 +15,13 @@ A high-performance, ultra-lightweight image viewer designed for speed and direct
 ## 🚀 Download
 You can download the latest version of the viewer from the **[Releases page](https://github.com/icyhoty2k/PosMan/releases/latest)**.
 
-> *Built with native C++ for maximum efficiency (176 KB).*
+> *Built with native C++ for maximum efficiency (178 KB).*
 
 ---
 
 ## ✨ Features
-* **⚡ Extreme Efficiency:** 176 KB footprint with near-instant startup.
+* **⚡ Extreme Efficiency:** 178 KB footprint with near-instant startup.
+* **🧳 Portable:** Fully self-contained; runs perfectly from any folder or USB drive with no installation required.
 * **👻 Service-Like Persistence:** Stays resident in RAM and "ghosts" into the background (Esc to hide), ready for instant recall.
 * **🩹 Self-Healing:** Automatically manages its own registry paths and file associations—just run it once after moving to any location.
 * **🛠️ Zero-Magic Design:** Native WIC-based decoding, explicit state management, and direct Windows API calls for maximum transparency and speed.
@@ -55,5 +56,5 @@ mkdir build && cd build
 cmake ..
 cmake --build . --config Release
 ```
-📜 License
-Licensed under the GNU Affero General Public License v3.0 (AGPLv3). See the LICENSE file for details.
+## 📜 License
+Licensed under the **[GNU Affero General Public License v3.0 (AGPLv3)](LICENSE)**. See the [LICENSE](LICENSE) file for full details.
