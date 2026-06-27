@@ -7,16 +7,16 @@
 
 namespace fs = std::filesystem;
 
-constexpr auto is_image_ext = [](const std::wstring& ext) -> bool {
-    std::wstring l_ext = ext | std::views::transform([](wchar_t c) { return (wchar_t)std::towlower(c); })
-                             | std::ranges::to<std::wstring>();
-    return l_ext == L".jpg" || l_ext == L".jpeg" || l_ext == L".png" || l_ext == L".bmp" || l_ext == L".webp";
+constexpr auto is_image_ext = [](const std::wstring &ext) -> bool {
+    std::wstring l_ext = ext | std::views::transform([](wchar_t c) { return (wchar_t) std::towlower(c); })
+                         | std::ranges::to<std::wstring>();
+    return l_ext == L".jpg" || l_ext == L".jpeg" || l_ext == L".png" || l_ext == L".bmp" || l_ext == L".webp" || l_ext == L".gif" || l_ext == L".tiff";
 };
 
 void OpenInitialImage(HWND hWnd) {
     g_app.isDialogVisible = true; // Block Esc processing
 
-    wchar_t szFile[MAX_PATH] = { 0 };
+    wchar_t szFile[MAX_PATH] = {0};
     OPENFILENAMEW ofn{};
     ofn.lStructSize = sizeof(ofn);
     ofn.hwndOwner = hWnd;
@@ -31,9 +31,9 @@ void OpenInitialImage(HWND hWnd) {
     if (success) {
         fs::path filePath(szFile);
         g_app.playlist = fs::directory_iterator(filePath.parent_path())
-            | std::views::filter([](const auto& e) { return e.is_regular_file() && is_image_ext(e.path().extension().wstring()); })
-            | std::views::transform([](const auto& e) { return e.path().wstring(); })
-            | std::ranges::to<std::vector<std::wstring>>();
+                         | std::views::filter([](const auto &e) { return e.is_regular_file() && is_image_ext(e.path().extension().wstring()); })
+                         | std::views::transform([](const auto &e) { return e.path().wstring(); })
+                         | std::ranges::to<std::vector<std::wstring> >();
 
         // Sort alphabetically so arrow-key navigation matches Explorer order
         std::ranges::sort(g_app.playlist);
@@ -51,7 +51,8 @@ void OpenInitialImage(HWND hWnd) {
         }
     }
 }
-void OpenSpecificImage(HWND hWnd, const std::wstring& filePathStr) {
+
+void OpenSpecificImage(HWND hWnd, const std::wstring &filePathStr) {
     fs::path filePath(filePathStr);
 
     // Safety check: ensure the file actually exists before processing
@@ -61,9 +62,9 @@ void OpenSpecificImage(HWND hWnd, const std::wstring& filePathStr) {
 
     // Build the playlist from the directory of the injected file
     g_app.playlist = fs::directory_iterator(filePath.parent_path())
-        | std::views::filter([](const auto& e) { return e.is_regular_file() && is_image_ext(e.path().extension().wstring()); })
-        | std::views::transform([](const auto& e) { return e.path().wstring(); })
-        | std::ranges::to<std::vector<std::wstring>>();
+                     | std::views::filter([](const auto &e) { return e.is_regular_file() && is_image_ext(e.path().extension().wstring()); })
+                     | std::views::transform([](const auto &e) { return e.path().wstring(); })
+                     | std::ranges::to<std::vector<std::wstring> >();
 
     // Sort alphabetically so arrow-key navigation matches Explorer order
     std::ranges::sort(g_app.playlist);
