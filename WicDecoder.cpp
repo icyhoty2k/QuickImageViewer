@@ -11,7 +11,7 @@ void LoadImageIndex(HWND hWnd, int index) {
     if (index < 0 || index >= static_cast<int>(g_app.playlist.size())) return;
 
     g_app.currentIndex = index;
-    const std::wstring& currentPath = g_app.playlist[g_app.currentIndex];
+    const std::wstring &currentPath = g_app.playlist[g_app.currentIndex];
 
     // 2. Try to serve from VRAM cache first — avoids disk I/O + decode on the UI thread.
     //    Passing nullptr signals a cache-only lookup.
@@ -21,20 +21,21 @@ void LoadImageIndex(HWND hWnd, int index) {
         ComPtr<IWICBitmapDecoder> decoder;
         ComPtr<IWICBitmapFrameDecode> frame;
         if (SUCCEEDED(g_app.wicFactory->CreateDecoderFromFilename(
-                currentPath.c_str(), nullptr, GENERIC_READ,
-                WICDecodeMetadataCacheOnDemand, &decoder)) &&
+            currentPath.c_str(), nullptr, GENERIC_READ,
+            WICDecodeMetadataCacheOnDemand, &decoder)) &&
             SUCCEEDED(decoder->GetFrame(0, &frame))) {
             UINT w = 0, h = 0;
             frame->GetSize(&w, &h);
-            g_app.imgWidth  = static_cast<int>(w);
+            g_app.imgWidth = static_cast<int>(w);
             g_app.imgHeight = static_cast<int>(h);
         }
     } else {
         // Cache miss: full decode from disk on the UI thread
         ComPtr<IWICBitmapDecoder> decoder;
         if (FAILED(g_app.wicFactory->CreateDecoderFromFilename(
-                currentPath.c_str(), nullptr, GENERIC_READ,
-                WICDecodeMetadataCacheOnDemand, &decoder))) return;
+            currentPath.c_str(), nullptr, GENERIC_READ,
+            WICDecodeMetadataCacheOnDemand, &decoder)))
+            return;
 
         ComPtr<IWICBitmapFrameDecode> frame;
         if (FAILED(decoder->GetFrame(0, &frame))) return;
@@ -48,7 +49,7 @@ void LoadImageIndex(HWND hWnd, int index) {
         converter->GetSize(&width, &height);
 
         // Store image dimensions for pan constraint logic in MouseHandler
-        g_app.imgWidth  = static_cast<int>(width);
+        g_app.imgWidth = static_cast<int>(width);
         g_app.imgHeight = static_cast<int>(height);
 
         if (g_app.renderer) {
@@ -62,13 +63,15 @@ void LoadImageIndex(HWND hWnd, int index) {
         int fwd = index + i;
         int bwd = index - i;
         if (fwd < total) {
-            g_decoderWorker.PushTask([fwd]() {
-                g_app.renderer->PreloadBitmap(g_app.playlist[fwd]);
+            std::wstring fwdPath = g_app.playlist[fwd];
+            g_decoderWorker.PushTask([fwdPath]() {
+                g_app.renderer->PreloadBitmap(fwdPath);
             });
         }
         if (bwd >= 0) {
-            g_decoderWorker.PushTask([bwd]() {
-                g_app.renderer->PreloadBitmap(g_app.playlist[bwd]);
+            std::wstring bwdPath = g_app.playlist[bwd];
+            g_decoderWorker.PushTask([bwdPath]() {
+                g_app.renderer->PreloadBitmap(bwdPath);
             });
         }
     }

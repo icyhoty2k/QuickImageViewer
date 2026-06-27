@@ -248,13 +248,20 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) 
 
         // Window size changed: Update renderer
         case WM_SIZE:
-        case WM_SIZING:
             if (g_app.renderer) {
                 g_app.renderer->Resize(LOWORD(lParam), HIWORD(lParam));
             }
             InvalidateRect(hWnd, nullptr, FALSE);
+            return 0;
+        case WM_SIZING:
+            if (g_app.renderer) {
+                {
+                    RECT *r = (RECT *) lParam;
+                    g_app.renderer->Resize(r->right - r->left, r->bottom - r->top);
+                }
+            }
+            InvalidateRect(hWnd, nullptr, FALSE);
             return TRUE;
-
         // --- CLEAN MOUSE HANDLERS ---
         case WM_LBUTTONDOWN:
         case WM_RBUTTONDOWN:
@@ -407,7 +414,12 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) 
             EndPaint(hWnd, &ps);
             return 0;
         }
-
+        case Config::WM_QIV_PENDING_UPLOADS: {
+            if (g_app.renderer) {
+                g_app.renderer->ProcessPendingUploads();
+            }
+            return 0;
+        }
         case WM_NCCALCSIZE:
             return 0;
 

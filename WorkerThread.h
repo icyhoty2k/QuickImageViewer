@@ -8,25 +8,29 @@
 
 class WorkerThread {
 public:
+    Microsoft::WRL::ComPtr<IWICImagingFactory> wicFactory;
+
     WorkerThread() : m_running(true) {
         m_thread = std::thread([this] {
             // Initialize COM for background WIC/Direct2D operations
             CoInitializeEx(NULL, COINIT_MULTITHREADED);
-            
+            CoCreateInstance(CLSID_WICImagingFactory, nullptr, CLSCTX_INPROC_SERVER,
+                             IID_PPV_ARGS(&wicFactory));
             while (m_running) {
                 std::function<void()> task;
                 {
                     std::unique_lock<std::mutex> lock(m_queueMutex);
                     // Thread sleeps here until notified; consumes 0 CPU
                     m_cv.wait(lock, [this] { return !m_queue.empty() || !m_running; });
-                    
+
                     if (!m_running) break;
-                    
+
                     task = std::move(m_queue.front());
                     m_queue.pop();
                 }
                 if (task) task();
             }
+            wicFactory.Reset();
             CoUninitialize();
         });
     }
@@ -47,9 +51,10 @@ public:
         }
         m_cv.notify_one();
     }
+
     void ClearQueue() {
         std::lock_guard<std::mutex> lock(m_queueMutex);
-        std::queue<std::function<void()>> empty;
+        std::queue<std::function<void()> > empty;
         std::swap(m_queue, empty);
     }
 
@@ -57,9 +62,10 @@ private:
     std::thread m_thread;
     std::mutex m_queueMutex;
     std::condition_variable m_cv;
-    std::queue<std::function<void()>> m_queue;
-    bool m_running;
+    std::queue<std::function<void()> > m_queue;
+    std::atomic<bool> m_running;
 };
+
 // Define the global workers here so they are initialized once at startup
 extern WorkerThread g_ioWorker;
 extern WorkerThread g_decoderWorker;

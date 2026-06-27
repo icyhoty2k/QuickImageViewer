@@ -7,17 +7,23 @@
 
 /// Base interface for image rendering strategies.
 /// Implementations must handle bitmap loading, scaling, and painting.
-class IImageRenderer
-{
+class IImageRenderer {
 public:
     IImageRenderer() = default;
+
     virtual ~IImageRenderer() = default;
 
     // Disable copy/move to enforce unique renderer ownership
-    IImageRenderer(const IImageRenderer&) = delete;
-    IImageRenderer& operator=(const IImageRenderer&) = delete;
-    IImageRenderer(IImageRenderer&&) = delete;
-    IImageRenderer& operator=(IImageRenderer&&) = delete;
+    IImageRenderer(const IImageRenderer &) = delete;
+
+    IImageRenderer &operator=(const IImageRenderer &) = delete;
+
+    IImageRenderer(IImageRenderer &&) = delete;
+
+    IImageRenderer &operator=(IImageRenderer &&) = delete;
+
+    virtual void ProcessPendingUploads() {
+    }
 
     /// Initialize the renderer resources for the specified window handle.
     [[nodiscard]]
@@ -34,16 +40,15 @@ public:
     /// @param filePath The absolute path used for identifying cached GPU resources.
     [[nodiscard]]
     virtual HRESULT LoadBitmap(
-        IWICBitmapSource* bitmap,
+        IWICBitmapSource *bitmap,
         UINT width,
         UINT height,
-        const std::wstring& filePath) = 0;
+        const std::wstring &filePath) = 0;
 
     /// Paints the active bitmap to the target surface.
     [[nodiscard]]
     virtual HRESULT Render() = 0;
 
     /// support background preloading
-    [[nodiscard]] virtual HRESULT PreloadBitmap(const std::wstring& filePath) = 0;
-
+    [[nodiscard]] virtual HRESULT PreloadBitmap(const std::wstring &filePath) = 0;
 };
