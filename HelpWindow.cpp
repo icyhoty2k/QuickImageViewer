@@ -42,19 +42,19 @@ namespace UI {
                     SetTextColor(hdc, RGB(220, 220, 220));
                     lineRect.left += MulDiv(150, dpi, 96);
                     DrawTextW(hdc, desc.c_str(), -1, &lineRect, DT_LEFT);
-                    y += fontSize + 5;
+                    y += fontSize + 3;
                 };
 
                 // Specialized helper for System Integration (Two-tone coloring)
                 auto DrawSystemLine = [&](const std::wstring &label, const std::wstring &desc) {
-                    RECT labelRect = {rc.left + padding, y, rc.right - padding, y + fontSize + 5};
+                    RECT labelRect = {rc.left + padding, y, rc.right - padding, y + fontSize + 2};
                     SetTextColor(hdc, RGB(100, 200, 255)); // Blue Label
                     DrawTextW(hdc, label.c_str(), -1, &labelRect, DT_LEFT);
 
                     RECT descRect = {rc.left + padding + MulDiv(100, dpi, 96), y, rc.right - padding, y + fontSize + 5};
                     SetTextColor(hdc, RGB(200, 200, 200)); // Grey Description
                     DrawTextW(hdc, desc.c_str(), -1, &descRect, DT_LEFT);
-                    y += fontSize + 5;
+                    y += fontSize + 3;
                 };
 
                 // Draw Header
@@ -65,7 +65,7 @@ namespace UI {
                 SetTextColor(hdc, RGB(100, 200, 255));
                 RECT sysRect2 = {rc.left + padding, y, rc.right - padding, rc.bottom};
                 DrawTextW(hdc, L"Keyboard and mouse shortcuts :", -1, &sysRect2, DT_LEFT);
-                y += fontSize + 20;
+                y += fontSize;
 
                 // Render shortcuts
                 DrawLine(L"Left/Right", L": Previous / Next image in folder");
@@ -87,7 +87,13 @@ namespace UI {
                 DrawLine(L"Left Click Drag", L": Pan image view");
                 DrawLine(L"Middle Drag", L": Resize window dimensions");
                 DrawLine(L"Middle Click", L": Reset window and center image");
-                y += fontSize / 2;
+                y += fontSize / 2; // Add a small spacer
+                DrawLine(L"RMB + Wheel", L": Zoom In / Out");
+                DrawLine(L"Horizontal Wheel", L": Adjust Window Opacity");
+                DrawLine(L"RMB + Horizontal Wheel", L": Resize Window from Center");
+                DrawLine(L"RMB + Left Click", L": Open current image location in Explorer");
+                DrawLine(L"N", L": Toggle overlay info (Index/Filename)"); // NEW
+                y += fontSize / 2; // Add a small spacer
                 DrawLine(L"Ctrl+N", L": Open new viewer instance");
                 DrawLine(L"Esc / Ctrl+W", L": Hide window to background");
                 DrawLine(L"Ctrl+Q", L": Quit application process and kill background process");
@@ -98,7 +104,7 @@ namespace UI {
                 SetTextColor(hdc, RGB(100, 200, 255));
                 RECT sysRect = {rc.left + padding, y, rc.right - padding, rc.bottom};
                 DrawTextW(hdc, L"System Integration & Healing:", -1, &sysRect, DT_LEFT);
-                y += fontSize + 20;
+                y += fontSize + 10;
 
                 // Render colored System Integration lines
                 DrawSystemLine(L"Self-Healing:", L": Auto checks self path on every launch, updates windows registry");
