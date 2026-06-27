@@ -137,8 +137,8 @@ void MouseHandler::HandleMouseMove(HWND hWnd, LPARAM lParam) {
     if (g_app.isMidDragging) {
         POINT curMouse = {GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam)};
         ClientToScreen(hWnd, &curMouse);
-        g_app.hasMidMoved = true;
         if (!g_app.isFullscreen) {
+            g_app.hasMidMoved = true;
             int dx = curMouse.x - g_app.lastMidMouse.x;
             int dy = curMouse.y - g_app.lastMidMouse.y;
             RECT rc;
