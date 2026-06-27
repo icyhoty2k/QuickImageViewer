@@ -28,23 +28,22 @@
 #include "Renderer/RendererD2D.h"
 #include "Renderer/RendererGDI.h"
 #include "WorkerThread.h"
-
+#include <shlobj.h> // Required for SHOpenFolderAndSelectItems
 // Global application state
 AppState g_app;
-DropTarget* g_pDropTarget = nullptr;
+DropTarget *g_pDropTarget = nullptr;
 // Define the storage for the globals exactly once in your entry point file
 WorkerThread g_ioWorker;
 WorkerThread g_decoderWorker;
 
 LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) {
     switch (message) {
-
         // Handle file paths sent from other instances of the viewer
         case WM_COPYDATA: {
-            COPYDATASTRUCT* cds = (COPYDATASTRUCT*)lParam;
+            COPYDATASTRUCT *cds = (COPYDATASTRUCT *) lParam;
             if (cds->dwData == 1) {
                 // Create a local copy to ensure safety even if processing takes time
-                std::wstring safePath((LPCWSTR)cds->lpData);
+                std::wstring safePath((LPCWSTR) cds->lpData);
 
                 // --- 1. LOAD THE NEW IMAGE ---
                 OpenSpecificImage(hWnd, safePath.c_str());
@@ -59,9 +58,19 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) 
         }
 
         case WM_KEYDOWN: {
-            bool shift = (GetKeyState(VK_SHIFT)   & 0x8000) != 0;
-            bool ctrl  = (GetKeyState(VK_CONTROL) & 0x8000) != 0;
-
+            bool shift = (GetKeyState(VK_SHIFT) & 0x8000) != 0;
+            bool ctrl = (GetKeyState(VK_CONTROL) & 0x8000) != 0;
+            if (wParam == 'E' || wParam == VK_TAB) {
+                if (!g_app.playlist.empty() && g_app.currentIndex >= 0) {
+                    const std::wstring &path = g_app.playlist[g_app.currentIndex];
+                    PIDLIST_ABSOLUTE pidl = ILCreateFromPathW(path.c_str());
+                    if (pidl) {
+                        SHOpenFolderAndSelectItems(pidl, 0, nullptr, 0);
+                        ILFree(pidl);
+                    }
+                }
+                return 0;
+            }
             // True Hard Quit (Ctrl + Q) to flush from RAM completely
             if (wParam == 'Q' && ctrl) {
                 PostQuitMessage(0);
@@ -97,35 +106,34 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) 
             // Fullscreen toggle: F, F11, Enter, Ctrl+Shift+T
             if (wParam == VK_F11 || wParam == 'F' || wParam == VK_RETURN ||
                 (wParam == 'T' && ctrl && shift)) {
-
                 if (!g_app.isFullscreen) {
                     GetWindowRect(hWnd, &g_app.savedWindowRect);
-                    MONITORINFO mi = { sizeof(mi) };
+                    MONITORINFO mi = {sizeof(mi)};
                     GetMonitorInfo(MonitorFromWindow(hWnd, MONITOR_DEFAULTTONEAREST), &mi);
                     SetWindowPos(hWnd, HWND_TOPMOST,
-                        mi.rcMonitor.left, mi.rcMonitor.top,
-                        mi.rcMonitor.right  - mi.rcMonitor.left,
-                        mi.rcMonitor.bottom - mi.rcMonitor.top,
-                        SWP_FRAMECHANGED);
+                                 mi.rcMonitor.left, mi.rcMonitor.top,
+                                 mi.rcMonitor.right - mi.rcMonitor.left,
+                                 mi.rcMonitor.bottom - mi.rcMonitor.top,
+                                 SWP_FRAMECHANGED);
                     DWMNCRENDERINGPOLICY policy = DWMNCRP_DISABLED;
                     DwmSetWindowAttribute(hWnd, DWMWA_NCRENDERING_POLICY, &policy, sizeof(policy));
                     DWORD corner = 1; // DWMWCP_DONOTROUND
                     DwmSetWindowAttribute(hWnd, 33, &corner, sizeof(corner));
-                    MARGINS margins = { 0, 0, 0, 0 };
+                    MARGINS margins = {0, 0, 0, 0};
                     DwmExtendFrameIntoClientArea(hWnd, &margins);
                     g_app.isFullscreen = true;
                 } else {
                     SetWindowPos(hWnd, HWND_NOTOPMOST,
-                        g_app.savedWindowRect.left,
-                        g_app.savedWindowRect.top,
-                        g_app.savedWindowRect.right  - g_app.savedWindowRect.left,
-                        g_app.savedWindowRect.bottom - g_app.savedWindowRect.top,
-                        SWP_FRAMECHANGED);
+                                 g_app.savedWindowRect.left,
+                                 g_app.savedWindowRect.top,
+                                 g_app.savedWindowRect.right - g_app.savedWindowRect.left,
+                                 g_app.savedWindowRect.bottom - g_app.savedWindowRect.top,
+                                 SWP_FRAMECHANGED);
                     DWMNCRENDERINGPOLICY policy = DWMNCRP_ENABLED;
                     DwmSetWindowAttribute(hWnd, DWMWA_NCRENDERING_POLICY, &policy, sizeof(policy));
                     DWORD corner = 2; // DWMWCP_ROUND
                     DwmSetWindowAttribute(hWnd, 33, &corner, sizeof(corner));
-                    MARGINS margins = { 1, 1, 1, 1 };
+                    MARGINS margins = {1, 1, 1, 1};
                     DwmExtendFrameIntoClientArea(hWnd, &margins);
                     g_app.isFullscreen = false;
                 }
@@ -146,7 +154,8 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) 
                         break;
                     case VK_SPACE:
                         if (shift)
-                            LoadImageIndex(hWnd, (g_app.currentIndex - 1 + g_app.playlist.size()) % g_app.playlist.size());
+                            LoadImageIndex(
+                                hWnd, (g_app.currentIndex - 1 + g_app.playlist.size()) % g_app.playlist.size());
                         else
                             LoadImageIndex(hWnd, (g_app.currentIndex + 1) % g_app.playlist.size());
                         InvalidateRect(hWnd, nullptr, FALSE);
@@ -165,7 +174,7 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) 
                         break;
                     case VK_NUMPAD0:
                     case '0':
-                        g_app.viewport.zoom    = 1.0f;
+                        g_app.viewport.zoom = 1.0f;
                         g_app.viewport.offsetX = 0.0f;
                         g_app.viewport.offsetY = 0.0f;
                         InvalidateRect(hWnd, nullptr, FALSE);
@@ -181,24 +190,24 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) 
         case WM_NCHITTEST: {
             if (g_app.isFullscreen) return HTCLIENT;
 
-            POINT pt = { GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam) };
+            POINT pt = {GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam)};
             RECT rc;
             GetWindowRect(hWnd, &rc);
 
             const int border = 8;
-            bool top    = pt.y <  rc.top    + border;
+            bool top = pt.y < rc.top + border;
             bool bottom = pt.y >= rc.bottom - border;
-            bool left   = pt.x <  rc.left   + border;
-            bool right  = pt.x >= rc.right  - border;
+            bool left = pt.x < rc.left + border;
+            bool right = pt.x >= rc.right - border;
 
-            if (top    && left)  return HTTOPLEFT;
-            if (top    && right) return HTTOPRIGHT;
-            if (bottom && left)  return HTBOTTOMLEFT;
+            if (top && left) return HTTOPLEFT;
+            if (top && right) return HTTOPRIGHT;
+            if (bottom && left) return HTBOTTOMLEFT;
             if (bottom && right) return HTBOTTOMRIGHT;
-            if (top)             return HTTOP;
-            if (bottom)          return HTBOTTOM;
-            if (left)            return HTLEFT;
-            if (right)           return HTRIGHT;
+            if (top) return HTTOP;
+            if (bottom) return HTBOTTOM;
+            if (left) return HTLEFT;
+            if (right) return HTRIGHT;
 
             return HTCLIENT;
         }
@@ -212,7 +221,7 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) 
             InvalidateRect(hWnd, nullptr, FALSE);
             return TRUE;
 
-            // --- CLEAN MOUSE HANDLERS ---
+        // --- CLEAN MOUSE HANDLERS ---
         case WM_LBUTTONDOWN:
         case WM_RBUTTONDOWN:
             // This is the direct entry point for zoom and drag
@@ -243,35 +252,35 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) 
 
             if (!g_app.isFullscreen) {
                 GetWindowRect(hWnd, &g_app.savedWindowRect);
-                MONITORINFO mi = { sizeof(mi) };
+                MONITORINFO mi = {sizeof(mi)};
                 GetMonitorInfo(MonitorFromWindow(hWnd, MONITOR_DEFAULTTONEAREST), &mi);
 
                 SetWindowPos(hWnd, HWND_TOPMOST,
-                    mi.rcMonitor.left, mi.rcMonitor.top,
-                    mi.rcMonitor.right  - mi.rcMonitor.left,
-                    mi.rcMonitor.bottom - mi.rcMonitor.top,
-                    SWP_FRAMECHANGED | SWP_NOCOPYBITS); // Add NOCOPYBITS
+                             mi.rcMonitor.left, mi.rcMonitor.top,
+                             mi.rcMonitor.right - mi.rcMonitor.left,
+                             mi.rcMonitor.bottom - mi.rcMonitor.top,
+                             SWP_FRAMECHANGED | SWP_NOCOPYBITS); // Add NOCOPYBITS
 
                 DWMNCRENDERINGPOLICY policy = DWMNCRP_DISABLED;
                 DwmSetWindowAttribute(hWnd, DWMWA_NCRENDERING_POLICY, &policy, sizeof(policy));
                 DWORD corner = 1;
                 DwmSetWindowAttribute(hWnd, 33, &corner, sizeof(corner));
-                MARGINS margins = { 0, 0, 0, 0 };
+                MARGINS margins = {0, 0, 0, 0};
                 DwmExtendFrameIntoClientArea(hWnd, &margins);
                 g_app.isFullscreen = true;
             } else {
                 SetWindowPos(hWnd, HWND_NOTOPMOST,
-                    g_app.savedWindowRect.left,
-                    g_app.savedWindowRect.top,
-                    g_app.savedWindowRect.right  - g_app.savedWindowRect.left,
-                    g_app.savedWindowRect.bottom - g_app.savedWindowRect.top,
-                    SWP_FRAMECHANGED | SWP_NOCOPYBITS); // Add NOCOPYBITS
+                             g_app.savedWindowRect.left,
+                             g_app.savedWindowRect.top,
+                             g_app.savedWindowRect.right - g_app.savedWindowRect.left,
+                             g_app.savedWindowRect.bottom - g_app.savedWindowRect.top,
+                             SWP_FRAMECHANGED | SWP_NOCOPYBITS); // Add NOCOPYBITS
 
                 DWMNCRENDERINGPOLICY policy = DWMNCRP_ENABLED;
                 DwmSetWindowAttribute(hWnd, DWMWA_NCRENDERING_POLICY, &policy, sizeof(policy));
                 DWORD corner = 2;
                 DwmSetWindowAttribute(hWnd, 33, &corner, sizeof(corner));
-                MARGINS margins = { 1, 1, 1, 1 };
+                MARGINS margins = {1, 1, 1, 1};
                 DwmExtendFrameIntoClientArea(hWnd, &margins);
                 g_app.isFullscreen = false;
             }
@@ -337,7 +346,7 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE, LPSTR, int nCmdShow) {
     if (FAILED(OleInitialize(nullptr))) return 0;
 
     // Set DPI awareness
-    typedef BOOL(WINAPI *SETDPI)(DPI_AWARENESS_CONTEXT);
+    typedef BOOL (WINAPI *SETDPI)(DPI_AWARENESS_CONTEXT);
     if (HMODULE hU32 = GetModuleHandleW(L"user32.dll")) {
         if (auto setDpi = reinterpret_cast<SETDPI>(GetProcAddress(hU32, "SetProcessDpiAwarenessContext"))) {
             setDpi(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2);
@@ -354,20 +363,23 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE, LPSTR, int nCmdShow) {
     // --- SINGLE INSTANCE & RAM RESIDENT LOGIC ---
     bool bypassMutex = (GetAsyncKeyState(VK_SHIFT) & 0x8000) != 0;
     if (GetEnvironmentVariableW(L"QIV_NEW_INSTANCE", nullptr, 0) > 0) bypassMutex = true;
-    std::wstring mutexName = L"QuickImageViewer_SingleInstanceMutex" + (bypassMutex ? std::to_wstring(GetTickCount()) : L"");
+    std::wstring mutexName = L"QuickImageViewer_SingleInstanceMutex" + (bypassMutex
+                                                                            ? std::to_wstring(GetTickCount())
+                                                                            : L"");
     HANDLE hMutex = CreateMutexW(NULL, TRUE, mutexName.c_str());
     if (GetLastError() == ERROR_ALREADY_EXISTS) {
         HWND hExistingWnd = FindWindowW(Config::WINDOW_CLASS_NAME, nullptr);
         if (hExistingWnd) {
-            int argc; LPWSTR* argv = CommandLineToArgvW(GetCommandLineW(), &argc);
+            int argc;
+            LPWSTR *argv = CommandLineToArgvW(GetCommandLineW(), &argc);
             if (argc > 1) {
                 // Safe, non-aggregate initialization
                 COPYDATASTRUCT cds;
                 cds.dwData = 1;
-                cds.cbData = (DWORD)((wcslen(argv[1]) + 1) * sizeof(wchar_t));
-                cds.lpData = (void*)argv[1];
+                cds.cbData = (DWORD) ((wcslen(argv[1]) + 1) * sizeof(wchar_t));
+                cds.lpData = (void *) argv[1];
 
-                SendMessageW(hExistingWnd, WM_COPYDATA, 0, (LPARAM)&cds);
+                SendMessageW(hExistingWnd, WM_COPYDATA, 0, (LPARAM) &cds);
             }
             LocalFree(argv);
         }
@@ -375,15 +387,18 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE, LPSTR, int nCmdShow) {
         return 0;
     }
 
-    WNDCLASSW wc{ 0 };
-    wc.lpfnWndProc = WndProc; wc.hInstance = hInstance; wc.lpszClassName = Config::WINDOW_CLASS_NAME;
+    WNDCLASSW wc{0};
+    wc.lpfnWndProc = WndProc;
+    wc.hInstance = hInstance;
+    wc.lpszClassName = Config::WINDOW_CLASS_NAME;
     wc.style = CS_DBLCLKS;
-    wc.hCursor = LoadCursor(nullptr, IDC_ARROW); wc.hIcon = LoadIcon(hInstance, MAKEINTRESOURCE(IDI_APP_ICON));
+    wc.hCursor = LoadCursor(nullptr, IDC_ARROW);
+    wc.hIcon = LoadIcon(hInstance, MAKEINTRESOURCE(IDI_APP_ICON));
     RegisterClassW(&wc);
 
     HWND hWnd = CreateViewerWindow(hInstance, wc.lpszClassName);
     UINT dpi = GetDpiForWindow(hWnd);
-    g_app.dpiScale = (float)dpi / 96.0f; // Calculate scale factor once
+    g_app.dpiScale = (float) dpi / 96.0f; // Calculate scale factor once
     g_app.screenW = GetSystemMetrics(SM_CXSCREEN);
     g_app.screenH = GetSystemMetrics(SM_CYSCREEN);
     // Initialize Renderer (D2D with GDI fallback)
@@ -394,7 +409,7 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE, LPSTR, int nCmdShow) {
     }
 #ifdef _DEBUG
     if (g_app.renderer) {
-        if (dynamic_cast<RendererD2D*>(g_app.renderer.get())) {
+        if (dynamic_cast<RendererD2D *>(g_app.renderer.get())) {
             OutputDebugStringW(L"RENDERER: Using Direct2D (GPU Acceleration Active)\n");
         } else {
             OutputDebugStringW(L"RENDERER: Using GDI (Fallback Mode)\n");
@@ -408,9 +423,15 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE, LPSTR, int nCmdShow) {
     DwmSetWindowAttribute(hWnd, 33, &corner, sizeof(corner));
 
     // Handle startup arguments
-    int argc; LPWSTR* argv = CommandLineToArgvW(GetCommandLineW(), &argc);
+    int argc;
+    LPWSTR *argv = CommandLineToArgvW(GetCommandLineW(), &argc);
     if (argc > 1 && std::wstring(argv[1]) == L"-background") ShowWindow(hWnd, SW_HIDE);
-    else { ShowWindow(hWnd, nCmdShow); UpdateWindow(hWnd); if (argc > 1) OpenSpecificImage(hWnd, argv[1]); else OpenInitialImage(hWnd); }
+    else {
+        ShowWindow(hWnd, nCmdShow);
+        UpdateWindow(hWnd);
+        if (argc > 1) OpenSpecificImage(hWnd, argv[1]);
+        else OpenInitialImage(hWnd);
+    }
     LocalFree(argv);
 
     MSG msg{};

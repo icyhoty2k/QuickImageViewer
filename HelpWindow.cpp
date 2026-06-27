@@ -24,36 +24,37 @@ namespace UI {
 
                 // Scale font size based on your 4K 200% DPI settings
                 UINT dpi = GetDpiForWindow(hWnd);
-                int fontSize = MulDiv(18, dpi, 96); 
+                int fontSize = MulDiv(18, dpi, 96);
 
                 HFONT hFont = CreateFontW(fontSize, 0, 0, 0, FW_NORMAL, FALSE, FALSE, FALSE,
                                           DEFAULT_CHARSET, OUT_OUTLINE_PRECIS,
                                           CLIP_DEFAULT_PRECIS, CLEARTYPE_QUALITY,
                                           VARIABLE_PITCH, L"Segoe UI");
-                HFONT hOldFont = (HFONT)SelectObject(hdc, hFont);
+                HFONT hOldFont = (HFONT) SelectObject(hdc, hFont);
 
                 std::wstring helpText =
-                    L" Quick Image Viewer - Shortcuts\n\n"
-                    L" [Navigation]\n"
-                    L" Left / Right Arrow\t: Previous / Next Image\n"
-                    L" Space / Shift+Space\t: Next / Previous Image\n"
-                    L" Scroll Wheel\t\t: Next / Previous Image\n\n"
-                    L" [Zoom & Pan]\n"
-                    L" Up / Down Arrow\t: Zoom In / Out\n"
-                    L" Ctrl + Scroll\t\t: Zoom In / Out\n"
-                    L" Numpad 0\t\t: Reset Zoom & Center\n"
-                    L" Right Mouse Hold\t: 2x Quick Zoom & Pan\n\n"
-                    L" [Window Controls]\n"
-                    L" F / F11 / Enter\t\t: Toggle Fullscreen\n"
-                    L" Left Mouse Drag\t: Move Window\n"
-                    L" Middle Mouse Drag\t: Resize Window\n"
-                    L" Middle Mouse Click\t: Reset & Center Window\n\n"
-                    L" [Application]\n"
-                    L" Ctrl + N\t\t: Open New Viewer Window\n"
-                    L" Shift + Open File\t: Open in New Instance\n"
-                    L" Esc / Ctrl+W / X\t: Hide to Background (Instant Load)\n"
-                    L" Ctrl + Q\t\t: Quit Completely\n"
-                    L" F1\t\t\t: Toggle this Help Menu\n";
+                        L" Quick Image Viewer - Shortcuts\n\n"
+                        L" [Navigation]\n"
+                        L" Left / Right Arrow\t: Previous / Next Image\n"
+                        L" Space / Shift+Space\t: Next / Previous Image\n"
+                        L" Scroll Wheel\t\t: Next / Previous Image\n"
+                        L" E or TAB \t\t\t: Open File Location in Explorer\n\n" // New shortcut added here
+                        L" [Zoom & Pan]\n"
+                        L" Up / Down Arrow\t: Zoom In / Out\n"
+                        L" Ctrl + Scroll\t\t: Zoom In / Out\n"
+                        L" Numpad 0\t\t: Reset Zoom & Center\n"
+                        L" Right Mouse Hold\t: 2x Quick Zoom & Pan\n\n"
+                        L" [Window Controls]\n"
+                        L" F / F11 / Enter\t\t: Toggle Fullscreen\n"
+                        L" Left Mouse Drag\t: Move Window\n"
+                        L" Middle Mouse Drag\t: Resize Window\n"
+                        L" Middle Mouse Click\t: Reset & Center Window\n\n"
+                        L" [Application]\n"
+                        L" Ctrl + N\t\t: Open New Viewer Window\n"
+                        L" Shift + Open File\t: Open in New Instance\n"
+                        L" Esc / Ctrl+W / X\t: Hide to Background (Instant Load)\n"
+                        L" Ctrl + Q\t\t: Quit Completely\n"
+                        L" F1\t\t\t: Toggle this Help Menu\n";
 
                 // Add padding inside the window
                 int padding = MulDiv(20, dpi, 96);
