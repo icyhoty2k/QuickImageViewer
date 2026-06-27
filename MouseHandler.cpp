@@ -13,7 +13,7 @@ void MouseHandler::HandleButtonDown(HWND hWnd, UINT message, LPARAM lParam) {
     if (message == WM_MBUTTONDOWN) {
         g_app.isMidDragging = true;
         g_app.hasMidMoved = false;
-        POINT pt = { GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam) };
+        POINT pt = {GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam)};
         ClientToScreen(hWnd, &pt);
         g_app.lastMidMouse = pt;
         SetCapture(hWnd);
@@ -23,12 +23,11 @@ void MouseHandler::HandleButtonDown(HWND hWnd, UINT message, LPARAM lParam) {
     if (IsDragAction(message)) {
         if (g_app.isFullscreen) return;
         g_app.isWindowDragging = true;
-        POINT pt = { GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam) };
+        POINT pt = {GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam)};
         ClientToScreen(hWnd, &pt);
         g_app.lastWindowMouse = pt;
         SetCapture(hWnd);
-    }
-    else if (IsViewControlAction(message)) {
+    } else if (IsViewControlAction(message)) {
         if (g_app.viewport.isDragging) return;
         SetCursor(NULL);
 
@@ -38,23 +37,23 @@ void MouseHandler::HandleButtonDown(HWND hWnd, UINT message, LPARAM lParam) {
         g_app.savedOffsetY = g_app.viewport.offsetY;
 
         // 2. Get mouse position and window center
-        POINT pt = { GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam) };
+        POINT pt = {GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam)};
         RECT rc;
         GetClientRect(hWnd, &rc);
         float centerX = (rc.right - rc.left) / 2.0f;
         float centerY = (rc.bottom - rc.top) / 2.0f;
 
         // 3. Calculate how far the mouse is from the center
-        float dx = (float)pt.x - centerX;
-        float dy = (float)pt.y - centerY;
+        float dx = (float) pt.x - centerX;
+        float dy = (float) pt.y - centerY;
 
         // 4. Apply temporary zoom
         g_app.viewport.zoom *= Config::ZOOM_CLICK;
 
         // 5. Shift the offset to keep the clicked point at the center
         // We adjust the offset by the distance moved, scaled by the zoom difference
-        g_app.viewport.offsetX = (g_app.savedOffsetX - dx) ;
-        g_app.viewport.offsetY = (g_app.savedOffsetY - dy) ;
+        g_app.viewport.offsetX = (g_app.savedOffsetX - dx);
+        g_app.viewport.offsetY = (g_app.savedOffsetY - dy);
 
         // 6. Start dragging
         g_app.viewport.lastMouse = pt;
@@ -72,16 +71,20 @@ void MouseHandler::HandleButtonUp(HWND hWnd, UINT message, LPARAM lParam) {
             g_app.viewport.offsetX = 0.0f;
             g_app.viewport.offsetY = 0.0f;
 
-            // 2. Calculate DPI-scaled dimensions
-            int targetW = (int)(Config::BASE_WIDTH * g_app.dpiScale);
-            int targetH = (int)(Config::BASE_HEIGHT * g_app.dpiScale);
+            // 3. RESTORE OPACITY: Reset to full (255)
+            g_app.opacity = 255;
+            SetLayeredWindowAttributes(hWnd, 0, g_app.opacity, LWA_ALPHA);
 
-            // 3. Center and RESIZE the window
+            // 2. Calculate DPI-scaled dimensions
+            int targetW = (int) (Config::BASE_WIDTH * g_app.dpiScale);
+            int targetH = (int) (Config::BASE_HEIGHT * g_app.dpiScale);
+
+            // 4. Center and RESIZE the window
             SetWindowPos(hWnd, NULL,
-                 (g_app.screenW - targetW) / 2,
-                 (g_app.screenH - targetH) / 2,
-                 targetW, targetH,
-                 SWP_NOZORDER | SWP_NOACTIVATE | SWP_FRAMECHANGED);
+                         (g_app.screenW - targetW) / 2,
+                         (g_app.screenH - targetH) / 2,
+                         targetW, targetH,
+                         SWP_NOZORDER | SWP_NOACTIVATE | SWP_FRAMECHANGED);
 
             InvalidateRect(hWnd, nullptr, FALSE);
         }
@@ -94,8 +97,7 @@ void MouseHandler::HandleButtonUp(HWND hWnd, UINT message, LPARAM lParam) {
     if (IsDragAction(message)) {
         g_app.isWindowDragging = false;
         ReleaseCapture();
-    }
-    else if (IsViewControlAction(message)) {
+    } else if (IsViewControlAction(message)) {
         SetCursor(LoadCursor(nullptr, IDC_ARROW));
 
         // Restore zoom and pan
@@ -111,24 +113,24 @@ void MouseHandler::HandleButtonUp(HWND hWnd, UINT message, LPARAM lParam) {
 
 void MouseHandler::HandleMouseMove(HWND hWnd, LPARAM lParam) {
     if (g_app.isMidDragging) {
-        POINT curMouse = { GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam) };
+        POINT curMouse = {GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam)};
         ClientToScreen(hWnd, &curMouse);
         g_app.hasMidMoved = true;
         if (!g_app.isFullscreen) {
             int dx = curMouse.x - g_app.lastMidMouse.x;
             int dy = curMouse.y - g_app.lastMidMouse.y;
-            RECT rc; GetWindowRect(hWnd, &rc);
+            RECT rc;
+            GetWindowRect(hWnd, &rc);
             SetWindowPos(hWnd, nullptr, 0, 0, (rc.right - rc.left) + dx, (rc.bottom - rc.top) + dy,
                          SWP_NOMOVE | SWP_NOZORDER | SWP_NOACTIVATE | SWP_NOCOPYBITS);
         }
         g_app.lastMidMouse = curMouse;
         InvalidateRect(hWnd, nullptr, FALSE);
-    }
-    else if (g_app.viewport.isDragging) {
-        POINT curMouse = { GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam) };
+    } else if (g_app.viewport.isDragging) {
+        POINT curMouse = {GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam)};
 
-        float dx = (float)(g_app.viewport.lastMouse.x - curMouse.x);
-        float dy = (float)(g_app.viewport.lastMouse.y - curMouse.y);
+        float dx = (float) (g_app.viewport.lastMouse.x - curMouse.x);
+        float dy = (float) (g_app.viewport.lastMouse.y - curMouse.y);
 
         // Update Position using addition
         g_app.viewport.offsetX += dx;
@@ -137,13 +139,14 @@ void MouseHandler::HandleMouseMove(HWND hWnd, LPARAM lParam) {
 
         // Constraint Logic
         if (g_app.imgWidth > 0 && g_app.imgHeight > 0) {
-            RECT rc; GetClientRect(hWnd, &rc);
-            float winW = (float)(rc.right - rc.left);
-            float winH = (float)(rc.bottom - rc.top);
+            RECT rc;
+            GetClientRect(hWnd, &rc);
+            float winW = (float) (rc.right - rc.left);
+            float winH = (float) (rc.bottom - rc.top);
 
-            float base = std::min(winW / (float)g_app.imgWidth, winH / (float)g_app.imgHeight);
-            float renderW = (float)g_app.imgWidth * base * g_app.viewport.zoom;
-            float renderH = (float)g_app.imgHeight * base * g_app.viewport.zoom;
+            float base = std::min(winW / (float) g_app.imgWidth, winH / (float) g_app.imgHeight);
+            float renderW = (float) g_app.imgWidth * base * g_app.viewport.zoom;
+            float renderH = (float) g_app.imgHeight * base * g_app.viewport.zoom;
 
             float maxOffX = std::max(0.0f, (renderW - winW) / 2.0f);
             float maxOffY = std::max(0.0f, (renderH - winH) / 2.0f);
@@ -153,13 +156,13 @@ void MouseHandler::HandleMouseMove(HWND hWnd, LPARAM lParam) {
         }
 
         InvalidateRect(hWnd, nullptr, FALSE);
-    }
-    else if (g_app.isWindowDragging) {
-        POINT curMouse = { GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam) };
+    } else if (g_app.isWindowDragging) {
+        POINT curMouse = {GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam)};
         ClientToScreen(hWnd, &curMouse);
         int dx = curMouse.x - g_app.lastWindowMouse.x;
         int dy = curMouse.y - g_app.lastWindowMouse.y;
-        RECT rc; GetWindowRect(hWnd, &rc);
+        RECT rc;
+        GetWindowRect(hWnd, &rc);
         SetWindowPos(hWnd, nullptr, rc.left + dx, rc.top + dy, 0, 0, SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE);
         g_app.lastWindowMouse = curMouse;
     }
@@ -172,7 +175,7 @@ void MouseHandler::HandleMouseWheel(HWND hWnd, WPARAM wParam, LPARAM lParam) {
         g_app.viewport.zoom *= (zDelta > 0) ? Config::ZOOM_STEP : (1.0f / Config::ZOOM_STEP);
     } else {
         int step = (zDelta < 0) ? 1 : -1;
-        int newIdx = (g_app.currentIndex + step + (int)g_app.playlist.size()) % (int)g_app.playlist.size();
+        int newIdx = (g_app.currentIndex + step + (int) g_app.playlist.size()) % (int) g_app.playlist.size();
         LoadImageIndex(hWnd, newIdx);
     }
     InvalidateRect(hWnd, nullptr, FALSE);

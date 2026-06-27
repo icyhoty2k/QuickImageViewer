@@ -8,12 +8,15 @@
 #include <memory>
 
 struct ViewportState {
-
-    float zoom    = 1.0f;
+    int rotation = 0; // 0, 90, 180, 270
+    bool flippedH = false; //horizontal Flip
+    bool flippedV = false; //vertical Flip
+    // Initial opacity: Fully opaque
+    float zoom = 1.0f;
     float offsetX = 0.0f;
     float offsetY = 0.0f;
     bool isDragging = false;
-    POINT lastMouse = { 0, 0 };
+    POINT lastMouse = {0, 0};
 };
 
 struct AppState {
@@ -21,9 +24,10 @@ struct AppState {
     std::unique_ptr<IImageRenderer> renderer;
     HBITMAP hDIB = nullptr;
     float dpiScale = 1.0f;
+    BYTE opacity = 255;
     int screenW = 0;
     int screenH = 0;
-    int imgWidth  = 0;
+    int imgWidth = 0;
     int imgHeight = 0;
     std::vector<std::wstring> playlist;
     int currentIndex = -1;
@@ -35,11 +39,11 @@ struct AppState {
 
     // Middle mouse panning
     bool isMidDragging = false;
-    bool hasMidMoved   = false;
+    bool hasMidMoved = false;
     POINT lastMidMouse = {0, 0};
 
     // Left click temp zoom + saved state
-    float savedZoom    = 1.0f;
+    float savedZoom = 1.0f;
     float savedOffsetX = 0.0f;
     float savedOffsetY = 0.0f;
 
