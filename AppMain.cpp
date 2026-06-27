@@ -263,7 +263,7 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) 
             InvalidateRect(hWnd, nullptr, FALSE);
             return TRUE;
         // --- CLEAN MOUSE HANDLERS ---
-   
+
         case WM_LBUTTONDOWN:
         case WM_RBUTTONDOWN:
             // This is the direct entry point for zoom and drag
@@ -330,7 +330,7 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) 
                 // 2. Define resize step (adjust for sensitivity)
                 int resizeStep = (hDelta > 0) ? 20 : -20;
                 int newW = currentW + resizeStep;
-                int newH = currentH + (resizeStep * (currentH / (float) currentW)); // Maintain aspect ratio
+                int newH = (int) std::round(currentH + resizeStep * ((float) currentH / currentW)); // Maintain aspect ratio
 
                 // 3. Calculate new centered position
                 int newX = rc.left - (resizeStep / 2);
