@@ -31,13 +31,13 @@ void RendererD2D::Resize(UINT width, UINT height) {
 }
 
 // UI THREAD ONLY: Uploads decoded data to VRAM. Caller must NOT hold m_cacheMutex.
-HRESULT RendererD2D::CreateBitmapFromWic(IWICBitmapSource *bitmap, const std::wstring &filePath) {
+HRESULT RendererD2D::UploadAndCacheBitmap(IWICBitmapSource *bitmap, const std::wstring &filePath) {
     std::lock_guard<std::mutex> lock(m_cacheMutex);
-    return CreateBitmapFromWic_Locked(bitmap, filePath);
+    return UploadAndCacheBitmap_Locked(bitmap, filePath);
 }
 
 // UI THREAD ONLY: Internal version — caller must already hold m_cacheMutex.
-HRESULT RendererD2D::CreateBitmapFromWic_Locked(IWICBitmapSource *bitmap, const std::wstring &filePath) {
+HRESULT RendererD2D::UploadAndCacheBitmap_Locked(IWICBitmapSource *bitmap, const std::wstring &filePath) {
     if (!m_pRenderTarget) return E_UNEXPECTED;
 
     Microsoft::WRL::ComPtr<ID2D1Bitmap> newBitmap;
@@ -76,7 +76,7 @@ void RendererD2D::ProcessPendingUploads() {
             upload = std::move(m_pendingUploads.front());
             m_pendingUploads.pop();
         }
-        HRESULT hr = CreateBitmapFromWic(
+        HRESULT hr = UploadAndCacheBitmap(
             upload.converter.Get(),
             upload.filePath);
 #ifdef _DEBUG
@@ -87,24 +87,42 @@ void RendererD2D::ProcessPendingUploads() {
 }
 
 HRESULT RendererD2D::LoadBitmap(IWICBitmapSource *bitmap, UINT width, UINT height, const std::wstring &filePath) {
-    std::lock_guard<std::mutex> lock(m_cacheMutex);
-
-    auto it = m_bitmapCache.find(filePath);
-    if (it != m_bitmapCache.end()) {
-        // Cache hit: promote in LRU and set as active
-        m_lruList.splice(m_lruList.begin(), m_lruList, it->second.lruIt);
-        m_pBitmap = it->second.bitmap;
-        return S_OK;
+    // 1. Quick cache check
+    {
+        std::lock_guard<std::mutex> lock(m_cacheMutex);
+        auto it = m_bitmapCache.find(filePath);
+        if (it != m_bitmapCache.end()) {
+            m_lruList.splice(m_lruList.begin(), m_lruList, it->second.lruIt);
+            m_pBitmap = it->second.bitmap;
+            return S_OK;
+        }
     }
 
-    // Cache miss: if no bitmap was provided this was a cache-only probe — fail cleanly
-    if (!bitmap) return E_FAIL;
+    if (!bitmap || !m_pRenderTarget) return E_FAIL;
 
-    // Cache miss: decode into VRAM now (UI thread only)
-    HRESULT hr = CreateBitmapFromWic_Locked(bitmap, filePath);
+    // 2. Perform expensive GPU upload OUTSIDE the lock
+    Microsoft::WRL::ComPtr<ID2D1Bitmap> newBitmap;
+    HRESULT hr = m_pRenderTarget->CreateBitmapFromWicBitmap(bitmap, nullptr, newBitmap.GetAddressOf());
+
     if (SUCCEEDED(hr)) {
-        // The new bitmap was just inserted at the front of the LRU list
-        m_pBitmap = m_bitmapCache[filePath].bitmap;
+        std::lock_guard<std::mutex> lock(m_cacheMutex);
+
+        // Final sanity check: if it was added by a concurrent process
+        // during our upload, remove the old one first.
+        auto it = m_bitmapCache.find(filePath);
+        if (it != m_bitmapCache.end()) {
+            m_lruList.erase(it->second.lruIt);
+            m_bitmapCache.erase(it);
+        }
+
+        if (m_lruList.size() >= Config::VRAM_CACHE_IMAGES_COUNT) {
+            m_bitmapCache.erase(m_lruList.back());
+            m_lruList.pop_back();
+        }
+
+        m_lruList.push_front(filePath);
+        m_bitmapCache[filePath] = {newBitmap, m_lruList.begin()};
+        m_pBitmap = newBitmap;
     }
     return hr;
 }
@@ -155,40 +173,41 @@ HRESULT RendererD2D::PreloadBitmap(const std::wstring &filePath) {
 
 HRESULT RendererD2D::Render() {
     if (!m_pRenderTarget) return E_FAIL;
+
     m_pRenderTarget->BeginDraw();
     m_pRenderTarget->Clear(m_clearColor);
 
     if (m_pBitmap) {
-        D2D1_SIZE_F rtSize = m_pRenderTarget->GetSize();
-        float imageW = (float) m_pBitmap->GetSize().width;
-        float imageH = (float) m_pBitmap->GetSize().height;
-        float base = (std::min)(rtSize.width / imageW, rtSize.height / imageH);
-        float z = (g_app.viewport.zoom <= 0.0f) ? 1.0f : g_app.viewport.zoom;
-        float renderW = imageW * base * z;
-        float renderH = imageH * base * z;
-        float left = (rtSize.width - renderW) / 2.0f + g_app.viewport.offsetX;
-        float top = (rtSize.height - renderH) / 2.0f + g_app.viewport.offsetY;
+        const auto size = m_pBitmap->GetSize();
+        const float imageW = size.width;
+        const float imageH = size.height;
+
+        const D2D1_SIZE_F rtSize = m_pRenderTarget->GetSize();
+        const float base = std::min(rtSize.width / imageW, rtSize.height / imageH);
+        const float z = (g_app.viewport.zoom <= 0.0f) ? 1.0f : g_app.viewport.zoom;
+        const float renderW = imageW * base * z;
+        const float renderH = imageH * base * z;
+        const float left = (rtSize.width - renderW) / 2.0f + g_app.viewport.offsetX;
+        const float top = (rtSize.height - renderH) / 2.0f + g_app.viewport.offsetY;
+
         m_pRenderTarget->DrawBitmap(m_pBitmap.Get(), D2D1::RectF(left, top, left + renderW, top + renderH));
     }
+
     HRESULT hr = m_pRenderTarget->EndDraw();
 
     if (hr == D2DERR_RECREATE_TARGET) {
+        // Clear all resources linked to the dead target
         m_pBitmap.Reset();
+        m_bitmapCache.clear();
+        m_lruList.clear();
         m_pRenderTarget.Reset();
 
         RECT rc{};
         GetClientRect(m_hwnd, &rc);
-
         hr = m_pFactory->CreateHwndRenderTarget(
             D2D1::RenderTargetProperties(),
-            D2D1::HwndRenderTargetProperties(
-                m_hwnd,
-                D2D1::SizeU(rc.right - rc.left, rc.bottom - rc.top)),
+            D2D1::HwndRenderTargetProperties(m_hwnd, D2D1::SizeU(rc.right - rc.left, rc.bottom - rc.top)),
             m_pRenderTarget.GetAddressOf());
-
-        if (SUCCEEDED(hr))
-            m_pBitmap.Reset();
     }
-
     return hr;
 }
