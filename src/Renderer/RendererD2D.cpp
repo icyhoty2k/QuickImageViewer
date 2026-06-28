@@ -3,6 +3,8 @@
 #include "../Platform/Constants.h"
 #include <algorithm>
 #include "../WorkerThread.h"
+#include <chrono>
+#include <vector>
 #pragma comment(lib, "d2d1.lib")
 #pragma comment(lib, "dwrite.lib")
 
@@ -22,7 +24,6 @@ HRESULT RendererD2D::Initialize(HWND hwnd) {
         return E_FAIL;
     }
 
-    // Attempt to create primary font, fallback to Arial if it fails
     HRESULT hrFont = m_pDWriteFactory->CreateTextFormat(
             L"Segoe UI", nullptr,
             DWRITE_FONT_WEIGHT_NORMAL, DWRITE_FONT_STYLE_NORMAL, DWRITE_FONT_STRETCH_NORMAL,
@@ -51,40 +52,80 @@ void RendererD2D::Resize(UINT width, UINT height) {
     if (m_pRenderTarget) m_pRenderTarget->Resize(D2D1::SizeU(width, height));
 }
 
-HRESULT RendererD2D::UploadAndCacheBitmap(IWICBitmapSource *bitmap, const std::wstring &filePath, UINT width, UINT height) {
+HRESULT RendererD2D::UploadAndCacheBitmap(const std::vector<BYTE> &pixelData, UINT stride, const std::wstring &filePath, UINT width, UINT height) {
     std::lock_guard<std::mutex> lock(m_cacheMutex);
-    return UploadAndCacheBitmap_Locked(bitmap, filePath, width, height);
+    return UploadAndCacheBitmap_Locked(pixelData, stride, filePath, width, height);
 }
 
-HRESULT RendererD2D::UploadAndCacheBitmap_Locked(IWICBitmapSource *bitmap, const std::wstring &filePath, UINT width, UINT height) {
-    if (!m_pRenderTarget) return E_UNEXPECTED;
+HRESULT RendererD2D::UploadAndCacheBitmap_Locked(const std::vector<BYTE> &pixelData, UINT stride, const std::wstring &filePath, UINT width, UINT height) {
+    if (!m_pRenderTarget || pixelData.empty()) return E_UNEXPECTED;
 
-    Microsoft::WRL::ComPtr<ID2D1Bitmap> newBitmap;
-    HRESULT hr = m_pRenderTarget->CreateBitmapFromWicBitmap(bitmap, nullptr, newBitmap.GetAddressOf());
-    if (FAILED(hr)) return hr;
+    Microsoft::WRL::ComPtr<ID2D1Bitmap> targetBitmap;
 
+    // 1. Check if the file is already in the cache (e.g., reloading current image)
     auto existing = m_bitmapCache.find(filePath);
     if (existing != m_bitmapCache.end()) {
+        if (existing->second.width == width && existing->second.height == height) {
+            targetBitmap = existing->second.bitmap; // Claim this buffer for recycling
+        }
         m_lruList.erase(existing->second.lruIt);
         m_bitmapCache.erase(existing);
     }
 
-    if (m_lruList.size() >= Constants::VRAM_CACHE_IMAGES_COUNT) {
-        m_bitmapCache.erase(m_lruList.back());
+    // 2. Check the LRU eviction candidate if we hit the cache limit
+    if (!targetBitmap && m_lruList.size() >= Constants::VRAM_CACHE_IMAGES_COUNT) {
+        auto oldestIt = m_bitmapCache.find(m_lruList.back());
+        if (oldestIt != m_bitmapCache.end()) {
+            if (oldestIt->second.width == width && oldestIt->second.height == height) {
+                targetBitmap = oldestIt->second.bitmap; // Claim this buffer for recycling
+            }
+            m_bitmapCache.erase(oldestIt);
+        }
         m_lruList.pop_back();
     }
 
+    HRESULT hr = S_OK;
+
+    // 3. Upload Pixels: Recycle if possible, Allocate if necessary
+    if (targetBitmap) {
+        // FAST PATH: Direct PCIe transfer to existing VRAM buffer. Zero allocation overhead.
+        D2D1_RECT_U destRect = D2D1::RectU(0, 0, width, height);
+        hr = targetBitmap->CopyFromMemory(&destRect, pixelData.data(), stride);
+    } else {
+        // SLOW PATH: Dimensions didn't match, force DirectX to allocate new VRAM.
+        D2D1_BITMAP_PROPERTIES props = D2D1::BitmapProperties(
+                D2D1::PixelFormat(DXGI_FORMAT_B8G8R8A8_UNORM, D2D1_ALPHA_MODE_PREMULTIPLIED)
+                );
+        hr = m_pRenderTarget->CreateBitmap(
+                D2D1::SizeU(width, height),
+                pixelData.data(),
+                stride,
+                props,
+                targetBitmap.GetAddressOf()
+                );
+    }
+
+    if (FAILED(hr)) return hr;
+
+    // 4. Register the buffer in the cache under the new file path
     m_lruList.push_front(filePath);
-    m_bitmapCache.emplace(filePath, CachedBitmap{newBitmap, m_lruList.begin(), width, height});
+    m_bitmapCache.emplace(filePath, CachedBitmap{targetBitmap, m_lruList.begin(), width, height});
+
     return S_OK;
 }
 
 void RendererD2D::ProcessPendingUploads() {
+    auto startTime = std::chrono::high_resolution_clock::now();
     while (true) {
         PendingUpload upload;
         {
             std::lock_guard<std::mutex> lock(m_cacheMutex);
             if (m_pendingUploads.empty()) break;
+            auto now = std::chrono::high_resolution_clock::now();
+            if (std::chrono::duration_cast<std::chrono::milliseconds>(now - startTime).count() > 3) {
+                PostMessageW(m_hwnd, Constants::WM_QIV_PENDING_UPLOADS, 0, 0);
+                break;
+            }
             upload = std::move(m_pendingUploads.front());
             m_pendingUploads.pop();
         }
@@ -93,9 +134,9 @@ void RendererD2D::ProcessPendingUploads() {
         int dist = std::abs(upload.playlistIndex - currentIdx);
 
         if (dist <= Constants::PRELOAD_LOOKASIDE_COUNT) {
-            HRESULT hr = UploadAndCacheBitmap(upload.converter.Get(), upload.filePath, upload.width, upload.height);
+            HRESULT hr = UploadAndCacheBitmap(upload.pixelData, upload.stride, upload.filePath, upload.width, upload.height);
 #ifdef _DEBUG
-            if (FAILED(hr)) OutputDebugStringW(L"CreateBitmapFromWic failed.\n");
+            if (FAILED(hr)) OutputDebugStringW(L"RAM to VRAM upload failed.\n");
 #else
             (void) hr;
 #endif
@@ -145,13 +186,9 @@ HRESULT RendererD2D::LoadBitmap(IWICBitmapSource *bitmap, UINT width, UINT heigh
 }
 
 HRESULT RendererD2D::PreloadBitmap(const std::wstring &filePath, int requestIndex) {
-    // Capture the decode worker's WIC factory (COINIT_MULTITHREADED → free-threaded,
-    // safe to call from the IO thread).
     Microsoft::WRL::ComPtr<IWICImagingFactory2> wicFac = g_decoderWorker.wicFactory;
     if (!wicFac) return E_UNEXPECTED;
 
-    // IO worker: open file, read container header → IWICBitmapDecoder
-    // This is the disk-bound step; it must not block the decode worker.
     g_ioWorker.PushTask([filePath, requestIndex, wicFac, this]() {
         if (g_app.wantedIndex.load(std::memory_order_acquire) != requestIndex) return;
 
@@ -161,7 +198,6 @@ HRESULT RendererD2D::PreloadBitmap(const std::wstring &filePath, int requestInde
                 WICDecodeMetadataCacheOnDemand, &decoder);
         if (FAILED(hr)) return;
 
-        // Decode worker: frame decode + pixel format conversion (CPU-bound)
         g_decoderWorker.PushTask([decoder, filePath, requestIndex, this]() {
             if (g_app.wantedIndex.load(std::memory_order_acquire) != requestIndex) return;
 
@@ -171,7 +207,6 @@ HRESULT RendererD2D::PreloadBitmap(const std::wstring &filePath, int requestInde
             UINT width = 0, height = 0;
             frame->GetSize(&width, &height);
 
-            // Use the decode worker's own WIC factory for conversion
             Microsoft::WRL::ComPtr<IWICFormatConverter> converter;
             if (FAILED(g_decoderWorker.wicFactory->CreateFormatConverter(&converter))) return;
 
@@ -181,10 +216,22 @@ HRESULT RendererD2D::PreloadBitmap(const std::wstring &filePath, int requestInde
                 WICBitmapPaletteTypeCustom)))
                 return;
 
-            // Render thread: GPU upload via ProcessPendingUploads (WM_QIV_PENDING_UPLOADS)
+            // Extract pixels directly into standard system RAM
+            UINT stride = width * 4; // 32bpp = 4 bytes per pixel
+            std::vector<BYTE> pixelData(stride * height);
+
+            HRESULT copyHr = converter->CopyPixels(
+                    nullptr, stride,
+                    static_cast<UINT>(pixelData.size()),
+                    pixelData.data()
+                    );
+
+            if (FAILED(copyHr)) return;
+
             {
                 std::lock_guard<std::mutex> lock(m_cacheMutex);
-                m_pendingUploads.push({requestIndex, filePath, converter, width, height});
+                // Move the raw buffer into the queue (std::move ensures no deep copy overhead)
+                m_pendingUploads.push({requestIndex, filePath, std::move(pixelData), stride, width, height});
             }
             PostMessageW(m_hwnd, Constants::WM_QIV_PENDING_UPLOADS, 0, 0);
         });
@@ -215,8 +262,20 @@ HRESULT RendererD2D::Render() {
         if (g_app.viewport.flippedV) transform = transform * D2D1::Matrix3x2F::Scale(1.0f, -1.0f, center);
         transform = transform * D2D1::Matrix3x2F::Rotation(static_cast<float>(g_app.viewport.rotation), center);
 
+        bool isNative = (std::abs(g_app.viewport.zoom - 1.0f) < 0.001f);
+        D2D1_BITMAP_INTERPOLATION_MODE interpMode = isNative
+                                                        ? D2D1_BITMAP_INTERPOLATION_MODE_NEAREST_NEIGHBOR
+                                                        : D2D1_BITMAP_INTERPOLATION_MODE_LINEAR;
+
         m_pRenderTarget->SetTransform(transform);
-        m_pRenderTarget->DrawBitmap(m_pBitmap.Get(), D2D1::RectF(left, top, left + renderW, top + renderH));
+
+        m_pRenderTarget->DrawBitmap(
+                m_pBitmap.Get(),
+                D2D1::RectF(left, top, left + renderW, top + renderH),
+                1.0f,
+                interpMode
+                );
+
         m_pRenderTarget->SetTransform(D2D1::Matrix3x2F::Identity());
 
         if (!g_app.playlist.empty() && g_app.showOverlayInfoText) {
@@ -226,7 +285,6 @@ HRESULT RendererD2D::Render() {
                                 std::to_wstring(g_app.playlist.size()) + L" - " + fileName;
             D2D1_RECT_F layoutRect = D2D1::RectF(15.0f, 6.0f, rtSize.width - 10.0f, rtSize.height - 10.0f);
 
-            // Safety check: ensure resources exist before drawing
             if (m_pTextFormat && m_pTextBrush) {
                 m_pRenderTarget->DrawText(text.c_str(), static_cast<UINT32>(text.length()),
                                           m_pTextFormat.Get(), layoutRect, m_pTextBrush.Get());
@@ -235,20 +293,26 @@ HRESULT RendererD2D::Render() {
     }
 
     HRESULT hr = m_pRenderTarget->EndDraw();
+
     if (hr == D2DERR_RECREATE_TARGET) {
         m_pBitmap.Reset();
         m_bitmapCache.clear();
         m_lruList.clear();
         m_pRenderTarget.Reset();
+
         RECT rc{};
         GetClientRect(m_hwnd, &rc);
-        hr = m_pFactory->CreateHwndRenderTarget(D2D1::RenderTargetProperties(),
-                                                D2D1::HwndRenderTargetProperties(m_hwnd, D2D1::SizeU(rc.right - rc.left, rc.bottom - rc.top)),
-                                                m_pRenderTarget.GetAddressOf());
+        hr = m_pFactory->CreateHwndRenderTarget(
+                D2D1::RenderTargetProperties(),
+                D2D1::HwndRenderTargetProperties(m_hwnd, D2D1::SizeU(rc.right - rc.left, rc.bottom - rc.top)),
+                m_pRenderTarget.GetAddressOf()
+                );
+
         if (SUCCEEDED(hr)) {
             m_pTextBrush.Reset();
             (void) m_pRenderTarget->CreateSolidColorBrush(D2D1::ColorF(D2D1::ColorF::LightGreen), &m_pTextBrush);
         }
     }
+
     return hr;
 }

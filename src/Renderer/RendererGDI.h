@@ -21,10 +21,8 @@ class RendererGDI final : public IImageRenderer {
 
         [[nodiscard]] HRESULT Render() override;
 
-        // Updated to match the new signature in IRenderer.h
         [[nodiscard]] HRESULT PreloadBitmap(const std::wstring &filePath, int requestIndex) override;
 
-        // Required to satisfy the interface for the background worker
         void ProcessPendingUploads() override;
 
     private:
