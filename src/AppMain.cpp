@@ -35,8 +35,11 @@ AppState g_app;
 DropTarget *g_pDropTarget = nullptr;
 
 // Define the storage for the globals exactly once in your entry point file
-WorkerThread g_decoderWorker;
-WorkerThread g_ioWorker;
+//   g_ioWorker      – IoThreadPool: started lazily in FileHandler once the
+//                     target drive is known (1 thread HDD, 2 threads SSD/NVMe)
+//   g_decoderWorker – WorkerThread(true): WIC decode + pixel convert
+IoThreadPool g_ioWorker;
+WorkerThread g_decoderWorker(true);
 
 void ToggleFullscreen(HWND hWnd) {
     if (!g_app.isFullscreen) {

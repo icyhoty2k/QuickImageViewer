@@ -7,7 +7,7 @@
 #pragma comment(lib, "dwrite.lib")
 
 extern WorkerThread g_decoderWorker;
-extern WorkerThread g_ioWorker;
+extern IoThreadPool g_ioWorker;
 
 HRESULT RendererD2D::Initialize(HWND hwnd) {
     m_hwnd = hwnd;
@@ -18,7 +18,7 @@ HRESULT RendererD2D::Initialize(HWND hwnd) {
     }
 
     if (FAILED(DWriteCreateFactory(DWRITE_FACTORY_TYPE_SHARED, __uuidof(IDWriteFactory),
-                                   reinterpret_cast<IUnknown **>(m_pDWriteFactory.GetAddressOf())))) {
+        reinterpret_cast<IUnknown **>(m_pDWriteFactory.GetAddressOf())))) {
         return E_FAIL;
     }
 
@@ -145,30 +145,47 @@ HRESULT RendererD2D::LoadBitmap(IWICBitmapSource *bitmap, UINT width, UINT heigh
 }
 
 HRESULT RendererD2D::PreloadBitmap(const std::wstring &filePath, int requestIndex) {
-    g_ioWorker.PushTask([filePath, requestIndex, this]() {
-        Microsoft::WRL::ComPtr<IWICBitmapDecoder> decoder;
-        if (FAILED(g_app.wicFactory->CreateDecoderFromFilename(
-                filePath.c_str(), nullptr, GENERIC_READ, WICDecodeMetadataCacheOnDemand, &decoder)))
-            return;
+    // Capture the decode worker's WIC factory (COINIT_MULTITHREADED → free-threaded,
+    // safe to call from the IO thread).
+    Microsoft::WRL::ComPtr<IWICImagingFactory2> wicFac = g_decoderWorker.wicFactory;
+    if (!wicFac) return E_UNEXPECTED;
 
+    // IO worker: open file, read container header → IWICBitmapDecoder
+    // This is the disk-bound step; it must not block the decode worker.
+    g_ioWorker.PushTask([filePath, requestIndex, wicFac, this]() {
+        if (g_app.wantedIndex.load(std::memory_order_acquire) != requestIndex) return;
+
+        Microsoft::WRL::ComPtr<IWICBitmapDecoder> decoder;
+        HRESULT hr = wicFac->CreateDecoderFromFilename(
+                filePath.c_str(), nullptr, GENERIC_READ,
+                WICDecodeMetadataCacheOnDemand, &decoder);
+        if (FAILED(hr)) return;
+
+        // Decode worker: frame decode + pixel format conversion (CPU-bound)
         g_decoderWorker.PushTask([decoder, filePath, requestIndex, this]() {
             if (g_app.wantedIndex.load(std::memory_order_acquire) != requestIndex) return;
 
             Microsoft::WRL::ComPtr<IWICBitmapFrameDecode> frame;
             if (FAILED(decoder->GetFrame(0, &frame))) return;
 
-            UINT width, height;
+            UINT width = 0, height = 0;
             frame->GetSize(&width, &height);
 
+            // Use the decode worker's own WIC factory for conversion
             Microsoft::WRL::ComPtr<IWICFormatConverter> converter;
-            if (FAILED(g_app.wicFactory->CreateFormatConverter(&converter))) return;
+            if (FAILED(g_decoderWorker.wicFactory->CreateFormatConverter(&converter))) return;
 
-            if (FAILED(converter->Initialize(frame.Get(), GUID_WICPixelFormat32bppPBGRA,
-                                             WICBitmapDitherTypeNone, nullptr, 0.0f, WICBitmapPaletteTypeCustom)))
+            if (FAILED(converter->Initialize(
+                frame.Get(), GUID_WICPixelFormat32bppPBGRA,
+                WICBitmapDitherTypeNone, nullptr, 0.0f,
+                WICBitmapPaletteTypeCustom)))
                 return;
 
-            std::lock_guard<std::mutex> lock(m_cacheMutex);
-            m_pendingUploads.push({requestIndex, filePath, converter, width, height});
+            // Render thread: GPU upload via ProcessPendingUploads (WM_QIV_PENDING_UPLOADS)
+            {
+                std::lock_guard<std::mutex> lock(m_cacheMutex);
+                m_pendingUploads.push({requestIndex, filePath, converter, width, height});
+            }
             PostMessageW(m_hwnd, Constants::WM_QIV_PENDING_UPLOADS, 0, 0);
         });
     });
