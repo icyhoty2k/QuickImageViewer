@@ -1,84 +1,259 @@
 #include "RendererD2D.h"
 #include "../AppState.h"
 #include "../Platform/Constants.h"
-#include <algorithm>
 #include "../WorkerThread.h"
+#include <algorithm>
 #include <chrono>
 #include <vector>
+
+// Link the required import libraries
+#pragma comment(lib, "d3d11.lib")
+#pragma comment(lib, "dxgi.lib")
 #pragma comment(lib, "d2d1.lib")
 #pragma comment(lib, "dwrite.lib")
 
 extern WorkerThread g_decoderWorker;
 extern IoThreadPool g_ioWorker;
 
+// =============================================================================
+//  Initialize
+// =============================================================================
 HRESULT RendererD2D::Initialize(HWND hwnd) {
     m_hwnd = hwnd;
 
-    if (!m_pFactory) {
-        HRESULT hr = D2D1CreateFactory(D2D1_FACTORY_TYPE_SINGLE_THREADED, m_pFactory.GetAddressOf());
+    // --- Device-independent factory (created once, never released on device loss) ---
+    if (!m_pD2DFactory) {
+        D2D1_FACTORY_OPTIONS opts{};
+#ifdef _DEBUG
+        opts.debugLevel = D2D1_DEBUG_LEVEL_INFORMATION;
+#endif
+        HRESULT hr = D2D1CreateFactory(D2D1_FACTORY_TYPE_SINGLE_THREADED,
+                                       __uuidof(ID2D1Factory7),
+                                       &opts,
+                                       reinterpret_cast<void **>(m_pD2DFactory.GetAddressOf()));
         if (FAILED(hr)) return hr;
     }
 
-    if (FAILED(DWriteCreateFactory(DWRITE_FACTORY_TYPE_SHARED, __uuidof(IDWriteFactory),
-        reinterpret_cast<IUnknown **>(m_pDWriteFactory.GetAddressOf())))) {
-        return E_FAIL;
-    }
+    // --- DWrite factory (device-independent, created once) ---
+    if (!m_pDWriteFactory) {
+        HRESULT hr = DWriteCreateFactory(DWRITE_FACTORY_TYPE_SHARED,
+                                         __uuidof(IDWriteFactory3),
+                                         reinterpret_cast<IUnknown **>(m_pDWriteFactory.GetAddressOf()));
+        if (FAILED(hr)) return hr;
 
-    HRESULT hrFont = m_pDWriteFactory->CreateTextFormat(
-            L"Segoe UI", nullptr,
-            DWRITE_FONT_WEIGHT_NORMAL, DWRITE_FONT_STYLE_NORMAL, DWRITE_FONT_STRETCH_NORMAL,
-            12.0f, L"en-us", &m_pTextFormat);
-
-    if (FAILED(hrFont)) {
-        (void) m_pDWriteFactory->CreateTextFormat(
-                L"Arial", nullptr,
+        // Try Segoe UI first, fall back to Arial
+        hr = m_pDWriteFactory->CreateTextFormat(
+                L"Segoe UI", nullptr,
                 DWRITE_FONT_WEIGHT_NORMAL, DWRITE_FONT_STYLE_NORMAL, DWRITE_FONT_STRETCH_NORMAL,
                 12.0f, L"en-us", &m_pTextFormat);
+
+        if (FAILED(hr)) {
+            (void) m_pDWriteFactory->CreateTextFormat(
+                    L"Arial", nullptr,
+                    DWRITE_FONT_WEIGHT_NORMAL, DWRITE_FONT_STYLE_NORMAL, DWRITE_FONT_STRETCH_NORMAL,
+                    12.0f, L"en-us", &m_pTextFormat);
+        }
     }
 
-    RECT rc{};
-    GetClientRect(hwnd, &rc);
-    HRESULT hr = m_pFactory->CreateHwndRenderTarget(
-            D2D1::RenderTargetProperties(),
-            D2D1::HwndRenderTargetProperties(hwnd, D2D1::SizeU(rc.right - rc.left, rc.bottom - rc.top)),
-            m_pRenderTarget.GetAddressOf());
+    return CreateDeviceResources();
+}
 
+// =============================================================================
+//  CreateDeviceResources  — builds D3D11 → DXGI → D2D7 chain
+// =============================================================================
+HRESULT RendererD2D::CreateDeviceResources() {
+    // 1. Create D3D11 device with D2D interop flag
+    D3D_FEATURE_LEVEL featureLevels[] = {
+        D3D_FEATURE_LEVEL_11_1,
+        D3D_FEATURE_LEVEL_11_0,
+        D3D_FEATURE_LEVEL_10_1,
+        D3D_FEATURE_LEVEL_10_0,
+    };
+    UINT createFlags = D3D11_CREATE_DEVICE_BGRA_SUPPORT;
+#ifdef _DEBUG
+    createFlags |= D3D11_CREATE_DEVICE_DEBUG;
+#endif
+
+    D3D_FEATURE_LEVEL chosenLevel{};
+    HRESULT hr = D3D11CreateDevice(
+            nullptr, // default adapter
+            D3D_DRIVER_TYPE_HARDWARE,
+            nullptr,
+            createFlags,
+            featureLevels, ARRAYSIZE(featureLevels),
+            D3D11_SDK_VERSION,
+            m_pD3DDevice.GetAddressOf(),
+            &chosenLevel,
+            m_pD3DContext.GetAddressOf());
+
+    if (FAILED(hr)) {
+        // Retry without debug layer (SDK might not be installed)
+        createFlags &= ~D3D11_CREATE_DEVICE_DEBUG;
+        hr = D3D11CreateDevice(nullptr, D3D_DRIVER_TYPE_HARDWARE, nullptr,
+                               createFlags, featureLevels, ARRAYSIZE(featureLevels),
+                               D3D11_SDK_VERSION,
+                               m_pD3DDevice.GetAddressOf(), &chosenLevel,
+                               m_pD3DContext.GetAddressOf());
+        if (FAILED(hr)) return hr;
+    }
+
+    // 2. Get the DXGI device from D3D11 device
+    Microsoft::WRL::ComPtr<IDXGIDevice1> dxgiDevice;
+    hr = m_pD3DDevice.As(&dxgiDevice);
     if (FAILED(hr)) return hr;
 
-    return m_pRenderTarget->CreateSolidColorBrush(D2D1::ColorF(D2D1::ColorF::LightGreen), &m_pTextBrush);
+    // Limit pre-rendered frames to 1 to reduce input latency
+    (void) dxgiDevice->SetMaximumFrameLatency(1);
+
+    // 3. Get DXGI adapter → factory to create the swap chain
+    Microsoft::WRL::ComPtr<IDXGIAdapter> dxgiAdapter;
+    hr = dxgiDevice->GetAdapter(dxgiAdapter.GetAddressOf());
+    if (FAILED(hr)) return hr;
+
+    Microsoft::WRL::ComPtr<IDXGIFactory2> dxgiFactory;
+    hr = dxgiAdapter->GetParent(__uuidof(IDXGIFactory2),
+                                reinterpret_cast<void **>(dxgiFactory.GetAddressOf()));
+    if (FAILED(hr)) return hr;
+
+    // 4. Create DXGI swap chain for the HWND
+    DXGI_SWAP_CHAIN_DESC1 swapDesc{};
+    swapDesc.Width = 0; // auto from window
+    swapDesc.Height = 0;
+    swapDesc.Format = DXGI_FORMAT_B8G8R8A8_UNORM; // required for D2D
+    swapDesc.Stereo = FALSE;
+    swapDesc.SampleDesc.Count = 1;
+    swapDesc.SampleDesc.Quality = 0;
+    swapDesc.BufferUsage = DXGI_USAGE_RENDER_TARGET_OUTPUT;
+    swapDesc.BufferCount = 2;
+    swapDesc.Scaling = DXGI_SCALING_NONE;
+    swapDesc.SwapEffect = DXGI_SWAP_EFFECT_FLIP_DISCARD; // modern flip model
+    swapDesc.AlphaMode = DXGI_ALPHA_MODE_IGNORE;
+    swapDesc.Flags = 0;
+
+    hr = dxgiFactory->CreateSwapChainForHwnd(
+            m_pD3DDevice.Get(), m_hwnd,
+            &swapDesc, nullptr, nullptr,
+            m_pSwapChain.GetAddressOf());
+    if (FAILED(hr)) return hr;
+
+    // Disable exclusive fullscreen transitions (we manage fullscreen ourselves)
+    (void) dxgiFactory->MakeWindowAssociation(m_hwnd, DXGI_MWA_NO_ALT_ENTER);
+
+    // 5. Create D2D device from the DXGI device
+    hr = m_pD2DFactory->CreateDevice(dxgiDevice.Get(),
+                                     reinterpret_cast<ID2D1Device **>(m_pD2DDevice.GetAddressOf()));
+    if (FAILED(hr)) return hr;
+
+    // 6. Create ID2D1DeviceContext7 from the D2D device
+    hr = m_pD2DDevice->CreateDeviceContext(
+            D2D1_DEVICE_CONTEXT_OPTIONS_NONE,
+            reinterpret_cast<ID2D1DeviceContext **>(m_pDeviceContext.GetAddressOf()));
+    if (FAILED(hr)) return hr;
+
+    // 7. Bind the swap chain back buffer as the D2D render target
+    hr = CreateBackBufferBitmap();
+    if (FAILED(hr)) return hr;
+
+    // 8. Create text brush (device-dependent resource)
+    hr = m_pDeviceContext->CreateSolidColorBrush(
+            D2D1::ColorF(D2D1::ColorF::LightGreen), &m_pTextBrush);
+    return hr;
 }
 
+// =============================================================================
+//  CreateBackBufferBitmap  — wraps the DXGI back buffer in an ID2D1Bitmap1
+// =============================================================================
+HRESULT RendererD2D::CreateBackBufferBitmap() {
+    m_pBackBufferBitmap.Reset();
+
+    Microsoft::WRL::ComPtr<IDXGISurface> dxgiBackBuffer;
+    HRESULT hr = m_pSwapChain->GetBuffer(0, __uuidof(IDXGISurface),
+                                         reinterpret_cast<void **>(dxgiBackBuffer.GetAddressOf()));
+    if (FAILED(hr)) return hr;
+
+    D2D1_BITMAP_PROPERTIES1 bmpProps = D2D1::BitmapProperties1(
+            D2D1_BITMAP_OPTIONS_TARGET | D2D1_BITMAP_OPTIONS_CANNOT_DRAW,
+            D2D1::PixelFormat(DXGI_FORMAT_B8G8R8A8_UNORM, D2D1_ALPHA_MODE_IGNORE));
+
+    hr = m_pDeviceContext->CreateBitmapFromDxgiSurface(
+            dxgiBackBuffer.Get(), &bmpProps,
+            m_pBackBufferBitmap.GetAddressOf());
+    if (FAILED(hr)) return hr;
+
+    m_pDeviceContext->SetTarget(m_pBackBufferBitmap.Get());
+    return S_OK;
+}
+
+// =============================================================================
+//  DiscardDeviceResources
+// =============================================================================
+void RendererD2D::DiscardDeviceResources() {
+    // Clear the D2D target before releasing swap chain resources
+    if (m_pDeviceContext) m_pDeviceContext->SetTarget(nullptr);
+
+    m_pTextBrush.Reset();
+    m_pBackBufferBitmap.Reset();
+    m_pBitmap.Reset();
+    m_bitmapCache.clear();
+    m_lruList.clear();
+    m_pDeviceContext.Reset();
+    m_pD2DDevice.Reset();
+    m_pSwapChain.Reset();
+    m_pD3DContext.Reset();
+    m_pD3DDevice.Reset();
+}
+
+// =============================================================================
+//  Resize
+// =============================================================================
 void RendererD2D::Resize(UINT width, UINT height) {
-    if (m_pRenderTarget) m_pRenderTarget->Resize(D2D1::SizeU(width, height));
+    if (!m_pSwapChain || !m_pDeviceContext) return;
+
+    // Must clear the D2D target before resizing swap chain buffers
+    m_pDeviceContext->SetTarget(nullptr);
+    m_pBackBufferBitmap.Reset();
+
+    HRESULT hr = m_pSwapChain->ResizeBuffers(0, width, height,
+                                             DXGI_FORMAT_UNKNOWN, 0);
+    if (SUCCEEDED(hr)) {
+        (void) CreateBackBufferBitmap();
+    }
 }
 
-HRESULT RendererD2D::UploadAndCacheBitmap(const std::vector<BYTE> &pixelData, UINT stride, const std::wstring &filePath, UINT width, UINT height) {
+// =============================================================================
+//  UploadAndCacheBitmap  (thread-safe wrapper)
+// =============================================================================
+HRESULT RendererD2D::UploadAndCacheBitmap(const std::vector<BYTE> &pixelData, UINT stride,
+                                          const std::wstring &filePath, UINT width, UINT height) {
     std::lock_guard<std::mutex> lock(m_cacheMutex);
     return UploadAndCacheBitmap_Locked(pixelData, stride, filePath, width, height);
 }
 
-HRESULT RendererD2D::UploadAndCacheBitmap_Locked(const std::vector<BYTE> &pixelData, UINT stride, const std::wstring &filePath, UINT width, UINT height) {
-    if (!m_pRenderTarget || pixelData.empty()) return E_UNEXPECTED;
+// =============================================================================
+//  UploadAndCacheBitmap_Locked  (caller must hold m_cacheMutex)
+// =============================================================================
+HRESULT RendererD2D::UploadAndCacheBitmap_Locked(const std::vector<BYTE> &pixelData, UINT stride,
+                                                 const std::wstring &filePath, UINT width, UINT height) {
+    if (!m_pDeviceContext || pixelData.empty()) return E_UNEXPECTED;
 
-    Microsoft::WRL::ComPtr<ID2D1Bitmap> targetBitmap;
+    Microsoft::WRL::ComPtr<ID2D1Bitmap1> targetBitmap;
 
-    // 1. Check if the exact file is already in the cache (e.g., reloading current image)
+    // 1. Check if the exact file is already cached (same path, reloading)
     auto existing = m_bitmapCache.find(filePath);
     if (existing != m_bitmapCache.end()) {
         if (existing->second.width == width && existing->second.height == height) {
-            targetBitmap = existing->second.bitmap; // Claim this buffer for recycling
+            targetBitmap = existing->second.bitmap; // recycle the VRAM buffer
         }
         m_lruList.erase(existing->second.lruIt);
         m_bitmapCache.erase(existing);
     }
 
-    // 2. Check the LRU eviction candidate if we hit the cache limit
+    // 2. LRU eviction if cache is full
     if (!targetBitmap && m_lruList.size() >= Constants::VRAM_CACHE_IMAGES_COUNT) {
         auto oldestIt = m_bitmapCache.find(m_lruList.back());
         if (oldestIt != m_bitmapCache.end()) {
-            // Only recycle if the dimensions are an exact match
             if (oldestIt->second.width == width && oldestIt->second.height == height) {
-                targetBitmap = oldestIt->second.bitmap; // Claim this buffer for recycling
+                targetBitmap = oldestIt->second.bitmap; // recycle if dimensions match
             }
             m_bitmapCache.erase(oldestIt);
         }
@@ -87,41 +262,44 @@ HRESULT RendererD2D::UploadAndCacheBitmap_Locked(const std::vector<BYTE> &pixelD
 
     HRESULT hr = S_OK;
 
-    // 3. Upload Pixels: Recycle if possible, Allocate if necessary
     if (targetBitmap) {
-        // FAST PATH: Direct PCIe transfer to existing VRAM buffer. Zero OS allocation overhead.
+        // FAST PATH: CopyFromMemory into existing VRAM buffer — zero allocation overhead
         D2D1_RECT_U destRect = D2D1::RectU(0, 0, width, height);
         hr = targetBitmap->CopyFromMemory(&destRect, pixelData.data(), stride);
     } else {
-        // SLOW PATH: Dimensions didn't match (or cache is still filling up), allocate new VRAM.
-        D2D1_BITMAP_PROPERTIES props = D2D1::BitmapProperties(
-                D2D1::PixelFormat(DXGI_FORMAT_B8G8R8A8_UNORM, D2D1_ALPHA_MODE_PREMULTIPLIED)
-                );
-        hr = m_pRenderTarget->CreateBitmap(
+        // SLOW PATH: Allocate a new D2D bitmap on the GPU
+        D2D1_BITMAP_PROPERTIES1 props = D2D1::BitmapProperties1(
+                D2D1_BITMAP_OPTIONS_NONE,
+                D2D1::PixelFormat(DXGI_FORMAT_B8G8R8A8_UNORM, D2D1_ALPHA_MODE_PREMULTIPLIED));
+
+        hr = m_pDeviceContext->CreateBitmap(
                 D2D1::SizeU(width, height),
                 pixelData.data(),
                 stride,
                 props,
-                targetBitmap.GetAddressOf()
-                );
+                targetBitmap.GetAddressOf());
     }
 
     if (FAILED(hr)) return hr;
 
-    // 4. Register the buffer in the cache under the new file path
+    // 3. Register in the LRU cache
     m_lruList.push_front(filePath);
     m_bitmapCache.emplace(filePath, CachedBitmap{targetBitmap, m_lruList.begin(), width, height});
-
     return S_OK;
 }
 
+// =============================================================================
+//  ProcessPendingUploads  — called from the UI thread
+// =============================================================================
 void RendererD2D::ProcessPendingUploads() {
     auto startTime = std::chrono::high_resolution_clock::now();
+
     while (true) {
         PendingUpload upload;
         {
             std::lock_guard<std::mutex> lock(m_cacheMutex);
             if (m_pendingUploads.empty()) break;
+
             auto now = std::chrono::high_resolution_clock::now();
             if (std::chrono::duration_cast<std::chrono::milliseconds>(now - startTime).count() > 3) {
                 PostMessageW(m_hwnd, Constants::WM_QIV_PENDING_UPLOADS, 0, 0);
@@ -135,7 +313,8 @@ void RendererD2D::ProcessPendingUploads() {
         int dist = std::abs(upload.playlistIndex - currentIdx);
 
         if (dist <= Constants::PRELOAD_LOOKASIDE_COUNT) {
-            HRESULT hr = UploadAndCacheBitmap(upload.pixelData, upload.stride, upload.filePath, upload.width, upload.height);
+            HRESULT hr = UploadAndCacheBitmap(upload.pixelData, upload.stride,
+                                              upload.filePath, upload.width, upload.height);
 #ifdef _DEBUG
             if (FAILED(hr)) OutputDebugStringW(L"RAM to VRAM upload failed.\n");
 #else
@@ -145,7 +324,11 @@ void RendererD2D::ProcessPendingUploads() {
     }
 }
 
-HRESULT RendererD2D::LoadBitmap(IWICBitmapSource *bitmap, UINT width, UINT height, const std::wstring &filePath) {
+// =============================================================================
+//  LoadBitmap
+// =============================================================================
+HRESULT RendererD2D::LoadBitmap(IWICBitmapSource *bitmap, UINT width, UINT height,
+                                const std::wstring &filePath) {
     {
         std::lock_guard<std::mutex> lock(m_cacheMutex);
         auto it = m_bitmapCache.find(filePath);
@@ -158,19 +341,22 @@ HRESULT RendererD2D::LoadBitmap(IWICBitmapSource *bitmap, UINT width, UINT heigh
         }
     }
 
-    if (!bitmap || !m_pRenderTarget) return E_FAIL;
+    if (!bitmap || !m_pDeviceContext) return E_FAIL;
 
-    Microsoft::WRL::ComPtr<ID2D1Bitmap> newBitmap;
-    HRESULT hr = m_pRenderTarget->CreateBitmapFromWicBitmap(bitmap, nullptr, newBitmap.GetAddressOf());
+    // CreateBitmapFromWicBitmap on ID2D1DeviceContext produces an ID2D1Bitmap1
+    Microsoft::WRL::ComPtr<ID2D1Bitmap1> newBitmap;
+    HRESULT hr = m_pDeviceContext->CreateBitmapFromWicBitmap(
+            bitmap, nullptr,
+            reinterpret_cast<ID2D1Bitmap **>(newBitmap.GetAddressOf()));
 
     if (SUCCEEDED(hr)) {
         std::lock_guard<std::mutex> lock(m_cacheMutex);
+
         auto it = m_bitmapCache.find(filePath);
         if (it != m_bitmapCache.end()) {
             m_lruList.erase(it->second.lruIt);
             m_bitmapCache.erase(it);
         }
-
         if (m_lruList.size() >= Constants::VRAM_CACHE_IMAGES_COUNT) {
             m_bitmapCache.erase(m_lruList.back());
             m_lruList.pop_back();
@@ -186,6 +372,9 @@ HRESULT RendererD2D::LoadBitmap(IWICBitmapSource *bitmap, UINT width, UINT heigh
     return hr;
 }
 
+// =============================================================================
+//  PreloadBitmap
+// =============================================================================
 HRESULT RendererD2D::PreloadBitmap(const std::wstring &filePath, int requestIndex) {
     Microsoft::WRL::ComPtr<IWICImagingFactory2> wicFac = g_decoderWorker.wicFactory;
     if (!wicFac) return E_UNEXPECTED;
@@ -217,22 +406,20 @@ HRESULT RendererD2D::PreloadBitmap(const std::wstring &filePath, int requestInde
                 WICBitmapPaletteTypeCustom)))
                 return;
 
-            // Extract pixels directly into standard system RAM
-            UINT stride = width * 4; // 32bpp = 4 bytes per pixel
+            UINT stride = width * 4;
             std::vector<BYTE> pixelData(stride * height);
 
-            HRESULT copyHr = converter->CopyPixels(
-                    nullptr, stride,
-                    static_cast<UINT>(pixelData.size()),
-                    pixelData.data()
-                    );
-
-            if (FAILED(copyHr)) return;
+            if (FAILED(converter->CopyPixels(nullptr, stride,
+                static_cast<UINT>(pixelData.size()),
+                pixelData.data())))
+                return;
 
             {
                 std::lock_guard<std::mutex> lock(m_cacheMutex);
-                // Move the raw buffer into the queue (std::move ensures no deep copy overhead)
-                m_pendingUploads.push({requestIndex, filePath, std::move(pixelData), stride, width, height});
+                m_pendingUploads.push({
+                    requestIndex, filePath,
+                    std::move(pixelData), stride, width, height
+                });
             }
             PostMessageW(m_hwnd, Constants::WM_QIV_PENDING_UPLOADS, 0, 0);
         });
@@ -240,70 +427,54 @@ HRESULT RendererD2D::PreloadBitmap(const std::wstring &filePath, int requestInde
     return S_OK;
 }
 
+// =============================================================================
+//  Render
+// =============================================================================
 HRESULT RendererD2D::Render() {
-    if (!m_pRenderTarget) return E_FAIL;
+    if (!m_pDeviceContext || !m_pSwapChain) return E_FAIL;
 
-    m_pRenderTarget->BeginDraw();
-    m_pRenderTarget->Clear(m_clearColor);
+    m_pDeviceContext->BeginDraw();
+    m_pDeviceContext->Clear(m_clearColor);
 
     if (m_pBitmap) {
-        const auto size = m_pBitmap->GetSize();
-        const D2D1_SIZE_F rtSize = m_pRenderTarget->GetSize();
+        const D2D1_SIZE_F imgSize = m_pBitmap->GetSize();
+        const D2D1_SIZE_F rtSize = m_pDeviceContext->GetSize();
         const D2D1_POINT_2F center = D2D1::Point2F(rtSize.width / 2.0f, rtSize.height / 2.0f);
-        // 1. Calculate ratios for FitToView and FitToWindow
-        float ratioX = rtSize.width / size.width;
-        float ratioY = rtSize.height / size.height;
 
-        float renderW = size.width;
-        float renderH = size.height;
+        float ratioX = rtSize.width / imgSize.width;
+        float ratioY = rtSize.height / imgSize.height;
+        float renderW = imgSize.width;
+        float renderH = imgSize.height;
 
-        // 2. Exact, rigid axis control
         switch (g_app.viewMode) {
             case Constants::ViewModes::ViewMode::FitToView_PreserveAspectRatio:
-                renderW = size.width * std::min(ratioX, ratioY);
-                renderH = size.height * std::min(ratioX, ratioY);
+                renderW = imgSize.width * std::min(ratioX, ratioY);
+                renderH = imgSize.height * std::min(ratioX, ratioY);
                 break;
 
             case Constants::ViewModes::ViewMode::FitToWidth_DoNotPreserveAspectRatio:
-                // 1. Force width to window edges
                 renderW = rtSize.width;
-
-                // 2. Take the original height (do NOT multiply or grow it)
-                renderH = size.height;
-
-                // 3. The Hard Stop: If the image is taller than the window, crush it to the window height
-                if (renderH > rtSize.height) {
-                    renderH = rtSize.height;
-                }
+                renderH = imgSize.height;
+                if (renderH > rtSize.height) renderH = rtSize.height;
                 break;
 
             case Constants::ViewModes::ViewMode::FitToHeight_DoNotPreserveAspectRatio:
-                // 1. Force height to window edges
                 renderH = rtSize.height;
-
-                // 2. Take the original width (do NOT multiply or grow it)
-                renderW = size.width;
-
-                // 3. The Hard Stop: If the image is wider than the window, crush it to the window width
-                if (renderW > rtSize.width) {
-                    renderW = rtSize.width;
-                }
+                renderW = imgSize.width;
+                if (renderW > rtSize.width) renderW = rtSize.width;
                 break;
 
             case Constants::ViewModes::ViewMode::FitToWindow_DoNotPreserveAspectRatio:
-                // Stretch both axes to fill the window completely
                 renderW = rtSize.width;
                 renderH = rtSize.height;
                 break;
 
             case Constants::ViewModes::ViewMode::OriginalImageSize_PreserveAspectRatio:
-                // Raw 1:1 pixels, no bounds checking
-                renderW = size.width;
-                renderH = size.height;
+                renderW = imgSize.width;
+                renderH = imgSize.height;
                 break;
         }
 
-        // 3. Apply Zoom
         const float z = (g_app.viewport.zoom <= 0.0f) ? 1.0f : g_app.viewport.zoom;
         renderW *= z;
         renderH *= z;
@@ -312,60 +483,63 @@ HRESULT RendererD2D::Render() {
         const float top = (rtSize.height - renderH) / 2.0f + g_app.viewport.offsetY;
 
         D2D1_MATRIX_3X2_F transform = D2D1::Matrix3x2F::Identity();
-        if (g_app.viewport.flippedH) transform = transform * D2D1::Matrix3x2F::Scale(-1.0f, 1.0f, center);
-        if (g_app.viewport.flippedV) transform = transform * D2D1::Matrix3x2F::Scale(1.0f, -1.0f, center);
-        transform = transform * D2D1::Matrix3x2F::Rotation(static_cast<float>(g_app.viewport.rotation), center);
+        if (g_app.viewport.flippedH)
+            transform = transform * D2D1::Matrix3x2F::Scale(-1.0f, 1.0f, center);
+        if (g_app.viewport.flippedV)
+            transform = transform * D2D1::Matrix3x2F::Scale(1.0f, -1.0f, center);
+        transform = transform * D2D1::Matrix3x2F::Rotation(
+                            static_cast<float>(g_app.viewport.rotation), center);
 
+        m_pDeviceContext->SetTransform(transform);
+
+        // Use high-quality cubic when scaled; nearest-neighbor at exact 1:1 to preserve sharpness
         bool isNative = (std::abs(g_app.viewport.zoom - 1.0f) < 0.001f);
-        D2D1_BITMAP_INTERPOLATION_MODE interpMode = isNative
-                                                        ? D2D1_BITMAP_INTERPOLATION_MODE_NEAREST_NEIGHBOR
-                                                        : D2D1_BITMAP_INTERPOLATION_MODE_LINEAR;
+        D2D1_INTERPOLATION_MODE interpMode = isNative
+                                                 ? D2D1_INTERPOLATION_MODE_NEAREST_NEIGHBOR
+                                                 : D2D1_INTERPOLATION_MODE_HIGH_QUALITY_CUBIC;
 
-        m_pRenderTarget->SetTransform(transform);
-
-        m_pRenderTarget->DrawBitmap(
+        m_pDeviceContext->DrawBitmap(
                 m_pBitmap.Get(),
                 D2D1::RectF(left, top, left + renderW, top + renderH),
                 1.0f,
-                interpMode
-                );
+                interpMode);
 
-        m_pRenderTarget->SetTransform(D2D1::Matrix3x2F::Identity());
+        m_pDeviceContext->SetTransform(D2D1::Matrix3x2F::Identity());
 
+        // Overlay text
         if (!g_app.playlist.empty() && g_app.showOverlayInfoText) {
             std::wstring fullPath = g_app.playlist[g_app.currentIndex];
             std::wstring fileName = fullPath.substr(fullPath.find_last_of(L"\\/") + 1);
             std::wstring text = std::to_wstring(g_app.currentIndex + 1) + L" / " +
                                 std::to_wstring(g_app.playlist.size()) + L" - " + fileName;
-            D2D1_RECT_F layoutRect = D2D1::RectF(15.0f, 6.0f, rtSize.width - 10.0f, rtSize.height - 10.0f);
-
+            D2D1_RECT_F layoutRect = D2D1::RectF(15.0f, 6.0f,
+                                                 rtSize.width - 10.0f, rtSize.height - 10.0f);
             if (m_pTextFormat && m_pTextBrush) {
-                m_pRenderTarget->DrawText(text.c_str(), static_cast<UINT32>(text.length()),
-                                          m_pTextFormat.Get(), layoutRect, m_pTextBrush.Get());
+                m_pDeviceContext->DrawText(text.c_str(), static_cast<UINT32>(text.length()),
+                                           m_pTextFormat.Get(), layoutRect, m_pTextBrush.Get());
             }
         }
     }
 
-    HRESULT hr = m_pRenderTarget->EndDraw();
+    HRESULT hr = m_pDeviceContext->EndDraw();
 
-    if (hr == D2DERR_RECREATE_TARGET) {
-        m_pBitmap.Reset();
-        m_bitmapCache.clear();
-        m_lruList.clear();
-        m_pRenderTarget.Reset();
+    if (hr == D2DERR_RECREATE_TARGET ||
+        hr == static_cast<HRESULT>(DXGI_ERROR_DEVICE_REMOVED) ||
+        hr == static_cast<HRESULT>(DXGI_ERROR_DEVICE_RESET)) {
+        // Full device loss: rebuild everything
+        DiscardDeviceResources();
+        hr = CreateDeviceResources();
+        return hr; // caller will repaint next frame
+    }
 
-        RECT rc{};
-        GetClientRect(m_hwnd, &rc);
-        hr = m_pFactory->CreateHwndRenderTarget(
-                D2D1::RenderTargetProperties(),
-                D2D1::HwndRenderTargetProperties(m_hwnd, D2D1::SizeU(rc.right - rc.left, rc.bottom - rc.top)),
-                m_pRenderTarget.GetAddressOf()
-                );
+    if (FAILED(hr)) return hr;
 
-        if (SUCCEEDED(hr)) {
-            m_pTextBrush.Reset();
-            (void) m_pRenderTarget->CreateSolidColorBrush(D2D1::ColorF(D2D1::ColorF::LightGreen), &m_pTextBrush);
-        }
+    // Present the frame (sync interval 0 = immediate, no vsync forced)
+    HRESULT hrPresent = m_pSwapChain->Present(0, 0);
+    if (hrPresent == static_cast<HRESULT>(DXGI_ERROR_DEVICE_REMOVED) ||
+        hrPresent == static_cast<HRESULT>(DXGI_ERROR_DEVICE_RESET)) {
+        DiscardDeviceResources();
+        (void) CreateDeviceResources();
     }
 
     return hr;
