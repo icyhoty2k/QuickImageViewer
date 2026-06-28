@@ -22,6 +22,11 @@ HRESULT RendererGDI::Initialize(HWND hwnd) {
     return m_backgroundBrush ? S_OK : E_FAIL;
 }
 
+void RendererGDI::UpdateTextFormat() {
+    // This empty implementation is perfectly valid for GDI
+    // because GDI handles text via CreateFontW, not DirectWrite.
+}
+
 void RendererGDI::UpdateColorEffects() {
     // GDI renderer does not support D2D effects
 }

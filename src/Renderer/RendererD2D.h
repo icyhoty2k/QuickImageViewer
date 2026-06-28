@@ -24,6 +24,8 @@ class RendererD2D final : public IImageRenderer {
 
         [[nodiscard]] HRESULT Initialize(HWND hwnd) override;
 
+        void UpdateTextFormat() override;
+
         void Resize(UINT width, UINT height) override;
 
         [[nodiscard]] HRESULT LoadBitmap(IWICBitmapSource *bitmap, UINT width, UINT height,

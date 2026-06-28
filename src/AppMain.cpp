@@ -92,7 +92,11 @@ static void UpdateRendererColorEffects(HWND hWnd) {
 LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) {
     switch (message) {
         case WM_DPICHANGED: {
-            g_app.dpiScale = HIWORD(wParam) / 96.0f;
+            // 1. Update your global scale
+            g_app.dpiScale = static_cast<float>(HIWORD(wParam)) / 96.0f;
+
+            // 2. Refresh the Renderer's font format
+            g_app.renderer->UpdateTextFormat();
             RECT *const prcNewWindow = (RECT *) lParam;
             SetWindowPos(hWnd,
                          nullptr,

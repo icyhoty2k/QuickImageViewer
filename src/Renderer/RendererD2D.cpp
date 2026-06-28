@@ -37,25 +37,31 @@ HRESULT RendererD2D::Initialize(HWND hwnd) {
     // --- DWrite factory (device-independent, created once) ---
     if (!m_pDWriteFactory) {
         HRESULT hr = DWriteCreateFactory(DWRITE_FACTORY_TYPE_SHARED,
-                                         __uuidof(IDWriteFactory3),
+                                         __uuidof(IDWriteFactory7),
                                          reinterpret_cast<IUnknown **>(m_pDWriteFactory.GetAddressOf()));
         if (FAILED(hr)) return hr;
-
-        // Try Segoe UI first, fall back to Arial
-        hr = m_pDWriteFactory->CreateTextFormat(
-                L"Segoe UI", nullptr,
-                DWRITE_FONT_WEIGHT_NORMAL, DWRITE_FONT_STYLE_NORMAL, DWRITE_FONT_STRETCH_NORMAL,
-                12.0f, L"en-us", &m_pTextFormat);
-
-        if (FAILED(hr)) {
-            (void) m_pDWriteFactory->CreateTextFormat(
-                    L"Arial", nullptr,
-                    DWRITE_FONT_WEIGHT_NORMAL, DWRITE_FONT_STYLE_NORMAL, DWRITE_FONT_STRETCH_NORMAL,
-                    12.0f, L"en-us", &m_pTextFormat);
-        }
+        UpdateTextFormat();
     }
 
     return CreateDeviceResources();
+}
+
+void RendererD2D::UpdateTextFormat() {
+    float scaledFontSize = 14.0f * g_app.dpiScale;
+
+    m_pTextFormat.Reset();
+    HRESULT hr = m_pDWriteFactory->CreateTextFormat(
+            L"Segoe UI", nullptr,
+            DWRITE_FONT_WEIGHT_NORMAL, DWRITE_FONT_STYLE_NORMAL, DWRITE_FONT_STRETCH_NORMAL,
+            scaledFontSize, L"en-us", &m_pTextFormat);
+
+    // Fallback
+    if (FAILED(hr)) {
+        (void) m_pDWriteFactory->CreateTextFormat(
+                L"Arial", nullptr,
+                DWRITE_FONT_WEIGHT_NORMAL, DWRITE_FONT_STYLE_NORMAL, DWRITE_FONT_STRETCH_NORMAL,
+                scaledFontSize, L"en-us", &m_pTextFormat);
+    }
 }
 
 void RendererD2D::UpdateColorEffects() {
@@ -509,7 +515,7 @@ HRESULT RendererD2D::PreloadBitmap(const std::wstring &filePath, int requestInde
 // =============================================================================
 HRESULT RendererD2D::Render() {
     if (!m_pDeviceContext || !m_pSwapChain) return E_FAIL;
-   
+
     m_pDeviceContext->BeginDraw();
     m_pDeviceContext->Clear(m_clearColor);
 

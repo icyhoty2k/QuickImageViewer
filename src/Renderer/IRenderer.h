@@ -22,6 +22,8 @@ class IImageRenderer {
 
         IImageRenderer &operator=(IImageRenderer &&) = delete;
 
+        virtual void UpdateTextFormat() = 0;
+
         virtual void ProcessPendingUploads() {}
 
         /// Initialize the renderer resources for the specified window handle.
@@ -51,7 +53,7 @@ class IImageRenderer {
         /// support background preloading
         [[nodiscard]]
         virtual HRESULT PreloadBitmap(const std::wstring &filePath, int requestIndex) = 0;
-        
+
         /// support color effects saturation contrast brightness
         virtual void UpdateColorEffects() {}
 };
