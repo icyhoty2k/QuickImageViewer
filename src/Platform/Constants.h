@@ -76,13 +76,13 @@ namespace Constants {
 
     namespace ViewModes {
         enum class ViewMode {
-            FitToView = 1,
-            FitToWidth = 2,
-            FitToHeight = 3,
-            FitToWindow = 4,
-            OriginalImageSize = 5
+            FitToView_PreserveAspectRatio = 1,
+            FitToWidth_DoNotPreserveAspectRatio = 2,
+            FitToHeight_DoNotPreserveAspectRatio = 3,
+            FitToWindow_DoNotPreserveAspectRatio = 4,
+            OriginalImageSize_PreserveAspectRatio = 5
         };
 
-        constexpr ViewMode defaultViewMode = ViewMode::FitToView;
+        constexpr ViewMode defaultViewMode = ViewMode::FitToView_PreserveAspectRatio;
     }
 }

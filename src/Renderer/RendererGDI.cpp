@@ -77,26 +77,75 @@ HRESULT RendererGDI::Render() {
     FillRect(m_backDC, &rc, m_backgroundBrush);
 
     if (g_app.hDIB) {
+        // 1. Calculate ratios using floats for precision
         float ratioX = static_cast<float>(m_windowWidth) / m_imageWidth;
         float ratioY = static_cast<float>(m_windowHeight) / m_imageHeight;
-        float baseRatio = (std::min)(ratioX, ratioY);
 
-        int renderW = static_cast<int>(m_imageWidth * baseRatio * g_app.viewport.zoom);
-        int renderH = static_cast<int>(m_imageHeight * baseRatio * g_app.viewport.zoom);
-        int drawX = static_cast<int>((m_windowWidth - renderW) / 2.0f + g_app.viewport.offsetX);
-        int drawY = static_cast<int>((m_windowHeight - renderH) / 2.0f + g_app.viewport.offsetY);
+        float renderW = static_cast<float>(m_imageWidth);
+        float renderH = static_cast<float>(m_imageHeight);
+
+        // 2. Exact, rigid axis control (Identical to D2D logic)
+        switch (g_app.viewMode) {
+            case Constants::ViewModes::ViewMode::FitToView_PreserveAspectRatio:
+                renderW = m_imageWidth * (std::min)(ratioX, ratioY);
+                renderH = m_imageHeight * (std::min)(ratioX, ratioY);
+                break;
+
+            case Constants::ViewModes::ViewMode::FitToWidth_DoNotPreserveAspectRatio:
+                // Force width to window edges
+                renderW = static_cast<float>(m_windowWidth);
+                // Take original height
+                renderH = static_cast<float>(m_imageHeight);
+                // The Hard Stop: Crush to window height if it spills
+                if (renderH > m_windowHeight) {
+                    renderH = static_cast<float>(m_windowHeight);
+                }
+                break;
+
+            case Constants::ViewModes::ViewMode::FitToHeight_DoNotPreserveAspectRatio:
+                // Force height to window edges
+                renderH = static_cast<float>(m_windowHeight);
+                // Take original width
+                renderW = static_cast<float>(m_imageWidth);
+                // The Hard Stop: Crush to window width if it spills
+                if (renderW > m_windowWidth) {
+                    renderW = static_cast<float>(m_windowWidth);
+                }
+                break;
+
+            case Constants::ViewModes::ViewMode::FitToWindow_DoNotPreserveAspectRatio:
+                // Stretch both axes
+                renderW = static_cast<float>(m_windowWidth);
+                renderH = static_cast<float>(m_windowHeight);
+                break;
+
+            case Constants::ViewModes::ViewMode::OriginalImageSize_PreserveAspectRatio:
+                // Raw 1:1 pixels
+                renderW = static_cast<float>(m_imageWidth);
+                renderH = static_cast<float>(m_imageHeight);
+                break;
+        }
+
+        // 3. Apply Zoom and convert back to GDI integers for drawing
+        const float z = (g_app.viewport.zoom <= 0.0f) ? 1.0f : g_app.viewport.zoom;
+        int finalRenderW = static_cast<int>(renderW * z);
+        int finalRenderH = static_cast<int>(renderH * z);
+
+        int drawX = static_cast<int>((m_windowWidth - finalRenderW) / 2.0f + g_app.viewport.offsetX);
+        int drawY = static_cast<int>((m_windowHeight - finalRenderH) / 2.0f + g_app.viewport.offsetY);
 
         HDC hdcDIB = CreateCompatibleDC(m_backDC);
         if (hdcDIB) {
             HBITMAP hbmOld = static_cast<HBITMAP>(SelectObject(hdcDIB, g_app.hDIB));
             SetStretchBltMode(m_backDC, HALFTONE);
-            StretchBlt(m_backDC, drawX, drawY, renderW, renderH,
+            StretchBlt(m_backDC, drawX, drawY, finalRenderW, finalRenderH,
                        hdcDIB, 0, 0, m_imageWidth, m_imageHeight, SRCCOPY);
             SelectObject(hdcDIB, hbmOld);
             DeleteDC(hdcDIB);
         }
     }
 
+    // Overlay text logic remains untouched
     if (!g_app.playlist.empty() && g_app.showOverlayInfoText) {
         std::wstring fullPath = g_app.playlist[g_app.currentIndex];
         std::wstring fileName = fullPath.substr(fullPath.find_last_of(L"\\/") + 1);
