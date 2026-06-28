@@ -1,6 +1,6 @@
 #include "RendererD2D.h"
 #include "../AppState.h"
-#include "../Constants.h"
+#include "../Platform/Constants.h"
 #include <algorithm>
 #include "../WorkerThread.h"
 #pragma comment(lib, "d2d1.lib")
@@ -18,7 +18,7 @@ HRESULT RendererD2D::Initialize(HWND hwnd) {
     }
 
     if (FAILED(DWriteCreateFactory(DWRITE_FACTORY_TYPE_SHARED, __uuidof(IDWriteFactory),
-        reinterpret_cast<IUnknown**>(m_pDWriteFactory.GetAddressOf())))) {
+                                   reinterpret_cast<IUnknown **>(m_pDWriteFactory.GetAddressOf())))) {
         return E_FAIL;
     }
 
@@ -148,7 +148,7 @@ HRESULT RendererD2D::PreloadBitmap(const std::wstring &filePath, int requestInde
     g_ioWorker.PushTask([filePath, requestIndex, this]() {
         Microsoft::WRL::ComPtr<IWICBitmapDecoder> decoder;
         if (FAILED(g_app.wicFactory->CreateDecoderFromFilename(
-            filePath.c_str(), nullptr, GENERIC_READ, WICDecodeMetadataCacheOnDemand, &decoder)))
+                filePath.c_str(), nullptr, GENERIC_READ, WICDecodeMetadataCacheOnDemand, &decoder)))
             return;
 
         g_decoderWorker.PushTask([decoder, filePath, requestIndex, this]() {
@@ -164,7 +164,7 @@ HRESULT RendererD2D::PreloadBitmap(const std::wstring &filePath, int requestInde
             if (FAILED(g_app.wicFactory->CreateFormatConverter(&converter))) return;
 
             if (FAILED(converter->Initialize(frame.Get(), GUID_WICPixelFormat32bppPBGRA,
-                WICBitmapDitherTypeNone, nullptr, 0.0f, WICBitmapPaletteTypeCustom)))
+                                             WICBitmapDitherTypeNone, nullptr, 0.0f, WICBitmapPaletteTypeCustom)))
                 return;
 
             std::lock_guard<std::mutex> lock(m_cacheMutex);

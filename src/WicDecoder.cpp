@@ -1,7 +1,7 @@
 #include "../WicDecoder.h"
 #include "AppState.h"
 #include "../WorkerThread.h"
-#include "Constants.h"
+#include "Platform/Constants.h"
 
 using Microsoft::WRL::ComPtr;
 

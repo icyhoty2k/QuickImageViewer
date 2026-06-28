@@ -1,5 +1,5 @@
 #include "HelpWindow.h"
-#include "Constants.h"
+#include "../Platform/Constants.h"
 #include <string>
 #include <dwmapi.h>
 #include <algorithm>

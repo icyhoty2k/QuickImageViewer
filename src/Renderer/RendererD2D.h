@@ -9,7 +9,7 @@
 #include <mutex>
 #include <queue>
 #include <dwrite.h>
-#include "../Constants.h"
+#include "../Platform/Constants.h"
 
 class RendererD2D final : public IImageRenderer {
     public:
@@ -22,7 +22,7 @@ class RendererD2D final : public IImageRenderer {
         void Resize(UINT width, UINT height) override;
 
         [[nodiscard]] HRESULT
-        LoadBitmap(IWICBitmapSource *bitmap, UINT width, UINT height, const std::wstring &filePath) override;
+            LoadBitmap(IWICBitmapSource *bitmap, UINT width, UINT height, const std::wstring &filePath) override;
 
         [[nodiscard]] HRESULT PreloadBitmap(const std::wstring &filePath, int requestIndex) override;
 

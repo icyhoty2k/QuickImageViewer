@@ -1,6 +1,6 @@
 #pragma once
 #include <windows.h>
-#include "../Constants.h"
+#include "Constants.h"
 
 namespace MouseHandler {
     // Decision logic

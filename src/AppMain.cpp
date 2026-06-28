@@ -6,7 +6,7 @@
 #include <uxtheme.h>
 
 #include "../AppState.h"
-#include "Constants.h"
+#include "Platform/Constants.h"
 #include "../DropTarget.h"
 #include "Platform/FileHandler.h"
 #include "UI/HelpWindow.h"
@@ -480,7 +480,10 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE, LPSTR, int nCmdShow) {
     if (FAILED(OleInitialize(nullptr))) return 0;
 
     // Set DPI awareness
-    typedef BOOL (WINAPI *SETDPI)(DPI_AWARENESS_CONTEXT);
+    typedef BOOL (WINAPI
+    *SETDPI
+    )
+    (DPI_AWARENESS_CONTEXT);
     if (HMODULE hU32 = GetModuleHandleW(L"user32.dll")) {
         if (auto setDpi = reinterpret_cast<SETDPI>(GetProcAddress(hU32, "SetProcessDpiAwarenessContext"))) {
             setDpi(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2);
@@ -508,9 +511,9 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE, LPSTR, int nCmdShow) {
             if (argc > 1) {
                 COPYDATASTRUCT cds;
                 cds.dwData = 1;
-                cds.cbData = (DWORD) ((wcslen(argv[1]) + 1) * sizeof(wchar_t));
+                cds.cbData = (DWORD)((wcslen(argv[1]) + 1) * sizeof(wchar_t));
                 cds.lpData = (void *) argv[1];
-                SendMessageW(hExistingWnd, WM_COPYDATA, 0, (LPARAM) &cds);
+                SendMessageW(hExistingWnd, WM_COPYDATA, 0, (LPARAM) & cds);
             }
             LocalFree(argv);
         }
