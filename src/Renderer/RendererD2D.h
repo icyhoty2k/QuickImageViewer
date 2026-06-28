@@ -40,6 +40,8 @@ class RendererD2D final : public IImageRenderer {
 
         void UpdateColorEffects() override;
 
+        void ClearActiveImage() override;
+
         // SVG support
         [[nodiscard]] HRESULT LoadSvgFromBytes(const std::vector<BYTE> &svgBytes,
                                                const std::wstring &filePath) override;
