@@ -8,6 +8,7 @@
 #include <string>
 #include <mutex>
 #include <queue>
+#include <vector> // Required for std::vector<BYTE>
 #include <dwrite.h>
 #include "../Platform/Constants.h"
 
@@ -21,15 +22,14 @@ class RendererD2D final : public IImageRenderer {
 
         void Resize(UINT width, UINT height) override;
 
-        [[nodiscard]] HRESULT
-            LoadBitmap(IWICBitmapSource *bitmap, UINT width, UINT height, const std::wstring &filePath) override;
+        [[nodiscard]] HRESULT LoadBitmap(IWICBitmapSource *bitmap, UINT width, UINT height, const std::wstring &filePath) override;
 
         [[nodiscard]] HRESULT PreloadBitmap(const std::wstring &filePath, int requestIndex) override;
 
         [[nodiscard]] HRESULT Render() override;
 
         // UI THREAD: Processes the background-decoded images
-        void ProcessPendingUploads();
+        void ProcessPendingUploads() override;
 
         Microsoft::WRL::ComPtr<IDWriteFactory> m_pDWriteFactory;
         Microsoft::WRL::ComPtr<IDWriteTextFormat> m_pTextFormat;
@@ -39,16 +39,17 @@ class RendererD2D final : public IImageRenderer {
         struct CachedBitmap {
             Microsoft::WRL::ComPtr<ID2D1Bitmap> bitmap;
             std::list<std::wstring>::iterator lruIt;
-            UINT width = 0; // Add these
-            UINT height = 0; // Add these
+            UINT width = 0;
+            UINT height = 0;
         };
 
         struct PendingUpload {
             int playlistIndex;
             std::wstring filePath;
-            Microsoft::WRL::ComPtr<IWICBitmapSource> converter;
-            UINT width; // Added to match the .cpp push
-            UINT height; // Added to match the .cpp push
+            std::vector<BYTE> pixelData; // Fully replaces WIC Format Converter
+            UINT stride; // Bytes per row
+            UINT width;
+            UINT height;
         };
 
         // Direct2D Resources
@@ -56,15 +57,18 @@ class RendererD2D final : public IImageRenderer {
         Microsoft::WRL::ComPtr<ID2D1HwndRenderTarget> m_pRenderTarget;
         Microsoft::WRL::ComPtr<ID2D1Bitmap> m_pBitmap;
 
-        HRESULT UploadAndCacheBitmap(IWICBitmapSource *bitmap, const std::wstring &filePath, UINT width, UINT height);
+        // --- UPDATED SIGNATURES ---
+        HRESULT UploadAndCacheBitmap(const std::vector<BYTE> &pixelData, UINT stride, const std::wstring &filePath, UINT width, UINT height);
 
         // Internal version — caller must already hold m_cacheMutex
-        HRESULT UploadAndCacheBitmap_Locked(IWICBitmapSource *bitmap, const std::wstring &filePath, UINT width, UINT height);
+        HRESULT UploadAndCacheBitmap_Locked(const std::vector<BYTE> &pixelData, UINT stride, const std::wstring &filePath, UINT width, UINT height);
+
+        // --------------------------
 
         // Cache management
         std::unordered_map<std::wstring, CachedBitmap> m_bitmapCache;
         std::list<std::wstring> m_lruList;
-        std::queue<PendingUpload> m_pendingUploads; // Moved inside class
+        std::queue<PendingUpload> m_pendingUploads;
 
         std::mutex m_cacheMutex;
 
