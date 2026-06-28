@@ -191,18 +191,14 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) 
             // ===============================
             // COLOR EFFECTS
             // ===============================
-
-
             // Shift + Delete reset
             if (wParam == VK_DELETE && shift) {
                 g_app.saturation = Constants::DEFAULT_SATURATION;
                 g_app.brightness = Constants::DEFAULT_BRIGHTNESS;
                 g_app.contrast = Constants::DEFAULT_CONTRAST;
-
                 UpdateRendererColorEffects(hWnd);
                 return 0;
             }
-
 
             // I = grayscale
             if (wParam == 'I') {
@@ -210,11 +206,9 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) 
                         (g_app.saturation == 0.0f)
                             ? 1.0f
                             : 0.0f;
-
                 UpdateRendererColorEffects(hWnd);
                 return 0;
             }
-
 
             // [ saturation -
             if (wParam == VK_OEM_4) {
@@ -223,11 +217,9 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) 
                                 0.0f,
                                 g_app.saturation - Constants::COLOR_ADJUST_STEP
                                 );
-
                 UpdateRendererColorEffects(hWnd);
                 return 0;
             }
-
 
             // ] saturation +
             if (wParam == VK_OEM_6) {
@@ -236,11 +228,9 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) 
                                 2.0f,
                                 g_app.saturation + Constants::COLOR_ADJUST_STEP
                                 );
-
                 UpdateRendererColorEffects(hWnd);
                 return 0;
             }
-
 
             // B brightness +
             // Shift+B brightness -
@@ -249,20 +239,15 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) 
                     g_app.brightness -= Constants::COLOR_ADJUST_STEP;
                 else
                     g_app.brightness += Constants::COLOR_ADJUST_STEP;
-
-
                 g_app.brightness =
                         std::clamp(
                                 g_app.brightness,
                                 -1.0f,
                                 1.0f
                                 );
-
-
                 UpdateRendererColorEffects(hWnd);
                 return 0;
             }
-
 
             // C contrast +
             // Shift+C contrast -
@@ -271,16 +256,12 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) 
                     g_app.contrast -= Constants::COLOR_ADJUST_STEP;
                 else
                     g_app.contrast += Constants::COLOR_ADJUST_STEP;
-
-
                 g_app.contrast =
                         std::clamp(
                                 g_app.contrast,
                                 0.0f,
                                 3.0f
                                 );
-
-
                 UpdateRendererColorEffects(hWnd);
                 return 0;
             }
