@@ -63,5 +63,6 @@ mkdir build && cd build
 cmake ..
 cmake --build . --config Release
 ```
-📜 License
-Licensed under the GNU Affero General Public License v3.0 (AGPLv3). See the LICENSE file for full details.
+## 📜 License
+
+Licensed under the **[GNU Affero General Public License v3.0 (AGPLv3)](docs/LICENSE)**. See the [LICENSE](docs/LICENSE) file for full details.
