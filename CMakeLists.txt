@@ -11,6 +11,7 @@ set(SOURCES
         src/DropTarget.cpp
         src/Platform/MouseHandler.cpp
         src/WicDecoder.cpp
+        src/SvgDecoder.cpp
         src/Platform/DpiAwareInit.cpp
         src/DriveInfo.cpp
         src/Platform/FileHandler.cpp
@@ -76,7 +77,7 @@ target_link_libraries(QuickImageViewer PRIVATE
         ole32
         oleaut32
         uuid
-
+        shlwapi
 )
 
 # 6. Robust Manifest Embedding

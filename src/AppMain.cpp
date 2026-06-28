@@ -13,6 +13,7 @@
 #include "UI/HelpWindow.h"
 #include "Platform/MouseHandler.h"
 #include "../WicDecoder.h"
+#include "../SvgDecoder.h"
 
 #include <windows.h>
 #include <windowsx.h>
@@ -519,6 +520,30 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) 
         case Constants::WM_QIV_REPAINT: {
             // Signal the UI to redraw once the IOWorker confirms the bitmap is ready
             InvalidateRect(hWnd, nullptr, FALSE);
+            return 0;
+        }
+
+        case Constants::WM_QIV_SVG_READY: {
+            // wParam = playlist index at the time of the IO request
+            // lParam = heap-allocated SvgPayload* (we own it, must delete)
+            struct SvgPayload {
+                std::wstring path;
+                std::vector<BYTE> bytes;
+            };
+            auto *payload = reinterpret_cast<SvgPayload *>(lParam);
+            if (!payload) return 0;
+
+            int arrivedIndex = static_cast<int>(wParam);
+
+            // Discard if user navigated away while bytes were in flight
+            if (arrivedIndex == g_app.wantedIndex.load(std::memory_order_acquire) &&
+                g_app.renderer) {
+                if (SUCCEEDED(g_app.renderer->LoadSvgFromBytes(payload->bytes, payload->path))) {
+                    InvalidateRect(hWnd, nullptr, FALSE);
+                }
+            }
+
+            delete payload;
             return 0;
         }
         case WM_PAINT: {

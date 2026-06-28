@@ -2,9 +2,11 @@
 #include "../AppState.h"
 #include "../Platform/Constants.h"
 #include "../WorkerThread.h"
+#include "../SvgDecoder.h"
 #include <algorithm>
 #include <chrono>
 #include <vector>
+#include <shlwapi.h>  // SHCreateMemStream
 // Link the required import libraries
 #pragma comment(lib, "d3d11.lib")
 #pragma comment(lib, "dxgi.lib")
@@ -225,7 +227,7 @@ HRESULT RendererD2D::CreateDeviceResources() {
 
 
     hr = m_pDeviceContext->CreateEffect(
-            CLSID_D2D1ColorMatrix,
+            CLSID_D2D1Brightness,
             &m_pBrightnessEffect);
 
     if (FAILED(hr))
@@ -275,6 +277,11 @@ void RendererD2D::DiscardDeviceResources() {
     m_pBitmap.Reset();
     m_bitmapCache.clear();
     m_lruList.clear();
+    // SVG documents are device-dependent – discard them too
+    m_svgCache.clear();
+    m_pActiveSvg.Reset();
+    m_svgNativeW = 0.0f;
+    m_svgNativeH = 0.0f;
     m_pDeviceContext.Reset();
     m_pD2DDevice.Reset();
     m_pSwapChain.Reset();
@@ -418,6 +425,10 @@ HRESULT RendererD2D::LoadBitmap(IWICBitmapSource *bitmap, UINT width, UINT heigh
         if (it != m_bitmapCache.end()) {
             m_lruList.splice(m_lruList.begin(), m_lruList, it->second.lruIt);
             m_pBitmap = it->second.bitmap;
+            // Clear any active SVG so the raster path takes over
+            m_pActiveSvg.Reset();
+            m_svgNativeW = 0.0f;
+            m_svgNativeH = 0.0f;
             g_app.imgWidth = static_cast<int>(it->second.width);
             g_app.imgHeight = static_cast<int>(it->second.height);
             return S_OK;
@@ -448,6 +459,11 @@ HRESULT RendererD2D::LoadBitmap(IWICBitmapSource *bitmap, UINT width, UINT heigh
         m_lruList.push_front(filePath);
         m_bitmapCache[filePath] = {newBitmap, m_lruList.begin(), width, height};
         m_pBitmap = newBitmap;
+
+        // Clear any active SVG so the raster render path takes over
+        m_pActiveSvg.Reset();
+        m_svgNativeW = 0.0f;
+        m_svgNativeH = 0.0f;
 
         g_app.imgWidth = static_cast<int>(width);
         g_app.imgHeight = static_cast<int>(height);
@@ -519,7 +535,113 @@ HRESULT RendererD2D::Render() {
     m_pDeviceContext->BeginDraw();
     m_pDeviceContext->Clear(m_clearColor);
 
-    if (m_pBitmap) {
+    // =========================================================================
+    //  SVG path  (mutually exclusive with the raster bitmap path below)
+    // =========================================================================
+    if (m_pActiveSvg) {
+        const D2D1_SIZE_F rtSize = m_pDeviceContext->GetSize();
+
+        // m_svgNativeW/H is the intrinsic SVG size in logical pixels.
+        // If we couldn't read it, fall back to treating the SVG as square-ish
+        // using the window dimensions.
+        const float imgW = (m_svgNativeW > 1.0f) ? m_svgNativeW : rtSize.width;
+        const float imgH = (m_svgNativeH > 1.0f) ? m_svgNativeH : rtSize.height;
+
+        // Compute scaled render size (same logic as the raster path)
+        float renderW = imgW;
+        float renderH = imgH;
+        const float ratioX = rtSize.width / imgW;
+        const float ratioY = rtSize.height / imgH;
+
+        switch (g_app.viewMode) {
+            case Constants::ViewModes::ViewMode::FitToView_PreserveAspectRatio:
+                renderW = imgW * std::min(ratioX, ratioY);
+                renderH = imgH * std::min(ratioX, ratioY);
+                break;
+            case Constants::ViewModes::ViewMode::FitToWidth_DoNotPreserveAspectRatio:
+                renderW = rtSize.width;
+                renderH = imgH;
+                if (renderH > rtSize.height) renderH = rtSize.height;
+                break;
+            case Constants::ViewModes::ViewMode::FitToHeight_DoNotPreserveAspectRatio:
+                renderH = rtSize.height;
+                renderW = imgW;
+                if (renderW > rtSize.width) renderW = rtSize.width;
+                break;
+            case Constants::ViewModes::ViewMode::FitToWindow_DoNotPreserveAspectRatio:
+                renderW = rtSize.width;
+                renderH = rtSize.height;
+                break;
+            case Constants::ViewModes::ViewMode::OriginalImageSize_PreserveAspectRatio:
+                renderW = imgW;
+                renderH = imgH;
+                break;
+        }
+
+        const float z = (g_app.viewport.zoom <= 0.0f) ? 1.0f : g_app.viewport.zoom;
+        renderW *= z;
+        renderH *= z;
+
+        const float left = (rtSize.width - renderW) / 2.0f + g_app.viewport.offsetX;
+        const float top = (rtSize.height - renderH) / 2.0f + g_app.viewport.offsetY;
+
+        // DrawSvgDocument always draws at (0,0) in the DC coordinate system,
+        // sized to whatever SetViewportSize says.  We position/rotate via the
+        // DC world transform:
+        //
+        //   1. Scale: viewport = (renderW, renderH) handles this already –
+        //      D2D scales the SVG tree to fill that rectangle.
+        //   2. Translate to (left, top).
+        //   3. Rotate / flip around the screen centre.
+        //
+        // Transform order (right-to-left):  T * R * F
+        // We apply them left-to-right using the matrix multiply convention
+        // where the last multiplied matrix is applied first in screen space.
+
+        // Tell D2D how large to rasterise the SVG
+        m_pActiveSvg->SetViewportSize(D2D1::SizeF(renderW, renderH));
+
+        const D2D1_POINT_2F screenCenter =
+                D2D1::Point2F(rtSize.width / 2.0f, rtSize.height / 2.0f);
+
+        // Start with translation to the target top-left corner
+        D2D1_MATRIX_3X2_F transform =
+                D2D1::Matrix3x2F::Translation(left, top);
+
+        // Then apply flip / rotation around the screen centre
+        // (same order as the raster path)
+        if (g_app.viewport.flippedH)
+            transform = transform * D2D1::Matrix3x2F::Scale(-1.0f, 1.0f, screenCenter);
+        if (g_app.viewport.flippedV)
+            transform = transform * D2D1::Matrix3x2F::Scale(1.0f, -1.0f, screenCenter);
+        if (g_app.viewport.rotation != 0)
+            transform = transform * D2D1::Matrix3x2F::Rotation(
+                                static_cast<float>(g_app.viewport.rotation), screenCenter);
+
+        m_pDeviceContext->SetTransform(transform);
+
+        // QI for DrawSvgDocument (requires ID2D1DeviceContext5)
+        Microsoft::WRL::ComPtr<ID2D1DeviceContext5> ctx5;
+        if (SUCCEEDED(m_pDeviceContext.As(&ctx5))) {
+            ctx5->DrawSvgDocument(m_pActiveSvg.Get());
+        }
+
+        m_pDeviceContext->SetTransform(D2D1::Matrix3x2F::Identity());
+
+        // Overlay text (same as raster path)
+        if (!g_app.playlist.empty() && g_app.showOverlayInfoText) {
+            std::wstring fullPath = g_app.playlist[g_app.currentIndex];
+            std::wstring fileName = fullPath.substr(fullPath.find_last_of(L"\\/") + 1);
+            std::wstring text = std::to_wstring(g_app.currentIndex + 1) + L" / " +
+                                std::to_wstring(g_app.playlist.size()) + L" - " + fileName;
+            D2D1_RECT_F layoutRect = D2D1::RectF(15.0f, 6.0f,
+                                                 rtSize.width - 10.0f, rtSize.height - 10.0f);
+            if (m_pTextFormat && m_pTextBrush) {
+                m_pDeviceContext->DrawText(text.c_str(), static_cast<UINT32>(text.length()),
+                                           m_pTextFormat.Get(), layoutRect, m_pTextBrush.Get());
+            }
+        }
+    } else if (m_pBitmap) {
         const D2D1_SIZE_F imgSize = m_pBitmap->GetSize();
         const D2D1_SIZE_F rtSize = m_pDeviceContext->GetSize();
         const D2D1_POINT_2F center = D2D1::Point2F(rtSize.width / 2.0f, rtSize.height / 2.0f);
@@ -651,4 +773,131 @@ HRESULT RendererD2D::Render() {
     }
 
     return hr;
+}
+
+// =============================================================================
+//  ClearActiveImage  — drops current raster bitmap and SVG so next Render()
+//  shows a blank frame instead of a stale image during async load.
+// =============================================================================
+void RendererD2D::ClearActiveImage() {
+    m_pBitmap.Reset();
+    m_pActiveSvg.Reset();
+    m_svgNativeW = 0.0f;
+    m_svgNativeH = 0.0f;
+}
+
+// =============================================================================
+//  LoadSvgFromBytes  — parses SVG XML into an ID2D1SvgDocument on the UI thread
+// =============================================================================
+// Called from FileHandler (UI thread) after SvgDecoder::LoadFile() delivers
+// the raw bytes.  ID2D1SvgDocument can only be created on the device context
+// thread, so there is no background-thread path for SVG (unlike raster images).
+//
+// The document is kept in m_svgCache (simple unordered_map, no LRU needed –
+// SVGs are tiny).  m_pActiveSvg is set so Render() draws it instead of
+// m_pBitmap.  m_pBitmap is cleared so the raster path stays idle.
+// =============================================================================
+HRESULT RendererD2D::LoadSvgFromBytes(const std::vector<BYTE> &svgBytes,
+                                      const std::wstring &filePath) {
+    if (!m_pDeviceContext) return E_UNEXPECTED;
+    if (svgBytes.empty()) return E_INVALIDARG;
+
+    // Clear the raster bitmap immediately so we never draw a stale image
+    // while the SVG is being set up, even if something fails below.
+    m_pBitmap.Reset();
+    m_pActiveSvg.Reset();
+
+    // --- 1. Check SVG cache first ---
+    {
+        auto it = m_svgCache.find(filePath);
+        if (it != m_svgCache.end()) {
+            m_pActiveSvg = it->second.document;
+            m_svgNativeW = it->second.viewportW;
+            m_svgNativeH = it->second.viewportH;
+            m_pBitmap.Reset(); // raster path must be idle
+            g_app.imgWidth = static_cast<int>(m_svgNativeW);
+            g_app.imgHeight = static_cast<int>(m_svgNativeH);
+            return S_OK;
+        }
+    }
+
+    // --- 2. QI for ID2D1DeviceContext5 (needed for CreateSvgDocument) ---
+    Microsoft::WRL::ComPtr<ID2D1DeviceContext5> ctx5;
+    HRESULT hr = m_pDeviceContext.As(&ctx5);
+    if (FAILED(hr)) return hr; // ID2D1DeviceContext5 requires Win10 1703+
+
+    // --- 3. Wrap raw bytes in an IStream ---
+    IStream *pStream = SHCreateMemStream(svgBytes.data(),
+                                         static_cast<UINT>(svgBytes.size()));
+    if (!pStream) return E_OUTOFMEMORY;
+
+    // --- 4. Use the current window size as initial viewport.
+    //        D2D will override this with the SVG's own viewBox/width/height. ---
+    D2D1_SIZE_F rtSize = m_pDeviceContext->GetSize();
+    D2D1_SIZE_F viewport = (rtSize.width > 0 && rtSize.height > 0)
+                               ? rtSize
+                               : D2D1::SizeF(1920.0f, 1080.0f);
+
+    Microsoft::WRL::ComPtr<ID2D1SvgDocument> svgDoc;
+    hr = ctx5->CreateSvgDocument(pStream, viewport, svgDoc.GetAddressOf());
+    pStream->Release();
+    if (FAILED(hr)) return hr;
+
+    // --- 5. Read back intrinsic size from the SVG root element ---
+    // Strategy:
+    //   a) Try viewBox first – its values are always in user units (pixels).
+    //   b) Fall back to width/height attributes only when they are in plain
+    //      pixel units (D2D1_SVG_LENGTH_UNITS_NUMBER), not percentages.
+    //   c) If nothing works, use the viewport size we passed to CreateSvgDocument.
+    float nativeW = 0.0f;
+    float nativeH = 0.0f;
+
+    Microsoft::WRL::ComPtr<ID2D1SvgElement> root;
+    svgDoc->GetRoot(root.GetAddressOf());
+    if (root) {
+        // (a) viewBox  — most reliable, always in user units
+        D2D1_SVG_VIEWBOX vb{};
+        if (SUCCEEDED(root->GetAttributeValue(
+            L"viewBox",
+            D2D1_SVG_ATTRIBUTE_POD_TYPE_VIEWBOX,
+            &vb,
+            sizeof(vb)))) {
+            if (vb.width > 0.0f && vb.height > 0.0f) {
+                nativeW = vb.width;
+                nativeH = vb.height;
+            }
+        }
+
+        // (b) width / height – only trust them when units == NUMBER (plain px)
+        if (nativeW <= 0.0f || nativeH <= 0.0f) {
+            D2D1_SVG_LENGTH wLen{}, hLen{};
+            bool wOk = SUCCEEDED(root->GetAttributeValue(L"width", &wLen));
+            bool hOk = SUCCEEDED(root->GetAttributeValue(L"height", &hLen));
+
+            if (wOk && hOk &&
+                wLen.units == D2D1_SVG_LENGTH_UNITS_NUMBER &&
+                hLen.units == D2D1_SVG_LENGTH_UNITS_NUMBER &&
+                wLen.value > 0.0f && hLen.value > 0.0f) {
+                nativeW = wLen.value;
+                nativeH = hLen.value;
+            }
+        }
+    }
+
+    // (c) Last-resort: use the viewport size we gave CreateSvgDocument
+    if (nativeW <= 0.0f) nativeW = viewport.width;
+    if (nativeH <= 0.0f) nativeH = viewport.height;
+
+    // --- 6. Cache it ---
+    m_svgCache[filePath] = CachedSvg{svgDoc, nativeW, nativeH};
+
+    // --- 7. Make it active ---
+    m_pActiveSvg = svgDoc;
+    m_svgNativeW = nativeW;
+    m_svgNativeH = nativeH;
+    m_pBitmap.Reset(); // clear any previous raster
+    g_app.imgWidth = static_cast<int>(nativeW);
+    g_app.imgHeight = static_cast<int>(nativeH);
+
+    return S_OK;
 }

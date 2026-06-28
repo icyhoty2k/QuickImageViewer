@@ -3,6 +3,7 @@
 #include <windows.h>
 #include <wincodec.h>
 #include <string>
+#include <vector>
 #include "../Platform/Constants.h"
 
 /// Base interface for image rendering strategies.
@@ -56,4 +57,23 @@ class IImageRenderer {
 
         /// support color effects saturation contrast brightness
         virtual void UpdateColorEffects() {}
+
+        // -------------------------------------------------------------------
+        // SVG support
+        // -------------------------------------------------------------------
+
+        /// Load an SVG from raw bytes into the renderer's SVG cache.
+        /// Returns S_OK on success, E_NOTIMPL if the renderer has no SVG support.
+        [[nodiscard]]
+        virtual HRESULT LoadSvgFromBytes(const std::vector<BYTE> &svgBytes,
+                                         const std::wstring &filePath) {
+            (void) svgBytes;
+            (void) filePath;
+            return E_NOTIMPL;
+        }
+
+        /// Returns true when the currently active "image" is an SVG document.
+        virtual bool HasActiveSvg() const {
+            return false;
+        }
 };
