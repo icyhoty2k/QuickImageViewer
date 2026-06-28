@@ -19,14 +19,16 @@ namespace Constants {
     inline bool SWAP_MOUSE_BUTTONS = true; // Set this to true to swap Left and Right mouse button functions
 
     //==========================Cache optimization====================================
-    constexpr const int VRAM_CACHE_IMAGES_COUNT = 30;
-    constexpr const int PRELOAD_LOOKASIDE_COUNT = 3;
+    constexpr const int VRAM_CACHE_IMAGES_COUNT = 10;
+    constexpr const int PRELOAD_LOOKASIDE_COUNT = 1;
     constexpr const int PRELOAD_TIMER_COUNTDOWN = 150; // this is used to delay preloading if user scrolls very fast
     //==========================Cache optimization====================================
 
 
     // Custom window messages
     constexpr UINT WM_QIV_PENDING_UPLOADS = WM_USER + 1; // Posted by background decoder thread
+    // DWM API Attributes
+    constexpr DWORD DWMWA_WINDOW_CORNER_PREFERENCE = 33;
 
     // =============================================================================
     constexpr const wchar_t *APP_NAME = BASE_NAME;

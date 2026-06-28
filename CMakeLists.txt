@@ -16,7 +16,6 @@ set(SOURCES
         src/Platform/RegistrySetup.cpp
         src/Renderer/RendererGDI.cpp
         src/Renderer/RendererD2D.cpp
-        src/Cache/ImageCache.cpp
         src/UI/HelpWindow.cpp
         resources/resource.rc
 )
@@ -53,7 +52,6 @@ target_link_options(QuickImageViewer PRIVATE
 # 4. Include Directories
 target_include_directories(QuickImageViewer PRIVATE
         ${CMAKE_CURRENT_SOURCE_DIR}/src
-        ${CMAKE_CURRENT_SOURCE_DIR}/src/Cache
         ${CMAKE_CURRENT_SOURCE_DIR}/src/Platform
         ${CMAKE_CURRENT_SOURCE_DIR}/src/Renderer
         ${CMAKE_CURRENT_SOURCE_DIR}/src/UI

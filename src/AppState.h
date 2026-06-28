@@ -20,6 +20,7 @@ struct ViewportState {
 };
 
 struct AppState {
+    std::atomic<int> wantedIndex{-1};
     Microsoft::WRL::ComPtr<IWICImagingFactory> wicFactory;
     std::unique_ptr<IImageRenderer> renderer;
     HBITMAP hDIB = nullptr;
