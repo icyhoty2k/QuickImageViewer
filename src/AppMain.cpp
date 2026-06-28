@@ -56,7 +56,38 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) 
             }
             return TRUE;
         }
+        case WM_TIMER: {
+            constexpr UINT_PTR TIMER_LOOKASIDE = 1001;
 
+            if (wParam == TIMER_LOOKASIDE) {
+                // The scroll wheel has rested. Stop the timer.
+                KillTimer(hWnd, TIMER_LOOKASIDE);
+
+                if (g_app.playlist.empty()) return 0;
+
+                int index = g_app.currentIndex;
+                const int total = static_cast<int>(g_app.playlist.size());
+
+                // Queue the predictive images safely without clogging the active scroll
+                for (int i = 1; i <= Constants::PRELOAD_LOOKASIDE_COUNT; ++i) {
+                    int fwd = index + i;
+                    int bwd = index - i;
+                    if (fwd < total) {
+                        std::wstring fwdPath = g_app.playlist[fwd];
+                        g_decoderWorker.PushTask([fwdPath]() {
+                            if (g_app.renderer) (void) g_app.renderer->PreloadBitmap(fwdPath);
+                        });
+                    }
+                    if (bwd >= 0) {
+                        std::wstring bwdPath = g_app.playlist[bwd];
+                        g_decoderWorker.PushTask([bwdPath]() {
+                            if (g_app.renderer) (void) g_app.renderer->PreloadBitmap(bwdPath);
+                        });
+                    }
+                }
+            }
+            return 0;
+        }
         case WM_KEYDOWN: {
             bool shift = (GetKeyState(VK_SHIFT) & 0x8000) != 0;
             bool ctrl = (GetKeyState(VK_CONTROL) & 0x8000) != 0;
@@ -195,13 +226,13 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) 
                     case VK_UP:
                     case VK_ADD:
                     case VK_OEM_PLUS:
-                        g_app.viewport.zoom *= Config::ZOOM_STEP;
+                        g_app.viewport.zoom *= Constants::ZOOM_STEP;
                         InvalidateRect(hWnd, nullptr, FALSE);
                         break;
                     case VK_DOWN:
                     case VK_SUBTRACT:
                     case VK_OEM_MINUS:
-                        g_app.viewport.zoom /= Config::ZOOM_STEP;
+                        g_app.viewport.zoom /= Constants::ZOOM_STEP;
                         InvalidateRect(hWnd, nullptr, FALSE);
                         break;
                     case VK_NUMPAD0:
@@ -288,14 +319,14 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) 
 
                 if (delta > 0) {
                     g_app.opacity = static_cast<BYTE>(
-                        (g_app.opacity + Config::OPACITY_STEP > 255)
+                        (g_app.opacity + Constants::OPACITY_STEP > 255)
                             ? 255
-                            : (g_app.opacity + Config::OPACITY_STEP));
+                            : (g_app.opacity + Constants::OPACITY_STEP));
                 } else {
                     g_app.opacity = static_cast<BYTE>(
-                        (g_app.opacity - Config::OPACITY_STEP < 10)
+                        (g_app.opacity - Constants::OPACITY_STEP < 10)
                             ? 10
-                            : (g_app.opacity - Config::OPACITY_STEP));
+                            : (g_app.opacity - Constants::OPACITY_STEP));
                 }
 
                 SetLayeredWindowAttributes(hWnd, 0, g_app.opacity, LWA_ALPHA);
@@ -331,9 +362,9 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) 
             }
 
             if (hDelta > 0) {
-                g_app.opacity = static_cast<BYTE>(std::min(255, g_app.opacity + Config::OPACITY_STEP));
+                g_app.opacity = static_cast<BYTE>(std::min(255, g_app.opacity + Constants::OPACITY_STEP));
             } else {
-                g_app.opacity = static_cast<BYTE>(std::max(10, g_app.opacity - Config::OPACITY_STEP));
+                g_app.opacity = static_cast<BYTE>(std::max(10, g_app.opacity - Constants::OPACITY_STEP));
             }
             SetLayeredWindowAttributes(hWnd, 0, g_app.opacity, LWA_ALPHA);
             return 0;
@@ -399,9 +430,20 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) 
             return 0;
         }
 
-        case Config::WM_QIV_PENDING_UPLOADS: {
+        case Constants::WM_QIV_PENDING_UPLOADS: {
             if (g_app.renderer) {
+                // 1. Upload the background-decoded VRAM
                 g_app.renderer->ProcessPendingUploads();
+
+                // 2. Check if the current image is now ready in the cache
+                if (!g_app.playlist.empty()) {
+                    const std::wstring &currentPath = g_app.playlist[g_app.currentIndex];
+
+                    // Sending nullptr probes the cache. If it hits, it updates dimensions and returns S_OK
+                    if (SUCCEEDED(g_app.renderer->LoadBitmap(nullptr, 0, 0, currentPath))) {
+                        InvalidateRect(hWnd, nullptr, FALSE); // Draw it!
+                    }
+                }
             }
             return 0;
         }
@@ -461,7 +503,7 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE, LPSTR, int nCmdShow) {
                                                                             : L"");
     HANDLE hMutex = CreateMutexW(NULL, TRUE, mutexName.c_str());
     if (GetLastError() == ERROR_ALREADY_EXISTS) {
-        HWND hExistingWnd = FindWindowW(Config::WINDOW_CLASS_NAME, nullptr);
+        HWND hExistingWnd = FindWindowW(Constants::WINDOW_CLASS_NAME, nullptr);
         if (hExistingWnd) {
             int argc;
             LPWSTR *argv = CommandLineToArgvW(GetCommandLineW(), &argc);
@@ -482,7 +524,7 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE, LPSTR, int nCmdShow) {
     WNDCLASSW wc{0};
     wc.lpfnWndProc = WndProc;
     wc.hInstance = hInstance;
-    wc.lpszClassName = Config::WINDOW_CLASS_NAME;
+    wc.lpszClassName = Constants::WINDOW_CLASS_NAME;
     wc.style = CS_DBLCLKS;
     wc.hCursor = LoadCursor(nullptr, IDC_ARROW);
     wc.hIcon = LoadIcon(hInstance, MAKEINTRESOURCE(IDI_APP_ICON));
@@ -551,7 +593,7 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE, LPSTR, int nCmdShow) {
         g_pDropTarget = nullptr;
     }
 
-    UnregisterClassW(Config::WINDOW_CLASS_NAME, hInstance);
+    UnregisterClassW(Constants::WINDOW_CLASS_NAME, hInstance);
 
     CoUninitialize();
     OleUninitialize();

@@ -61,7 +61,7 @@ struct AppState {
         EnumWindows([](HWND hwnd, LPARAM lParam) -> BOOL {
             wchar_t className[256];
             if (GetClassNameW(hwnd, className, 256)) {
-                if (wcscmp(className, Config::WINDOW_CLASS_NAME) == 0) {
+                if (wcscmp(className, Constants::WINDOW_CLASS_NAME) == 0) {
                     (*(int *) lParam)++;
                 }
             }

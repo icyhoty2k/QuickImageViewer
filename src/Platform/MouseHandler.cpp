@@ -67,7 +67,7 @@ void MouseHandler::HandleButtonDown(HWND hWnd, UINT message, LPARAM lParam) {
         float dy = (float) pt.y - centerY;
 
         // 4. Apply temporary zoom
-        g_app.viewport.zoom *= Config::ZOOM_CLICK;
+        g_app.viewport.zoom *= Constants::ZOOM_CLICK;
 
         // 5. Shift the offset to keep the clicked point at the center
         // We adjust the offset by the distance moved, scaled by the zoom difference
@@ -98,8 +98,8 @@ void MouseHandler::HandleButtonUp(HWND hWnd, UINT message, LPARAM /*lParam*/) {
             SetLayeredWindowAttributes(hWnd, 0, g_app.opacity, LWA_ALPHA);
 
             // 2. Calculate DPI-scaled dimensions
-            int targetW = (int) (Config::BASE_WIDTH * g_app.dpiScale);
-            int targetH = (int) (Config::BASE_HEIGHT * g_app.dpiScale);
+            int targetW = (int) (Constants::BASE_WIDTH * g_app.dpiScale);
+            int targetH = (int) (Constants::BASE_HEIGHT * g_app.dpiScale);
 
             // 4. Center and RESIZE the window
             HMONITOR hMonitor = MonitorFromWindow(hWnd, MONITOR_DEFAULTTONEAREST);
@@ -209,11 +209,11 @@ void MouseHandler::HandleMouseWheel(HWND hWnd, WPARAM wParam, LPARAM /*lParam*/)
 
     if (isRmbDown) {
         // Zoom logic when RMB is held
-        g_app.viewport.zoom *= (zDelta > 0) ? Config::ZOOM_STEP : (1.0f / Config::ZOOM_STEP);
+        g_app.viewport.zoom *= (zDelta > 0) ? Constants::ZOOM_STEP : (1.0f / Constants::ZOOM_STEP);
         InvalidateRect(hWnd, nullptr, FALSE);
     } else if (GET_KEYSTATE_WPARAM(wParam) & MK_CONTROL) {
         // Existing Ctrl+Scroll zoom logic
-        g_app.viewport.zoom *= (zDelta > 0) ? Config::ZOOM_STEP : (1.0f / Config::ZOOM_STEP);
+        g_app.viewport.zoom *= (zDelta > 0) ? Constants::ZOOM_STEP : (1.0f / Constants::ZOOM_STEP);
         InvalidateRect(hWnd, nullptr, FALSE);
     } else {
         // Default: Image navigation
