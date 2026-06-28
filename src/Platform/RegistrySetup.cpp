@@ -2,100 +2,147 @@
 #include <windows.h>
 #include <string>
 #include <shlobj.h>
-#include <vector>
+#include "Constants.h"
 
 namespace System {
-    // Helper function to check if the current path is already registered
     bool NeedsRegistration(const std::wstring &expectedCommand) {
         HKEY hKey;
-        if (RegOpenKeyExW(HKEY_CURRENT_USER, L"Software\\Classes\\Applications\\QuickImageViewer.exe\\shell\\open\\command",
-                          0, KEY_READ, &hKey) == ERROR_SUCCESS) {
-            DWORD bufferSize = 0;
-            RegQueryValueExW(hKey, nullptr, nullptr, nullptr, nullptr, &bufferSize);
-            if (bufferSize > 0) {
-                std::vector<wchar_t> buffer(bufferSize / sizeof(wchar_t) + 1);
-                if (RegQueryValueExW(hKey, nullptr, nullptr, nullptr, (LPBYTE) buffer.data(), &bufferSize) == ERROR_SUCCESS) {
-                    RegCloseKey(hKey);
-                    if (expectedCommand == buffer.data()) return false;
-                    return true;
-                }
-            }
-            RegCloseKey(hKey);
+        if (RegOpenKeyExW(HKEY_CURRENT_USER, Constants::Registry::OPEN_WITH_COMMAND,
+                          0, KEY_READ, &hKey) != ERROR_SUCCESS) {
+            return true;
         }
-        return true;
+
+        DWORD size = 0;
+        DWORD type = 0;
+        if (RegQueryValueExW(hKey, nullptr, nullptr, &type, nullptr, &size) != ERROR_SUCCESS || type != REG_SZ) {
+            RegCloseKey(hKey);
+            return true;
+        }
+
+        if (size > 1024 * 1024) { // Safety cap
+            RegCloseKey(hKey);
+            return true;
+        }
+
+        std::wstring current(size / sizeof(wchar_t), L'\0');
+        DWORD readType = 0;
+        if (RegQueryValueExW(hKey, nullptr, nullptr, &readType,
+                             reinterpret_cast<LPBYTE>(current.data()), &size) != ERROR_SUCCESS || readType != REG_SZ) {
+            RegCloseKey(hKey);
+            return true;
+        }
+        RegCloseKey(hKey);
+
+        if (!current.empty() && current.back() == L'\0') current.pop_back();
+
+        return current != expectedCommand;
     }
 
     void RegisterAppForOpenWith() {
-        // 1. Get the dynamic, absolute path to this running .exe
-        wchar_t exePath[MAX_PATH];
-        GetModuleFileNameW(nullptr, exePath, MAX_PATH);
+        wchar_t exePath[32768];
+        DWORD len = GetModuleFileNameW(nullptr, exePath, 32768);
+        if (len == 0 || len >= 32768) return;
 
-        // Build the execution command: "H:\Path\To\QuickImageViewer.exe" "%1"
         std::wstring command = std::wstring(L"\"") + exePath + L"\" \"%1\"";
-
-        // FAST EXIT: If already registered at this location, do absolutely nothing.
-        if (!NeedsRegistration(command)) {
-            return;
-        }
+        if (!NeedsRegistration(command)) return;
 
         HKEY hKey;
-
-        // 2. Register the executable command
-        if (RegCreateKeyExW(HKEY_CURRENT_USER, L"Software\\Classes\\Applications\\QuickImageViewer.exe\\shell\\open\\command",
+        // 1. Command registration
+        if (RegCreateKeyExW(HKEY_CURRENT_USER, Constants::Registry::OPEN_WITH_COMMAND,
                             0, nullptr, REG_OPTION_NON_VOLATILE, KEY_WRITE, nullptr, &hKey, nullptr) == ERROR_SUCCESS) {
-            RegSetValueExW(hKey, nullptr, 0, REG_SZ, (const BYTE *) command.c_str(), static_cast<DWORD>((command.length() + 1) * sizeof(wchar_t)));
+            RegSetValueExW(hKey, nullptr, 0, REG_SZ, reinterpret_cast<const BYTE *>(command.c_str()),
+                           static_cast<DWORD>((command.length() + 1) * sizeof(wchar_t)));
             RegCloseKey(hKey);
         }
 
-        // 3. Set the clean display name Windows will show in the menu
-        if (RegCreateKeyExW(HKEY_CURRENT_USER, L"Software\\Classes\\Applications\\QuickImageViewer.exe",
+        // 2. Friendly application name
+        if (RegCreateKeyExW(HKEY_CURRENT_USER, Constants::Registry::OPEN_WITH_ROOT,
                             0, nullptr, REG_OPTION_NON_VOLATILE, KEY_WRITE, nullptr, &hKey, nullptr) == ERROR_SUCCESS) {
-            std::wstring friendlyName = L"Quick Image Viewer";
-            RegSetValueExW(hKey, L"FriendlyAppName", 0, REG_SZ, (const BYTE *) friendlyName.c_str(), static_cast<DWORD>((friendlyName.length() + 1) * sizeof(wchar_t)));
+            const std::wstring friendlyName = L"Quick Image Viewer";
+            RegSetValueExW(hKey, L"FriendlyAppName", 0, REG_SZ, reinterpret_cast<const BYTE *>(friendlyName.c_str()),
+                           static_cast<DWORD>((friendlyName.length() + 1) * sizeof(wchar_t)));
             RegCloseKey(hKey);
         }
 
-        // 4. Tell Windows exactly which extensions this app supports
-        if (RegCreateKeyExW(HKEY_CURRENT_USER, L"Software\\Classes\\Applications\\QuickImageViewer.exe\\SupportedTypes",
+        // 3. Supported image types using centralized constants
+        if (RegCreateKeyExW(HKEY_CURRENT_USER, Constants::Registry::OPEN_WITH_TYPES,
                             0, nullptr, REG_OPTION_NON_VOLATILE, KEY_WRITE, nullptr, &hKey, nullptr) == ERROR_SUCCESS) {
-            const wchar_t *emptyStr = L"";
-            RegSetValueExW(hKey, L".jpg", 0, REG_SZ, (const BYTE *) emptyStr, sizeof(wchar_t));
-            RegSetValueExW(hKey, L".jpeg", 0, REG_SZ, (const BYTE *) emptyStr, sizeof(wchar_t));
-            RegSetValueExW(hKey, L".png", 0, REG_SZ, (const BYTE *) emptyStr, sizeof(wchar_t));
-            RegSetValueExW(hKey, L".webp", 0, REG_SZ, (const BYTE *) emptyStr, sizeof(wchar_t));
-            RegSetValueExW(hKey, L".bmp", 0, REG_SZ, (const BYTE *) emptyStr, sizeof(wchar_t));
+            const wchar_t *empty = L"";
+            for (size_t i = 0; i < Constants::Registry::SUPPORTED_EXTENSIONS_COUNT; ++i) {
+                RegSetValueExW(hKey, Constants::Registry::SUPPORTED_EXTENSIONS[i], 0, REG_SZ,
+                               reinterpret_cast<const BYTE *>(empty), sizeof(wchar_t));
+            }
             RegCloseKey(hKey);
         }
 
-        // 5. Force Windows Explorer to refresh its icon and menu cache (Only runs on install/move!)
         SHChangeNotify(SHCNE_ASSOCCHANGED, SHCNF_IDLIST, nullptr, nullptr);
     }
 
     void EnableRunOnStartup() {
-        wchar_t exePath[MAX_PATH];
-        GetModuleFileNameW(nullptr, exePath, MAX_PATH);
+        wchar_t exePath[32768];
+        DWORD len = GetModuleFileNameW(nullptr, exePath, 32768);
+        if (len == 0 || len >= 32768) return;
 
-        // Build the command: "H:\Path\To\QuickImageViewer.exe" -background
         std::wstring command = std::wstring(L"\"") + exePath + L"\" -background";
 
         HKEY hKey;
-        if (RegCreateKeyExW(HKEY_CURRENT_USER, L"Software\\Microsoft\\Windows\\CurrentVersion\\Run",
+        if (RegCreateKeyExW(HKEY_CURRENT_USER, Constants::Registry::RUN_KEY,
                             0, nullptr, REG_OPTION_NON_VOLATILE, KEY_WRITE, nullptr, &hKey, nullptr) == ERROR_SUCCESS) {
-            bool needsUpdate = true;
+            bool needsUpdate = false;
+            DWORD size = 0;
+            DWORD type = 0;
+            DWORD readType = 0;
 
-            DWORD bufferSize = 0;
-            RegQueryValueExW(hKey, L"QuickImageViewer", nullptr, nullptr, nullptr, &bufferSize);
-            if (bufferSize > 0) {
-                std::vector<wchar_t> buffer(bufferSize / sizeof(wchar_t) + 1);
-                if (RegQueryValueExW(hKey, L"QuickImageViewer", nullptr, nullptr, (LPBYTE) buffer.data(), &bufferSize) == ERROR_SUCCESS) {
-                    if (command == buffer.data()) needsUpdate = false;
+            if (RegQueryValueExW(hKey, Constants::Registry::RUN_VALUE_NAME, nullptr, &type, nullptr, &size) == ERROR_SUCCESS) {
+                if (type != REG_SZ || size > 1024 * 1024) {
+                    needsUpdate = true;
+                } else {
+                    std::wstring current(size / sizeof(wchar_t), L'\0');
+                    if (RegQueryValueExW(hKey, Constants::Registry::RUN_VALUE_NAME, nullptr, &readType,
+                                         reinterpret_cast<LPBYTE>(current.data()), &size) == ERROR_SUCCESS) {
+                        if (readType == REG_SZ) {
+                            if (!current.empty() && current.back() == L'\0') current.pop_back();
+                            if (current != command) needsUpdate = true;
+                        } else {
+                            needsUpdate = true;
+                        }
+                    }
                 }
+            } else {
+                needsUpdate = true;
             }
 
             if (needsUpdate) {
-                RegSetValueExW(hKey, L"QuickImageViewer", 0, REG_SZ, (const BYTE *) command.c_str(), static_cast<DWORD>((command.length() + 1) * sizeof(wchar_t)));
+                RegSetValueExW(hKey, Constants::Registry::RUN_VALUE_NAME, 0, REG_SZ, reinterpret_cast<const BYTE *>(command.c_str()),
+                               static_cast<DWORD>((command.length() + 1) * sizeof(wchar_t)));
             }
             RegCloseKey(hKey);
         }
+    }
+
+    // Integer/Flag persistence (DWORD)
+    void SaveSetting(const wchar_t *valueName, DWORD value) {
+        RegSetKeyValueW(HKEY_CURRENT_USER, Constants::Registry::ROOT_KEY,
+                        valueName, REG_DWORD, &value, sizeof(DWORD));
+    }
+
+    DWORD LoadSetting(const wchar_t *valueName, DWORD defaultValue) {
+        DWORD value = defaultValue;
+        DWORD size = sizeof(DWORD);
+        RegGetValueW(HKEY_CURRENT_USER, Constants::Registry::ROOT_KEY,
+                     valueName, RRF_RT_REG_DWORD, nullptr, &value, &size);
+        return value;
+    }
+
+    // Text/Path persistence (String)
+    void SaveStringSetting(const wchar_t *valueName, const std::wstring &value) {
+        RegSetKeyValueW(HKEY_CURRENT_USER, Constants::Registry::ROOT_KEY, valueName,
+                        REG_SZ, value.c_str(), static_cast<DWORD>((value.length() + 1) * sizeof(wchar_t)));
+    }
+
+    void LoadStringSetting(const wchar_t *valueName, wchar_t *buffer, DWORD bufferSize) {
+        DWORD size = bufferSize * sizeof(wchar_t);
+        RegGetValueW(HKEY_CURRENT_USER, Constants::Registry::ROOT_KEY, valueName,
+                     RRF_RT_REG_SZ, nullptr, buffer, &size);
     }
 }

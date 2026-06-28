@@ -22,10 +22,18 @@ HRESULT RendererD2D::Initialize(HWND hwnd) {
         return E_FAIL;
     }
 
-    (void) m_pDWriteFactory->CreateTextFormat(
+    // Attempt to create primary font, fallback to Arial if it fails
+    HRESULT hrFont = m_pDWriteFactory->CreateTextFormat(
             L"Segoe UI", nullptr,
             DWRITE_FONT_WEIGHT_NORMAL, DWRITE_FONT_STYLE_NORMAL, DWRITE_FONT_STRETCH_NORMAL,
             12.0f, L"en-us", &m_pTextFormat);
+
+    if (FAILED(hrFont)) {
+        (void) m_pDWriteFactory->CreateTextFormat(
+                L"Arial", nullptr,
+                DWRITE_FONT_WEIGHT_NORMAL, DWRITE_FONT_STYLE_NORMAL, DWRITE_FONT_STRETCH_NORMAL,
+                12.0f, L"en-us", &m_pTextFormat);
+    }
 
     RECT rc{};
     GetClientRect(hwnd, &rc);
@@ -200,8 +208,12 @@ HRESULT RendererD2D::Render() {
             std::wstring text = std::to_wstring(g_app.currentIndex + 1) + L" / " +
                                 std::to_wstring(g_app.playlist.size()) + L" - " + fileName;
             D2D1_RECT_F layoutRect = D2D1::RectF(15.0f, 6.0f, rtSize.width - 10.0f, rtSize.height - 10.0f);
-            m_pRenderTarget->DrawText(text.c_str(), static_cast<UINT32>(text.length()),
-                                      m_pTextFormat.Get(), layoutRect, m_pTextBrush.Get());
+
+            // Safety check: ensure resources exist before drawing
+            if (m_pTextFormat && m_pTextBrush) {
+                m_pRenderTarget->DrawText(text.c_str(), static_cast<UINT32>(text.length()),
+                                          m_pTextFormat.Get(), layoutRect, m_pTextBrush.Get());
+            }
         }
     }
 
