@@ -29,15 +29,70 @@
 #include "Renderer/RendererGDI.h"
 #include "WorkerThread.h"
 #include <shlobj.h> // Required for SHOpenFolderAndSelectItems
+
 // Global application state
 AppState g_app;
 DropTarget *g_pDropTarget = nullptr;
+
 // Define the storage for the globals exactly once in your entry point file
-WorkerThread g_ioWorker;
 WorkerThread g_decoderWorker;
+WorkerThread g_ioWorker;
+
+void ToggleFullscreen(HWND hWnd) {
+    if (!g_app.isFullscreen) {
+        GetWindowRect(hWnd, &g_app.savedWindowRect);
+        MONITORINFO mi = {sizeof(mi)};
+        GetMonitorInfo(MonitorFromWindow(hWnd, MONITOR_DEFAULTTONEAREST), &mi);
+
+        SetWindowPos(hWnd, HWND_TOPMOST,
+                     mi.rcMonitor.left, mi.rcMonitor.top,
+                     mi.rcMonitor.right - mi.rcMonitor.left,
+                     mi.rcMonitor.bottom - mi.rcMonitor.top,
+                     SWP_FRAMECHANGED | SWP_NOCOPYBITS);
+
+        DWMNCRENDERINGPOLICY policy = DWMNCRP_DISABLED;
+        DwmSetWindowAttribute(hWnd, DWMWA_NCRENDERING_POLICY, &policy, sizeof(policy));
+        DWORD corner = 1; // DWMWCP_DONOTROUND
+        DwmSetWindowAttribute(hWnd, Constants::DWMWA_WINDOW_CORNER_PREFERENCE, &corner, sizeof(corner));
+        MARGINS margins = {0, 0, 0, 0};
+        DwmExtendFrameIntoClientArea(hWnd, &margins);
+
+        g_app.isFullscreen = true;
+    } else {
+        SetWindowPos(hWnd, HWND_NOTOPMOST,
+                     g_app.savedWindowRect.left,
+                     g_app.savedWindowRect.top,
+                     g_app.savedWindowRect.right - g_app.savedWindowRect.left,
+                     g_app.savedWindowRect.bottom - g_app.savedWindowRect.top,
+                     SWP_FRAMECHANGED | SWP_NOCOPYBITS);
+
+        DWMNCRENDERINGPOLICY policy = DWMNCRP_ENABLED;
+        DwmSetWindowAttribute(hWnd, DWMWA_NCRENDERING_POLICY, &policy, sizeof(policy));
+        DWORD corner = 2; // DWMWCP_ROUND
+        DwmSetWindowAttribute(hWnd, Constants::DWMWA_WINDOW_CORNER_PREFERENCE, &corner, sizeof(corner));
+        MARGINS margins = {1, 1, 1, 1};
+        DwmExtendFrameIntoClientArea(hWnd, &margins);
+
+        g_app.isFullscreen = false;
+    }
+}
 
 LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) {
     switch (message) {
+        case WM_DPICHANGED: {
+            g_app.dpiScale = HIWORD(wParam) / 96.0f;
+            RECT *const prcNewWindow = (RECT *) lParam;
+            SetWindowPos(hWnd,
+                         nullptr,
+                         prcNewWindow->left,
+                         prcNewWindow->top,
+                         prcNewWindow->right - prcNewWindow->left,
+                         prcNewWindow->bottom - prcNewWindow->top,
+                         SWP_NOZORDER | SWP_NOACTIVATE);
+            InvalidateRect(hWnd, nullptr, FALSE);
+            return 0;
+        }
+
         // Handle file paths sent from other instances of the viewer
         case WM_COPYDATA: {
             COPYDATASTRUCT *cds = (COPYDATASTRUCT *) lParam;
@@ -60,7 +115,6 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) 
             constexpr UINT_PTR TIMER_LOOKASIDE = 1001;
 
             if (wParam == TIMER_LOOKASIDE) {
-                // The scroll wheel has rested. Stop the timer.
                 KillTimer(hWnd, TIMER_LOOKASIDE);
 
                 if (g_app.playlist.empty()) return 0;
@@ -68,20 +122,24 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) 
                 int index = g_app.currentIndex;
                 const int total = static_cast<int>(g_app.playlist.size());
 
-                // Queue the predictive images safely without clogging the active scroll
                 for (int i = 1; i <= Constants::PRELOAD_LOOKASIDE_COUNT; ++i) {
                     int fwd = index + i;
                     int bwd = index - i;
+
                     if (fwd < total) {
                         std::wstring fwdPath = g_app.playlist[fwd];
-                        g_decoderWorker.PushTask([fwdPath]() {
-                            if (g_app.renderer) (void) g_app.renderer->PreloadBitmap(fwdPath);
+                        g_decoderWorker.PushTask([fwdPath, index]() {
+                            // ABORT if user started scrolling again
+                            if (g_app.wantedIndex.load(std::memory_order_acquire) != index) return;
+                            if (g_app.renderer) (void) g_app.renderer->PreloadBitmap(fwdPath, index);
                         });
                     }
                     if (bwd >= 0) {
                         std::wstring bwdPath = g_app.playlist[bwd];
-                        g_decoderWorker.PushTask([bwdPath]() {
-                            if (g_app.renderer) (void) g_app.renderer->PreloadBitmap(bwdPath);
+                        g_decoderWorker.PushTask([bwdPath, index]() {
+                            // ABORT if user started scrolling again
+                            if (g_app.wantedIndex.load(std::memory_order_acquire) != index) return;
+                            if (g_app.renderer) (void) g_app.renderer->PreloadBitmap(bwdPath, index);
                         });
                     }
                 }
@@ -168,37 +226,7 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) 
             // Fullscreen toggle: F, F11, Enter, Ctrl+Shift+T
             if (wParam == VK_F11 || wParam == 'F' || wParam == VK_RETURN ||
                 (wParam == 'T' && ctrl && shift)) {
-                if (!g_app.isFullscreen) {
-                    GetWindowRect(hWnd, &g_app.savedWindowRect);
-                    MONITORINFO mi = {sizeof(mi)};
-                    GetMonitorInfo(MonitorFromWindow(hWnd, MONITOR_DEFAULTTONEAREST), &mi);
-                    SetWindowPos(hWnd, HWND_TOPMOST,
-                                 mi.rcMonitor.left, mi.rcMonitor.top,
-                                 mi.rcMonitor.right - mi.rcMonitor.left,
-                                 mi.rcMonitor.bottom - mi.rcMonitor.top,
-                                 SWP_FRAMECHANGED);
-                    DWMNCRENDERINGPOLICY policy = DWMNCRP_DISABLED;
-                    DwmSetWindowAttribute(hWnd, DWMWA_NCRENDERING_POLICY, &policy, sizeof(policy));
-                    DWORD corner = 1; // DWMWCP_DONOTROUND
-                    DwmSetWindowAttribute(hWnd, 33, &corner, sizeof(corner));
-                    MARGINS margins = {0, 0, 0, 0};
-                    DwmExtendFrameIntoClientArea(hWnd, &margins);
-                    g_app.isFullscreen = true;
-                } else {
-                    SetWindowPos(hWnd, HWND_NOTOPMOST,
-                                 g_app.savedWindowRect.left,
-                                 g_app.savedWindowRect.top,
-                                 g_app.savedWindowRect.right - g_app.savedWindowRect.left,
-                                 g_app.savedWindowRect.bottom - g_app.savedWindowRect.top,
-                                 SWP_FRAMECHANGED);
-                    DWMNCRENDERINGPOLICY policy = DWMNCRP_ENABLED;
-                    DwmSetWindowAttribute(hWnd, DWMWA_NCRENDERING_POLICY, &policy, sizeof(policy));
-                    DWORD corner = 2; // DWMWCP_ROUND
-                    DwmSetWindowAttribute(hWnd, 33, &corner, sizeof(corner));
-                    MARGINS margins = {1, 1, 1, 1};
-                    DwmExtendFrameIntoClientArea(hWnd, &margins);
-                    g_app.isFullscreen = false;
-                }
+                ToggleFullscreen(hWnd);
                 InvalidateRect(hWnd, nullptr, FALSE);
                 return 0;
             }
@@ -373,40 +401,7 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) 
         case WM_LBUTTONDBLCLK: {
             SendMessageW(hWnd, WM_SETREDRAW, FALSE, 0);
 
-            if (!g_app.isFullscreen) {
-                GetWindowRect(hWnd, &g_app.savedWindowRect);
-                MONITORINFO mi = {sizeof(mi)};
-                GetMonitorInfo(MonitorFromWindow(hWnd, MONITOR_DEFAULTTONEAREST), &mi);
-
-                SetWindowPos(hWnd, HWND_TOPMOST,
-                             mi.rcMonitor.left, mi.rcMonitor.top,
-                             mi.rcMonitor.right - mi.rcMonitor.left,
-                             mi.rcMonitor.bottom - mi.rcMonitor.top,
-                             SWP_FRAMECHANGED | SWP_NOCOPYBITS);
-
-                DWMNCRENDERINGPOLICY policy = DWMNCRP_DISABLED;
-                DwmSetWindowAttribute(hWnd, DWMWA_NCRENDERING_POLICY, &policy, sizeof(policy));
-                DWORD corner = 1;
-                DwmSetWindowAttribute(hWnd, 33, &corner, sizeof(corner));
-                MARGINS margins = {0, 0, 0, 0};
-                DwmExtendFrameIntoClientArea(hWnd, &margins);
-                g_app.isFullscreen = true;
-            } else {
-                SetWindowPos(hWnd, HWND_NOTOPMOST,
-                             g_app.savedWindowRect.left,
-                             g_app.savedWindowRect.top,
-                             g_app.savedWindowRect.right - g_app.savedWindowRect.left,
-                             g_app.savedWindowRect.bottom - g_app.savedWindowRect.top,
-                             SWP_FRAMECHANGED | SWP_NOCOPYBITS);
-
-                DWMNCRENDERINGPOLICY policy = DWMNCRP_ENABLED;
-                DwmSetWindowAttribute(hWnd, DWMWA_NCRENDERING_POLICY, &policy, sizeof(policy));
-                DWORD corner = 2;
-                DwmSetWindowAttribute(hWnd, 33, &corner, sizeof(corner));
-                MARGINS margins = {1, 1, 1, 1};
-                DwmExtendFrameIntoClientArea(hWnd, &margins);
-                g_app.isFullscreen = false;
-            }
+            ToggleFullscreen(hWnd);
 
             SendMessageW(hWnd, WM_SETREDRAW, TRUE, 0);
             RedrawWindow(hWnd, nullptr, nullptr, RDW_INVALIDATE | RDW_UPDATENOW | RDW_FRAME);
@@ -559,8 +554,9 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE, LPSTR, int nCmdShow) {
 
     RegisterDragDrop(hWnd, (g_pDropTarget = new DropTarget(hWnd)));
     UI::InitHelpWindow(hInstance, hWnd);
+
     DWORD corner = 2; // DWMWCP_ROUND
-    DwmSetWindowAttribute(hWnd, 33, &corner, sizeof(corner));
+    DwmSetWindowAttribute(hWnd, Constants::DWMWA_WINDOW_CORNER_PREFERENCE, &corner, sizeof(corner));
 
     // Handle startup arguments
     int argc;

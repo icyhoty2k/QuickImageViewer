@@ -7,29 +7,26 @@
 #pragma comment(lib, "dwrite.lib")
 
 extern WorkerThread g_decoderWorker;
+extern WorkerThread g_ioWorker;
 
 HRESULT RendererD2D::Initialize(HWND hwnd) {
     m_hwnd = hwnd;
 
-    // 1. Create the D2D Factory FIRST
     if (!m_pFactory) {
         HRESULT hr = D2D1CreateFactory(D2D1_FACTORY_TYPE_SINGLE_THREADED, m_pFactory.GetAddressOf());
         if (FAILED(hr)) return hr;
     }
 
-    // 2. Create the DWrite Factory
     if (FAILED(DWriteCreateFactory(DWRITE_FACTORY_TYPE_SHARED, __uuidof(IDWriteFactory),
         reinterpret_cast<IUnknown**>(m_pDWriteFactory.GetAddressOf())))) {
         return E_FAIL;
     }
 
-    // 3. Setup Text Format — result intentionally ignored; text overlay is non-critical
     (void) m_pDWriteFactory->CreateTextFormat(
             L"Segoe UI", nullptr,
             DWRITE_FONT_WEIGHT_NORMAL, DWRITE_FONT_STYLE_NORMAL, DWRITE_FONT_STRETCH_NORMAL,
             12.0f, L"en-us", &m_pTextFormat);
 
-    // 4. Create the Render Target
     RECT rc{};
     GetClientRect(hwnd, &rc);
     HRESULT hr = m_pFactory->CreateHwndRenderTarget(
@@ -39,7 +36,6 @@ HRESULT RendererD2D::Initialize(HWND hwnd) {
 
     if (FAILED(hr)) return hr;
 
-    // 5. Create Brush (Requires active RenderTarget)
     return m_pRenderTarget->CreateSolidColorBrush(D2D1::ColorF(D2D1::ColorF::LightGreen), &m_pTextBrush);
 }
 
@@ -47,40 +43,34 @@ void RendererD2D::Resize(UINT width, UINT height) {
     if (m_pRenderTarget) m_pRenderTarget->Resize(D2D1::SizeU(width, height));
 }
 
-// UI THREAD ONLY: Uploads decoded data to VRAM. Caller must NOT hold m_cacheMutex.
-HRESULT RendererD2D::UploadAndCacheBitmap(IWICBitmapSource *bitmap, const std::wstring &filePath) {
+HRESULT RendererD2D::UploadAndCacheBitmap(IWICBitmapSource *bitmap, const std::wstring &filePath, UINT width, UINT height) {
     std::lock_guard<std::mutex> lock(m_cacheMutex);
-    return UploadAndCacheBitmap_Locked(bitmap, filePath);
+    return UploadAndCacheBitmap_Locked(bitmap, filePath, width, height);
 }
 
-// UI THREAD ONLY: Internal version — caller must already hold m_cacheMutex.
-HRESULT RendererD2D::UploadAndCacheBitmap_Locked(IWICBitmapSource *bitmap, const std::wstring &filePath) {
+HRESULT RendererD2D::UploadAndCacheBitmap_Locked(IWICBitmapSource *bitmap, const std::wstring &filePath, UINT width, UINT height) {
     if (!m_pRenderTarget) return E_UNEXPECTED;
 
     Microsoft::WRL::ComPtr<ID2D1Bitmap> newBitmap;
     HRESULT hr = m_pRenderTarget->CreateBitmapFromWicBitmap(bitmap, nullptr, newBitmap.GetAddressOf());
     if (FAILED(hr)) return hr;
 
-    // Remove existing entry if present.
     auto existing = m_bitmapCache.find(filePath);
     if (existing != m_bitmapCache.end()) {
         m_lruList.erase(existing->second.lruIt);
         m_bitmapCache.erase(existing);
     }
 
-    // Evict least recently used image if cache is full.
     if (m_lruList.size() >= Constants::VRAM_CACHE_IMAGES_COUNT) {
         m_bitmapCache.erase(m_lruList.back());
         m_lruList.pop_back();
     }
 
-    // Insert the new bitmap.
     m_lruList.push_front(filePath);
-    m_bitmapCache.emplace(filePath, CachedBitmap{newBitmap, m_lruList.begin()});
+    m_bitmapCache.emplace(filePath, CachedBitmap{newBitmap, m_lruList.begin(), width, height});
     return S_OK;
 }
 
-// UI THREAD ONLY: Drain the queue of images decoded in the background.
 void RendererD2D::ProcessPendingUploads() {
     while (true) {
         PendingUpload upload;
@@ -91,63 +81,40 @@ void RendererD2D::ProcessPendingUploads() {
             m_pendingUploads.pop();
         }
 
-        // --- STALE UPLOAD REJECTION ---
-        // Verify the background-decoded image is still relevant before copying 33MB to the GPU.
-        auto it = std::ranges::find(g_app.playlist, upload.filePath);
-        if (it != g_app.playlist.end()) {
-            int uploadIdx = static_cast<int>(std::distance(g_app.playlist.begin(), it));
-            int currentIdx = g_app.currentIndex;
-            int total = static_cast<int>(g_app.playlist.size());
+        int currentIdx = g_app.wantedIndex.load(std::memory_order_acquire);
+        int dist = std::abs(upload.playlistIndex - currentIdx);
 
-            // Calculate exact distance handling circular array bounds
-            int dist = uploadIdx > currentIdx ? uploadIdx - currentIdx : currentIdx - uploadIdx;
-            int wrappedDist = dist < (total - dist) ? dist : (total - dist);
-
-            // Only execute the heavy D2D CreateBitmapFromWicBitmap if it is the target
-            // or within the lookaside buffer.
-            if (wrappedDist <= Constants::PRELOAD_LOOKASIDE_COUNT) {
-                HRESULT hr = UploadAndCacheBitmap(upload.converter.Get(), upload.filePath);
+        if (dist <= Constants::PRELOAD_LOOKASIDE_COUNT) {
+            HRESULT hr = UploadAndCacheBitmap(upload.converter.Get(), upload.filePath, upload.width, upload.height);
 #ifdef _DEBUG
-                if (FAILED(hr)) OutputDebugStringW(L"CreateBitmapFromWic failed.\n");
+            if (FAILED(hr)) OutputDebugStringW(L"CreateBitmapFromWic failed.\n");
+#else
+            (void) hr;
 #endif
-            } else {
-                // SILENT DISCARD: You scrolled past this before VRAM upload could start.
-                // The ComPtr goes out of scope and frees the system RAM instantly.
-            }
         }
     }
 }
 
 HRESULT RendererD2D::LoadBitmap(IWICBitmapSource *bitmap, UINT width, UINT height, const std::wstring &filePath) {
-    // 1. Quick cache check
     {
         std::lock_guard<std::mutex> lock(m_cacheMutex);
         auto it = m_bitmapCache.find(filePath);
         if (it != m_bitmapCache.end()) {
             m_lruList.splice(m_lruList.begin(), m_lruList, it->second.lruIt);
             m_pBitmap = it->second.bitmap;
-
-            // Extract dimensions directly from VRAM (Zero-Disk I/O)
-            D2D1_SIZE_F size = m_pBitmap->GetSize();
-            g_app.imgWidth = static_cast<int>(size.width);
-            g_app.imgHeight = static_cast<int>(size.height);
-
+            g_app.imgWidth = static_cast<int>(it->second.width);
+            g_app.imgHeight = static_cast<int>(it->second.height);
             return S_OK;
         }
     }
 
-    // A cache probe (bitmap == nullptr) shouldn't proceed to GPU upload
     if (!bitmap || !m_pRenderTarget) return E_FAIL;
 
-    // 2. Perform expensive GPU upload OUTSIDE the lock
     Microsoft::WRL::ComPtr<ID2D1Bitmap> newBitmap;
     HRESULT hr = m_pRenderTarget->CreateBitmapFromWicBitmap(bitmap, nullptr, newBitmap.GetAddressOf());
 
     if (SUCCEEDED(hr)) {
         std::lock_guard<std::mutex> lock(m_cacheMutex);
-
-        // Final sanity check: if it was added by a concurrent process
-        // during our upload, remove the old one first.
         auto it = m_bitmapCache.find(filePath);
         if (it != m_bitmapCache.end()) {
             m_lruList.erase(it->second.lruIt);
@@ -160,55 +127,43 @@ HRESULT RendererD2D::LoadBitmap(IWICBitmapSource *bitmap, UINT width, UINT heigh
         }
 
         m_lruList.push_front(filePath);
-        m_bitmapCache[filePath] = {newBitmap, m_lruList.begin()};
+        m_bitmapCache[filePath] = {newBitmap, m_lruList.begin(), width, height};
         m_pBitmap = newBitmap;
 
-        // Update global dimensions for the newly loaded image
         g_app.imgWidth = static_cast<int>(width);
         g_app.imgHeight = static_cast<int>(height);
     }
-
     return hr;
 }
 
-// BACKGROUND THREAD: Performs I/O and Decoding only
-HRESULT RendererD2D::PreloadBitmap(const std::wstring &filePath) {
-    // 1. Thread-safe check
-    {
-        std::lock_guard<std::mutex> lock(m_cacheMutex);
-        if (m_bitmapCache.find(filePath) != m_bitmapCache.end()) return S_OK;
-    }
+HRESULT RendererD2D::PreloadBitmap(const std::wstring &filePath, int requestIndex) {
+    g_ioWorker.PushTask([filePath, requestIndex, this]() {
+        Microsoft::WRL::ComPtr<IWICBitmapDecoder> decoder;
+        if (FAILED(g_app.wicFactory->CreateDecoderFromFilename(
+            filePath.c_str(), nullptr, GENERIC_READ, WICDecodeMetadataCacheOnDemand, &decoder)))
+            return;
 
-    // 2. Decode using the global factory
-    Microsoft::WRL::ComPtr<IWICBitmapDecoder> decoder;
-    if (FAILED(g_decoderWorker.wicFactory->CreateDecoderFromFilename(
-        filePath.c_str(), nullptr, GENERIC_READ, WICDecodeMetadataCacheOnDemand, &decoder)))
-        return E_FAIL;
+        g_decoderWorker.PushTask([decoder, filePath, requestIndex, this]() {
+            if (g_app.wantedIndex.load(std::memory_order_acquire) != requestIndex) return;
 
-    Microsoft::WRL::ComPtr<IWICBitmapFrameDecode> frame;
-    if (FAILED(decoder->GetFrame(0, &frame))) return E_FAIL;
+            Microsoft::WRL::ComPtr<IWICBitmapFrameDecode> frame;
+            if (FAILED(decoder->GetFrame(0, &frame))) return;
 
-    Microsoft::WRL::ComPtr<IWICFormatConverter> converter;
-    HRESULT hr = g_decoderWorker.wicFactory->CreateFormatConverter(&converter);
-    if (FAILED(hr)) return hr;
+            UINT width, height;
+            frame->GetSize(&width, &height);
 
-    hr = converter->Initialize(
-            frame.Get(),
-            GUID_WICPixelFormat32bppPBGRA,
-            WICBitmapDitherTypeNone,
-            nullptr,
-            0.0f,
-            WICBitmapPaletteTypeCustom);
-    if (FAILED(hr)) return hr;
+            Microsoft::WRL::ComPtr<IWICFormatConverter> converter;
+            if (FAILED(g_app.wicFactory->CreateFormatConverter(&converter))) return;
 
-    // 3. Hand-off: Push to queue and signal UI
-    {
-        std::lock_guard<std::mutex> lock(m_cacheMutex);
-        m_pendingUploads.push({filePath, converter});
-    }
-    if (!PostMessage(m_hwnd, Constants::WM_QIV_PENDING_UPLOADS, 0, 0))
-        return HRESULT_FROM_WIN32(GetLastError());
+            if (FAILED(converter->Initialize(frame.Get(), GUID_WICPixelFormat32bppPBGRA,
+                WICBitmapDitherTypeNone, nullptr, 0.0f, WICBitmapPaletteTypeCustom)))
+                return;
 
+            std::lock_guard<std::mutex> lock(m_cacheMutex);
+            m_pendingUploads.push({requestIndex, filePath, converter, width, height});
+            PostMessageW(m_hwnd, Constants::WM_QIV_PENDING_UPLOADS, 0, 0);
+        });
+    });
     return S_OK;
 }
 
@@ -231,14 +186,8 @@ HRESULT RendererD2D::Render() {
         const float top = (rtSize.height - renderH) / 2.0f + g_app.viewport.offsetY;
 
         D2D1_MATRIX_3X2_F transform = D2D1::Matrix3x2F::Identity();
-
-        if (g_app.viewport.flippedH) {
-            transform = transform * D2D1::Matrix3x2F::Scale(-1.0f, 1.0f, center);
-        }
-        if (g_app.viewport.flippedV) {
-            transform = transform * D2D1::Matrix3x2F::Scale(1.0f, -1.0f, center);
-        }
-
+        if (g_app.viewport.flippedH) transform = transform * D2D1::Matrix3x2F::Scale(-1.0f, 1.0f, center);
+        if (g_app.viewport.flippedV) transform = transform * D2D1::Matrix3x2F::Scale(1.0f, -1.0f, center);
         transform = transform * D2D1::Matrix3x2F::Rotation(static_cast<float>(g_app.viewport.rotation), center);
 
         m_pRenderTarget->SetTransform(transform);
@@ -257,25 +206,19 @@ HRESULT RendererD2D::Render() {
     }
 
     HRESULT hr = m_pRenderTarget->EndDraw();
-
     if (hr == D2DERR_RECREATE_TARGET) {
         m_pBitmap.Reset();
         m_bitmapCache.clear();
         m_lruList.clear();
         m_pRenderTarget.Reset();
-
         RECT rc{};
         GetClientRect(m_hwnd, &rc);
-        hr = m_pFactory->CreateHwndRenderTarget(
-                D2D1::RenderTargetProperties(),
-                D2D1::HwndRenderTargetProperties(m_hwnd, D2D1::SizeU(rc.right - rc.left, rc.bottom - rc.top)),
-                m_pRenderTarget.GetAddressOf());
-
-        // Recreate device-dependent brush — old one is invalid after target loss
+        hr = m_pFactory->CreateHwndRenderTarget(D2D1::RenderTargetProperties(),
+                                                D2D1::HwndRenderTargetProperties(m_hwnd, D2D1::SizeU(rc.right - rc.left, rc.bottom - rc.top)),
+                                                m_pRenderTarget.GetAddressOf());
         if (SUCCEEDED(hr)) {
             m_pTextBrush.Reset();
-            (void) m_pRenderTarget->CreateSolidColorBrush(
-                    D2D1::ColorF(D2D1::ColorF::LightGreen), &m_pTextBrush);
+            (void) m_pRenderTarget->CreateSolidColorBrush(D2D1::ColorF(D2D1::ColorF::LightGreen), &m_pTextBrush);
         }
     }
     return hr;

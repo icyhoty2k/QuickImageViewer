@@ -140,7 +140,7 @@ HRESULT RendererGDI::Render() {
     return S_OK;
 }
 
-HRESULT RendererGDI::PreloadBitmap(const std::wstring & /*filePath*/) {
+HRESULT RendererGDI::PreloadBitmap(const std::wstring & /*filePath*/, int /*requestIndex*/) {
     return S_OK; // GDI has no VRAM cache — no-op
 }
 
