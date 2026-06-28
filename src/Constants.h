@@ -1,4 +1,5 @@
 #pragma once
+#include <iterator>
 
 namespace Constants {
     constexpr const wchar_t *BASE_NAME = L"QuickImageViewer";
