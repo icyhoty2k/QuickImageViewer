@@ -24,6 +24,7 @@ struct AppState {
     Microsoft::WRL::ComPtr<IWICImagingFactory> wicFactory;
     std::unique_ptr<IImageRenderer> renderer;
     HBITMAP hDIB = nullptr;
+    Constants::ViewModes::ViewMode viewMode = Constants::ViewModes::defaultViewMode;
     float dpiScale = 1.0f;
     bool isRmbDown = false;
     bool showOverlayInfoText = Constants::DEFAULT_SHOW_OVERLAY;

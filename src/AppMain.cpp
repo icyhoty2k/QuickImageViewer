@@ -152,6 +152,12 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) 
         case WM_KEYDOWN: {
             bool shift = (GetKeyState(VK_SHIFT) & 0x8000) != 0;
             bool ctrl = (GetKeyState(VK_CONTROL) & 0x8000) != 0;
+            // 2. Handle your new ViewModes (keys '1' through '5')
+            if (wParam >= '1' && wParam <= '5') {
+                g_app.viewMode = static_cast<Constants::ViewModes::ViewMode>(wParam - '0');
+                InvalidateRect(hWnd, nullptr, FALSE);
+                return 0;
+            }
             if (wParam == 'E' || wParam == VK_TAB) {
                 if (!g_app.playlist.empty() && g_app.currentIndex >= 0) {
                     const std::wstring &path = g_app.playlist[g_app.currentIndex];

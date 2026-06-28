@@ -19,6 +19,8 @@ set(SOURCES
         src/Renderer/RendererD2D.cpp
         src/UI/HelpWindow.cpp
         resources/resource.rc
+        src/UI/OverlayText.cpp
+        src/UI/OverlayText.h
 )
 
 add_executable(QuickImageViewer WIN32 ${SOURCES})
