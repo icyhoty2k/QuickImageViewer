@@ -3,7 +3,7 @@
 #include <windows.h>
 #include <wincodec.h>
 #include <string>
-#include "../Constants.h"
+#include "../Platform/Constants.h"
 
 /// Base interface for image rendering strategies.
 /// Implementations must handle bitmap loading, scaling, and painting.

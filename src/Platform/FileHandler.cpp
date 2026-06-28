@@ -10,39 +10,57 @@
 
 namespace fs = std::filesystem;
 
-// Unified image extension check using the constant array
-constexpr auto is_image_ext = [](const std::wstring &ext) -> bool {
-    std::wstring l_ext = ext | std::views::transform([](wchar_t c) {
-                             return (wchar_t) std::towlower(c);
-                         })
-                         | std::ranges::to<std::wstring>();
-
+bool is_image_ext(const std::wstring &ext) {
     for (size_t i = 0; i < Constants::Registry::SUPPORTED_EXTENSIONS_COUNT; ++i) {
-        if (l_ext == Constants::Registry::SUPPORTED_EXTENSIONS[i]) return true;
+        if (_wcsicmp(ext.c_str(), Constants::Registry::SUPPORTED_EXTENSIONS[i]) == 0) {
+            return true;
+        }
     }
     return false;
-};
+}
 
 void OpenInitialImage(HWND hWnd) {
     g_app.isDialogVisible = true;
 
-    // Dynamically build the filter from Constants
-    std::wstring filter = L"All Supported Images\0";
+    // Build the filter buffer correctly for Windows API
+    std::vector<wchar_t> filterBuffer;
+
+    // 1. Description: "All Supported Images"
+    std::wstring desc = L"All Supported Images";
+    filterBuffer.insert(filterBuffer.end(), desc.begin(), desc.end());
+    filterBuffer.push_back(L'\0');
+
+    // 2. Extensions: "*.jpg;*.jpeg;..."
+    std::wstring exts;
     for (size_t i = 0; i < Constants::Registry::SUPPORTED_EXTENSIONS_COUNT; ++i) {
-        filter += L"*" + std::wstring(Constants::Registry::SUPPORTED_EXTENSIONS[i]) + (i == Constants::Registry::SUPPORTED_EXTENSIONS_COUNT - 1 ? L"" : L";");
+        exts += L"*" + std::wstring(Constants::Registry::SUPPORTED_EXTENSIONS[i]);
+        if (i < Constants::Registry::SUPPORTED_EXTENSIONS_COUNT - 1) exts += L";";
     }
-    filter += L"\0All Files (*.*)\0*.*\0";
+    filterBuffer.insert(filterBuffer.end(), exts.begin(), exts.end());
+    filterBuffer.push_back(L'\0');
+
+    // 3. Description: "All Files (*.*)"
+    std::wstring allFilesDesc = L"All Files (*.*)";
+    filterBuffer.insert(filterBuffer.end(), allFilesDesc.begin(), allFilesDesc.end());
+    filterBuffer.push_back(L'\0');
+
+    // 4. Extension: "*.*"
+    std::wstring allFilesExt = L"*.*";
+    filterBuffer.insert(filterBuffer.end(), allFilesExt.begin(), allFilesExt.end());
+    filterBuffer.push_back(L'\0');
+
+    // Final double null terminator required by API
+    filterBuffer.push_back(L'\0');
 
     wchar_t szFile[MAX_PATH] = {0};
     OPENFILENAMEW ofn{};
     ofn.lStructSize = sizeof(ofn);
     ofn.hwndOwner = hWnd;
     ofn.lpstrFile = szFile;
-    ofn.nMaxFile = sizeof(szFile);
-    ofn.lpstrFilter = filter.c_str();
-    ofn.Flags = OFN_PATHMUSTEXIST | OFN_FILEMUSTEXIST;
+    ofn.nMaxFile = MAX_PATH;
+    ofn.lpstrFilter = filterBuffer.data();
+    ofn.Flags = OFN_PATHMUSTEXIST | OFN_FILEMUSTEXIST | OFN_EXPLORER;
 
-    // Load last folder via our System helper
     wchar_t lastDir[MAX_PATH] = {0};
     System::LoadStringSetting(Constants::Registry::LAST_FOLDER, lastDir, MAX_PATH);
     if (lastDir[0] != L'\0') ofn.lpstrInitialDir = lastDir;
@@ -52,8 +70,6 @@ void OpenInitialImage(HWND hWnd) {
 
     if (success) {
         fs::path filePath = fs::canonical(fs::path(szFile));
-
-        // Save last folder via our System helper
         System::SaveStringSetting(Constants::Registry::LAST_FOLDER, filePath.parent_path().wstring());
 
         g_app.playlist = fs::directory_iterator(filePath.parent_path())

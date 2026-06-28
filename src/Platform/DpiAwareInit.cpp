@@ -1,5 +1,5 @@
 #include "DpiAwareInit.h"
-#include "../Constants.h"
+#include "Constants.h"
 
 HWND CreateViewerWindow(HINSTANCE hInstance, const wchar_t *className) {
     // Step 1: Create the window using system DPI for initial placement
@@ -11,12 +11,12 @@ HWND CreateViewerWindow(HINSTANCE hInstance, const wchar_t *className) {
     int screenH = GetSystemMetricsForDpi(SM_CYSCREEN, sysDpi);
 
     HWND hWnd = CreateWindowExW(
-        WS_EX_APPWINDOW,
-        className, Constants::APP_TASKBAR_NAME,
-        WS_POPUP,
-        (screenW - winW) / 2, (screenH - winH) / 2, winW, winH,
-        nullptr, nullptr, hInstance, nullptr
-    );
+            WS_EX_APPWINDOW,
+            className, Constants::APP_TASKBAR_NAME,
+            WS_POPUP,
+            (screenW - winW) / 2, (screenH - winH) / 2, winW, winH,
+            nullptr, nullptr, hInstance, nullptr
+            );
 
     // Step 2: Now that the window exists, get the actual monitor DPI it landed on
     UINT actualDpi = GetDpiForWindow(hWnd);
