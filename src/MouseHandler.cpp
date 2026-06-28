@@ -82,7 +82,7 @@ void MouseHandler::HandleButtonDown(HWND hWnd, UINT message, LPARAM lParam) {
     }
 }
 
-void MouseHandler::HandleButtonUp(HWND hWnd, UINT message, LPARAM lParam) {
+void MouseHandler::HandleButtonUp(HWND hWnd, UINT message, LPARAM /*lParam*/) {
     if (message == WM_RBUTTONUP) {
         g_app.isRmbDown = false;
     }
@@ -190,7 +190,7 @@ void MouseHandler::HandleMouseMove(HWND hWnd, LPARAM lParam) {
     }
 }
 
-void MouseHandler::HandleMouseWheel(HWND hWnd, WPARAM wParam, LPARAM lParam) {
+void MouseHandler::HandleMouseWheel(HWND hWnd, WPARAM wParam, LPARAM /*lParam*/) {
     if (g_app.playlist.empty()) return;
 
     // Check if RMB is held down (0x8000 indicates the key is down)

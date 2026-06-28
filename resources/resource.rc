@@ -1,3 +1,4 @@
 #include "resource.h"
 
+// The icon is in the same folder as this .rc file, so this is fine:
 IDI_APP_ICON ICON "QIV.ico"

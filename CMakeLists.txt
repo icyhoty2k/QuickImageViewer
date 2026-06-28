@@ -1,10 +1,10 @@
 cmake_minimum_required(VERSION 3.20)
-project(QuickImageViewer)
+
+project(QuickImageViewer LANGUAGES CXX)
 
 set(CMAKE_CXX_STANDARD 23)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
-# Matches your exact physical file tree
 set(SOURCES
         src/AppMain.cpp
         src/DropTarget.cpp
@@ -20,17 +20,32 @@ set(SOURCES
         resources/resource.rc
 )
 
-# 1. Define the executable first
 add_executable(QuickImageViewer WIN32 ${SOURCES})
 
-# 2. NOW define the definitions for that target
+# 1. Compile definitions
 target_compile_definitions(QuickImageViewer PRIVATE
         NOMINMAX
-        $<$<CONFIG:Debug>:_DEBUG>
-        $<$<CONFIG:Release>:NDEBUG>
+        UNICODE
+        _UNICODE
 )
 
-# 3. Link libraries
+# 2. Strict warnings for code quality
+target_compile_options(QuickImageViewer PRIVATE
+        /W4
+        /permissive-
+        /EHsc
+)
+
+# 3. Include directories
+target_include_directories(QuickImageViewer PRIVATE
+        ${CMAKE_CURRENT_SOURCE_DIR}/src
+        ${CMAKE_CURRENT_SOURCE_DIR}/src/Cache
+        ${CMAKE_CURRENT_SOURCE_DIR}/src/Platform
+        ${CMAKE_CURRENT_SOURCE_DIR}/src/Renderer
+        ${CMAKE_CURRENT_SOURCE_DIR}/src/UI
+)
+
+# 4. Windows libraries
 target_link_libraries(QuickImageViewer PRIVATE
         d2d1
         dwrite
@@ -46,11 +61,11 @@ target_link_libraries(QuickImageViewer PRIVATE
         uuid
 )
 
-# Ensure the compiler can resolve includes cleanly
-target_include_directories(QuickImageViewer PRIVATE
-        ${CMAKE_CURRENT_SOURCE_DIR}/src
-        ${CMAKE_CURRENT_SOURCE_DIR}/src/Cache
-        ${CMAKE_CURRENT_SOURCE_DIR}/src/Platform
-        ${CMAKE_CURRENT_SOURCE_DIR}/src/Renderer
-        ${CMAKE_CURRENT_SOURCE_DIR}/src/UI
+# 5. Robust manifest embedding
+add_custom_command(TARGET QuickImageViewer POST_BUILD
+        COMMAND mt.exe
+        /manifest "${CMAKE_CURRENT_SOURCE_DIR}/app.manifest"
+        "/outputresource:$<TARGET_FILE:QuickImageViewer>;#1"
+        COMMENT "Embedding custom manifest via mt.exe..."
+        VERBATIM
 )

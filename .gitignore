@@ -1,6 +1,6 @@
 Plaintext
 # CMake build files
-/build/
+build/
 
 # IDE files
 .idea/

@@ -25,7 +25,7 @@ void LoadImageIndex(HWND hWnd, int index) {
             WICDecodeMetadataCacheOnDemand, &decoder)) &&
             SUCCEEDED(decoder->GetFrame(0, &frame))) {
             UINT w = 0, h = 0;
-            frame->GetSize(&w, &h);
+            if (FAILED(frame->GetSize(&w, &h))) return;
             g_app.imgWidth = static_cast<int>(w);
             g_app.imgHeight = static_cast<int>(h);
         }
@@ -41,19 +41,22 @@ void LoadImageIndex(HWND hWnd, int index) {
         if (FAILED(decoder->GetFrame(0, &frame))) return;
 
         ComPtr<IWICFormatConverter> converter;
-        g_app.wicFactory->CreateFormatConverter(&converter);
-        converter->Initialize(frame.Get(), GUID_WICPixelFormat32bppPBGRA,
-                              WICBitmapDitherTypeNone, nullptr, 0.0f, WICBitmapPaletteTypeCustom);
+        if (FAILED(g_app.wicFactory->CreateFormatConverter(&converter))) return;
+
+        if (FAILED(converter->Initialize(frame.Get(), GUID_WICPixelFormat32bppPBGRA,
+            WICBitmapDitherTypeNone, nullptr, 0.0f,
+            WICBitmapPaletteTypeCustom)))
+            return;
 
         UINT width = 0, height = 0;
-        converter->GetSize(&width, &height);
+        if (FAILED(converter->GetSize(&width, &height))) return;
 
         // Store image dimensions for pan constraint logic in MouseHandler
         g_app.imgWidth = static_cast<int>(width);
         g_app.imgHeight = static_cast<int>(height);
 
         if (g_app.renderer) {
-            g_app.renderer->LoadBitmap(converter.Get(), width, height, currentPath);
+            (void) g_app.renderer->LoadBitmap(converter.Get(), width, height, currentPath);
         }
     }
 
@@ -65,13 +68,13 @@ void LoadImageIndex(HWND hWnd, int index) {
         if (fwd < total) {
             std::wstring fwdPath = g_app.playlist[fwd];
             g_decoderWorker.PushTask([fwdPath]() {
-                g_app.renderer->PreloadBitmap(fwdPath);
+                (void) g_app.renderer->PreloadBitmap(fwdPath);
             });
         }
         if (bwd >= 0) {
             std::wstring bwdPath = g_app.playlist[bwd];
             g_decoderWorker.PushTask([bwdPath]() {
-                g_app.renderer->PreloadBitmap(bwdPath);
+                (void) g_app.renderer->PreloadBitmap(bwdPath);
             });
         }
     }
