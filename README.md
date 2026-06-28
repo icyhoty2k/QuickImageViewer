@@ -2,7 +2,7 @@
 
 Looking for a lightweight WebP viewer for Windows that doesn't sacrifice performance? **QuickImageViewer (QIV)** is a **fast image viewer built with C++** and native Win32 APIs, designed for users who demand speed and direct control. Whether you need a **portable image viewer with no install** required, or simply want to escape the bloat of modern software, QIV provides a seamless experience for modern formats like WebP, JPEG XL, and JPEG.
 
-It delivers 90%+ feature parity with legacy viewers at a fraction of the footprint (178 KB).
+It delivers 90%+ feature parity with legacy viewers at a fraction of the footprint (sub-300).
 
 ---
 
@@ -18,13 +18,13 @@ It delivers 90%+ feature parity with legacy viewers at a fraction of the footpri
 
 You can download the latest version of the viewer from the **[Releases page](https://github.com/icyhoty2k/QuickImageViewer/releases/latest)**.
 
-> *Built with native C++ for maximum efficiency (178 KB).*
+> *Built with native C++ for maximum efficiency (sub-300 KB).*
 
 ---
 
 ## ✨ Features
 
-* **⚡ Extreme Efficiency:** 178 KB footprint with near-instant startup.
+* **⚡ Extreme Efficiency:** sub-300 KB footprint with near-instant startup.
 * **🧳 Portable:** Fully self-contained; runs perfectly from any folder or USB drive with no installation required.
 * **👻 Service-Like Persistence:** Stays resident in RAM and "ghosts" into the background (Esc to hide), ready for instant recall.
 * **🩹 Self-Healing:** Automatically manages its own registry paths and file associations—just run it once after moving to any location.
