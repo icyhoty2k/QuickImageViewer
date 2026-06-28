@@ -27,6 +27,8 @@ class RendererGDI final : public IImageRenderer {
 
         void UpdateColorEffects() override;
 
+        void UpdateTextFormat() override;
+
     private:
         void DestroyBackBuffer();
 
