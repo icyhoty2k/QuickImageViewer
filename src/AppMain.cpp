@@ -5,13 +5,13 @@
 #include <intsafe.h>
 #include <uxtheme.h>
 
-#include "AppState.h"
+#include "../AppState.h"
 #include "Constants.h"
-#include "DropTarget.h"
-#include "FileHandler.h"
-#include "HelpWindow.h"
-#include "MouseHandler.h"
-#include "WicDecoder.h"
+#include "../DropTarget.h"
+#include "Platform/FileHandler.h"
+#include "UI/HelpWindow.h"
+#include "../MouseHandler.h"
+#include "../WicDecoder.h"
 
 #include <windows.h>
 #include <windowsx.h>
@@ -20,10 +20,10 @@
 #include <string>     // Handling string paths
 #include <memory>     // Needed for std::unique_ptr for renderer management
 
-#include "DpiAwareInit.h"
+#include "Platform/DpiAwareInit.h"
 
-#include "resources/resource.h"
-#include "RegistrySetup.h"
+#include "../resources/resource.h"
+#include "Platform/RegistrySetup.h"
 
 #include "Renderer/RendererD2D.h"
 #include "Renderer/RendererGDI.h"

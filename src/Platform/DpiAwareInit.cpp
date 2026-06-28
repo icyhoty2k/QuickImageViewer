@@ -1,5 +1,5 @@
 #include "DpiAwareInit.h"
-#include  "Constants.h"
+#include "../Constants.h"
 
 HWND CreateViewerWindow(HINSTANCE hInstance, const wchar_t *className) {
     // Step 1: Create the window using system DPI for initial placement

@@ -1,5 +1,5 @@
 #include "RendererGDI.h"
-#include "../AppState.h"
+#include "AppState.h"
 #include <algorithm>
 
 RendererGDI::RendererGDI() = default;

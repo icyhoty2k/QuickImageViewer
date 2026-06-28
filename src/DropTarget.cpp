@@ -1,5 +1,5 @@
-#include "DropTarget.h"
-#include "FileHandler.h"
+#include "../DropTarget.h"
+#include "Platform/FileHandler.h"
 #include <shlobj.h>
 
 HRESULT __stdcall DropTarget::QueryInterface(REFIID iid, void** ppvObject) {
