@@ -259,12 +259,12 @@ HRESULT RendererD2D::Render() {
 
         // 2. Exact, rigid axis control
         switch (g_app.viewMode) {
-            case Constants::ViewModes::ViewMode::FitToView:
+            case Constants::ViewModes::ViewMode::FitToView_PreserveAspectRatio:
                 renderW = size.width * std::min(ratioX, ratioY);
                 renderH = size.height * std::min(ratioX, ratioY);
                 break;
 
-            case Constants::ViewModes::ViewMode::FitToWidth:
+            case Constants::ViewModes::ViewMode::FitToWidth_DoNotPreserveAspectRatio:
                 // 1. Force width to window edges
                 renderW = rtSize.width;
 
@@ -277,7 +277,7 @@ HRESULT RendererD2D::Render() {
                 }
                 break;
 
-            case Constants::ViewModes::ViewMode::FitToHeight:
+            case Constants::ViewModes::ViewMode::FitToHeight_DoNotPreserveAspectRatio:
                 // 1. Force height to window edges
                 renderH = rtSize.height;
 
@@ -290,13 +290,13 @@ HRESULT RendererD2D::Render() {
                 }
                 break;
 
-            case Constants::ViewModes::ViewMode::FitToWindow:
+            case Constants::ViewModes::ViewMode::FitToWindow_DoNotPreserveAspectRatio:
                 // Stretch both axes to fill the window completely
                 renderW = rtSize.width;
                 renderH = rtSize.height;
                 break;
 
-            case Constants::ViewModes::ViewMode::OriginalImageSize:
+            case Constants::ViewModes::ViewMode::OriginalImageSize_PreserveAspectRatio:
                 // Raw 1:1 pixels, no bounds checking
                 renderW = size.width;
                 renderH = size.height;
