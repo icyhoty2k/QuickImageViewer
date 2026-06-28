@@ -37,6 +37,9 @@ namespace Constants {
 }
 
 namespace Constants::Registry {
+    // Switch this between HKEY_CURRENT_USER and HKEY_LOCAL_MACHINE
+    inline HKEY ROOT_HIVE = HKEY_CURRENT_USER;
+
     // Base path for application-specific user preferences (HKEY_CURRENT_USER)
     constexpr const wchar_t *ROOT_KEY = L"Software\\QuickImageViewer";
 
@@ -66,5 +69,5 @@ namespace Constants::Registry {
     };
 
     // Helper to get the number of elements
-    constexpr size_t SUPPORTED_EXTENSIONS_COUNT = sizeof(SUPPORTED_EXTENSIONS) / sizeof(SUPPORTED_EXTENSIONS[0]);
+    constexpr size_t SUPPORTED_EXTENSIONS_COUNT = std::size(SUPPORTED_EXTENSIONS);
 }
