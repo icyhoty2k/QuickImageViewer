@@ -62,7 +62,7 @@ HRESULT RendererD2D::UploadAndCacheBitmap_Locked(const std::vector<BYTE> &pixelD
 
     Microsoft::WRL::ComPtr<ID2D1Bitmap> targetBitmap;
 
-    // 1. Check if the file is already in the cache (e.g., reloading current image)
+    // 1. Check if the exact file is already in the cache (e.g., reloading current image)
     auto existing = m_bitmapCache.find(filePath);
     if (existing != m_bitmapCache.end()) {
         if (existing->second.width == width && existing->second.height == height) {
@@ -76,6 +76,7 @@ HRESULT RendererD2D::UploadAndCacheBitmap_Locked(const std::vector<BYTE> &pixelD
     if (!targetBitmap && m_lruList.size() >= Constants::VRAM_CACHE_IMAGES_COUNT) {
         auto oldestIt = m_bitmapCache.find(m_lruList.back());
         if (oldestIt != m_bitmapCache.end()) {
+            // Only recycle if the dimensions are an exact match
             if (oldestIt->second.width == width && oldestIt->second.height == height) {
                 targetBitmap = oldestIt->second.bitmap; // Claim this buffer for recycling
             }
@@ -88,11 +89,11 @@ HRESULT RendererD2D::UploadAndCacheBitmap_Locked(const std::vector<BYTE> &pixelD
 
     // 3. Upload Pixels: Recycle if possible, Allocate if necessary
     if (targetBitmap) {
-        // FAST PATH: Direct PCIe transfer to existing VRAM buffer. Zero allocation overhead.
+        // FAST PATH: Direct PCIe transfer to existing VRAM buffer. Zero OS allocation overhead.
         D2D1_RECT_U destRect = D2D1::RectU(0, 0, width, height);
         hr = targetBitmap->CopyFromMemory(&destRect, pixelData.data(), stride);
     } else {
-        // SLOW PATH: Dimensions didn't match, force DirectX to allocate new VRAM.
+        // SLOW PATH: Dimensions didn't match (or cache is still filling up), allocate new VRAM.
         D2D1_BITMAP_PROPERTIES props = D2D1::BitmapProperties(
                 D2D1::PixelFormat(DXGI_FORMAT_B8G8R8A8_UNORM, D2D1_ALPHA_MODE_PREMULTIPLIED)
                 );
