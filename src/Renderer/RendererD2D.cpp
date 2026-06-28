@@ -23,17 +23,19 @@ HRESULT RendererD2D::Initialize(HWND hwnd) {
         return E_FAIL;
     }
 
-    // 3. Setup Text Format
-    m_pDWriteFactory->CreateTextFormat(L"Segoe UI", nullptr, DWRITE_FONT_WEIGHT_NORMAL,
-                                       DWRITE_FONT_STYLE_NORMAL, DWRITE_FONT_STRETCH_NORMAL, 12.0f, L"en-us", &m_pTextFormat);
+    // 3. Setup Text Format — result intentionally ignored; text overlay is non-critical
+    (void) m_pDWriteFactory->CreateTextFormat(
+            L"Segoe UI", nullptr,
+            DWRITE_FONT_WEIGHT_NORMAL, DWRITE_FONT_STYLE_NORMAL, DWRITE_FONT_STRETCH_NORMAL,
+            12.0f, L"en-us", &m_pTextFormat);
 
     // 4. Create the Render Target
     RECT rc{};
     GetClientRect(hwnd, &rc);
     HRESULT hr = m_pFactory->CreateHwndRenderTarget(
-        D2D1::RenderTargetProperties(),
-        D2D1::HwndRenderTargetProperties(hwnd, D2D1::SizeU(rc.right - rc.left, rc.bottom - rc.top)),
-        m_pRenderTarget.GetAddressOf());
+            D2D1::RenderTargetProperties(),
+            D2D1::HwndRenderTargetProperties(hwnd, D2D1::SizeU(rc.right - rc.left, rc.bottom - rc.top)),
+            m_pRenderTarget.GetAddressOf());
 
     if (FAILED(hr)) return hr;
 
@@ -74,9 +76,7 @@ HRESULT RendererD2D::UploadAndCacheBitmap_Locked(IWICBitmapSource *bitmap, const
 
     // Insert the new bitmap.
     m_lruList.push_front(filePath);
-    m_bitmapCache.emplace(
-        filePath,
-        CachedBitmap{newBitmap, m_lruList.begin()});
+    m_bitmapCache.emplace(filePath, CachedBitmap{newBitmap, m_lruList.begin()});
     return S_OK;
 }
 
@@ -86,17 +86,16 @@ void RendererD2D::ProcessPendingUploads() {
         PendingUpload upload;
         {
             std::lock_guard<std::mutex> lock(m_cacheMutex);
-            if (m_pendingUploads.empty())
-                break;
+            if (m_pendingUploads.empty()) break;
             upload = std::move(m_pendingUploads.front());
             m_pendingUploads.pop();
         }
-        HRESULT hr = UploadAndCacheBitmap(
-            upload.converter.Get(),
-            upload.filePath);
+        HRESULT hr = UploadAndCacheBitmap(upload.converter.Get(), upload.filePath);
 #ifdef _DEBUG
         if (FAILED(hr))
             OutputDebugStringW(L"CreateBitmapFromWic failed.\n");
+#else
+        (void) hr;
 #endif
     }
 }
@@ -139,6 +138,12 @@ HRESULT RendererD2D::LoadBitmap(IWICBitmapSource *bitmap, UINT width, UINT heigh
         m_bitmapCache[filePath] = {newBitmap, m_lruList.begin()};
         m_pBitmap = newBitmap;
     }
+
+    // Suppress unused-parameter warnings: width/height are not needed for D2D
+    // (CreateBitmapFromWicBitmap reads dimensions directly from the WIC source)
+    (void) width;
+    (void) height;
+
     return hr;
 }
 
@@ -161,19 +166,16 @@ HRESULT RendererD2D::PreloadBitmap(const std::wstring &filePath) {
 
     Microsoft::WRL::ComPtr<IWICFormatConverter> converter;
     HRESULT hr = g_decoderWorker.wicFactory->CreateFormatConverter(&converter);
-    if (FAILED(hr))
-        return hr;
+    if (FAILED(hr)) return hr;
 
     hr = converter->Initialize(
-        frame.Get(),
-        GUID_WICPixelFormat32bppPBGRA,
-        WICBitmapDitherTypeNone,
-        nullptr,
-        0.0f,
-        WICBitmapPaletteTypeCustom);
-
-    if (FAILED(hr))
-        return hr;
+            frame.Get(),
+            GUID_WICPixelFormat32bppPBGRA,
+            WICBitmapDitherTypeNone,
+            nullptr,
+            0.0f,
+            WICBitmapPaletteTypeCustom);
+    if (FAILED(hr)) return hr;
 
     // 3. Hand-off: Push to queue and signal UI
     {
@@ -197,7 +199,6 @@ HRESULT RendererD2D::Render() {
         const D2D1_SIZE_F rtSize = m_pRenderTarget->GetSize();
         const D2D1_POINT_2F center = D2D1::Point2F(rtSize.width / 2.0f, rtSize.height / 2.0f);
 
-        // Calculate basic geometry
         const float base = std::min(rtSize.width / size.width, rtSize.height / size.height);
         const float z = (g_app.viewport.zoom <= 0.0f) ? 1.0f : g_app.viewport.zoom;
         const float renderW = size.width * base * z;
@@ -205,37 +206,29 @@ HRESULT RendererD2D::Render() {
         const float left = (rtSize.width - renderW) / 2.0f + g_app.viewport.offsetX;
         const float top = (rtSize.height - renderH) / 2.0f + g_app.viewport.offsetY;
 
-        // Combine transformations
-        // 1. Start with Identity
         D2D1_MATRIX_3X2_F transform = D2D1::Matrix3x2F::Identity();
 
-        // 2. Apply flip horizontal if needed (scale X by -1, relative to center)
         if (g_app.viewport.flippedH) {
             transform = transform * D2D1::Matrix3x2F::Scale(-1.0f, 1.0f, center);
         }
-        // 2. Apply flip vertical if needed (scale Y by -1, relative to center)
         if (g_app.viewport.flippedV) {
             transform = transform * D2D1::Matrix3x2F::Scale(1.0f, -1.0f, center);
         }
 
-        // 3. Apply rotation (relative to center)
-        transform = transform * D2D1::Matrix3x2F::Rotation((float) g_app.viewport.rotation, center);
+        transform = transform * D2D1::Matrix3x2F::Rotation(static_cast<float>(g_app.viewport.rotation), center);
 
         m_pRenderTarget->SetTransform(transform);
         m_pRenderTarget->DrawBitmap(m_pBitmap.Get(), D2D1::RectF(left, top, left + renderW, top + renderH));
         m_pRenderTarget->SetTransform(D2D1::Matrix3x2F::Identity());
+
         if (!g_app.playlist.empty() && g_app.showOverlayInfoText) {
-            // 1. Get the current path
             std::wstring fullPath = g_app.playlist[g_app.currentIndex];
-
-            // 2. Extract filename (everything after the last backslash)
             std::wstring fileName = fullPath.substr(fullPath.find_last_of(L"\\/") + 1);
-
-            // 3. Format the display string
             std::wstring text = std::to_wstring(g_app.currentIndex + 1) + L" / " +
                                 std::to_wstring(g_app.playlist.size()) + L" - " + fileName;
-            D2D1_RECT_F layoutRect = D2D1::RectF(0 + 15.0f, 0 + 6.0f, rtSize.width - 10.0f, rtSize.height - 10.0f);
-            m_pRenderTarget->DrawText(text.c_str(), (UINT32) text.length(), m_pTextFormat.Get(), layoutRect, m_pTextBrush.Get());
+            D2D1_RECT_F layoutRect = D2D1::RectF(15.0f, 6.0f, rtSize.width - 10.0f, rtSize.height - 10.0f);
+            m_pRenderTarget->DrawText(text.c_str(), static_cast<UINT32>(text.length()),
+                                      m_pTextFormat.Get(), layoutRect, m_pTextBrush.Get());
         }
     }
 
@@ -250,14 +243,15 @@ HRESULT RendererD2D::Render() {
         RECT rc{};
         GetClientRect(m_hwnd, &rc);
         hr = m_pFactory->CreateHwndRenderTarget(
-            D2D1::RenderTargetProperties(),
-            D2D1::HwndRenderTargetProperties(m_hwnd, D2D1::SizeU(rc.right - rc.left, rc.bottom - rc.top)),
-            m_pRenderTarget.GetAddressOf());
+                D2D1::RenderTargetProperties(),
+                D2D1::HwndRenderTargetProperties(m_hwnd, D2D1::SizeU(rc.right - rc.left, rc.bottom - rc.top)),
+                m_pRenderTarget.GetAddressOf());
 
         // Recreate device-dependent brush — old one is invalid after target loss
         if (SUCCEEDED(hr)) {
             m_pTextBrush.Reset();
-            m_pRenderTarget->CreateSolidColorBrush(D2D1::ColorF(D2D1::ColorF::LightGreen), &m_pTextBrush);
+            (void) m_pRenderTarget->CreateSolidColorBrush(
+                    D2D1::ColorF(D2D1::ColorF::LightGreen), &m_pTextBrush);
         }
     }
     return hr;

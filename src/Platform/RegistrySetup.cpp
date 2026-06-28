@@ -43,7 +43,8 @@ namespace System {
         // 2. Register the executable command
         if (RegCreateKeyExW(HKEY_CURRENT_USER, L"Software\\Classes\\Applications\\QuickImageViewer.exe\\shell\\open\\command",
                             0, nullptr, REG_OPTION_NON_VOLATILE, KEY_WRITE, nullptr, &hKey, nullptr) == ERROR_SUCCESS) {
-            RegSetValueExW(hKey, nullptr, 0, REG_SZ, (const BYTE *) command.c_str(), (command.length() + 1) * sizeof(wchar_t));
+            RegSetValueExW(hKey, nullptr, 0, REG_SZ, (const BYTE *) command.c_str(), static_cast<DWORD>((command.length() + 1) * sizeof(wchar_t))
+                    );;
             RegCloseKey(hKey);
         }
 
@@ -51,7 +52,7 @@ namespace System {
         if (RegCreateKeyExW(HKEY_CURRENT_USER, L"Software\\Classes\\Applications\\QuickImageViewer.exe",
                             0, nullptr, REG_OPTION_NON_VOLATILE, KEY_WRITE, nullptr, &hKey, nullptr) == ERROR_SUCCESS) {
             std::wstring friendlyName = L"Quick Image Viewer";
-            RegSetValueExW(hKey, L"FriendlyAppName", 0, REG_SZ, (const BYTE *) friendlyName.c_str(), (friendlyName.length() + 1) * sizeof(wchar_t));
+            RegSetValueExW(hKey, L"FriendlyAppName", 0, REG_SZ, (const BYTE *) friendlyName.c_str(), static_cast<DWORD>((friendlyName.length() + 1) * sizeof(wchar_t)));
             RegCloseKey(hKey);
         }
 
@@ -93,7 +94,7 @@ namespace System {
             }
 
             if (needsUpdate) {
-                RegSetValueExW(hKey, L"QuickImageViewer", 0, REG_SZ, (const BYTE *) command.c_str(), (command.length() + 1) * sizeof(wchar_t));
+                RegSetValueExW(hKey, L"QuickImageViewer", 0, REG_SZ, (const BYTE *) command.c_str(), static_cast<DWORD>((command.length() + 1) * sizeof(wchar_t)));
             }
             RegCloseKey(hKey);
         }

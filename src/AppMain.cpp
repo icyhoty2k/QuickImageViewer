@@ -81,7 +81,7 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) 
                 InvalidateRect(hWnd, nullptr, FALSE);
                 return 0;
             }
-            // Rotate Image: R (Clockwise) or Ctrl+R (Counter-Clockwise)
+            // Rotate Image: R (Clockwise) or Shift+R (Counter-Clockwise)
             if (wParam == 'R') {
                 if (shift) {
                     // Counter-Clockwise
@@ -110,9 +110,6 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) 
             }
             // Hide to RAM instead of quitting (Esc or Ctrl + W)
             if (wParam == VK_ESCAPE || (wParam == 'W' && ctrl)) {
-                // Check if this is the "main" instance
-                // A simple way is to check if it's the first window created
-                // or use a flag in your AppState.
                 if (g_app.GetInstanceCount() <= 1) {
                     ShowWindow(hWnd, SW_HIDE);
                 } else {
@@ -123,7 +120,7 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) 
             }
             if (wParam == 'N' && !ctrl) {
                 g_app.showOverlayInfoText = !g_app.showOverlayInfoText;
-                InvalidateRect(hWnd, nullptr, FALSE); // Redraw to hide/show text
+                InvalidateRect(hWnd, nullptr, FALSE);
                 return 0;
             }
             // Open a New Blank Window (Ctrl + N)
@@ -177,21 +174,22 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) 
 
             // Navigation + zoom
             if (!g_app.playlist.empty()) {
+                // Cache size as int once to avoid repeated size_t->int casts below
+                const int playlistSize = static_cast<int>(g_app.playlist.size());
                 switch (wParam) {
                     case VK_LEFT:
-                        LoadImageIndex(hWnd, (g_app.currentIndex - 1 + g_app.playlist.size()) % g_app.playlist.size());
+                        LoadImageIndex(hWnd, (g_app.currentIndex - 1 + playlistSize) % playlistSize);
                         InvalidateRect(hWnd, nullptr, FALSE);
                         break;
                     case VK_RIGHT:
-                        LoadImageIndex(hWnd, (g_app.currentIndex + 1) % g_app.playlist.size());
+                        LoadImageIndex(hWnd, (g_app.currentIndex + 1) % playlistSize);
                         InvalidateRect(hWnd, nullptr, FALSE);
                         break;
                     case VK_SPACE:
                         if (shift)
-                            LoadImageIndex(
-                                hWnd, (g_app.currentIndex - 1 + g_app.playlist.size()) % g_app.playlist.size());
+                            LoadImageIndex(hWnd, (g_app.currentIndex - 1 + playlistSize) % playlistSize);
                         else
-                            LoadImageIndex(hWnd, (g_app.currentIndex + 1) % g_app.playlist.size());
+                            LoadImageIndex(hWnd, (g_app.currentIndex + 1) % playlistSize);
                         InvalidateRect(hWnd, nullptr, FALSE);
                         break;
                     case VK_UP:
@@ -255,18 +253,15 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) 
             return 0;
         case WM_SIZING:
             if (g_app.renderer) {
-                {
-                    RECT *r = (RECT *) lParam;
-                    g_app.renderer->Resize(r->right - r->left, r->bottom - r->top);
-                }
+                RECT *r = (RECT *) lParam;
+                g_app.renderer->Resize(r->right - r->left, r->bottom - r->top);
             }
             InvalidateRect(hWnd, nullptr, FALSE);
             return TRUE;
-        // --- CLEAN MOUSE HANDLERS ---
 
+        // --- CLEAN MOUSE HANDLERS ---
         case WM_LBUTTONDOWN:
         case WM_RBUTTONDOWN:
-            // This is the direct entry point for zoom and drag
             MouseHandler::HandleButtonDown(hWnd, message, lParam);
             return 0;
 
@@ -284,75 +279,67 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) 
             if (message == WM_MBUTTONDOWN) MouseHandler::HandleButtonDown(hWnd, message, lParam);
             else MouseHandler::HandleButtonUp(hWnd, message, lParam);
             return 0;
-        case WM_MOUSEWHEEL: {
-            // Check if Shilft is held down
-            bool isShiftDown = (GetKeyState(VK_SHIFT) & 0x8000) != 0;
 
-            // Check for Middle Mouse button scroll (Standard wheel)
-            // Note: If you want to restrict this specifically to Middle Mouse Scroll:
-            // Windows WM_MOUSEWHEEL usually reports the wheel delta.
-            // If you need to verify middle button is held, check GetKeyState(VK_MBUTTON).
+        case WM_MOUSEWHEEL: {
+            bool isShiftDown = (GetKeyState(VK_SHIFT) & 0x8000) != 0;
 
             if (isShiftDown) {
                 int delta = GET_WHEEL_DELTA_WPARAM(wParam);
 
-                // Adjust opacity (stepping by 15 for a smooth fade feel)
                 if (delta > 0) {
-                    g_app.opacity = (g_app.opacity + Config::OPACITY_STEP > 255)
-                                        ? 255
-                                        : (g_app.opacity + Config::OPACITY_STEP);
+                    g_app.opacity = static_cast<BYTE>(
+                        (g_app.opacity + Config::OPACITY_STEP > 255)
+                            ? 255
+                            : (g_app.opacity + Config::OPACITY_STEP));
                 } else {
-                    g_app.opacity = (g_app.opacity - Config::OPACITY_STEP < 10)
-                                        ? 10
-                                        : (g_app.opacity - Config::OPACITY_STEP);
+                    g_app.opacity = static_cast<BYTE>(
+                        (g_app.opacity - Config::OPACITY_STEP < 10)
+                            ? 10
+                            : (g_app.opacity - Config::OPACITY_STEP));
                 }
 
-                // Apply to the window
                 SetLayeredWindowAttributes(hWnd, 0, g_app.opacity, LWA_ALPHA);
-                return 0; // Handled
+                return 0;
             }
 
-            // Fallback to standard zoom
             MouseHandler::HandleMouseWheel(hWnd, wParam, lParam);
             return 0;
         }
+
         case WM_MOUSEHWHEEL: {
             bool isRmbDown = (GetKeyState(VK_RBUTTON) & 0x8000) != 0;
             int hDelta = GET_WHEEL_DELTA_WPARAM(wParam);
 
             if (isRmbDown) {
-                // 1. Get current window rect
                 RECT rc;
                 GetWindowRect(hWnd, &rc);
                 int currentW = rc.right - rc.left;
                 int currentH = rc.bottom - rc.top;
 
-                // 2. Define resize step (adjust for sensitivity)
                 int resizeStep = (hDelta > 0) ? 20 : -20;
                 int newW = currentW + resizeStep;
-                int newH = (int) std::round(currentH + resizeStep * ((float) currentH / currentW)); // Maintain aspect ratio
+                int newH = static_cast<int>(std::round(
+                        currentH + resizeStep * (static_cast<float>(currentH) / currentW)));
 
-                // 3. Calculate new centered position
                 int newX = rc.left - (resizeStep / 2);
                 int newY = rc.top - (resizeStep / 2);
 
-                // 4. Apply resize and position
-                SetWindowPos(hWnd, nullptr, newX, newY, newW, newH, SWP_NOZORDER | SWP_NOACTIVATE | SWP_NOCOPYBITS);
+                SetWindowPos(hWnd, nullptr, newX, newY, newW, newH,
+                             SWP_NOZORDER | SWP_NOACTIVATE | SWP_NOCOPYBITS);
                 InvalidateRect(hWnd, nullptr, FALSE);
                 return 0;
             }
 
-            // Existing Opacity Logic if RMB is NOT held
             if (hDelta > 0) {
-                g_app.opacity = std::min(255, g_app.opacity + Config::OPACITY_STEP);
+                g_app.opacity = static_cast<BYTE>(std::min(255, g_app.opacity + Config::OPACITY_STEP));
             } else {
-                g_app.opacity = std::max(10, g_app.opacity - Config::OPACITY_STEP);
+                g_app.opacity = static_cast<BYTE>(std::max(10, g_app.opacity - Config::OPACITY_STEP));
             }
             SetLayeredWindowAttributes(hWnd, 0, g_app.opacity, LWA_ALPHA);
             return 0;
         }
+
         case WM_LBUTTONDBLCLK: {
-            // 1. Defer painting to prevent jitter
             SendMessageW(hWnd, WM_SETREDRAW, FALSE, 0);
 
             if (!g_app.isFullscreen) {
@@ -364,7 +351,7 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) 
                              mi.rcMonitor.left, mi.rcMonitor.top,
                              mi.rcMonitor.right - mi.rcMonitor.left,
                              mi.rcMonitor.bottom - mi.rcMonitor.top,
-                             SWP_FRAMECHANGED | SWP_NOCOPYBITS); // Add NOCOPYBITS
+                             SWP_FRAMECHANGED | SWP_NOCOPYBITS);
 
                 DWMNCRENDERINGPOLICY policy = DWMNCRP_DISABLED;
                 DwmSetWindowAttribute(hWnd, DWMWA_NCRENDERING_POLICY, &policy, sizeof(policy));
@@ -379,7 +366,7 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) 
                              g_app.savedWindowRect.top,
                              g_app.savedWindowRect.right - g_app.savedWindowRect.left,
                              g_app.savedWindowRect.bottom - g_app.savedWindowRect.top,
-                             SWP_FRAMECHANGED | SWP_NOCOPYBITS); // Add NOCOPYBITS
+                             SWP_FRAMECHANGED | SWP_NOCOPYBITS);
 
                 DWMNCRENDERINGPOLICY policy = DWMNCRP_ENABLED;
                 DwmSetWindowAttribute(hWnd, DWMWA_NCRENDERING_POLICY, &policy, sizeof(policy));
@@ -390,37 +377,35 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) 
                 g_app.isFullscreen = false;
             }
 
-            // 2. Resume drawing and force an immediate update
             SendMessageW(hWnd, WM_SETREDRAW, TRUE, 0);
             RedrawWindow(hWnd, nullptr, nullptr, RDW_INVALIDATE | RDW_UPDATENOW | RDW_FRAME);
-
             return 0;
         }
+
         case WM_CAPTURECHANGED: {
-            // If capture is lost (e.g., ALT+TAB or mouse released outside),
-            // kill timer and clean up state.
             g_app.viewport.isDragging = false;
             g_app.isWindowDragging = false;
             ReleaseCapture();
             return 0;
         }
 
-        // PAINT: Using the polymorphic renderer
         case WM_PAINT: {
             PAINTSTRUCT ps;
             BeginPaint(hWnd, &ps);
             if (g_app.renderer) {
-                g_app.renderer->Render();
+                (void) g_app.renderer->Render();
             }
             EndPaint(hWnd, &ps);
             return 0;
         }
+
         case Config::WM_QIV_PENDING_UPLOADS: {
             if (g_app.renderer) {
                 g_app.renderer->ProcessPendingUploads();
             }
             return 0;
         }
+
         case WM_NCCALCSIZE:
             return 0;
 
@@ -431,7 +416,6 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) 
             return 1;
 
         case WM_CLOSE: {
-            // Force exit if a debugger is attached, or if we are in Debug build
             if (IsDebuggerPresent()) {
                 PostQuitMessage(0);
             } else {
@@ -466,7 +450,6 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE, LPSTR, int nCmdShow) {
     CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED | COINIT_DISABLE_OLE1DDE);
     CoCreateInstance(CLSID_WICImagingFactory, nullptr, CLSCTX_INPROC_SERVER, IID_PPV_ARGS(&g_app.wicFactory));
 
-    // Register and startup
     System::RegisterAppForOpenWith();
     System::EnableRunOnStartup();
 
@@ -483,12 +466,10 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE, LPSTR, int nCmdShow) {
             int argc;
             LPWSTR *argv = CommandLineToArgvW(GetCommandLineW(), &argc);
             if (argc > 1) {
-                // Safe, non-aggregate initialization
                 COPYDATASTRUCT cds;
                 cds.dwData = 1;
                 cds.cbData = (DWORD) ((wcslen(argv[1]) + 1) * sizeof(wchar_t));
                 cds.lpData = (void *) argv[1];
-
                 SendMessageW(hExistingWnd, WM_COPYDATA, 0, (LPARAM) &cds);
             }
             LocalFree(argv);
@@ -508,21 +489,21 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE, LPSTR, int nCmdShow) {
     RegisterClassW(&wc);
 
     HWND hWnd = CreateViewerWindow(hInstance, wc.lpszClassName);
-    // Identify if this instance is the primary one
-    // If QIV_NEW_INSTANCE is set, this is a secondary (disposable) instance
 
     SetWindowLongW(hWnd, GWL_EXSTYLE, GetWindowLongW(hWnd, GWL_EXSTYLE) | WS_EX_LAYERED);
     SetLayeredWindowAttributes(hWnd, 0, g_app.opacity, LWA_ALPHA);
     UINT dpi = GetDpiForWindow(hWnd);
-    g_app.dpiScale = (float) dpi / 96.0f; // Calculate scale factor once
+    g_app.dpiScale = static_cast<float>(dpi) / 96.0f;
     g_app.screenW = GetSystemMetrics(SM_CXSCREEN);
     g_app.screenH = GetSystemMetrics(SM_CYSCREEN);
+
     // Initialize Renderer (D2D with GDI fallback)
     g_app.renderer = std::make_unique<RendererD2D>();
     if (FAILED(g_app.renderer->Initialize(hWnd))) {
         g_app.renderer = std::make_unique<RendererGDI>();
-        g_app.renderer->Initialize(hWnd);
+        (void) g_app.renderer->Initialize(hWnd); // GDI init: S_OK always, failure is non-fatal
     }
+
 #ifdef _DEBUG
     if (g_app.renderer) {
         if (dynamic_cast<RendererD2D *>(g_app.renderer.get())) {
@@ -532,7 +513,7 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE, LPSTR, int nCmdShow) {
         }
     }
 #endif
-    // Register Drag/Drop and Help
+
     RegisterDragDrop(hWnd, (g_pDropTarget = new DropTarget(hWnd)));
     UI::InitHelpWindow(hInstance, hWnd);
     DWORD corner = 2; // DWMWCP_ROUND
@@ -556,9 +537,7 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE, LPSTR, int nCmdShow) {
         DispatchMessage(&msg);
     }
 
-    // 11. --- CRITICAL CLEANUP ---
-    // The message loop has exited; this is where we safely destroy
-    // resources before the process fully terminates.
+    // --- CRITICAL CLEANUP ---
     g_app.renderer.reset();
 
     if (g_app.wicFactory) {
@@ -571,17 +550,15 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE, LPSTR, int nCmdShow) {
         g_pDropTarget = nullptr;
     }
 
-    // Optional: Unregister the class for total cleanliness
     UnregisterClassW(Config::WINDOW_CLASS_NAME, hInstance);
 
     CoUninitialize();
     OleUninitialize();
 
-    // Release the single-instance mutex
     if (hMutex) {
         ReleaseMutex(hMutex);
         CloseHandle(hMutex);
     }
 
-    return static_cast<int>(msg.wParam); // WinMain concludes here
+    return static_cast<int>(msg.wParam);
 }
