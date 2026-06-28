@@ -19,7 +19,7 @@ RendererGDI::~RendererGDI() {
 HRESULT RendererGDI::Initialize(HWND hwnd) {
     m_hwnd = hwnd;
     m_backgroundBrush = CreateSolidBrush(RGB(20, 20, 20));
-    return S_OK;
+    return m_backgroundBrush ? S_OK : E_FAIL;
 }
 
 void RendererGDI::Resize(UINT width, UINT height) {
@@ -30,7 +30,6 @@ void RendererGDI::Resize(UINT width, UINT height) {
 }
 
 HRESULT RendererGDI::LoadBitmap(IWICBitmapSource *bitmap, UINT width, UINT height, const std::wstring & /*filePath*/) {
-    // nullptr bitmap = cache-only probe. GDI has no cache, always miss.
     if (!bitmap) return E_FAIL;
 
     m_imageWidth = width;
@@ -74,11 +73,9 @@ HRESULT RendererGDI::LoadBitmap(IWICBitmapSource *bitmap, UINT width, UINT heigh
 HRESULT RendererGDI::Render() {
     if (!m_backDC || !m_hwnd) return E_FAIL;
 
-    // 1. Clear background
     RECT rc = {0, 0, static_cast<LONG>(m_windowWidth), static_cast<LONG>(m_windowHeight)};
     FillRect(m_backDC, &rc, m_backgroundBrush);
 
-    // 2. Draw scaled image
     if (g_app.hDIB) {
         float ratioX = static_cast<float>(m_windowWidth) / m_imageWidth;
         float ratioY = static_cast<float>(m_windowHeight) / m_imageHeight;
@@ -90,22 +87,16 @@ HRESULT RendererGDI::Render() {
         int drawY = static_cast<int>((m_windowHeight - renderH) / 2.0f + g_app.viewport.offsetY);
 
         HDC hdcDIB = CreateCompatibleDC(m_backDC);
-        HBITMAP hbmOld = static_cast<HBITMAP>(SelectObject(hdcDIB, g_app.hDIB));
-
-        SetStretchBltMode(m_backDC, HALFTONE);
-        StretchBlt(m_backDC, drawX, drawY, renderW, renderH,
-                   hdcDIB, 0, 0, m_imageWidth, m_imageHeight, SRCCOPY);
-
-        SelectObject(hdcDIB, hbmOld);
-        DeleteDC(hdcDIB);
+        if (hdcDIB) {
+            HBITMAP hbmOld = static_cast<HBITMAP>(SelectObject(hdcDIB, g_app.hDIB));
+            SetStretchBltMode(m_backDC, HALFTONE);
+            StretchBlt(m_backDC, drawX, drawY, renderW, renderH,
+                       hdcDIB, 0, 0, m_imageWidth, m_imageHeight, SRCCOPY);
+            SelectObject(hdcDIB, hbmOld);
+            DeleteDC(hdcDIB);
+        }
     }
 
-    // NOTE: Render() is called from WM_PAINT between BeginPaint/EndPaint.
-    // We must use the HWND's DC obtained via GetDC, not BeginPaint's HDC,
-    // because the interface does not pass the HDC through. This works correctly
-    // but means we do not use BeginPaint's clip region — acceptable for a full-window blit.
-
-    // 3. Overlay text (drawn into back buffer before final blit)
     if (!g_app.playlist.empty() && g_app.showOverlayInfoText) {
         std::wstring fullPath = g_app.playlist[g_app.currentIndex];
         std::wstring fileName = fullPath.substr(fullPath.find_last_of(L"\\/") + 1);
@@ -115,59 +106,59 @@ HRESULT RendererGDI::Render() {
         HFONT hFont = CreateFontW(14, 0, 0, 0, FW_NORMAL, FALSE, FALSE, FALSE,
                                   DEFAULT_CHARSET, OUT_OUTLINE_PRECIS, CLIP_DEFAULT_PRECIS,
                                   CLEARTYPE_QUALITY, VARIABLE_PITCH, L"Segoe UI");
-        HFONT hOldFont = static_cast<HFONT>(SelectObject(m_backDC, hFont));
 
-        SetBkMode(m_backDC, TRANSPARENT);
-        SetTextColor(m_backDC, RGB(0, 255, 0));
-
-        RECT textRect = {
-            0,
-            static_cast<LONG>(m_windowHeight) - 35,
-            static_cast<LONG>(m_windowWidth) - 10,
-            static_cast<LONG>(m_windowHeight) - 5
-        };
-        DrawTextW(m_backDC, text.c_str(), -1, &textRect, DT_SINGLELINE | DT_RIGHT | DT_VCENTER);
-
-        SelectObject(m_backDC, hOldFont);
-        (void) DeleteObject(hFont);
+        if (hFont) {
+            HFONT hOldFont = static_cast<HFONT>(SelectObject(m_backDC, hFont));
+            SetBkMode(m_backDC, TRANSPARENT);
+            SetTextColor(m_backDC, RGB(0, 255, 0));
+            RECT textRect = {
+                0, static_cast<LONG>(m_windowHeight) - 35,
+                static_cast<LONG>(m_windowWidth) - 10,
+                static_cast<LONG>(m_windowHeight) - 5
+            };
+            DrawTextW(m_backDC, text.c_str(), -1, &textRect, DT_SINGLELINE | DT_RIGHT | DT_VCENTER);
+            SelectObject(m_backDC, hOldFont);
+            DeleteObject(hFont);
+        }
     }
 
-    // 4. Final blit to screen
     HDC hdc = GetDC(m_hwnd);
-    BitBlt(hdc, 0, 0, m_windowWidth, m_windowHeight, m_backDC, 0, 0, SRCCOPY);
-    ReleaseDC(m_hwnd, hdc);
+    if (hdc) {
+        BitBlt(hdc, 0, 0, m_windowWidth, m_windowHeight, m_backDC, 0, 0, SRCCOPY);
+        ReleaseDC(m_hwnd, hdc);
+    }
 
     return S_OK;
 }
 
-HRESULT RendererGDI::PreloadBitmap(const std::wstring & /*filePath*/, int /*requestIndex*/) {
-    return S_OK; // GDI has no VRAM cache — no-op
+HRESULT RendererGDI::PreloadBitmap(const std::wstring &, int) {
+    return S_OK;
 }
 
 HRESULT RendererGDI::CreateBackBuffer(UINT width, UINT height) {
     DestroyBackBuffer();
     HDC hdcScreen = GetDC(m_hwnd);
+    if (!hdcScreen) return E_FAIL;
+
     m_backDC = CreateCompatibleDC(hdcScreen);
     m_backBitmap = CreateCompatibleBitmap(hdcScreen, width, height);
-    m_backBitmapOld = static_cast<HBITMAP>(SelectObject(m_backDC, m_backBitmap));
+    if (m_backDC && m_backBitmap) {
+        m_backBitmapOld = static_cast<HBITMAP>(SelectObject(m_backDC, m_backBitmap));
+    }
     ReleaseDC(m_hwnd, hdcScreen);
-    return S_OK;
+    return (m_backDC && m_backBitmap) ? S_OK : E_FAIL;
 }
 
 void RendererGDI::DestroyBackBuffer() {
     if (m_backDC) {
-        (void) SelectObject(m_backDC, m_backBitmapOld);
-        (void) DeleteDC(m_backDC);
+        if (m_backBitmapOld) SelectObject(m_backDC, m_backBitmapOld);
+        DeleteDC(m_backDC);
         m_backDC = nullptr;
     }
     if (m_backBitmap) {
-        (void) DeleteObject(m_backBitmap);
+        DeleteObject(m_backBitmap);
         m_backBitmap = nullptr;
     }
 }
 
-void RendererGDI::ProcessPendingUploads() {
-    // No-op for GDI.
-    // GDI uses system memory (DIB sections) and does not require
-    // synchronized VRAM upload queuing like Direct2D.
-}
+void RendererGDI::ProcessPendingUploads() {}
