@@ -1,53 +1,157 @@
-#include "../WicDecoder.h"
-#include "AppState.h"
-#include "../WorkerThread.h"
-#include "Platform/Constants.h"
+#include "WicDecoder.h"
+
+#include <windows.h>
+#include <mutex>
+
 
 using Microsoft::WRL::ComPtr;
 
-constexpr UINT_PTR TIMER_LOOKASIDE = 1001;
 
-void LoadImageIndex(HWND hWnd, int index) {
-    // 1. Flush any pending decoding work from the previous state
-    g_decoderWorker.ClearQueue();
-    g_ioWorker.ClearQueue();
+static ComPtr<IWICImagingFactory2> GetWICFactory() {
+    static ComPtr<IWICImagingFactory2> factory;
+    static std::once_flag flag;
 
-    if (index < 0 || index >= static_cast<int>(g_app.playlist.size())) return;
+    std::call_once(flag, []() {
+        HRESULT hr = CoCreateInstance(
+                CLSID_WICImagingFactory2,
+                nullptr,
+                CLSCTX_INPROC_SERVER,
+                IID_PPV_ARGS(&factory)
+                );
 
-    // Reset viewport on index change
-    if (g_app.currentIndex != index) {
-        g_app.viewport = ViewportState{};
-    }
-
-    g_app.currentIndex = index;
-
-    // 2. Synchronize target for background workers
-    g_app.wantedIndex.store(index, std::memory_order_release);
-
-    const std::wstring &currentPath = g_app.playlist[index];
-
-    // Update window title
-    std::wstring fileName = currentPath.substr(currentPath.find_last_of(L"\\/") + 1);
-    std::wstring windowTitle = fileName + L" - QuickImageViewer";
-    SetWindowTextW(hWnd, windowTitle.c_str());
-
-    // 3. Cache Probe: If already in VRAM, do not hit the disk
-    if (g_app.renderer && SUCCEEDED(g_app.renderer->LoadBitmap(nullptr, 0, 0, currentPath))) {
-        InvalidateRect(hWnd, nullptr, FALSE);
-        SetTimer(hWnd, TIMER_LOOKASIDE, Constants::PRELOAD_TIMER_COUNTDOWN, nullptr);
-        return;
-    }
-
-    // 4. Split I/O and Decode Pipeline (Cache Miss)
-    g_ioWorker.PushTask([currentPath, index, hWnd]() {
-        // Cooperative Cancellation: Abort if user scrolled past this
-        if (g_app.wantedIndex.load(std::memory_order_acquire) != index) return;
-
-        // Perform I/O priming and hand off to decoder
-        if (g_app.renderer) {
-            (void) g_app.renderer->PreloadBitmap(currentPath, index);
+        if (FAILED(hr)) {
+            OutputDebugStringW(
+                    L"WIC2: Failed creating Imaging Factory\n"
+                    );
         }
     });
 
-    SetTimer(hWnd, TIMER_LOOKASIDE, Constants::PRELOAD_TIMER_COUNTDOWN, nullptr);
+    return factory;
+}
+
+
+HRESULT WicDecoder::DecodeImage(
+        const std::wstring &filePath,
+        DecodedImage &result
+        ) {
+    auto factory = GetWICFactory();
+
+    if (!factory)
+        return E_FAIL;
+
+
+    //
+    // Create decoder
+    //
+    ComPtr<IWICBitmapDecoder> decoder;
+
+    HRESULT hr = factory->CreateDecoderFromFilename(
+            filePath.c_str(),
+            nullptr,
+            GENERIC_READ,
+            WICDecodeMetadataCacheOnLoad,
+            &decoder
+            );
+
+    if (FAILED(hr)) {
+        OutputDebugStringW(
+                L"WIC2: Decoder creation failed\n"
+                );
+
+        return hr;
+    }
+
+
+    //
+    // First frame
+    //
+    ComPtr<IWICBitmapFrameDecode> frame;
+
+    hr = decoder->GetFrame(
+            0,
+            &frame
+            );
+
+    if (FAILED(hr)) {
+        OutputDebugStringW(
+                L"WIC2: Frame decode failed\n"
+                );
+
+        return hr;
+    }
+
+
+    //
+    // Get dimensions BEFORE conversion
+    //
+    hr = frame->GetSize(
+            &result.width,
+            &result.height
+            );
+
+    if (FAILED(hr))
+        return hr;
+
+
+    //
+    // Convert to Direct2D compatible format
+    //
+    ComPtr<IWICFormatConverter> converter;
+
+
+    hr = factory->CreateFormatConverter(
+            &converter
+            );
+
+
+    if (FAILED(hr))
+        return hr;
+
+
+    hr = converter->Initialize(
+            frame.Get(),
+
+            GUID_WICPixelFormat32bppPBGRA,
+
+            WICBitmapDitherTypeNone,
+
+            nullptr,
+
+            0.0,
+
+            WICBitmapPaletteTypeCustom
+            );
+
+
+    if (FAILED(hr)) {
+        OutputDebugStringW(
+                L"WIC2: Pixel conversion failed\n"
+                );
+
+        return hr;
+    }
+
+
+    //
+    // Make a cached RAM bitmap
+    //
+    hr = factory->CreateBitmapFromSource(
+            converter.Get(),
+
+            WICBitmapCacheOnLoad,
+
+            &result.bitmap
+            );
+
+
+    if (FAILED(hr)) {
+        OutputDebugStringW(
+                L"WIC2: Bitmap creation failed\n"
+                );
+
+        return hr;
+    }
+
+
+    return S_OK;
 }

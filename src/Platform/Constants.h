@@ -29,6 +29,7 @@ namespace Constants {
 
     // Custom window messages
     constexpr UINT WM_QIV_PENDING_UPLOADS = WM_USER + 1; // Posted by background decoder thread
+    constexpr UINT WM_QIV_REPAINT = WM_USER + 2; // Signal to UI thread that bitmap is ready
     // DWM API Attributes
     constexpr DWORD DWMWA_WINDOW_CORNER_PREFERENCE = 33;
 
