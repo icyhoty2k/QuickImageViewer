@@ -285,7 +285,10 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) 
             RECT rc;
             GetWindowRect(hWnd, &rc);
 
-            const int border = 8;
+            // Scale the border by the DPI factor
+            // Using int to maintain pixel alignment
+            const int border = static_cast<int>(8 * g_app.dpiScale);
+
             bool top = pt.y < rc.top + border;
             bool bottom = pt.y >= rc.bottom - border;
             bool left = pt.x < rc.left + border;
