@@ -62,6 +62,8 @@ target_include_directories(QuickImageViewer PRIVATE
 
 # 5. Windows Libraries
 target_link_libraries(QuickImageViewer PRIVATE
+        d3d11
+        dxgi
         d2d1
         dwrite
         user32
