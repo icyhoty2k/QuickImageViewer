@@ -250,11 +250,64 @@ HRESULT RendererD2D::Render() {
         const auto size = m_pBitmap->GetSize();
         const D2D1_SIZE_F rtSize = m_pRenderTarget->GetSize();
         const D2D1_POINT_2F center = D2D1::Point2F(rtSize.width / 2.0f, rtSize.height / 2.0f);
+        // 1. Calculate ratios for FitToView and FitToWindow
+        float ratioX = rtSize.width / size.width;
+        float ratioY = rtSize.height / size.height;
 
-        const float base = std::min(rtSize.width / size.width, rtSize.height / size.height);
+        float renderW = size.width;
+        float renderH = size.height;
+
+        // 2. Exact, rigid axis control
+        switch (g_app.viewMode) {
+            case Constants::ViewModes::ViewMode::FitToView:
+                renderW = size.width * std::min(ratioX, ratioY);
+                renderH = size.height * std::min(ratioX, ratioY);
+                break;
+
+            case Constants::ViewModes::ViewMode::FitToWidth:
+                // 1. Force width to window edges
+                renderW = rtSize.width;
+
+                // 2. Take the original height (do NOT multiply or grow it)
+                renderH = size.height;
+
+                // 3. The Hard Stop: If the image is taller than the window, crush it to the window height
+                if (renderH > rtSize.height) {
+                    renderH = rtSize.height;
+                }
+                break;
+
+            case Constants::ViewModes::ViewMode::FitToHeight:
+                // 1. Force height to window edges
+                renderH = rtSize.height;
+
+                // 2. Take the original width (do NOT multiply or grow it)
+                renderW = size.width;
+
+                // 3. The Hard Stop: If the image is wider than the window, crush it to the window width
+                if (renderW > rtSize.width) {
+                    renderW = rtSize.width;
+                }
+                break;
+
+            case Constants::ViewModes::ViewMode::FitToWindow:
+                // Stretch both axes to fill the window completely
+                renderW = rtSize.width;
+                renderH = rtSize.height;
+                break;
+
+            case Constants::ViewModes::ViewMode::OriginalImageSize:
+                // Raw 1:1 pixels, no bounds checking
+                renderW = size.width;
+                renderH = size.height;
+                break;
+        }
+
+        // 3. Apply Zoom
         const float z = (g_app.viewport.zoom <= 0.0f) ? 1.0f : g_app.viewport.zoom;
-        const float renderW = size.width * base * z;
-        const float renderH = size.height * base * z;
+        renderW *= z;
+        renderH *= z;
+
         const float left = (rtSize.width - renderW) / 2.0f + g_app.viewport.offsetX;
         const float top = (rtSize.height - renderH) / 2.0f + g_app.viewport.offsetY;
 
