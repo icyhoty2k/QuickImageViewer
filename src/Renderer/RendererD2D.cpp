@@ -574,6 +574,7 @@ HRESULT RendererD2D::Render() {
             m_pContrastEffect &&
             m_pBrightnessEffect &&
             m_pScaleEffect) { // Added missing scale effect check
+            m_pDeviceContext->SetTransform(D2D1::Matrix3x2F::Identity());
             m_pSaturationEffect->SetInput(0, image);
             m_pContrastEffect->SetInputEffect(0, m_pSaturationEffect.Get());
             m_pBrightnessEffect->SetInputEffect(0, m_pContrastEffect.Get());
@@ -589,11 +590,11 @@ HRESULT RendererD2D::Render() {
                     interpMode);
             D2D1_POINT_2F targetOffset = D2D1::Point2F(left, top);
             m_pDeviceContext->DrawImage(
-                    m_pScaleEffect.Get(),
-                    &targetOffset,
-                    nullptr,
-                    interpMode,
-                    D2D1_COMPOSITE_MODE_SOURCE_OVER);
+                    m_pScaleEffect.Get(), // 1. The Effect
+                    targetOffset, // 2. The Point (passed by value, NOT a pointer)
+                    interpMode, // 3. Interpolation Mode
+                    D2D1_COMPOSITE_MODE_SOURCE_OVER // 4. Composite Mode
+                    );
         } else {
             m_pDeviceContext->DrawBitmap(
                     m_pBitmap.Get(),
