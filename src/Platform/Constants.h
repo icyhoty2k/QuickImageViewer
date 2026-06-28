@@ -26,6 +26,7 @@ namespace Constants {
 
     //==========================Cache optimization====================================
     constexpr const int VRAM_CACHE_IMAGES_COUNT = 10;
+    constexpr const int VRAM_CACHE_SVG_COUNT = 10;
     constexpr const int PRELOAD_LOOKASIDE_COUNT = 1;
     constexpr const int PRELOAD_TIMER_COUNTDOWN = 150; // this is used to delay preloading if user scrolls very fast
     //==========================Cache optimization====================================

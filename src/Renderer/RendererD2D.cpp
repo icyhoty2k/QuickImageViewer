@@ -279,6 +279,7 @@ void RendererD2D::DiscardDeviceResources() {
     m_lruList.clear();
     // SVG documents are device-dependent – discard them too
     m_svgCache.clear();
+    m_svgLruList.clear();
     m_pActiveSvg.Reset();
     m_svgNativeW = 0.0f;
     m_svgNativeH = 0.0f;
@@ -809,8 +810,10 @@ HRESULT RendererD2D::LoadSvgFromBytes(const std::vector<BYTE> &svgBytes,
 
     // --- 1. Check SVG cache first ---
     {
+        std::lock_guard<std::mutex> lock(m_cacheMutex);
         auto it = m_svgCache.find(filePath);
         if (it != m_svgCache.end()) {
+            m_svgLruList.splice(m_svgLruList.begin(), m_svgLruList, it->second.lruIt);
             m_pActiveSvg = it->second.document;
             m_svgNativeW = it->second.viewportW;
             m_svgNativeH = it->second.viewportH;
@@ -889,7 +892,15 @@ HRESULT RendererD2D::LoadSvgFromBytes(const std::vector<BYTE> &svgBytes,
     if (nativeH <= 0.0f) nativeH = viewport.height;
 
     // --- 6. Cache it ---
-    m_svgCache[filePath] = CachedSvg{svgDoc, nativeW, nativeH};
+    {
+        std::lock_guard<std::mutex> lock(m_cacheMutex);
+        if (m_svgLruList.size() >= Constants::VRAM_CACHE_SVG_COUNT) {
+            m_svgCache.erase(m_svgLruList.back());
+            m_svgLruList.pop_back();
+        }
+        m_svgLruList.push_front(filePath);
+        m_svgCache[filePath] = CachedSvg{svgDoc, m_svgLruList.begin(), nativeW, nativeH};
+    }
 
     // --- 7. Make it active ---
     m_pActiveSvg = svgDoc;
