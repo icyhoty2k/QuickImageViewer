@@ -6,7 +6,7 @@
 
 namespace UI {
     HWND g_hHelpWnd = nullptr;
-    std::wstring fullTitle = std::wstring(Config::BASE_NAME) + L" v" + Config::APP_VERSION;
+    std::wstring fullTitle = std::wstring(Constants::BASE_NAME) + L" v" + Constants::APP_VERSION;
 
     LRESULT CALLBACK HelpWndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) {
         switch (message) {
@@ -123,7 +123,7 @@ namespace UI {
                 SelectObject(hdc, hFooterFont);
                 SetTextColor(hdc, RGB(120, 120, 120));
 
-                std::wstring footer = std::wstring(L" ") + Config::APP_CREATOR + L" | " + Config::APP_HELP_FOOTER;
+                std::wstring footer = std::wstring(L" ") + Constants::APP_CREATOR + L" | " + Constants::APP_HELP_FOOTER;
                 RECT footerRect = {rc.left, rc.bottom - padding, rc.right, rc.bottom};
                 DrawTextW(hdc, footer.c_str(), -1, &footerRect, DT_CENTER | DT_BOTTOM);
 
@@ -174,7 +174,7 @@ namespace UI {
         int winW = MulDiv(640, dpi, 96);
         int winH = MulDiv(760, dpi, 96);
 
-        g_hHelpWnd = CreateWindowExW(WS_EX_TOOLWINDOW | WS_EX_TOPMOST, wc.lpszClassName, Config::APP_TASKBAR_NAME,
+        g_hHelpWnd = CreateWindowExW(WS_EX_TOOLWINDOW | WS_EX_TOPMOST, wc.lpszClassName, Constants::APP_TASKBAR_NAME,
                                      WS_POPUP | WS_CAPTION | WS_BORDER, 0, 0, winW, winH, hParent, nullptr, hInstance,
                                      nullptr);
 

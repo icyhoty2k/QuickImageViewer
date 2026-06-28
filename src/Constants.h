@@ -1,6 +1,6 @@
 #pragma once
 
-namespace Config {
+namespace Constants {
     constexpr const wchar_t *BASE_NAME = L"QuickImageViewer";
 
     constexpr const wchar_t *APP_CREATOR = L"Ivan Hristov Yanev";
@@ -21,6 +21,7 @@ namespace Config {
     //==========================Cache optimization====================================
     constexpr const int VRAM_CACHE_IMAGES_COUNT = 30;
     constexpr const int PRELOAD_LOOKASIDE_COUNT = 3;
+    constexpr const int PRELOAD_TIMER_COUNTDOWN = 150; // this is used to delay preloading if user scrolls very fast
     //==========================Cache optimization====================================
 
 

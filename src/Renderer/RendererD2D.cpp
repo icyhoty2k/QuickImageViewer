@@ -69,7 +69,7 @@ HRESULT RendererD2D::UploadAndCacheBitmap_Locked(IWICBitmapSource *bitmap, const
     }
 
     // Evict least recently used image if cache is full.
-    if (m_lruList.size() >= Config::VRAM_CACHE_IMAGES_COUNT) {
+    if (m_lruList.size() >= Constants::VRAM_CACHE_IMAGES_COUNT) {
         m_bitmapCache.erase(m_lruList.back());
         m_lruList.pop_back();
     }
@@ -90,13 +90,31 @@ void RendererD2D::ProcessPendingUploads() {
             upload = std::move(m_pendingUploads.front());
             m_pendingUploads.pop();
         }
-        HRESULT hr = UploadAndCacheBitmap(upload.converter.Get(), upload.filePath);
+
+        // --- STALE UPLOAD REJECTION ---
+        // Verify the background-decoded image is still relevant before copying 33MB to the GPU.
+        auto it = std::ranges::find(g_app.playlist, upload.filePath);
+        if (it != g_app.playlist.end()) {
+            int uploadIdx = static_cast<int>(std::distance(g_app.playlist.begin(), it));
+            int currentIdx = g_app.currentIndex;
+            int total = static_cast<int>(g_app.playlist.size());
+
+            // Calculate exact distance handling circular array bounds
+            int dist = uploadIdx > currentIdx ? uploadIdx - currentIdx : currentIdx - uploadIdx;
+            int wrappedDist = dist < (total - dist) ? dist : (total - dist);
+
+            // Only execute the heavy D2D CreateBitmapFromWicBitmap if it is the target
+            // or within the lookaside buffer.
+            if (wrappedDist <= Constants::PRELOAD_LOOKASIDE_COUNT) {
+                HRESULT hr = UploadAndCacheBitmap(upload.converter.Get(), upload.filePath);
 #ifdef _DEBUG
-        if (FAILED(hr))
-            OutputDebugStringW(L"CreateBitmapFromWic failed.\n");
-#else
-        (void) hr;
+                if (FAILED(hr)) OutputDebugStringW(L"CreateBitmapFromWic failed.\n");
 #endif
+            } else {
+                // SILENT DISCARD: You scrolled past this before VRAM upload could start.
+                // The ComPtr goes out of scope and frees the system RAM instantly.
+            }
+        }
     }
 }
 
@@ -136,7 +154,7 @@ HRESULT RendererD2D::LoadBitmap(IWICBitmapSource *bitmap, UINT width, UINT heigh
             m_bitmapCache.erase(it);
         }
 
-        if (m_lruList.size() >= Config::VRAM_CACHE_IMAGES_COUNT) {
+        if (m_lruList.size() >= Constants::VRAM_CACHE_IMAGES_COUNT) {
             m_bitmapCache.erase(m_lruList.back());
             m_lruList.pop_back();
         }
@@ -188,7 +206,7 @@ HRESULT RendererD2D::PreloadBitmap(const std::wstring &filePath) {
         std::lock_guard<std::mutex> lock(m_cacheMutex);
         m_pendingUploads.push({filePath, converter});
     }
-    if (!PostMessage(m_hwnd, Config::WM_QIV_PENDING_UPLOADS, 0, 0))
+    if (!PostMessage(m_hwnd, Constants::WM_QIV_PENDING_UPLOADS, 0, 0))
         return HRESULT_FROM_WIN32(GetLastError());
 
     return S_OK;
