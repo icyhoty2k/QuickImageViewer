@@ -1,6 +1,6 @@
 #pragma once
 #include <windows.h>
-#include "Constants.h"
+#include "../Constants.h"
 
 namespace MouseHandler {
     // Decision logic
@@ -16,7 +16,10 @@ namespace MouseHandler {
 
     // Handlers
     void HandleButtonDown(HWND hWnd, UINT message, LPARAM lParam);
+
     void HandleButtonUp(HWND hWnd, UINT message, LPARAM lParam);
+
     void HandleMouseMove(HWND hWnd, LPARAM lParam);
+
     void HandleMouseWheel(HWND hWnd, WPARAM wParam, LPARAM lParam);
 }

@@ -165,3 +165,9 @@ void RendererGDI::DestroyBackBuffer() {
         m_backBitmap = nullptr;
     }
 }
+
+void RendererGDI::ProcessPendingUploads() {
+    // No-op for GDI.
+    // GDI uses system memory (DIB sections) and does not require
+    // synchronized VRAM upload queuing like Direct2D.
+}

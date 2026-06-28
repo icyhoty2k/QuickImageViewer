@@ -6,31 +6,16 @@
 using Microsoft::WRL::ComPtr;
 
 void LoadImageIndex(HWND hWnd, int index) {
-    // 1. Cancel any pending background preload work — we are going somewhere new
+    // 1. Cancel any pending background preload work
     g_decoderWorker.ClearQueue();
     if (index < 0 || index >= static_cast<int>(g_app.playlist.size())) return;
 
     g_app.currentIndex = index;
     const std::wstring &currentPath = g_app.playlist[g_app.currentIndex];
 
-    // 2. Try to serve from VRAM cache first — avoids disk I/O + decode on the UI thread.
-    //    Passing nullptr signals a cache-only lookup.
-    if (g_app.renderer && SUCCEEDED(g_app.renderer->LoadBitmap(nullptr, 0, 0, currentPath))) {
-        // Cache hit: image already in VRAM.
-        // Read dimensions cheaply from the file header only (no pixel decode).
-        ComPtr<IWICBitmapDecoder> decoder;
-        ComPtr<IWICBitmapFrameDecode> frame;
-        if (SUCCEEDED(g_app.wicFactory->CreateDecoderFromFilename(
-            currentPath.c_str(), nullptr, GENERIC_READ,
-            WICDecodeMetadataCacheOnDemand, &decoder)) &&
-            SUCCEEDED(decoder->GetFrame(0, &frame))) {
-            UINT w = 0, h = 0;
-            if (FAILED(frame->GetSize(&w, &h))) return;
-            g_app.imgWidth = static_cast<int>(w);
-            g_app.imgHeight = static_cast<int>(h);
-        }
-    } else {
-        // Cache miss: full decode from disk on the UI thread
+    // 2. Probe the Cache (nullptr signals cache probe)
+    // If FAILED, we have a Cache Miss and must decode from disk.
+    if (g_app.renderer && FAILED(g_app.renderer->LoadBitmap(nullptr, 0, 0, currentPath))) {
         ComPtr<IWICBitmapDecoder> decoder;
         if (FAILED(g_app.wicFactory->CreateDecoderFromFilename(
             currentPath.c_str(), nullptr, GENERIC_READ,
@@ -51,16 +36,20 @@ void LoadImageIndex(HWND hWnd, int index) {
         UINT width = 0, height = 0;
         if (FAILED(converter->GetSize(&width, &height))) return;
 
-        // Store image dimensions for pan constraint logic in MouseHandler
+        // Store image dimensions for pan constraint logic
         g_app.imgWidth = static_cast<int>(width);
         g_app.imgHeight = static_cast<int>(height);
 
-        if (g_app.renderer) {
-            (void) g_app.renderer->LoadBitmap(converter.Get(), width, height, currentPath);
-        }
+        // Send to renderer (which should also add it to the cache)
+        (void) g_app.renderer->LoadBitmap(converter.Get(), width, height, currentPath);
     }
 
-    // 3. Bidirectional preload — uses PRELOAD_LOOKASIDE_COUNT from Constants.h
+    // 3. Update the Window Title dynamically
+    std::wstring fileName = currentPath.substr(currentPath.find_last_of(L"\\/") + 1);
+    std::wstring windowTitle = fileName + L" - QuickImageViewer";
+    SetWindowTextW(hWnd, windowTitle.c_str());
+
+    // 4. Bidirectional preload
     const int total = static_cast<int>(g_app.playlist.size());
     for (int i = 1; i <= Config::PRELOAD_LOOKASIDE_COUNT; ++i) {
         int fwd = index + i;
@@ -68,13 +57,13 @@ void LoadImageIndex(HWND hWnd, int index) {
         if (fwd < total) {
             std::wstring fwdPath = g_app.playlist[fwd];
             g_decoderWorker.PushTask([fwdPath]() {
-                (void) g_app.renderer->PreloadBitmap(fwdPath);
+                if (g_app.renderer) (void) g_app.renderer->PreloadBitmap(fwdPath);
             });
         }
         if (bwd >= 0) {
             std::wstring bwdPath = g_app.playlist[bwd];
             g_decoderWorker.PushTask([bwdPath]() {
-                (void) g_app.renderer->PreloadBitmap(bwdPath);
+                if (g_app.renderer) (void) g_app.renderer->PreloadBitmap(bwdPath);
             });
         }
     }

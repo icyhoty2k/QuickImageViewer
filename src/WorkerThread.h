@@ -7,63 +7,66 @@
 #include <windows.h>
 
 class WorkerThread {
-public:
-    Microsoft::WRL::ComPtr<IWICImagingFactory> wicFactory;
+    public:
+        Microsoft::WRL::ComPtr<IWICImagingFactory> wicFactory;
 
-    WorkerThread() : m_running(true) {
-        m_thread = std::thread([this] {
-            // Initialize COM for background WIC/Direct2D operations
-            CoInitializeEx(NULL, COINIT_MULTITHREADED);
-            CoCreateInstance(CLSID_WICImagingFactory, nullptr, CLSCTX_INPROC_SERVER,
-                             IID_PPV_ARGS(&wicFactory));
-            while (m_running) {
-                std::function<void()> task;
-                {
-                    std::unique_lock<std::mutex> lock(m_queueMutex);
-                    // Thread sleeps here until notified; consumes 0 CPU
-                    m_cv.wait(lock, [this] { return !m_queue.empty() || !m_running; });
+        WorkerThread() : m_running(true) {
+            m_thread = std::thread([this] {
+                // Initialize COM for background WIC/Direct2D operations
+                CoInitializeEx(NULL, COINIT_MULTITHREADED);
+                CoCreateInstance(CLSID_WICImagingFactory, nullptr, CLSCTX_INPROC_SERVER,
+                                 IID_PPV_ARGS(&wicFactory));
+                while (m_running) {
+                    std::function<void()> task;
+                    {
+                        std::unique_lock<std::mutex> lock(m_queueMutex);
+                        // Thread sleeps here until notified; consumes 0 CPU
+                        m_cv.wait(lock, [this] {
+                            return !m_queue.empty() || !m_running;
+                        });
 
-                    if (!m_running) break;
+                        if (!m_running) break;
 
-                    task = std::move(m_queue.front());
-                    m_queue.pop();
+                        task = std::move(m_queue.front());
+                        m_queue.pop();
+                    }
+                    if (task) task();
                 }
-                if (task) task();
+                wicFactory.Reset();
+                CoUninitialize();
+            });
+        }
+
+        ~WorkerThread() {
+            {
+                std::lock_guard<std::mutex> lock(m_queueMutex);
+                m_running = false;
             }
-            wicFactory.Reset();
-            CoUninitialize();
-        });
-    }
-
-    ~WorkerThread() {
-        {
-            std::lock_guard<std::mutex> lock(m_queueMutex);
-            m_running = false;
+            m_cv.notify_one();
+            if (m_thread.joinable()) m_thread.join();
         }
-        m_cv.notify_one();
-        if (m_thread.joinable()) m_thread.join();
-    }
 
-    void PushTask(std::function<void()> task) {
-        {
-            std::lock_guard<std::mutex> lock(m_queueMutex);
-            m_queue.push(std::move(task));
+        void PushTask(std::function<void()> task) {
+            {
+                std::lock_guard<std::mutex> lock(m_queueMutex);
+                if (!m_running) return; // don't enqueue after shutdown
+                m_queue.push(std::move(task));
+            }
+            m_cv.notify_one();
         }
-        m_cv.notify_one();
-    }
 
-    void ClearQueue() {
-        std::lock_guard<std::mutex> lock(m_queueMutex);
-        std::queue<std::function<void()> > empty;
-        std::swap(m_queue, empty);
-    }
+        void ClearQueue() {
+            std::lock_guard<std::mutex> lock(m_queueMutex);
+            std::queue<std::function<void()> > empty;
+            std::swap(m_queue, empty);
+        }
 
-private:
-    std::thread m_thread;
-    std::mutex m_queueMutex;
-    std::condition_variable m_cv;
-    std::queue<std::function<void()> > m_queue;
-    std::atomic<bool> m_running;
+    private:
+        std::thread m_thread;
+        std::mutex m_queueMutex;
+        std::condition_variable m_cv;
+        std::queue<std::function<void()> > m_queue;
+        std::atomic<bool> m_running;
 };
 
 // Define the global workers here so they are initialized once at startup

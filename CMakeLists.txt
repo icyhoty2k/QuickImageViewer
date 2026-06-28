@@ -4,11 +4,12 @@ project(QuickImageViewer LANGUAGES CXX)
 
 set(CMAKE_CXX_STANDARD 23)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
+set(CMAKE_CXX_EXTENSIONS OFF) # Strictly enforce standard C++23 without compiler-specific deviations
 
 set(SOURCES
         src/AppMain.cpp
         src/DropTarget.cpp
-        src/MouseHandler.cpp
+        src/Platform/MouseHandler.cpp
         src/WicDecoder.cpp
         src/Platform/DpiAwareInit.cpp
         src/Platform/FileHandler.cpp
@@ -22,21 +23,34 @@ set(SOURCES
 
 add_executable(QuickImageViewer WIN32 ${SOURCES})
 
-# 1. Compile definitions
+# 1. Compile Definitions
 target_compile_definitions(QuickImageViewer PRIVATE
         NOMINMAX
         UNICODE
         _UNICODE
+        $<$<CONFIG:Release>:NDEBUG> # Standard macro to strip assert() overhead in Release
 )
 
-# 2. Strict warnings for code quality
+# 2. Compile Options (Warnings, MP, and Release Optimization)
 target_compile_options(QuickImageViewer PRIVATE
         /W4
         /permissive-
         /EHsc
+        /MP
+        $<$<CONFIG:Release>:/GL>    # Whole Program Optimization (LTCG part 1)
+        #        $<$<CONFIG:Release>:/Zi->   # Prevent PDB generation in Release to save RAM/Disk I/O
 )
 
-# 3. Include directories
+# 3. Explicit Linker Flags (Safe & Industry Standard)
+target_link_options(QuickImageViewer PRIVATE
+        /SUBSYSTEM:WINDOWS          # Explicitly target Win32 subsystem to prevent console windows
+        $<$<CONFIG:Release>:/LTCG>             # Link Time Code Generation
+        $<$<CONFIG:Release>:/INCREMENTAL:NO>   # Clean, non-fragmented binary
+        $<$<CONFIG:Release>:/OPT:REF>          # Eliminate unreferenced functions
+        $<$<CONFIG:Release>:/OPT:ICF>          # Fold identical functions to reduce executable size
+)
+
+# 4. Include Directories
 target_include_directories(QuickImageViewer PRIVATE
         ${CMAKE_CURRENT_SOURCE_DIR}/src
         ${CMAKE_CURRENT_SOURCE_DIR}/src/Cache
@@ -45,7 +59,7 @@ target_include_directories(QuickImageViewer PRIVATE
         ${CMAKE_CURRENT_SOURCE_DIR}/src/UI
 )
 
-# 4. Windows libraries
+# 5. Windows Libraries
 target_link_libraries(QuickImageViewer PRIVATE
         d2d1
         dwrite
@@ -61,7 +75,7 @@ target_link_libraries(QuickImageViewer PRIVATE
         uuid
 )
 
-# 5. Robust manifest embedding
+# 6. Robust Manifest Embedding
 add_custom_command(TARGET QuickImageViewer POST_BUILD
         COMMAND mt.exe
         /manifest "${CMAKE_CURRENT_SOURCE_DIR}/app.manifest"
