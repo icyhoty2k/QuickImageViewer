@@ -10,6 +10,10 @@ namespace Constants {
     constexpr const wchar_t *APP_VERSION = L"1.0.0"; // major.minor.patch
     //Saveable options
     static constexpr float ZOOM_STEP = 1.1f; // +/- keys and ctrl+wheel
+    constexpr float COLOR_ADJUST_STEP = 0.1f; // step for brightness contrast and saturation
+    constexpr float DEFAULT_SATURATION = 1.0f;
+    constexpr float DEFAULT_BRIGHTNESS = 0.0f;
+    constexpr float DEFAULT_CONTRAST = 1.0f;
     static constexpr float ZOOM_CLICK = 3.0f; // left click zoom multiplier
     static constexpr int OPACITY_STEP = 10; // left click zoom multiplier from 10 to 255 step is 10
     constexpr bool DEFAULT_SHOW_OVERLAY = true;

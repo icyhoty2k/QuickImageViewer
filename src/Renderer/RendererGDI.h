@@ -25,6 +25,8 @@ class RendererGDI final : public IImageRenderer {
 
         void ProcessPendingUploads() override;
 
+        void UpdateColorEffects() override;
+
     private:
         void DestroyBackBuffer();
 

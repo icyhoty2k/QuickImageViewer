@@ -1,0 +1,19 @@
+Key	Action
+I	grayscale on/off
+[	saturation -
+]	saturation +
+B	brightness +
+Shift+B	brightness -
+C	contrast +
+Shift+C	contrast -
+shift+delete key  restore original image , saturation , brightness contrast
+add a step to brightness saturation contrast  like brightnessSaturationContrastStep=0.1
+
+========================================
+shift+spaceBar previous image
+spacebar next image
+========================================
+1.add support for svg files !
+2. add support for text
+3. save settings in registry
+4. save image with ctrl+s to a location (image that is edited contrast brightness saturation)

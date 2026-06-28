@@ -76,6 +76,7 @@ target_link_libraries(QuickImageViewer PRIVATE
         ole32
         oleaut32
         uuid
+
 )
 
 # 6. Robust Manifest Embedding
