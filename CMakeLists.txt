@@ -12,6 +12,7 @@ set(SOURCES
         src/Platform/MouseHandler.cpp
         src/WicDecoder.cpp
         src/Platform/DpiAwareInit.cpp
+        src/DriveInfo.cpp
         src/Platform/FileHandler.cpp
         src/Platform/RegistrySetup.cpp
         src/Renderer/RendererGDI.cpp

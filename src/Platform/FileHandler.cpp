@@ -7,8 +7,23 @@
 #include <ranges>
 #include <vector>
 #include "WorkerThread.h"
+#include "DriveInfo.h"
 
 namespace fs = std::filesystem;
+
+// ---------------------------------------------------------------------------
+// EnsureIoWorkerStarted
+// ---------------------------------------------------------------------------
+// Called once per folder open with the folder path. Detects the drive type
+// and starts g_ioWorker with the right thread count on first call.
+// Subsequent calls are no-ops (IsStarted() guard).
+// ---------------------------------------------------------------------------
+static void EnsureIoWorkerStarted(const std::wstring &folderPath) {
+    if (!g_ioWorker.IsStarted()) {
+        size_t optimal = DriveInfo::GetOptimalIoThreadCount(folderPath);
+        g_ioWorker.Start(optimal);
+    }
+}
 
 bool is_image_ext(const std::wstring &ext) {
     for (size_t i = 0; i < Constants::Registry::SUPPORTED_EXTENSIONS_COUNT; ++i) {
@@ -18,6 +33,98 @@ bool is_image_ext(const std::wstring &ext) {
     }
     return false;
 }
+
+// ---------------------------------------------------------------------------
+// GetDiskOffset
+// ---------------------------------------------------------------------------
+// Returns the logical cluster number (LCN) of the first extent of a file
+// using FSCTL_GET_RETRIEVAL_POINTERS. This is the physical position of the
+// file's first data cluster on the disk platter.
+//
+// On SSDs or network paths the ioctl may fail — in that case we return
+// UINT64_MAX so the file sorts to the end and the fallback is alphabetical
+// order for those entries (harmless on SSD anyway).
+//
+// Requires SE_MANAGE_VOLUME_NAME privilege on some older Windows versions,
+// but on Windows 10/11 with NTFS opening with FILE_FLAG_NO_BUFFERING is
+// sufficient for the ioctl without elevation.
+// ---------------------------------------------------------------------------
+static UINT64 GetDiskOffset(const std::wstring &path) {
+    HANDLE hFile = CreateFileW(
+            path.c_str(),
+            FILE_READ_ATTRIBUTES, // minimal access — no data read
+            FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE,
+            nullptr,
+            OPEN_EXISTING,
+            FILE_FLAG_NO_BUFFERING, // required for retrieval pointer ioctl
+            nullptr
+            );
+
+    if (hFile == INVALID_HANDLE_VALUE)
+        return UINT64_MAX;
+
+    // FSCTL_GET_RETRIEVAL_POINTERS needs a starting VCN of 0
+    STARTING_VCN_INPUT_BUFFER startVcn{};
+    startVcn.StartingVcn.QuadPart = 0;
+
+    // Buffer sized for one extent (we only need the first one)
+    struct {
+        RETRIEVAL_POINTERS_BUFFER header;
+        LARGE_INTEGER extraLcn; // room for at least one extent
+    } rpBuf{};
+
+    DWORD bytesReturned = 0;
+    DeviceIoControl(
+            hFile,
+            FSCTL_GET_RETRIEVAL_POINTERS,
+            &startVcn, sizeof(startVcn),
+            &rpBuf, sizeof(rpBuf),
+            &bytesReturned,
+            nullptr
+            );
+    // ERROR_MORE_DATA is fine — we only need Extents[0]
+
+    CloseHandle(hFile);
+
+    if (rpBuf.header.ExtentCount < 1)
+        return UINT64_MAX;
+
+    // Lcn of the first extent = physical position on disk
+    LONGLONG lcn = rpBuf.header.Extents[0].Lcn.QuadPart;
+    return (lcn < 0) ? UINT64_MAX : static_cast<UINT64>(lcn);
+}
+
+// ---------------------------------------------------------------------------
+// SortPlaylistByDiskOrder
+// ---------------------------------------------------------------------------
+// Sorts the playlist so files are visited in ascending physical disk offset
+// order. This minimises HDD head seeks when navigating sequentially.
+// On SSDs or non-NTFS volumes the ioctl returns UINT64_MAX for all files,
+// so the sort is stable and the existing order (alphabetical) is preserved.
+// ---------------------------------------------------------------------------
+static void SortPlaylistByDiskOrder(std::vector<std::wstring> &playlist) {
+    // Gather offsets once up front — one CreateFile per image, cheap
+    std::vector<UINT64> offsets;
+    offsets.reserve(playlist.size());
+    for (const auto &p: playlist)
+        offsets.push_back(GetDiskOffset(p));
+
+    // Build an index array and sort that, then reorder both vectors together
+    std::vector<size_t> idx(playlist.size());
+    for (size_t i = 0; i < idx.size(); ++i) idx[i] = i;
+
+    std::stable_sort(idx.begin(), idx.end(), [&](size_t a, size_t b) {
+        return offsets[a] < offsets[b];
+    });
+
+    std::vector<std::wstring> sorted;
+    sorted.reserve(playlist.size());
+    for (size_t i: idx)
+        sorted.push_back(std::move(playlist[i]));
+
+    playlist = std::move(sorted);
+}
+
 
 void OpenInitialImage(HWND hWnd) {
     g_app.isDialogVisible = true;
@@ -75,11 +182,14 @@ void OpenInitialImage(HWND hWnd) {
                          })
                          | std::ranges::to<std::vector<std::wstring> >();
 
-        std::ranges::sort(g_app.playlist);
+        // Start IO worker with correct thread count for this drive type (HDD=1, SSD/NVMe=2)
+        EnsureIoWorkerStarted(filePath.parent_path().wstring());
+
+        // Sort by physical disk position to minimise HDD head seeks
+        SortPlaylistByDiskOrder(g_app.playlist);
 
         auto it = std::ranges::find(g_app.playlist, filePath.wstring());
         if (it != g_app.playlist.end()) {
-            extern void LoadImageIndex(HWND, int);
             LoadImageIndex(hWnd, static_cast<int>(std::distance(g_app.playlist.begin(), it)));
         }
     } else if (g_app.playlist.empty()) {
@@ -140,7 +250,12 @@ void OpenSpecificImage(HWND hWnd, const std::wstring &filePathStr) {
                      })
                      | std::ranges::to<std::vector<std::wstring> >();
 
-    std::ranges::sort(g_app.playlist);
+    // Start IO worker with correct thread count for this drive type (HDD=1, SSD/NVMe=2)
+    EnsureIoWorkerStarted(filePath.parent_path().wstring());
+
+    // Sort by physical disk position to minimise HDD head seeks
+    SortPlaylistByDiskOrder(g_app.playlist);
+
     auto it = std::ranges::find(g_app.playlist, filePath.wstring());
     if (it != g_app.playlist.end()) {
         LoadImageIndex(hWnd, static_cast<int>(std::distance(g_app.playlist.begin(), it)));
