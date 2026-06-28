@@ -417,7 +417,11 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) 
             ReleaseCapture();
             return 0;
         }
-
+        case Constants::WM_QIV_REPAINT: {
+            // Signal the UI to redraw once the IOWorker confirms the bitmap is ready
+            InvalidateRect(hWnd, nullptr, FALSE);
+            return 0;
+        }
         case WM_PAINT: {
             PAINTSTRUCT ps;
             BeginPaint(hWnd, &ps);
@@ -481,9 +485,9 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE, LPSTR, int nCmdShow) {
 
     // Set DPI awareness
     typedef BOOL (WINAPI
-    *SETDPI
-    )
-    (DPI_AWARENESS_CONTEXT);
+                *SETDPI
+            )
+            (DPI_AWARENESS_CONTEXT);
     if (HMODULE hU32 = GetModuleHandleW(L"user32.dll")) {
         if (auto setDpi = reinterpret_cast<SETDPI>(GetProcAddress(hU32, "SetProcessDpiAwarenessContext"))) {
             setDpi(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2);
@@ -511,9 +515,9 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE, LPSTR, int nCmdShow) {
             if (argc > 1) {
                 COPYDATASTRUCT cds;
                 cds.dwData = 1;
-                cds.cbData = (DWORD)((wcslen(argv[1]) + 1) * sizeof(wchar_t));
+                cds.cbData = (DWORD) ((wcslen(argv[1]) + 1) * sizeof(wchar_t));
                 cds.lpData = (void *) argv[1];
-                SendMessageW(hExistingWnd, WM_COPYDATA, 0, (LPARAM) & cds);
+                SendMessageW(hExistingWnd, WM_COPYDATA, 0, (LPARAM) &cds);
             }
             LocalFree(argv);
         }

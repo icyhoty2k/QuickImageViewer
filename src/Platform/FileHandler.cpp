@@ -1,12 +1,12 @@
 #include "FileHandler.h"
 #include "../AppState.h"
-#include "RegistrySetup.h" // For Save/LoadStringSetting
+#include "RegistrySetup.h"
 #include "Constants.h"
 #include <commdlg.h>
 #include <filesystem>
 #include <ranges>
-#include <cwctype>
 #include <vector>
+#include "WorkerThread.h"
 
 namespace fs = std::filesystem;
 
@@ -22,15 +22,14 @@ bool is_image_ext(const std::wstring &ext) {
 void OpenInitialImage(HWND hWnd) {
     g_app.isDialogVisible = true;
 
-    // Build the filter buffer correctly for Windows API
+    // Build the filter buffer correctly to avoid dialog failure
     std::vector<wchar_t> filterBuffer;
 
-    // 1. Description: "All Supported Images"
+    // 1. All Supported Images
     std::wstring desc = L"All Supported Images";
     filterBuffer.insert(filterBuffer.end(), desc.begin(), desc.end());
     filterBuffer.push_back(L'\0');
 
-    // 2. Extensions: "*.jpg;*.jpeg;..."
     std::wstring exts;
     for (size_t i = 0; i < Constants::Registry::SUPPORTED_EXTENSIONS_COUNT; ++i) {
         exts += L"*" + std::wstring(Constants::Registry::SUPPORTED_EXTENSIONS[i]);
@@ -39,18 +38,13 @@ void OpenInitialImage(HWND hWnd) {
     filterBuffer.insert(filterBuffer.end(), exts.begin(), exts.end());
     filterBuffer.push_back(L'\0');
 
-    // 3. Description: "All Files (*.*)"
+    // 2. All Files
     std::wstring allFilesDesc = L"All Files (*.*)";
     filterBuffer.insert(filterBuffer.end(), allFilesDesc.begin(), allFilesDesc.end());
     filterBuffer.push_back(L'\0');
-
-    // 4. Extension: "*.*"
-    std::wstring allFilesExt = L"*.*";
-    filterBuffer.insert(filterBuffer.end(), allFilesExt.begin(), allFilesExt.end());
+    filterBuffer.insert(filterBuffer.end(), L"*.*", L"*.*" + 3);
     filterBuffer.push_back(L'\0');
-
-    // Final double null terminator required by API
-    filterBuffer.push_back(L'\0');
+    filterBuffer.push_back(L'\0'); // Double null terminator
 
     wchar_t szFile[MAX_PATH] = {0};
     OPENFILENAMEW ofn{};
@@ -93,6 +87,35 @@ void OpenInitialImage(HWND hWnd) {
     }
 }
 
+void LoadImageIndex(HWND hWnd, int index) {
+    g_decoderWorker.ClearQueue();
+    g_ioWorker.ClearQueue();
+
+    if (index < 0 || index >= static_cast<int>(g_app.playlist.size())) return;
+
+    if (g_app.currentIndex != index) g_app.viewport = ViewportState{};
+    g_app.currentIndex = index;
+    g_app.wantedIndex.store(index, std::memory_order_release);
+
+    const std::wstring &currentPath = g_app.playlist[index];
+    SetWindowTextW(hWnd, (currentPath.substr(currentPath.find_last_of(L"\\/") + 1) + L" - QuickImageViewer").c_str());
+
+    if (g_app.renderer && SUCCEEDED(g_app.renderer->LoadBitmap(nullptr, 0, 0, currentPath))) {
+        InvalidateRect(hWnd, nullptr, FALSE);
+        SetTimer(hWnd, 1001, Constants::PRELOAD_TIMER_COUNTDOWN, nullptr);
+        return;
+    }
+
+    g_ioWorker.PushTask([currentPath, index, hWnd]() {
+        if (g_app.wantedIndex.load(std::memory_order_acquire) != index) return;
+        if (g_app.renderer && SUCCEEDED(g_app.renderer->PreloadBitmap(currentPath, index))) {
+            PostMessage(hWnd, Constants::WM_QIV_REPAINT, 0, 0);
+        }
+    });
+
+    SetTimer(hWnd, 1001, Constants::PRELOAD_TIMER_COUNTDOWN, nullptr);
+}
+
 void OpenSpecificImage(HWND hWnd, const std::wstring &filePathStr) {
     fs::path filePath(filePathStr);
     if (!fs::exists(filePath) || !fs::is_regular_file(filePath)) return;
@@ -102,7 +125,6 @@ void OpenSpecificImage(HWND hWnd, const std::wstring &filePathStr) {
         if (filePath.parent_path() == fs::path(g_app.playlist[0]).parent_path()) {
             auto it = std::ranges::find(g_app.playlist, filePath.wstring());
             if (it != g_app.playlist.end()) {
-                extern void LoadImageIndex(HWND, int);
                 LoadImageIndex(hWnd, static_cast<int>(std::distance(g_app.playlist.begin(), it)));
                 return;
             }
@@ -121,7 +143,6 @@ void OpenSpecificImage(HWND hWnd, const std::wstring &filePathStr) {
     std::ranges::sort(g_app.playlist);
     auto it = std::ranges::find(g_app.playlist, filePath.wstring());
     if (it != g_app.playlist.end()) {
-        extern void LoadImageIndex(HWND, int);
         LoadImageIndex(hWnd, static_cast<int>(std::distance(g_app.playlist.begin(), it)));
     }
 }
