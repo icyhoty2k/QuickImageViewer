@@ -7,7 +7,8 @@
 namespace System {
     bool NeedsRegistration(const std::wstring &expectedCommand) {
         HKEY hKey;
-        if (RegOpenKeyExW(HKEY_CURRENT_USER, Constants::Registry::OPEN_WITH_COMMAND,
+        // Uses dynamic ROOT_HIVE
+        if (RegOpenKeyExW(Constants::Registry::ROOT_HIVE, Constants::Registry::OPEN_WITH_COMMAND,
                           0, KEY_READ, &hKey) != ERROR_SUCCESS) {
             return true;
         }
@@ -19,7 +20,7 @@ namespace System {
             return true;
         }
 
-        if (size > 1024 * 1024) { // Safety cap
+        if (size > 1024 * 1024) {
             RegCloseKey(hKey);
             return true;
         }
@@ -47,8 +48,8 @@ namespace System {
         if (!NeedsRegistration(command)) return;
 
         HKEY hKey;
-        // 1. Command registration
-        if (RegCreateKeyExW(HKEY_CURRENT_USER, Constants::Registry::OPEN_WITH_COMMAND,
+        // 1. Command registration using ROOT_HIVE
+        if (RegCreateKeyExW(Constants::Registry::ROOT_HIVE, Constants::Registry::OPEN_WITH_COMMAND,
                             0, nullptr, REG_OPTION_NON_VOLATILE, KEY_WRITE, nullptr, &hKey, nullptr) == ERROR_SUCCESS) {
             RegSetValueExW(hKey, nullptr, 0, REG_SZ, reinterpret_cast<const BYTE *>(command.c_str()),
                            static_cast<DWORD>((command.length() + 1) * sizeof(wchar_t)));
@@ -56,7 +57,7 @@ namespace System {
         }
 
         // 2. Friendly application name
-        if (RegCreateKeyExW(HKEY_CURRENT_USER, Constants::Registry::OPEN_WITH_ROOT,
+        if (RegCreateKeyExW(Constants::Registry::ROOT_HIVE, Constants::Registry::OPEN_WITH_ROOT,
                             0, nullptr, REG_OPTION_NON_VOLATILE, KEY_WRITE, nullptr, &hKey, nullptr) == ERROR_SUCCESS) {
             const std::wstring friendlyName = L"Quick Image Viewer";
             RegSetValueExW(hKey, L"FriendlyAppName", 0, REG_SZ, reinterpret_cast<const BYTE *>(friendlyName.c_str()),
@@ -64,8 +65,8 @@ namespace System {
             RegCloseKey(hKey);
         }
 
-        // 3. Supported image types using centralized constants
-        if (RegCreateKeyExW(HKEY_CURRENT_USER, Constants::Registry::OPEN_WITH_TYPES,
+        // 3. Supported image types
+        if (RegCreateKeyExW(Constants::Registry::ROOT_HIVE, Constants::Registry::OPEN_WITH_TYPES,
                             0, nullptr, REG_OPTION_NON_VOLATILE, KEY_WRITE, nullptr, &hKey, nullptr) == ERROR_SUCCESS) {
             const wchar_t *empty = L"";
             for (size_t i = 0; i < Constants::Registry::SUPPORTED_EXTENSIONS_COUNT; ++i) {
@@ -86,7 +87,7 @@ namespace System {
         std::wstring command = std::wstring(L"\"") + exePath + L"\" -background";
 
         HKEY hKey;
-        if (RegCreateKeyExW(HKEY_CURRENT_USER, Constants::Registry::RUN_KEY,
+        if (RegCreateKeyExW(Constants::Registry::ROOT_HIVE, Constants::Registry::RUN_KEY,
                             0, nullptr, REG_OPTION_NON_VOLATILE, KEY_WRITE, nullptr, &hKey, nullptr) == ERROR_SUCCESS) {
             bool needsUpdate = false;
             DWORD size = 0;
@@ -120,29 +121,27 @@ namespace System {
         }
     }
 
-    // Integer/Flag persistence (DWORD)
     void SaveSetting(const wchar_t *valueName, DWORD value) {
-        RegSetKeyValueW(HKEY_CURRENT_USER, Constants::Registry::ROOT_KEY,
+        RegSetKeyValueW(Constants::Registry::ROOT_HIVE, Constants::Registry::ROOT_KEY,
                         valueName, REG_DWORD, &value, sizeof(DWORD));
     }
 
     DWORD LoadSetting(const wchar_t *valueName, DWORD defaultValue) {
         DWORD value = defaultValue;
         DWORD size = sizeof(DWORD);
-        RegGetValueW(HKEY_CURRENT_USER, Constants::Registry::ROOT_KEY,
+        RegGetValueW(Constants::Registry::ROOT_HIVE, Constants::Registry::ROOT_KEY,
                      valueName, RRF_RT_REG_DWORD, nullptr, &value, &size);
         return value;
     }
 
-    // Text/Path persistence (String)
     void SaveStringSetting(const wchar_t *valueName, const std::wstring &value) {
-        RegSetKeyValueW(HKEY_CURRENT_USER, Constants::Registry::ROOT_KEY, valueName,
+        RegSetKeyValueW(Constants::Registry::ROOT_HIVE, Constants::Registry::ROOT_KEY, valueName,
                         REG_SZ, value.c_str(), static_cast<DWORD>((value.length() + 1) * sizeof(wchar_t)));
     }
 
     void LoadStringSetting(const wchar_t *valueName, wchar_t *buffer, DWORD bufferSize) {
         DWORD size = bufferSize * sizeof(wchar_t);
-        RegGetValueW(HKEY_CURRENT_USER, Constants::Registry::ROOT_KEY, valueName,
+        RegGetValueW(Constants::Registry::ROOT_HIVE, Constants::Registry::ROOT_KEY, valueName,
                      RRF_RT_REG_SZ, nullptr, buffer, &size);
     }
 }
