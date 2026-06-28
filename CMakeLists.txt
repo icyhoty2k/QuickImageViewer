@@ -4,19 +4,20 @@ project(QuickImageViewer)
 set(CMAKE_CXX_STANDARD 23)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
+# Matches your exact physical file tree
 set(SOURCES
-        AppMain.cpp
-        FileHandler.cpp
-        WicDecoder.cpp
-        RegistrySetup.cpp
-        DpiAwareInit.cpp
-        HelpWindow.cpp
-        DropTarget.cpp
+        src/AppMain.cpp
+        src/DropTarget.cpp
+        src/MouseHandler.cpp
+        src/WicDecoder.cpp
+        src/Platform/DpiAwareInit.cpp
+        src/Platform/FileHandler.cpp
+        src/Platform/RegistrySetup.cpp
+        src/Renderer/RendererGDI.cpp
+        src/Renderer/RendererD2D.cpp
+        src/Cache/ImageCache.cpp
+        src/UI/HelpWindow.cpp
         resources/resource.rc
-        Renderer/RendererGDI.cpp
-        Renderer/RendererD2D.cpp
-        MouseHandler.h
-        mouseHandler.cpp
 )
 
 # 1. Define the executable first
@@ -43,4 +44,13 @@ target_link_libraries(QuickImageViewer PRIVATE
         ole32
         oleaut32
         uuid
+)
+
+# Ensure the compiler can resolve includes cleanly
+target_include_directories(QuickImageViewer PRIVATE
+        ${CMAKE_CURRENT_SOURCE_DIR}/src
+        ${CMAKE_CURRENT_SOURCE_DIR}/src/Cache
+        ${CMAKE_CURRENT_SOURCE_DIR}/src/Platform
+        ${CMAKE_CURRENT_SOURCE_DIR}/src/Renderer
+        ${CMAKE_CURRENT_SOURCE_DIR}/src/UI
 )

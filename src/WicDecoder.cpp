@@ -1,6 +1,6 @@
-#include "WicDecoder.h"
+#include "../WicDecoder.h"
 #include "AppState.h"
-#include "WorkerThread.h"
+#include "../WorkerThread.h"
 #include "Constants.h"
 
 using Microsoft::WRL::ComPtr;

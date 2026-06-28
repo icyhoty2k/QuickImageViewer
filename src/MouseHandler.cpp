@@ -1,7 +1,7 @@
-#include "MouseHandler.h"
+#include "../MouseHandler.h"
 #include "AppState.h"
 #include "Constants.h"
-#include "WicDecoder.h"
+#include "../WicDecoder.h"
 #include <windowsx.h>
 #include <algorithm>
 #include <shlobj_core.h>
