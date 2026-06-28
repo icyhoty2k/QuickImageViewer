@@ -58,6 +58,9 @@ class IImageRenderer {
         /// support color effects saturation contrast brightness
         virtual void UpdateColorEffects() {}
 
+        /// Clears the currently active image/SVG to show a blank frame during loading
+        virtual void ClearActiveImage() {}
+
         // -------------------------------------------------------------------
         // SVG support
         // -------------------------------------------------------------------
