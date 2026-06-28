@@ -1,7 +1,9 @@
 # 🖼️ QuickImageViewer (QIV)
 
 *
-*Looking
+
+*
+Looking
 for
 a
 lightweight
@@ -16,13 +18,18 @@ performance?
 **
 
 *
-*QuickImageViewer (
+
+*
+QuickImageViewer (
 QIV)
 **
 is
 a
+
 *
-*fast
+
+*
+fast
 image
 viewer
 built
@@ -46,8 +53,11 @@ Whether
 you
 need
 a
+
 *
-*portable
+
+*
+portable
 image
 viewer
 with
@@ -101,9 +111,9 @@ KB).
 
 ## 📸 Preview
 
-| Main Interface                     | Shortcuts & Integration                |
-|:-----------------------------------|:---------------------------------------|
-| ![Application](Screenshot_App.png) | ![Shortcuts](Screenshot_Shortcuts.png) |
+| Main Interface                               | Shortcuts & Integration                          |
+|:---------------------------------------------|:-------------------------------------------------|
+| ![Application](resources/Screenshot_App.png) | ![Shortcuts](resources/Screenshot_Shortcuts.png) |
 
 ---
 
@@ -120,7 +130,9 @@ the
 viewer
 from
 the
+
 *
+
 *[Releases page](https://github.com/icyhoty2k/PosMan/releases/latest)
 **.
 
@@ -141,7 +153,9 @@ KB).*
 
 *
 *
-*⚡
+
+*
+⚡
 Extreme
 Efficiency:
 **
@@ -151,9 +165,12 @@ footprint
 with
 near-instant
 startup.
+
 *
 *
-*🧳
+
+*
+🧳
 Portable:
 **
 Fully
@@ -170,9 +187,12 @@ with
 no
 installation
 required.
+
 *
 *
-*👻
+
+*
+👻
 Service-Like
 Persistence:
 **
@@ -192,9 +212,12 @@ ready
 for
 instant
 recall.
+
 *
 *
-*🩹
+
+*
+🩹
 Self-Healing:
 **
 Automatically
@@ -214,9 +237,12 @@ moving
 to
 any
 location.
+
 *
 *
-*🛠️
+
+*
+🛠️
 Zero-Magic
 Design:
 **
@@ -236,9 +262,12 @@ maximum
 transparency
 and
 speed.
+
 *
 *
-*🧠
+
+*
+🧠
 Smart
 Resource
 Management:
@@ -267,12 +296,16 @@ latest
 binary
 from
 the
+
 *
+
 *[Releases page](https://github.com/icyhoty2k/PosMan/releases/latest)
 **.
 
 *
-*💡
+
+*
+💡
 Note:
 **
 If
@@ -323,6 +356,7 @@ abstractions:
 *
 *
 *
+
 `main.cpp`
 ** :
 Application
@@ -330,18 +364,22 @@ lifecycle
 and
 instance
 management.
+
 *
 *
 *
+
 `WicDecoder.cpp`
 ** :
 Low-level
 WIC
 image
 decoding.
+
 *
 *
 *
+
 `RendererD2D/GDI.cpp`
 ** :
 Hardware-accelerated (
@@ -350,9 +388,11 @@ or
 fallback (
 GDI)
 rendering.
+
 *
 *
 *
+
 `AppState.h`
 ** :
 Centralized,
@@ -382,7 +422,9 @@ cmake --build . --config Release
 Licensed
 under
 the
+
 *
+
 *[GNU Affero General Public License v3.0 (AGPLv3)](LICENSE)
 **.
 See
