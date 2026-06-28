@@ -34,6 +34,7 @@ namespace Constants {
     // Custom window messages
     constexpr UINT WM_QIV_PENDING_UPLOADS = WM_USER + 1; // Posted by background decoder thread
     constexpr UINT WM_QIV_REPAINT = WM_USER + 2; // Signal to UI thread that bitmap is ready
+    constexpr UINT WM_QIV_SVG_READY = WM_USER + 3; // Posted by IO thread when SVG bytes are loaded
     // DWM API Attributes
     constexpr DWORD DWMWA_WINDOW_CORNER_PREFERENCE = 33;
 
@@ -71,7 +72,8 @@ namespace Constants {
         constexpr const wchar_t *SUPPORTED_EXTENSIONS[] = {
             L".jpg", L".jpeg", L".png", L".webp", L".bmp", L".gif", L".tiff", L".tif",
             L".ico", L".heic", L".heif", L".jxr", L".wdp", L".hdp", L".dds",
-            L".dng", L".cr2", L".cr3", L".nef", L".arw"
+            L".dng", L".cr2", L".cr3", L".nef", L".arw",
+            L".svg"
         };
 
         // Helper to get the number of elements

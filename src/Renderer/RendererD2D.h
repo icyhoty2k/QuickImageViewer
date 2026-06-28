@@ -5,6 +5,7 @@
 #include <dxgi1_2.h>
 #include <d2d1_3.h>
 #include <d2d1_3helper.h>
+#include <d2d1svg.h>
 #include <dwrite_3.h>
 #include <wrl/client.h>
 #include <list>
@@ -38,6 +39,14 @@ class RendererD2D final : public IImageRenderer {
         void ProcessPendingUploads() override;
 
         void UpdateColorEffects() override;
+
+        // SVG support
+        [[nodiscard]] HRESULT LoadSvgFromBytes(const std::vector<BYTE> &svgBytes,
+                                               const std::wstring &filePath) override;
+
+        bool HasActiveSvg() const override {
+            return m_pActiveSvg != nullptr;
+        }
 
         // Public DWrite resources (used by callers that draw text through the DeviceContext)
         Microsoft::WRL::ComPtr<IDWriteFactory3> m_pDWriteFactory;
@@ -92,6 +101,23 @@ class RendererD2D final : public IImageRenderer {
         std::queue<PendingUpload> m_pendingUploads;
         std::mutex m_cacheMutex;
         std::mutex m_uploadMutex;
+
+        // -------------------------------------------------------------------------
+        // SVG  (ID2D1SvgDocument – device-dependent, released on device loss)
+        // -------------------------------------------------------------------------
+        struct CachedSvg {
+            Microsoft::WRL::ComPtr<ID2D1SvgDocument> document;
+            float viewportW = 0.0f;
+            float viewportH = 0.0f;
+        };
+
+        // Keyed by canonical file path, same as bitmap cache
+        std::unordered_map<std::wstring, CachedSvg> m_svgCache;
+
+        // The SVG document to draw this frame (nullptr when a raster image is active)
+        Microsoft::WRL::ComPtr<ID2D1SvgDocument> m_pActiveSvg;
+        float m_svgNativeW = 0.0f; // intrinsic SVG width  (from viewBox / width attr)
+        float m_svgNativeH = 0.0f; // intrinsic SVG height
 
         // -------------------------------------------------------------------------
         // Window / state

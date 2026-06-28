@@ -8,6 +8,7 @@
 #include <vector>
 #include "WorkerThread.h"
 #include "DriveInfo.h"
+#include "../SvgDecoder.h"
 
 namespace fs = std::filesystem;
 
@@ -210,6 +211,44 @@ void LoadImageIndex(HWND hWnd, int index) {
     const std::wstring &currentPath = g_app.playlist[index];
     SetWindowTextW(hWnd, (currentPath.substr(currentPath.find_last_of(L"\\/") + 1) + L" - QuickImageViewer").c_str());
 
+    // -------------------------------------------------------------------------
+    // SVG path: load bytes on IO thread, call LoadSvgFromBytes on UI thread
+    // -------------------------------------------------------------------------
+    if (SvgDecoder::IsSvgPath(currentPath)) {
+        // Clear the stale raster bitmap NOW so WM_PAINT shows black
+        // instead of the previous image while the IO task runs.
+        if (g_app.renderer) g_app.renderer->ClearActiveImage();
+
+        g_ioWorker.PushTask([currentPath, index, hWnd]() {
+            if (g_app.wantedIndex.load(std::memory_order_acquire) != index) return;
+
+            std::vector<BYTE> svgBytes;
+            if (FAILED(SvgDecoder::LoadFile(currentPath, svgBytes))) return;
+
+            // Must create ID2D1SvgDocument on the UI thread.
+            // We ship the bytes back via a heap-allocated vector + PostMessage.
+            // Use a simple wrapper struct so we can pass the pointer as LPARAM.
+            struct SvgPayload {
+                std::wstring path;
+                std::vector<BYTE> bytes;
+            };
+
+            auto *payload = new SvgPayload{currentPath, std::move(svgBytes)};
+
+            // WM_QIV_SVG_READY is defined as WM_USER + 3 in Constants.h
+            // We post it here; AppMain.cpp handles it.
+            PostMessageW(hWnd, Constants::WM_QIV_SVG_READY,
+                         static_cast<WPARAM>(index),
+                         reinterpret_cast<LPARAM>(payload));
+        });
+
+        SetTimer(hWnd, 1001, Constants::PRELOAD_TIMER_COUNTDOWN, nullptr);
+        return;
+    }
+
+    // -------------------------------------------------------------------------
+    // Raster path (unchanged)
+    // -------------------------------------------------------------------------
     if (g_app.renderer && SUCCEEDED(g_app.renderer->LoadBitmap(nullptr, 0, 0, currentPath))) {
         InvalidateRect(hWnd, nullptr, FALSE);
         SetTimer(hWnd, 1001, Constants::PRELOAD_TIMER_COUNTDOWN, nullptr);
