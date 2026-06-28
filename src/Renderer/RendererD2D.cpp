@@ -63,23 +63,29 @@ void RendererD2D::UpdateColorEffects() {
         !m_pContrastEffect ||
         !m_pBrightnessEffect)
         return;
+
     m_pSaturationEffect->SetValue(
             D2D1_SATURATION_PROP_SATURATION,
             g_app.saturation);
+
     m_pContrastEffect->SetValue(
             D2D1_CONTRAST_PROP_CONTRAST,
-            g_app.contrast);
-    float b = g_app.brightness;
+            std::clamp(g_app.contrast, 0.0f, 2.0f));
+
+
+    float b = std::clamp(g_app.brightness, -1.0f, 1.0f);
+
+    // smooth brightness
+    float white = 1.0f + (b * 0.5f);
+    float black = (b < 0.0f) ? (-b * 0.5f) : 0.0f;
+
     m_pBrightnessEffect->SetValue(
             D2D1_BRIGHTNESS_PROP_WHITE_POINT,
-            D2D1::Vector2F(
-                    1.0f + b,
-                    1.0f + b));
+            D2D1::Vector2F(white, white));
+
     m_pBrightnessEffect->SetValue(
             D2D1_BRIGHTNESS_PROP_BLACK_POINT,
-            D2D1::Vector2F(
-                    b < 0 ? -b : 0.0f,
-                    b < 0 ? -b : 0.0f));
+            D2D1::Vector2F(black, black));
 }
 
 // =============================================================================
@@ -213,7 +219,7 @@ HRESULT RendererD2D::CreateDeviceResources() {
 
 
     hr = m_pDeviceContext->CreateEffect(
-            CLSID_D2D1Brightness,
+            CLSID_D2D1ColorMatrix,
             &m_pBrightnessEffect);
 
     if (FAILED(hr))
@@ -503,7 +509,7 @@ HRESULT RendererD2D::PreloadBitmap(const std::wstring &filePath, int requestInde
 // =============================================================================
 HRESULT RendererD2D::Render() {
     if (!m_pDeviceContext || !m_pSwapChain) return E_FAIL;
-
+   
     m_pDeviceContext->BeginDraw();
     m_pDeviceContext->Clear(m_clearColor);
 
