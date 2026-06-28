@@ -29,6 +29,9 @@ struct AppState {
     bool isRmbDown = false;
     bool showOverlayInfoText = Constants::DEFAULT_SHOW_OVERLAY;
     BYTE opacity = 255;
+    float saturation = Constants::DEFAULT_SATURATION;
+    float brightness = Constants::DEFAULT_BRIGHTNESS;
+    float contrast = Constants::DEFAULT_CONTRAST;
     int screenW = 0;
     int screenH = 0;
     int imgWidth = 0;

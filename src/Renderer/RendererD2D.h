@@ -13,7 +13,8 @@
 #include <mutex>
 #include <queue>
 #include <vector>
-#include "../Platform/Constants.h"
+#include <d2d1effects_1.h>
+
 
 class RendererD2D final : public IImageRenderer {
     public:
@@ -34,6 +35,8 @@ class RendererD2D final : public IImageRenderer {
 
         void ProcessPendingUploads() override;
 
+        void UpdateColorEffects() override;
+
         // Public DWrite resources (used by callers that draw text through the DeviceContext)
         Microsoft::WRL::ComPtr<IDWriteFactory3> m_pDWriteFactory;
         Microsoft::WRL::ComPtr<IDWriteTextFormat> m_pTextFormat;
@@ -53,6 +56,10 @@ class RendererD2D final : public IImageRenderer {
         Microsoft::WRL::ComPtr<IDXGISwapChain1> m_pSwapChain;
         Microsoft::WRL::ComPtr<ID2D1Device6> m_pD2DDevice;
         Microsoft::WRL::ComPtr<ID2D1DeviceContext7> m_pDeviceContext;
+        Microsoft::WRL::ComPtr<ID2D1Effect> m_pSaturationEffect;
+        Microsoft::WRL::ComPtr<ID2D1Effect> m_pContrastEffect;
+        Microsoft::WRL::ComPtr<ID2D1Effect> m_pBrightnessEffect;
+        Microsoft::WRL::ComPtr<ID2D1Effect> m_pScaleEffect;
 
         // Back-buffer D2D bitmap we render into each frame
         Microsoft::WRL::ComPtr<ID2D1Bitmap1> m_pBackBufferBitmap;
@@ -82,6 +89,7 @@ class RendererD2D final : public IImageRenderer {
         std::list<std::wstring> m_lruList;
         std::queue<PendingUpload> m_pendingUploads;
         std::mutex m_cacheMutex;
+        std::mutex m_uploadMutex;
 
         // -------------------------------------------------------------------------
         // Window / state

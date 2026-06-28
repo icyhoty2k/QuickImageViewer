@@ -1,3 +1,4 @@
+#include <algorithm>
 #ifndef NOMINMAX
 #define NOMINMAX
 #endif
@@ -41,7 +42,7 @@ DropTarget *g_pDropTarget = nullptr;
 IoThreadPool g_ioWorker;
 WorkerThread g_decoderWorker(true);
 
-void ToggleFullscreen(HWND hWnd) {
+static void ToggleFullscreen(HWND hWnd) {
     if (!g_app.isFullscreen) {
         GetWindowRect(hWnd, &g_app.savedWindowRect);
         MONITORINFO mi = {sizeof(mi)};
@@ -78,6 +79,14 @@ void ToggleFullscreen(HWND hWnd) {
 
         g_app.isFullscreen = false;
     }
+}
+
+static void UpdateRendererColorEffects(HWND hWnd) {
+    if (g_app.renderer) {
+        g_app.renderer->UpdateColorEffects();
+    }
+
+    InvalidateRect(hWnd, nullptr, FALSE);
 }
 
 LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) {
@@ -177,6 +186,102 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) 
             if (wParam == 'V') {
                 g_app.viewport.flippedV = !g_app.viewport.flippedV;
                 InvalidateRect(hWnd, nullptr, FALSE);
+                return 0;
+            }
+            // ===============================
+            // COLOR EFFECTS
+            // ===============================
+
+
+            // Shift + Delete reset
+            if (wParam == VK_DELETE && shift) {
+                g_app.saturation = Constants::DEFAULT_SATURATION;
+                g_app.brightness = Constants::DEFAULT_BRIGHTNESS;
+                g_app.contrast = Constants::DEFAULT_CONTRAST;
+
+                UpdateRendererColorEffects(hWnd);
+                return 0;
+            }
+
+
+            // I = grayscale
+            if (wParam == 'I') {
+                g_app.saturation =
+                        (g_app.saturation == 0.0f)
+                            ? 1.0f
+                            : 0.0f;
+
+                UpdateRendererColorEffects(hWnd);
+                return 0;
+            }
+
+
+            // [ saturation -
+            if (wParam == VK_OEM_4) {
+                g_app.saturation =
+                        std::max(
+                                0.0f,
+                                g_app.saturation - Constants::COLOR_ADJUST_STEP
+                                );
+
+                UpdateRendererColorEffects(hWnd);
+                return 0;
+            }
+
+
+            // ] saturation +
+            if (wParam == VK_OEM_6) {
+                g_app.saturation =
+                        std::min(
+                                2.0f,
+                                g_app.saturation + Constants::COLOR_ADJUST_STEP
+                                );
+
+                UpdateRendererColorEffects(hWnd);
+                return 0;
+            }
+
+
+            // B brightness +
+            // Shift+B brightness -
+            if (wParam == 'B') {
+                if (shift)
+                    g_app.brightness -= Constants::COLOR_ADJUST_STEP;
+                else
+                    g_app.brightness += Constants::COLOR_ADJUST_STEP;
+
+
+                g_app.brightness =
+                        std::clamp(
+                                g_app.brightness,
+                                -1.0f,
+                                1.0f
+                                );
+
+
+                UpdateRendererColorEffects(hWnd);
+                return 0;
+            }
+
+
+            // C contrast +
+            // Shift+C contrast -
+            if (wParam == 'C') {
+                if (shift)
+                    g_app.contrast -= Constants::COLOR_ADJUST_STEP;
+                else
+                    g_app.contrast += Constants::COLOR_ADJUST_STEP;
+
+
+                g_app.contrast =
+                        std::clamp(
+                                g_app.contrast,
+                                0.0f,
+                                3.0f
+                                );
+
+
+                UpdateRendererColorEffects(hWnd);
                 return 0;
             }
             // Rotate Image: R (Clockwise) or Shift+R (Counter-Clockwise)

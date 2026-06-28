@@ -22,6 +22,10 @@ HRESULT RendererGDI::Initialize(HWND hwnd) {
     return m_backgroundBrush ? S_OK : E_FAIL;
 }
 
+void RendererGDI::UpdateColorEffects() {
+    // GDI renderer does not support D2D effects
+}
+
 void RendererGDI::Resize(UINT width, UINT height) {
     if (m_windowWidth == width && m_windowHeight == height) return;
     m_windowWidth = width;

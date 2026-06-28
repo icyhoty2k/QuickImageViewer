@@ -5,12 +5,12 @@
 #include <algorithm>
 #include <chrono>
 #include <vector>
-
 // Link the required import libraries
 #pragma comment(lib, "d3d11.lib")
 #pragma comment(lib, "dxgi.lib")
 #pragma comment(lib, "d2d1.lib")
 #pragma comment(lib, "dwrite.lib")
+#pragma comment(lib, "dxguid.lib")
 
 extern WorkerThread g_decoderWorker;
 extern IoThreadPool g_ioWorker;
@@ -56,6 +56,30 @@ HRESULT RendererD2D::Initialize(HWND hwnd) {
     }
 
     return CreateDeviceResources();
+}
+
+void RendererD2D::UpdateColorEffects() {
+    if (!m_pSaturationEffect ||
+        !m_pContrastEffect ||
+        !m_pBrightnessEffect)
+        return;
+    m_pSaturationEffect->SetValue(
+            D2D1_SATURATION_PROP_SATURATION,
+            g_app.saturation);
+    m_pContrastEffect->SetValue(
+            D2D1_CONTRAST_PROP_CONTRAST,
+            g_app.contrast);
+    float b = g_app.brightness;
+    m_pBrightnessEffect->SetValue(
+            D2D1_BRIGHTNESS_PROP_WHITE_POINT,
+            D2D1::Vector2F(
+                    1.0f + b,
+                    1.0f + b));
+    m_pBrightnessEffect->SetValue(
+            D2D1_BRIGHTNESS_PROP_BLACK_POINT,
+            D2D1::Vector2F(
+                    b < 0 ? -b : 0.0f,
+                    b < 0 ? -b : 0.0f));
 }
 
 // =============================================================================
@@ -156,8 +180,51 @@ HRESULT RendererD2D::CreateDeviceResources() {
 
     // 8. Create text brush (device-dependent resource)
     hr = m_pDeviceContext->CreateSolidColorBrush(
-            D2D1::ColorF(D2D1::ColorF::LightGreen), &m_pTextBrush);
-    return hr;
+            D2D1::ColorF(D2D1::ColorF::LightGreen),
+            &m_pTextBrush);
+
+    if (FAILED(hr))
+        return hr;
+
+
+    // 9. Create color adjustment effects
+    hr = m_pDeviceContext->CreateEffect(
+            CLSID_D2D1Saturation,
+            &m_pSaturationEffect);
+
+    if (FAILED(hr))
+        return hr;
+
+
+    hr = m_pDeviceContext->CreateEffect(
+            CLSID_D2D1Contrast,
+            &m_pContrastEffect);
+
+    if (FAILED(hr))
+        return hr;
+
+
+    hr = m_pDeviceContext->CreateEffect(
+            CLSID_D2D1Scale,
+            &m_pScaleEffect);
+
+    if (FAILED(hr))
+        return hr;
+
+
+    hr = m_pDeviceContext->CreateEffect(
+            CLSID_D2D1Brightness,
+            &m_pBrightnessEffect);
+
+    if (FAILED(hr))
+        return hr;
+
+
+    // Initialize neutral effect values
+    UpdateColorEffects();
+
+
+    return S_OK;
 }
 
 // =============================================================================
@@ -201,6 +268,10 @@ void RendererD2D::DiscardDeviceResources() {
     m_pSwapChain.Reset();
     m_pD3DContext.Reset();
     m_pD3DDevice.Reset();
+    m_pSaturationEffect.Reset();
+    m_pContrastEffect.Reset();
+    m_pBrightnessEffect.Reset();
+    m_pScaleEffect.Reset();
 }
 
 // =============================================================================
@@ -451,24 +522,20 @@ HRESULT RendererD2D::Render() {
                 renderW = imgSize.width * std::min(ratioX, ratioY);
                 renderH = imgSize.height * std::min(ratioX, ratioY);
                 break;
-
             case Constants::ViewModes::ViewMode::FitToWidth_DoNotPreserveAspectRatio:
                 renderW = rtSize.width;
                 renderH = imgSize.height;
                 if (renderH > rtSize.height) renderH = rtSize.height;
                 break;
-
             case Constants::ViewModes::ViewMode::FitToHeight_DoNotPreserveAspectRatio:
                 renderH = rtSize.height;
                 renderW = imgSize.width;
                 if (renderW > rtSize.width) renderW = rtSize.width;
                 break;
-
             case Constants::ViewModes::ViewMode::FitToWindow_DoNotPreserveAspectRatio:
                 renderW = rtSize.width;
                 renderH = rtSize.height;
                 break;
-
             case Constants::ViewModes::ViewMode::OriginalImageSize_PreserveAspectRatio:
                 renderW = imgSize.width;
                 renderH = imgSize.height;
@@ -492,21 +559,51 @@ HRESULT RendererD2D::Render() {
 
         m_pDeviceContext->SetTransform(transform);
 
-        // Use high-quality cubic when scaled; nearest-neighbor at exact 1:1 to preserve sharpness
         bool isNative = (std::abs(g_app.viewport.zoom - 1.0f) < 0.001f);
         D2D1_INTERPOLATION_MODE interpMode = isNative
                                                  ? D2D1_INTERPOLATION_MODE_NEAREST_NEIGHBOR
                                                  : D2D1_INTERPOLATION_MODE_HIGH_QUALITY_CUBIC;
 
-        m_pDeviceContext->DrawBitmap(
-                m_pBitmap.Get(),
-                D2D1::RectF(left, top, left + renderW, top + renderH),
-                1.0f,
-                interpMode);
+        ID2D1Image *image = m_pBitmap.Get();
+        bool useEffects =
+                std::abs(g_app.saturation - 1.0f) > 0.001f ||
+                std::abs(g_app.contrast - 1.0f) > 0.001f ||
+                std::abs(g_app.brightness) > 0.001f;
+        if (useEffects &&
+            m_pSaturationEffect &&
+            m_pContrastEffect &&
+            m_pBrightnessEffect &&
+            m_pScaleEffect) { // Added missing scale effect check
+            m_pSaturationEffect->SetInput(0, image);
+            m_pContrastEffect->SetInputEffect(0, m_pSaturationEffect.Get());
+            m_pBrightnessEffect->SetInputEffect(0, m_pContrastEffect.Get());
+            m_pScaleEffect->SetInputEffect(0, m_pBrightnessEffect.Get());
+            m_pScaleEffect->SetValue(
+                    D2D1_SCALE_PROP_SCALE,
+                    D2D1::Vector2F(
+                            renderW / imgSize.width,
+                            renderH / imgSize.height));
+
+            m_pScaleEffect->SetValue(
+                    D2D1_SCALE_PROP_INTERPOLATION_MODE,
+                    interpMode);
+            D2D1_POINT_2F targetOffset = D2D1::Point2F(left, top);
+            m_pDeviceContext->DrawImage(
+                    m_pScaleEffect.Get(),
+                    &targetOffset,
+                    nullptr,
+                    interpMode,
+                    D2D1_COMPOSITE_MODE_SOURCE_OVER);
+        } else {
+            m_pDeviceContext->DrawBitmap(
+                    m_pBitmap.Get(),
+                    D2D1::RectF(left, top, left + renderW, top + renderH),
+                    1.0f,
+                    interpMode);
+        }
 
         m_pDeviceContext->SetTransform(D2D1::Matrix3x2F::Identity());
 
-        // Overlay text
         if (!g_app.playlist.empty() && g_app.showOverlayInfoText) {
             std::wstring fullPath = g_app.playlist[g_app.currentIndex];
             std::wstring fileName = fullPath.substr(fullPath.find_last_of(L"\\/") + 1);
@@ -526,15 +623,13 @@ HRESULT RendererD2D::Render() {
     if (hr == D2DERR_RECREATE_TARGET ||
         hr == static_cast<HRESULT>(DXGI_ERROR_DEVICE_REMOVED) ||
         hr == static_cast<HRESULT>(DXGI_ERROR_DEVICE_RESET)) {
-        // Full device loss: rebuild everything
         DiscardDeviceResources();
         hr = CreateDeviceResources();
-        return hr; // caller will repaint next frame
+        return hr;
     }
 
     if (FAILED(hr)) return hr;
 
-    // Present the frame (sync interval 0 = immediate, no vsync forced)
     HRESULT hrPresent = m_pSwapChain->Present(0, 0);
     if (hrPresent == static_cast<HRESULT>(DXGI_ERROR_DEVICE_REMOVED) ||
         hrPresent == static_cast<HRESULT>(DXGI_ERROR_DEVICE_RESET)) {
