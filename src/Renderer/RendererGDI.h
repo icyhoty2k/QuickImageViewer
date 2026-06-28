@@ -1,41 +1,45 @@
 #pragma once
 
 #include "IRenderer.h"
-#include <string> // Ensure this is included
+#include <string>
 
-class RendererGDI final : public IImageRenderer
-{
-public:
-    RendererGDI();
-    ~RendererGDI() override;
+class RendererGDI final : public IImageRenderer {
+    public:
+        RendererGDI();
 
-    [[nodiscard]] HRESULT Initialize(HWND hwnd) override;
-    void Resize(UINT width, UINT height) override;
+        ~RendererGDI() override;
 
-    // Updated signature to match IRenderer
-    [[nodiscard]] HRESULT LoadBitmap(
-        IWICBitmapSource* bitmap,
-        UINT width,
-        UINT height,
-        const std::wstring& filePath) override;
+        [[nodiscard]] HRESULT Initialize(HWND hwnd) override;
 
-    [[nodiscard]] HRESULT Render() override;
+        void Resize(UINT width, UINT height) override;
 
-    [[nodiscard]] HRESULT PreloadBitmap(const std::wstring& filePath) override;
+        [[nodiscard]] HRESULT LoadBitmap(
+                IWICBitmapSource *bitmap,
+                UINT width,
+                UINT height,
+                const std::wstring &filePath) override;
 
-private:
-    void DestroyBackBuffer();
-    [[nodiscard]] HRESULT CreateBackBuffer(UINT width, UINT height);
+        [[nodiscard]] HRESULT Render() override;
 
-private:
-    HWND m_hwnd = nullptr;
-    UINT m_windowWidth = 0;
-    UINT m_windowHeight = 0;
-    UINT m_imageWidth = 0;
-    UINT m_imageHeight = 0;
+        [[nodiscard]] HRESULT PreloadBitmap(const std::wstring &filePath) override;
 
-    HDC m_backDC = nullptr;
-    HBITMAP m_backBitmap = nullptr;
-    HBITMAP m_backBitmapOld = nullptr;
-    HBRUSH m_backgroundBrush = nullptr;
+        // ADD THIS: Required to satisfy the interface for the background worker
+        void ProcessPendingUploads() override;
+
+    private:
+        void DestroyBackBuffer();
+
+        [[nodiscard]] HRESULT CreateBackBuffer(UINT width, UINT height);
+
+    private:
+        HWND m_hwnd = nullptr;
+        UINT m_windowWidth = 0;
+        UINT m_windowHeight = 0;
+        UINT m_imageWidth = 0;
+        UINT m_imageHeight = 0;
+
+        HDC m_backDC = nullptr;
+        HBITMAP m_backBitmap = nullptr;
+        HBITMAP m_backBitmapOld = nullptr;
+        HBRUSH m_backgroundBrush = nullptr;
 };

@@ -43,8 +43,7 @@ namespace System {
         // 2. Register the executable command
         if (RegCreateKeyExW(HKEY_CURRENT_USER, L"Software\\Classes\\Applications\\QuickImageViewer.exe\\shell\\open\\command",
                             0, nullptr, REG_OPTION_NON_VOLATILE, KEY_WRITE, nullptr, &hKey, nullptr) == ERROR_SUCCESS) {
-            RegSetValueExW(hKey, nullptr, 0, REG_SZ, (const BYTE *) command.c_str(), static_cast<DWORD>((command.length() + 1) * sizeof(wchar_t))
-                    );;
+            RegSetValueExW(hKey, nullptr, 0, REG_SZ, (const BYTE *) command.c_str(), static_cast<DWORD>((command.length() + 1) * sizeof(wchar_t)));
             RegCloseKey(hKey);
         }
 

@@ -108,10 +108,17 @@ HRESULT RendererD2D::LoadBitmap(IWICBitmapSource *bitmap, UINT width, UINT heigh
         if (it != m_bitmapCache.end()) {
             m_lruList.splice(m_lruList.begin(), m_lruList, it->second.lruIt);
             m_pBitmap = it->second.bitmap;
+
+            // Extract dimensions directly from VRAM (Zero-Disk I/O)
+            D2D1_SIZE_F size = m_pBitmap->GetSize();
+            g_app.imgWidth = static_cast<int>(size.width);
+            g_app.imgHeight = static_cast<int>(size.height);
+
             return S_OK;
         }
     }
 
+    // A cache probe (bitmap == nullptr) shouldn't proceed to GPU upload
     if (!bitmap || !m_pRenderTarget) return E_FAIL;
 
     // 2. Perform expensive GPU upload OUTSIDE the lock
@@ -137,12 +144,11 @@ HRESULT RendererD2D::LoadBitmap(IWICBitmapSource *bitmap, UINT width, UINT heigh
         m_lruList.push_front(filePath);
         m_bitmapCache[filePath] = {newBitmap, m_lruList.begin()};
         m_pBitmap = newBitmap;
-    }
 
-    // Suppress unused-parameter warnings: width/height are not needed for D2D
-    // (CreateBitmapFromWicBitmap reads dimensions directly from the WIC source)
-    (void) width;
-    (void) height;
+        // Update global dimensions for the newly loaded image
+        g_app.imgWidth = static_cast<int>(width);
+        g_app.imgHeight = static_cast<int>(height);
+    }
 
     return hr;
 }

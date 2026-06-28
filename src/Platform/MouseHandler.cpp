@@ -1,7 +1,7 @@
-#include "../MouseHandler.h"
+#include "MouseHandler.h"
 #include "AppState.h"
 #include "Constants.h"
-#include "../WicDecoder.h"
+#include "WicDecoder.h"
 #include <windowsx.h>
 #include <algorithm>
 #include <shlobj_core.h>
@@ -102,11 +102,18 @@ void MouseHandler::HandleButtonUp(HWND hWnd, UINT message, LPARAM /*lParam*/) {
             int targetH = (int) (Config::BASE_HEIGHT * g_app.dpiScale);
 
             // 4. Center and RESIZE the window
-            SetWindowPos(hWnd, NULL,
-                         (g_app.screenW - targetW) / 2,
-                         (g_app.screenH - targetH) / 2,
-                         targetW, targetH,
-                         SWP_NOZORDER | SWP_NOACTIVATE | SWP_FRAMECHANGED);
+            HMONITOR hMonitor = MonitorFromWindow(hWnd, MONITOR_DEFAULTTONEAREST);
+            MONITORINFO mi = {sizeof(mi)};
+            if (GetMonitorInfo(hMonitor, &mi)) {
+                int monitorW = mi.rcMonitor.right - mi.rcMonitor.left;
+                int monitorH = mi.rcMonitor.bottom - mi.rcMonitor.top;
+
+                SetWindowPos(hWnd, NULL,
+                             mi.rcMonitor.left + (monitorW - targetW) / 2,
+                             mi.rcMonitor.top + (monitorH - targetH) / 2,
+                             targetW, targetH,
+                             SWP_NOZORDER | SWP_NOACTIVATE | SWP_FRAMECHANGED);
+            }
 
             InvalidateRect(hWnd, nullptr, FALSE);
         }
@@ -143,7 +150,9 @@ void MouseHandler::HandleMouseMove(HWND hWnd, LPARAM lParam) {
             int dy = curMouse.y - g_app.lastMidMouse.y;
             RECT rc;
             GetWindowRect(hWnd, &rc);
-            SetWindowPos(hWnd, nullptr, 0, 0, (rc.right - rc.left) + dx, (rc.bottom - rc.top) + dy,
+            int newW = std::max(200, static_cast<int>((rc.right - rc.left) + dx));
+            int newH = std::max(150, static_cast<int>((rc.bottom - rc.top) + dy));
+            SetWindowPos(hWnd, nullptr, 0, 0, newW, newH,
                          SWP_NOMOVE | SWP_NOZORDER | SWP_NOACTIVATE | SWP_NOCOPYBITS);
         }
         g_app.lastMidMouse = curMouse;
