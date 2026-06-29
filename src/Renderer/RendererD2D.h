@@ -90,15 +90,15 @@ class RendererD2D final : public IImageRenderer {
         Microsoft::WRL::ComPtr<ID2D1Bitmap1> m_pBackBufferBitmap;
 
         // Cache Window Resources
-        HWND m_hCacheWnd = nullptr; // stored so RenderCacheWindow can query real client size
+        HWND m_hCacheWnd = nullptr;
         Microsoft::WRL::ComPtr<IDXGISwapChain1> m_pCacheSwapChain;
         Microsoft::WRL::ComPtr<ID2D1Bitmap1> m_pCacheBackBuffer;
         Microsoft::WRL::ComPtr<ID2D1SolidColorBrush> m_pCacheTextBrush;
         Microsoft::WRL::ComPtr<ID2D1SolidColorBrush> m_pCacheBorderBrush;
-        Microsoft::WRL::ComPtr<ID2D1SolidColorBrush> m_pCacheButtonBrush; // button fill
-        Microsoft::WRL::ComPtr<ID2D1SolidColorBrush> m_pCacheButtonTextBrush; // button label
+        Microsoft::WRL::ComPtr<ID2D1SolidColorBrush> m_pCacheButtonBrush;
+        Microsoft::WRL::ComPtr<ID2D1SolidColorBrush> m_pCacheButtonTextBrush;
         Microsoft::WRL::ComPtr<IDWriteTextFormat> m_pCacheTextFormat;
-        Microsoft::WRL::ComPtr<IDWriteTextFormat> m_pCacheButtonFormat; // button label format
+        Microsoft::WRL::ComPtr<IDWriteTextFormat> m_pCacheButtonFormat;
         Microsoft::WRL::ComPtr<ID2D1DeviceContext7> m_pCacheDeviceContext;
 
         // -------------------------------------------------------------------------
