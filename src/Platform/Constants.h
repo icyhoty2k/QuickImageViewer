@@ -25,7 +25,15 @@ namespace Constants {
     inline bool SWAP_MOUSE_BUTTONS = true; // Set this to true to swap Left and Right mouse button functions
 
     //==========================Cache optimization====================================
-    constexpr const int VRAM_CACHE_IMAGES_COUNT = 10;
+    constexpr float CACHE_THUMB_WIDTH = 300.0f;
+    constexpr float CACHE_THUMB_HEIGHT = 180.0f;
+    constexpr float CACHE_THUMB_SPACING = 55.0f;
+    constexpr float CACHE_MARGIN = 10.0f;
+    constexpr float CACHE_WINDOW_OPACITY = 210.0f;
+    constexpr float CACHE_WINDOW_MOUSE_WHEEL_SPEED = 120.0f;
+    constexpr int8_t CACHE_WINDOW_MOUSE_WHEEL_DIRECTION = 1; // 1 is forward -1 is reverse
+
+    constexpr const int VRAM_CACHE_IMAGES_COUNT = 30;
     constexpr const int VRAM_CACHE_SVG_COUNT = 10;
     constexpr const int PRELOAD_LOOKASIDE_COUNT = 1;
     constexpr const int PRELOAD_TIMER_COUNTDOWN = 150; // this is used to delay preloading if user scrolls very fast

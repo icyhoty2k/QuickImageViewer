@@ -130,71 +130,97 @@ static void SortPlaylistByDiskOrder(std::vector<std::wstring> &playlist) {
 void OpenInitialImage(HWND hWnd) {
     g_app.isDialogVisible = true;
 
-    // Build the filter buffer correctly to avoid dialog failure
+    // Helper for building the filter string
     std::vector<wchar_t> filterBuffer;
+    auto AppendFilterString = [&](std::wstring_view text) {
+        filterBuffer.insert(filterBuffer.end(), text.begin(), text.end());
+        filterBuffer.push_back(L'\0');
+    };
 
-    // 1. All Supported Images
-    std::wstring desc = L"All Supported Images";
-    filterBuffer.insert(filterBuffer.end(), desc.begin(), desc.end());
-    filterBuffer.push_back(L'\0');
-
-    std::wstring exts;
+    // Build supported extensions
+    std::wstring extensions;
     for (size_t i = 0; i < Constants::Registry::SUPPORTED_EXTENSIONS_COUNT; ++i) {
-        exts += L"*" + std::wstring(Constants::Registry::SUPPORTED_EXTENSIONS[i]);
-        if (i < Constants::Registry::SUPPORTED_EXTENSIONS_COUNT - 1) exts += L";";
+        extensions += L"*";
+        extensions += Constants::Registry::SUPPORTED_EXTENSIONS[i];
+        if (i + 1 < Constants::Registry::SUPPORTED_EXTENSIONS_COUNT)
+            extensions += L";";
     }
-    filterBuffer.insert(filterBuffer.end(), exts.begin(), exts.end());
+
+    // Filter entries
+    AppendFilterString(L"All Supported Images");
+    AppendFilterString(extensions);
+    AppendFilterString(L"All Files (*.*)");
+    AppendFilterString(L"*.*");
+
+    // End of filter list (double null)
     filterBuffer.push_back(L'\0');
 
-    // 2. All Files
-    std::wstring allFilesDesc = L"All Files (*.*)";
-    filterBuffer.insert(filterBuffer.end(), allFilesDesc.begin(), allFilesDesc.end());
-    filterBuffer.push_back(L'\0');
-    filterBuffer.insert(filterBuffer.end(), L"*.*", L"*.*" + 3);
-    filterBuffer.push_back(L'\0');
-    filterBuffer.push_back(L'\0'); // Double null terminator
+    wchar_t fileName[MAX_PATH] = {};
 
-    wchar_t szFile[MAX_PATH] = {0};
     OPENFILENAMEW ofn{};
     ofn.lStructSize = sizeof(ofn);
     ofn.hwndOwner = hWnd;
-    ofn.lpstrFile = szFile;
-    ofn.nMaxFile = MAX_PATH;
     ofn.lpstrFilter = filterBuffer.data();
-    ofn.Flags = OFN_PATHMUSTEXIST | OFN_FILEMUSTEXIST | OFN_EXPLORER;
+    ofn.lpstrFile = fileName;
+    ofn.nMaxFile = MAX_PATH;
+    ofn.Flags = OFN_EXPLORER | OFN_PATHMUSTEXIST | OFN_FILEMUSTEXIST;
 
-    wchar_t lastDir[MAX_PATH] = {0};
-    System::LoadStringSetting(Constants::Registry::LAST_FOLDER, lastDir, MAX_PATH);
-    if (lastDir[0] != L'\0') ofn.lpstrInitialDir = lastDir;
+    wchar_t lastFolder[MAX_PATH] = {};
+    System::LoadStringSetting(Constants::Registry::LAST_FOLDER,
+                              lastFolder,
+                              MAX_PATH);
 
-    bool success = GetOpenFileNameW(&ofn);
+    if (lastFolder[0] != L'\0')
+        ofn.lpstrInitialDir = lastFolder;
+
+    const BOOL result = GetOpenFileNameW(&ofn);
+
     g_app.isDialogVisible = false;
 
-    if (success) {
-        fs::path filePath = fs::canonical(fs::path(szFile));
-        System::SaveStringSetting(Constants::Registry::LAST_FOLDER, filePath.parent_path().wstring());
+    if (!result) {
+        if (g_app.playlist.empty())
+            PostQuitMessage(0);
+        return;
+    }
 
-        g_app.playlist = fs::directory_iterator(filePath.parent_path())
-                         | std::views::filter([](const auto &e) {
-                             return e.is_regular_file() && is_image_ext(e.path().extension().wstring());
-                         })
-                         | std::views::transform([](const auto &e) {
-                             return fs::canonical(e.path()).wstring();
-                         })
-                         | std::ranges::to<std::vector<std::wstring> >();
+    std::filesystem::path selectedPath;
 
-        // Start IO worker with correct thread count for this drive type (HDD=1, SSD/NVMe=2)
-        EnsureIoWorkerStarted(filePath.parent_path().wstring());
+    try {
+        selectedPath = std::filesystem::canonical(fileName);
+    } catch (...) {
+        return;
+    }
 
-        // Sort by physical disk position to minimise HDD head seeks
-        SortPlaylistByDiskOrder(g_app.playlist);
+    System::SaveStringSetting(
+            Constants::Registry::LAST_FOLDER,
+            selectedPath.parent_path().wstring());
 
-        auto it = std::ranges::find(g_app.playlist, filePath.wstring());
-        if (it != g_app.playlist.end()) {
-            LoadImageIndex(hWnd, static_cast<int>(std::distance(g_app.playlist.begin(), it)));
+    g_app.playlist.clear();
+
+    try {
+        for (const auto &entry: std::filesystem::directory_iterator(selectedPath.parent_path())) {
+            if (!entry.is_regular_file())
+                continue;
+
+            if (!is_image_ext(entry.path().extension().wstring()))
+                continue;
+
+            g_app.playlist.push_back(
+                    std::filesystem::canonical(entry.path()).wstring());
         }
-    } else if (g_app.playlist.empty()) {
-        PostQuitMessage(0);
+    } catch (...) {
+        return;
+    }
+
+    EnsureIoWorkerStarted(selectedPath.parent_path().wstring());
+
+    SortPlaylistByDiskOrder(g_app.playlist);
+
+    auto it = std::ranges::find(g_app.playlist, selectedPath.wstring());
+    if (it != g_app.playlist.end()) {
+        LoadImageIndex(
+                hWnd,
+                static_cast<int>(std::distance(g_app.playlist.begin(), it)));
     }
 }
 
@@ -257,7 +283,7 @@ void LoadImageIndex(HWND hWnd, int index) {
             // Cache miss: just kick off the async load. Do NOT clear the
             // current image, to prevent a black flash. The old image will
             // continue to be displayed until the new one is ready.
-            (void)g_app.renderer->PreloadBitmap(currentPath, index);
+            (void) g_app.renderer->PreloadBitmap(currentPath, index);
         }
     }
 
