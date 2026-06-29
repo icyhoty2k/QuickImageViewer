@@ -74,7 +74,7 @@ namespace Constants {
             L".jpg", L".jpeg", L".png", L".webp", L".bmp", L".gif", L".tiff", L".tif",
             L".ico", L".heic", L".heif", L".jxr", L".wdp", L".hdp", L".dds",
             L".dng", L".cr2", L".cr3", L".nef", L".arw",
-            L".svg"
+            L".svg", L".avif", L".tga"
         };
 
         // Helper to get the number of elements

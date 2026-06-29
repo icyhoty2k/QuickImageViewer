@@ -7,6 +7,8 @@
 #include "Renderer/IRenderer.h"
 #include <memory>
 
+#include "Constants.h"
+
 struct ViewportState {
     int rotation = 0; // 0, 90, 180, 270
     bool flippedH = false; //horizontal Flip
