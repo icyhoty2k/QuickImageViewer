@@ -47,13 +47,18 @@ class RendererD2D final : public IImageRenderer {
 
         // Cache Management
         std::vector<CacheItem> GetCachedBitmaps() override;
+
         void ClearCache() override;
-        void RemoveFromCache(const std::wstring& filePath) override;
+
+        void RemoveFromCache(const std::wstring &filePath) override;
 
         // Cache Window
         void CreateCacheWindowDeviceResources(HWND hwnd);
+
         void DiscardCacheWindowDeviceResources();
+
         void RenderCacheWindow(int selectedIndex);
+
         void ResizeCacheWindow(UINT width, UINT height);
 
 
@@ -85,12 +90,16 @@ class RendererD2D final : public IImageRenderer {
         Microsoft::WRL::ComPtr<ID2D1Bitmap1> m_pBackBufferBitmap;
 
         // Cache Window Resources
+        HWND m_hCacheWnd = nullptr; // stored so RenderCacheWindow can query real client size
         Microsoft::WRL::ComPtr<IDXGISwapChain1> m_pCacheSwapChain;
         Microsoft::WRL::ComPtr<ID2D1Bitmap1> m_pCacheBackBuffer;
         Microsoft::WRL::ComPtr<ID2D1SolidColorBrush> m_pCacheTextBrush;
         Microsoft::WRL::ComPtr<ID2D1SolidColorBrush> m_pCacheBorderBrush;
-        Microsoft::WRL::ComPtr<IDWriteTextFormat> m_pCacheTextFormat; // Added for cache window text
-        Microsoft::WRL::ComPtr<ID2D1DeviceContext7> m_pCacheDeviceContext; // Dedicated device context for cache window
+        Microsoft::WRL::ComPtr<ID2D1SolidColorBrush> m_pCacheButtonBrush; // button fill
+        Microsoft::WRL::ComPtr<ID2D1SolidColorBrush> m_pCacheButtonTextBrush; // button label
+        Microsoft::WRL::ComPtr<IDWriteTextFormat> m_pCacheTextFormat;
+        Microsoft::WRL::ComPtr<IDWriteTextFormat> m_pCacheButtonFormat; // button label format
+        Microsoft::WRL::ComPtr<ID2D1DeviceContext7> m_pCacheDeviceContext;
 
         // -------------------------------------------------------------------------
         // Cache
