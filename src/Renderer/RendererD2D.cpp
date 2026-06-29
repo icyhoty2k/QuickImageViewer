@@ -965,13 +965,18 @@ HRESULT RendererD2D::CreateCacheWindowDeviceResources(HWND hwnd) {
     if (FAILED(hr)) return hr;
 
     // 3. Bind Backbuffer
-    RECT rc;
+    RECT rc{};
     GetClientRect(hwnd, &rc);
 
-    ResizeCacheWindow(
-            rc.right,
-            rc.bottom);
+    UINT w = static_cast<UINT>(rc.right - rc.left);
+    UINT h = static_cast<UINT>(rc.bottom - rc.top);
 
+    if (w == 0 || h == 0) {
+        w = 800;
+        h = Constants::CACHE_WINDOW_THICKNESS;
+    }
+
+    ResizeCacheWindow(w, h);
     // 4. Create Brushes
     m_pCacheDeviceContext->CreateSolidColorBrush(D2D1::ColorF(0.2f, 0.2f, 0.2f), &m_pCacheButtonBrush);
     m_pCacheDeviceContext->CreateSolidColorBrush(D2D1::ColorF(D2D1::ColorF::LightGreen), &m_pCacheBorderBrush);
@@ -981,15 +986,37 @@ HRESULT RendererD2D::CreateCacheWindowDeviceResources(HWND hwnd) {
 }
 
 void RendererD2D::ResizeCacheWindow(UINT width, UINT height) {
-    if (!m_pCacheSwapChain || !m_pCacheDeviceContext) return;
+    if (!m_pCacheSwapChain || !m_pCacheDeviceContext)
+        return;
     m_pCacheDeviceContext->SetTarget(nullptr);
     m_pCacheBackBuffer.Reset();
-    m_pCacheSwapChain->ResizeBuffers(0, width, height, DXGI_FORMAT_UNKNOWN, 0);
-
+    HRESULT hr = m_pCacheSwapChain->ResizeBuffers(
+            0,
+            width,
+            height,
+            DXGI_FORMAT_UNKNOWN,
+            0);
+    if (FAILED(hr))
+        return;
     Microsoft::WRL::ComPtr<IDXGISurface> surface;
-    m_pCacheSwapChain->GetBuffer(0, IID_PPV_ARGS(&surface));
-    D2D1_BITMAP_PROPERTIES1 props = D2D1::BitmapProperties1(D2D1_BITMAP_OPTIONS_TARGET | D2D1_BITMAP_OPTIONS_CANNOT_DRAW,
-                                                            D2D1::PixelFormat(DXGI_FORMAT_B8G8R8A8_UNORM, D2D1_ALPHA_MODE_IGNORE));
-    m_pCacheDeviceContext->CreateBitmapFromDxgiSurface(surface.Get(), &props, &m_pCacheBackBuffer);
-    m_pCacheDeviceContext->SetTarget(m_pCacheBackBuffer.Get());
+    hr = m_pCacheSwapChain->GetBuffer(
+            0,
+            IID_PPV_ARGS(&surface));
+    if (FAILED(hr))
+        return;
+    D2D1_BITMAP_PROPERTIES1 props =
+            D2D1::BitmapProperties1(
+                    D2D1_BITMAP_OPTIONS_TARGET |
+                    D2D1_BITMAP_OPTIONS_CANNOT_DRAW,
+                    D2D1::PixelFormat(
+                            DXGI_FORMAT_B8G8R8A8_UNORM,
+                            D2D1_ALPHA_MODE_IGNORE));
+    hr = m_pCacheDeviceContext->CreateBitmapFromDxgiSurface(
+            surface.Get(),
+            &props,
+            &m_pCacheBackBuffer);
+    if (FAILED(hr))
+        return;
+    m_pCacheDeviceContext->SetTarget(
+            m_pCacheBackBuffer.Get());
 }
