@@ -181,11 +181,18 @@ HRESULT RendererD2D::CreateDeviceResources() {
                                      &m_pD2DDevice);
     if (FAILED(hr)) return hr;
 
-    // 6. Create ID2D1DeviceContext7 from the D2D device
-    hr = m_pD2DDevice->CreateDeviceContext(
-            D2D1_DEVICE_CONTEXT_OPTIONS_NONE,
-            &m_pDeviceContext);
-    if (FAILED(hr)) return hr;
+    // 6. Create device context, then QI up to ID2D1DeviceContext7.
+    //    CreateDeviceContext on ID2D1Device6 tops out at DeviceContext6,
+    //    so we create into the base interface first, then QueryInterface.
+    {
+        Microsoft::WRL::ComPtr<ID2D1DeviceContext> baseDC;
+        hr = m_pD2DDevice->CreateDeviceContext(
+                D2D1_DEVICE_CONTEXT_OPTIONS_NONE,
+                baseDC.GetAddressOf());
+        if (FAILED(hr)) return hr;
+        hr = baseDC.As(&m_pDeviceContext);
+        if (FAILED(hr)) return hr;
+    }
 
     // 7. Bind the swap chain back buffer as the D2D render target
     hr = CreateBackBufferBitmap();
@@ -333,7 +340,7 @@ HRESULT RendererD2D::LoadBitmap(IWICBitmapSource *bitmap, UINT width, UINT heigh
     if (!bitmap || !m_pD2DDevice) return E_FAIL;
 
     // Use a temporary device context to create the bitmap from the WIC source.
-    // This allows the bitmap to be created on the device rather than being tied 
+    // This allows the bitmap to be created on the device rather than being tied
     // strictly to the UI thread's current context state.
     Microsoft::WRL::ComPtr<ID2D1DeviceContext> tempCtx;
     HRESULT hr = m_pD2DDevice->CreateDeviceContext(D2D1_DEVICE_CONTEXT_OPTIONS_NONE, &tempCtx);
@@ -902,7 +909,12 @@ void RendererD2D::CreateCacheWindowDeviceResources(HWND hwnd) {
 
     dxgiFactory->CreateSwapChainForHwnd(m_pD3DDevice.Get(), hwnd, &swapDesc, nullptr, nullptr, &m_pCacheSwapChain);
 
-    m_pD2DDevice->CreateDeviceContext(D2D1_DEVICE_CONTEXT_OPTIONS_NONE, &m_pCacheDeviceContext);
+    // QI up to ID2D1DeviceContext7 via the base interface (same pattern as main context)
+    {
+        Microsoft::WRL::ComPtr<ID2D1DeviceContext> baseDC;
+        m_pD2DDevice->CreateDeviceContext(D2D1_DEVICE_CONTEXT_OPTIONS_NONE, baseDC.GetAddressOf());
+        if (baseDC) baseDC.As(&m_pCacheDeviceContext);
+    }
 
     if (m_pCacheDeviceContext) {
         m_pCacheDeviceContext->CreateSolidColorBrush(D2D1::ColorF(D2D1::ColorF::White), &m_pCacheTextBrush);
@@ -947,7 +959,7 @@ void RendererD2D::RenderCacheWindow(int selectedIndex) {
         std::wstring fileName = items[i].filePath.substr(items[i].filePath.find_last_of(L"\\/") + 1);
         D2D1_RECT_F textRect = D2D1::RectF(x, y + thumbHeight, x + thumbWidth, y + thumbHeight + 30);
         if (m_pCacheTextFormat && m_pCacheTextBrush) {
-            m_pCacheDeviceContext->DrawTextW(fileName.c_str(), (UINT32)fileName.length(), m_pCacheTextFormat.Get(), textRect, m_pCacheTextBrush.Get());
+            m_pCacheDeviceContext->DrawTextW(fileName.c_str(), (UINT32) fileName.length(), m_pCacheTextFormat.Get(), textRect, m_pCacheTextBrush.Get());
         }
 
         x += thumbWidth + padding;
@@ -971,9 +983,9 @@ void RendererD2D::ResizeCacheWindow(UINT width, UINT height) {
         m_pCacheSwapChain->GetBuffer(0, IID_PPV_ARGS(&dxgiBackBuffer));
 
         D2D1_BITMAP_PROPERTIES1 bmpProps = D2D1::BitmapProperties1(
-            D2D1_BITMAP_OPTIONS_TARGET | D2D1_BITMAP_OPTIONS_CANNOT_DRAW,
-            D2D1::PixelFormat(DXGI_FORMAT_B8G8R8A8_UNORM, D2D1_ALPHA_MODE_IGNORE)
-        );
+                D2D1_BITMAP_OPTIONS_TARGET | D2D1_BITMAP_OPTIONS_CANNOT_DRAW,
+                D2D1::PixelFormat(DXGI_FORMAT_B8G8R8A8_UNORM, D2D1_ALPHA_MODE_IGNORE)
+                );
         m_pCacheDeviceContext->CreateBitmapFromDxgiSurface(dxgiBackBuffer.Get(), &bmpProps, &m_pCacheBackBuffer);
         m_pCacheDeviceContext->SetTarget(m_pCacheBackBuffer.Get());
     }
