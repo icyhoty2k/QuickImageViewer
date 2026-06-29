@@ -853,10 +853,15 @@ HRESULT RendererD2D::LoadSvgFromBytes(const std::vector<BYTE> &svgBytes,
 // =============================================================================
 std::vector<IImageRenderer::CacheItem> RendererD2D::GetCachedBitmaps() {
     std::lock_guard<std::mutex> lock(m_cacheMutex);
+    // Walk the LRU list for stable, deterministic order — the unordered_map
+    // gives different iteration order each call, which breaks hit-testing.
     std::vector<CacheItem> items;
     items.reserve(m_bitmapCache.size());
-    for (const auto &pair: m_bitmapCache) {
-        items.push_back({pair.first, pair.second.bitmap.Get()});
+    for (const auto &path: m_lruList) {
+        auto mapIt = m_bitmapCache.find(path);
+        if (mapIt != m_bitmapCache.end()) {
+            items.push_back({path, mapIt->second.bitmap.Get()});
+        }
     }
     return items;
 }
@@ -893,6 +898,8 @@ void RendererD2D::RemoveFromCache(const std::wstring &filePath) {
 void RendererD2D::CreateCacheWindowDeviceResources(HWND hwnd) {
     if (m_pCacheSwapChain) return;
 
+    m_hCacheWnd = hwnd;
+
     Microsoft::WRL::ComPtr<IDXGIDevice1> dxgiDevice;
     m_pD3DDevice.As(&dxgiDevice);
     Microsoft::WRL::ComPtr<IDXGIAdapter> dxgiAdapter;
@@ -909,7 +916,7 @@ void RendererD2D::CreateCacheWindowDeviceResources(HWND hwnd) {
 
     dxgiFactory->CreateSwapChainForHwnd(m_pD3DDevice.Get(), hwnd, &swapDesc, nullptr, nullptr, &m_pCacheSwapChain);
 
-    // QI up to ID2D1DeviceContext7 via the base interface (same pattern as main context)
+    // QI up to ID2D1DeviceContext7 via the base interface
     {
         Microsoft::WRL::ComPtr<ID2D1DeviceContext> baseDC;
         m_pD2DDevice->CreateDeviceContext(D2D1_DEVICE_CONTEXT_OPTIONS_NONE, baseDC.GetAddressOf());
@@ -917,55 +924,143 @@ void RendererD2D::CreateCacheWindowDeviceResources(HWND hwnd) {
     }
 
     if (m_pCacheDeviceContext) {
+        // Thumbnail filename label: white, 11pt
         m_pCacheDeviceContext->CreateSolidColorBrush(D2D1::ColorF(D2D1::ColorF::White), &m_pCacheTextBrush);
-        m_pDWriteFactory->CreateTextFormat(L"Segoe UI", NULL, DWRITE_FONT_WEIGHT_NORMAL, DWRITE_FONT_STYLE_NORMAL, DWRITE_FONT_STRETCH_NORMAL, 12.0f, L"en-us", &m_pCacheTextFormat);
-        m_pCacheDeviceContext->CreateSolidColorBrush(D2D1::ColorF(D2D1::ColorF::Green), &m_pCacheBorderBrush);
+        m_pDWriteFactory->CreateTextFormat(L"Segoe UI", nullptr,
+                                           DWRITE_FONT_WEIGHT_NORMAL, DWRITE_FONT_STYLE_NORMAL, DWRITE_FONT_STRETCH_NORMAL,
+                                           11.0f, L"en-us", &m_pCacheTextFormat);
+
+        // Selection border: green
+        m_pCacheDeviceContext->CreateSolidColorBrush(D2D1::ColorF(D2D1::ColorF::LimeGreen), &m_pCacheBorderBrush);
+
+        // Button fill: mid-gray; button label: white
+        m_pCacheDeviceContext->CreateSolidColorBrush(D2D1::ColorF(0.25f, 0.25f, 0.25f), &m_pCacheButtonBrush);
+        m_pCacheDeviceContext->CreateSolidColorBrush(D2D1::ColorF(D2D1::ColorF::White), &m_pCacheButtonTextBrush);
+        m_pDWriteFactory->CreateTextFormat(L"Segoe UI", nullptr,
+                                           DWRITE_FONT_WEIGHT_NORMAL, DWRITE_FONT_STYLE_NORMAL, DWRITE_FONT_STRETCH_NORMAL,
+                                           12.0f, L"en-us", &m_pCacheButtonFormat);
+        if (m_pCacheButtonFormat) {
+            m_pCacheButtonFormat->SetTextAlignment(DWRITE_TEXT_ALIGNMENT_CENTER);
+            m_pCacheButtonFormat->SetParagraphAlignment(DWRITE_PARAGRAPH_ALIGNMENT_CENTER);
+        }
     }
 
-    ResizeCacheWindow(0, 0); // Create initial back buffer
+    // Get actual client size for the first back buffer — ResizeCacheWindow(0,0)
+    // lets DXGI auto-size from the HWND on first creation.
+    ResizeCacheWindow(0, 0);
 }
 
 void RendererD2D::DiscardCacheWindowDeviceResources() {
+    m_hCacheWnd = nullptr;
     m_pCacheSwapChain.Reset();
     m_pCacheBackBuffer.Reset();
     m_pCacheTextBrush.Reset();
     m_pCacheBorderBrush.Reset();
+    m_pCacheButtonBrush.Reset();
+    m_pCacheButtonTextBrush.Reset();
     m_pCacheTextFormat.Reset();
+    m_pCacheButtonFormat.Reset();
     m_pCacheDeviceContext.Reset();
 }
+
+// Button layout constants — also used by CacheWindow.cpp hit-testing
+// Keep in sync with CACHE_BTN_* values used there.
+static constexpr float CACHE_BTN_Y = 8.0f;
+static constexpr float CACHE_BTN_H = 28.0f;
+static constexpr float CACHE_BTN_W = 145.0f;
+static constexpr float CACHE_BTN_PAD = 8.0f;
+static constexpr float CACHE_BTN_X0 = 10.0f;
+static constexpr float CACHE_BTN_X1 = CACHE_BTN_X0 + CACHE_BTN_W + CACHE_BTN_PAD;
+static constexpr float CACHE_BTN_X2 = CACHE_BTN_X1 + CACHE_BTN_W + CACHE_BTN_PAD;
+static constexpr float CACHE_THUMB_Y = CACHE_BTN_Y + CACHE_BTN_H + CACHE_BTN_PAD; // 44 px
 
 void RendererD2D::RenderCacheWindow(int selectedIndex) {
     if (!m_pCacheDeviceContext || !m_pCacheSwapChain) return;
 
+    // Always use the real HWND client rect — m_pCacheDeviceContext->GetSize()
+    // can return (0,0) if ResizeCacheWindow(0,0) was called during init before
+    // the window was shown and sized by Windows.
+    float surfaceW = 0.0f, surfaceH = 0.0f;
+    if (m_hCacheWnd) {
+        RECT cr{};
+        GetClientRect(m_hCacheWnd, &cr);
+        surfaceW = static_cast<float>(cr.right);
+        surfaceH = static_cast<float>(cr.bottom);
+    }
+    if (surfaceW < 1.0f || surfaceH < 1.0f) {
+        D2D1_SIZE_F sz = m_pCacheDeviceContext->GetSize();
+        surfaceW = sz.width;
+        surfaceH = sz.height;
+    }
+    if (surfaceW < 1.0f) return; // nothing to draw into yet
+
     m_pCacheDeviceContext->BeginDraw();
     m_pCacheDeviceContext->Clear(D2D1::ColorF(0.1f, 0.1f, 0.1f));
 
+    // -----------------------------------------------------------------
+    // Draw the three D2D buttons (replaces Win32 child controls which
+    // conflict with the DXGI swap chain paint surface).
+    // -----------------------------------------------------------------
+    const wchar_t *btnLabels[3] = {L"Clear All Cache", L"Add Current Image", L"Remove Selected"};
+    float btnX[3] = {CACHE_BTN_X0, CACHE_BTN_X1, CACHE_BTN_X2};
+
+    for (int b = 0; b < 3; ++b) {
+        D2D1_RECT_F btnRect = D2D1::RectF(btnX[b], CACHE_BTN_Y,
+                                          btnX[b] + CACHE_BTN_W, CACHE_BTN_Y + CACHE_BTN_H);
+        if (m_pCacheButtonBrush) {
+            m_pCacheDeviceContext->FillRectangle(btnRect, m_pCacheButtonBrush.Get());
+        }
+        if (m_pCacheBorderBrush) {
+            m_pCacheDeviceContext->DrawRectangle(btnRect, m_pCacheBorderBrush.Get(), 1.0f);
+        }
+        if (m_pCacheButtonFormat && m_pCacheButtonTextBrush) {
+            m_pCacheDeviceContext->DrawTextW(btnLabels[b],
+                                             static_cast<UINT32>(wcslen(btnLabels[b])),
+                                             m_pCacheButtonFormat.Get(), btnRect,
+                                             m_pCacheButtonTextBrush.Get());
+        }
+    }
+
+    // -----------------------------------------------------------------
+    // Draw thumbnails starting below the button row
+    // -----------------------------------------------------------------
     auto items = GetCachedBitmaps();
-    float x = 10.0f, y = 50.0f;
-    float thumbWidth = 120.0f, thumbHeight = 90.0f;
-    float padding = 10.0f;
-    D2D1_SIZE_F rtSize = m_pCacheDeviceContext->GetSize();
+    constexpr float thumbW = 120.0f;
+    constexpr float thumbH = 90.0f;
+    constexpr float padding = 10.0f;
+    constexpr float labelH = 30.0f;
+
+    float x = 10.0f;
+    float y = CACHE_THUMB_Y;
 
     for (size_t i = 0; i < items.size(); ++i) {
-        D2D1_RECT_F thumbRect = D2D1::RectF(x, y, x + thumbWidth, y + thumbHeight);
+        D2D1_RECT_F thumbRect = D2D1::RectF(x, y, x + thumbW, y + thumbH);
+
         if (items[i].bitmap) {
             m_pCacheDeviceContext->DrawBitmap(items[i].bitmap, thumbRect);
+        } else {
+            // Placeholder for bitmaps not yet uploaded — draw a dark rect
+            m_pCacheDeviceContext->FillRectangle(thumbRect, m_pCacheButtonBrush.Get());
         }
 
-        if (i == selectedIndex) {
-            m_pCacheDeviceContext->DrawRectangle(&thumbRect, m_pCacheBorderBrush.Get(), 2.0f);
+        if (static_cast<int>(i) == selectedIndex && m_pCacheBorderBrush) {
+            m_pCacheDeviceContext->DrawRectangle(thumbRect, m_pCacheBorderBrush.Get(), 2.0f);
         }
 
-        std::wstring fileName = items[i].filePath.substr(items[i].filePath.find_last_of(L"\\/") + 1);
-        D2D1_RECT_F textRect = D2D1::RectF(x, y + thumbHeight, x + thumbWidth, y + thumbHeight + 30);
+        // Filename label below the thumbnail
+        std::wstring fileName = items[i].filePath.substr(items[i].filePath.find_last_of(L"\/") + 1);
+        D2D1_RECT_F textRect = D2D1::RectF(x, y + thumbH, x + thumbW, y + thumbH + labelH);
         if (m_pCacheTextFormat && m_pCacheTextBrush) {
-            m_pCacheDeviceContext->DrawTextW(fileName.c_str(), (UINT32) fileName.length(), m_pCacheTextFormat.Get(), textRect, m_pCacheTextBrush.Get());
+            m_pCacheDeviceContext->DrawTextW(fileName.c_str(),
+                                             static_cast<UINT32>(fileName.length()),
+                                             m_pCacheTextFormat.Get(), textRect,
+                                             m_pCacheTextBrush.Get());
         }
 
-        x += thumbWidth + padding;
-        if (x + thumbWidth > rtSize.width - padding) {
+        x += thumbW + padding;
+        if (x + thumbW > surfaceW - padding) {
             x = 10.0f;
-            y += thumbHeight + padding + 30.0f;
+            y += thumbH + padding + labelH;
         }
     }
 
