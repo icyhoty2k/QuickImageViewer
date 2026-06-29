@@ -149,8 +149,7 @@ HRESULT RendererD2D::CreateDeviceResources() {
     if (FAILED(hr)) return hr;
 
     Microsoft::WRL::ComPtr<IDXGIFactory2> dxgiFactory;
-    hr = dxgiAdapter->GetParent(__uuidof(IDXGIFactory2),
-                                reinterpret_cast<void **>(dxgiFactory.GetAddressOf()));
+    hr = dxgiAdapter->GetParent(IID_PPV_ARGS(&dxgiFactory));
     if (FAILED(hr)) return hr;
 
     // 4. Create DXGI swap chain for the HWND
@@ -171,7 +170,7 @@ HRESULT RendererD2D::CreateDeviceResources() {
     hr = dxgiFactory->CreateSwapChainForHwnd(
             m_pD3DDevice.Get(), m_hwnd,
             &swapDesc, nullptr, nullptr,
-            m_pSwapChain.GetAddressOf());
+            &m_pSwapChain);
     if (FAILED(hr)) return hr;
 
     // Disable exclusive fullscreen transitions (we manage fullscreen ourselves)
@@ -179,13 +178,13 @@ HRESULT RendererD2D::CreateDeviceResources() {
 
     // 5. Create D2D device from the DXGI device
     hr = m_pD2DFactory->CreateDevice(dxgiDevice.Get(),
-                                     reinterpret_cast<ID2D1Device **>(m_pD2DDevice.GetAddressOf()));
+                                     &m_pD2DDevice);
     if (FAILED(hr)) return hr;
 
     // 6. Create ID2D1DeviceContext7 from the D2D device
     hr = m_pD2DDevice->CreateDeviceContext(
             D2D1_DEVICE_CONTEXT_OPTIONS_NONE,
-            reinterpret_cast<ID2D1DeviceContext **>(m_pDeviceContext.GetAddressOf()));
+            &m_pDeviceContext);
     if (FAILED(hr)) return hr;
 
     // 7. Bind the swap chain back buffer as the D2D render target
@@ -248,8 +247,7 @@ HRESULT RendererD2D::CreateBackBufferBitmap() {
     m_pBackBufferBitmap.Reset();
 
     Microsoft::WRL::ComPtr<IDXGISurface> dxgiBackBuffer;
-    HRESULT hr = m_pSwapChain->GetBuffer(0, __uuidof(IDXGISurface),
-                                         reinterpret_cast<void **>(dxgiBackBuffer.GetAddressOf()));
+    HRESULT hr = m_pSwapChain->GetBuffer(0, IID_PPV_ARGS(&dxgiBackBuffer));
     if (FAILED(hr)) return hr;
 
     D2D1_BITMAP_PROPERTIES1 bmpProps = D2D1::BitmapProperties1(
@@ -258,7 +256,7 @@ HRESULT RendererD2D::CreateBackBufferBitmap() {
 
     hr = m_pDeviceContext->CreateBitmapFromDxgiSurface(
             dxgiBackBuffer.Get(), &bmpProps,
-            m_pBackBufferBitmap.GetAddressOf());
+            &m_pBackBufferBitmap);
     if (FAILED(hr)) return hr;
 
     m_pDeviceContext->SetTarget(m_pBackBufferBitmap.Get());
@@ -312,110 +310,6 @@ void RendererD2D::Resize(UINT width, UINT height) {
 }
 
 // =============================================================================
-//  UploadAndCacheBitmap  (thread-safe wrapper)
-// =============================================================================
-HRESULT RendererD2D::UploadAndCacheBitmap(const std::vector<BYTE> &pixelData, UINT stride,
-                                          const std::wstring &filePath, UINT width, UINT height) {
-    std::lock_guard<std::mutex> lock(m_cacheMutex);
-    return UploadAndCacheBitmap_Locked(pixelData, stride, filePath, width, height);
-}
-
-// =============================================================================
-//  UploadAndCacheBitmap_Locked  (caller must hold m_cacheMutex)
-// =============================================================================
-HRESULT RendererD2D::UploadAndCacheBitmap_Locked(const std::vector<BYTE> &pixelData, UINT stride,
-                                                 const std::wstring &filePath, UINT width, UINT height) {
-    if (!m_pDeviceContext || pixelData.empty()) return E_UNEXPECTED;
-
-    Microsoft::WRL::ComPtr<ID2D1Bitmap1> targetBitmap;
-
-    // 1. Check if the exact file is already cached (same path, reloading)
-    auto existing = m_bitmapCache.find(filePath);
-    if (existing != m_bitmapCache.end()) {
-        if (existing->second.width == width && existing->second.height == height) {
-            targetBitmap = existing->second.bitmap; // recycle the VRAM buffer
-        }
-        m_lruList.erase(existing->second.lruIt);
-        m_bitmapCache.erase(existing);
-    }
-
-    // 2. LRU eviction if cache is full
-    if (!targetBitmap && m_lruList.size() >= Constants::VRAM_CACHE_IMAGES_COUNT) {
-        auto oldestIt = m_bitmapCache.find(m_lruList.back());
-        if (oldestIt != m_bitmapCache.end()) {
-            if (oldestIt->second.width == width && oldestIt->second.height == height) {
-                targetBitmap = oldestIt->second.bitmap; // recycle if dimensions match
-            }
-            m_bitmapCache.erase(oldestIt);
-        }
-        m_lruList.pop_back();
-    }
-
-    HRESULT hr = S_OK;
-
-    if (targetBitmap) {
-        // FAST PATH: CopyFromMemory into existing VRAM buffer — zero allocation overhead
-        D2D1_RECT_U destRect = D2D1::RectU(0, 0, width, height);
-        hr = targetBitmap->CopyFromMemory(&destRect, pixelData.data(), stride);
-    } else {
-        // SLOW PATH: Allocate a new D2D bitmap on the GPU
-        D2D1_BITMAP_PROPERTIES1 props = D2D1::BitmapProperties1(
-                D2D1_BITMAP_OPTIONS_NONE,
-                D2D1::PixelFormat(DXGI_FORMAT_B8G8R8A8_UNORM, D2D1_ALPHA_MODE_PREMULTIPLIED));
-
-        hr = m_pDeviceContext->CreateBitmap(
-                D2D1::SizeU(width, height),
-                pixelData.data(),
-                stride,
-                props,
-                targetBitmap.GetAddressOf());
-    }
-
-    if (FAILED(hr)) return hr;
-
-    // 3. Register in the LRU cache
-    m_lruList.push_front(filePath);
-    m_bitmapCache.emplace(filePath, CachedBitmap{targetBitmap, m_lruList.begin(), width, height});
-    return S_OK;
-}
-
-// =============================================================================
-//  ProcessPendingUploads  — called from the UI thread
-// =============================================================================
-void RendererD2D::ProcessPendingUploads() {
-    auto startTime = std::chrono::high_resolution_clock::now();
-
-    while (true) {
-        PendingUpload upload;
-        {
-            std::lock_guard<std::mutex> lock(m_cacheMutex);
-            if (m_pendingUploads.empty()) break;
-
-            auto now = std::chrono::high_resolution_clock::now();
-            if (std::chrono::duration_cast<std::chrono::milliseconds>(now - startTime).count() > 3) {
-                PostMessageW(m_hwnd, Constants::WM_QIV_PENDING_UPLOADS, 0, 0);
-                break;
-            }
-            upload = std::move(m_pendingUploads.front());
-            m_pendingUploads.pop();
-        }
-
-        int currentIdx = g_app.wantedIndex.load(std::memory_order_acquire);
-        int dist = std::abs(upload.playlistIndex - currentIdx);
-
-        if (dist <= Constants::PRELOAD_LOOKASIDE_COUNT) {
-            HRESULT hr = UploadAndCacheBitmap(upload.pixelData, upload.stride,
-                                              upload.filePath, upload.width, upload.height);
-#ifdef _DEBUG
-            if (FAILED(hr)) OutputDebugStringW(L"RAM to VRAM upload failed.\n");
-#else
-            (void) hr;
-#endif
-        }
-    }
-}
-
-// =============================================================================
 //  LoadBitmap
 // =============================================================================
 HRESULT RendererD2D::LoadBitmap(IWICBitmapSource *bitmap, UINT width, UINT height,
@@ -436,13 +330,19 @@ HRESULT RendererD2D::LoadBitmap(IWICBitmapSource *bitmap, UINT width, UINT heigh
         }
     }
 
-    if (!bitmap || !m_pDeviceContext) return E_FAIL;
+    if (!bitmap || !m_pD2DDevice) return E_FAIL;
 
-    // CreateBitmapFromWicBitmap on ID2D1DeviceContext produces an ID2D1Bitmap1
+    // Use a temporary device context to create the bitmap from the WIC source.
+    // This allows the bitmap to be created on the device rather than being tied 
+    // strictly to the UI thread's current context state.
+    Microsoft::WRL::ComPtr<ID2D1DeviceContext> tempCtx;
+    HRESULT hr = m_pD2DDevice->CreateDeviceContext(D2D1_DEVICE_CONTEXT_OPTIONS_NONE, &tempCtx);
+    if (FAILED(hr)) return hr;
+
     Microsoft::WRL::ComPtr<ID2D1Bitmap1> newBitmap;
-    HRESULT hr = m_pDeviceContext->CreateBitmapFromWicBitmap(
+    hr = tempCtx->CreateBitmapFromWicBitmap(
             bitmap, nullptr,
-            reinterpret_cast<ID2D1Bitmap **>(newBitmap.GetAddressOf()));
+            &newBitmap);
 
     if (SUCCEEDED(hr)) {
         std::lock_guard<std::mutex> lock(m_cacheMutex);
@@ -477,19 +377,42 @@ HRESULT RendererD2D::LoadBitmap(IWICBitmapSource *bitmap, UINT width, UINT heigh
 // =============================================================================
 HRESULT RendererD2D::PreloadBitmap(const std::wstring &filePath, int requestIndex) {
     Microsoft::WRL::ComPtr<IWICImagingFactory2> wicFac = g_decoderWorker.wicFactory;
-    if (!wicFac) return E_UNEXPECTED;
+    if (!wicFac || !m_pD2DDevice) return E_UNEXPECTED;
 
-    g_ioWorker.PushTask([filePath, requestIndex, wicFac, this]() {
+    // Capture the D2D device for the background thread
+    Microsoft::WRL::ComPtr<ID2D1Device6> d2dDevice = m_pD2DDevice;
+
+    g_ioWorker.PushTask([filePath, requestIndex, wicFac, d2dDevice, this]() {
         if (g_app.wantedIndex.load(std::memory_order_acquire) != requestIndex) return;
 
-        Microsoft::WRL::ComPtr<IWICBitmapDecoder> decoder;
-        HRESULT hr = wicFac->CreateDecoderFromFilename(
-                filePath.c_str(), nullptr, GENERIC_READ,
-                WICDecodeMetadataCacheOnDemand, &decoder);
-        if (FAILED(hr)) return;
+        // Read compressed file bytes on the IO thread
+        HANDLE hFile = CreateFileW(filePath.c_str(), GENERIC_READ, FILE_SHARE_READ, NULL, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, NULL);
+        if (hFile == INVALID_HANDLE_VALUE) return;
 
-        g_decoderWorker.PushTask([decoder, filePath, requestIndex, this]() {
+        LARGE_INTEGER fileSize;
+        if (!GetFileSizeEx(hFile, &fileSize)) {
+            CloseHandle(hFile);
+            return;
+        }
+
+        std::vector<BYTE> compressedBytes(fileSize.QuadPart);
+        DWORD bytesRead;
+        if (!ReadFile(hFile, compressedBytes.data(), static_cast<DWORD>(fileSize.QuadPart), &bytesRead, NULL) || bytesRead != fileSize.QuadPart) {
+            CloseHandle(hFile);
+            return;
+        }
+        CloseHandle(hFile);
+
+        g_decoderWorker.PushTask([compressedBytes = std::move(compressedBytes), filePath, requestIndex, wicFac, d2dDevice, this]() mutable {
             if (g_app.wantedIndex.load(std::memory_order_acquire) != requestIndex) return;
+
+            // Create a decoder from the compressed memory stream
+            Microsoft::WRL::ComPtr<IWICStream> wicStream;
+            if (FAILED(wicFac->CreateStream(&wicStream))) return;
+            if (FAILED(wicStream->InitializeFromMemory(compressedBytes.data(), static_cast<DWORD>(compressedBytes.size())))) return;
+
+            Microsoft::WRL::ComPtr<IWICBitmapDecoder> decoder;
+            if (FAILED(wicFac->CreateDecoderFromStream(wicStream.Get(), nullptr, WICDecodeMetadataCacheOnDemand, &decoder))) return;
 
             Microsoft::WRL::ComPtr<IWICBitmapFrameDecode> frame;
             if (FAILED(decoder->GetFrame(0, &frame))) return;
@@ -498,7 +421,7 @@ HRESULT RendererD2D::PreloadBitmap(const std::wstring &filePath, int requestInde
             frame->GetSize(&width, &height);
 
             Microsoft::WRL::ComPtr<IWICFormatConverter> converter;
-            if (FAILED(g_decoderWorker.wicFactory->CreateFormatConverter(&converter))) return;
+            if (FAILED(wicFac->CreateFormatConverter(&converter))) return;
 
             if (FAILED(converter->Initialize(
                 frame.Get(), GUID_WICPixelFormat32bppPBGRA,
@@ -506,22 +429,27 @@ HRESULT RendererD2D::PreloadBitmap(const std::wstring &filePath, int requestInde
                 WICBitmapPaletteTypeCustom)))
                 return;
 
-            UINT stride = width * 4;
-            std::vector<BYTE> pixelData(stride * height);
+            // This is the new direct-to-VRAM path
+            Microsoft::WRL::ComPtr<ID2D1DeviceContext> tempCtx;
+            if (FAILED(d2dDevice->CreateDeviceContext(D2D1_DEVICE_CONTEXT_OPTIONS_NONE, &tempCtx))) return;
 
-            if (FAILED(converter->CopyPixels(nullptr, stride,
-                static_cast<UINT>(pixelData.size()),
-                pixelData.data())))
-                return;
+            Microsoft::WRL::ComPtr<ID2D1Bitmap1> newBitmap;
+            HRESULT hr = tempCtx->CreateBitmapFromWicBitmap(converter.Get(), nullptr, &newBitmap);
+            if (FAILED(hr)) return;
 
             {
                 std::lock_guard<std::mutex> lock(m_cacheMutex);
-                m_pendingUploads.push({
-                    requestIndex, filePath,
-                    std::move(pixelData), stride, width, height
-                });
+                if (m_lruList.size() >= Constants::VRAM_CACHE_IMAGES_COUNT) {
+                    m_bitmapCache.erase(m_lruList.back());
+                    m_lruList.pop_back();
+                }
+                m_lruList.push_front(filePath);
+                m_bitmapCache[filePath] = {newBitmap, m_lruList.begin(), width, height};
             }
-            PostMessageW(m_hwnd, Constants::WM_QIV_PENDING_UPLOADS, 0, 0);
+
+            if (g_app.wantedIndex.load(std::memory_order_acquire) == requestIndex) {
+                PostMessageW(m_hwnd, Constants::WM_QIV_REPAINT, 0, 0);
+            }
         });
     });
     return S_OK;
@@ -911,4 +839,142 @@ HRESULT RendererD2D::LoadSvgFromBytes(const std::vector<BYTE> &svgBytes,
     g_app.imgHeight = static_cast<int>(nativeH);
 
     return S_OK;
+}
+
+// =============================================================================
+//  Cache Management
+// =============================================================================
+std::vector<IImageRenderer::CacheItem> RendererD2D::GetCachedBitmaps() {
+    std::lock_guard<std::mutex> lock(m_cacheMutex);
+    std::vector<CacheItem> items;
+    items.reserve(m_bitmapCache.size());
+    for (const auto &pair: m_bitmapCache) {
+        items.push_back({pair.first, pair.second.bitmap.Get()});
+    }
+    return items;
+}
+
+void RendererD2D::ClearCache() {
+    std::lock_guard<std::mutex> lock(m_cacheMutex);
+    m_bitmapCache.clear();
+    m_lruList.clear();
+    m_svgCache.clear();
+    m_svgLruList.clear();
+    // Also clear the active pointers
+    m_pBitmap.Reset();
+    m_pActiveSvg.Reset();
+}
+
+void RendererD2D::RemoveFromCache(const std::wstring &filePath) {
+    std::lock_guard<std::mutex> lock(m_cacheMutex);
+    auto it = m_bitmapCache.find(filePath);
+    if (it != m_bitmapCache.end()) {
+        m_lruList.erase(it->second.lruIt);
+        m_bitmapCache.erase(it);
+    }
+    auto svg_it = m_svgCache.find(filePath);
+    if (svg_it != m_svgCache.end()) {
+        m_svgLruList.erase(svg_it->second.lruIt);
+        m_svgCache.erase(svg_it);
+    }
+}
+
+// =============================================================================
+//  Cache Window
+// =============================================================================
+
+void RendererD2D::CreateCacheWindowDeviceResources(HWND hwnd) {
+    if (m_pCacheSwapChain) return;
+
+    Microsoft::WRL::ComPtr<IDXGIDevice1> dxgiDevice;
+    m_pD3DDevice.As(&dxgiDevice);
+    Microsoft::WRL::ComPtr<IDXGIAdapter> dxgiAdapter;
+    dxgiDevice->GetAdapter(&dxgiAdapter);
+    Microsoft::WRL::ComPtr<IDXGIFactory2> dxgiFactory;
+    dxgiAdapter->GetParent(IID_PPV_ARGS(&dxgiFactory));
+
+    DXGI_SWAP_CHAIN_DESC1 swapDesc{};
+    swapDesc.Format = DXGI_FORMAT_B8G8R8A8_UNORM;
+    swapDesc.SampleDesc.Count = 1;
+    swapDesc.BufferUsage = DXGI_USAGE_RENDER_TARGET_OUTPUT;
+    swapDesc.BufferCount = 2;
+    swapDesc.SwapEffect = DXGI_SWAP_EFFECT_FLIP_DISCARD;
+
+    dxgiFactory->CreateSwapChainForHwnd(m_pD3DDevice.Get(), hwnd, &swapDesc, nullptr, nullptr, &m_pCacheSwapChain);
+
+    m_pD2DDevice->CreateDeviceContext(D2D1_DEVICE_CONTEXT_OPTIONS_NONE, &m_pCacheDeviceContext);
+
+    if (m_pCacheDeviceContext) {
+        m_pCacheDeviceContext->CreateSolidColorBrush(D2D1::ColorF(D2D1::ColorF::White), &m_pCacheTextBrush);
+        m_pDWriteFactory->CreateTextFormat(L"Segoe UI", NULL, DWRITE_FONT_WEIGHT_NORMAL, DWRITE_FONT_STYLE_NORMAL, DWRITE_FONT_STRETCH_NORMAL, 12.0f, L"en-us", &m_pCacheTextFormat);
+        m_pCacheDeviceContext->CreateSolidColorBrush(D2D1::ColorF(D2D1::ColorF::Green), &m_pCacheBorderBrush);
+    }
+
+    ResizeCacheWindow(0, 0); // Create initial back buffer
+}
+
+void RendererD2D::DiscardCacheWindowDeviceResources() {
+    m_pCacheSwapChain.Reset();
+    m_pCacheBackBuffer.Reset();
+    m_pCacheTextBrush.Reset();
+    m_pCacheBorderBrush.Reset();
+    m_pCacheTextFormat.Reset();
+    m_pCacheDeviceContext.Reset();
+}
+
+void RendererD2D::RenderCacheWindow(int selectedIndex) {
+    if (!m_pCacheDeviceContext || !m_pCacheSwapChain) return;
+
+    m_pCacheDeviceContext->BeginDraw();
+    m_pCacheDeviceContext->Clear(D2D1::ColorF(0.1f, 0.1f, 0.1f));
+
+    auto items = GetCachedBitmaps();
+    float x = 10.0f, y = 50.0f;
+    float thumbWidth = 120.0f, thumbHeight = 90.0f;
+    float padding = 10.0f;
+    D2D1_SIZE_F rtSize = m_pCacheDeviceContext->GetSize();
+
+    for (size_t i = 0; i < items.size(); ++i) {
+        D2D1_RECT_F thumbRect = D2D1::RectF(x, y, x + thumbWidth, y + thumbHeight);
+        if (items[i].bitmap) {
+            m_pCacheDeviceContext->DrawBitmap(items[i].bitmap, thumbRect);
+        }
+
+        if (i == selectedIndex) {
+            m_pCacheDeviceContext->DrawRectangle(&thumbRect, m_pCacheBorderBrush.Get(), 2.0f);
+        }
+
+        std::wstring fileName = items[i].filePath.substr(items[i].filePath.find_last_of(L"\\/") + 1);
+        D2D1_RECT_F textRect = D2D1::RectF(x, y + thumbHeight, x + thumbWidth, y + thumbHeight + 30);
+        if (m_pCacheTextFormat && m_pCacheTextBrush) {
+            m_pCacheDeviceContext->DrawTextW(fileName.c_str(), (UINT32)fileName.length(), m_pCacheTextFormat.Get(), textRect, m_pCacheTextBrush.Get());
+        }
+
+        x += thumbWidth + padding;
+        if (x + thumbWidth > rtSize.width - padding) {
+            x = 10.0f;
+            y += thumbHeight + padding + 30.0f;
+        }
+    }
+
+    m_pCacheDeviceContext->EndDraw();
+    m_pCacheSwapChain->Present(1, 0);
+}
+
+void RendererD2D::ResizeCacheWindow(UINT width, UINT height) {
+    if (m_pCacheSwapChain) {
+        m_pCacheDeviceContext->SetTarget(nullptr);
+        m_pCacheBackBuffer.Reset();
+        m_pCacheSwapChain->ResizeBuffers(0, width, height, DXGI_FORMAT_UNKNOWN, 0);
+
+        Microsoft::WRL::ComPtr<IDXGISurface> dxgiBackBuffer;
+        m_pCacheSwapChain->GetBuffer(0, IID_PPV_ARGS(&dxgiBackBuffer));
+
+        D2D1_BITMAP_PROPERTIES1 bmpProps = D2D1::BitmapProperties1(
+            D2D1_BITMAP_OPTIONS_TARGET | D2D1_BITMAP_OPTIONS_CANNOT_DRAW,
+            D2D1::PixelFormat(DXGI_FORMAT_B8G8R8A8_UNORM, D2D1_ALPHA_MODE_IGNORE)
+        );
+        m_pCacheDeviceContext->CreateBitmapFromDxgiSurface(dxgiBackBuffer.Get(), &bmpProps, &m_pCacheBackBuffer);
+        m_pCacheDeviceContext->SetTarget(m_pCacheBackBuffer.Get());
+    }
 }

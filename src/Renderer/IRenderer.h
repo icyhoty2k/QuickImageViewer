@@ -4,7 +4,10 @@
 #include <wincodec.h>
 #include <string>
 #include <vector>
-#include "../Platform/Constants.h"
+#include <d2d1_1.h>
+
+// Forward declaration to avoid including the full d2d1.h in this header
+struct ID2D1Bitmap1;
 
 /// Base interface for image rendering strategies.
 /// Implementations must handle bitmap loading, scaling, and painting.
@@ -79,4 +82,16 @@ class IImageRenderer {
         virtual bool HasActiveSvg() const {
             return false;
         }
+
+        // -------------------------------------------------------------------
+        // Cache Management
+        // -------------------------------------------------------------------
+        struct CacheItem {
+            std::wstring filePath;
+            ID2D1Bitmap1* bitmap;
+        };
+
+        virtual std::vector<CacheItem> GetCachedBitmaps() { return {}; }
+        virtual void ClearCache() {}
+        virtual void RemoveFromCache(const std::wstring& filePath) {}
 };

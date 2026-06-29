@@ -4,7 +4,6 @@
 #include <d3d11.h>
 #include <dxgi1_2.h>
 #include <d2d1_3.h>
-#include <d2d1_3helper.h>
 #include <d2d1svg.h>
 #include <dwrite_3.h>
 #include <wrl/client.h>
@@ -12,9 +11,7 @@
 #include <unordered_map>
 #include <string>
 #include <mutex>
-#include <queue>
 #include <vector>
-#include <d2d1effects_1.h>
 
 
 class RendererD2D final : public IImageRenderer {
@@ -36,8 +33,6 @@ class RendererD2D final : public IImageRenderer {
 
         [[nodiscard]] HRESULT Render() override;
 
-        void ProcessPendingUploads() override;
-
         void UpdateColorEffects() override;
 
         void ClearActiveImage() override;
@@ -49,6 +44,18 @@ class RendererD2D final : public IImageRenderer {
         bool HasActiveSvg() const override {
             return m_pActiveSvg != nullptr;
         }
+
+        // Cache Management
+        std::vector<CacheItem> GetCachedBitmaps() override;
+        void ClearCache() override;
+        void RemoveFromCache(const std::wstring& filePath) override;
+
+        // Cache Window
+        void CreateCacheWindowDeviceResources(HWND hwnd);
+        void DiscardCacheWindowDeviceResources();
+        void RenderCacheWindow(int selectedIndex);
+        void ResizeCacheWindow(UINT width, UINT height);
+
 
         // Public DWrite resources (used by callers that draw text through the DeviceContext)
         Microsoft::WRL::ComPtr<IDWriteFactory3> m_pDWriteFactory;
@@ -77,6 +84,14 @@ class RendererD2D final : public IImageRenderer {
         // Back-buffer D2D bitmap we render into each frame
         Microsoft::WRL::ComPtr<ID2D1Bitmap1> m_pBackBufferBitmap;
 
+        // Cache Window Resources
+        Microsoft::WRL::ComPtr<IDXGISwapChain1> m_pCacheSwapChain;
+        Microsoft::WRL::ComPtr<ID2D1Bitmap1> m_pCacheBackBuffer;
+        Microsoft::WRL::ComPtr<ID2D1SolidColorBrush> m_pCacheTextBrush;
+        Microsoft::WRL::ComPtr<ID2D1SolidColorBrush> m_pCacheBorderBrush;
+        Microsoft::WRL::ComPtr<IDWriteTextFormat> m_pCacheTextFormat; // Added for cache window text
+        Microsoft::WRL::ComPtr<ID2D1DeviceContext7> m_pCacheDeviceContext; // Dedicated device context for cache window
+
         // -------------------------------------------------------------------------
         // Cache
         // -------------------------------------------------------------------------
@@ -87,22 +102,11 @@ class RendererD2D final : public IImageRenderer {
             UINT height = 0;
         };
 
-        struct PendingUpload {
-            int playlistIndex;
-            std::wstring filePath;
-            std::vector<BYTE> pixelData;
-            UINT stride;
-            UINT width;
-            UINT height;
-        };
-
         Microsoft::WRL::ComPtr<ID2D1Bitmap1> m_pBitmap; // currently displayed bitmap
 
         std::unordered_map<std::wstring, CachedBitmap> m_bitmapCache;
         std::list<std::wstring> m_lruList;
-        std::queue<PendingUpload> m_pendingUploads;
         std::mutex m_cacheMutex;
-        std::mutex m_uploadMutex;
 
         // -------------------------------------------------------------------------
         // SVG  (ID2D1SvgDocument – device-dependent, released on device loss)
@@ -137,10 +141,4 @@ class RendererD2D final : public IImageRenderer {
         void DiscardDeviceResources();
 
         HRESULT CreateBackBufferBitmap();
-
-        HRESULT UploadAndCacheBitmap(const std::vector<BYTE> &pixelData, UINT stride,
-                                     const std::wstring &filePath, UINT width, UINT height);
-
-        HRESULT UploadAndCacheBitmap_Locked(const std::vector<BYTE> &pixelData, UINT stride,
-                                            const std::wstring &filePath, UINT width, UINT height);
 };

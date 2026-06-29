@@ -247,20 +247,19 @@ void LoadImageIndex(HWND hWnd, int index) {
     }
 
     // -------------------------------------------------------------------------
-    // Raster path (unchanged)
+    // Raster path (now fully async)
     // -------------------------------------------------------------------------
-    if (g_app.renderer && SUCCEEDED(g_app.renderer->LoadBitmap(nullptr, 0, 0, currentPath))) {
-        InvalidateRect(hWnd, nullptr, FALSE);
-        SetTimer(hWnd, 1001, Constants::PRELOAD_TIMER_COUNTDOWN, nullptr);
-        return;
-    }
-
-    g_ioWorker.PushTask([currentPath, index, hWnd]() {
-        if (g_app.wantedIndex.load(std::memory_order_acquire) != index) return;
-        if (g_app.renderer && SUCCEEDED(g_app.renderer->PreloadBitmap(currentPath, index))) {
-            PostMessage(hWnd, Constants::WM_QIV_REPAINT, 0, 0);
+    if (g_app.renderer) {
+        // Probe the cache. If it hits, this call is synchronous and fast.
+        if (SUCCEEDED(g_app.renderer->LoadBitmap(nullptr, 0, 0, currentPath))) {
+            InvalidateRect(hWnd, nullptr, FALSE);
+        } else {
+            // Cache miss: just kick off the async load. Do NOT clear the
+            // current image, to prevent a black flash. The old image will
+            // continue to be displayed until the new one is ready.
+            (void)g_app.renderer->PreloadBitmap(currentPath, index);
         }
-    });
+    }
 
     SetTimer(hWnd, 1001, Constants::PRELOAD_TIMER_COUNTDOWN, nullptr);
 }

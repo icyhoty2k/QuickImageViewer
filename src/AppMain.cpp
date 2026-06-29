@@ -11,6 +11,7 @@
 #include "../DropTarget.h"
 #include "Platform/FileHandler.h"
 #include "UI/HelpWindow.h"
+#include "UI/CacheWindow.h"
 #include "Platform/MouseHandler.h"
 #include "../WicDecoder.h"
 #include "../SvgDecoder.h"
@@ -297,6 +298,11 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) 
                 OpenInitialImage(hWnd);
                 return 0;
             }
+            // Toggle Cache Menu (F3)
+            if (wParam == VK_F3) {
+                UI::ToggleCacheWindow();
+                return 0;
+            }
             // Hide to RAM instead of quitting (Esc or Ctrl + W)
             if (wParam == VK_ESCAPE || (wParam == 'W' && ctrl)) {
                 if (g_app.GetInstanceCount() <= 1) {
@@ -518,8 +524,15 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) 
             return 0;
         }
         case Constants::WM_QIV_REPAINT: {
-            // Signal the UI to redraw once the IOWorker confirms the bitmap is ready
-            InvalidateRect(hWnd, nullptr, FALSE);
+            // The background thread has finished decoding and caching the bitmap.
+            // Now, on the UI thread, we probe the cache to make it the active bitmap.
+            if (g_app.renderer && !g_app.playlist.empty()) {
+                const std::wstring &currentPath = g_app.playlist[g_app.currentIndex];
+                // This call will find the bitmap in the cache and set it as active.
+                if (SUCCEEDED(g_app.renderer->LoadBitmap(nullptr, 0, 0, currentPath))) {
+                    InvalidateRect(hWnd, nullptr, FALSE); // Now, repaint with the correct image.
+                }
+            }
             return 0;
         }
 
@@ -553,24 +566,6 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) 
                 (void) g_app.renderer->Render();
             }
             EndPaint(hWnd, &ps);
-            return 0;
-        }
-
-        case Constants::WM_QIV_PENDING_UPLOADS: {
-            if (g_app.renderer) {
-                // 1. Upload the background-decoded VRAM
-                g_app.renderer->ProcessPendingUploads();
-
-                // 2. Check if the current image is now ready in the cache
-                if (!g_app.playlist.empty()) {
-                    const std::wstring &currentPath = g_app.playlist[g_app.currentIndex];
-
-                    // Sending nullptr probes the cache. If it hits, it updates dimensions and returns S_OK
-                    if (SUCCEEDED(g_app.renderer->LoadBitmap(nullptr, 0, 0, currentPath))) {
-                        InvalidateRect(hWnd, nullptr, FALSE); // Draw it!
-                    }
-                }
-            }
             return 0;
         }
 
@@ -688,6 +683,7 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE, LPSTR, int nCmdShow) {
 
     RegisterDragDrop(hWnd, (g_pDropTarget = new DropTarget(hWnd)));
     UI::InitHelpWindow(hInstance, hWnd);
+    UI::InitCacheWindow(hInstance, hWnd);
 
     DWORD corner = 2; // DWMWCP_ROUND
     DwmSetWindowAttribute(hWnd, Constants::DWMWA_WINDOW_CORNER_PREFERENCE, &corner, sizeof(corner));
