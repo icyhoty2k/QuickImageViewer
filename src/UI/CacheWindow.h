@@ -25,6 +25,10 @@ namespace UI {
 
     void InitCacheWindow(HINSTANCE hInstance, HWND hParent);
 
+    void InitCacheWindow(HINSTANCE hInstance, HWND hParent, int8_t position);
+
+    void MoveCacheWindow();
+
     void ToggleCacheWindow();
 
     void UpdateCacheView();
