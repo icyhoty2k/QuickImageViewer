@@ -7,6 +7,7 @@
 #include <chrono>
 #include <vector>
 #include <shlwapi.h>  // SHCreateMemStream
+#include "../UI/CacheWindow.h"
 // Link the required import libraries
 #pragma comment(lib, "d3d11.lib")
 #pragma comment(lib, "dxgi.lib")
@@ -383,6 +384,10 @@ HRESULT RendererD2D::LoadBitmap(IWICBitmapSource *bitmap, UINT width, UINT heigh
 //  PreloadBitmap
 // =============================================================================
 HRESULT RendererD2D::PreloadBitmap(const std::wstring &filePath, int requestIndex) {
+    std::lock_guard<std::mutex> lock(m_cacheMutex);
+    if (m_bitmapCache.find(filePath) != m_bitmapCache.end()) {
+        return S_OK; // Already cached, ignore the request
+    }
     Microsoft::WRL::ComPtr<IWICImagingFactory2> wicFac = g_decoderWorker.wicFactory;
     if (!wicFac || !m_pD2DDevice) return E_UNEXPECTED;
 
@@ -446,6 +451,12 @@ HRESULT RendererD2D::PreloadBitmap(const std::wstring &filePath, int requestInde
 
             {
                 std::lock_guard<std::mutex> lock(m_cacheMutex);
+                auto it = m_bitmapCache.find(filePath);
+                if (it != m_bitmapCache.end()) {
+                    // Safely erase the old entry to prevent orphaned nodes in m_lruList
+                    m_lruList.erase(it->second.lruIt);
+                    m_bitmapCache.erase(it);
+                }
                 if (m_lruList.size() >= Constants::VRAM_CACHE_IMAGES_COUNT) {
                     m_bitmapCache.erase(m_lruList.back());
                     m_lruList.pop_back();
@@ -890,175 +901,95 @@ void RendererD2D::RemoveFromCache(const std::wstring &filePath) {
 //  Cache Window
 // =============================================================================
 
-void RendererD2D::CreateCacheWindowDeviceResources(HWND hwnd) {
-    if (m_pCacheSwapChain) return;
-
-    Microsoft::WRL::ComPtr<IDXGIDevice1> dxgiDevice;
-    m_pD3DDevice.As(&dxgiDevice);
-    Microsoft::WRL::ComPtr<IDXGIAdapter> dxgiAdapter;
-    dxgiDevice->GetAdapter(&dxgiAdapter);
-    Microsoft::WRL::ComPtr<IDXGIFactory2> dxgiFactory;
-    dxgiAdapter->GetParent(IID_PPV_ARGS(&dxgiFactory));
-
-    DXGI_SWAP_CHAIN_DESC1 swapDesc{};
-    swapDesc.Format = DXGI_FORMAT_B8G8R8A8_UNORM;
-    swapDesc.SampleDesc.Count = 1;
-    swapDesc.BufferUsage = DXGI_USAGE_RENDER_TARGET_OUTPUT;
-    swapDesc.BufferCount = 2;
-    swapDesc.SwapEffect = DXGI_SWAP_EFFECT_FLIP_DISCARD;
-
-    dxgiFactory->CreateSwapChainForHwnd(m_pD3DDevice.Get(), hwnd, &swapDesc, nullptr, nullptr, &m_pCacheSwapChain);
-
-    // QI up to ID2D1DeviceContext7 via the base interface (same pattern as main context)
-    {
-        Microsoft::WRL::ComPtr<ID2D1DeviceContext> baseDC;
-        m_pD2DDevice->CreateDeviceContext(D2D1_DEVICE_CONTEXT_OPTIONS_NONE, baseDC.GetAddressOf());
-        if (baseDC) baseDC.As(&m_pCacheDeviceContext);
-    }
-
-    if (m_pCacheDeviceContext) {
-        // Thumbnail filename: white, 14 pt
-        m_pCacheDeviceContext->CreateSolidColorBrush(D2D1::ColorF(D2D1::ColorF::White), &m_pCacheTextBrush);
-        m_pDWriteFactory->CreateTextFormat(L"Segoe UI", nullptr,
-                                           DWRITE_FONT_WEIGHT_NORMAL, DWRITE_FONT_STYLE_NORMAL, DWRITE_FONT_STRETCH_NORMAL,
-                                           14.0f, L"en-us", &m_pCacheTextFormat);
-
-        // Selection / border highlight: lime green
-        m_pCacheDeviceContext->CreateSolidColorBrush(D2D1::ColorF(D2D1::ColorF::LimeGreen), &m_pCacheBorderBrush);
-
-        // D2D button fill (mid-gray) and label (white)
-        m_pCacheDeviceContext->CreateSolidColorBrush(D2D1::ColorF(0.25f, 0.25f, 0.28f), &m_pCacheButtonBrush);
-        m_pCacheDeviceContext->CreateSolidColorBrush(D2D1::ColorF(D2D1::ColorF::White), &m_pCacheButtonTextBrush);
-        m_pDWriteFactory->CreateTextFormat(L"Segoe UI", nullptr,
-                                           DWRITE_FONT_WEIGHT_NORMAL, DWRITE_FONT_STYLE_NORMAL, DWRITE_FONT_STRETCH_NORMAL,
-                                           13.0f, L"en-us", &m_pCacheButtonFormat);
-        if (m_pCacheButtonFormat) {
-            m_pCacheButtonFormat->SetTextAlignment(DWRITE_TEXT_ALIGNMENT_CENTER);
-            m_pCacheButtonFormat->SetParagraphAlignment(DWRITE_PARAGRAPH_ALIGNMENT_CENTER);
-        }
-    }
-
-    m_hCacheWnd = hwnd;
-    ResizeCacheWindow(0, 0); // Create initial back buffer (DXGI auto-sizes from hwnd)
-}
-
-void RendererD2D::DiscardCacheWindowDeviceResources() {
-    m_hCacheWnd = nullptr;
-    m_pCacheSwapChain.Reset();
-    m_pCacheBackBuffer.Reset();
-    m_pCacheTextBrush.Reset();
-    m_pCacheBorderBrush.Reset();
-    m_pCacheButtonBrush.Reset();
-    m_pCacheButtonTextBrush.Reset();
-    m_pCacheTextFormat.Reset();
-    m_pCacheButtonFormat.Reset();
-    m_pCacheDeviceContext.Reset();
-}
-
-void RendererD2D::RenderCacheWindow(int selectedIndex) {
+void RendererD2D::RenderCacheWindow(int selectedIndex, int hoverIndex) {
     if (!m_pCacheDeviceContext || !m_pCacheSwapChain) return;
-
-    // Get real surface width from the HWND — m_pCacheDeviceContext->GetSize()
-    // can return (0,0) on the first paint before the swap chain is resized.
-    float surfaceW = 0.0f;
-    if (m_hCacheWnd) {
-        RECT cr{};
-        GetClientRect(m_hCacheWnd, &cr);
-        surfaceW = static_cast<float>(cr.right);
-    }
-    if (surfaceW < 1.0f) {
-        surfaceW = m_pCacheDeviceContext->GetSize().width;
-    }
-    if (surfaceW < 1.0f) return;
-
-    // Layout constants — keep in sync with CacheWindow.cpp
-    constexpr float BTN_Y = 8.0f;
-    constexpr float BTN_H = 28.0f;
-    constexpr float BTN_W = 145.0f;
-    constexpr float BTN_GP = 8.0f;
-    constexpr float BTN_X0 = 10.0f;
-    constexpr float BTN_X1 = BTN_X0 + BTN_W + BTN_GP;
-    constexpr float BTN_X2 = BTN_X1 + BTN_W + BTN_GP;
-
-    constexpr float THUMB_W = 240.0f;
-    constexpr float THUMB_H = 180.0f;
-    constexpr float THUMB_PAD = 12.0f;
-    constexpr float LABEL_H = 36.0f;
-    constexpr float THUMB_X0 = 10.0f;
-    constexpr float THUMB_Y0 = BTN_Y + BTN_H + BTN_GP; // 44 px
-
     m_pCacheDeviceContext->BeginDraw();
-    m_pCacheDeviceContext->Clear(D2D1::ColorF(0.08f, 0.08f, 0.08f));
+    m_pCacheDeviceContext->Clear(D2D1::ColorF(0.08f, 0.08f, 0.08f, 1.0f));
 
-    // ── D2D Buttons ──────────────────────────────────────────────────────────
-    const wchar_t *btnLabels[3] = {L"Clear All Cache", L"Add Current Image", L"Remove Selected"};
-    float btnXArr[3] = {BTN_X0, BTN_X1, BTN_X2};
-
-    for (int b = 0; b < 3; ++b) {
-        D2D1_RECT_F br = D2D1::RectF(btnXArr[b], BTN_Y,
-                                     btnXArr[b] + BTN_W, BTN_Y + BTN_H);
-        if (m_pCacheButtonBrush) m_pCacheDeviceContext->FillRectangle(br, m_pCacheButtonBrush.Get());
-        if (m_pCacheBorderBrush) m_pCacheDeviceContext->DrawRectangle(br, m_pCacheBorderBrush.Get(), 1.0f);
-        if (m_pCacheButtonFormat && m_pCacheButtonTextBrush)
-            m_pCacheDeviceContext->DrawTextW(btnLabels[b],
-                                             static_cast<UINT32>(wcslen(btnLabels[b])),
-                                             m_pCacheButtonFormat.Get(), br, m_pCacheButtonTextBrush.Get());
-    }
-
-    // ── Thumbnails ───────────────────────────────────────────────────────────
-    auto items = GetCachedBitmaps();
-    float x = THUMB_X0;
-    float y = THUMB_Y0;
-
-    for (size_t i = 0; i < items.size(); ++i) {
-        D2D1_RECT_F thumbRect = D2D1::RectF(x, y, x + THUMB_W, y + THUMB_H);
-
-        if (items[i].bitmap) {
-            m_pCacheDeviceContext->DrawBitmap(items[i].bitmap, thumbRect,
-                                              1.0f, D2D1_BITMAP_INTERPOLATION_MODE_LINEAR);
+    // Draw Thumbnails using the shared "Live Object" layout
+    for (size_t i = 0; i < UI::g_thumbnailObjects.size(); ++i) {
+        const auto &thumb = UI::g_thumbnailObjects[i];
+        if (m_bitmapCache.count(thumb.filePath)) {
+            m_pCacheDeviceContext->DrawBitmap(m_bitmapCache[thumb.filePath].bitmap.Get(),
+                                              thumb.rect, 1.0f, D2D1_BITMAP_INTERPOLATION_MODE_LINEAR);
         } else {
-            // Placeholder for items not yet uploaded to VRAM
-            if (m_pCacheButtonBrush)
-                m_pCacheDeviceContext->FillRectangle(thumbRect, m_pCacheButtonBrush.Get());
+            m_pCacheDeviceContext->FillRectangle(thumb.rect, m_pCacheButtonBrush.Get());
         }
 
-        if (static_cast<int>(i) == selectedIndex && m_pCacheBorderBrush) {
-            m_pCacheDeviceContext->DrawRectangle(thumbRect, m_pCacheBorderBrush.Get(), 3.0f);
-        }
+        if (static_cast<int>(i) == selectedIndex)
+            m_pCacheDeviceContext->DrawRectangle(thumb.rect, m_pCacheBorderBrush.Get(), 3.0f);
 
-        std::wstring fileName = items[i].filePath.substr(items[i].filePath.find_last_of(L"\/") + 1);
-        D2D1_RECT_F textRect = D2D1::RectF(x, y + THUMB_H, x + THUMB_W, y + THUMB_H + LABEL_H);
-        if (m_pCacheTextFormat && m_pCacheTextBrush) {
-            m_pCacheDeviceContext->DrawTextW(fileName.c_str(),
-                                             static_cast<UINT32>(fileName.length()),
-                                             m_pCacheTextFormat.Get(), textRect, m_pCacheTextBrush.Get());
-        }
-
-        x += THUMB_W + THUMB_PAD;
-        if (x + THUMB_W > surfaceW - THUMB_PAD) {
-            x = THUMB_X0;
-            y += THUMB_H + THUMB_PAD + LABEL_H;
-        }
+        // Add hover effect if applicable
+        if (static_cast<int>(i) == hoverIndex)
+            m_pCacheDeviceContext->DrawRectangle(thumb.rect, m_pCacheTextBrush.Get(), 1.0f);
     }
-
-    m_pCacheDeviceContext->EndDraw();
+    HRESULT hr = m_pCacheDeviceContext->EndDraw();
+    if (FAILED(hr)) {
+        wchar_t buf[128];
+        swprintf_s(buf, L"Cache EndDraw failed: 0x%08X\n", hr);
+        OutputDebugStringW(buf);
+    }
     m_pCacheSwapChain->Present(1, 0);
 }
 
+HRESULT RendererD2D::CreateCacheWindowDeviceResources(HWND hwnd) {
+    m_hCacheWnd = hwnd;
+
+    // 1. Create Swap Chain for the Cache Window
+    DXGI_SWAP_CHAIN_DESC1 swapDesc{};
+    swapDesc.Width = 0;
+    swapDesc.Height = 0;
+    swapDesc.Format = DXGI_FORMAT_B8G8R8A8_UNORM;
+    swapDesc.BufferCount = 2;
+    swapDesc.BufferUsage = DXGI_USAGE_RENDER_TARGET_OUTPUT;
+    swapDesc.SwapEffect = DXGI_SWAP_EFFECT_FLIP_DISCARD;
+    swapDesc.SampleDesc.Count = 1;
+
+    Microsoft::WRL::ComPtr<IDXGIDevice1> dxgiDevice;
+    m_pD3DDevice.As(&dxgiDevice);
+    Microsoft::WRL::ComPtr<IDXGIAdapter> adapter;
+    dxgiDevice->GetAdapter(&adapter);
+    Microsoft::WRL::ComPtr<IDXGIFactory2> factory;
+    adapter->GetParent(IID_PPV_ARGS(&factory));
+
+    HRESULT hr = factory->CreateSwapChainForHwnd(m_pD3DDevice.Get(), hwnd, &swapDesc, nullptr, nullptr, &m_pCacheSwapChain);
+    if (FAILED(hr)) return hr;
+
+    // 2. Create D2D Device Context (Corrected initialization logic)
+    Microsoft::WRL::ComPtr<ID2D1DeviceContext> baseContext;
+    hr = m_pD2DDevice->CreateDeviceContext(D2D1_DEVICE_CONTEXT_OPTIONS_NONE, &baseContext);
+    if (FAILED(hr)) return hr;
+
+    // QueryInterface for the version your header uses (ID2D1DeviceContext7)
+    hr = baseContext.As(&m_pCacheDeviceContext);
+    if (FAILED(hr)) return hr;
+
+    // 3. Bind Backbuffer
+    RECT rc;
+    GetClientRect(hwnd, &rc);
+
+    ResizeCacheWindow(
+            rc.right,
+            rc.bottom);
+
+    // 4. Create Brushes
+    m_pCacheDeviceContext->CreateSolidColorBrush(D2D1::ColorF(0.2f, 0.2f, 0.2f), &m_pCacheButtonBrush);
+    m_pCacheDeviceContext->CreateSolidColorBrush(D2D1::ColorF(D2D1::ColorF::LightGreen), &m_pCacheBorderBrush);
+    m_pCacheDeviceContext->CreateSolidColorBrush(D2D1::ColorF(D2D1::ColorF::White), &m_pCacheTextBrush);
+
+    return S_OK;
+}
+
 void RendererD2D::ResizeCacheWindow(UINT width, UINT height) {
-    if (m_pCacheSwapChain) {
-        m_pCacheDeviceContext->SetTarget(nullptr);
-        m_pCacheBackBuffer.Reset();
-        m_pCacheSwapChain->ResizeBuffers(0, width, height, DXGI_FORMAT_UNKNOWN, 0);
+    if (!m_pCacheSwapChain || !m_pCacheDeviceContext) return;
+    m_pCacheDeviceContext->SetTarget(nullptr);
+    m_pCacheBackBuffer.Reset();
+    m_pCacheSwapChain->ResizeBuffers(0, width, height, DXGI_FORMAT_UNKNOWN, 0);
 
-        Microsoft::WRL::ComPtr<IDXGISurface> dxgiBackBuffer;
-        m_pCacheSwapChain->GetBuffer(0, IID_PPV_ARGS(&dxgiBackBuffer));
-
-        D2D1_BITMAP_PROPERTIES1 bmpProps = D2D1::BitmapProperties1(
-                D2D1_BITMAP_OPTIONS_TARGET | D2D1_BITMAP_OPTIONS_CANNOT_DRAW,
-                D2D1::PixelFormat(DXGI_FORMAT_B8G8R8A8_UNORM, D2D1_ALPHA_MODE_IGNORE)
-                );
-        m_pCacheDeviceContext->CreateBitmapFromDxgiSurface(dxgiBackBuffer.Get(), &bmpProps, &m_pCacheBackBuffer);
-        m_pCacheDeviceContext->SetTarget(m_pCacheBackBuffer.Get());
-    }
+    Microsoft::WRL::ComPtr<IDXGISurface> surface;
+    m_pCacheSwapChain->GetBuffer(0, IID_PPV_ARGS(&surface));
+    D2D1_BITMAP_PROPERTIES1 props = D2D1::BitmapProperties1(D2D1_BITMAP_OPTIONS_TARGET | D2D1_BITMAP_OPTIONS_CANNOT_DRAW,
+                                                            D2D1::PixelFormat(DXGI_FORMAT_B8G8R8A8_UNORM, D2D1_ALPHA_MODE_IGNORE));
+    m_pCacheDeviceContext->CreateBitmapFromDxgiSurface(surface.Get(), &props, &m_pCacheBackBuffer);
+    m_pCacheDeviceContext->SetTarget(m_pCacheBackBuffer.Get());
 }
