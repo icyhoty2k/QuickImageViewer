@@ -68,33 +68,26 @@ void RendererD2D::UpdateTextFormat() {
 }
 
 void RendererD2D::UpdateColorEffects() {
-    if (!m_pSaturationEffect ||
-        !m_pContrastEffect ||
-        !m_pBrightnessEffect)
+    if (!m_pSaturationEffect || !m_pContrastEffect || !m_pBrightnessEffect)
         return;
 
-    m_pSaturationEffect->SetValue(
-            D2D1_SATURATION_PROP_SATURATION,
-            g_app.saturation);
+    // D2D1_SATURATION_PROP_SATURATION: 0.0 = greyscale, 1.0 = no change
+    m_pSaturationEffect->SetValue(D2D1_SATURATION_PROP_SATURATION, g_app.saturation);
 
-    m_pContrastEffect->SetValue(
-            D2D1_CONTRAST_PROP_CONTRAST,
-            std::clamp(g_app.contrast, 0.0f, 2.0f));
+    // D2D1_CONTRAST_PROP_CONTRAST: 0.0 = no change, 1.0 = maximum.
+    // g_app.contrast default = 1.0 (neutral), range 0.0–3.0 (from AppMain clamp).
+    // Remap: subtract 1.0 so neutral→0.0, then divide by 2.0 to fit D2D 0–1 range.
+    float contrastD2D = std::clamp((g_app.contrast - 1.0f) / 2.0f, 0.0f, 1.0f);
+    m_pContrastEffect->SetValue(D2D1_CONTRAST_PROP_CONTRAST, contrastD2D);
 
-
+    // D2D1_BRIGHTNESS white point (1,1) = no change; black point (0,0) = no change.
+    // g_app.brightness: 0.0 = neutral, +1.0 = brightest, -1.0 = darkest.
     float b = std::clamp(g_app.brightness, -1.0f, 1.0f);
+    float white = std::clamp(1.0f + b, 0.0f, 2.0f); // 0.0..2.0, neutral = 1.0
+    float black = (b < 0.0f) ? std::clamp(-b, 0.0f, 1.0f) : 0.0f; // lift blacks when darkening
 
-    // smooth brightness
-    float white = 1.0f + (b * 0.5f);
-    float black = (b < 0.0f) ? (-b * 0.5f) : 0.0f;
-
-    m_pBrightnessEffect->SetValue(
-            D2D1_BRIGHTNESS_PROP_WHITE_POINT,
-            D2D1::Vector2F(white, white));
-
-    m_pBrightnessEffect->SetValue(
-            D2D1_BRIGHTNESS_PROP_BLACK_POINT,
-            D2D1::Vector2F(black, black));
+    m_pBrightnessEffect->SetValue(D2D1_BRIGHTNESS_PROP_WHITE_POINT, D2D1::Vector2F(white, white));
+    m_pBrightnessEffect->SetValue(D2D1_BRIGHTNESS_PROP_BLACK_POINT, D2D1::Vector2F(black, black));
 }
 
 // =============================================================================
@@ -646,6 +639,7 @@ HRESULT RendererD2D::Render() {
                                                  : D2D1_INTERPOLATION_MODE_HIGH_QUALITY_CUBIC;
 
         ID2D1Image *image = m_pBitmap.Get();
+        // g_app.contrast neutral = 1.0f, so check offset from 1.0
         bool useEffects =
                 std::abs(g_app.saturation - 1.0f) > 0.001f ||
                 std::abs(g_app.contrast - 1.0f) > 0.001f ||
@@ -654,8 +648,8 @@ HRESULT RendererD2D::Render() {
             m_pSaturationEffect &&
             m_pContrastEffect &&
             m_pBrightnessEffect &&
-            m_pScaleEffect) { // Added missing scale effect check
-            m_pDeviceContext->SetTransform(D2D1::Matrix3x2F::Identity());
+            m_pScaleEffect) {
+            // Do NOT reset transform here — flip/rotation is already set above.
             m_pSaturationEffect->SetInput(0, image);
             m_pContrastEffect->SetInputEffect(0, m_pSaturationEffect.Get());
             m_pBrightnessEffect->SetInputEffect(0, m_pContrastEffect.Get());
@@ -666,9 +660,11 @@ HRESULT RendererD2D::Render() {
                             renderW / imgSize.width,
                             renderH / imgSize.height));
 
-            m_pScaleEffect->SetValue(
-                    D2D1_SCALE_PROP_INTERPOLATION_MODE,
-                    interpMode);
+            // D2D1_SCALE_PROP_INTERPOLATION_MODE takes D2D1_SCALE_INTERPOLATION_MODE, not D2D1_INTERPOLATION_MODE
+            D2D1_SCALE_INTERPOLATION_MODE scaleInterp = isNative
+                                                            ? D2D1_SCALE_INTERPOLATION_MODE_NEAREST_NEIGHBOR
+                                                            : D2D1_SCALE_INTERPOLATION_MODE_HIGH_QUALITY_CUBIC;
+            m_pScaleEffect->SetValue(D2D1_SCALE_PROP_INTERPOLATION_MODE, scaleInterp);
             D2D1_POINT_2F targetOffset = D2D1::Point2F(left, top);
             m_pDeviceContext->DrawImage(
                     m_pScaleEffect.Get(), // 1. The Effect
