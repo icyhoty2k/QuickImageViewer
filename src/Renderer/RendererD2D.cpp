@@ -861,9 +861,12 @@ HRESULT RendererD2D::LoadSvgFromBytes(const std::vector<BYTE> &svgBytes,
 std::vector<IImageRenderer::CacheItem> RendererD2D::GetCachedBitmaps() {
     std::lock_guard<std::mutex> lock(m_cacheMutex);
     std::vector<CacheItem> items;
-    items.reserve(m_bitmapCache.size());
-    for (const auto &pair: m_bitmapCache) {
-        items.push_back({pair.first, pair.second.bitmap.Get()});
+    items.reserve(m_lruList.size());
+    for (const std::wstring &path: m_lruList) {
+        auto it = m_bitmapCache.find(path);
+        if (it != m_bitmapCache.end()) {
+            items.push_back({it->first, it->second.bitmap.Get()});
+        }
     }
     return items;
 }
@@ -905,8 +908,9 @@ void RendererD2D::RenderCacheWindow(int selectedIndex, int hoverIndex) {
     // Draw Thumbnails using the shared "Live Object" layout
     for (size_t i = 0; i < UI::g_thumbnailObjects.size(); ++i) {
         const auto &thumb = UI::g_thumbnailObjects[i];
-        if (m_bitmapCache.count(thumb.filePath)) {
-            m_pCacheDeviceContext->DrawBitmap(m_bitmapCache[thumb.filePath].bitmap.Get(),
+        auto it = m_bitmapCache.find(thumb.filePath);
+        if (it != m_bitmapCache.end()) {
+            m_pCacheDeviceContext->DrawBitmap(it->second.bitmap.Get(),
                                               thumb.rect, 1.0f, D2D1_BITMAP_INTERPOLATION_MODE_LINEAR);
         } else {
             m_pCacheDeviceContext->FillRectangle(thumb.rect, m_pCacheButtonBrush.Get());

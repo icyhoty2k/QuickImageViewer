@@ -4,6 +4,7 @@
 #include <wrl/client.h>
 #include <vector>
 #include <string>
+#include <unordered_map>
 #include "Renderer/IRenderer.h"
 #include <memory>
 
@@ -39,6 +40,7 @@ struct AppState {
     int imgWidth = 0;
     int imgHeight = 0;
     std::vector<std::wstring> playlist;
+    std::unordered_map<std::wstring, int> playlistIndexMap; // path → index, rebuilt with playlist
     int currentIndex = -1;
     ViewportState viewport;
 

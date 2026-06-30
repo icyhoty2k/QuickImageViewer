@@ -2,7 +2,6 @@
 #include "../AppState.h"
 #include "../Platform/FileHandler.h"
 #include <windowsx.h>
-#include <algorithm>
 #include "../Renderer/RendererD2D.h"
 #include "Constants.h"
 
@@ -74,8 +73,8 @@ namespace UI {
 
         // Build thumbnail objects
         for (const auto &item: items) {
-            auto it = std::find(g_app.playlist.begin(), g_app.playlist.end(), item.filePath);
-            int idx = (it != g_app.playlist.end()) ? static_cast<int>(std::distance(g_app.playlist.begin(), it)) : -1;
+            auto mapIt = g_app.playlistIndexMap.find(item.filePath);
+            int idx = (mapIt != g_app.playlistIndexMap.end()) ? mapIt->second : -1;
 
             g_thumbnailObjects.push_back({
                 D2D1::RectF(x, y, x + thumbW, y + thumbH),
