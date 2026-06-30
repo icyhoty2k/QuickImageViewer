@@ -216,6 +216,13 @@ void OpenInitialImage(HWND hWnd) {
 
     SortPlaylistByDiskOrder(g_app.playlist);
 
+    // Rebuild the O(1) path → index lookup map
+    g_app.playlistIndexMap.clear();
+    g_app.playlistIndexMap.reserve(g_app.playlist.size());
+    for (int i = 0; i < static_cast<int>(g_app.playlist.size()); ++i) {
+        g_app.playlistIndexMap[g_app.playlist[i]] = i;
+    }
+
     auto it = std::ranges::find(g_app.playlist, selectedPath.wstring());
     if (it != g_app.playlist.end()) {
         LoadImageIndex(
@@ -319,6 +326,13 @@ void OpenSpecificImage(HWND hWnd, const std::wstring &filePathStr) {
 
     // Sort by physical disk position to minimise HDD head seeks
     SortPlaylistByDiskOrder(g_app.playlist);
+
+    // Rebuild the O(1) path → index lookup map
+    g_app.playlistIndexMap.clear();
+    g_app.playlistIndexMap.reserve(g_app.playlist.size());
+    for (int i = 0; i < static_cast<int>(g_app.playlist.size()); ++i) {
+        g_app.playlistIndexMap[g_app.playlist[i]] = i;
+    }
 
     auto it = std::ranges::find(g_app.playlist, filePath.wstring());
     if (it != g_app.playlist.end()) {
