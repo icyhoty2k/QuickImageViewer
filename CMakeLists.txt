@@ -6,6 +6,18 @@ set(CMAKE_CXX_STANDARD 23)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF) # Strictly enforce standard C++23 without compiler-specific deviations
 
+# --- Custom Option for Static MSVC Runtime ---
+option(QIV_STATIC_RUNTIME "Statically link the MSVC C/C++ runtime (/MT instead of /MD)" OFF)
+
+if (QIV_STATIC_RUNTIME)
+    # Statically link the runtime (/MT for Release, /MTd for Debug)
+    set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>")
+else ()
+    # Dynamically link the runtime (/MD for Release, /MDd for Debug)
+    set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>DLL")
+endif ()
+# ---------------------------------------------
+
 set(SOURCES
         src/AppMain.cpp
         src/DropTarget.cpp
@@ -42,17 +54,25 @@ target_compile_options(QuickImageViewer PRIVATE
         /permissive-
         /EHsc
         /MP
-        $<$<CONFIG:Release>:/GL>    # Whole Program Optimization (LTCG part 1)
-        #        $<$<CONFIG:Release>:/Zi->   # Prevent PDB generation in Release to save RAM/Disk I/O
+        # --- Explicit Release Performance Overrides ---
+        $<$<CONFIG:Release>:/O2>         # Maximize speed
+        $<$<CONFIG:Release>:/Oi>         # Enable intrinsic functions
+        $<$<CONFIG:Release>:/Ot>         # Favor fast code over small size
+        $<$<CONFIG:Release>:/fp:fast>    # Fast floating-point math for UI/viewport transforms
+        $<$<CONFIG:Release>:/arch:AVX2>  # Hardware acceleration for modern CPUs
+        $<$<CONFIG:Release>:/GL>         # Whole Program Optimization (LTCG part 1)
+        $<$<CONFIG:Release>:/Gw>         # Optimize global data
+        # $<$<CONFIG:Release>:/GS->      # Uncomment to disable stack checks for absolute max speed
 )
 
 # 3. Explicit Linker Flags (Safe & Industry Standard)
 target_link_options(QuickImageViewer PRIVATE
-        /SUBSYSTEM:WINDOWS          # Explicitly target Win32 subsystem to prevent console windows
+        /SUBSYSTEM:WINDOWS                     # Explicitly target Win32 subsystem to prevent console windows
         $<$<CONFIG:Release>:/LTCG>             # Link Time Code Generation
         $<$<CONFIG:Release>:/INCREMENTAL:NO>   # Clean, non-fragmented binary
-        $<$<CONFIG:Release>:/OPT:REF>          # Eliminate unreferenced functions
+        $<$<CONFIG:Release>:/OPT:REF>          # Eliminate unreferenced functions/data
         $<$<CONFIG:Release>:/OPT:ICF>          # Fold identical functions to reduce executable size
+        $<$<CONFIG:Release>:/CGTHREADS:16>      # Multi-thread the LTCG code generation phase
 )
 
 # 4. Include Directories
