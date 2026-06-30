@@ -170,5 +170,6 @@ namespace Shortcuts {
         constexpr UINT SC_COLOR_SAT_UP = VK_OEM_6;
 
         constexpr UINT SC_COLOR_RESET_ALL_EFFECTS = VK_NUMPAD0; // Reset all color effects
+        constexpr UINT SC_COLOR_SAVE_TO_DISK = 'S'; //Ctrl + s Save image with effects to disc, don't change size and aspect ratio just save it with effects
     }
 } // namespace Shortcuts
