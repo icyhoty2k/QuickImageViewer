@@ -8,6 +8,7 @@
 
 #include "../AppState.h"
 #include "Platform/Constants.h"
+#include "Platform/Shortcuts.h"
 #include "../DropTarget.h"
 #include "Platform/FileHandler.h"
 #include "UI/HelpWindow.h"
@@ -198,7 +199,8 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) 
             // COLOR EFFECTS
             // ===============================
             // Shift + Delete reset
-            if (wParam == VK_DELETE && shift) {
+            // Shift+Delete  —  Reset all color effects
+            if (wParam == Shortcuts::SC_COLOR_RESET && shift) {
                 g_app.saturation = Constants::DEFAULT_SATURATION;
                 g_app.brightness = Constants::DEFAULT_BRIGHTNESS;
                 g_app.contrast = Constants::DEFAULT_CONTRAST;
@@ -217,7 +219,8 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) 
             }
 
             // [ saturation -
-            if (wParam == VK_OEM_4) {
+            // [  —  Saturation -
+            if (wParam == Shortcuts::SC_COLOR_SAT_DOWN) {
                 g_app.saturation =
                         std::max(
                                 0.0f,
@@ -228,7 +231,8 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) 
             }
 
             // ] saturation +
-            if (wParam == VK_OEM_6) {
+            // ]  —  Saturation +
+            if (wParam == Shortcuts::SC_COLOR_SAT_UP) {
                 g_app.saturation =
                         std::min(
                                 2.0f,
@@ -289,22 +293,28 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) 
                 return 0;
             }
             // Toggle Help Menu (F1)
-            if (wParam == VK_F1) {
+            if (wParam == Shortcuts::SC_PANEL_HELP_TOGGLE) {
                 UI::ToggleHelpWindow();
                 return 0;
             }
             // Open File Dialog (F2)
-            if (wParam == VK_F2) {
+            if (wParam == Shortcuts::SC_PANEL_OPEN_FILE) {
                 OpenInitialImage(hWnd);
                 return 0;
             }
-            // Toggle Cache Menu (F3)
-            if (wParam == VK_F3) {
+            // Toggle Cache panel (F3)
+            if (wParam == Shortcuts::SC_PANEL_CACHE_TOGGLE) {
                 UI::ToggleCacheWindow();
                 return 0;
             }
+            // // Toggle Dir panel (F5)
+            // if (wParam == Shortcuts::SC_PANEL_DIR_TOGGLE) {
+            //     UI::ToggleDirWindow();
+            //     return 0;
+            // }
             // Hide to RAM instead of quitting (Esc or Ctrl + W)
-            if (wParam == VK_ESCAPE || (wParam == 'W' && ctrl)) {
+            // Esc / Ctrl+W  —  Hide to RAM
+            if (wParam == Shortcuts::SC_APP_HIDE || (wParam == Shortcuts::SC_APP_HIDE_ALT && ctrl)) {
                 if (g_app.GetInstanceCount() <= 1) {
                     ShowWindow(hWnd, SW_HIDE);
                 } else {
@@ -330,8 +340,10 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) 
             }
 
             // Fullscreen toggle: F, F11, Enter, Ctrl+Shift+T
-            if (wParam == VK_F11 || wParam == 'F' || wParam == VK_RETURN ||
-                (wParam == 'T' && ctrl && shift)) {
+            if (wParam == Shortcuts::SC_PANEL_FULLSCREEN ||
+                wParam == Shortcuts::SC_PANEL_FULLSCREEN_F ||
+                wParam == Shortcuts::SC_PANEL_FULLSCREEN_ENTER ||
+                (wParam == Shortcuts::SC_PANEL_FULLSCREEN_T && ctrl && shift)) {
                 ToggleFullscreen(hWnd);
                 InvalidateRect(hWnd, nullptr, FALSE);
                 return 0;
@@ -342,35 +354,35 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) 
                 // Cache size as int once to avoid repeated size_t->int casts below
                 const int playlistSize = static_cast<int>(g_app.playlist.size());
                 switch (wParam) {
-                    case VK_LEFT:
+                    case Shortcuts::SC_NAV_PREV:
                         LoadImageIndex(hWnd, (g_app.currentIndex - 1 + playlistSize) % playlistSize);
                         InvalidateRect(hWnd, nullptr, FALSE);
                         break;
-                    case VK_RIGHT:
+                    case Shortcuts::SC_NAV_NEXT:
                         LoadImageIndex(hWnd, (g_app.currentIndex + 1) % playlistSize);
                         InvalidateRect(hWnd, nullptr, FALSE);
                         break;
-                    case VK_SPACE:
+                    case Shortcuts::SC_NAV_NEXT_SPACE:
                         if (shift)
                             LoadImageIndex(hWnd, (g_app.currentIndex - 1 + playlistSize) % playlistSize);
                         else
                             LoadImageIndex(hWnd, (g_app.currentIndex + 1) % playlistSize);
                         InvalidateRect(hWnd, nullptr, FALSE);
                         break;
-                    case VK_UP:
-                    case VK_ADD:
-                    case VK_OEM_PLUS:
+                    case Shortcuts::SC_ZOOM_IN:
+                    case Shortcuts::SC_ZOOM_IN_NUMPAD:
+                    case Shortcuts::SC_ZOOM_IN_OEM:
                         g_app.viewport.zoom *= Constants::ZOOM_STEP;
                         InvalidateRect(hWnd, nullptr, FALSE);
                         break;
-                    case VK_DOWN:
-                    case VK_SUBTRACT:
-                    case VK_OEM_MINUS:
+                    case Shortcuts::SC_ZOOM_OUT:
+                    case Shortcuts::SC_ZOOM_OUT_NUMPAD:
+                    case Shortcuts::SC_ZOOM_OUT_OEM:
                         g_app.viewport.zoom /= Constants::ZOOM_STEP;
                         InvalidateRect(hWnd, nullptr, FALSE);
                         break;
-                    case VK_NUMPAD0:
-                    case '0':
+                    case Shortcuts::SC_ZOOM_RESET_NUMPAD:
+                    case Shortcuts::SC_ZOOM_RESET:
                         g_app.viewport.zoom = 1.0f;
                         g_app.viewport.offsetX = 0.0f;
                         g_app.viewport.offsetY = 0.0f;

@@ -23,6 +23,7 @@ set(SOURCES
         resources/resource.rc
         src/UI/OverlayText.cpp
         src/UI/OverlayText.h
+        src/Platform/Shortcuts.h
 )
 
 add_executable(QuickImageViewer WIN32 ${SOURCES})

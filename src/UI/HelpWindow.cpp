@@ -1,5 +1,6 @@
 #include "HelpWindow.h"
 #include "../Platform/Constants.h"
+#include "../Platform/Shortcuts.h"
 #include <string>
 #include <dwmapi.h>
 #include <algorithm>
@@ -135,7 +136,8 @@ namespace UI {
             }
 
             case WM_KEYDOWN:
-                if (wParam == VK_ESCAPE || wParam == VK_F1) ShowWindow(hWnd, SW_HIDE);
+                if (wParam == Shortcuts::SC_LOCAL_HIDE || wParam == Shortcuts::SC_PANEL_HELP_TOGGLE)
+                    ShowWindow(hWnd, SW_HIDE);
                 return 0;
 
             case WM_CLOSE:

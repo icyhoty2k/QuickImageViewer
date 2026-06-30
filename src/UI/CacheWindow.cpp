@@ -4,6 +4,7 @@
 #include <windowsx.h>
 #include "../Renderer/RendererD2D.h"
 #include "Constants.h"
+#include "../Platform/Shortcuts.h"
 
 namespace UI {
     HWND g_hCacheWnd = nullptr;
@@ -171,13 +172,13 @@ namespace UI {
                 return 0;
             }
             case WM_KEYDOWN: {
-                if (wParam == VK_ESCAPE) {
+                if (wParam == Shortcuts::SC_LOCAL_HIDE) {
                     ShowWindow(hWnd, SW_HIDE);
                     return 0;
-                } else if (wParam == VK_F3) {
+                } else if (wParam == Shortcuts::SC_PANEL_CACHE_TOGGLE) {
                     ToggleCacheWindow();
                     return 0;
-                } else if (wParam == VK_F4) {
+                } else if (wParam == Shortcuts::SC_PANEL_CACHE_MOVE) {
                     MoveCacheWindow();
                     return 0;
                 }
