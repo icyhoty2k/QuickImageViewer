@@ -68,27 +68,64 @@ void RendererD2D::UpdateTextFormat() {
 }
 
 void RendererD2D::UpdateColorEffects() {
-    if (!m_pSaturationEffect || !m_pContrastEffect || !m_pBrightnessEffect)
+    if (!m_pColorMatrixEffect)
         return;
 
-    // D2D1_SATURATION_PROP_SATURATION: 0.0 = greyscale, 1.0 = no change
-    m_pSaturationEffect->SetValue(D2D1_SATURATION_PROP_SATURATION, g_app.saturation);
+    // ----- Saturation -----
+    // g_app.saturation: 0.0 = grayscale, 1.0 = neutral, >1.0 = oversaturated.
+    // No internal D2D cap to worry about here (unlike CLSID_D2D1Saturation,
+    // which hard-clamps at 2.0) — push it as far as AppMain allows.
+    const float s = g_app.saturation;
+    constexpr float lumR = 0.2126f;
+    constexpr float lumG = 0.7152f;
+    constexpr float lumB = 0.0722f;
 
-    // D2D1_CONTRAST_PROP_CONTRAST: 0.0 = no change, 1.0 = maximum.
-    // g_app.contrast default = 1.0 (neutral), range 0.0–3.0 (from AppMain clamp).
-    // Remap: subtract 1.0 so neutral→0.0, then divide by 2.0 to fit D2D 0–1 range.
-    float contrastD2D = std::clamp((g_app.contrast - 1.0f) / 2.0f, 0.0f, 1.0f);
-    m_pContrastEffect->SetValue(D2D1_CONTRAST_PROP_CONTRAST, contrastD2D);
+    // 3x3 saturation matrix: out[i] = lum[j]*(1-s) + (i==j ? s : 0)
+    float sat[3][3] = {
+        { lumR * (1.0f - s) + s, lumG * (1.0f - s),       lumB * (1.0f - s) },
+        { lumR * (1.0f - s),     lumG * (1.0f - s) + s,   lumB * (1.0f - s) },
+        { lumR * (1.0f - s),     lumG * (1.0f - s),       lumB * (1.0f - s) + s },
+    };
 
-    // D2D1_BRIGHTNESS white point (1,1) = no change; black point (0,0) = no change.
-    // g_app.brightness: 0.0 = neutral, +1.0 = brightest, -1.0 = darkest.
-    float b = std::clamp(g_app.brightness, -1.0f, 1.0f);
-    float white = std::clamp(1.0f + b, 0.0f, 2.0f); // 0.0..2.0, neutral = 1.0
-    float black = (b < 0.0f) ? std::clamp(-b, 0.0f, 1.0f) : 0.0f; // lift blacks when darkening
+    // ----- Contrast -----
+    // g_app.contrast: 1.0 = neutral. out = (in - 0.5) * c + 0.5
+    // Folded into the matrix by scaling every row of `sat` by c; the offset
+    // picks up 0.5 * (1 - c). No internal cap, unlike CLSID_D2D1Contrast.
+    const float c = g_app.contrast;
+    float m[3][3];
+    for (int row = 0; row < 3; ++row)
+        for (int col = 0; col < 3; ++col)
+            m[row][col] = sat[row][col] * c;
 
-    m_pBrightnessEffect->SetValue(D2D1_BRIGHTNESS_PROP_WHITE_POINT, D2D1::Vector2F(white, white));
-    m_pBrightnessEffect->SetValue(D2D1_BRIGHTNESS_PROP_BLACK_POINT, D2D1::Vector2F(black, black));
+    // ----- Brightness -----
+    // g_app.brightness: 0.0 = neutral, +1.0 = pure white, -1.0 = pure black.
+    // Simple additive offset, GPU-clamped to [0,1] — this is the part that
+    // replaced CLSID_D2D1Brightness, whose white/black point properties
+    // accepted our SetValue calls (confirmed via debug log) but silently
+    // produced no visible change.
+    const float b = std::clamp(g_app.brightness, -1.0f, 1.0f);
+    const float contrastOffset = 0.5f * (1.0f - c);
+    const float offset = contrastOffset + b;
+
+    D2D1_MATRIX_5X4_F matrix = D2D1::Matrix5x4F(
+            m[0][0], m[1][0], m[2][0], 0.0f,
+            m[0][1], m[1][1], m[2][1], 0.0f,
+            m[0][2], m[1][2], m[2][2], 0.0f,
+            0.0f,    0.0f,    0.0f,    1.0f,
+            offset,  offset,  offset,  0.0f);
+
+    m_pColorMatrixEffect->SetValue(D2D1_COLORMATRIX_PROP_COLOR_MATRIX, matrix);
+    m_pColorMatrixEffect->SetValue(D2D1_COLORMATRIX_PROP_CLAMP_OUTPUT, TRUE);
+
+#ifdef _DEBUG
+    {
+        wchar_t buf[128];
+        swprintf_s(buf, L"[QIV] brightness=%.3f saturation=%.3f contrast=%.3f\n", b, s, c);
+        OutputDebugStringW(buf);
+    }
+#endif
 }
+
 
 // =============================================================================
 //  CreateDeviceResources  — builds D3D11 → DXGI → D2D7 chain
@@ -201,18 +238,16 @@ HRESULT RendererD2D::CreateDeviceResources() {
         return hr;
 
 
-    // 9. Create color adjustment effects
+    // 9. Create color adjustment effect — single ColorMatrix combining
+    // saturation + contrast + brightness, computed explicitly in
+    // UpdateColorEffects(). Replaces the old D2D1Saturation/D2D1Contrast/
+    // D2D1Brightness chain: those built-in effects either clamp internally
+    // (saturation maxes at 2.0) or didn't behave as documented (Brightness's
+    // white/black point silently did nothing despite valid SetValue calls).
+    // ColorMatrix is a plain linear transform + offset — fully predictable.
     hr = m_pDeviceContext->CreateEffect(
-            CLSID_D2D1Saturation,
-            &m_pSaturationEffect);
-
-    if (FAILED(hr))
-        return hr;
-
-
-    hr = m_pDeviceContext->CreateEffect(
-            CLSID_D2D1Contrast,
-            &m_pContrastEffect);
+            CLSID_D2D1ColorMatrix,
+            &m_pColorMatrixEffect);
 
     if (FAILED(hr))
         return hr;
@@ -221,14 +256,6 @@ HRESULT RendererD2D::CreateDeviceResources() {
     hr = m_pDeviceContext->CreateEffect(
             CLSID_D2D1Scale,
             &m_pScaleEffect);
-
-    if (FAILED(hr))
-        return hr;
-
-
-    hr = m_pDeviceContext->CreateEffect(
-            CLSID_D2D1Brightness,
-            &m_pBrightnessEffect);
 
     if (FAILED(hr))
         return hr;
@@ -287,9 +314,7 @@ void RendererD2D::DiscardDeviceResources() {
     m_pSwapChain.Reset();
     m_pD3DContext.Reset();
     m_pD3DDevice.Reset();
-    m_pSaturationEffect.Reset();
-    m_pContrastEffect.Reset();
-    m_pBrightnessEffect.Reset();
+    m_pColorMatrixEffect.Reset();
     m_pScaleEffect.Reset();
 }
 
@@ -662,15 +687,11 @@ HRESULT RendererD2D::Render() {
                 std::abs(g_app.contrast - 1.0f) > 0.001f ||
                 std::abs(g_app.brightness) > 0.001f;
         if (useEffects &&
-            m_pSaturationEffect &&
-            m_pContrastEffect &&
-            m_pBrightnessEffect &&
+            m_pColorMatrixEffect &&
             m_pScaleEffect) {
             // Do NOT reset transform here — flip/rotation is already set above.
-            m_pSaturationEffect->SetInput(0, image);
-            m_pContrastEffect->SetInputEffect(0, m_pSaturationEffect.Get());
-            m_pBrightnessEffect->SetInputEffect(0, m_pContrastEffect.Get());
-            m_pScaleEffect->SetInputEffect(0, m_pBrightnessEffect.Get());
+            m_pColorMatrixEffect->SetInput(0, image);
+            m_pScaleEffect->SetInputEffect(0, m_pColorMatrixEffect.Get());
             m_pScaleEffect->SetValue(
                     D2D1_SCALE_PROP_SCALE,
                     D2D1::Vector2F(

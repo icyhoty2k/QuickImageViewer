@@ -82,9 +82,9 @@ class RendererD2D final : public IImageRenderer {
         Microsoft::WRL::ComPtr<IDXGISwapChain1> m_pSwapChain;
         Microsoft::WRL::ComPtr<ID2D1Device6> m_pD2DDevice;
         Microsoft::WRL::ComPtr<ID2D1DeviceContext7> m_pDeviceContext;
-        Microsoft::WRL::ComPtr<ID2D1Effect> m_pSaturationEffect;
-        Microsoft::WRL::ComPtr<ID2D1Effect> m_pContrastEffect;
-        Microsoft::WRL::ComPtr<ID2D1Effect> m_pBrightnessEffect;
+        // Single combined effect: saturation + contrast + brightness folded
+        // into one 5x4 color matrix computed explicitly in UpdateColorEffects().
+        Microsoft::WRL::ComPtr<ID2D1Effect> m_pColorMatrixEffect;
         Microsoft::WRL::ComPtr<ID2D1Effect> m_pScaleEffect;
         Microsoft::WRL::ComPtr<ID2D1Bitmap1> m_pBackBufferBitmap;
 
