@@ -1,5 +1,4 @@
 #pragma once
-#include <intsafe.h>
 //
 // Shortcuts.h  —  Single source of truth for all keyboard shortcuts in QIV.
 //
