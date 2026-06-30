@@ -75,9 +75,11 @@ namespace Shortcuts {
 
     // Left Arrow  —  Previous image
     constexpr UINT SC_NAV_PREV = VK_LEFT;
+    constexpr UINT SC_NAV_PREV_2 = VK_UP;
 
     // Right Arrow  —  Next image
     constexpr UINT SC_NAV_NEXT = VK_RIGHT;
+    constexpr UINT SC_NAV_NEXT_2 = VK_DOWN;
 
     // Space       —  Next image  /  Shift+Space  —  Previous image
     constexpr UINT SC_NAV_NEXT_SPACE = VK_SPACE; // no modifier = next
@@ -87,6 +89,7 @@ namespace Shortcuts {
     constexpr UINT SC_NAV_SHOW_IN_EXPLORER = 'E';
     constexpr UINT SC_NAV_SHOW_IN_EXPLORER_TAB = VK_TAB;
 
+
     // -------------------------------------------------------------------------
     // Zoom
     // -------------------------------------------------------------------------
@@ -94,16 +97,13 @@ namespace Shortcuts {
     // Up / Numpad+ / +  —  Zoom in
     constexpr UINT SC_ZOOM_IN = VK_UP;
     constexpr UINT SC_ZOOM_IN_NUMPAD = VK_ADD;
-    constexpr UINT SC_ZOOM_IN_OEM = VK_OEM_PLUS;
+
 
     // Down / Numpad- / -  —  Zoom out
     constexpr UINT SC_ZOOM_OUT = VK_DOWN;
     constexpr UINT SC_ZOOM_OUT_NUMPAD = VK_SUBTRACT;
-    constexpr UINT SC_ZOOM_OUT_OEM = VK_OEM_MINUS;
 
-    // 0 / Numpad0  —  Reset zoom and pan to 1:1, centered
-    constexpr UINT SC_ZOOM_RESET = '0';
-    constexpr UINT SC_ZOOM_RESET_NUMPAD = VK_NUMPAD0;
+    constexpr UINT SC_ZOOM_RESET = VK_MULTIPLY; // —  Reset zoom and pan to 1:1, centered
 
     // Mouse: Ctrl+Wheel  —  Zoom in/out (handled in WM_MOUSEWHEEL)
     // Mouse: RMB drag    —  Pan image
@@ -160,6 +160,8 @@ namespace Shortcuts {
         constexpr UINT SC_COLOR_OUTLINE = VK_PRIOR; // Toggle image outline
         constexpr UINT SC_COLOR_THRESHOLD = VK_NEXT; // Toggle black & white threshold
 
+        constexpr UINT SC_COLOR_GAMMA_UP = VK_OEM_PLUS; // +/- 0.1 // but not the numpad plus i use it for zoom+
+        constexpr UINT SC_COLOR_GAMMA_DOWN = VK_OEM_MINUS; // +/- 0.1 // but not the numpad plus i use it for zoom-
         constexpr UINT SC_COLOR_BRIGHTNESS_UP = '\''; // +/- 0.1
         constexpr UINT SC_COLOR_BRIGHTNESS_DOWN = '\\';
         constexpr UINT SC_COLOR_CONTRAST_UP = '.'; // +/- 0.1
