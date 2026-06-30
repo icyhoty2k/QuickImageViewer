@@ -32,7 +32,7 @@ namespace Shortcuts {
     constexpr UINT SC_APP_NEW_WINDOW = 'N'; // requires ctrl
 
     // Shift+Delete  — Restore default application state
-    constexpr UINT SC_APP_RESET_LAYOUT = VK_DELETE; // Shift+Delete — Reset window layout, center the window, and clear all image effects.
+    constexpr UINT SC_APP_RESET_DEFAULTS = VK_DELETE; // Shift+Delete — Reset window layout, center the window, and clear all image effects.
 
     // -------------------------------------------------------------------------
     // Panels / Overlays SC_PANEL = CacheWindow
@@ -163,10 +163,9 @@ namespace Shortcuts {
 
         constexpr UINT SC_COLOR_RESET_NUMPAD = VK_NUMPAD0; // Reset all color effects
 
-
         // B          —  Brightness +0.1
         // Shift+B    —  Brightness -0.1
-        constexpr UINT SC_COLOR_BRIGHT = 'B';
+        constexpr UINT SC_COLOR_BRIGHTNESS = 'B';
         // C          —  Contrast +0.1
         // Shift+C    —  Contrast -0.1
         constexpr UINT SC_COLOR_CONTRAST = 'C';
