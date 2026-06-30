@@ -116,4 +116,5 @@ namespace Constants {
 
         constexpr ViewMode defaultViewMode = ViewMode::FitToView_PreserveAspectRatio;
     }
+
 }

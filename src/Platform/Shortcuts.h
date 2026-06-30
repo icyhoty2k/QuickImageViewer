@@ -130,31 +130,6 @@ namespace Shortcuts {
 
     // V  —  Flip vertical
     constexpr UINT SC_TRANSFORM_FLIP_V = 'V';
-
-    // -------------------------------------------------------------------------
-    // Color Effects
-    // -------------------------------------------------------------------------
-
-    // [  —  Saturation -0.1
-    constexpr UINT SC_COLOR_SAT_DOWN = VK_OEM_4;
-
-    // ]  —  Saturation +0.1
-    constexpr UINT SC_COLOR_SAT_UP = VK_OEM_6;
-
-    // I  —  Toggle grayscale (saturation 0 ↔ 1)
-    constexpr UINT SC_COLOR_GRAYSCALE = 'I';
-
-    // B          —  Brightness +0.1
-    // Shift+B    —  Brightness -0.1
-    constexpr UINT SC_COLOR_BRIGHT = 'B';
-
-    // C          —  Contrast +0.1
-    // Shift+C    —  Contrast -0.1
-    constexpr UINT SC_COLOR_CONTRAST = 'C';
-
-    // Shift+Delete  —  Reset all color effects to defaults
-    constexpr UINT SC_COLOR_RESET = VK_DELETE; // requires shift
-
     // -------------------------------------------------------------------------
     // Panel-local shortcuts (handled in each panel's own WndProc)
     // -------------------------------------------------------------------------
@@ -167,5 +142,33 @@ namespace Shortcuts {
     // F4  —  (CacheWindow) cycle cache panel position
     // F5  —  (DirWindow)   toggle dir panel
     // F6  —  (DirWindow)   cycle dir panel position
-    // These reuse the SC_PANEL_* constants above.
+    // These reuse the SC_PANEL_*
+
+    // -------------------------------------------------------------------------
+    // Color Effects
+    // -------------------------------------------------------------------------
+    namespace ImageEffects {
+        // insert,delete,home,end,pageup,pagedown
+        //TODO remove i key for grasesclase replase with new one
+        constexpr UINT SC_COLOR_GRAYSCALE = VK_DELETE; // I  —  Toggle grayscale (saturation 0 ↔ 1)
+        constexpr UINT SC_COLOR_INVERT_COLORS = VK_INSERT; // I  —  Toggle grayscale (saturation 0 ↔ 1)
+        constexpr UINT SC_COLOR_SEPIA = VK_HOME; // I  —  Toggle grayscale (saturation 0 ↔ 1)
+        constexpr UINT SC_COLOR_RED = VK_END; // I  —  Toggle grayscale (saturation 0 ↔ 1)
+        constexpr UINT SC_COLOR_GREEN = VK_PRIOR; // I  —  Toggle grayscale (saturation 0 ↔ 1)
+        constexpr UINT SC_COLOR_BLUE = VK_NEXT; // I  —  Toggle grayscale (saturation 0 ↔ 1)
+        constexpr UINT SC_COLOR_EFFECTS_RESSET = VK_NUMPAD0; //  Reset all color effects to defaults
+        // Shift+Delete  —  Reset all color effects to defaults
+        constexpr UINT SC_COLOR_RESET = VK_DELETE; // requires shift
+        // B          —  Brightness +0.1
+        // Shift+B    —  Brightness -0.1
+        constexpr UINT SC_COLOR_BRIGHT = 'B';
+        // C          —  Contrast +0.1
+        // Shift+C    —  Contrast -0.1
+        constexpr UINT SC_COLOR_CONTRAST = 'C';
+        // [  —  Saturation -0.1
+        constexpr UINT SC_COLOR_SAT_DOWN = VK_OEM_4;
+
+        // ]  —  Saturation +0.1
+        constexpr UINT SC_COLOR_SAT_UP = VK_OEM_6;
+    }
 } // namespace Shortcuts
