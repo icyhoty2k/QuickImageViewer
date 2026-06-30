@@ -690,7 +690,7 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE, LPSTR, int nCmdShow) {
         (void) g_app.renderer->Initialize(hWnd); // GDI init: S_OK always, failure is non-fatal
     }
     // ---  CALLBACK REGISTRATION From IRenderer---
-    g_app.renderer->onImageChangedCallback = [](int newIndex) {
+    g_app.renderer->onImageChangedCallback = [](int) {
         // This ensures the rectangle snaps to the actual displayed image index
         UI::SyncSelectionRectangle();
     };
