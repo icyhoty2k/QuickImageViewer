@@ -73,10 +73,12 @@ namespace Shortcuts {
     // Navigation
     // -------------------------------------------------------------------------
 
-    // Left Arrow  —  Previous image
+    // Left Arrow / Up Arrow  —  Previous image
     constexpr UINT SC_NAV_PREV = VK_LEFT;
+    constexpr UINT SC_NAV_PREV_A = VK_UP;
 
-    // Right Arrow  —  Next image
+    // Right Arrow / Down Arrow  —  Next image
+    constexpr UINT SC_NAV_NEXT_A = VK_DOWN;
     constexpr UINT SC_NAV_NEXT = VK_RIGHT;
 
     // Space       —  Next image  /  Shift+Space  —  Previous image
@@ -92,13 +94,11 @@ namespace Shortcuts {
     // Zoom
     // -------------------------------------------------------------------------
 
-    // Up / Numpad+ / +  —  Zoom in
-    constexpr UINT SC_ZOOM_IN = VK_UP;
+    // Numpad+ / +  —  Zoom in
     constexpr UINT SC_ZOOM_IN_NUMPAD = VK_ADD;
 
 
-    // Down / Numpad- / -  —  Zoom out
-    constexpr UINT SC_ZOOM_OUT = VK_DOWN;
+    // Numpad- / -  —  Zoom out
     constexpr UINT SC_ZOOM_OUT_NUMPAD = VK_SUBTRACT;
 
     constexpr UINT SC_ZOOM_RESET = VK_MULTIPLY; // —  Reset zoom and pan to 1:1, centered
