@@ -31,6 +31,9 @@ namespace Shortcuts {
     // Ctrl+N  —  Spawn a new blank QIV window
     constexpr UINT SC_APP_NEW_WINDOW = 'N'; // requires ctrl
 
+    // Shift+Delete  — Restore default application state
+    constexpr UINT SC_APP_RESET_LAYOUT = VK_DELETE; // Shift+Delete — Reset window layout, center the window, and clear all image effects.
+
     // -------------------------------------------------------------------------
     // Panels / Overlays SC_PANEL = CacheWindow
     // -------------------------------------------------------------------------
@@ -148,17 +151,19 @@ namespace Shortcuts {
     // Color Effects
     // -------------------------------------------------------------------------
     namespace ImageEffects {
-        // insert,delete,home,end,pageup,pagedown
+        // Dedicated image effect keys:
+        // Insert, Delete, Home, End, Page Up, Page Down
         //TODO remove i key for grasesclase replase with new one
-        constexpr UINT SC_COLOR_GRAYSCALE = VK_DELETE; // I  —  Toggle grayscale
-        constexpr UINT SC_COLOR_INVERT_COLORS = VK_INSERT; // I  —  Toggle invert
-        constexpr UINT SC_COLOR_SEPIA = VK_HOME; // I  —  Toggle sepia
-        constexpr UINT SC_COLOR_SOLARIZE = VK_END; // I  —  Toggle solarize
-        constexpr UINT SC_COLOR_IMAGE_OUTLINE = VK_PRIOR; // I  —  Toggle outline
+        constexpr UINT SC_COLOR_GRAYSCALE = VK_DELETE; // Toggle grayscale
+        constexpr UINT SC_COLOR_INVERT = VK_INSERT; // Toggle invert colors
+        constexpr UINT SC_COLOR_SEPIA = VK_HOME; // Toggle sepia
+        constexpr UINT SC_COLOR_SOLARIZE = VK_END; // Toggle solarize
+        constexpr UINT SC_COLOR_OUTLINE = VK_PRIOR; // Toggle image outline
         constexpr UINT SC_COLOR_THRESHOLD = VK_NEXT; // Toggle black & white threshold
-        constexpr UINT SC_COLOR_EFFECTS_RESSET = VK_NUMPAD0; //  Reset all color effects to defaults
-        // Shift+Delete  —  Reset all color effects to defaults
-        constexpr UINT SC_COLOR_RESET = VK_DELETE; // requires shift
+
+        constexpr UINT SC_COLOR_RESET_NUMPAD = VK_NUMPAD0; // Reset all color effects
+
+
         // B          —  Brightness +0.1
         // Shift+B    —  Brightness -0.1
         constexpr UINT SC_COLOR_BRIGHT = 'B';
