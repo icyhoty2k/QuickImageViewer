@@ -153,7 +153,7 @@ namespace Shortcuts {
     namespace ImageEffects {
         // Dedicated image effect keys:
         // Insert, Delete, Home, End, Page Up, Page Down
-        //TODO remove i key for grasesclase replase with new one
+        //TODO remember to remove "i"  key for grayscale and remove old brightness and contrast shortcuts b and c and shift b and c , replace with new one
         constexpr UINT SC_COLOR_GRAYSCALE = VK_DELETE; // Toggle grayscale
         constexpr UINT SC_COLOR_INVERT = VK_INSERT; // Toggle invert colors
         constexpr UINT SC_COLOR_SEPIA = VK_HOME; // Toggle sepia
@@ -161,18 +161,13 @@ namespace Shortcuts {
         constexpr UINT SC_COLOR_OUTLINE = VK_PRIOR; // Toggle image outline
         constexpr UINT SC_COLOR_THRESHOLD = VK_NEXT; // Toggle black & white threshold
 
-        constexpr UINT SC_COLOR_RESET_NUMPAD = VK_NUMPAD0; // Reset all color effects
-
-        // B          —  Brightness +0.1
-        // Shift+B    —  Brightness -0.1
-        constexpr UINT SC_COLOR_BRIGHTNESS = 'B';
-        // C          —  Contrast +0.1
-        // Shift+C    —  Contrast -0.1
-        constexpr UINT SC_COLOR_CONTRAST = 'C';
-        // [  —  Saturation -0.1
-        constexpr UINT SC_COLOR_SAT_DOWN = VK_OEM_4;
-
-        // ]  —  Saturation +0.1
+        constexpr UINT SC_COLOR_BRIGHTNESS_UP = '\''; // +/- 0.1
+        constexpr UINT SC_COLOR_BRIGHTNESS_DOWN = '\\';
+        constexpr UINT SC_COLOR_CONTRAST_UP = '.'; // +/- 0.1
+        constexpr UINT SC_COLOR_CONTRAST_DOWN = '/';
+        constexpr UINT SC_COLOR_SAT_DOWN = VK_OEM_4; // +/- 0.1
         constexpr UINT SC_COLOR_SAT_UP = VK_OEM_6;
+
+        constexpr UINT SC_COLOR_RESET_ALL_EFFECTS = VK_NUMPAD0; // Reset all color effects
     }
 } // namespace Shortcuts
