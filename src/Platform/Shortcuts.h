@@ -174,6 +174,6 @@ namespace Shortcuts {
     }
 
     namespace REFERENCE_ONLY::MouseShortcuts {
-        //Here I will put all mouse shortcuts just for reference!
+        //TODO Here I will put all mouse shortcuts !
     }
 } // namespace Shortcuts
