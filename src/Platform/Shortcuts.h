@@ -150,12 +150,12 @@ namespace Shortcuts {
     namespace ImageEffects {
         // insert,delete,home,end,pageup,pagedown
         //TODO remove i key for grasesclase replase with new one
-        constexpr UINT SC_COLOR_GRAYSCALE = VK_DELETE; // I  —  Toggle grayscale (saturation 0 ↔ 1)
-        constexpr UINT SC_COLOR_INVERT_COLORS = VK_INSERT; // I  —  Toggle grayscale (saturation 0 ↔ 1)
-        constexpr UINT SC_COLOR_SEPIA = VK_HOME; // I  —  Toggle grayscale (saturation 0 ↔ 1)
-        constexpr UINT SC_COLOR_RED = VK_END; // I  —  Toggle grayscale (saturation 0 ↔ 1)
-        constexpr UINT SC_COLOR_GREEN = VK_PRIOR; // I  —  Toggle grayscale (saturation 0 ↔ 1)
-        constexpr UINT SC_COLOR_BLUE = VK_NEXT; // I  —  Toggle grayscale (saturation 0 ↔ 1)
+        constexpr UINT SC_COLOR_GRAYSCALE = VK_DELETE; // I  —  Toggle grayscale
+        constexpr UINT SC_COLOR_INVERT_COLORS = VK_INSERT; // I  —  Toggle invert
+        constexpr UINT SC_COLOR_SEPIA = VK_HOME; // I  —  Toggle sepia
+        constexpr UINT SC_COLOR_SOLARIZE = VK_END; // I  —  Toggle solarize
+        constexpr UINT SC_COLOR_IMAGE_OUTLINE = VK_PRIOR; // I  —  Toggle outline
+        constexpr UINT SC_COLOR_THRESHOLD = VK_NEXT; // Toggle black & white threshold
         constexpr UINT SC_COLOR_EFFECTS_RESSET = VK_NUMPAD0; //  Reset all color effects to defaults
         // Shift+Delete  —  Reset all color effects to defaults
         constexpr UINT SC_COLOR_RESET = VK_DELETE; // requires shift
