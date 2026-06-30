@@ -10,3 +10,4 @@ build/
 *.obj
 *.exe
 *.pdb
+/QIV_src.zip

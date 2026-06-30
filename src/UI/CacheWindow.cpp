@@ -17,82 +17,6 @@ namespace UI {
     std::vector<Thumbnail> g_thumbnailObjects;
     int8_t g_cachePosition = Constants::CACHE_WINDOW_POSITION;
 
-    void UpdateCacheView() {
-        if (!g_hCacheWnd || !g_app.renderer || !IsWindowVisible(g_hCacheWnd)) return;
-
-        g_thumbnailObjects.clear();
-        auto items = g_app.renderer->GetCachedBitmaps();
-        RECT cr{};
-        GetClientRect(g_hCacheWnd, &cr);
-
-        float surfaceW = static_cast<float>(cr.right);
-        float surfaceH = static_cast<float>(cr.bottom);
-
-        bool vertical = (g_cachePosition == 1 || g_cachePosition == 3);
-
-        // Standardize sizes using explicit DPI scaling rather than stretching to the window bounds
-        float thumbW = Constants::CACHE_THUMB_WIDTH * g_app.dpiScale;
-        float thumbH = Constants::CACHE_THUMB_HEIGHT * g_app.dpiScale;
-        float scaledMargin = Constants::CACHE_THUMB_MARGIN * g_app.dpiScale;
-        float scaledSpacing = Constants::CACHE_THUMB_SPACING * g_app.dpiScale;
-
-        float x = scaledMargin;
-        float y = scaledMargin;
-
-        if (!vertical) {
-            // Horizontal alignment (Top / Bottom)
-            // Center the thumbnail vertically within the window thickness
-            y = (surfaceH - thumbH) / 2.0f;
-
-            float totalWidth = items.size() * (thumbW + scaledSpacing) - scaledSpacing;
-
-            if (totalWidth <= surfaceW) {
-                x = (surfaceW - totalWidth) / 2.0f;
-            } else {
-                float minOffset = surfaceW - totalWidth - scaledMargin;
-                if (g_cacheOffset > 0) g_cacheOffset = 0;
-                if (g_cacheOffset < minOffset) g_cacheOffset = minOffset;
-                x = scaledMargin + g_cacheOffset;
-            }
-        } else {
-            // Vertical alignment (Left / Right)
-            // Center the thumbnail horizontally within the window thickness
-            x = (surfaceW - thumbW) / 2.0f;
-
-            float totalHeight = items.size() * (thumbH + scaledSpacing) - scaledSpacing;
-
-            if (totalHeight <= surfaceH) {
-                y = (surfaceH - totalHeight) / 2.0f;
-            } else {
-                float minOffset = surfaceH - totalHeight - scaledMargin;
-                if (g_cacheOffset > 0) g_cacheOffset = 0;
-                if (g_cacheOffset < minOffset) g_cacheOffset = minOffset;
-                y = scaledMargin + g_cacheOffset;
-            }
-        }
-
-        // Build thumbnail objects
-        for (const auto &item: items) {
-            auto mapIt = g_app.playlistIndexMap.find(item.filePath);
-            int idx = (mapIt != g_app.playlistIndexMap.end()) ? mapIt->second : -1;
-
-            g_thumbnailObjects.push_back({
-                D2D1::RectF(x, y, x + thumbW, y + thumbH),
-                item.filePath,
-                idx
-            });
-
-            if (vertical) {
-                y += thumbH + scaledSpacing;
-            } else {
-                x += thumbW + scaledSpacing;
-            }
-        }
-
-        InvalidateRect(g_hCacheWnd, nullptr, TRUE);
-        UpdateWindow(g_hCacheWnd);
-    }
-
     LRESULT CALLBACK CacheWndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) {
         switch (message) {
             case WM_PAINT: {
@@ -170,22 +94,24 @@ namespace UI {
                 UpdateCacheView();
                 return 0;
             }
-            case WM_KEYDOWN: {}
+            case WM_KEYDOWN: {
                 if (wParam == Shortcuts::SC_LOCAL_HIDE) {
                     ShowWindow(hWnd, SW_HIDE);
                     return 0;
-                    if (wParam == Shortcuts::SC_LOCAL_HIDE) {
-                        ShowWindow(hWnd, SW_HIDE);
-                        return 0;
-                    } else if (wParam == Shortcuts::SC_PANEL_CACHE_TOGGLE) {
-                        ToggleCacheWindow();
-                        return 0;
-                    } else if (wParam == Shortcuts::SC_PANEL_CACHE_MOVE) {
-                        MoveCacheWindow();
-                        return 0;
-                    }
-                    break;
                 }
+                if (wParam == Shortcuts::SC_LOCAL_HIDE) {
+                    ShowWindow(hWnd, SW_HIDE);
+                    return 0;
+                } else if (wParam == Shortcuts::SC_PANEL_CACHE_TOGGLE) {
+                    ToggleCacheWindow();
+                    return 0;
+                } else if (wParam == Shortcuts::SC_PANEL_CACHE_MOVE) {
+                    MoveCacheWindow();
+                    return 0;
+                }
+                break;
+            }
+
             case WM_CLOSE: {
                 ShowWindow(hWnd, SW_HIDE);
                 return 0;
@@ -193,6 +119,84 @@ namespace UI {
         }
         return DefWindowProcW(hWnd, message, wParam, lParam);
     }
+
+
+    void UpdateCacheView() {
+        if (!g_hCacheWnd || !g_app.renderer || !IsWindowVisible(g_hCacheWnd)) return;
+
+        g_thumbnailObjects.clear();
+        auto items = g_app.renderer->GetCachedBitmaps();
+        RECT cr{};
+        GetClientRect(g_hCacheWnd, &cr);
+
+        float surfaceW = static_cast<float>(cr.right);
+        float surfaceH = static_cast<float>(cr.bottom);
+
+        bool vertical = (g_cachePosition == 1 || g_cachePosition == 3);
+
+        // Standardize sizes using explicit DPI scaling rather than stretching to the window bounds
+        float thumbW = Constants::CACHE_THUMB_WIDTH * g_app.dpiScale;
+        float thumbH = Constants::CACHE_THUMB_HEIGHT * g_app.dpiScale;
+        float scaledMargin = Constants::CACHE_THUMB_MARGIN * g_app.dpiScale;
+        float scaledSpacing = Constants::CACHE_THUMB_SPACING * g_app.dpiScale;
+
+        float x = scaledMargin;
+        float y = scaledMargin;
+
+        if (!vertical) {
+            // Horizontal alignment (Top / Bottom)
+            // Center the thumbnail vertically within the window thickness
+            y = (surfaceH - thumbH) / 2.0f;
+
+            float totalWidth = items.size() * (thumbW + scaledSpacing) - scaledSpacing;
+
+            if (totalWidth <= surfaceW) {
+                x = (surfaceW - totalWidth) / 2.0f;
+            } else {
+                float minOffset = surfaceW - totalWidth - scaledMargin;
+                if (g_cacheOffset > 0) g_cacheOffset = 0;
+                if (g_cacheOffset < minOffset) g_cacheOffset = minOffset;
+                x = scaledMargin + g_cacheOffset;
+            }
+        } else {
+            // Vertical alignment (Left / Right)
+            // Center the thumbnail horizontally within the window thickness
+            x = (surfaceW - thumbW) / 2.0f;
+
+            float totalHeight = items.size() * (thumbH + scaledSpacing) - scaledSpacing;
+
+            if (totalHeight <= surfaceH) {
+                y = (surfaceH - totalHeight) / 2.0f;
+            } else {
+                float minOffset = surfaceH - totalHeight - scaledMargin;
+                if (g_cacheOffset > 0) g_cacheOffset = 0;
+                if (g_cacheOffset < minOffset) g_cacheOffset = minOffset;
+                y = scaledMargin + g_cacheOffset;
+            }
+        }
+
+        // Build thumbnail objects
+        for (const auto &item: items) {
+            auto mapIt = g_app.playlistIndexMap.find(item.filePath);
+            int idx = (mapIt != g_app.playlistIndexMap.end()) ? mapIt->second : -1;
+
+            g_thumbnailObjects.push_back({
+                D2D1::RectF(x, y, x + thumbW, y + thumbH),
+                item.filePath,
+                idx
+            });
+
+            if (vertical) {
+                y += thumbH + scaledSpacing;
+            } else {
+                x += thumbW + scaledSpacing;
+            }
+        }
+
+        InvalidateRect(g_hCacheWnd, nullptr, TRUE);
+        UpdateWindow(g_hCacheWnd);
+    }
+
 
     void GetCacheWindowBounds(HWND hRefWnd, int8_t position, int &x, int &y, int &width, int &height) {
         HMONITOR hMonitor = MonitorFromWindow(hRefWnd, MONITOR_DEFAULTTONEAREST);
