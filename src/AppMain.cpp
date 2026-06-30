@@ -92,6 +92,63 @@ static void UpdateRendererColorEffects(HWND hWnd) {
     InvalidateRect(hWnd, nullptr, FALSE);
 }
 
+// Shift+Delete (Shortcuts::SC_APP_RESET_DEFAULTS) — restore default application
+// state: window size/position centered on the current monitor, zoom/pan/
+// rotation/flip/opacity reset, and every image effect cleared.
+static void ResetWindowLayoutAndEffects(HWND hWnd) {
+    // --- Viewport / window ---
+    g_app.viewport.zoom = 1.0f;
+    g_app.viewport.offsetX = 0.0f;
+    g_app.viewport.offsetY = 0.0f;
+    g_app.viewport.rotation = 0;
+    g_app.viewport.flippedH = false;
+    g_app.viewport.flippedV = false;
+
+    g_app.opacity = 255;
+    SetLayeredWindowAttributes(hWnd, 0, g_app.opacity, LWA_ALPHA);
+
+    int targetW = (int) (Constants::BASE_WIDTH * g_app.dpiScale);
+    int targetH = (int) (Constants::BASE_HEIGHT * g_app.dpiScale);
+
+    HMONITOR hMonitor = MonitorFromWindow(hWnd, MONITOR_DEFAULTTONEAREST);
+    MONITORINFO mi = {sizeof(mi)};
+    if (GetMonitorInfo(hMonitor, &mi)) {
+        int monitorW = mi.rcMonitor.right - mi.rcMonitor.left;
+        int monitorH = mi.rcMonitor.bottom - mi.rcMonitor.top;
+
+        SetWindowPos(hWnd, NULL,
+                     mi.rcMonitor.left + (monitorW - targetW) / 2,
+                     mi.rcMonitor.top + (monitorH - targetH) / 2,
+                     targetW, targetH,
+                     SWP_NOZORDER | SWP_NOACTIVATE | SWP_FRAMECHANGED);
+    }
+
+    // --- All image effects ---
+    g_app.saturation = Constants::DEFAULT_SATURATION;
+    g_app.brightness = Constants::DEFAULT_BRIGHTNESS;
+    g_app.contrast = Constants::DEFAULT_CONTRAST;
+    g_app.gamma = Constants::DEFAULT_GAMMA;
+    g_app.effectGrayscale = false;
+    g_app.effectInvert = false;
+    g_app.effectSepia = false;
+    g_app.effectSolarize = false;
+    g_app.effectOutline = false;
+    g_app.effectThreshold = false;
+
+    UpdateRendererColorEffects(hWnd);
+}
+
+// Builds the output path for Ctrl+S (Shortcuts::ImageEffects::SC_COLOR_SAVE_TO_DISK):
+// same folder, "<name>_edited.png" — never overwrites the source file.
+static std::wstring BuildEffectsOutputPath(const std::wstring &srcPath) {
+    size_t dot = srcPath.find_last_of(L'.');
+    size_t slash = srcPath.find_last_of(L"\\/");
+    std::wstring base = (dot != std::wstring::npos && (slash == std::wstring::npos || dot > slash))
+                            ? srcPath.substr(0, dot)
+                            : srcPath;
+    return base + L"_edited.png";
+}
+
 LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) {
     switch (message) {
         case WM_DPICHANGED: {
@@ -196,85 +253,143 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) 
                 return 0;
             }
             // ===============================
-            // COLOR EFFECTS
+            // COLOR EFFECTS  — see Shortcuts::ImageEffects (Shortcuts.h is the
+            // single source of truth; all keys below must come from there).
             // ===============================
-            // Shift + Delete reset
-            // Shift+Delete  —  Reset all color effects
-            if (wParam == Shortcuts::SC_COLOR_RESET && shift) {
+
+            // Shift+Delete  —  Full app reset: window layout + all image effects
+            if (wParam == Shortcuts::SC_APP_RESET_DEFAULTS && shift) {
+                ResetWindowLayoutAndEffects(hWnd);
+                return 0;
+            }
+
+            // Delete (no shift)  —  Toggle grayscale
+            if (wParam == Shortcuts::ImageEffects::SC_COLOR_GRAYSCALE && !shift) {
+                g_app.effectGrayscale = !g_app.effectGrayscale;
+                UpdateRendererColorEffects(hWnd);
+                return 0;
+            }
+
+            // Insert  —  Toggle invert colors
+            if (wParam == Shortcuts::ImageEffects::SC_COLOR_INVERT) {
+                g_app.effectInvert = !g_app.effectInvert;
+                UpdateRendererColorEffects(hWnd);
+                return 0;
+            }
+
+            // Home  —  Toggle sepia
+            if (wParam == Shortcuts::ImageEffects::SC_COLOR_SEPIA) {
+                g_app.effectSepia = !g_app.effectSepia;
+                UpdateRendererColorEffects(hWnd);
+                return 0;
+            }
+
+            // End  —  Toggle solarize
+            if (wParam == Shortcuts::ImageEffects::SC_COLOR_SOLARIZE) {
+                g_app.effectSolarize = !g_app.effectSolarize;
+                UpdateRendererColorEffects(hWnd);
+                return 0;
+            }
+
+            // Page Up  —  Toggle image outline
+            if (wParam == Shortcuts::ImageEffects::SC_COLOR_OUTLINE) {
+                g_app.effectOutline = !g_app.effectOutline;
+                UpdateRendererColorEffects(hWnd);
+                return 0;
+            }
+
+            // Page Down  —  Toggle black & white threshold
+            if (wParam == Shortcuts::ImageEffects::SC_COLOR_THRESHOLD) {
+                g_app.effectThreshold = !g_app.effectThreshold;
+                UpdateRendererColorEffects(hWnd);
+                return 0;
+            }
+
+            // '+' (OEM_PLUS)  —  Gamma up   /   '-' (OEM_MINUS)  —  Gamma down
+            if (wParam == Shortcuts::ImageEffects::SC_COLOR_GAMMA_UP) {
+                g_app.gamma = std::min(Constants::MAX_GAMMA, g_app.gamma + Constants::GAMMA_STEP);
+                UpdateRendererColorEffects(hWnd);
+                return 0;
+            }
+            if (wParam == Shortcuts::ImageEffects::SC_COLOR_GAMMA_DOWN) {
+                g_app.gamma = std::max(Constants::MIN_GAMMA, g_app.gamma - Constants::GAMMA_STEP);
+                UpdateRendererColorEffects(hWnd);
+                return 0;
+            }
+
+            // '  —  Brightness up   /   \  —  Brightness down
+            if (wParam == Shortcuts::ImageEffects::SC_COLOR_BRIGHTNESS_UP) {
+                g_app.brightness = std::clamp(
+                        g_app.brightness + Constants::COLOR_ADJUST_STEP,
+                        -Constants::MIN_MAX_BRIGHTNESS, Constants::MIN_MAX_BRIGHTNESS);
+                UpdateRendererColorEffects(hWnd);
+                return 0;
+            }
+            if (wParam == Shortcuts::ImageEffects::SC_COLOR_BRIGHTNESS_DOWN) {
+                g_app.brightness = std::clamp(
+                        g_app.brightness - Constants::COLOR_ADJUST_STEP,
+                        -Constants::MIN_MAX_BRIGHTNESS, Constants::MIN_MAX_BRIGHTNESS);
+                UpdateRendererColorEffects(hWnd);
+                return 0;
+            }
+
+            // .  —  Contrast up   /   /  —  Contrast down
+            if (wParam == Shortcuts::ImageEffects::SC_COLOR_CONTRAST_UP) {
+                g_app.contrast = std::clamp(
+                        g_app.contrast + Constants::COLOR_ADJUST_STEP,
+                        0.0f, Constants::MIN_MAX_CONTRAST);
+                UpdateRendererColorEffects(hWnd);
+                return 0;
+            }
+            if (wParam == Shortcuts::ImageEffects::SC_COLOR_CONTRAST_DOWN) {
+                g_app.contrast = std::clamp(
+                        g_app.contrast - Constants::COLOR_ADJUST_STEP,
+                        0.0f, Constants::MIN_MAX_CONTRAST);
+                UpdateRendererColorEffects(hWnd);
+                return 0;
+            }
+
+            // [  —  Saturation -   /   ]  —  Saturation +
+            if (wParam == Shortcuts::ImageEffects::SC_COLOR_SAT_DOWN) {
+                g_app.saturation = std::max(0.0f, g_app.saturation - Constants::COLOR_ADJUST_STEP);
+                UpdateRendererColorEffects(hWnd);
+                return 0;
+            }
+            if (wParam == Shortcuts::ImageEffects::SC_COLOR_SAT_UP) {
+                g_app.saturation = std::min(
+                        Constants::MIN_MAX_SATURATION, g_app.saturation + Constants::COLOR_ADJUST_STEP);
+                UpdateRendererColorEffects(hWnd);
+                return 0;
+            }
+
+            // Numpad0  —  Reset all color effects only (saturation/brightness/
+            // contrast/gamma + every toggle), leaves window/zoom/pan untouched.
+            if (wParam == Shortcuts::ImageEffects::SC_COLOR_RESET_ALL_EFFECTS) {
                 g_app.saturation = Constants::DEFAULT_SATURATION;
                 g_app.brightness = Constants::DEFAULT_BRIGHTNESS;
                 g_app.contrast = Constants::DEFAULT_CONTRAST;
+                g_app.gamma = Constants::DEFAULT_GAMMA;
+                g_app.effectGrayscale = false;
+                g_app.effectInvert = false;
+                g_app.effectSepia = false;
+                g_app.effectSolarize = false;
+                g_app.effectOutline = false;
+                g_app.effectThreshold = false;
                 UpdateRendererColorEffects(hWnd);
                 return 0;
             }
 
-            // I = grayscale
-            if (wParam == 'I') {
-                g_app.saturation =
-                        (g_app.saturation == 0.0f)
-                            ? 1.0f
-                            : 0.0f;
-                UpdateRendererColorEffects(hWnd);
+            // Ctrl+S  —  Save current image with effects applied to disk
+            // (size and aspect ratio are left untouched).
+            if (wParam == Shortcuts::ImageEffects::SC_COLOR_SAVE_TO_DISK && ctrl) {
+                if (g_app.renderer && !g_app.playlist.empty() && g_app.currentIndex >= 0) {
+                    const std::wstring &srcPath = g_app.playlist[g_app.currentIndex];
+                    std::wstring outPath = BuildEffectsOutputPath(srcPath);
+                    (void) g_app.renderer->SaveCurrentImageWithEffects(outPath);
+                }
                 return 0;
             }
 
-            // [ saturation -
-            // [  —  Saturation -
-            if (wParam == Shortcuts::SC_COLOR_SAT_DOWN) {
-                g_app.saturation =
-                        std::max(
-                                0.0f,
-                                g_app.saturation - Constants::COLOR_ADJUST_STEP
-                                );
-                UpdateRendererColorEffects(hWnd);
-                return 0;
-            }
-
-            // ] saturation +
-            // ]  —  Saturation +
-            if (wParam == Shortcuts::SC_COLOR_SAT_UP) {
-                g_app.saturation =
-                        std::min(
-                                Constants::MIN_MAX_SATURATION,
-                                g_app.saturation + Constants::COLOR_ADJUST_STEP
-                                );
-                UpdateRendererColorEffects(hWnd);
-                return 0;
-            }
-
-            // B brightness +
-            // Shift+B brightness -
-            if (wParam == 'B') {
-                if (shift)
-                    g_app.brightness -= Constants::COLOR_ADJUST_STEP;
-                else
-                    g_app.brightness += Constants::COLOR_ADJUST_STEP;
-                g_app.brightness =
-                        std::clamp(
-                                g_app.brightness,
-                                -Constants::MIN_MAX_BRIGHTNESS,
-                                Constants::MIN_MAX_BRIGHTNESS
-                                );
-                UpdateRendererColorEffects(hWnd);
-                return 0;
-            }
-
-            // C contrast +
-            // Shift+C contrast -
-            if (wParam == 'C') {
-                if (shift)
-                    g_app.contrast -= Constants::COLOR_ADJUST_STEP;
-                else
-                    g_app.contrast += Constants::COLOR_ADJUST_STEP;
-                g_app.contrast =
-                        std::clamp(
-                                g_app.contrast,
-                                0.0f,
-                                Constants::MIN_MAX_CONTRAST
-                                );
-                UpdateRendererColorEffects(hWnd);
-                return 0;
-            }
             // Rotate Image: R (Clockwise) or Shift+R (Counter-Clockwise)
             if (wParam == 'R') {
                 if (shift) {
@@ -376,17 +491,14 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) 
                         break;
                     case Shortcuts::SC_ZOOM_IN:
                     case Shortcuts::SC_ZOOM_IN_NUMPAD:
-                    case Shortcuts::SC_ZOOM_IN_OEM:
                         g_app.viewport.zoom *= Constants::ZOOM_STEP;
                         InvalidateRect(hWnd, nullptr, FALSE);
                         break;
                     case Shortcuts::SC_ZOOM_OUT:
                     case Shortcuts::SC_ZOOM_OUT_NUMPAD:
-                    case Shortcuts::SC_ZOOM_OUT_OEM:
                         g_app.viewport.zoom /= Constants::ZOOM_STEP;
                         InvalidateRect(hWnd, nullptr, FALSE);
                         break;
-                    case Shortcuts::SC_ZOOM_RESET_NUMPAD:
                     case Shortcuts::SC_ZOOM_RESET:
                         g_app.viewport.zoom = 1.0f;
                         g_app.viewport.offsetX = 0.0f;

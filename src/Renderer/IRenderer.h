@@ -63,6 +63,15 @@ class IImageRenderer {
         /// support color effects saturation contrast brightness
         virtual void UpdateColorEffects() {}
 
+        /// Renders the currently active image with all active color effects
+        /// baked in and writes it to disk as a PNG, at native resolution
+        /// (no resize, no aspect ratio change). Used by Ctrl+S
+        /// (Shortcuts::ImageEffects::SC_COLOR_SAVE_TO_DISK).
+        [[nodiscard]]
+        virtual HRESULT SaveCurrentImageWithEffects(const std::wstring & /*outPath*/) {
+            return E_NOTIMPL;
+        }
+
         /// Clears the currently active image/SVG to show a blank frame during loading
         virtual void ClearActiveImage() {}
 

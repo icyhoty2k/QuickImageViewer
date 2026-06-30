@@ -40,6 +40,8 @@ class RendererD2D final : public IImageRenderer {
 
         void UpdateColorEffects() override;
 
+        [[nodiscard]] HRESULT SaveCurrentImageWithEffects(const std::wstring &outPath) override;
+
         void ClearActiveImage() override;
 
         // SVG support
@@ -82,9 +84,18 @@ class RendererD2D final : public IImageRenderer {
         Microsoft::WRL::ComPtr<IDXGISwapChain1> m_pSwapChain;
         Microsoft::WRL::ComPtr<ID2D1Device6> m_pD2DDevice;
         Microsoft::WRL::ComPtr<ID2D1DeviceContext7> m_pDeviceContext;
-        // Single combined effect: saturation + contrast + brightness folded
-        // into one 5x4 color matrix computed explicitly in UpdateColorEffects().
+        // Single combined effect: saturation + contrast + brightness + grayscale
+        // + invert + sepia folded into one 5x4 color matrix computed explicitly
+        // in UpdateColorEffects() (all of these are linear transforms, so they
+        // compose into a single matrix — no extra effect nodes needed).
         Microsoft::WRL::ComPtr<ID2D1Effect> m_pColorMatrixEffect;
+        // Non-linear / spatial effects that CANNOT be folded into the matrix
+        // above — each is its own D2D effect node, chained in a fixed order
+        // and bypassed (input wired straight through) when its toggle is off.
+        Microsoft::WRL::ComPtr<ID2D1Effect> m_pGammaEffect; // CLSID_D2D1GammaTransfer
+        Microsoft::WRL::ComPtr<ID2D1Effect> m_pSolarizeEffect; // CLSID_D2D1TableTransfer
+        Microsoft::WRL::ComPtr<ID2D1Effect> m_pThresholdEffect; // CLSID_D2D1Threshold
+        Microsoft::WRL::ComPtr<ID2D1Effect> m_pOutlineEffect; // CLSID_D2D1EdgeDetection
         Microsoft::WRL::ComPtr<ID2D1Effect> m_pScaleEffect;
         Microsoft::WRL::ComPtr<ID2D1Bitmap1> m_pBackBufferBitmap;
 
@@ -137,4 +148,14 @@ class RendererD2D final : public IImageRenderer {
         void DiscardDeviceResources();
 
         HRESULT CreateBackBufferBitmap();
+
+        // Creates the non-linear effect nodes (gamma/solarize/threshold/outline)
+        // lazily on first use, since most images never touch them.
+        HRESULT EnsureExtraEffects();
+
+        // Wires g_app's saturation/contrast/brightness/grayscale/invert/sepia
+        // into m_pColorMatrixEffect, then chains whichever of gamma/solarize/
+        // threshold/outline are currently toggled on, in that fixed order.
+        // Returns the final ID2D1Image* ready to be scaled/drawn or captured.
+        ID2D1Effect *BuildEffectChain(ID2D1Image *source);
 };

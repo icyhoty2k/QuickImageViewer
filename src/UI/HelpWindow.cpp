@@ -81,11 +81,11 @@ namespace UI {
                 y += fontSize / 2;
                 DrawLine(L"Up/Down", L": Zoom image In / Out");
                 DrawLine(L"Ctrl + Wheel", L": Zoom image In / Out");
-                DrawLine(L"Numpad 0", L": Reset zoom and opacity and center image");
-                DrawLine(L"Right Click", L": 2x Quick zoom and toggle pan");
+                DrawLine(L"Numpad 0", L": Reset all color effects (saturation/brightness/etc.)");
+                DrawLine(L"Left Click", L": Quick 3x zoom (hold + drag to pan)");
                 y += fontSize / 2;
                 DrawLine(L"F11 / Enter", L": Toggle Fullscreen mode");
-                DrawLine(L"Left Click Drag", L": Pan image view");
+                DrawLine(L"Right Click Drag", L": Move the window");
                 DrawLine(L"Middle Drag", L": Resize window dimensions");
                 DrawLine(L"Middle Click", L": Reset window and center image");
                 y += fontSize / 2; // Add a small spacer
@@ -100,6 +100,27 @@ namespace UI {
                 DrawLine(L"Ctrl+Q", L": Quit application process and kill background process");
                 DrawLine(L"F1", L": Toggle help menu");
                 DrawLine(L"ESC", L": Hide help menu");
+                DrawLine(L"F3 / F4", L": Toggle / move VRAM cache panel");
+                DrawLine(L"F12", L": Clear VRAM cache");
+                DrawLine(L"Shift+Delete", L": Reset window layout AND all image effects");
+
+                y += fontSize + 1;
+                SetTextColor(hdc, RGB(100, 200, 255));
+                RECT colorRect = {rc.left + padding, y, rc.right - padding, rc.bottom};
+                DrawTextW(hdc, L"Color effects:", -1, &colorRect, DT_LEFT);
+                y += fontSize + 10;
+
+                DrawLine(L"Delete", L": Toggle grayscale");
+                DrawLine(L"Insert", L": Toggle invert colors");
+                DrawLine(L"Home", L": Toggle sepia");
+                DrawLine(L"End", L": Toggle solarize");
+                DrawLine(L"Page Up", L": Toggle outline");
+                DrawLine(L"Page Down", L": Toggle black & white threshold");
+                DrawLine(L"[ / ]", L": Saturation - / +");
+                DrawLine(L"' / \\", L": Brightness + / -");
+                DrawLine(L". / /", L": Contrast + / -");
+                DrawLine(L"+ / -", L": Gamma + / -");
+                DrawLine(L"Ctrl+S", L": Save image with effects to disk");
 
                 y += fontSize + 1;
                 SetTextColor(hdc, RGB(100, 200, 255));
