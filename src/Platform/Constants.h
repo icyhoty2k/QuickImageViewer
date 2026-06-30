@@ -19,6 +19,20 @@ namespace Constants {
     constexpr float MIN_MAX_SATURATION = 7.0f;
     constexpr float MIN_MAX_BRIGHTNESS = 1.0f;
     constexpr float MIN_MAX_CONTRAST = 7.0f;
+
+    // ----- Gamma (ImageEffects: SC_COLOR_GAMMA_UP / SC_COLOR_GAMMA_DOWN) -----
+    constexpr float DEFAULT_GAMMA = 1.0f; // neutral, no curve applied
+    constexpr float GAMMA_STEP = 0.1f;
+    constexpr float MIN_GAMMA = 0.1f; // avoid 0 or negative exponents
+    constexpr float MAX_GAMMA = 4.0f;
+
+    // ----- Solarize / Threshold (ImageEffects toggles) -----
+    constexpr float SOLARIZE_THRESHOLD = 0.5f; // values above this get inverted
+    constexpr float BW_THRESHOLD_LEVEL = 0.5f; // black/white cutover point
+
+    // ----- Outline (D2D EdgeDetection) -----
+    constexpr float OUTLINE_STRENGTH = 0.5f;
+    constexpr float OUTLINE_BLUR_RADIUS = 0.0f;
     static constexpr float ZOOM_CLICK = 3.0f; // left click zoom multiplier
     static constexpr int OPACITY_STEP = 10; // left click zoom multiplier from 10 to 255 step is 10
     constexpr bool DEFAULT_SHOW_OVERLAY = true;
@@ -116,5 +130,4 @@ namespace Constants {
 
         constexpr ViewMode defaultViewMode = ViewMode::FitToView_PreserveAspectRatio;
     }
-
 }

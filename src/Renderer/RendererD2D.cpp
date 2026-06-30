@@ -71,41 +71,62 @@ void RendererD2D::UpdateColorEffects() {
     if (!m_pColorMatrixEffect)
         return;
 
-    // ----- Saturation -----
-    // g_app.saturation: 0.0 = grayscale, 1.0 = neutral, >1.0 = oversaturated.
-    // No internal D2D cap to worry about here (unlike CLSID_D2D1Saturation,
-    // which hard-clamps at 2.0) — push it as far as AppMain allows.
-    const float s = g_app.saturation;
+    // Non-linear effect nodes are created lazily here so the first toggle
+    // of any of gamma/solarize/threshold/outline doesn't stall on creation
+    // mid-frame inside Render().
+    (void) EnsureExtraEffects();
+
     constexpr float lumR = 0.2126f;
     constexpr float lumG = 0.7152f;
     constexpr float lumB = 0.0722f;
 
-    // 3x3 saturation matrix: out[i] = lum[j]*(1-s) + (i==j ? s : 0)
-    float sat[3][3] = {
-        { lumR * (1.0f - s) + s, lumG * (1.0f - s),       lumB * (1.0f - s) },
-        { lumR * (1.0f - s),     lumG * (1.0f - s) + s,   lumB * (1.0f - s) },
-        { lumR * (1.0f - s),     lumG * (1.0f - s),       lumB * (1.0f - s) + s },
-    };
+    // ----- Base matrix: Sepia (fixed tone matrix) OR Saturation/Grayscale -----
+    // Sepia replaces the saturation step rather than stacking with it — two
+    // independent "what color should this become" steps would just fight
+    // each other and the result wouldn't be predictable.
+    float base[3][3];
+    if (g_app.effectSepia) {
+        base[0][0] = 0.393f; base[0][1] = 0.769f; base[0][2] = 0.189f;
+        base[1][0] = 0.349f; base[1][1] = 0.686f; base[1][2] = 0.168f;
+        base[2][0] = 0.272f; base[2][1] = 0.534f; base[2][2] = 0.131f;
+    } else {
+        // g_app.saturation: 0.0 = grayscale, 1.0 = neutral, >1.0 = oversaturated.
+        // effectGrayscale forces s=0 regardless of the continuous slider value
+        // (the slider value itself is preserved so toggling grayscale back off
+        // restores whatever saturation the user had dialed in).
+        const float s = g_app.effectGrayscale ? 0.0f : g_app.saturation;
+        base[0][0] = lumR * (1.0f - s) + s; base[0][1] = lumG * (1.0f - s);     base[0][2] = lumB * (1.0f - s);
+        base[1][0] = lumR * (1.0f - s);     base[1][1] = lumG * (1.0f - s) + s; base[1][2] = lumB * (1.0f - s);
+        base[2][0] = lumR * (1.0f - s);     base[2][1] = lumG * (1.0f - s);     base[2][2] = lumB * (1.0f - s) + s;
+    }
 
     // ----- Contrast -----
     // g_app.contrast: 1.0 = neutral. out = (in - 0.5) * c + 0.5
-    // Folded into the matrix by scaling every row of `sat` by c; the offset
+    // Folded into the matrix by scaling every row of `base` by c; the offset
     // picks up 0.5 * (1 - c). No internal cap, unlike CLSID_D2D1Contrast.
     const float c = g_app.contrast;
     float m[3][3];
     for (int row = 0; row < 3; ++row)
         for (int col = 0; col < 3; ++col)
-            m[row][col] = sat[row][col] * c;
+            m[row][col] = base[row][col] * c;
 
     // ----- Brightness -----
     // g_app.brightness: 0.0 = neutral, +1.0 = pure white, -1.0 = pure black.
-    // Simple additive offset, GPU-clamped to [0,1] — this is the part that
-    // replaced CLSID_D2D1Brightness, whose white/black point properties
-    // accepted our SetValue calls (confirmed via debug log) but silently
-    // produced no visible change.
     const float b = std::clamp(g_app.brightness, -1.0f, 1.0f);
     const float contrastOffset = 0.5f * (1.0f - c);
-    const float offset = contrastOffset + b;
+    float offset = contrastOffset + b;
+
+    // ----- Invert -----
+    // out = 1 - (m*in + offset)  =>  m' = -m, offset' = 1 - offset.
+    // Applied last so it inverts whatever sepia/grayscale/contrast/brightness
+    // already produced — matches "Invert colors" being a final flip, not an
+    // independent tint.
+    if (g_app.effectInvert) {
+        for (int row = 0; row < 3; ++row)
+            for (int col = 0; col < 3; ++col)
+                m[row][col] = -m[row][col];
+        offset = 1.0f - offset;
+    }
 
     D2D1_MATRIX_5X4_F matrix = D2D1::Matrix5x4F(
             m[0][0], m[1][0], m[2][0], 0.0f,
@@ -117,13 +138,107 @@ void RendererD2D::UpdateColorEffects() {
     m_pColorMatrixEffect->SetValue(D2D1_COLORMATRIX_PROP_COLOR_MATRIX, matrix);
     m_pColorMatrixEffect->SetValue(D2D1_COLORMATRIX_PROP_CLAMP_OUTPUT, TRUE);
 
+    // ----- Gamma ----- (non-linear, cannot fold into the matrix above)
+    if (m_pGammaEffect) {
+        const float g = (g_app.gamma <= 0.01f) ? 0.01f : g_app.gamma;
+        const float exponent = 1.0f / g; // gamma > 1.0 => brighter midtones
+        m_pGammaEffect->SetValue(D2D1_GAMMATRANSFER_PROP_RED_EXPONENT, exponent);
+        m_pGammaEffect->SetValue(D2D1_GAMMATRANSFER_PROP_GREEN_EXPONENT, exponent);
+        m_pGammaEffect->SetValue(D2D1_GAMMATRANSFER_PROP_BLUE_EXPONENT, exponent);
+    }
+
 #ifdef _DEBUG
     {
-        wchar_t buf[128];
-        swprintf_s(buf, L"[QIV] brightness=%.3f saturation=%.3f contrast=%.3f\n", b, s, c);
+        wchar_t buf[160];
+        swprintf_s(buf, L"[QIV] brightness=%.3f saturation=%.3f contrast=%.3f gamma=%.3f gray=%d inv=%d sepia=%d sol=%d out=%d thr=%d\n",
+                   b, g_app.saturation, c, g_app.gamma,
+                   g_app.effectGrayscale, g_app.effectInvert, g_app.effectSepia,
+                   g_app.effectSolarize, g_app.effectOutline, g_app.effectThreshold);
         OutputDebugStringW(buf);
     }
 #endif
+}
+
+// =============================================================================
+//  EnsureExtraEffects  — lazily create the non-linear effect nodes
+// =============================================================================
+HRESULT RendererD2D::EnsureExtraEffects() {
+    if (!m_pDeviceContext) return E_FAIL;
+    HRESULT hr = S_OK;
+
+    if (!m_pGammaEffect) {
+        hr = m_pDeviceContext->CreateEffect(CLSID_D2D1GammaTransfer, &m_pGammaEffect);
+        if (FAILED(hr)) return hr;
+        m_pGammaEffect->SetValue(D2D1_GAMMATRANSFER_PROP_ALPHA_DISABLE, TRUE);
+    }
+
+    if (!m_pSolarizeEffect) {
+        hr = m_pDeviceContext->CreateEffect(CLSID_D2D1TableTransfer, &m_pSolarizeEffect);
+        if (FAILED(hr)) return hr;
+
+        // Build a 256-entry per-channel LUT: values above the threshold get
+        // inverted, values below pass through untouched — a true solarize.
+        std::vector<float> lut(256);
+        for (int i = 0; i < 256; ++i) {
+            const float v = static_cast<float>(i) / 255.0f;
+            lut[i] = (v > Constants::SOLARIZE_THRESHOLD) ? (1.0f - v) : v;
+        }
+        const auto *lutBytes = reinterpret_cast<const BYTE *>(lut.data());
+        const UINT32 lutSize = static_cast<UINT32>(lut.size() * sizeof(float));
+        m_pSolarizeEffect->SetValue(D2D1_TABLETRANSFER_PROP_RED_TABLE, lutBytes, lutSize);
+        m_pSolarizeEffect->SetValue(D2D1_TABLETRANSFER_PROP_GREEN_TABLE, lutBytes, lutSize);
+        m_pSolarizeEffect->SetValue(D2D1_TABLETRANSFER_PROP_BLUE_TABLE, lutBytes, lutSize);
+        m_pSolarizeEffect->SetValue(D2D1_TABLETRANSFER_PROP_ALPHA_DISABLE, TRUE);
+    }
+
+    if (!m_pThresholdEffect) {
+        hr = m_pDeviceContext->CreateEffect(CLSID_D2D1Threshold, &m_pThresholdEffect);
+        if (FAILED(hr)) return hr;
+        m_pThresholdEffect->SetValue(D2D1_THRESHOLD_PROP_THRESHOLD, Constants::BW_THRESHOLD_LEVEL);
+    }
+
+    if (!m_pOutlineEffect) {
+        hr = m_pDeviceContext->CreateEffect(CLSID_D2D1EdgeDetection, &m_pOutlineEffect);
+        if (FAILED(hr)) return hr;
+        m_pOutlineEffect->SetValue(D2D1_EDGEDETECTION_PROP_STRENGTH, Constants::OUTLINE_STRENGTH);
+        m_pOutlineEffect->SetValue(D2D1_EDGEDETECTION_PROP_BLUR_RADIUS, Constants::OUTLINE_BLUR_RADIUS);
+        m_pOutlineEffect->SetValue(D2D1_EDGEDETECTION_PROP_OVERLAY_EDGES, TRUE);
+    }
+
+    return S_OK;
+}
+
+// =============================================================================
+//  BuildEffectChain  — wires source -> ColorMatrix -> [Gamma] -> [Solarize]
+//                      -> [Threshold] -> [Outline], skipping any stage whose
+//                      toggle is off. Returns the final effect (never null
+//                      once m_pColorMatrixEffect exists).
+// =============================================================================
+ID2D1Effect *RendererD2D::BuildEffectChain(ID2D1Image *source) {
+    if (!m_pColorMatrixEffect) return nullptr;
+    (void) EnsureExtraEffects();
+
+    m_pColorMatrixEffect->SetInput(0, source);
+    ID2D1Effect *current = m_pColorMatrixEffect.Get();
+
+    if (std::abs(g_app.gamma - 1.0f) > 0.001f && m_pGammaEffect) {
+        m_pGammaEffect->SetInputEffect(0, current);
+        current = m_pGammaEffect.Get();
+    }
+    if (g_app.effectSolarize && m_pSolarizeEffect) {
+        m_pSolarizeEffect->SetInputEffect(0, current);
+        current = m_pSolarizeEffect.Get();
+    }
+    if (g_app.effectThreshold && m_pThresholdEffect) {
+        m_pThresholdEffect->SetInputEffect(0, current);
+        current = m_pThresholdEffect.Get();
+    }
+    if (g_app.effectOutline && m_pOutlineEffect) {
+        m_pOutlineEffect->SetInputEffect(0, current);
+        current = m_pOutlineEffect.Get();
+    }
+
+    return current;
 }
 
 
@@ -315,6 +430,10 @@ void RendererD2D::DiscardDeviceResources() {
     m_pD3DContext.Reset();
     m_pD3DDevice.Reset();
     m_pColorMatrixEffect.Reset();
+    m_pGammaEffect.Reset();
+    m_pSolarizeEffect.Reset();
+    m_pThresholdEffect.Reset();
+    m_pOutlineEffect.Reset();
     m_pScaleEffect.Reset();
 }
 
@@ -681,17 +800,20 @@ HRESULT RendererD2D::Render() {
                                                  : D2D1_INTERPOLATION_MODE_HIGH_QUALITY_CUBIC;
 
         ID2D1Image *image = m_pBitmap.Get();
-        // g_app.contrast neutral = 1.0f, so check offset from 1.0
+        // g_app.contrast neutral = 1.0f, g_app.gamma neutral = 1.0f, so check offset from those
         bool useEffects =
                 std::abs(g_app.saturation - 1.0f) > 0.001f ||
                 std::abs(g_app.contrast - 1.0f) > 0.001f ||
-                std::abs(g_app.brightness) > 0.001f;
+                std::abs(g_app.brightness) > 0.001f ||
+                std::abs(g_app.gamma - 1.0f) > 0.001f ||
+                g_app.effectGrayscale || g_app.effectInvert || g_app.effectSepia ||
+                g_app.effectSolarize || g_app.effectThreshold || g_app.effectOutline;
         if (useEffects &&
             m_pColorMatrixEffect &&
             m_pScaleEffect) {
             // Do NOT reset transform here — flip/rotation is already set above.
-            m_pColorMatrixEffect->SetInput(0, image);
-            m_pScaleEffect->SetInputEffect(0, m_pColorMatrixEffect.Get());
+            ID2D1Effect *finalEffect = BuildEffectChain(image);
+            m_pScaleEffect->SetInputEffect(0, finalEffect);
             m_pScaleEffect->SetValue(
                     D2D1_SCALE_PROP_SCALE,
                     D2D1::Vector2F(
@@ -1140,4 +1262,136 @@ void RendererD2D::ResizeCacheWindow(UINT width, UINT height) {
         return;
     m_pCacheDeviceContext->SetTarget(
             m_pCacheBackBuffer.Get());
+}
+
+// =============================================================================
+//  SaveCurrentImageWithEffects  — Ctrl+S (Shortcuts::ImageEffects::SC_COLOR_SAVE_TO_DISK)
+//  Bakes the active color-effect chain into the image at its native pixel
+//  size (no resize, no rotation/flip/zoom applied — only color effects) and
+//  writes it out as a PNG.
+// =============================================================================
+HRESULT RendererD2D::SaveCurrentImageWithEffects(const std::wstring &outPath) {
+    if (!m_pBitmap || !m_pDeviceContext || !m_pD3DDevice) return E_FAIL;
+
+    HRESULT hr = S_OK;
+    D2D1_SIZE_U pixelSize = m_pBitmap->GetPixelSize();
+    if (pixelSize.width == 0 || pixelSize.height == 0) return E_FAIL;
+
+    // 1. Offscreen D3D11 render-target texture, sized to the native image.
+    D3D11_TEXTURE2D_DESC texDesc{};
+    texDesc.Width = pixelSize.width;
+    texDesc.Height = pixelSize.height;
+    texDesc.MipLevels = 1;
+    texDesc.ArraySize = 1;
+    texDesc.Format = DXGI_FORMAT_B8G8R8A8_UNORM;
+    texDesc.SampleDesc.Count = 1;
+    texDesc.Usage = D3D11_USAGE_DEFAULT;
+    texDesc.BindFlags = D3D11_BIND_RENDER_TARGET;
+
+    Microsoft::WRL::ComPtr<ID3D11Texture2D> offscreenTex;
+    hr = m_pD3DDevice->CreateTexture2D(&texDesc, nullptr, &offscreenTex);
+    if (FAILED(hr)) return hr;
+
+    Microsoft::WRL::ComPtr<IDXGISurface> dxgiSurface;
+    hr = offscreenTex.As(&dxgiSurface);
+    if (FAILED(hr)) return hr;
+
+    D2D1_BITMAP_PROPERTIES1 targetProps = D2D1::BitmapProperties1(
+            D2D1_BITMAP_OPTIONS_TARGET,
+            D2D1::PixelFormat(DXGI_FORMAT_B8G8R8A8_UNORM, D2D1_ALPHA_MODE_PREMULTIPLIED));
+
+    Microsoft::WRL::ComPtr<ID2D1Bitmap1> offscreenBitmap;
+    hr = m_pDeviceContext->CreateBitmapFromDxgiSurface(dxgiSurface.Get(), &targetProps, &offscreenBitmap);
+    if (FAILED(hr)) return hr;
+
+    // 2. Render the effect chain (no scale, no transform — 1:1 pixels).
+    Microsoft::WRL::ComPtr<ID2D1Image> previousTarget;
+    m_pDeviceContext->GetTarget(&previousTarget);
+
+    m_pDeviceContext->SetTarget(offscreenBitmap.Get());
+    m_pDeviceContext->BeginDraw();
+    m_pDeviceContext->Clear(D2D1::ColorF(0, 0, 0, 0));
+    m_pDeviceContext->SetTransform(D2D1::Matrix3x2F::Identity());
+
+    ID2D1Effect *finalEffect = BuildEffectChain(m_pBitmap.Get());
+    if (finalEffect) {
+        m_pDeviceContext->DrawImage(finalEffect, D2D1::Point2F(0.0f, 0.0f));
+    } else {
+        m_pDeviceContext->DrawImage(m_pBitmap.Get(), D2D1::Point2F(0.0f, 0.0f));
+    }
+
+    hr = m_pDeviceContext->EndDraw();
+
+    // Restore the live back-buffer target so the on-screen frame isn't disturbed.
+    m_pDeviceContext->SetTarget(previousTarget.Get());
+    if (FAILED(hr)) return hr;
+
+    // 3. Copy to a CPU-readable staging texture.
+    D3D11_TEXTURE2D_DESC stagingDesc = texDesc;
+    stagingDesc.Usage = D3D11_USAGE_STAGING;
+    stagingDesc.BindFlags = 0;
+    stagingDesc.CPUAccessFlags = D3D11_CPU_ACCESS_READ;
+
+    Microsoft::WRL::ComPtr<ID3D11Texture2D> stagingTex;
+    hr = m_pD3DDevice->CreateTexture2D(&stagingDesc, nullptr, &stagingTex);
+    if (FAILED(hr)) return hr;
+
+    m_pD3DContext->CopyResource(stagingTex.Get(), offscreenTex.Get());
+
+    D3D11_MAPPED_SUBRESOURCE mapped{};
+    hr = m_pD3DContext->Map(stagingTex.Get(), 0, D3D11_MAP_READ, 0, &mapped);
+    if (FAILED(hr)) return hr;
+
+    // Pack into a tightly-strided BGRA buffer for WIC (mapped.RowPitch may
+    // include padding, so copy row by row).
+    std::vector<BYTE> pixels(static_cast<size_t>(pixelSize.width) * pixelSize.height * 4);
+    const UINT rowBytes = pixelSize.width * 4;
+    for (UINT row = 0; row < pixelSize.height; ++row) {
+        memcpy(pixels.data() + static_cast<size_t>(row) * rowBytes,
+               static_cast<const BYTE *>(mapped.pData) + static_cast<size_t>(row) * mapped.RowPitch,
+               rowBytes);
+    }
+    m_pD3DContext->Unmap(stagingTex.Get(), 0);
+
+    // 4. Encode to PNG via WIC, reusing the decoder thread's WIC factory.
+    Microsoft::WRL::ComPtr<IWICImagingFactory2> wicFac = g_decoderWorker.wicFactory;
+    if (!wicFac) return E_FAIL;
+
+    Microsoft::WRL::ComPtr<IWICStream> stream;
+    hr = wicFac->CreateStream(&stream);
+    if (FAILED(hr)) return hr;
+
+    hr = stream->InitializeFromFilename(outPath.c_str(), GENERIC_WRITE);
+    if (FAILED(hr)) return hr;
+
+    Microsoft::WRL::ComPtr<IWICBitmapEncoder> encoder;
+    hr = wicFac->CreateEncoder(GUID_ContainerFormatPng, nullptr, &encoder);
+    if (FAILED(hr)) return hr;
+
+    hr = encoder->Initialize(stream.Get(), WICBitmapEncoderNoCache);
+    if (FAILED(hr)) return hr;
+
+    Microsoft::WRL::ComPtr<IWICBitmapFrameEncode> frame;
+    Microsoft::WRL::ComPtr<IPropertyBag2> props;
+    hr = encoder->CreateNewFrame(&frame, &props);
+    if (FAILED(hr)) return hr;
+
+    hr = frame->Initialize(props.Get());
+    if (FAILED(hr)) return hr;
+
+    hr = frame->SetSize(pixelSize.width, pixelSize.height);
+    if (FAILED(hr)) return hr;
+
+    WICPixelFormatGUID format = GUID_WICPixelFormat32bppBGRA;
+    hr = frame->SetPixelFormat(&format);
+    if (FAILED(hr)) return hr;
+
+    hr = frame->WritePixels(pixelSize.height, rowBytes,
+                            static_cast<UINT>(pixels.size()), pixels.data());
+    if (FAILED(hr)) return hr;
+
+    hr = frame->Commit();
+    if (FAILED(hr)) return hr;
+
+    return encoder->Commit();
 }

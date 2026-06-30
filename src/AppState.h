@@ -35,6 +35,15 @@ struct AppState {
     float saturation = Constants::DEFAULT_SATURATION;
     float brightness = Constants::DEFAULT_BRIGHTNESS;
     float contrast = Constants::DEFAULT_CONTRAST;
+    float gamma = Constants::DEFAULT_GAMMA;
+
+    // Toggleable color effects — see Shortcuts::ImageEffects (Shortcuts.h is the source of truth)
+    bool effectGrayscale = false; // Delete
+    bool effectInvert = false; // Insert
+    bool effectSepia = false; // Home
+    bool effectSolarize = false; // End
+    bool effectOutline = false; // Page Up
+    bool effectThreshold = false; // Page Down
     int screenW = 0;
     int screenH = 0;
     int imgWidth = 0;

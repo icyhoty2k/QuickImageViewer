@@ -75,11 +75,9 @@ namespace Shortcuts {
 
     // Left Arrow  —  Previous image
     constexpr UINT SC_NAV_PREV = VK_LEFT;
-    constexpr UINT SC_NAV_PREV_2 = VK_UP;
 
     // Right Arrow  —  Next image
     constexpr UINT SC_NAV_NEXT = VK_RIGHT;
-    constexpr UINT SC_NAV_NEXT_2 = VK_DOWN;
 
     // Space       —  Next image  /  Shift+Space  —  Previous image
     constexpr UINT SC_NAV_NEXT_SPACE = VK_SPACE; // no modifier = next
@@ -105,9 +103,9 @@ namespace Shortcuts {
 
     constexpr UINT SC_ZOOM_RESET = VK_MULTIPLY; // —  Reset zoom and pan to 1:1, centered
 
-    // Mouse: Ctrl+Wheel  —  Zoom in/out (handled in WM_MOUSEWHEEL)
-    // Mouse: RMB drag    —  Pan image
-    // Mouse: LMB click   —  Quick zoom-to ZOOM_CLICK and back
+    // Mouse: Ctrl+Wheel / RMB(view-control)+Wheel  —  Zoom in/out (handled in WM_MOUSEWHEEL)
+    // See Shortcuts::REFERENCE_ONLY::MouseShortcuts below for the full, accurate
+    // mouse map — it depends on Constants::SWAP_MOUSE_BUTTONS.
 
     // -------------------------------------------------------------------------
     // View Modes  (keys '1'–'5')
@@ -150,9 +148,12 @@ namespace Shortcuts {
     // Color Effects
     // -------------------------------------------------------------------------
     namespace ImageEffects {
-        // Dedicated image effect keys:
-        // Insert, Delete, Home, End, Page Up, Page Down
-        //TODO remember to remove "i"  key for grayscale and remove old brightness and contrast shortcuts b and c and shift b and c , replace with new one
+        // Dedicated image effect keys (do NOT use letters here — letters are
+        // reserved for transform/navigation; effects live on Insert, Delete,
+        // Home, End, Page Up, Page Down, plus the punctuation cluster for
+        // continuous adjustments). The old 'I' grayscale toggle and the old
+        // B / Shift+B / C / Shift+C brightness/contrast keys have been
+        // removed — AppMain.cpp must only use the constants below.
         constexpr UINT SC_COLOR_GRAYSCALE = VK_DELETE; // Toggle grayscale
         constexpr UINT SC_COLOR_INVERT = VK_INSERT; // Toggle invert colors
         constexpr UINT SC_COLOR_SEPIA = VK_HOME; // Toggle sepia
@@ -174,6 +175,58 @@ namespace Shortcuts {
     }
 
     namespace REFERENCE_ONLY::MouseShortcuts {
-        //TODO Here I will put all mouse shortcuts !
+        // Here I will put all mouse shortcuts just for reference!
+        //
+        // Mouse buttons are NOT remapped via constants like keyboard keys —
+        // WM_LBUTTONDOWN / WM_RBUTTONDOWN are intrinsic Windows messages.
+        // Which physical button does which job is decided at runtime by
+        // Constants::SWAP_MOUSE_BUTTONS (see MouseHandler::IsDragAction /
+        // IsViewControlAction). This list documents the CURRENT behavior
+        // with Constants::SWAP_MOUSE_BUTTONS = true (the shipped default).
+        //
+        // -------------------------------------------------------------
+        // "View-control button"  = LMB   (RMB if SWAP_MOUSE_BUTTONS = false)
+        // "Window-drag button"   = RMB   (LMB if SWAP_MOUSE_BUTTONS = false)
+        // -------------------------------------------------------------
+        //
+        // View-control button, click+hold —  Quick zoom to Constants::ZOOM_CLICK
+        //                                     (3x) centered on the cursor.
+        // View-control button, drag       —  While held, pans the temporarily
+        //                                     zoomed image (offset only; zoom
+        //                                     and pan revert on release).
+        //
+        // Window-drag button, click+hold  —  Begins moving the window
+        //                                     (disabled while fullscreen).
+        // Window-drag button, drag        —  Moves the window.
+        //
+        // Window-drag button HELD + View-control button CLICK
+        //                                  —  Reveals the current file in
+        //                                     Windows Explorer (same as E / Tab).
+        //
+        // Middle Mouse Button, click (no movement)
+        //                                  —  Reset: zoom/pan to 1:1, opacity
+        //                                     to full, window resized to
+        //                                     Constants::BASE_WIDTH x
+        //                                     BASE_HEIGHT and centered on the
+        //                                     current monitor.
+        // Middle Mouse Button, drag       —  Live-resizes the window from its
+        //                                     top-left corner (disabled while
+        //                                     fullscreen).
+        //
+        // LMB double-click                —  Toggle fullscreen (same as
+        //                                     SC_PANEL_FULLSCREEN).
+        //
+        // Wheel (vertical), no modifier   —  Navigate: forward/up = previous
+        //                                     image, back/down = next image.
+        // Ctrl + Wheel (vertical)         —  Zoom in (up) / out (down) by
+        //                                     Constants::ZOOM_STEP.
+        // RMB held + Wheel (vertical)     —  Same as Ctrl+Wheel: zoom in/out.
+        // Shift + Wheel (vertical)        —  Adjust window/image opacity by
+        //                                     Constants::OPACITY_STEP.
+        //
+        // Wheel (horizontal), no modifier —  Adjust window/image opacity
+        //                                     (same as Shift+vertical wheel).
+        // RMB held + Wheel (horizontal)   —  Live-resize the window from its
+        //                                     center, 20px per notch.
     }
 } // namespace Shortcuts
