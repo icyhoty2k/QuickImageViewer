@@ -6,6 +6,7 @@
 #include <d2d1_3.h>
 #include <d2d1svg.h>
 #include <dwrite_3.h>
+#include <functional>
 #include <wrl/client.h>
 #include <list>
 #include <unordered_map>
@@ -52,6 +53,8 @@ class RendererD2D final : public IImageRenderer {
         std::vector<CacheItem> GetCachedBitmaps() override;
 
         void ClearCache() override;
+
+        void ClearCache(const std::wstring &excludePath) override;
 
         void RemoveFromCache(const std::wstring &filePath) override;
 

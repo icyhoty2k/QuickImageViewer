@@ -9,6 +9,8 @@ namespace UI {
     // Cache window layout
     extern float g_cacheOffset;
 
+    void SyncSelectionRectangle();
+
     // Shared logical object representing a thumbnail
     struct Thumbnail {
         D2D1_RECT_F rect; // Shared coordinate space

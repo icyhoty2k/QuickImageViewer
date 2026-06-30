@@ -5,14 +5,14 @@
 #include <dwmapi.h>
 #include <intsafe.h>
 #include <uxtheme.h>
-
+#include "CacheWindow.h"
 #include "../AppState.h"
 #include "Platform/Constants.h"
 #include "Platform/Shortcuts.h"
 #include "../DropTarget.h"
 #include "Platform/FileHandler.h"
 #include "UI/HelpWindow.h"
-#include "UI/CacheWindow.h"
+
 #include "Platform/MouseHandler.h"
 #include "../WicDecoder.h"
 #include "../SvgDecoder.h"
@@ -305,6 +305,11 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) 
             // Toggle Cache panel (F3)
             if (wParam == Shortcuts::SC_PANEL_CACHE_TOGGLE) {
                 UI::ToggleCacheWindow();
+                return 0;
+            }
+            // Clear VRAM Cache and UI (F12)
+            if (wParam == Shortcuts::SC_PANEL_CACHE_CLEAR) {
+                UI::ClearThumbnailCache();
                 return 0;
             }
             // // Toggle Dir panel (F5)
@@ -684,7 +689,11 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE, LPSTR, int nCmdShow) {
         g_app.renderer = std::make_unique<RendererGDI>();
         (void) g_app.renderer->Initialize(hWnd); // GDI init: S_OK always, failure is non-fatal
     }
-
+    // ---  CALLBACK REGISTRATION From IRenderer---
+    g_app.renderer->onImageChangedCallback = [](int newIndex) {
+        // This ensures the rectangle snaps to the actual displayed image index
+        UI::SyncSelectionRectangle();
+    };
 #ifdef _DEBUG
     if (g_app.renderer) {
         if (dynamic_cast<RendererD2D *>(g_app.renderer.get())) {

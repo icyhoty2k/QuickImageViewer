@@ -1,4 +1,5 @@
 #include "CacheWindow.h"
+#include <algorithm>
 #include "../AppState.h"
 #include "../Platform/FileHandler.h"
 #include <windowsx.h>
@@ -16,6 +17,23 @@ namespace UI {
     float g_cacheOffset = 0.0f;
     std::vector<Thumbnail> g_thumbnailObjects;
     int8_t g_cachePosition = Constants::CACHE_WINDOW_POSITION;
+    POINT g_clickPos = {0, 0};
+    bool g_hasMoved = false;
+
+    // The single source of truth for UI selection state
+    void SyncSelectionRectangle() {
+        if (!g_hCacheWnd) return;
+
+        g_selectedIndex = -1;
+        for (size_t i = 0; i < g_thumbnailObjects.size(); ++i) {
+            if (g_thumbnailObjects[i].playlistIndex == g_app.currentIndex) {
+                g_selectedIndex = static_cast<int>(i);
+                break;
+            }
+        }
+        InvalidateRect(g_hCacheWnd, nullptr, TRUE);
+        UpdateWindow(g_hCacheWnd);
+    }
 
     LRESULT CALLBACK CacheWndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) {
         switch (message) {
@@ -31,57 +49,7 @@ namespace UI {
                 EndPaint(hWnd, &ps);
                 return 0;
             }
-            case WM_MOUSEWHEEL: {
-                int delta = GET_WHEEL_DELTA_WPARAM(wParam);
-                float scroll = Constants::CACHE_WINDOW_MOUSE_WHEEL_SPEED;
-                if (GetKeyState(VK_SHIFT) & 0x8000) scroll *= 3.0f;
-                float amount = (delta > 0 ? scroll : -scroll) * Constants::CACHE_WINDOW_MOUSE_WHEEL_DIRECTION;
-                g_cacheOffset += amount;
-                UpdateCacheView();
-                return 0;
-            }
-            case WM_LBUTTONDOWN: {
-                int x = GET_X_LPARAM(lParam);
-                int y = GET_Y_LPARAM(lParam);
 
-                for (size_t i = 0; i < g_thumbnailObjects.size(); ++i) {
-                    if (g_thumbnailObjects[i].HitTest(x, y)) {
-                        g_selectedIndex = static_cast<int>(i);
-                        LoadImageIndex(g_hOwner, g_thumbnailObjects[i].playlistIndex);
-                        break;
-                    }
-                }
-
-                g_isDragging = true;
-                SetCapture(hWnd);
-                GetCursorPos(&g_lastMousePos);
-                return 0;
-            }
-            case WM_MOUSEMOVE: {
-                if (g_isDragging) {
-                    POINT cur;
-                    GetCursorPos(&cur);
-                    float delta;
-
-                    if (g_cachePosition == 2 || g_cachePosition == 3) {
-                        delta = static_cast<float>(cur.y - g_lastMousePos.y);
-                    } else {
-                        delta = static_cast<float>(cur.x - g_lastMousePos.x);
-                    }
-
-                    g_cacheOffset += delta;
-                    g_lastMousePos = cur;
-
-                    UpdateCacheView();
-                    InvalidateRect(hWnd, nullptr, FALSE);
-                }
-                return 0;
-            }
-            case WM_LBUTTONUP: {
-                ReleaseCapture();
-                g_isDragging = false;
-                return 0;
-            }
             case WM_SIZE: {
                 if (g_app.renderer) {
                     auto *r = dynamic_cast<RendererD2D *>(g_app.renderer.get());
@@ -94,22 +62,108 @@ namespace UI {
                 UpdateCacheView();
                 return 0;
             }
+
+            case WM_MOUSEWHEEL: {
+                int delta = GET_WHEEL_DELTA_WPARAM(wParam);
+                float scroll = Constants::CACHE_WINDOW_MOUSE_WHEEL_SPEED;
+                if (GetKeyState(VK_SHIFT) & 0x8000) scroll *= 3.0f;
+                float amount = (delta > 0 ? scroll : -scroll) * Constants::CACHE_WINDOW_MOUSE_WHEEL_DIRECTION;
+                g_cacheOffset += amount;
+                UpdateCacheView();
+                return 0;
+            }
+
             case WM_KEYDOWN: {
-                if (wParam == Shortcuts::SC_LOCAL_HIDE) {
-                    ShowWindow(hWnd, SW_HIDE);
-                    return 0;
-                }
-                if (wParam == Shortcuts::SC_LOCAL_HIDE) {
-                    ShowWindow(hWnd, SW_HIDE);
-                    return 0;
-                } else if (wParam == Shortcuts::SC_PANEL_CACHE_TOGGLE) {
-                    ToggleCacheWindow();
-                    return 0;
-                } else if (wParam == Shortcuts::SC_PANEL_CACHE_MOVE) {
-                    MoveCacheWindow();
-                    return 0;
+                switch (wParam) {
+                    case Shortcuts::SC_PANEL_CACHE_CLEAR:
+                        ClearThumbnailCache();
+                        return 0;
+                    case Shortcuts::SC_LOCAL_HIDE:
+                        ShowWindow(hWnd, SW_HIDE);
+                        return 0;
+                    case Shortcuts::SC_PANEL_CACHE_TOGGLE:
+                        ToggleCacheWindow();
+                        return 0;
+                    case Shortcuts::SC_PANEL_CACHE_MOVE:
+                        MoveCacheWindow();
+                        return 0;
+                    default:
+                        if (g_hOwner) {
+                            return SendMessageW(g_hOwner, message, wParam, lParam);
+                        }
+                        break;
                 }
                 break;
+            }
+
+            case WM_LBUTTONDOWN: {
+                g_clickPos.x = GET_X_LPARAM(lParam);
+                g_clickPos.y = GET_Y_LPARAM(lParam);
+                g_hasMoved = false;
+
+                g_isDragging = true;
+                SetCapture(hWnd);
+                GetCursorPos(&g_lastMousePos);
+                return 0;
+            }
+
+            case WM_MOUSEMOVE: {
+                int x = GET_X_LPARAM(lParam);
+                int y = GET_Y_LPARAM(lParam);
+
+                int newHoverIndex = -1;
+                for (size_t i = 0; i < g_thumbnailObjects.size(); ++i) {
+                    if (g_thumbnailObjects[i].HitTest(x, y)) {
+                        newHoverIndex = static_cast<int>(i);
+                        break;
+                    }
+                }
+
+                if (newHoverIndex != g_hoverIndex) {
+                    g_hoverIndex = newHoverIndex;
+                    InvalidateRect(hWnd, nullptr, FALSE);
+                }
+
+                if (g_isDragging) {
+                    if (abs(x - g_clickPos.x) > 5 || abs(y - g_clickPos.y) > 5) {
+                        g_hasMoved = true;
+                    }
+
+                    POINT cur;
+                    GetCursorPos(&cur);
+                    float delta;
+
+                    if (g_cachePosition == 1 || g_cachePosition == 3) {
+                        delta = static_cast<float>(cur.y - g_lastMousePos.y);
+                    } else {
+                        delta = static_cast<float>(cur.x - g_lastMousePos.x);
+                    }
+
+                    g_cacheOffset += delta;
+                    g_lastMousePos = cur;
+
+                    UpdateCacheView();
+                }
+                return 0;
+            }
+
+            case WM_LBUTTONUP: {
+                if (g_isDragging) {
+                    ReleaseCapture();
+
+                    if (!g_hasMoved) {
+                        int x = GET_X_LPARAM(lParam);
+                        int y = GET_Y_LPARAM(lParam);
+                        for (size_t i = 0; i < g_thumbnailObjects.size(); ++i) {
+                            if (g_thumbnailObjects[i].HitTest(x, y)) {
+                                LoadImageIndex(g_hOwner, g_thumbnailObjects[i].playlistIndex);
+                                break;
+                            }
+                        }
+                    }
+                    g_isDragging = false;
+                }
+                return 0;
             }
 
             case WM_CLOSE: {
@@ -120,6 +174,21 @@ namespace UI {
         return DefWindowProcW(hWnd, message, wParam, lParam);
     }
 
+    void ClearThumbnailCache() {
+        std::wstring activeFile = L"";
+        if (!g_app.playlist.empty() &&
+            g_app.currentIndex >= 0 &&
+            g_app.currentIndex < static_cast<int>(g_app.playlist.size())) {
+            activeFile = g_app.playlist[g_app.currentIndex];
+        }
+
+        if (g_app.renderer) {
+            g_app.renderer->ClearCache(activeFile);
+        }
+
+        g_cacheOffset = 0.0f;
+        UpdateCacheView();
+    }
 
     void UpdateCacheView() {
         if (!g_hCacheWnd || !g_app.renderer || !IsWindowVisible(g_hCacheWnd)) return;
@@ -131,10 +200,8 @@ namespace UI {
 
         float surfaceW = static_cast<float>(cr.right);
         float surfaceH = static_cast<float>(cr.bottom);
-
         bool vertical = (g_cachePosition == 1 || g_cachePosition == 3);
 
-        // Standardize sizes using explicit DPI scaling rather than stretching to the window bounds
         float thumbW = Constants::CACHE_THUMB_WIDTH * g_app.dpiScale;
         float thumbH = Constants::CACHE_THUMB_HEIGHT * g_app.dpiScale;
         float scaledMargin = Constants::CACHE_THUMB_MARGIN * g_app.dpiScale;
@@ -144,38 +211,27 @@ namespace UI {
         float y = scaledMargin;
 
         if (!vertical) {
-            // Horizontal alignment (Top / Bottom)
-            // Center the thumbnail vertically within the window thickness
             y = (surfaceH - thumbH) / 2.0f;
-
             float totalWidth = items.size() * (thumbW + scaledSpacing) - scaledSpacing;
-
             if (totalWidth <= surfaceW) {
                 x = (surfaceW - totalWidth) / 2.0f;
             } else {
                 float minOffset = surfaceW - totalWidth - scaledMargin;
-                if (g_cacheOffset > 0) g_cacheOffset = 0;
-                if (g_cacheOffset < minOffset) g_cacheOffset = minOffset;
+                g_cacheOffset = std::clamp(g_cacheOffset, minOffset, 0.0f);
                 x = scaledMargin + g_cacheOffset;
             }
         } else {
-            // Vertical alignment (Left / Right)
-            // Center the thumbnail horizontally within the window thickness
             x = (surfaceW - thumbW) / 2.0f;
-
             float totalHeight = items.size() * (thumbH + scaledSpacing) - scaledSpacing;
-
             if (totalHeight <= surfaceH) {
                 y = (surfaceH - totalHeight) / 2.0f;
             } else {
                 float minOffset = surfaceH - totalHeight - scaledMargin;
-                if (g_cacheOffset > 0) g_cacheOffset = 0;
-                if (g_cacheOffset < minOffset) g_cacheOffset = minOffset;
+                g_cacheOffset = std::clamp(g_cacheOffset, minOffset, 0.0f);
                 y = scaledMargin + g_cacheOffset;
             }
         }
 
-        // Build thumbnail objects
         for (const auto &item: items) {
             auto mapIt = g_app.playlistIndexMap.find(item.filePath);
             int idx = (mapIt != g_app.playlistIndexMap.end()) ? mapIt->second : -1;
@@ -186,17 +242,13 @@ namespace UI {
                 idx
             });
 
-            if (vertical) {
-                y += thumbH + scaledSpacing;
-            } else {
-                x += thumbW + scaledSpacing;
-            }
+            if (vertical) y += thumbH + scaledSpacing;
+            else x += thumbW + scaledSpacing;
         }
 
-        InvalidateRect(g_hCacheWnd, nullptr, TRUE);
-        UpdateWindow(g_hCacheWnd);
+        // Re-anchor the selection to match the newly built geometry vector
+        SyncSelectionRectangle();
     }
-
 
     void GetCacheWindowBounds(HWND hRefWnd, int8_t position, int &x, int &y, int &width, int &height) {
         HMONITOR hMonitor = MonitorFromWindow(hRefWnd, MONITOR_DEFAULTTONEAREST);
@@ -208,7 +260,6 @@ namespace UI {
         int monW = mi.rcMonitor.right - mi.rcMonitor.left;
         int monH = mi.rcMonitor.bottom - mi.rcMonitor.top;
 
-        // Dynamically calculate thickness based on thumbnail sizes to ensure a uniform margin
         int horzThickness = static_cast<int>((Constants::CACHE_THUMB_HEIGHT + (Constants::CACHE_THUMB_MARGIN * 2.0f)) * g_app.dpiScale);
         int vertThickness = static_cast<int>((Constants::CACHE_THUMB_WIDTH + (Constants::CACHE_THUMB_MARGIN * 2.0f)) * g_app.dpiScale);
 
@@ -301,8 +352,6 @@ namespace UI {
             ShowWindow(g_hCacheWnd, SW_SHOW);
             SetForegroundWindow(g_hCacheWnd);
             UpdateCacheView();
-            InvalidateRect(g_hCacheWnd, NULL, TRUE);
-            UpdateWindow(g_hCacheWnd);
         }
     }
 }
