@@ -235,7 +235,7 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) 
             if (wParam == Shortcuts::SC_COLOR_SAT_UP) {
                 g_app.saturation =
                         std::min(
-                                2.0f,
+                                Constants::MIN_MAX_SATURATION,
                                 g_app.saturation + Constants::COLOR_ADJUST_STEP
                                 );
                 UpdateRendererColorEffects(hWnd);
@@ -252,8 +252,8 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) 
                 g_app.brightness =
                         std::clamp(
                                 g_app.brightness,
-                                -1.0f,
-                                1.0f
+                                -Constants::MIN_MAX_BRIGHTNESS,
+                                Constants::MIN_MAX_BRIGHTNESS
                                 );
                 UpdateRendererColorEffects(hWnd);
                 return 0;
@@ -270,7 +270,7 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) 
                         std::clamp(
                                 g_app.contrast,
                                 0.0f,
-                                3.0f
+                                Constants::MIN_MAX_CONTRAST
                                 );
                 UpdateRendererColorEffects(hWnd);
                 return 0;
