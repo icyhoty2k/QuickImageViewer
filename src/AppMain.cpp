@@ -475,10 +475,12 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) 
                 const int playlistSize = static_cast<int>(g_app.playlist.size());
                 switch (wParam) {
                     case Shortcuts::SC_NAV_PREV:
+                    case Shortcuts::SC_NAV_PREV_A:
                         LoadImageIndex(hWnd, (g_app.currentIndex - 1 + playlistSize) % playlistSize);
                         InvalidateRect(hWnd, nullptr, FALSE);
                         break;
                     case Shortcuts::SC_NAV_NEXT:
+                    case Shortcuts::SC_NAV_NEXT_A:
                         LoadImageIndex(hWnd, (g_app.currentIndex + 1) % playlistSize);
                         InvalidateRect(hWnd, nullptr, FALSE);
                         break;
@@ -489,12 +491,12 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) 
                             LoadImageIndex(hWnd, (g_app.currentIndex + 1) % playlistSize);
                         InvalidateRect(hWnd, nullptr, FALSE);
                         break;
-                    case Shortcuts::SC_ZOOM_IN:
+
                     case Shortcuts::SC_ZOOM_IN_NUMPAD:
                         g_app.viewport.zoom *= Constants::ZOOM_STEP;
                         InvalidateRect(hWnd, nullptr, FALSE);
                         break;
-                    case Shortcuts::SC_ZOOM_OUT:
+
                     case Shortcuts::SC_ZOOM_OUT_NUMPAD:
                         g_app.viewport.zoom /= Constants::ZOOM_STEP;
                         InvalidateRect(hWnd, nullptr, FALSE);
