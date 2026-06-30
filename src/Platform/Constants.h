@@ -1,5 +1,6 @@
 #pragma once
 #include <iterator>
+#include <d2d1.h>
 
 namespace Constants {
     constexpr const wchar_t *BASE_NAME = L"QuickImageViewer";
@@ -29,12 +30,20 @@ namespace Constants {
     constexpr float CACHE_THUMB_HEIGHT = 80.0f;
     constexpr float CACHE_THUMB_SPACING = 18.0f;
     constexpr float CACHE_THUMB_MARGIN = 20.0f;
-    constexpr float CACHE_WINDOW_OPACITY = 210.0f;
+    constexpr BYTE CACHE_WINDOW_OPACITY = 210;
     constexpr float CACHE_WINDOW_MOUSE_WHEEL_SPEED = 120.0f;
     constexpr int8_t CACHE_WINDOW_MOUSE_WHEEL_DIRECTION = 1; // 1 is forward -1 is reverse
     constexpr int8_t CACHE_WINDOW_POSITION = 0; // /0 top /1 right /2 bottom /3 left
     constexpr int CACHE_WINDOW_THICKNESS = 120;
 
+    namespace CacheColors {
+        const D2D1::ColorF::Enum BACKGROUND = D2D1::ColorF::Black; // Or your custom 0.08f, 0.08f, 0.08f
+        const D2D1::ColorF::Enum SELECTION_BORDER = D2D1::ColorF::LightGreen;
+        const float SELECTION_BORDER_THICKNESS = 3.0f;
+        const D2D1::ColorF::Enum HOVER = D2D1::ColorF::White;
+        const float HOVER_THICKNESS = 1.0f;
+        const D2D1::ColorF::Enum PLACEHOLDER = D2D1::ColorF::DarkSlateGray;
+    }
 
     constexpr const int VRAM_CACHE_IMAGES_COUNT = 30;
     constexpr const int VRAM_CACHE_SVG_COUNT = 10;

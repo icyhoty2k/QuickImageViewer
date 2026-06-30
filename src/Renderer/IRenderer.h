@@ -1,10 +1,10 @@
 #pragma once
 
 #include <windows.h>
-#include <wincodec.h>
 #include <string>
 #include <vector>
 #include <d2d1_1.h>
+#include <functional>
 
 // Forward declaration to avoid including the full d2d1.h in this header
 struct ID2D1Bitmap1;
@@ -16,6 +16,8 @@ class IImageRenderer {
         IImageRenderer() = default;
 
         virtual ~IImageRenderer() = default;
+
+        std::function<void(int)> onImageChangedCallback;
 
         // Disable copy/move to enforce unique renderer ownership
         IImageRenderer(const IImageRenderer &) = delete;
@@ -71,10 +73,7 @@ class IImageRenderer {
         /// Load an SVG from raw bytes into the renderer's SVG cache.
         /// Returns S_OK on success, E_NOTIMPL if the renderer has no SVG support.
         [[nodiscard]]
-        virtual HRESULT LoadSvgFromBytes(const std::vector<BYTE> &svgBytes,
-                                         const std::wstring &filePath) {
-            (void) svgBytes;
-            (void) filePath;
+        virtual HRESULT LoadSvgFromBytes(const std::vector<BYTE> & /*svgBytes*/, const std::wstring &/*filePath*/) {
             return E_NOTIMPL;
         }
 
@@ -88,10 +87,14 @@ class IImageRenderer {
         // -------------------------------------------------------------------
         struct CacheItem {
             std::wstring filePath;
-            ID2D1Bitmap1* bitmap;
+            ID2D1Bitmap1 *bitmap;
         };
 
-        virtual std::vector<CacheItem> GetCachedBitmaps() { return {}; }
+        virtual std::vector<CacheItem> GetCachedBitmaps() {
+            return {};
+        }
+
         virtual void ClearCache() {}
-        virtual void RemoveFromCache(const std::wstring& filePath) {}
+        virtual void ClearCache(const std::wstring & /*excludePath*/) {}
+        virtual void RemoveFromCache(const std::wstring & /*filePath*/) {}
 };

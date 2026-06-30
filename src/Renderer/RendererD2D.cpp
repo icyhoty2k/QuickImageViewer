@@ -315,6 +315,8 @@ void RendererD2D::Resize(UINT width, UINT height) {
 // =============================================================================
 HRESULT RendererD2D::LoadBitmap(IWICBitmapSource *bitmap, UINT width, UINT height,
                                 const std::wstring &filePath) {
+    bool isCacheHit = false;
+
     {
         std::lock_guard<std::mutex> lock(m_cacheMutex);
         auto it = m_bitmapCache.find(filePath);
@@ -327,8 +329,16 @@ HRESULT RendererD2D::LoadBitmap(IWICBitmapSource *bitmap, UINT width, UINT heigh
             m_svgNativeH = 0.0f;
             g_app.imgWidth = static_cast<int>(it->second.width);
             g_app.imgHeight = static_cast<int>(it->second.height);
-            return S_OK;
+            isCacheHit = true;
         }
+    }
+
+    if (isCacheHit) {
+        // Fire callback safely outside the mutex lock
+        if (onImageChangedCallback) {
+            onImageChangedCallback(g_app.currentIndex);
+        }
+        return S_OK;
     }
 
     if (!bitmap || !m_pD2DDevice) return E_FAIL;
@@ -346,20 +356,22 @@ HRESULT RendererD2D::LoadBitmap(IWICBitmapSource *bitmap, UINT width, UINT heigh
             &newBitmap);
 
     if (SUCCEEDED(hr)) {
-        std::lock_guard<std::mutex> lock(m_cacheMutex);
+        {
+            std::lock_guard<std::mutex> lock(m_cacheMutex);
+            auto it = m_bitmapCache.find(filePath);
+            if (it != m_bitmapCache.end()) {
+                m_lruList.erase(it->second.lruIt);
+                m_bitmapCache.erase(it);
+            }
+            if (m_lruList.size() >= Constants::VRAM_CACHE_IMAGES_COUNT) {
+                m_bitmapCache.erase(m_lruList.back());
+                m_lruList.pop_back();
+            }
 
-        auto it = m_bitmapCache.find(filePath);
-        if (it != m_bitmapCache.end()) {
-            m_lruList.erase(it->second.lruIt);
-            m_bitmapCache.erase(it);
-        }
-        if (m_lruList.size() >= Constants::VRAM_CACHE_IMAGES_COUNT) {
-            m_bitmapCache.erase(m_lruList.back());
-            m_lruList.pop_back();
+            m_lruList.push_front(filePath);
+            m_bitmapCache[filePath] = {newBitmap, m_lruList.begin(), width, height};
         }
 
-        m_lruList.push_front(filePath);
-        m_bitmapCache[filePath] = {newBitmap, m_lruList.begin(), width, height};
         m_pBitmap = newBitmap;
 
         // Clear any active SVG so the raster render path takes over
@@ -369,6 +381,11 @@ HRESULT RendererD2D::LoadBitmap(IWICBitmapSource *bitmap, UINT width, UINT heigh
 
         g_app.imgWidth = static_cast<int>(width);
         g_app.imgHeight = static_cast<int>(height);
+
+        // Fire callback safely outside the mutex lock
+        if (onImageChangedCallback) {
+            onImageChangedCallback(g_app.currentIndex);
+        }
     }
     return hr;
 }
@@ -750,6 +767,8 @@ HRESULT RendererD2D::LoadSvgFromBytes(const std::vector<BYTE> &svgBytes,
     m_pBitmap.Reset();
     m_pActiveSvg.Reset();
 
+    bool isCacheHit = false;
+
     // --- 1. Check SVG cache first ---
     {
         std::lock_guard<std::mutex> lock(m_cacheMutex);
@@ -762,8 +781,16 @@ HRESULT RendererD2D::LoadSvgFromBytes(const std::vector<BYTE> &svgBytes,
             m_pBitmap.Reset(); // raster path must be idle
             g_app.imgWidth = static_cast<int>(m_svgNativeW);
             g_app.imgHeight = static_cast<int>(m_svgNativeH);
-            return S_OK;
+            isCacheHit = true;
         }
+    }
+
+    if (isCacheHit) {
+        // Fire callback safely outside the mutex lock
+        if (onImageChangedCallback) {
+            onImageChangedCallback(g_app.currentIndex);
+        }
+        return S_OK;
     }
 
     // --- 2. QI for ID2D1DeviceContext5 (needed for CreateSvgDocument) ---
@@ -852,6 +879,11 @@ HRESULT RendererD2D::LoadSvgFromBytes(const std::vector<BYTE> &svgBytes,
     g_app.imgWidth = static_cast<int>(nativeW);
     g_app.imgHeight = static_cast<int>(nativeH);
 
+    // Fire callback safely outside the mutex lock
+    if (onImageChangedCallback) {
+        onImageChangedCallback(g_app.currentIndex);
+    }
+
     return S_OK;
 }
 
@@ -871,15 +903,59 @@ std::vector<IImageRenderer::CacheItem> RendererD2D::GetCachedBitmaps() {
     return items;
 }
 
+// 1. The parameter-less overload forwards an empty string
 void RendererD2D::ClearCache() {
+    ClearCache(L"");
+}
+
+void RendererD2D::ClearCache(const std::wstring &excludePath) {
     std::lock_guard<std::mutex> lock(m_cacheMutex);
+
+    // 1. If no path is provided, nuke everything completely
+    if (excludePath.empty()) {
+        m_bitmapCache.clear();
+        m_lruList.clear();
+        m_svgCache.clear();
+        m_svgLruList.clear();
+        m_pBitmap.Reset();
+        m_pActiveSvg.Reset();
+        return;
+    }
+
+    // 2. Filter the Bitmap Cache
+    auto bmpIt = m_bitmapCache.find(excludePath);
+    bool foundBmp = (bmpIt != m_bitmapCache.end());
+    CachedBitmap savedBmp;
+    if (foundBmp) savedBmp = bmpIt->second; // Save it before wiping
+
     m_bitmapCache.clear();
     m_lruList.clear();
+
+    if (foundBmp) {
+        // Re-insert the active file and generate a fresh LRU iterator
+        m_lruList.push_front(excludePath);
+        savedBmp.lruIt = m_lruList.begin();
+        m_bitmapCache[excludePath] = savedBmp;
+    }
+
+    // 3. Filter the SVG Cache
+    auto svgIt = m_svgCache.find(excludePath);
+    bool foundSvg = (svgIt != m_svgCache.end());
+    CachedSvg savedSvg;
+    if (foundSvg) savedSvg = svgIt->second; // Save it before wiping
+
     m_svgCache.clear();
     m_svgLruList.clear();
-    // Also clear the active pointers
-    m_pBitmap.Reset();
-    m_pActiveSvg.Reset();
+
+    if (foundSvg) {
+        // Re-insert the active file and generate a fresh LRU iterator
+        m_svgLruList.push_front(excludePath);
+        savedSvg.lruIt = m_svgLruList.begin();
+        m_svgCache[excludePath] = savedSvg;
+    }
+
+    // Notice we do NOT call m_pBitmap.Reset() or m_pActiveSvg.Reset() here.
+    // This guarantees the image currently bound to the GPU stays visible on screen.
 }
 
 void RendererD2D::RemoveFromCache(const std::wstring &filePath) {
@@ -902,33 +978,57 @@ void RendererD2D::RemoveFromCache(const std::wstring &filePath) {
 
 void RendererD2D::RenderCacheWindow(int selectedIndex, int hoverIndex) {
     if (!m_pCacheDeviceContext || !m_pCacheSwapChain) return;
+
+    // Secure the cache access during rendering to prevent crashes if the
+    // preloader background thread accesses it simultaneously.
+    std::lock_guard<std::mutex> lock(m_cacheMutex);
+
     m_pCacheDeviceContext->BeginDraw();
     m_pCacheDeviceContext->Clear(D2D1::ColorF(0.08f, 0.08f, 0.08f, 1.0f));
 
-    // Draw Thumbnails using the shared "Live Object" layout
+    // Iterate through the UI layout objects
     for (size_t i = 0; i < UI::g_thumbnailObjects.size(); ++i) {
         const auto &thumb = UI::g_thumbnailObjects[i];
+
+        // Check if the bitmap is available in the renderer's VRAM cache
         auto it = m_bitmapCache.find(thumb.filePath);
-        if (it != m_bitmapCache.end()) {
-            m_pCacheDeviceContext->DrawBitmap(it->second.bitmap.Get(),
-                                              thumb.rect, 1.0f, D2D1_BITMAP_INTERPOLATION_MODE_LINEAR);
+
+        if (it != m_bitmapCache.end() && it->second.bitmap) {
+            // Bitmap found: Draw the real image
+            m_pCacheDeviceContext->DrawBitmap(
+                    it->second.bitmap.Get(),
+                    thumb.rect,
+                    1.0f,
+                    D2D1_BITMAP_INTERPOLATION_MODE_LINEAR
+                    );
         } else {
+            // Bitmap missing: Draw a subtle placeholder box
+            // This prevents the screen from going blank and shows the UI is active
             m_pCacheDeviceContext->FillRectangle(thumb.rect, m_pCacheButtonBrush.Get());
+
+            // Optional: Trigger a background load if it's not already in progress
+            // Ensure your Renderer has a mechanism to avoid spamming requests
+            // PreloadBitmap(thumb.filePath, thumb.playlistIndex);
         }
 
-        if (static_cast<int>(i) == selectedIndex)
-            m_pCacheDeviceContext->DrawRectangle(thumb.rect, m_pCacheBorderBrush.Get(), 3.0f);
+        // Selection highlight
+        if (static_cast<int>(i) == selectedIndex) {
+            m_pCacheDeviceContext->DrawRectangle(thumb.rect, m_pCacheBorderBrush.Get(), Constants::CacheColors::SELECTION_BORDER_THICKNESS);
+        }
 
-        // Add hover effect if applicable
-        if (static_cast<int>(i) == hoverIndex)
-            m_pCacheDeviceContext->DrawRectangle(thumb.rect, m_pCacheTextBrush.Get(), 1.0f);
+        // Hover highlight
+        if (static_cast<int>(i) == hoverIndex) {
+            m_pCacheDeviceContext->DrawRectangle(thumb.rect, m_pCacheTextBrush.Get(), Constants::CacheColors::HOVER_THICKNESS);
+        }
     }
+
     HRESULT hr = m_pCacheDeviceContext->EndDraw();
-    if (FAILED(hr)) {
-        wchar_t buf[128];
-        swprintf_s(buf, L"Cache EndDraw failed: 0x%08X\n", hr);
-        OutputDebugStringW(buf);
+
+    // Handle device loss gracefully
+    if (hr == D2DERR_RECREATE_TARGET || hr == static_cast<HRESULT>(DXGI_ERROR_DEVICE_REMOVED)) {
+        // You would typically trigger a resource recreation here
     }
+
     m_pCacheSwapChain->Present(1, 0);
 }
 
@@ -978,9 +1078,9 @@ HRESULT RendererD2D::CreateCacheWindowDeviceResources(HWND hwnd) {
 
     ResizeCacheWindow(w, h);
     // 4. Create Brushes
-    m_pCacheDeviceContext->CreateSolidColorBrush(D2D1::ColorF(0.2f, 0.2f, 0.2f), &m_pCacheButtonBrush);
-    m_pCacheDeviceContext->CreateSolidColorBrush(D2D1::ColorF(D2D1::ColorF::LightGreen), &m_pCacheBorderBrush);
-    m_pCacheDeviceContext->CreateSolidColorBrush(D2D1::ColorF(D2D1::ColorF::White), &m_pCacheTextBrush);
+    m_pCacheDeviceContext->CreateSolidColorBrush(D2D1::ColorF(Constants::CacheColors::PLACEHOLDER), &m_pCacheButtonBrush);
+    m_pCacheDeviceContext->CreateSolidColorBrush(D2D1::ColorF(Constants::CacheColors::SELECTION_BORDER), &m_pCacheBorderBrush);
+    m_pCacheDeviceContext->CreateSolidColorBrush(D2D1::ColorF(Constants::CacheColors::HOVER), &m_pCacheTextBrush);
 
     return S_OK;
 }
