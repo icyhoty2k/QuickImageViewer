@@ -543,6 +543,7 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) 
                 // This call will find the bitmap in the cache and set it as active.
                 if (SUCCEEDED(g_app.renderer->LoadBitmap(nullptr, 0, 0, currentPath))) {
                     InvalidateRect(hWnd, nullptr, FALSE); // Now, repaint with the correct image.
+                    UI::UpdateCacheView();
                 }
             }
             return 0;
@@ -565,6 +566,7 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) 
                 g_app.renderer) {
                 if (SUCCEEDED(g_app.renderer->LoadSvgFromBytes(payload->bytes, payload->path))) {
                     InvalidateRect(hWnd, nullptr, FALSE);
+                    UI::UpdateCacheView();
                 }
             }
 
@@ -695,7 +697,7 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE, LPSTR, int nCmdShow) {
 
     RegisterDragDrop(hWnd, (g_pDropTarget = new DropTarget(hWnd)));
     UI::InitHelpWindow(hInstance, hWnd);
-    UI::InitCacheWindow(hInstance, hWnd);
+    UI::InitCacheWindow(hInstance, hWnd, Constants::CACHE_WINDOW_POSITION);
 
     DWORD corner = 2; // DWMWCP_ROUND
     DwmSetWindowAttribute(hWnd, Constants::DWMWA_WINDOW_CORNER_PREFERENCE, &corner, sizeof(corner));

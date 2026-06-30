@@ -18,18 +18,17 @@ namespace UI {
     int8_t g_cachePosition = Constants::CACHE_WINDOW_POSITION;
 
     void UpdateCacheView() {
-        if (!g_hCacheWnd || !g_app.renderer) return;
+        if (!g_hCacheWnd || !g_app.renderer || !IsWindowVisible(g_hCacheWnd)) return;
 
         g_thumbnailObjects.clear();
         auto items = g_app.renderer->GetCachedBitmaps();
-
         RECT cr{};
         GetClientRect(g_hCacheWnd, &cr);
 
         float surfaceW = static_cast<float>(cr.right);
         float surfaceH = static_cast<float>(cr.bottom);
 
-        bool vertical = (g_cachePosition == 2 || g_cachePosition == 3);
+        bool vertical = (g_cachePosition == 1 || g_cachePosition == 3);
 
         // Standardize sizes using explicit DPI scaling rather than stretching to the window bounds
         float thumbW = Constants::CACHE_THUMB_WIDTH * g_app.dpiScale;
@@ -171,19 +170,22 @@ namespace UI {
                 UpdateCacheView();
                 return 0;
             }
-            case WM_KEYDOWN: {
+            case WM_KEYDOWN: {}
                 if (wParam == Shortcuts::SC_LOCAL_HIDE) {
                     ShowWindow(hWnd, SW_HIDE);
                     return 0;
-                } else if (wParam == Shortcuts::SC_PANEL_CACHE_TOGGLE) {
-                    ToggleCacheWindow();
-                    return 0;
-                } else if (wParam == Shortcuts::SC_PANEL_CACHE_MOVE) {
-                    MoveCacheWindow();
-                    return 0;
+                    if (wParam == Shortcuts::SC_LOCAL_HIDE) {
+                        ShowWindow(hWnd, SW_HIDE);
+                        return 0;
+                    } else if (wParam == Shortcuts::SC_PANEL_CACHE_TOGGLE) {
+                        ToggleCacheWindow();
+                        return 0;
+                    } else if (wParam == Shortcuts::SC_PANEL_CACHE_MOVE) {
+                        MoveCacheWindow();
+                        return 0;
+                    }
+                    break;
                 }
-                break;
-            }
             case WM_CLOSE: {
                 ShowWindow(hWnd, SW_HIDE);
                 return 0;
@@ -192,17 +194,8 @@ namespace UI {
         return DefWindowProcW(hWnd, message, wParam, lParam);
     }
 
-    void InitCacheWindow(HINSTANCE hInstance, HWND hParent) {
-        InitCacheWindow(hInstance, hParent, Constants::CACHE_WINDOW_POSITION);
-    }
-
-    void MoveCacheWindow() {
-        if (!g_hCacheWnd) return;
-
-        g_cachePosition++;
-        if (g_cachePosition > 3) g_cachePosition = 0;
-
-        HMONITOR hMonitor = MonitorFromWindow(g_hOwner ? g_hOwner : g_hCacheWnd, MONITOR_DEFAULTTONEAREST);
+    void GetCacheWindowBounds(HWND hRefWnd, int8_t position, int &x, int &y, int &width, int &height) {
+        HMONITOR hMonitor = MonitorFromWindow(hRefWnd, MONITOR_DEFAULTTONEAREST);
         MONITORINFO mi = {sizeof(mi)};
         GetMonitorInfoW(hMonitor, &mi);
 
@@ -215,33 +208,39 @@ namespace UI {
         int horzThickness = static_cast<int>((Constants::CACHE_THUMB_HEIGHT + (Constants::CACHE_THUMB_MARGIN * 2.0f)) * g_app.dpiScale);
         int vertThickness = static_cast<int>((Constants::CACHE_THUMB_WIDTH + (Constants::CACHE_THUMB_MARGIN * 2.0f)) * g_app.dpiScale);
 
-        int x = monX;
-        int y = monY;
-        int width = monW;
-        int height = horzThickness;
+        x = monX;
+        y = monY;
+        width = monW;
+        height = horzThickness;
 
-        switch (g_cachePosition) {
-            case 0: // bottom
-                y = monY + monH - horzThickness;
-                height = horzThickness;
-                break;
-            case 1: // top
+        switch (position) {
+            case 0: // top
                 y = monY;
                 height = horzThickness;
                 break;
-            case 2: // left
-                width = vertThickness;
-                height = monH;
-                break;
-            case 3: // right
+            case 1: // right
                 x = monX + monW - vertThickness;
                 width = vertThickness;
                 height = monH;
                 break;
+            case 2: // bottom
+                y = monY + monH - horzThickness;
+                height = horzThickness;
+                break;
+            case 3: // left
+                width = vertThickness;
+                height = monH;
+                break;
         }
+    }
 
+    void MoveCacheWindow() {
+        if (!g_hCacheWnd) return;
+        g_cachePosition++;
+        if (g_cachePosition > 3) g_cachePosition = 0;
+        int x, y, width, height;
+        GetCacheWindowBounds(g_hOwner ? g_hOwner : g_hCacheWnd, g_cachePosition, x, y, width, height);
         g_cacheOffset = 0;
-
         SetWindowPos(
                 g_hCacheWnd,
                 HWND_TOPMOST,
@@ -261,46 +260,10 @@ namespace UI {
         wc.hInstance = hInstance;
         wc.hCursor = LoadCursor(nullptr, IDC_ARROW);
         wc.lpszClassName = L"QIV_CacheWindow";
-
         RegisterClassW(&wc);
 
-        HMONITOR hMonitor = MonitorFromWindow(hParent, MONITOR_DEFAULTTONEAREST);
-        MONITORINFO mi = {sizeof(mi)};
-        GetMonitorInfoW(hMonitor, &mi);
-
-        int monX = mi.rcMonitor.left;
-        int monY = mi.rcMonitor.top;
-        int monW = mi.rcMonitor.right - mi.rcMonitor.left;
-        int monH = mi.rcMonitor.bottom - mi.rcMonitor.top;
-
-        // Dynamically calculate thickness based on thumbnail sizes to ensure a uniform margin
-        int horzThickness = static_cast<int>((Constants::CACHE_THUMB_HEIGHT + (Constants::CACHE_THUMB_MARGIN * 2.0f)) * g_app.dpiScale);
-        int vertThickness = static_cast<int>((Constants::CACHE_THUMB_WIDTH + (Constants::CACHE_THUMB_MARGIN * 2.0f)) * g_app.dpiScale);
-
-        int x = monX;
-        int y = monY;
-        int width = monW;
-        int height = horzThickness;
-
-        switch (position) {
-            case 0: // bottom
-                y = monY + monH - horzThickness;
-                height = horzThickness;
-                break;
-            case 1: // top
-                y = monY;
-                height = horzThickness;
-                break;
-            case 2: // left
-                width = vertThickness;
-                height = monH;
-                break;
-            case 3: // right
-                x = monX + monW - vertThickness;
-                width = vertThickness;
-                height = monH;
-                break;
-        }
+        int x, y, width, height;
+        GetCacheWindowBounds(hParent, position, x, y, width, height);
 
         g_hCacheWnd = CreateWindowExW(
                 WS_EX_TOPMOST | WS_EX_TOOLWINDOW | WS_EX_LAYERED,
