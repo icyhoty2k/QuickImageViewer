@@ -22,9 +22,6 @@ namespace UI {
         }
     };
 
-
-    void InitCacheWindow(HINSTANCE hInstance, HWND hParent);
-
     void InitCacheWindow(HINSTANCE hInstance, HWND hParent, int8_t position);
 
     void MoveCacheWindow();
@@ -35,6 +32,8 @@ namespace UI {
 
     void RenderCacheWindow(int selectedIndex, int hoverIndex);
 
+    // Clears the cache
+    void ClearThumbnailCache();
 
     // Exposed for the Renderer to use for drawing
     extern std::vector<Thumbnail> g_thumbnailObjects;

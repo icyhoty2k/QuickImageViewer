@@ -32,7 +32,7 @@ namespace Shortcuts {
     constexpr UINT SC_APP_NEW_WINDOW = 'N'; // requires ctrl
 
     // -------------------------------------------------------------------------
-    // Panels / Overlays
+    // Panels / Overlays SC_PANEL = CacheWindow
     // -------------------------------------------------------------------------
 
     // F1  —  Toggle Help overlay
@@ -60,6 +60,9 @@ namespace Shortcuts {
     constexpr UINT SC_PANEL_FULLSCREEN_F = 'F';
     constexpr UINT SC_PANEL_FULLSCREEN_ENTER = VK_RETURN;
     constexpr UINT SC_PANEL_FULLSCREEN_T = 'T'; // requires ctrl+shift
+
+    // F12 —  Clear VRAM Cache and reset cache window UI
+    constexpr UINT SC_PANEL_CACHE_CLEAR = VK_F12;
 
     // N  —  Toggle on-screen info text overlay
     constexpr UINT SC_PANEL_OVERLAY_TOGGLE = 'N'; // no modifier

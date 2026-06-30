@@ -32,7 +32,7 @@ namespace Constants {
     constexpr float CACHE_WINDOW_OPACITY = 210.0f;
     constexpr float CACHE_WINDOW_MOUSE_WHEEL_SPEED = 120.0f;
     constexpr int8_t CACHE_WINDOW_MOUSE_WHEEL_DIRECTION = 1; // 1 is forward -1 is reverse
-    constexpr int8_t CACHE_WINDOW_POSITION = 1; // /0 bottom /1 top /2 left /3 right
+    constexpr int8_t CACHE_WINDOW_POSITION = 0; // /0 top /1 right /2 bottom /3 left
     constexpr int CACHE_WINDOW_THICKNESS = 120;
 
 
