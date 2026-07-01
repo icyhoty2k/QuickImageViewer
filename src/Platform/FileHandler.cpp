@@ -250,7 +250,7 @@ void LoadImageIndex(HWND hWnd, int index) {
 
     g_app.currentIndex = index;
     g_app.wantedIndex.store(index, std::memory_order_release);
-   
+
 
     const std::wstring &currentPath = g_app.playlist[index];
     SetWindowTextW(hWnd, (currentPath.substr(currentPath.find_last_of(L"\\/") + 1) + L" - QuickImageViewer").c_str());
@@ -288,7 +288,10 @@ void LoadImageIndex(HWND hWnd, int index) {
     // -------------------------------------------------------------------------
     if (g_app.renderer) {
         if (SUCCEEDED(g_app.renderer->LoadBitmap(nullptr, 0, 0, currentPath))) {
-            InvalidateRect(hWnd, nullptr, FALSE);
+            // Cache hit: the new bitmap is now active in the renderer.
+            // Rewire the effect graph to the new bitmap so the display node
+            // is not left pointing at the previous image's effect output.
+            g_app.UpdateRendererColorEffects(hWnd);
         } else {
             (void) g_app.renderer->PreloadBitmap(currentPath, index);
         }

@@ -539,6 +539,12 @@ HRESULT RendererD2D::LoadBitmap(IWICBitmapSource *bitmap, UINT width, UINT heigh
     }
 
     if (isCacheHit) {
+        // Reset the display node so UpdateColorEffects() will rewire the
+        // effect graph to the new bitmap (not the previous image's output).
+        // Without this, ApplyPreviousEffects() is skipped because the stale
+        // node pointer doesn't match m_pBitmap, leaving the graph wired to
+        // the old image — causing the viewer to appear stuck on navigation.
+        m_pActiveDisplayNode = nullptr;
         // Fire callback safely outside the mutex lock
         if (onImageChangedCallback) {
             onImageChangedCallback(g_app.currentIndex);
@@ -578,7 +584,10 @@ HRESULT RendererD2D::LoadBitmap(IWICBitmapSource *bitmap, UINT width, UINT heigh
         }
 
         m_pBitmap = newBitmap;
-        
+        // Reset the display node to null — UpdateRendererColorEffects() called
+        // from WM_QIV_REPAINT will rewire it correctly (fast path or effect graph)
+        // based on the current g_app effect state. Never force hasActiveEffects here.
+        m_pActiveDisplayNode = nullptr;
         // Clear any active SVG so the raster render path takes over
         m_pActiveSvg.Reset();
         m_svgNativeW = 0.0f;
