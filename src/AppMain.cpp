@@ -99,16 +99,6 @@ static void ResetWindowLayoutAndEffects(HWND hWnd) {
     g_app.UpdateRendererColorEffects(hWnd);
 }
 
-// Builds the output path for Ctrl+S (Shortcuts::ImageEffects::SC_COLOR_SAVE_TO_DISK):
-// same folder, "<name>_edited.png" — never overwrites the source file.
-static std::wstring BuildEffectsOutputPath(const std::wstring &srcPath) {
-    size_t dot = srcPath.find_last_of(L'.');
-    size_t slash = srcPath.find_last_of(L"\\/");
-    std::wstring base = (dot != std::wstring::npos && (slash == std::wstring::npos || dot > slash))
-                            ? srcPath.substr(0, dot)
-                            : srcPath;
-    return base + L"_edited.png";
-}
 
 LRESULT CALLBACK MainAppWndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) {
     switch (message) {
