@@ -143,12 +143,7 @@ struct AppState {
     }
 
     // HELPER: Auto-wakes the preview toggle when a user adjusts any effect
-    void WakeUpAndApplyEffects(HWND hWnd, bool &effectToggle) {
-        // 1. Flip the specific effect state FIRST
-        effectToggle = !effectToggle;
-
-        // 2. Now that the state is flipped, we can evaluate hasActiveEffects
-        //    and trigger the renderer.
+    void WakeUpAndApplyEffects(HWND hWnd) {
         UpdateRendererColorEffects(hWnd);
 
         // 3. If the user turned something on, ensure the preview is visible
@@ -157,6 +152,13 @@ struct AppState {
             renderer->UpdateColorEffects();
             InvalidateRect(hWnd, nullptr, FALSE);
         }
+    }
+
+    void WakeUpAndApplyEffects(HWND hWnd, bool &effectToggle) {
+        // 1. Flip the specific effect state FIRST
+        effectToggle = !effectToggle;
+
+        WakeUpAndApplyEffects(hWnd);
     }
 
     void UpdateRendererColorEffects(HWND hWnd) {
