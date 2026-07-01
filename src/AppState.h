@@ -154,6 +154,8 @@ struct AppState {
         // 3. If the user turned something on, ensure the preview is visible
         if (hasActiveEffects) {
             effectPreviewEnabled = true;
+            renderer->UpdateColorEffects();
+            InvalidateRect(hWnd, nullptr, FALSE);
         }
     }
 
