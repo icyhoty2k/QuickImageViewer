@@ -244,17 +244,13 @@ void LoadImageIndex(HWND hWnd, int index) {
         if (!g_app.effectPreviewEnabled) {
             g_app.ResetEffects();
         }
-    
-
-        // 2. Flip the explicit bypass switch. The Renderer will now ignore
-        // the effect graph entirely and draw the raw bitmap.
-        g_app.hasActiveEffects = false;
 
         // DELETED: g_app.renderer->UpdateColorEffects() is completely gone.
     }
 
     g_app.currentIndex = index;
     g_app.wantedIndex.store(index, std::memory_order_release);
+   
 
     const std::wstring &currentPath = g_app.playlist[index];
     SetWindowTextW(hWnd, (currentPath.substr(currentPath.find_last_of(L"\\/") + 1) + L" - QuickImageViewer").c_str());

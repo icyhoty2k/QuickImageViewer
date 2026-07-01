@@ -663,6 +663,9 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) 
                 const std::wstring &currentPath = g_app.playlist[g_app.currentIndex];
                 // This call will find the bitmap in the cache and set it as active.
                 if (SUCCEEDED(g_app.renderer->LoadBitmap(nullptr, 0, 0, currentPath))) {
+                    // --- CALL THE EFFECT UPDATER HERE ---
+                    // Now the bitmap is ready, we can safely wire the effect graph.
+                    g_app.UpdateRendererColorEffects(hWnd);
                     InvalidateRect(hWnd, nullptr, FALSE); // Now, repaint with the correct image.
                     UI::UpdateCacheView();
                 }
