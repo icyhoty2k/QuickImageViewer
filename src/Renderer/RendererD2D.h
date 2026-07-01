@@ -40,6 +40,7 @@ class RendererD2D final : public IImageRenderer {
 
         void UpdateColorEffects() override;
 
+
         [[nodiscard]] HRESULT SaveCurrentImageWithEffects(const std::wstring &outPath) override;
 
         void ClearActiveImage() override;
@@ -69,6 +70,8 @@ class RendererD2D final : public IImageRenderer {
 
         void ResizeCacheWindow(UINT width, UINT height);
 
+        void ApplyPreviousEffects() override;
+        
         // Public DWrite resources
         Microsoft::WRL::ComPtr<IDWriteFactory3> m_pDWriteFactory;
         Microsoft::WRL::ComPtr<IDWriteTextFormat> m_pTextFormat;
@@ -77,7 +80,10 @@ class RendererD2D final : public IImageRenderer {
     private:
         // Device-independent resources
         Microsoft::WRL::ComPtr<ID2D1Factory7> m_pD2DFactory;
-
+        // --- The Master Bypass Switch (Renderer-side) ---
+        // This acts as the final "Display Node" that Render() draws.
+        // It points to EITHER m_pBitmap (bypass) or the effect output (active).
+        Microsoft::WRL::ComPtr<ID2D1Image> m_pActiveDisplayNode;
         // Device-dependent resources
         Microsoft::WRL::ComPtr<ID3D11Device> m_pD3DDevice;
         Microsoft::WRL::ComPtr<ID3D11DeviceContext> m_pD3DContext;

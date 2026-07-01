@@ -150,12 +150,13 @@ namespace Shortcuts {
     // Color Effects
     // -------------------------------------------------------------------------
     namespace ImageEffects {
-        // Dedicated image effect keys (do NOT use letters here — letters are
-        // reserved for transform/navigation; effects live on Insert, Delete,
-        // Home, End, Page Up, Page Down, plus the punctuation cluster for
-        // continuous adjustments). The old 'I' grayscale toggle and the old
-        // B / Shift+B / C / Shift+C brightness/contrast keys have been
-        // removed — AppMain.cpp must only use the constants below.
+        // -------------------------------------------------------------------------
+        // Image Effects
+        // -------------------------------------------------------------------------
+        // Tab  —  Applies the currently stored effect pipeline to the active image
+        //         bypassing the need to rebuild the graph.
+        constexpr UINT SC_EFFECT_APPLY_TOGGLE = VK_OEM_3; // the grave key `
+        // Dedicated image effect keys
         constexpr UINT SC_COLOR_GRAYSCALE = VK_DELETE; // Toggle grayscale
         constexpr UINT SC_COLOR_INVERT = VK_INSERT; // Toggle invert colors
         constexpr UINT SC_COLOR_SEPIA = VK_HOME; // Toggle sepia

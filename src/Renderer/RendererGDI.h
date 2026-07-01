@@ -29,6 +29,10 @@ class RendererGDI final : public IImageRenderer {
 
         void UpdateTextFormat() override;
 
+        void ApplyPreviousEffects() override {
+            // GDI does not use the effect pipeline, so this is just an empty implementation.
+        }
+
     private:
         void DestroyBackBuffer();
 
