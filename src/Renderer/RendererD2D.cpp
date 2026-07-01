@@ -578,9 +578,7 @@ HRESULT RendererD2D::LoadBitmap(IWICBitmapSource *bitmap, UINT width, UINT heigh
         }
 
         m_pBitmap = newBitmap;
-        m_pActiveDisplayNode = nullptr; // Reset state
-        g_app.hasActiveEffects = false; // Force navigation back to Fast Path
-        m_pActiveDisplayNode = m_pBitmap; // <-- THIS IS THE BYPASS
+        
         // Clear any active SVG so the raster render path takes over
         m_pActiveSvg.Reset();
         m_svgNativeW = 0.0f;
