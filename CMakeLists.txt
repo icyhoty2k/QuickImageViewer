@@ -36,6 +36,9 @@ set(SOURCES
         src/UI/OverlayText.cpp
         src/UI/OverlayText.h
         src/Input/Shortcuts.h
+        src/Input/CommandExecuter.cpp
+        src/Input/Command.h
+        src/Input/CommandResolver.cpp
 )
 
 add_executable(QuickImageViewer WIN32 ${SOURCES})
@@ -81,6 +84,8 @@ target_include_directories(QuickImageViewer PRIVATE
         ${CMAKE_CURRENT_SOURCE_DIR}/src/Platform
         ${CMAKE_CURRENT_SOURCE_DIR}/src/Renderer
         ${CMAKE_CURRENT_SOURCE_DIR}/src/UI
+        ${CMAKE_CURRENT_SOURCE_DIR}/src/Input
+        ${CMAKE_CURRENT_SOURCE_DIR}/src/Persistence
 )
 
 # 5. Windows Libraries
