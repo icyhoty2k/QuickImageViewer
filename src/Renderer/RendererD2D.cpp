@@ -203,20 +203,26 @@ HRESULT RendererD2D::EnsureExtraEffects() {
         m_pSolarizeEffect->SetValue(D2D1_TABLETRANSFER_PROP_ALPHA_DISABLE, TRUE);
     }
 
-    // Note: Direct2D does not have a built-in Threshold effect
-    // This functionality would need to be implemented using a custom shader or
-    // by using other available effects like ColorMatrix or a combination of effects
-    // For now, we'll skip creating the threshold effect if it's not available
-    // if (!m_pThresholdEffect) {
-    //     // Attempt to create threshold effect - if this fails, we'll just skip it
-    //     hr = m_pDeviceContext->CreateEffect(CLSID_D2D1Threshold, &m_pThresholdEffect);
-    //     if (FAILED(hr)) {
-    //         // Threshold effect not available in this SDK version - continue without it
-    //         m_pThresholdEffect = nullptr;
-    //     } else {
-    //         m_pThresholdEffect->SetValue(D2D1_THRESHOLD_PROP_THRESHOLD, Constants::BW_THRESHOLD_LEVEL);
-    //     }
-    // }
+    // Threshold effect: implemented via D2D1TableTransfer with a step LUT.
+    // CLSID_D2D1Threshold does not exist in the Win32 SDK — we build the
+    // equivalent ourselves: values below BW_THRESHOLD_LEVEL map to 0.0 (black),
+    // values at or above map to 1.0 (white).  Same approach as solarize.
+    if (!m_pThresholdEffect) {
+        hr = m_pDeviceContext->CreateEffect(CLSID_D2D1TableTransfer, &m_pThresholdEffect);
+        if (FAILED(hr)) return hr;
+
+        std::vector<float> lut(256);
+        for (int i = 0; i < 256; ++i) {
+            const float v = static_cast<float>(i) / 255.0f;
+            lut[i] = (v >= Constants::BW_THRESHOLD_LEVEL) ? 1.0f : 0.0f;
+        }
+        const auto *lutBytes = reinterpret_cast<const BYTE *>(lut.data());
+        const UINT32 lutSize = static_cast<UINT32>(lut.size() * sizeof(float));
+        m_pThresholdEffect->SetValue(D2D1_TABLETRANSFER_PROP_RED_TABLE, lutBytes, lutSize);
+        m_pThresholdEffect->SetValue(D2D1_TABLETRANSFER_PROP_GREEN_TABLE, lutBytes, lutSize);
+        m_pThresholdEffect->SetValue(D2D1_TABLETRANSFER_PROP_BLUE_TABLE, lutBytes, lutSize);
+        m_pThresholdEffect->SetValue(D2D1_TABLETRANSFER_PROP_ALPHA_DISABLE, TRUE);
+    }
 
     if (!m_pOutlineEffect) {
         // Attempt to create edge detection effect
@@ -1321,34 +1327,42 @@ HRESULT RendererD2D::SaveCurrentImageWithEffects(const std::wstring &outPath) {
     hr = offscreenTex.As(&dxgiSurface);
     if (FAILED(hr)) return hr;
 
+    // Use IGNORE alpha — the source bitmap is opaque (loaded from JPEG/PNG with no
+    // alpha channel).  PREMULTIPLIED here causes D2D to pre-multiply the alpha on
+    // every pixel before writing, making the raw bytes unsuitable for WIC's straight-
+    // alpha encoder and producing a black image when alpha == 0.
     D2D1_BITMAP_PROPERTIES1 targetProps = D2D1::BitmapProperties1(
             D2D1_BITMAP_OPTIONS_TARGET,
-            D2D1::PixelFormat(DXGI_FORMAT_B8G8R8A8_UNORM, D2D1_ALPHA_MODE_PREMULTIPLIED));
+            D2D1::PixelFormat(DXGI_FORMAT_B8G8R8A8_UNORM, D2D1_ALPHA_MODE_IGNORE));
 
     Microsoft::WRL::ComPtr<ID2D1Bitmap1> offscreenBitmap;
     hr = m_pDeviceContext->CreateBitmapFromDxgiSurface(dxgiSurface.Get(), &targetProps, &offscreenBitmap);
     if (FAILED(hr)) return hr;
 
-    // 2. Render the effect chain (no scale, no transform — 1:1 pixels).
+    // 2. Render the effect chain into the offscreen target (1:1 pixels, no transform).
     Microsoft::WRL::ComPtr<ID2D1Image> previousTarget;
     m_pDeviceContext->GetTarget(&previousTarget);
 
     m_pDeviceContext->SetTarget(offscreenBitmap.Get());
     m_pDeviceContext->BeginDraw();
-    m_pDeviceContext->Clear(D2D1::ColorF(0, 0, 0, 0));
+    m_pDeviceContext->Clear(D2D1::ColorF(D2D1::ColorF::Black));
     m_pDeviceContext->SetTransform(D2D1::Matrix3x2F::Identity());
 
     ID2D1Effect *finalEffect = BuildEffectChain(m_pBitmap.Get());
     if (finalEffect) {
         m_pDeviceContext->DrawImage(finalEffect, D2D1::Point2F(0.0f, 0.0f));
     } else {
-        m_pDeviceContext->DrawImage(m_pBitmap.Get(), D2D1::Point2F(0.0f, 0.0f));
+        m_pDeviceContext->DrawBitmap(
+                m_pBitmap.Get(),
+                D2D1::RectF(0.0f, 0.0f,
+                            static_cast<float>(pixelSize.width),
+                            static_cast<float>(pixelSize.height)),
+                1.0f,
+                D2D1_BITMAP_INTERPOLATION_MODE_NEAREST_NEIGHBOR);
     }
 
     hr = m_pDeviceContext->EndDraw();
-
-    // Restore the live back-buffer target so the on-screen frame isn't disturbed.
-    m_pDeviceContext->SetTarget(previousTarget.Get());
+    m_pDeviceContext->SetTarget(previousTarget.Get()); // always restore
     if (FAILED(hr)) return hr;
 
     // 3. Copy to a CPU-readable staging texture.
@@ -1367,10 +1381,9 @@ HRESULT RendererD2D::SaveCurrentImageWithEffects(const std::wstring &outPath) {
     hr = m_pD3DContext->Map(stagingTex.Get(), 0, D3D11_MAP_READ, 0, &mapped);
     if (FAILED(hr)) return hr;
 
-    // Pack into a tightly-strided BGRA buffer for WIC (mapped.RowPitch may
-    // include padding, so copy row by row).
-    std::vector<BYTE> pixels(static_cast<size_t>(pixelSize.width) * pixelSize.height * 4);
+    // Copy row-by-row because mapped.RowPitch may include GPU padding.
     const UINT rowBytes = pixelSize.width * 4;
+    std::vector<BYTE> pixels(static_cast<size_t>(pixelSize.width) * pixelSize.height * 4);
     for (UINT row = 0; row < pixelSize.height; ++row) {
         memcpy(pixels.data() + static_cast<size_t>(row) * rowBytes,
                static_cast<const BYTE *>(mapped.pData) + static_cast<size_t>(row) * mapped.RowPitch,
@@ -1378,37 +1391,43 @@ HRESULT RendererD2D::SaveCurrentImageWithEffects(const std::wstring &outPath) {
     }
     m_pD3DContext->Unmap(stagingTex.Get(), 0);
 
-    // 4. Encode to PNG via WIC, reusing the decoder thread's WIC factory.
-    Microsoft::WRL::ComPtr<IWICImagingFactory2> wicFac = g_decoderWorker.wicFactory;
+    // 4. Encode to PNG via WIC.
+    // g_app.wicFactory is the IWICImagingFactory created on the UI thread
+    // (COINIT_APARTMENTTHREADED).  SaveCurrentImageWithEffects is always called
+    // from the UI thread (Ctrl+S), so this is safe.  The decoder thread's
+    // IWICImagingFactory2 lives in a COINIT_MULTITHREADED apartment — using it
+    // here crosses apartment boundaries and causes silent failures.
+    Microsoft::WRL::ComPtr<IWICImagingFactory> wicFac = g_app.wicFactory;
     if (!wicFac) return E_FAIL;
 
-    Microsoft::WRL::ComPtr<IWICStream> stream;
-    hr = wicFac->CreateStream(&stream);
+    Microsoft::WRL::ComPtr<IWICStream> wicStream;
+    hr = wicFac->CreateStream(&wicStream);
     if (FAILED(hr)) return hr;
 
-    hr = stream->InitializeFromFilename(outPath.c_str(), GENERIC_WRITE);
+    hr = wicStream->InitializeFromFilename(outPath.c_str(), GENERIC_WRITE);
     if (FAILED(hr)) return hr;
 
     Microsoft::WRL::ComPtr<IWICBitmapEncoder> encoder;
     hr = wicFac->CreateEncoder(GUID_ContainerFormatPng, nullptr, &encoder);
     if (FAILED(hr)) return hr;
 
-    hr = encoder->Initialize(stream.Get(), WICBitmapEncoderNoCache);
+    hr = encoder->Initialize(wicStream.Get(), WICBitmapEncoderNoCache);
     if (FAILED(hr)) return hr;
 
     Microsoft::WRL::ComPtr<IWICBitmapFrameEncode> frame;
-    Microsoft::WRL::ComPtr<IPropertyBag2> props;
-    hr = encoder->CreateNewFrame(&frame, &props);
+    Microsoft::WRL::ComPtr<IPropertyBag2> frameProps;
+    hr = encoder->CreateNewFrame(&frame, &frameProps);
     if (FAILED(hr)) return hr;
 
-    hr = frame->Initialize(props.Get());
+    hr = frame->Initialize(frameProps.Get());
     if (FAILED(hr)) return hr;
 
     hr = frame->SetSize(pixelSize.width, pixelSize.height);
     if (FAILED(hr)) return hr;
 
-    WICPixelFormatGUID format = GUID_WICPixelFormat32bppBGRA;
-    hr = frame->SetPixelFormat(&format);
+    // BGRA straight-alpha — matches what we read out of the staging texture.
+    WICPixelFormatGUID fmt = GUID_WICPixelFormat32bppBGRA;
+    hr = frame->SetPixelFormat(&fmt);
     if (FAILED(hr)) return hr;
 
     hr = frame->WritePixels(pixelSize.height, rowBytes,

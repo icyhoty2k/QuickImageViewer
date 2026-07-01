@@ -32,7 +32,8 @@
 #include "Renderer/RendererD2D.h"
 #include "Renderer/RendererGDI.h"
 #include "WorkerThread.h"
-#include <shlobj.h> // Required for SHOpenFolderAndSelectItems
+#include <shlobj.h>   // Required for SHOpenFolderAndSelectItems
+#include <commdlg.h>  // GetSaveFileName dialog
 
 // Global application state
 AppState g_app;
@@ -225,13 +226,14 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) 
         case WM_KEYDOWN: {
             bool shift = (GetKeyState(VK_SHIFT) & 0x8000) != 0;
             bool ctrl = (GetKeyState(VK_CONTROL) & 0x8000) != 0;
-            // 2. Handle your new ViewModes (keys '1' through '5')
-            if (wParam >= '1' && wParam <= '5') {
+            // Keys '1'–'5'  —  Switch view mode
+            if (wParam >= Shortcuts::SC_VIEW_MODE_FIRST && wParam <= Shortcuts::SC_VIEW_MODE_LAST) {
                 g_app.viewMode = static_cast<Constants::ViewModes::ViewMode>(wParam - '0');
                 InvalidateRect(hWnd, nullptr, FALSE);
                 return 0;
             }
-            if (wParam == 'E' || wParam == VK_TAB) {
+            // E / Tab  —  Reveal current file in Windows Explorer
+            if (wParam == Shortcuts::SC_NAV_SHOW_IN_EXPLORER || wParam == Shortcuts::SC_NAV_SHOW_IN_EXPLORER_TAB) {
                 if (!g_app.playlist.empty() && g_app.currentIndex >= 0) {
                     const std::wstring &path = g_app.playlist[g_app.currentIndex];
                     PIDLIST_ABSOLUTE pidl = ILCreateFromPathW(path.c_str());
@@ -242,12 +244,14 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) 
                 }
                 return 0;
             }
-            if (wParam == 'H') {
+            // H  —  Flip horizontal
+            if (wParam == Shortcuts::SC_TRANSFORM_FLIP_H) {
                 g_app.viewport.flippedH = !g_app.viewport.flippedH;
                 InvalidateRect(hWnd, nullptr, FALSE);
                 return 0;
             }
-            if (wParam == 'V') {
+            // V  —  Flip vertical
+            if (wParam == Shortcuts::SC_TRANSFORM_FLIP_V) {
                 g_app.viewport.flippedV = !g_app.viewport.flippedV;
                 InvalidateRect(hWnd, nullptr, FALSE);
                 return 0;
@@ -379,13 +383,59 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) 
                 return 0;
             }
 
-            // Ctrl+S  —  Save current image with effects applied to disk
-            // (size and aspect ratio are left untouched).
+            // Ctrl+S  —  Save current image with effects applied to disk.
+            // Opens a standard Save dialog so the user picks the output path.
+            // Only PNG output is supported (effects are baked at native pixel size).
             if (wParam == Shortcuts::ImageEffects::SC_COLOR_SAVE_TO_DISK && ctrl) {
                 if (g_app.renderer && !g_app.playlist.empty() && g_app.currentIndex >= 0) {
                     const std::wstring &srcPath = g_app.playlist[g_app.currentIndex];
-                    std::wstring outPath = BuildEffectsOutputPath(srcPath);
-                    (void) g_app.renderer->SaveCurrentImageWithEffects(outPath);
+
+                    // Build a default filename: original name (no extension) + "_edited.png"
+                    std::wstring defaultName;
+                    {
+                        size_t slash = srcPath.find_last_of(L"\\/");
+                        std::wstring nameOnly = (slash != std::wstring::npos)
+                                                    ? srcPath.substr(slash + 1)
+                                                    : srcPath;
+                        // Strip extension from display name
+                        size_t dotInName = nameOnly.find_last_of(L'.');
+                        if (dotInName != std::wstring::npos)
+                            nameOnly = nameOnly.substr(0, dotInName);
+                        defaultName = nameOnly + L"_edited.png";
+                    }
+
+                    // Buffer for the dialog — must be large enough for long paths
+                    wchar_t outBuf[MAX_PATH * 2] = {};
+                    wcsncpy_s(outBuf, defaultName.c_str(), _TRUNCATE);
+
+                    OPENFILENAMEW ofn{};
+                    ofn.lStructSize = sizeof(ofn);
+                    ofn.hwndOwner = hWnd;
+                    ofn.lpstrFilter = L"PNG Image\0*.png\0All Files\0*.*\0";
+                    ofn.nFilterIndex = 1;
+                    ofn.lpstrFile = outBuf;
+                    ofn.nMaxFile = ARRAYSIZE(outBuf);
+                    ofn.lpstrDefExt = L"png";
+                    ofn.lpstrTitle = L"Save image with effects";
+                    ofn.Flags = OFN_OVERWRITEPROMPT | OFN_PATHMUSTEXIST | OFN_NOCHANGEDIR;
+
+                    // Set initial directory to the source image's folder
+                    wchar_t initDir[MAX_PATH] = {};
+                    {
+                        size_t slash = srcPath.find_last_of(L"\\/");
+                        if (slash != std::wstring::npos)
+                            wcsncpy_s(initDir, srcPath.substr(0, slash).c_str(), _TRUNCATE);
+                    }
+                    ofn.lpstrInitialDir = initDir;
+
+                    if (GetSaveFileNameW(&ofn)) {
+                        HRESULT hr = g_app.renderer->SaveCurrentImageWithEffects(outBuf);
+                        if (FAILED(hr)) {
+                            wchar_t errBuf[128];
+                            swprintf_s(errBuf, L"Failed to save image.\nHRESULT: 0x%08X", static_cast<unsigned>(hr));
+                            MessageBoxW(hWnd, errBuf, L"QuickImageViewer", MB_OK | MB_ICONERROR);
+                        }
+                    }
                 }
                 return 0;
             }
@@ -402,8 +452,8 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) 
                 InvalidateRect(hWnd, nullptr, FALSE);
                 return 0;
             }
-            // True Hard Quit (Ctrl + Q) to flush from RAM completely
-            if (wParam == 'Q' && ctrl) {
+            // Ctrl+Q  —  Hard quit: flush from RAM completely
+            if (wParam == Shortcuts::SC_APP_HARD_QUIT && ctrl) {
                 PostQuitMessage(0);
                 return 0;
             }
@@ -443,13 +493,14 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) 
                 }
                 return 0;
             }
-            if (wParam == 'N' && !ctrl) {
+            // N  —  Toggle on-screen info text overlay
+            if (wParam == Shortcuts::SC_PANEL_OVERLAY_TOGGLE && !ctrl) {
                 g_app.showOverlayInfoText = !g_app.showOverlayInfoText;
                 InvalidateRect(hWnd, nullptr, FALSE);
                 return 0;
             }
-            // Open a New Blank Window (Ctrl + N)
-            if (wParam == 'N' && ctrl) {
+            // Ctrl+N  —  Open a new blank QIV window
+            if (wParam == Shortcuts::SC_APP_NEW_WINDOW && ctrl) {
                 wchar_t exePath[MAX_PATH];
                 GetModuleFileNameW(nullptr, exePath, MAX_PATH);
 
