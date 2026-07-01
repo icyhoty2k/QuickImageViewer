@@ -239,13 +239,6 @@ void LoadImageIndex(HWND hWnd, int index) {
 
     if (g_app.currentIndex != index) {
         g_app.viewport = ViewportState{};
-
-        // 1. Unconditionally assign defaults to RAM (0-cost CPU operation)
-        if (!g_app.effectPreviewEnabled) {
-            g_app.ResetEffects();
-        }
-
-        // DELETED: g_app.renderer->UpdateColorEffects() is completely gone.
     }
 
     g_app.currentIndex = index;
