@@ -30,6 +30,8 @@ class IImageRenderer {
 
         virtual void UpdateTextFormat() = 0;
 
+        virtual void ApplyPreviousEffects() = 0;
+
         virtual void ProcessPendingUploads() {}
 
         /// Initialize the renderer resources for the specified window handle.

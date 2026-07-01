@@ -239,19 +239,20 @@ void LoadImageIndex(HWND hWnd, int index) {
 
     if (g_app.currentIndex != index) {
         g_app.viewport = ViewportState{};
-        // Reset all color effects so each image starts clean.
-        g_app.saturation = Constants::DEFAULT_SATURATION;
-        g_app.brightness = Constants::DEFAULT_BRIGHTNESS;
-        g_app.contrast = Constants::DEFAULT_CONTRAST;
-        g_app.gamma = Constants::DEFAULT_GAMMA;
-        g_app.effectGrayscale = false;
-        g_app.effectInvert = false;
-        g_app.effectSepia = false;
-        g_app.effectSolarize = false;
-        g_app.effectOutline = false;
-        g_app.effectThreshold = false;
-        if (g_app.renderer) g_app.renderer->UpdateColorEffects();
+
+        // 1. Unconditionally assign defaults to RAM (0-cost CPU operation)
+        if (!g_app.effectPreviewEnabled) {
+            g_app.ResetEffects();
+        }
+    
+
+        // 2. Flip the explicit bypass switch. The Renderer will now ignore
+        // the effect graph entirely and draw the raw bitmap.
+        g_app.hasActiveEffects = false;
+
+        // DELETED: g_app.renderer->UpdateColorEffects() is completely gone.
     }
+
     g_app.currentIndex = index;
     g_app.wantedIndex.store(index, std::memory_order_release);
 
@@ -262,8 +263,6 @@ void LoadImageIndex(HWND hWnd, int index) {
     // SVG path: load bytes on IO thread, call LoadSvgFromBytes on UI thread
     // -------------------------------------------------------------------------
     if (SvgDecoder::IsSvgPath(currentPath)) {
-        // Clear the stale raster bitmap NOW so WM_PAINT shows black
-        // instead of the previous image while the IO task runs.
         if (g_app.renderer) g_app.renderer->ClearActiveImage();
 
         g_ioWorker.PushTask([currentPath, index, hWnd]() {
@@ -272,9 +271,6 @@ void LoadImageIndex(HWND hWnd, int index) {
             std::vector<BYTE> svgBytes;
             if (FAILED(SvgDecoder::LoadFile(currentPath, svgBytes))) return;
 
-            // Must create ID2D1SvgDocument on the UI thread.
-            // We ship the bytes back via a heap-allocated vector + PostMessage.
-            // Use a simple wrapper struct so we can pass the pointer as LPARAM.
             struct SvgPayload {
                 std::wstring path;
                 std::vector<BYTE> bytes;
@@ -282,8 +278,6 @@ void LoadImageIndex(HWND hWnd, int index) {
 
             auto *payload = new SvgPayload{currentPath, std::move(svgBytes)};
 
-            // WM_QIV_SVG_READY is defined as WM_USER + 3 in Constants.h
-            // We post it here; AppMain.cpp handles it.
             PostMessageW(hWnd, Constants::WM_QIV_SVG_READY,
                          static_cast<WPARAM>(index),
                          reinterpret_cast<LPARAM>(payload));
@@ -297,13 +291,9 @@ void LoadImageIndex(HWND hWnd, int index) {
     // Raster path (now fully async)
     // -------------------------------------------------------------------------
     if (g_app.renderer) {
-        // Probe the cache. If it hits, this call is synchronous and fast.
         if (SUCCEEDED(g_app.renderer->LoadBitmap(nullptr, 0, 0, currentPath))) {
             InvalidateRect(hWnd, nullptr, FALSE);
         } else {
-            // Cache miss: just kick off the async load. Do NOT clear the
-            // current image, to prevent a black flash. The old image will
-            // continue to be displayed until the new one is ready.
             (void) g_app.renderer->PreloadBitmap(currentPath, index);
         }
     }

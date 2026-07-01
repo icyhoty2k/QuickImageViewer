@@ -85,58 +85,18 @@ static void ToggleFullscreen(HWND hWnd) {
     }
 }
 
-static void UpdateRendererColorEffects(HWND hWnd) {
-    if (g_app.renderer) {
-        g_app.renderer->UpdateColorEffects();
-    }
-
-    InvalidateRect(hWnd, nullptr, FALSE);
-}
 
 // Shift+Delete (Shortcuts::SC_APP_RESET_DEFAULTS) — restore default application
 // state: window size/position centered on the current monitor, zoom/pan/
 // rotation/flip/opacity reset, and every image effect cleared.
 static void ResetWindowLayoutAndEffects(HWND hWnd) {
     // --- Viewport / window ---
-    g_app.viewport.zoom = 1.0f;
-    g_app.viewport.offsetX = 0.0f;
-    g_app.viewport.offsetY = 0.0f;
-    g_app.viewport.rotation = 0;
-    g_app.viewport.flippedH = false;
-    g_app.viewport.flippedV = false;
-
-    g_app.opacity = 255;
-    SetLayeredWindowAttributes(hWnd, 0, g_app.opacity, LWA_ALPHA);
-
-    int targetW = (int) (Constants::BASE_WIDTH * g_app.dpiScale);
-    int targetH = (int) (Constants::BASE_HEIGHT * g_app.dpiScale);
-
-    HMONITOR hMonitor = MonitorFromWindow(hWnd, MONITOR_DEFAULTTONEAREST);
-    MONITORINFO mi = {sizeof(mi)};
-    if (GetMonitorInfo(hMonitor, &mi)) {
-        int monitorW = mi.rcMonitor.right - mi.rcMonitor.left;
-        int monitorH = mi.rcMonitor.bottom - mi.rcMonitor.top;
-
-        SetWindowPos(hWnd, NULL,
-                     mi.rcMonitor.left + (monitorW - targetW) / 2,
-                     mi.rcMonitor.top + (monitorH - targetH) / 2,
-                     targetW, targetH,
-                     SWP_NOZORDER | SWP_NOACTIVATE | SWP_FRAMECHANGED);
-    }
+    g_app.ResetWindowState(hWnd);
 
     // --- All image effects ---
-    g_app.saturation = Constants::DEFAULT_SATURATION;
-    g_app.brightness = Constants::DEFAULT_BRIGHTNESS;
-    g_app.contrast = Constants::DEFAULT_CONTRAST;
-    g_app.gamma = Constants::DEFAULT_GAMMA;
-    g_app.effectGrayscale = false;
-    g_app.effectInvert = false;
-    g_app.effectSepia = false;
-    g_app.effectSolarize = false;
-    g_app.effectOutline = false;
-    g_app.effectThreshold = false;
+    g_app.ResetEffects();
 
-    UpdateRendererColorEffects(hWnd);
+    g_app.UpdateRendererColorEffects(hWnd);
 }
 
 // Builds the output path for Ctrl+S (Shortcuts::ImageEffects::SC_COLOR_SAVE_TO_DISK):
@@ -260,126 +220,118 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) 
             // COLOR EFFECTS  — see Shortcuts::ImageEffects (Shortcuts.h is the
             // single source of truth; all keys below must come from there).
             // ===============================
+            // HELPER: Auto-wakes the preview toggle when a user adjusts any effect
 
             // Shift+Delete  —  Full app reset: window layout + all image effects
             if (wParam == Shortcuts::SC_APP_RESET_DEFAULTS && shift) {
                 ResetWindowLayoutAndEffects(hWnd);
                 return 0;
             }
+            if (wParam == Shortcuts::ImageEffects::SC_EFFECT_APPLY_TOGGLE) {
+                // Toggle the preview state on or off
+                g_app.effectPreviewEnabled = !g_app.effectPreviewEnabled;
+                g_app.UpdateRendererColorEffects(hWnd);
 
-            // Delete (no shift)  —  Toggle grayscale
+                return 0;
+            }
+            // 1.Delete (no shift)  —  Toggle grayscale
             if (wParam == Shortcuts::ImageEffects::SC_COLOR_GRAYSCALE && !shift) {
-                g_app.effectGrayscale = !g_app.effectGrayscale;
-                UpdateRendererColorEffects(hWnd);
+                g_app.WakeUpAndApplyEffects(hWnd, g_app.effectGrayscale);
                 return 0;
             }
 
-            // Insert  —  Toggle invert colors
+            // 2.Insert  —  Toggle invert colors
             if (wParam == Shortcuts::ImageEffects::SC_COLOR_INVERT) {
-                g_app.effectInvert = !g_app.effectInvert;
-                UpdateRendererColorEffects(hWnd);
+                g_app.WakeUpAndApplyEffects(hWnd, g_app.effectInvert);
                 return 0;
             }
 
-            // Home  —  Toggle sepia
+            // 3.Home  —  Toggle sepia
             if (wParam == Shortcuts::ImageEffects::SC_COLOR_SEPIA) {
-                g_app.effectSepia = !g_app.effectSepia;
-                UpdateRendererColorEffects(hWnd);
+                g_app.WakeUpAndApplyEffects(hWnd, g_app.effectSepia);
                 return 0;
             }
 
-            // End  —  Toggle solarize
+            // 4.End  —  Toggle solarize
             if (wParam == Shortcuts::ImageEffects::SC_COLOR_SOLARIZE) {
-                g_app.effectSolarize = !g_app.effectSolarize;
-                UpdateRendererColorEffects(hWnd);
+                g_app.WakeUpAndApplyEffects(hWnd, g_app.effectSolarize);
                 return 0;
             }
 
-            // Page Up  —  Toggle image outline
+            // 5.Page Up  —  Toggle image outline
             if (wParam == Shortcuts::ImageEffects::SC_COLOR_OUTLINE) {
-                g_app.effectOutline = !g_app.effectOutline;
-                UpdateRendererColorEffects(hWnd);
+                g_app.WakeUpAndApplyEffects(hWnd, g_app.effectOutline);
                 return 0;
             }
 
-            // Page Down  —  Toggle black & white threshold
+            // 6.Page Down  —  Toggle black & white threshold
             if (wParam == Shortcuts::ImageEffects::SC_COLOR_THRESHOLD) {
-                g_app.effectThreshold = !g_app.effectThreshold;
-                UpdateRendererColorEffects(hWnd);
+                g_app.WakeUpAndApplyEffects(hWnd, g_app.effectThreshold);
                 return 0;
             }
 
-            // '+' (OEM_PLUS)  —  Gamma up   /   '-' (OEM_MINUS)  —  Gamma down
+            // 7. '+' (OEM_PLUS)  —  Gamma up   /   '-' (OEM_MINUS)  —  Gamma down
             if (wParam == Shortcuts::ImageEffects::SC_COLOR_GAMMA_UP) {
                 g_app.gamma = std::min(Constants::MAX_GAMMA, g_app.gamma + Constants::GAMMA_STEP);
-                UpdateRendererColorEffects(hWnd);
+
                 return 0;
             }
             if (wParam == Shortcuts::ImageEffects::SC_COLOR_GAMMA_DOWN) {
                 g_app.gamma = std::max(Constants::MIN_GAMMA, g_app.gamma - Constants::GAMMA_STEP);
-                UpdateRendererColorEffects(hWnd);
+
                 return 0;
             }
 
-            // '  —  Brightness up   /   \  —  Brightness down
+            // 8. '  —  Brightness up   /   \  —  Brightness down
             if (wParam == Shortcuts::ImageEffects::SC_COLOR_BRIGHTNESS_UP) {
                 g_app.brightness = std::clamp(
                         g_app.brightness + Constants::COLOR_ADJUST_STEP,
                         -Constants::MIN_MAX_BRIGHTNESS, Constants::MIN_MAX_BRIGHTNESS);
-                UpdateRendererColorEffects(hWnd);
+
                 return 0;
             }
             if (wParam == Shortcuts::ImageEffects::SC_COLOR_BRIGHTNESS_DOWN) {
                 g_app.brightness = std::clamp(
                         g_app.brightness - Constants::COLOR_ADJUST_STEP,
                         -Constants::MIN_MAX_BRIGHTNESS, Constants::MIN_MAX_BRIGHTNESS);
-                UpdateRendererColorEffects(hWnd);
+
                 return 0;
             }
 
-            // .  —  Contrast up   /   /  —  Contrast down
+            // 9. .  —  Contrast up   /   /  —  Contrast down
             if (wParam == Shortcuts::ImageEffects::SC_COLOR_CONTRAST_UP) {
                 g_app.contrast = std::clamp(
                         g_app.contrast + Constants::COLOR_ADJUST_STEP,
                         0.0f, Constants::MIN_MAX_CONTRAST);
-                UpdateRendererColorEffects(hWnd);
+
                 return 0;
             }
             if (wParam == Shortcuts::ImageEffects::SC_COLOR_CONTRAST_DOWN) {
                 g_app.contrast = std::clamp(
                         g_app.contrast - Constants::COLOR_ADJUST_STEP,
                         0.0f, Constants::MIN_MAX_CONTRAST);
-                UpdateRendererColorEffects(hWnd);
+
                 return 0;
             }
 
-            // [  —  Saturation -   /   ]  —  Saturation +
+            // 10. [  —  Saturation -   /   ]  —  Saturation +
             if (wParam == Shortcuts::ImageEffects::SC_COLOR_SAT_DOWN) {
                 g_app.saturation = std::max(0.0f, g_app.saturation - Constants::COLOR_ADJUST_STEP);
-                UpdateRendererColorEffects(hWnd);
+
                 return 0;
             }
             if (wParam == Shortcuts::ImageEffects::SC_COLOR_SAT_UP) {
                 g_app.saturation = std::min(
                         Constants::MIN_MAX_SATURATION, g_app.saturation + Constants::COLOR_ADJUST_STEP);
-                UpdateRendererColorEffects(hWnd);
+
                 return 0;
             }
 
             // Numpad0  —  Reset all color effects only (saturation/brightness/
             // contrast/gamma + every toggle), leaves window/zoom/pan untouched.
             if (wParam == Shortcuts::ImageEffects::SC_COLOR_RESET_ALL_EFFECTS) {
-                g_app.saturation = Constants::DEFAULT_SATURATION;
-                g_app.brightness = Constants::DEFAULT_BRIGHTNESS;
-                g_app.contrast = Constants::DEFAULT_CONTRAST;
-                g_app.gamma = Constants::DEFAULT_GAMMA;
-                g_app.effectGrayscale = false;
-                g_app.effectInvert = false;
-                g_app.effectSepia = false;
-                g_app.effectSolarize = false;
-                g_app.effectOutline = false;
-                g_app.effectThreshold = false;
-                UpdateRendererColorEffects(hWnd);
+                g_app.ResetEffects();
+                g_app.UpdateRendererColorEffects(hWnd);
                 return 0;
             }
 

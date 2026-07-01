@@ -46,7 +46,12 @@ HRESULT RendererD2D::Initialize(HWND hwnd) {
         UpdateTextFormat();
     }
 
-    return CreateDeviceResources();
+    HRESULT hr = CreateDeviceResources();
+    if (SUCCEEDED(hr)) {
+        // Initialize to empty/default state
+        m_pActiveDisplayNode = nullptr;
+    }
+    return hr;
 }
 
 void RendererD2D::UpdateTextFormat() {
@@ -68,9 +73,18 @@ void RendererD2D::UpdateTextFormat() {
 }
 
 void RendererD2D::UpdateColorEffects() {
-    if (!m_pColorMatrixEffect)
-        return;
-
+    if (!m_pColorMatrixEffect) return;
+    (void) EnsureExtraEffects();
+    // 1. Check BOTH booleans. If effects are active AND the preview toggle is on...
+    if (g_app.hasActiveEffects && g_app.effectPreviewEnabled && m_pBitmap) {
+        // If we are currently pointing to the raw bitmap (Fast Path), switch to the graph
+        if (m_pActiveDisplayNode.Get() == m_pBitmap.Get() || m_pActiveDisplayNode == nullptr) {
+            ApplyPreviousEffects();
+        }
+    } else {
+        // 2. Safe bypass: if no effects OR preview disabled, point directly to raw image
+        m_pActiveDisplayNode = m_pBitmap; // FAST PATH
+    }
     // Non-linear effect nodes are created lazily here so the first toggle
     // of any of gamma/solarize/threshold/outline doesn't stall on creation
     // mid-frame inside Render().
@@ -237,6 +251,22 @@ HRESULT RendererD2D::EnsureExtraEffects() {
     }
 
     return S_OK;
+}
+
+void RendererD2D::ApplyPreviousEffects() {
+    (void) EnsureExtraEffects();
+
+    // Wire the graph using your existing logic
+    ID2D1Effect *finalEffect = BuildEffectChain(m_pBitmap.Get());
+
+    if (finalEffect) {
+        // PROPER COM WAY: Do not cast! Ask the effect to yield its output image.
+        Microsoft::WRL::ComPtr<ID2D1Image> effectOutput;
+        finalEffect->GetOutput(&effectOutput);
+
+        // Now safely store the true image pointer
+        m_pActiveDisplayNode = effectOutput;
+    }
 }
 
 // =============================================================================
@@ -548,7 +578,9 @@ HRESULT RendererD2D::LoadBitmap(IWICBitmapSource *bitmap, UINT width, UINT heigh
         }
 
         m_pBitmap = newBitmap;
-
+        m_pActiveDisplayNode = nullptr; // Reset state
+        g_app.hasActiveEffects = false; // Force navigation back to Fast Path
+        m_pActiveDisplayNode = m_pBitmap; // <-- THIS IS THE BYPASS
         // Clear any active SVG so the raster render path takes over
         m_pActiveSvg.Reset();
         m_svgNativeW = 0.0f;
@@ -720,16 +752,6 @@ HRESULT RendererD2D::Render() {
         // DrawSvgDocument always draws at (0,0) in the DC coordinate system,
         // sized to whatever SetViewportSize says.  We position/rotate via the
         // DC world transform:
-        //
-        //   1. Scale: viewport = (renderW, renderH) handles this already –
-        //      D2D scales the SVG tree to fill that rectangle.
-        //   2. Translate to (left, top).
-        //   3. Rotate / flip around the screen centre.
-        //
-        // Transform order (right-to-left):  T * R * F
-        // We apply them left-to-right using the matrix multiply convention
-        // where the last multiplied matrix is applied first in screen space.
-
         // Tell D2D how large to rasterise the SVG
         m_pActiveSvg->SetViewportSize(D2D1::SizeF(renderW, renderH));
 
@@ -741,7 +763,6 @@ HRESULT RendererD2D::Render() {
                 D2D1::Matrix3x2F::Translation(left, top);
 
         // Then apply flip / rotation around the screen centre
-        // (same order as the raster path)
         if (g_app.viewport.flippedH)
             transform = transform * D2D1::Matrix3x2F::Scale(-1.0f, 1.0f, screenCenter);
         if (g_app.viewport.flippedV)
@@ -830,40 +851,35 @@ HRESULT RendererD2D::Render() {
                                                  ? D2D1_INTERPOLATION_MODE_NEAREST_NEIGHBOR
                                                  : D2D1_INTERPOLATION_MODE_HIGH_QUALITY_CUBIC;
 
-        ID2D1Image *image = m_pBitmap.Get();
-        // g_app.contrast neutral = 1.0f, g_app.gamma neutral = 1.0f, so check offset from those
-        bool useEffects =
-                std::abs(g_app.saturation - 1.0f) > 0.001f ||
-                std::abs(g_app.contrast - 1.0f) > 0.001f ||
-                std::abs(g_app.brightness) > 0.001f ||
-                std::abs(g_app.gamma - 1.0f) > 0.001f ||
-                g_app.effectGrayscale || g_app.effectInvert || g_app.effectSepia ||
-                g_app.effectSolarize || g_app.effectThreshold || g_app.effectOutline;
-        if (useEffects &&
-            m_pColorMatrixEffect &&
+        // =========================================================================
+        // THE MASTER BYPASS EVALUATION
+        // Draw the effect graph ONLY if there are active effects, the toggle is on,
+        // and the node has successfully been wired away from the raw bitmap.
+        // =========================================================================
+        if (g_app.hasActiveEffects && g_app.effectPreviewEnabled &&
+            m_pActiveDisplayNode && m_pActiveDisplayNode.Get() != m_pBitmap.Get() &&
             m_pScaleEffect) {
-            // Do NOT reset transform here — flip/rotation is already set above.
-            ID2D1Effect *finalEffect = BuildEffectChain(image);
-            m_pScaleEffect->SetInputEffect(0, finalEffect);
+            // SLOW PATH: Draw the processed effect graph
+            m_pScaleEffect->SetInput(0, m_pActiveDisplayNode.Get());
             m_pScaleEffect->SetValue(
                     D2D1_SCALE_PROP_SCALE,
                     D2D1::Vector2F(
                             renderW / imgSize.width,
                             renderH / imgSize.height));
 
-            // D2D1_SCALE_PROP_INTERPOLATION_MODE takes D2D1_SCALE_INTERPOLATION_MODE, not D2D1_INTERPOLATION_MODE
             D2D1_SCALE_INTERPOLATION_MODE scaleInterp = isNative
                                                             ? D2D1_SCALE_INTERPOLATION_MODE_NEAREST_NEIGHBOR
                                                             : D2D1_SCALE_INTERPOLATION_MODE_HIGH_QUALITY_CUBIC;
             m_pScaleEffect->SetValue(D2D1_SCALE_PROP_INTERPOLATION_MODE, scaleInterp);
             D2D1_POINT_2F targetOffset = D2D1::Point2F(left, top);
             m_pDeviceContext->DrawImage(
-                    m_pScaleEffect.Get(), // 1. The Effect
-                    targetOffset, // 2. The Point (passed by value, NOT a pointer)
-                    interpMode, // 3. Interpolation Mode
-                    D2D1_COMPOSITE_MODE_SOURCE_OVER // 4. Composite Mode
+                    m_pScaleEffect.Get(),
+                    targetOffset,
+                    interpMode,
+                    D2D1_COMPOSITE_MODE_SOURCE_OVER
                     );
         } else {
+            // ULTIMATE FAST PATH: Directly draw the raw bitmap
             m_pDeviceContext->DrawBitmap(
                     m_pBitmap.Get(),
                     D2D1::RectF(left, top, left + renderW, top + renderH),

@@ -23,6 +23,12 @@ struct ViewportState {
 };
 
 struct AppState {
+    // --- THE MASTER BYPASS SWITCH ---
+    // When false, the renderer completely ignores the GPU effect graph
+    // and draws the raw ID2D1Bitmap natively.
+    bool hasActiveEffects = false; // if any effects are used then true else false and just skip and display image
+    bool effectPreviewEnabled = false; // `
+
     std::atomic<int> wantedIndex{-1};
     Microsoft::WRL::ComPtr<IWICImagingFactory> wicFactory;
     std::unique_ptr<IImageRenderer> renderer;
@@ -86,6 +92,87 @@ struct AppState {
             return TRUE;
         }, (LPARAM) &count);
         return count;
+    }
+
+    void ResetEffects() {
+        saturation = Constants::DEFAULT_SATURATION;
+        brightness = Constants::DEFAULT_BRIGHTNESS;
+        contrast = Constants::DEFAULT_CONTRAST;
+        gamma = Constants::DEFAULT_GAMMA;
+
+        effectGrayscale = false;
+        effectInvert = false;
+        effectSepia = false;
+        effectSolarize = false;
+        effectOutline = false;
+        effectThreshold = false;
+
+        // Flip the bypass switch so the renderer stops drawing the effect graph
+        // Explicitly clear the active state flag
+        hasActiveEffects = false;
+        effectPreviewEnabled = false;
+    }
+
+    void ResetWindowState(HWND hWnd) {
+        // --- Viewport / window ---
+        viewport.zoom = 1.0f;
+        viewport.offsetX = 0.0f;
+        viewport.offsetY = 0.0f;
+        viewport.rotation = 0;
+        viewport.flippedH = false;
+        viewport.flippedV = false;
+
+        opacity = 255;
+        SetLayeredWindowAttributes(hWnd, 0, opacity, LWA_ALPHA);
+
+        int targetW = (int) (Constants::BASE_WIDTH * dpiScale);
+        int targetH = (int) (Constants::BASE_HEIGHT * dpiScale);
+
+        HMONITOR hMonitor = MonitorFromWindow(hWnd, MONITOR_DEFAULTTONEAREST);
+        MONITORINFO mi = {sizeof(mi)};
+        if (GetMonitorInfo(hMonitor, &mi)) {
+            int monitorW = mi.rcMonitor.right - mi.rcMonitor.left;
+            int monitorH = mi.rcMonitor.bottom - mi.rcMonitor.top;
+
+            SetWindowPos(hWnd, NULL,
+                         mi.rcMonitor.left + (monitorW - targetW) / 2,
+                         mi.rcMonitor.top + (monitorH - targetH) / 2,
+                         targetW, targetH,
+                         SWP_NOZORDER | SWP_NOACTIVATE | SWP_FRAMECHANGED);
+        }
+    }
+
+    // HELPER: Auto-wakes the preview toggle when a user adjusts any effect
+    void WakeUpAndApplyEffects(HWND hWnd, bool &effectToggle) {
+        // 1. Flip the specific effect state FIRST
+        effectToggle = !effectToggle;
+
+        // 2. Now that the state is flipped, we can evaluate hasActiveEffects
+        //    and trigger the renderer.
+        UpdateRendererColorEffects(hWnd);
+
+        // 3. If the user turned something on, ensure the preview is visible
+        if (hasActiveEffects) {
+            effectPreviewEnabled = true;
+        }
+    }
+
+    void UpdateRendererColorEffects(HWND hWnd) {
+        // 1. Evaluate if any value deviates from the strict defaults
+        hasActiveEffects =
+                std::abs(saturation - Constants::DEFAULT_SATURATION) > 0.001f ||
+                std::abs(contrast - Constants::DEFAULT_CONTRAST) > 0.001f ||
+                std::abs(brightness - Constants::DEFAULT_BRIGHTNESS) > 0.001f ||
+                std::abs(gamma - Constants::DEFAULT_GAMMA) > 0.001f ||
+                effectGrayscale || effectInvert || effectSepia ||
+                effectSolarize || effectThreshold || effectOutline;
+
+        // 2. Forward the update to the active renderer
+        if (renderer) {
+            renderer->UpdateColorEffects();
+        }
+
+        InvalidateRect(hWnd, nullptr, FALSE);
     }
 };
 
