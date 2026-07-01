@@ -77,12 +77,17 @@ void RendererD2D::UpdateColorEffects() {
     (void) EnsureExtraEffects();
     // 1. Check BOTH booleans. If effects are active AND the preview toggle is on...
     if (g_app.hasActiveEffects && g_app.effectPreviewEnabled && m_pBitmap) {
-        // If we are currently pointing to the raw bitmap (Fast Path), switch to the graph
-        if (m_pActiveDisplayNode.Get() == m_pBitmap.Get() || m_pActiveDisplayNode == nullptr) {
-            ApplyPreviousEffects();
-        }
+        // Always rebuild the chain unconditionally. The old guard
+        //   (node == bitmap || node == nullptr)
+        // broke stacking: when a second effect was toggled (e.g. End/Solarize
+        // already active, then Insert/Invert), m_pActiveDisplayNode pointed at
+        // the first effect's output — not the bitmap, not null — so
+        // ApplyPreviousEffects() was skipped and the new effect was ignored.
+        // BuildEffectChain always rebuilds from scratch using current booleans,
+        // so calling it unconditionally is correct and cheap.
+        ApplyPreviousEffects();
     } else {
-        // 2. Safe bypass: if no effects OR preview disabled, point directly to raw image
+        // Safe bypass: no effects active OR preview toggled off.
         m_pActiveDisplayNode = m_pBitmap; // FAST PATH
     }
     // Non-linear effect nodes are created lazily here so the first toggle
