@@ -237,7 +237,21 @@ void LoadImageIndex(HWND hWnd, int index) {
 
     if (index < 0 || index >= static_cast<int>(g_app.playlist.size())) return;
 
-    if (g_app.currentIndex != index) g_app.viewport = ViewportState{};
+    if (g_app.currentIndex != index) {
+        g_app.viewport = ViewportState{};
+        // Reset all color effects so each image starts clean.
+        g_app.saturation = Constants::DEFAULT_SATURATION;
+        g_app.brightness = Constants::DEFAULT_BRIGHTNESS;
+        g_app.contrast = Constants::DEFAULT_CONTRAST;
+        g_app.gamma = Constants::DEFAULT_GAMMA;
+        g_app.effectGrayscale = false;
+        g_app.effectInvert = false;
+        g_app.effectSepia = false;
+        g_app.effectSolarize = false;
+        g_app.effectOutline = false;
+        g_app.effectThreshold = false;
+        if (g_app.renderer) g_app.renderer->UpdateColorEffects();
+    }
     g_app.currentIndex = index;
     g_app.wantedIndex.store(index, std::memory_order_release);
 

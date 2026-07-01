@@ -115,7 +115,9 @@ namespace Shortcuts {
     // 3  —  Fit to height, ignore aspect ratio
     // 4  —  Fit to window, ignore aspect ratio
     // 5  —  Original 1:1 pixel size, preserve aspect ratio
-    // Handled as:  wParam >= '1' && wParam <= '5'
+    // Handled as:  wParam >= SC_VIEW_MODE_FIRST && wParam <= SC_VIEW_MODE_LAST
+    constexpr UINT SC_VIEW_MODE_FIRST = '1';
+    constexpr UINT SC_VIEW_MODE_LAST = '5';
 
     // -------------------------------------------------------------------------
     // Transform
