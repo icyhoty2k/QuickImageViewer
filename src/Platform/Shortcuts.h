@@ -163,10 +163,10 @@ namespace Shortcuts {
 
         constexpr UINT SC_COLOR_GAMMA_UP = VK_OEM_PLUS; // +/- 0.1 // but not the numpad plus i use it for zoom+
         constexpr UINT SC_COLOR_GAMMA_DOWN = VK_OEM_MINUS; // +/- 0.1 // but not the numpad plus i use it for zoom-
-        constexpr UINT SC_COLOR_BRIGHTNESS_UP = '\''; // +/- 0.1
-        constexpr UINT SC_COLOR_BRIGHTNESS_DOWN = '\\';
-        constexpr UINT SC_COLOR_CONTRAST_UP = '.'; // +/- 0.1
-        constexpr UINT SC_COLOR_CONTRAST_DOWN = '/';
+        constexpr UINT SC_COLOR_BRIGHTNESS_UP = VK_OEM_5; // the \ key
+        constexpr UINT SC_COLOR_BRIGHTNESS_DOWN = VK_OEM_7; //the apostrophe key " ' " // +/- 0.1
+        constexpr UINT SC_COLOR_CONTRAST_UP = VK_OEM_2; //the " . " key // +/- 0.1
+        constexpr UINT SC_COLOR_CONTRAST_DOWN = VK_OEM_PERIOD;
         constexpr UINT SC_COLOR_SAT_DOWN = VK_OEM_4; // +/- 0.1
         constexpr UINT SC_COLOR_SAT_UP = VK_OEM_6;
 

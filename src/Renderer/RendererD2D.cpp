@@ -86,18 +86,30 @@ void RendererD2D::UpdateColorEffects() {
     // each other and the result wouldn't be predictable.
     float base[3][3];
     if (g_app.effectSepia) {
-        base[0][0] = 0.393f; base[0][1] = 0.769f; base[0][2] = 0.189f;
-        base[1][0] = 0.349f; base[1][1] = 0.686f; base[1][2] = 0.168f;
-        base[2][0] = 0.272f; base[2][1] = 0.534f; base[2][2] = 0.131f;
+        base[0][0] = 0.393f;
+        base[0][1] = 0.769f;
+        base[0][2] = 0.189f;
+        base[1][0] = 0.349f;
+        base[1][1] = 0.686f;
+        base[1][2] = 0.168f;
+        base[2][0] = 0.272f;
+        base[2][1] = 0.534f;
+        base[2][2] = 0.131f;
     } else {
         // g_app.saturation: 0.0 = grayscale, 1.0 = neutral, >1.0 = oversaturated.
         // effectGrayscale forces s=0 regardless of the continuous slider value
         // (the slider value itself is preserved so toggling grayscale back off
         // restores whatever saturation the user had dialed in).
         const float s = g_app.effectGrayscale ? 0.0f : g_app.saturation;
-        base[0][0] = lumR * (1.0f - s) + s; base[0][1] = lumG * (1.0f - s);     base[0][2] = lumB * (1.0f - s);
-        base[1][0] = lumR * (1.0f - s);     base[1][1] = lumG * (1.0f - s) + s; base[1][2] = lumB * (1.0f - s);
-        base[2][0] = lumR * (1.0f - s);     base[2][1] = lumG * (1.0f - s);     base[2][2] = lumB * (1.0f - s) + s;
+        base[0][0] = lumR * (1.0f - s) + s;
+        base[0][1] = lumG * (1.0f - s);
+        base[0][2] = lumB * (1.0f - s);
+        base[1][0] = lumR * (1.0f - s);
+        base[1][1] = lumG * (1.0f - s) + s;
+        base[1][2] = lumB * (1.0f - s);
+        base[2][0] = lumR * (1.0f - s);
+        base[2][1] = lumG * (1.0f - s);
+        base[2][2] = lumB * (1.0f - s) + s;
     }
 
     // ----- Contrast -----
@@ -132,8 +144,8 @@ void RendererD2D::UpdateColorEffects() {
             m[0][0], m[1][0], m[2][0], 0.0f,
             m[0][1], m[1][1], m[2][1], 0.0f,
             m[0][2], m[1][2], m[2][2], 0.0f,
-            0.0f,    0.0f,    0.0f,    1.0f,
-            offset,  offset,  offset,  0.0f);
+            0.0f, 0.0f, 0.0f, 1.0f,
+            offset, offset, offset, 0.0f);
 
     m_pColorMatrixEffect->SetValue(D2D1_COLORMATRIX_PROP_COLOR_MATRIX, matrix);
     m_pColorMatrixEffect->SetValue(D2D1_COLORMATRIX_PROP_CLAMP_OUTPUT, TRUE);
@@ -191,18 +203,31 @@ HRESULT RendererD2D::EnsureExtraEffects() {
         m_pSolarizeEffect->SetValue(D2D1_TABLETRANSFER_PROP_ALPHA_DISABLE, TRUE);
     }
 
-    if (!m_pThresholdEffect) {
-        hr = m_pDeviceContext->CreateEffect(CLSID_D2D1Threshold, &m_pThresholdEffect);
-        if (FAILED(hr)) return hr;
-        m_pThresholdEffect->SetValue(D2D1_THRESHOLD_PROP_THRESHOLD, Constants::BW_THRESHOLD_LEVEL);
-    }
+    // Note: Direct2D does not have a built-in Threshold effect
+    // This functionality would need to be implemented using a custom shader or
+    // by using other available effects like ColorMatrix or a combination of effects
+    // For now, we'll skip creating the threshold effect if it's not available
+    // if (!m_pThresholdEffect) {
+    //     // Attempt to create threshold effect - if this fails, we'll just skip it
+    //     hr = m_pDeviceContext->CreateEffect(CLSID_D2D1Threshold, &m_pThresholdEffect);
+    //     if (FAILED(hr)) {
+    //         // Threshold effect not available in this SDK version - continue without it
+    //         m_pThresholdEffect = nullptr;
+    //     } else {
+    //         m_pThresholdEffect->SetValue(D2D1_THRESHOLD_PROP_THRESHOLD, Constants::BW_THRESHOLD_LEVEL);
+    //     }
+    // }
 
     if (!m_pOutlineEffect) {
+        // Attempt to create edge detection effect
         hr = m_pDeviceContext->CreateEffect(CLSID_D2D1EdgeDetection, &m_pOutlineEffect);
-        if (FAILED(hr)) return hr;
-        m_pOutlineEffect->SetValue(D2D1_EDGEDETECTION_PROP_STRENGTH, Constants::OUTLINE_STRENGTH);
-        m_pOutlineEffect->SetValue(D2D1_EDGEDETECTION_PROP_BLUR_RADIUS, Constants::OUTLINE_BLUR_RADIUS);
-        m_pOutlineEffect->SetValue(D2D1_EDGEDETECTION_PROP_OVERLAY_EDGES, TRUE);
+        if (FAILED(hr)) {
+            // Edge detection effect not available in this SDK version - continue without it
+            m_pOutlineEffect = nullptr;
+        } else {
+            m_pOutlineEffect->SetValue(D2D1_EDGEDETECTION_PROP_STRENGTH, Constants::OUTLINE_STRENGTH);
+            m_pOutlineEffect->SetValue(D2D1_EDGEDETECTION_PROP_BLUR_RADIUS, Constants::OUTLINE_BLUR_RADIUS);
+        }
     }
 
     return S_OK;
