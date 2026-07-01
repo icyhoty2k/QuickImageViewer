@@ -266,19 +266,19 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) 
             // 6.Page Down  —  Toggle black & white threshold
             if (wParam == Shortcuts::ImageEffects::SC_COLOR_THRESHOLD) {
                 g_app.WakeUpAndApplyEffects(hWnd, g_app.effectThreshold);
-                g_app.UpdateRendererColorEffects(hWnd);
+                g_app.WakeUpAndApplyEffects(hWnd);
                 return 0;
             }
 
             // 7. '+' (OEM_PLUS)  —  Gamma up   /   '-' (OEM_MINUS)  —  Gamma down
             if (wParam == Shortcuts::ImageEffects::SC_COLOR_GAMMA_UP) {
                 g_app.gamma = std::min(Constants::MAX_GAMMA, g_app.gamma + Constants::GAMMA_STEP);
-                g_app.UpdateRendererColorEffects(hWnd);
+                g_app.WakeUpAndApplyEffects(hWnd);
                 return 0;
             }
             if (wParam == Shortcuts::ImageEffects::SC_COLOR_GAMMA_DOWN) {
                 g_app.gamma = std::max(Constants::MIN_GAMMA, g_app.gamma - Constants::GAMMA_STEP);
-
+                g_app.WakeUpAndApplyEffects(hWnd);
                 return 0;
             }
 
@@ -287,13 +287,14 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) 
                 g_app.brightness = std::clamp(
                         g_app.brightness + Constants::COLOR_ADJUST_STEP,
                         -Constants::MIN_MAX_BRIGHTNESS, Constants::MIN_MAX_BRIGHTNESS);
-                //todo fix
+                g_app.WakeUpAndApplyEffects(hWnd);
                 return 0;
             }
             if (wParam == Shortcuts::ImageEffects::SC_COLOR_BRIGHTNESS_DOWN) {
                 g_app.brightness = std::clamp(
                         g_app.brightness - Constants::COLOR_ADJUST_STEP,
                         -Constants::MIN_MAX_BRIGHTNESS, Constants::MIN_MAX_BRIGHTNESS);
+                g_app.WakeUpAndApplyEffects(hWnd);
 
                 return 0;
             }
@@ -303,6 +304,7 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) 
                 g_app.contrast = std::clamp(
                         g_app.contrast + Constants::COLOR_ADJUST_STEP,
                         0.0f, Constants::MIN_MAX_CONTRAST);
+                g_app.WakeUpAndApplyEffects(hWnd);
 
                 return 0;
             }
@@ -310,6 +312,7 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) 
                 g_app.contrast = std::clamp(
                         g_app.contrast - Constants::COLOR_ADJUST_STEP,
                         0.0f, Constants::MIN_MAX_CONTRAST);
+                g_app.WakeUpAndApplyEffects(hWnd);
 
                 return 0;
             }
@@ -317,13 +320,13 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) 
             // 10. [  —  Saturation -   /   ]  —  Saturation +
             if (wParam == Shortcuts::ImageEffects::SC_COLOR_SAT_DOWN) {
                 g_app.saturation = std::max(0.0f, g_app.saturation - Constants::COLOR_ADJUST_STEP);
-
+                g_app.WakeUpAndApplyEffects(hWnd);
                 return 0;
             }
             if (wParam == Shortcuts::ImageEffects::SC_COLOR_SAT_UP) {
                 g_app.saturation = std::min(
                         Constants::MIN_MAX_SATURATION, g_app.saturation + Constants::COLOR_ADJUST_STEP);
-
+                g_app.WakeUpAndApplyEffects(hWnd);
                 return 0;
             }
 
