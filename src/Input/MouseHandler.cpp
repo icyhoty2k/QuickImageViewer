@@ -1,7 +1,7 @@
-#include "MouseHandler.h"
+#include "../Platform/MouseHandler.h"
 #include "AppState.h"
-#include "Constants.h"
-#include "FileHandler.h"
+#include "../Platform/Constants.h"
+#include "../Platform/FileHandler.h"
 #include "WicDecoder.h"
 #include <windowsx.h>
 #include <algorithm>

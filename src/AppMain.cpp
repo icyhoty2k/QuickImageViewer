@@ -8,12 +8,12 @@
 #include "CacheWindow.h"
 #include "../AppState.h"
 #include "Platform/Constants.h"
-#include "Platform/Shortcuts.h"
+#include "InputEvents/Shortcuts.h"
 #include "../DropTarget.h"
 #include "Platform/FileHandler.h"
 #include "UI/HelpWindow.h"
 
-#include "Platform/MouseHandler.h"
+#include "InputEvents/MouseHandler.h"
 #include "../WicDecoder.h"
 #include "../SvgDecoder.h"
 

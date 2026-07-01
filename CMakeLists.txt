@@ -21,7 +21,7 @@ endif ()
 set(SOURCES
         src/AppMain.cpp
         src/DropTarget.cpp
-        src/Platform/MouseHandler.cpp
+        src/Input/MouseHandler.cpp
         src/WicDecoder.cpp
         src/SvgDecoder.cpp
         src/Platform/DpiAwareInit.cpp
@@ -35,7 +35,7 @@ set(SOURCES
         resources/resource.rc
         src/UI/OverlayText.cpp
         src/UI/OverlayText.h
-        src/Platform/Shortcuts.h
+        src/Input/Shortcuts.h
 )
 
 add_executable(QuickImageViewer WIN32 ${SOURCES})
