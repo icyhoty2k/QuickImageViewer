@@ -231,7 +231,6 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) 
                 // Toggle the preview state on or off
                 g_app.effectPreviewEnabled = !g_app.effectPreviewEnabled;
                 g_app.UpdateRendererColorEffects(hWnd);
-
                 return 0;
             }
             // 1.Delete (no shift)  —  Toggle grayscale
