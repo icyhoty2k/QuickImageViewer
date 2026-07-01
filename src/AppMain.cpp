@@ -266,13 +266,14 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) 
             // 6.Page Down  —  Toggle black & white threshold
             if (wParam == Shortcuts::ImageEffects::SC_COLOR_THRESHOLD) {
                 g_app.WakeUpAndApplyEffects(hWnd, g_app.effectThreshold);
+                g_app.UpdateRendererColorEffects(hWnd);
                 return 0;
             }
 
             // 7. '+' (OEM_PLUS)  —  Gamma up   /   '-' (OEM_MINUS)  —  Gamma down
             if (wParam == Shortcuts::ImageEffects::SC_COLOR_GAMMA_UP) {
                 g_app.gamma = std::min(Constants::MAX_GAMMA, g_app.gamma + Constants::GAMMA_STEP);
-
+                g_app.UpdateRendererColorEffects(hWnd);
                 return 0;
             }
             if (wParam == Shortcuts::ImageEffects::SC_COLOR_GAMMA_DOWN) {
@@ -286,7 +287,7 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) 
                 g_app.brightness = std::clamp(
                         g_app.brightness + Constants::COLOR_ADJUST_STEP,
                         -Constants::MIN_MAX_BRIGHTNESS, Constants::MIN_MAX_BRIGHTNESS);
-
+                //todo fix
                 return 0;
             }
             if (wParam == Shortcuts::ImageEffects::SC_COLOR_BRIGHTNESS_DOWN) {
