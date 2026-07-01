@@ -13,4 +13,4 @@ build/
 /QIV_src.zip
 
 # Zip Archive of the src dir splits 10 files a part 
-archive
+/archive/
