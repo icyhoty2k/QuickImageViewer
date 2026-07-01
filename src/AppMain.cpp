@@ -399,7 +399,7 @@ LRESULT CALLBACK MainAppWndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM l
             }
             // Ctrl+Q  —  Hard quit: flush from RAM completely
             if (wParam == Shortcuts::SC_APP_HARD_QUIT && ctrl) {
-                PostQuitMessage(0);
+                DestroyWindow(hWnd);
                 return 0;
             }
             // Toggle Help Menu (F1)
@@ -711,16 +711,10 @@ LRESULT CALLBACK MainAppWndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM l
             return 1;
 
         case WM_CLOSE: {
-            if (IsDebuggerPresent()) {
-                PostQuitMessage(0);
-            } else {
-#ifdef DEBUG_BUILD
-                PostQuitMessage(0);
-#else
-                ShowWindow(hWnd, SW_HIDE);
-#endif
-            }
-            return 0;
+            // 1. "Hide" instead of "Destroy"
+            // This removes the window from sight but keeps the process and message loop alive.
+            ShowWindow(hWnd, SW_HIDE);
+            return 0; // Returning 0 prevents WM_DESTROY from being called
         }
 
         case WM_DESTROY:
