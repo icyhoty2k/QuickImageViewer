@@ -1332,7 +1332,7 @@ HRESULT RendererD2D::SaveCurrentImageWithEffects(const std::wstring &outPath) {
     // every pixel before writing, making the raw bytes unsuitable for WIC's straight-
     // alpha encoder and producing a black image when alpha == 0.
     D2D1_BITMAP_PROPERTIES1 targetProps = D2D1::BitmapProperties1(
-            D2D1_BITMAP_OPTIONS_TARGET,
+            D2D1_BITMAP_OPTIONS_TARGET | D2D1_BITMAP_OPTIONS_CANNOT_DRAW,
             D2D1::PixelFormat(DXGI_FORMAT_B8G8R8A8_UNORM, D2D1_ALPHA_MODE_IGNORE));
 
     Microsoft::WRL::ComPtr<ID2D1Bitmap1> offscreenBitmap;
