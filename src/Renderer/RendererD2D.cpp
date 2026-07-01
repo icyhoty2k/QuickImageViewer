@@ -868,7 +868,7 @@ HRESULT RendererD2D::Render() {
         // Draw the effect graph ONLY if there are active effects, the toggle is on,
         // and the node has successfully been wired away from the raw bitmap.
         // =========================================================================
-        if (g_app.hasActiveEffects && g_app.effectPreviewEnabled &&
+        if (g_app.effectPreviewEnabled && g_app.hasActiveEffects &&
             m_pActiveDisplayNode && m_pActiveDisplayNode.Get() != m_pBitmap.Get() &&
             m_pScaleEffect) {
             // SLOW PATH: Draw the processed effect graph
