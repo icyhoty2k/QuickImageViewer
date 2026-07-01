@@ -11,3 +11,4 @@ build/
 *.exe
 *.pdb
 /QIV_src.zip
+archive
