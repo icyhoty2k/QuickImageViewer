@@ -391,7 +391,7 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) 
             }
 
             // Rotate Image: R (Clockwise) or Shift+R (Counter-Clockwise)
-            if (wParam == 'R') {
+            if (wParam == Shortcuts::SC_TRANSFORM_ROTATE) {
                 if (shift) {
                     // Counter-Clockwise
                     g_app.viewport.rotation = (g_app.viewport.rotation - 90 + 360) % 360;
@@ -524,7 +524,7 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) 
 
             // Scale the border by the DPI factor
             // Using int to maintain pixel alignment
-            const int border = static_cast<int>(8 * g_app.dpiScale);
+            const int border = static_cast<int>(2 * g_app.dpiScale);
 
             bool top = pt.y < rc.top + border;
             bool bottom = pt.y >= rc.bottom - border;
