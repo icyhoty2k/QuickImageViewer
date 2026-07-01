@@ -5,7 +5,7 @@
 #include <windowsx.h>
 #include "../Renderer/RendererD2D.h"
 #include "Constants.h"
-#include "../Platform/Shortcuts.h"
+#include "../InputEvents/Shortcuts.h"
 
 namespace UI {
     HWND g_hCacheWnd = nullptr;
