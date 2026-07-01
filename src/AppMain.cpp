@@ -8,12 +8,12 @@
 #include "CacheWindow.h"
 #include "../AppState.h"
 #include "Platform/Constants.h"
-#include "InputEvents/Shortcuts.h"
+#include "Shortcuts.h"
 #include "../DropTarget.h"
 #include "Platform/FileHandler.h"
 #include "UI/HelpWindow.h"
 
-#include "InputEvents/MouseHandler.h"
+#include "MouseHandler.h"
 #include "../WicDecoder.h"
 #include "../SvgDecoder.h"
 
@@ -110,7 +110,7 @@ static std::wstring BuildEffectsOutputPath(const std::wstring &srcPath) {
     return base + L"_edited.png";
 }
 
-LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) {
+LRESULT CALLBACK MainAppWndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) {
     switch (message) {
         case WM_DPICHANGED: {
             // 1. Update your global scale
@@ -788,12 +788,12 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE, LPSTR, int nCmdShow) {
     }
 
     WNDCLASSW wc{0};
-    wc.lpfnWndProc = WndProc;
+    wc.lpfnWndProc = MainAppWndProc; // The name of the Callback to send messages to
     wc.hInstance = hInstance;
     wc.lpszClassName = Constants::WINDOW_CLASS_NAME;
     wc.style = CS_DBLCLKS;
     wc.hCursor = LoadCursor(nullptr, IDC_ARROW);
-    wc.hIcon = LoadIcon(hInstance, MAKEINTRESOURCE(IDI_APP_ICON));
+    wc.hIcon = LoadIcon(hInstance, MAKEINTRESOURCE(IDI_APP_ICON)); // Taskbar icon
     RegisterClassW(&wc);
 
     HWND hWnd = CreateViewerWindow(hInstance, wc.lpszClassName);

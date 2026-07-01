@@ -1,6 +1,6 @@
 #include "HelpWindow.h"
 #include "../Platform/Constants.h"
-#include "../InputEvents/Shortcuts.h"
+#include "Shortcuts.h"
 #include <string>
 #include <dwmapi.h>
 #include <algorithm>

@@ -1,4 +1,4 @@
-#include "../Platform/MouseHandler.h"
+#include "MouseHandler.h"
 #include "AppState.h"
 #include "../Platform/Constants.h"
 #include "../Platform/FileHandler.h"
