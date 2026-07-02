@@ -26,19 +26,18 @@
 // ---------------------------------------------------------------------------
 
 namespace UI {
-
     // -------------------------------------------------------------------------
     // File-scope state
     // -------------------------------------------------------------------------
-    static HWND  g_hDirWnd     = nullptr;
-    static HWND  g_hDirOwner   = nullptr;
-    static int   g_selectedIdx = -1;
-    static int   g_hoverIdx    = -1;
-    static bool  g_isDragging  = false;
-    static bool  g_hasMoved    = false;
-    static POINT g_lastMouse   = {0, 0};
-    static POINT g_clickPos    = {0, 0};
-    static int8_t g_dirPosition = 0; // 0 = centered
+    static HWND g_hDirWnd = nullptr;
+    static HWND g_hDirOwner = nullptr;
+    static int g_selectedIdx = -1;
+    static int g_hoverIdx = -1;
+    static bool g_isDragging = false;
+    static bool g_hasMoved = false;
+    static POINT g_lastMouse = {0, 0};
+    static POINT g_clickPos = {0, 0};
+    static int8_t g_dirPosition = Constants::CURRENT_DIR_WINDOW_POSITION; // 0 = centered
 
     float g_dirOffset = 0.0f;
     std::vector<DirThumbnail> g_dirThumbnailObjects;
@@ -60,7 +59,7 @@ namespace UI {
 
         int monX = mi.rcMonitor.left;
         int monY = mi.rcMonitor.top;
-        int monW = mi.rcMonitor.right  - mi.rcMonitor.left;
+        int monW = mi.rcMonitor.right - mi.rcMonitor.left;
         int monH = mi.rcMonitor.bottom - mi.rcMonitor.top;
 
         // Thickness for a horizontal strip (thumb height + margins on both sides)
@@ -83,15 +82,35 @@ namespace UI {
                 break;
             }
             case 1: // top
-                x = monX;  y = monY;                     w = monW; h = horzThick; break;
+                x = monX;
+                y = monY;
+                w = monW;
+                h = horzThick;
+                break;
             case 2: // right
-                x = monX + monW - vertThick; y = monY;   w = vertThick; h = monH; break;
+                x = monX + monW - vertThick;
+                y = monY;
+                w = vertThick;
+                h = monH;
+                break;
             case 3: // bottom
-                x = monX;  y = monY + monH - horzThick;  w = monW; h = horzThick; break;
+                x = monX;
+                y = monY + monH - horzThick;
+                w = monW;
+                h = horzThick;
+                break;
             case 4: // left
-                x = monX;  y = monY;                     w = vertThick; h = monH; break;
+                x = monX;
+                y = monY;
+                w = vertThick;
+                h = monH;
+                break;
             default:
-                x = monX; y = monY; w = monW; h = horzThick; break;
+                x = monX;
+                y = monY;
+                w = monW;
+                h = horzThick;
+                break;
         }
     }
 
@@ -131,12 +150,12 @@ namespace UI {
 
         float surfaceW = static_cast<float>(cr.right);
         float surfaceH = static_cast<float>(cr.bottom);
-        bool vertical  = (g_dirPosition == 2 || g_dirPosition == 4); // right or left
+        bool vertical = (g_dirPosition == 2 || g_dirPosition == 4); // right or left
 
-        float thumbW       = Constants::CACHE_THUMB_WIDTH  * g_app.dpiScale;
-        float thumbH       = Constants::CACHE_THUMB_HEIGHT * g_app.dpiScale;
-        float scaledMargin = Constants::CACHE_THUMB_MARGIN  * g_app.dpiScale;
-        float scaledSpacing= Constants::CACHE_THUMB_SPACING * g_app.dpiScale;
+        float thumbW = Constants::CACHE_THUMB_WIDTH * g_app.dpiScale;
+        float thumbH = Constants::CACHE_THUMB_HEIGHT * g_app.dpiScale;
+        float scaledMargin = Constants::CACHE_THUMB_MARGIN * g_app.dpiScale;
+        float scaledSpacing = Constants::CACHE_THUMB_SPACING * g_app.dpiScale;
 
         // Build the source list from the playlist (same folder = entire playlist)
         const std::vector<std::wstring> &items = g_app.playlist;
@@ -175,7 +194,7 @@ namespace UI {
             });
 
             if (vertical) y += thumbH + scaledSpacing;
-            else          x += thumbW + scaledSpacing;
+            else x += thumbW + scaledSpacing;
         }
 
         SyncDirSelectionRectangle();
@@ -220,7 +239,7 @@ namespace UI {
                 float scroll = Constants::CACHE_WINDOW_MOUSE_WHEEL_SPEED;
                 if (GetKeyState(VK_SHIFT) & 0x8000) scroll *= 3.0f;
                 float amount = (delta > 0 ? scroll : -scroll)
-                             * Constants::CACHE_WINDOW_MOUSE_WHEEL_DIRECTION;
+                               * Constants::CACHE_WINDOW_MOUSE_WHEEL_DIRECTION;
                 g_dirOffset += amount;
                 UpdateDirView();
                 return 0;
@@ -251,7 +270,7 @@ namespace UI {
             case WM_LBUTTONDOWN: {
                 g_clickPos.x = GET_X_LPARAM(lParam);
                 g_clickPos.y = GET_Y_LPARAM(lParam);
-                g_hasMoved   = false;
+                g_hasMoved = false;
                 g_isDragging = true;
                 SetCapture(hWnd);
                 GetCursorPos(&g_lastMouse);
@@ -289,8 +308,8 @@ namespace UI {
                     } else {
                         delta = static_cast<float>(cur.x - g_lastMouse.x);
                     }
-                    g_dirOffset  += delta;
-                    g_lastMouse   = cur;
+                    g_dirOffset += delta;
+                    g_lastMouse = cur;
                     UpdateDirView();
                 }
                 return 0;
@@ -334,10 +353,10 @@ namespace UI {
         g_hDirOwner = hParent;
 
         WNDCLASSW wc{};
-        wc.style         = CS_DBLCLKS;
-        wc.lpfnWndProc   = DirWndProc;
-        wc.hInstance     = hInstance;
-        wc.hCursor       = LoadCursor(nullptr, IDC_ARROW);
+        wc.style = CS_DBLCLKS;
+        wc.lpfnWndProc = DirWndProc;
+        wc.hInstance = hInstance;
+        wc.hCursor = LoadCursor(nullptr, IDC_ARROW);
         wc.lpszClassName = L"QIV_DirWindow";
         RegisterClassW(&wc);
 
@@ -345,13 +364,13 @@ namespace UI {
         GetDirWindowBounds(hParent, g_dirPosition, x, y, w, h);
 
         g_hDirWnd = CreateWindowExW(
-            WS_EX_TOPMOST | WS_EX_TOOLWINDOW | WS_EX_LAYERED,
-            wc.lpszClassName,
-            L"Directory",
-            WS_POPUP,
-            x, y, w, h,
-            hParent, nullptr, hInstance, nullptr
-        );
+                WS_EX_TOPMOST | WS_EX_TOOLWINDOW | WS_EX_LAYERED,
+                wc.lpszClassName,
+                L"Directory",
+                WS_POPUP,
+                x, y, w, h,
+                hParent, nullptr, hInstance, nullptr
+                );
 
         if (!g_hDirWnd) return;
 
@@ -390,11 +409,10 @@ namespace UI {
         g_dirOffset = 0.0f;
 
         SetWindowPos(
-            g_hDirWnd,
-            HWND_TOPMOST,
-            x, y, w, h,
-            SWP_SHOWWINDOW | SWP_FRAMECHANGED
-        );
+                g_hDirWnd,
+                HWND_TOPMOST,
+                x, y, w, h,
+                SWP_SHOWWINDOW | SWP_FRAMECHANGED
+                );
     }
-
 } // namespace UI
