@@ -14,6 +14,7 @@
 #include "../DropTarget.h"
 #include "Platform/FileHandler.h"
 #include "UI/HelpWindow.h"
+#include "UI/DirWindow.h"
 
 #include "MouseHandler.h"
 #include "Input/Command.h"
@@ -286,6 +287,7 @@ LRESULT CALLBACK MainAppWndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM l
                     g_app.UpdateRendererColorEffects(hWnd);
                     InvalidateRect(hWnd, nullptr, FALSE); // Now, repaint with the correct image.
                     UI::UpdateCacheView();
+                    UI::UpdateDirView();
                 }
             }
             return 0;
@@ -309,6 +311,7 @@ LRESULT CALLBACK MainAppWndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM l
                 if (SUCCEEDED(g_app.renderer->LoadSvgFromBytes(payload->bytes, payload->path))) {
                     InvalidateRect(hWnd, nullptr, FALSE);
                     UI::UpdateCacheView();
+                    UI::UpdateDirView();
                 }
             }
 
@@ -424,6 +427,7 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE, LPSTR, int nCmdShow) {
     g_app.renderer->onImageChangedCallback = [](int) {
         // This ensures the rectangle snaps to the actual displayed image index
         UI::SyncSelectionRectangle();
+        UI::SyncDirSelectionRectangle();
     };
 #ifdef _DEBUG
     if (g_app.renderer) {
@@ -438,6 +442,7 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE, LPSTR, int nCmdShow) {
     RegisterDragDrop(hWnd, (g_pDropTarget = new DropTarget(hWnd)));
     UI::InitHelpWindow(hInstance, hWnd);
     UI::InitCacheWindow(hInstance, hWnd, Constants::CACHE_WINDOW_POSITION);
+    UI::InitDirWindow(hInstance, hWnd);
 
     DWORD corner = 2; // DWMWCP_ROUND
     DwmSetWindowAttribute(hWnd, Constants::DWMWA_WINDOW_CORNER_PREFERENCE, &corner, sizeof(corner));
