@@ -6,6 +6,8 @@
 #include <filesystem>
 #include <ranges>
 #include <vector>
+
+#include "DirWindow.h"
 #include "WorkerThread.h"
 #include "DriveInfo.h"
 #include "../SvgDecoder.h"
@@ -248,7 +250,7 @@ void LoadImageIndex(HWND hWnd, int index) {
     g_app.currentIndex = index;
     g_app.wantedIndex.store(index, std::memory_order_release);
 
-
+    UI::SyncDirSelectionRectangle();
     const std::wstring &currentPath = g_app.playlist[index];
     SetWindowTextW(hWnd, (currentPath.substr(currentPath.find_last_of(L"\\/") + 1) + L" - QuickImageViewer").c_str());
 
