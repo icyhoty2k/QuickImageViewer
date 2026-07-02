@@ -1,5 +1,5 @@
 // CommandProvider.cpp
-#include "CommandProvider.h"
+#include "AppCommands.h"
 
 #include <dwmapi.h>
 
@@ -8,7 +8,7 @@
 
 extern AppState g_app;
 
-void CommandProvider::SaveImageToDisk(HWND hWnd) {
+void AppCommands::SaveImageToDisk(HWND hWnd) {
     if (!g_app.renderer || g_app.playlist.empty() || g_app.currentIndex < 0) return;
 
     const std::wstring &srcPath = g_app.playlist[g_app.currentIndex];
@@ -58,7 +58,7 @@ void CommandProvider::SaveImageToDisk(HWND hWnd) {
     }
 }
 
-void CommandProvider::ToggleFullscreen(HWND hWnd) {
+void AppCommands::ToggleFullscreen(HWND hWnd) {
     if (!g_app.isFullscreen) {
         GetWindowRect(hWnd, &g_app.savedWindowRect);
         MONITORINFO mi = {sizeof(mi)};
@@ -97,7 +97,7 @@ void CommandProvider::ToggleFullscreen(HWND hWnd) {
     }
 }
 
-void CommandProvider::ResetWindowLayoutAndEffects(HWND hWnd) {
+void AppCommands::ResetWindowLayoutAndEffects(HWND hWnd) {
     // --- Viewport / window ---
     g_app.ResetWindowState(hWnd);
 

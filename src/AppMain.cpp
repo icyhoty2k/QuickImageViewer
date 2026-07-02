@@ -1,6 +1,6 @@
 #include <algorithm>
 
-#include "CommandProvider.h"
+#include "AppCommands.h"
 #ifndef NOMINMAX
 #define NOMINMAX
 #endif
@@ -261,7 +261,7 @@ LRESULT CALLBACK MainAppWndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM l
         case WM_LBUTTONDBLCLK: {
             SendMessageW(hWnd, WM_SETREDRAW, FALSE, 0);
 
-            CommandProvider::ToggleFullscreen(hWnd);
+            AppCommands::ToggleFullscreen(hWnd);
 
             SendMessageW(hWnd, WM_SETREDRAW, TRUE, 0);
             RedrawWindow(hWnd, nullptr, nullptr, RDW_INVALIDATE | RDW_UPDATENOW | RDW_FRAME);

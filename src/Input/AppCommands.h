@@ -2,7 +2,7 @@
 #pragma once
 #include <windows.h>
 
-class CommandProvider {
+class AppCommands {
     public:
         static void ToggleFullscreen(HWND hWnd);
 
