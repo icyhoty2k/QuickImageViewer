@@ -7,15 +7,15 @@
 #include <dwmapi.h>
 #include <intsafe.h>
 #include <uxtheme.h>
-#include "CacheWindow.h"
+#include "CacheThumbnailsWindow.h"
 #include "../AppState.h"
 #include "Platform/Constants.h"
 
 #include "../DropTarget.h"
 #include "Platform/FileHandler.h"
 #include "UI/HelpWindow.h"
-#include "UI/DirWindow.h"
-#include "UI/HistoryWindow.h"
+#include "UI/CurrentDirThumbnailsWindow.h"
+#include "UI/HistoryListDirWindow.h"
 
 #include "MouseHandler.h"
 #include "Input/Command.h"
