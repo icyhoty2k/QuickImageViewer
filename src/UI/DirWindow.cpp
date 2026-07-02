@@ -261,26 +261,27 @@ namespace UI {
                         return 0;
 
                     case VK_UP:
-                    case VK_LEFT: {
+                        // todo fix hover i want to hover over the items
+                    {
                         if (!g_dirThumbnailObjects.empty()) {
                             int newIdx = (g_selectedIdx > 0)
                                              ? g_selectedIdx - 1
                                              : static_cast<int>(g_dirThumbnailObjects.size()) - 1;
-                            LoadImageIndex(g_hDirOwner, g_dirThumbnailObjects[newIdx].playlistIndex);
-                            // SyncDirSelectionRectangle() will be called by the load path,
-                            // but we also need to scroll the view so the thumb is visible.
+                            g_selectedIdx = newIdx;
                             ScrollDirViewToSelected();
                         }
                         return 0;
                     }
 
+
                     case VK_DOWN:
-                    case VK_RIGHT: {
+                        // todo fix hover i want to hover over the items
+                    {
                         if (!g_dirThumbnailObjects.empty()) {
                             int newIdx = (g_selectedIdx < static_cast<int>(g_dirThumbnailObjects.size()) - 1)
                                              ? g_selectedIdx + 1
                                              : 0;
-                            LoadImageIndex(g_hDirOwner, g_dirThumbnailObjects[newIdx].playlistIndex);
+                            g_selectedIdx = newIdx;
                             ScrollDirViewToSelected();
                         }
                         return 0;
