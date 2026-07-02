@@ -1,26 +1,86 @@
 #pragma once
 #include <windows.h>
 
+// =============================================================================
+// Command.h  —  All discrete keyboard actions in QIV.
+//
+// Flow: WM_KEYDOWN → InputManager::handleKeyboard()
+//           Stage 1: ResolveKeyboardKeys()   → Command
+//           Stage 2: ExecuteKeyboardShortcutCommand()  → side effects
+// =============================================================================
+
 enum class Command {
     None,
+
+    // --- Navigation ---
     NextImage,
     PrevImage,
-    ToggleInvert,
-    ToggleGrayscale,
-    ToggleSepia,
+    ShowInExplorer,
+
+    // --- View modes (1-5) ---
+    ViewMode1,
+    ViewMode2,
+    ViewMode3,
+    ViewMode4,
+    ViewMode5,
+
+    // --- Zoom ---
+    ZoomIn,
+    ZoomOut,
+    ZoomReset,
+
+    // --- Transform ---
+    RotateCW,
+    RotateCCW,
+    FlipH,
+    FlipV,
+
+    // --- Fullscreen ---
     ToggleFullscreen,
-    ResetAll,
-    SaveImage,
-    HideToTray
+
+    // --- Panels / Overlays ---
+    ToggleHelp,
+    OpenFile,
+    ToggleCache,
+    ClearCache,
+    ToggleOverlay,
+
+    // --- App control ---
+    HideToTray,
+    NewWindow,
+    HardQuit,
+    ResetAll, // Shift+Delete — window layout + all effects
+
+    // --- Color effects (toggles) ---
+    ToggleGrayscale,
+    ToggleInvert,
+    ToggleSepia,
+    ToggleSolarize,
+    ToggleOutline,
+    ToggleThreshold,
+    ToggleEffectPreview,
+
+    // --- Color adjustments ---
+    GammaUp,
+    GammaDown,
+    BrightnessUp,
+    BrightnessDown,
+    ContrastUp,
+    ContrastDown,
+    SaturationUp,
+    SaturationDown,
+
+    // --- Save ---
+    ResetEffects, // Numpad0 — effects only, leave window alone
+    SaveImage, // Ctrl+S
 };
 
 class InputManager {
     public:
-        // This is the only public "door"
+        // Single public entry point — call from WM_KEYDOWN
         static void handleKeyboard(HWND hWnd, WPARAM wParam);
 
     private:
-        // These are hidden from the rest of the app
         static Command ResolveKeyboardKeys(UINT key);
 
         static void ExecuteKeyboardShortcutCommand(HWND hWnd, Command cmd);
