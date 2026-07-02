@@ -26,6 +26,8 @@
 // ---------------------------------------------------------------------------
 
 namespace UI {
+    static void ScrollDirViewToSelected();
+
     // -------------------------------------------------------------------------
     // File-scope state
     // -------------------------------------------------------------------------
@@ -257,6 +259,33 @@ namespace UI {
                     case Shortcuts::SC_PANEL_DIR_MOVE:
                         MoveDirWindow();
                         return 0;
+
+                    case VK_UP:
+                    case VK_LEFT: {
+                        if (!g_dirThumbnailObjects.empty()) {
+                            int newIdx = (g_selectedIdx > 0)
+                                             ? g_selectedIdx - 1
+                                             : static_cast<int>(g_dirThumbnailObjects.size()) - 1;
+                            LoadImageIndex(g_hDirOwner, g_dirThumbnailObjects[newIdx].playlistIndex);
+                            // SyncDirSelectionRectangle() will be called by the load path,
+                            // but we also need to scroll the view so the thumb is visible.
+                            ScrollDirViewToSelected();
+                        }
+                        return 0;
+                    }
+
+                    case VK_DOWN:
+                    case VK_RIGHT: {
+                        if (!g_dirThumbnailObjects.empty()) {
+                            int newIdx = (g_selectedIdx < static_cast<int>(g_dirThumbnailObjects.size()) - 1)
+                                             ? g_selectedIdx + 1
+                                             : 0;
+                            LoadImageIndex(g_hDirOwner, g_dirThumbnailObjects[newIdx].playlistIndex);
+                            ScrollDirViewToSelected();
+                        }
+                        return 0;
+                    }
+
                     default:
                         if (g_hDirOwner) {
                             return SendMessageW(g_hDirOwner, message, wParam, lParam);
@@ -395,6 +424,8 @@ namespace UI {
             g_dirOffset = 0.0f;
             ShowWindow(g_hDirWnd, SW_SHOW);
             SetForegroundWindow(g_hDirWnd);
+            SetForegroundWindow(g_hDirWnd); // Brings to front
+            SetFocus(g_hDirWnd); // Forces keyboard focus
             UpdateDirView();
         }
     }
@@ -414,5 +445,42 @@ namespace UI {
                 x, y, w, h,
                 SWP_SHOWWINDOW | SWP_FRAMECHANGED
                 );
+    }
+
+    static void ScrollDirViewToSelected() {
+        if (g_selectedIdx < 0 || g_selectedIdx >= static_cast<int>(g_dirThumbnailObjects.size()))
+            return;
+
+        RECT cr{};
+        GetClientRect(g_hDirWnd, &cr);
+        float surfaceW = static_cast<float>(cr.right);
+        float surfaceH = static_cast<float>(cr.bottom);
+        bool vertical = (g_dirPosition == 2 || g_dirPosition == 4);
+
+        float thumbW = Constants::CACHE_THUMB_WIDTH * g_app.dpiScale;
+        float thumbH = Constants::CACHE_THUMB_HEIGHT * g_app.dpiScale;
+        float scaledSpacing = Constants::CACHE_THUMB_SPACING * g_app.dpiScale;
+        float scaledMargin = Constants::CACHE_THUMB_MARGIN * g_app.dpiScale;
+
+        if (!vertical) {
+            // Horizontal layout: bring thumb into [margin .. surfaceW - margin - thumbW]
+            float slotX = static_cast<float>(g_selectedIdx) * (thumbW + scaledSpacing);
+            float visL = -g_dirOffset + scaledMargin;
+            float visR = visL + surfaceW - scaledMargin * 2.0f;
+            if (slotX < visL)
+                g_dirOffset = -(slotX - scaledMargin);
+            else if (slotX + thumbW > visR)
+                g_dirOffset = -(slotX + thumbW - surfaceW + scaledMargin);
+        } else {
+            // Vertical layout
+            float slotY = static_cast<float>(g_selectedIdx) * (thumbH + scaledSpacing);
+            float visT = -g_dirOffset + scaledMargin;
+            float visB = visT + surfaceH - scaledMargin * 2.0f;
+            if (slotY < visT)
+                g_dirOffset = -(slotY - scaledMargin);
+            else if (slotY + thumbH > visB)
+                g_dirOffset = -(slotY + thumbH - surfaceH + scaledMargin);
+        }
+        UpdateDirView();
     }
 } // namespace UI
