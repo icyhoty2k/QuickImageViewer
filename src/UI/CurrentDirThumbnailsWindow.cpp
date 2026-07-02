@@ -1,4 +1,4 @@
-#include "DirWindow.h"
+#include "CurrentDirThumbnailsWindow.h"
 #include <algorithm>
 #include <filesystem>
 #include "../AppState.h"
@@ -234,7 +234,14 @@ namespace UI {
                 UpdateDirView();
                 return 0;
             }
+            case WM_SETFOCUS:
+                // Ensure the parent knows we have focus if needed,
+                // or simply do nothing to prevent the parent from fighting for it.
+                return 0;
 
+            case WM_KILLFOCUS:
+                // Optional: decide if you want to hide the window when focus is lost
+                return 0;
             // -----------------------------------------------------------------
             case WM_MOUSEWHEEL: {
                 int delta = GET_WHEEL_DELTA_WPARAM(wParam);
@@ -260,30 +267,33 @@ namespace UI {
                         MoveDirWindow();
                         return 0;
 
-                    case VK_UP:
+                    case VK_UP: {
                         // todo fix hover i want to hover over the items
-                    {
                         if (!g_dirThumbnailObjects.empty()) {
-                            int newIdx = (g_selectedIdx > 0)
-                                             ? g_selectedIdx - 1
-                                             : static_cast<int>(g_dirThumbnailObjects.size()) - 1;
-                            g_selectedIdx = newIdx;
+                            g_selectedIdx = (g_selectedIdx > 0)
+                                                ? g_selectedIdx - 1
+                                                : static_cast<int>(g_dirThumbnailObjects.size()) - 1;
+                            g_hoverIdx = g_selectedIdx; // Synchronize hover
                             ScrollDirViewToSelected();
+                            InvalidateRect(hWnd, nullptr, FALSE);
+                            UpdateWindow(hWnd); // Force immediate paint
                         }
                         return 0;
                     }
-
-
-                    case VK_DOWN:
-                        // todo fix hover i want to hover over the items
-                    {
+                    case VK_DOWN: {
                         if (!g_dirThumbnailObjects.empty()) {
-                            int newIdx = (g_selectedIdx < static_cast<int>(g_dirThumbnailObjects.size()) - 1)
-                                             ? g_selectedIdx + 1
-                                             : 0;
-                            g_selectedIdx = newIdx;
+                            g_selectedIdx = (g_selectedIdx < static_cast<int>(g_dirThumbnailObjects.size()) - 1)
+                                                ? g_selectedIdx + 1
+                                                : 0;
+
+                            // Fix: Explicitly update hover index to sync with keyboard selection
+                            g_hoverIdx = g_selectedIdx;
+
                             ScrollDirViewToSelected();
+                            InvalidateRect(hWnd, nullptr, FALSE);
                         }
+                        InvalidateRect(hWnd, nullptr, FALSE);
+                        UpdateWindow(hWnd); // Force immediate paint
                         return 0;
                     }
 
@@ -363,6 +373,7 @@ namespace UI {
                     }
                     g_isDragging = false;
                 }
+
                 return 0;
             }
 
@@ -422,11 +433,11 @@ namespace UI {
         if (IsWindowVisible(g_hDirWnd)) {
             ShowWindow(g_hDirWnd, SW_HIDE);
         } else {
-            g_dirOffset = 0.0f;
             ShowWindow(g_hDirWnd, SW_SHOW);
+            // Force-bring to front and force-focus
+            SetWindowPos(g_hDirWnd, HWND_TOPMOST, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_SHOWWINDOW);
             SetForegroundWindow(g_hDirWnd);
-            SetForegroundWindow(g_hDirWnd); // Brings to front
-            SetFocus(g_hDirWnd); // Forces keyboard focus
+            SetFocus(g_hDirWnd);
             UpdateDirView();
         }
     }

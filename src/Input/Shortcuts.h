@@ -78,10 +78,10 @@ namespace Shortcuts {
 
     // Left Arrow / Up Arrow  —  Previous image
     constexpr UINT SC_NAV_PREV = VK_LEFT;
-    constexpr UINT SC_NAV_PREV_A = VK_UP;
+    // constexpr UINT SC_NAV_PREV_A = VK_UP;
 
     // Right Arrow / Down Arrow  —  Next image
-    constexpr UINT SC_NAV_NEXT_A = VK_DOWN;
+    // constexpr UINT SC_NAV_NEXT_A = VK_DOWN;
     constexpr UINT SC_NAV_NEXT = VK_RIGHT;
 
     // Space       —  Next image  /  Shift+Space  —  Previous image

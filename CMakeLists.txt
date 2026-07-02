@@ -31,9 +31,9 @@ set(SOURCES
         src/Renderer/RendererGDI.cpp
         src/Renderer/RendererD2D.cpp
         src/UI/HelpWindow.cpp
-        src/UI/CacheWindow.cpp
-        src/UI/DirWindow.cpp
-        src/UI/HistoryWindow.cpp
+        src/UI/CacheThumbnailsWindow.cpp
+        src/UI/CurrentDirThumbnailsWindow.cpp
+        src/UI/HistoryListDirWindow.cpp
         resources/resource.rc
         src/UI/OverlayText.cpp
         src/UI/OverlayText.h

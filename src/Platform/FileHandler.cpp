@@ -7,11 +7,11 @@
 #include <ranges>
 #include <vector>
 
-#include "DirWindow.h"
+#include "CurrentDirThumbnailsWindow.h"
 #include "WorkerThread.h"
 #include "DriveInfo.h"
 #include "../SvgDecoder.h"
-#include "../UI/HistoryWindow.h"
+#include "../UI/HistoryListDirWindow.h"
 
 namespace fs = std::filesystem;
 

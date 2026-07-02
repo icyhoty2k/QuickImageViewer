@@ -1,4 +1,4 @@
-#include "HistoryWindow.h"
+#include "HistoryListDirWindow.h"
 #include "../Platform/Constants.h"
 #include "../Platform/FileHandler.h"
 #include "../AppState.h"
@@ -278,10 +278,43 @@ namespace UI {
                     case Shortcuts::SC_PANEL_HISTORY_TOGGLE:
                         ToggleHistoryWindow();
                         return 0;
-                    default:
-                        if (g_hHistOwner) {
-                            return SendMessageW(g_hHistOwner, message, wParam, lParam);
+
+                    case VK_UP: {
+                        if (!g_folderHistory.empty()) {
+                            g_hoverRow = (g_hoverRow <= 0) ? (int) g_folderHistory.size() - 1 : g_hoverRow - 1;
+                            InvalidateRect(hWnd, nullptr, FALSE);
                         }
+                        return 0;
+                    }
+
+                    case VK_DOWN: {
+                        if (!g_folderHistory.empty()) {
+                            g_hoverRow = (g_hoverRow < (int) g_folderHistory.size() - 1) ? g_hoverRow + 1 : 0;
+                            InvalidateRect(hWnd, nullptr, FALSE);
+                        }
+                        return 0;
+                    }
+
+                    case VK_RETURN: // Select the highlighted folder
+                    case VK_SPACE: {
+                        if (g_hoverRow >= 0 && g_hoverRow < (int) g_folderHistory.size()) {
+                            // Trigger the same logic as LBUTTONUP
+                            const std::wstring &folder = g_folderHistory[g_hoverRow];
+                            ShowWindow(hWnd, SW_HIDE);
+                            try {
+                                for (const auto &entry: std::filesystem::directory_iterator(folder)) {
+                                    if (entry.is_regular_file()) {
+                                        OpenSpecificImage(g_hHistOwner, entry.path().wstring());
+                                        break;
+                                    }
+                                }
+                            } catch (...) {}
+                        }
+                        return 0;
+                    }
+
+                    default:
+                        if (g_hHistOwner) return SendMessageW(g_hHistOwner, message, wParam, lParam);
                         break;
                 }
                 break;

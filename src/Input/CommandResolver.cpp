@@ -33,11 +33,11 @@ Command InputManager::ResolveKeyboardKeys(UINT key) {
     switch (key) {
         // --- Navigation ---
         case Shortcuts::SC_NAV_NEXT:
-        case Shortcuts::SC_NAV_NEXT_A:
+            // case Shortcuts::SC_NAV_NEXT_A:
             return Command::NextImage;
 
         case Shortcuts::SC_NAV_PREV:
-        case Shortcuts::SC_NAV_PREV_A:
+            // case Shortcuts::SC_NAV_PREV_A:
             return Command::PrevImage;
 
         case Shortcuts::SC_NAV_NEXT_SPACE:

@@ -2,9 +2,9 @@
 #include "../AppState.h"
 #include "../Platform/Constants.h"
 #include "../Platform/FileHandler.h"
-#include "../UI/CacheWindow.h"
-#include "../UI/DirWindow.h"
-#include "../UI/HistoryWindow.h"
+#include "../UI/CacheThumbnailsWindow.h"
+#include "../UI/CurrentDirThumbnailsWindow.h"
+#include "../UI/HistoryListDirWindow.h"
 #include "../UI/HelpWindow.h"
 #include <algorithm>
 #include <commdlg.h>
