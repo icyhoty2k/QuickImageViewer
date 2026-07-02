@@ -57,6 +57,9 @@ namespace Shortcuts {
     //        Handled inside DirWindow's own WndProc when the panel has focus.
     constexpr UINT SC_PANEL_DIR_MOVE = VK_F6;
 
+    // F7  —  Toggle Folder History panel (last N visited folders)
+    constexpr UINT SC_PANEL_HISTORY_TOGGLE = VK_F7;
+
     // F11 / F / Enter / Ctrl+Shift+T  —  Toggle fullscreen
     constexpr UINT SC_PANEL_FULLSCREEN = VK_F11;
     constexpr UINT SC_PANEL_FULLSCREEN_F = 'F';

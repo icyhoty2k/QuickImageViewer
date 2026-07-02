@@ -43,7 +43,8 @@ enum class Command {
     OpenFile,
     ToggleCache,
     ClearCache,
-    ToggleDir, // F5 — current-folder image browser
+    ToggleDir,   // F5 — current-folder image browser
+    ToggleHistory, // F7 — folder history panel
     ToggleOverlay,
 
     // --- App control ---

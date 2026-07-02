@@ -74,6 +74,7 @@ Command InputManager::ResolveKeyboardKeys(UINT key) {
         case Shortcuts::SC_PANEL_OPEN_FILE: return Command::OpenFile; // F2
         case Shortcuts::SC_PANEL_CACHE_TOGGLE: return Command::ToggleCache; // F3
         case Shortcuts::SC_PANEL_DIR_TOGGLE: return Command::ToggleDir; // F5
+        case Shortcuts::SC_PANEL_HISTORY_TOGGLE: return Command::ToggleHistory; // F7
         case Shortcuts::SC_PANEL_CACHE_CLEAR: return Command::ClearCache; // F12
 
         // --- Overlay ---

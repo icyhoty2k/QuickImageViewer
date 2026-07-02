@@ -9,6 +9,7 @@
 #include "WorkerThread.h"
 #include "DriveInfo.h"
 #include "../SvgDecoder.h"
+#include "../UI/HistoryWindow.h"
 
 namespace fs = std::filesystem;
 
@@ -223,6 +224,9 @@ void OpenInitialImage(HWND hWnd) {
         g_app.playlistIndexMap[g_app.playlist[i]] = i;
     }
 
+    // Record this folder in the history panel
+    UI::PushFolderHistory(selectedPath.parent_path().wstring());
+
     auto it = std::ranges::find(g_app.playlist, selectedPath.wstring());
     if (it != g_app.playlist.end()) {
         LoadImageIndex(
@@ -329,6 +333,9 @@ void OpenSpecificImage(HWND hWnd, const std::wstring &filePathStr) {
     for (int i = 0; i < static_cast<int>(g_app.playlist.size()); ++i) {
         g_app.playlistIndexMap[g_app.playlist[i]] = i;
     }
+
+    // Record this folder in the history panel
+    UI::PushFolderHistory(filePath.parent_path().wstring());
 
     auto it = std::ranges::find(g_app.playlist, filePath.wstring());
     if (it != g_app.playlist.end()) {

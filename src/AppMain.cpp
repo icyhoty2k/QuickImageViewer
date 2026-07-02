@@ -15,6 +15,7 @@
 #include "Platform/FileHandler.h"
 #include "UI/HelpWindow.h"
 #include "UI/DirWindow.h"
+#include "UI/HistoryWindow.h"
 
 #include "MouseHandler.h"
 #include "Input/Command.h"
@@ -443,6 +444,7 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE, LPSTR, int nCmdShow) {
     UI::InitHelpWindow(hInstance, hWnd);
     UI::InitCacheWindow(hInstance, hWnd, Constants::CACHE_WINDOW_POSITION);
     UI::InitDirWindow(hInstance, hWnd);
+    UI::InitHistoryWindow(hInstance, hWnd);
 
     DWORD corner = 2; // DWMWCP_ROUND
     DwmSetWindowAttribute(hWnd, Constants::DWMWA_WINDOW_CORNER_PREFERENCE, &corner, sizeof(corner));
