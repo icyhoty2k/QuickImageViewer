@@ -58,7 +58,7 @@ namespace Shortcuts {
     constexpr UINT SC_PANEL_DIR_MOVE = VK_F6;
 
     // F7  —  Toggle Folder History panel (last N visited folders)
-    constexpr UINT SC_PANEL_HISTORY_TOGGLE = VK_F7;
+    constexpr UINT SC_PANEL_HISTORY_TOGGLE = VK_TAB;
 
     // F11 / F / Enter / Ctrl+Shift+T  —  Toggle fullscreen
     constexpr UINT SC_PANEL_FULLSCREEN = VK_F11;
@@ -90,7 +90,7 @@ namespace Shortcuts {
 
     // E / Tab  —  Open current file in Explorer (select in folder)
     constexpr UINT SC_NAV_SHOW_IN_EXPLORER = 'E';
-    constexpr UINT SC_NAV_SHOW_IN_EXPLORER_TAB = VK_TAB;
+    //constexpr UINT SC_NAV_SHOW_IN_EXPLORER_TAB = VK_TAB; // tab will be used for history window
 
 
     // -------------------------------------------------------------------------

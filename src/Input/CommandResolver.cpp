@@ -45,7 +45,7 @@ Command InputManager::ResolveKeyboardKeys(UINT key) {
             return shift ? Command::PrevImage : Command::NextImage;
 
         case Shortcuts::SC_NAV_SHOW_IN_EXPLORER: // E
-        case Shortcuts::SC_NAV_SHOW_IN_EXPLORER_TAB: // Tab
+            //case Shortcuts::SC_NAV_SHOW_IN_EXPLORER_TAB: // Tab
             return Command::ShowInExplorer;
 
         // --- Zoom ---

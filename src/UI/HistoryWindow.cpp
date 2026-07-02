@@ -26,13 +26,12 @@
 // ---------------------------------------------------------------------------
 
 namespace UI {
-
     // -------------------------------------------------------------------------
     // File-scope state
     // -------------------------------------------------------------------------
-    static HWND  g_hHistWnd   = nullptr;
-    static HWND  g_hHistOwner = nullptr;
-    static int   g_hoverRow   = -1; // which history row the mouse is over
+    static HWND g_hHistWnd = nullptr;
+    static HWND g_hHistOwner = nullptr;
+    static int g_hoverRow = -1; // which history row the mouse is over
 
     // The history list: index 0 = most recently visited
     static std::vector<std::wstring> g_folderHistory;
@@ -74,21 +73,21 @@ namespace UI {
 
         int monX = mi.rcMonitor.left;
         int monY = mi.rcMonitor.top;
-        int monW = mi.rcMonitor.right  - mi.rcMonitor.left;
+        int monW = mi.rcMonitor.right - mi.rcMonitor.left;
         int monH = mi.rcMonitor.bottom - mi.rcMonitor.top;
 
-        UINT dpi    = GetDpiForWindow(hRef);
-        int rowH    = MulDiv(Constants::HISTORY_ROW_HEIGHT, dpi, 96);
+        UINT dpi = GetDpiForWindow(hRef);
+        int rowH = MulDiv(Constants::HISTORY_ROW_HEIGHT, dpi, 96);
         int padding = MulDiv(Constants::HISTORY_PADDING, dpi, 96);
 
         // Height: header + one row per history entry + footer/padding
         int entries = std::max(1, static_cast<int>(g_folderHistory.size()));
-        int totalH  = padding * 2                   // top + bottom padding
-                    + MulDiv(30, dpi, 96)            // title row
-                    + MulDiv(8,  dpi, 96)            // gap below title
-                    + entries * rowH;                // content rows
+        int totalH = padding * 2 // top + bottom padding
+                     + MulDiv(30, dpi, 96) // title row
+                     + MulDiv(8, dpi, 96) // gap below title
+                     + entries * rowH; // content rows
 
-        w = static_cast<int>(monW * 0.70f);
+        w = static_cast<int>(monW * 0.30f);
         h = std::min(totalH, static_cast<int>(monH * 0.80f));
         x = monX + (monW - w) / 2;
         y = monY + (monH - h) / 2;
@@ -99,7 +98,6 @@ namespace UI {
     // -------------------------------------------------------------------------
     static LRESULT CALLBACK HistWndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) {
         switch (message) {
-
             // -----------------------------------------------------------------
             case WM_PAINT: {
                 PAINTSTRUCT ps;
@@ -107,12 +105,12 @@ namespace UI {
                 RECT rc;
                 GetClientRect(hWnd, &rc);
 
-                UINT dpi    = GetDpiForWindow(hWnd);
+                UINT dpi = GetDpiForWindow(hWnd);
                 int padding = MulDiv(Constants::HISTORY_PADDING, dpi, 96);
-                int rowH    = MulDiv(Constants::HISTORY_ROW_HEIGHT, dpi, 96);
-                int fontSize= MulDiv(Constants::HISTORY_FONT_SIZE, dpi, 96);
+                int rowH = MulDiv(Constants::HISTORY_ROW_HEIGHT, dpi, 96);
+                int fontSize = MulDiv(Constants::HISTORY_FONT_SIZE, dpi, 96);
                 int titleSz = MulDiv(Constants::HISTORY_FONT_SIZE + 2, dpi, 96);
-                int indexW  = MulDiv(28, dpi, 96); // width of the "#N" column
+                int indexW = MulDiv(28, dpi, 96); // width of the "#N" column
 
                 // Dark background
                 HBRUSH hBg = CreateSolidBrush(RGB(18, 18, 18));
@@ -123,30 +121,32 @@ namespace UI {
 
                 // Title font (slightly larger, bold)
                 HFONT hTitleFont = CreateFontW(
-                    titleSz, 0, 0, 0, FW_BOLD, FALSE, FALSE, FALSE,
-                    DEFAULT_CHARSET, OUT_OUTLINE_PRECIS, CLIP_DEFAULT_PRECIS,
-                    CLEARTYPE_QUALITY, VARIABLE_PITCH, L"Segoe UI");
+                        titleSz, 0, 0, 0, FW_BOLD, FALSE, FALSE, FALSE,
+                        DEFAULT_CHARSET, OUT_OUTLINE_PRECIS, CLIP_DEFAULT_PRECIS,
+                        CLEARTYPE_QUALITY, VARIABLE_PITCH, L"Segoe UI");
 
                 // Body font
                 HFONT hBodyFont = CreateFontW(
-                    fontSize, 0, 0, 0, FW_NORMAL, FALSE, FALSE, FALSE,
-                    DEFAULT_CHARSET, OUT_OUTLINE_PRECIS, CLIP_DEFAULT_PRECIS,
-                    CLEARTYPE_QUALITY, VARIABLE_PITCH, L"Segoe UI");
+                        fontSize, 0, 0, 0, FW_NORMAL, FALSE, FALSE, FALSE,
+                        DEFAULT_CHARSET, OUT_OUTLINE_PRECIS, CLIP_DEFAULT_PRECIS,
+                        CLEARTYPE_QUALITY, VARIABLE_PITCH, L"Segoe UI");
 
                 // ---- Title row ----
                 SelectObject(hdc, hTitleFont);
                 SetTextColor(hdc, RGB(100, 200, 255));
 
                 std::wstring title = L"Folder History  (last "
-                    + std::to_wstring(Constants::HISTORY_MAX_DIRS) + L" folders)";
-                RECT titleRect = {rc.left + padding, rc.top + padding,
-                                  rc.right - padding, rc.top + padding + titleSz + 4};
+                                     + std::to_wstring(Constants::HISTORY_MAX_DIRS) + L" folders)";
+                RECT titleRect = {
+                    rc.left + padding, rc.top + padding,
+                    rc.right - padding, rc.top + padding + titleSz + 4
+                };
                 DrawTextW(hdc, title.c_str(), -1, &titleRect, DT_LEFT | DT_VCENTER | DT_SINGLELINE);
 
                 // Thin separator line below title
                 int sepY = titleRect.bottom + MulDiv(4, dpi, 96);
                 HPEN hPen = CreatePen(PS_SOLID, 1, RGB(50, 50, 50));
-                HPEN hOldPen = (HPEN)SelectObject(hdc, hPen);
+                HPEN hOldPen = (HPEN) SelectObject(hdc, hPen);
                 MoveToEx(hdc, rc.left + padding, sepY, nullptr);
                 LineTo(hdc, rc.right - padding, sepY);
                 SelectObject(hdc, hOldPen);
@@ -179,17 +179,21 @@ namespace UI {
                         // Index number column (yellow)
                         SetTextColor(hdc, RGB(255, 204, 0));
                         std::wstring idxStr = std::to_wstring(i + 1);
-                        RECT idxRect = {rc.left + padding, y,
-                                        rc.left + padding + indexW, y + rowH};
+                        RECT idxRect = {
+                            rc.left + padding, y,
+                            rc.left + padding + indexW, y + rowH
+                        };
                         DrawTextW(hdc, idxStr.c_str(), -1, &idxRect,
                                   DT_RIGHT | DT_VCENTER | DT_SINGLELINE);
 
                         // Folder path (white, clipped to right edge with ellipsis)
                         SetTextColor(hdc, (i == g_hoverRow) ? RGB(255, 255, 255) : RGB(200, 200, 200));
-                        RECT pathRect = {rc.left + padding + indexW + MulDiv(10, dpi, 96),
-                                         y,
-                                         rc.right - padding,
-                                         y + rowH};
+                        RECT pathRect = {
+                            rc.left + padding + indexW + MulDiv(10, dpi, 96),
+                            y,
+                            rc.right - padding,
+                            y + rowH
+                        };
                         DrawTextW(hdc, g_folderHistory[i].c_str(), -1, &pathRect,
                                   DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
 
@@ -242,7 +246,7 @@ namespace UI {
 
                         // Find the first image file in the folder and open it
                         try {
-                            for (const auto &entry : std::filesystem::directory_iterator(folder)) {
+                            for (const auto &entry: std::filesystem::directory_iterator(folder)) {
                                 if (!entry.is_regular_file()) continue;
                                 std::wstring ext = entry.path().extension().wstring();
                                 // Use OpenSpecificImage which handles full playlist rebuild
@@ -300,10 +304,10 @@ namespace UI {
         g_hHistOwner = hParent;
 
         WNDCLASSW wc{};
-        wc.style         = CS_DBLCLKS;
-        wc.lpfnWndProc   = HistWndProc;
-        wc.hInstance     = hInstance;
-        wc.hCursor       = LoadCursor(nullptr, IDC_ARROW);
+        wc.style = CS_DBLCLKS;
+        wc.lpfnWndProc = HistWndProc;
+        wc.hInstance = hInstance;
+        wc.hCursor = LoadCursor(nullptr, IDC_ARROW);
         wc.lpszClassName = L"QIV_HistoryWindow";
         RegisterClassW(&wc);
 
@@ -311,13 +315,13 @@ namespace UI {
         GetHistoryWindowBounds(hParent, x, y, w, h);
 
         g_hHistWnd = CreateWindowExW(
-            WS_EX_TOPMOST | WS_EX_TOOLWINDOW | WS_EX_LAYERED,
-            wc.lpszClassName,
-            L"Folder History",
-            WS_POPUP,
-            x, y, w, h,
-            hParent, nullptr, hInstance, nullptr
-        );
+                WS_EX_TOPMOST | WS_EX_TOOLWINDOW | WS_EX_LAYERED,
+                wc.lpszClassName,
+                L"Folder History",
+                WS_POPUP,
+                x, y, w, h,
+                hParent, nullptr, hInstance, nullptr
+                );
 
         if (!g_hHistWnd) return;
 
@@ -342,5 +346,4 @@ namespace UI {
             InvalidateRect(g_hHistWnd, nullptr, TRUE);
         }
     }
-
 } // namespace UI

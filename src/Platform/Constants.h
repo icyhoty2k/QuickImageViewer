@@ -42,8 +42,9 @@ namespace Constants {
     constexpr int BASE_HEIGHT = 800;
 
     inline bool SWAP_MOUSE_BUTTONS = true; // Set this to true to swap Left and Right mouse button functions
-
-    //==========================Cache optimization====================================
+    // =========================================================================
+    // CACHE WINDOW AND CURRENT DIR WINDOW
+    // =========================================================================
     constexpr float CACHE_THUMB_WIDTH = 120.0f;
     constexpr float CACHE_THUMB_HEIGHT = 80.0f;
     constexpr float CACHE_THUMB_SPACING = 18.0f;
@@ -51,8 +52,16 @@ namespace Constants {
     constexpr BYTE CACHE_WINDOW_OPACITY = 210;
     constexpr float CACHE_WINDOW_MOUSE_WHEEL_SPEED = 120.0f;
     constexpr int8_t CACHE_WINDOW_MOUSE_WHEEL_DIRECTION = 1; // 1 is forward -1 is reverse
-    constexpr int8_t CACHE_WINDOW_POSITION = 0; // /0 top /1 right /2 bottom /3 left
     constexpr int CACHE_WINDOW_THICKNESS = 120;
+    constexpr int8_t CACHE_WINDOW_POSITION = 2; // /0 top /1 right /2 bottom /3 left
+
+    //   position 0 : centered floating panel (80 % wide, thumb-height tall)
+    //   position 1 : top edge strip (full width)
+    //   position 2 : right edge strip (full height)
+    //   position 3 : bottom edge strip (full width)
+    //   position 4 : left edge strip (full height)
+    constexpr int8_t CURRENT_DIR_WINDOW_POSITION = 1; // /0 top /1 right /2 bottom /3 left
+
 
     namespace CacheColors {
         const D2D1::ColorF::Enum BACKGROUND = D2D1::ColorF::Black; // Or your custom 0.08f, 0.08f, 0.08f
@@ -63,6 +72,7 @@ namespace Constants {
         const D2D1::ColorF::Enum PLACEHOLDER = D2D1::ColorF::DarkSlateGray;
     }
 
+    //==========================Cache optimization====================================
     constexpr const int VRAM_CACHE_IMAGES_COUNT = 30;
     constexpr const int VRAM_CACHE_SVG_COUNT = 10;
     constexpr const int PRELOAD_LOOKASIDE_COUNT = 1;
@@ -73,10 +83,10 @@ namespace Constants {
     // =========================================================================
     // Folder History (HistoryWindow)
     // =========================================================================
-    constexpr int HISTORY_MAX_DIRS   = 10;  // how many folders to remember — change here
-    constexpr int HISTORY_ROW_HEIGHT = 28;  // px at 96 DPI per history row
-    constexpr int HISTORY_PADDING    = 16;  // px at 96 DPI inner padding
-    constexpr int HISTORY_FONT_SIZE  = 14;  // pt at 96 DPI body font
+    constexpr int HISTORY_MAX_DIRS = 10; // how many folders to remember — change here
+    constexpr int HISTORY_ROW_HEIGHT = 28; // px at 96 DPI per history row
+    constexpr int HISTORY_PADDING = 16; // px at 96 DPI inner padding
+    constexpr int HISTORY_FONT_SIZE = 14; // pt at 96 DPI body font
 
     // Custom window messages
     constexpr UINT WM_QIV_PENDING_UPLOADS = WM_USER + 1; // Posted by background decoder thread
