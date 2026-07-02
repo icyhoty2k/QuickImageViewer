@@ -7,6 +7,8 @@
 #include <chrono>
 #include <vector>
 #include <shlwapi.h>  // SHCreateMemStream
+
+#include "DirWindow.h"
 #include "../UI/CacheWindow.h"
 // Link the required import libraries
 #pragma comment(lib, "d3d11.lib")
@@ -1466,4 +1468,144 @@ HRESULT RendererD2D::SaveCurrentImageWithEffects(const std::wstring &outPath) {
     if (FAILED(hr)) return hr;
 
     return encoder->Commit();
+}
+
+// =============================================================================
+//  DirWindow device resources  —  own swap chain, device context, and brushes.
+//  Mirrors the CacheWindow resource set exactly (m_pDir* instead of m_pCache*).
+// =============================================================================
+
+HRESULT RendererD2D::CreateDirWindowDeviceResources(HWND hwnd) {
+    m_hDirWnd = hwnd;
+
+    // 1. Swap chain for the dir window
+    DXGI_SWAP_CHAIN_DESC1 swapDesc{};
+    swapDesc.Width = 0;
+    swapDesc.Height = 0;
+    swapDesc.Format = DXGI_FORMAT_B8G8R8A8_UNORM;
+    swapDesc.BufferCount = 2;
+    swapDesc.BufferUsage = DXGI_USAGE_RENDER_TARGET_OUTPUT;
+    swapDesc.SwapEffect = DXGI_SWAP_EFFECT_FLIP_DISCARD;
+    swapDesc.SampleDesc.Count = 1;
+
+    Microsoft::WRL::ComPtr<IDXGIDevice1> dxgiDevice;
+    Microsoft::WRL::ComPtr<IDXGIAdapter> adapter;
+    Microsoft::WRL::ComPtr<IDXGIFactory2> factory;
+    m_pD3DDevice.As(&dxgiDevice);
+    dxgiDevice->GetAdapter(&adapter);
+    adapter->GetParent(IID_PPV_ARGS(&factory));
+
+    HRESULT hr = factory->CreateSwapChainForHwnd(
+            m_pD3DDevice.Get(), hwnd, &swapDesc,
+            nullptr, nullptr, &m_pDirSwapChain);
+    if (FAILED(hr)) return hr;
+
+    // 2. D2D device context
+    Microsoft::WRL::ComPtr<ID2D1DeviceContext> baseCtx;
+    hr = m_pD2DDevice->CreateDeviceContext(D2D1_DEVICE_CONTEXT_OPTIONS_NONE, &baseCtx);
+    if (FAILED(hr)) return hr;
+    hr = baseCtx.As(&m_pDirDeviceContext);
+    if (FAILED(hr)) return hr;
+
+    // 3. Bind back-buffer
+    RECT rc{};
+    GetClientRect(hwnd, &rc);
+    UINT w = static_cast<UINT>(rc.right - rc.left);
+    UINT h = static_cast<UINT>(rc.bottom - rc.top);
+    if (w == 0 || h == 0) {
+        w = 1200;
+        h = Constants::CACHE_WINDOW_THICKNESS;
+    }
+    ResizeDirWindow(w, h);
+
+    // 4. Brushes (same colours as cache window)
+    m_pDirDeviceContext->CreateSolidColorBrush(
+            D2D1::ColorF(Constants::CacheColors::PLACEHOLDER), &m_pDirPlaceholderBrush);
+    m_pDirDeviceContext->CreateSolidColorBrush(
+            D2D1::ColorF(Constants::CacheColors::SELECTION_BORDER), &m_pDirBorderBrush);
+    m_pDirDeviceContext->CreateSolidColorBrush(
+            D2D1::ColorF(Constants::CacheColors::HOVER), &m_pDirHoverBrush);
+
+    return S_OK;
+}
+
+void RendererD2D::ResizeDirWindow(UINT width, UINT height) {
+    if (!m_pDirSwapChain || !m_pDirDeviceContext) return;
+
+    m_pDirDeviceContext->SetTarget(nullptr);
+    m_pDirBackBuffer.Reset();
+
+    HRESULT hr = m_pDirSwapChain->ResizeBuffers(0, width, height, DXGI_FORMAT_UNKNOWN, 0);
+    if (FAILED(hr)) return;
+
+    Microsoft::WRL::ComPtr<IDXGISurface> surface;
+    hr = m_pDirSwapChain->GetBuffer(0, IID_PPV_ARGS(&surface));
+    if (FAILED(hr)) return;
+
+    D2D1_BITMAP_PROPERTIES1 props = D2D1::BitmapProperties1(
+            D2D1_BITMAP_OPTIONS_TARGET | D2D1_BITMAP_OPTIONS_CANNOT_DRAW,
+            D2D1::PixelFormat(DXGI_FORMAT_B8G8R8A8_UNORM, D2D1_ALPHA_MODE_IGNORE));
+
+    hr = m_pDirDeviceContext->CreateBitmapFromDxgiSurface(surface.Get(), &props, &m_pDirBackBuffer);
+    if (FAILED(hr)) return;
+
+    m_pDirDeviceContext->SetTarget(m_pDirBackBuffer.Get());
+}
+
+void RendererD2D::RenderDirWindow(int selectedIndex, int hoverIndex) {
+    if (!m_pDirDeviceContext || !m_pDirSwapChain) return;
+
+    std::lock_guard<std::mutex> lock(m_cacheMutex);
+
+    m_pDirDeviceContext->BeginDraw();
+    m_pDirDeviceContext->Clear(D2D1::ColorF(0.08f, 0.08f, 0.08f, 1.0f));
+
+    for (size_t i = 0; i < UI::g_dirThumbnailObjects.size(); ++i) {
+        const auto &thumb = UI::g_dirThumbnailObjects[i];
+
+        // Try VRAM cache first (preloaded bitmaps are already there)
+        auto it = m_bitmapCache.find(thumb.filePath);
+        if (it != m_bitmapCache.end() && it->second.bitmap) {
+            m_pDirDeviceContext->DrawBitmap(
+                    it->second.bitmap.Get(),
+                    thumb.rect,
+                    1.0f,
+                    D2D1_BITMAP_INTERPOLATION_MODE_LINEAR);
+        } else {
+            // Placeholder box — same style as cache window
+            m_pDirDeviceContext->FillRectangle(thumb.rect, m_pDirPlaceholderBrush.Get());
+        }
+
+        // Selection highlight
+        if (static_cast<int>(i) == selectedIndex) {
+            m_pDirDeviceContext->DrawRectangle(
+                    thumb.rect, m_pDirBorderBrush.Get(),
+                    Constants::CacheColors::SELECTION_BORDER_THICKNESS);
+        }
+
+        // Hover highlight
+        if (static_cast<int>(i) == hoverIndex) {
+            m_pDirDeviceContext->DrawRectangle(
+                    thumb.rect, m_pDirHoverBrush.Get(),
+                    Constants::CacheColors::HOVER_THICKNESS);
+        }
+    }
+
+    HRESULT hr = m_pDirDeviceContext->EndDraw();
+    if (hr == D2DERR_RECREATE_TARGET ||
+        hr == static_cast<HRESULT>(DXGI_ERROR_DEVICE_REMOVED)) {
+        // Device loss — caller can trigger re-init if needed
+    }
+    m_pDirSwapChain->Present(1, 0);
+}
+
+void RendererD2D::DiscardDirWindowDeviceResources() {
+    m_pDirDeviceContext->SetTarget(nullptr);
+    m_pDirBackBuffer.Reset();
+    m_pDirPlaceholderBrush.Reset();
+    m_pDirBorderBrush.Reset();
+    m_pDirHoverBrush.Reset();
+    m_pDirSwapChain.Reset();
+    m_pDirDeviceContext.Reset();
+    m_hDirWnd = nullptr;
 }

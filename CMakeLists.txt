@@ -33,6 +33,7 @@ set(SOURCES
         src/UI/HelpWindow.cpp
         src/UI/CacheWindow.cpp
         src/UI/DirWindow.cpp
+        src/UI/HistoryWindow.cpp
         resources/resource.rc
         src/UI/OverlayText.cpp
         src/UI/OverlayText.h

@@ -4,6 +4,7 @@
 #include "../Platform/FileHandler.h"
 #include "../UI/CacheWindow.h"
 #include "../UI/DirWindow.h"
+#include "../UI/HistoryWindow.h"
 #include "../UI/HelpWindow.h"
 #include <algorithm>
 #include <commdlg.h>
@@ -158,6 +159,10 @@ void InputManager::ExecuteKeyboardShortcutCommand(HWND hWnd, Command cmd) {
 
         case Command::ToggleDir:
             UI::ToggleDirWindow();
+            break;
+
+        case Command::ToggleHistory:
+            UI::ToggleHistoryWindow();
             break;
 
         case Command::ToggleOverlay:

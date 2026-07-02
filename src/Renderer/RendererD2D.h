@@ -132,9 +132,9 @@ class RendererD2D final : public IImageRenderer {
 
         // Dir Window Resources  —  current-folder image browser
         HWND m_hDirWnd = nullptr;
-        Microsoft::WRL::ComPtr<IDXGISwapChain1> m_pDirSwapChain;
-        Microsoft::WRL::ComPtr<ID2D1DeviceContext7> m_pDirDeviceContext;
-        Microsoft::WRL::ComPtr<ID2D1Bitmap1> m_pDirBackBuffer;
+        Microsoft::WRL::ComPtr<IDXGISwapChain1>      m_pDirSwapChain;
+        Microsoft::WRL::ComPtr<ID2D1DeviceContext7>  m_pDirDeviceContext;
+        Microsoft::WRL::ComPtr<ID2D1Bitmap1>         m_pDirBackBuffer;
         Microsoft::WRL::ComPtr<ID2D1SolidColorBrush> m_pDirPlaceholderBrush;
         Microsoft::WRL::ComPtr<ID2D1SolidColorBrush> m_pDirBorderBrush;
         Microsoft::WRL::ComPtr<ID2D1SolidColorBrush> m_pDirHoverBrush;
