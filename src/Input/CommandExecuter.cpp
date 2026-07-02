@@ -3,6 +3,7 @@
 #include "../Platform/Constants.h"
 #include "../Platform/FileHandler.h"
 #include "../UI/CacheWindow.h"
+#include "../UI/DirWindow.h"
 #include "../UI/HelpWindow.h"
 #include <algorithm>
 #include <commdlg.h>
@@ -153,6 +154,10 @@ void InputManager::ExecuteKeyboardShortcutCommand(HWND hWnd, Command cmd) {
 
         case Command::ClearCache:
             UI::ClearThumbnailCache();
+            break;
+
+        case Command::ToggleDir:
+            UI::ToggleDirWindow();
             break;
 
         case Command::ToggleOverlay:

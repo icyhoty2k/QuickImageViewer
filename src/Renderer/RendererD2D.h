@@ -70,8 +70,21 @@ class RendererD2D final : public IImageRenderer {
 
         void ResizeCacheWindow(UINT width, UINT height);
 
+        // Dir Window  —  current-folder image browser
+        ID2D1DeviceContext7 *GetDirContext() const {
+            return m_pDirDeviceContext.Get();
+        }
+
+        HRESULT CreateDirWindowDeviceResources(HWND hwnd);
+
+        void DiscardDirWindowDeviceResources();
+
+        void RenderDirWindow(int selectedIndex, int hoverIndex);
+
+        void ResizeDirWindow(UINT width, UINT height);
+
         void ApplyPreviousEffects() override;
-        
+
         // Public DWrite resources
         Microsoft::WRL::ComPtr<IDWriteFactory3> m_pDWriteFactory;
         Microsoft::WRL::ComPtr<IDWriteTextFormat> m_pTextFormat;
@@ -116,6 +129,15 @@ class RendererD2D final : public IImageRenderer {
         Microsoft::WRL::ComPtr<ID2D1SolidColorBrush> m_pCacheButtonTextBrush;
         Microsoft::WRL::ComPtr<IDWriteTextFormat> m_pCacheTextFormat;
         Microsoft::WRL::ComPtr<IDWriteTextFormat> m_pCacheButtonFormat;
+
+        // Dir Window Resources  —  current-folder image browser
+        HWND m_hDirWnd = nullptr;
+        Microsoft::WRL::ComPtr<IDXGISwapChain1> m_pDirSwapChain;
+        Microsoft::WRL::ComPtr<ID2D1DeviceContext7> m_pDirDeviceContext;
+        Microsoft::WRL::ComPtr<ID2D1Bitmap1> m_pDirBackBuffer;
+        Microsoft::WRL::ComPtr<ID2D1SolidColorBrush> m_pDirPlaceholderBrush;
+        Microsoft::WRL::ComPtr<ID2D1SolidColorBrush> m_pDirBorderBrush;
+        Microsoft::WRL::ComPtr<ID2D1SolidColorBrush> m_pDirHoverBrush;
 
         // Cache
         struct CachedBitmap {
