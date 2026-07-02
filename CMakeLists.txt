@@ -43,6 +43,7 @@ set(SOURCES
         src/Input/CommandResolver.cpp
         src/Input/AppCommands.h
         src/Input/AppCommands.cpp
+        src/Persistence/test.cpp
 )
 
 add_executable(QuickImageViewer WIN32 ${SOURCES})
