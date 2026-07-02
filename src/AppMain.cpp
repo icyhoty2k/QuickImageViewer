@@ -1,4 +1,6 @@
 #include <algorithm>
+
+#include "CommandProvider.h"
 #ifndef NOMINMAX
 #define NOMINMAX
 #endif
@@ -8,14 +10,15 @@
 #include "CacheWindow.h"
 #include "../AppState.h"
 #include "Platform/Constants.h"
-#include "Shortcuts.h"
+
 #include "../DropTarget.h"
 #include "Platform/FileHandler.h"
 #include "UI/HelpWindow.h"
 
 #include "MouseHandler.h"
+#include "Input/Command.h"
 #include "../WicDecoder.h"
-#include "../SvgDecoder.h"
+
 
 #include <windows.h>
 #include <windowsx.h>
@@ -46,58 +49,10 @@ DropTarget *g_pDropTarget = nullptr;
 IoThreadPool g_ioWorker;
 WorkerThread g_decoderWorker(true);
 
-static void ToggleFullscreen(HWND hWnd) {
-    if (!g_app.isFullscreen) {
-        GetWindowRect(hWnd, &g_app.savedWindowRect);
-        MONITORINFO mi = {sizeof(mi)};
-        GetMonitorInfo(MonitorFromWindow(hWnd, MONITOR_DEFAULTTONEAREST), &mi);
-
-        SetWindowPos(hWnd, HWND_TOPMOST,
-                     mi.rcMonitor.left, mi.rcMonitor.top,
-                     mi.rcMonitor.right - mi.rcMonitor.left,
-                     mi.rcMonitor.bottom - mi.rcMonitor.top,
-                     SWP_FRAMECHANGED | SWP_NOCOPYBITS);
-
-        DWMNCRENDERINGPOLICY policy = DWMNCRP_DISABLED;
-        DwmSetWindowAttribute(hWnd, DWMWA_NCRENDERING_POLICY, &policy, sizeof(policy));
-        DWORD corner = 1; // DWMWCP_DONOTROUND
-        DwmSetWindowAttribute(hWnd, Constants::DWMWA_WINDOW_CORNER_PREFERENCE, &corner, sizeof(corner));
-        MARGINS margins = {0, 0, 0, 0};
-        DwmExtendFrameIntoClientArea(hWnd, &margins);
-
-        g_app.isFullscreen = true;
-    } else {
-        SetWindowPos(hWnd, HWND_NOTOPMOST,
-                     g_app.savedWindowRect.left,
-                     g_app.savedWindowRect.top,
-                     g_app.savedWindowRect.right - g_app.savedWindowRect.left,
-                     g_app.savedWindowRect.bottom - g_app.savedWindowRect.top,
-                     SWP_FRAMECHANGED | SWP_NOCOPYBITS);
-
-        DWMNCRENDERINGPOLICY policy = DWMNCRP_ENABLED;
-        DwmSetWindowAttribute(hWnd, DWMWA_NCRENDERING_POLICY, &policy, sizeof(policy));
-        DWORD corner = 2; // DWMWCP_ROUND
-        DwmSetWindowAttribute(hWnd, Constants::DWMWA_WINDOW_CORNER_PREFERENCE, &corner, sizeof(corner));
-        MARGINS margins = {1, 1, 1, 1};
-        DwmExtendFrameIntoClientArea(hWnd, &margins);
-
-        g_app.isFullscreen = false;
-    }
-}
-
 
 // Shift+Delete (Shortcuts::SC_APP_RESET_DEFAULTS) — restore default application
 // state: window size/position centered on the current monitor, zoom/pan/
 // rotation/flip/opacity reset, and every image effect cleared.
-static void ResetWindowLayoutAndEffects(HWND hWnd) {
-    // --- Viewport / window ---
-    g_app.ResetWindowState(hWnd);
-
-    // --- All image effects ---
-    g_app.ResetEffects();
-
-    g_app.UpdateRendererColorEffects(hWnd);
-}
 
 
 LRESULT CALLBACK MainAppWndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) {
@@ -173,340 +128,9 @@ LRESULT CALLBACK MainAppWndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM l
             }
             return 0;
         }
-        case WM_KEYDOWN: {
-            bool shift = (GetKeyState(VK_SHIFT) & 0x8000) != 0;
-            bool ctrl = (GetKeyState(VK_CONTROL) & 0x8000) != 0;
-            // Keys '1'–'5'  —  Switch view mode
-            if (wParam >= Shortcuts::SC_VIEW_MODE_FIRST && wParam <= Shortcuts::SC_VIEW_MODE_LAST) {
-                g_app.viewMode = static_cast<Constants::ViewModes::ViewMode>(wParam - '0');
-                InvalidateRect(hWnd, nullptr, FALSE);
-                return 0;
-            }
-            // E / Tab  —  Reveal current file in Windows Explorer
-            if (wParam == Shortcuts::SC_NAV_SHOW_IN_EXPLORER || wParam == Shortcuts::SC_NAV_SHOW_IN_EXPLORER_TAB) {
-                if (!g_app.playlist.empty() && g_app.currentIndex >= 0) {
-                    const std::wstring &path = g_app.playlist[g_app.currentIndex];
-                    PIDLIST_ABSOLUTE pidl = ILCreateFromPathW(path.c_str());
-                    if (pidl) {
-                        SHOpenFolderAndSelectItems(pidl, 0, nullptr, 0);
-                        ILFree(pidl);
-                    }
-                }
-                return 0;
-            }
-            // H  —  Flip horizontal
-            if (wParam == Shortcuts::SC_TRANSFORM_FLIP_H) {
-                g_app.viewport.flippedH = !g_app.viewport.flippedH;
-                InvalidateRect(hWnd, nullptr, FALSE);
-                return 0;
-            }
-            // V  —  Flip vertical
-            if (wParam == Shortcuts::SC_TRANSFORM_FLIP_V) {
-                g_app.viewport.flippedV = !g_app.viewport.flippedV;
-                InvalidateRect(hWnd, nullptr, FALSE);
-                return 0;
-            }
-            // ===============================
-            // COLOR EFFECTS  — see Shortcuts::ImageEffects (Shortcuts.h is the
-            // single source of truth; all keys below must come from there).
-            // ===============================
-            // HELPER: Auto-wakes the preview toggle when a user adjusts any effect
-
-            // Shift+Delete  —  Full app reset: window layout + all image effects
-            if (wParam == Shortcuts::SC_APP_RESET_DEFAULTS && shift) {
-                ResetWindowLayoutAndEffects(hWnd);
-                return 0;
-            }
-            if (wParam == Shortcuts::ImageEffects::SC_EFFECT_APPLY_TOGGLE) {
-                // Toggle the preview state on or off
-                g_app.effectPreviewEnabled = !g_app.effectPreviewEnabled;
-                g_app.UpdateRendererColorEffects(hWnd);
-                return 0;
-            }
-            // 1.Delete (no shift)  —  Toggle grayscale
-            if (wParam == Shortcuts::ImageEffects::SC_COLOR_GRAYSCALE && !shift) {
-                g_app.WakeUpAndApplyEffects(hWnd, g_app.effectGrayscale);
-                return 0;
-            }
-
-            // 2.Insert  —  Toggle invert colors
-            if (wParam == Shortcuts::ImageEffects::SC_COLOR_INVERT) {
-                g_app.WakeUpAndApplyEffects(hWnd, g_app.effectInvert);
-                return 0;
-            }
-
-            // 3.Home  —  Toggle sepia
-            if (wParam == Shortcuts::ImageEffects::SC_COLOR_SEPIA) {
-                g_app.WakeUpAndApplyEffects(hWnd, g_app.effectSepia);
-                return 0;
-            }
-
-            // 4.End  —  Toggle solarize
-            if (wParam == Shortcuts::ImageEffects::SC_COLOR_SOLARIZE) {
-                g_app.WakeUpAndApplyEffects(hWnd, g_app.effectSolarize);
-                return 0;
-            }
-
-            // 5.Page Up  —  Toggle image outline
-            if (wParam == Shortcuts::ImageEffects::SC_COLOR_OUTLINE) {
-                g_app.WakeUpAndApplyEffects(hWnd, g_app.effectOutline);
-                return 0;
-            }
-
-            // 6.Page Down  —  Toggle black & white threshold
-            if (wParam == Shortcuts::ImageEffects::SC_COLOR_THRESHOLD) {
-                g_app.WakeUpAndApplyEffects(hWnd, g_app.effectThreshold);
-                g_app.WakeUpAndApplyEffects(hWnd);
-                return 0;
-            }
-
-            // 7. '+' (OEM_PLUS)  —  Gamma up   /   '-' (OEM_MINUS)  —  Gamma down
-            if (wParam == Shortcuts::ImageEffects::SC_COLOR_GAMMA_UP) {
-                g_app.gamma = std::min(Constants::MAX_GAMMA, g_app.gamma + Constants::GAMMA_STEP);
-                g_app.WakeUpAndApplyEffects(hWnd);
-                return 0;
-            }
-            if (wParam == Shortcuts::ImageEffects::SC_COLOR_GAMMA_DOWN) {
-                g_app.gamma = std::max(Constants::MIN_GAMMA, g_app.gamma - Constants::GAMMA_STEP);
-                g_app.WakeUpAndApplyEffects(hWnd);
-                return 0;
-            }
-
-            // 8. '  —  Brightness up   /   \  —  Brightness down
-            if (wParam == Shortcuts::ImageEffects::SC_COLOR_BRIGHTNESS_UP) {
-                g_app.brightness = std::clamp(
-                        g_app.brightness + Constants::COLOR_ADJUST_STEP,
-                        -Constants::MIN_MAX_BRIGHTNESS, Constants::MIN_MAX_BRIGHTNESS);
-                g_app.WakeUpAndApplyEffects(hWnd);
-                return 0;
-            }
-            if (wParam == Shortcuts::ImageEffects::SC_COLOR_BRIGHTNESS_DOWN) {
-                g_app.brightness = std::clamp(
-                        g_app.brightness - Constants::COLOR_ADJUST_STEP,
-                        -Constants::MIN_MAX_BRIGHTNESS, Constants::MIN_MAX_BRIGHTNESS);
-                g_app.WakeUpAndApplyEffects(hWnd);
-
-                return 0;
-            }
-
-            // 9. .  —  Contrast up   /   /  —  Contrast down
-            if (wParam == Shortcuts::ImageEffects::SC_COLOR_CONTRAST_UP) {
-                g_app.contrast = std::clamp(
-                        g_app.contrast + Constants::COLOR_ADJUST_STEP,
-                        0.0f, Constants::MIN_MAX_CONTRAST);
-                g_app.WakeUpAndApplyEffects(hWnd);
-
-                return 0;
-            }
-            if (wParam == Shortcuts::ImageEffects::SC_COLOR_CONTRAST_DOWN) {
-                g_app.contrast = std::clamp(
-                        g_app.contrast - Constants::COLOR_ADJUST_STEP,
-                        0.0f, Constants::MIN_MAX_CONTRAST);
-                g_app.WakeUpAndApplyEffects(hWnd);
-
-                return 0;
-            }
-
-            // 10. [  —  Saturation -   /   ]  —  Saturation +
-            if (wParam == Shortcuts::ImageEffects::SC_COLOR_SAT_DOWN) {
-                g_app.saturation = std::max(0.0f, g_app.saturation - Constants::COLOR_ADJUST_STEP);
-                g_app.WakeUpAndApplyEffects(hWnd);
-                return 0;
-            }
-            if (wParam == Shortcuts::ImageEffects::SC_COLOR_SAT_UP) {
-                g_app.saturation = std::min(
-                        Constants::MIN_MAX_SATURATION, g_app.saturation + Constants::COLOR_ADJUST_STEP);
-                g_app.WakeUpAndApplyEffects(hWnd);
-                return 0;
-            }
-
-            // Numpad0  —  Reset all color effects only (saturation/brightness/
-            // contrast/gamma + every toggle), leaves window/zoom/pan untouched.
-            if (wParam == Shortcuts::ImageEffects::SC_COLOR_RESET_ALL_EFFECTS) {
-                g_app.ResetEffects();
-                g_app.UpdateRendererColorEffects(hWnd);
-                return 0;
-            }
-
-            // Ctrl+S  —  Save current image with effects applied to disk.
-            // Opens a standard Save dialog so the user picks the output path.
-            // Only PNG output is supported (effects are baked at native pixel size).
-            if (wParam == Shortcuts::ImageEffects::SC_COLOR_SAVE_TO_DISK && ctrl) {
-                if (g_app.renderer && !g_app.playlist.empty() && g_app.currentIndex >= 0) {
-                    const std::wstring &srcPath = g_app.playlist[g_app.currentIndex];
-
-                    // Build a default filename: original name (no extension) + "_edited.png"
-                    std::wstring defaultName;
-                    {
-                        size_t slash = srcPath.find_last_of(L"\\/");
-                        std::wstring nameOnly = (slash != std::wstring::npos)
-                                                    ? srcPath.substr(slash + 1)
-                                                    : srcPath;
-                        // Strip extension from display name
-                        size_t dotInName = nameOnly.find_last_of(L'.');
-                        if (dotInName != std::wstring::npos)
-                            nameOnly = nameOnly.substr(0, dotInName);
-                        defaultName = nameOnly + L"_edited.png";
-                    }
-
-                    // Buffer for the dialog — must be large enough for long paths
-                    wchar_t outBuf[MAX_PATH * 2] = {};
-                    wcsncpy_s(outBuf, defaultName.c_str(), _TRUNCATE);
-
-                    OPENFILENAMEW ofn{};
-                    ofn.lStructSize = sizeof(ofn);
-                    ofn.hwndOwner = hWnd;
-                    ofn.lpstrFilter = L"PNG Image\0*.png\0All Files\0*.*\0";
-                    ofn.nFilterIndex = 1;
-                    ofn.lpstrFile = outBuf;
-                    ofn.nMaxFile = ARRAYSIZE(outBuf);
-                    ofn.lpstrDefExt = L"png";
-                    ofn.lpstrTitle = L"Save image with effects";
-                    ofn.Flags = OFN_OVERWRITEPROMPT | OFN_PATHMUSTEXIST | OFN_NOCHANGEDIR;
-
-                    // Set initial directory to the source image's folder
-                    wchar_t initDir[MAX_PATH] = {};
-                    {
-                        size_t slash = srcPath.find_last_of(L"\\/");
-                        if (slash != std::wstring::npos)
-                            wcsncpy_s(initDir, srcPath.substr(0, slash).c_str(), _TRUNCATE);
-                    }
-                    ofn.lpstrInitialDir = initDir;
-
-                    if (GetSaveFileNameW(&ofn)) {
-                        HRESULT hr = g_app.renderer->SaveCurrentImageWithEffects(outBuf);
-                        if (FAILED(hr)) {
-                            wchar_t errBuf[128];
-                            swprintf_s(errBuf, L"Failed to save image.\nHRESULT: 0x%08X", static_cast<unsigned>(hr));
-                            MessageBoxW(hWnd, errBuf, L"QuickImageViewer", MB_OK | MB_ICONERROR);
-                        }
-                    }
-                }
-                return 0;
-            }
-
-            // Rotate Image: R (Clockwise) or Shift+R (Counter-Clockwise)
-            if (wParam == Shortcuts::SC_TRANSFORM_ROTATE) {
-                if (shift) {
-                    // Counter-Clockwise
-                    g_app.viewport.rotation = (g_app.viewport.rotation - 90 + 360) % 360;
-                } else {
-                    // Clockwise
-                    g_app.viewport.rotation = (g_app.viewport.rotation + 90) % 360;
-                }
-                InvalidateRect(hWnd, nullptr, FALSE);
-                return 0;
-            }
-            // Ctrl+Q  —  Hard quit: flush from RAM completely
-            if (wParam == Shortcuts::SC_APP_HARD_QUIT && ctrl) {
-                DestroyWindow(hWnd);
-                return 0;
-            }
-            // Toggle Help Menu (F1)
-            if (wParam == Shortcuts::SC_PANEL_HELP_TOGGLE) {
-                UI::ToggleHelpWindow();
-                return 0;
-            }
-            // Open File Dialog (F2)
-            if (wParam == Shortcuts::SC_PANEL_OPEN_FILE) {
-                OpenInitialImage(hWnd);
-                return 0;
-            }
-            // Toggle Cache panel (F3)
-            if (wParam == Shortcuts::SC_PANEL_CACHE_TOGGLE) {
-                UI::ToggleCacheWindow();
-                return 0;
-            }
-            // Clear VRAM Cache and UI (F12)
-            if (wParam == Shortcuts::SC_PANEL_CACHE_CLEAR) {
-                UI::ClearThumbnailCache();
-                return 0;
-            }
-            // // Toggle Dir panel (F5)
-            // if (wParam == Shortcuts::SC_PANEL_DIR_TOGGLE) {
-            //     UI::ToggleDirWindow();
-            //     return 0;
-            // }
-            // Hide to RAM instead of quitting (Esc or Ctrl + W)
-            // Esc / Ctrl+W  —  Hide to RAM
-            if (wParam == Shortcuts::SC_APP_HIDE || (wParam == Shortcuts::SC_APP_HIDE_ALT && ctrl)) {
-                if (g_app.GetInstanceCount() <= 1) {
-                    ShowWindow(hWnd, SW_HIDE);
-                } else {
-                    // This is a disposable instance: kill it completely
-                    PostQuitMessage(0);
-                }
-                return 0;
-            }
-            // N  —  Toggle on-screen info text overlay
-            if (wParam == Shortcuts::SC_PANEL_OVERLAY_TOGGLE && !ctrl) {
-                g_app.showOverlayInfoText = !g_app.showOverlayInfoText;
-                InvalidateRect(hWnd, nullptr, FALSE);
-                return 0;
-            }
-            // Ctrl+N  —  Open a new blank QIV window
-            if (wParam == Shortcuts::SC_APP_NEW_WINDOW && ctrl) {
-                wchar_t exePath[MAX_PATH];
-                GetModuleFileNameW(nullptr, exePath, MAX_PATH);
-
-                SetEnvironmentVariableW(L"QIV_NEW_INSTANCE", L"1");
-                ShellExecuteW(nullptr, L"open", exePath, nullptr, nullptr, SW_SHOW);
-                SetEnvironmentVariableW(L"QIV_NEW_INSTANCE", nullptr);
-                return 0;
-            }
-
-            // Fullscreen toggle: F, F11, Enter, Ctrl+Shift+T
-            if (wParam == Shortcuts::SC_PANEL_FULLSCREEN ||
-                wParam == Shortcuts::SC_PANEL_FULLSCREEN_F ||
-                wParam == Shortcuts::SC_PANEL_FULLSCREEN_ENTER ||
-                (wParam == Shortcuts::SC_PANEL_FULLSCREEN_T && ctrl && shift)) {
-                ToggleFullscreen(hWnd);
-                InvalidateRect(hWnd, nullptr, FALSE);
-                return 0;
-            }
-
-            // Navigation + zoom
-            if (!g_app.playlist.empty()) {
-                // Cache size as int once to avoid repeated size_t->int casts below
-                const int playlistSize = static_cast<int>(g_app.playlist.size());
-                switch (wParam) {
-                    case Shortcuts::SC_NAV_PREV:
-                    case Shortcuts::SC_NAV_PREV_A:
-                        LoadImageIndex(hWnd, (g_app.currentIndex - 1 + playlistSize) % playlistSize);
-                        InvalidateRect(hWnd, nullptr, FALSE);
-                        break;
-                    case Shortcuts::SC_NAV_NEXT:
-                    case Shortcuts::SC_NAV_NEXT_A:
-                        LoadImageIndex(hWnd, (g_app.currentIndex + 1) % playlistSize);
-                        InvalidateRect(hWnd, nullptr, FALSE);
-                        break;
-                    case Shortcuts::SC_NAV_NEXT_SPACE:
-                        if (shift)
-                            LoadImageIndex(hWnd, (g_app.currentIndex - 1 + playlistSize) % playlistSize);
-                        else
-                            LoadImageIndex(hWnd, (g_app.currentIndex + 1) % playlistSize);
-                        InvalidateRect(hWnd, nullptr, FALSE);
-                        break;
-
-                    case Shortcuts::SC_ZOOM_IN_NUMPAD:
-                        g_app.viewport.zoom *= Constants::ZOOM_STEP;
-                        InvalidateRect(hWnd, nullptr, FALSE);
-                        break;
-
-                    case Shortcuts::SC_ZOOM_OUT_NUMPAD:
-                        g_app.viewport.zoom /= Constants::ZOOM_STEP;
-                        InvalidateRect(hWnd, nullptr, FALSE);
-                        break;
-                    case Shortcuts::SC_ZOOM_RESET:
-                        g_app.viewport.zoom = 1.0f;
-                        g_app.viewport.offsetX = 0.0f;
-                        g_app.viewport.offsetY = 0.0f;
-                        InvalidateRect(hWnd, nullptr, FALSE);
-                        break;
-                }
-            }
+        case WM_KEYDOWN:
+            InputManager::handleKeyboard(hWnd, wParam);
             return 0;
-        }
 
         case WM_NCACTIVATE:
             return TRUE;
@@ -637,7 +261,7 @@ LRESULT CALLBACK MainAppWndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM l
         case WM_LBUTTONDBLCLK: {
             SendMessageW(hWnd, WM_SETREDRAW, FALSE, 0);
 
-            ToggleFullscreen(hWnd);
+            CommandProvider::ToggleFullscreen(hWnd);
 
             SendMessageW(hWnd, WM_SETREDRAW, TRUE, 0);
             RedrawWindow(hWnd, nullptr, nullptr, RDW_INVALIDATE | RDW_UPDATENOW | RDW_FRAME);
