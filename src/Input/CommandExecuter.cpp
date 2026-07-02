@@ -8,7 +8,7 @@
 #include <commdlg.h>
 #include <shlobj_core.h>
 #include <shtypes.h>
-#include "CommandProvider.h"
+#include "AppCommands.h"
 
 // These two functions live in AppMain.cpp.
 // Declared here (not in a header) to keep them package-private.
@@ -132,7 +132,7 @@ void InputManager::ExecuteKeyboardShortcutCommand(HWND hWnd, Command cmd) {
         // Fullscreen
         // -----------------------------------------------------------------------
         case Command::ToggleFullscreen:
-            CommandProvider::ToggleFullscreen(hWnd);
+            AppCommands::ToggleFullscreen(hWnd);
             InvalidateRect(hWnd, nullptr, FALSE);
             break;
 
@@ -185,7 +185,7 @@ void InputManager::ExecuteKeyboardShortcutCommand(HWND hWnd, Command cmd) {
             break;
 
         case Command::ResetAll:
-            CommandProvider::ResetWindowLayoutAndEffects(hWnd);
+            AppCommands::ResetWindowLayoutAndEffects(hWnd);
             break;
 
         // -----------------------------------------------------------------------
@@ -218,7 +218,6 @@ void InputManager::ExecuteKeyboardShortcutCommand(HWND hWnd, Command cmd) {
 
         case Command::ToggleThreshold:
             g_app.WakeUpAndApplyEffects(hWnd, g_app.effectThreshold);
-            g_app.WakeUpAndApplyEffects(hWnd);
             break;
 
         // -----------------------------------------------------------------------
@@ -282,7 +281,7 @@ void InputManager::ExecuteKeyboardShortcutCommand(HWND hWnd, Command cmd) {
             break;
 
         case Command::SaveImage: {
-            CommandProvider::SaveImageToDisk(hWnd);
+            AppCommands::SaveImageToDisk(hWnd);
             break;
         }
 

@@ -39,8 +39,8 @@ set(SOURCES
         src/Input/CommandExecuter.cpp
         src/Input/Command.h
         src/Input/CommandResolver.cpp
-        src/Input/CommandProvider.h
-        src/Input/CommandProvider.cpp
+        src/Input/AppCommands.h
+        src/Input/AppCommands.cpp
 )
 
 add_executable(QuickImageViewer WIN32 ${SOURCES})
