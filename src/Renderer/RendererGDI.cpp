@@ -6,9 +6,9 @@ RendererGDI::RendererGDI() = default;
 
 RendererGDI::~RendererGDI() {
     DestroyBackBuffer();
-    if (g_app.hDIB) {
-        (void) DeleteObject(g_app.hDIB);
-        g_app.hDIB = nullptr;
+    if (app.hDIB) {
+        (void) DeleteObject(app.hDIB);
+        app.hDIB = nullptr;
     }
     if (m_backgroundBrush) {
         (void) DeleteObject(m_backgroundBrush);
@@ -44,9 +44,9 @@ HRESULT RendererGDI::LoadBitmap(IWICBitmapSource *bitmap, UINT width, UINT heigh
     m_imageWidth = width;
     m_imageHeight = height;
 
-    if (g_app.hDIB) {
-        (void) DeleteObject(g_app.hDIB);
-        g_app.hDIB = nullptr;
+    if (app.hDIB) {
+        (void) DeleteObject(app.hDIB);
+        app.hDIB = nullptr;
     }
 
     BITMAPINFO bmi{};
@@ -59,10 +59,10 @@ HRESULT RendererGDI::LoadBitmap(IWICBitmapSource *bitmap, UINT width, UINT heigh
 
     void *pPixels = nullptr;
     HDC hdcScreen = GetDC(m_hwnd);
-    g_app.hDIB = CreateDIBSection(hdcScreen, &bmi, DIB_RGB_COLORS, &pPixels, nullptr, 0);
+    app.hDIB = CreateDIBSection(hdcScreen, &bmi, DIB_RGB_COLORS, &pPixels, nullptr, 0);
     ReleaseDC(m_hwnd, hdcScreen);
 
-    if (g_app.hDIB && pPixels) {
+    if (app.hDIB && pPixels) {
         HRESULT hr = bitmap->CopyPixels(
                 nullptr,
                 width * 4,
@@ -70,13 +70,13 @@ HRESULT RendererGDI::LoadBitmap(IWICBitmapSource *bitmap, UINT width, UINT heigh
                 static_cast<BYTE *>(pPixels));
 
         if (FAILED(hr)) {
-            (void) DeleteObject(g_app.hDIB);
-            g_app.hDIB = nullptr;
+            (void) DeleteObject(app.hDIB);
+            app.hDIB = nullptr;
             return hr;
         }
     }
 
-    return g_app.hDIB ? S_OK : E_FAIL;
+    return app.hDIB ? S_OK : E_FAIL;
 }
 
 HRESULT RendererGDI::Render() {
@@ -85,7 +85,7 @@ HRESULT RendererGDI::Render() {
     RECT rc = {0, 0, static_cast<LONG>(m_windowWidth), static_cast<LONG>(m_windowHeight)};
     FillRect(m_backDC, &rc, m_backgroundBrush);
 
-    if (g_app.hDIB) {
+    if (app.hDIB) {
         // 1. Calculate ratios using floats for precision
         float ratioX = static_cast<float>(m_windowWidth) / m_imageWidth;
         float ratioY = static_cast<float>(m_windowHeight) / m_imageHeight;
@@ -94,7 +94,7 @@ HRESULT RendererGDI::Render() {
         float renderH = static_cast<float>(m_imageHeight);
 
         // 2. Exact, rigid axis control (Identical to D2D logic)
-        switch (g_app.viewMode) {
+        switch (app.viewMode) {
             case Constants::ViewModes::ViewMode::FitToView_PreserveAspectRatio:
                 renderW = m_imageWidth * (std::min)(ratioX, ratioY);
                 renderH = m_imageHeight * (std::min)(ratioX, ratioY);
@@ -136,16 +136,16 @@ HRESULT RendererGDI::Render() {
         }
 
         // 3. Apply Zoom and convert back to GDI integers for drawing
-        const float z = (g_app.viewport.zoom <= 0.0f) ? 1.0f : g_app.viewport.zoom;
+        const float z = (app.viewport.zoom <= 0.0f) ? 1.0f : app.viewport.zoom;
         int finalRenderW = static_cast<int>(renderW * z);
         int finalRenderH = static_cast<int>(renderH * z);
 
-        int drawX = static_cast<int>((m_windowWidth - finalRenderW) / 2.0f + g_app.viewport.offsetX);
-        int drawY = static_cast<int>((m_windowHeight - finalRenderH) / 2.0f + g_app.viewport.offsetY);
+        int drawX = static_cast<int>((m_windowWidth - finalRenderW) / 2.0f + app.viewport.offsetX);
+        int drawY = static_cast<int>((m_windowHeight - finalRenderH) / 2.0f + app.viewport.offsetY);
 
         HDC hdcDIB = CreateCompatibleDC(m_backDC);
         if (hdcDIB) {
-            HBITMAP hbmOld = static_cast<HBITMAP>(SelectObject(hdcDIB, g_app.hDIB));
+            HBITMAP hbmOld = static_cast<HBITMAP>(SelectObject(hdcDIB, app.hDIB));
             SetStretchBltMode(m_backDC, HALFTONE);
             StretchBlt(m_backDC, drawX, drawY, finalRenderW, finalRenderH,
                        hdcDIB, 0, 0, m_imageWidth, m_imageHeight, SRCCOPY);
@@ -155,11 +155,11 @@ HRESULT RendererGDI::Render() {
     }
 
     // Overlay text logic remains untouched
-    if (!g_app.playlist.empty() && g_app.showOverlayInfoText) {
-        std::wstring fullPath = g_app.playlist[g_app.currentIndex];
+    if (!app.playlist.empty() && app.showOverlayInfoText) {
+        std::wstring fullPath = app.playlist[app.currentIndex];
         std::wstring fileName = fullPath.substr(fullPath.find_last_of(L"\\/") + 1);
-        std::wstring text = std::to_wstring(g_app.currentIndex + 1) + L" / " +
-                            std::to_wstring(g_app.playlist.size()) + L" - " + fileName;
+        std::wstring text = std::to_wstring(app.currentIndex + 1) + L" / " +
+                            std::to_wstring(app.playlist.size()) + L" - " + fileName;
 
         HFONT hFont = CreateFontW(14, 0, 0, 0, FW_NORMAL, FALSE, FALSE, FALSE,
                                   DEFAULT_CHARSET, OUT_OUTLINE_PRECIS, CLIP_DEFAULT_PRECIS,

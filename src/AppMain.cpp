@@ -1,6 +1,7 @@
 #include <algorithm>
 
 #include "AppCommands.h"
+#include "UIManager.h"
 #ifndef NOMINMAX
 #define NOMINMAX
 #endif
@@ -41,7 +42,7 @@
 #include <commdlg.h>  // GetSaveFileName dialog
 
 // Global application state
-AppState g_app;
+AppState app;
 DropTarget *g_pDropTarget = nullptr;
 
 // Define the storage for the globals exactly once in your entry point file
@@ -61,10 +62,10 @@ LRESULT CALLBACK MainAppWndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM l
     switch (message) {
         case WM_DPICHANGED: {
             // 1. Update your global scale
-            g_app.dpiScale = static_cast<float>(HIWORD(wParam)) / 96.0f;
+            app.dpiScale = static_cast<float>(HIWORD(wParam)) / 96.0f;
 
             // 2. Refresh the Renderer's font format
-            g_app.renderer->UpdateTextFormat();
+            app.renderer->UpdateTextFormat();
             RECT *const prcNewWindow = (RECT *) lParam;
             SetWindowPos(hWnd,
                          nullptr,
@@ -101,29 +102,29 @@ LRESULT CALLBACK MainAppWndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM l
             if (wParam == TIMER_LOOKASIDE) {
                 KillTimer(hWnd, TIMER_LOOKASIDE);
 
-                if (g_app.playlist.empty()) return 0;
+                if (app.playlist.empty()) return 0;
 
-                int index = g_app.currentIndex;
-                const int total = static_cast<int>(g_app.playlist.size());
+                int index = app.currentIndex;
+                const int total = static_cast<int>(app.playlist.size());
 
                 for (int i = 1; i <= Constants::PRELOAD_LOOKASIDE_COUNT; ++i) {
                     int fwd = index + i;
                     int bwd = index - i;
 
                     if (fwd < total) {
-                        std::wstring fwdPath = g_app.playlist[fwd];
+                        std::wstring fwdPath = app.playlist[fwd];
                         g_decoderWorker.PushTask([fwdPath, index]() {
                             // ABORT if user started scrolling again
-                            if (g_app.wantedIndex.load(std::memory_order_acquire) != index) return;
-                            if (g_app.renderer) (void) g_app.renderer->PreloadBitmap(fwdPath, index);
+                            if (app.wantedIndex.load(std::memory_order_acquire) != index) return;
+                            if (app.renderer) (void) app.renderer->PreloadBitmap(fwdPath, index);
                         });
                     }
                     if (bwd >= 0) {
-                        std::wstring bwdPath = g_app.playlist[bwd];
+                        std::wstring bwdPath = app.playlist[bwd];
                         g_decoderWorker.PushTask([bwdPath, index]() {
                             // ABORT if user started scrolling again
-                            if (g_app.wantedIndex.load(std::memory_order_acquire) != index) return;
-                            if (g_app.renderer) (void) g_app.renderer->PreloadBitmap(bwdPath, index);
+                            if (app.wantedIndex.load(std::memory_order_acquire) != index) return;
+                            if (app.renderer) (void) app.renderer->PreloadBitmap(bwdPath, index);
                         });
                     }
                 }
@@ -138,7 +139,7 @@ LRESULT CALLBACK MainAppWndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM l
             return TRUE;
 
         case WM_NCHITTEST: {
-            if (g_app.isFullscreen) return HTCLIENT;
+            if (app.isFullscreen) return HTCLIENT;
 
             POINT pt = {GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam)};
             RECT rc;
@@ -146,7 +147,7 @@ LRESULT CALLBACK MainAppWndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM l
 
             // Scale the border by the DPI factor
             // Using int to maintain pixel alignment
-            const int border = static_cast<int>(2 * g_app.dpiScale);
+            const int border = static_cast<int>(2 * app.dpiScale);
 
             bool top = pt.y < rc.top + border;
             bool bottom = pt.y >= rc.bottom - border;
@@ -167,15 +168,15 @@ LRESULT CALLBACK MainAppWndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM l
 
         // Window size changed: Update renderer
         case WM_SIZE:
-            if (g_app.renderer) {
-                g_app.renderer->Resize(LOWORD(lParam), HIWORD(lParam));
+            if (app.renderer) {
+                app.renderer->Resize(LOWORD(lParam), HIWORD(lParam));
             }
             InvalidateRect(hWnd, nullptr, FALSE);
             return 0;
         case WM_SIZING:
-            if (g_app.renderer) {
+            if (app.renderer) {
                 RECT *r = (RECT *) lParam;
-                g_app.renderer->Resize(r->right - r->left, r->bottom - r->top);
+                app.renderer->Resize(r->right - r->left, r->bottom - r->top);
             }
             InvalidateRect(hWnd, nullptr, FALSE);
             return TRUE;
@@ -208,18 +209,18 @@ LRESULT CALLBACK MainAppWndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM l
                 int delta = GET_WHEEL_DELTA_WPARAM(wParam);
 
                 if (delta > 0) {
-                    g_app.opacity = static_cast<BYTE>(
-                        (g_app.opacity + Constants::OPACITY_STEP > 255)
+                    app.opacity = static_cast<BYTE>(
+                        (app.opacity + Constants::OPACITY_STEP > 255)
                             ? 255
-                            : (g_app.opacity + Constants::OPACITY_STEP));
+                            : (app.opacity + Constants::OPACITY_STEP));
                 } else {
-                    g_app.opacity = static_cast<BYTE>(
-                        (g_app.opacity - Constants::OPACITY_STEP < 10)
+                    app.opacity = static_cast<BYTE>(
+                        (app.opacity - Constants::OPACITY_STEP < 10)
                             ? 10
-                            : (g_app.opacity - Constants::OPACITY_STEP));
+                            : (app.opacity - Constants::OPACITY_STEP));
                 }
 
-                SetLayeredWindowAttributes(hWnd, 0, g_app.opacity, LWA_ALPHA);
+                SetLayeredWindowAttributes(hWnd, 0, app.opacity, LWA_ALPHA);
                 return 0;
             }
 
@@ -252,11 +253,11 @@ LRESULT CALLBACK MainAppWndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM l
             }
 
             if (hDelta > 0) {
-                g_app.opacity = static_cast<BYTE>(std::min(255, g_app.opacity + Constants::OPACITY_STEP));
+                app.opacity = static_cast<BYTE>(std::min(255, app.opacity + Constants::OPACITY_STEP));
             } else {
-                g_app.opacity = static_cast<BYTE>(std::max(10, g_app.opacity - Constants::OPACITY_STEP));
+                app.opacity = static_cast<BYTE>(std::max(10, app.opacity - Constants::OPACITY_STEP));
             }
-            SetLayeredWindowAttributes(hWnd, 0, g_app.opacity, LWA_ALPHA);
+            SetLayeredWindowAttributes(hWnd, 0, app.opacity, LWA_ALPHA);
             return 0;
         }
 
@@ -271,21 +272,21 @@ LRESULT CALLBACK MainAppWndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM l
         }
 
         case WM_CAPTURECHANGED: {
-            g_app.viewport.isDragging = false;
-            g_app.isWindowDragging = false;
+            app.viewport.isDragging = false;
+            app.isWindowDragging = false;
             ReleaseCapture();
             return 0;
         }
         case Constants::WM_QIV_REPAINT: {
             // The background thread has finished decoding and caching the bitmap.
             // Now, on the UI thread, we probe the cache to make it the active bitmap.
-            if (g_app.renderer && !g_app.playlist.empty()) {
-                const std::wstring &currentPath = g_app.playlist[g_app.currentIndex];
+            if (app.renderer && !app.playlist.empty()) {
+                const std::wstring &currentPath = app.playlist[app.currentIndex];
                 // This call will find the bitmap in the cache and set it as active.
-                if (SUCCEEDED(g_app.renderer->LoadBitmap(nullptr, 0, 0, currentPath))) {
+                if (SUCCEEDED(app.renderer->LoadBitmap(nullptr, 0, 0, currentPath))) {
                     // --- CALL THE EFFECT UPDATER HERE ---
                     // Now the bitmap is ready, we can safely wire the effect graph.
-                    g_app.UpdateRendererColorEffects(hWnd);
+                    app.UpdateRendererColorEffects(hWnd);
                     InvalidateRect(hWnd, nullptr, FALSE); // Now, repaint with the correct image.
                     UI::UpdateCacheView();
                     UI::UpdateDirView();
@@ -307,9 +308,9 @@ LRESULT CALLBACK MainAppWndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM l
             int arrivedIndex = static_cast<int>(wParam);
 
             // Discard if user navigated away while bytes were in flight
-            if (arrivedIndex == g_app.wantedIndex.load(std::memory_order_acquire) &&
-                g_app.renderer) {
-                if (SUCCEEDED(g_app.renderer->LoadSvgFromBytes(payload->bytes, payload->path))) {
+            if (arrivedIndex == app.wantedIndex.load(std::memory_order_acquire) &&
+                app.renderer) {
+                if (SUCCEEDED(app.renderer->LoadSvgFromBytes(payload->bytes, payload->path))) {
                     InvalidateRect(hWnd, nullptr, FALSE);
                     UI::UpdateCacheView();
                     UI::UpdateDirView();
@@ -322,8 +323,8 @@ LRESULT CALLBACK MainAppWndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM l
         case WM_PAINT: {
             PAINTSTRUCT ps;
             BeginPaint(hWnd, &ps);
-            if (g_app.renderer) {
-                (void) g_app.renderer->Render();
+            if (app.renderer) {
+                (void) app.renderer->Render();
             }
             EndPaint(hWnd, &ps);
             return 0;
@@ -352,15 +353,13 @@ LRESULT CALLBACK MainAppWndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM l
     return DefWindowProcW(hWnd, message, wParam, lParam);
 }
 
-int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE, LPSTR, int nCmdShow) {
+//Main entry point
+int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, PWSTR pCmdLine, int nCmdShow) {
     // 1. Initialize OLE
     if (FAILED(OleInitialize(nullptr))) return 0;
 
     // Set DPI awareness
-    typedef BOOL (WINAPI
-                *SETDPI
-            )
-            (DPI_AWARENESS_CONTEXT);
+    typedef BOOL (WINAPI *SETDPI)(DPI_AWARENESS_CONTEXT);
     if (HMODULE hU32 = GetModuleHandleW(L"user32.dll")) {
         if (auto setDpi = reinterpret_cast<SETDPI>(GetProcAddress(hU32, "SetProcessDpiAwarenessContext"))) {
             setDpi(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2);
@@ -368,97 +367,87 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE, LPSTR, int nCmdShow) {
     }
 
     CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED | COINIT_DISABLE_OLE1DDE);
-    if (FAILED(CoCreateInstance(CLSID_WICImagingFactory, nullptr, CLSCTX_INPROC_SERVER, IID_PPV_ARGS(&g_app.wicFactory)))) return 0;
+    if (FAILED(CoCreateInstance(CLSID_WICImagingFactory, nullptr, CLSCTX_INPROC_SERVER, IID_PPV_ARGS(&app.wicFactory)))) return 0;
 
     System::RegisterAppForOpenWith();
     System::EnableRunOnStartup();
 
+    // --- CONSOLIDATED COMMAND LINE PARSING ---
+    int argc;
+    LPWSTR *argv = CommandLineToArgvW(GetCommandLineW(), &argc);
+
     // --- SINGLE INSTANCE & RAM RESIDENT LOGIC ---
     bool bypassMutex = (GetAsyncKeyState(VK_SHIFT) & 0x8000) != 0;
     if (GetEnvironmentVariableW(L"QIV_NEW_INSTANCE", nullptr, 0) > 0) bypassMutex = true;
-    std::wstring mutexName = L"QuickImageViewer_SingleInstanceMutex" + (bypassMutex
-                                                                            ? std::to_wstring(GetTickCount())
-                                                                            : L"");
+
+    std::wstring mutexName = L"QuickImageViewer_SingleInstanceMutex" + (bypassMutex ? std::to_wstring(GetTickCount()) : L"");
     HANDLE hMutex = CreateMutexW(NULL, TRUE, mutexName.c_str());
+
     if (GetLastError() == ERROR_ALREADY_EXISTS) {
         HWND hExistingWnd = FindWindowW(Constants::WINDOW_CLASS_NAME, nullptr);
-        if (hExistingWnd) {
-            int argc;
-            LPWSTR *argv = CommandLineToArgvW(GetCommandLineW(), &argc);
-            if (argc > 1) {
-                COPYDATASTRUCT cds;
-                cds.dwData = 1;
-                cds.cbData = (DWORD) ((wcslen(argv[1]) + 1) * sizeof(wchar_t));
-                cds.lpData = (void *) argv[1];
-                SendMessageW(hExistingWnd, WM_COPYDATA, 0, (LPARAM) &cds);
-            }
-            LocalFree(argv);
+        if (hExistingWnd && argc > 1) {
+            COPYDATASTRUCT cds;
+            cds.dwData = 1;
+            cds.cbData = (DWORD) ((wcslen(argv[1]) + 1) * sizeof(wchar_t));
+            cds.lpData = (void *) argv[1];
+            SendMessageW(hExistingWnd, WM_COPYDATA, 0, (LPARAM) &cds);
         }
+        LocalFree(argv);
         ReleaseMutex(hMutex);
         CloseHandle(hMutex);
         return 0;
     }
 
+    // --- Window Creation ---
     WNDCLASSW wc{0};
-    wc.lpfnWndProc = MainAppWndProc; // The name of the Callback to send messages to
+    wc.lpfnWndProc = MainAppWndProc;
     wc.hInstance = hInstance;
     wc.lpszClassName = Constants::WINDOW_CLASS_NAME;
     wc.style = CS_DBLCLKS;
     wc.hCursor = LoadCursor(nullptr, IDC_ARROW);
-    wc.hIcon = LoadIcon(hInstance, MAKEINTRESOURCE(IDI_APP_ICON)); // Taskbar icon
+    wc.hIcon = LoadIcon(hInstance, MAKEINTRESOURCE(IDI_APP_ICON));
     RegisterClassW(&wc);
 
     HWND hWnd = CreateViewerWindow(hInstance, wc.lpszClassName);
-    if (!hWnd) return 1;
-
-    SetWindowLongW(hWnd, GWL_EXSTYLE, GetWindowLongW(hWnd, GWL_EXSTYLE) | WS_EX_LAYERED);
-    SetLayeredWindowAttributes(hWnd, 0, g_app.opacity, LWA_ALPHA);
-    UINT dpi = GetDpiForWindow(hWnd);
-    g_app.dpiScale = static_cast<float>(dpi) / 96.0f;
-    g_app.screenW = GetSystemMetrics(SM_CXSCREEN);
-    g_app.screenH = GetSystemMetrics(SM_CYSCREEN);
-
-    // Initialize Renderer (D2D with GDI fallback)
-    g_app.renderer = std::make_unique<RendererD2D>();
-    if (FAILED(g_app.renderer->Initialize(hWnd))) {
-        g_app.renderer = std::make_unique<RendererGDI>();
-        (void) g_app.renderer->Initialize(hWnd); // GDI init: S_OK always, failure is non-fatal
+    if (!hWnd) {
+        LocalFree(argv);
+        return 1;
     }
-    // ---  CALLBACK REGISTRATION From IRenderer---
-    g_app.renderer->onImageChangedCallback = [](int) {
-        // This ensures the rectangle snaps to the actual displayed image index
+
+    // Init UI Manager (The New Controller)
+    app.uiManager.Init(hInstance, hWnd);
+
+    // Renderer & Setup
+    SetWindowLongW(hWnd, GWL_EXSTYLE, GetWindowLongW(hWnd, GWL_EXSTYLE) | WS_EX_LAYERED);
+    SetLayeredWindowAttributes(hWnd, 0, app.opacity, LWA_ALPHA);
+    app.dpiScale = static_cast<float>(GetDpiForWindow(hWnd)) / 96.0f;
+    app.screenW = GetSystemMetrics(SM_CXSCREEN);
+    app.screenH = GetSystemMetrics(SM_CYSCREEN);
+
+    app.renderer = std::make_unique<RendererD2D>();
+    if (FAILED(app.renderer->Initialize(hWnd))) {
+        app.renderer = std::make_unique<RendererGDI>();
+        (void) app.renderer->Initialize(hWnd);
+    }
+    app.renderer->onImageChangedCallback = [](int) {
         UI::SyncSelectionRectangle();
         UI::SyncDirSelectionRectangle();
     };
-#ifdef _DEBUG
-    if (g_app.renderer) {
-        if (dynamic_cast<RendererD2D *>(g_app.renderer.get())) {
-            OutputDebugStringW(L"RENDERER: Using Direct2D (GPU Acceleration Active)\n");
-        } else {
-            OutputDebugStringW(L"RENDERER: Using GDI (Fallback Mode)\n");
-        }
-    }
-#endif
 
     RegisterDragDrop(hWnd, (g_pDropTarget = new DropTarget(hWnd)));
-    UI::InitHelpWindow(hInstance, hWnd);
-    UI::InitCacheWindow(hInstance, hWnd, Constants::CACHE_WINDOW_POSITION);
-    UI::InitDirWindow(hInstance, hWnd);
-    UI::InitHistoryWindow(hInstance, hWnd);
 
-    DWORD corner = 2; // DWMWCP_ROUND
-    DwmSetWindowAttribute(hWnd, Constants::DWMWA_WINDOW_CORNER_PREFERENCE, &corner, sizeof(corner));
-
-    // Handle startup arguments
-    int argc;
-    LPWSTR *argv = CommandLineToArgvW(GetCommandLineW(), &argc);
-    if (argc > 1 && std::wstring(argv[1]) == L"-background") ShowWindow(hWnd, SW_HIDE);
-    else {
+    DwmSetWindowAttribute(hWnd, Constants::DWMWA_WINDOW_CORNER_PREFERENCES, &Constants::APP_CORNER_PREFERENCES, sizeof(Constants::APP_CORNER_PREFERENCES));
+    // Handle startup arguments using the already-parsed 'argv'
+    if (argc > 1 && std::wstring(argv[1]) == L"-background") {
+        ShowWindow(hWnd, SW_HIDE);
+    } else {
         ShowWindow(hWnd, nCmdShow);
         UpdateWindow(hWnd);
         if (argc > 1) OpenSpecificImage(hWnd, argv[1]);
         else OpenInitialImage(hWnd);
     }
+
+    // Cleanup command line memory ONCE
     LocalFree(argv);
 
     MSG msg{};
@@ -468,10 +457,10 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE, LPSTR, int nCmdShow) {
     }
 
     // --- CRITICAL CLEANUP ---
-    g_app.renderer.reset();
+    app.renderer.reset();
 
-    if (g_app.wicFactory) {
-        g_app.wicFactory.Reset();
+    if (app.wicFactory) {
+        app.wicFactory.Reset();
     }
 
     if (g_pDropTarget) {

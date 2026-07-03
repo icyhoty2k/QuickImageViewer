@@ -6,12 +6,12 @@
 #include "AppState.h" // Assuming this is the path
 // ... include other necessary headers
 
-extern AppState g_app;
+extern AppState app;
 
 void AppCommands::SaveImageToDisk(HWND hWnd) {
-    if (!g_app.renderer || g_app.playlist.empty() || g_app.currentIndex < 0) return;
+    if (!app.renderer || app.playlist.empty() || app.currentIndex < 0) return;
 
-    const std::wstring &srcPath = g_app.playlist[g_app.currentIndex];
+    const std::wstring &srcPath = app.playlist[app.currentIndex];
 
     // Build default filename: original basename + "_edited.png"
     std::wstring defaultName;
@@ -48,7 +48,7 @@ void AppCommands::SaveImageToDisk(HWND hWnd) {
     ofn.lpstrInitialDir = initDir;
 
     if (GetSaveFileNameW(&ofn)) {
-        HRESULT hr = g_app.renderer->SaveCurrentImageWithEffects(outBuf);
+        HRESULT hr = app.renderer->SaveCurrentImageWithEffects(outBuf);
         if (FAILED(hr)) {
             wchar_t errBuf[128];
             swprintf_s(errBuf, L"Failed to save image.\nHRESULT: 0x%08X",
@@ -59,8 +59,8 @@ void AppCommands::SaveImageToDisk(HWND hWnd) {
 }
 
 void AppCommands::ToggleFullscreen(HWND hWnd) {
-    if (!g_app.isFullscreen) {
-        GetWindowRect(hWnd, &g_app.savedWindowRect);
+    if (!app.isFullscreen) {
+        GetWindowRect(hWnd, &app.savedWindowRect);
         MONITORINFO mi = {sizeof(mi)};
         GetMonitorInfo(MonitorFromWindow(hWnd, MONITOR_DEFAULTTONEAREST), &mi);
 
@@ -73,36 +73,36 @@ void AppCommands::ToggleFullscreen(HWND hWnd) {
         DWMNCRENDERINGPOLICY policy = DWMNCRP_DISABLED;
         DwmSetWindowAttribute(hWnd, DWMWA_NCRENDERING_POLICY, &policy, sizeof(policy));
         DWORD corner = 1; // DWMWCP_DONOTROUND
-        DwmSetWindowAttribute(hWnd, Constants::DWMWA_WINDOW_CORNER_PREFERENCE, &corner, sizeof(corner));
+        DwmSetWindowAttribute(hWnd, Constants::DWMWA_WINDOW_CORNER_PREFERENCES, &corner, sizeof(corner));
         MARGINS margins = {0, 0, 0, 0};
         DwmExtendFrameIntoClientArea(hWnd, &margins);
 
-        g_app.isFullscreen = true;
+        app.isFullscreen = true;
     } else {
         SetWindowPos(hWnd, HWND_NOTOPMOST,
-                     g_app.savedWindowRect.left,
-                     g_app.savedWindowRect.top,
-                     g_app.savedWindowRect.right - g_app.savedWindowRect.left,
-                     g_app.savedWindowRect.bottom - g_app.savedWindowRect.top,
+                     app.savedWindowRect.left,
+                     app.savedWindowRect.top,
+                     app.savedWindowRect.right - app.savedWindowRect.left,
+                     app.savedWindowRect.bottom - app.savedWindowRect.top,
                      SWP_FRAMECHANGED | SWP_NOCOPYBITS);
 
         DWMNCRENDERINGPOLICY policy = DWMNCRP_ENABLED;
         DwmSetWindowAttribute(hWnd, DWMWA_NCRENDERING_POLICY, &policy, sizeof(policy));
         DWORD corner = 2; // DWMWCP_ROUND
-        DwmSetWindowAttribute(hWnd, Constants::DWMWA_WINDOW_CORNER_PREFERENCE, &corner, sizeof(corner));
+        DwmSetWindowAttribute(hWnd, Constants::DWMWA_WINDOW_CORNER_PREFERENCES, &corner, sizeof(corner));
         MARGINS margins = {1, 1, 1, 1};
         DwmExtendFrameIntoClientArea(hWnd, &margins);
 
-        g_app.isFullscreen = false;
+        app.isFullscreen = false;
     }
 }
 
 void AppCommands::ResetWindowLayoutAndEffects(HWND hWnd) {
     // --- Viewport / window ---
-    g_app.ResetWindowState(hWnd);
+    app.ResetWindowState(hWnd);
 
     // --- All image effects ---
-    g_app.ResetEffects();
+    app.ResetEffects();
 
-    g_app.UpdateRendererColorEffects(hWnd);
+    app.UpdateRendererColorEffects(hWnd);
 }

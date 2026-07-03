@@ -16,7 +16,7 @@
 // Declared here (not in a header) to keep them package-private.
 
 
-extern AppState g_app;
+extern AppState app;
 
 // =============================================================================
 // handleKeyboard — public entry point called from WM_KEYDOWN
@@ -37,24 +37,24 @@ void InputManager::ExecuteKeyboardShortcutCommand(HWND hWnd, Command cmd) {
         // Navigation
         // -----------------------------------------------------------------------
         case Command::NextImage:
-            if (!g_app.playlist.empty()) {
-                int size = static_cast<int>(g_app.playlist.size());
-                LoadImageIndex(hWnd, (g_app.currentIndex + 1) % size);
+            if (!app.playlist.empty()) {
+                int size = static_cast<int>(app.playlist.size());
+                LoadImageIndex(hWnd, (app.currentIndex + 1) % size);
                 InvalidateRect(hWnd, nullptr, FALSE);
             }
             break;
 
         case Command::PrevImage:
-            if (!g_app.playlist.empty()) {
-                int size = static_cast<int>(g_app.playlist.size());
-                LoadImageIndex(hWnd, (g_app.currentIndex - 1 + size) % size);
+            if (!app.playlist.empty()) {
+                int size = static_cast<int>(app.playlist.size());
+                LoadImageIndex(hWnd, (app.currentIndex - 1 + size) % size);
                 InvalidateRect(hWnd, nullptr, FALSE);
             }
             break;
 
         case Command::ShowInExplorer:
-            if (!g_app.playlist.empty() && g_app.currentIndex >= 0) {
-                const std::wstring &path = g_app.playlist[g_app.currentIndex];
+            if (!app.playlist.empty() && app.currentIndex >= 0) {
+                const std::wstring &path = app.playlist[app.currentIndex];
                 PIDLIST_ABSOLUTE pidl = ILCreateFromPathW(path.c_str());
                 if (pidl) {
                     SHOpenFolderAndSelectItems(pidl, 0, nullptr, 0);
@@ -67,23 +67,23 @@ void InputManager::ExecuteKeyboardShortcutCommand(HWND hWnd, Command cmd) {
         // View modes
         // -----------------------------------------------------------------------
         case Command::ViewMode1:
-            g_app.viewMode = static_cast<Constants::ViewModes::ViewMode>(1);
+            app.viewMode = static_cast<Constants::ViewModes::ViewMode>(1);
             InvalidateRect(hWnd, nullptr, FALSE);
             break;
         case Command::ViewMode2:
-            g_app.viewMode = static_cast<Constants::ViewModes::ViewMode>(2);
+            app.viewMode = static_cast<Constants::ViewModes::ViewMode>(2);
             InvalidateRect(hWnd, nullptr, FALSE);
             break;
         case Command::ViewMode3:
-            g_app.viewMode = static_cast<Constants::ViewModes::ViewMode>(3);
+            app.viewMode = static_cast<Constants::ViewModes::ViewMode>(3);
             InvalidateRect(hWnd, nullptr, FALSE);
             break;
         case Command::ViewMode4:
-            g_app.viewMode = static_cast<Constants::ViewModes::ViewMode>(4);
+            app.viewMode = static_cast<Constants::ViewModes::ViewMode>(4);
             InvalidateRect(hWnd, nullptr, FALSE);
             break;
         case Command::ViewMode5:
-            g_app.viewMode = static_cast<Constants::ViewModes::ViewMode>(5);
+            app.viewMode = static_cast<Constants::ViewModes::ViewMode>(5);
             InvalidateRect(hWnd, nullptr, FALSE);
             break;
 
@@ -91,19 +91,19 @@ void InputManager::ExecuteKeyboardShortcutCommand(HWND hWnd, Command cmd) {
         // Zoom
         // -----------------------------------------------------------------------
         case Command::ZoomIn:
-            g_app.viewport.zoom *= Constants::ZOOM_STEP;
+            app.viewport.zoom *= Constants::ZOOM_STEP;
             InvalidateRect(hWnd, nullptr, FALSE);
             break;
 
         case Command::ZoomOut:
-            g_app.viewport.zoom /= Constants::ZOOM_STEP;
+            app.viewport.zoom /= Constants::ZOOM_STEP;
             InvalidateRect(hWnd, nullptr, FALSE);
             break;
 
         case Command::ZoomReset:
-            g_app.viewport.zoom = 1.0f;
-            g_app.viewport.offsetX = 0.0f;
-            g_app.viewport.offsetY = 0.0f;
+            app.viewport.zoom = 1.0f;
+            app.viewport.offsetX = 0.0f;
+            app.viewport.offsetY = 0.0f;
             InvalidateRect(hWnd, nullptr, FALSE);
             break;
 
@@ -111,22 +111,22 @@ void InputManager::ExecuteKeyboardShortcutCommand(HWND hWnd, Command cmd) {
         // Transform
         // -----------------------------------------------------------------------
         case Command::RotateCW:
-            g_app.viewport.rotation = (g_app.viewport.rotation + 90) % 360;
+            app.viewport.rotation = (app.viewport.rotation + 90) % 360;
             InvalidateRect(hWnd, nullptr, FALSE);
             break;
 
         case Command::RotateCCW:
-            g_app.viewport.rotation = (g_app.viewport.rotation - 90 + 360) % 360;
+            app.viewport.rotation = (app.viewport.rotation - 90 + 360) % 360;
             InvalidateRect(hWnd, nullptr, FALSE);
             break;
 
         case Command::FlipH:
-            g_app.viewport.flippedH = !g_app.viewport.flippedH;
+            app.viewport.flippedH = !app.viewport.flippedH;
             InvalidateRect(hWnd, nullptr, FALSE);
             break;
 
         case Command::FlipV:
-            g_app.viewport.flippedV = !g_app.viewport.flippedV;
+            app.viewport.flippedV = !app.viewport.flippedV;
             InvalidateRect(hWnd, nullptr, FALSE);
             break;
 
@@ -142,7 +142,7 @@ void InputManager::ExecuteKeyboardShortcutCommand(HWND hWnd, Command cmd) {
         // Panels / overlays
         // -----------------------------------------------------------------------
         case Command::ToggleHelp:
-            UI::ToggleHelpWindow();
+            app.uiManager.Toggle(g_helpWindow);
             break;
 
         case Command::OpenFile:
@@ -166,7 +166,7 @@ void InputManager::ExecuteKeyboardShortcutCommand(HWND hWnd, Command cmd) {
             break;
 
         case Command::ToggleOverlay:
-            g_app.showOverlayInfoText = !g_app.showOverlayInfoText;
+            app.showOverlayInfoText = !app.showOverlayInfoText;
             InvalidateRect(hWnd, nullptr, FALSE);
             break;
 
@@ -176,9 +176,9 @@ void InputManager::ExecuteKeyboardShortcutCommand(HWND hWnd, Command cmd) {
         case Command::HideToTray:
             UI::HideDirWindow();
             UI::ToggleCacheWindow();
-            UI::ToggleHelpWindow();
+            app.uiManager.Toggle(g_helpWindow.get());
             UI::ToggleHistoryWindow();
-            if (g_app.GetInstanceCount() <= 1) {
+            if (app.GetInstanceCount() <= 1) {
                 ShowWindow(hWnd, SW_HIDE);
             } else {
                 PostQuitMessage(0);
@@ -206,92 +206,92 @@ void InputManager::ExecuteKeyboardShortcutCommand(HWND hWnd, Command cmd) {
         // Color effect toggles
         // -----------------------------------------------------------------------
         case Command::ToggleEffectPreview:
-            g_app.effectPreviewEnabled = !g_app.effectPreviewEnabled;
-            g_app.UpdateRendererColorEffects(hWnd);
+            app.effectPreviewEnabled = !app.effectPreviewEnabled;
+            app.UpdateRendererColorEffects(hWnd);
             break;
 
         case Command::ToggleGrayscale:
-            g_app.WakeUpAndApplyEffects(hWnd, g_app.effectGrayscale);
+            app.WakeUpAndApplyEffects(hWnd, app.effectGrayscale);
             break;
 
         case Command::ToggleInvert:
-            g_app.WakeUpAndApplyEffects(hWnd, g_app.effectInvert);
+            app.WakeUpAndApplyEffects(hWnd, app.effectInvert);
             break;
 
         case Command::ToggleSepia:
-            g_app.WakeUpAndApplyEffects(hWnd, g_app.effectSepia);
+            app.WakeUpAndApplyEffects(hWnd, app.effectSepia);
             break;
 
         case Command::ToggleSolarize:
-            g_app.WakeUpAndApplyEffects(hWnd, g_app.effectSolarize);
+            app.WakeUpAndApplyEffects(hWnd, app.effectSolarize);
             break;
 
         case Command::ToggleOutline:
-            g_app.WakeUpAndApplyEffects(hWnd, g_app.effectOutline);
+            app.WakeUpAndApplyEffects(hWnd, app.effectOutline);
             break;
 
         case Command::ToggleThreshold:
-            g_app.WakeUpAndApplyEffects(hWnd, g_app.effectThreshold);
+            app.WakeUpAndApplyEffects(hWnd, app.effectThreshold);
             break;
 
         // -----------------------------------------------------------------------
         // Continuous adjustments
         // -----------------------------------------------------------------------
         case Command::GammaUp:
-            g_app.gamma = std::min(Constants::MAX_GAMMA, g_app.gamma + Constants::GAMMA_STEP);
-            g_app.WakeUpAndApplyEffects(hWnd);
+            app.gamma = std::min(Constants::MAX_GAMMA, app.gamma + Constants::GAMMA_STEP);
+            app.WakeUpAndApplyEffects(hWnd);
             break;
 
         case Command::GammaDown:
-            g_app.gamma = std::max(Constants::MIN_GAMMA, g_app.gamma - Constants::GAMMA_STEP);
-            g_app.WakeUpAndApplyEffects(hWnd);
+            app.gamma = std::max(Constants::MIN_GAMMA, app.gamma - Constants::GAMMA_STEP);
+            app.WakeUpAndApplyEffects(hWnd);
             break;
 
         case Command::BrightnessUp:
-            g_app.brightness = std::clamp(
-                    g_app.brightness + Constants::COLOR_ADJUST_STEP,
+            app.brightness = std::clamp(
+                    app.brightness + Constants::COLOR_ADJUST_STEP,
                     -Constants::MIN_MAX_BRIGHTNESS, Constants::MIN_MAX_BRIGHTNESS);
-            g_app.WakeUpAndApplyEffects(hWnd);
+            app.WakeUpAndApplyEffects(hWnd);
             break;
 
         case Command::BrightnessDown:
-            g_app.brightness = std::clamp(
-                    g_app.brightness - Constants::COLOR_ADJUST_STEP,
+            app.brightness = std::clamp(
+                    app.brightness - Constants::COLOR_ADJUST_STEP,
                     -Constants::MIN_MAX_BRIGHTNESS, Constants::MIN_MAX_BRIGHTNESS);
-            g_app.WakeUpAndApplyEffects(hWnd);
+            app.WakeUpAndApplyEffects(hWnd);
             break;
 
         case Command::ContrastUp:
-            g_app.contrast = std::clamp(
-                    g_app.contrast + Constants::COLOR_ADJUST_STEP,
+            app.contrast = std::clamp(
+                    app.contrast + Constants::COLOR_ADJUST_STEP,
                     0.0f, Constants::MIN_MAX_CONTRAST);
-            g_app.WakeUpAndApplyEffects(hWnd);
+            app.WakeUpAndApplyEffects(hWnd);
             break;
 
         case Command::ContrastDown:
-            g_app.contrast = std::clamp(
-                    g_app.contrast - Constants::COLOR_ADJUST_STEP,
+            app.contrast = std::clamp(
+                    app.contrast - Constants::COLOR_ADJUST_STEP,
                     0.0f, Constants::MIN_MAX_CONTRAST);
-            g_app.WakeUpAndApplyEffects(hWnd);
+            app.WakeUpAndApplyEffects(hWnd);
             break;
 
         case Command::SaturationUp:
-            g_app.saturation = std::min(
-                    Constants::MIN_MAX_SATURATION, g_app.saturation + Constants::COLOR_ADJUST_STEP);
-            g_app.WakeUpAndApplyEffects(hWnd);
+            app.saturation = std::min(
+                    Constants::MIN_MAX_SATURATION, app.saturation + Constants::COLOR_ADJUST_STEP);
+            app.WakeUpAndApplyEffects(hWnd);
             break;
 
         case Command::SaturationDown:
-            g_app.saturation = std::max(0.0f, g_app.saturation - Constants::COLOR_ADJUST_STEP);
-            g_app.WakeUpAndApplyEffects(hWnd);
+            app.saturation = std::max(0.0f, app.saturation - Constants::COLOR_ADJUST_STEP);
+            app.WakeUpAndApplyEffects(hWnd);
             break;
 
         // -----------------------------------------------------------------------
         // Save / reset
         // -----------------------------------------------------------------------
         case Command::ResetEffects:
-            g_app.ResetEffects();
-            g_app.UpdateRendererColorEffects(hWnd);
+            app.ResetEffects();
+            app.UpdateRendererColorEffects(hWnd);
             break;
 
         case Command::SaveImage: {
