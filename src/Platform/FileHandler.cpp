@@ -235,9 +235,8 @@ void OpenInitialImage(HWND hWnd) {
 
     auto it = std::ranges::find(g_app.playlist, selectedPath.wstring());
     if (it != g_app.playlist.end()) {
-        LoadImageIndex(
-                hWnd,
-                static_cast<int>(std::distance(g_app.playlist.begin(), it)));
+        LoadImageIndex(hWnd, static_cast<int>(std::distance(g_app.playlist.begin(), it)));
+        UI::UpdateDirView();
     }
 }
 
@@ -350,9 +349,11 @@ void OpenSpecificImage(HWND hWnd, const std::wstring &filePathStr) {
 
     // New folder — drop stale dir window thumbnails before navigating
     UI::ClearDirThumbnailCache();
+    UI::UpdateDirView();
 
     auto it = std::ranges::find(g_app.playlist, filePath.wstring());
     if (it != g_app.playlist.end()) {
         LoadImageIndex(hWnd, static_cast<int>(std::distance(g_app.playlist.begin(), it)));
+        UI::UpdateDirView();
     }
 }
