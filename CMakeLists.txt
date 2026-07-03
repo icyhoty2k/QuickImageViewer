@@ -36,15 +36,11 @@ set(SOURCES
         src/UI/HistoryListDirWindow.cpp
         resources/resource.rc
         src/UI/OverlayText.cpp
-        src/UI/OverlayText.h
-        src/Input/Shortcuts.h
         src/Input/CommandExecuter.cpp
-        src/Input/Command.h
         src/Input/CommandResolver.cpp
-        src/Input/AppCommands.h
         src/Input/AppCommands.cpp
         src/Persistence/test.cpp
-        src/UI/IPanelWindow.h
+        src/UI/UIManager.cpp
 )
 
 add_executable(QuickImageViewer WIN32 ${SOURCES})

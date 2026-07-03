@@ -6,23 +6,72 @@
 #include <algorithm>
 
 namespace UI {
-    HWND g_hHelpWnd = nullptr;
-    std::wstring fullTitle = std::wstring(Constants::BASE_NAME) + L" v" + Constants::APP_VERSION;
+    void HelpWindow::Init(HINSTANCE hInstance, HWND hParent) {
+        m_hParent = hParent;
+        m_fullTitle = std::wstring(Constants::BASE_NAME) + L" v" + Constants::APP_VERSION;
 
-    LRESULT CALLBACK HelpWndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) {
+        WNDCLASSW wc = {0};
+        wc.lpfnWndProc = IPanelWindow::WindowRouter;
+        wc.hInstance = hInstance;
+        wc.hCursor = LoadCursor(nullptr, IDC_ARROW);
+        wc.lpszClassName = L"QIV_HelpWindow";
+        RegisterClassW(&wc);
+
+        UINT dpi = GetDpiForWindow(hParent);
+        int winW = MulDiv(640, dpi, 96);
+        int winH = MulDiv(760, dpi, 96);
+
+        CreateWindowExW(
+                WS_EX_TOOLWINDOW | WS_EX_TOPMOST,
+                wc.lpszClassName,
+                Constants::APP_TASKBAR_NAME,
+                WS_POPUP | WS_CAPTION | WS_BORDER,
+                0, 0, winW, winH,
+                hParent, nullptr, hInstance,
+                this
+                );
+
+        BOOL darkMode = TRUE;
+        DwmSetWindowAttribute(m_hWnd, 20, &darkMode, sizeof(darkMode));
+        DWORD corner = 2;
+        DwmSetWindowAttribute(m_hWnd, 33, &corner, sizeof(corner));
+        COLORREF darkColor = RGB(24, 24, 24);
+        DwmSetWindowAttribute(m_hWnd, 35, &darkColor, sizeof(darkColor));
+
+        SetWindowPos(m_hWnd, nullptr, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | SWP_FRAMECHANGED);
+    }
+
+    void HelpWindow::Show() {
+        if (m_hWnd) {
+            if (m_hParent) {
+                // Dynamically re-center based on the parent window's current position
+                RECT rcParent, rcHelp;
+                GetWindowRect(m_hParent, &rcParent);
+                GetWindowRect(m_hWnd, &rcHelp);
+                int x = rcParent.left + ((rcParent.right - rcParent.left) - (rcHelp.right - rcHelp.left)) / 2;
+                int y = rcParent.top + ((rcParent.bottom - rcParent.top) - (rcHelp.bottom - rcHelp.top)) / 2;
+                SetWindowPos(m_hWnd, HWND_TOPMOST, x, y, 0, 0, SWP_NOSIZE | SWP_SHOWWINDOW);
+            } else {
+                ShowWindow(m_hWnd, SW_SHOW);
+            }
+            SetForegroundWindow(m_hWnd);
+        }
+    }
+
+    LRESULT HelpWindow::HandleMessage(UINT message, WPARAM wParam, LPARAM lParam) {
         switch (message) {
             case WM_PAINT: {
                 PAINTSTRUCT ps;
-                HDC hdc = BeginPaint(hWnd, &ps);
+                HDC hdc = BeginPaint(m_hWnd, &ps);
                 RECT rc;
-                GetClientRect(hWnd, &rc);
+                GetClientRect(m_hWnd, &rc);
 
                 // 1. Dark Background
                 HBRUSH hBrush = CreateSolidBrush(RGB(24, 24, 24));
                 FillRect(hdc, &rc, hBrush);
                 DeleteObject(hBrush);
 
-                UINT dpi = GetDpiForWindow(hWnd);
+                UINT dpi = GetDpiForWindow(m_hWnd);
                 int padding = MulDiv(20, dpi, 96);
                 int fontSize = MulDiv(16, dpi, 96);
 
@@ -60,7 +109,7 @@ namespace UI {
 
                 // Draw Header
                 SetTextColor(hdc, RGB(100, 200, 255));
-                DrawTextW(hdc, fullTitle.c_str(), -1, &rc, DT_CENTER);
+                DrawTextW(hdc, m_fullTitle.c_str(), -1, &rc, DT_CENTER);
                 y += fontSize / 2;
 
                 SetTextColor(hdc, RGB(100, 200, 255));
@@ -88,13 +137,13 @@ namespace UI {
                 DrawLine(L"Right Click Drag", L": Move the window");
                 DrawLine(L"Middle Drag", L": Resize window dimensions");
                 DrawLine(L"Middle Click", L": Reset window and center image");
-                y += fontSize / 2; // Add a small spacer
+                y += fontSize / 2;
                 DrawLine(L"RMB + Wheel", L": Zoom In / Out");
                 DrawLine(L"Horizontal Wheel", L": Adjust Window Opacity");
                 DrawLine(L"RMB + Horizontal Wheel", L": Resize Window from Center");
                 DrawLine(L"RMB + Left Click", L": Open current image location in Explorer");
-                DrawLine(L"N", L": Toggle overlay info (Index/Filename)"); // NEW
-                y += fontSize / 2; // Add a small spacer
+                DrawLine(L"N", L": Toggle overlay info (Index/Filename)");
+                y += fontSize / 2;
                 DrawLine(L"Ctrl+N", L": Open new viewer instance");
                 DrawLine(L"Esc / Ctrl+W", L": Hide window to background");
                 DrawLine(L"Ctrl+Q", L": Quit application process and kill background process");
@@ -152,61 +201,21 @@ namespace UI {
                 SelectObject(hdc, hOldFont);
                 DeleteObject(hFont);
                 DeleteObject(hFooterFont);
-                EndPaint(hWnd, &ps);
+                EndPaint(m_hWnd, &ps);
                 return 0;
             }
 
             case WM_KEYDOWN:
-                if (wParam == Shortcuts::SC_LOCAL_HIDE || wParam == Shortcuts::SC_PANEL_HELP_TOGGLE)
-                    ShowWindow(hWnd, SW_HIDE);
+                if (wParam == Shortcuts::SC_LOCAL_HIDE || wParam == Shortcuts::SC_PANEL_HELP_TOGGLE) {
+                    Hide();
+                }
                 return 0;
 
             case WM_CLOSE:
-                ShowWindow(hWnd, SW_HIDE);
+                Hide();
                 return 0;
         }
-        return DefWindowProcW(hWnd, message, wParam, lParam);
+
+        return DefWindowProcW(m_hWnd, message, wParam, lParam);
     }
-
-    void ToggleHelpWindow() {
-        if (!g_hHelpWnd) return;
-        if (IsWindowVisible(g_hHelpWnd)) ShowWindow(g_hHelpWnd, SW_HIDE);
-        else {
-            HWND hParent = GetWindow(g_hHelpWnd, GW_OWNER);
-            if (hParent) {
-                RECT rcParent, rcHelp;
-                GetWindowRect(hParent, &rcParent);
-                GetWindowRect(g_hHelpWnd, &rcHelp);
-                int x = rcParent.left + ((rcParent.right - rcParent.left) - (rcHelp.right - rcHelp.left)) / 2;
-                int y = rcParent.top + ((rcParent.bottom - rcParent.top) - (rcHelp.bottom - rcHelp.top)) / 2;
-                SetWindowPos(g_hHelpWnd, HWND_TOPMOST, x, y, 0, 0, SWP_NOSIZE | SWP_SHOWWINDOW);
-            } else ShowWindow(g_hHelpWnd, SW_SHOW);
-            SetForegroundWindow(g_hHelpWnd);
-        }
-    }
-
-    void InitHelpWindow(HINSTANCE hInstance, HWND hParent) {
-        WNDCLASSW wc = {0};
-        wc.lpfnWndProc = HelpWndProc;
-        wc.hInstance = hInstance;
-        wc.hCursor = LoadCursor(nullptr, IDC_ARROW);
-        wc.lpszClassName = L"QIV_HelpWindow";
-        RegisterClassW(&wc);
-
-        UINT dpi = GetDpiForWindow(hParent);
-        int winW = MulDiv(640, dpi, 96);
-        int winH = MulDiv(760, dpi, 96);
-
-        g_hHelpWnd = CreateWindowExW(WS_EX_TOOLWINDOW | WS_EX_TOPMOST, wc.lpszClassName, Constants::APP_TASKBAR_NAME,
-                                     WS_POPUP | WS_CAPTION | WS_BORDER, 0, 0, winW, winH, hParent, nullptr, hInstance,
-                                     nullptr);
-
-        BOOL darkMode = TRUE;
-        DwmSetWindowAttribute(g_hHelpWnd, 20, &darkMode, sizeof(darkMode));
-        DWORD corner = 2;
-        DwmSetWindowAttribute(g_hHelpWnd, 33, &corner, sizeof(corner));
-        COLORREF darkColor = RGB(24, 24, 24);
-        DwmSetWindowAttribute(g_hHelpWnd, 35, &darkColor, sizeof(darkColor));
-        SetWindowPos(g_hHelpWnd, nullptr, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | SWP_FRAMECHANGED);
-    }
-}
+} // namespace UI

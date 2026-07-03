@@ -9,6 +9,7 @@
 #include <memory>
 
 #include "Constants.h"
+#include "UIManager.h"
 
 struct ViewportState {
     int rotation = 0; // 0, 90, 180, 270
@@ -178,8 +179,9 @@ struct AppState {
 
         InvalidateRect(hWnd, nullptr, FALSE);
     }
+    UIManager uiManager;
 };
 
 
 // Global state shared across files
-extern AppState g_app;
+extern AppState app;

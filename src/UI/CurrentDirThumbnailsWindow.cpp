@@ -67,11 +67,11 @@ namespace UI {
         // Thickness for a horizontal strip (thumb height + margins on both sides)
         int horzThick = static_cast<int>(
             (Constants::CACHE_THUMB_HEIGHT + Constants::CACHE_THUMB_MARGIN * 2.0f)
-            * g_app.dpiScale);
+            * app.dpiScale);
         // Thickness for a vertical strip (thumb width + margins on both sides)
         int vertThick = static_cast<int>(
             (Constants::CACHE_THUMB_WIDTH + Constants::CACHE_THUMB_MARGIN * 2.0f)
-            * g_app.dpiScale);
+            * app.dpiScale);
 
         switch (position) {
             case 0: { // centered floating — 80 % of monitor width, thumb-height tall
@@ -124,7 +124,7 @@ namespace UI {
 
         g_selectedIdx = -1;
         for (size_t i = 0; i < g_dirThumbnailObjects.size(); ++i) {
-            if (g_dirThumbnailObjects[i].playlistIndex == g_app.currentIndex) {
+            if (g_dirThumbnailObjects[i].playlistIndex == app.currentIndex) {
                 g_selectedIdx = static_cast<int>(i);
                 break;
             }
@@ -139,8 +139,8 @@ namespace UI {
     // Call on every folder change so the old folder's thumbnails are not shown.
     // -------------------------------------------------------------------------
     void ClearDirThumbnailCache() {
-        if (!g_app.renderer) return;
-        auto *r = dynamic_cast<RendererD2D *>(g_app.renderer.get());
+        if (!app.renderer) return;
+        auto *r = dynamic_cast<RendererD2D *>(app.renderer.get());
         if (r) r->ClearDirThumbnailCache();
     }
 
@@ -148,12 +148,12 @@ namespace UI {
     // UpdateDirView  —  Rebuild thumbnail geometry from the current folder
     // -------------------------------------------------------------------------
     void UpdateDirView() {
-        if (!g_hDirWnd || !g_app.renderer || !IsWindowVisible(g_hDirWnd)) return;
+        if (!g_hDirWnd || !app.renderer || !IsWindowVisible(g_hDirWnd)) return;
 
         g_dirThumbnailObjects.clear();
 
         // Nothing loaded yet — nothing to show
-        if (g_app.playlist.empty() || g_app.currentIndex < 0) {
+        if (app.playlist.empty() || app.currentIndex < 0) {
             InvalidateRect(g_hDirWnd, nullptr, TRUE);
             return;
         }
@@ -165,13 +165,13 @@ namespace UI {
         float surfaceH = static_cast<float>(cr.bottom);
         bool vertical = (g_dirPosition == 2 || g_dirPosition == 4); // right or left
 
-        float thumbW = Constants::CACHE_THUMB_WIDTH * g_app.dpiScale;
-        float thumbH = Constants::CACHE_THUMB_HEIGHT * g_app.dpiScale;
-        float scaledMargin = Constants::CACHE_THUMB_MARGIN * g_app.dpiScale;
-        float scaledSpacing = Constants::CACHE_THUMB_SPACING * g_app.dpiScale;
+        float thumbW = Constants::CACHE_THUMB_WIDTH * app.dpiScale;
+        float thumbH = Constants::CACHE_THUMB_HEIGHT * app.dpiScale;
+        float scaledMargin = Constants::CACHE_THUMB_MARGIN * app.dpiScale;
+        float scaledSpacing = Constants::CACHE_THUMB_SPACING * app.dpiScale;
 
         // Build the source list from the playlist (same folder = entire playlist)
-        const std::vector<std::wstring> &items = g_app.playlist;
+        const std::vector<std::wstring> &items = app.playlist;
         size_t count = items.size();
 
         float x = scaledMargin;
@@ -215,7 +215,7 @@ namespace UI {
         // Queue async thumbnail decodes for every file not yet in the dir cache.
         // Each job posts WM_QIV_REPAINT to the dir window when it finishes,
         // so thumbnails appear progressively as they decode.
-        auto *r = dynamic_cast<RendererD2D *>(g_app.renderer.get());
+        auto *r = dynamic_cast<RendererD2D *>(app.renderer.get());
         if (r) {
             for (const auto &obj: g_dirThumbnailObjects) {
                 r->RequestDirThumbnail(obj.filePath);
@@ -232,8 +232,8 @@ namespace UI {
             case WM_PAINT: {
                 PAINTSTRUCT ps;
                 BeginPaint(hWnd, &ps);
-                if (g_app.renderer) {
-                    auto *r = dynamic_cast<RendererD2D *>(g_app.renderer.get());
+                if (app.renderer) {
+                    auto *r = dynamic_cast<RendererD2D *>(app.renderer.get());
                     if (r && r->GetDirContext()) {
                         r->RenderDirWindow(g_selectedIdx, g_hoverIdx);
                     }
@@ -244,8 +244,8 @@ namespace UI {
 
             // -----------------------------------------------------------------
             case WM_SIZE: {
-                if (g_app.renderer) {
-                    auto *r = dynamic_cast<RendererD2D *>(g_app.renderer.get());
+                if (app.renderer) {
+                    auto *r = dynamic_cast<RendererD2D *>(app.renderer.get());
                     if (r) {
                         UINT w = LOWORD(lParam);
                         UINT h = HIWORD(lParam);
@@ -438,8 +438,8 @@ namespace UI {
 
         SetLayeredWindowAttributes(g_hDirWnd, 0, Constants::CACHE_WINDOW_OPACITY, LWA_ALPHA);
 
-        if (g_app.renderer) {
-            auto *r = dynamic_cast<RendererD2D *>(g_app.renderer.get());
+        if (app.renderer) {
+            auto *r = dynamic_cast<RendererD2D *>(app.renderer.get());
             if (r) {
                 r->CreateDirWindowDeviceResources(g_hDirWnd);
             }
@@ -490,10 +490,10 @@ namespace UI {
         float surfaceH = static_cast<float>(cr.bottom);
         bool vertical = (g_dirPosition == 2 || g_dirPosition == 4);
 
-        float thumbW = Constants::CACHE_THUMB_WIDTH * g_app.dpiScale;
-        float thumbH = Constants::CACHE_THUMB_HEIGHT * g_app.dpiScale;
-        float scaledSpacing = Constants::CACHE_THUMB_SPACING * g_app.dpiScale;
-        float scaledMargin = Constants::CACHE_THUMB_MARGIN * g_app.dpiScale;
+        float thumbW = Constants::CACHE_THUMB_WIDTH * app.dpiScale;
+        float thumbH = Constants::CACHE_THUMB_HEIGHT * app.dpiScale;
+        float scaledSpacing = Constants::CACHE_THUMB_SPACING * app.dpiScale;
+        float scaledMargin = Constants::CACHE_THUMB_MARGIN * app.dpiScale;
 
         if (!vertical) {
             // Horizontal layout: bring thumb into [margin .. surfaceW - margin - thumbW]

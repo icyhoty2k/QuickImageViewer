@@ -26,7 +26,7 @@ namespace UI {
 
         g_selectedIndex = -1;
         for (size_t i = 0; i < g_thumbnailObjects.size(); ++i) {
-            if (g_thumbnailObjects[i].playlistIndex == g_app.currentIndex) {
+            if (g_thumbnailObjects[i].playlistIndex == app.currentIndex) {
                 g_selectedIndex = static_cast<int>(i);
                 break;
             }
@@ -40,8 +40,8 @@ namespace UI {
             case WM_PAINT: {
                 PAINTSTRUCT ps;
                 BeginPaint(hWnd, &ps);
-                if (g_app.renderer) {
-                    auto *r = dynamic_cast<RendererD2D *>(g_app.renderer.get());
+                if (app.renderer) {
+                    auto *r = dynamic_cast<RendererD2D *>(app.renderer.get());
                     if (r && r->GetCacheContext()) {
                         r->RenderCacheWindow(g_selectedIndex, g_hoverIndex);
                     }
@@ -51,8 +51,8 @@ namespace UI {
             }
 
             case WM_SIZE: {
-                if (g_app.renderer) {
-                    auto *r = dynamic_cast<RendererD2D *>(g_app.renderer.get());
+                if (app.renderer) {
+                    auto *r = dynamic_cast<RendererD2D *>(app.renderer.get());
                     if (r) {
                         UINT w = LOWORD(lParam);
                         UINT h = HIWORD(lParam);
@@ -176,14 +176,14 @@ namespace UI {
 
     void ClearThumbnailCache() {
         std::wstring activeFile = L"";
-        if (!g_app.playlist.empty() &&
-            g_app.currentIndex >= 0 &&
-            g_app.currentIndex < static_cast<int>(g_app.playlist.size())) {
-            activeFile = g_app.playlist[g_app.currentIndex];
+        if (!app.playlist.empty() &&
+            app.currentIndex >= 0 &&
+            app.currentIndex < static_cast<int>(app.playlist.size())) {
+            activeFile = app.playlist[app.currentIndex];
         }
 
-        if (g_app.renderer) {
-            g_app.renderer->ClearCache(activeFile);
+        if (app.renderer) {
+            app.renderer->ClearCache(activeFile);
         }
 
         g_cacheOffset = 0.0f;
@@ -191,10 +191,10 @@ namespace UI {
     }
 
     void UpdateCacheView() {
-        if (!g_hCacheWnd || !g_app.renderer || !IsWindowVisible(g_hCacheWnd)) return;
+        if (!g_hCacheWnd || !app.renderer || !IsWindowVisible(g_hCacheWnd)) return;
 
         g_thumbnailObjects.clear();
-        auto items = g_app.renderer->GetCachedBitmaps();
+        auto items = app.renderer->GetCachedBitmaps();
         RECT cr{};
         GetClientRect(g_hCacheWnd, &cr);
 
@@ -202,10 +202,10 @@ namespace UI {
         float surfaceH = static_cast<float>(cr.bottom);
         bool vertical = (g_cachePosition == 1 || g_cachePosition == 3);
 
-        float thumbW = Constants::CACHE_THUMB_WIDTH * g_app.dpiScale;
-        float thumbH = Constants::CACHE_THUMB_HEIGHT * g_app.dpiScale;
-        float scaledMargin = Constants::CACHE_THUMB_MARGIN * g_app.dpiScale;
-        float scaledSpacing = Constants::CACHE_THUMB_SPACING * g_app.dpiScale;
+        float thumbW = Constants::CACHE_THUMB_WIDTH * app.dpiScale;
+        float thumbH = Constants::CACHE_THUMB_HEIGHT * app.dpiScale;
+        float scaledMargin = Constants::CACHE_THUMB_MARGIN * app.dpiScale;
+        float scaledSpacing = Constants::CACHE_THUMB_SPACING * app.dpiScale;
 
         float x = scaledMargin;
         float y = scaledMargin;
@@ -233,8 +233,8 @@ namespace UI {
         }
 
         for (const auto &item: items) {
-            auto mapIt = g_app.playlistIndexMap.find(item.filePath);
-            int idx = (mapIt != g_app.playlistIndexMap.end()) ? mapIt->second : -1;
+            auto mapIt = app.playlistIndexMap.find(item.filePath);
+            int idx = (mapIt != app.playlistIndexMap.end()) ? mapIt->second : -1;
 
             g_thumbnailObjects.push_back({
                 D2D1::RectF(x, y, x + thumbW, y + thumbH),
@@ -260,8 +260,8 @@ namespace UI {
         int monW = mi.rcMonitor.right - mi.rcMonitor.left;
         int monH = mi.rcMonitor.bottom - mi.rcMonitor.top;
 
-        int horzThickness = static_cast<int>((Constants::CACHE_THUMB_HEIGHT + (Constants::CACHE_THUMB_MARGIN * 2.0f)) * g_app.dpiScale);
-        int vertThickness = static_cast<int>((Constants::CACHE_THUMB_WIDTH + (Constants::CACHE_THUMB_MARGIN * 2.0f)) * g_app.dpiScale);
+        int horzThickness = static_cast<int>((Constants::CACHE_THUMB_HEIGHT + (Constants::CACHE_THUMB_MARGIN * 2.0f)) * app.dpiScale);
+        int vertThickness = static_cast<int>((Constants::CACHE_THUMB_WIDTH + (Constants::CACHE_THUMB_MARGIN * 2.0f)) * app.dpiScale);
 
         x = monX;
         y = monY;
@@ -333,8 +333,8 @@ namespace UI {
 
         SetLayeredWindowAttributes(g_hCacheWnd, 0, Constants::CACHE_WINDOW_OPACITY, LWA_ALPHA);
 
-        if (g_app.renderer) {
-            auto *r = dynamic_cast<RendererD2D *>(g_app.renderer.get());
+        if (app.renderer) {
+            auto *r = dynamic_cast<RendererD2D *>(app.renderer.get());
             if (r) {
                 r->CreateCacheWindowDeviceResources(g_hCacheWnd);
             }

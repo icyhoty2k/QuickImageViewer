@@ -1,7 +1,20 @@
 #pragma once
 #include <windows.h>
+#include <string>
+#include "IPanelWindow.h"
 
 namespace UI {
-    void InitHelpWindow(HINSTANCE hInstance, HWND hParent);
-    void ToggleHelpWindow();
-}
+    class HelpWindow : public IPanelWindow {
+        public:
+            void Init(HINSTANCE hInstance, HWND hParent) override;
+
+            void Show() override;
+
+        protected:
+            LRESULT HandleMessage(UINT message, WPARAM wParam, LPARAM lParam) override;
+
+        private:
+            // Formerly a global variable
+            std::wstring m_fullTitle;
+    };
+} // namespace UI

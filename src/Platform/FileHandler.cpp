@@ -132,7 +132,7 @@ static void SortPlaylistByDiskOrder(std::vector<std::wstring> &playlist) {
 
 
 void OpenInitialImage(HWND hWnd) {
-    g_app.isDialogVisible = true;
+    app.isDialogVisible = true;
 
     // Helper for building the filter string
     std::vector<wchar_t> filterBuffer;
@@ -179,10 +179,10 @@ void OpenInitialImage(HWND hWnd) {
 
     const BOOL result = GetOpenFileNameW(&ofn);
 
-    g_app.isDialogVisible = false;
+    app.isDialogVisible = false;
 
     if (!result) {
-        if (g_app.playlist.empty())
+        if (app.playlist.empty())
             PostQuitMessage(0);
         return;
     }
@@ -199,7 +199,7 @@ void OpenInitialImage(HWND hWnd) {
             Constants::Registry::LAST_FOLDER,
             selectedPath.parent_path().wstring());
 
-    g_app.playlist.clear();
+    app.playlist.clear();
 
     try {
         for (const auto &entry: std::filesystem::directory_iterator(selectedPath.parent_path())) {
@@ -209,7 +209,7 @@ void OpenInitialImage(HWND hWnd) {
             if (!is_image_ext(entry.path().extension().wstring()))
                 continue;
 
-            g_app.playlist.push_back(
+            app.playlist.push_back(
                     std::filesystem::canonical(entry.path()).wstring());
         }
     } catch (...) {
@@ -218,13 +218,13 @@ void OpenInitialImage(HWND hWnd) {
 
     EnsureIoWorkerStarted(selectedPath.parent_path().wstring());
 
-    SortPlaylistByDiskOrder(g_app.playlist);
+    SortPlaylistByDiskOrder(app.playlist);
 
     // Rebuild the O(1) path → index lookup map
-    g_app.playlistIndexMap.clear();
-    g_app.playlistIndexMap.reserve(g_app.playlist.size());
-    for (int i = 0; i < static_cast<int>(g_app.playlist.size()); ++i) {
-        g_app.playlistIndexMap[g_app.playlist[i]] = i;
+    app.playlistIndexMap.clear();
+    app.playlistIndexMap.reserve(app.playlist.size());
+    for (int i = 0; i < static_cast<int>(app.playlist.size()); ++i) {
+        app.playlistIndexMap[app.playlist[i]] = i;
     }
 
     // Record this folder in the history panel
@@ -233,9 +233,9 @@ void OpenInitialImage(HWND hWnd) {
     // New folder — drop stale dir window thumbnails before navigating
     UI::ClearDirThumbnailCache();
 
-    auto it = std::ranges::find(g_app.playlist, selectedPath.wstring());
-    if (it != g_app.playlist.end()) {
-        LoadImageIndex(hWnd, static_cast<int>(std::distance(g_app.playlist.begin(), it)));
+    auto it = std::ranges::find(app.playlist, selectedPath.wstring());
+    if (it != app.playlist.end()) {
+        LoadImageIndex(hWnd, static_cast<int>(std::distance(app.playlist.begin(), it)));
         UI::UpdateDirView();
     }
 }
@@ -244,27 +244,27 @@ void LoadImageIndex(HWND hWnd, int index) {
     g_decoderWorker.ClearQueue();
     g_ioWorker.ClearQueue();
 
-    if (index < 0 || index >= static_cast<int>(g_app.playlist.size())) return;
+    if (index < 0 || index >= static_cast<int>(app.playlist.size())) return;
 
-    if (g_app.currentIndex != index) {
-        g_app.viewport = ViewportState{};
+    if (app.currentIndex != index) {
+        app.viewport = ViewportState{};
     }
 
-    g_app.currentIndex = index;
-    g_app.wantedIndex.store(index, std::memory_order_release);
+    app.currentIndex = index;
+    app.wantedIndex.store(index, std::memory_order_release);
 
     UI::SyncDirSelectionRectangle();
-    const std::wstring &currentPath = g_app.playlist[index];
+    const std::wstring &currentPath = app.playlist[index];
     SetWindowTextW(hWnd, (currentPath.substr(currentPath.find_last_of(L"\\/") + 1) + L" - QuickImageViewer").c_str());
 
     // -------------------------------------------------------------------------
     // SVG path: load bytes on IO thread, call LoadSvgFromBytes on UI thread
     // -------------------------------------------------------------------------
     if (SvgDecoder::IsSvgPath(currentPath)) {
-        if (g_app.renderer) g_app.renderer->ClearActiveImage();
+        if (app.renderer) app.renderer->ClearActiveImage();
 
         g_ioWorker.PushTask([currentPath, index, hWnd]() {
-            if (g_app.wantedIndex.load(std::memory_order_acquire) != index) return;
+            if (app.wantedIndex.load(std::memory_order_acquire) != index) return;
 
             std::vector<BYTE> svgBytes;
             if (FAILED(SvgDecoder::LoadFile(currentPath, svgBytes))) return;
@@ -288,14 +288,14 @@ void LoadImageIndex(HWND hWnd, int index) {
     // -------------------------------------------------------------------------
     // Raster path (now fully async)
     // -------------------------------------------------------------------------
-    if (g_app.renderer) {
-        if (SUCCEEDED(g_app.renderer->LoadBitmap(nullptr, 0, 0, currentPath))) {
+    if (app.renderer) {
+        if (SUCCEEDED(app.renderer->LoadBitmap(nullptr, 0, 0, currentPath))) {
             // Cache hit: the new bitmap is now active in the renderer.
             // Rewire the effect graph to the new bitmap so the display node
             // is not left pointing at the previous image's effect output.
-            g_app.UpdateRendererColorEffects(hWnd);
+            app.UpdateRendererColorEffects(hWnd);
         } else {
-            (void) g_app.renderer->PreloadBitmap(currentPath, index);
+            (void) app.renderer->PreloadBitmap(currentPath, index);
         }
     }
 
@@ -307,11 +307,11 @@ void OpenSpecificImage(HWND hWnd, const std::wstring &filePathStr) {
     if (!fs::exists(filePath) || !fs::is_regular_file(filePath)) return;
     filePath = fs::canonical(filePath);
 
-    if (!g_app.playlist.empty()) {
-        if (filePath.parent_path() == fs::path(g_app.playlist[0]).parent_path()) {
-            auto it = std::ranges::find(g_app.playlist, filePath.wstring());
-            if (it != g_app.playlist.end()) {
-                LoadImageIndex(hWnd, static_cast<int>(std::distance(g_app.playlist.begin(), it)));
+    if (!app.playlist.empty()) {
+        if (filePath.parent_path() == fs::path(app.playlist[0]).parent_path()) {
+            auto it = std::ranges::find(app.playlist, filePath.wstring());
+            if (it != app.playlist.end()) {
+                LoadImageIndex(hWnd, static_cast<int>(std::distance(app.playlist.begin(), it)));
                 // Record this folder in the history panel
                 UI::PushFolderHistory(filePath.parent_path().wstring());
                 UI::ClearDirThumbnailCache();
@@ -322,7 +322,7 @@ void OpenSpecificImage(HWND hWnd, const std::wstring &filePathStr) {
         }
     }
 
-    g_app.playlist = fs::directory_iterator(filePath.parent_path())
+    app.playlist = fs::directory_iterator(filePath.parent_path())
                      | std::views::filter([](const auto &e) {
                          return e.is_regular_file() && is_image_ext(e.path().extension().wstring());
                      })
@@ -335,13 +335,13 @@ void OpenSpecificImage(HWND hWnd, const std::wstring &filePathStr) {
     EnsureIoWorkerStarted(filePath.parent_path().wstring());
 
     // Sort by physical disk position to minimise HDD head seeks
-    SortPlaylistByDiskOrder(g_app.playlist);
+    SortPlaylistByDiskOrder(app.playlist);
 
     // Rebuild the O(1) path → index lookup map
-    g_app.playlistIndexMap.clear();
-    g_app.playlistIndexMap.reserve(g_app.playlist.size());
-    for (int i = 0; i < static_cast<int>(g_app.playlist.size()); ++i) {
-        g_app.playlistIndexMap[g_app.playlist[i]] = i;
+    app.playlistIndexMap.clear();
+    app.playlistIndexMap.reserve(app.playlist.size());
+    for (int i = 0; i < static_cast<int>(app.playlist.size()); ++i) {
+        app.playlistIndexMap[app.playlist[i]] = i;
     }
 
     // Record this folder in the history panel
@@ -351,9 +351,9 @@ void OpenSpecificImage(HWND hWnd, const std::wstring &filePathStr) {
     UI::ClearDirThumbnailCache();
     UI::UpdateDirView();
 
-    auto it = std::ranges::find(g_app.playlist, filePath.wstring());
-    if (it != g_app.playlist.end()) {
-        LoadImageIndex(hWnd, static_cast<int>(std::distance(g_app.playlist.begin(), it)));
+    auto it = std::ranges::find(app.playlist, filePath.wstring());
+    if (it != app.playlist.end()) {
+        LoadImageIndex(hWnd, static_cast<int>(std::distance(app.playlist.begin(), it)));
         UI::UpdateDirView();
     }
 }

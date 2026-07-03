@@ -57,7 +57,7 @@ HRESULT RendererD2D::Initialize(HWND hwnd) {
 }
 
 void RendererD2D::UpdateTextFormat() {
-    float scaledFontSize = 14.0f * g_app.dpiScale;
+    float scaledFontSize = 14.0f * app.dpiScale;
 
     m_pTextFormat.Reset();
     HRESULT hr = m_pDWriteFactory->CreateTextFormat(
@@ -78,7 +78,7 @@ void RendererD2D::UpdateColorEffects() {
     if (!m_pColorMatrixEffect) return;
     (void) EnsureExtraEffects();
     // 1. Check BOTH booleans. If effects are active AND the preview toggle is on...
-    if (g_app.hasActiveEffects && g_app.effectPreviewEnabled && m_pBitmap) {
+    if (app.hasActiveEffects && app.effectPreviewEnabled && m_pBitmap) {
         // Always rebuild the chain unconditionally. The old guard
         //   (node == bitmap || node == nullptr)
         // broke stacking: when a second effect was toggled (e.g. End/Solarize
@@ -106,7 +106,7 @@ void RendererD2D::UpdateColorEffects() {
     // independent "what color should this become" steps would just fight
     // each other and the result wouldn't be predictable.
     float base[3][3];
-    if (g_app.effectSepia) {
+    if (app.effectSepia) {
         base[0][0] = 0.393f;
         base[0][1] = 0.769f;
         base[0][2] = 0.189f;
@@ -121,7 +121,7 @@ void RendererD2D::UpdateColorEffects() {
         // effectGrayscale forces s=0 regardless of the continuous slider value
         // (the slider value itself is preserved so toggling grayscale back off
         // restores whatever saturation the user had dialed in).
-        const float s = g_app.effectGrayscale ? 0.0f : g_app.saturation;
+        const float s = app.effectGrayscale ? 0.0f : app.saturation;
         base[0][0] = lumR * (1.0f - s) + s;
         base[0][1] = lumG * (1.0f - s);
         base[0][2] = lumB * (1.0f - s);
@@ -137,7 +137,7 @@ void RendererD2D::UpdateColorEffects() {
     // g_app.contrast: 1.0 = neutral. out = (in - 0.5) * c + 0.5
     // Folded into the matrix by scaling every row of `base` by c; the offset
     // picks up 0.5 * (1 - c). No internal cap, unlike CLSID_D2D1Contrast.
-    const float c = g_app.contrast;
+    const float c = app.contrast;
     float m[3][3];
     for (int row = 0; row < 3; ++row)
         for (int col = 0; col < 3; ++col)
@@ -145,7 +145,7 @@ void RendererD2D::UpdateColorEffects() {
 
     // ----- Brightness -----
     // g_app.brightness: 0.0 = neutral, +1.0 = pure white, -1.0 = pure black.
-    const float b = std::clamp(g_app.brightness, -1.0f, 1.0f);
+    const float b = std::clamp(app.brightness, -1.0f, 1.0f);
     const float contrastOffset = 0.5f * (1.0f - c);
     float offset = contrastOffset + b;
 
@@ -154,7 +154,7 @@ void RendererD2D::UpdateColorEffects() {
     // Applied last so it inverts whatever sepia/grayscale/contrast/brightness
     // already produced — matches "Invert colors" being a final flip, not an
     // independent tint.
-    if (g_app.effectInvert) {
+    if (app.effectInvert) {
         for (int row = 0; row < 3; ++row)
             for (int col = 0; col < 3; ++col)
                 m[row][col] = -m[row][col];
@@ -173,7 +173,7 @@ void RendererD2D::UpdateColorEffects() {
 
     // ----- Gamma ----- (non-linear, cannot fold into the matrix above)
     if (m_pGammaEffect) {
-        const float g = (g_app.gamma <= 0.01f) ? 0.01f : g_app.gamma;
+        const float g = (app.gamma <= 0.01f) ? 0.01f : app.gamma;
         const float exponent = 1.0f / g; // gamma > 1.0 => brighter midtones
         m_pGammaEffect->SetValue(D2D1_GAMMATRANSFER_PROP_RED_EXPONENT, exponent);
         m_pGammaEffect->SetValue(D2D1_GAMMATRANSFER_PROP_GREEN_EXPONENT, exponent);
@@ -184,9 +184,9 @@ void RendererD2D::UpdateColorEffects() {
     {
         wchar_t buf[160];
         swprintf_s(buf, L"[QIV] brightness=%.3f saturation=%.3f contrast=%.3f gamma=%.3f gray=%d inv=%d sepia=%d sol=%d out=%d thr=%d\n",
-                   b, g_app.saturation, c, g_app.gamma,
-                   g_app.effectGrayscale, g_app.effectInvert, g_app.effectSepia,
-                   g_app.effectSolarize, g_app.effectOutline, g_app.effectThreshold);
+                   b, app.saturation, c, app.gamma,
+                   app.effectGrayscale, app.effectInvert, app.effectSepia,
+                   app.effectSolarize, app.effectOutline, app.effectThreshold);
         OutputDebugStringW(buf);
     }
 #endif
@@ -289,19 +289,19 @@ ID2D1Effect *RendererD2D::BuildEffectChain(ID2D1Image *source) {
     m_pColorMatrixEffect->SetInput(0, source);
     ID2D1Effect *current = m_pColorMatrixEffect.Get();
 
-    if (std::abs(g_app.gamma - 1.0f) > 0.001f && m_pGammaEffect) {
+    if (std::abs(app.gamma - 1.0f) > 0.001f && m_pGammaEffect) {
         m_pGammaEffect->SetInputEffect(0, current);
         current = m_pGammaEffect.Get();
     }
-    if (g_app.effectSolarize && m_pSolarizeEffect) {
+    if (app.effectSolarize && m_pSolarizeEffect) {
         m_pSolarizeEffect->SetInputEffect(0, current);
         current = m_pSolarizeEffect.Get();
     }
-    if (g_app.effectThreshold && m_pThresholdEffect) {
+    if (app.effectThreshold && m_pThresholdEffect) {
         m_pThresholdEffect->SetInputEffect(0, current);
         current = m_pThresholdEffect.Get();
     }
-    if (g_app.effectOutline && m_pOutlineEffect) {
+    if (app.effectOutline && m_pOutlineEffect) {
         m_pOutlineEffect->SetInputEffect(0, current);
         current = m_pOutlineEffect.Get();
     }
@@ -539,8 +539,8 @@ HRESULT RendererD2D::LoadBitmap(IWICBitmapSource *bitmap, UINT width, UINT heigh
             m_pActiveSvg.Reset();
             m_svgNativeW = 0.0f;
             m_svgNativeH = 0.0f;
-            g_app.imgWidth = static_cast<int>(it->second.width);
-            g_app.imgHeight = static_cast<int>(it->second.height);
+            app.imgWidth = static_cast<int>(it->second.width);
+            app.imgHeight = static_cast<int>(it->second.height);
             isCacheHit = true;
         }
     }
@@ -554,7 +554,7 @@ HRESULT RendererD2D::LoadBitmap(IWICBitmapSource *bitmap, UINT width, UINT heigh
         m_pActiveDisplayNode = nullptr;
         // Fire callback safely outside the mutex lock
         if (onImageChangedCallback) {
-            onImageChangedCallback(g_app.currentIndex);
+            onImageChangedCallback(app.currentIndex);
         }
         return S_OK;
     }
@@ -600,12 +600,12 @@ HRESULT RendererD2D::LoadBitmap(IWICBitmapSource *bitmap, UINT width, UINT heigh
         m_svgNativeW = 0.0f;
         m_svgNativeH = 0.0f;
 
-        g_app.imgWidth = static_cast<int>(width);
-        g_app.imgHeight = static_cast<int>(height);
+        app.imgWidth = static_cast<int>(width);
+        app.imgHeight = static_cast<int>(height);
 
         // Fire callback safely outside the mutex lock
         if (onImageChangedCallback) {
-            onImageChangedCallback(g_app.currentIndex);
+            onImageChangedCallback(app.currentIndex);
         }
     }
     return hr;
@@ -626,7 +626,7 @@ HRESULT RendererD2D::PreloadBitmap(const std::wstring &filePath, int requestInde
     Microsoft::WRL::ComPtr<ID2D1Device6> d2dDevice = m_pD2DDevice;
 
     g_ioWorker.PushTask([filePath, requestIndex, wicFac, d2dDevice, this]() {
-        if (g_app.wantedIndex.load(std::memory_order_acquire) != requestIndex) return;
+        if (app.wantedIndex.load(std::memory_order_acquire) != requestIndex) return;
 
         // Read compressed file bytes on the IO thread
         HANDLE hFile = CreateFileW(filePath.c_str(), GENERIC_READ, FILE_SHARE_READ, NULL, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, NULL);
@@ -647,7 +647,7 @@ HRESULT RendererD2D::PreloadBitmap(const std::wstring &filePath, int requestInde
         CloseHandle(hFile);
 
         g_decoderWorker.PushTask([compressedBytes = std::move(compressedBytes), filePath, requestIndex, wicFac, d2dDevice, this]() mutable {
-            if (g_app.wantedIndex.load(std::memory_order_acquire) != requestIndex) return;
+            if (app.wantedIndex.load(std::memory_order_acquire) != requestIndex) return;
 
             // Create a decoder from the compressed memory stream
             Microsoft::WRL::ComPtr<IWICStream> wicStream;
@@ -696,7 +696,7 @@ HRESULT RendererD2D::PreloadBitmap(const std::wstring &filePath, int requestInde
                 m_bitmapCache[filePath] = {newBitmap, m_lruList.begin(), width, height};
             }
 
-            if (g_app.wantedIndex.load(std::memory_order_acquire) == requestIndex) {
+            if (app.wantedIndex.load(std::memory_order_acquire) == requestIndex) {
                 PostMessageW(m_hwnd, Constants::WM_QIV_REPAINT, 0, 0);
             }
         });
@@ -731,7 +731,7 @@ HRESULT RendererD2D::Render() {
         const float ratioX = rtSize.width / imgW;
         const float ratioY = rtSize.height / imgH;
 
-        switch (g_app.viewMode) {
+        switch (app.viewMode) {
             case Constants::ViewModes::ViewMode::FitToView_PreserveAspectRatio:
                 renderW = imgW * std::min(ratioX, ratioY);
                 renderH = imgH * std::min(ratioX, ratioY);
@@ -756,12 +756,12 @@ HRESULT RendererD2D::Render() {
                 break;
         }
 
-        const float z = (g_app.viewport.zoom <= 0.0f) ? 1.0f : g_app.viewport.zoom;
+        const float z = (app.viewport.zoom <= 0.0f) ? 1.0f : app.viewport.zoom;
         renderW *= z;
         renderH *= z;
 
-        const float left = (rtSize.width - renderW) / 2.0f + g_app.viewport.offsetX;
-        const float top = (rtSize.height - renderH) / 2.0f + g_app.viewport.offsetY;
+        const float left = (rtSize.width - renderW) / 2.0f + app.viewport.offsetX;
+        const float top = (rtSize.height - renderH) / 2.0f + app.viewport.offsetY;
 
         // DrawSvgDocument always draws at (0,0) in the DC coordinate system,
         // sized to whatever SetViewportSize says.  We position/rotate via the
@@ -777,13 +777,13 @@ HRESULT RendererD2D::Render() {
                 D2D1::Matrix3x2F::Translation(left, top);
 
         // Then apply flip / rotation around the screen centre
-        if (g_app.viewport.flippedH)
+        if (app.viewport.flippedH)
             transform = transform * D2D1::Matrix3x2F::Scale(-1.0f, 1.0f, screenCenter);
-        if (g_app.viewport.flippedV)
+        if (app.viewport.flippedV)
             transform = transform * D2D1::Matrix3x2F::Scale(1.0f, -1.0f, screenCenter);
-        if (g_app.viewport.rotation != 0)
+        if (app.viewport.rotation != 0)
             transform = transform * D2D1::Matrix3x2F::Rotation(
-                                static_cast<float>(g_app.viewport.rotation), screenCenter);
+                                static_cast<float>(app.viewport.rotation), screenCenter);
 
         m_pDeviceContext->SetTransform(transform);
 
@@ -796,11 +796,11 @@ HRESULT RendererD2D::Render() {
         m_pDeviceContext->SetTransform(D2D1::Matrix3x2F::Identity());
 
         // Overlay text (same as raster path)
-        if (!g_app.playlist.empty() && g_app.showOverlayInfoText) {
-            std::wstring fullPath = g_app.playlist[g_app.currentIndex];
+        if (!app.playlist.empty() && app.showOverlayInfoText) {
+            std::wstring fullPath = app.playlist[app.currentIndex];
             std::wstring fileName = fullPath.substr(fullPath.find_last_of(L"\\/") + 1);
-            std::wstring text = std::to_wstring(g_app.currentIndex + 1) + L" / " +
-                                std::to_wstring(g_app.playlist.size()) + L" - " + fileName;
+            std::wstring text = std::to_wstring(app.currentIndex + 1) + L" / " +
+                                std::to_wstring(app.playlist.size()) + L" - " + fileName;
             D2D1_RECT_F layoutRect = D2D1::RectF(15.0f, 6.0f,
                                                  rtSize.width - 10.0f, rtSize.height - 10.0f);
             if (m_pTextFormat && m_pTextBrush) {
@@ -818,7 +818,7 @@ HRESULT RendererD2D::Render() {
         float renderW = imgSize.width;
         float renderH = imgSize.height;
 
-        switch (g_app.viewMode) {
+        switch (app.viewMode) {
             case Constants::ViewModes::ViewMode::FitToView_PreserveAspectRatio:
                 renderW = imgSize.width * std::min(ratioX, ratioY);
                 renderH = imgSize.height * std::min(ratioX, ratioY);
@@ -843,24 +843,24 @@ HRESULT RendererD2D::Render() {
                 break;
         }
 
-        const float z = (g_app.viewport.zoom <= 0.0f) ? 1.0f : g_app.viewport.zoom;
+        const float z = (app.viewport.zoom <= 0.0f) ? 1.0f : app.viewport.zoom;
         renderW *= z;
         renderH *= z;
 
-        const float left = (rtSize.width - renderW) / 2.0f + g_app.viewport.offsetX;
-        const float top = (rtSize.height - renderH) / 2.0f + g_app.viewport.offsetY;
+        const float left = (rtSize.width - renderW) / 2.0f + app.viewport.offsetX;
+        const float top = (rtSize.height - renderH) / 2.0f + app.viewport.offsetY;
 
         D2D1_MATRIX_3X2_F transform = D2D1::Matrix3x2F::Identity();
-        if (g_app.viewport.flippedH)
+        if (app.viewport.flippedH)
             transform = transform * D2D1::Matrix3x2F::Scale(-1.0f, 1.0f, center);
-        if (g_app.viewport.flippedV)
+        if (app.viewport.flippedV)
             transform = transform * D2D1::Matrix3x2F::Scale(1.0f, -1.0f, center);
         transform = transform * D2D1::Matrix3x2F::Rotation(
-                            static_cast<float>(g_app.viewport.rotation), center);
+                            static_cast<float>(app.viewport.rotation), center);
 
         m_pDeviceContext->SetTransform(transform);
 
-        bool isNative = (std::abs(g_app.viewport.zoom - 1.0f) < 0.001f);
+        bool isNative = (std::abs(app.viewport.zoom - 1.0f) < 0.001f);
         D2D1_INTERPOLATION_MODE interpMode = isNative
                                                  ? D2D1_INTERPOLATION_MODE_NEAREST_NEIGHBOR
                                                  : D2D1_INTERPOLATION_MODE_HIGH_QUALITY_CUBIC;
@@ -870,7 +870,7 @@ HRESULT RendererD2D::Render() {
         // Draw the effect graph ONLY if there are active effects, the toggle is on,
         // and the node has successfully been wired away from the raw bitmap.
         // =========================================================================
-        if (g_app.effectPreviewEnabled && g_app.hasActiveEffects &&
+        if (app.effectPreviewEnabled && app.hasActiveEffects &&
             m_pActiveDisplayNode && m_pActiveDisplayNode.Get() != m_pBitmap.Get() &&
             m_pScaleEffect) {
             // SLOW PATH: Draw the processed effect graph
@@ -903,11 +903,11 @@ HRESULT RendererD2D::Render() {
 
         m_pDeviceContext->SetTransform(D2D1::Matrix3x2F::Identity());
 
-        if (!g_app.playlist.empty() && g_app.showOverlayInfoText) {
-            std::wstring fullPath = g_app.playlist[g_app.currentIndex];
+        if (!app.playlist.empty() && app.showOverlayInfoText) {
+            std::wstring fullPath = app.playlist[app.currentIndex];
             std::wstring fileName = fullPath.substr(fullPath.find_last_of(L"\\/") + 1);
-            std::wstring text = std::to_wstring(g_app.currentIndex + 1) + L" / " +
-                                std::to_wstring(g_app.playlist.size()) + L" - " + fileName;
+            std::wstring text = std::to_wstring(app.currentIndex + 1) + L" / " +
+                                std::to_wstring(app.playlist.size()) + L" - " + fileName;
             D2D1_RECT_F layoutRect = D2D1::RectF(15.0f, 6.0f,
                                                  rtSize.width - 10.0f, rtSize.height - 10.0f);
             if (m_pTextFormat && m_pTextBrush) {
@@ -983,8 +983,8 @@ HRESULT RendererD2D::LoadSvgFromBytes(const std::vector<BYTE> &svgBytes,
             m_svgNativeW = it->second.viewportW;
             m_svgNativeH = it->second.viewportH;
             m_pBitmap.Reset(); // raster path must be idle
-            g_app.imgWidth = static_cast<int>(m_svgNativeW);
-            g_app.imgHeight = static_cast<int>(m_svgNativeH);
+            app.imgWidth = static_cast<int>(m_svgNativeW);
+            app.imgHeight = static_cast<int>(m_svgNativeH);
             isCacheHit = true;
         }
     }
@@ -992,7 +992,7 @@ HRESULT RendererD2D::LoadSvgFromBytes(const std::vector<BYTE> &svgBytes,
     if (isCacheHit) {
         // Fire callback safely outside the mutex lock
         if (onImageChangedCallback) {
-            onImageChangedCallback(g_app.currentIndex);
+            onImageChangedCallback(app.currentIndex);
         }
         return S_OK;
     }
@@ -1080,12 +1080,12 @@ HRESULT RendererD2D::LoadSvgFromBytes(const std::vector<BYTE> &svgBytes,
     m_svgNativeW = nativeW;
     m_svgNativeH = nativeH;
     m_pBitmap.Reset(); // clear any previous raster
-    g_app.imgWidth = static_cast<int>(nativeW);
-    g_app.imgHeight = static_cast<int>(nativeH);
+    app.imgWidth = static_cast<int>(nativeW);
+    app.imgHeight = static_cast<int>(nativeH);
 
     // Fire callback safely outside the mutex lock
     if (onImageChangedCallback) {
-        onImageChangedCallback(g_app.currentIndex);
+        onImageChangedCallback(app.currentIndex);
     }
 
     return S_OK;
@@ -1427,7 +1427,7 @@ HRESULT RendererD2D::SaveCurrentImageWithEffects(const std::wstring &outPath) {
     // from the UI thread (Ctrl+S), so this is safe.  The decoder thread's
     // IWICImagingFactory2 lives in a COINIT_MULTITHREADED apartment — using it
     // here crosses apartment boundaries and causes silent failures.
-    Microsoft::WRL::ComPtr<IWICImagingFactory> wicFac = g_app.wicFactory;
+    Microsoft::WRL::ComPtr<IWICImagingFactory> wicFac = app.wicFactory;
     if (!wicFac) return E_FAIL;
 
     Microsoft::WRL::ComPtr<IWICStream> wicStream;

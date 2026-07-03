@@ -1,6 +1,7 @@
 #pragma once
 #include <iterator>
 #include <d2d1.h>
+#include <dwmapi.h>
 
 namespace Constants {
     constexpr const wchar_t *BASE_NAME = L"QuickImageViewer";
@@ -93,7 +94,9 @@ namespace Constants {
     constexpr UINT WM_QIV_REPAINT = WM_USER + 2; // Signal to UI thread that bitmap is ready
     constexpr UINT WM_QIV_SVG_READY = WM_USER + 3; // Posted by IO thread when SVG bytes are loaded
     // DWM API Attributes
-    constexpr DWORD DWMWA_WINDOW_CORNER_PREFERENCE = 33;
+    constexpr DWORD DWMWA_WINDOW_CORNER_PREFERENCES = DWMWA_WINDOW_CORNER_PREFERENCE;
+    // 0 (DWMWCP_DEFAULT): Let Windows decide. 1 (DWMWCP_DONOTROUND): Square corners. 2 (DWMWCP_ROUND): Standard rounded corners. 3 (DWMWCP_ROUNDSMALL): Slightly rounded corners.
+    constexpr DWORD APP_CORNER_PREFERENCES = DWMWCP_DEFAULT;
 
     // =============================================================================
     constexpr const wchar_t *APP_NAME = BASE_NAME;
