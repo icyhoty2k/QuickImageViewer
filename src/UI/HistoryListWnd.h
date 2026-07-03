@@ -4,8 +4,10 @@
 #include <vector>
 #include <string>
 
+#include "IPanelWindow.h"
+
 namespace UI {
-    class HistoryListWnd {
+    class HistoryListWnd : public IPanelWindow {
         // -------------------------------------------------------------------------
         // HistoryWindow  —  Last-visited folder history panel.
         //

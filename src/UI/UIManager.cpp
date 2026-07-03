@@ -1,7 +1,5 @@
 #include "UIManager.h"
 
-#include <vector>
-
 UI::UIManager uiManager;
 
 namespace UI {
@@ -34,8 +32,8 @@ namespace UI {
     void UIManager::HideAll() {
         // Explicitly hide each member
         Hide(helpWnd);
-        Hide(cacheWindow);
-        Hide(dirWindow);
-        Hide(historyWindow);
+        Hide(cacheWnd);
+        Hide(currDirWnd);
+        Hide(historyListWnd);
     }
 } // namespace UI

@@ -2,11 +2,13 @@
 
 #include <windows.h>
 #include <vector>
+
+#include "IPanelWindow.h"
 #include "Thumbnail.h"
 
 
 namespace UI {
-    class CacheWnd {
+    class CacheWnd : public IPanelWindow {
         // Cache window layout
 
         void SyncSelectionRectangle();
