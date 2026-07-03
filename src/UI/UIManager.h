@@ -4,7 +4,7 @@
 #include "IPanelWindow.h"
 #include "HelpWnd.h"
 #include "CacheWnd.h"
-#include "CurrDirWnd.h"
+#include "DirWnd.h"
 #include "HistoryListWnd.h"
 
 
