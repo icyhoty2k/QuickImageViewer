@@ -246,15 +246,20 @@ namespace UI {
 
                         // Find the first image file in the folder and open it
                         try {
+                            bool imageFound = false;
                             for (const auto &entry: std::filesystem::directory_iterator(folder)) {
-                                if (!entry.is_regular_file()) continue;
-                                std::wstring ext = entry.path().extension().wstring();
-                                // Use OpenSpecificImage which handles full playlist rebuild
-                                OpenSpecificImage(g_hHistOwner, entry.path().wstring());
-                                break; // OpenSpecificImage sorts the playlist; first file is enough
+                                if (entry.is_regular_file() && is_image_ext(entry.path())) {
+                                    OpenSpecificImage(g_hHistOwner, entry.path().wstring());
+                                    imageFound = true;
+                                    break; // Valid image found and passed to viewer
+                                }
+                            }
+
+                            if (!imageFound) {
+                                // Optional: Log or display a message that no images were found in this folder
                             }
                         } catch (...) {
-                            // Folder may have been deleted — silently ignore
+                            // Folder may be inaccessible or deleted
                         }
                         return 0;
                     }
@@ -287,6 +292,7 @@ namespace UI {
                         return 0;
                     }
 
+
                     case VK_DOWN: {
                         if (!g_folderHistory.empty()) {
                             g_hoverRow = (g_hoverRow < (int) g_folderHistory.size() - 1) ? g_hoverRow + 1 : 0;
@@ -301,14 +307,19 @@ namespace UI {
                             // Trigger the same logic as LBUTTONUP
                             const std::wstring &folder = g_folderHistory[g_hoverRow];
                             ShowWindow(hWnd, SW_HIDE);
+                            bool loaded = false;
                             try {
                                 for (const auto &entry: std::filesystem::directory_iterator(folder)) {
-                                    if (entry.is_regular_file()) {
+                                    if (entry.is_regular_file() && is_image_ext(entry.path().extension().wstring())) {
+                                        // Found a valid image — tell the main viewer to load it
                                         OpenSpecificImage(g_hHistOwner, entry.path().wstring());
-                                        break;
+                                        loaded = true;
+                                        break; // Stop looking after the first image is found
                                     }
                                 }
-                            } catch (...) {}
+                            } catch (...) {
+                                // Handle inaccessible directory
+                            }
                         }
                         return 0;
                     }
@@ -368,12 +379,24 @@ namespace UI {
         if (IsWindowVisible(g_hHistWnd)) {
             ShowWindow(g_hHistWnd, SW_HIDE);
         } else {
+            // Find current folder index in the history list
+            // g_hoverRow = -1;
+            // const std::wstring &currentFolder = std::filesystem::path(g_app.playlist[g_app.currentIndex]).parent_path().wstring();
+            //
+            // const auto &history = GetFolderHistory();
+            // for (int i = 0; i < (int) history.size(); ++i) {
+            //     if (history[i] == currentFolder) {
+            //         g_hoverRow = i;
+            //         break;
+            //     }
+            // }
+            // ----
             // Recalculate size every open (history list may have grown)
             int x, y, w, h;
             GetHistoryWindowBounds(g_hHistOwner ? g_hHistOwner : g_hHistWnd, x, y, w, h);
             SetWindowPos(g_hHistWnd, HWND_TOPMOST, x, y, w, h, SWP_FRAMECHANGED);
 
-            g_hoverRow = -1;
+            g_hoverRow = 0;
             ShowWindow(g_hHistWnd, SW_SHOW);
             SetForegroundWindow(g_hHistWnd);
             InvalidateRect(g_hHistWnd, nullptr, TRUE);
