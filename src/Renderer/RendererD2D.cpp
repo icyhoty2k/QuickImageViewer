@@ -8,8 +8,8 @@
 #include <vector>
 #include <shlwapi.h>  // SHCreateMemStream
 
-#include "CurrentDirThumbnailsWindow.h"
-#include "../UI/CacheThumbnailsWindow.h"
+#include "CurrDirWnd.h"
+#include "../UI/CacheWnd.h"
 // Link the required import libraries
 #pragma comment(lib, "d3d11.lib")
 #pragma comment(lib, "dxgi.lib")

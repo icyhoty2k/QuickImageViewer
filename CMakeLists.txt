@@ -30,10 +30,10 @@ set(SOURCES
         src/Platform/RegistrySetup.cpp
         src/Renderer/RendererGDI.cpp
         src/Renderer/RendererD2D.cpp
-        src/UI/HelpWindow.cpp
-        src/UI/CacheThumbnailsWindow.cpp
-        src/UI/CurrentDirThumbnailsWindow.cpp
-        src/UI/HistoryListDirWindow.cpp
+        src/UI/HelpWnd.cpp
+        src/UI/CacheWnd.cpp
+        src/UI/CurrDirWnd.cpp
+        src/UI/HistoryListWnd.cpp
         resources/resource.rc
         src/UI/OverlayText.cpp
         src/Input/CommandExecuter.cpp

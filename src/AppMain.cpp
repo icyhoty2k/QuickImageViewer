@@ -8,15 +8,15 @@
 #include <dwmapi.h>
 #include <intsafe.h>
 #include <uxtheme.h>
-#include "CacheThumbnailsWindow.h"
+#include "CacheWnd.h"
 #include "../AppState.h"
 #include "Platform/Constants.h"
 
 #include "../DropTarget.h"
 #include "Platform/FileHandler.h"
-#include "UI/HelpWindow.h"
-#include "UI/CurrentDirThumbnailsWindow.h"
-#include "UI/HistoryListDirWindow.h"
+#include "UI/HelpWnd.h"
+#include "UI/CurrDirWnd.h"
+#include "UI/HistoryListWnd.h"
 
 #include "MouseHandler.h"
 #include "Input/Command.h"

@@ -1,4 +1,4 @@
-#include "HistoryListDirWindow.h"
+#include "HistoryListWnd.h"
 #include "../Platform/Constants.h"
 #include "../Platform/FileHandler.h"
 #include "../AppState.h"

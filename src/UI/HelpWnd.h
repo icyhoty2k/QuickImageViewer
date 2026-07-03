@@ -4,7 +4,7 @@
 #include "IPanelWindow.h"
 
 namespace UI {
-    class HelpWindow : public IPanelWindow {
+    class HelpWnd : public IPanelWindow {
         public:
             void Init(HINSTANCE hInstance, HWND hParent) override;
 

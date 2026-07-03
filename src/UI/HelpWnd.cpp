@@ -1,4 +1,4 @@
-#include "HelpWindow.h"
+#include "HelpWnd.h"
 #include "../Platform/Constants.h"
 #include "Shortcuts.h"
 #include <string>
@@ -6,7 +6,7 @@
 #include <algorithm>
 
 namespace UI {
-    void HelpWindow::Init(HINSTANCE hInstance, HWND hParent) {
+    void HelpWnd::Init(HINSTANCE hInstance, HWND hParent) {
         m_hParent = hParent;
         m_fullTitle = std::wstring(Constants::BASE_NAME) + L" v" + Constants::APP_VERSION;
 
@@ -41,7 +41,7 @@ namespace UI {
         SetWindowPos(m_hWnd, nullptr, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | SWP_FRAMECHANGED);
     }
 
-    void HelpWindow::Show() {
+    void HelpWnd::Show() {
         if (m_hWnd) {
             if (m_hParent) {
                 // Dynamically re-center based on the parent window's current position
@@ -58,7 +58,7 @@ namespace UI {
         }
     }
 
-    LRESULT HelpWindow::HandleMessage(UINT message, WPARAM wParam, LPARAM lParam) {
+    LRESULT HelpWnd::HandleMessage(UINT message, WPARAM wParam, LPARAM lParam) {
         switch (message) {
             case WM_PAINT: {
                 PAINTSTRUCT ps;

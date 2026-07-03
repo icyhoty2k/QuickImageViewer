@@ -2,10 +2,10 @@
 #include "../AppState.h"
 #include "../Platform/Constants.h"
 #include "../Platform/FileHandler.h"
-#include "../UI/CacheThumbnailsWindow.h"
-#include "../UI/CurrentDirThumbnailsWindow.h"
-#include "../UI/HistoryListDirWindow.h"
-#include "../UI/HelpWindow.h"
+#include "../UI/CacheWnd.h"
+#include "../UI/CurrDirWnd.h"
+#include "../UI/HistoryListWnd.h"
+#include "../UI/HelpWnd.h"
 #include <algorithm>
 #include <commdlg.h>
 #include <shlobj_core.h>

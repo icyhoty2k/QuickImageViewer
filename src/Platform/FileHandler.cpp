@@ -7,12 +7,12 @@
 #include <ranges>
 #include <vector>
 
-#include "CacheThumbnailsWindow.h"
-#include "CurrentDirThumbnailsWindow.h"
+#include "CacheWnd.h"
+#include "CurrDirWnd.h"
 #include "WorkerThread.h"
 #include "DriveInfo.h"
 #include "../SvgDecoder.h"
-#include "../UI/HistoryListDirWindow.h"
+#include "../UI/HistoryListWnd.h"
 
 namespace fs = std::filesystem;
 

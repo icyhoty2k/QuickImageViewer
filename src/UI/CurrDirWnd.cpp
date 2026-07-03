@@ -1,4 +1,4 @@
-#include "CurrentDirThumbnailsWindow.h"
+#include "CurrDirWnd.h"
 #include <algorithm>
 #include <filesystem>
 #include "../AppState.h"
