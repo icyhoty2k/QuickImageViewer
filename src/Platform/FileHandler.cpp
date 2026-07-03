@@ -7,6 +7,7 @@
 #include <ranges>
 #include <vector>
 
+#include "CacheThumbnailsWindow.h"
 #include "CurrentDirThumbnailsWindow.h"
 #include "WorkerThread.h"
 #include "DriveInfo.h"
@@ -229,6 +230,9 @@ void OpenInitialImage(HWND hWnd) {
     // Record this folder in the history panel
     UI::PushFolderHistory(selectedPath.parent_path().wstring());
 
+    // New folder — drop stale dir window thumbnails before navigating
+    UI::ClearDirThumbnailCache();
+
     auto it = std::ranges::find(g_app.playlist, selectedPath.wstring());
     if (it != g_app.playlist.end()) {
         LoadImageIndex(
@@ -338,6 +342,9 @@ void OpenSpecificImage(HWND hWnd, const std::wstring &filePathStr) {
 
     // Record this folder in the history panel
     UI::PushFolderHistory(filePath.parent_path().wstring());
+
+    // New folder — drop stale dir window thumbnails before navigating
+    UI::ClearDirThumbnailCache();
 
     auto it = std::ranges::find(g_app.playlist, filePath.wstring());
     if (it != g_app.playlist.end()) {

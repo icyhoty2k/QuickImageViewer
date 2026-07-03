@@ -6,7 +6,6 @@
 #include <d2d1.h>
 
 namespace UI {
-
     // -------------------------------------------------------------------------
     // DirWindow  —  Current-folder image browser panel.
     //
@@ -28,8 +27,8 @@ namespace UI {
         int playlistIndex;
 
         bool HitTest(int x, int y) const {
-            return (x >= rect.left  && x <= rect.right &&
-                    y >= rect.top   && y <= rect.bottom);
+            return (x >= rect.left && x <= rect.right &&
+                    y >= rect.top && y <= rect.bottom);
         }
     };
 
@@ -49,10 +48,13 @@ namespace UI {
     void ToggleDirWindow();
 
     // ---- Layout -------------------------------------------------------------
-    void MoveDirWindow();   // Cycles position through the preset slots
+    void MoveDirWindow(); // Cycles position through the preset slots
 
     // ---- Data ---------------------------------------------------------------
     // Rescans the current folder and rebuilds g_dirThumbnailObjects
     void UpdateDirView();
 
+    // Drops all scaled dir thumbnails from the renderer cache.
+    // Call this whenever the active folder changes so stale images are not shown.
+    void ClearDirThumbnailCache();
 } // namespace UI
