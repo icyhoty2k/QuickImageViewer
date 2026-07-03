@@ -2,8 +2,7 @@
 
 #include <windows.h>
 #include <vector>
-#include <string>
-#include <d2d1.h>
+#include "Thumbnail.h"
 
 namespace UI {
     // -------------------------------------------------------------------------
@@ -20,23 +19,12 @@ namespace UI {
     //   Esc —  Hide panel (SC_LOCAL_HIDE)
     // -------------------------------------------------------------------------
 
-    // Shared thumbnail geometry object (same as CacheWindow's Thumbnail)
-    struct DirThumbnail {
-        D2D1_RECT_F rect;
-        std::wstring filePath;
-        int playlistIndex;
-
-        bool HitTest(int x, int y) const {
-            return (x >= rect.left && x <= rect.right &&
-                    y >= rect.top && y <= rect.bottom);
-        }
-    };
 
     // Layout scroll offset for the dir panel
     extern float g_dirOffset;
 
     // The current set of thumbnail geometry objects (read by RendererD2D)
-    extern std::vector<DirThumbnail> g_dirThumbnailObjects;
+    extern std::vector<Thumbnail> g_dirThumbnailObjects;
 
     // Re-anchors the selection highlight after a playlist change or scroll
     void SyncDirSelectionRectangle();

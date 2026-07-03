@@ -23,9 +23,9 @@ namespace UI {
 
             HelpWnd &getHelpWindow();
 
-            CacheThumbnailsWindow &getCacheWindow();
+            CacheWnd &getCacheWindow();
 
-            CurrentDirThumbnailsWindow &getDirWindow();
+            CurrDirWnd &getDirWindow();
 
 
             // --- Stack-Allocated Panels ---
@@ -36,9 +36,9 @@ namespace UI {
             // HistoryListDirWindow historyWindow;
 
         private:
-            HelpWnd helpWindow;
-            CacheThumbnailsWindow cacheThumbnailsWindow;
-            CurrentDirThumbnailsWindow currentDirThumbnailsWindow;
+            HelpWnd helpWnd;
+            CacheWnd cacheWnd;
+            CurrDirWnd currDirWnd;
 
             HINSTANCE m_hInstance = nullptr;
             HWND m_hMainWnd = nullptr;
