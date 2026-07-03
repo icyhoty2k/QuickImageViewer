@@ -129,6 +129,7 @@ namespace UI {
                 break;
             }
         }
+        ScrollDirViewToSelected();
         InvalidateRect(g_hDirWnd, nullptr, TRUE);
         UpdateWindow(g_hDirWnd);
     }
@@ -216,7 +217,7 @@ namespace UI {
         // so thumbnails appear progressively as they decode.
         auto *r = dynamic_cast<RendererD2D *>(g_app.renderer.get());
         if (r) {
-            for (const auto &obj : g_dirThumbnailObjects) {
+            for (const auto &obj: g_dirThumbnailObjects) {
                 r->RequestDirThumbnail(obj.filePath);
             }
         }
@@ -513,6 +514,11 @@ namespace UI {
             else if (slotY + thumbH > visB)
                 g_dirOffset = -(slotY + thumbH - surfaceH + scaledMargin);
         }
-        UpdateDirView();
+        InvalidateRect(g_hDirWnd, nullptr, FALSE);
+    }
+
+    void HideDirWindow() {
+        if (g_hDirWnd && IsWindowVisible(g_hDirWnd))
+            ShowWindow(g_hDirWnd, SW_HIDE);
     }
 } // namespace UI

@@ -174,6 +174,10 @@ void InputManager::ExecuteKeyboardShortcutCommand(HWND hWnd, Command cmd) {
         // App control
         // -----------------------------------------------------------------------
         case Command::HideToTray:
+            UI::HideDirWindow();
+            UI::ToggleCacheWindow();
+            UI::ToggleHelpWindow();
+            UI::ToggleHistoryWindow();
             if (g_app.GetInstanceCount() <= 1) {
                 ShowWindow(hWnd, SW_HIDE);
             } else {

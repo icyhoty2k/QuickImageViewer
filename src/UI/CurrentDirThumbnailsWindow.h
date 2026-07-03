@@ -47,6 +47,8 @@ namespace UI {
     // ---- Visibility ---------------------------------------------------------
     void ToggleDirWindow();
 
+    void HideDirWindow();
+
     // ---- Layout -------------------------------------------------------------
     void MoveDirWindow(); // Cycles position through the preset slots
 
