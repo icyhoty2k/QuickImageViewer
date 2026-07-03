@@ -313,6 +313,11 @@ void OpenSpecificImage(HWND hWnd, const std::wstring &filePathStr) {
             auto it = std::ranges::find(g_app.playlist, filePath.wstring());
             if (it != g_app.playlist.end()) {
                 LoadImageIndex(hWnd, static_cast<int>(std::distance(g_app.playlist.begin(), it)));
+                // Record this folder in the history panel
+                UI::PushFolderHistory(filePath.parent_path().wstring());
+                UI::ClearDirThumbnailCache();
+                InvalidateRect(hWnd, nullptr, TRUE);
+                UpdateWindow(hWnd);
                 return;
             }
         }
