@@ -8,6 +8,8 @@ namespace UI {
         public:
             void Init(HINSTANCE hInstance, HWND hParent) override;
 
+            void Init(HINSTANCE hInstance, HWND hParent, int8_t position) override;
+
             void Show() override;
 
         protected:

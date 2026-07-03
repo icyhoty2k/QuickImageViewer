@@ -10,25 +10,31 @@
 namespace UI {
     class CacheWnd : public IPanelWindow {
         // Cache window layout
+        public:
+            void SyncSelectionRectangle();
 
-        void SyncSelectionRectangle();
+            // Shared logical object representing a thumbnail
 
-        // Shared logical object representing a thumbnail
+            void Init(HINSTANCE hInstance, HWND hParent, int8_t position) override;
 
-        void InitCacheWindow(HINSTANCE hInstance, HWND hParent, int8_t position);
+            void Init(HINSTANCE hInstance, HWND hParent) override;
 
-        void MoveCacheWindow();
+        protected:
+            LRESULT HandleMessage(UINT message, WPARAM wParam, LPARAM lParam) override;
 
-        void ToggleCacheWindow();
+        public:
+            void MoveCacheWindow();
 
-        void UpdateCacheView();
+            void ToggleCacheWindow();
 
-        void RenderCacheWindow(int selectedIndex, int hoverIndex);
+            void UpdateCacheView();
 
-        // Clears the cache
-        void ClearThumbnailCache();
+            // void RenderCacheWindow(int selectedIndex, int hoverIndex);
 
-        // Exposed for the Renderer to use for drawing
+            // Clears the cache
+            void ClearThumbnailCache();
+
+            // Exposed for the Renderer to use for drawing
     };
 
     extern float g_cacheOffset;

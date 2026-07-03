@@ -1,4 +1,5 @@
 #pragma once
+#include <cstdint>
 #include <windows.h>
 
 namespace UI {
@@ -12,6 +13,8 @@ namespace UI {
 
             // Pure virtual function ensuring derived classes implement their setup
             virtual void Init(HINSTANCE hInstance, HWND hParent) = 0;
+
+            virtual void Init(HINSTANCE hInstance, HWND hParent, int8_t position) =0;
 
             virtual void Show() {
                 if (m_hWnd) {

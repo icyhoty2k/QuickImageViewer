@@ -21,32 +21,39 @@ namespace UI {
         //   F6  —  Cycle position: center / top / right / bottom / left (SC_PANEL_DIR_MOVE)
         //   Esc —  Hide panel (SC_LOCAL_HIDE)
         // -------------------------------------------------------------------------
+        public:
+            void Init(HINSTANCE hInstance, HWND hParent) override;
+
+            void Init(HINSTANCE hInstance, HWND hParent, int8_t position) override;
+
+        protected:
+            LRESULT HandleMessage(UINT message, WPARAM wParam, LPARAM lParam) override;
+
+        private:
+            // Layout scroll offset for the dir panel
 
 
-        // Layout scroll offset for the dir panel
+            // Re-anchors the selection highlight after a playlist change or scroll
+            void SyncDirSelectionRectangle();
 
+            // ---- Lifecycle ----------------------------------------------------------
+            void InitDirWindow(HINSTANCE hInstance, HWND hParent);
 
-        // Re-anchors the selection highlight after a playlist change or scroll
-        void SyncDirSelectionRectangle();
+            // ---- Visibility ---------------------------------------------------------
+            void ToggleDirWindow();
 
-        // ---- Lifecycle ----------------------------------------------------------
-        void InitDirWindow(HINSTANCE hInstance, HWND hParent);
+            void HideDirWindow();
 
-        // ---- Visibility ---------------------------------------------------------
-        void ToggleDirWindow();
+            // ---- Layout -------------------------------------------------------------
+            void MoveDirWindow(); // Cycles position through the preset slots
 
-        void HideDirWindow();
+            // ---- Data ---------------------------------------------------------------
+            // Rescans the current folder and rebuilds g_dirThumbnailObjects
+            void UpdateDirView();
 
-        // ---- Layout -------------------------------------------------------------
-        void MoveDirWindow(); // Cycles position through the preset slots
-
-        // ---- Data ---------------------------------------------------------------
-        // Rescans the current folder and rebuilds g_dirThumbnailObjects
-        void UpdateDirView();
-
-        // Drops all scaled dir thumbnails from the renderer cache.
-        // Call this whenever the active folder changes so stale images are not shown.
-        void ClearDirThumbnailCache();
+            // Drops all scaled dir thumbnails from the renderer cache.
+            // Call this whenever the active folder changes so stale images are not shown.
+            void ClearDirThumbnailCache();
     };
 
     extern float g_dirOffset;

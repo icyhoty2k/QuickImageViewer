@@ -96,7 +96,7 @@ namespace UI {
     // -------------------------------------------------------------------------
     // Window procedure
     // -------------------------------------------------------------------------
-    static LRESULT CALLBACK HistWndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) {
+    LRESULT CALLBACK HistoryListWnd::HandleMessage(UINT message, WPARAM wParam, LPARAM lParam) {
         switch (message) {
             // -----------------------------------------------------------------
             case WM_PAINT: {
@@ -343,8 +343,9 @@ namespace UI {
     // -------------------------------------------------------------------------
     // Public API
     // -------------------------------------------------------------------------
+    void HistoryListWnd::Init(HINSTANCE hInstance, HWND hParent, int8_t position) {}
 
-    void InitHistoryWindow(HINSTANCE hInstance, HWND hParent) {
+    void HistoryListWnd::Init(HINSTANCE hInstance, HWND hParent) {
         g_hHistOwner = hParent;
 
         WNDCLASSW wc{};

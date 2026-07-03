@@ -6,6 +6,10 @@
 #include <algorithm>
 
 namespace UI {
+    void HelpWnd::Init(HINSTANCE hInstance, HWND hParent, int8_t position) {
+        HelpWnd::Init(hInstance, hParent);
+    }
+
     void HelpWnd::Init(HINSTANCE hInstance, HWND hParent) {
         m_hParent = hParent;
         m_fullTitle = std::wstring(Constants::BASE_NAME) + L" v" + Constants::APP_VERSION;
@@ -40,6 +44,7 @@ namespace UI {
 
         SetWindowPos(m_hWnd, nullptr, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | SWP_FRAMECHANGED);
     }
+
 
     void HelpWnd::Show() {
         if (m_hWnd) {
