@@ -42,7 +42,7 @@ namespace UI {
     static int8_t g_dirPosition = Constants::CURRENT_DIR_WINDOW_POSITION; // 0 = centered
 
     float g_dirOffset = 0.0f;
-    std::vector<DirThumbnail> g_dirThumbnailObjects;
+    std::vector<Thumbnail> g_dirThumbnailObjects;
 
     // -------------------------------------------------------------------------
     // Geometry helpers
