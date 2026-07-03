@@ -26,7 +26,7 @@ namespace UI {
 
             CacheWnd &getCacheWindow();
 
-            CurrDirWnd &getDirWindow();
+            DirWnd &getDirWindow();
 
             HistoryListWnd &getHistoryListWindow();
 
@@ -41,7 +41,7 @@ namespace UI {
         private:
             HelpWnd helpWnd;
             CacheWnd cacheWnd;
-            CurrDirWnd currDirWnd;
+            DirWnd currDirWnd;
             HistoryListWnd historyListWnd;
 
             HINSTANCE m_hInstance = nullptr;

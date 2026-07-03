@@ -15,7 +15,7 @@
 #include "../DropTarget.h"
 #include "Platform/FileHandler.h"
 #include "UI/HelpWnd.h"
-#include "UI/CurrDirWnd.h"
+#include "UI/DirWnd.h"
 #include "UI/HistoryListWnd.h"
 
 #include "MouseHandler.h"

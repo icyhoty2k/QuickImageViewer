@@ -1,4 +1,4 @@
-#include "CurrDirWnd.h"
+#include "DirWnd.h"
 #include <algorithm>
 #include <filesystem>
 #include "../AppState.h"
@@ -226,7 +226,7 @@ namespace UI {
     // -------------------------------------------------------------------------
     // Window procedure
     // -------------------------------------------------------------------------
-    LRESULT CALLBACK CurrDirWnd::HandleMessage(UINT message, WPARAM wParam, LPARAM lParam) {
+    LRESULT CALLBACK DirWnd::HandleMessage(UINT message, WPARAM wParam, LPARAM lParam) {
         switch (message) {
             // -----------------------------------------------------------------
             case WM_PAINT: {
@@ -410,9 +410,9 @@ namespace UI {
     // -------------------------------------------------------------------------
     // Public API
     // -------------------------------------------------------------------------
-    void CurrDirWnd::Init(HINSTANCE hInstance, HWND hParent, int8_t position) {}
+    void DirWnd::Init(HINSTANCE hInstance, HWND hParent, int8_t position) {}
 
-    void CurrDirWnd::Init(HINSTANCE hInstance, HWND hParent) {
+    void DirWnd::Init(HINSTANCE hInstance, HWND hParent) {
         g_hDirOwner = hParent;
 
         WNDCLASSW wc{};

@@ -8,7 +8,7 @@
 #include <vector>
 #include <shlwapi.h>  // SHCreateMemStream
 
-#include "CurrDirWnd.h"
+#include "DirWnd.h"
 #include "../UI/CacheWnd.h"
 // Link the required import libraries
 #pragma comment(lib, "d3d11.lib")
