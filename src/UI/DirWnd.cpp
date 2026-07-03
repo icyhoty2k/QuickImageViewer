@@ -39,7 +39,7 @@ namespace UI {
     static bool g_hasMoved = false;
     static POINT g_lastMouse = {0, 0};
     static POINT g_clickPos = {0, 0};
-    static int8_t g_dirPosition = Constants::CURRENT_DIR_WINDOW_POSITION; // 0 = centered
+    static int8_t g_dirPosition = Constants::CURRENT_DIR_WINDOW_POSITION;
 
     float g_dirOffset = 0.0f;
     std::vector<Thumbnail> g_dirThumbnailObjects;
