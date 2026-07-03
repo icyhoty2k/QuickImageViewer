@@ -226,7 +226,7 @@ namespace UI {
     // -------------------------------------------------------------------------
     // Window procedure
     // -------------------------------------------------------------------------
-    static LRESULT CALLBACK DirWndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) {
+    LRESULT CALLBACK CurrDirWnd::HandleMessage(UINT message, WPARAM wParam, LPARAM lParam) {
         switch (message) {
             // -----------------------------------------------------------------
             case WM_PAINT: {
@@ -410,13 +410,14 @@ namespace UI {
     // -------------------------------------------------------------------------
     // Public API
     // -------------------------------------------------------------------------
+    void CurrDirWnd::Init(HINSTANCE hInstance, HWND hParent, int8_t position) {}
 
-    void InitDirWindow(HINSTANCE hInstance, HWND hParent) {
+    void CurrDirWnd::Init(HINSTANCE hInstance, HWND hParent) {
         g_hDirOwner = hParent;
 
         WNDCLASSW wc{};
         wc.style = CS_DBLCLKS;
-        wc.lpfnWndProc = DirWndProc;
+        wc.lpfnWndProc = HandleMessage;
         wc.hInstance = hInstance;
         wc.hCursor = LoadCursor(nullptr, IDC_ARROW);
         wc.lpszClassName = L"QIV_DirWindow";

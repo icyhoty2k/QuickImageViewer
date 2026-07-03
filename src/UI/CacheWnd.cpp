@@ -21,7 +21,7 @@ namespace UI {
     bool g_hasMoved = false;
 
     // The single source of truth for UI selection state
-    void SyncSelectionRectangle() {
+    void CacheWnd::SyncSelectionRectangle() {
         if (!g_hCacheWnd) return;
 
         g_selectedIndex = -1;
@@ -35,7 +35,7 @@ namespace UI {
         UpdateWindow(g_hCacheWnd);
     }
 
-    LRESULT CALLBACK CacheWndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) {
+    LRESULT CALLBACK CacheWnd::HandleMessage(UINT message, WPARAM wParam, LPARAM lParam) {
         switch (message) {
             case WM_PAINT: {
                 PAINTSTRUCT ps;
@@ -174,7 +174,7 @@ namespace UI {
         return DefWindowProcW(hWnd, message, wParam, lParam);
     }
 
-    void ClearThumbnailCache() {
+    void CacheWnd::ClearThumbnailCache() {
         std::wstring activeFile = L"";
         if (!app.playlist.empty() &&
             app.currentIndex >= 0 &&
@@ -190,7 +190,7 @@ namespace UI {
         UpdateCacheView();
     }
 
-    void UpdateCacheView() {
+    void CacheWnd::UpdateCacheView() {
         if (!g_hCacheWnd || !app.renderer || !IsWindowVisible(g_hCacheWnd)) return;
 
         g_thumbnailObjects.clear();
@@ -289,7 +289,7 @@ namespace UI {
         }
     }
 
-    void MoveCacheWindow() {
+    void CacheWnd::MoveCacheWindow() {
         if (!g_hCacheWnd) return;
         g_cachePosition++;
         if (g_cachePosition > 3) g_cachePosition = 0;
@@ -305,7 +305,11 @@ namespace UI {
                 );
     }
 
-    void InitCacheWindow(HINSTANCE hInstance, HWND hParent, int8_t position) {
+    void CacheWnd::Init(HINSTANCE hInstance, HWND hParent) {
+        Init(hInstance, hParent, 0);
+    }
+
+    void CacheWnd::Init(HINSTANCE hInstance, HWND hParent, int8_t position) {
         g_cachePosition = position;
         g_hOwner = hParent;
 
@@ -343,7 +347,7 @@ namespace UI {
         ShowWindow(g_hCacheWnd, SW_HIDE);
     }
 
-    void ToggleCacheWindow() {
+    void CacheWnd::ToggleCacheWindow() {
         if (!g_hCacheWnd) return;
 
         if (IsWindowVisible(g_hCacheWnd)) {

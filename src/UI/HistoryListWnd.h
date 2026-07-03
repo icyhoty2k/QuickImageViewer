@@ -21,8 +21,16 @@ namespace UI {
         //   F7  —  Toggle history panel (SC_PANEL_HISTORY_TOGGLE)
         //   Esc —  Hide panel (SC_LOCAL_HIDE)
         // -------------------------------------------------------------------------
+        public:
+            void Init(HINSTANCE hInstance, HWND hParent) override;
 
-        // Called by FileHandler after every successful folder load.
+            void Init(HINSTANCE hInstance, HWND hParent, int8_t position) override;
+
+        protected:
+            LRESULT HandleMessage(UINT message, WPARAM wParam, LPARAM lParam) override;
+
+        private:
+            // Called by FileHandler after every successful folder load.
         // Pushes the folder path to the front; drops oldest entry when the list
         // exceeds Constants::HISTORY_MAX_DIRS.
         void PushFolderHistory(const std::wstring &folderPath);
