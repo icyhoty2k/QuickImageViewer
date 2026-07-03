@@ -9,7 +9,6 @@
 #include <memory>
 
 #include "Constants.h"
-#include "UIManager.h"
 
 struct ViewportState {
     int rotation = 0; // 0, 90, 180, 270
