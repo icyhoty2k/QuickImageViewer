@@ -24,16 +24,16 @@ namespace UI {
     }
 
     HelpWnd &UIManager::getHelpWindow() {
-        if (helpWindow.GetHwnd() == nullptr) {
-            helpWindow.Init(m_hInstance, m_hMainWnd);
+        if (helpWnd.GetHwnd() == nullptr) {
+            helpWnd.Init(m_hInstance, m_hMainWnd);
         }
-        return helpWindow;
+        return helpWnd;
     }
 
 
     void UIManager::HideAll() {
         // Explicitly hide each member
-        Hide(helpWindow);
+        Hide(helpWnd);
         Hide(cacheWindow);
         Hide(dirWindow);
         Hide(historyWindow);
