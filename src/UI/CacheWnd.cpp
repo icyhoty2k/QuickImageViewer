@@ -1,4 +1,4 @@
-#include "CacheThumbnailsWindow.h"
+#include "CacheWnd.h"
 #include <algorithm>
 #include "../AppState.h"
 #include "../Platform/FileHandler.h"

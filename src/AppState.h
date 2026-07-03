@@ -179,7 +179,6 @@ struct AppState {
 
         InvalidateRect(hWnd, nullptr, FALSE);
     }
-    UIManager uiManager;
 };
 
 
