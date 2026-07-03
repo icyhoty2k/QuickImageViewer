@@ -7,7 +7,7 @@
 #include "Thumbnail.h"
 
 namespace UI {
-    class CurrDirWnd : public IPanelWindow {
+    class DirWnd : public IPanelWindow {
         // -------------------------------------------------------------------------
         // DirWindow  —  Current-folder image browser panel.
         //

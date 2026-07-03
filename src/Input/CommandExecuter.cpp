@@ -3,7 +3,7 @@
 #include "../Platform/Constants.h"
 #include "../Platform/FileHandler.h"
 #include "../UI/CacheWnd.h"
-#include "../UI/CurrDirWnd.h"
+#include "../UI/DirWnd.h"
 #include "../UI/HistoryListWnd.h"
 #include "../UI/HelpWnd.h"
 #include <algorithm>

@@ -32,7 +32,7 @@ set(SOURCES
         src/Renderer/RendererD2D.cpp
         src/UI/HelpWnd.cpp
         src/UI/CacheWnd.cpp
-        src/UI/CurrDirWnd.cpp
+        src/UI/DirWnd.cpp
         src/UI/HistoryListWnd.cpp
         resources/resource.rc
         src/UI/OverlayText.cpp

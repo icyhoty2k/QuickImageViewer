@@ -8,7 +8,7 @@
 #include <vector>
 
 #include "CacheWnd.h"
-#include "CurrDirWnd.h"
+#include "DirWnd.h"
 #include "WorkerThread.h"
 #include "DriveInfo.h"
 #include "../SvgDecoder.h"

@@ -39,14 +39,14 @@ namespace UI {
         switch (message) {
             case WM_PAINT: {
                 PAINTSTRUCT ps;
-                BeginPaint(hWnd, &ps);
+                BeginPaint(m_hWnd, &ps);
                 if (app.renderer) {
                     auto *r = dynamic_cast<RendererD2D *>(app.renderer.get());
                     if (r && r->GetCacheContext()) {
                         r->RenderCacheWindow(g_selectedIndex, g_hoverIndex);
                     }
                 }
-                EndPaint(hWnd, &ps);
+                EndPaint(m_hWnd, &ps);
                 return 0;
             }
 
@@ -79,7 +79,7 @@ namespace UI {
                         ClearThumbnailCache();
                         return 0;
                     case Shortcuts::SC_LOCAL_HIDE:
-                        ShowWindow(hWnd, SW_HIDE);
+                        ShowWindow(m_hWnd, SW_HIDE);
                         return 0;
                     case Shortcuts::SC_PANEL_CACHE_TOGGLE:
                         ToggleCacheWindow();
@@ -102,7 +102,7 @@ namespace UI {
                 g_hasMoved = false;
 
                 g_isDragging = true;
-                SetCapture(hWnd);
+                SetCapture(m_hWnd);
                 GetCursorPos(&g_lastMousePos);
                 return 0;
             }
@@ -121,7 +121,7 @@ namespace UI {
 
                 if (newHoverIndex != g_hoverIndex) {
                     g_hoverIndex = newHoverIndex;
-                    InvalidateRect(hWnd, nullptr, FALSE);
+                    InvalidateRect(m_hWnd, nullptr, FALSE);
                 }
 
                 if (g_isDragging) {
@@ -167,11 +167,11 @@ namespace UI {
             }
 
             case WM_CLOSE: {
-                ShowWindow(hWnd, SW_HIDE);
+                ShowWindow(m_hWnd, SW_HIDE);
                 return 0;
             }
         }
-        return DefWindowProcW(hWnd, message, wParam, lParam);
+        return DefWindowProcW(m_hWnd, message, wParam, lParam);
     }
 
     void CacheWnd::ClearThumbnailCache() {
@@ -315,7 +315,7 @@ namespace UI {
 
         WNDCLASSW wc{};
         wc.style = CS_DBLCLKS;
-        wc.lpfnWndProc = CacheWndProc;
+        wc.lpfnWndProc = IPanelWindow::WindowRouter;;
         wc.hInstance = hInstance;
         wc.hCursor = LoadCursor(nullptr, IDC_ARROW);
         wc.lpszClassName = L"QIV_CacheWindow";
