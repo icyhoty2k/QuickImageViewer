@@ -5,6 +5,7 @@
 #include "HelpWnd.h"
 #include "CacheWnd.h"
 #include "CurrDirWnd.h"
+#include "HistoryListWnd.h"
 
 
 namespace UI {
@@ -27,6 +28,8 @@ namespace UI {
 
             CurrDirWnd &getDirWindow();
 
+            HistoryListWnd &getHistoryListWindow();
+
 
             // --- Stack-Allocated Panels ---
             // Publicly accessible so you can pass them to the methods above.
@@ -39,6 +42,7 @@ namespace UI {
             HelpWnd helpWnd;
             CacheWnd cacheWnd;
             CurrDirWnd currDirWnd;
+            HistoryListWnd historyListWnd;
 
             HINSTANCE m_hInstance = nullptr;
             HWND m_hMainWnd = nullptr;
