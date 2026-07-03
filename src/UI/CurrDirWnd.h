@@ -2,10 +2,12 @@
 
 #include <windows.h>
 #include <vector>
+
+#include "IPanelWindow.h"
 #include "Thumbnail.h"
 
 namespace UI {
-    class CurrDirWnd {
+    class CurrDirWnd : public IPanelWindow {
         // -------------------------------------------------------------------------
         // DirWindow  —  Current-folder image browser panel.
         //
@@ -22,10 +24,7 @@ namespace UI {
 
 
         // Layout scroll offset for the dir panel
-        extern float g_dirOffset;
 
-        // The current set of thumbnail geometry objects (read by RendererD2D)
-        extern std::vector<Thumbnail> g_dirThumbnailObjects;
 
         // Re-anchors the selection highlight after a playlist change or scroll
         void SyncDirSelectionRectangle();
@@ -49,4 +48,9 @@ namespace UI {
         // Call this whenever the active folder changes so stale images are not shown.
         void ClearDirThumbnailCache();
     };
+
+    extern float g_dirOffset;
+
+    // The current set of thumbnail geometry objects (read by RendererD2D)
+    extern std::vector<Thumbnail> g_dirThumbnailObjects;
 }
