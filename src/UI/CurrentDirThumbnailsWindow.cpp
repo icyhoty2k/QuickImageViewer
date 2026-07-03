@@ -134,6 +134,16 @@ namespace UI {
     }
 
     // -------------------------------------------------------------------------
+    // ClearDirThumbnailCache  —  Drop all scaled dir thumbnails from the renderer.
+    // Call on every folder change so the old folder's thumbnails are not shown.
+    // -------------------------------------------------------------------------
+    void ClearDirThumbnailCache() {
+        if (!g_app.renderer) return;
+        auto *r = dynamic_cast<RendererD2D *>(g_app.renderer.get());
+        if (r) r->ClearDirThumbnailCache();
+    }
+
+    // -------------------------------------------------------------------------
     // UpdateDirView  —  Rebuild thumbnail geometry from the current folder
     // -------------------------------------------------------------------------
     void UpdateDirView() {
@@ -200,6 +210,16 @@ namespace UI {
         }
 
         SyncDirSelectionRectangle();
+
+        // Queue async thumbnail decodes for every file not yet in the dir cache.
+        // Each job posts WM_QIV_REPAINT to the dir window when it finishes,
+        // so thumbnails appear progressively as they decode.
+        auto *r = dynamic_cast<RendererD2D *>(g_app.renderer.get());
+        if (r) {
+            for (const auto &obj : g_dirThumbnailObjects) {
+                r->RequestDirThumbnail(obj.filePath);
+            }
+        }
     }
 
     // -------------------------------------------------------------------------

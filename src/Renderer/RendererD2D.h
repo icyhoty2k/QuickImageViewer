@@ -83,6 +83,13 @@ class RendererD2D final : public IImageRenderer {
 
         void ResizeDirWindow(UINT width, UINT height);
 
+        // Queues an async decode+scale job for one file.
+        // Posts WM_QIV_REPAINT to m_hDirWnd when the thumbnail lands.
+        void RequestDirThumbnail(const std::wstring &filePath);
+
+        // Drops the entire dir thumbnail cache (call on folder change).
+        void ClearDirThumbnailCache();
+
         void ApplyPreviousEffects() override;
 
         // Public DWrite resources
@@ -132,12 +139,18 @@ class RendererD2D final : public IImageRenderer {
 
         // Dir Window Resources  —  current-folder image browser
         HWND m_hDirWnd = nullptr;
-        Microsoft::WRL::ComPtr<IDXGISwapChain1>      m_pDirSwapChain;
-        Microsoft::WRL::ComPtr<ID2D1DeviceContext7>  m_pDirDeviceContext;
-        Microsoft::WRL::ComPtr<ID2D1Bitmap1>         m_pDirBackBuffer;
+        Microsoft::WRL::ComPtr<IDXGISwapChain1> m_pDirSwapChain;
+        Microsoft::WRL::ComPtr<ID2D1DeviceContext7> m_pDirDeviceContext;
+        Microsoft::WRL::ComPtr<ID2D1Bitmap1> m_pDirBackBuffer;
         Microsoft::WRL::ComPtr<ID2D1SolidColorBrush> m_pDirPlaceholderBrush;
         Microsoft::WRL::ComPtr<ID2D1SolidColorBrush> m_pDirBorderBrush;
         Microsoft::WRL::ComPtr<ID2D1SolidColorBrush> m_pDirHoverBrush;
+
+        // Dir thumbnail cache  —  small scaled-down bitmaps for every file in
+        // the current folder.  Separate from m_bitmapCache (which holds full-res
+        // images) so it never evicts viewer bitmaps and is cleared on folder change.
+        std::unordered_map<std::wstring, Microsoft::WRL::ComPtr<ID2D1Bitmap1> > m_dirThumbCache;
+        std::mutex m_dirThumbMutex;
 
         // Cache
         struct CachedBitmap {

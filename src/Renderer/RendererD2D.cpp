@@ -1563,18 +1563,37 @@ void RendererD2D::RenderDirWindow(int selectedIndex, int hoverIndex) {
     for (size_t i = 0; i < UI::g_dirThumbnailObjects.size(); ++i) {
         const auto &thumb = UI::g_dirThumbnailObjects[i];
 
-        // Try VRAM cache first (preloaded bitmaps are already there)
-        auto it = m_bitmapCache.find(thumb.filePath);
-        if (it != m_bitmapCache.end() && it->second.bitmap) {
-            m_pDirDeviceContext->DrawBitmap(
-                    it->second.bitmap.Get(),
-                    thumb.rect,
-                    1.0f,
-                    D2D1_BITMAP_INTERPOLATION_MODE_LINEAR);
-        } else {
-            // Placeholder box — same style as cache window
-            m_pDirDeviceContext->FillRectangle(thumb.rect, m_pDirPlaceholderBrush.Get());
+        // 1. Check the dedicated dir thumbnail cache (scaled-down bitmaps)
+        {
+            std::lock_guard<std::mutex> dirLock(m_dirThumbMutex);
+            auto it = m_dirThumbCache.find(thumb.filePath);
+            if (it != m_dirThumbCache.end() && it->second) {
+                m_pDirDeviceContext->DrawBitmap(
+                        it->second.Get(),
+                        thumb.rect,
+                        1.0f,
+                        D2D1_BITMAP_INTERPOLATION_MODE_LINEAR);
+                goto draw_border;
+            }
         }
+
+        // 2. Fall back to the full-res VRAM cache (image already loaded by viewer)
+        {
+            auto it = m_bitmapCache.find(thumb.filePath);
+            if (it != m_bitmapCache.end() && it->second.bitmap) {
+                m_pDirDeviceContext->DrawBitmap(
+                        it->second.bitmap.Get(),
+                        thumb.rect,
+                        1.0f,
+                        D2D1_BITMAP_INTERPOLATION_MODE_LINEAR);
+                goto draw_border;
+            }
+        }
+
+        // 3. Still loading — draw placeholder box
+        m_pDirDeviceContext->FillRectangle(thumb.rect, m_pDirPlaceholderBrush.Get());
+
+    draw_border:;
 
         // Selection highlight
         if (static_cast<int>(i) == selectedIndex) {
@@ -1608,4 +1627,124 @@ void RendererD2D::DiscardDirWindowDeviceResources() {
     m_pDirSwapChain.Reset();
     m_pDirDeviceContext.Reset();
     m_hDirWnd = nullptr;
+}
+
+// =============================================================================
+//  ClearDirThumbnailCache
+//  Drops all scaled thumbnails generated for the dir window.
+//  Call this when the folder changes so stale entries don't linger.
+// =============================================================================
+void RendererD2D::ClearDirThumbnailCache() {
+    std::lock_guard<std::mutex> lock(m_dirThumbMutex);
+    m_dirThumbCache.clear();
+}
+
+// =============================================================================
+//  RequestDirThumbnail
+//  Queues an IO + decode job that reads the file, decodes it via WIC,
+//  scales it down to CACHE_THUMB_WIDTH x CACHE_THUMB_HEIGHT, uploads the
+//  resulting small bitmap into m_dirThumbCache, then posts WM_QIV_REPAINT
+//  to the dir window so RenderDirWindow picks it up.
+//
+//  If the thumbnail is already in the cache the call is a no-op.
+// =============================================================================
+void RendererD2D::RequestDirThumbnail(const std::wstring &filePath) {
+    // Skip if already decoded
+    {
+        std::lock_guard<std::mutex> lock(m_dirThumbMutex);
+        if (m_dirThumbCache.count(filePath)) return;
+    }
+
+    Microsoft::WRL::ComPtr<IWICImagingFactory2> wicFac = g_decoderWorker.wicFactory;
+    Microsoft::WRL::ComPtr<ID2D1Device6> d2dDev = m_pD2DDevice;
+    HWND hDir = m_hDirWnd;
+
+    if (!wicFac || !d2dDev || !hDir) return;
+
+    UINT thumbW = static_cast<UINT>(Constants::CACHE_THUMB_WIDTH);
+    UINT thumbH = static_cast<UINT>(Constants::CACHE_THUMB_HEIGHT);
+
+    g_ioWorker.PushTask([filePath, wicFac, d2dDev, hDir, thumbW, thumbH, this]() {
+        // --- IO thread: read raw bytes ---
+        HANDLE hFile = CreateFileW(filePath.c_str(), GENERIC_READ, FILE_SHARE_READ,
+                                   nullptr, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, nullptr);
+        if (hFile == INVALID_HANDLE_VALUE) return;
+
+        LARGE_INTEGER fileSize{};
+        if (!GetFileSizeEx(hFile, &fileSize)) {
+            CloseHandle(hFile);
+            return;
+        }
+
+        std::vector<BYTE> bytes(static_cast<size_t>(fileSize.QuadPart));
+        DWORD bytesRead = 0;
+        bool ok = ReadFile(hFile, bytes.data(), static_cast<DWORD>(bytes.size()), &bytesRead, nullptr)
+                  && bytesRead == static_cast<DWORD>(bytes.size());
+        CloseHandle(hFile);
+        if (!ok) return;
+
+        g_decoderWorker.PushTask([bytes = std::move(bytes), filePath, wicFac, d2dDev,
+                    hDir, thumbW, thumbH, this]() mutable {
+                    // --- Decode thread: decode + scale ---
+
+                    // Create WIC stream from memory
+                    Microsoft::WRL::ComPtr<IWICStream> stream;
+                    if (FAILED(wicFac->CreateStream(&stream))) return;
+                    if (FAILED(stream->InitializeFromMemory(bytes.data(),
+                        static_cast<DWORD>(bytes.size()))))
+                        return;
+
+                    Microsoft::WRL::ComPtr<IWICBitmapDecoder> decoder;
+                    if (FAILED(wicFac->CreateDecoderFromStream(stream.Get(), nullptr,
+                        WICDecodeMetadataCacheOnDemand, &decoder)))
+                        return;
+
+                    Microsoft::WRL::ComPtr<IWICBitmapFrameDecode> frame;
+                    if (FAILED(decoder->GetFrame(0, &frame))) return;
+
+                    UINT srcW = 0, srcH = 0;
+                    frame->GetSize(&srcW, &srcH);
+                    if (srcW == 0 || srcH == 0) return;
+
+                    // Compute scale that fits inside thumbW x thumbH keeping aspect ratio
+                    float scaleX = static_cast<float>(thumbW) / static_cast<float>(srcW);
+                    float scaleY = static_cast<float>(thumbH) / static_cast<float>(srcH);
+                    float scale = (scaleX < scaleY) ? scaleX : scaleY;
+                    UINT dstW = static_cast<UINT>(static_cast<float>(srcW) * scale);
+                    UINT dstH = static_cast<UINT>(static_cast<float>(srcH) * scale);
+                    if (dstW == 0) dstW = 1;
+                    if (dstH == 0) dstH = 1;
+
+                    // Scale with WIC
+                    Microsoft::WRL::ComPtr<IWICBitmapScaler> scaler;
+                    if (FAILED(wicFac->CreateBitmapScaler(&scaler))) return;
+                    if (FAILED(scaler->Initialize(frame.Get(), dstW, dstH,
+                        WICBitmapInterpolationModeFant)))
+                        return;
+
+                    // Convert to 32bppPBGRA for D2D
+                    Microsoft::WRL::ComPtr<IWICFormatConverter> converter;
+                    if (FAILED(wicFac->CreateFormatConverter(&converter))) return;
+                    if (FAILED(converter->Initialize(scaler.Get(), GUID_WICPixelFormat32bppPBGRA,
+                        WICBitmapDitherTypeNone, nullptr, 0.0f,
+                        WICBitmapPaletteTypeCustom)))
+                        return;
+
+                    // Upload to VRAM using a temporary device context
+                    Microsoft::WRL::ComPtr<ID2D1DeviceContext> tempCtx;
+                    if (FAILED(d2dDev->CreateDeviceContext(D2D1_DEVICE_CONTEXT_OPTIONS_NONE, &tempCtx))) return;
+
+                    Microsoft::WRL::ComPtr<ID2D1Bitmap1> thumbBitmap;
+                    if (FAILED(tempCtx->CreateBitmapFromWicBitmap(converter.Get(), nullptr, &thumbBitmap))) return;
+
+                    // Store in dir thumb cache
+                    {
+                        std::lock_guard<std::mutex> lock(m_dirThumbMutex);
+                        m_dirThumbCache[filePath] = thumbBitmap;
+                    }
+
+                    // Wake the dir window
+                    PostMessageW(hDir, Constants::WM_QIV_REPAINT, 0, 0);
+                });
+    });
 }
