@@ -154,7 +154,7 @@ HRESULT RendererGDI::Render() {
         }
     }
 
-    // Overlay text logic remains untouched
+    // Overlays text logic remains untouched
     if (!app.playlist.empty() && app.showOverlayInfoText) {
         std::wstring fullPath = app.playlist[app.currentIndex];
         std::wstring fileName = fullPath.substr(fullPath.find_last_of(L"\\/") + 1);

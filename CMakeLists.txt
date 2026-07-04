@@ -35,7 +35,7 @@ set(SOURCES
         src/UI/DirWnd.cpp
         src/UI/HistoryListWnd.cpp
         resources/resource.rc
-        src/Overlay/OverlayText.cpp
+        src/Overlays/OverlayText.cpp
         src/Input/CommandExecuter.cpp
         src/Input/CommandResolver.cpp
         src/Input/AppCommands.cpp
@@ -91,6 +91,7 @@ target_include_directories(QuickImageViewer PRIVATE
         ${CMAKE_CURRENT_SOURCE_DIR}/src/UI
         ${CMAKE_CURRENT_SOURCE_DIR}/src/Input
         ${CMAKE_CURRENT_SOURCE_DIR}/src/Persistence
+        ${CMAKE_CURRENT_SOURCE_DIR}/src/Overlays
 )
 
 # 5. Windows Libraries
