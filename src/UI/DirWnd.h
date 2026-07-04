@@ -55,8 +55,4 @@ namespace UI {
 
             void PostBuildHook() override; // async decodes + legacy global sync
     };
-
-    // Legacy globals — RendererD2D reads these directly
-    extern float g_dirOffset;
-    extern std::vector<Thumbnail> g_dirThumbnailObjects;
 } // namespace UI

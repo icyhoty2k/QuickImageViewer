@@ -5,10 +5,6 @@
 #include "../Renderer/RendererD2D.h"
 
 namespace UI {
-    // Legacy globals kept so RendererD2D doesn't need changes
-    float g_dirOffset = 0.0f;
-    std::vector<Thumbnail> g_dirThumbnailObjects;
-
     // -------------------------------------------------------------------------
     // Shortcuts
     // -------------------------------------------------------------------------
@@ -28,12 +24,9 @@ namespace UI {
     }
 
     // -------------------------------------------------------------------------
-    // PostBuildHook — queue async decodes + sync legacy globals for RendererD2D
+    // PostBuildHook — queue async decodes for RendererD2D
     // -------------------------------------------------------------------------
     void DirWnd::PostBuildHook() {
-        g_dirOffset = m_offset;
-        g_dirThumbnailObjects = m_thumbnails;
-
         auto *r = dynamic_cast<RendererD2D *>(app.renderer.get());
         if (r) {
             for (const auto &t: m_thumbnails) {

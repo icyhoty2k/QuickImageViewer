@@ -1080,7 +1080,7 @@ void RendererD2D::ResizePanel(ThumbnailPanelType type, UINT width, UINT height) 
     panel.deviceContext->SetTarget(panel.backBuffer.Get());
 }
 
-void RendererD2D::RenderPanel(ThumbnailPanelType type, int selectedIndex, int hoverIndex) {
+void RendererD2D::RenderPanel(ThumbnailPanelType type, int selectedIndex, int hoverIndex, const std::vector<UI::Thumbnail> &thumbnails) {
     ThumbnailPanel &panel = GetPanel(type);
     if (!panel.deviceContext || !panel.swapChain) return;
 
@@ -1089,10 +1089,9 @@ void RendererD2D::RenderPanel(ThumbnailPanelType type, int selectedIndex, int ho
     panel.deviceContext->BeginDraw();
     panel.deviceContext->Clear(D2D1::ColorF(0.08f, 0.08f, 0.08f, 1.0f));
 
-    const auto &objects = (type == ThumbnailPanelType::Cache) ? UI::g_thumbnailObjects : UI::g_dirThumbnailObjects;
-
-    for (size_t i = 0; i < objects.size(); ++i) {
-        const auto &thumb = objects[i];
+    // The legacy ternary operator is removed. We now iterate directly over the passed parameter:
+    for (size_t i = 0; i < thumbnails.size(); ++i) {
+        const auto &thumb = thumbnails[i];
         bool drawn = false;
 
         // 1. Check Dir thumbnail cache if active
