@@ -38,10 +38,10 @@ namespace UI {
     }
 
     CacheWnd &UIManager::getCacheWindow() {
-        // if (isInit(cacheWnd)) {
-        //     return cacheWnd;
-        // }
-        // cacheWnd.Init(m_hInstance, m_hMainWnd, 1);
+        if (isInit(cacheWnd)) {
+            return cacheWnd;
+        }
+        cacheWnd.Init(m_hInstance, m_hMainWnd, 2);
         return cacheWnd;
     }
 
