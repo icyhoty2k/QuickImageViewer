@@ -9,12 +9,12 @@
 namespace UI {
     class DirWnd : public IPanelWindow {
         // -------------------------------------------------------------------------
-        // DirWindow  —  Current-folder image browser panel.
+        // DirWnd  —  Current-folder image browser panel.
         //
-        // Same visual language as CacheWindow (D2D thumbnails, hover/select border,
-        // drag-to-scroll, click-to-navigate) but positioned as a centered floating
-        // popup instead of an edge strip, and its data comes from the file-system
-        // (all images in the current folder) rather than the VRAM bitmap cache.
+        // Same visual language as CacheWnd (D2D thumbnails, hover/select border,
+        // drag-to-scroll, click-to-navigate) but positioned as a floating popup
+        // (default: centered) and its data comes from the file-system (all images
+        // in the current folder) rather than the VRAM bitmap cache.
         //
         // Shortcuts:
         //   F5  —  Toggle panel (SC_PANEL_DIR_TOGGLE)
@@ -30,14 +30,8 @@ namespace UI {
             LRESULT HandleMessage(UINT message, WPARAM wParam, LPARAM lParam) override;
 
         private:
-            // Layout scroll offset for the dir panel
-
-
             // Re-anchors the selection highlight after a playlist change or scroll
             void SyncDirSelectionRectangle();
-
-            // ---- Lifecycle ----------------------------------------------------------
-            void InitDirWindow(HINSTANCE hInstance, HWND hParent);
 
             // ---- Visibility ---------------------------------------------------------
             void ToggleDirWindow();
@@ -52,7 +46,6 @@ namespace UI {
             void UpdateDirView();
 
             // Drops all scaled dir thumbnails from the renderer cache.
-            // Call this whenever the active folder changes so stale images are not shown.
             void ClearDirThumbnailCache();
     };
 
