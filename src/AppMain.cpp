@@ -288,8 +288,8 @@ LRESULT CALLBACK MainAppWndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM l
                     // Now the bitmap is ready, we can safely wire the effect graph.
                     app.UpdateRendererColorEffects(hWnd);
                     InvalidateRect(hWnd, nullptr, FALSE); // Now, repaint with the correct image.
-                    UI::UpdateCacheView();
-                    UI::UpdateDirView();
+                    uiManager.getCacheWindow().UpdateCacheView();
+                    uiManager.getDirWindow().UpdateDirView();
                 }
             }
             return 0;
@@ -312,8 +312,8 @@ LRESULT CALLBACK MainAppWndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM l
                 app.renderer) {
                 if (SUCCEEDED(app.renderer->LoadSvgFromBytes(payload->bytes, payload->path))) {
                     InvalidateRect(hWnd, nullptr, FALSE);
-                    UI::UpdateCacheView();
-                    UI::UpdateDirView();
+                    uiManager.getCacheWindow().UpdateCacheView();
+                    uiManager.getDirWindow().UpdateDirView();
                 }
             }
 
@@ -415,7 +415,7 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, PWSTR pCmdLine
     }
 
     // Init UI Manager (The New Controller)
-    app.uiManager.Init(hInstance, hWnd);
+    uiManager.Init(hInstance, hWnd);
 
     // Renderer & Setup
     SetWindowLongW(hWnd, GWL_EXSTYLE, GetWindowLongW(hWnd, GWL_EXSTYLE) | WS_EX_LAYERED);
@@ -430,8 +430,8 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, PWSTR pCmdLine
         (void) app.renderer->Initialize(hWnd);
     }
     app.renderer->onImageChangedCallback = [](int) {
-        UI::SyncSelectionRectangle();
-        UI::SyncDirSelectionRectangle();
+        uiManager.getCacheWindow().SyncSelectionRectangle();
+        uiManager.getDirWindow().SyncDirSelectionRectangle();
     };
 
     RegisterDragDrop(hWnd, (g_pDropTarget = new DropTarget(hWnd)));

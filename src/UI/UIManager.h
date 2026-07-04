@@ -20,7 +20,7 @@ namespace UI {
 
             void Hide(IPanelWindow &panel);
 
-            void HideAll();
+            void HideAllPanelWindows();
 
             HelpWnd &getHelpWindow();
 
@@ -46,6 +46,8 @@ namespace UI {
 
             HINSTANCE m_hInstance = nullptr;
             HWND m_hMainWnd = nullptr;
+
+            bool isInit(IPanelWindow &panel);
     };
 }
 

@@ -11,6 +11,7 @@
 #include <shlobj_core.h>
 #include <shtypes.h>
 #include "AppCommands.h"
+#include "UIManager.h"
 
 // These two functions live in AppMain.cpp.
 // Declared here (not in a header) to keep them package-private.
@@ -142,7 +143,7 @@ void InputManager::ExecuteKeyboardShortcutCommand(HWND hWnd, Command cmd) {
         // Panels / overlays
         // -----------------------------------------------------------------------
         case Command::ToggleHelp:
-            app.uiManager.Toggle(g_helpWindow);
+            uiManager.Toggle(uiManager.getHelpWindow());
             break;
 
         case Command::OpenFile:
@@ -150,19 +151,20 @@ void InputManager::ExecuteKeyboardShortcutCommand(HWND hWnd, Command cmd) {
             break;
 
         case Command::ToggleCache:
-            UI::ToggleCacheWindow();
+            uiManager.Toggle(uiManager.getCacheWindow());
             break;
 
         case Command::ClearCache:
-            UI::ClearThumbnailCache();
+            uiManager.getCacheWindow().ClearThumbnailCache();
+
             break;
 
         case Command::ToggleDir:
-            UI::ToggleDirWindow();
+            uiManager.Toggle(uiManager.getDirWindow());
             break;
 
         case Command::ToggleHistory:
-            UI::ToggleHistoryWindow();
+            uiManager.Toggle(uiManager.getHistoryListWindow());
             break;
 
         case Command::ToggleOverlay:
@@ -174,10 +176,7 @@ void InputManager::ExecuteKeyboardShortcutCommand(HWND hWnd, Command cmd) {
         // App control
         // -----------------------------------------------------------------------
         case Command::HideToTray:
-            UI::HideDirWindow();
-            UI::ToggleCacheWindow();
-            app.uiManager.Toggle(g_helpWindow.get());
-            UI::ToggleHistoryWindow();
+            uiManager.HideAllPanelWindows();
             if (app.GetInstanceCount() <= 1) {
                 ShowWindow(hWnd, SW_HIDE);
             } else {

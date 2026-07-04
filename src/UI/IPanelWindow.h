@@ -41,6 +41,7 @@ namespace UI {
                 return m_hWnd;
             }
 
+
         protected:
             HWND m_hWnd = nullptr;
             HWND m_hParent = nullptr;

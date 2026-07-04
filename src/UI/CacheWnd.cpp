@@ -32,7 +32,7 @@ namespace UI {
             }
         }
         InvalidateRect(g_hCacheWnd, nullptr, TRUE);
-        UpdateWindow(g_hCacheWnd);
+        // UpdateWindow(g_hCacheWnd);
     }
 
     LRESULT CALLBACK CacheWnd::HandleMessage(UINT message, WPARAM wParam, LPARAM lParam) {
