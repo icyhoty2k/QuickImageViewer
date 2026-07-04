@@ -1,6 +1,7 @@
-// CommandProvider.cpp
+// file: AppCommands.cpp
+// header: AppCommands.h
 #include "AppCommands.h"
-
+#include "../../resources/resource.h"
 #include <dwmapi.h>
 
 #include "AppState.h" // Assuming this is the path
@@ -105,4 +106,28 @@ void AppCommands::ResetWindowLayoutAndEffects(HWND hWnd) {
     app.ResetEffects();
 
     app.UpdateRendererColorEffects(hWnd);
+}
+
+void AppCommands::AddTrayIcon(HWND hWnd) {
+    NOTIFYICONDATAW nid = {sizeof(nid)};
+    nid.hWnd = hWnd;
+    nid.uID = ID_TRAY_APP_ICON;
+    // NIF_ICON: Shows the icon
+    // NIF_MESSAGE: Sends our custom WM_TRAYICON to our WndProc
+    // NIF_TIP: Shows a tooltip on hover
+    nid.uFlags = NIF_ICON | NIF_MESSAGE | NIF_TIP;
+    nid.uCallbackMessage = WM_TRAYICON;
+
+    // Use your existing app icon
+    nid.hIcon = LoadIcon(GetModuleHandle(NULL), MAKEINTRESOURCE(IDI_APP_ICON));
+    wcscpy_s(nid.szTip, L"QuickImageViewer"); // Hover text
+
+    Shell_NotifyIconW(NIM_ADD, &nid);
+}
+
+void AppCommands::RemoveTrayIcon(HWND hWnd) {
+    NOTIFYICONDATAW nid = {sizeof(nid)};
+    nid.hWnd = hWnd;
+    nid.uID = ID_TRAY_APP_ICON;
+    Shell_NotifyIconW(NIM_DELETE, &nid);
 }

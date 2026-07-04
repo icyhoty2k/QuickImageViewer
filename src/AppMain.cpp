@@ -85,17 +85,17 @@ LRESULT CALLBACK MainAppWndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM l
         case WM_COPYDATA: {
             COPYDATASTRUCT *cds = (COPYDATASTRUCT *) lParam;
             if (cds->dwData == 1) {
-                // Create a local copy to ensure safety even if processing takes time
                 std::wstring safePath((LPCWSTR) cds->lpData);
-
-                // --- 1. LOAD THE NEW IMAGE ---
                 OpenSpecificImage(hWnd, safePath.c_str());
 
-                // --- 2. WAKE UP & CENTER ---
-                // (viewport already reset inside LoadImageIndex via OpenSpecificImage)
+                AppCommands::RemoveTrayIcon(hWnd); // Clean up tray
                 ShowWindow(hWnd, SW_RESTORE);
-                SetForegroundWindow(hWnd); // Bring to front
+                SetForegroundWindow(hWnd);
                 InvalidateRect(hWnd, nullptr, FALSE);
+            } else if (cds->dwData == 2) {
+                AppCommands::RemoveTrayIcon(hWnd); // Clean up tray
+                ShowWindow(hWnd, SW_RESTORE);
+                SetForegroundWindow(hWnd);
             }
             return TRUE;
         }
@@ -343,6 +343,8 @@ LRESULT CALLBACK MainAppWndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM l
             return 1;
 
         case WM_CLOSE: {
+            //Tray icon on close
+            AppCommands::AddTrayIcon(hWnd);
             // 1. "Hide" instead of "Destroy"
             // This removes the window from sight but keeps the process and message loop alive.
             ShowWindow(hWnd, SW_HIDE);
@@ -388,11 +390,24 @@ int WINAPI wWinMain(HINSTANCE hInstance, [[maybe_unused]] HINSTANCE hPrevInstanc
 
     if (GetLastError() == ERROR_ALREADY_EXISTS) {
         HWND hExistingWnd = FindWindowW(Constants::WINDOW_CLASS_NAME, nullptr);
-        if (hExistingWnd && argc > 1) {
+        if (hExistingWnd) {
+            // Allow the background instance to steal focus from this closing instance
+            DWORD existingProcId;
+            GetWindowThreadProcessId(hExistingWnd, &existingProcId);
+            AllowSetForegroundWindow(existingProcId);
+
             COPYDATASTRUCT cds;
-            cds.dwData = 1;
-            cds.cbData = (DWORD) ((wcslen(argv[1]) + 1) * sizeof(wchar_t));
-            cds.lpData = (void *) argv[1];
+            if (argc > 1) {
+                // Signal 1: Load new image and wake up
+                cds.dwData = 1;
+                cds.cbData = (DWORD) ((wcslen(argv[1]) + 1) * sizeof(wchar_t));
+                cds.lpData = (void *) argv[1];
+            } else {
+                // Signal 2: Wake up only (no file passed)
+                cds.dwData = 2;
+                cds.cbData = 0;
+                cds.lpData = nullptr;
+            }
             SendMessageW(hExistingWnd, WM_COPYDATA, 0, (LPARAM) &cds);
         }
         LocalFree(argv);
