@@ -41,7 +41,7 @@ namespace UI {
         private:
             HelpWnd helpWnd;
             CacheWnd cacheWnd;
-            DirWnd currDirWnd;
+            DirWnd dirWnd;
             HistoryListWnd historyListWnd;
 
             HINSTANCE m_hInstance = nullptr;

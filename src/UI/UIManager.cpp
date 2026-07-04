@@ -33,7 +33,7 @@ namespace UI {
         // Explicitly hide each member
         Hide(helpWnd);
         Hide(cacheWnd);
-        Hide(currDirWnd);
+        Hide(dirWnd);
         Hide(historyListWnd);
     }
 } // namespace UI
