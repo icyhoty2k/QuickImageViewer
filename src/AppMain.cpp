@@ -51,6 +51,9 @@ DropTarget *g_pDropTarget = nullptr;
 //   g_decoderWorker – WorkerThread(true): WIC decode + pixel convert
 IoThreadPool g_ioWorker;
 WorkerThread g_decoderWorker(true);
+// Dedicated worker for DirWnd thumbnail decoding.
+// Kept separate so LoadImageIndex's ClearQueue() never wipes dir thumb tasks.
+WorkerThread g_dirThumbWorker(true);
 
 
 // Shift+Delete (Shortcuts::SC_APP_RESET_DEFAULTS) — restore default application

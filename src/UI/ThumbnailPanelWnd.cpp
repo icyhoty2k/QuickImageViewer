@@ -342,31 +342,6 @@ namespace UI {
                     return 0;
                 }
 
-                if (key == VK_UP) {
-                    if (!m_thumbnails.empty()) {
-                        m_selectedIdx = (m_selectedIdx > 0)
-                                            ? m_selectedIdx - 1
-                                            : static_cast<int>(m_thumbnails.size()) - 1;
-                        m_hoverIdx = m_selectedIdx;
-                        ScrollToSelected();
-                        InvalidateRect(m_hWnd, nullptr, FALSE);
-                        UpdateWindow(m_hWnd);
-                    }
-                    return 0;
-                }
-                if (key == VK_DOWN) {
-                    if (!m_thumbnails.empty()) {
-                        m_selectedIdx = (m_selectedIdx < static_cast<int>(m_thumbnails.size()) - 1)
-                                            ? m_selectedIdx + 1
-                                            : 0;
-                        m_hoverIdx = m_selectedIdx;
-                        ScrollToSelected();
-                        InvalidateRect(m_hWnd, nullptr, FALSE);
-                        UpdateWindow(m_hWnd);
-                    }
-                    return 0;
-                }
-
                 // Forward unhandled keys to the main window
                 if (m_hOwner) return SendMessageW(m_hOwner, message, wParam, lParam);
                 break;
@@ -434,7 +409,9 @@ namespace UI {
                 }
                 return 0;
             }
-
+            case Constants::WM_QIV_REPAINT:
+                InvalidateRect(m_hWnd, nullptr, FALSE);
+                return 0;
             // -----------------------------------------------------------------
             case WM_CLOSE:
                 ShowWindow(m_hWnd, SW_HIDE);

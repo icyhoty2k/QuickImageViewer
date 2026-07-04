@@ -19,6 +19,7 @@
 
 extern WorkerThread g_decoderWorker;
 extern IoThreadPool g_ioWorker;
+extern WorkerThread g_dirThumbWorker;
 
 // =============================================================================
 //  Initialize
