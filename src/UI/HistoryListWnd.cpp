@@ -302,7 +302,7 @@ namespace UI {
     // -------------------------------------------------------------------------
     // Public API
     // -------------------------------------------------------------------------
-    void HistoryListWnd::Init(HINSTANCE hInstance, HWND hParent, int8_t position) {
+    void HistoryListWnd::Init(HINSTANCE hInstance, HWND hParent, int8_t /*position*/) {
         Init(hInstance, hParent);
     }
 
