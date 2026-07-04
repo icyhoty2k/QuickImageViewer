@@ -267,8 +267,7 @@ namespace UI {
                         return 0;
                     }
 
-                    case VK_RETURN:
-                    case VK_SPACE: {
+                    case VK_RETURN: {
                         if (g_hoverRow >= 0 && g_hoverRow < static_cast<int>(g_folderHistory.size())) {
                             const std::wstring &folder = g_folderHistory[g_hoverRow];
                             ShowWindow(m_hWnd, SW_HIDE);
@@ -337,22 +336,26 @@ namespace UI {
         ShowWindow(m_hWnd, SW_HIDE);
     }
 
-    void HistoryListWnd::ToggleHistoryWindow() {
+    void HistoryListWnd::Show() {
         if (!m_hWnd) return;
 
-        if (IsWindowVisible(m_hWnd)) {
-            ShowWindow(m_hWnd, SW_HIDE);
-        } else {
-            // Recalculate size every open (history list may have grown)
-            int x, y, w, h;
-            GetHistoryWindowBounds(g_hHistOwner ? g_hHistOwner : m_hWnd, x, y, w, h);
-            SetWindowPos(m_hWnd, HWND_TOPMOST, x, y, w, h, SWP_FRAMECHANGED);
+        int x, y, w, h;
+        GetHistoryWindowBounds(g_hHistOwner ? g_hHistOwner : m_hWnd, x, y, w, h);
+        SetWindowPos(m_hWnd, HWND_TOPMOST, x, y, w, h, SWP_FRAMECHANGED);
 
-            g_hoverRow = 0;
-            ShowWindow(m_hWnd, SW_SHOW);
-            SetForegroundWindow(m_hWnd);
-            InvalidateRect(m_hWnd, nullptr, TRUE);
-        }
+        g_hoverRow = 0;
+        ShowWindow(m_hWnd, SW_SHOW);
+        SetForegroundWindow(m_hWnd);
+        InvalidateRect(m_hWnd, nullptr, TRUE);
+    }
+
+    void HistoryListWnd::Toggle() {
+        if (!m_hWnd) return;
+        IsWindowVisible(m_hWnd) ? Hide() : Show();
+    }
+
+    void HistoryListWnd::ToggleHistoryWindow() {
+        Toggle(); // delegates — one place to maintain
     }
 
     void HistoryListWnd::PushFolderHistory(const std::wstring &folderPath) {

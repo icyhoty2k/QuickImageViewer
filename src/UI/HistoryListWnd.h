@@ -26,6 +26,12 @@ namespace UI {
 
             void Init(HINSTANCE hInstance, HWND hParent, int8_t position) override;
 
+            // Resize to fit current history count, then show.
+            void Show() override;
+
+            // Hide if visible, Show() if not.
+            void Toggle() override;
+
             // Called by FileHandler after every successful folder load.
             void PushFolderHistory(const std::wstring &folderPath);
 
