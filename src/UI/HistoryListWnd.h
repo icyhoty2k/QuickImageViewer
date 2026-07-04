@@ -9,15 +9,15 @@
 namespace UI {
     class HistoryListWnd : public IPanelWindow {
         // -------------------------------------------------------------------------
-        // HistoryWindow  —  Last-visited folder history panel.
+        // HistoryListWnd  —  Last-visited folder history panel.
         //
         // Shows the last Constants::HISTORY_MAX_DIRS folders the user opened,
-        // most-recent at the top. Click any row to open that folder (first image).
+        // most-recent at the top.  Click any row to open that folder (first image).
         //
-        // Displayed as a centered floating GDI popup — same dark style as the
-        // HelpWindow, same WS_POPUP | WS_EX_TOPMOST | WS_EX_LAYERED flags.
+        // Displayed as a centered floating GDI popup — same dark style as HelpWnd,
+        // same WS_POPUP | WS_EX_TOPMOST | WS_EX_LAYERED flags.
         //
-        // Shortcut:
+        // Shortcuts:
         //   F7  —  Toggle history panel (SC_PANEL_HISTORY_TOGGLE)
         //   Esc —  Hide panel (SC_LOCAL_HIDE)
         // -------------------------------------------------------------------------
@@ -26,22 +26,21 @@ namespace UI {
 
             void Init(HINSTANCE hInstance, HWND hParent, int8_t position) override;
 
+            // Called by FileHandler after every successful folder load.
+            void PushFolderHistory(const std::wstring &folderPath);
+
+            // Returns the current history list (index 0 = most recent).
+            const std::vector<std::wstring> &GetFolderHistory();
+
         protected:
             LRESULT HandleMessage(UINT message, WPARAM wParam, LPARAM lParam) override;
 
         private:
-            // Called by FileHandler after every successful folder load.
-        // Pushes the folder path to the front; drops oldest entry when the list
-        // exceeds Constants::HISTORY_MAX_DIRS.
-        void PushFolderHistory(const std::wstring &folderPath);
-
-        // Returns the current history list (index 0 = most recent).
-        const std::vector<std::wstring> &GetFolderHistory();
-
-        // ---- Lifecycle ----------------------------------------------------------
-        void InitHistoryWindow(HINSTANCE hInstance, HWND hParent);
-
-        // ---- Visibility ---------------------------------------------------------
-        void ToggleHistoryWindow();
+            void ToggleHistoryWindow();
     };
-}
+
+    // Free-function variants kept for FileHandler compatibility
+    void PushFolderHistory(const std::wstring &folderPath);
+
+    const std::vector<std::wstring> &GetFolderHistory();
+} // namespace UI

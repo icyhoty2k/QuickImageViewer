@@ -4,8 +4,8 @@
 #include "../Platform/FileHandler.h"
 #include <windowsx.h>
 #include "../Renderer/RendererD2D.h"
-#include "Constants.h"
-#include "Shortcuts.h"
+#include "../Platform/Constants.h"
+#include "../Input/Shortcuts.h"
 
 namespace UI {
     HWND g_hCacheWnd = nullptr;
