@@ -77,7 +77,7 @@ Command InputManager::ResolveKeyboardKeys(UINT key) {
         case Shortcuts::SC_PANEL_HISTORY_TOGGLE: return Command::ToggleHistory; // F7
         case Shortcuts::SC_PANEL_CACHE_CLEAR: return Command::ClearCache; // F12
 
-        // --- Overlay ---
+        // --- Overlays ---
         // N without Ctrl = overlay toggle; Ctrl+N = new window (handled below)
         case Shortcuts::SC_PANEL_OVERLAY_TOGGLE: // 'N'
             if (!ctrl) return Command::ToggleOverlay;
