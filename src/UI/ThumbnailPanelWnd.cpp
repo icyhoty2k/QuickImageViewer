@@ -451,7 +451,8 @@ namespace UI {
         if (!app.renderer) return;
         auto *r = dynamic_cast<RendererD2D *>(app.renderer.get());
         if (r && r->GetPanelContext(GetPanelType())) {
-            r->RenderPanel(GetPanelType(), selectedIdx, hoverIdx);
+            // Pass the protected m_thumbnails vector directly
+            r->RenderPanel(GetPanelType(), selectedIdx, hoverIdx, m_thumbnails);
         }
     }
 

@@ -54,11 +54,5 @@ namespace UI {
 
             // Returns VRAM-cached file paths — base class handles all layout
             std::vector<std::wstring> GetSourceItems() const override;
-
-            void PostBuildHook() override; // syncs legacy globals for RendererD2D
     };
-
-    // Legacy globals — RendererD2D reads these directly
-    extern float g_cacheOffset;
-    extern std::vector<Thumbnail> g_thumbnailObjects;
 } // namespace UI

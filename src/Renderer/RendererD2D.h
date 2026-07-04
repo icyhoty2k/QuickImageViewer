@@ -14,6 +14,8 @@
 #include <mutex>
 #include <vector>
 
+#include "Thumbnail.h"
+
 class RendererD2D final : public IImageRenderer {
     public:
         int g_hoverIndex = -1;
@@ -65,7 +67,7 @@ class RendererD2D final : public IImageRenderer {
 
         void DiscardPanelDeviceResources(ThumbnailPanelType type);
 
-        void RenderPanel(ThumbnailPanelType type, int selectedIndex, int hoverIndex);
+        void RenderPanel(ThumbnailPanelType type, int selectedIndex, int hoverIndex, const std::vector<UI::Thumbnail> &thumbnails);
 
         void ResizePanel(ThumbnailPanelType type, UINT width, UINT height);
 

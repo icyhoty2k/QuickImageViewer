@@ -5,10 +5,6 @@
 #include "../Renderer/RendererD2D.h"
 
 namespace UI {
-    // Legacy globals kept so RendererD2D doesn't need changes
-    float g_cacheOffset = 0.0f;
-    std::vector<Thumbnail> g_thumbnailObjects;
-
     // -------------------------------------------------------------------------
     // Shortcuts
     // -------------------------------------------------------------------------
@@ -36,13 +32,6 @@ namespace UI {
         return paths;
     }
 
-    // -------------------------------------------------------------------------
-    // PostBuildHook — syncs legacy globals for RendererD2D
-    // -------------------------------------------------------------------------
-    void CacheWnd::PostBuildHook() {
-        g_cacheOffset = m_offset;
-        g_thumbnailObjects = m_thumbnails;
-    }
 
     // -------------------------------------------------------------------------
     // ClearThumbnailCache
