@@ -218,7 +218,7 @@ namespace UI {
                         ShowWindow(m_hWnd, SW_HIDE);
                         try {
                             for (const auto &entry: std::filesystem::directory_iterator(folder)) {
-                                if (entry.is_regular_file() && is_image_ext(entry.path())) {
+                                if (entry.is_regular_file() && is_image_ext(entry.path().extension().wstring())) {
                                     OpenSpecificImage(g_hHistOwner, entry.path().wstring());
                                     break;
                                 }
