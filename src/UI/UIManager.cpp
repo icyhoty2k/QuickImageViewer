@@ -41,7 +41,7 @@ namespace UI {
         if (isInit(cacheWnd)) {
             return cacheWnd;
         }
-        cacheWnd.Init(m_hInstance, m_hMainWnd, 2);
+        cacheWnd.Init(m_hInstance, m_hMainWnd, 3);
         return cacheWnd;
     }
 
