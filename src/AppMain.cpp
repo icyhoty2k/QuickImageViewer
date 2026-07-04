@@ -369,7 +369,7 @@ LRESULT CALLBACK MainAppWndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM l
                     // Fallback if we already have the rights
                     SetForegroundWindow(hWnd);
                 }
-            }else if (lParam == WM_RBUTTONUP) {
+            } else if (lParam == WM_RBUTTONUP) {
                 // Right-click shows a context menu
                 POINT pt;
                 GetCursorPos(&pt);
@@ -393,8 +393,7 @@ LRESULT CALLBACK MainAppWndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM l
                     SetForegroundWindow(hWnd);
                 } else if (cmd == 2) { // Exit clicked
                     AppCommands::RemoveTrayIcon(hWnd);
-                    // Actually kill the app this time
-                    PostQuitMessage(0);
+                    DestroyWindow(hWnd);
                 }
             }
             return 0;

@@ -182,7 +182,6 @@ void InputManager::ExecuteKeyboardShortcutCommand(HWND hWnd, Command cmd) {
                 AppCommands::AddTrayIcon(hWnd);
                 ShowWindow(hWnd, SW_HIDE);
             } else {
-                AppCommands::RemoveTrayIcon(hWnd);
                 DestroyWindow(hWnd);
             }
             break;
