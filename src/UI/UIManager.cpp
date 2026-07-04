@@ -49,7 +49,7 @@ namespace UI {
         if (isInit(dirWnd)) {
             return dirWnd;
         }
-        dirWnd.Init(m_hInstance, m_hMainWnd, 0);
+        dirWnd.Init(m_hInstance, m_hMainWnd, 1);
         return dirWnd;
     }
 
