@@ -79,22 +79,13 @@ void RendererD2D::UpdateColorEffects() {
     (void) EnsureExtraEffects();
     // 1. Check BOTH booleans. If effects are active AND the preview toggle is on...
     if (app.hasActiveEffects && app.effectPreviewEnabled && m_pBitmap) {
-        // Always rebuild the chain unconditionally. The old guard
-        //   (node == bitmap || node == nullptr)
-        // broke stacking: when a second effect was toggled (e.g. End/Solarize
-        // already active, then Insert/Invert), m_pActiveDisplayNode pointed at
-        // the first effect's output — not the bitmap, not null — so
-        // ApplyPreviousEffects() was skipped and the new effect was ignored.
-        // BuildEffectChain always rebuilds from scratch using current booleans,
-        // so calling it unconditionally is correct and cheap.
+        // Always rebuild the chain unconditionally.
         ApplyPreviousEffects();
     } else {
         // Safe bypass: no effects active OR preview toggled off.
         m_pActiveDisplayNode = m_pBitmap; // FAST PATH
     }
-    // Non-linear effect nodes are created lazily here so the first toggle
-    // of any of gamma/solarize/threshold/outline doesn't stall on creation
-    // mid-frame inside Render().
+    // Non-linear effect nodes are created lazily here
     (void) EnsureExtraEffects();
 
     constexpr float lumR = 0.2126f;
@@ -102,9 +93,6 @@ void RendererD2D::UpdateColorEffects() {
     constexpr float lumB = 0.0722f;
 
     // ----- Base matrix: Sepia (fixed tone matrix) OR Saturation/Grayscale -----
-    // Sepia replaces the saturation step rather than stacking with it — two
-    // independent "what color should this become" steps would just fight
-    // each other and the result wouldn't be predictable.
     float base[3][3];
     if (app.effectSepia) {
         base[0][0] = 0.393f;
@@ -117,10 +105,6 @@ void RendererD2D::UpdateColorEffects() {
         base[2][1] = 0.534f;
         base[2][2] = 0.131f;
     } else {
-        // g_app.saturation: 0.0 = grayscale, 1.0 = neutral, >1.0 = oversaturated.
-        // effectGrayscale forces s=0 regardless of the continuous slider value
-        // (the slider value itself is preserved so toggling grayscale back off
-        // restores whatever saturation the user had dialed in).
         const float s = app.effectGrayscale ? 0.0f : app.saturation;
         base[0][0] = lumR * (1.0f - s) + s;
         base[0][1] = lumG * (1.0f - s);
@@ -134,9 +118,6 @@ void RendererD2D::UpdateColorEffects() {
     }
 
     // ----- Contrast -----
-    // g_app.contrast: 1.0 = neutral. out = (in - 0.5) * c + 0.5
-    // Folded into the matrix by scaling every row of `base` by c; the offset
-    // picks up 0.5 * (1 - c). No internal cap, unlike CLSID_D2D1Contrast.
     const float c = app.contrast;
     float m[3][3];
     for (int row = 0; row < 3; ++row)
@@ -144,16 +125,11 @@ void RendererD2D::UpdateColorEffects() {
             m[row][col] = base[row][col] * c;
 
     // ----- Brightness -----
-    // g_app.brightness: 0.0 = neutral, +1.0 = pure white, -1.0 = pure black.
     const float b = std::clamp(app.brightness, -1.0f, 1.0f);
     const float contrastOffset = 0.5f * (1.0f - c);
     float offset = contrastOffset + b;
 
     // ----- Invert -----
-    // out = 1 - (m*in + offset)  =>  m' = -m, offset' = 1 - offset.
-    // Applied last so it inverts whatever sepia/grayscale/contrast/brightness
-    // already produced — matches "Invert colors" being a final flip, not an
-    // independent tint.
     if (app.effectInvert) {
         for (int row = 0; row < 3; ++row)
             for (int col = 0; col < 3; ++col)
@@ -171,10 +147,10 @@ void RendererD2D::UpdateColorEffects() {
     m_pColorMatrixEffect->SetValue(D2D1_COLORMATRIX_PROP_COLOR_MATRIX, matrix);
     m_pColorMatrixEffect->SetValue(D2D1_COLORMATRIX_PROP_CLAMP_OUTPUT, TRUE);
 
-    // ----- Gamma ----- (non-linear, cannot fold into the matrix above)
+    // ----- Gamma -----
     if (m_pGammaEffect) {
         const float g = (app.gamma <= 0.01f) ? 0.01f : app.gamma;
-        const float exponent = 1.0f / g; // gamma > 1.0 => brighter midtones
+        const float exponent = 1.0f / g;
         m_pGammaEffect->SetValue(D2D1_GAMMATRANSFER_PROP_RED_EXPONENT, exponent);
         m_pGammaEffect->SetValue(D2D1_GAMMATRANSFER_PROP_GREEN_EXPONENT, exponent);
         m_pGammaEffect->SetValue(D2D1_GAMMATRANSFER_PROP_BLUE_EXPONENT, exponent);
@@ -193,7 +169,7 @@ void RendererD2D::UpdateColorEffects() {
 }
 
 // =============================================================================
-//  EnsureExtraEffects  — lazily create the non-linear effect nodes
+//  EnsureExtraEffects
 // =============================================================================
 HRESULT RendererD2D::EnsureExtraEffects() {
     if (!m_pDeviceContext) return E_FAIL;
@@ -209,8 +185,6 @@ HRESULT RendererD2D::EnsureExtraEffects() {
         hr = m_pDeviceContext->CreateEffect(CLSID_D2D1TableTransfer, &m_pSolarizeEffect);
         if (FAILED(hr)) return hr;
 
-        // Build a 256-entry per-channel LUT: values above the threshold get
-        // inverted, values below pass through untouched — a true solarize.
         std::vector<float> lut(256);
         for (int i = 0; i < 256; ++i) {
             const float v = static_cast<float>(i) / 255.0f;
@@ -224,10 +198,6 @@ HRESULT RendererD2D::EnsureExtraEffects() {
         m_pSolarizeEffect->SetValue(D2D1_TABLETRANSFER_PROP_ALPHA_DISABLE, TRUE);
     }
 
-    // Threshold effect: implemented via D2D1TableTransfer with a step LUT.
-    // CLSID_D2D1Threshold does not exist in the Win32 SDK — we build the
-    // equivalent ourselves: values below BW_THRESHOLD_LEVEL map to 0.0 (black),
-    // values at or above map to 1.0 (white).  Same approach as solarize.
     if (!m_pThresholdEffect) {
         hr = m_pDeviceContext->CreateEffect(CLSID_D2D1TableTransfer, &m_pThresholdEffect);
         if (FAILED(hr)) return hr;
@@ -246,10 +216,8 @@ HRESULT RendererD2D::EnsureExtraEffects() {
     }
 
     if (!m_pOutlineEffect) {
-        // Attempt to create edge detection effect
         hr = m_pDeviceContext->CreateEffect(CLSID_D2D1EdgeDetection, &m_pOutlineEffect);
         if (FAILED(hr)) {
-            // Edge detection effect not available in this SDK version - continue without it
             m_pOutlineEffect = nullptr;
         } else {
             m_pOutlineEffect->SetValue(D2D1_EDGEDETECTION_PROP_STRENGTH, Constants::OUTLINE_STRENGTH);
@@ -263,24 +231,17 @@ HRESULT RendererD2D::EnsureExtraEffects() {
 void RendererD2D::ApplyPreviousEffects() {
     (void) EnsureExtraEffects();
 
-    // Wire the graph using your existing logic
     ID2D1Effect *finalEffect = BuildEffectChain(m_pBitmap.Get());
 
     if (finalEffect) {
-        // PROPER COM WAY: Do not cast! Ask the effect to yield its output image.
         Microsoft::WRL::ComPtr<ID2D1Image> effectOutput;
         finalEffect->GetOutput(&effectOutput);
-
-        // Now safely store the true image pointer
         m_pActiveDisplayNode = effectOutput;
     }
 }
 
 // =============================================================================
-//  BuildEffectChain  — wires source -> ColorMatrix -> [Gamma] -> [Solarize]
-//                      -> [Threshold] -> [Outline], skipping any stage whose
-//                      toggle is off. Returns the final effect (never null
-//                      once m_pColorMatrixEffect exists).
+//  BuildEffectChain
 // =============================================================================
 ID2D1Effect *RendererD2D::BuildEffectChain(ID2D1Image *source) {
     if (!m_pColorMatrixEffect) return nullptr;
@@ -309,12 +270,10 @@ ID2D1Effect *RendererD2D::BuildEffectChain(ID2D1Image *source) {
     return current;
 }
 
-
 // =============================================================================
-//  CreateDeviceResources  — builds D3D11 → DXGI → D2D7 chain
+//  CreateDeviceResources
 // =============================================================================
 HRESULT RendererD2D::CreateDeviceResources() {
-    // 1. Create D3D11 device with D2D interop flag
     D3D_FEATURE_LEVEL featureLevels[] = {
         D3D_FEATURE_LEVEL_11_1,
         D3D_FEATURE_LEVEL_11_0,
@@ -328,36 +287,26 @@ HRESULT RendererD2D::CreateDeviceResources() {
 
     D3D_FEATURE_LEVEL chosenLevel{};
     HRESULT hr = D3D11CreateDevice(
-            nullptr, // default adapter
-            D3D_DRIVER_TYPE_HARDWARE,
-            nullptr,
-            createFlags,
-            featureLevels, ARRAYSIZE(featureLevels),
-            D3D11_SDK_VERSION,
-            m_pD3DDevice.GetAddressOf(),
-            &chosenLevel,
-            m_pD3DContext.GetAddressOf());
+            nullptr, D3D_DRIVER_TYPE_HARDWARE, nullptr,
+            createFlags, featureLevels, ARRAYSIZE(featureLevels),
+            D3D11_SDK_VERSION, m_pD3DDevice.GetAddressOf(),
+            &chosenLevel, m_pD3DContext.GetAddressOf());
 
     if (FAILED(hr)) {
-        // Retry without debug layer (SDK might not be installed)
         createFlags &= ~D3D11_CREATE_DEVICE_DEBUG;
         hr = D3D11CreateDevice(nullptr, D3D_DRIVER_TYPE_HARDWARE, nullptr,
                                createFlags, featureLevels, ARRAYSIZE(featureLevels),
-                               D3D11_SDK_VERSION,
-                               m_pD3DDevice.GetAddressOf(), &chosenLevel,
-                               m_pD3DContext.GetAddressOf());
+                               D3D11_SDK_VERSION, m_pD3DDevice.GetAddressOf(),
+                               &chosenLevel, m_pD3DContext.GetAddressOf());
         if (FAILED(hr)) return hr;
     }
 
-    // 2. Get the DXGI device from D3D11 device
     Microsoft::WRL::ComPtr<IDXGIDevice1> dxgiDevice;
     hr = m_pD3DDevice.As(&dxgiDevice);
     if (FAILED(hr)) return hr;
 
-    // Limit pre-rendered frames to 1 to reduce input latency
     (void) dxgiDevice->SetMaximumFrameLatency(1);
 
-    // 3. Get DXGI adapter → factory to create the swap chain
     Microsoft::WRL::ComPtr<IDXGIAdapter> dxgiAdapter;
     hr = dxgiDevice->GetAdapter(dxgiAdapter.GetAddressOf());
     if (FAILED(hr)) return hr;
@@ -366,18 +315,17 @@ HRESULT RendererD2D::CreateDeviceResources() {
     hr = dxgiAdapter->GetParent(IID_PPV_ARGS(&dxgiFactory));
     if (FAILED(hr)) return hr;
 
-    // 4. Create DXGI swap chain for the HWND
     DXGI_SWAP_CHAIN_DESC1 swapDesc{};
-    swapDesc.Width = 0; // auto from window
+    swapDesc.Width = 0;
     swapDesc.Height = 0;
-    swapDesc.Format = DXGI_FORMAT_B8G8R8A8_UNORM; // required for D2D
+    swapDesc.Format = DXGI_FORMAT_B8G8R8A8_UNORM;
     swapDesc.Stereo = FALSE;
     swapDesc.SampleDesc.Count = 1;
     swapDesc.SampleDesc.Quality = 0;
     swapDesc.BufferUsage = DXGI_USAGE_RENDER_TARGET_OUTPUT;
     swapDesc.BufferCount = 2;
     swapDesc.Scaling = DXGI_SCALING_NONE;
-    swapDesc.SwapEffect = DXGI_SWAP_EFFECT_FLIP_DISCARD; // modern flip model
+    swapDesc.SwapEffect = DXGI_SWAP_EFFECT_FLIP_DISCARD;
     swapDesc.AlphaMode = DXGI_ALPHA_MODE_IGNORE;
     swapDesc.Flags = 0;
 
@@ -387,72 +335,38 @@ HRESULT RendererD2D::CreateDeviceResources() {
             &m_pSwapChain);
     if (FAILED(hr)) return hr;
 
-    // Disable exclusive fullscreen transitions (we manage fullscreen ourselves)
     (void) dxgiFactory->MakeWindowAssociation(m_hwnd, DXGI_MWA_NO_ALT_ENTER);
 
-    // 5. Create D2D device from the DXGI device
-    hr = m_pD2DFactory->CreateDevice(dxgiDevice.Get(),
-                                     &m_pD2DDevice);
+    hr = m_pD2DFactory->CreateDevice(dxgiDevice.Get(), &m_pD2DDevice);
     if (FAILED(hr)) return hr;
 
-    // 6. Create device context, then QI up to ID2D1DeviceContext7.
-    //    CreateDeviceContext on ID2D1Device6 tops out at DeviceContext6,
-    //    so we create into the base interface first, then QueryInterface.
     {
         Microsoft::WRL::ComPtr<ID2D1DeviceContext> baseDC;
-        hr = m_pD2DDevice->CreateDeviceContext(
-                D2D1_DEVICE_CONTEXT_OPTIONS_NONE,
-                baseDC.GetAddressOf());
+        hr = m_pD2DDevice->CreateDeviceContext(D2D1_DEVICE_CONTEXT_OPTIONS_NONE, baseDC.GetAddressOf());
         if (FAILED(hr)) return hr;
         hr = baseDC.As(&m_pDeviceContext);
         if (FAILED(hr)) return hr;
     }
 
-    // 7. Bind the swap chain back buffer as the D2D render target
     hr = CreateBackBufferBitmap();
     if (FAILED(hr)) return hr;
 
-    // 8. Create text brush (device-dependent resource)
-    hr = m_pDeviceContext->CreateSolidColorBrush(
-            D2D1::ColorF(D2D1::ColorF::LightGreen),
-            &m_pTextBrush);
+    hr = m_pDeviceContext->CreateSolidColorBrush(D2D1::ColorF(D2D1::ColorF::LightGreen), &m_pTextBrush);
+    if (FAILED(hr)) return hr;
 
-    if (FAILED(hr))
-        return hr;
+    hr = m_pDeviceContext->CreateEffect(CLSID_D2D1ColorMatrix, &m_pColorMatrixEffect);
+    if (FAILED(hr)) return hr;
 
+    hr = m_pDeviceContext->CreateEffect(CLSID_D2D1Scale, &m_pScaleEffect);
+    if (FAILED(hr)) return hr;
 
-    // 9. Create color adjustment effect — single ColorMatrix combining
-    // saturation + contrast + brightness, computed explicitly in
-    // UpdateColorEffects(). Replaces the old D2D1Saturation/D2D1Contrast/
-    // D2D1Brightness chain: those built-in effects either clamp internally
-    // (saturation maxes at 2.0) or didn't behave as documented (Brightness's
-    // white/black point silently did nothing despite valid SetValue calls).
-    // ColorMatrix is a plain linear transform + offset — fully predictable.
-    hr = m_pDeviceContext->CreateEffect(
-            CLSID_D2D1ColorMatrix,
-            &m_pColorMatrixEffect);
-
-    if (FAILED(hr))
-        return hr;
-
-
-    hr = m_pDeviceContext->CreateEffect(
-            CLSID_D2D1Scale,
-            &m_pScaleEffect);
-
-    if (FAILED(hr))
-        return hr;
-
-
-    // Initialize neutral effect values
     UpdateColorEffects();
-
 
     return S_OK;
 }
 
 // =============================================================================
-//  CreateBackBufferBitmap  — wraps the DXGI back buffer in an ID2D1Bitmap1
+//  CreateBackBufferBitmap
 // =============================================================================
 HRESULT RendererD2D::CreateBackBufferBitmap() {
     m_pBackBufferBitmap.Reset();
@@ -478,7 +392,6 @@ HRESULT RendererD2D::CreateBackBufferBitmap() {
 //  DiscardDeviceResources
 // =============================================================================
 void RendererD2D::DiscardDeviceResources() {
-    // Clear the D2D target before releasing swap chain resources
     if (m_pDeviceContext) m_pDeviceContext->SetTarget(nullptr);
 
     m_pTextBrush.Reset();
@@ -486,7 +399,6 @@ void RendererD2D::DiscardDeviceResources() {
     m_pBitmap.Reset();
     m_bitmapCache.clear();
     m_lruList.clear();
-    // SVG documents are device-dependent – discard them too
     m_svgCache.clear();
     m_svgLruList.clear();
     m_pActiveSvg.Reset();
@@ -511,12 +423,10 @@ void RendererD2D::DiscardDeviceResources() {
 void RendererD2D::Resize(UINT width, UINT height) {
     if (!m_pSwapChain || !m_pDeviceContext) return;
 
-    // Must clear the D2D target before resizing swap chain buffers
     m_pDeviceContext->SetTarget(nullptr);
     m_pBackBufferBitmap.Reset();
 
-    HRESULT hr = m_pSwapChain->ResizeBuffers(0, width, height,
-                                             DXGI_FORMAT_UNKNOWN, 0);
+    HRESULT hr = m_pSwapChain->ResizeBuffers(0, width, height, DXGI_FORMAT_UNKNOWN, 0);
     if (SUCCEEDED(hr)) {
         (void) CreateBackBufferBitmap();
     }
@@ -535,7 +445,6 @@ HRESULT RendererD2D::LoadBitmap(IWICBitmapSource *bitmap, UINT width, UINT heigh
         if (it != m_bitmapCache.end()) {
             m_lruList.splice(m_lruList.begin(), m_lruList, it->second.lruIt);
             m_pBitmap = it->second.bitmap;
-            // Clear any active SVG so the raster path takes over
             m_pActiveSvg.Reset();
             m_svgNativeW = 0.0f;
             m_svgNativeH = 0.0f;
@@ -546,13 +455,7 @@ HRESULT RendererD2D::LoadBitmap(IWICBitmapSource *bitmap, UINT width, UINT heigh
     }
 
     if (isCacheHit) {
-        // Reset the display node so UpdateColorEffects() will rewire the
-        // effect graph to the new bitmap (not the previous image's output).
-        // Without this, ApplyPreviousEffects() is skipped because the stale
-        // node pointer doesn't match m_pBitmap, leaving the graph wired to
-        // the old image — causing the viewer to appear stuck on navigation.
         m_pActiveDisplayNode = nullptr;
-        // Fire callback safely outside the mutex lock
         if (onImageChangedCallback) {
             onImageChangedCallback(app.currentIndex);
         }
@@ -561,17 +464,12 @@ HRESULT RendererD2D::LoadBitmap(IWICBitmapSource *bitmap, UINT width, UINT heigh
 
     if (!bitmap || !m_pD2DDevice) return E_FAIL;
 
-    // Use a temporary device context to create the bitmap from the WIC source.
-    // This allows the bitmap to be created on the device rather than being tied
-    // strictly to the UI thread's current context state.
     Microsoft::WRL::ComPtr<ID2D1DeviceContext> tempCtx;
     HRESULT hr = m_pD2DDevice->CreateDeviceContext(D2D1_DEVICE_CONTEXT_OPTIONS_NONE, &tempCtx);
     if (FAILED(hr)) return hr;
 
     Microsoft::WRL::ComPtr<ID2D1Bitmap1> newBitmap;
-    hr = tempCtx->CreateBitmapFromWicBitmap(
-            bitmap, nullptr,
-            &newBitmap);
+    hr = tempCtx->CreateBitmapFromWicBitmap(bitmap, nullptr, &newBitmap);
 
     if (SUCCEEDED(hr)) {
         {
@@ -591,11 +489,7 @@ HRESULT RendererD2D::LoadBitmap(IWICBitmapSource *bitmap, UINT width, UINT heigh
         }
 
         m_pBitmap = newBitmap;
-        // Reset the display node to null — UpdateRendererColorEffects() called
-        // from WM_QIV_REPAINT will rewire it correctly (fast path or effect graph)
-        // based on the current g_app effect state. Never force hasActiveEffects here.
         m_pActiveDisplayNode = nullptr;
-        // Clear any active SVG so the raster render path takes over
         m_pActiveSvg.Reset();
         m_svgNativeW = 0.0f;
         m_svgNativeH = 0.0f;
@@ -603,7 +497,6 @@ HRESULT RendererD2D::LoadBitmap(IWICBitmapSource *bitmap, UINT width, UINT heigh
         app.imgWidth = static_cast<int>(width);
         app.imgHeight = static_cast<int>(height);
 
-        // Fire callback safely outside the mutex lock
         if (onImageChangedCallback) {
             onImageChangedCallback(app.currentIndex);
         }
@@ -617,18 +510,16 @@ HRESULT RendererD2D::LoadBitmap(IWICBitmapSource *bitmap, UINT width, UINT heigh
 HRESULT RendererD2D::PreloadBitmap(const std::wstring &filePath, int requestIndex) {
     std::lock_guard<std::mutex> lock(m_cacheMutex);
     if (m_bitmapCache.find(filePath) != m_bitmapCache.end()) {
-        return S_OK; // Already cached, ignore the request
+        return S_OK;
     }
     Microsoft::WRL::ComPtr<IWICImagingFactory2> wicFac = g_decoderWorker.wicFactory;
     if (!wicFac || !m_pD2DDevice) return E_UNEXPECTED;
 
-    // Capture the D2D device for the background thread
     Microsoft::WRL::ComPtr<ID2D1Device6> d2dDevice = m_pD2DDevice;
 
     g_ioWorker.PushTask([filePath, requestIndex, wicFac, d2dDevice, this]() {
         if (app.wantedIndex.load(std::memory_order_acquire) != requestIndex) return;
 
-        // Read compressed file bytes on the IO thread
         HANDLE hFile = CreateFileW(filePath.c_str(), GENERIC_READ, FILE_SHARE_READ, NULL, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, NULL);
         if (hFile == INVALID_HANDLE_VALUE) return;
 
@@ -649,7 +540,6 @@ HRESULT RendererD2D::PreloadBitmap(const std::wstring &filePath, int requestInde
         g_decoderWorker.PushTask([compressedBytes = std::move(compressedBytes), filePath, requestIndex, wicFac, d2dDevice, this]() mutable {
             if (app.wantedIndex.load(std::memory_order_acquire) != requestIndex) return;
 
-            // Create a decoder from the compressed memory stream
             Microsoft::WRL::ComPtr<IWICStream> wicStream;
             if (FAILED(wicFac->CreateStream(&wicStream))) return;
             if (FAILED(wicStream->InitializeFromMemory(compressedBytes.data(), static_cast<DWORD>(compressedBytes.size())))) return;
@@ -672,7 +562,6 @@ HRESULT RendererD2D::PreloadBitmap(const std::wstring &filePath, int requestInde
                 WICBitmapPaletteTypeCustom)))
                 return;
 
-            // This is the new direct-to-VRAM path
             Microsoft::WRL::ComPtr<ID2D1DeviceContext> tempCtx;
             if (FAILED(d2dDevice->CreateDeviceContext(D2D1_DEVICE_CONTEXT_OPTIONS_NONE, &tempCtx))) return;
 
@@ -684,7 +573,6 @@ HRESULT RendererD2D::PreloadBitmap(const std::wstring &filePath, int requestInde
                 std::lock_guard<std::mutex> lock(m_cacheMutex);
                 auto it = m_bitmapCache.find(filePath);
                 if (it != m_bitmapCache.end()) {
-                    // Safely erase the old entry to prevent orphaned nodes in m_lruList
                     m_lruList.erase(it->second.lruIt);
                     m_bitmapCache.erase(it);
                 }
@@ -713,19 +601,11 @@ HRESULT RendererD2D::Render() {
     m_pDeviceContext->BeginDraw();
     m_pDeviceContext->Clear(m_clearColor);
 
-    // =========================================================================
-    //  SVG path  (mutually exclusive with the raster bitmap path below)
-    // =========================================================================
     if (m_pActiveSvg) {
         const D2D1_SIZE_F rtSize = m_pDeviceContext->GetSize();
-
-        // m_svgNativeW/H is the intrinsic SVG size in logical pixels.
-        // If we couldn't read it, fall back to treating the SVG as square-ish
-        // using the window dimensions.
         const float imgW = (m_svgNativeW > 1.0f) ? m_svgNativeW : rtSize.width;
         const float imgH = (m_svgNativeH > 1.0f) ? m_svgNativeH : rtSize.height;
 
-        // Compute scaled render size (same logic as the raster path)
         float renderW = imgW;
         float renderH = imgH;
         const float ratioX = rtSize.width / imgW;
@@ -763,20 +643,12 @@ HRESULT RendererD2D::Render() {
         const float left = (rtSize.width - renderW) / 2.0f + app.viewport.offsetX;
         const float top = (rtSize.height - renderH) / 2.0f + app.viewport.offsetY;
 
-        // DrawSvgDocument always draws at (0,0) in the DC coordinate system,
-        // sized to whatever SetViewportSize says.  We position/rotate via the
-        // DC world transform:
-        // Tell D2D how large to rasterise the SVG
         m_pActiveSvg->SetViewportSize(D2D1::SizeF(renderW, renderH));
 
-        const D2D1_POINT_2F screenCenter =
-                D2D1::Point2F(rtSize.width / 2.0f, rtSize.height / 2.0f);
+        const D2D1_POINT_2F screenCenter = D2D1::Point2F(rtSize.width / 2.0f, rtSize.height / 2.0f);
 
-        // Start with translation to the target top-left corner
-        D2D1_MATRIX_3X2_F transform =
-                D2D1::Matrix3x2F::Translation(left, top);
+        D2D1_MATRIX_3X2_F transform = D2D1::Matrix3x2F::Translation(left, top);
 
-        // Then apply flip / rotation around the screen centre
         if (app.viewport.flippedH)
             transform = transform * D2D1::Matrix3x2F::Scale(-1.0f, 1.0f, screenCenter);
         if (app.viewport.flippedV)
@@ -787,7 +659,6 @@ HRESULT RendererD2D::Render() {
 
         m_pDeviceContext->SetTransform(transform);
 
-        // QI for DrawSvgDocument (requires ID2D1DeviceContext5)
         Microsoft::WRL::ComPtr<ID2D1DeviceContext5> ctx5;
         if (SUCCEEDED(m_pDeviceContext.As(&ctx5))) {
             ctx5->DrawSvgDocument(m_pActiveSvg.Get());
@@ -795,7 +666,6 @@ HRESULT RendererD2D::Render() {
 
         m_pDeviceContext->SetTransform(D2D1::Matrix3x2F::Identity());
 
-        // Overlay text (same as raster path)
         if (!app.playlist.empty() && app.showOverlayInfoText) {
             std::wstring fullPath = app.playlist[app.currentIndex];
             std::wstring fileName = fullPath.substr(fullPath.find_last_of(L"\\/") + 1);
@@ -865,15 +735,9 @@ HRESULT RendererD2D::Render() {
                                                  ? D2D1_INTERPOLATION_MODE_NEAREST_NEIGHBOR
                                                  : D2D1_INTERPOLATION_MODE_HIGH_QUALITY_CUBIC;
 
-        // =========================================================================
-        // THE MASTER BYPASS EVALUATION
-        // Draw the effect graph ONLY if there are active effects, the toggle is on,
-        // and the node has successfully been wired away from the raw bitmap.
-        // =========================================================================
         if (app.effectPreviewEnabled && app.hasActiveEffects &&
             m_pActiveDisplayNode && m_pActiveDisplayNode.Get() != m_pBitmap.Get() &&
             m_pScaleEffect) {
-            // SLOW PATH: Draw the processed effect graph
             m_pScaleEffect->SetInput(0, m_pActiveDisplayNode.Get());
             m_pScaleEffect->SetValue(
                     D2D1_SCALE_PROP_SCALE,
@@ -893,7 +757,6 @@ HRESULT RendererD2D::Render() {
                     D2D1_COMPOSITE_MODE_SOURCE_OVER
                     );
         } else {
-            // ULTIMATE FAST PATH: Directly draw the raw bitmap
             m_pDeviceContext->DrawBitmap(
                     m_pBitmap.Get(),
                     D2D1::RectF(left, top, left + renderW, top + renderH),
@@ -940,8 +803,7 @@ HRESULT RendererD2D::Render() {
 }
 
 // =============================================================================
-//  ClearActiveImage  — drops current raster bitmap and SVG so next Render()
-//  shows a blank frame instead of a stale image during async load.
+//  ClearActiveImage
 // =============================================================================
 void RendererD2D::ClearActiveImage() {
     m_pBitmap.Reset();
@@ -951,29 +813,18 @@ void RendererD2D::ClearActiveImage() {
 }
 
 // =============================================================================
-//  LoadSvgFromBytes  — parses SVG XML into an ID2D1SvgDocument on the UI thread
-// =============================================================================
-// Called from FileHandler (UI thread) after SvgDecoder::LoadFile() delivers
-// the raw bytes.  ID2D1SvgDocument can only be created on the device context
-// thread, so there is no background-thread path for SVG (unlike raster images).
-//
-// The document is kept in m_svgCache (simple unordered_map, no LRU needed –
-// SVGs are tiny).  m_pActiveSvg is set so Render() draws it instead of
-// m_pBitmap.  m_pBitmap is cleared so the raster path stays idle.
+//  LoadSvgFromBytes
 // =============================================================================
 HRESULT RendererD2D::LoadSvgFromBytes(const std::vector<BYTE> &svgBytes,
                                       const std::wstring &filePath) {
     if (!m_pDeviceContext) return E_UNEXPECTED;
     if (svgBytes.empty()) return E_INVALIDARG;
 
-    // Clear the raster bitmap immediately so we never draw a stale image
-    // while the SVG is being set up, even if something fails below.
     m_pBitmap.Reset();
     m_pActiveSvg.Reset();
 
     bool isCacheHit = false;
 
-    // --- 1. Check SVG cache first ---
     {
         std::lock_guard<std::mutex> lock(m_cacheMutex);
         auto it = m_svgCache.find(filePath);
@@ -982,7 +833,7 @@ HRESULT RendererD2D::LoadSvgFromBytes(const std::vector<BYTE> &svgBytes,
             m_pActiveSvg = it->second.document;
             m_svgNativeW = it->second.viewportW;
             m_svgNativeH = it->second.viewportH;
-            m_pBitmap.Reset(); // raster path must be idle
+            m_pBitmap.Reset();
             app.imgWidth = static_cast<int>(m_svgNativeW);
             app.imgHeight = static_cast<int>(m_svgNativeH);
             isCacheHit = true;
@@ -990,25 +841,20 @@ HRESULT RendererD2D::LoadSvgFromBytes(const std::vector<BYTE> &svgBytes,
     }
 
     if (isCacheHit) {
-        // Fire callback safely outside the mutex lock
         if (onImageChangedCallback) {
             onImageChangedCallback(app.currentIndex);
         }
         return S_OK;
     }
 
-    // --- 2. QI for ID2D1DeviceContext5 (needed for CreateSvgDocument) ---
     Microsoft::WRL::ComPtr<ID2D1DeviceContext5> ctx5;
     HRESULT hr = m_pDeviceContext.As(&ctx5);
-    if (FAILED(hr)) return hr; // ID2D1DeviceContext5 requires Win10 1703+
+    if (FAILED(hr)) return hr;
 
-    // --- 3. Wrap raw bytes in an IStream ---
     IStream *pStream = SHCreateMemStream(svgBytes.data(),
                                          static_cast<UINT>(svgBytes.size()));
     if (!pStream) return E_OUTOFMEMORY;
 
-    // --- 4. Use the current window size as initial viewport.
-    //        D2D will override this with the SVG's own viewBox/width/height. ---
     D2D1_SIZE_F rtSize = m_pDeviceContext->GetSize();
     D2D1_SIZE_F viewport = (rtSize.width > 0 && rtSize.height > 0)
                                ? rtSize
@@ -1019,19 +865,12 @@ HRESULT RendererD2D::LoadSvgFromBytes(const std::vector<BYTE> &svgBytes,
     pStream->Release();
     if (FAILED(hr)) return hr;
 
-    // --- 5. Read back intrinsic size from the SVG root element ---
-    // Strategy:
-    //   a) Try viewBox first – its values are always in user units (pixels).
-    //   b) Fall back to width/height attributes only when they are in plain
-    //      pixel units (D2D1_SVG_LENGTH_UNITS_NUMBER), not percentages.
-    //   c) If nothing works, use the viewport size we passed to CreateSvgDocument.
     float nativeW = 0.0f;
     float nativeH = 0.0f;
 
     Microsoft::WRL::ComPtr<ID2D1SvgElement> root;
     svgDoc->GetRoot(root.GetAddressOf());
     if (root) {
-        // (a) viewBox  — most reliable, always in user units
         D2D1_SVG_VIEWBOX vb{};
         if (SUCCEEDED(root->GetAttributeValue(
             L"viewBox",
@@ -1044,7 +883,6 @@ HRESULT RendererD2D::LoadSvgFromBytes(const std::vector<BYTE> &svgBytes,
             }
         }
 
-        // (b) width / height – only trust them when units == NUMBER (plain px)
         if (nativeW <= 0.0f || nativeH <= 0.0f) {
             D2D1_SVG_LENGTH wLen{}, hLen{};
             bool wOk = SUCCEEDED(root->GetAttributeValue(L"width", &wLen));
@@ -1060,11 +898,9 @@ HRESULT RendererD2D::LoadSvgFromBytes(const std::vector<BYTE> &svgBytes,
         }
     }
 
-    // (c) Last-resort: use the viewport size we gave CreateSvgDocument
     if (nativeW <= 0.0f) nativeW = viewport.width;
     if (nativeH <= 0.0f) nativeH = viewport.height;
 
-    // --- 6. Cache it ---
     {
         std::lock_guard<std::mutex> lock(m_cacheMutex);
         if (m_svgLruList.size() >= Constants::VRAM_CACHE_SVG_COUNT) {
@@ -1075,15 +911,13 @@ HRESULT RendererD2D::LoadSvgFromBytes(const std::vector<BYTE> &svgBytes,
         m_svgCache[filePath] = CachedSvg{svgDoc, m_svgLruList.begin(), nativeW, nativeH};
     }
 
-    // --- 7. Make it active ---
     m_pActiveSvg = svgDoc;
     m_svgNativeW = nativeW;
     m_svgNativeH = nativeH;
-    m_pBitmap.Reset(); // clear any previous raster
+    m_pBitmap.Reset();
     app.imgWidth = static_cast<int>(nativeW);
     app.imgHeight = static_cast<int>(nativeH);
 
-    // Fire callback safely outside the mutex lock
     if (onImageChangedCallback) {
         onImageChangedCallback(app.currentIndex);
     }
@@ -1107,7 +941,6 @@ std::vector<IImageRenderer::CacheItem> RendererD2D::GetCachedBitmaps() {
     return items;
 }
 
-// 1. The parameter-less overload forwards an empty string
 void RendererD2D::ClearCache() {
     ClearCache(L"");
 }
@@ -1115,7 +948,6 @@ void RendererD2D::ClearCache() {
 void RendererD2D::ClearCache(const std::wstring &excludePath) {
     std::lock_guard<std::mutex> lock(m_cacheMutex);
 
-    // 1. If no path is provided, nuke everything completely
     if (excludePath.empty()) {
         m_bitmapCache.clear();
         m_lruList.clear();
@@ -1126,40 +958,33 @@ void RendererD2D::ClearCache(const std::wstring &excludePath) {
         return;
     }
 
-    // 2. Filter the Bitmap Cache
     auto bmpIt = m_bitmapCache.find(excludePath);
     bool foundBmp = (bmpIt != m_bitmapCache.end());
     CachedBitmap savedBmp;
-    if (foundBmp) savedBmp = bmpIt->second; // Save it before wiping
+    if (foundBmp) savedBmp = bmpIt->second;
 
     m_bitmapCache.clear();
     m_lruList.clear();
 
     if (foundBmp) {
-        // Re-insert the active file and generate a fresh LRU iterator
         m_lruList.push_front(excludePath);
         savedBmp.lruIt = m_lruList.begin();
         m_bitmapCache[excludePath] = savedBmp;
     }
 
-    // 3. Filter the SVG Cache
     auto svgIt = m_svgCache.find(excludePath);
     bool foundSvg = (svgIt != m_svgCache.end());
     CachedSvg savedSvg;
-    if (foundSvg) savedSvg = svgIt->second; // Save it before wiping
+    if (foundSvg) savedSvg = svgIt->second;
 
     m_svgCache.clear();
     m_svgLruList.clear();
 
     if (foundSvg) {
-        // Re-insert the active file and generate a fresh LRU iterator
         m_svgLruList.push_front(excludePath);
         savedSvg.lruIt = m_svgLruList.begin();
         m_svgCache[excludePath] = savedSvg;
     }
-
-    // Notice we do NOT call m_pBitmap.Reset() or m_pActiveSvg.Reset() here.
-    // This guarantees the image currently bound to the GPU stays visible on screen.
 }
 
 void RendererD2D::RemoveFromCache(const std::wstring &filePath) {
@@ -1177,69 +1002,13 @@ void RendererD2D::RemoveFromCache(const std::wstring &filePath) {
 }
 
 // =============================================================================
-//  Cache Window
+//  Thumbnail Panels (Cache & Dir Windows)
 // =============================================================================
 
-void RendererD2D::RenderCacheWindow(int selectedIndex, int hoverIndex) {
-    if (!m_pCacheDeviceContext || !m_pCacheSwapChain) return;
+HRESULT RendererD2D::CreatePanelDeviceResources(ThumbnailPanelType type, HWND hwnd) {
+    ThumbnailPanel &panel = GetPanel(type);
+    panel.hwnd = hwnd;
 
-    // Secure the cache access during rendering to prevent crashes if the
-    // preloader background thread accesses it simultaneously.
-    std::lock_guard<std::mutex> lock(m_cacheMutex);
-
-    m_pCacheDeviceContext->BeginDraw();
-    m_pCacheDeviceContext->Clear(D2D1::ColorF(0.08f, 0.08f, 0.08f, 1.0f));
-
-    // Iterate through the UI layout objects
-    for (size_t i = 0; i < UI::g_thumbnailObjects.size(); ++i) {
-        const auto &thumb = UI::g_thumbnailObjects[i];
-
-        // Check if the bitmap is available in the renderer's VRAM cache
-        auto it = m_bitmapCache.find(thumb.filePath);
-
-        if (it != m_bitmapCache.end() && it->second.bitmap) {
-            // Bitmap found: Draw the real image
-            m_pCacheDeviceContext->DrawBitmap(
-                    it->second.bitmap.Get(),
-                    thumb.rect,
-                    1.0f,
-                    D2D1_BITMAP_INTERPOLATION_MODE_LINEAR
-                    );
-        } else {
-            // Bitmap missing: Draw a subtle placeholder box
-            // This prevents the screen from going blank and shows the UI is active
-            m_pCacheDeviceContext->FillRectangle(thumb.rect, m_pCacheButtonBrush.Get());
-
-            // Optional: Trigger a background load if it's not already in progress
-            // Ensure your Renderer has a mechanism to avoid spamming requests
-            // PreloadBitmap(thumb.filePath, thumb.playlistIndex);
-        }
-
-        // Selection highlight
-        if (static_cast<int>(i) == selectedIndex) {
-            m_pCacheDeviceContext->DrawRectangle(thumb.rect, m_pCacheBorderBrush.Get(), Constants::CacheColors::SELECTION_BORDER_THICKNESS);
-        }
-
-        // Hover highlight
-        if (static_cast<int>(i) == hoverIndex) {
-            m_pCacheDeviceContext->DrawRectangle(thumb.rect, m_pCacheTextBrush.Get(), Constants::CacheColors::HOVER_THICKNESS);
-        }
-    }
-
-    HRESULT hr = m_pCacheDeviceContext->EndDraw();
-
-    // Handle device loss gracefully
-    if (hr == D2DERR_RECREATE_TARGET || hr == static_cast<HRESULT>(DXGI_ERROR_DEVICE_REMOVED)) {
-        // You would typically trigger a resource recreation here
-    }
-
-    m_pCacheSwapChain->Present(1, 0);
-}
-
-HRESULT RendererD2D::CreateCacheWindowDeviceResources(HWND hwnd) {
-    m_hCacheWnd = hwnd;
-
-    // 1. Create Swap Chain for the Cache Window
     DXGI_SWAP_CHAIN_DESC1 swapDesc{};
     swapDesc.Width = 0;
     swapDesc.Height = 0;
@@ -1250,86 +1019,143 @@ HRESULT RendererD2D::CreateCacheWindowDeviceResources(HWND hwnd) {
     swapDesc.SampleDesc.Count = 1;
 
     Microsoft::WRL::ComPtr<IDXGIDevice1> dxgiDevice;
-    m_pD3DDevice.As(&dxgiDevice);
     Microsoft::WRL::ComPtr<IDXGIAdapter> adapter;
-    dxgiDevice->GetAdapter(&adapter);
     Microsoft::WRL::ComPtr<IDXGIFactory2> factory;
+
+    m_pD3DDevice.As(&dxgiDevice);
+    dxgiDevice->GetAdapter(&adapter);
     adapter->GetParent(IID_PPV_ARGS(&factory));
 
-    HRESULT hr = factory->CreateSwapChainForHwnd(m_pD3DDevice.Get(), hwnd, &swapDesc, nullptr, nullptr, &m_pCacheSwapChain);
+    HRESULT hr = factory->CreateSwapChainForHwnd(
+            m_pD3DDevice.Get(), hwnd, &swapDesc, nullptr, nullptr, &panel.swapChain);
     if (FAILED(hr)) return hr;
 
-    // 2. Create D2D Device Context (Corrected initialization logic)
     Microsoft::WRL::ComPtr<ID2D1DeviceContext> baseContext;
     hr = m_pD2DDevice->CreateDeviceContext(D2D1_DEVICE_CONTEXT_OPTIONS_NONE, &baseContext);
     if (FAILED(hr)) return hr;
 
-    // QueryInterface for the version your header uses (ID2D1DeviceContext7)
-    hr = baseContext.As(&m_pCacheDeviceContext);
+    hr = baseContext.As(&panel.deviceContext);
     if (FAILED(hr)) return hr;
 
-    // 3. Bind Backbuffer
     RECT rc{};
     GetClientRect(hwnd, &rc);
-
     UINT w = static_cast<UINT>(rc.right - rc.left);
     UINT h = static_cast<UINT>(rc.bottom - rc.top);
 
     if (w == 0 || h == 0) {
-        w = 800;
+        w = (type == ThumbnailPanelType::Dir) ? 1200 : 800;
         h = Constants::CACHE_WINDOW_THICKNESS;
     }
 
-    ResizeCacheWindow(w, h);
-    // 4. Create Brushes
-    m_pCacheDeviceContext->CreateSolidColorBrush(D2D1::ColorF(Constants::CacheColors::PLACEHOLDER), &m_pCacheButtonBrush);
-    m_pCacheDeviceContext->CreateSolidColorBrush(D2D1::ColorF(Constants::CacheColors::SELECTION_BORDER), &m_pCacheBorderBrush);
-    m_pCacheDeviceContext->CreateSolidColorBrush(D2D1::ColorF(Constants::CacheColors::HOVER), &m_pCacheTextBrush);
+    ResizePanel(type, w, h);
+
+    panel.deviceContext->CreateSolidColorBrush(D2D1::ColorF(Constants::CacheColors::PLACEHOLDER), &panel.placeholderBrush);
+    panel.deviceContext->CreateSolidColorBrush(D2D1::ColorF(Constants::CacheColors::SELECTION_BORDER), &panel.borderBrush);
+    panel.deviceContext->CreateSolidColorBrush(D2D1::ColorF(Constants::CacheColors::HOVER), &panel.hoverBrush);
 
     return S_OK;
 }
 
-void RendererD2D::ResizeCacheWindow(UINT width, UINT height) {
-    if (!m_pCacheSwapChain || !m_pCacheDeviceContext)
-        return;
-    m_pCacheDeviceContext->SetTarget(nullptr);
-    m_pCacheBackBuffer.Reset();
-    HRESULT hr = m_pCacheSwapChain->ResizeBuffers(
-            0,
-            width,
-            height,
-            DXGI_FORMAT_UNKNOWN,
-            0);
-    if (FAILED(hr))
-        return;
+void RendererD2D::ResizePanel(ThumbnailPanelType type, UINT width, UINT height) {
+    ThumbnailPanel &panel = GetPanel(type);
+    if (!panel.swapChain || !panel.deviceContext) return;
+
+    panel.deviceContext->SetTarget(nullptr);
+    panel.backBuffer.Reset();
+
+    HRESULT hr = panel.swapChain->ResizeBuffers(0, width, height, DXGI_FORMAT_UNKNOWN, 0);
+    if (FAILED(hr)) return;
+
     Microsoft::WRL::ComPtr<IDXGISurface> surface;
-    hr = m_pCacheSwapChain->GetBuffer(
-            0,
-            IID_PPV_ARGS(&surface));
-    if (FAILED(hr))
-        return;
-    D2D1_BITMAP_PROPERTIES1 props =
-            D2D1::BitmapProperties1(
-                    D2D1_BITMAP_OPTIONS_TARGET |
-                    D2D1_BITMAP_OPTIONS_CANNOT_DRAW,
-                    D2D1::PixelFormat(
-                            DXGI_FORMAT_B8G8R8A8_UNORM,
-                            D2D1_ALPHA_MODE_IGNORE));
-    hr = m_pCacheDeviceContext->CreateBitmapFromDxgiSurface(
-            surface.Get(),
-            &props,
-            &m_pCacheBackBuffer);
-    if (FAILED(hr))
-        return;
-    m_pCacheDeviceContext->SetTarget(
-            m_pCacheBackBuffer.Get());
+    hr = panel.swapChain->GetBuffer(0, IID_PPV_ARGS(&surface));
+    if (FAILED(hr)) return;
+
+    D2D1_BITMAP_PROPERTIES1 props = D2D1::BitmapProperties1(
+            D2D1_BITMAP_OPTIONS_TARGET | D2D1_BITMAP_OPTIONS_CANNOT_DRAW,
+            D2D1::PixelFormat(DXGI_FORMAT_B8G8R8A8_UNORM, D2D1_ALPHA_MODE_IGNORE));
+
+    hr = panel.deviceContext->CreateBitmapFromDxgiSurface(surface.Get(), &props, &panel.backBuffer);
+    if (FAILED(hr)) return;
+
+    panel.deviceContext->SetTarget(panel.backBuffer.Get());
+}
+
+void RendererD2D::RenderPanel(ThumbnailPanelType type, int selectedIndex, int hoverIndex) {
+    ThumbnailPanel &panel = GetPanel(type);
+    if (!panel.deviceContext || !panel.swapChain) return;
+
+    std::lock_guard<std::mutex> lock(m_cacheMutex);
+
+    panel.deviceContext->BeginDraw();
+    panel.deviceContext->Clear(D2D1::ColorF(0.08f, 0.08f, 0.08f, 1.0f));
+
+    const auto &objects = (type == ThumbnailPanelType::Cache) ? UI::g_thumbnailObjects : UI::g_dirThumbnailObjects;
+
+    for (size_t i = 0; i < objects.size(); ++i) {
+        const auto &thumb = objects[i];
+        bool drawn = false;
+
+        // 1. Check Dir thumbnail cache if active
+        if (type == ThumbnailPanelType::Dir) {
+            std::lock_guard<std::mutex> dirLock(m_dirThumbMutex);
+            auto it = m_dirThumbCache.find(thumb.filePath);
+            if (it != m_dirThumbCache.end() && it->second) {
+                panel.deviceContext->DrawBitmap(it->second.Get(), thumb.rect, 1.0f, D2D1_BITMAP_INTERPOLATION_MODE_LINEAR);
+                drawn = true;
+            }
+        }
+
+        // 2. Fall back to global VRAM Cache
+        if (!drawn) {
+            auto it = m_bitmapCache.find(thumb.filePath);
+            if (it != m_bitmapCache.end() && it->second.bitmap) {
+                panel.deviceContext->DrawBitmap(it->second.bitmap.Get(), thumb.rect, 1.0f, D2D1_BITMAP_INTERPOLATION_MODE_LINEAR);
+                drawn = true;
+            }
+        }
+
+        // 3. Fall back to placeholder
+        if (!drawn) {
+            panel.deviceContext->FillRectangle(thumb.rect, panel.placeholderBrush.Get());
+        }
+
+        // Selection highlight
+        if (static_cast<int>(i) == selectedIndex) {
+            panel.deviceContext->DrawRectangle(thumb.rect, panel.borderBrush.Get(), Constants::CacheColors::SELECTION_BORDER_THICKNESS);
+        }
+
+        // Hover highlight
+        if (static_cast<int>(i) == hoverIndex) {
+            panel.deviceContext->DrawRectangle(thumb.rect, panel.hoverBrush.Get(), Constants::CacheColors::HOVER_THICKNESS);
+        }
+    }
+
+    HRESULT hr = panel.deviceContext->EndDraw();
+    if (hr == D2DERR_RECREATE_TARGET || hr == static_cast<HRESULT>(DXGI_ERROR_DEVICE_REMOVED)) {
+        // Device loss
+    }
+
+    panel.swapChain->Present(1, 0);
+}
+
+void RendererD2D::DiscardPanelDeviceResources(ThumbnailPanelType type) {
+    ThumbnailPanel &panel = GetPanel(type);
+    if (panel.deviceContext) panel.deviceContext->SetTarget(nullptr);
+    panel.backBuffer.Reset();
+    panel.placeholderBrush.Reset();
+    panel.borderBrush.Reset();
+    panel.hoverBrush.Reset();
+    panel.swapChain.Reset();
+    panel.deviceContext.Reset();
+    panel.hwnd = nullptr;
+}
+
+ID2D1DeviceContext7 *RendererD2D::GetPanelContext(ThumbnailPanelType type) {
+    return GetPanel(type).deviceContext.Get();
 }
 
 // =============================================================================
-//  SaveCurrentImageWithEffects  — Ctrl+S (Shortcuts::ImageEffects::SC_COLOR_SAVE_TO_DISK)
-//  Bakes the active color-effect chain into the image at its native pixel
-//  size (no resize, no rotation/flip/zoom applied — only color effects) and
-//  writes it out as a PNG.
+//  SaveCurrentImageWithEffects
 // =============================================================================
 HRESULT RendererD2D::SaveCurrentImageWithEffects(const std::wstring &outPath) {
     if (!m_pBitmap || !m_pDeviceContext || !m_pD3DDevice) return E_FAIL;
@@ -1338,7 +1164,6 @@ HRESULT RendererD2D::SaveCurrentImageWithEffects(const std::wstring &outPath) {
     D2D1_SIZE_U pixelSize = m_pBitmap->GetPixelSize();
     if (pixelSize.width == 0 || pixelSize.height == 0) return E_FAIL;
 
-    // 1. Offscreen D3D11 render-target texture, sized to the native image.
     D3D11_TEXTURE2D_DESC texDesc{};
     texDesc.Width = pixelSize.width;
     texDesc.Height = pixelSize.height;
@@ -1357,10 +1182,6 @@ HRESULT RendererD2D::SaveCurrentImageWithEffects(const std::wstring &outPath) {
     hr = offscreenTex.As(&dxgiSurface);
     if (FAILED(hr)) return hr;
 
-    // Use IGNORE alpha — the source bitmap is opaque (loaded from JPEG/PNG with no
-    // alpha channel).  PREMULTIPLIED here causes D2D to pre-multiply the alpha on
-    // every pixel before writing, making the raw bytes unsuitable for WIC's straight-
-    // alpha encoder and producing a black image when alpha == 0.
     D2D1_BITMAP_PROPERTIES1 targetProps = D2D1::BitmapProperties1(
             D2D1_BITMAP_OPTIONS_TARGET | D2D1_BITMAP_OPTIONS_CANNOT_DRAW,
             D2D1::PixelFormat(DXGI_FORMAT_B8G8R8A8_UNORM, D2D1_ALPHA_MODE_IGNORE));
@@ -1369,7 +1190,6 @@ HRESULT RendererD2D::SaveCurrentImageWithEffects(const std::wstring &outPath) {
     hr = m_pDeviceContext->CreateBitmapFromDxgiSurface(dxgiSurface.Get(), &targetProps, &offscreenBitmap);
     if (FAILED(hr)) return hr;
 
-    // 2. Render the effect chain into the offscreen target (1:1 pixels, no transform).
     Microsoft::WRL::ComPtr<ID2D1Image> previousTarget;
     m_pDeviceContext->GetTarget(&previousTarget);
 
@@ -1392,10 +1212,9 @@ HRESULT RendererD2D::SaveCurrentImageWithEffects(const std::wstring &outPath) {
     }
 
     hr = m_pDeviceContext->EndDraw();
-    m_pDeviceContext->SetTarget(previousTarget.Get()); // always restore
+    m_pDeviceContext->SetTarget(previousTarget.Get());
     if (FAILED(hr)) return hr;
 
-    // 3. Copy to a CPU-readable staging texture.
     D3D11_TEXTURE2D_DESC stagingDesc = texDesc;
     stagingDesc.Usage = D3D11_USAGE_STAGING;
     stagingDesc.BindFlags = 0;
@@ -1411,7 +1230,6 @@ HRESULT RendererD2D::SaveCurrentImageWithEffects(const std::wstring &outPath) {
     hr = m_pD3DContext->Map(stagingTex.Get(), 0, D3D11_MAP_READ, 0, &mapped);
     if (FAILED(hr)) return hr;
 
-    // Copy row-by-row because mapped.RowPitch may include GPU padding.
     const UINT rowBytes = pixelSize.width * 4;
     std::vector<BYTE> pixels(static_cast<size_t>(pixelSize.width) * pixelSize.height * 4);
     for (UINT row = 0; row < pixelSize.height; ++row) {
@@ -1421,12 +1239,6 @@ HRESULT RendererD2D::SaveCurrentImageWithEffects(const std::wstring &outPath) {
     }
     m_pD3DContext->Unmap(stagingTex.Get(), 0);
 
-    // 4. Encode to PNG via WIC.
-    // g_app.wicFactory is the IWICImagingFactory created on the UI thread
-    // (COINIT_APARTMENTTHREADED).  SaveCurrentImageWithEffects is always called
-    // from the UI thread (Ctrl+S), so this is safe.  The decoder thread's
-    // IWICImagingFactory2 lives in a COINIT_MULTITHREADED apartment — using it
-    // here crosses apartment boundaries and causes silent failures.
     Microsoft::WRL::ComPtr<IWICImagingFactory> wicFac = app.wicFactory;
     if (!wicFac) return E_FAIL;
 
@@ -1455,7 +1267,6 @@ HRESULT RendererD2D::SaveCurrentImageWithEffects(const std::wstring &outPath) {
     hr = frame->SetSize(pixelSize.width, pixelSize.height);
     if (FAILED(hr)) return hr;
 
-    // BGRA straight-alpha — matches what we read out of the staging texture.
     WICPixelFormatGUID fmt = GUID_WICPixelFormat32bppBGRA;
     hr = frame->SetPixelFormat(&fmt);
     if (FAILED(hr)) return hr;
@@ -1471,168 +1282,7 @@ HRESULT RendererD2D::SaveCurrentImageWithEffects(const std::wstring &outPath) {
 }
 
 // =============================================================================
-//  DirWindow device resources  —  own swap chain, device context, and brushes.
-//  Mirrors the CacheWindow resource set exactly (m_pDir* instead of m_pCache*).
-// =============================================================================
-
-HRESULT RendererD2D::CreateDirWindowDeviceResources(HWND hwnd) {
-    m_hDirWnd = hwnd;
-
-    // 1. Swap chain for the dir window
-    DXGI_SWAP_CHAIN_DESC1 swapDesc{};
-    swapDesc.Width = 0;
-    swapDesc.Height = 0;
-    swapDesc.Format = DXGI_FORMAT_B8G8R8A8_UNORM;
-    swapDesc.BufferCount = 2;
-    swapDesc.BufferUsage = DXGI_USAGE_RENDER_TARGET_OUTPUT;
-    swapDesc.SwapEffect = DXGI_SWAP_EFFECT_FLIP_DISCARD;
-    swapDesc.SampleDesc.Count = 1;
-
-    Microsoft::WRL::ComPtr<IDXGIDevice1> dxgiDevice;
-    Microsoft::WRL::ComPtr<IDXGIAdapter> adapter;
-    Microsoft::WRL::ComPtr<IDXGIFactory2> factory;
-    m_pD3DDevice.As(&dxgiDevice);
-    dxgiDevice->GetAdapter(&adapter);
-    adapter->GetParent(IID_PPV_ARGS(&factory));
-
-    HRESULT hr = factory->CreateSwapChainForHwnd(
-            m_pD3DDevice.Get(), hwnd, &swapDesc,
-            nullptr, nullptr, &m_pDirSwapChain);
-    if (FAILED(hr)) return hr;
-
-    // 2. D2D device context
-    Microsoft::WRL::ComPtr<ID2D1DeviceContext> baseCtx;
-    hr = m_pD2DDevice->CreateDeviceContext(D2D1_DEVICE_CONTEXT_OPTIONS_NONE, &baseCtx);
-    if (FAILED(hr)) return hr;
-    hr = baseCtx.As(&m_pDirDeviceContext);
-    if (FAILED(hr)) return hr;
-
-    // 3. Bind back-buffer
-    RECT rc{};
-    GetClientRect(hwnd, &rc);
-    UINT w = static_cast<UINT>(rc.right - rc.left);
-    UINT h = static_cast<UINT>(rc.bottom - rc.top);
-    if (w == 0 || h == 0) {
-        w = 1200;
-        h = Constants::CACHE_WINDOW_THICKNESS;
-    }
-    ResizeDirWindow(w, h);
-
-    // 4. Brushes (same colours as cache window)
-    m_pDirDeviceContext->CreateSolidColorBrush(
-            D2D1::ColorF(Constants::CacheColors::PLACEHOLDER), &m_pDirPlaceholderBrush);
-    m_pDirDeviceContext->CreateSolidColorBrush(
-            D2D1::ColorF(Constants::CacheColors::SELECTION_BORDER), &m_pDirBorderBrush);
-    m_pDirDeviceContext->CreateSolidColorBrush(
-            D2D1::ColorF(Constants::CacheColors::HOVER), &m_pDirHoverBrush);
-
-    return S_OK;
-}
-
-void RendererD2D::ResizeDirWindow(UINT width, UINT height) {
-    if (!m_pDirSwapChain || !m_pDirDeviceContext) return;
-
-    m_pDirDeviceContext->SetTarget(nullptr);
-    m_pDirBackBuffer.Reset();
-
-    HRESULT hr = m_pDirSwapChain->ResizeBuffers(0, width, height, DXGI_FORMAT_UNKNOWN, 0);
-    if (FAILED(hr)) return;
-
-    Microsoft::WRL::ComPtr<IDXGISurface> surface;
-    hr = m_pDirSwapChain->GetBuffer(0, IID_PPV_ARGS(&surface));
-    if (FAILED(hr)) return;
-
-    D2D1_BITMAP_PROPERTIES1 props = D2D1::BitmapProperties1(
-            D2D1_BITMAP_OPTIONS_TARGET | D2D1_BITMAP_OPTIONS_CANNOT_DRAW,
-            D2D1::PixelFormat(DXGI_FORMAT_B8G8R8A8_UNORM, D2D1_ALPHA_MODE_IGNORE));
-
-    hr = m_pDirDeviceContext->CreateBitmapFromDxgiSurface(surface.Get(), &props, &m_pDirBackBuffer);
-    if (FAILED(hr)) return;
-
-    m_pDirDeviceContext->SetTarget(m_pDirBackBuffer.Get());
-}
-
-void RendererD2D::RenderDirWindow(int selectedIndex, int hoverIndex) {
-    if (!m_pDirDeviceContext || !m_pDirSwapChain) return;
-
-    std::lock_guard<std::mutex> lock(m_cacheMutex);
-
-    m_pDirDeviceContext->BeginDraw();
-    m_pDirDeviceContext->Clear(D2D1::ColorF(0.08f, 0.08f, 0.08f, 1.0f));
-
-    for (size_t i = 0; i < UI::g_dirThumbnailObjects.size(); ++i) {
-        const auto &thumb = UI::g_dirThumbnailObjects[i];
-
-        // 1. Check the dedicated dir thumbnail cache (scaled-down bitmaps)
-        {
-            std::lock_guard<std::mutex> dirLock(m_dirThumbMutex);
-            auto it = m_dirThumbCache.find(thumb.filePath);
-            if (it != m_dirThumbCache.end() && it->second) {
-                m_pDirDeviceContext->DrawBitmap(
-                        it->second.Get(),
-                        thumb.rect,
-                        1.0f,
-                        D2D1_BITMAP_INTERPOLATION_MODE_LINEAR);
-                goto draw_border;
-            }
-        }
-
-        // 2. Fall back to the full-res VRAM cache (image already loaded by viewer)
-        {
-            auto it = m_bitmapCache.find(thumb.filePath);
-            if (it != m_bitmapCache.end() && it->second.bitmap) {
-                m_pDirDeviceContext->DrawBitmap(
-                        it->second.bitmap.Get(),
-                        thumb.rect,
-                        1.0f,
-                        D2D1_BITMAP_INTERPOLATION_MODE_LINEAR);
-                goto draw_border;
-            }
-        }
-
-        // 3. Still loading — draw placeholder box
-        m_pDirDeviceContext->FillRectangle(thumb.rect, m_pDirPlaceholderBrush.Get());
-
-    draw_border:;
-
-        // Selection highlight
-        if (static_cast<int>(i) == selectedIndex) {
-            m_pDirDeviceContext->DrawRectangle(
-                    thumb.rect, m_pDirBorderBrush.Get(),
-                    Constants::CacheColors::SELECTION_BORDER_THICKNESS);
-        }
-
-        // Hover highlight
-        if (static_cast<int>(i) == hoverIndex) {
-            m_pDirDeviceContext->DrawRectangle(
-                    thumb.rect, m_pDirHoverBrush.Get(),
-                    Constants::CacheColors::HOVER_THICKNESS);
-        }
-    }
-
-    HRESULT hr = m_pDirDeviceContext->EndDraw();
-    if (hr == D2DERR_RECREATE_TARGET ||
-        hr == static_cast<HRESULT>(DXGI_ERROR_DEVICE_REMOVED)) {
-        // Device loss — caller can trigger re-init if needed
-    }
-    m_pDirSwapChain->Present(1, 0);
-}
-
-void RendererD2D::DiscardDirWindowDeviceResources() {
-    m_pDirDeviceContext->SetTarget(nullptr);
-    m_pDirBackBuffer.Reset();
-    m_pDirPlaceholderBrush.Reset();
-    m_pDirBorderBrush.Reset();
-    m_pDirHoverBrush.Reset();
-    m_pDirSwapChain.Reset();
-    m_pDirDeviceContext.Reset();
-    m_hDirWnd = nullptr;
-}
-
-// =============================================================================
 //  ClearDirThumbnailCache
-//  Drops all scaled thumbnails generated for the dir window.
-//  Call this when the folder changes so stale entries don't linger.
 // =============================================================================
 void RendererD2D::ClearDirThumbnailCache() {
     std::lock_guard<std::mutex> lock(m_dirThumbMutex);
@@ -1641,15 +1291,8 @@ void RendererD2D::ClearDirThumbnailCache() {
 
 // =============================================================================
 //  RequestDirThumbnail
-//  Queues an IO + decode job that reads the file, decodes it via WIC,
-//  scales it down to CACHE_THUMB_WIDTH x CACHE_THUMB_HEIGHT, uploads the
-//  resulting small bitmap into m_dirThumbCache, then posts WM_QIV_REPAINT
-//  to the dir window so RenderDirWindow picks it up.
-//
-//  If the thumbnail is already in the cache the call is a no-op.
 // =============================================================================
 void RendererD2D::RequestDirThumbnail(const std::wstring &filePath) {
-    // Skip if already decoded
     {
         std::lock_guard<std::mutex> lock(m_dirThumbMutex);
         if (m_dirThumbCache.count(filePath)) return;
@@ -1657,7 +1300,9 @@ void RendererD2D::RequestDirThumbnail(const std::wstring &filePath) {
 
     Microsoft::WRL::ComPtr<IWICImagingFactory2> wicFac = g_decoderWorker.wicFactory;
     Microsoft::WRL::ComPtr<ID2D1Device6> d2dDev = m_pD2DDevice;
-    HWND hDir = m_hDirWnd;
+
+    // Access the dir panel's hwnd via the unified struct
+    HWND hDir = GetPanel(ThumbnailPanelType::Dir).hwnd;
 
     if (!wicFac || !d2dDev || !hDir) return;
 
@@ -1665,7 +1310,6 @@ void RendererD2D::RequestDirThumbnail(const std::wstring &filePath) {
     UINT thumbH = static_cast<UINT>(Constants::CACHE_THUMB_HEIGHT);
 
     g_ioWorker.PushTask([filePath, wicFac, d2dDev, hDir, thumbW, thumbH, this]() {
-        // --- IO thread: read raw bytes ---
         HANDLE hFile = CreateFileW(filePath.c_str(), GENERIC_READ, FILE_SHARE_READ,
                                    nullptr, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, nullptr);
         if (hFile == INVALID_HANDLE_VALUE) return;
@@ -1685,9 +1329,6 @@ void RendererD2D::RequestDirThumbnail(const std::wstring &filePath) {
 
         g_decoderWorker.PushTask([bytes = std::move(bytes), filePath, wicFac, d2dDev,
                     hDir, thumbW, thumbH, this]() mutable {
-                    // --- Decode thread: decode + scale ---
-
-                    // Create WIC stream from memory
                     Microsoft::WRL::ComPtr<IWICStream> stream;
                     if (FAILED(wicFac->CreateStream(&stream))) return;
                     if (FAILED(stream->InitializeFromMemory(bytes.data(),
@@ -1706,7 +1347,6 @@ void RendererD2D::RequestDirThumbnail(const std::wstring &filePath) {
                     frame->GetSize(&srcW, &srcH);
                     if (srcW == 0 || srcH == 0) return;
 
-                    // Compute scale that fits inside thumbW x thumbH keeping aspect ratio
                     float scaleX = static_cast<float>(thumbW) / static_cast<float>(srcW);
                     float scaleY = static_cast<float>(thumbH) / static_cast<float>(srcH);
                     float scale = (scaleX < scaleY) ? scaleX : scaleY;
@@ -1715,14 +1355,12 @@ void RendererD2D::RequestDirThumbnail(const std::wstring &filePath) {
                     if (dstW == 0) dstW = 1;
                     if (dstH == 0) dstH = 1;
 
-                    // Scale with WIC
                     Microsoft::WRL::ComPtr<IWICBitmapScaler> scaler;
                     if (FAILED(wicFac->CreateBitmapScaler(&scaler))) return;
                     if (FAILED(scaler->Initialize(frame.Get(), dstW, dstH,
                         WICBitmapInterpolationModeFant)))
                         return;
 
-                    // Convert to 32bppPBGRA for D2D
                     Microsoft::WRL::ComPtr<IWICFormatConverter> converter;
                     if (FAILED(wicFac->CreateFormatConverter(&converter))) return;
                     if (FAILED(converter->Initialize(scaler.Get(), GUID_WICPixelFormat32bppPBGRA,
@@ -1730,20 +1368,17 @@ void RendererD2D::RequestDirThumbnail(const std::wstring &filePath) {
                         WICBitmapPaletteTypeCustom)))
                         return;
 
-                    // Upload to VRAM using a temporary device context
                     Microsoft::WRL::ComPtr<ID2D1DeviceContext> tempCtx;
                     if (FAILED(d2dDev->CreateDeviceContext(D2D1_DEVICE_CONTEXT_OPTIONS_NONE, &tempCtx))) return;
 
                     Microsoft::WRL::ComPtr<ID2D1Bitmap1> thumbBitmap;
                     if (FAILED(tempCtx->CreateBitmapFromWicBitmap(converter.Get(), nullptr, &thumbBitmap))) return;
 
-                    // Store in dir thumb cache
                     {
                         std::lock_guard<std::mutex> lock(m_dirThumbMutex);
                         m_dirThumbCache[filePath] = thumbBitmap;
                     }
 
-                    // Wake the dir window
                     PostMessageW(hDir, Constants::WM_QIV_REPAINT, 0, 0);
                 });
     });

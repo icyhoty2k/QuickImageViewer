@@ -84,7 +84,7 @@ namespace Constants {
     // =========================================================================
     // Folder History (HistoryWindow)
     // =========================================================================
-    constexpr int HISTORY_MAX_DIRS = 10; // how many folders to remember — change here
+    constexpr int HISTORY_MAX_DIRS = 5; // how many folders to remember — change here
     constexpr int HISTORY_ROW_HEIGHT = 28; // px at 96 DPI per history row
     constexpr int HISTORY_PADDING = 16; // px at 96 DPI inner padding
     constexpr int HISTORY_FONT_SIZE = 14; // pt at 96 DPI body font

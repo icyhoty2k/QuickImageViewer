@@ -5,6 +5,7 @@
 #include <vector>
 
 #include "IPanelWindow.h"
+#include "RendererD2D.h"
 #include "Thumbnail.h"
 
 namespace UI {
@@ -84,16 +85,19 @@ namespace UI {
             // Vertical = right(2) or left(4).  Override not needed by subclasses.
             bool IsVertical() const;
 
+            // --- NEW: Force derived classes to declare their Panel Type ---
+            virtual RendererD2D::ThumbnailPanelType GetPanelType() const = 0;
+
             // Paint — calls the correct renderer method
-            virtual void Render(int selectedIdx, int hoverIdx) = 0;
+            virtual void Render(int selectedIdx, int hoverIdx);
 
             // Resize the panel's D2D swap chain.
             // One line per subclass; kept virtual because each calls a different
             // renderer method (ResizeCacheWindow vs ResizeDirWindow).
-            virtual void ResizeSwapChain(UINT w, UINT h) = 0;
+            virtual void ResizeSwapChain(UINT w, UINT h);
 
             // Create per-panel D2D device resources (called once in Init)
-            virtual void CreateDeviceResources() = 0;
+            virtual void CreateDeviceResources();
 
             // Returns the ordered list of file paths this panel displays.
             // Base class calls this inside UpdateView() and handles all layout math.

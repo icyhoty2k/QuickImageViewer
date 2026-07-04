@@ -36,31 +36,10 @@ namespace UI {
 
         auto *r = dynamic_cast<RendererD2D *>(app.renderer.get());
         if (r) {
-            for (const auto &t: m_thumbnails)
+            for (const auto &t: m_thumbnails) {
                 r->RequestDirThumbnail(t.filePath);
+            }
         }
-    }
-
-    // -------------------------------------------------------------------------
-    // Renderer calls
-    // -------------------------------------------------------------------------
-    void DirWnd::Render(int selectedIdx, int hoverIdx) {
-        if (!app.renderer) return;
-        auto *r = dynamic_cast<RendererD2D *>(app.renderer.get());
-        if (r && r->GetDirContext())
-            r->RenderDirWindow(selectedIdx, hoverIdx);
-    }
-
-    void DirWnd::ResizeSwapChain(UINT w, UINT h) {
-        if (!app.renderer) return;
-        auto *r = dynamic_cast<RendererD2D *>(app.renderer.get());
-        if (r) r->ResizeDirWindow(w, h);
-    }
-
-    void DirWnd::CreateDeviceResources() {
-        if (!app.renderer) return;
-        auto *r = dynamic_cast<RendererD2D *>(app.renderer.get());
-        if (r) r->CreateDirWindowDeviceResources(m_hWnd);
     }
 
     // -------------------------------------------------------------------------
@@ -69,6 +48,8 @@ namespace UI {
     void DirWnd::ClearDirThumbnailCache() {
         if (!app.renderer) return;
         auto *r = dynamic_cast<RendererD2D *>(app.renderer.get());
-        if (r) r->ClearDirThumbnailCache();
+        if (r) {
+            r->ClearDirThumbnailCache();
+        }
     }
 } // namespace UI
