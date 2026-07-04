@@ -6,7 +6,7 @@
 #include <algorithm>
 
 namespace UI {
-    void HelpWnd::Init(HINSTANCE hInstance, HWND hParent, int8_t position) {
+    void HelpWnd::Init(HINSTANCE hInstance, HWND hParent, int8_t /*position*/) {
         HelpWnd::Init(hInstance, hParent);
     }
 

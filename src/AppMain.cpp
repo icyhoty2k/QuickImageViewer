@@ -88,12 +88,10 @@ LRESULT CALLBACK MainAppWndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM l
                 std::wstring safePath((LPCWSTR) cds->lpData);
                 OpenSpecificImage(hWnd, safePath.c_str());
 
-                AppCommands::RemoveTrayIcon(hWnd); // Clean up tray
                 ShowWindow(hWnd, SW_RESTORE);
                 SetForegroundWindow(hWnd);
                 InvalidateRect(hWnd, nullptr, FALSE);
             } else if (cds->dwData == 2) {
-                AppCommands::RemoveTrayIcon(hWnd); // Clean up tray
                 ShowWindow(hWnd, SW_RESTORE);
                 SetForegroundWindow(hWnd);
             }
@@ -344,7 +342,7 @@ LRESULT CALLBACK MainAppWndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM l
         case WM_TRAYICON: {
             if (lParam == WM_LBUTTONDBLCLK) {
                 // 1. Remove the tray icon and make the window visible
-                AppCommands::RemoveTrayIcon(hWnd);
+
                 ShowWindow(hWnd, SW_SHOW);
                 ShowWindow(hWnd, SW_RESTORE);
 
@@ -387,7 +385,7 @@ LRESULT CALLBACK MainAppWndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM l
                 DestroyMenu(hMenu);
 
                 if (cmd == 1) { // Restore clicked
-                    AppCommands::RemoveTrayIcon(hWnd);
+
                     ShowWindow(hWnd, SW_SHOW);
                     ShowWindow(hWnd, SW_RESTORE);
                     SetForegroundWindow(hWnd);
