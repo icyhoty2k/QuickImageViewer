@@ -33,18 +33,17 @@ namespace UI {
     // PushFolderHistory  —  called by FileHandler after every folder load
     // -------------------------------------------------------------------------
     void PushFolderHistory(const std::wstring &folderPath) {
-        if (folderPath.empty()) return;
+        if (folderPath.empty())
+            return;
 
         auto it = std::find(g_folderHistory.begin(), g_folderHistory.end(), folderPath);
-        if (it != g_folderHistory.end()) {
+        if (it != g_folderHistory.end())
             g_folderHistory.erase(it);
-        }
 
         g_folderHistory.insert(g_folderHistory.begin(), folderPath);
 
-        if (static_cast<int>(g_folderHistory.size()) > Constants::HISTORY_MAX_DIRS) {
-            g_folderHistory.resize(static_cast<size_t>(Constants::HISTORY_MAX_DIRS));
-        }
+        if (g_folderHistory.size() > Constants::HISTORY_MAX_DIRS)
+            g_folderHistory.resize(Constants::HISTORY_MAX_DIRS);
     }
 
     const std::vector<std::wstring> &GetFolderHistory() {
