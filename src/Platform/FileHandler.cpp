@@ -6,9 +6,10 @@
 #include <filesystem>
 #include <ranges>
 #include <vector>
+#include "UI/UIManager.h"
+#include "UI/UIManager.h"
 
-#include "CacheWnd.h"
-#include "DirWnd.h"
+
 #include "WorkerThread.h"
 #include "DriveInfo.h"
 #include "../SvgDecoder.h"
@@ -231,12 +232,13 @@ void OpenInitialImage(HWND hWnd) {
     UI::PushFolderHistory(selectedPath.parent_path().wstring());
 
     // New folder — drop stale dir window thumbnails before navigating
-    UI::ClearDirThumbnailCache();
+    uiManager.getDirWindow().ClearDirThumbnailCache();
+
 
     auto it = std::ranges::find(app.playlist, selectedPath.wstring());
     if (it != app.playlist.end()) {
         LoadImageIndex(hWnd, static_cast<int>(std::distance(app.playlist.begin(), it)));
-        UI::UpdateDirView();
+        uiManager.getDirWindow().UpdateDirView();
     }
 }
 
@@ -252,8 +254,8 @@ void LoadImageIndex(HWND hWnd, int index) {
 
     app.currentIndex = index;
     app.wantedIndex.store(index, std::memory_order_release);
+    uiManager.getDirWindow().SyncDirSelectionRectangle();
 
-    UI::SyncDirSelectionRectangle();
     const std::wstring &currentPath = app.playlist[index];
     SetWindowTextW(hWnd, (currentPath.substr(currentPath.find_last_of(L"\\/") + 1) + L" - QuickImageViewer").c_str());
 
@@ -314,7 +316,7 @@ void OpenSpecificImage(HWND hWnd, const std::wstring &filePathStr) {
                 LoadImageIndex(hWnd, static_cast<int>(std::distance(app.playlist.begin(), it)));
                 // Record this folder in the history panel
                 UI::PushFolderHistory(filePath.parent_path().wstring());
-                UI::ClearDirThumbnailCache();
+                uiManager.getDirWindow().ClearDirThumbnailCache();
                 InvalidateRect(hWnd, nullptr, TRUE);
                 UpdateWindow(hWnd);
                 return;
@@ -323,13 +325,13 @@ void OpenSpecificImage(HWND hWnd, const std::wstring &filePathStr) {
     }
 
     app.playlist = fs::directory_iterator(filePath.parent_path())
-                     | std::views::filter([](const auto &e) {
-                         return e.is_regular_file() && is_image_ext(e.path().extension().wstring());
-                     })
-                     | std::views::transform([](const auto &e) {
-                         return fs::canonical(e.path()).wstring();
-                     })
-                     | std::ranges::to<std::vector<std::wstring> >();
+                   | std::views::filter([](const auto &e) {
+                       return e.is_regular_file() && is_image_ext(e.path().extension().wstring());
+                   })
+                   | std::views::transform([](const auto &e) {
+                       return fs::canonical(e.path()).wstring();
+                   })
+                   | std::ranges::to<std::vector<std::wstring> >();
 
     // Start IO worker with correct thread count for this drive type (HDD=1, SSD/NVMe=2)
     EnsureIoWorkerStarted(filePath.parent_path().wstring());
@@ -348,12 +350,12 @@ void OpenSpecificImage(HWND hWnd, const std::wstring &filePathStr) {
     UI::PushFolderHistory(filePath.parent_path().wstring());
 
     // New folder — drop stale dir window thumbnails before navigating
-    UI::ClearDirThumbnailCache();
-    UI::UpdateDirView();
+    uiManager.getDirWindow().ClearDirThumbnailCache();
+    uiManager.getDirWindow().UpdateDirView();
 
     auto it = std::ranges::find(app.playlist, filePath.wstring());
     if (it != app.playlist.end()) {
         LoadImageIndex(hWnd, static_cast<int>(std::distance(app.playlist.begin(), it)));
-        UI::UpdateDirView();
+        uiManager.getDirWindow().UpdateDirView();
     }
 }

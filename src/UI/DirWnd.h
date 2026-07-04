@@ -26,13 +26,20 @@ namespace UI {
 
             void Init(HINSTANCE hInstance, HWND hParent, int8_t position) override;
 
+            // ---- Data ---------------------------------------------------------------
+            // Rescans the current folder and rebuilds g_dirThumbnailObjects
+            void UpdateDirView();
+
+            // Re-anchors the selection highlight after a playlist change or scroll
+            void SyncDirSelectionRectangle();
+
+            // Drops all scaled dir thumbnails from the renderer cache.
+            void ClearDirThumbnailCache();
+
         protected:
             LRESULT HandleMessage(UINT message, WPARAM wParam, LPARAM lParam) override;
 
         private:
-            // Re-anchors the selection highlight after a playlist change or scroll
-            void SyncDirSelectionRectangle();
-
             // ---- Visibility ---------------------------------------------------------
             void ToggleDirWindow();
 
@@ -40,13 +47,6 @@ namespace UI {
 
             // ---- Layout -------------------------------------------------------------
             void MoveDirWindow(); // Cycles position through the preset slots
-
-            // ---- Data ---------------------------------------------------------------
-            // Rescans the current folder and rebuilds g_dirThumbnailObjects
-            void UpdateDirView();
-
-            // Drops all scaled dir thumbnails from the renderer cache.
-            void ClearDirThumbnailCache();
     };
 
     extern float g_dirOffset;

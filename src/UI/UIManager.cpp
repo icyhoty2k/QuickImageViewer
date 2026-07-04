@@ -8,10 +8,6 @@ namespace UI {
         m_hMainWnd = hMainWnd;
 
         // Init all panels once here so they are ready before first toggle
-        helpWnd.Init(hInstance, hMainWnd);
-        cacheWnd.Init(hInstance, hMainWnd, 0);
-        dirWnd.Init(hInstance, hMainWnd);
-        historyListWnd.Init(hInstance, hMainWnd);
     }
 
     void UIManager::Show(IPanelWindow &panel) {
@@ -26,7 +22,7 @@ namespace UI {
         panel.Toggle(); // panels are already initialized in Init()
     }
 
-    void UIManager::HideAll() {
+    void UIManager::HideAllPanelWindows() {
         Hide(helpWnd);
         Hide(cacheWnd);
         Hide(dirWnd);
@@ -34,18 +30,38 @@ namespace UI {
     }
 
     HelpWnd &UIManager::getHelpWindow() {
+        if (isInit(helpWnd)) {
+            return helpWnd;
+        }
+        helpWnd.Init(m_hInstance, m_hMainWnd);
         return helpWnd;
     }
 
     CacheWnd &UIManager::getCacheWindow() {
+        // if (isInit(cacheWnd)) {
+        //     return cacheWnd;
+        // }
+        // cacheWnd.Init(m_hInstance, m_hMainWnd, 1);
         return cacheWnd;
     }
 
     DirWnd &UIManager::getDirWindow() {
+        if (isInit(dirWnd)) {
+            return dirWnd;
+        }
+        dirWnd.Init(m_hInstance, m_hMainWnd, 0);
         return dirWnd;
     }
 
     HistoryListWnd &UIManager::getHistoryListWindow() {
+        if (isInit(historyListWnd)) {
+            return historyListWnd;
+        }
+        historyListWnd.Init(m_hInstance, m_hMainWnd);
         return historyListWnd;
     }
-} // namespace UI
+
+    bool UIManager::isInit(IPanelWindow &panel) {
+        return panel.GetHwnd() != nullptr;
+    }
+}
