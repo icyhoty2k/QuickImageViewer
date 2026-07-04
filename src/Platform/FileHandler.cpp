@@ -313,6 +313,10 @@ void OpenSpecificImage(HWND hWnd, const std::wstring &filePathStr) {
         if (filePath.parent_path() == fs::path(app.playlist[0]).parent_path()) {
             auto it = std::ranges::find(app.playlist, filePath.wstring());
             if (it != app.playlist.end()) {
+                // Same folder — no need to rebuild playlist, but still record
+                // the folder in history so revisiting via the history panel
+                // bumps the entry to the top (PushFolderHistory deduplicates).
+                UI::PushFolderHistory(filePath.parent_path().wstring());
                 LoadImageIndex(hWnd, static_cast<int>(std::distance(app.playlist.begin(), it)));
                 InvalidateRect(hWnd, nullptr, TRUE);
                 UpdateWindow(hWnd);
