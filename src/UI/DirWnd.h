@@ -41,6 +41,11 @@ namespace UI {
                 return L"Directory";
             }
 
+            // --- NEW: Tell the base class which panel this is ---
+            RendererD2D::ThumbnailPanelType GetPanelType() const override {
+                return RendererD2D::ThumbnailPanelType::Dir;
+            }
+
             int GetKeyToggle() const override;
 
             int GetKeyMove() const override;
@@ -49,12 +54,6 @@ namespace UI {
             std::vector<std::wstring> GetSourceItems() const override;
 
             void PostBuildHook() override; // async decodes + legacy global sync
-
-            void Render(int selectedIdx, int hoverIdx) override;
-
-            void ResizeSwapChain(UINT w, UINT h) override;
-
-            void CreateDeviceResources() override;
     };
 
     // Legacy globals — RendererD2D reads these directly

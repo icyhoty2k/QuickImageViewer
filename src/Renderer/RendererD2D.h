@@ -24,10 +24,6 @@ class RendererD2D final : public IImageRenderer {
 
         [[nodiscard]] HRESULT Initialize(HWND hwnd) override;
 
-        ID2D1DeviceContext7 *GetCacheContext() const {
-            return m_pCacheDeviceContext.Get();
-        }
-
         void UpdateTextFormat() override;
 
         void Resize(UINT width, UINT height) override;
@@ -39,7 +35,6 @@ class RendererD2D final : public IImageRenderer {
         [[nodiscard]] HRESULT Render() override;
 
         void UpdateColorEffects() override;
-
 
         [[nodiscard]] HRESULT SaveCurrentImageWithEffects(const std::wstring &outPath) override;
 
@@ -61,30 +56,23 @@ class RendererD2D final : public IImageRenderer {
 
         void RemoveFromCache(const std::wstring &filePath) override;
 
-        // Cache Window
-        HRESULT CreateCacheWindowDeviceResources(HWND hwnd);
+        // =====================================================================
+        // Thumbnail Panel APIs (Cache & Dir Windows)
+        // =====================================================================
+        enum class ThumbnailPanelType { Cache, Dir };
 
-        void DiscardCacheWindowDeviceResources();
+        HRESULT CreatePanelDeviceResources(ThumbnailPanelType type, HWND hwnd);
 
-        void RenderCacheWindow(int selectedIndex, int hoverIndex);
+        void DiscardPanelDeviceResources(ThumbnailPanelType type);
 
-        void ResizeCacheWindow(UINT width, UINT height);
+        void RenderPanel(ThumbnailPanelType type, int selectedIndex, int hoverIndex);
 
-        // Dir Window  —  current-folder image browser
-        ID2D1DeviceContext7 *GetDirContext() const {
-            return m_pDirDeviceContext.Get();
-        }
+        void ResizePanel(ThumbnailPanelType type, UINT width, UINT height);
 
-        HRESULT CreateDirWindowDeviceResources(HWND hwnd);
-
-        void DiscardDirWindowDeviceResources();
-
-        void RenderDirWindow(int selectedIndex, int hoverIndex);
-
-        void ResizeDirWindow(UINT width, UINT height);
+        ID2D1DeviceContext7 *GetPanelContext(ThumbnailPanelType type);
 
         // Queues an async decode+scale job for one file.
-        // Posts WM_QIV_REPAINT to m_hDirWnd when the thumbnail lands.
+        // Posts WM_QIV_REPAINT to the dir panel HWND when the thumbnail lands.
         void RequestDirThumbnail(const std::wstring &filePath);
 
         // Drops the entire dir thumbnail cache (call on folder change).
@@ -125,26 +113,25 @@ class RendererD2D final : public IImageRenderer {
         Microsoft::WRL::ComPtr<ID2D1Effect> m_pScaleEffect;
         Microsoft::WRL::ComPtr<ID2D1Bitmap1> m_pBackBufferBitmap;
 
-        // Cache Window Resources
-        HWND m_hCacheWnd = nullptr;
-        Microsoft::WRL::ComPtr<IDXGISwapChain1> m_pCacheSwapChain;
-        Microsoft::WRL::ComPtr<ID2D1DeviceContext7> m_pCacheDeviceContext;
-        Microsoft::WRL::ComPtr<ID2D1Bitmap1> m_pCacheBackBuffer;
-        Microsoft::WRL::ComPtr<ID2D1SolidColorBrush> m_pCacheTextBrush;
-        Microsoft::WRL::ComPtr<ID2D1SolidColorBrush> m_pCacheBorderBrush;
-        Microsoft::WRL::ComPtr<ID2D1SolidColorBrush> m_pCacheButtonBrush;
-        Microsoft::WRL::ComPtr<ID2D1SolidColorBrush> m_pCacheButtonTextBrush;
-        Microsoft::WRL::ComPtr<IDWriteTextFormat> m_pCacheTextFormat;
-        Microsoft::WRL::ComPtr<IDWriteTextFormat> m_pCacheButtonFormat;
+        // =====================================================================
+        // Thumbnail Panel Resources (Cache & Dir Windows)
+        // =====================================================================
+        struct ThumbnailPanel {
+            HWND hwnd = nullptr;
+            Microsoft::WRL::ComPtr<IDXGISwapChain1> swapChain;
+            Microsoft::WRL::ComPtr<ID2D1DeviceContext7> deviceContext;
+            Microsoft::WRL::ComPtr<ID2D1Bitmap1> backBuffer;
+            Microsoft::WRL::ComPtr<ID2D1SolidColorBrush> placeholderBrush;
+            Microsoft::WRL::ComPtr<ID2D1SolidColorBrush> borderBrush;
+            Microsoft::WRL::ComPtr<ID2D1SolidColorBrush> hoverBrush;
+        };
 
-        // Dir Window Resources  —  current-folder image browser
-        HWND m_hDirWnd = nullptr;
-        Microsoft::WRL::ComPtr<IDXGISwapChain1> m_pDirSwapChain;
-        Microsoft::WRL::ComPtr<ID2D1DeviceContext7> m_pDirDeviceContext;
-        Microsoft::WRL::ComPtr<ID2D1Bitmap1> m_pDirBackBuffer;
-        Microsoft::WRL::ComPtr<ID2D1SolidColorBrush> m_pDirPlaceholderBrush;
-        Microsoft::WRL::ComPtr<ID2D1SolidColorBrush> m_pDirBorderBrush;
-        Microsoft::WRL::ComPtr<ID2D1SolidColorBrush> m_pDirHoverBrush;
+        ThumbnailPanel m_cachePanel;
+        ThumbnailPanel m_dirPanel;
+
+        ThumbnailPanel &GetPanel(ThumbnailPanelType type) {
+            return type == ThumbnailPanelType::Cache ? m_cachePanel : m_dirPanel;
+        }
 
         // Dir thumbnail cache  —  small scaled-down bitmaps for every file in
         // the current folder.  Separate from m_bitmapCache (which holds full-res

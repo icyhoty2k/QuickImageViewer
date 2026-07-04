@@ -37,33 +37,11 @@ namespace UI {
     }
 
     // -------------------------------------------------------------------------
-    // PostBuildHook — sync legacy globals for RendererD2D
+    // PostBuildHook — syncs legacy globals for RendererD2D
     // -------------------------------------------------------------------------
     void CacheWnd::PostBuildHook() {
         g_cacheOffset = m_offset;
         g_thumbnailObjects = m_thumbnails;
-    }
-
-    // -------------------------------------------------------------------------
-    // Renderer calls
-    // -------------------------------------------------------------------------
-    void CacheWnd::Render(int selectedIdx, int hoverIdx) {
-        if (!app.renderer) return;
-        auto *r = dynamic_cast<RendererD2D *>(app.renderer.get());
-        if (r && r->GetCacheContext())
-            r->RenderCacheWindow(selectedIdx, hoverIdx);
-    }
-
-    void CacheWnd::ResizeSwapChain(UINT w, UINT h) {
-        if (!app.renderer) return;
-        auto *r = dynamic_cast<RendererD2D *>(app.renderer.get());
-        if (r) r->ResizeCacheWindow(w, h);
-    }
-
-    void CacheWnd::CreateDeviceResources() {
-        if (!app.renderer) return;
-        auto *r = dynamic_cast<RendererD2D *>(app.renderer.get());
-        if (r) r->CreateCacheWindowDeviceResources(m_hWnd);
     }
 
     // -------------------------------------------------------------------------
@@ -72,11 +50,13 @@ namespace UI {
     void CacheWnd::ClearThumbnailCache() {
         std::wstring activeFile;
         if (!app.playlist.empty() && app.currentIndex >= 0 &&
-            app.currentIndex < static_cast<int>(app.playlist.size()))
+            app.currentIndex < static_cast<int>(app.playlist.size())) {
             activeFile = app.playlist[app.currentIndex];
+        }
 
-        if (app.renderer) app.renderer->ClearCache(activeFile);
-        m_offset = 0.0f;
+        if (app.renderer) {
+            app.renderer->ClearCache(activeFile);
+        }
         UpdateView();
     }
 } // namespace UI

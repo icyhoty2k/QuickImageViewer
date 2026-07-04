@@ -7,6 +7,7 @@
 #include "../AppState.h"
 #include "../Platform/Constants.h"
 #include "../Input/Shortcuts.h"
+#include "../Renderer/RendererD2D.h"
 
 namespace UI {
     // =========================================================================
@@ -441,5 +442,32 @@ namespace UI {
         }
 
         return DefWindowProcW(m_hWnd, message, wParam, lParam);
+    }
+
+    // =========================================================================
+    // Unified Renderer Calls
+    // =========================================================================
+    void ThumbnailPanelWnd::Render(int selectedIdx, int hoverIdx) {
+        if (!app.renderer) return;
+        auto *r = dynamic_cast<RendererD2D *>(app.renderer.get());
+        if (r && r->GetPanelContext(GetPanelType())) {
+            r->RenderPanel(GetPanelType(), selectedIdx, hoverIdx);
+        }
+    }
+
+    void ThumbnailPanelWnd::ResizeSwapChain(UINT w, UINT h) {
+        if (!app.renderer) return;
+        auto *r = dynamic_cast<RendererD2D *>(app.renderer.get());
+        if (r) {
+            r->ResizePanel(GetPanelType(), w, h);
+        }
+    }
+
+    void ThumbnailPanelWnd::CreateDeviceResources() {
+        if (!app.renderer) return;
+        auto *r = dynamic_cast<RendererD2D *>(app.renderer.get());
+        if (r) {
+            r->CreatePanelDeviceResources(GetPanelType(), m_hWnd);
+        }
     }
 } // namespace UI
