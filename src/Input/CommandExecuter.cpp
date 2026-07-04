@@ -175,15 +175,18 @@ void InputManager::ExecuteKeyboardShortcutCommand(HWND hWnd, Command cmd) {
         // -----------------------------------------------------------------------
         // App control
         // -----------------------------------------------------------------------
-        case Command::HideToTray:
+        case Command::HideToTray: {
             uiManager.HideAllPanelWindows();
             if (app.GetInstanceCount() <= 1) {
+                //Tray icon on close
+                AppCommands::AddTrayIcon(hWnd);
                 ShowWindow(hWnd, SW_HIDE);
             } else {
-                PostQuitMessage(0);
+                AppCommands::RemoveTrayIcon(hWnd);
+                DestroyWindow(hWnd);
             }
             break;
-
+        }
         case Command::NewWindow: {
             wchar_t exePath[MAX_PATH];
             GetModuleFileNameW(nullptr, exePath, MAX_PATH);

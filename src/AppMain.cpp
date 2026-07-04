@@ -341,10 +341,65 @@ LRESULT CALLBACK MainAppWndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM l
 
         case WM_ERASEBKGND:
             return 1;
+        case WM_TRAYICON: {
+            if (lParam == WM_LBUTTONDBLCLK) {
+                // 1. Remove the tray icon and make the window visible
+                AppCommands::RemoveTrayIcon(hWnd);
+                ShowWindow(hWnd, SW_SHOW);
+                ShowWindow(hWnd, SW_RESTORE);
 
+                // 2. Bulletproof focus-stealing logic
+                HWND hForegroundWnd = GetForegroundWindow();
+                if (hForegroundWnd && hForegroundWnd != hWnd) {
+                    DWORD foregroundThreadId = GetWindowThreadProcessId(hForegroundWnd, nullptr);
+                    DWORD currentThreadId = GetCurrentThreadId();
+
+                    // Attach our thread to the current foreground thread
+                    AttachThreadInput(foregroundThreadId, currentThreadId, TRUE);
+
+                    // Force the window to the absolute front and give it input focus
+                    SetForegroundWindow(hWnd);
+                    SetWindowPos(hWnd, HWND_TOP, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE);
+                    SetActiveWindow(hWnd);
+                    SetFocus(hWnd);
+
+                    // Detach safely
+                    AttachThreadInput(foregroundThreadId, currentThreadId, FALSE);
+                } else {
+                    // Fallback if we already have the rights
+                    SetForegroundWindow(hWnd);
+                }
+            }else if (lParam == WM_RBUTTONUP) {
+                // Right-click shows a context menu
+                POINT pt;
+                GetCursorPos(&pt);
+
+                HMENU hMenu = CreatePopupMenu();
+                AppendMenuW(hMenu, MF_STRING, 1, L"Restore QuickImageViewer");
+                AppendMenuW(hMenu, MF_STRING, 2, L"Exit Completely");
+
+                // SetForegroundWindow is REQUIRED here, otherwise the menu
+                // won't disappear if the user clicks away from it.
+                SetForegroundWindow(hWnd);
+
+                // TrackPopupMenu blocks until the user clicks an option or clicks away
+                int cmd = TrackPopupMenu(hMenu, TPM_RETURNCMD | TPM_NONOTIFY, pt.x, pt.y, 0, hWnd, nullptr);
+                DestroyMenu(hMenu);
+
+                if (cmd == 1) { // Restore clicked
+                    AppCommands::RemoveTrayIcon(hWnd);
+                    ShowWindow(hWnd, SW_SHOW);
+                    ShowWindow(hWnd, SW_RESTORE);
+                    SetForegroundWindow(hWnd);
+                } else if (cmd == 2) { // Exit clicked
+                    AppCommands::RemoveTrayIcon(hWnd);
+                    // Actually kill the app this time
+                    PostQuitMessage(0);
+                }
+            }
+            return 0;
+        }
         case WM_CLOSE: {
-            //Tray icon on close
-            AppCommands::AddTrayIcon(hWnd);
             // 1. "Hide" instead of "Destroy"
             // This removes the window from sight but keeps the process and message loop alive.
             ShowWindow(hWnd, SW_HIDE);
