@@ -100,6 +100,15 @@ class RendererD2D final : public IImageRenderer {
         Microsoft::WRL::ComPtr<IDXGISwapChain1> m_pSwapChain;
         Microsoft::WRL::ComPtr<ID2D1Device6> m_pD2DDevice;
         Microsoft::WRL::ComPtr<ID2D1DeviceContext7> m_pDeviceContext;
+        
+        // =====================================================================
+        // Pooled DeviceContexts (created once, reused for all decode/thumbnail ops)
+        // =====================================================================
+        // Used for loading full-resolution bitmaps in LoadBitmap() and PreloadBitmap()
+        Microsoft::WRL::ComPtr<ID2D1DeviceContext> m_decodeContext;
+        // Used for thumbnail scaling and conversion in RequestDirThumbnail()
+        Microsoft::WRL::ComPtr<ID2D1DeviceContext> m_thumbnailContext;
+        
         // Single combined effect: saturation + contrast + brightness + grayscale
         // + invert + sepia folded into one 5x4 color matrix computed explicitly
         // in UpdateColorEffects() (all of these are linear transforms, so they
