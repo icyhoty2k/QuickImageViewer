@@ -42,11 +42,8 @@ set(SOURCES
         src/Persistence/test.cpp
         src/UI/UIManager.cpp
         src/UI/Thumbnail.h
-        "src/UI/ThumbnailPanelWnd.cpp"
-        "src/UI/ThumbnailPanelWnd.h"
-        src/Overlays/TextOverlay.h
         src/Overlays/OverlayManager.cpp
-        src/Overlays/OverlayManager.h
+        src/UI/ThumbnailPanelWnd.cpp
 )
 
 add_executable(QuickImageViewer WIN32 ${SOURCES})
