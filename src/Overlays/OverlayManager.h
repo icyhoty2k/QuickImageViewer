@@ -3,7 +3,6 @@
 #include <vector>
 #include <d2d1.h>
 #include <dwrite_3.h>
-#include <wrl/client.h>
 
 #include "RendererD2D.h"
 
