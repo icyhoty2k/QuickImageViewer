@@ -359,6 +359,25 @@ HRESULT RendererD2D::CreateDeviceResources() {
         if (FAILED(hr)) return hr;
     }
 
+    // =========================================================================
+    // Create pooled DeviceContexts for decode and thumbnail operations
+    // =========================================================================
+    // Decode context: used in LoadBitmap() and PreloadBitmap()
+    {
+        Microsoft::WRL::ComPtr<ID2D1DeviceContext> decodeDC;
+        hr = m_pD2DDevice->CreateDeviceContext(D2D1_DEVICE_CONTEXT_OPTIONS_NONE, decodeDC.GetAddressOf());
+        if (FAILED(hr)) return hr;
+        m_decodeContext = decodeDC;
+    }
+
+    // Thumbnail context: used in RequestDirThumbnail()
+    {
+        Microsoft::WRL::ComPtr<ID2D1DeviceContext> thumbDC;
+        hr = m_pD2DDevice->CreateDeviceContext(D2D1_DEVICE_CONTEXT_OPTIONS_NONE, thumbDC.GetAddressOf());
+        if (FAILED(hr)) return hr;
+        m_thumbnailContext = thumbDC;
+    }
+
     hr = CreateBackBufferBitmap();
     if (FAILED(hr)) return hr;
 
@@ -416,6 +435,8 @@ void RendererD2D::DiscardDeviceResources() {
     m_svgNativeW = 0.0f;
     m_svgNativeH = 0.0f;
     m_pDeviceContext.Reset();
+    m_decodeContext.Reset();
+    m_thumbnailContext.Reset();
     m_pD2DDevice.Reset();
     m_pSwapChain.Reset();
     m_pD3DContext.Reset();
@@ -474,14 +495,10 @@ HRESULT RendererD2D::LoadBitmap(IWICBitmapSource *bitmap, UINT width, UINT heigh
         return S_OK;
     }
 
-    if (!bitmap || !m_pD2DDevice) return E_FAIL;
-
-    Microsoft::WRL::ComPtr<ID2D1DeviceContext> tempCtx;
-    HRESULT hr = m_pD2DDevice->CreateDeviceContext(D2D1_DEVICE_CONTEXT_OPTIONS_NONE, &tempCtx);
-    if (FAILED(hr)) return hr;
+    if (!bitmap || !m_pD2DDevice || !m_decodeContext) return E_FAIL;
 
     Microsoft::WRL::ComPtr<ID2D1Bitmap1> newBitmap;
-    hr = tempCtx->CreateBitmapFromWicBitmap(bitmap, nullptr, &newBitmap);
+    HRESULT hr = m_decodeContext->CreateBitmapFromWicBitmap(bitmap, nullptr, &newBitmap);
 
     if (SUCCEEDED(hr)) {
         {
@@ -525,11 +542,12 @@ HRESULT RendererD2D::PreloadBitmap(const std::wstring &filePath, int requestInde
         return S_OK;
     }
     Microsoft::WRL::ComPtr<IWICImagingFactory2> wicFac = g_decoderWorker.wicFactory;
-    if (!wicFac || !m_pD2DDevice) return E_UNEXPECTED;
+    if (!wicFac || !m_pD2DDevice || !m_decodeContext) return E_UNEXPECTED;
 
     Microsoft::WRL::ComPtr<ID2D1Device6> d2dDevice = m_pD2DDevice;
+    Microsoft::WRL::ComPtr<ID2D1DeviceContext> decodeCtx = m_decodeContext;
 
-    g_ioWorker.PushTask([filePath, requestIndex, wicFac, d2dDevice, this]() {
+    g_ioWorker.PushTask([filePath, requestIndex, wicFac, d2dDevice, decodeCtx, this]() {
         if (app.wantedIndex.load(std::memory_order_acquire) != requestIndex) return;
 
         HANDLE hFile = CreateFileW(filePath.c_str(), GENERIC_READ, FILE_SHARE_READ, NULL, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, NULL);
@@ -549,7 +567,7 @@ HRESULT RendererD2D::PreloadBitmap(const std::wstring &filePath, int requestInde
         }
         CloseHandle(hFile);
 
-        g_decoderWorker.PushTask([compressedBytes = std::move(compressedBytes), filePath, requestIndex, wicFac, d2dDevice, this]() mutable {
+        g_decoderWorker.PushTask([compressedBytes = std::move(compressedBytes), filePath, requestIndex, wicFac, d2dDevice, decodeCtx, this]() mutable {
             if (app.wantedIndex.load(std::memory_order_acquire) != requestIndex) return;
 
             Microsoft::WRL::ComPtr<IWICStream> wicStream;
@@ -574,11 +592,8 @@ HRESULT RendererD2D::PreloadBitmap(const std::wstring &filePath, int requestInde
                 WICBitmapPaletteTypeCustom)))
                 return;
 
-            Microsoft::WRL::ComPtr<ID2D1DeviceContext> tempCtx;
-            if (FAILED(d2dDevice->CreateDeviceContext(D2D1_DEVICE_CONTEXT_OPTIONS_NONE, &tempCtx))) return;
-
             Microsoft::WRL::ComPtr<ID2D1Bitmap1> newBitmap;
-            HRESULT hr = tempCtx->CreateBitmapFromWicBitmap(converter.Get(), nullptr, &newBitmap);
+            HRESULT hr = decodeCtx->CreateBitmapFromWicBitmap(converter.Get(), nullptr, &newBitmap);
             if (FAILED(hr)) return;
 
             {
@@ -1289,16 +1304,17 @@ void RendererD2D::RequestDirThumbnail(const std::wstring &filePath) {
 
     Microsoft::WRL::ComPtr<IWICImagingFactory2> wicFac = g_decoderWorker.wicFactory;
     Microsoft::WRL::ComPtr<ID2D1Device6> d2dDev = m_pD2DDevice;
+    Microsoft::WRL::ComPtr<ID2D1DeviceContext> thumbCtx = m_thumbnailContext;
 
     // Access the dir panel's hwnd via the unified struct
     HWND hDir = GetPanel(ThumbnailPanelType::Dir).hwnd;
 
-    if (!wicFac || !d2dDev || !hDir) return;
+    if (!wicFac || !d2dDev || !thumbCtx || !hDir) return;
 
     UINT thumbW = static_cast<UINT>(Constants::CACHE_THUMB_WIDTH);
     UINT thumbH = static_cast<UINT>(Constants::CACHE_THUMB_HEIGHT);
 
-    g_ioWorker.PushTask([filePath, wicFac, d2dDev, hDir, thumbW, thumbH, this]() {
+    g_ioWorker.PushTask([filePath, wicFac, d2dDev, thumbCtx, hDir, thumbW, thumbH, this]() {
         HANDLE hFile = CreateFileW(filePath.c_str(), GENERIC_READ, FILE_SHARE_READ,
                                    nullptr, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, nullptr);
         if (hFile == INVALID_HANDLE_VALUE) return;
@@ -1316,7 +1332,7 @@ void RendererD2D::RequestDirThumbnail(const std::wstring &filePath) {
         CloseHandle(hFile);
         if (!ok) return;
 
-        g_decoderWorker.PushTask([bytes = std::move(bytes), filePath, wicFac, d2dDev,
+        g_decoderWorker.PushTask([bytes = std::move(bytes), filePath, wicFac, d2dDev, thumbCtx,
                     hDir, thumbW, thumbH, this]() mutable {
                     Microsoft::WRL::ComPtr<IWICStream> stream;
                     if (FAILED(wicFac->CreateStream(&stream))) return;
@@ -1357,11 +1373,8 @@ void RendererD2D::RequestDirThumbnail(const std::wstring &filePath) {
                         WICBitmapPaletteTypeCustom)))
                         return;
 
-                    Microsoft::WRL::ComPtr<ID2D1DeviceContext> tempCtx;
-                    if (FAILED(d2dDev->CreateDeviceContext(D2D1_DEVICE_CONTEXT_OPTIONS_NONE, &tempCtx))) return;
-
                     Microsoft::WRL::ComPtr<ID2D1Bitmap1> thumbBitmap;
-                    if (FAILED(tempCtx->CreateBitmapFromWicBitmap(converter.Get(), nullptr, &thumbBitmap))) return;
+                    if (FAILED(thumbCtx->CreateBitmapFromWicBitmap(converter.Get(), nullptr, &thumbBitmap))) return;
 
                     {
                         std::lock_guard<std::mutex> lock(m_dirThumbMutex);
