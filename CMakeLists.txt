@@ -35,7 +35,6 @@ set(SOURCES
         src/UI/CacheWnd.cpp
         src/UI/DirWnd.cpp
         src/UI/HistoryListWnd.cpp
-        src/Overlays/OverlayText.cpp
         src/Input/CommandExecuter.cpp
         src/Input/CommandResolver.cpp
         src/Input/AppCommands.cpp

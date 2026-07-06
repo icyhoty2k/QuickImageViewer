@@ -56,6 +56,13 @@ HRESULT RendererD2D::Initialize(HWND hwnd) {
         m_pActiveDisplayNode = nullptr;
         // Hand text resources to the overlay manager — it does not own them
         g_overlayManager.Init(m_pTextFormat.Get(), m_pTextBrush.Get());
+
+        // Compute initial rects from the actual window client size
+        RECT rc{};
+        GetClientRect(m_hwnd, &rc);
+        g_overlayManager.OnResize(
+                static_cast<float>(rc.right - rc.left),
+                static_cast<float>(rc.bottom - rc.top));
     }
     return hr;
 }
