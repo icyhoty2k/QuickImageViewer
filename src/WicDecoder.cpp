@@ -94,19 +94,43 @@ HRESULT WicDecoder::DecodeImage(
 
 
     //
-    // Convert to Direct2D compatible format
+    // Check source pixel format — skip converter if already 32bppPBGRA
+    //
+    WICPixelFormatGUID sourceFormat{};
+    hr = frame->GetPixelFormat(&sourceFormat);
+    if (FAILED(hr))
+        return hr;
+
+    // If source is already 32bppPBGRA, use it directly
+    if (sourceFormat == GUID_WICPixelFormat32bppPBGRA) {
+        hr = factory->CreateBitmapFromSource(
+                frame.Get(),
+                WICBitmapCacheOnLoad,
+                &result.bitmap
+                );
+
+        if (FAILED(hr)) {
+            OutputDebugStringW(
+                    L"WIC2: Bitmap creation failed (native format)\n"
+                    );
+            return hr;
+        }
+
+        return S_OK;
+    }
+
+
+    //
+    // Convert to Direct2D compatible format (only if needed)
     //
     ComPtr<IWICFormatConverter> converter;
-
 
     hr = factory->CreateFormatConverter(
             &converter
             );
 
-
     if (FAILED(hr))
         return hr;
-
 
     hr = converter->Initialize(
             frame.Get(),
@@ -121,7 +145,6 @@ HRESULT WicDecoder::DecodeImage(
 
             WICBitmapPaletteTypeCustom
             );
-
 
     if (FAILED(hr)) {
         OutputDebugStringW(
@@ -143,7 +166,6 @@ HRESULT WicDecoder::DecodeImage(
             &result.bitmap
             );
 
-
     if (FAILED(hr)) {
         OutputDebugStringW(
                 L"WIC2: Bitmap creation failed\n"
@@ -151,7 +173,6 @@ HRESULT WicDecoder::DecodeImage(
 
         return hr;
     }
-
 
     return S_OK;
 }
