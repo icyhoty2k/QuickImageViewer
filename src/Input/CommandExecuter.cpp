@@ -1,5 +1,6 @@
 #include "Command.h"
 #include "../AppState.h"
+#include "../Overlays/OverlayManager.h"
 #include "../Platform/Constants.h"
 #include "../Platform/FileHandler.h"
 #include "../UI/CacheWnd.h"
@@ -169,6 +170,7 @@ void InputManager::ExecuteKeyboardShortcutCommand(HWND hWnd, Command cmd) {
 
         case Command::ToggleOverlay:
             app.showOverlayInfoText = !app.showOverlayInfoText;
+            g_overlayManager.SetAllVisible(app.showOverlayInfoText);
             InvalidateRect(hWnd, nullptr, FALSE);
             break;
 
