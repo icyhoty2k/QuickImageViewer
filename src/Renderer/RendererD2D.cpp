@@ -1,4 +1,5 @@
 #include "RendererD2D.h"
+#include "../Overlays/OverlayManager.h"
 #include "../AppState.h"
 #include "../Platform/Constants.h"
 #include "../WorkerThread.h"
@@ -53,6 +54,8 @@ HRESULT RendererD2D::Initialize(HWND hwnd) {
     if (SUCCEEDED(hr)) {
         // Initialize to empty/default state
         m_pActiveDisplayNode = nullptr;
+        // Hand text resources to the overlay manager — it does not own them
+        g_overlayManager.Init(m_pTextFormat.Get(), m_pTextBrush.Get());
     }
     return hr;
 }
@@ -430,6 +433,7 @@ void RendererD2D::Resize(UINT width, UINT height) {
     HRESULT hr = m_pSwapChain->ResizeBuffers(0, width, height, DXGI_FORMAT_UNKNOWN, 0);
     if (SUCCEEDED(hr)) {
         (void) CreateBackBufferBitmap();
+        g_overlayManager.OnResize(static_cast<float>(width), static_cast<float>(height));
     }
 }
 
@@ -667,18 +671,7 @@ HRESULT RendererD2D::Render() {
 
         m_pDeviceContext->SetTransform(D2D1::Matrix3x2F::Identity());
 
-        if (!app.playlist.empty() && app.showOverlayInfoText) {
-            std::wstring fullPath = app.playlist[app.currentIndex];
-            std::wstring fileName = fullPath.substr(fullPath.find_last_of(L"\\/") + 1);
-            std::wstring text = std::to_wstring(app.currentIndex + 1) + L" / " +
-                                std::to_wstring(app.playlist.size()) + L" - " + fileName;
-            D2D1_RECT_F layoutRect = D2D1::RectF(15.0f, 6.0f,
-                                                 rtSize.width - 10.0f, rtSize.height - 10.0f);
-            if (m_pTextFormat && m_pTextBrush) {
-                m_pDeviceContext->DrawText(text.c_str(), static_cast<UINT32>(text.length()),
-                                           m_pTextFormat.Get(), layoutRect, m_pTextBrush.Get());
-            }
-        }
+        g_overlayManager.RenderAll(m_pDeviceContext.Get());
     } else if (m_pBitmap) {
         const D2D1_SIZE_F imgSize = m_pBitmap->GetSize();
         const D2D1_SIZE_F rtSize = m_pDeviceContext->GetSize();
@@ -767,18 +760,7 @@ HRESULT RendererD2D::Render() {
 
         m_pDeviceContext->SetTransform(D2D1::Matrix3x2F::Identity());
 
-        if (!app.playlist.empty() && app.showOverlayInfoText) {
-            std::wstring fullPath = app.playlist[app.currentIndex];
-            std::wstring fileName = fullPath.substr(fullPath.find_last_of(L"\\/") + 1);
-            std::wstring text = std::to_wstring(app.currentIndex + 1) + L" / " +
-                                std::to_wstring(app.playlist.size()) + L" - " + fileName;
-            D2D1_RECT_F layoutRect = D2D1::RectF(15.0f, 6.0f,
-                                                 rtSize.width - 10.0f, rtSize.height - 10.0f);
-            if (m_pTextFormat && m_pTextBrush) {
-                m_pDeviceContext->DrawText(text.c_str(), static_cast<UINT32>(text.length()),
-                                           m_pTextFormat.Get(), layoutRect, m_pTextBrush.Get());
-            }
-        }
+        g_overlayManager.RenderAll(m_pDeviceContext.Get());
     }
 
     HRESULT hr = m_pDeviceContext->EndDraw();

@@ -44,6 +44,9 @@ set(SOURCES
         src/UI/Thumbnail.h
         "src/UI/ThumbnailPanelWnd.cpp"
         "src/UI/ThumbnailPanelWnd.h"
+        src/Overlays/TextOverlay.h
+        src/Overlays/OverlayManager.cpp
+        src/Overlays/OverlayManager.h
 )
 
 add_executable(QuickImageViewer WIN32 ${SOURCES})
