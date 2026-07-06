@@ -19,6 +19,7 @@ endif ()
 # ---------------------------------------------
 
 set(SOURCES
+        resources/resource.rc
         src/AppMain.cpp
         src/DropTarget.cpp
         src/Input/MouseHandler.cpp
@@ -34,7 +35,6 @@ set(SOURCES
         src/UI/CacheWnd.cpp
         src/UI/DirWnd.cpp
         src/UI/HistoryListWnd.cpp
-        resources/resource.rc
         src/Overlays/OverlayText.cpp
         src/Input/CommandExecuter.cpp
         src/Input/CommandResolver.cpp
