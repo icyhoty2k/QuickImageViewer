@@ -13,7 +13,131 @@ add a step to brightness saturation contrast  like brightnessSaturationContrastS
 shift+spaceBar previous image
 spacebar next image
 ========================================
-1.add support for svg files !
-2. add support for text
-3. save settings in registry
-4. save image with ctrl+s to a location (image that is edited contrast brightness saturation)
+1.add support for svg files ! - done
+2. add support for text - working
+3. save settings in registry -not done
+4. save image with ctrl+s to a location (image that is edited contrast brightness saturation) - done
+
+working idea ..... its much better
+=================================================================
+For QIV specifically
+
+Knowing your renderer, I'd structure it like this:
+
+class OverlayRenderer
+{
+public:
+    void Initialize(ID2D1DeviceContext*);
+    void Update(const OverlayData&);
+    void Draw();
+
+private:
+    ComPtr<IDWriteFactory7>      m_factory;
+    ComPtr<IDWriteTextFormat3>   m_format;
+    ComPtr<IDWriteTextLayout>    m_layout;
+    ComPtr<ID2D1SolidColorBrush> m_textBrush;
+    ComPtr<ID2D1SolidColorBrush> m_backgroundBrush;
+};
+i like this
+
+I like it too. It fits the direction you've been taking with QIV—splitting responsibilities into focused classes instead of having RendererD2D own everything.
+
+I'd actually take it one step further and make the overlay completely independent of image rendering.
+
+class OverlayRenderer
+{
+public:
+    bool Initialize(
+        ID2D1DeviceContext* dc,
+        IDWriteFactory7* dwriteFactory);
+
+    void SetVisible(bool visible);
+
+    void Update(const OverlayData& data);
+
+    void Render();
+
+    void OnDpiChanged(float dpi);
+
+private:
+    void CreateResources();
+    void RebuildLayout();
+
+private:
+    ID2D1DeviceContext* m_dc = nullptr;
+
+    Microsoft::WRL::ComPtr<IDWriteFactory7>      m_dwriteFactory;
+    Microsoft::WRL::ComPtr<IDWriteTextFormat3>   m_textFormat;
+    Microsoft::WRL::ComPtr<IDWriteTextLayout>    m_textLayout;
+
+    Microsoft::WRL::ComPtr<ID2D1SolidColorBrush> m_textBrush;
+    Microsoft::WRL::ComPtr<ID2D1SolidColorBrush> m_backgroundBrush;
+
+    OverlayData m_data;
+
+    bool m_visible = true;
+    bool m_dirty = true;
+};
+
+Then define a simple data structure:
+
+struct OverlayData
+{
+    std::wstring filename;
+    std::wstring dimensions;
+    std::wstring fileSize;
+    std::wstring zoom;
+    std::wstring aspectRatio;
+    std::wstring format;
+
+    bool modified = false;
+};
+
+Then your RendererD2D becomes very clean:
+
+void RendererD2D::Render()
+{
+    BeginDraw();
+
+    DrawImage();
+
+    m_overlay.Render();
+
+    EndDraw();
+}
+
+When something changes:
+
+OverlayData data;
+
+data.filename    = L"forest.png";
+data.dimensions  = L"3840 × 2160";
+data.fileSize    = L"2.53 MB";
+data.zoom        = L"125%";
+data.aspectRatio = L"16:9";
+data.format      = L"PNG";
+
+m_overlay.Update(data);
+
+The overlay itself decides whether it needs to rebuild the IDWriteTextLayout. If nothing changed, Render() simply draws the cached layout.
+
+Even better for QIV
+
+Since you've been moving toward a more modular architecture (commands, UI panels, renderer separation), I'd make the overlay just another render pass.
+
+RendererD2D
+ ├── ImageRenderer
+ ├── OverlayRenderer
+ ├── SelectionRenderer      (future)
+ ├── GridRenderer           (future)
+ ├── HistogramRenderer      (future)
+ └── AnimationRenderer      (future)
+
+Then RendererD2D is basically an orchestrator:
+
+m_imageRenderer.Render();
+m_overlayRenderer.Render();
+
+Each renderer owns only its own Direct2D/DirectWrite resources.
+
+Knowing your QIV project, this is the direction I would take. It scales much better as you add features like EXIF information, image statistics, FPS counters, debug overlays, or animated HUD elements. Instead of RendererD2D gradually growing into a 2,000-line class, it remains a coordinator while each rendering component stays small, focused, and easy to maintain. I think it would fit the architecture of QIV very well.
