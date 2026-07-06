@@ -1,5 +1,6 @@
 #include "FileHandler.h"
 #include "../AppState.h"
+#include "../Overlays/OverlayManager.h"
 #include "RegistrySetup.h"
 #include "Constants.h"
 #include <commdlg.h>
@@ -242,6 +243,19 @@ void OpenInitialImage(HWND hWnd) {
     }
 }
 
+// Called from every code path where an image finishes loading (cache hit,
+// WM_QIV_REPAINT, WM_QIV_SVG_READY). Keeps overlay content in sync.
+void UpdateOverlaysForCurrentImage() {
+    if (app.playlist.empty() || app.currentIndex < 0) return;
+    const std::wstring &path = app.playlist[app.currentIndex];
+    std::wstring fileName = path.substr(path.find_last_of(L"\\/") + 1);
+    g_overlayManager.UpdateInfo(app.currentIndex,
+                                static_cast<int>(app.playlist.size()),
+                                fileName);
+    g_overlayManager.UpdateDims(app.imgWidth, app.imgHeight);
+    g_overlayManager.UpdateZoom(app.viewport.zoom);
+}
+
 void LoadImageIndex(HWND hWnd, int index) {
     g_decoderWorker.ClearQueue();
     g_ioWorker.ClearQueue();
@@ -296,6 +310,7 @@ void LoadImageIndex(HWND hWnd, int index) {
             // Rewire the effect graph to the new bitmap so the display node
             // is not left pointing at the previous image's effect output.
             app.UpdateRendererColorEffects(hWnd);
+            UpdateOverlaysForCurrentImage();
         } else {
             (void) app.renderer->PreloadBitmap(currentPath, index);
         }

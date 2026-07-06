@@ -2,6 +2,10 @@
 
 #include "AppCommands.h"
 #include "Overlays/OverlayManager.h"
+
+// Defined in FileHandler.cpp — updates all overlay text for the current image
+extern void UpdateOverlaysForCurrentImage();
+
 #include "UIManager.h"
 #ifndef NOMINMAX
 #define NOMINMAX
@@ -289,14 +293,7 @@ LRESULT CALLBACK MainAppWndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM l
                     // --- CALL THE EFFECT UPDATER HERE ---
                     // Now the bitmap is ready, we can safely wire the effect graph.
                     app.UpdateRendererColorEffects(hWnd);
-
-                    // Update info overlay with current image data
-                    std::wstring fileName = currentPath.substr(currentPath.find_last_of(L"\\/") + 1);
-                    g_overlayManager.UpdateInfo(app.currentIndex,
-                                                static_cast<int>(app.playlist.size()),
-                                                fileName);
-                    g_overlayManager.UpdateDims(app.imgWidth, app.imgHeight);
-                    g_overlayManager.UpdateZoom(app.viewport.zoom);
+                    UpdateOverlaysForCurrentImage();
 
                     InvalidateRect(hWnd, nullptr, FALSE); // Now, repaint with the correct image.
                     uiManager.getCacheWindow().UpdateCacheView();
@@ -322,11 +319,7 @@ LRESULT CALLBACK MainAppWndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM l
             if (arrivedIndex == app.wantedIndex.load(std::memory_order_acquire) &&
                 app.renderer) {
                 if (SUCCEEDED(app.renderer->LoadSvgFromBytes(payload->bytes, payload->path))) {
-                    std::wstring fileName = payload->path.substr(payload->path.find_last_of(L"\\/") + 1);
-                    g_overlayManager.UpdateInfo(app.currentIndex,
-                                                static_cast<int>(app.playlist.size()),
-                                                fileName);
-                    g_overlayManager.UpdateZoom(app.viewport.zoom);
+                    UpdateOverlaysForCurrentImage();
 
                     InvalidateRect(hWnd, nullptr, FALSE);
                     uiManager.getCacheWindow().UpdateCacheView();
