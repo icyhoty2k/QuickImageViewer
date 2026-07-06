@@ -273,6 +273,13 @@ void LoadImageIndex(HWND hWnd, int index) {
     const std::wstring &currentPath = app.playlist[index];
     SetWindowTextW(hWnd, (currentPath.substr(currentPath.find_last_of(L"\\/") + 1) + L" - QuickImageViewer").c_str());
 
+    // =========================================================================
+    // IMMEDIATE: Update overlay text INSTANTLY (filename, count, zoom, dims)
+    // This happens synchronously, so fast scrolling shows text changes right away
+    // =========================================================================
+    UpdateOverlaysForCurrentImage();
+    InvalidateRect(hWnd, nullptr, FALSE);
+
     // -------------------------------------------------------------------------
     // SVG path: load bytes on IO thread, call LoadSvgFromBytes on UI thread
     // -------------------------------------------------------------------------
@@ -310,7 +317,7 @@ void LoadImageIndex(HWND hWnd, int index) {
             // Rewire the effect graph to the new bitmap so the display node
             // is not left pointing at the previous image's effect output.
             app.UpdateRendererColorEffects(hWnd);
-            UpdateOverlaysForCurrentImage();
+            // Note: UpdateOverlaysForCurrentImage() was already called above
         } else {
             (void) app.renderer->PreloadBitmap(currentPath, index);
         }
