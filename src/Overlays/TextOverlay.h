@@ -18,8 +18,14 @@ class TextOverlay {
 
         // Update content and position in one call.
         void Update(std::wstring newText, D2D1_RECT_F newRect) {
-            if (newText != text) { text = std::move(newText); m_layoutDirty = true; }
-            if (RectsAreDifferent(newRect, rect)) { rect = newRect; m_layoutDirty = true; }
+            if (newText != text) {
+                text = std::move(newText);
+                m_layoutDirty = true;
+            }
+            if (RectsAreDifferent(newRect, rect)) {
+                rect = newRect;
+                m_layoutDirty = true;
+            }
         }
 
         // Update only the text, keep the existing rect.
@@ -40,20 +46,24 @@ class TextOverlay {
 
         // Returns the cached layout, (re)creating it if text or rect changed.
         // Returns nullptr if factory/format are null or CreateTextLayout fails.
+        [[nodiscard]]
         IDWriteTextLayout *GetLayout(IDWriteFactory *factory, IDWriteTextFormat *format) {
             if (!m_layoutDirty && m_layout) return m_layout.Get();
             if (!factory || !format || text.empty()) return nullptr;
 
             m_layout.Reset();
-            const float maxW = rect.right  - rect.left;
-            const float maxH = rect.bottom - rect.top;
-            factory->CreateTextLayout(
-                text.c_str(),
-                static_cast<UINT32>(text.length()),
-                format,
-                maxW > 0.0f ? maxW : 4096.0f,
-                maxH > 0.0f ? maxH : 4096.0f,
-                &m_layout);
+            const float maxW = std::max(rect.right - rect.left, 1.0f);
+            const float maxH = std::max(rect.bottom - rect.top, 1.0f);
+            HRESULT hr = factory->CreateTextLayout(
+                    text.c_str(),
+                    static_cast<UINT32>(text.length()),
+                    format,
+                    maxW,
+                    maxH,
+                    &m_layout);
+
+            if (FAILED(hr))
+                return nullptr;
 
             m_layoutDirty = false;
             return m_layout.Get();
