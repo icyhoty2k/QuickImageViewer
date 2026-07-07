@@ -17,6 +17,7 @@ like: Reset to Defaults , when shift+0 pressed, or All effect reset to defaults 
 overflood the user,also center center must be configurable independantly from all other notifications , its color size and font must be controllable separately from all other notifications
 
 right now shortcuts are ctrl+akt+1..9 i dont want that
+-- i want a key to toggle all backgrounds of all overlays currnty its black with little transperancy , first the color must be set from constants and a toogle in constants on /off
 
 implement:
  -Would you like to implement a quick "1:1 Pixel Mapping" command (e.g., double-clicking the zoom overlay).
