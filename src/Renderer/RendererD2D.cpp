@@ -705,7 +705,7 @@ HRESULT RendererD2D::Render() {
         }
 
         m_pDeviceContext->SetTransform(D2D1::Matrix3x2F::Identity());
-        g_overlayManager.UpdateZoom(app.viewport.zoom);
+        g_overlayManager.UpdateZoom(app.viewport.zoom, m_hwnd);
         g_overlayManager.RenderAll(m_pDeviceContext.Get());
     } else if (m_pBitmap) {
         const D2D1_SIZE_F imgSize = m_pBitmap->GetSize();
@@ -794,7 +794,7 @@ HRESULT RendererD2D::Render() {
         }
 
         m_pDeviceContext->SetTransform(D2D1::Matrix3x2F::Identity());
-        g_overlayManager.UpdateZoom(app.viewport.zoom);
+        g_overlayManager.UpdateZoom(app.viewport.zoom, m_hwnd);
         g_overlayManager.RenderAll(m_pDeviceContext.Get());
     }
 

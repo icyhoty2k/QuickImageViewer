@@ -79,7 +79,7 @@ class OverlayManager {
         void UpdateInfo(int index, int total, const std::wstring &filename);
 
         // TOP_CENTER — raw zoom scalar, e.g. 0.86f → "86.0%"
-        void UpdateZoom(float zoom);
+        void UpdateZoom(float zoom, HWND hWnd);
 
         // BOT_RIGHT  — pixel dimensions + file size in bytes
         void UpdateDims(int imgW, int imgH, int64_t fileSizeBytes);

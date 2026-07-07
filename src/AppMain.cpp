@@ -4,7 +4,7 @@
 #include "Overlays/OverlayManager.h"
 
 // Defined in FileHandler.cpp — updates all overlay text for the current image
-extern void UpdateOverlaysForCurrentImage();
+extern void UpdateOverlaysForCurrentImage(HWND hWnd);
 
 #include "UIManager.h"
 #ifndef NOMINMAX
@@ -12,16 +12,16 @@ extern void UpdateOverlaysForCurrentImage();
 #endif
 #include <dwmapi.h>
 #include <intsafe.h>
-#include <uxtheme.h>
+
 #include "CacheWnd.h"
 #include "../AppState.h"
 #include "Platform/Constants.h"
 
 #include "../DropTarget.h"
 #include "Platform/FileHandler.h"
-#include "UI/HelpWnd.h"
+
 #include "UI/DirWnd.h"
-#include "UI/HistoryListWnd.h"
+
 
 #include "MouseHandler.h"
 #include "Input/Command.h"
@@ -44,7 +44,7 @@ extern void UpdateOverlaysForCurrentImage();
 #include "Renderer/RendererGDI.h"
 #include "WorkerThread.h"
 #include <shlobj.h>   // Required for SHOpenFolderAndSelectItems
-#include <commdlg.h>  // GetSaveFileName dialog
+
 
 // Global application state
 AppState app;
@@ -293,7 +293,7 @@ LRESULT CALLBACK MainAppWndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM l
                     // --- CALL THE EFFECT UPDATER HERE ---
                     // Now the bitmap is ready, we can safely wire the effect graph.
                     app.UpdateRendererColorEffects(hWnd);
-                    UpdateOverlaysForCurrentImage();
+                    UpdateOverlaysForCurrentImage(hWnd);
 
                     InvalidateRect(hWnd, nullptr, FALSE); // Now, repaint with the correct image.
                     uiManager.getCacheWindow().UpdateCacheView();
@@ -319,7 +319,7 @@ LRESULT CALLBACK MainAppWndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM l
             if (arrivedIndex == app.wantedIndex.load(std::memory_order_acquire) &&
                 app.renderer) {
                 if (SUCCEEDED(app.renderer->LoadSvgFromBytes(payload->bytes, payload->path))) {
-                    UpdateOverlaysForCurrentImage();
+                    UpdateOverlaysForCurrentImage(hWnd);
 
                     InvalidateRect(hWnd, nullptr, FALSE);
                     uiManager.getCacheWindow().UpdateCacheView();

@@ -245,7 +245,7 @@ void OpenInitialImage(HWND hWnd) {
 
 // Called from every code path where an image finishes loading (cache hit,
 // WM_QIV_REPAINT, WM_QIV_SVG_READY). Keeps overlay content in sync.
-void UpdateOverlaysForCurrentImage() {
+void UpdateOverlaysForCurrentImage(HWND hWnd) {
     if (app.playlist.empty() || app.currentIndex < 0) return;
     const std::wstring &path = app.playlist[app.currentIndex];
     std::wstring fileName = path.substr(path.find_last_of(L"\\/") + 1);
@@ -266,7 +266,7 @@ void UpdateOverlaysForCurrentImage() {
                                 static_cast<int>(app.playlist.size()),
                                 fileName);
     g_overlayManager.UpdateDims(app.imgWidth, app.imgHeight, fileSizeBytes);
-    g_overlayManager.UpdateZoom(app.viewport.zoom);
+    g_overlayManager.UpdateZoom(app.viewport.zoom, hWnd);
     g_overlayManager.UpdateEffects();
 }
 
@@ -291,7 +291,7 @@ void LoadImageIndex(HWND hWnd, int index) {
     // IMMEDIATE: Update overlay text INSTANTLY (filename, count, zoom, dims)
     // This happens synchronously, so fast scrolling shows text changes right away
     // =========================================================================
-    UpdateOverlaysForCurrentImage();
+    UpdateOverlaysForCurrentImage(hWnd);
     InvalidateRect(hWnd, nullptr, FALSE);
 
     // -------------------------------------------------------------------------

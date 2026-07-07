@@ -198,6 +198,24 @@ struct AppState {
             activeEffectsList.push_back(effectName);
         }
     }
+
+    float GetRealZoom(HWND hWnd) const {
+        if (imgWidth <= 0 || imgHeight <= 0) return 1.0f;
+
+        RECT rc;
+        GetClientRect(hWnd, &rc);
+        float winW = (float) (rc.right - rc.left);
+        float winH = (float) (rc.bottom - rc.top);
+
+        // 1. Calculate the "Fit" scale (the scale at which zoom 1.0 fits the window)
+        float fitScale = std::min(winW / (float) imgWidth, winH / (float) imgHeight);
+
+        // 2. The "Real" zoom is the current zoom (which is a multiplier of fitScale)
+        // divided by the fitScale to normalize it to the image's pixel size.
+        // Or, more simply: (Current Rendered Size) / (Native Image Size)
+        float renderW = (float) imgWidth * fitScale * viewport.zoom;
+        return renderW / (float) imgWidth;
+    }
 };
 
 
