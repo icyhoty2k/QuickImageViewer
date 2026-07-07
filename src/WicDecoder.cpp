@@ -45,11 +45,14 @@ HRESULT WicDecoder::DecodeImage(
     //
     ComPtr<IWICBitmapDecoder> decoder;
 
+    // WICDecodeMetadataCacheOnDemand: defer metadata loading until it is
+    // explicitly requested. We only read pixel data here, so this avoids
+    // wasting time and RAM on EXIF/XMP/IPTC blocks we never touch.
     HRESULT hr = factory->CreateDecoderFromFilename(
             filePath.c_str(),
             nullptr,
             GENERIC_READ,
-            WICDecodeMetadataCacheOnLoad,
+            WICDecodeMetadataCacheOnDemand,
             &decoder
             );
 

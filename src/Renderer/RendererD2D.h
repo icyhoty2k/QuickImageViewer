@@ -100,15 +100,12 @@ class RendererD2D final : public IImageRenderer {
         Microsoft::WRL::ComPtr<IDXGISwapChain1> m_pSwapChain;
         Microsoft::WRL::ComPtr<ID2D1Device6> m_pD2DDevice;
         Microsoft::WRL::ComPtr<ID2D1DeviceContext7> m_pDeviceContext;
-        
-        // =====================================================================
-        // Pooled DeviceContexts (created once, reused for all decode/thumbnail ops)
-        // =====================================================================
-        // Used for loading full-resolution bitmaps in LoadBitmap() and PreloadBitmap()
-        Microsoft::WRL::ComPtr<ID2D1DeviceContext> m_decodeContext;
-        // Used for thumbnail scaling and conversion in RequestDirThumbnail()
-        Microsoft::WRL::ComPtr<ID2D1DeviceContext> m_thumbnailContext;
-        
+
+        // NOTE: No shared decode/thumbnail DeviceContexts here.
+        // ID2D1Device::CreateDeviceContext() is thread-safe; each worker task
+        // creates its own short-lived DeviceContext from m_pD2DDevice, uses it,
+        // and releases it. This eliminates all data races on shared D2D state.
+
         // Single combined effect: saturation + contrast + brightness + grayscale
         // + invert + sepia folded into one 5x4 color matrix computed explicitly
         // in UpdateColorEffects() (all of these are linear transforms, so they
@@ -147,7 +144,9 @@ class RendererD2D final : public IImageRenderer {
         // Dir thumbnail cache  —  small scaled-down bitmaps for every file in
         // the current folder.  Separate from m_bitmapCache (which holds full-res
         // images) so it never evicts viewer bitmaps and is cleared on folder change.
+        // Evicted LRU-style at DIR_THUMB_CACHE_MAX entries to cap VRAM usage.
         std::unordered_map<std::wstring, Microsoft::WRL::ComPtr<ID2D1Bitmap1> > m_dirThumbCache;
+        std::list<std::wstring> m_dirThumbLruList;
         std::mutex m_dirThumbMutex;
 
         // Cache
