@@ -1,4 +1,5 @@
 #include <algorithm>
+#include <format>
 
 #include "AppCommands.h"
 #include "Overlays/OverlayManager.h"
@@ -446,7 +447,7 @@ int WINAPI wWinMain(HINSTANCE hInstance, [[maybe_unused]] HINSTANCE hPrevInstanc
     bool bypassMutex = (GetAsyncKeyState(VK_SHIFT) & 0x8000) != 0;
     if (GetEnvironmentVariableW(L"QIV_NEW_INSTANCE", nullptr, 0) > 0) bypassMutex = true;
 
-    std::wstring mutexName = L"QuickImageViewer_SingleInstanceMutex" + (bypassMutex ? std::to_wstring(GetTickCount()) : L"");
+    std::wstring mutexName = std::format(L"Global\\QuickImageViewer_SingleInstanceMutex{}", bypassMutex ? std::to_wstring(GetTickCount64()) : L"");
     HANDLE hMutex = CreateMutexW(NULL, TRUE, mutexName.c_str());
 
     if (GetLastError() == ERROR_ALREADY_EXISTS) {
