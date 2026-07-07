@@ -174,6 +174,30 @@ void InputManager::ExecuteKeyboardShortcutCommand(HWND hWnd, Command cmd) {
             InvalidateRect(hWnd, nullptr, FALSE);
             break;
 
+        case Command::ToggleOverlayTopRight: {
+            bool now = !g_overlayManager.IsSlotVisible(OverlayManager::TOP_RIGHT);
+            g_overlayManager.SetSlotVisible(OverlayManager::TOP_RIGHT, now);
+            InvalidateRect(hWnd, nullptr, FALSE);
+            break;
+        }
+        case Command::ToggleOverlayTopCenter: {
+            bool now = !g_overlayManager.IsSlotVisible(OverlayManager::TOP_CENTER);
+            g_overlayManager.SetSlotVisible(OverlayManager::TOP_CENTER, now);
+            InvalidateRect(hWnd, nullptr, FALSE);
+            break;
+        }
+        case Command::ToggleOverlayBotRight: {
+            bool now = !g_overlayManager.IsSlotVisible(OverlayManager::BOT_RIGHT);
+            g_overlayManager.SetSlotVisible(OverlayManager::BOT_RIGHT, now);
+            InvalidateRect(hWnd, nullptr, FALSE);
+            break;
+        }
+        case Command::ToggleOverlayBotLeft: {
+            bool now = !g_overlayManager.IsSlotVisible(OverlayManager::BOT_LEFT);
+            g_overlayManager.SetSlotVisible(OverlayManager::BOT_LEFT, now);
+            InvalidateRect(hWnd, nullptr, FALSE);
+            break;
+        }
         // -----------------------------------------------------------------------
         // App control
         // -----------------------------------------------------------------------
@@ -211,6 +235,7 @@ void InputManager::ExecuteKeyboardShortcutCommand(HWND hWnd, Command cmd) {
         case Command::ToggleEffectPreview:
             app.effectPreviewEnabled = !app.effectPreviewEnabled;
             app.UpdateRendererColorEffects(hWnd);
+            g_overlayManager.UpdateEffects();
             break;
 
         case Command::ToggleGrayscale:
@@ -295,6 +320,7 @@ void InputManager::ExecuteKeyboardShortcutCommand(HWND hWnd, Command cmd) {
         case Command::ResetEffects:
             app.ResetEffects();
             app.UpdateRendererColorEffects(hWnd);
+            g_overlayManager.UpdateEffects();
             break;
 
         case Command::SaveImage: {

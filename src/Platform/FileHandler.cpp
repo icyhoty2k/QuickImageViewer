@@ -249,11 +249,25 @@ void UpdateOverlaysForCurrentImage() {
     if (app.playlist.empty() || app.currentIndex < 0) return;
     const std::wstring &path = app.playlist[app.currentIndex];
     std::wstring fileName = path.substr(path.find_last_of(L"\\/") + 1);
+
+    // Get file size on disk for the BOT_RIGHT overlay.
+    int64_t fileSizeBytes = 0;
+    {
+        WIN32_FILE_ATTRIBUTE_DATA fad{};
+        if (GetFileAttributesExW(path.c_str(), GetFileExInfoStandard, &fad)) {
+            LARGE_INTEGER li;
+            li.HighPart = static_cast<LONG>(fad.nFileSizeHigh);
+            li.LowPart = fad.nFileSizeLow;
+            fileSizeBytes = li.QuadPart;
+        }
+    }
+
     g_overlayManager.UpdateInfo(app.currentIndex,
                                 static_cast<int>(app.playlist.size()),
                                 fileName);
-    g_overlayManager.UpdateDims(app.imgWidth, app.imgHeight);
+    g_overlayManager.UpdateDims(app.imgWidth, app.imgHeight, fileSizeBytes);
     g_overlayManager.UpdateZoom(app.viewport.zoom);
+    g_overlayManager.UpdateEffects();
 }
 
 void LoadImageIndex(HWND hWnd, int index) {

@@ -5,8 +5,8 @@
 // Command.h  —  All discrete keyboard actions in QIV.
 //
 // Flow: WM_KEYDOWN → InputManager::handleKeyboard()
-//           Stage 1: ResolveKeyboardKeys()   → Command
-//           Stage 2: ExecuteKeyboardShortcutCommand()  → side effects
+//           Stage 1: ResolveKeyboardKeys()          → Command
+//           Stage 2: ExecuteKeyboardShortcutCommand() → side effects
 // =============================================================================
 
 enum class Command {
@@ -43,15 +43,19 @@ enum class Command {
     OpenFile,
     ToggleCache,
     ClearCache,
-    ToggleDir,   // F5 — current-folder image browser
-    ToggleHistory, // F7 — folder history panel
-    ToggleOverlay,
+    ToggleDir,
+    ToggleHistory,
+    ToggleOverlay, // N / I        — master: all slots on/off
+    ToggleOverlayTopRight, // Ctrl+Alt+1   — index / filename slot
+    ToggleOverlayTopCenter, // Ctrl+Alt+2   — zoom slot
+    ToggleOverlayBotRight, // Ctrl+Alt+3   — dims / file size slot
+    ToggleOverlayBotLeft, // Ctrl+Alt+4   — effects slot
 
     // --- App control ---
     HideToTray,
     NewWindow,
     HardQuit,
-    ResetAll, // Shift+Delete — window layout + all effects
+    ResetAll,
 
     // --- Color effects (toggles) ---
     ToggleGrayscale,
@@ -72,14 +76,13 @@ enum class Command {
     SaturationUp,
     SaturationDown,
 
-    // --- Save ---
-    ResetEffects, // Numpad0 — effects only, leave window alone
-    SaveImage, // Ctrl+S
+    // --- Save / reset ---
+    ResetEffects,
+    SaveImage,
 };
 
 class InputManager {
     public:
-        // Single public entry point — call from WM_KEYDOWN
         static void handleKeyboard(HWND hWnd, WPARAM wParam);
 
     private:
