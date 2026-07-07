@@ -17,3 +17,9 @@ left notifications must grow to right and right must be right aligned and grow t
 center notifications must grow to both ends
 shortcuts keys must be ctrl+ num from 1 .. 9 and ctrl + 0 for toggle
 shortcuts keys must be from 1 do 9 and 1 is top left 2 top center 3 top right , 4 middle left , 5 middle center , 6 middle right , 7 bottom left , 8 bottom center , 9 bottom right , 0 toggle all on off
+
+about center , center notification this one is special it will be used for displaying various text content like a messaging system we will use it for various messages ,
+this will be the app general message queue we will diplay all sorts of messages we need it to show and then gradually hide , ex show 10 sec (configurable in constants) and then hide .
+i need it to show ex: if user has pressed ctrl+0 and hide all notifications center center dysplays : info pannels OFF , when toggle of and Info panels : ON , and other such kind off messages
+like: Reset to Defaults , when shift+0 pressed, or All effect reset to defaults and so on , but without trivial actions like next image , and previous image we do not want to
+overflood the user,also center center must be configurable independantly from all other notifications , its color size and font must be controllable separately from all other notifications
