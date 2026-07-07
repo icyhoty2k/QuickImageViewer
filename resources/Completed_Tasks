@@ -141,3 +141,14 @@ m_overlayRenderer.Render();
 Each renderer owns only its own Direct2D/DirectWrite resources.
 
 Knowing your QIV project, this is the direction I would take. It scales much better as you add features like EXIF information, image statistics, FPS counters, debug overlays, or animated HUD elements. Instead of RendererD2D gradually growing into a 2,000-line class, it remains a coordinator while each rendering component stays small, focused, and easy to maintain. I think it would fit the architecture of QIV very well.
+bottom left must grow up from bottom to up one on top of the other effect
+bottom right must be image dimmensions / image size on disc , ex.: 1920x1080 / 4.3mb
+top right must be current viewport zoom because window is smaller tha the image i want the current display zoom , ex: 86.0 %
+
+bottom left must be applyed effect togglable : ex brightness : 120%
+                                                  sepia
+                                                  invert
+left notifications must grow to right and right must be right aligned and grow to left
+center notifications must grow to both ends
+top left corner must be number / total (and below the number )
+                         name of file with extension ex: image1.jpg
