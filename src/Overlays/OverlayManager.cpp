@@ -200,7 +200,7 @@ void OverlayManager::UpdateInfo(int index, int total, const std::wstring &filena
     slotTopLeft.UpdateText(std::move(text));
 }
 
-void OverlayManager::UpdateZoom(float zoom, HWND hWnd) {
+void OverlayManager::UpdateZoom(float /*zoom*/, HWND hWnd) {
     float realZoom = app.GetRealZoom(hWnd);
     wchar_t buf[32];
     swprintf_s(buf, L"%.0f%%", realZoom * 100.0f);

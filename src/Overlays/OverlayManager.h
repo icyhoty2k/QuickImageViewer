@@ -1,6 +1,5 @@
 #pragma once
 #include "TextOverlay.h"
-#include <vector>
 #include <string>
 #include <d2d1.h>
 #include <dwrite_3.h>

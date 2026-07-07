@@ -3,14 +3,14 @@
 #include "../AppState.h"
 #include "../Platform/Constants.h"
 #include "../WorkerThread.h"
-#include "../SvgDecoder.h"
+
 #include <algorithm>
 #include <chrono>
 #include <vector>
 #include <shlwapi.h>  // SHCreateMemStream
 
 #include "DirWnd.h"
-#include "../UI/CacheWnd.h"
+
 // Link the required import libraries
 #pragma comment(lib, "d3d11.lib")
 #pragma comment(lib, "dxgi.lib")

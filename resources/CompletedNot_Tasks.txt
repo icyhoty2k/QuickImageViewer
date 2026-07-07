@@ -4,27 +4,19 @@ top : right center middle
 center : right center middle
 bottom : right center middle
 also each one must be toggable : on off , and a master key for toggle off all with "i"
-top left corner must be number / total (and below the number )
-                         name of file with extension ex: image1.jpg
-bottom right must be image dimmensions / image size on disc , ex.: 1920x1080 / 4.3mb
-top right must be current viewport zoom because window is smaller tha the image i want the current display zoom , ex: 86.0 %
-bottom left must be applyed effect and values: ex brightness : 120%
-                                                  sepia true
-                                                  invert : true
-bottom left must grow up from bottom to up one on top of the other effect
 
-left notifications must grow to right and right must be right aligned and grow to left
-center notifications must grow to both ends
+
 shortcuts keys must be ctrl+ num from 1 .. 9 and ctrl + 0 for toggle
 shortcuts keys must be from 1 do 9 and 1 is top left 2 top center 3 top right , 4 middle left , 5 middle center , 6 middle right , 7 bottom left , 8 bottom center , 9 bottom right , 0 toggle all on off
-ashortcut keys alt+ctrl are modifier the same notifications that ctrl+1 controls: ex 1 is a modifier for top left notification when pressed it displays text on 2 line and pressed again it displays text on one line.
+shortcut keys alt+ctrl are modifier the same notifications that ctrl+1 controls: ex 1 is a modifier for top left notification when pressed it displays text on 2 line and pressed again it displays text on one line.
 when a modifier shortcut is pressed it changes the behaviour of the notification ex: ctrl+alt+1 -> show number and text on one vs 2 lines
-about center , center notification this one is special it will be used for displaying various text content like a messaging system we will use it for various messages ,
+about center: , center-center the middle of the screen -  notification this one is special it will be used for displaying various text content like a messaging system we will use it for various messages ,
 this will be the app general message queue we will diplay all sorts of messages we need it to show and then gradually hide , ex show 10 sec (configurable in constants) and then hide .
 i need it to show ex: if user has pressed ctrl+0 and hide all notifications center center dysplays : info pannels OFF , when toggle of and Info panels : ON , and other such kind off messages
 like: Reset to Defaults , when shift+0 pressed, or All effect reset to defaults and so on , but without trivial actions like next image , and previous image we do not want to
 overflood the user,also center center must be configurable independantly from all other notifications , its color size and font must be controllable separately from all other notifications
 
+right now shortcuts are ctrl+akt+1..9 i dont want that
 
 implement:
  -Would you like to implement a quick "1:1 Pixel Mapping" command (e.g., double-clicking the zoom overlay).
