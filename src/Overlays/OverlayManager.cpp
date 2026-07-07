@@ -214,13 +214,14 @@ void OverlayManager::UpdateDims(int imgW, int imgH, int64_t fileSizeBytes) {
 }
 
 void OverlayManager::UpdateEffects() {
-    if (!app.hasActiveEffects) {
+    if (!app.hasActiveEffects || !app.effectPreviewEnabled) {
         slotBotLeft.UpdateText(L"");
+        slotBotLeft.InvalidateLayout();
+        RecomputeRects();
         return;
     }
 
     std::wstring lines;
-
     auto appendLine = [&](const std::wstring &s) {
         if (!lines.empty()) lines += L"\n";
         lines += s;
@@ -243,14 +244,13 @@ void OverlayManager::UpdateEffects() {
     if (std::abs(app.gamma - 1.0f) > EPS)
         appendLine(L"Gamma: " + fmtFloat(app.gamma));
 
-    if (app.effectGrayscale) appendLine(L"Grayscale");
-    if (app.effectInvert) appendLine(L"Invert");
-    if (app.effectSepia) appendLine(L"Sepia");
-    if (app.effectSolarize) appendLine(L"Solarize");
-    if (app.effectOutline) appendLine(L"Outline");
-    if (app.effectThreshold) appendLine(L"Threshold");
+    for (const auto &effectName: app.activeEffectsList) {
+        appendLine(effectName);
+    }
 
     slotBotLeft.UpdateText(std::move(lines));
+    slotBotLeft.InvalidateLayout();
+    RecomputeRects();
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

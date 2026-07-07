@@ -239,28 +239,35 @@ void InputManager::ExecuteKeyboardShortcutCommand(HWND hWnd, Command cmd) {
             break;
 
         case Command::ToggleGrayscale:
+            app.ToggleEffectChronological(L"Grayscale");
             app.WakeUpAndApplyEffects(hWnd, app.effectGrayscale);
             break;
 
         case Command::ToggleInvert:
+            app.ToggleEffectChronological(L"Invert");
             app.WakeUpAndApplyEffects(hWnd, app.effectInvert);
             break;
 
         case Command::ToggleSepia:
+            app.ToggleEffectChronological(L"Sepia");
             app.WakeUpAndApplyEffects(hWnd, app.effectSepia);
             break;
 
         case Command::ToggleSolarize:
+            app.ToggleEffectChronological(L"Solarize");
             app.WakeUpAndApplyEffects(hWnd, app.effectSolarize);
             break;
 
         case Command::ToggleOutline:
+            app.ToggleEffectChronological(L"Outline");
             app.WakeUpAndApplyEffects(hWnd, app.effectOutline);
             break;
 
         case Command::ToggleThreshold:
+            app.ToggleEffectChronological(L"Threshold");
             app.WakeUpAndApplyEffects(hWnd, app.effectThreshold);
             break;
+
 
         // -----------------------------------------------------------------------
         // Continuous adjustments

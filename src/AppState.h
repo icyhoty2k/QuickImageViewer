@@ -111,6 +111,7 @@ struct AppState {
         // Explicitly clear the active state flag
         hasActiveEffects = false;
         effectPreviewEnabled = false;
+        activeEffectsList.clear();
     }
 
     void ResetWindowState(HWND hWnd) {
@@ -181,6 +182,21 @@ struct AppState {
         }
 
         InvalidateRect(hWnd, nullptr, FALSE);
+    }
+
+    // Instead of multiple booleans, use a vector to track the active order
+    std::vector<std::wstring> activeEffectsList;
+
+    // Helper to toggle an effect chronologically
+    void ToggleEffectChronological(const std::wstring &effectName) {
+        auto it = std::find(activeEffectsList.begin(), activeEffectsList.end(), effectName);
+        if (it != activeEffectsList.end()) {
+            // It's already on, so remove it
+            activeEffectsList.erase(it);
+        } else {
+            // It's off, add it to the bottom of the list
+            activeEffectsList.push_back(effectName);
+        }
     }
 };
 
