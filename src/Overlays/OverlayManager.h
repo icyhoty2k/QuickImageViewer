@@ -35,9 +35,16 @@ class OverlayManager {
 
         void SetAllVisible(bool show);
 
+        // Renders all active overlays using cached IDWriteTextLayout objects.
+        // No heap allocation occurs unless text or rect changed since last call.
         void RenderAll(ID2D1DeviceContext *ctx) const;
 
+        // Call on device loss — invalidates all cached IDWriteTextLayout objects
+        // so they are recreated from the new device on the next RenderAll().
+        void InvalidateLayouts();
+
     private:
+        IDWriteFactory *m_pDWriteFactory = nullptr;
         IDWriteTextFormat *m_pTextFormat = nullptr;
         ID2D1SolidColorBrush *m_pTextBrush = nullptr;
         std::vector<TextOverlay *> m_active;
