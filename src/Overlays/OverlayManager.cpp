@@ -143,7 +143,7 @@ void OverlayManager::RecomputeRects() {
     const float H = m_rtH;
     const float M = MARGIN;
 
-    // TOP_RIGHT — index/total line + filename line, right-aligned
+    // TOP_RIGHT - zoom indicator
     slotTopRight.UpdateRect(D2D1::RectF(
             W - COL_RIGHT_WIDTH - M, M,
             W - M, M + ROW_DOUBLE));
@@ -153,7 +153,7 @@ void OverlayManager::RecomputeRects() {
             (W - COL_CENTER_WIDTH) * 0.5f, M,
             (W + COL_CENTER_WIDTH) * 0.5f, M + ROW_SINGLE));
 
-    // TOP_LEFT — unused
+    // TOP_LEFT —  index/total line + filename line, right-aligned
     slotTopLeft.UpdateRect(D2D1::RectF(
             M, M,
             M + COL_LEFT_WIDTH, M + ROW_SINGLE));
@@ -200,9 +200,10 @@ void OverlayManager::UpdateInfo(int index, int total, const std::wstring &filena
     slotTopLeft.UpdateText(std::move(text));
 }
 
-void OverlayManager::UpdateZoom(float zoom) {
+void OverlayManager::UpdateZoom(float zoom, HWND hWnd) {
+    float realZoom = app.GetRealZoom(hWnd);
     wchar_t buf[32];
-    swprintf_s(buf, L"%.1f%%", zoom * 100.0f);
+    swprintf_s(buf, L"%.0f%%", realZoom * 100.0f);
     slotTopRight.UpdateText(buf);
 }
 
