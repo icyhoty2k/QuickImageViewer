@@ -117,6 +117,11 @@ class OverlayManager {
         Microsoft::WRL::ComPtr<IDWriteTextFormat> m_fmtCenter; // DWRITE_TEXT_ALIGNMENT_CENTER
         Microsoft::WRL::ComPtr<IDWriteTextFormat> m_fmtTrailing; // DWRITE_TEXT_ALIGNMENT_TRAILING
 
+        // --- BOTTOM ONLY ---
+        Microsoft::WRL::ComPtr<IDWriteTextFormat> m_fmtBotLeft;
+        Microsoft::WRL::ComPtr<IDWriteTextFormat> m_fmtBotCenter;
+        Microsoft::WRL::ComPtr<IDWriteTextFormat> m_fmtBotRight;
+
         // ── Slot metadata ────────────────────────────────────────────────────
         struct SlotMeta {
             TextOverlay *overlay = nullptr;

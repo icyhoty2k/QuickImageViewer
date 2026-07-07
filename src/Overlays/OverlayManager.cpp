@@ -1,7 +1,6 @@
 #include "OverlayManager.h"
 #include "../AppState.h"
 #include <algorithm>
-#include <cmath>
 #include <wrl/client.h>
 
 OverlayManager g_overlayManager;
@@ -19,7 +18,7 @@ static constexpr float COL_CENTER_WIDTH = 200.0f;
 
 static constexpr float ROW_SINGLE = 24.0f;
 static constexpr float ROW_DOUBLE = 44.0f;
-static constexpr float ROW_EFFECTS = static_cast<float>(EFFECT_MAX_LINES) * 20.0f;
+static constexpr float ROW_EFFECTS = static_cast<float>(EFFECT_MAX_LINES) * 28.0f;
 
 static constexpr float BG_ALPHA = 0.45f;
 static constexpr float BG_PADDING = 3.0f;
@@ -72,7 +71,7 @@ void OverlayManager::BuildSlotFormats() {
     std::wstring locale(locLen, L'\0');
     m_pTextFormat->GetLocaleName(&locale[0], locLen);
 
-    auto makeFormat = [&](IDWriteTextFormat **ppOut, DWRITE_TEXT_ALIGNMENT align) {
+    auto makeFormat = [&](IDWriteTextFormat **ppOut, DWRITE_TEXT_ALIGNMENT align, DWRITE_PARAGRAPH_ALIGNMENT pAlign) {
         Microsoft::WRL::ComPtr<IDWriteTextFormat> fmt;
         HRESULT hr = m_pDWriteFactory->CreateTextFormat(
                 famName.c_str(), nullptr,
@@ -80,7 +79,7 @@ void OverlayManager::BuildSlotFormats() {
                 fontSize, locale.c_str(), &fmt);
         if (SUCCEEDED(hr)) {
             fmt->SetTextAlignment(align);
-            fmt->SetParagraphAlignment(DWRITE_PARAGRAPH_ALIGNMENT_NEAR);
+            fmt->SetParagraphAlignment(pAlign); // 2. Apply paragraph alignment
             fmt->SetWordWrapping(DWRITE_WORD_WRAPPING_NO_WRAP);
             *ppOut = fmt.Detach();
         }
@@ -88,27 +87,43 @@ void OverlayManager::BuildSlotFormats() {
 
     IDWriteTextFormat *raw = nullptr;
 
-    makeFormat(&raw, DWRITE_TEXT_ALIGNMENT_LEADING);
+    makeFormat(&raw, DWRITE_TEXT_ALIGNMENT_LEADING, DWRITE_PARAGRAPH_ALIGNMENT_NEAR);
     m_fmtLeft.Attach(raw);
     raw = nullptr;
 
-    makeFormat(&raw, DWRITE_TEXT_ALIGNMENT_CENTER);
+    makeFormat(&raw, DWRITE_TEXT_ALIGNMENT_CENTER, DWRITE_PARAGRAPH_ALIGNMENT_NEAR);
     m_fmtCenter.Attach(raw);
     raw = nullptr;
 
-    makeFormat(&raw, DWRITE_TEXT_ALIGNMENT_TRAILING);
+    makeFormat(&raw, DWRITE_TEXT_ALIGNMENT_TRAILING, DWRITE_PARAGRAPH_ALIGNMENT_NEAR);
     m_fmtTrailing.Attach(raw);
     raw = nullptr;
 
+    // --- BOT SLOTS (Bottom-Aligned) ---
+    makeFormat(&raw, DWRITE_TEXT_ALIGNMENT_LEADING, DWRITE_PARAGRAPH_ALIGNMENT_FAR);
+    m_fmtBotLeft.Attach(raw);
+    raw = nullptr;
+
+    makeFormat(&raw, DWRITE_TEXT_ALIGNMENT_CENTER, DWRITE_PARAGRAPH_ALIGNMENT_FAR);
+    m_fmtBotCenter.Attach(raw);
+    raw = nullptr;
+
+    makeFormat(&raw, DWRITE_TEXT_ALIGNMENT_TRAILING, DWRITE_PARAGRAPH_ALIGNMENT_FAR);
+    m_fmtBotRight.Attach(raw);
+    raw = nullptr;
+
+    // --- ASSIGNMENTS ---
     m_slots[TOP_LEFT].fmt = m_fmtLeft.Get();
     m_slots[TOP_CENTER].fmt = m_fmtCenter.Get();
     m_slots[TOP_RIGHT].fmt = m_fmtTrailing.Get();
     m_slots[MID_LEFT].fmt = m_fmtLeft.Get();
     m_slots[MID_CENTER].fmt = m_fmtCenter.Get();
     m_slots[MID_RIGHT].fmt = m_fmtTrailing.Get();
-    m_slots[BOT_LEFT].fmt = m_fmtLeft.Get();
-    m_slots[BOT_CENTER].fmt = m_fmtCenter.Get();
-    m_slots[BOT_RIGHT].fmt = m_fmtTrailing.Get();
+
+    // Assign the new bottom-aligned formats here
+    m_slots[BOT_LEFT].fmt = m_fmtBotLeft.Get();
+    m_slots[BOT_CENTER].fmt = m_fmtBotCenter.Get();
+    m_slots[BOT_RIGHT].fmt = m_fmtBotRight.Get();
 
     InvalidateLayouts();
 }
@@ -333,11 +348,13 @@ void OverlayManager::RenderAll(ID2D1DeviceContext *ctx) const {
                 break;
         }
 
+        float inkTop = slotRect.top + tm.top;
+
         D2D1_RECT_F bgRect = D2D1::RectF(
                 inkLeft - BG_PADDING,
-                slotRect.top - BG_PADDING,
+                inkTop - BG_PADDING, // Replaced slotRect.top
                 inkLeft + tm.width + BG_PADDING,
-                slotRect.top + tm.height + BG_PADDING);
+                inkTop + tm.height + BG_PADDING); // Replaced slotRect.top
 
         bgRect.left = std::max(0.0f, bgRect.left);
         bgRect.top = std::max(0.0f, bgRect.top);
