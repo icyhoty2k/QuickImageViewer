@@ -1,9 +1,15 @@
 #pragma once
 #include <string>
 #include <d2d1.h>
+#include <dwrite_3.h>
+#include <wrl/client.h>
 
 // A single text overlay drawn on the main window.
 // Created once at startup, updated when content changes, toggled via SetActive().
+//
+// IDWriteTextLayout is cached and only recreated when the text or bounding rect
+// changes. DrawText() (the D2D convenience wrapper) internally allocates and
+// destroys a layout on every call — this avoids that per-frame heap churn.
 class TextOverlay {
     public:
         std::wstring text;
@@ -11,20 +17,60 @@ class TextOverlay {
         bool active = false;
 
         // Update content and position in one call.
-        // Call this whenever the displayed value changes (image navigation, zoom, etc.)
         void Update(std::wstring newText, D2D1_RECT_F newRect) {
-            text = std::move(newText);
-            rect = newRect;
+            if (newText != text) { text = std::move(newText); m_layoutDirty = true; }
+            if (RectsAreDifferent(newRect, rect)) { rect = newRect; m_layoutDirty = true; }
         }
 
         // Update only the text, keep the existing rect.
-        // Use when the overlay position never changes (e.g. fixed-corner overlays).
         void UpdateText(std::wstring newText) {
-            text = std::move(newText);
+            if (newText != text) {
+                text = std::move(newText);
+                m_layoutDirty = true;
+            }
         }
 
         // Update only the rect (e.g. on window resize).
         void UpdateRect(D2D1_RECT_F newRect) {
-            rect = newRect;
+            if (RectsAreDifferent(newRect, rect)) {
+                rect = newRect;
+                m_layoutDirty = true;
+            }
+        }
+
+        // Returns the cached layout, (re)creating it if text or rect changed.
+        // Returns nullptr if factory/format are null or CreateTextLayout fails.
+        IDWriteTextLayout *GetLayout(IDWriteFactory *factory, IDWriteTextFormat *format) {
+            if (!m_layoutDirty && m_layout) return m_layout.Get();
+            if (!factory || !format || text.empty()) return nullptr;
+
+            m_layout.Reset();
+            const float maxW = rect.right  - rect.left;
+            const float maxH = rect.bottom - rect.top;
+            factory->CreateTextLayout(
+                text.c_str(),
+                static_cast<UINT32>(text.length()),
+                format,
+                maxW > 0.0f ? maxW : 4096.0f,
+                maxH > 0.0f ? maxH : 4096.0f,
+                &m_layout);
+
+            m_layoutDirty = false;
+            return m_layout.Get();
+        }
+
+        // Call when the D2D/DWrite device is lost — layouts hold device resources.
+        void InvalidateLayout() {
+            m_layout.Reset();
+            m_layoutDirty = true;
+        }
+
+    private:
+        Microsoft::WRL::ComPtr<IDWriteTextLayout> m_layout;
+        bool m_layoutDirty = true;
+
+        static bool RectsAreDifferent(const D2D1_RECT_F &a, const D2D1_RECT_F &b) {
+            return a.left != b.left || a.top != b.top ||
+                   a.right != b.right || a.bottom != b.bottom;
         }
 };

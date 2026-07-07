@@ -101,10 +101,16 @@ class RendererD2D final : public IImageRenderer {
         Microsoft::WRL::ComPtr<ID2D1Device6> m_pD2DDevice;
         Microsoft::WRL::ComPtr<ID2D1DeviceContext7> m_pDeviceContext;
 
+        // =====================================================================
         // NOTE: No shared decode/thumbnail DeviceContexts here.
         // ID2D1Device::CreateDeviceContext() is thread-safe; each worker task
         // creates its own short-lived DeviceContext from m_pD2DDevice, uses it,
         // and releases it. This eliminates all data races on shared D2D state.
+
+        // ID2D1DeviceContext5 is queried once from m_pDeviceContext and cached
+        // here to avoid a per-frame QueryInterface in the SVG render path.
+        // Reset in DiscardDeviceResources(), repopulated in CreateDeviceResources().
+        Microsoft::WRL::ComPtr<ID2D1DeviceContext5> m_pDeviceContext5;
 
         // Single combined effect: saturation + contrast + brightness + grayscale
         // + invert + sepia folded into one 5x4 color matrix computed explicitly

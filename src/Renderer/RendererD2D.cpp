@@ -357,6 +357,10 @@ HRESULT RendererD2D::CreateDeviceResources() {
         if (FAILED(hr)) return hr;
         hr = baseDC.As(&m_pDeviceContext);
         if (FAILED(hr)) return hr;
+
+        // Cache the ID2D1DeviceContext5 interface once — used every frame for SVG.
+        // Avoids a QueryInterface call inside Render().
+        (void) m_pDeviceContext.As(&m_pDeviceContext5);
     }
 
     hr = CreateBackBufferBitmap();
@@ -416,6 +420,7 @@ void RendererD2D::DiscardDeviceResources() {
     m_svgNativeW = 0.0f;
     m_svgNativeH = 0.0f;
     m_pDeviceContext.Reset();
+    m_pDeviceContext5.Reset();
     m_pD2DDevice.Reset();
     m_pSwapChain.Reset();
     m_pD3DContext.Reset();
@@ -695,9 +700,8 @@ HRESULT RendererD2D::Render() {
 
         m_pDeviceContext->SetTransform(transform);
 
-        Microsoft::WRL::ComPtr<ID2D1DeviceContext5> ctx5;
-        if (SUCCEEDED(m_pDeviceContext.As(&ctx5))) {
-            ctx5->DrawSvgDocument(m_pActiveSvg.Get());
+        if (m_pDeviceContext5) {
+            m_pDeviceContext5->DrawSvgDocument(m_pActiveSvg.Get());
         }
 
         m_pDeviceContext->SetTransform(D2D1::Matrix3x2F::Identity());
@@ -877,9 +881,7 @@ HRESULT RendererD2D::LoadSvgFromBytes(const std::vector<BYTE> &svgBytes,
         return S_OK;
     }
 
-    Microsoft::WRL::ComPtr<ID2D1DeviceContext5> ctx5;
-    HRESULT hr = m_pDeviceContext.As(&ctx5);
-    if (FAILED(hr)) return hr;
+    if (!m_pDeviceContext5) return E_UNEXPECTED;
 
     IStream *pStream = SHCreateMemStream(svgBytes.data(),
                                          static_cast<UINT>(svgBytes.size()));
@@ -891,7 +893,7 @@ HRESULT RendererD2D::LoadSvgFromBytes(const std::vector<BYTE> &svgBytes,
                                : D2D1::SizeF(1920.0f, 1080.0f);
 
     Microsoft::WRL::ComPtr<ID2D1SvgDocument> svgDoc;
-    hr = ctx5->CreateSvgDocument(pStream, viewport, svgDoc.GetAddressOf());
+    HRESULT hr = m_pDeviceContext5->CreateSvgDocument(pStream, viewport, svgDoc.GetAddressOf());
     pStream->Release();
     if (FAILED(hr)) return hr;
 
