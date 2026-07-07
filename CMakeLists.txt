@@ -4,6 +4,7 @@ project(QuickImageViewer LANGUAGES CXX)
 
 set(CMAKE_CXX_STANDARD 23)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
+set(CMAKE_VERBOSE_MAKEFILE ON)
 set(CMAKE_CXX_EXTENSIONS OFF) # Strictly enforce standard C++23 without compiler-specific deviations
 
 # --- Custom Option for Static MSVC Runtime ---
@@ -40,10 +41,13 @@ set(SOURCES
         src/Input/AppCommands.cpp
         src/Persistence/test.cpp
         src/UI/UIManager.cpp
-        src/UI/Thumbnail.h
         src/Overlays/OverlayManager.cpp
         src/UI/ThumbnailPanelWnd.cpp
 )
+find_program(SCCACHE_PROGRAM sccache)
+if (SCCACHE_PROGRAM)
+    set(CMAKE_CXX_COMPILER_LAUNCHER ${SCCACHE_PROGRAM})
+endif ()
 
 add_executable(QuickImageViewer WIN32 ${SOURCES})
 
@@ -58,9 +62,13 @@ target_compile_definitions(QuickImageViewer PRIVATE
 # 2. Compile Options (Warnings, MP, and Release Optimization)
 target_compile_options(QuickImageViewer PRIVATE
         /W4
+        #        /analyze
         /permissive-
         /EHsc
         /MP
+        /utf-8
+        /Zc:__cplusplus
+        /Zc:preprocessor
         # --- Explicit Release Performance Overrides ---
         $<$<CONFIG:Release>:/O2>         # Maximize speed
         $<$<CONFIG:Release>:/Oi>         # Enable intrinsic functions
@@ -69,6 +77,12 @@ target_compile_options(QuickImageViewer PRIVATE
         $<$<CONFIG:Release>:/arch:AVX2>  # Hardware acceleration for modern CPUs
         $<$<CONFIG:Release>:/GL>         # Whole Program Optimization (LTCG part 1)
         $<$<CONFIG:Release>:/Gw>         # Optimize global data
+        $<$<CONFIG:Release>:/Gy>         # Function-level linking.
+        $<$<CONFIG:Release>:/GF>         # Pool identical string literals. Small binary improvement. No downside.
+        $<$<CONFIG:Release>:/Zc:inline>         # Optimize global data
+        $<$<CONFIG:Release>:/favor:AMD64>         # Optimize global data
+
+
         # $<$<CONFIG:Release>:/GS->      # Uncomment to disable stack checks for absolute max speed
 )
 
@@ -79,7 +93,7 @@ target_link_options(QuickImageViewer PRIVATE
         $<$<CONFIG:Release>:/INCREMENTAL:NO>   # Clean, non-fragmented binary
         $<$<CONFIG:Release>:/OPT:REF>          # Eliminate unreferenced functions/data
         $<$<CONFIG:Release>:/OPT:ICF>          # Fold identical functions to reduce executable size
-        $<$<CONFIG:Release>:/CGTHREADS:16>      # Multi-thread the LTCG code generation phase
+        #        $<$<CONFIG:Release>:/CGTHREADS:16>      # Multi-thread the LTCG code generation phase
 )
 
 # 4. Include Directories
@@ -127,7 +141,7 @@ add_custom_command(
         COMMAND ${CMAKE_COMMAND} -E echo "--------------------------------------------------------"
         COMMAND ${CMAKE_COMMAND} -E echo "SUCCESS: Build complete."
         COMMAND powershell -Command "$file = Get-Item '$<TARGET_FILE:QuickImageViewer>'; Write-Host ('Size: {0:N2} KB' -f ($file.Length / 1KB))"
-        COMMAND ${CMAKE_COMMAND} -E echo "Executable: $<SHELL_PATH:$<TARGET_FILE:QuickImageViewer>>"
+        COMMAND ${CMAKE_COMMAND} -E echo "Directory: $<TARGET_FILE_DIR:QuickImageViewer>"
         COMMAND ${CMAKE_COMMAND} -E echo "--------------------------------------------------------"
         VERBATIM
 )

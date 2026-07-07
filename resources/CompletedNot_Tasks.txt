@@ -21,3 +21,11 @@ right now shortcuts are ctrl+akt+1..9 i dont want that
 implement:
  -Would you like to implement a quick "1:1 Pixel Mapping" command (e.g., double-clicking the zoom overlay).
  -that resets the view to exactly 100% to ensure the user is always looking at the native, non-interpolated data?
+
+
+!!!!!!!!!!!!!!!!!!!!!!
+One Potential Bottleneck: The std::function Overhead
+You are pushing std::function<void()> tasks into your queues.
+The Cost: Every time you std::move a std::function or capture variables in a lambda, you might trigger a heap allocation if the lambda closure is larger than a small pointer size (usually 16–32 bytes).
+The Fix: If you find the decoder thread is "stuttering" during very high-speed scrolling, check the size of the lambdas you are pushing. For the g_decoderWorker, try to capture pointers rather than objects to keep the closure size under the "Small Object Optimization" limit, which avoids heap allocations during the task dispatch.
+how to fix where in conde
