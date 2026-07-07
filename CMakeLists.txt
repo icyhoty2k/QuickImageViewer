@@ -120,3 +120,14 @@ add_custom_command(TARGET QuickImageViewer POST_BUILD
         COMMENT "Embedding custom manifest via mt.exe..."
         VERBATIM
 )
+# Build Completion Notification
+add_custom_command(
+        TARGET QuickImageViewer
+        POST_BUILD
+        COMMAND ${CMAKE_COMMAND} -E echo "--------------------------------------------------------"
+        COMMAND ${CMAKE_COMMAND} -E echo "SUCCESS: Build complete."
+        COMMAND powershell -Command "$file = Get-Item '$<TARGET_FILE:QuickImageViewer>'; Write-Host ('Size: {0:N2} KB' -f ($file.Length / 1KB))"
+        COMMAND ${CMAKE_COMMAND} -E echo "Executable: $<SHELL_PATH:$<TARGET_FILE:QuickImageViewer>>"
+        COMMAND ${CMAKE_COMMAND} -E echo "--------------------------------------------------------"
+        VERBATIM
+)
