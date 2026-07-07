@@ -55,7 +55,7 @@ HRESULT RendererD2D::Initialize(HWND hwnd) {
         // Initialize to empty/default state
         m_pActiveDisplayNode = nullptr;
         // Hand text resources to the overlay manager — it does not own them
-        g_overlayManager.Init(m_pTextFormat.Get(), m_pTextBrush.Get());
+        g_overlayManager.Init(m_pDWriteFactory.Get(), m_pTextFormat.Get(), m_pTextBrush.Get());
 
         // Compute initial rects from the actual window client size
         RECT rc{};
@@ -705,7 +705,7 @@ HRESULT RendererD2D::Render() {
         }
 
         m_pDeviceContext->SetTransform(D2D1::Matrix3x2F::Identity());
-
+        g_overlayManager.UpdateZoom(app.viewport.zoom);
         g_overlayManager.RenderAll(m_pDeviceContext.Get());
     } else if (m_pBitmap) {
         const D2D1_SIZE_F imgSize = m_pBitmap->GetSize();
@@ -794,7 +794,7 @@ HRESULT RendererD2D::Render() {
         }
 
         m_pDeviceContext->SetTransform(D2D1::Matrix3x2F::Identity());
-
+        g_overlayManager.UpdateZoom(app.viewport.zoom);
         g_overlayManager.RenderAll(m_pDeviceContext.Get());
     }
 
@@ -809,7 +809,7 @@ HRESULT RendererD2D::Render() {
             // m_pTextFormat and m_pTextBrush are recreated inside CreateDeviceResources.
             // Re-hand them to the overlay manager so it doesn't hold stale pointers
             // from before the device loss.
-            g_overlayManager.Init(m_pTextFormat.Get(), m_pTextBrush.Get());
+            g_overlayManager.Init(m_pDWriteFactory.Get(), m_pTextFormat.Get(), m_pTextBrush.Get());
             RECT rc{};
             GetClientRect(m_hwnd, &rc);
             g_overlayManager.OnResize(static_cast<float>(rc.right - rc.left),
@@ -825,7 +825,7 @@ HRESULT RendererD2D::Render() {
         hrPresent == static_cast<HRESULT>(DXGI_ERROR_DEVICE_RESET)) {
         DiscardDeviceResources();
         if (SUCCEEDED(CreateDeviceResources())) {
-            g_overlayManager.Init(m_pTextFormat.Get(), m_pTextBrush.Get());
+            g_overlayManager.Init(m_pDWriteFactory.Get(), m_pTextFormat.Get(), m_pTextBrush.Get());
             RECT rc{};
             GetClientRect(m_hwnd, &rc);
             g_overlayManager.OnResize(static_cast<float>(rc.right - rc.left),

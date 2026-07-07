@@ -1,171 +1,19 @@
-The biggest thing I noticed
-
-You're creating temporary DeviceContexts.
-
-Example:
-
-m_pD2DDevice->CreateDeviceContext(...)
-
-inside
-
-LoadBitmap()
-
-PreloadBitmap()
-
-Thumbnail loading
-
-That is surprisingly expensive.
-
-A DeviceContext is not free.
-
-I'd probably have
-
-Render Context
-
-Decode Context
-
-Thumbnail Context
-
-created once.
-
-Not every image.
-
-This won't double performance, but it can shave off measurable CPU overhead.
-
-Another thing
-
-You read every image completely into RAM first.
-
-CreateFile()
-
-↓
-
-ReadFile()
-
-↓
-
-vector<BYTE>
-
-↓
-
-InitializeFromMemory()
-
-↓
-
-WIC
-
-instead of
-
-CreateDecoderFromFilename()
-
-or
-
-IWICStream::InitializeFromFilename()
-
-At first glance that seems slower.
-
-But...
-
-...for your architecture
-
-It's actually clever.
-
-Why?
-
-Because
-
-IO Thread
-
-owns disk access.
-
-Then
-
-Decode Thread
-
-never blocks on disk.
-
-The decoder only touches RAM.
-
-I actually like this architecture.
-
-I wouldn't change it.
-
-
-2. WIC converter
-
-I still think you're always converting
-
-Frame
-
-↓
-
-FormatConverter
-
-↓
-
-32bppPBGRA
-
-Even when unnecessary.
-
-Small gain.
-
-Easy fix.
-
-3. Prefetch more aggressively
-
-Currently I believe you're mainly preloading the next image.
-
-I'd probably maintain something like:
-
-previous -2
-
-previous -1
-
-current
-
-next +1
-
-next +2
-
-next +3
-
-depending on available RAM.
-
-With modern systems (and your own HomePC has 64 GB RAM), this is often worthwhile.
-
-4. Thumbnail decoding
-
-I saw:
-
-Fant interpolation
-
-Excellent quality.
-
-But for thumbnails,
-
-Linear
-
-is much faster and users won't notice the difference in tiny previews.
-
-Replace JPEG decoding with libjpeg-turbo.
-Reuse ID2D1DeviceContext instances instead of creating temporary ones during loading.
-Skip the IWICFormatConverter when the source is already 32bppPBGRA.
-
-
-3. Asynchronous Decoding Threads
-If you are worried that other formats are "slow," the hardware-level solution is to increase the parallelism in your Decode Thread architecture.
-
-The Multi-Threaded approach: Since you have a 16-core (or higher) CPU, don't just have one "Decode Thread." Create a small, fixed-size Worker Pool.
-
-Implementation: When your prefetcher triggers (the current ± 3), it shouldn't just send a job to one thread. It should fire off all 5-7 images to the thread pool simultaneously.
-
-The "Massive" Gain: Even if a PNG takes longer to decode than a JPEG, if you decode 5 images in parallel, your UI will never feel the "slow" format because the next image is almost certainly already sitting in RAM before the user even thinks about scrolling.
-
-Summary Strategy
-If you want to move away from format-specific optimizations:
-
-Stop using IWICFormatConverter for everything. Use CopyPixels into a pre-allocated buffer and handle the final pixel layout (swizzling to BGRA) yourself using DirectXMath (SIMD).
-
-Implement a Thread Pool for your decoder. This will make your application speed scale linearly with the number of cores on your 14900KF/9950X, regardless of the file format.
-
-By doing this, you are effectively "turbo-charging" your entire pipeline rather than just creating a fast-lane for JPEGs.
+Task notifications for qiv!
+Notifications must have theese positions:
+top : right center middle
+center : right center middle
+bottom : right center middle
+also each one must be toggable : on off , and a master key for toggle off all with "i"
+top left corner must be number / total (and below the number )
+                         name of file with extension ex: image1.jpg
+bottom right must be image dimmensions / image size on disc , ex.: 1920x1080 / 4.3mb
+top right must be current viewport zoom because window is smaller tha the image i want the current display zoom , ex: 86.0 %
+bottom left must be applyed effect and values: ex brightness : 120%
+                                                  sepia true
+                                                  invert : true
+bottom left must grow up from bottom to up one on top of the other effect
+
+left notifications must grow to right and right must be right aligned and grow to left
+center notifications must grow to both ends
+shortcuts keys must be ctrl+ num from 1 .. 9 and ctrl + 0 for toggle
+shortcuts keys must be from 1 do 9 and 1 is top left 2 top center 3 top right , 4 middle left , 5 middle center , 6 middle right , 7 bottom left , 8 bottom center , 9 bottom right , 0 toggle all on off

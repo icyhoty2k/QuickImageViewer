@@ -146,12 +146,16 @@ struct AppState {
     void WakeUpAndApplyEffects(HWND hWnd) {
         UpdateRendererColorEffects(hWnd);
 
-        // 3. If the user turned something on, ensure the preview is visible
         if (hasActiveEffects) {
             effectPreviewEnabled = true;
             renderer->UpdateColorEffects();
             InvalidateRect(hWnd, nullptr, FALSE);
         }
+
+        // Rebuild the BOT_LEFT effects overlay text.
+        // Forward-declared here to avoid a circular include with OverlayManager.h.
+        extern void QIV_UpdateEffectsOverlay();
+        QIV_UpdateEffectsOverlay();
     }
 
     void WakeUpAndApplyEffects(HWND hWnd, bool &effectToggle) {

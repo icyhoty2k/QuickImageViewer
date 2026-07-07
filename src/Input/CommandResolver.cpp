@@ -11,8 +11,21 @@
 // =============================================================================
 
 Command InputManager::ResolveKeyboardKeys(UINT key) {
-    bool ctrl = (GetKeyState(VK_CONTROL) & 0x8000) != 0;
-    bool shift = (GetKeyState(VK_SHIFT) & 0x8000) != 0;
+    bool ctrl  = (GetKeyState(VK_CONTROL) & 0x8000) != 0;
+    bool shift = (GetKeyState(VK_SHIFT)   & 0x8000) != 0;
+    bool alt   = (GetKeyState(VK_MENU)    & 0x8000) != 0;
+
+    // -------------------------------------------------------------------------
+    // Per-slot overlay toggles  Ctrl+Alt+1..4  (no shift)
+    // -------------------------------------------------------------------------
+    if (ctrl && alt && !shift) {
+        switch (key) {
+            case Shortcuts::SC_OVERLAY_SLOT_TOP_RIGHT:  return Command::ToggleOverlayTopRight;
+            case Shortcuts::SC_OVERLAY_SLOT_TOP_CENTER: return Command::ToggleOverlayTopCenter;
+            case Shortcuts::SC_OVERLAY_SLOT_BOT_RIGHT:  return Command::ToggleOverlayBotRight;
+            case Shortcuts::SC_OVERLAY_SLOT_BOT_LEFT:   return Command::ToggleOverlayBotLeft;
+        }
+    }
 
     // -------------------------------------------------------------------------
     // View modes  '1'–'5'  (no modifier)
@@ -32,26 +45,18 @@ Command InputManager::ResolveKeyboardKeys(UINT key) {
     // -------------------------------------------------------------------------
     switch (key) {
         // --- Navigation ---
-        case Shortcuts::SC_NAV_NEXT:
-            // case Shortcuts::SC_NAV_NEXT_A:
-            return Command::NextImage;
-
-        case Shortcuts::SC_NAV_PREV:
-            // case Shortcuts::SC_NAV_PREV_A:
-            return Command::PrevImage;
+        case Shortcuts::SC_NAV_NEXT:  return Command::NextImage;
+        case Shortcuts::SC_NAV_PREV:  return Command::PrevImage;
 
         case Shortcuts::SC_NAV_NEXT_SPACE:
-            // Space = next; Shift+Space = prev
             return shift ? Command::PrevImage : Command::NextImage;
 
-        case Shortcuts::SC_NAV_SHOW_IN_EXPLORER: // E
-            //case Shortcuts::SC_NAV_SHOW_IN_EXPLORER_TAB: // Tab
-            return Command::ShowInExplorer;
+        case Shortcuts::SC_NAV_SHOW_IN_EXPLORER: return Command::ShowInExplorer;
 
         // --- Zoom ---
-        case Shortcuts::SC_ZOOM_IN_NUMPAD: return Command::ZoomIn;
+        case Shortcuts::SC_ZOOM_IN_NUMPAD:  return Command::ZoomIn;
         case Shortcuts::SC_ZOOM_OUT_NUMPAD: return Command::ZoomOut;
-        case Shortcuts::SC_ZOOM_RESET: return Command::ZoomReset;
+        case Shortcuts::SC_ZOOM_RESET:      return Command::ZoomReset;
 
         // --- Transform ---
         case Shortcuts::SC_TRANSFORM_ROTATE:
@@ -60,66 +65,69 @@ Command InputManager::ResolveKeyboardKeys(UINT key) {
         case Shortcuts::SC_TRANSFORM_FLIP_H: return Command::FlipH;
         case Shortcuts::SC_TRANSFORM_FLIP_V: return Command::FlipV;
 
-        // --- Fullscreen: F / F11 / Enter / Ctrl+Shift+T ---
-        case Shortcuts::SC_PANEL_FULLSCREEN: return Command::ToggleFullscreen; // F11
-        case Shortcuts::SC_PANEL_FULLSCREEN_F: return Command::ToggleFullscreen; // F (no modifier)
-        case Shortcuts::SC_PANEL_FULLSCREEN_ENTER: return Command::ToggleFullscreen; // Enter
+        // --- Fullscreen ---
+        case Shortcuts::SC_PANEL_FULLSCREEN:       return Command::ToggleFullscreen;
+        case Shortcuts::SC_PANEL_FULLSCREEN_F:     return Command::ToggleFullscreen;
+        case Shortcuts::SC_PANEL_FULLSCREEN_ENTER: return Command::ToggleFullscreen;
 
-        case Shortcuts::SC_PANEL_FULLSCREEN_T: // T — only with Ctrl+Shift
+        case Shortcuts::SC_PANEL_FULLSCREEN_T:
             if (ctrl && shift) return Command::ToggleFullscreen;
             break;
 
         // --- Panels ---
-        case Shortcuts::SC_PANEL_HELP_TOGGLE: return Command::ToggleHelp; // F1
-        case Shortcuts::SC_PANEL_OPEN_FILE: return Command::OpenFile; // F2
-        case Shortcuts::SC_PANEL_CACHE_TOGGLE: return Command::ToggleCache; // F3
-        case Shortcuts::SC_PANEL_DIR_TOGGLE: return Command::ToggleDir; // F5
-        case Shortcuts::SC_PANEL_HISTORY_TOGGLE: return Command::ToggleHistory; // F7
-        case Shortcuts::SC_PANEL_CACHE_CLEAR: return Command::ClearCache; // F12
+        case Shortcuts::SC_PANEL_HELP_TOGGLE:    return Command::ToggleHelp;
+        case Shortcuts::SC_PANEL_OPEN_FILE:      return Command::OpenFile;
+        case Shortcuts::SC_PANEL_CACHE_TOGGLE:   return Command::ToggleCache;
+        case Shortcuts::SC_PANEL_DIR_TOGGLE:     return Command::ToggleDir;
+        case Shortcuts::SC_PANEL_HISTORY_TOGGLE: return Command::ToggleHistory;
+        case Shortcuts::SC_PANEL_CACHE_CLEAR:    return Command::ClearCache;
 
         // --- Overlays ---
-        // N without Ctrl = overlay toggle; Ctrl+N = new window (handled below)
-        case Shortcuts::SC_PANEL_OVERLAY_TOGGLE: // 'N'
+        case Shortcuts::SC_PANEL_OVERLAY_TOGGLE: // N
             if (!ctrl) return Command::ToggleOverlay;
             return Command::NewWindow; // Ctrl+N
 
+        case Shortcuts::SC_PANEL_OVERLAY_MASTER: // I
+            if (!ctrl) return Command::ToggleOverlay;
+            break;
+
         // --- App control ---
-        case Shortcuts::SC_APP_HIDE: return Command::HideToTray; // Esc
-        case Shortcuts::SC_APP_HIDE_ALT: // W — only with Ctrl
+        case Shortcuts::SC_APP_HIDE: return Command::HideToTray;
+
+        case Shortcuts::SC_APP_HIDE_ALT:
             if (ctrl) return Command::HideToTray;
             break;
 
-        case Shortcuts::SC_APP_HARD_QUIT: // Q — only with Ctrl
+        case Shortcuts::SC_APP_HARD_QUIT:
             if (ctrl) return Command::HardQuit;
             break;
 
-        case Shortcuts::SC_APP_RESET_DEFAULTS: // Delete
+        case Shortcuts::SC_APP_RESET_DEFAULTS:
             if (shift) return Command::ResetAll;
-            // plain Delete without shift → grayscale toggle (SC_COLOR_GRAYSCALE reuses VK_DELETE)
-            return Command::ToggleGrayscale;
+            return Command::ToggleGrayscale; // plain Delete
 
         // --- Color effect toggles ---
-        case Shortcuts::ImageEffects::SC_EFFECT_APPLY_TOGGLE: return Command::ToggleEffectPreview; // `
-        // SC_COLOR_GRAYSCALE == VK_DELETE — already handled above (plain Delete)
-        case Shortcuts::ImageEffects::SC_COLOR_INVERT: return Command::ToggleInvert; // Insert
-        case Shortcuts::ImageEffects::SC_COLOR_SEPIA: return Command::ToggleSepia; // Home
-        case Shortcuts::ImageEffects::SC_COLOR_SOLARIZE: return Command::ToggleSolarize; // End
-        case Shortcuts::ImageEffects::SC_COLOR_OUTLINE: return Command::ToggleOutline; // PgUp
-        case Shortcuts::ImageEffects::SC_COLOR_THRESHOLD: return Command::ToggleThreshold; // PgDn
+        case Shortcuts::ImageEffects::SC_EFFECT_APPLY_TOGGLE: return Command::ToggleEffectPreview;
+        case Shortcuts::ImageEffects::SC_COLOR_INVERT:        return Command::ToggleInvert;
+        case Shortcuts::ImageEffects::SC_COLOR_SEPIA:         return Command::ToggleSepia;
+        case Shortcuts::ImageEffects::SC_COLOR_SOLARIZE:      return Command::ToggleSolarize;
+        case Shortcuts::ImageEffects::SC_COLOR_OUTLINE:       return Command::ToggleOutline;
+        case Shortcuts::ImageEffects::SC_COLOR_THRESHOLD:     return Command::ToggleThreshold;
 
         // --- Continuous adjustments ---
-        case Shortcuts::ImageEffects::SC_COLOR_GAMMA_UP: return Command::GammaUp;
-        case Shortcuts::ImageEffects::SC_COLOR_GAMMA_DOWN: return Command::GammaDown;
-        case Shortcuts::ImageEffects::SC_COLOR_BRIGHTNESS_UP: return Command::BrightnessUp;
+        case Shortcuts::ImageEffects::SC_COLOR_GAMMA_UP:        return Command::GammaUp;
+        case Shortcuts::ImageEffects::SC_COLOR_GAMMA_DOWN:      return Command::GammaDown;
+        case Shortcuts::ImageEffects::SC_COLOR_BRIGHTNESS_UP:   return Command::BrightnessUp;
         case Shortcuts::ImageEffects::SC_COLOR_BRIGHTNESS_DOWN: return Command::BrightnessDown;
-        case Shortcuts::ImageEffects::SC_COLOR_CONTRAST_UP: return Command::ContrastUp;
-        case Shortcuts::ImageEffects::SC_COLOR_CONTRAST_DOWN: return Command::ContrastDown;
-        case Shortcuts::ImageEffects::SC_COLOR_SAT_UP: return Command::SaturationUp;
-        case Shortcuts::ImageEffects::SC_COLOR_SAT_DOWN: return Command::SaturationDown;
+        case Shortcuts::ImageEffects::SC_COLOR_CONTRAST_UP:     return Command::ContrastUp;
+        case Shortcuts::ImageEffects::SC_COLOR_CONTRAST_DOWN:   return Command::ContrastDown;
+        case Shortcuts::ImageEffects::SC_COLOR_SAT_UP:          return Command::SaturationUp;
+        case Shortcuts::ImageEffects::SC_COLOR_SAT_DOWN:        return Command::SaturationDown;
 
         // --- Save / reset ---
-        case Shortcuts::ImageEffects::SC_COLOR_RESET_ALL_EFFECTS: return Command::ResetEffects; // Numpad0
-        case Shortcuts::ImageEffects::SC_COLOR_SAVE_TO_DISK: // S — only with Ctrl
+        case Shortcuts::ImageEffects::SC_COLOR_RESET_ALL_EFFECTS: return Command::ResetEffects;
+
+        case Shortcuts::ImageEffects::SC_COLOR_SAVE_TO_DISK:
             if (ctrl) return Command::SaveImage;
             break;
     }

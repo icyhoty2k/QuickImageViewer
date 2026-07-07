@@ -8,7 +8,7 @@
 //      relevant WndProc (CacheWindow.cpp, HelpWindow.cpp, etc.).
 //   3. Add it to the help text in HelpWindow.cpp.
 //
-// MODIFIER FLAGS (read at runtime via GetKeyState):
+// MODIFIER FLAGS (read at runtime via GetKeyState):\
 //   bool shift = (GetKeyState(VK_SHIFT)   & 0x8000) != 0;
 //   bool ctrl  = (GetKeyState(VK_CONTROL) & 0x8000) != 0;
 //
@@ -24,215 +24,130 @@ namespace Shortcuts {
     constexpr UINT SC_APP_HARD_QUIT = 'Q'; // requires ctrl
 
     // Esc  /  Ctrl+W  —  Hide to tray (keeps process alive); kills extra instances
-    constexpr UINT SC_APP_HIDE = VK_ESCAPE;
+    constexpr UINT SC_APP_HIDE     = VK_ESCAPE;
     constexpr UINT SC_APP_HIDE_ALT = 'W'; // requires ctrl
 
     // Ctrl+N  —  Spawn a new blank QIV window
     constexpr UINT SC_APP_NEW_WINDOW = 'N'; // requires ctrl
 
     // Shift+Delete  — Restore default application state
-    constexpr UINT SC_APP_RESET_DEFAULTS = VK_DELETE; // Shift+Delete — Reset window layout, center the window, and clear all image effects.
+    constexpr UINT SC_APP_RESET_DEFAULTS = VK_DELETE;
 
     // -------------------------------------------------------------------------
-    // Panels / Overlays SC_PANEL = CacheWindow
+    // Panels / Overlays
     // -------------------------------------------------------------------------
 
-    // F1  —  Toggle Help overlay
-    constexpr UINT SC_PANEL_HELP_TOGGLE = VK_F1;
-
-    // F2  —  Open file picker dialog
-    constexpr UINT SC_PANEL_OPEN_FILE = VK_F2;
-
-    // F3  —  Toggle VRAM Cache panel
-    constexpr UINT SC_PANEL_CACHE_TOGGLE = VK_F3;
-
-    // F4  —  Cycle VRAM Cache panel position (bottom / top / left / right)
-    //        Handled inside CacheWindow's own WndProc when the panel has focus.
-    constexpr UINT SC_PANEL_CACHE_MOVE = VK_F4;
-
-    // F5  —  Toggle Directory panel (shows all images in current folder)
-    constexpr UINT SC_PANEL_DIR_TOGGLE = VK_F5;
-
-    // F6  —  Cycle Directory panel position (bottom / top / left / right)
-    //        Handled inside DirWindow's own WndProc when the panel has focus.
-    constexpr UINT SC_PANEL_DIR_MOVE = VK_F6;
-
-    // F7  —  Toggle Folder History panel (last N visited folders)
+    constexpr UINT SC_PANEL_HELP_TOGGLE    = VK_F1;
+    constexpr UINT SC_PANEL_OPEN_FILE      = VK_F2;
+    constexpr UINT SC_PANEL_CACHE_TOGGLE   = VK_F3;
+    constexpr UINT SC_PANEL_CACHE_MOVE     = VK_F4;
+    constexpr UINT SC_PANEL_DIR_TOGGLE     = VK_F5;
+    constexpr UINT SC_PANEL_DIR_MOVE       = VK_F6;
     constexpr UINT SC_PANEL_HISTORY_TOGGLE = VK_TAB;
-
-    // F11 / F / Enter / Ctrl+Shift+T  —  Toggle fullscreen
-    constexpr UINT SC_PANEL_FULLSCREEN = VK_F11;
-    constexpr UINT SC_PANEL_FULLSCREEN_F = 'F';
+    constexpr UINT SC_PANEL_FULLSCREEN     = VK_F11;
+    constexpr UINT SC_PANEL_FULLSCREEN_F   = 'F';
     constexpr UINT SC_PANEL_FULLSCREEN_ENTER = VK_RETURN;
-    constexpr UINT SC_PANEL_FULLSCREEN_T = 'T'; // requires ctrl+shift
+    constexpr UINT SC_PANEL_FULLSCREEN_T   = 'T'; // requires ctrl+shift
+    constexpr UINT SC_PANEL_CACHE_CLEAR    = VK_F12;
 
-    // F12 —  Clear VRAM Cache and reset cache window UI
-    constexpr UINT SC_PANEL_CACHE_CLEAR = VK_F12;
+    // N (no modifier)  —  Master overlay toggle (all slots on/off)
+    constexpr UINT SC_PANEL_OVERLAY_TOGGLE = 'N';
 
-    // N  —  Toggle on-screen info text overlay
-    constexpr UINT SC_PANEL_OVERLAY_TOGGLE = 'N'; // no modifier
+    // I (no modifier)  —  Master overlay toggle — same effect as N
+    constexpr UINT SC_PANEL_OVERLAY_MASTER = 'I';
+
+    // Per-slot individual toggles — Ctrl+Alt+1..4  (no shift)
+    //   Ctrl+Alt+1  —  TOP_RIGHT  (index / filename)
+    //   Ctrl+Alt+2  —  TOP_CENTER (zoom)
+    //   Ctrl+Alt+3  —  BOT_RIGHT  (dims / file size)
+    //   Ctrl+Alt+4  —  BOT_LEFT   (effects list)
+    constexpr UINT SC_OVERLAY_SLOT_TOP_RIGHT  = '1'; // requires ctrl+alt
+    constexpr UINT SC_OVERLAY_SLOT_TOP_CENTER = '2'; // requires ctrl+alt
+    constexpr UINT SC_OVERLAY_SLOT_BOT_RIGHT  = '3'; // requires ctrl+alt
+    constexpr UINT SC_OVERLAY_SLOT_BOT_LEFT   = '4'; // requires ctrl+alt
 
     // -------------------------------------------------------------------------
     // Navigation
     // -------------------------------------------------------------------------
 
-    // Left Arrow / Up Arrow  —  Previous image
-    constexpr UINT SC_NAV_PREV = VK_LEFT;
-    // constexpr UINT SC_NAV_PREV_A = VK_UP;
-
-    // Right Arrow / Down Arrow  —  Next image
-    // constexpr UINT SC_NAV_NEXT_A = VK_DOWN;
-    constexpr UINT SC_NAV_NEXT = VK_RIGHT;
-
-    // Space       —  Next image  /  Shift+Space  —  Previous image
-    constexpr UINT SC_NAV_NEXT_SPACE = VK_SPACE; // no modifier = next
-    // shift = prev
-
-    // E / Tab  —  Open current file in Explorer (select in folder)
+    constexpr UINT SC_NAV_PREV            = VK_LEFT;
+    constexpr UINT SC_NAV_NEXT            = VK_RIGHT;
+    constexpr UINT SC_NAV_NEXT_SPACE      = VK_SPACE;
     constexpr UINT SC_NAV_SHOW_IN_EXPLORER = 'E';
-    //constexpr UINT SC_NAV_SHOW_IN_EXPLORER_TAB = VK_TAB; // tab will be used for history window
-
 
     // -------------------------------------------------------------------------
     // Zoom
     // -------------------------------------------------------------------------
 
-    // Numpad+ / +  —  Zoom in
-    constexpr UINT SC_ZOOM_IN_NUMPAD = VK_ADD;
-
-
-    // Numpad- / -  —  Zoom out
+    constexpr UINT SC_ZOOM_IN_NUMPAD  = VK_ADD;
     constexpr UINT SC_ZOOM_OUT_NUMPAD = VK_SUBTRACT;
-
-    constexpr UINT SC_ZOOM_RESET = VK_MULTIPLY; // —  Reset zoom and pan to 1:1, centered
-
-    // Mouse: Ctrl+Wheel / RMB(view-control)+Wheel  —  Zoom in/out (handled in WM_MOUSEWHEEL)
-    // See Shortcuts::REFERENCE_ONLY::MouseShortcuts below for the full, accurate
-    // mouse map — it depends on Constants::SWAP_MOUSE_BUTTONS.
+    constexpr UINT SC_ZOOM_RESET      = VK_MULTIPLY;
 
     // -------------------------------------------------------------------------
     // View Modes  (keys '1'–'5')
     // -------------------------------------------------------------------------
-    // 1  —  Fit to view, preserve aspect ratio         (default)
-    // 2  —  Fit to width, ignore aspect ratio
-    // 3  —  Fit to height, ignore aspect ratio
-    // 4  —  Fit to window, ignore aspect ratio
-    // 5  —  Original 1:1 pixel size, preserve aspect ratio
-    // Handled as:  wParam >= SC_VIEW_MODE_FIRST && wParam <= SC_VIEW_MODE_LAST
+
     constexpr UINT SC_VIEW_MODE_FIRST = '1';
-    constexpr UINT SC_VIEW_MODE_LAST = '5';
+    constexpr UINT SC_VIEW_MODE_LAST  = '5';
 
     // -------------------------------------------------------------------------
     // Transform
     // -------------------------------------------------------------------------
 
-    // R          —  Rotate clockwise 90°
-    // Shift+R    —  Rotate counter-clockwise 90°
     constexpr UINT SC_TRANSFORM_ROTATE = 'R';
-
-    // H  —  Flip horizontal
     constexpr UINT SC_TRANSFORM_FLIP_H = 'H';
-
-    // V  —  Flip vertical
     constexpr UINT SC_TRANSFORM_FLIP_V = 'V';
+
     // -------------------------------------------------------------------------
     // Panel-local shortcuts (handled in each panel's own WndProc)
     // -------------------------------------------------------------------------
 
-    // Esc  —  Hide the panel that currently has focus
     constexpr UINT SC_LOCAL_HIDE = VK_ESCAPE;
-
-    // F1  —  (HelpWindow) close help
-    // F3  —  (CacheWindow) toggle cache panel
-    // F4  —  (CacheWindow) cycle cache panel position
-    // F5  —  (DirWindow)   toggle dir panel
-    // F6  —  (DirWindow)   cycle dir panel position
-    // These reuse the SC_PANEL_*
 
     // -------------------------------------------------------------------------
     // Color Effects
     // -------------------------------------------------------------------------
     namespace ImageEffects {
-        // -------------------------------------------------------------------------
-        // Image Effects
-        // -------------------------------------------------------------------------
-        // Tab  —  Applies the currently stored effect pipeline to the active image
-        //         bypassing the need to rebuild the graph.
-        constexpr UINT SC_EFFECT_APPLY_TOGGLE = VK_OEM_3; // the grave key `
-        // Dedicated image effect keys
-        constexpr UINT SC_COLOR_GRAYSCALE = VK_DELETE; // Toggle grayscale
-        constexpr UINT SC_COLOR_INVERT = VK_INSERT; // Toggle invert colors
-        constexpr UINT SC_COLOR_SEPIA = VK_HOME; // Toggle sepia
-        constexpr UINT SC_COLOR_SOLARIZE = VK_END; // Toggle solarize
-        constexpr UINT SC_COLOR_OUTLINE = VK_PRIOR; // Toggle image outline
-        constexpr UINT SC_COLOR_THRESHOLD = VK_NEXT; // Toggle black & white threshold
-
-        constexpr UINT SC_COLOR_GAMMA_UP = VK_OEM_PLUS; // +/- 0.1 // but not the numpad plus i use it for zoom+
-        constexpr UINT SC_COLOR_GAMMA_DOWN = VK_OEM_MINUS; // +/- 0.1 // but not the numpad plus i use it for zoom-
-        constexpr UINT SC_COLOR_BRIGHTNESS_UP = VK_OEM_5; // the \ key
-        constexpr UINT SC_COLOR_BRIGHTNESS_DOWN = VK_OEM_7; //the apostrophe key " ' " // +/- 0.1
-        constexpr UINT SC_COLOR_CONTRAST_UP = VK_OEM_2; //the " . " key // +/- 0.1
-        constexpr UINT SC_COLOR_CONTRAST_DOWN = VK_OEM_PERIOD;
-        constexpr UINT SC_COLOR_SAT_DOWN = VK_OEM_4; // +/- 0.1
-        constexpr UINT SC_COLOR_SAT_UP = VK_OEM_6;
-
-        constexpr UINT SC_COLOR_RESET_ALL_EFFECTS = VK_NUMPAD0; // Reset all color effects
-        constexpr UINT SC_COLOR_SAVE_TO_DISK = 'S'; //Ctrl + s Save image with effects to disc, don't change size and aspect ratio just save it with effects
+        constexpr UINT SC_EFFECT_APPLY_TOGGLE      = VK_OEM_3;    // grave key `
+        constexpr UINT SC_COLOR_GRAYSCALE          = VK_DELETE;
+        constexpr UINT SC_COLOR_INVERT             = VK_INSERT;
+        constexpr UINT SC_COLOR_SEPIA              = VK_HOME;
+        constexpr UINT SC_COLOR_SOLARIZE           = VK_END;
+        constexpr UINT SC_COLOR_OUTLINE            = VK_PRIOR;
+        constexpr UINT SC_COLOR_THRESHOLD          = VK_NEXT;
+        constexpr UINT SC_COLOR_GAMMA_UP           = VK_OEM_PLUS;
+        constexpr UINT SC_COLOR_GAMMA_DOWN         = VK_OEM_MINUS;
+        constexpr UINT SC_COLOR_BRIGHTNESS_UP      = VK_OEM_5;    // backslash
+        constexpr UINT SC_COLOR_BRIGHTNESS_DOWN    = VK_OEM_7;    // apostrophe
+        constexpr UINT SC_COLOR_CONTRAST_UP        = VK_OEM_2;    // forward slash
+        constexpr UINT SC_COLOR_CONTRAST_DOWN      = VK_OEM_PERIOD;
+        constexpr UINT SC_COLOR_SAT_DOWN           = VK_OEM_4;
+        constexpr UINT SC_COLOR_SAT_UP             = VK_OEM_6;
+        constexpr UINT SC_COLOR_RESET_ALL_EFFECTS  = VK_NUMPAD0;
+        constexpr UINT SC_COLOR_SAVE_TO_DISK       = 'S';         // requires ctrl
     }
 
     namespace REFERENCE_ONLY::MouseShortcuts {
-        // Here I will put all mouse shortcuts just for reference!
-        //
         // Mouse buttons are NOT remapped via constants like keyboard keys —
         // WM_LBUTTONDOWN / WM_RBUTTONDOWN are intrinsic Windows messages.
         // Which physical button does which job is decided at runtime by
-        // Constants::SWAP_MOUSE_BUTTONS (see MouseHandler::IsDragAction /
-        // IsViewControlAction). This list documents the CURRENT behavior
-        // with Constants::SWAP_MOUSE_BUTTONS = true (the shipped default).
+        // Constants::SWAP_MOUSE_BUTTONS.
         //
-        // -------------------------------------------------------------
-        // "View-control button"  = LMB   (RMB if SWAP_MOUSE_BUTTONS = false)
-        // "Window-drag button"   = RMB   (LMB if SWAP_MOUSE_BUTTONS = false)
-        // -------------------------------------------------------------
+        // With Constants::SWAP_MOUSE_BUTTONS = true (shipped default):
         //
-        // View-control button, click+hold —  Quick zoom to Constants::ZOOM_CLICK
-        //                                     (3x) centered on the cursor.
-        // View-control button, drag       —  While held, pans the temporarily
-        //                                     zoomed image (offset only; zoom
-        //                                     and pan revert on release).
-        //
-        // Window-drag button, click+hold  —  Begins moving the window
-        //                                     (disabled while fullscreen).
-        // Window-drag button, drag        —  Moves the window.
-        //
-        // Window-drag button HELD + View-control button CLICK
-        //                                  —  Reveals the current file in
-        //                                     Windows Explorer (same as E / Tab).
-        //
-        // Middle Mouse Button, click (no movement)
-        //                                  —  Reset: zoom/pan to 1:1, opacity
-        //                                     to full, window resized to
-        //                                     Constants::BASE_WIDTH x
-        //                                     BASE_HEIGHT and centered on the
-        //                                     current monitor.
-        // Middle Mouse Button, drag       —  Live-resizes the window from its
-        //                                     top-left corner (disabled while
-        //                                     fullscreen).
-        //
-        // LMB double-click                —  Toggle fullscreen (same as
-        //                                     SC_PANEL_FULLSCREEN).
-        //
-        // Wheel (vertical), no modifier   —  Navigate: forward/up = previous
-        //                                     image, back/down = next image.
-        // Ctrl + Wheel (vertical)         —  Zoom in (up) / out (down) by
-        //                                     Constants::ZOOM_STEP.
-        // RMB held + Wheel (vertical)     —  Same as Ctrl+Wheel: zoom in/out.
-        // Shift + Wheel (vertical)        —  Adjust window/image opacity by
-        //                                     Constants::OPACITY_STEP.
-        //
-        // Wheel (horizontal), no modifier —  Adjust window/image opacity
-        //                                     (same as Shift+vertical wheel).
-        // RMB held + Wheel (horizontal)   —  Live-resize the window from its
-        //                                     center, 20px per notch.
+        // LMB hold          — Quick zoom to Constants::ZOOM_CLICK (3x), centered on cursor
+        // LMB drag          — Pan while temporarily zoomed (reverts on release)
+        // RMB hold          — Move the window
+        // RMB drag          — Move the window
+        // RMB held + LMB    — Reveal current file in Explorer
+        // MMB click         — Reset zoom/pan/opacity, resize window to default, center on monitor
+        // MMB drag          — Live-resize window from top-left corner
+        // LMB double-click  — Toggle fullscreen
+        // Wheel up/down     — Previous / next image
+        // Ctrl+Wheel        — Zoom in / out
+        // RMB held + Wheel  — Zoom in / out
+        // Shift+Wheel       — Adjust opacity
+        // Horizontal wheel  — Adjust opacity
+        // RMB held + H-wheel — Live-resize window from center (20px per notch)
     }
 } // namespace Shortcuts
