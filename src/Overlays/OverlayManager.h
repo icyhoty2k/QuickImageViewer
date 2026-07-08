@@ -5,6 +5,7 @@
 #include <dwrite_3.h>
 #include <wrl/client.h>
 
+#include "Constants.h"
 #include "RendererD2D.h"
 
 // =============================================================================
@@ -150,7 +151,7 @@ class OverlayManager {
         struct SlotMeta {
             TextOverlay *overlay = nullptr;
             bool visible = false;
-            bool compact = false; // true → 1-line, false → 2-line
+            bool compact = Constants::Overlay::COMPACT_OVERLAY_MODE; // true → 1-line, false → 2-line
             IDWriteTextFormat *fmt = nullptr;
         };
 

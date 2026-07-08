@@ -181,4 +181,8 @@ namespace Constants {
 
         constexpr ViewMode defaultViewMode = ViewMode::FitToView_PreserveAspectRatio;
     }
+
+    namespace Overlay {
+        constexpr const bool COMPACT_OVERLAY_MODE = true; // true → 1-line, false → 2-line
+    }
 }
