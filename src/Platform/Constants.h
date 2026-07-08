@@ -184,5 +184,5 @@ namespace Constants {
 
     namespace Overlay {
         constexpr const bool COMPACT_OVERLAY_MODE = true; // true → 1-line, false → 2-line
+        constexpr const bool EVERYTHING_ON_TOP_LEFT = false; // append all overlays starting from 0 to 9 on the left one below another
     }
-}
