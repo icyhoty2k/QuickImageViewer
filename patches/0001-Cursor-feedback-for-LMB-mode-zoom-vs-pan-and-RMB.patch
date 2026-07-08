@@ -1,0 +1,112 @@
+From fefdc1ae8db223a99fd0aa1cdbdb40f26e580306 Mon Sep 17 00:00:00 2001
+From: Ivan Hristov Yanev <icyhoty2k@gmail.com>
+Date: Wed, 8 Jul 2026 22:21:28 +0000
+Subject: [PATCH] Cursor feedback for LMB mode (zoom vs pan) and RMB
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+Constants::Cursors namespace added to Constants.h with four entries:
+  LMB_ZOOM  = IDC_CROSS  (crosshair — LMB will 3x zoom)
+  LMB_PAN   = IDC_HAND   (hand — LMB will pan)
+  RMB_DOWN  = IDC_ARROW  (arrow — RMB is held)
+  DEFAULT   = IDC_ARROW  (restored after any action)
+
+MouseHandler changes:
+- RMB down  -> set Cursors::RMB_DOWN
+- RMB up    -> restore Cursors::DEFAULT
+- LMB down  -> set Cursors::LMB_ZOOM or LMB_PAN based on imageOverflows
+- LMB up    -> restore Cursors::DEFAULT
+- MouseMove while viewport.isDragging -> re-assert LMB_ZOOM or LMB_PAN
+  (Windows resets the cursor on every WM_MOUSEMOVE otherwise)
+---
+ src/Input/MouseHandler.cpp | 13 +++++++++++--
+ src/Platform/Constants.h   | 15 +++++++++++++++
+ 2 files changed, 26 insertions(+), 2 deletions(-)
+
+diff --git a/src/Input/MouseHandler.cpp b/src/Input/MouseHandler.cpp
+index 099c882..b9369b6 100644
+--- a/src/Input/MouseHandler.cpp
++++ b/src/Input/MouseHandler.cpp
+@@ -15,6 +15,7 @@ void MouseHandler::HandleButtonDown(HWND hWnd, UINT message, LPARAM lParam) {
+     // Track RMB state
+     if (message == WM_RBUTTONDOWN) {
+         app.isRmbDown = true;
++        SetCursor(LoadCursor(nullptr, Constants::Cursors::RMB_DOWN));
+     }
+ 
+     // New logic: If RMB is down and we receive a Left Click
+@@ -49,7 +50,6 @@ void MouseHandler::HandleButtonDown(HWND hWnd, UINT message, LPARAM lParam) {
+         SetCapture(hWnd);
+     } else if (IsViewControlAction(message)) {
+         if (app.viewport.isDragging) return;
+-        SetCursor(NULL);
+ 
+         POINT pt = {GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam)};
+         RECT rc;
+@@ -94,6 +94,10 @@ void MouseHandler::HandleButtonDown(HWND hWnd, UINT message, LPARAM lParam) {
+         // click-zoom and go straight to pan mode.
+         bool imageOverflows = (renderW > winW + 0.5f) || (renderH > winH + 0.5f);
+ 
++        // Show the appropriate cursor so the user knows what LMB will do.
++        SetCursor(LoadCursor(nullptr,
++            imageOverflows ? Constants::Cursors::LMB_PAN : Constants::Cursors::LMB_ZOOM));
++
+         // Save state so ButtonUp can restore if we zoomed.
+         app.savedZoom    = app.viewport.zoom;
+         app.savedOffsetX = app.viewport.offsetX;
+@@ -132,6 +136,7 @@ void MouseHandler::HandleButtonDown(HWND hWnd, UINT message, LPARAM lParam) {
+ void MouseHandler::HandleButtonUp(HWND hWnd, UINT message, LPARAM /*lParam*/) {
+     if (message == WM_RBUTTONUP) {
+         app.isRmbDown = false;
++        SetCursor(LoadCursor(nullptr, Constants::Cursors::DEFAULT));
+     }
+     if (message == WM_MBUTTONUP) {
+         if (!app.hasMidMoved) {
+@@ -174,7 +179,7 @@ void MouseHandler::HandleButtonUp(HWND hWnd, UINT message, LPARAM /*lParam*/) {
+         app.isWindowDragging = false;
+         ReleaseCapture();
+     } else if (IsViewControlAction(message)) {
+-        SetCursor(LoadCursor(nullptr, IDC_ARROW));
++        SetCursor(LoadCursor(nullptr, Constants::Cursors::DEFAULT));
+ 
+         // Only restore zoom/offset if we applied the click-zoom on press.
+         // If the image was already overflowing and we only panned, keep
+@@ -209,6 +214,10 @@ void MouseHandler::HandleMouseMove(HWND hWnd, LPARAM lParam) {
+         app.lastMidMouse = curMouse;
+         InvalidateRect(hWnd, nullptr, FALSE);
+     } else if (app.viewport.isDragging) {
++        // Keep the appropriate cursor during drag (Windows resets it on every move).
++        SetCursor(LoadCursor(nullptr,
++            app.lmbDidZoom ? Constants::Cursors::LMB_ZOOM : Constants::Cursors::LMB_PAN));
++
+         POINT curMouse = {GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam)};
+ 
+         float dx = (float) (app.viewport.lastMouse.x - curMouse.x);
+diff --git a/src/Platform/Constants.h b/src/Platform/Constants.h
+index 710a07c..4e73010 100644
+--- a/src/Platform/Constants.h
++++ b/src/Platform/Constants.h
+@@ -196,4 +196,19 @@ namespace Constants {
+         // Custom window messages
+         constexpr UINT WM_QIV_CENTER_MSG_HIDE = WM_USER + 10; // Posted by WM_TIMER to hide center msg
+     }
++
++    // =========================================================================
++    // Cursors — LMB mode indicators
++    // =========================================================================
++    // Change these IDC_ values to swap the cursor for each mode.
++    namespace Cursors {
++        // LMB will apply 3x zoom (image fits inside viewport)
++        constexpr LPWSTR LMB_ZOOM = IDC_CROSS;   // magnifier-style crosshair
++        // LMB will pan (image already overflows viewport)
++        constexpr LPWSTR LMB_PAN  = IDC_HAND;    // grab hand
++        // RMB is held — drag-move window or context actions
++        constexpr LPWSTR RMB_DOWN = IDC_ARROW;   // default arrow
++        // After any LMB action ends — restored cursor
++        constexpr LPWSTR DEFAULT  = IDC_ARROW;
++    }
+ }
+-- 
+2.43.0
+

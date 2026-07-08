@@ -1,0 +1,104 @@
+From caaf74a13dc39ae9715294a105658e9db684e9ce Mon Sep 17 00:00:00 2001
+From: Ivan Hristov Yanev <icyhoty2k@gmail.com>
+Date: Wed, 8 Jul 2026 22:25:06 +0000
+Subject: [PATCH] =?UTF-8?q?Fix=20constexpr=20cursor=20constants=20?=
+ =?UTF-8?q?=E2=80=94=20WORD=20IDs=20+=20MAKEINTRESOURCEW?=
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+MSVC rejects constexpr LPWSTR = IDC_CROSS because IDC_* macros expand
+to MAKEINTRESOURCE() which is a reinterpret_cast — not a constant
+expression.
+
+Fix: store cursor IDs as constexpr WORD (the raw OCR_* integer values)
+and wrap with MAKEINTRESOURCEW() at every LoadCursor() call site.
+
+  LMB_ZOOM = 32515  (IDC_CROSS)
+  LMB_PAN  = 32649  (IDC_HAND)
+  RMB_DOWN = 32512  (IDC_ARROW)
+  DEFAULT  = 32512  (IDC_ARROW)
+---
+ src/Input/MouseHandler.cpp | 10 +++++-----
+ src/Platform/Constants.h   | 16 +++++++---------
+ 2 files changed, 12 insertions(+), 14 deletions(-)
+
+diff --git a/src/Input/MouseHandler.cpp b/src/Input/MouseHandler.cpp
+index b9369b6..e74d9aa 100644
+--- a/src/Input/MouseHandler.cpp
++++ b/src/Input/MouseHandler.cpp
+@@ -15,7 +15,7 @@ void MouseHandler::HandleButtonDown(HWND hWnd, UINT message, LPARAM lParam) {
+     // Track RMB state
+     if (message == WM_RBUTTONDOWN) {
+         app.isRmbDown = true;
+-        SetCursor(LoadCursor(nullptr, Constants::Cursors::RMB_DOWN));
++        SetCursor(LoadCursor(nullptr, MAKEINTRESOURCEW(Constants::Cursors::RMB_DOWN)));
+     }
+ 
+     // New logic: If RMB is down and we receive a Left Click
+@@ -96,7 +96,7 @@ void MouseHandler::HandleButtonDown(HWND hWnd, UINT message, LPARAM lParam) {
+ 
+         // Show the appropriate cursor so the user knows what LMB will do.
+         SetCursor(LoadCursor(nullptr,
+-            imageOverflows ? Constants::Cursors::LMB_PAN : Constants::Cursors::LMB_ZOOM));
++            MAKEINTRESOURCEW(imageOverflows ? Constants::Cursors::LMB_PAN : Constants::Cursors::LMB_ZOOM)));
+ 
+         // Save state so ButtonUp can restore if we zoomed.
+         app.savedZoom    = app.viewport.zoom;
+@@ -136,7 +136,7 @@ void MouseHandler::HandleButtonDown(HWND hWnd, UINT message, LPARAM lParam) {
+ void MouseHandler::HandleButtonUp(HWND hWnd, UINT message, LPARAM /*lParam*/) {
+     if (message == WM_RBUTTONUP) {
+         app.isRmbDown = false;
+-        SetCursor(LoadCursor(nullptr, Constants::Cursors::DEFAULT));
++        SetCursor(LoadCursor(nullptr, MAKEINTRESOURCEW(Constants::Cursors::DEFAULT)));
+     }
+     if (message == WM_MBUTTONUP) {
+         if (!app.hasMidMoved) {
+@@ -179,7 +179,7 @@ void MouseHandler::HandleButtonUp(HWND hWnd, UINT message, LPARAM /*lParam*/) {
+         app.isWindowDragging = false;
+         ReleaseCapture();
+     } else if (IsViewControlAction(message)) {
+-        SetCursor(LoadCursor(nullptr, Constants::Cursors::DEFAULT));
++        SetCursor(LoadCursor(nullptr, MAKEINTRESOURCEW(Constants::Cursors::DEFAULT)));
+ 
+         // Only restore zoom/offset if we applied the click-zoom on press.
+         // If the image was already overflowing and we only panned, keep
+@@ -216,7 +216,7 @@ void MouseHandler::HandleMouseMove(HWND hWnd, LPARAM lParam) {
+     } else if (app.viewport.isDragging) {
+         // Keep the appropriate cursor during drag (Windows resets it on every move).
+         SetCursor(LoadCursor(nullptr,
+-            app.lmbDidZoom ? Constants::Cursors::LMB_ZOOM : Constants::Cursors::LMB_PAN));
++            MAKEINTRESOURCEW(app.lmbDidZoom ? Constants::Cursors::LMB_ZOOM : Constants::Cursors::LMB_PAN)));
+ 
+         POINT curMouse = {GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam)};
+ 
+diff --git a/src/Platform/Constants.h b/src/Platform/Constants.h
+index 4e73010..fecb9c4 100644
+--- a/src/Platform/Constants.h
++++ b/src/Platform/Constants.h
+@@ -200,15 +200,13 @@ namespace Constants {
+     // =========================================================================
+     // Cursors — LMB mode indicators
+     // =========================================================================
+-    // Change these IDC_ values to swap the cursor for each mode.
++    // Values are the raw resource IDs (WORD) behind the IDC_ macros.
++    // Use as: LoadCursor(nullptr, MAKEINTRESOURCEW(Constants::Cursors::LMB_ZOOM))
++    // Change these to any other OCR_* value to swap the cursor for each mode.
+     namespace Cursors {
+-        // LMB will apply 3x zoom (image fits inside viewport)
+-        constexpr LPWSTR LMB_ZOOM = IDC_CROSS;   // magnifier-style crosshair
+-        // LMB will pan (image already overflows viewport)
+-        constexpr LPWSTR LMB_PAN  = IDC_HAND;    // grab hand
+-        // RMB is held — drag-move window or context actions
+-        constexpr LPWSTR RMB_DOWN = IDC_ARROW;   // default arrow
+-        // After any LMB action ends — restored cursor
+-        constexpr LPWSTR DEFAULT  = IDC_ARROW;
++        constexpr WORD LMB_ZOOM = 32515; // IDC_CROSS  — LMB will 3x zoom
++        constexpr WORD LMB_PAN  = 32649; // IDC_HAND   — LMB will pan
++        constexpr WORD RMB_DOWN = 32512; // IDC_ARROW  — RMB is held
++        constexpr WORD DEFAULT  = 32512; // IDC_ARROW  — restored after action
+     }
+ }
+-- 
+2.43.0
+
