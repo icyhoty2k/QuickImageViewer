@@ -173,6 +173,44 @@ void OverlayManager::RecomputeRects() {
     const float H = m_rtH;
     const float M = MARGIN;
 
+    // ── EVERYTHING_ON_TOP_LEFT ────────────────────────────────────────────────
+    // All slots (0-8 except MID_CENTER) stacked vertically from top-left,
+    // one below another in slot order, each separated by MARGIN.
+    // MID_CENTER keeps its normal screen-center position.
+    if (Constants::Overlay::EVERYTHING_ON_TOP_LEFT) {
+        float cursorY = M;
+
+        // Slot pointer, its column width, and whether it uses ROW_EFFECTS height
+        struct StackEntry { Slot slot; TextOverlay *ov; float colW; bool isEffects; };
+        const StackEntry entries[] = {
+            { TOP_LEFT,   &slotTopLeft,   COL_LEFT_WIDTH,   false },
+            { TOP_CENTER, &slotTopCenter, COL_CENTER_WIDTH, false },
+            { TOP_RIGHT,  &slotTopRight,  COL_RIGHT_WIDTH,  false },
+            { MID_LEFT,   &slotMidLeft,   COL_LEFT_WIDTH,   false },
+            { MID_RIGHT,  &slotMidRight,  COL_RIGHT_WIDTH,  false },
+            { BOT_LEFT,   &slotBotLeft,   COL_LEFT_WIDTH,   true  },
+            { BOT_CENTER, &slotBotCenter, COL_CENTER_WIDTH, false },
+            { BOT_RIGHT,  &slotBotRight,  COL_RIGHT_WIDTH,  false },
+        };
+
+        for (const auto &e : entries) {
+            float rowH = e.isEffects ? ROW_EFFECTS
+                       : m_slots[e.slot].compact ? ROW_SINGLE
+                                                 : ROW_DOUBLE;
+            e.ov->UpdateRect(D2D1::RectF(M, cursorY, M + e.colW, cursorY + rowH));
+            cursorY += rowH + M;
+        }
+
+        // MID_CENTER always stays screen-centered
+        slotMidCenter.UpdateRect(D2D1::RectF(
+            (W - Constants::MSG_CENTER_WIDTH)  * 0.5f,
+            (H - Constants::MSG_CENTER_HEIGHT) * 0.5f,
+            (W + Constants::MSG_CENTER_WIDTH)  * 0.5f,
+            (H + Constants::MSG_CENTER_HEIGHT) * 0.5f));
+        return;
+    }
+    // ── Normal 3×3 grid ──────────────────────────────────────────────────────
+
     // [1] TOP_LEFT — index/total + filename (1 or 2 lines)
     {
         float rowH = m_slots[TOP_LEFT].compact ? ROW_SINGLE : ROW_DOUBLE;
