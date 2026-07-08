@@ -162,13 +162,21 @@ namespace Constants {
     namespace Overlay {
         constexpr bool DEFAULT_SHOW_OVERLAY = true;
         constexpr const bool COMPACT_OVERLAY_MODE = true; // true → 1-line, false → 2-line
-
+        // P key — toggle semi-transparent background behind all overlay text.
+        // Text is always drawn; only the background rect is suppressed when false.
+        inline bool OVERLAY_SHOW_BACKGROUND = true;
+        // Layout mode cycled with O key:
+        //   0 — default 3×3 grid
+        //   1 — all slots stacked vertically on top-left
+        //   2 — compact 2-line summary top-left:
+        //         line 1: index / total + filename
+        //         line 2: zoom% + WxH / size  (TOP_CENTER + BOT_RIGHT combined)
+        inline int OVERLAY_LAYOUT_MODE = 0;
         // =========================================================================
         // Overlay — Center-Center message queue (MID_CENTER slot)
         // =========================================================================
         // How long the center-center notification stays visible before auto-hiding (ms)
         constexpr UINT MSG_CENTER_DISPLAY_MS = 1500;
-
         // Center-center text color  (R, G, B, A)
         constexpr float MSG_CENTER_COLOR_R = 1.0f;
         constexpr float MSG_CENTER_COLOR_G = 0.85f;
@@ -182,8 +190,6 @@ namespace Constants {
         constexpr const wchar_t *MSG_CENTER__FONT_FAMILY_DEFAULT = L"Segoe UI";
         constexpr const wchar_t *MSG_ALL_FONT_FAMILY_FALLBACK = L"Arial";
         constexpr const wchar_t *MSG_ALL_FONT_LOCALE = L"en-us";
-
-
         // =========================================================================
         // Overlay — per-slot notification panel width / height
         // =========================================================================
@@ -191,21 +197,7 @@ namespace Constants {
         constexpr float MSG_CENTER_WIDTH = 420.0f;
         // Height of a single-line center-center message box
         constexpr float MSG_CENTER_HEIGHT = 36.0f;
-
         // Custom window messages
         constexpr UINT WM_QIV_CENTER_MSG_HIDE = WM_USER + 10; // Posted by WM_TIMER to hide center msg
-
-
-        // Layout mode cycled with O key:
-        //   0 — default 3×3 grid
-        //   1 — all slots stacked vertically on top-left
-        //   2 — compact 2-line summary top-left:
-        //         line 1: index / total + filename
-        //         line 2: zoom% + WxH / size  (TOP_CENTER + BOT_RIGHT combined)
-        inline int OVERLAY_LAYOUT_MODE = 0;
-
-        // P key — toggle semi-transparent background behind all overlay text.
-        // Text is always drawn; only the background rect is suppressed when false.
-        inline bool OVERLAY_SHOW_BACKGROUND = true;
     }
 }
