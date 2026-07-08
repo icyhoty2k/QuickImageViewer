@@ -178,6 +178,11 @@ namespace Constants {
         // Center-center font size (pt). Other slots use the RendererD2D default size.
         constexpr float MSG_ALL_BUT_CENTER_FONT_SIZE = 14.0f;
         constexpr float MSG_CENTER_FONT_SIZE = 14.0f;
+        constexpr const wchar_t *MSG_ALL_BUT_CENTER_FONT_FAMILY_DEFAULT = L"Segoe UI";
+        constexpr const wchar_t *MSG_CENTER__FONT_FAMILY_DEFAULT = L"Segoe UI";
+        constexpr const wchar_t *MSG_ALL_FONT_FAMILY_FALLBACK = L"Arial";
+        constexpr const wchar_t *MSG_ALL_FONT_LOCALE = L"en-us";
+
 
         // =========================================================================
         // Overlay — per-slot notification panel width / height

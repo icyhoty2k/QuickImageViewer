@@ -76,15 +76,15 @@ void OverlayManager::UpdateTextFormat() {
     }
 
     HRESULT hr = m_pDWriteFactory->CreateTextFormat(
-            L"Segoe UI", nullptr,
+            Constants::Overlay::MSG_ALL_BUT_CENTER_FONT_FAMILY_DEFAULT, nullptr,
             DWRITE_FONT_WEIGHT_NORMAL, DWRITE_FONT_STYLE_NORMAL, DWRITE_FONT_STRETCH_NORMAL,
-            scaledFontSize, L"en-us", &m_pTextFormat);
+            scaledFontSize, Constants::Overlay::MSG_ALL_FONT_LOCALE, &m_pTextFormat);
 
     if (FAILED(hr)) {
         (void) m_pDWriteFactory->CreateTextFormat(
-                L"Arial", nullptr,
+                Constants::Overlay::MSG_ALL_FONT_FAMILY_FALLBACK, nullptr,
                 DWRITE_FONT_WEIGHT_NORMAL, DWRITE_FONT_STYLE_NORMAL, DWRITE_FONT_STRETCH_NORMAL,
-                scaledFontSize, L"en-us", &m_pTextFormat);
+                scaledFontSize, Constants::Overlay::MSG_ALL_FONT_LOCALE, &m_pTextFormat);
     }
 
     // -------------------------------------------------------------------------
@@ -96,10 +96,15 @@ void OverlayManager::UpdateTextFormat() {
     // You can now independently change "Segoe UI" to any other font family,
     // or change the weight (e.g., DWRITE_FONT_WEIGHT_BOLD) for just the center text.
     HRESULT hrCenter = m_pDWriteFactory->CreateTextFormat(
-            L"Segoe UI", nullptr,
+            Constants::Overlay::MSG_CENTER__FONT_FAMILY_DEFAULT, nullptr,
             DWRITE_FONT_WEIGHT_BOLD, DWRITE_FONT_STYLE_NORMAL, DWRITE_FONT_STRETCH_NORMAL,
-            centerSize, L"en-us", &m_fmtCenter5);
-
+            centerSize, Constants::Overlay::MSG_ALL_FONT_LOCALE, &m_fmtCenter5);
+    if (FAILED(hrCenter)) {
+        (void) m_pDWriteFactory->CreateTextFormat(
+                Constants::Overlay::MSG_ALL_FONT_FAMILY_FALLBACK, nullptr,
+                DWRITE_FONT_WEIGHT_NORMAL, DWRITE_FONT_STYLE_NORMAL, DWRITE_FONT_STRETCH_NORMAL,
+                scaledFontSize, Constants::Overlay::MSG_ALL_FONT_LOCALE, &m_pTextFormat);
+    }
     if (SUCCEEDED(hrCenter)) {
         // Set the required center alignments directly on this specific format
         m_fmtCenter5->SetTextAlignment(DWRITE_TEXT_ALIGNMENT_CENTER);
