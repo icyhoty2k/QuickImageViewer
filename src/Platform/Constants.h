@@ -174,10 +174,10 @@ namespace Constants {
         constexpr float MSG_CENTER_COLOR_G = 0.85f;
         constexpr float MSG_CENTER_COLOR_B = 0.20f;
         constexpr float MSG_CENTER_COLOR_A = 1.0f;
-
+        constexpr float MSG_BASE_FONT_SIZE = 10.0f;
         // Center-center font size (pt). Other slots use the RendererD2D default size.
-        constexpr float MSG_ALL_BUT_CENTER_FONT_SIZE = 14.0f;
-        constexpr float MSG_CENTER_FONT_SIZE = 14.0f;
+        constexpr float MSG_ALL_BUT_CENTER_FONT_SIZE = MSG_BASE_FONT_SIZE * 1.4f;
+        constexpr float MSG_CENTER_FONT_SIZE = MSG_BASE_FONT_SIZE * 1.6f;
         constexpr const wchar_t *MSG_ALL_BUT_CENTER_FONT_FAMILY_DEFAULT = L"Segoe UI";
         constexpr const wchar_t *MSG_CENTER__FONT_FAMILY_DEFAULT = L"Segoe UI";
         constexpr const wchar_t *MSG_ALL_FONT_FAMILY_FALLBACK = L"Arial";
