@@ -55,7 +55,7 @@ HRESULT RendererD2D::Initialize(HWND hwnd) {
         // Initialize to empty/default state
         m_pActiveDisplayNode = nullptr;
         // Hand text resources to the overlay manager — it does not own them
-        g_overlayManager.Init(m_pDWriteFactory.Get(), m_pTextFormat.Get(), m_pTextBrush.Get());
+        g_overlayManager.Init(m_pDWriteFactory.Get(), m_pTextFormat.Get(), m_pTextBrush.Get(), m_pDeviceContext.Get());
 
         // Compute initial rects from the actual window client size
         RECT rc{};
@@ -407,6 +407,9 @@ HRESULT RendererD2D::CreateBackBufferBitmap() {
 //  DiscardDeviceResources
 // =============================================================================
 void RendererD2D::DiscardDeviceResources() {
+    // Notify overlay manager before device resources disappear
+    g_overlayManager.OnDeviceLost();
+
     if (m_pDeviceContext) m_pDeviceContext->SetTarget(nullptr);
 
     m_pTextBrush.Reset();
@@ -809,7 +812,7 @@ HRESULT RendererD2D::Render() {
             // m_pTextFormat and m_pTextBrush are recreated inside CreateDeviceResources.
             // Re-hand them to the overlay manager so it doesn't hold stale pointers
             // from before the device loss.
-            g_overlayManager.Init(m_pDWriteFactory.Get(), m_pTextFormat.Get(), m_pTextBrush.Get());
+            g_overlayManager.Init(m_pDWriteFactory.Get(), m_pTextFormat.Get(), m_pTextBrush.Get(), m_pDeviceContext.Get());
             RECT rc{};
             GetClientRect(m_hwnd, &rc);
             g_overlayManager.OnResize(static_cast<float>(rc.right - rc.left),
@@ -825,7 +828,7 @@ HRESULT RendererD2D::Render() {
         hrPresent == static_cast<HRESULT>(DXGI_ERROR_DEVICE_RESET)) {
         DiscardDeviceResources();
         if (SUCCEEDED(CreateDeviceResources())) {
-            g_overlayManager.Init(m_pDWriteFactory.Get(), m_pTextFormat.Get(), m_pTextBrush.Get());
+            g_overlayManager.Init(m_pDWriteFactory.Get(), m_pTextFormat.Get(), m_pTextBrush.Get(), m_pDeviceContext.Get());
             RECT rc{};
             GetClientRect(m_hwnd, &rc);
             g_overlayManager.OnResize(static_cast<float>(rc.right - rc.left),

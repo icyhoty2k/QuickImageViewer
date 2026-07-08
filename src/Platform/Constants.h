@@ -38,6 +38,32 @@ namespace Constants {
     static constexpr int OPACITY_STEP = 10; // left click zoom multiplier from 10 to 255 step is 10
     constexpr bool DEFAULT_SHOW_OVERLAY = true;
 
+    // =========================================================================
+    // Overlay — Center-Center message queue (MID_CENTER slot)
+    // =========================================================================
+    // How long the center-center notification stays visible before auto-hiding (ms)
+    constexpr UINT MSG_CENTER_DISPLAY_MS = 4000;
+
+    // Center-center text color  (R, G, B, A)
+    constexpr float MSG_CENTER_COLOR_R = 1.0f;
+    constexpr float MSG_CENTER_COLOR_G = 0.85f;
+    constexpr float MSG_CENTER_COLOR_B = 0.20f;
+    constexpr float MSG_CENTER_COLOR_A = 1.0f;
+
+    // Center-center font size (pt). Other slots use the RendererD2D default size.
+    constexpr float MSG_CENTER_FONT_SIZE = 20.0f;
+
+    // =========================================================================
+    // Overlay — per-slot notification panel width / height
+    // =========================================================================
+    // Width of the center-center message box (pixels)
+    constexpr float MSG_CENTER_WIDTH = 420.0f;
+    // Height of a single-line center-center message box
+    constexpr float MSG_CENTER_HEIGHT = 36.0f;
+
+    // Custom window messages
+    constexpr UINT WM_QIV_CENTER_MSG_HIDE = WM_USER + 10; // Posted by WM_TIMER to hide center msg
+
 
     constexpr int BASE_WIDTH = 1200;
     constexpr int BASE_HEIGHT = 800;

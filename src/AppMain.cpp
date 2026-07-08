@@ -1,5 +1,4 @@
 #include <algorithm>
-#include <format>
 
 #include "AppCommands.h"
 #include "Overlays/OverlayManager.h"
@@ -97,7 +96,6 @@ LRESULT CALLBACK MainAppWndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM l
                 ShowWindow(hWnd, SW_RESTORE);
                 SetForegroundWindow(hWnd);
                 InvalidateRect(hWnd, nullptr, FALSE);
-                // dwData 2 is to show app if it was hidden when clicked the exe file
             } else if (cds->dwData == 2) {
                 ShowWindow(hWnd, SW_RESTORE);
                 SetForegroundWindow(hWnd);
@@ -106,6 +104,12 @@ LRESULT CALLBACK MainAppWndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM l
         }
         case WM_TIMER: {
             constexpr UINT_PTR TIMER_LOOKASIDE = 1001;
+            constexpr UINT_PTR TIMER_CENTER_MSG = 1002;
+
+            if (wParam == TIMER_CENTER_MSG) {
+                g_overlayManager.OnCenterMessageTimer(hWnd);
+                return 0;
+            }
 
             if (wParam == TIMER_LOOKASIDE) {
                 KillTimer(hWnd, TIMER_LOOKASIDE);
@@ -268,7 +272,7 @@ LRESULT CALLBACK MainAppWndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM l
             SetLayeredWindowAttributes(hWnd, 0, app.opacity, LWA_ALPHA);
             return 0;
         }
-        //Restore App if it was in background , or start app if not running , or if clicking on mainapp toggle fullscreen
+
         case WM_LBUTTONDBLCLK: {
             SendMessageW(hWnd, WM_SETREDRAW, FALSE, 0);
 
@@ -352,7 +356,7 @@ LRESULT CALLBACK MainAppWndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM l
             return 1;
         case WM_TRAYICON: {
             if (lParam == WM_LBUTTONDBLCLK) {
-                //  make the window visible
+                // 1. Remove the tray icon and make the window visible
 
                 ShowWindow(hWnd, SW_SHOW);
                 ShowWindow(hWnd, SW_RESTORE);
@@ -448,7 +452,7 @@ int WINAPI wWinMain(HINSTANCE hInstance, [[maybe_unused]] HINSTANCE hPrevInstanc
     bool bypassMutex = (GetAsyncKeyState(VK_SHIFT) & 0x8000) != 0;
     if (GetEnvironmentVariableW(L"QIV_NEW_INSTANCE", nullptr, 0) > 0) bypassMutex = true;
 
-    std::wstring mutexName = std::format(L"Global\\QuickImageViewer_SingleInstanceMutex{}", bypassMutex ? std::to_wstring(GetTickCount64()) : L"");
+    std::wstring mutexName = L"QuickImageViewer_SingleInstanceMutex" + (bypassMutex ? std::to_wstring(GetTickCount()) : L"");
     HANDLE hMutex = CreateMutexW(NULL, TRUE, mutexName.c_str());
 
     if (GetLastError() == ERROR_ALREADY_EXISTS) {
@@ -466,7 +470,7 @@ int WINAPI wWinMain(HINSTANCE hInstance, [[maybe_unused]] HINSTANCE hPrevInstanc
                 cds.cbData = (DWORD) ((wcslen(argv[1]) + 1) * sizeof(wchar_t));
                 cds.lpData = (void *) argv[1];
             } else {
-                // Signal 2: Wake up only (no file passed) this message is send to wake app bring to front from background
+                // Signal 2: Wake up only (no file passed)
                 cds.dwData = 2;
                 cds.cbData = 0;
                 cds.lpData = nullptr;

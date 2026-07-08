@@ -168,36 +168,111 @@ void InputManager::ExecuteKeyboardShortcutCommand(HWND hWnd, Command cmd) {
             uiManager.Toggle(uiManager.getHistoryListWindow());
             break;
 
-        case Command::ToggleOverlay:
+        // ── Master overlay toggle (N / I / Ctrl+0) ───────────────────────────
+        case Command::ToggleOverlay: {
             app.showOverlayInfoText = !app.showOverlayInfoText;
             g_overlayManager.SetAllVisible(app.showOverlayInfoText);
-            InvalidateRect(hWnd, nullptr, FALSE);
-            break;
-
-        case Command::ToggleOverlayTopRight: {
-            bool now = !g_overlayManager.IsSlotVisible(OverlayManager::TOP_RIGHT);
-            g_overlayManager.SetSlotVisible(OverlayManager::TOP_RIGHT, now);
+            // Always post the state change to center-center — it survives the hide
+            // because MID_CENTER is independently controlled by PostCenterMessage.
+            g_overlayManager.PostCenterMessage(hWnd,
+                                               app.showOverlayInfoText ? L"Info Panels: ON" : L"Info Panels: OFF");
             InvalidateRect(hWnd, nullptr, FALSE);
             break;
         }
-        case Command::ToggleOverlayTopCenter: {
+
+        // ── Per-slot visibility toggles (Ctrl+1..9) ──────────────────────────
+        case Command::ToggleOverlaySlot1: {
+            bool now = !g_overlayManager.IsSlotVisible(OverlayManager::TOP_LEFT);
+            g_overlayManager.SetSlotVisible(OverlayManager::TOP_LEFT, now);
+            InvalidateRect(hWnd, nullptr, FALSE);
+            break;
+        }
+        case Command::ToggleOverlaySlot2: {
             bool now = !g_overlayManager.IsSlotVisible(OverlayManager::TOP_CENTER);
             g_overlayManager.SetSlotVisible(OverlayManager::TOP_CENTER, now);
             InvalidateRect(hWnd, nullptr, FALSE);
             break;
         }
-        case Command::ToggleOverlayBotRight: {
-            bool now = !g_overlayManager.IsSlotVisible(OverlayManager::BOT_RIGHT);
-            g_overlayManager.SetSlotVisible(OverlayManager::BOT_RIGHT, now);
+        case Command::ToggleOverlaySlot3: {
+            bool now = !g_overlayManager.IsSlotVisible(OverlayManager::TOP_RIGHT);
+            g_overlayManager.SetSlotVisible(OverlayManager::TOP_RIGHT, now);
             InvalidateRect(hWnd, nullptr, FALSE);
             break;
         }
-        case Command::ToggleOverlayBotLeft: {
+        case Command::ToggleOverlaySlot4: {
+            bool now = !g_overlayManager.IsSlotVisible(OverlayManager::MID_LEFT);
+            g_overlayManager.SetSlotVisible(OverlayManager::MID_LEFT, now);
+            InvalidateRect(hWnd, nullptr, FALSE);
+            break;
+        }
+        case Command::ToggleOverlaySlot5: {
+            // MID_CENTER — independent toggle; no center message for its own toggle
+            bool now = !g_overlayManager.IsSlotVisible(OverlayManager::MID_CENTER);
+            g_overlayManager.SetSlotVisible(OverlayManager::MID_CENTER, now);
+            InvalidateRect(hWnd, nullptr, FALSE);
+            break;
+        }
+        case Command::ToggleOverlaySlot6: {
+            bool now = !g_overlayManager.IsSlotVisible(OverlayManager::MID_RIGHT);
+            g_overlayManager.SetSlotVisible(OverlayManager::MID_RIGHT, now);
+            InvalidateRect(hWnd, nullptr, FALSE);
+            break;
+        }
+        case Command::ToggleOverlaySlot7: {
             bool now = !g_overlayManager.IsSlotVisible(OverlayManager::BOT_LEFT);
             g_overlayManager.SetSlotVisible(OverlayManager::BOT_LEFT, now);
             InvalidateRect(hWnd, nullptr, FALSE);
             break;
         }
+        case Command::ToggleOverlaySlot8: {
+            bool now = !g_overlayManager.IsSlotVisible(OverlayManager::BOT_CENTER);
+            g_overlayManager.SetSlotVisible(OverlayManager::BOT_CENTER, now);
+            InvalidateRect(hWnd, nullptr, FALSE);
+            break;
+        }
+        case Command::ToggleOverlaySlot9: {
+            bool now = !g_overlayManager.IsSlotVisible(OverlayManager::BOT_RIGHT);
+            g_overlayManager.SetSlotVisible(OverlayManager::BOT_RIGHT, now);
+            InvalidateRect(hWnd, nullptr, FALSE);
+            break;
+        }
+
+        // ── Per-slot compact-mode toggles (Ctrl+Alt+1..9) ────────────────────
+        case Command::CompactOverlaySlot1:
+            g_overlayManager.ToggleCompactMode(OverlayManager::TOP_LEFT);
+            InvalidateRect(hWnd, nullptr, FALSE);
+            break;
+        case Command::CompactOverlaySlot2:
+            g_overlayManager.ToggleCompactMode(OverlayManager::TOP_CENTER);
+            InvalidateRect(hWnd, nullptr, FALSE);
+            break;
+        case Command::CompactOverlaySlot3:
+            g_overlayManager.ToggleCompactMode(OverlayManager::TOP_RIGHT);
+            InvalidateRect(hWnd, nullptr, FALSE);
+            break;
+        case Command::CompactOverlaySlot4:
+            g_overlayManager.ToggleCompactMode(OverlayManager::MID_LEFT);
+            InvalidateRect(hWnd, nullptr, FALSE);
+            break;
+        case Command::CompactOverlaySlot5:
+            // no-op: MID_CENTER is always single-line
+            break;
+        case Command::CompactOverlaySlot6:
+            g_overlayManager.ToggleCompactMode(OverlayManager::MID_RIGHT);
+            InvalidateRect(hWnd, nullptr, FALSE);
+            break;
+        case Command::CompactOverlaySlot7:
+            g_overlayManager.ToggleCompactMode(OverlayManager::BOT_LEFT);
+            InvalidateRect(hWnd, nullptr, FALSE);
+            break;
+        case Command::CompactOverlaySlot8:
+            g_overlayManager.ToggleCompactMode(OverlayManager::BOT_CENTER);
+            InvalidateRect(hWnd, nullptr, FALSE);
+            break;
+        case Command::CompactOverlaySlot9:
+            g_overlayManager.ToggleCompactMode(OverlayManager::BOT_RIGHT);
+            InvalidateRect(hWnd, nullptr, FALSE);
+            break;
         // -----------------------------------------------------------------------
         // App control
         // -----------------------------------------------------------------------
@@ -227,6 +302,7 @@ void InputManager::ExecuteKeyboardShortcutCommand(HWND hWnd, Command cmd) {
 
         case Command::ResetAll:
             AppCommands::ResetWindowLayoutAndEffects(hWnd);
+            g_overlayManager.PostCenterMessage(hWnd, L"Reset to Defaults");
             break;
 
         // -----------------------------------------------------------------------
@@ -328,6 +404,7 @@ void InputManager::ExecuteKeyboardShortcutCommand(HWND hWnd, Command cmd) {
             app.ResetEffects();
             app.UpdateRendererColorEffects(hWnd);
             g_overlayManager.UpdateEffects();
+            g_overlayManager.PostCenterMessage(hWnd, L"All Effects Reset");
             break;
 
         case Command::SaveImage: {
