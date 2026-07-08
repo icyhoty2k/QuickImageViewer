@@ -18,7 +18,7 @@ Command InputManager::ResolveKeyboardKeys(UINT key) {
     // -------------------------------------------------------------------------
     // Per-slot compact-mode toggles  Ctrl+Alt+1..9  (no shift)
     // -------------------------------------------------------------------------
-    if (ctrl && alt && !shift) {
+    if (ctrl && !alt && shift) {
         switch (key) {
             case Shortcuts::SC_OVERLAY_COMPACT_1: return Command::CompactOverlaySlot1;
             case Shortcuts::SC_OVERLAY_COMPACT_2: return Command::CompactOverlaySlot2;
