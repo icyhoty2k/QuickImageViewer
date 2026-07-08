@@ -109,7 +109,6 @@ namespace Constants {
     constexpr const wchar_t *APP_NAME = BASE_NAME;
     constexpr const wchar_t *WINDOW_CLASS_NAME = BASE_NAME;
 
-
     namespace Registry {
         // Switch this between HKEY_CURRENT_USER and HKEY_LOCAL_MACHINE
         inline HKEY ROOT_HIVE = HKEY_CURRENT_USER;
@@ -118,7 +117,7 @@ namespace Constants {
         constexpr const wchar_t *ROOT_KEY = L"Software\\QuickImageViewer";
         // Path string to the last directory accessed by the user
         constexpr const wchar_t *LAST_FOLDER = L"LastFolder";
-        
+
         // --- Settings (Stored under ROOT_KEY) ---
         // --- System Integration (Open With & Startup) ---
         // Registry path to define the shell command for opening associated files
