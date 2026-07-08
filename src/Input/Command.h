@@ -45,11 +45,31 @@ enum class Command {
     ClearCache,
     ToggleDir,
     ToggleHistory,
-    ToggleOverlay, // N / I        — master: all slots on/off
-    ToggleOverlayTopRight, // Ctrl+Alt+1   — index / filename slot
-    ToggleOverlayTopCenter, // Ctrl+Alt+2   — zoom slot
-    ToggleOverlayBotRight, // Ctrl+Alt+3   — dims / file size slot
-    ToggleOverlayBotLeft, // Ctrl+Alt+4   — effects slot
+    // Master toggle  (N / I / Ctrl+0)
+    ToggleOverlay,
+
+    // Per-slot visibility toggles  (Ctrl+1 .. Ctrl+9)
+    ToggleOverlaySlot1, // TOP_LEFT
+    ToggleOverlaySlot2, // TOP_CENTER
+    ToggleOverlaySlot3, // TOP_RIGHT
+    ToggleOverlaySlot4, // MID_LEFT
+    ToggleOverlaySlot5, // MID_CENTER  (center-center message)
+    ToggleOverlaySlot6, // MID_RIGHT
+    ToggleOverlaySlot7, // BOT_LEFT
+    ToggleOverlaySlot8, // BOT_CENTER
+    ToggleOverlaySlot9, // BOT_RIGHT
+
+    // Per-slot compact-mode toggle  (Ctrl+Alt+1 .. Ctrl+Alt+9)
+    // Switches between 1-line (compact) and 2-line (full) display for that slot
+    CompactOverlaySlot1,
+    CompactOverlaySlot2,
+    CompactOverlaySlot3,
+    CompactOverlaySlot4,
+    CompactOverlaySlot5,
+    CompactOverlaySlot6,
+    CompactOverlaySlot7,
+    CompactOverlaySlot8,
+    CompactOverlaySlot9,
 
     // --- App control ---
     HideToTray,

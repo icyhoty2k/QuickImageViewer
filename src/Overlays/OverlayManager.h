@@ -1,33 +1,42 @@
 #pragma once
 #include "TextOverlay.h"
 #include <string>
-#include <d2d1.h>
+#include <d2d1_3.h>
 #include <dwrite_3.h>
+#include <wrl/client.h>
 
 #include "RendererD2D.h"
 
 // =============================================================================
 // OverlayManager — 9-slot 3×3 grid overlay system for QIV
 //
-// Grid layout:
-//   TOP_LEFT    TOP_CENTER    TOP_RIGHT
-//   MID_LEFT    MID_CENTER    MID_RIGHT
-//   BOT_LEFT    BOT_CENTER    BOT_RIGHT
+// Grid layout  (slot number = Ctrl+N shortcut key):
+//   [1] TOP_LEFT    [2] TOP_CENTER    [3] TOP_RIGHT
+//   [4] MID_LEFT    [5] MID_CENTER    [6] MID_RIGHT
+//   [7] BOT_LEFT    [8] BOT_CENTER    [9] BOT_RIGHT
 //
-// Assigned notifications:
-//   TOP_RIGHT  : "42 / 100\nimage1.jpg"    (index / total + filename)
-//   TOP_CENTER : "86.0%"                    (current viewport zoom)
-//   BOT_RIGHT  : "1920×1080 / 4.3 MB"      (dimensions / file size on disc)
-//   BOT_LEFT   : stacked effect list        (active effects, grows upward)
+// Current slot assignments:
+//   TOP_LEFT   [1] : "42 / 100\nimage1.jpg"    (index / total + filename)
+//   TOP_CENTER [2] : "86.0%"                    (current viewport zoom)
+//   TOP_RIGHT  [3] : unused
+//   MID_LEFT   [4] : unused
+//   MID_CENTER [5] : general message queue      (transient — auto-hides)
+//   MID_RIGHT  [6] : unused
+//   BOT_LEFT   [7] : stacked effect list        (active effects, grows upward)
+//   BOT_CENTER [8] : unused
+//   BOT_RIGHT  [9] : "1920×1080 / 4.3 MB"      (dimensions / file size)
 //
-// Growth directions:
-//   Left  slots: text left-aligned,  rect grows rightward from left edge
-//   Right slots: text right-aligned, rect grows leftward  from right edge
-//   Center slots: text centered,     rect grows from center outward
+// Shortcut scheme:
+//   Ctrl+1..9   — toggle individual slot ON/OFF
+//   Ctrl+0      — master toggle (all slots)
+//   I / N       — master toggle (same as Ctrl+0)
+//   Ctrl+Alt+1..9 — toggle compact (1-line) vs full (2-line) display per slot
 //
-// Toggle keys (defined in Shortcuts.h):
-//   I          : master toggle (all slots on/off)
-//   Individual : Ctrl+Alt+1..4 (see Shortcuts.h)
+// Center-center [5] is special:
+//   • Has its own font size, color, and brush (independent from other slots).
+//   • Receives transient messages via PostCenterMessage().
+//   • Auto-hides after Constants::MSG_CENTER_DISPLAY_MS milliseconds.
+//   • Compact-mode toggle is a no-op for this slot (always single-line).
 // =============================================================================
 
 class OverlayManager {
@@ -47,34 +56,29 @@ class OverlayManager {
         };
 
         // ── Public overlays (content set by callers) ──────────────────────────
-        // TOP_RIGHT  — "42 / 100\nimage1.jpg"
-        TextOverlay slotTopRight;
-        // TOP_CENTER — "86.0%"
-        TextOverlay slotTopCenter;
-        // BOT_RIGHT  — "1920×1080 / 4.3 MB"
-        TextOverlay slotBotRight;
-        // BOT_LEFT   — active effects, one per line, grows bottom→top
-        TextOverlay slotBotLeft;
-
-        // Unused slots (available for future use)
-        TextOverlay slotTopLeft;
-        TextOverlay slotMidLeft;
-        TextOverlay slotMidCenter;
-        TextOverlay slotMidRight;
-        TextOverlay slotBotCenter;
+        TextOverlay slotTopLeft; // [1] index / total + filename
+        TextOverlay slotTopCenter; // [2] zoom %
+        TextOverlay slotTopRight; // [3] unused
+        TextOverlay slotMidLeft; // [4] unused
+        TextOverlay slotMidCenter; // [5] general message queue (center-center)
+        TextOverlay slotMidRight; // [6] unused
+        TextOverlay slotBotLeft; // [7] active effects list
+        TextOverlay slotBotCenter; // [8] unused
+        TextOverlay slotBotRight; // [9] dimensions / file size
 
         // ── Lifecycle ─────────────────────────────────────────────────────────
         // Must be called once after the DWrite factory and text resources are ready.
-        // Does NOT take ownership — caller (RendererD2D) keeps them alive.
+        // Does NOT take ownership — caller (RendererD2D) keeps the base format alive.
         void Init(IDWriteFactory3 *dwriteFactory,
                   IDWriteTextFormat *textFormat,
-                  ID2D1SolidColorBrush *textBrush);
+                  ID2D1SolidColorBrush *textBrush,
+                  ID2D1DeviceContext *ctx);
 
         // Called on every WM_SIZE / Resize. Recomputes all slot rects.
         void OnResize(float rtW, float rtH);
 
         // ── Content updates ───────────────────────────────────────────────────
-        // TOP_RIGHT  — index is 0-based; displays as (index+1) / total
+        // TOP_LEFT  — index is 0-based; displays as (index+1) / total
         void UpdateInfo(int index, int total, const std::wstring &filename);
 
         // TOP_CENTER — raw zoom scalar, e.g. 0.86f → "86.0%"
@@ -85,6 +89,14 @@ class OverlayManager {
 
         // BOT_LEFT   — rebuild from current AppState effects
         void UpdateEffects();
+
+        // MID_CENTER — post a transient message; auto-hides after MSG_CENTER_DISPLAY_MS.
+        // Pass hWnd so the timer can be set/reset on the main window.
+        // Center-center must be enabled (slot visible) for the message to appear.
+        void PostCenterMessage(HWND hWnd, const std::wstring &msg);
+
+        // Called from WM_TIMER in AppMain — hides MID_CENTER after timeout.
+        void OnCenterMessageTimer(HWND hWnd);
 
         // ── Visibility ────────────────────────────────────────────────────────
         void SetSlotVisible(Slot slot, bool show);
@@ -97,26 +109,39 @@ class OverlayManager {
             return m_masterVisible;
         }
 
+        // ── Compact mode ──────────────────────────────────────────────────────
+        // Toggles 1-line (compact) vs 2-line (full) rendering for a slot.
+        // MID_CENTER ignores this — it is always displayed on one line.
+        void ToggleCompactMode(Slot slot);
+
+        [[nodiscard]] bool IsCompact(Slot slot) const;
+
         // ── Render ────────────────────────────────────────────────────────────
-        // Called once per frame from RendererD2D::Render().
-        // No allocations unless text/rect changed since last call.
         void RenderAll(ID2D1DeviceContext *ctx) const;
 
         // ── Device loss ───────────────────────────────────────────────────────
         void InvalidateLayouts();
 
+        // Called when the D2D device is lost — recreate center-center brush.
+        void OnDeviceLost();
+
+        void OnDeviceRestored(ID2D1DeviceContext *ctx);
+
     private:
-        // ── Resources (not owned) ────────────────────────────────────────────
+        // ── Resources (not owned, except m_pCenterBrush) ─────────────────────
         IDWriteFactory3 *m_pDWriteFactory = nullptr;
-        IDWriteTextFormat *m_pTextFormat = nullptr;
-        ID2D1SolidColorBrush *m_pTextBrush = nullptr;
+        IDWriteTextFormat *m_pTextFormat = nullptr; // base format (not owned)
+        ID2D1SolidColorBrush *m_pTextBrush = nullptr; // normal brush (not owned)
 
-        // Per-column text formats (created from the base format's parameters)
-        Microsoft::WRL::ComPtr<IDWriteTextFormat> m_fmtLeft; // DWRITE_TEXT_ALIGNMENT_LEADING
-        Microsoft::WRL::ComPtr<IDWriteTextFormat> m_fmtCenter; // DWRITE_TEXT_ALIGNMENT_CENTER
-        Microsoft::WRL::ComPtr<IDWriteTextFormat> m_fmtTrailing; // DWRITE_TEXT_ALIGNMENT_TRAILING
+        // Center-center owns its own brush and format (independent colour + size)
+        Microsoft::WRL::ComPtr<ID2D1SolidColorBrush> m_pCenterBrush;
+        Microsoft::WRL::ComPtr<IDWriteTextFormat> m_fmtCenter5; // center-center format
 
-        // --- BOTTOM ONLY ---
+        // Per-column text formats (derived from base format)
+        Microsoft::WRL::ComPtr<IDWriteTextFormat> m_fmtLeft; // LEADING
+        Microsoft::WRL::ComPtr<IDWriteTextFormat> m_fmtCenter; // CENTER
+        Microsoft::WRL::ComPtr<IDWriteTextFormat> m_fmtTrailing; // TRAILING
+        // Bottom-row variants (paragraph-aligned FAR so text anchors to bottom)
         Microsoft::WRL::ComPtr<IDWriteTextFormat> m_fmtBotLeft;
         Microsoft::WRL::ComPtr<IDWriteTextFormat> m_fmtBotCenter;
         Microsoft::WRL::ComPtr<IDWriteTextFormat> m_fmtBotRight;
@@ -125,7 +150,8 @@ class OverlayManager {
         struct SlotMeta {
             TextOverlay *overlay = nullptr;
             bool visible = false;
-            IDWriteTextFormat *fmt = nullptr; // points to one of m_fmtLeft/Center/Trailing
+            bool compact = false; // true → 1-line, false → 2-line
+            IDWriteTextFormat *fmt = nullptr;
         };
 
         SlotMeta m_slots[SLOT_COUNT];
@@ -134,8 +160,14 @@ class OverlayManager {
         float m_rtW = 0.0f;
         float m_rtH = 0.0f;
 
+        // Center-message timer state
+        static constexpr UINT_PTR TIMER_CENTER_MSG = 1002;
+        bool m_centerMsgActive = false; // true while the auto-hide timer is running
+
         // ── Helpers ──────────────────────────────────────────────────────────
         void BuildSlotFormats();
+
+        void BuildCenterBrush(ID2D1DeviceContext *ctx);
 
         void RecomputeRects();
 
@@ -143,6 +175,14 @@ class OverlayManager {
 
         // "4521472 → 4.3 MB",  "890123 → 869 KB",  "512 → 512 B"
         static std::wstring FormatFileSize(int64_t bytes);
+
+        // Rebuild TOP_LEFT text honouring compact flag
+        void RebuildTopLeft();
+
+        // Stores the raw data so compact toggle can re-render without a full reload
+        int m_infoIndex = 0;
+        int m_infoTotal = 0;
+        std::wstring m_infoFilename;
 };
 
 extern OverlayManager g_overlayManager;
