@@ -43,7 +43,6 @@ set(SOURCES
         src/UI/UIManager.cpp
         src/Overlays/OverlayManager.cpp
         src/UI/ThumbnailPanelWnd.cpp
-        src/Platform/ConstantsMessages.h
 )
 find_program(SCCACHE_PROGRAM sccache)
 if (SCCACHE_PROGRAM)
