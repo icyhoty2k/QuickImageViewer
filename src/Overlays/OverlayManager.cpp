@@ -39,7 +39,7 @@ void OverlayManager::Init(IDWriteFactory3 *dwriteFactory,
     auto wire = [&](Slot s, TextOverlay *ov, bool defaultVisible) {
         m_slots[s].overlay = ov;
         m_slots[s].visible = defaultVisible;
-        m_slots[s].compact = false;
+        m_slots[s].compact = Constants::Overlay::COMPACT_OVERLAY_MODE;
     };
 
     wire(TOP_LEFT, &slotTopLeft, true);
