@@ -42,11 +42,11 @@ void OverlayManager::Init(IDWriteFactory3 *dwriteFactory,
     };
 
     wire(TOP_LEFT, &slotTopLeft, true);
-    wire(TOP_CENTER, &slotTopCenter, true); // unused — available
+    wire(TOP_CENTER, &slotTopCenter, true); // used when switching with o do not disable for now
     wire(TOP_RIGHT, &slotTopRight, true); // zoom
-    wire(MID_LEFT, &slotMidLeft, true);
+    wire(MID_LEFT, &slotMidLeft, false);
     wire(MID_CENTER, &slotMidCenter, true); // center-center message queue
-    wire(MID_RIGHT, &slotMidRight, true);
+    wire(MID_RIGHT, &slotMidRight, false);
     wire(BOT_LEFT, &slotBotLeft, true); // effects
     wire(BOT_CENTER, &slotBotCenter, false);
     wire(BOT_RIGHT, &slotBotRight, true); // dims / size
