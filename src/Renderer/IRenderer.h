@@ -28,7 +28,6 @@ class IImageRenderer {
 
         IImageRenderer &operator=(IImageRenderer &&) = delete;
 
-        virtual void UpdateTextFormat() = 0;
 
         virtual void ApplyPreviousEffects() = 0;
 

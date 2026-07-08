@@ -58,8 +58,8 @@ class OverlayManager {
 
         // ── Public overlays (content set by callers) ──────────────────────────
         TextOverlay slotTopLeft; // [1] index / total + filename
-        TextOverlay slotTopCenter; // [2] zoom %
-        TextOverlay slotTopRight; // [3] unused
+        TextOverlay slotTopCenter; // [2] unused
+        TextOverlay slotTopRight; // [3] zoom %
         TextOverlay slotMidLeft; // [4] unused
         TextOverlay slotMidCenter; // [5] general message queue (center-center)
         TextOverlay slotMidRight; // [6] unused
@@ -71,7 +71,6 @@ class OverlayManager {
         // Must be called once after the DWrite factory and text resources are ready.
         // Does NOT take ownership — caller (RendererD2D) keeps the base format alive.
         void Init(IDWriteFactory3 *dwriteFactory,
-                  IDWriteTextFormat *textFormat,
                   ID2D1SolidColorBrush *textBrush,
                   ID2D1DeviceContext *ctx);
 
@@ -132,10 +131,12 @@ class OverlayManager {
 
         void OnDeviceRestored(ID2D1DeviceContext *ctx);
 
+        void UpdateTextFormat();
+
     private:
         // ── Resources (not owned, except m_pCenterBrush) ─────────────────────
         IDWriteFactory3 *m_pDWriteFactory = nullptr;
-        IDWriteTextFormat *m_pTextFormat = nullptr; // base format (not owned)
+        Microsoft::WRL::ComPtr<IDWriteTextFormat> m_pTextFormat; // base format (not owned)
         ID2D1SolidColorBrush *m_pTextBrush = nullptr; // normal brush (not owned)
 
         // Center-center owns its own brush and format (independent colour + size)
@@ -150,6 +151,7 @@ class OverlayManager {
         Microsoft::WRL::ComPtr<IDWriteTextFormat> m_fmtBotLeft;
         Microsoft::WRL::ComPtr<IDWriteTextFormat> m_fmtBotCenter;
         Microsoft::WRL::ComPtr<IDWriteTextFormat> m_fmtBotRight;
+
 
         // ── Slot metadata ────────────────────────────────────────────────────
         struct SlotMeta {
@@ -191,8 +193,8 @@ class OverlayManager {
 
         // Cached zoom + dims for layout-mode 2 combined line
         float m_zoom = 1.0f;
-        int   m_imgW = 0;
-        int   m_imgH = 0;
+        int m_imgW = 0;
+        int m_imgH = 0;
         int64_t m_fileSizeBytes = 0;
 
         // Rebuild the combined zoom+dims line used in layout mode 2

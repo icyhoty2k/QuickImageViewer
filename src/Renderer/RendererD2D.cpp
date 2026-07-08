@@ -47,7 +47,7 @@ HRESULT RendererD2D::Initialize(HWND hwnd) {
                                          __uuidof(IDWriteFactory7),
                                          reinterpret_cast<IUnknown **>(m_pDWriteFactory.GetAddressOf()));
         if (FAILED(hr)) return hr;
-        UpdateTextFormat();
+        g_overlayManager.UpdateTextFormat();
     }
 
     HRESULT hr = CreateDeviceResources();
@@ -55,7 +55,8 @@ HRESULT RendererD2D::Initialize(HWND hwnd) {
         // Initialize to empty/default state
         m_pActiveDisplayNode = nullptr;
         // Hand text resources to the overlay manager — it does not own them
-        g_overlayManager.Init(m_pDWriteFactory.Get(), m_pTextFormat.Get(), m_pTextBrush.Get(), m_pDeviceContext.Get());
+        g_overlayManager.Init(m_pDWriteFactory.Get(), m_pTextBrush.Get(), m_pDeviceContext.Get());
+        g_overlayManager.UpdateTextFormat();
 
         // Compute initial rects from the actual window client size
         RECT rc{};
@@ -65,24 +66,6 @@ HRESULT RendererD2D::Initialize(HWND hwnd) {
                 static_cast<float>(rc.bottom - rc.top));
     }
     return hr;
-}
-
-void RendererD2D::UpdateTextFormat() {
-    float scaledFontSize = 14.0f * app.dpiScale;
-
-    m_pTextFormat.Reset();
-    HRESULT hr = m_pDWriteFactory->CreateTextFormat(
-            L"Segoe UI", nullptr,
-            DWRITE_FONT_WEIGHT_NORMAL, DWRITE_FONT_STYLE_NORMAL, DWRITE_FONT_STRETCH_NORMAL,
-            scaledFontSize, L"en-us", &m_pTextFormat);
-
-    // Fallback
-    if (FAILED(hr)) {
-        (void) m_pDWriteFactory->CreateTextFormat(
-                L"Arial", nullptr,
-                DWRITE_FONT_WEIGHT_NORMAL, DWRITE_FONT_STYLE_NORMAL, DWRITE_FONT_STRETCH_NORMAL,
-                scaledFontSize, L"en-us", &m_pTextFormat);
-    }
 }
 
 void RendererD2D::UpdateColorEffects() {
@@ -812,7 +795,8 @@ HRESULT RendererD2D::Render() {
             // m_pTextFormat and m_pTextBrush are recreated inside CreateDeviceResources.
             // Re-hand them to the overlay manager so it doesn't hold stale pointers
             // from before the device loss.
-            g_overlayManager.Init(m_pDWriteFactory.Get(), m_pTextFormat.Get(), m_pTextBrush.Get(), m_pDeviceContext.Get());
+            g_overlayManager.Init(m_pDWriteFactory.Get(), m_pTextBrush.Get(), m_pDeviceContext.Get());
+            g_overlayManager.UpdateTextFormat();
             RECT rc{};
             GetClientRect(m_hwnd, &rc);
             g_overlayManager.OnResize(static_cast<float>(rc.right - rc.left),
@@ -828,7 +812,8 @@ HRESULT RendererD2D::Render() {
         hrPresent == static_cast<HRESULT>(DXGI_ERROR_DEVICE_RESET)) {
         DiscardDeviceResources();
         if (SUCCEEDED(CreateDeviceResources())) {
-            g_overlayManager.Init(m_pDWriteFactory.Get(), m_pTextFormat.Get(), m_pTextBrush.Get(), m_pDeviceContext.Get());
+            g_overlayManager.Init(m_pDWriteFactory.Get(), m_pTextBrush.Get(), m_pDeviceContext.Get());
+            g_overlayManager.UpdateTextFormat();
             RECT rc{};
             GetClientRect(m_hwnd, &rc);
             g_overlayManager.OnResize(static_cast<float>(rc.right - rc.left),

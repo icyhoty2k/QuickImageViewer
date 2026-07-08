@@ -73,7 +73,7 @@ LRESULT CALLBACK MainAppWndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM l
             app.dpiScale = static_cast<float>(HIWORD(wParam)) / 96.0f;
 
             // 2. Refresh the Renderer's font format
-            app.renderer->UpdateTextFormat();
+            g_overlayManager.UpdateTextFormat();
             RECT *const prcNewWindow = (RECT *) lParam;
             SetWindowPos(hWnd,
                          nullptr,
