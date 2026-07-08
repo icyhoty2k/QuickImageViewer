@@ -104,7 +104,7 @@ void OverlayManager::UpdateTextFormat() {
         (void) m_pDWriteFactory->CreateTextFormat(
                 Constants::Overlay::MSG_ALL_FONT_FAMILY_FALLBACK, nullptr,
                 DWRITE_FONT_WEIGHT_NORMAL, DWRITE_FONT_STYLE_NORMAL, DWRITE_FONT_STRETCH_NORMAL,
-                scaledFontSize, Constants::Overlay::MSG_ALL_FONT_LOCALE, &m_pTextFormat);
+                scaledFontSize, Constants::Overlay::MSG_ALL_FONT_LOCALE, &m_fmtCenter5);
     }
     if (SUCCEEDED(hrCenter)) {
         // Set the required center alignments directly on this specific format
