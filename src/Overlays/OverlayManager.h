@@ -78,6 +78,10 @@ class OverlayManager {
         // Called on every WM_SIZE / Resize. Recomputes all slot rects.
         void OnResize(float rtW, float rtH);
 
+        // Called when O key cycles OVERLAY_LAYOUT_MODE — recomputes rects and
+        // rebuilds slot content for the new mode.
+        void OnLayoutModeChanged(HWND hWnd);
+
         // ── Content updates ───────────────────────────────────────────────────
         // TOP_LEFT  — index is 0-based; displays as (index+1) / total
         void UpdateInfo(int index, int total, const std::wstring &filename);
@@ -180,10 +184,19 @@ class OverlayManager {
         // Rebuild TOP_LEFT text honouring compact flag
         void RebuildTopLeft();
 
-        // Stores the raw data so compact toggle can re-render without a full reload
+        // Stores the raw data so compact toggle / layout change can re-render
         int m_infoIndex = 0;
         int m_infoTotal = 0;
         std::wstring m_infoFilename;
+
+        // Cached zoom + dims for layout-mode 2 combined line
+        float m_zoom = 1.0f;
+        int   m_imgW = 0;
+        int   m_imgH = 0;
+        int64_t m_fileSizeBytes = 0;
+
+        // Rebuild the combined zoom+dims line used in layout mode 2
+        void RebuildSummaryLine2();
 };
 
 extern OverlayManager g_overlayManager;

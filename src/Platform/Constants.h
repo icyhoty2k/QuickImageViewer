@@ -184,6 +184,17 @@ namespace Constants {
 
     namespace Overlay {
         constexpr const bool COMPACT_OVERLAY_MODE = true; // true → 1-line, false → 2-line
-        constexpr const bool EVERYTHING_ON_TOP_LEFT = false; // append all overlays starting from 0 to 9 on the left one below another
+
+        // Layout mode cycled with O key:
+        //   0 — default 3×3 grid
+        //   1 — all slots stacked vertically on top-left
+        //   2 — compact 2-line summary top-left:
+        //         line 1: index / total + filename
+        //         line 2: zoom% + WxH / size  (TOP_CENTER + BOT_RIGHT combined)
+        inline int OVERLAY_LAYOUT_MODE = 0;
+
+        // P key — toggle semi-transparent background behind all overlay text.
+        // Text is always drawn; only the background rect is suppressed when false.
+        inline bool OVERLAY_SHOW_BACKGROUND = true;
     }
 }

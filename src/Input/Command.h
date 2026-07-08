@@ -47,6 +47,10 @@ enum class Command {
     ToggleHistory,
     // Master toggle  (N / I / Ctrl+0)
     ToggleOverlay,
+    // Cycle layout mode 0→1→2→0  (O)
+    CycleOverlayLayout,
+    // Toggle overlay text background on/off  (P)
+    ToggleOverlayBackground,
 
     // Per-slot visibility toggles  (Ctrl+1 .. Ctrl+9)
     ToggleOverlaySlot1, // TOP_LEFT

@@ -173,43 +173,63 @@ void OverlayManager::RecomputeRects() {
     const float H = m_rtH;
     const float M = MARGIN;
 
-    // ── EVERYTHING_ON_TOP_LEFT ────────────────────────────────────────────────
-    // All slots (0-8 except MID_CENTER) stacked vertically from top-left,
-    // one below another in slot order, each separated by MARGIN.
-    // MID_CENTER keeps its normal screen-center position.
-    if (Constants::Overlay::EVERYTHING_ON_TOP_LEFT) {
-        float cursorY = M;
-
-        // Slot pointer, its column width, and whether it uses ROW_EFFECTS height
-        struct StackEntry { Slot slot; TextOverlay *ov; float colW; bool isEffects; };
-        const StackEntry entries[] = {
-            { TOP_LEFT,   &slotTopLeft,   COL_LEFT_WIDTH,   false },
-            { TOP_CENTER, &slotTopCenter, COL_CENTER_WIDTH, false },
-            { TOP_RIGHT,  &slotTopRight,  COL_RIGHT_WIDTH,  false },
-            { MID_LEFT,   &slotMidLeft,   COL_LEFT_WIDTH,   false },
-            { MID_RIGHT,  &slotMidRight,  COL_RIGHT_WIDTH,  false },
-            { BOT_LEFT,   &slotBotLeft,   COL_LEFT_WIDTH,   true  },
-            { BOT_CENTER, &slotBotCenter, COL_CENTER_WIDTH, false },
-            { BOT_RIGHT,  &slotBotRight,  COL_RIGHT_WIDTH,  false },
-        };
-
-        for (const auto &e : entries) {
-            float rowH = e.isEffects ? ROW_EFFECTS
-                       : m_slots[e.slot].compact ? ROW_SINGLE
-                                                 : ROW_DOUBLE;
-            e.ov->UpdateRect(D2D1::RectF(M, cursorY, M + e.colW, cursorY + rowH));
-            cursorY += rowH + M;
-        }
-
-        // MID_CENTER always stays screen-centered
+    // MID_CENTER is always screen-centered regardless of layout mode
+    auto placeMidCenter = [&]() {
         slotMidCenter.UpdateRect(D2D1::RectF(
             (W - Constants::MSG_CENTER_WIDTH)  * 0.5f,
             (H - Constants::MSG_CENTER_HEIGHT) * 0.5f,
             (W + Constants::MSG_CENTER_WIDTH)  * 0.5f,
             (H + Constants::MSG_CENTER_HEIGHT) * 0.5f));
+    };
+
+    // ── Mode 1: all slots stacked vertically on top-left ─────────────────────
+    if (Constants::Overlay::OVERLAY_LAYOUT_MODE == 1) {
+        float cursorY = M;
+        // Order: TOP_LEFT, TOP_CENTER, TOP_RIGHT, MID_LEFT, MID_RIGHT,
+        //        BOT_RIGHT, BOT_CENTER, BOT_LEFT(effects last)
+        // All slots use COL_LEFT_WIDTH and LEADING alignment when stacked.
+        struct StackEntry { Slot slot; TextOverlay *ov; };
+        const StackEntry entries[] = {
+            { TOP_LEFT,   &slotTopLeft   },
+            { TOP_CENTER, &slotTopCenter },
+            { TOP_RIGHT,  &slotTopRight  },
+            { MID_LEFT,   &slotMidLeft   },
+            { MID_RIGHT,  &slotMidRight  },
+            { BOT_RIGHT,  &slotBotRight  },
+            { BOT_CENTER, &slotBotCenter },
+            { BOT_LEFT,   &slotBotLeft   },  // effects last
+        };
+        for (const auto &e : entries) {
+            float rowH = (e.slot == BOT_LEFT) ? ROW_EFFECTS
+                       : m_slots[e.slot].compact ? ROW_SINGLE : ROW_DOUBLE;
+            e.ov->UpdateRect(D2D1::RectF(M, cursorY, M + COL_LEFT_WIDTH, cursorY + rowH));
+            // Force leading alignment so all stacked text is left-aligned
+            m_slots[e.slot].fmt = (e.slot == BOT_LEFT) ? m_fmtBotLeft.Get() : m_fmtLeft.Get();
+            cursorY += rowH + M;
+        }
+        placeMidCenter();
         return;
     }
-    // ── Normal 3×3 grid ──────────────────────────────────────────────────────
+
+    // ── Mode 2: compact 2-line summary top-left ───────────────────────────────
+    // Line 1 (TOP_LEFT):   index / total + filename  (unchanged)
+    // Line 2 (TOP_CENTER): zoom% + WxH / size        (combined, repurposed rect)
+    // All other info slots get zero-size rects so they produce no output.
+    if (Constants::Overlay::OVERLAY_LAYOUT_MODE == 2) {
+        slotTopLeft.UpdateRect(D2D1::RectF(M, M, M + COL_LEFT_WIDTH, M + ROW_SINGLE));
+        slotTopCenter.UpdateRect(D2D1::RectF(M, M + ROW_SINGLE + M, M + COL_LEFT_WIDTH, M + ROW_SINGLE * 2.0f + M));
+        const D2D1_RECT_F zero = D2D1::RectF(0.0f, 0.0f, 0.0f, 0.0f);
+        slotTopRight.UpdateRect(zero);
+        slotMidLeft.UpdateRect(zero);
+        slotMidRight.UpdateRect(zero);
+        slotBotLeft.UpdateRect(zero);
+        slotBotCenter.UpdateRect(zero);
+        slotBotRight.UpdateRect(zero);
+        placeMidCenter();
+        return;
+    }
+
+    // ── Mode 0: normal 3×3 grid ───────────────────────────────────────────────
 
     // [1] TOP_LEFT — index/total + filename (1 or 2 lines)
     {
@@ -293,6 +313,58 @@ void OverlayManager::RebuildTopLeft() {
     slotTopLeft.UpdateText(std::move(text));
 }
 
+void OverlayManager::RebuildSummaryLine2() {
+    // "86%  1920×1080 / 4.3 MB"
+    wchar_t zoomBuf[16];
+    swprintf_s(zoomBuf, L"%.0f%%", m_zoom * 100.0f);
+    std::wstring text = zoomBuf;
+    text += L"  ";
+    text += std::to_wstring(m_imgW) + L"\u00D7" + std::to_wstring(m_imgH);
+    text += L" / ";
+    text += FormatFileSize(m_fileSizeBytes);
+    slotTopCenter.UpdateText(std::move(text));
+}
+
+void OverlayManager::OnLayoutModeChanged(HWND /*hWnd*/) {
+    RecomputeRects();
+    // Rebuild slot content to match the new mode
+    RebuildTopLeft();
+    if (Constants::Overlay::OVERLAY_LAYOUT_MODE == 2) {
+        RebuildSummaryLine2();
+        // Activate the two visible slots; deactivate the rest
+        slotTopLeft.active  = m_masterVisible;
+        slotTopCenter.active = m_masterVisible;
+        slotTopRight.active  = false;
+        slotMidLeft.active   = false;
+        slotMidRight.active  = false;
+        slotBotLeft.active   = false;
+        slotBotCenter.active = false;
+        slotBotRight.active  = false;
+    } else {
+        // Restore fmt assignments (mode 1 overrides them to LEADING for all slots)
+        m_slots[TOP_LEFT].fmt   = m_fmtLeft.Get();
+        m_slots[TOP_CENTER].fmt = m_fmtCenter.Get();
+        m_slots[TOP_RIGHT].fmt  = m_fmtTrailing.Get();
+        m_slots[MID_LEFT].fmt   = m_fmtLeft.Get();
+        m_slots[MID_CENTER].fmt = m_fmtCenter5.Get();
+        m_slots[MID_RIGHT].fmt  = m_fmtTrailing.Get();
+        m_slots[BOT_LEFT].fmt   = m_fmtBotLeft.Get();
+        m_slots[BOT_CENTER].fmt = m_fmtBotCenter.Get();
+        m_slots[BOT_RIGHT].fmt  = m_fmtBotRight.Get();
+        // Clear the summary text that mode 2 wrote into slotTopCenter
+        slotTopCenter.UpdateText(L"");
+        // Restore active state from master + per-slot visibility
+        for (int i = 0; i < SLOT_COUNT; ++i) {
+            if (i == MID_CENTER) continue;
+            m_slots[i].overlay->active = m_masterVisible && m_slots[i].visible;
+        }
+        // Restore normal zoom text in TOP_RIGHT
+        wchar_t buf[32];
+        swprintf_s(buf, L"%.0f%%", m_zoom * 100.0f);
+        slotTopRight.UpdateText(buf);
+    }
+}
+
 void OverlayManager::UpdateInfo(int index, int total, const std::wstring &filename) {
     m_infoIndex = index;
     m_infoTotal = total;
@@ -301,13 +373,21 @@ void OverlayManager::UpdateInfo(int index, int total, const std::wstring &filena
 }
 
 void OverlayManager::UpdateZoom(float /*zoom*/, HWND hWnd) {
-    float realZoom = app.GetRealZoom(hWnd);
+    m_zoom = app.GetRealZoom(hWnd);
     wchar_t buf[32];
-    swprintf_s(buf, L"%.0f%%", realZoom * 100.0f);
+    swprintf_s(buf, L"%.0f%%", m_zoom * 100.0f);
     slotTopRight.UpdateText(buf);
+    if (Constants::Overlay::OVERLAY_LAYOUT_MODE == 2)
+        RebuildSummaryLine2();
 }
 
 void OverlayManager::UpdateDims(int imgW, int imgH, int64_t fileSizeBytes) {
+    m_imgW = imgW;
+    m_imgH = imgH;
+    m_fileSizeBytes = fileSizeBytes;
+    if (Constants::Overlay::OVERLAY_LAYOUT_MODE == 2) {
+        RebuildSummaryLine2();
+    }
     std::wstring text;
     if (m_slots[BOT_RIGHT].compact) {
         // 1-line: "1920×1080 / 4.3 MB"
@@ -521,8 +601,10 @@ void OverlayManager::RenderAll(ID2D1DeviceContext *ctx) const {
             bgRect.bottom = std::min(m_rtH, bgRect.bottom);
 
             // Draw semi-transparent dark background
-            m_pCenterBrush->SetColor(D2D1::ColorF(0.0f, 0.0f, 0.0f, 0.60f));
-            ctx->FillRectangle(bgRect, m_pCenterBrush.Get());
+            if (Constants::Overlay::OVERLAY_SHOW_BACKGROUND) {
+                m_pCenterBrush->SetColor(D2D1::ColorF(0.0f, 0.0f, 0.0f, 0.60f));
+                ctx->FillRectangle(bgRect, m_pCenterBrush.Get());
+            }
 
             // Draw text in center-center color
             m_pCenterBrush->SetColor(D2D1::ColorF(
@@ -584,10 +666,12 @@ void OverlayManager::RenderAll(ID2D1DeviceContext *ctx) const {
         bgRect.bottom = std::min(m_rtH, bgRect.bottom);
 
         // Semi-transparent background
-        const D2D1_COLOR_F prevColor = m_pTextBrush->GetColor();
-        m_pTextBrush->SetColor(D2D1::ColorF(0.0f, 0.0f, 0.0f, BG_ALPHA));
-        ctx->FillRectangle(bgRect, m_pTextBrush);
-        m_pTextBrush->SetColor(prevColor);
+        if (Constants::Overlay::OVERLAY_SHOW_BACKGROUND) {
+            const D2D1_COLOR_F prevColor = m_pTextBrush->GetColor();
+            m_pTextBrush->SetColor(D2D1::ColorF(0.0f, 0.0f, 0.0f, BG_ALPHA));
+            ctx->FillRectangle(bgRect, m_pTextBrush);
+            m_pTextBrush->SetColor(prevColor);
+        }
 
         // Draw text
         ctx->DrawTextLayout(

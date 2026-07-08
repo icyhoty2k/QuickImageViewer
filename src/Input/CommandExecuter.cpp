@@ -168,6 +168,26 @@ void InputManager::ExecuteKeyboardShortcutCommand(HWND hWnd, Command cmd) {
             uiManager.Toggle(uiManager.getHistoryListWindow());
             break;
 
+        // ── Cycle overlay layout mode (O) ────────────────────────────────────
+        case Command::CycleOverlayLayout: {
+            int &mode = Constants::Overlay::OVERLAY_LAYOUT_MODE;
+            mode = (mode + 1) % 3;
+            g_overlayManager.OnLayoutModeChanged(hWnd);
+            const wchar_t *labels[] = { L"Layout: Grid", L"Layout: Stacked", L"Layout: Summary" };
+            g_overlayManager.PostCenterMessage(hWnd, labels[mode]);
+            InvalidateRect(hWnd, nullptr, FALSE);
+            break;
+        }
+
+        // ── Toggle overlay background (P) ─────────────────────────────────────
+        case Command::ToggleOverlayBackground: {
+            Constants::Overlay::OVERLAY_SHOW_BACKGROUND = !Constants::Overlay::OVERLAY_SHOW_BACKGROUND;
+            g_overlayManager.PostCenterMessage(hWnd,
+                Constants::Overlay::OVERLAY_SHOW_BACKGROUND ? L"Overlay BG: ON" : L"Overlay BG: OFF");
+            InvalidateRect(hWnd, nullptr, FALSE);
+            break;
+        }
+
         // ── Master overlay toggle (N / I / Ctrl+0) ───────────────────────────
         case Command::ToggleOverlay: {
             app.showOverlayInfoText = !app.showOverlayInfoText;

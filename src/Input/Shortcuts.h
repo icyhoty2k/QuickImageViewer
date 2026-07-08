@@ -56,6 +56,12 @@ namespace Shortcuts {
     // I (no modifier)  —  Master overlay toggle — same effect as N and Ctrl+0
     constexpr UINT SC_PANEL_OVERLAY_MASTER = 'I';
 
+    // O (no modifier)  —  Cycle overlay layout mode: 0 → 1 → 2 → 0
+    constexpr UINT SC_OVERLAY_LAYOUT_CYCLE = 'O';
+
+    // P (no modifier)  —  Toggle overlay text background on/off (text stays visible)
+    constexpr UINT SC_OVERLAY_BG_TOGGLE = 'P';
+
     // Ctrl+0  —  Master overlay toggle (same as N / I)
     constexpr UINT SC_PANEL_OVERLAY_MASTER_CTRL0 = '0'; // requires ctrl
 
