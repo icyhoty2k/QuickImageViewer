@@ -51,35 +51,81 @@ void MouseHandler::HandleButtonDown(HWND hWnd, UINT message, LPARAM lParam) {
         if (app.viewport.isDragging) return;
         SetCursor(NULL);
 
-        // 1. Save state
-        app.savedZoom = app.viewport.zoom;
-        app.savedOffsetX = app.viewport.offsetX;
-        app.savedOffsetY = app.viewport.offsetY;
-
-        // 2. Get mouse position and window center
         POINT pt = {GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam)};
         RECT rc;
         GetClientRect(hWnd, &rc);
-        float centerX = (rc.right - rc.left) / 2.0f;
-        float centerY = (rc.bottom - rc.top) / 2.0f;
+        float winW = (float)(rc.right - rc.left);
+        float winH = (float)(rc.bottom - rc.top);
 
-        // 3. Calculate how far the mouse is from the center
-        float dx = (float) pt.x - centerX;
-        float dy = (float) pt.y - centerY;
+        // Compute the rendered image size exactly as the renderer does.
+        float renderW = winW, renderH = winH; // fallback
+        if (app.imgWidth > 0 && app.imgHeight > 0) {
+            float imgW   = (float)app.imgWidth;
+            float imgH   = (float)app.imgHeight;
+            float ratioX = winW / imgW;
+            float ratioY = winH / imgH;
+            switch (app.viewMode) {
+                case Constants::ViewModes::ViewMode::FitToView_PreserveAspectRatio:
+                default:
+                    renderW = imgW * std::min(ratioX, ratioY);
+                    renderH = imgH * std::min(ratioX, ratioY);
+                    break;
+                case Constants::ViewModes::ViewMode::FitToWidth_DoNotPreserveAspectRatio:
+                    renderW = winW;
+                    renderH = imgH; if (renderH > winH) renderH = winH;
+                    break;
+                case Constants::ViewModes::ViewMode::FitToHeight_DoNotPreserveAspectRatio:
+                    renderH = winH;
+                    renderW = imgW; if (renderW > winW) renderW = winW;
+                    break;
+                case Constants::ViewModes::ViewMode::FitToWindow_DoNotPreserveAspectRatio:
+                    renderW = winW; renderH = winH;
+                    break;
+                case Constants::ViewModes::ViewMode::OriginalImageSize_PreserveAspectRatio:
+                    renderW = imgW; renderH = imgH;
+                    break;
+            }
+        }
+        const float z = (app.viewport.zoom <= 0.0f) ? 1.0f : app.viewport.zoom;
+        renderW *= z;
+        renderH *= z;
 
-        // 4. Apply temporary zoom
-        app.viewport.zoom *= Constants::ZOOM_CLICK;
+        // If the image already overflows the viewport in either axis, skip the
+        // click-zoom and go straight to pan mode.
+        bool imageOverflows = (renderW > winW + 0.5f) || (renderH > winH + 0.5f);
 
-        // 5. Shift the offset to keep the clicked point at the center
-        // We adjust the offset by the distance moved, scaled by the zoom difference
-        app.viewport.offsetX = (app.savedOffsetX - dx);
-        app.viewport.offsetY = (app.savedOffsetY - dy);
+        // Save state so ButtonUp can restore if we zoomed.
+        app.savedZoom    = app.viewport.zoom;
+        app.savedOffsetX = app.viewport.offsetX;
+        app.savedOffsetY = app.viewport.offsetY;
+        app.lmbDidZoom   = false;
 
-        // 6. Start dragging
-        app.viewport.lastMouse = pt;
+        if (!imageOverflows) {
+            // Image fits inside the viewport — apply the 3x click-zoom.
+            float centerX = winW / 2.0f;
+            float centerY = winH / 2.0f;
+            float dx = (float)pt.x - centerX;
+            float dy = (float)pt.y - centerY;
+
+            app.viewport.zoom *= Constants::ZOOM_CLICK;
+
+            // Keep the clicked pixel under the cursor.
+            // Derivation: renderer puts image center at (winW/2 + offsetX).
+            // Pixel at dx from window center is (dx - oldOffsetX) from image center.
+            // After zoom*Z it moves to Z*(dx - oldOffsetX). To keep it at dx:
+            //   newOffsetX = dx*(1 - Z) + Z*oldOffsetX
+            const float Z = Constants::ZOOM_CLICK;
+            app.viewport.offsetX = dx * (1.0f - Z) + Z * app.savedOffsetX;
+            app.viewport.offsetY = dy * (1.0f - Z) + Z * app.savedOffsetY;
+
+            app.lmbDidZoom = true;
+            InvalidateRect(hWnd, nullptr, FALSE);
+        }
+
+        // Always start pan (drag) mode.
+        app.viewport.lastMouse  = pt;
         app.viewport.isDragging = true;
         SetCapture(hWnd);
-        InvalidateRect(hWnd, nullptr, FALSE);
     }
 }
 
@@ -130,11 +176,15 @@ void MouseHandler::HandleButtonUp(HWND hWnd, UINT message, LPARAM /*lParam*/) {
     } else if (IsViewControlAction(message)) {
         SetCursor(LoadCursor(nullptr, IDC_ARROW));
 
-        // Restore zoom and pan
-        app.viewport.zoom = app.savedZoom;
-        app.viewport.offsetX = app.savedOffsetX;
-        app.viewport.offsetY = app.savedOffsetY;
-
+        // Only restore zoom/offset if we applied the click-zoom on press.
+        // If the image was already overflowing and we only panned, keep
+        // the current offset so the user's pan position is preserved.
+        if (app.lmbDidZoom) {
+            app.viewport.zoom    = app.savedZoom;
+            app.viewport.offsetX = app.savedOffsetX;
+            app.viewport.offsetY = app.savedOffsetY;
+        }
+        app.lmbDidZoom          = false;
         app.viewport.isDragging = false;
         ReleaseCapture();
         InvalidateRect(hWnd, nullptr, FALSE);
@@ -169,22 +219,56 @@ void MouseHandler::HandleMouseMove(HWND hWnd, LPARAM lParam) {
         app.viewport.offsetY += dy;
         app.viewport.lastMouse = curMouse;
 
-        // Constraint Logic
+        // Constraint — must mirror the renderer's renderW/renderH exactly so the
+        // pan limit matches the actual drawn edges of the image.
         if (app.imgWidth > 0 && app.imgHeight > 0) {
             RECT rc;
             GetClientRect(hWnd, &rc);
-            float winW = (float) (rc.right - rc.left);
-            float winH = (float) (rc.bottom - rc.top);
+            float winW = (float)(rc.right - rc.left);
+            float winH = (float)(rc.bottom - rc.top);
 
-            float base = std::min(winW / (float) app.imgWidth, winH / (float) app.imgHeight);
-            float renderW = (float) app.imgWidth * base * app.viewport.zoom;
-            float renderH = (float) app.imgHeight * base * app.viewport.zoom;
+            float imgW = (float)app.imgWidth;
+            float imgH = (float)app.imgHeight;
+            float ratioX = winW / imgW;
+            float ratioY = winH / imgH;
+
+            // Match renderer viewMode logic
+            float renderW, renderH;
+            switch (app.viewMode) {
+                case Constants::ViewModes::ViewMode::FitToView_PreserveAspectRatio:
+                default:
+                    renderW = imgW * std::min(ratioX, ratioY);
+                    renderH = imgH * std::min(ratioX, ratioY);
+                    break;
+                case Constants::ViewModes::ViewMode::FitToWidth_DoNotPreserveAspectRatio:
+                    renderW = winW;
+                    renderH = imgH;
+                    if (renderH > winH) renderH = winH;
+                    break;
+                case Constants::ViewModes::ViewMode::FitToHeight_DoNotPreserveAspectRatio:
+                    renderH = winH;
+                    renderW = imgW;
+                    if (renderW > winW) renderW = winW;
+                    break;
+                case Constants::ViewModes::ViewMode::FitToWindow_DoNotPreserveAspectRatio:
+                    renderW = winW;
+                    renderH = winH;
+                    break;
+                case Constants::ViewModes::ViewMode::OriginalImageSize_PreserveAspectRatio:
+                    renderW = imgW;
+                    renderH = imgH;
+                    break;
+            }
+
+            const float z = (app.viewport.zoom <= 0.0f) ? 1.0f : app.viewport.zoom;
+            renderW *= z;
+            renderH *= z;
 
             float maxOffX = std::max(0.0f, (renderW - winW) / 2.0f);
             float maxOffY = std::max(0.0f, (renderH - winH) / 2.0f);
 
-            app.viewport.offsetX = std::max(-maxOffX, std::min(maxOffX, app.viewport.offsetX));
-            app.viewport.offsetY = std::max(-maxOffY, std::min(maxOffY, app.viewport.offsetY));
+            app.viewport.offsetX = std::clamp(app.viewport.offsetX, -maxOffX, maxOffX);
+            app.viewport.offsetY = std::clamp(app.viewport.offsetY, -maxOffY, maxOffY);
         }
 
         InvalidateRect(hWnd, nullptr, FALSE);
