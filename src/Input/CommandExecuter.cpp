@@ -2,6 +2,7 @@
 #include "../AppState.h"
 #include "../Overlays/OverlayManager.h"
 #include "../Platform/Constants.h"
+#include "../Platform/ConstantsStrings.h"
 #include "../Platform/FileHandler.h"
 #include "../UI/CacheWnd.h"
 #include "../UI/DirWnd.h"
@@ -173,7 +174,7 @@ void InputManager::ExecuteKeyboardShortcutCommand(HWND hWnd, Command cmd) {
             int &mode = Constants::Overlay::OVERLAY_LAYOUT_MODE;
             mode = (mode + 1) % 3;
             g_overlayManager.OnLayoutModeChanged(hWnd);
-            const wchar_t *labels[] = { L"Layout: Grid", L"Layout: Stacked", L"Layout: Summary" };
+            const wchar_t *labels[] = { Constants::Messages::LAYOUT_GRID, Constants::Messages::LAYOUT_STACKED, Constants::Messages::LAYOUT_SUMMARY };
             g_overlayManager.PostCenterMessage(hWnd, labels[mode]);
             InvalidateRect(hWnd, nullptr, FALSE);
             break;
@@ -183,7 +184,7 @@ void InputManager::ExecuteKeyboardShortcutCommand(HWND hWnd, Command cmd) {
         case Command::ToggleOverlayBackground: {
             Constants::Overlay::OVERLAY_SHOW_BACKGROUND = !Constants::Overlay::OVERLAY_SHOW_BACKGROUND;
             g_overlayManager.PostCenterMessage(hWnd,
-                Constants::Overlay::OVERLAY_SHOW_BACKGROUND ? L"Overlay BG: ON" : L"Overlay BG: OFF");
+                Constants::Overlay::OVERLAY_SHOW_BACKGROUND ? Constants::Messages::OVERLAY_BG_ON : Constants::Messages::OVERLAY_BG_OFF);
             InvalidateRect(hWnd, nullptr, FALSE);
             break;
         }
@@ -195,7 +196,7 @@ void InputManager::ExecuteKeyboardShortcutCommand(HWND hWnd, Command cmd) {
             // Always post the state change to center-center — it survives the hide
             // because MID_CENTER is independently controlled by PostCenterMessage.
             g_overlayManager.PostCenterMessage(hWnd,
-                                               app.showOverlayInfoText ? L"Info Panels: ON" : L"Info Panels: OFF");
+                                               app.showOverlayInfoText ? Constants::Messages::INFO_PANELS_ON : Constants::Messages::INFO_PANELS_OFF);
             InvalidateRect(hWnd, nullptr, FALSE);
             break;
         }
@@ -322,7 +323,7 @@ void InputManager::ExecuteKeyboardShortcutCommand(HWND hWnd, Command cmd) {
 
         case Command::ResetAll:
             AppCommands::ResetWindowLayoutAndEffects(hWnd);
-            g_overlayManager.PostCenterMessage(hWnd, L"Reset to Defaults");
+            g_overlayManager.PostCenterMessage(hWnd, Constants::Messages::RESET_TO_DEFAULTS);
             break;
 
         // -----------------------------------------------------------------------
@@ -335,32 +336,32 @@ void InputManager::ExecuteKeyboardShortcutCommand(HWND hWnd, Command cmd) {
             break;
 
         case Command::ToggleGrayscale:
-            app.ToggleEffectChronological(L"Grayscale");
+            app.ToggleEffectChronological(Constants::Strings::EFFECT_GRAYSCALE);
             app.WakeUpAndApplyEffects(hWnd, app.effectGrayscale);
             break;
 
         case Command::ToggleInvert:
-            app.ToggleEffectChronological(L"Invert");
+            app.ToggleEffectChronological(Constants::Strings::EFFECT_INVERT);
             app.WakeUpAndApplyEffects(hWnd, app.effectInvert);
             break;
 
         case Command::ToggleSepia:
-            app.ToggleEffectChronological(L"Sepia");
+            app.ToggleEffectChronological(Constants::Strings::EFFECT_SEPIA);
             app.WakeUpAndApplyEffects(hWnd, app.effectSepia);
             break;
 
         case Command::ToggleSolarize:
-            app.ToggleEffectChronological(L"Solarize");
+            app.ToggleEffectChronological(Constants::Strings::EFFECT_SOLARIZE);
             app.WakeUpAndApplyEffects(hWnd, app.effectSolarize);
             break;
 
         case Command::ToggleOutline:
-            app.ToggleEffectChronological(L"Outline");
+            app.ToggleEffectChronological(Constants::Strings::EFFECT_OUTLINE);
             app.WakeUpAndApplyEffects(hWnd, app.effectOutline);
             break;
 
         case Command::ToggleThreshold:
-            app.ToggleEffectChronological(L"Threshold");
+            app.ToggleEffectChronological(Constants::Strings::EFFECT_THRESHOLD);
             app.WakeUpAndApplyEffects(hWnd, app.effectThreshold);
             break;
 
@@ -424,7 +425,7 @@ void InputManager::ExecuteKeyboardShortcutCommand(HWND hWnd, Command cmd) {
             app.ResetEffects();
             app.UpdateRendererColorEffects(hWnd);
             g_overlayManager.UpdateEffects();
-            g_overlayManager.PostCenterMessage(hWnd, L"All Effects Reset");
+            g_overlayManager.PostCenterMessage(hWnd, Constants::Messages::ALL_EFFECTS_RESET);
             break;
 
         case Command::SaveImage: {

@@ -1,6 +1,51 @@
-//Made just for ease of management and internationalization.
-// This file will contain all messages for the center center overlay !
-namespace Constants::Messages {}
+#pragma once
 
-//This will contain all strings other than messages for center center overlay because if app is internationalized i need to store the defaults
-namespace Constants::Strings {}
+// ConstantsStrings.h
+// Central repository for all user-visible text used in QIV overlays.
+// Keep strings here so they have one place to change for localization.
+
+namespace Constants::Messages
+{
+    // ── MID_CENTER: state-change notifications ──────────────────────────────
+    // These are posted via PostCenterMessage and auto-hide after the timer.
+
+    // Overlay master toggle (N / I / Ctrl+0)
+    constexpr const wchar_t* INFO_PANELS_ON    = L"Info Panels: ON";
+    constexpr const wchar_t* INFO_PANELS_OFF   = L"Info Panels: OFF";
+
+    // Overlay background toggle (P)
+    constexpr const wchar_t* OVERLAY_BG_ON     = L"Overlay BG: ON";
+    constexpr const wchar_t* OVERLAY_BG_OFF    = L"Overlay BG: OFF";
+
+    // Overlay layout cycle (O)
+    constexpr const wchar_t* LAYOUT_GRID       = L"Layout: Grid";
+    constexpr const wchar_t* LAYOUT_STACKED    = L"Layout: Stacked";
+    constexpr const wchar_t* LAYOUT_SUMMARY    = L"Layout: Summary";
+
+    // Reset / effects
+    constexpr const wchar_t* RESET_TO_DEFAULTS = L"Reset to Defaults";
+    constexpr const wchar_t* ALL_EFFECTS_RESET  = L"All Effects Reset";
+}
+
+namespace Constants::Strings
+{
+    // ── BOT_LEFT slot: active color-effect labels ───────────────────────────
+    // Used in OverlayManager::UpdateEffects() via appendLine()
+
+    // Named colour effects (also fed to ToggleEffectChronological)
+    constexpr const wchar_t* EFFECT_GRAYSCALE   = L"Grayscale";
+    constexpr const wchar_t* EFFECT_INVERT      = L"Invert";
+    constexpr const wchar_t* EFFECT_SEPIA       = L"Sepia";
+    constexpr const wchar_t* EFFECT_SOLARIZE    = L"Solarize";
+    constexpr const wchar_t* EFFECT_OUTLINE     = L"Outline";
+    constexpr const wchar_t* EFFECT_THRESHOLD   = L"Threshold";
+
+    // Continuous-parameter labels (prefix before the numeric value)
+    constexpr const wchar_t* LABEL_BRIGHTNESS   = L"Brightness: ";
+    constexpr const wchar_t* LABEL_CONTRAST     = L"Contrast: ";
+    constexpr const wchar_t* LABEL_SATURATION   = L"Saturation: ";
+    constexpr const wchar_t* LABEL_GAMMA        = L"Gamma: ";
+
+    // Brightness sign prefix (positive values)
+    constexpr const wchar_t* SIGN_POSITIVE      = L"+";
+}

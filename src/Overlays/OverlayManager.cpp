@@ -1,6 +1,7 @@
 #include "OverlayManager.h"
 #include "../AppState.h"
 #include "../Platform/Constants.h"
+#include "../Platform/ConstantsStrings.h"
 #include <algorithm>
 #include <wrl/client.h>
 
@@ -482,13 +483,13 @@ void OverlayManager::UpdateEffects() {
     constexpr float EPS = 0.001f;
 
     if (std::abs(app.brightness - 0.0f) > EPS)
-        appendLine(L"Brightness: " + (app.brightness >= 0 ? std::wstring(L"+") : L"") + fmtFloat(app.brightness));
+        appendLine(Constants::Strings::LABEL_BRIGHTNESS + (app.brightness >= 0 ? std::wstring(Constants::Strings::SIGN_POSITIVE) : L"") + fmtFloat(app.brightness));
     if (std::abs(app.contrast - 1.0f) > EPS)
-        appendLine(L"Contrast: " + fmtFloat(app.contrast));
+        appendLine(Constants::Strings::LABEL_CONTRAST + fmtFloat(app.contrast));
     if (std::abs(app.saturation - 1.0f) > EPS)
-        appendLine(L"Saturation: " + fmtFloat(app.saturation));
+        appendLine(Constants::Strings::LABEL_SATURATION + fmtFloat(app.saturation));
     if (std::abs(app.gamma - 1.0f) > EPS)
-        appendLine(L"Gamma: " + fmtFloat(app.gamma));
+        appendLine(Constants::Strings::LABEL_GAMMA + fmtFloat(app.gamma));
 
     for (const auto &effectName: app.activeEffectsList)
         appendLine(effectName);

@@ -1,0 +1,210 @@
+From 3be1023dcf7e2ab217cb1c07bcabcd31aebc7add Mon Sep 17 00:00:00 2001
+From: Ivan Hristov Yanev <icyhoty2k@gmail.com>
+Date: Wed, 8 Jul 2026 21:57:36 +0000
+Subject: [PATCH] Centralize all overlay strings into ConstantsStrings.h
+
+- Populate Constants::Messages with all MID_CENTER notification strings:
+  INFO_PANELS_ON/OFF, OVERLAY_BG_ON/OFF, LAYOUT_GRID/STACKED/SUMMARY,
+  RESET_TO_DEFAULTS, ALL_EFFECTS_RESET
+- Populate Constants::Strings with BOT_LEFT slot labels:
+  EFFECT_GRAYSCALE/INVERT/SEPIA/SOLARIZE/OUTLINE/THRESHOLD,
+  LABEL_BRIGHTNESS/CONTRAST/SATURATION/GAMMA, SIGN_POSITIVE
+- CommandExecuter.cpp: replace all inline L"..." literals with constants
+- OverlayManager.cpp: replace effect label literals with constants
+- Both files now include ConstantsStrings.h
+---
+ src/Input/CommandExecuter.cpp   | 23 +++++++-------
+ src/Overlays/OverlayManager.cpp |  9 +++---
+ src/Platform/ConstantsStrings.h | 55 ++++++++++++++++++++++++++++++---
+ 3 files changed, 67 insertions(+), 20 deletions(-)
+
+diff --git a/src/Input/CommandExecuter.cpp b/src/Input/CommandExecuter.cpp
+index d0e657f..dc3e6ed 100644
+--- a/src/Input/CommandExecuter.cpp
++++ b/src/Input/CommandExecuter.cpp
+@@ -2,6 +2,7 @@
+ #include "../AppState.h"
+ #include "../Overlays/OverlayManager.h"
+ #include "../Platform/Constants.h"
++#include "../Platform/ConstantsStrings.h"
+ #include "../Platform/FileHandler.h"
+ #include "../UI/CacheWnd.h"
+ #include "../UI/DirWnd.h"
+@@ -173,7 +174,7 @@ void InputManager::ExecuteKeyboardShortcutCommand(HWND hWnd, Command cmd) {
+             int &mode = Constants::Overlay::OVERLAY_LAYOUT_MODE;
+             mode = (mode + 1) % 3;
+             g_overlayManager.OnLayoutModeChanged(hWnd);
+-            const wchar_t *labels[] = { L"Layout: Grid", L"Layout: Stacked", L"Layout: Summary" };
++            const wchar_t *labels[] = { Constants::Messages::LAYOUT_GRID, Constants::Messages::LAYOUT_STACKED, Constants::Messages::LAYOUT_SUMMARY };
+             g_overlayManager.PostCenterMessage(hWnd, labels[mode]);
+             InvalidateRect(hWnd, nullptr, FALSE);
+             break;
+@@ -183,7 +184,7 @@ void InputManager::ExecuteKeyboardShortcutCommand(HWND hWnd, Command cmd) {
+         case Command::ToggleOverlayBackground: {
+             Constants::Overlay::OVERLAY_SHOW_BACKGROUND = !Constants::Overlay::OVERLAY_SHOW_BACKGROUND;
+             g_overlayManager.PostCenterMessage(hWnd,
+-                Constants::Overlay::OVERLAY_SHOW_BACKGROUND ? L"Overlay BG: ON" : L"Overlay BG: OFF");
++                Constants::Overlay::OVERLAY_SHOW_BACKGROUND ? Constants::Messages::OVERLAY_BG_ON : Constants::Messages::OVERLAY_BG_OFF);
+             InvalidateRect(hWnd, nullptr, FALSE);
+             break;
+         }
+@@ -195,7 +196,7 @@ void InputManager::ExecuteKeyboardShortcutCommand(HWND hWnd, Command cmd) {
+             // Always post the state change to center-center — it survives the hide
+             // because MID_CENTER is independently controlled by PostCenterMessage.
+             g_overlayManager.PostCenterMessage(hWnd,
+-                                               app.showOverlayInfoText ? L"Info Panels: ON" : L"Info Panels: OFF");
++                                               app.showOverlayInfoText ? Constants::Messages::INFO_PANELS_ON : Constants::Messages::INFO_PANELS_OFF);
+             InvalidateRect(hWnd, nullptr, FALSE);
+             break;
+         }
+@@ -322,7 +323,7 @@ void InputManager::ExecuteKeyboardShortcutCommand(HWND hWnd, Command cmd) {
+ 
+         case Command::ResetAll:
+             AppCommands::ResetWindowLayoutAndEffects(hWnd);
+-            g_overlayManager.PostCenterMessage(hWnd, L"Reset to Defaults");
++            g_overlayManager.PostCenterMessage(hWnd, Constants::Messages::RESET_TO_DEFAULTS);
+             break;
+ 
+         // -----------------------------------------------------------------------
+@@ -335,32 +336,32 @@ void InputManager::ExecuteKeyboardShortcutCommand(HWND hWnd, Command cmd) {
+             break;
+ 
+         case Command::ToggleGrayscale:
+-            app.ToggleEffectChronological(L"Grayscale");
++            app.ToggleEffectChronological(Constants::Strings::EFFECT_GRAYSCALE);
+             app.WakeUpAndApplyEffects(hWnd, app.effectGrayscale);
+             break;
+ 
+         case Command::ToggleInvert:
+-            app.ToggleEffectChronological(L"Invert");
++            app.ToggleEffectChronological(Constants::Strings::EFFECT_INVERT);
+             app.WakeUpAndApplyEffects(hWnd, app.effectInvert);
+             break;
+ 
+         case Command::ToggleSepia:
+-            app.ToggleEffectChronological(L"Sepia");
++            app.ToggleEffectChronological(Constants::Strings::EFFECT_SEPIA);
+             app.WakeUpAndApplyEffects(hWnd, app.effectSepia);
+             break;
+ 
+         case Command::ToggleSolarize:
+-            app.ToggleEffectChronological(L"Solarize");
++            app.ToggleEffectChronological(Constants::Strings::EFFECT_SOLARIZE);
+             app.WakeUpAndApplyEffects(hWnd, app.effectSolarize);
+             break;
+ 
+         case Command::ToggleOutline:
+-            app.ToggleEffectChronological(L"Outline");
++            app.ToggleEffectChronological(Constants::Strings::EFFECT_OUTLINE);
+             app.WakeUpAndApplyEffects(hWnd, app.effectOutline);
+             break;
+ 
+         case Command::ToggleThreshold:
+-            app.ToggleEffectChronological(L"Threshold");
++            app.ToggleEffectChronological(Constants::Strings::EFFECT_THRESHOLD);
+             app.WakeUpAndApplyEffects(hWnd, app.effectThreshold);
+             break;
+ 
+@@ -424,7 +425,7 @@ void InputManager::ExecuteKeyboardShortcutCommand(HWND hWnd, Command cmd) {
+             app.ResetEffects();
+             app.UpdateRendererColorEffects(hWnd);
+             g_overlayManager.UpdateEffects();
+-            g_overlayManager.PostCenterMessage(hWnd, L"All Effects Reset");
++            g_overlayManager.PostCenterMessage(hWnd, Constants::Messages::ALL_EFFECTS_RESET);
+             break;
+ 
+         case Command::SaveImage: {
+diff --git a/src/Overlays/OverlayManager.cpp b/src/Overlays/OverlayManager.cpp
+index 23de6ec..ce99a81 100644
+--- a/src/Overlays/OverlayManager.cpp
++++ b/src/Overlays/OverlayManager.cpp
+@@ -1,6 +1,7 @@
+ #include "OverlayManager.h"
+ #include "../AppState.h"
+ #include "../Platform/Constants.h"
++#include "../Platform/ConstantsStrings.h"
+ #include <algorithm>
+ #include <wrl/client.h>
+ 
+@@ -482,13 +483,13 @@ void OverlayManager::UpdateEffects() {
+     constexpr float EPS = 0.001f;
+ 
+     if (std::abs(app.brightness - 0.0f) > EPS)
+-        appendLine(L"Brightness: " + (app.brightness >= 0 ? std::wstring(L"+") : L"") + fmtFloat(app.brightness));
++        appendLine(Constants::Strings::LABEL_BRIGHTNESS + (app.brightness >= 0 ? std::wstring(Constants::Strings::SIGN_POSITIVE) : L"") + fmtFloat(app.brightness));
+     if (std::abs(app.contrast - 1.0f) > EPS)
+-        appendLine(L"Contrast: " + fmtFloat(app.contrast));
++        appendLine(Constants::Strings::LABEL_CONTRAST + fmtFloat(app.contrast));
+     if (std::abs(app.saturation - 1.0f) > EPS)
+-        appendLine(L"Saturation: " + fmtFloat(app.saturation));
++        appendLine(Constants::Strings::LABEL_SATURATION + fmtFloat(app.saturation));
+     if (std::abs(app.gamma - 1.0f) > EPS)
+-        appendLine(L"Gamma: " + fmtFloat(app.gamma));
++        appendLine(Constants::Strings::LABEL_GAMMA + fmtFloat(app.gamma));
+ 
+     for (const auto &effectName: app.activeEffectsList)
+         appendLine(effectName);
+diff --git a/src/Platform/ConstantsStrings.h b/src/Platform/ConstantsStrings.h
+index a204635..c339b22 100644
+--- a/src/Platform/ConstantsStrings.h
++++ b/src/Platform/ConstantsStrings.h
+@@ -1,6 +1,51 @@
+-//Made just for ease of management and internationalization.
+-// This file will contain all messages for the center center overlay !
+-namespace Constants::Messages {}
++#pragma once
+ 
+-//This will contain all strings other than messages for center center overlay because if app is internationalized i need to store the defaults
+-namespace Constants::Strings {}
++// ConstantsStrings.h
++// Central repository for all user-visible text used in QIV overlays.
++// Keep strings here so they have one place to change for localization.
++
++namespace Constants::Messages
++{
++    // ── MID_CENTER: state-change notifications ──────────────────────────────
++    // These are posted via PostCenterMessage and auto-hide after the timer.
++
++    // Overlay master toggle (N / I / Ctrl+0)
++    constexpr const wchar_t* INFO_PANELS_ON    = L"Info Panels: ON";
++    constexpr const wchar_t* INFO_PANELS_OFF   = L"Info Panels: OFF";
++
++    // Overlay background toggle (P)
++    constexpr const wchar_t* OVERLAY_BG_ON     = L"Overlay BG: ON";
++    constexpr const wchar_t* OVERLAY_BG_OFF    = L"Overlay BG: OFF";
++
++    // Overlay layout cycle (O)
++    constexpr const wchar_t* LAYOUT_GRID       = L"Layout: Grid";
++    constexpr const wchar_t* LAYOUT_STACKED    = L"Layout: Stacked";
++    constexpr const wchar_t* LAYOUT_SUMMARY    = L"Layout: Summary";
++
++    // Reset / effects
++    constexpr const wchar_t* RESET_TO_DEFAULTS = L"Reset to Defaults";
++    constexpr const wchar_t* ALL_EFFECTS_RESET  = L"All Effects Reset";
++}
++
++namespace Constants::Strings
++{
++    // ── BOT_LEFT slot: active color-effect labels ───────────────────────────
++    // Used in OverlayManager::UpdateEffects() via appendLine()
++
++    // Named colour effects (also fed to ToggleEffectChronological)
++    constexpr const wchar_t* EFFECT_GRAYSCALE   = L"Grayscale";
++    constexpr const wchar_t* EFFECT_INVERT      = L"Invert";
++    constexpr const wchar_t* EFFECT_SEPIA       = L"Sepia";
++    constexpr const wchar_t* EFFECT_SOLARIZE    = L"Solarize";
++    constexpr const wchar_t* EFFECT_OUTLINE     = L"Outline";
++    constexpr const wchar_t* EFFECT_THRESHOLD   = L"Threshold";
++
++    // Continuous-parameter labels (prefix before the numeric value)
++    constexpr const wchar_t* LABEL_BRIGHTNESS   = L"Brightness: ";
++    constexpr const wchar_t* LABEL_CONTRAST     = L"Contrast: ";
++    constexpr const wchar_t* LABEL_SATURATION   = L"Saturation: ";
++    constexpr const wchar_t* LABEL_GAMMA        = L"Gamma: ";
++
++    // Brightness sign prefix (positive values)
++    constexpr const wchar_t* SIGN_POSITIVE      = L"+";
++}
+-- 
+2.43.0
+
