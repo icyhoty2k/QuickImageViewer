@@ -97,6 +97,7 @@ LRESULT CALLBACK MainAppWndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM l
                 ShowWindow(hWnd, SW_RESTORE);
                 SetForegroundWindow(hWnd);
                 InvalidateRect(hWnd, nullptr, FALSE);
+                // dwData 2 is to show app if it was hidden when clicked the exe file
             } else if (cds->dwData == 2) {
                 ShowWindow(hWnd, SW_RESTORE);
                 SetForegroundWindow(hWnd);
@@ -267,7 +268,7 @@ LRESULT CALLBACK MainAppWndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM l
             SetLayeredWindowAttributes(hWnd, 0, app.opacity, LWA_ALPHA);
             return 0;
         }
-
+        //Restore App if it was in background , or start app if not running , or if clicking on mainapp toggle fullscreen
         case WM_LBUTTONDBLCLK: {
             SendMessageW(hWnd, WM_SETREDRAW, FALSE, 0);
 
@@ -351,7 +352,7 @@ LRESULT CALLBACK MainAppWndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM l
             return 1;
         case WM_TRAYICON: {
             if (lParam == WM_LBUTTONDBLCLK) {
-                // 1. Remove the tray icon and make the window visible
+                //  make the window visible
 
                 ShowWindow(hWnd, SW_SHOW);
                 ShowWindow(hWnd, SW_RESTORE);
@@ -465,7 +466,7 @@ int WINAPI wWinMain(HINSTANCE hInstance, [[maybe_unused]] HINSTANCE hPrevInstanc
                 cds.cbData = (DWORD) ((wcslen(argv[1]) + 1) * sizeof(wchar_t));
                 cds.lpData = (void *) argv[1];
             } else {
-                // Signal 2: Wake up only (no file passed)
+                // Signal 2: Wake up only (no file passed) this message is send to wake app bring to front from background
                 cds.dwData = 2;
                 cds.cbData = 0;
                 cds.lpData = nullptr;
