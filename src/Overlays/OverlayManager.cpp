@@ -29,11 +29,10 @@ static constexpr float BG_PADDING = 3.0f;
 // ─────────────────────────────────────────────────────────────────────────────
 
 void OverlayManager::Init(IDWriteFactory3 *dwriteFactory,
-                          IDWriteTextFormat *textFormat,
                           ID2D1SolidColorBrush *textBrush,
                           ID2D1DeviceContext *ctx) {
     m_pDWriteFactory = dwriteFactory;
-    m_pTextFormat = textFormat;
+
     m_pTextBrush = textBrush;
 
     auto wire = [&](Slot s, TextOverlay *ov, bool defaultVisible) {
@@ -43,8 +42,8 @@ void OverlayManager::Init(IDWriteFactory3 *dwriteFactory,
     };
 
     wire(TOP_LEFT, &slotTopLeft, true);
-    wire(TOP_CENTER, &slotTopCenter, true); // zoom
-    wire(TOP_RIGHT, &slotTopRight, true); // unused — available
+    wire(TOP_CENTER, &slotTopCenter, true); // unused — available
+    wire(TOP_RIGHT, &slotTopRight, true); // zoom
     wire(MID_LEFT, &slotMidLeft, true);
     wire(MID_CENTER, &slotMidCenter, true); // center-center message queue
     wire(MID_RIGHT, &slotMidRight, true);
@@ -61,17 +60,84 @@ void OverlayManager::Init(IDWriteFactory3 *dwriteFactory,
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
+//  Init text Size and brush color
+// ─────────────────────────────────────────────────────────────────────────────
+void OverlayManager::UpdateTextFormat() {
+    if (!m_pDWriteFactory) return;
+
+    // -------------------------------------------------------------------------
+    // 1. Create Base Font (for the 8 outer slots)
+    // -------------------------------------------------------------------------
+    float scaledFontSize = Constants::Overlay::MSG_ALL_BUT_CENTER_FONT_SIZE * app.dpiScale;
+
+    if (m_pTextFormat) {
+        m_pTextFormat->Release();
+        m_pTextFormat = nullptr;
+    }
+
+    HRESULT hr = m_pDWriteFactory->CreateTextFormat(
+            L"Segoe UI", nullptr,
+            DWRITE_FONT_WEIGHT_NORMAL, DWRITE_FONT_STYLE_NORMAL, DWRITE_FONT_STRETCH_NORMAL,
+            scaledFontSize, L"en-us", &m_pTextFormat);
+
+    if (FAILED(hr)) {
+        (void) m_pDWriteFactory->CreateTextFormat(
+                L"Arial", nullptr,
+                DWRITE_FONT_WEIGHT_NORMAL, DWRITE_FONT_STYLE_NORMAL, DWRITE_FONT_STRETCH_NORMAL,
+                scaledFontSize, L"en-us", &m_pTextFormat);
+    }
+
+    // -------------------------------------------------------------------------
+    // 2. Create Center Message Font (Totally Independent)
+    // -------------------------------------------------------------------------
+    float centerSize = Constants::Overlay::MSG_CENTER_FONT_SIZE * app.dpiScale;
+    m_fmtCenter5.Reset();
+
+    // You can now independently change "Segoe UI" to any other font family,
+    // or change the weight (e.g., DWRITE_FONT_WEIGHT_BOLD) for just the center text.
+    HRESULT hrCenter = m_pDWriteFactory->CreateTextFormat(
+            L"Segoe UI", nullptr,
+            DWRITE_FONT_WEIGHT_BOLD, DWRITE_FONT_STYLE_NORMAL, DWRITE_FONT_STRETCH_NORMAL,
+            centerSize, L"en-us", &m_fmtCenter5);
+
+    if (SUCCEEDED(hrCenter)) {
+        // Set the required center alignments directly on this specific format
+        m_fmtCenter5->SetTextAlignment(DWRITE_TEXT_ALIGNMENT_CENTER);
+        m_fmtCenter5->SetParagraphAlignment(DWRITE_PARAGRAPH_ALIGNMENT_CENTER);
+        m_fmtCenter5->SetWordWrapping(DWRITE_WORD_WRAPPING_NO_WRAP);
+    }
+
+    // -------------------------------------------------------------------------
+    // 3. Rebuild the outer slot layouts
+    // -------------------------------------------------------------------------
+    BuildSlotFormats();
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+//  Build center-center brush (independent colour)
+// ─────────────────────────────────────────────────────────────────────────────
+
+void OverlayManager::BuildCenterBrush(ID2D1DeviceContext *ctx) {
+    if (!ctx) return;
+    m_pCenterBrush.Reset();
+    D2D1_COLOR_F color = D2D1::ColorF(
+            Constants::Overlay::MSG_CENTER_COLOR_R,
+            Constants::Overlay::MSG_CENTER_COLOR_G,
+            Constants::Overlay::MSG_CENTER_COLOR_B,
+            Constants::Overlay::MSG_CENTER_COLOR_A);
+    ctx->CreateSolidColorBrush(color, &m_pCenterBrush);
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 //  Build per-column IDWriteTextFormat objects
 // ─────────────────────────────────────────────────────────────────────────────
 
 void OverlayManager::BuildSlotFormats() {
     if (!m_pDWriteFactory || !m_pTextFormat) return;
-
     // --- Read parameters from base format ---
     const UINT32 famLen = m_pTextFormat->GetFontFamilyNameLength() + 1;
     std::wstring famName(famLen, L'\0');
     m_pTextFormat->GetFontFamilyName(&famName[0], famLen);
-
     const float fontSize = m_pTextFormat->GetFontSize();
     const auto weight = m_pTextFormat->GetFontWeight();
     const auto style = m_pTextFormat->GetFontStyle();
@@ -98,9 +164,7 @@ void OverlayManager::BuildSlotFormats() {
             *ppOut = fmt.Detach();
         }
     };
-
     IDWriteTextFormat *raw = nullptr;
-
     // Normal rows (top/mid — paragraph NEAR)
     makeFormat(&raw, DWRITE_TEXT_ALIGNMENT_LEADING, DWRITE_PARAGRAPH_ALIGNMENT_NEAR);
     m_fmtLeft.Attach(raw);
@@ -123,18 +187,15 @@ void OverlayManager::BuildSlotFormats() {
     m_fmtBotRight.Attach(raw);
     raw = nullptr;
 
-    // Center-center (MID_CENTER) — independent font size, always centered
-    makeFormat(&raw, DWRITE_TEXT_ALIGNMENT_CENTER, DWRITE_PARAGRAPH_ALIGNMENT_CENTER,
-               Constants::MSG_CENTER_FONT_SIZE);
-    m_fmtCenter5.Attach(raw);
-    raw = nullptr;
-
     // --- Assign to slots ---
     m_slots[TOP_LEFT].fmt = m_fmtLeft.Get();
     m_slots[TOP_CENTER].fmt = m_fmtCenter.Get();
     m_slots[TOP_RIGHT].fmt = m_fmtTrailing.Get();
     m_slots[MID_LEFT].fmt = m_fmtLeft.Get();
-    m_slots[MID_CENTER].fmt = m_fmtCenter5.Get(); // special
+
+    // Wire up the independent center format
+    m_slots[MID_CENTER].fmt = m_fmtCenter5.Get();
+
     m_slots[MID_RIGHT].fmt = m_fmtTrailing.Get();
     m_slots[BOT_LEFT].fmt = m_fmtBotLeft.Get();
     m_slots[BOT_CENTER].fmt = m_fmtBotCenter.Get();
@@ -143,20 +204,6 @@ void OverlayManager::BuildSlotFormats() {
     InvalidateLayouts();
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-//  Build center-center brush (independent colour)
-// ─────────────────────────────────────────────────────────────────────────────
-
-void OverlayManager::BuildCenterBrush(ID2D1DeviceContext *ctx) {
-    if (!ctx) return;
-    m_pCenterBrush.Reset();
-    D2D1_COLOR_F color = D2D1::ColorF(
-            Constants::MSG_CENTER_COLOR_R,
-            Constants::MSG_CENTER_COLOR_G,
-            Constants::MSG_CENTER_COLOR_B,
-            Constants::MSG_CENTER_COLOR_A);
-    ctx->CreateSolidColorBrush(color, &m_pCenterBrush);
-}
 
 // ─────────────────────────────────────────────────────────────────────────────
 //  Resize
@@ -176,10 +223,10 @@ void OverlayManager::RecomputeRects() {
     // MID_CENTER is always screen-centered regardless of layout mode
     auto placeMidCenter = [&]() {
         slotMidCenter.UpdateRect(D2D1::RectF(
-            (W - Constants::MSG_CENTER_WIDTH)  * 0.5f,
-            (H - Constants::MSG_CENTER_HEIGHT) * 0.5f,
-            (W + Constants::MSG_CENTER_WIDTH)  * 0.5f,
-            (H + Constants::MSG_CENTER_HEIGHT) * 0.5f));
+                (W - Constants::Overlay::MSG_CENTER_WIDTH) * 0.5f,
+                (H - Constants::Overlay::MSG_CENTER_HEIGHT) * 0.5f,
+                (W + Constants::Overlay::MSG_CENTER_WIDTH) * 0.5f,
+                (H + Constants::Overlay::MSG_CENTER_HEIGHT) * 0.5f));
     };
 
     // ── Mode 1: all slots stacked vertically on top-left ─────────────────────
@@ -188,20 +235,26 @@ void OverlayManager::RecomputeRects() {
         // Order: TOP_LEFT, TOP_CENTER, TOP_RIGHT, MID_LEFT, MID_RIGHT,
         //        BOT_RIGHT, BOT_CENTER, BOT_LEFT(effects last)
         // All slots use COL_LEFT_WIDTH and LEADING alignment when stacked.
-        struct StackEntry { Slot slot; TextOverlay *ov; };
-        const StackEntry entries[] = {
-            { TOP_LEFT,   &slotTopLeft   },
-            { TOP_CENTER, &slotTopCenter },
-            { TOP_RIGHT,  &slotTopRight  },
-            { MID_LEFT,   &slotMidLeft   },
-            { MID_RIGHT,  &slotMidRight  },
-            { BOT_RIGHT,  &slotBotRight  },
-            { BOT_CENTER, &slotBotCenter },
-            { BOT_LEFT,   &slotBotLeft   },  // effects last
+        struct StackEntry {
+            Slot slot;
+            TextOverlay *ov;
         };
-        for (const auto &e : entries) {
-            float rowH = (e.slot == BOT_LEFT) ? ROW_EFFECTS
-                       : m_slots[e.slot].compact ? ROW_SINGLE : ROW_DOUBLE;
+        const StackEntry entries[] = {
+            {TOP_LEFT, &slotTopLeft},
+            {TOP_CENTER, &slotTopCenter},
+            {TOP_RIGHT, &slotTopRight},
+            {MID_LEFT, &slotMidLeft},
+            {MID_RIGHT, &slotMidRight},
+            {BOT_RIGHT, &slotBotRight},
+            {BOT_CENTER, &slotBotCenter},
+            {BOT_LEFT, &slotBotLeft}, // effects last
+        };
+        for (const auto &e: entries) {
+            float rowH = (e.slot == BOT_LEFT)
+                             ? ROW_EFFECTS
+                             : m_slots[e.slot].compact
+                                   ? ROW_SINGLE
+                                   : ROW_DOUBLE;
             e.ov->UpdateRect(D2D1::RectF(M, cursorY, M + COL_LEFT_WIDTH, cursorY + rowH));
             // Force leading alignment so all stacked text is left-aligned
             m_slots[e.slot].fmt = (e.slot == BOT_LEFT) ? m_fmtBotLeft.Get() : m_fmtLeft.Get();
@@ -260,10 +313,10 @@ void OverlayManager::RecomputeRects() {
 
     // [5] MID_CENTER — center-center message, always single line, centered in screen
     slotMidCenter.UpdateRect(D2D1::RectF(
-            (W - Constants::MSG_CENTER_WIDTH) * 0.5f,
-            (H - Constants::MSG_CENTER_HEIGHT) * 0.5f,
-            (W + Constants::MSG_CENTER_WIDTH) * 0.5f,
-            (H + Constants::MSG_CENTER_HEIGHT) * 0.5f));
+            (W - Constants::Overlay::MSG_CENTER_WIDTH) * 0.5f,
+            (H - Constants::Overlay::MSG_CENTER_HEIGHT) * 0.5f,
+            (W + Constants::Overlay::MSG_CENTER_WIDTH) * 0.5f,
+            (H + Constants::Overlay::MSG_CENTER_HEIGHT) * 0.5f));
 
     // [6] MID_RIGHT
     {
@@ -332,25 +385,25 @@ void OverlayManager::OnLayoutModeChanged(HWND /*hWnd*/) {
     if (Constants::Overlay::OVERLAY_LAYOUT_MODE == 2) {
         RebuildSummaryLine2();
         // Activate the two visible slots; deactivate the rest
-        slotTopLeft.active  = m_masterVisible;
+        slotTopLeft.active = m_masterVisible;
         slotTopCenter.active = m_masterVisible;
-        slotTopRight.active  = false;
-        slotMidLeft.active   = false;
-        slotMidRight.active  = false;
-        slotBotLeft.active   = false;
+        slotTopRight.active = false;
+        slotMidLeft.active = false;
+        slotMidRight.active = false;
+        slotBotLeft.active = false;
         slotBotCenter.active = false;
-        slotBotRight.active  = false;
+        slotBotRight.active = false;
     } else {
         // Restore fmt assignments (mode 1 overrides them to LEADING for all slots)
-        m_slots[TOP_LEFT].fmt   = m_fmtLeft.Get();
+        m_slots[TOP_LEFT].fmt = m_fmtLeft.Get();
         m_slots[TOP_CENTER].fmt = m_fmtCenter.Get();
-        m_slots[TOP_RIGHT].fmt  = m_fmtTrailing.Get();
-        m_slots[MID_LEFT].fmt   = m_fmtLeft.Get();
+        m_slots[TOP_RIGHT].fmt = m_fmtTrailing.Get();
+        m_slots[MID_LEFT].fmt = m_fmtLeft.Get();
         m_slots[MID_CENTER].fmt = m_fmtCenter5.Get();
-        m_slots[MID_RIGHT].fmt  = m_fmtTrailing.Get();
-        m_slots[BOT_LEFT].fmt   = m_fmtBotLeft.Get();
+        m_slots[MID_RIGHT].fmt = m_fmtTrailing.Get();
+        m_slots[BOT_LEFT].fmt = m_fmtBotLeft.Get();
         m_slots[BOT_CENTER].fmt = m_fmtBotCenter.Get();
-        m_slots[BOT_RIGHT].fmt  = m_fmtBotRight.Get();
+        m_slots[BOT_RIGHT].fmt = m_fmtBotRight.Get();
         // Clear the summary text that mode 2 wrote into slotTopCenter
         slotTopCenter.UpdateText(L"");
         // Restore active state from master + per-slot visibility
@@ -453,7 +506,7 @@ void OverlayManager::PostCenterMessage(HWND hWnd, const std::wstring &msg) {
 
     // Reset (or start) the auto-hide timer on the main window
     KillTimer(hWnd, TIMER_CENTER_MSG);
-    SetTimer(hWnd, TIMER_CENTER_MSG, Constants::MSG_CENTER_DISPLAY_MS, nullptr);
+    SetTimer(hWnd, TIMER_CENTER_MSG, Constants::Overlay::MSG_CENTER_DISPLAY_MS, nullptr);
     m_centerMsgActive = true;
 
     InvalidateRect(hWnd, nullptr, FALSE);
@@ -608,10 +661,10 @@ void OverlayManager::RenderAll(ID2D1DeviceContext *ctx) const {
 
             // Draw text in center-center color
             m_pCenterBrush->SetColor(D2D1::ColorF(
-                    Constants::MSG_CENTER_COLOR_R,
-                    Constants::MSG_CENTER_COLOR_G,
-                    Constants::MSG_CENTER_COLOR_B,
-                    Constants::MSG_CENTER_COLOR_A));
+                    Constants::Overlay::MSG_CENTER_COLOR_R,
+                    Constants::Overlay::MSG_CENTER_COLOR_G,
+                    Constants::Overlay::MSG_CENTER_COLOR_B,
+                    Constants::Overlay::MSG_CENTER_COLOR_A));
             ctx->DrawTextLayout(
                     D2D1::Point2F(slotRect.left, slotRect.top),
                     layout,

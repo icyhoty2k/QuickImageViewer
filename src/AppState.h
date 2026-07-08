@@ -36,7 +36,7 @@ struct AppState {
     Constants::ViewModes::ViewMode viewMode = Constants::ViewModes::defaultViewMode;
     float dpiScale = 1.0f;
     bool isRmbDown = false;
-    bool showOverlayInfoText = Constants::DEFAULT_SHOW_OVERLAY;
+    bool showOverlayInfoText = Constants::Overlay::DEFAULT_SHOW_OVERLAY;
     BYTE opacity = 255;
     float saturation = Constants::DEFAULT_SATURATION;
     float brightness = Constants::DEFAULT_BRIGHTNESS;
