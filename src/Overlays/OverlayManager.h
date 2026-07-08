@@ -157,7 +157,7 @@ class OverlayManager {
         struct SlotMeta {
             TextOverlay *overlay = nullptr;
             bool visible = false;
-            bool compact = Constants::Overlay::COMPACT_OVERLAY_MODE; // true → 1-line, false → 2-line
+            bool compact = Constants::Overlay::IS_COMPACT_OVERLAY_MODE; // true → 1-line, false → 2-line
             IDWriteTextFormat *fmt = nullptr;
         };
 

@@ -38,7 +38,7 @@ void OverlayManager::Init(IDWriteFactory3 *dwriteFactory,
     auto wire = [&](Slot s, TextOverlay *ov, bool defaultVisible) {
         m_slots[s].overlay = ov;
         m_slots[s].visible = defaultVisible;
-        m_slots[s].compact = Constants::Overlay::COMPACT_OVERLAY_MODE;
+        m_slots[s].compact = Constants::Overlay::IS_COMPACT_OVERLAY_MODE;
     };
 
     wire(TOP_LEFT, &slotTopLeft, true);
@@ -48,7 +48,7 @@ void OverlayManager::Init(IDWriteFactory3 *dwriteFactory,
     wire(MID_CENTER, &slotMidCenter, true); // center-center message queue
     wire(MID_RIGHT, &slotMidRight, true);
     wire(BOT_LEFT, &slotBotLeft, true); // effects
-    wire(BOT_CENTER, &slotBotCenter, true);
+    wire(BOT_CENTER, &slotBotCenter, false);
     wire(BOT_RIGHT, &slotBotRight, true); // dims / size
 
     // MID_CENTER is never shown until a message is posted
