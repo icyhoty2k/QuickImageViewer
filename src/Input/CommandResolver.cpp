@@ -114,6 +114,14 @@ Command InputManager::ResolveKeyboardKeys(UINT key) {
             if (!ctrl) return Command::ToggleOverlay;
             break;
 
+        case Shortcuts::SC_OVERLAY_LAYOUT_CYCLE: // O
+            if (!ctrl && !alt && !shift) return Command::CycleOverlayLayout;
+            break;
+
+        case Shortcuts::SC_OVERLAY_BG_TOGGLE: // P
+            if (!ctrl && !alt && !shift) return Command::ToggleOverlayBackground;
+            break;
+
         // --- App control ---
         case Shortcuts::SC_APP_HIDE: return Command::HideToTray;
 

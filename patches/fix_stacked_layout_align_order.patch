@@ -1,0 +1,72 @@
+From 2ea61a5dc76c1d5e8d37ccf1f16f0f62591a670b Mon Sep 17 00:00:00 2001
+From: Ivan Hristov Yanev <icyhoty2k@gmail.com>
+Date: Wed, 8 Jul 2026 12:15:15 +0000
+Subject: [PATCH] Fix stacked layout: left-align all slots, correct order,
+ effects last, restore fmt on exit
+
+---
+ src/Overlays/OverlayManager.cpp | 37 +++++++++++++++++++++++----------
+ 1 file changed, 26 insertions(+), 11 deletions(-)
+
+diff --git a/src/Overlays/OverlayManager.cpp b/src/Overlays/OverlayManager.cpp
+index b7d114c..0ff3d74 100644
+--- a/src/Overlays/OverlayManager.cpp
++++ b/src/Overlays/OverlayManager.cpp
+@@ -185,21 +185,26 @@ void OverlayManager::RecomputeRects() {
+     // ── Mode 1: all slots stacked vertically on top-left ─────────────────────
+     if (Constants::Overlay::OVERLAY_LAYOUT_MODE == 1) {
+         float cursorY = M;
+-        struct StackEntry { Slot slot; TextOverlay *ov; float colW; bool isEffects; };
++        // Order: TOP_LEFT, TOP_CENTER, TOP_RIGHT, MID_LEFT, MID_RIGHT,
++        //        BOT_RIGHT, BOT_CENTER, BOT_LEFT(effects last)
++        // All slots use COL_LEFT_WIDTH and LEADING alignment when stacked.
++        struct StackEntry { Slot slot; TextOverlay *ov; };
+         const StackEntry entries[] = {
+-            { TOP_LEFT,   &slotTopLeft,   COL_LEFT_WIDTH,   false },
+-            { TOP_CENTER, &slotTopCenter, COL_CENTER_WIDTH, false },
+-            { TOP_RIGHT,  &slotTopRight,  COL_RIGHT_WIDTH,  false },
+-            { MID_LEFT,   &slotMidLeft,   COL_LEFT_WIDTH,   false },
+-            { MID_RIGHT,  &slotMidRight,  COL_RIGHT_WIDTH,  false },
+-            { BOT_LEFT,   &slotBotLeft,   COL_LEFT_WIDTH,   true  },
+-            { BOT_CENTER, &slotBotCenter, COL_CENTER_WIDTH, false },
+-            { BOT_RIGHT,  &slotBotRight,  COL_RIGHT_WIDTH,  false },
++            { TOP_LEFT,   &slotTopLeft   },
++            { TOP_CENTER, &slotTopCenter },
++            { TOP_RIGHT,  &slotTopRight  },
++            { MID_LEFT,   &slotMidLeft   },
++            { MID_RIGHT,  &slotMidRight  },
++            { BOT_RIGHT,  &slotBotRight  },
++            { BOT_CENTER, &slotBotCenter },
++            { BOT_LEFT,   &slotBotLeft   },  // effects last
+         };
+         for (const auto &e : entries) {
+-            float rowH = e.isEffects ? ROW_EFFECTS
++            float rowH = (e.slot == BOT_LEFT) ? ROW_EFFECTS
+                        : m_slots[e.slot].compact ? ROW_SINGLE : ROW_DOUBLE;
+-            e.ov->UpdateRect(D2D1::RectF(M, cursorY, M + e.colW, cursorY + rowH));
++            e.ov->UpdateRect(D2D1::RectF(M, cursorY, M + COL_LEFT_WIDTH, cursorY + rowH));
++            // Force leading alignment so all stacked text is left-aligned
++            m_slots[e.slot].fmt = (e.slot == BOT_LEFT) ? m_fmtBotLeft.Get() : m_fmtLeft.Get();
+             cursorY += rowH + M;
+         }
+         placeMidCenter();
+@@ -336,6 +341,16 @@ void OverlayManager::OnLayoutModeChanged(HWND /*hWnd*/) {
+         slotBotCenter.active = false;
+         slotBotRight.active  = false;
+     } else {
++        // Restore fmt assignments (mode 1 overrides them to LEADING for all slots)
++        m_slots[TOP_LEFT].fmt   = m_fmtLeft.Get();
++        m_slots[TOP_CENTER].fmt = m_fmtCenter.Get();
++        m_slots[TOP_RIGHT].fmt  = m_fmtTrailing.Get();
++        m_slots[MID_LEFT].fmt   = m_fmtLeft.Get();
++        m_slots[MID_CENTER].fmt = m_fmtCenter5.Get();
++        m_slots[MID_RIGHT].fmt  = m_fmtTrailing.Get();
++        m_slots[BOT_LEFT].fmt   = m_fmtBotLeft.Get();
++        m_slots[BOT_CENTER].fmt = m_fmtBotCenter.Get();
++        m_slots[BOT_RIGHT].fmt  = m_fmtBotRight.Get();
+         // Clear the summary text that mode 2 wrote into slotTopCenter
+         slotTopCenter.UpdateText(L"");
+         // Restore active state from master + per-slot visibility
+-- 
+2.43.0
+

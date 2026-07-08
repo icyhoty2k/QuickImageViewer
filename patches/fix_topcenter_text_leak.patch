@@ -1,0 +1,26 @@
+From 72e66a945f8cc40b8cad091adb4b3e59b5b6e920 Mon Sep 17 00:00:00 2001
+From: Ivan Hristov Yanev <icyhoty2k@gmail.com>
+Date: Wed, 8 Jul 2026 12:10:11 +0000
+Subject: [PATCH] Fix slotTopCenter text leak when cycling back to mode 0 from
+ mode 2
+
+---
+ src/Overlays/OverlayManager.cpp | 2 ++
+ 1 file changed, 2 insertions(+)
+
+diff --git a/src/Overlays/OverlayManager.cpp b/src/Overlays/OverlayManager.cpp
+index bfc04bc..b7d114c 100644
+--- a/src/Overlays/OverlayManager.cpp
++++ b/src/Overlays/OverlayManager.cpp
+@@ -336,6 +336,8 @@ void OverlayManager::OnLayoutModeChanged(HWND /*hWnd*/) {
+         slotBotCenter.active = false;
+         slotBotRight.active  = false;
+     } else {
++        // Clear the summary text that mode 2 wrote into slotTopCenter
++        slotTopCenter.UpdateText(L"");
+         // Restore active state from master + per-slot visibility
+         for (int i = 0; i < SLOT_COUNT; ++i) {
+             if (i == MID_CENTER) continue;
+-- 
+2.43.0
+
