@@ -10,7 +10,7 @@ namespace Constants {
     constexpr const wchar_t *APP_HELP_FOOTER = L"Copyright® 06.2026 All rights reserved";
     constexpr const wchar_t *APP_TASKBAR_NAME = L"QIV";
     constexpr const wchar_t *APP_VERSION = L"1.0.0"; // major.minor.patch
-    //Saveable options
+
     static constexpr float ZOOM_STEP = 1.1f; // +/- keys and ctrl+wheel
 
     constexpr float COLOR_ADJUST_STEP = 0.1f; // step for brightness contrast and saturation
@@ -116,13 +116,10 @@ namespace Constants {
 
         // Base path for application-specific user preferences (HKEY_CURRENT_USER)
         constexpr const wchar_t *ROOT_KEY = L"Software\\QuickImageViewer";
-
-        // --- Settings (Stored under ROOT_KEY) ---
-        // Boolean flag to show/hide the on-screen information text overlay
-        constexpr const wchar_t *OVERLAY_ENABLED = L"ShowOverlay";
         // Path string to the last directory accessed by the user
         constexpr const wchar_t *LAST_FOLDER = L"LastFolder";
-
+        
+        // --- Settings (Stored under ROOT_KEY) ---
         // --- System Integration (Open With & Startup) ---
         // Registry path to define the shell command for opening associated files
         constexpr const wchar_t *OPEN_WITH_COMMAND = L"Software\\Classes\\Applications\\QuickImageViewer.exe\\shell\\open\\command";
