@@ -157,7 +157,7 @@ namespace Constants {
 
     namespace Overlay {
         constexpr bool DEFAULT_SHOW_OVERLAY = true;
-        constexpr const bool COMPACT_OVERLAY_MODE = true; // true → 1-line, false → 2-line
+        constexpr const bool IS_COMPACT_OVERLAY_MODE = true; // true → 1-line, false → 2-line
         // P key — toggle semi-transparent background behind all overlay text.
         // Text is always drawn; only the background rect is suppressed when false.
         inline bool OVERLAY_SHOW_BACKGROUND = true;
