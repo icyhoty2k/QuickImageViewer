@@ -15,6 +15,7 @@ void MouseHandler::HandleButtonDown(HWND hWnd, UINT message, LPARAM lParam) {
     // Track RMB state
     if (message == WM_RBUTTONDOWN) {
         app.isRmbDown = true;
+        SetCursor(LoadCursor(nullptr, MAKEINTRESOURCEW(Constants::Cursors::RMB_DOWN)));
     }
 
     // New logic: If RMB is down and we receive a Left Click
@@ -49,7 +50,6 @@ void MouseHandler::HandleButtonDown(HWND hWnd, UINT message, LPARAM lParam) {
         SetCapture(hWnd);
     } else if (IsViewControlAction(message)) {
         if (app.viewport.isDragging) return;
-        SetCursor(NULL);
 
         POINT pt = {GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam)};
         RECT rc;
@@ -94,6 +94,10 @@ void MouseHandler::HandleButtonDown(HWND hWnd, UINT message, LPARAM lParam) {
         // click-zoom and go straight to pan mode.
         bool imageOverflows = (renderW > winW + 0.5f) || (renderH > winH + 0.5f);
 
+        // Show the appropriate cursor so the user knows what LMB will do.
+        WORD cursorId = imageOverflows ? Constants::Cursors::LMB_PAN : Constants::Cursors::LMB_ZOOM;
+        SetCursor(LoadCursor(nullptr, MAKEINTRESOURCEW(cursorId)));
+
         // Save state so ButtonUp can restore if we zoomed.
         app.savedZoom    = app.viewport.zoom;
         app.savedOffsetX = app.viewport.offsetX;
@@ -132,6 +136,7 @@ void MouseHandler::HandleButtonDown(HWND hWnd, UINT message, LPARAM lParam) {
 void MouseHandler::HandleButtonUp(HWND hWnd, UINT message, LPARAM /*lParam*/) {
     if (message == WM_RBUTTONUP) {
         app.isRmbDown = false;
+        SetCursor(LoadCursor(nullptr, MAKEINTRESOURCEW(Constants::Cursors::DEFAULT)));
     }
     if (message == WM_MBUTTONUP) {
         if (!app.hasMidMoved) {
@@ -174,7 +179,7 @@ void MouseHandler::HandleButtonUp(HWND hWnd, UINT message, LPARAM /*lParam*/) {
         app.isWindowDragging = false;
         ReleaseCapture();
     } else if (IsViewControlAction(message)) {
-        SetCursor(LoadCursor(nullptr, IDC_ARROW));
+        SetCursor(LoadCursor(nullptr, MAKEINTRESOURCEW(Constants::Cursors::DEFAULT)));
 
         // Only restore zoom/offset if we applied the click-zoom on press.
         // If the image was already overflowing and we only panned, keep
@@ -209,6 +214,10 @@ void MouseHandler::HandleMouseMove(HWND hWnd, LPARAM lParam) {
         app.lastMidMouse = curMouse;
         InvalidateRect(hWnd, nullptr, FALSE);
     } else if (app.viewport.isDragging) {
+        // Keep the appropriate cursor during drag (Windows resets it on every move).
+        WORD cursorId = app.lmbDidZoom ? Constants::Cursors::LMB_ZOOM : Constants::Cursors::LMB_PAN;
+        SetCursor(LoadCursor(nullptr, MAKEINTRESOURCEW(cursorId)));
+
         POINT curMouse = {GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam)};
 
         float dx = (float) (app.viewport.lastMouse.x - curMouse.x);

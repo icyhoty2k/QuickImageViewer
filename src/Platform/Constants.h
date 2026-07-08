@@ -196,4 +196,18 @@ namespace Constants {
         // Custom window messages
         constexpr UINT WM_QIV_CENTER_MSG_HIDE = WM_USER + 10; // Posted by WM_TIMER to hide center msg
     }
+
+    // =========================================================================
+    // Cursors — LMB mode indicators
+    // =========================================================================
+    // Change these IDC_ values to swap the cursor for each mode.
+    // Values are the raw resource IDs (WORD) behind the IDC_ macros.
+    // Use as: LoadCursor(nullptr, MAKEINTRESOURCEW(Constants::Cursors::LMB_ZOOM))
+    // Change these to any other OCR_* value to swap the cursor for each mode.
+    namespace Cursors {
+        constexpr WORD LMB_ZOOM = 32515; // IDC_CROSS  — LMB will 3x zoom
+        constexpr WORD LMB_PAN = 32649; // IDC_HAND   — LMB will pan
+        constexpr WORD RMB_DOWN = 32512; // IDC_ARROW  — RMB is held
+        constexpr WORD DEFAULT = 32512; // IDC_ARROW  — restored after action
+    }
 }
