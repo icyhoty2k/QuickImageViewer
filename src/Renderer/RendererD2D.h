@@ -6,7 +6,6 @@
 #include <d2d1_3.h>
 #include <d2d1svg.h>
 #include <dwrite_3.h>
-#include <functional>
 #include <wrl/client.h>
 #include <list>
 #include <unordered_map>
@@ -15,6 +14,7 @@
 #include <vector>
 
 #include "Thumbnail.h"
+#include "WorkerThread.h"
 
 class RendererD2D final : public IImageRenderer {
     public:
@@ -201,3 +201,8 @@ class RendererD2D final : public IImageRenderer {
         // Returns the final ID2D1Image* ready to be scaled/drawn or captured.
         ID2D1Effect *BuildEffectChain(ID2D1Image *source);
 };
+
+// Declare the globals so all files see them
+extern DecoderThreadPool g_decoderWorker;
+extern IoThreadPool g_ioWorker;
+extern DecoderThreadPool g_dirThumbWorker;

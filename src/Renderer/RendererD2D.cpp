@@ -18,10 +18,6 @@
 #pragma comment(lib, "dwrite.lib")
 #pragma comment(lib, "dxguid.lib")
 
-extern WorkerThread g_decoderWorker;
-extern IoThreadPool g_ioWorker;
-extern WorkerThread g_dirThumbWorker;
-
 // =============================================================================
 //  Initialize
 // =============================================================================
@@ -34,7 +30,7 @@ HRESULT RendererD2D::Initialize(HWND hwnd) {
 #ifdef _DEBUG
         opts.debugLevel = D2D1_DEBUG_LEVEL_INFORMATION;
 #endif
-        HRESULT hr = D2D1CreateFactory(D2D1_FACTORY_TYPE_SINGLE_THREADED,
+        HRESULT hr = D2D1CreateFactory(D2D1_FACTORY_TYPE_MULTI_THREADED,
                                        __uuidof(ID2D1Factory7),
                                        &opts,
                                        reinterpret_cast<void **>(m_pD2DFactory.GetAddressOf()));
@@ -519,14 +515,11 @@ HRESULT RendererD2D::PreloadBitmap(const std::wstring &filePath, int requestInde
     if (m_bitmapCache.find(filePath) != m_bitmapCache.end()) {
         return S_OK;
     }
-    Microsoft::WRL::ComPtr<IWICImagingFactory2> wicFac = g_decoderWorker.wicFactory;
-    if (!wicFac || !m_pD2DDevice) return E_UNEXPECTED;
 
-    // Capture m_pD2DDevice only — each worker creates its own DeviceContext.
-    // ID2D1Device::CreateDeviceContext is thread-safe; no shared context needed.
+    // Capture device context as a pointer for the task (D2D device contexts are thread-safe)
     Microsoft::WRL::ComPtr<ID2D1Device6> d2dDevice = m_pD2DDevice;
 
-    g_ioWorker.PushTask([filePath, requestIndex, wicFac, d2dDevice, this]() {
+    g_ioWorker.PushTask([filePath, requestIndex, d2dDevice, this]() {
         if (app.wantedIndex.load(std::memory_order_acquire) != requestIndex) return;
 
         HANDLE hFile = CreateFileW(filePath.c_str(), GENERIC_READ, FILE_SHARE_READ, NULL, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, NULL);
@@ -546,7 +539,8 @@ HRESULT RendererD2D::PreloadBitmap(const std::wstring &filePath, int requestInde
         }
         CloseHandle(hFile);
 
-        g_decoderWorker.PushTask([compressedBytes = std::move(compressedBytes), filePath, requestIndex, wicFac, d2dDevice, this]() mutable {
+        // Pass the factory as a parameter to the lambda (injected by the thread pool)
+        g_decoderWorker.PushTask([compressedBytes = std::move(compressedBytes), filePath, requestIndex, d2dDevice, this](IWICImagingFactory2 *wicFac) mutable {
             if (app.wantedIndex.load(std::memory_order_acquire) != requestIndex) return;
 
             Microsoft::WRL::ComPtr<IWICStream> wicStream;
@@ -554,7 +548,6 @@ HRESULT RendererD2D::PreloadBitmap(const std::wstring &filePath, int requestInde
             if (FAILED(wicStream->InitializeFromMemory(compressedBytes.data(), static_cast<DWORD>(compressedBytes.size())))) return;
 
             Microsoft::WRL::ComPtr<IWICBitmapDecoder> decoder;
-            // WICDecodeMetadataCacheOnDemand: don't pre-load metadata we never read
             if (FAILED(wicFac->CreateDecoderFromStream(wicStream.Get(), nullptr, WICDecodeMetadataCacheOnDemand, &decoder))) return;
 
             Microsoft::WRL::ComPtr<IWICBitmapFrameDecode> frame;
@@ -563,13 +556,8 @@ HRESULT RendererD2D::PreloadBitmap(const std::wstring &filePath, int requestInde
             UINT width = 0, height = 0;
             frame->GetSize(&width, &height);
 
-            // ---------------------------------------------------------------
-            // Fast path: skip the converter if the source is already 32bppPBGRA.
-            // Same optimization as WicDecoder::DecodeImage().
-            // ---------------------------------------------------------------
             IWICBitmapSource *uploadSource = nullptr;
             Microsoft::WRL::ComPtr<IWICFormatConverter> converter;
-
             WICPixelFormatGUID srcFmt{};
             if (FAILED(frame->GetPixelFormat(&srcFmt))) return;
 
@@ -577,20 +565,13 @@ HRESULT RendererD2D::PreloadBitmap(const std::wstring &filePath, int requestInde
                 uploadSource = frame.Get();
             } else {
                 if (FAILED(wicFac->CreateFormatConverter(&converter))) return;
-                if (FAILED(converter->Initialize(
-                    frame.Get(), GUID_WICPixelFormat32bppPBGRA,
-                    WICBitmapDitherTypeNone, nullptr, 0.0f,
-                    WICBitmapPaletteTypeCustom)))
+                if (FAILED(converter->Initialize(frame.Get(), GUID_WICPixelFormat32bppPBGRA, WICBitmapDitherTypeNone, nullptr, 0.0f, WICBitmapPaletteTypeCustom)))
                     return;
                 uploadSource = converter.Get();
             }
 
-            // Per-task DeviceContext: created from the thread-safe ID2D1Device,
-            // used once, then released. No mutex needed.
             Microsoft::WRL::ComPtr<ID2D1DeviceContext> taskCtx;
-            if (FAILED(d2dDevice->CreateDeviceContext(D2D1_DEVICE_CONTEXT_OPTIONS_NONE,
-                taskCtx.GetAddressOf())))
-                return;
+            if (FAILED(d2dDevice->CreateDeviceContext(D2D1_DEVICE_CONTEXT_OPTIONS_NONE, taskCtx.GetAddressOf()))) return;
 
             Microsoft::WRL::ComPtr<ID2D1Bitmap1> newBitmap;
             HRESULT hr = taskCtx->CreateBitmapFromWicBitmap(uploadSource, nullptr, &newBitmap);
@@ -1344,20 +1325,16 @@ void RendererD2D::RequestDirThumbnail(const std::wstring &filePath) {
         if (m_dirThumbCache.count(filePath)) return;
     }
 
-    Microsoft::WRL::ComPtr<IWICImagingFactory2> wicFac = g_decoderWorker.wicFactory;
     Microsoft::WRL::ComPtr<ID2D1Device6> d2dDev = m_pD2DDevice;
-
-    // Access the dir panel's hwnd via the unified struct
     HWND hDir = GetPanel(ThumbnailPanelType::Dir).hwnd;
 
-    if (!wicFac || !d2dDev || !hDir) return;
+    if (!d2dDev || !hDir) return;
 
     UINT thumbW = static_cast<UINT>(Constants::CACHE_THUMB_WIDTH);
     UINT thumbH = static_cast<UINT>(Constants::CACHE_THUMB_HEIGHT);
 
-    g_ioWorker.PushTask([filePath, wicFac, d2dDev, hDir, thumbW, thumbH, this]() {
-        HANDLE hFile = CreateFileW(filePath.c_str(), GENERIC_READ, FILE_SHARE_READ,
-                                   nullptr, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, nullptr);
+    g_ioWorker.PushTask([filePath, d2dDev, hDir, thumbW, thumbH, this]() {
+        HANDLE hFile = CreateFileW(filePath.c_str(), GENERIC_READ, FILE_SHARE_READ, nullptr, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, nullptr);
         if (hFile == INVALID_HANDLE_VALUE) return;
 
         LARGE_INTEGER fileSize{};
@@ -1368,88 +1345,63 @@ void RendererD2D::RequestDirThumbnail(const std::wstring &filePath) {
 
         std::vector<BYTE> bytes(static_cast<size_t>(fileSize.QuadPart));
         DWORD bytesRead = 0;
-        bool ok = ReadFile(hFile, bytes.data(), static_cast<DWORD>(bytes.size()), &bytesRead, nullptr)
-                  && bytesRead == static_cast<DWORD>(bytes.size());
+        bool ok = ReadFile(hFile, bytes.data(), static_cast<DWORD>(bytes.size()), &bytesRead, nullptr) && bytesRead == static_cast<DWORD>(bytes.size());
         CloseHandle(hFile);
         if (!ok) return;
 
-        g_decoderWorker.PushTask([bytes = std::move(bytes), filePath, wicFac, d2dDev,
-                    hDir, thumbW, thumbH, this]() mutable {
-                    Microsoft::WRL::ComPtr<IWICStream> stream;
-                    if (FAILED(wicFac->CreateStream(&stream))) return;
-                    if (FAILED(stream->InitializeFromMemory(bytes.data(),
-                        static_cast<DWORD>(bytes.size()))))
-                        return;
+        g_decoderWorker.PushTask([bytes = std::move(bytes), filePath, d2dDev, hDir, thumbW, thumbH, this](IWICImagingFactory2 *wicFac) mutable {
+            Microsoft::WRL::ComPtr<IWICStream> stream;
+            if (FAILED(wicFac->CreateStream(&stream))) return;
+            if (FAILED(stream->InitializeFromMemory(bytes.data(), static_cast<DWORD>(bytes.size())))) return;
 
-                    Microsoft::WRL::ComPtr<IWICBitmapDecoder> decoder;
-                    // WICDecodeMetadataCacheOnDemand: don't pre-load metadata we never read
-                    if (FAILED(wicFac->CreateDecoderFromStream(stream.Get(), nullptr,
-                        WICDecodeMetadataCacheOnDemand, &decoder)))
-                        return;
+            Microsoft::WRL::ComPtr<IWICBitmapDecoder> decoder;
+            if (FAILED(wicFac->CreateDecoderFromStream(stream.Get(), nullptr, WICDecodeMetadataCacheOnDemand, &decoder))) return;
 
-                    Microsoft::WRL::ComPtr<IWICBitmapFrameDecode> frame;
-                    if (FAILED(decoder->GetFrame(0, &frame))) return;
+            Microsoft::WRL::ComPtr<IWICBitmapFrameDecode> frame;
+            if (FAILED(decoder->GetFrame(0, &frame))) return;
 
-                    UINT srcW = 0, srcH = 0;
-                    frame->GetSize(&srcW, &srcH);
-                    if (srcW == 0 || srcH == 0) return;
+            UINT srcW = 0, srcH = 0;
+            frame->GetSize(&srcW, &srcH);
+            if (srcW == 0 || srcH == 0) return;
 
-                    float scaleX = static_cast<float>(thumbW) / static_cast<float>(srcW);
-                    float scaleY = static_cast<float>(thumbH) / static_cast<float>(srcH);
-                    float scale = (scaleX < scaleY) ? scaleX : scaleY;
-                    UINT dstW = static_cast<UINT>(static_cast<float>(srcW) * scale);
-                    UINT dstH = static_cast<UINT>(static_cast<float>(srcH) * scale);
-                    if (dstW == 0) dstW = 1;
-                    if (dstH == 0) dstH = 1;
+            float scale = std::min(static_cast<float>(thumbW) / srcW, static_cast<float>(thumbH) / srcH);
+            UINT dstW = std::max(1U, static_cast<UINT>(srcW * scale));
+            UINT dstH = std::max(1U, static_cast<UINT>(srcH * scale));
 
-                    Microsoft::WRL::ComPtr<IWICBitmapScaler> scaler;
-                    if (FAILED(wicFac->CreateBitmapScaler(&scaler))) return;
-                    if (FAILED(scaler->Initialize(frame.Get(), dstW, dstH,
-                        WICBitmapInterpolationModeFant)))
-                        return;
+            Microsoft::WRL::ComPtr<IWICBitmapScaler> scaler;
+            if (FAILED(wicFac->CreateBitmapScaler(&scaler))) return;
+            if (FAILED(scaler->Initialize(frame.Get(), dstW, dstH, WICBitmapInterpolationModeFant))) return;
 
-                    // Fast path: skip the converter if the scaler output is already 32bppPBGRA.
-                    IWICBitmapSource *uploadSource = nullptr;
-                    Microsoft::WRL::ComPtr<IWICFormatConverter> converter;
+            IWICBitmapSource *uploadSource = nullptr;
+            Microsoft::WRL::ComPtr<IWICFormatConverter> converter;
+            WICPixelFormatGUID scaledFmt{};
+            if (FAILED(scaler->GetPixelFormat(&scaledFmt))) return;
 
-                    WICPixelFormatGUID scaledFmt{};
-                    if (FAILED(scaler->GetPixelFormat(&scaledFmt))) return;
+            if (scaledFmt == GUID_WICPixelFormat32bppPBGRA) {
+                uploadSource = scaler.Get();
+            } else {
+                if (FAILED(wicFac->CreateFormatConverter(&converter))) return;
+                if (FAILED(converter->Initialize(scaler.Get(), GUID_WICPixelFormat32bppPBGRA, WICBitmapDitherTypeNone, nullptr, 0.0f, WICBitmapPaletteTypeCustom)))
+                    return;
+                uploadSource = converter.Get();
+            }
 
-                    if (scaledFmt == GUID_WICPixelFormat32bppPBGRA) {
-                        uploadSource = scaler.Get();
-                    } else {
-                        if (FAILED(wicFac->CreateFormatConverter(&converter))) return;
-                        if (FAILED(converter->Initialize(scaler.Get(), GUID_WICPixelFormat32bppPBGRA,
-                            WICBitmapDitherTypeNone, nullptr, 0.0f,
-                            WICBitmapPaletteTypeCustom)))
-                            return;
-                        uploadSource = converter.Get();
-                    }
+            Microsoft::WRL::ComPtr<ID2D1DeviceContext> taskCtx;
+            if (FAILED(d2dDev->CreateDeviceContext(D2D1_DEVICE_CONTEXT_OPTIONS_NONE, taskCtx.GetAddressOf()))) return;
 
-                    // Per-task DeviceContext: created from the thread-safe ID2D1Device,
-                    // used once, then released. No mutex needed.
-                    Microsoft::WRL::ComPtr<ID2D1DeviceContext> taskCtx;
-                    if (FAILED(d2dDev->CreateDeviceContext(D2D1_DEVICE_CONTEXT_OPTIONS_NONE,
-                        taskCtx.GetAddressOf())))
-                        return;
+            Microsoft::WRL::ComPtr<ID2D1Bitmap1> thumbBitmap;
+            if (FAILED(taskCtx->CreateBitmapFromWicBitmap(uploadSource, nullptr, &thumbBitmap))) return;
 
-                    Microsoft::WRL::ComPtr<ID2D1Bitmap1> thumbBitmap;
-                    if (FAILED(taskCtx->CreateBitmapFromWicBitmap(uploadSource, nullptr, &thumbBitmap))) return;
-
-                    {
-                        std::lock_guard<std::mutex> lock(m_dirThumbMutex);
-
-                        // Evict the least-recently-used entry if we're at capacity
-                        if (m_dirThumbLruList.size() >= Constants::DIR_THUMB_CACHE_MAX) {
-                            m_dirThumbCache.erase(m_dirThumbLruList.back());
-                            m_dirThumbLruList.pop_back();
-                        }
-
-                        m_dirThumbLruList.push_front(filePath);
-                        m_dirThumbCache[filePath] = thumbBitmap;
-                    }
-
-                    PostMessageW(hDir, Constants::WM_QIV_REPAINT, 0, 0);
-                });
+            {
+                std::lock_guard<std::mutex> lock(m_dirThumbMutex);
+                if (m_dirThumbLruList.size() >= Constants::DIR_THUMB_CACHE_MAX) {
+                    m_dirThumbCache.erase(m_dirThumbLruList.back());
+                    m_dirThumbLruList.pop_back();
+                }
+                m_dirThumbLruList.push_front(filePath);
+                m_dirThumbCache[filePath] = thumbBitmap;
+            }
+            PostMessageW(hDir, Constants::WM_QIV_REPAINT, 0, 0);
+        });
     });
 }
