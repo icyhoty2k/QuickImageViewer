@@ -205,9 +205,9 @@ namespace Constants {
     // Use as: LoadCursor(nullptr, MAKEINTRESOURCEW(Constants::Cursors::LMB_ZOOM))
     // Change these to any other OCR_* value to swap the cursor for each mode.
     namespace Cursors {
-        constexpr int  LMB_ZOOM_RESOURCE_ID = 201; // IDC_ZOOM_CURSOR — magnifier .cur embedded in binary
-        constexpr WORD LMB_PAN  = 32649; // IDC_HAND   — LMB will pan
+        constexpr WORD LMB_ZOOM = 32515; // IDC_CROSS  — LMB will 3x zoom
+        constexpr WORD LMB_PAN = 32649; // IDC_HAND   — LMB will pan
         constexpr WORD RMB_DOWN = 32512; // IDC_ARROW  — RMB is held
-        constexpr WORD DEFAULT  = 32512; // IDC_ARROW  — restored after action
+        constexpr WORD DEFAULT = 32512; // IDC_ARROW  — restored after action
     }
 }
