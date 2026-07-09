@@ -14,7 +14,7 @@ namespace MouseHandler {
         return (message == WM_RBUTTONDOWN || message == WM_RBUTTONUP);
     }
 
-    // Handlers
+    //Mouse Handlers
     void HandleButtonDown(HWND hWnd, UINT message, LPARAM lParam);
 
     void HandleButtonUp(HWND hWnd, UINT message, LPARAM lParam);
