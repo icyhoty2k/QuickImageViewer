@@ -95,8 +95,7 @@ void MouseHandler::HandleButtonDown(HWND hWnd, UINT message, LPARAM lParam) {
         bool imageOverflows = (renderW > winW + 0.5f) || (renderH > winH + 0.5f);
 
         // Show the appropriate cursor so the user knows what LMB will do.
-        WORD cursorId = imageOverflows ? Constants::Cursors::LMB_PAN : Constants::Cursors::LMB_ZOOM;
-        SetCursor(LoadCursor(nullptr, MAKEINTRESOURCEW(cursorId)));
+        SetLmbCursor(imageOverflows);
 
         // Save state so ButtonUp can restore if we zoomed.
         app.savedZoom    = app.viewport.zoom;
@@ -214,9 +213,8 @@ void MouseHandler::HandleMouseMove(HWND hWnd, LPARAM lParam) {
         app.lastMidMouse = curMouse;
         InvalidateRect(hWnd, nullptr, FALSE);
     } else if (app.viewport.isDragging) {
-        // Keep the appropriate cursor during drag (Windows resets it on every move).
-        WORD cursorId = app.lmbDidZoom ? Constants::Cursors::LMB_ZOOM : Constants::Cursors::LMB_PAN;
-        SetCursor(LoadCursor(nullptr, MAKEINTRESOURCEW(cursorId)));
+        // Keep the appropriate cursor during drag (Windows resets it on every WM_MOUSEMOVE).
+        SetLmbCursor(!app.lmbDidZoom); // lmbDidZoom=true means zoom mode → not overflowing
 
         POINT curMouse = {GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam)};
 
@@ -290,6 +288,44 @@ void MouseHandler::HandleMouseMove(HWND hWnd, LPARAM lParam) {
         GetWindowRect(hWnd, &rc);
         SetWindowPos(hWnd, nullptr, rc.left + dx, rc.top + dy, 0, 0, SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE);
         app.lastWindowMouse = curMouse;
+    } else {
+        // Hover — no button held. Update LMB cursor so the user can see what
+        // a click will do before they press the button.
+        if (app.imgWidth > 0 && app.imgHeight > 0 && !app.isRmbDown) {
+            RECT rc;
+            GetClientRect(hWnd, &rc);
+            float winW = (float)(rc.right - rc.left);
+            float winH = (float)(rc.bottom - rc.top);
+            float imgW   = (float)app.imgWidth;
+            float imgH   = (float)app.imgHeight;
+            float ratioX = winW / imgW;
+            float ratioY = winH / imgH;
+            float renderW, renderH;
+            switch (app.viewMode) {
+                case Constants::ViewModes::ViewMode::FitToView_PreserveAspectRatio:
+                default:
+                    renderW = imgW * std::min(ratioX, ratioY);
+                    renderH = imgH * std::min(ratioX, ratioY);
+                    break;
+                case Constants::ViewModes::ViewMode::FitToWidth_DoNotPreserveAspectRatio:
+                    renderW = winW; renderH = imgH; if (renderH > winH) renderH = winH;
+                    break;
+                case Constants::ViewModes::ViewMode::FitToHeight_DoNotPreserveAspectRatio:
+                    renderH = winH; renderW = imgW; if (renderW > winW) renderW = winW;
+                    break;
+                case Constants::ViewModes::ViewMode::FitToWindow_DoNotPreserveAspectRatio:
+                    renderW = winW; renderH = winH;
+                    break;
+                case Constants::ViewModes::ViewMode::OriginalImageSize_PreserveAspectRatio:
+                    renderW = imgW; renderH = imgH;
+                    break;
+            }
+            const float z = (app.viewport.zoom <= 0.0f) ? 1.0f : app.viewport.zoom;
+            renderW *= z;
+            renderH *= z;
+            bool imageOverflows = (renderW > winW + 0.5f) || (renderH > winH + 0.5f);
+            SetLmbCursor(imageOverflows);
+        }
     }
 }
 
