@@ -502,6 +502,9 @@ int WINAPI wWinMain(HINSTANCE hInstance, [[maybe_unused]] HINSTANCE hPrevInstanc
     // Init UI Manager (The New Controller)
     uiManager.Init(hInstance, hWnd);
 
+    // Load custom cursors (magnifier etc.) from embedded resources
+    MouseHandler::LoadCursors(hInstance);
+
     // Renderer & Setup
     SetWindowLongW(hWnd, GWL_EXSTYLE, GetWindowLongW(hWnd, GWL_EXSTYLE) | WS_EX_LAYERED);
     SetLayeredWindowAttributes(hWnd, 0, app.opacity, LWA_ALPHA);
