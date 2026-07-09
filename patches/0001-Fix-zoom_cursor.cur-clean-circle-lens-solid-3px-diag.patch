@@ -1,0 +1,34 @@
+From 77ba88aef880f5ca8df703a2476fcdbe9504ee1e Mon Sep 17 00:00:00 2001
+From: Ivan Hristov Yanev <icyhoty2k@gmail.com>
+Date: Thu, 9 Jul 2026 11:25:24 +0000
+Subject: [PATCH] =?UTF-8?q?Fix=20zoom=5Fcursor.cur=20=E2=80=94=20clean=20c?=
+ =?UTF-8?q?ircle=20lens=20+=20solid=203px=20diagonal=20handle?=
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+Previous cursor had broken drawing (overlapping lens/handle, dotted
+handle from bad perpendicular thickening). Redesigned:
+- Lens: 3-radius circle (r=6,7,8) via midpoint algorithm, ~3px thick
+- Handle: 3 parallel 45-degree diagonals from (17,17) to (28,29)
+- Hotspot: (9,9) at lens center
+---
+ resources/zoom_cursor.cur | Bin 326 -> 326 bytes
+ 1 file changed, 0 insertions(+), 0 deletions(-)
+
+diff --git a/resources/zoom_cursor.cur b/resources/zoom_cursor.cur
+index e7c1a07e2cf850e4014d6b830f271cd72c7741ae..5f6f9659fd0150d2ad213a481c51536bc3dc3add 100644
+GIT binary patch
+literal 326
+zcmchRF$#lF5Jcz4DwUnBmX^6eyqQPv2sw_0$B^_90+As9Ia`E43d_v$;P1}tXQh*p
+znnpUiE=j5+wZ<cLCb^CT9NB;Ie8WdCKV~zU!PJniu=TLIUCh_c<&Cv~M}qqkrgzWi
+T=-`!KVjh0vA|HFX^mo<{x_@v|
+
+literal 326
+zcmchRF%E+;5CqquKuSZG)|8a|fc%VfDftpn9uhx+(gk9&Rz!tFnOm)Vy7B5xx+th^
+zrK{Bk=_aYOJ<{C{)>#2(_%F;i?DcUo*)?nxtbTI?ON2DQJi@~ykX5m$CK<oh$a{-C
+VX&gSP%nL97QXZTeo&Rm{F1~rYWaj_?
+
+-- 
+2.43.0
+
