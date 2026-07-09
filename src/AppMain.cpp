@@ -304,6 +304,11 @@ LRESULT CALLBACK MainAppWndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM l
                     InvalidateRect(hWnd, nullptr, FALSE); // Now, repaint with the correct image.
                     uiManager.getCacheWindow().UpdateCacheView();
                     uiManager.getDirWindow().UpdateDirView();
+                    // Scroll DirWnd to the newly active image. UpdateDirView()
+                    // rebuilds geometry and sets m_selectedIdx but does not move
+                    // m_offset (by design, so manual scrolling is not interrupted).
+                    // On a cache-miss arrival we always want to snap to selection.
+                    uiManager.getDirWindow().SyncDirSelectionRectangle();
                 }
             }
             return 0;
@@ -330,6 +335,7 @@ LRESULT CALLBACK MainAppWndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM l
                     InvalidateRect(hWnd, nullptr, FALSE);
                     uiManager.getCacheWindow().UpdateCacheView();
                     uiManager.getDirWindow().UpdateDirView();
+                    uiManager.getDirWindow().SyncDirSelectionRectangle();
                 }
             }
 

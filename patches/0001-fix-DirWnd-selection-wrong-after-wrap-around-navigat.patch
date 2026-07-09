@@ -1,0 +1,127 @@
+From 8ed310adeab0d8d51c38cbac11d64eaf637f2c2f Mon Sep 17 00:00:00 2001
+From: Ivan Hristov Yanev <icyhoty2k@gmail.com>
+Date: Thu, 9 Jul 2026 22:43:13 +0000
+Subject: [PATCH] fix: DirWnd selection wrong after wrap-around navigation
+ (image 800 -> 1)
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+SyncSelectionRectangle called ScrollToSelected() which updated m_offset,
+but m_thumbnails still held rects computed from the old offset. The repaint
+fired with stale geometry, so the selection highlight appeared at the old
+slot position rather than at the newly active image.
+
+The offset jump on wrap-around is especially large (e.g. scrolled to image
+800 = m_offset ~ -110 000px, wrapping to image 1 snaps m_offset to ~0),
+making the mismatch visible as the selection simply not appearing.
+
+Fix: add RebuildGeometry() — a lightweight helper that recomputes every
+Thumbnail::rect from the current m_offset without clearing the list, calling
+GetSourceItems(), or triggering PostBuildHook. SyncSelectionRectangle calls
+it immediately after ScrollToSelected() so the renderer always sees geometry
+that matches the scroll position before the InvalidateRect/UpdateWindow pair
+fires.
+---
+ src/UI/ThumbnailPanelWnd.cpp | 60 ++++++++++++++++++++++++++++++++++++
+ src/UI/ThumbnailPanelWnd.h   |  6 ++++
+ 2 files changed, 66 insertions(+)
+
+diff --git a/src/UI/ThumbnailPanelWnd.cpp b/src/UI/ThumbnailPanelWnd.cpp
+index 88a84e8..e0e1666 100644
+--- a/src/UI/ThumbnailPanelWnd.cpp
++++ b/src/UI/ThumbnailPanelWnd.cpp
+@@ -98,6 +98,12 @@ namespace UI {
+             }
+         }
+         ScrollToSelected();
++        // ScrollToSelected() may have changed m_offset. Recompute all thumbnail
++        // rects so the render sees positions that match the new scroll position.
++        // Without this, a large offset jump (e.g. image 800 → image 1) leaves
++        // m_thumbnails with rects computed from the old offset, causing the
++        // selection highlight to appear off-screen or at the wrong slot.
++        RebuildGeometry();
+         InvalidateRect(m_hWnd, nullptr, TRUE);
+         UpdateWindow(m_hWnd);
+     }
+@@ -192,6 +198,60 @@ namespace UI {
+         InvalidateRect(m_hWnd, nullptr, FALSE);
+     }
+ 
++    // =========================================================================
++    // RebuildGeometry
++    // Recomputes every thumbnail's rect from the current m_offset without
++    // touching m_thumbnails membership or calling PostBuildHook.
++    // Called by SyncSelectionRectangle after ScrollToSelected moves m_offset
++    // so the renderer draws geometry that matches the new scroll position.
++    // =========================================================================
++    void ThumbnailPanelWnd::RebuildGeometry() {
++        if (m_thumbnails.empty()) return;
++
++        RECT cr{};
++        GetClientRect(m_hWnd, &cr);
++        float surfaceW = static_cast<float>(cr.right);
++        float surfaceH = static_cast<float>(cr.bottom);
++        float thumbW   = Constants::CACHE_THUMB_WIDTH  * app.dpiScale;
++        float thumbH   = Constants::CACHE_THUMB_HEIGHT * app.dpiScale;
++        float margin   = Constants::CACHE_THUMB_MARGIN  * app.dpiScale;
++        float spacing  = Constants::CACHE_THUMB_SPACING * app.dpiScale;
++        bool  vertical = IsVertical();
++
++        float x = margin;
++        float y = margin;
++
++        size_t n = m_thumbnails.size();
++
++        if (!vertical) {
++            y = (surfaceH - thumbH) / 2.0f;
++            float totalW = static_cast<float>(n) * (thumbW + spacing) - spacing;
++            if (totalW <= surfaceW) {
++                x = (surfaceW - totalW) / 2.0f;
++            } else {
++                float minOff = surfaceW - totalW - margin;
++                m_offset = std::clamp(m_offset, minOff, 0.0f);
++                x = margin + m_offset;
++            }
++        } else {
++            x = (surfaceW - thumbW) / 2.0f;
++            float totalH = static_cast<float>(n) * (thumbH + spacing) - spacing;
++            if (totalH <= surfaceH) {
++                y = (surfaceH - totalH) / 2.0f;
++            } else {
++                float minOff = surfaceH - totalH - margin;
++                m_offset = std::clamp(m_offset, minOff, 0.0f);
++                y = margin + m_offset;
++            }
++        }
++
++        for (auto &t : m_thumbnails) {
++            t.rect = D2D1::RectF(x, y, x + thumbW, y + thumbH);
++            if (vertical) y += thumbH + spacing;
++            else          x += thumbW + spacing;
++        }
++    }
++
+     // =========================================================================
+     // ScrollToSelected
+     // =========================================================================
+diff --git a/src/UI/ThumbnailPanelWnd.h b/src/UI/ThumbnailPanelWnd.h
+index b39b5a6..1c8e806 100644
+--- a/src/UI/ThumbnailPanelWnd.h
++++ b/src/UI/ThumbnailPanelWnd.h
+@@ -112,6 +112,12 @@ namespace UI {
+         private:
+             void ScrollToSelected();
+ 
++            // Recomputes m_thumbnails rect positions from the current m_offset
++            // without clearing the list or calling PostBuildHook / GetSourceItems.
++            // Called by SyncSelectionRectangle after ScrollToSelected changes
++            // m_offset, so the render sees geometry that matches the new scroll pos.
++            void RebuildGeometry();
++
+             // Shared 5-slot geometry (same for both CacheWnd and DirWnd):
+             //   0 = center floating  (80% wide, thumb-height tall)
+             //   1 = top edge strip
+-- 
+2.43.0
+

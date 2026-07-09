@@ -1,0 +1,135 @@
+From f29829cf6fd705e145d84ec6f9717115cfb726ec Mon Sep 17 00:00:00 2001
+From: Ivan Hristov Yanev <icyhoty2k@gmail.com>
+Date: Thu, 9 Jul 2026 22:25:10 +0000
+Subject: [PATCH] =?UTF-8?q?fix:=20DirWnd=20show/disappear=20bug=20?=
+ =?UTF-8?q?=E2=80=94=20cache=20cap=20too=20small=20+=20duplicate=20in-flig?=
+ =?UTF-8?q?ht=20tasks?=
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+Three bugs caused the flicker with 800+ images in DirWnd:
+
+1. DIR_THUMB_CACHE_MAX was 256 — for an 800-image folder the LRU
+   eviction loop fired constantly: thumbnail 257 landing evicted
+   thumbnail 1, which then re-decoded and evicted thumbnail 2, etc.
+   Raised cap to 2048 (each dir-thumb is scaled to CACHE_THUMB_WIDTH x
+   CACHE_THUMB_HEIGHT, so 2048 entries stays within comfortable VRAM
+   limits on RTX 3090 / RTX 3060).
+
+2. TOCTOU race in RequestDirThumbnail: the cache-presence check and the
+   PushTask call were not atomic. A second UpdateView() call (scroll,
+   resize, re-open) could queue a duplicate IO+decode chain for the same
+   file between the check and the push. Fixed by adding m_dirThumbInFlight
+   (unordered_set<wstring> guarded by the existing m_dirThumbMutex) and
+   checking both cache AND in-flight inside the same lock scope before
+   inserting into in-flight and pushing the task.
+
+3. Duplicate LRU list entries from racing tasks: two in-flight tasks for
+   the same path could both pass the original count() guard and both push
+   the same path to m_dirThumbLruList, corrupting the eviction order. Fixed
+   by re-checking m_dirThumbCache.count() inside the final locked insert
+   block and skipping the insert if already present. In-flight entry is
+   always cleared first so future RequestDirThumbnail calls can proceed.
+
+ClearDirThumbnailCache also clears m_dirThumbInFlight so late-arriving
+tasks from the previous folder do not block re-requests in the new folder.
+---
+ src/Platform/Constants.h     |  2 +-
+ src/Renderer/RendererD2D.cpp | 27 ++++++++++++++++++++++-----
+ src/Renderer/RendererD2D.h   |  5 +++++
+ 3 files changed, 28 insertions(+), 6 deletions(-)
+
+diff --git a/src/Platform/Constants.h b/src/Platform/Constants.h
+index b2f2ab7..7f90744 100644
+--- a/src/Platform/Constants.h
++++ b/src/Platform/Constants.h
+@@ -82,7 +82,7 @@ namespace Constants {
+     // Maximum number of small dir-panel thumbnails kept in VRAM.
+     // Each entry is ~CACHE_THUMB_WIDTH * CACHE_THUMB_HEIGHT * 4 bytes ≈ 37 KB,
+     // so 256 entries ≈ 9 MB — safe even on the RTX 3060 with 12 GB GDDR6.
+-    constexpr const int DIR_THUMB_CACHE_MAX = 256;
++    constexpr const int DIR_THUMB_CACHE_MAX = 2048;
+     constexpr const int PRELOAD_LOOKASIDE_COUNT = 1;
+     constexpr const int PRELOAD_TIMER_COUNTDOWN = 150; // this is used to delay preloading if user scrolls very fast
+     //==========================Cache optimization====================================
+diff --git a/src/Renderer/RendererD2D.cpp b/src/Renderer/RendererD2D.cpp
+index f00ed73..89bcb6a 100644
+--- a/src/Renderer/RendererD2D.cpp
++++ b/src/Renderer/RendererD2D.cpp
+@@ -1314,6 +1314,10 @@ void RendererD2D::ClearDirThumbnailCache() {
+     std::lock_guard<std::mutex> lock(m_dirThumbMutex);
+     m_dirThumbCache.clear();
+     m_dirThumbLruList.clear();
++    // Clear in-flight too: any late-arriving task for the old folder will
++    // find its path absent from the cache, check the in-flight set, and
++    // skip the duplicate-insert guard correctly.
++    m_dirThumbInFlight.clear();
+ }
+ 
+ // =============================================================================
+@@ -1322,7 +1326,12 @@ void RendererD2D::ClearDirThumbnailCache() {
+ void RendererD2D::RequestDirThumbnail(const std::wstring &filePath) {
+     {
+         std::lock_guard<std::mutex> lock(m_dirThumbMutex);
++        // Skip if already cached OR if a decode task is already in flight.
++        // Both checks must be inside the same lock to eliminate the TOCTOU
++        // window between the check and the PushTask call below.
+         if (m_dirThumbCache.count(filePath)) return;
++        if (m_dirThumbInFlight.count(filePath)) return;
++        m_dirThumbInFlight.insert(filePath);
+     }
+ 
+     Microsoft::WRL::ComPtr<ID2D1Device6> d2dDev = m_pD2DDevice;
+@@ -1394,12 +1403,20 @@ void RendererD2D::RequestDirThumbnail(const std::wstring &filePath) {
+ 
+             {
+                 std::lock_guard<std::mutex> lock(m_dirThumbMutex);
+-                if (m_dirThumbLruList.size() >= Constants::DIR_THUMB_CACHE_MAX) {
+-                    m_dirThumbCache.erase(m_dirThumbLruList.back());
+-                    m_dirThumbLruList.pop_back();
++                // Always clear in-flight — task is done regardless of outcome.
++                m_dirThumbInFlight.erase(filePath);
++                // A racing second task for the same file (queued before the
++                // in-flight set was introduced, or after a ClearDirThumbnailCache)
++                // may have already written this entry. Skip duplicate insertion
++                // to keep the LRU list free of duplicate path entries.
++                if (!m_dirThumbCache.count(filePath)) {
++                    if (m_dirThumbLruList.size() >= Constants::DIR_THUMB_CACHE_MAX) {
++                        m_dirThumbCache.erase(m_dirThumbLruList.back());
++                        m_dirThumbLruList.pop_back();
++                    }
++                    m_dirThumbLruList.push_front(filePath);
++                    m_dirThumbCache[filePath] = thumbBitmap;
+                 }
+-                m_dirThumbLruList.push_front(filePath);
+-                m_dirThumbCache[filePath] = thumbBitmap;
+             }
+             PostMessageW(hDir, Constants::WM_QIV_REPAINT, 0, 0);
+         });
+diff --git a/src/Renderer/RendererD2D.h b/src/Renderer/RendererD2D.h
+index b221524..f895da6 100644
+--- a/src/Renderer/RendererD2D.h
++++ b/src/Renderer/RendererD2D.h
+@@ -9,6 +9,7 @@
+ #include <wrl/client.h>
+ #include <list>
+ #include <unordered_map>
++#include <unordered_set>
+ #include <string>
+ #include <mutex>
+ #include <vector>
+@@ -151,6 +152,10 @@ class RendererD2D final : public IImageRenderer {
+         // Evicted LRU-style at DIR_THUMB_CACHE_MAX entries to cap VRAM usage.
+         std::unordered_map<std::wstring, Microsoft::WRL::ComPtr<ID2D1Bitmap1> > m_dirThumbCache;
+         std::list<std::wstring> m_dirThumbLruList;
++        // Tracks paths for which an IO+decode task is already in flight.
++        // Guarded by m_dirThumbMutex. Prevents duplicate tasks being queued
++        // when UpdateView() is called multiple times before tasks complete.
++        std::unordered_set<std::wstring> m_dirThumbInFlight;
+         std::mutex m_dirThumbMutex;
+ 
+         // Cache
+-- 
+2.43.0
+
