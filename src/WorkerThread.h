@@ -13,58 +13,65 @@
 #include <vector>
 
 
-// ---------------------------------------------------------------------------
-// WorkerThread  —  single background thread with a task queue
-// ---------------------------------------------------------------------------
-// initWic = true  → decode worker: owns IWICImagingFactory2, CPU pixel work
-// initWic = false → plain task thread, no WIC
-// ---------------------------------------------------------------------------
-class WorkerThread {
+class DecoderThreadPool {
     public:
-        explicit WorkerThread(bool initWic = false)
-            : m_running(true) {
-            m_thread = std::thread([this, initWic] {
-                HRESULT hr = CoInitializeEx(nullptr, COINIT_MULTITHREADED);
-                if (FAILED(hr))
-                    OutputDebugStringW(L"WorkerThread: COM init failed\n");
+        DecoderThreadPool() : m_running(true) {
+            // Query available threads. Leave 2 free (1 for UI, 1 for IO/Disk).
+            unsigned int hc = std::thread::hardware_concurrency();
+            unsigned int threadCount = (hc > 2) ? hc - 2 : 1;
 
-                if (initWic) {
-                    HRESULT wicHr = CoCreateInstance(
-                            CLSID_WICImagingFactory2, nullptr,
-                            CLSCTX_INPROC_SERVER, IID_PPV_ARGS(&wicFactory));
-                    if (FAILED(wicHr))
-                        OutputDebugStringW(L"WorkerThread: WIC factory creation failed\n");
-                }
-
-                while (true) {
-                    std::function<void()> task;
-                    {
-                        std::unique_lock<std::mutex> lock(m_queueMutex);
-                        m_cv.wait(lock, [this] {
-                            return !m_queue.empty() || !m_running;
-                        });
-                        if (!m_running && m_queue.empty()) break;
-                        task = std::move(m_queue.front());
-                        m_queue.pop();
+            m_threads.reserve(threadCount);
+            for (unsigned int i = 0; i < threadCount; ++i) {
+                m_threads.emplace_back([this] {
+                    HRESULT hr = CoInitializeEx(nullptr, COINIT_MULTITHREADED);
+                    if (FAILED(hr)) {
+                        OutputDebugStringW(L"DecoderThreadPool: COM init failed\n");
                     }
-                    if (task) task();
-                }
 
-                wicFactory.Reset();
-                if (SUCCEEDED(hr)) CoUninitialize();
-            });
+                    // Isolate the WIC factory per-thread
+                    Microsoft::WRL::ComPtr<IWICImagingFactory2> localFactory;
+                    if (SUCCEEDED(hr)) {
+                        CoCreateInstance(CLSID_WICImagingFactory2, nullptr,
+                                         CLSCTX_INPROC_SERVER, IID_PPV_ARGS(&localFactory));
+                    }
+
+                    while (true) {
+                        // Notice the task signature now expects the factory pointer
+                        std::function<void(IWICImagingFactory2 *)> task;
+                        {
+                            std::unique_lock<std::mutex> lock(m_queueMutex);
+                            m_cv.wait(lock, [this] {
+                                return !m_queue.empty() || !m_running;
+                            });
+                            if (!m_running && m_queue.empty()) break;
+                            task = std::move(m_queue.front());
+                            m_queue.pop();
+                        }
+
+                        // Execute the payload, passing the thread's private factory
+                        if (task && localFactory) {
+                            task(localFactory.Get());
+                        }
+                    }
+
+                    localFactory.Reset();
+                    if (SUCCEEDED(hr)) CoUninitialize();
+                });
+            }
         }
 
-        ~WorkerThread() {
+        ~DecoderThreadPool() {
             {
                 std::lock_guard<std::mutex> lock(m_queueMutex);
                 m_running = false;
             }
-            m_cv.notify_one();
-            if (m_thread.joinable()) m_thread.join();
+            m_cv.notify_all();
+            for (auto &t: m_threads) {
+                if (t.joinable()) t.join();
+            }
         }
 
-        void PushTask(std::function<void()> task) {
+        void PushTask(std::function<void(IWICImagingFactory2 *)> task) {
             {
                 std::lock_guard<std::mutex> lock(m_queueMutex);
                 if (!m_running) return;
@@ -75,18 +82,15 @@ class WorkerThread {
 
         void ClearQueue() {
             std::lock_guard<std::mutex> lock(m_queueMutex);
-            std::queue<std::function<void()> > empty;
+            std::queue<std::function<void(IWICImagingFactory2 *)> > empty;
             std::swap(m_queue, empty);
         }
 
-        // Non-null only on the decode worker (initWic == true)
-        Microsoft::WRL::ComPtr<IWICImagingFactory2> wicFactory;
-
     private:
-        std::thread m_thread;
+        std::vector<std::thread> m_threads;
         std::mutex m_queueMutex;
         std::condition_variable m_cv;
-        std::queue<std::function<void()> > m_queue;
+        std::queue<std::function<void(IWICImagingFactory2 *)> > m_queue;
         std::atomic<bool> m_running;
 };
 
@@ -212,4 +216,4 @@ class IoThreadPool {
 //                   ProcessPendingUploads() on WM_QIV_PENDING_UPLOADS.
 // ---------------------------------------------------------------------------
 extern IoThreadPool g_ioWorker;
-extern WorkerThread g_decoderWorker;
+extern DecoderThreadPool g_decoderWorker;

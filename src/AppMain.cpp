@@ -55,10 +55,10 @@ DropTarget *g_pDropTarget = nullptr;
 //                     target drive is known (1 thread HDD, 2 threads SSD/NVMe)
 //   g_decoderWorker – WorkerThread(true): WIC decode + pixel convert
 IoThreadPool g_ioWorker;
-WorkerThread g_decoderWorker(true);
+DecoderThreadPool g_decoderWorker;
 // Dedicated worker for DirWnd thumbnail decoding.
 // Kept separate so LoadImageIndex's ClearQueue() never wipes dir thumb tasks.
-WorkerThread g_dirThumbWorker(true);
+DecoderThreadPool g_dirThumbWorker;
 
 
 // Shift+Delete (Shortcuts::SC_APP_RESET_DEFAULTS) — restore default application
@@ -123,21 +123,21 @@ LRESULT CALLBACK MainAppWndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM l
                     int fwd = index + i;
                     int bwd = index - i;
 
-                    if (fwd < total) {
-                        std::wstring fwdPath = app.playlist[fwd];
-                        g_decoderWorker.PushTask([fwdPath, index]() {
-                            // ABORT if user started scrolling again
+                    // Define the task builder as a lambda to avoid code duplication
+                    auto preloadTask = [index](const std::wstring &path) {
+                        return [path, index](IWICImagingFactory2 * /*unused_in_preload*/) {
+                            // PreloadBitmap currently handles its own factory internally
+                            // via the worker pool, but we must match the PushTask signature
                             if (app.wantedIndex.load(std::memory_order_acquire) != index) return;
-                            if (app.renderer) (void) app.renderer->PreloadBitmap(fwdPath, index);
-                        });
+                            if (app.renderer) (void) app.renderer->PreloadBitmap(path, index);
+                        };
+                    };
+
+                    if (fwd < total) {
+                        g_decoderWorker.PushTask(preloadTask(app.playlist[fwd]));
                     }
                     if (bwd >= 0) {
-                        std::wstring bwdPath = app.playlist[bwd];
-                        g_decoderWorker.PushTask([bwdPath, index]() {
-                            // ABORT if user started scrolling again
-                            if (app.wantedIndex.load(std::memory_order_acquire) != index) return;
-                            if (app.renderer) (void) app.renderer->PreloadBitmap(bwdPath, index);
-                        });
+                        g_decoderWorker.PushTask(preloadTask(app.playlist[bwd]));
                     }
                 }
             }
