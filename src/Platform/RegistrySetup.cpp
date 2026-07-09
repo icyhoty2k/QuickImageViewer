@@ -40,11 +40,16 @@ namespace System {
     }
 
     void RegisterAppForOpenWith() {
-        wchar_t exePath[32768];
-        DWORD len = GetModuleFileNameW(nullptr, exePath, 32768);
+        // Allocate the 32k character buffer cleanly on the heap
+        std::wstring exePathStr(32768, L'\0');
+        DWORD len = GetModuleFileNameW(nullptr, exePathStr.data(), static_cast<DWORD>(exePathStr.size()));
+
         if (len == 0 || len >= 32768) return;
 
-        std::wstring command = std::wstring(L"\"") + exePath + L"\" \"%1\"";
+        // Shrink the wstring to the exact actual path length
+        exePathStr.resize(len);
+
+        std::wstring command = std::wstring(L"\"") + exePathStr + L"\" \"%1\"";
         if (!NeedsRegistration(command)) return;
 
         HKEY hKey;
@@ -80,11 +85,15 @@ namespace System {
     }
 
     void EnableRunOnStartup() {
-        wchar_t exePath[32768];
-        DWORD len = GetModuleFileNameW(nullptr, exePath, 32768);
+        // Allocate cleanly on the heap
+        std::wstring exePathStr(32768, L'\0');
+        DWORD len = GetModuleFileNameW(nullptr, exePathStr.data(), static_cast<DWORD>(exePathStr.size()));
+
         if (len == 0 || len >= 32768) return;
 
-        std::wstring command = std::wstring(L"\"") + exePath + L"\" -background";
+        exePathStr.resize(len);
+
+        std::wstring command = std::wstring(L"\"") + exePathStr + L"\" -background";
 
         HKEY hKey;
         if (RegCreateKeyExW(Constants::Registry::ROOT_HIVE, Constants::Registry::RUN_KEY,
