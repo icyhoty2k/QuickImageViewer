@@ -54,14 +54,14 @@ void MouseHandler::HandleButtonDown(HWND hWnd, UINT message, LPARAM lParam) {
         POINT pt = {GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam)};
         RECT rc;
         GetClientRect(hWnd, &rc);
-        float winW = (float)(rc.right - rc.left);
-        float winH = (float)(rc.bottom - rc.top);
+        float winW = (float) (rc.right - rc.left);
+        float winH = (float) (rc.bottom - rc.top);
 
         // Compute the rendered image size exactly as the renderer does.
         float renderW = winW, renderH = winH; // fallback
         if (app.imgWidth > 0 && app.imgHeight > 0) {
-            float imgW   = (float)app.imgWidth;
-            float imgH   = (float)app.imgHeight;
+            float imgW = (float) app.imgWidth;
+            float imgH = (float) app.imgHeight;
             float ratioX = winW / imgW;
             float ratioY = winH / imgH;
             switch (app.viewMode) {
@@ -72,17 +72,21 @@ void MouseHandler::HandleButtonDown(HWND hWnd, UINT message, LPARAM lParam) {
                     break;
                 case Constants::ViewModes::ViewMode::FitToWidth_DoNotPreserveAspectRatio:
                     renderW = winW;
-                    renderH = imgH; if (renderH > winH) renderH = winH;
+                    renderH = imgH;
+                    if (renderH > winH) renderH = winH;
                     break;
                 case Constants::ViewModes::ViewMode::FitToHeight_DoNotPreserveAspectRatio:
                     renderH = winH;
-                    renderW = imgW; if (renderW > winW) renderW = winW;
+                    renderW = imgW;
+                    if (renderW > winW) renderW = winW;
                     break;
                 case Constants::ViewModes::ViewMode::FitToWindow_DoNotPreserveAspectRatio:
-                    renderW = winW; renderH = winH;
+                    renderW = winW;
+                    renderH = winH;
                     break;
                 case Constants::ViewModes::ViewMode::OriginalImageSize_PreserveAspectRatio:
-                    renderW = imgW; renderH = imgH;
+                    renderW = imgW;
+                    renderH = imgH;
                     break;
             }
         }
@@ -99,17 +103,17 @@ void MouseHandler::HandleButtonDown(HWND hWnd, UINT message, LPARAM lParam) {
         SetCursor(LoadCursor(nullptr, MAKEINTRESOURCEW(cursorId)));
 
         // Save state so ButtonUp can restore if we zoomed.
-        app.savedZoom    = app.viewport.zoom;
+        app.savedZoom = app.viewport.zoom;
         app.savedOffsetX = app.viewport.offsetX;
         app.savedOffsetY = app.viewport.offsetY;
-        app.lmbDidZoom   = false;
+        app.lmbDidZoom = false;
 
         if (!imageOverflows) {
             // Image fits inside the viewport — apply the 3x click-zoom.
             float centerX = winW / 2.0f;
             float centerY = winH / 2.0f;
-            float dx = (float)pt.x - centerX;
-            float dy = (float)pt.y - centerY;
+            float dx = (float) pt.x - centerX;
+            float dy = (float) pt.y - centerY;
 
             app.viewport.zoom *= Constants::ZOOM_CLICK;
 
@@ -127,7 +131,7 @@ void MouseHandler::HandleButtonDown(HWND hWnd, UINT message, LPARAM lParam) {
         }
 
         // Always start pan (drag) mode.
-        app.viewport.lastMouse  = pt;
+        app.viewport.lastMouse = pt;
         app.viewport.isDragging = true;
         SetCapture(hWnd);
     }
@@ -185,11 +189,11 @@ void MouseHandler::HandleButtonUp(HWND hWnd, UINT message, LPARAM /*lParam*/) {
         // If the image was already overflowing and we only panned, keep
         // the current offset so the user's pan position is preserved.
         if (app.lmbDidZoom) {
-            app.viewport.zoom    = app.savedZoom;
+            app.viewport.zoom = app.savedZoom;
             app.viewport.offsetX = app.savedOffsetX;
             app.viewport.offsetY = app.savedOffsetY;
         }
-        app.lmbDidZoom          = false;
+        app.lmbDidZoom = false;
         app.viewport.isDragging = false;
         ReleaseCapture();
         InvalidateRect(hWnd, nullptr, FALSE);
@@ -233,11 +237,11 @@ void MouseHandler::HandleMouseMove(HWND hWnd, LPARAM lParam) {
         if (app.imgWidth > 0 && app.imgHeight > 0) {
             RECT rc;
             GetClientRect(hWnd, &rc);
-            float winW = (float)(rc.right - rc.left);
-            float winH = (float)(rc.bottom - rc.top);
+            float winW = (float) (rc.right - rc.left);
+            float winH = (float) (rc.bottom - rc.top);
 
-            float imgW = (float)app.imgWidth;
-            float imgH = (float)app.imgHeight;
+            float imgW = (float) app.imgWidth;
+            float imgH = (float) app.imgHeight;
             float ratioX = winW / imgW;
             float ratioY = winH / imgH;
 
@@ -306,7 +310,7 @@ void MouseHandler::HandleMouseWheel(HWND hWnd, WPARAM wParam, LPARAM /*lParam*/)
         app.viewport.zoom *= (zDelta > 0) ? Constants::ZOOM_STEP : (1.0f / Constants::ZOOM_STEP);
         InvalidateRect(hWnd, nullptr, FALSE);
     } else if (GET_KEYSTATE_WPARAM(wParam) & MK_CONTROL) {
-        // Existing Ctrl+Scroll zoom logic
+        // Existing Ctrl+Scroll zoom logic.
         app.viewport.zoom *= (zDelta > 0) ? Constants::ZOOM_STEP : (1.0f / Constants::ZOOM_STEP);
         InvalidateRect(hWnd, nullptr, FALSE);
     } else {
