@@ -1,8 +1,0 @@
-Git operations:
-1.In CLion, open the terminal at the bottom and run:
-    git apply C:\path\to\overlay_everthing_top_left.patch
-        That's it — CLion will immediately show the changed file in the editor with the diff highlighted in the gutter.
-
-
-2.if later how can i reverse a patch:
-    git apply --reverse overlay_everthing_top_left.patch
