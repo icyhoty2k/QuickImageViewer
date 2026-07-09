@@ -2,3 +2,6 @@
 
 // The icon is in the same folder as this .rc file, so this is fine:
 IDI_APP_ICON ICON "QIV.ico"
+
+// Embed the application manifest (located in the root folder, one level up)
+1 24 "app.manifest"

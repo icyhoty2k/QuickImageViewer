@@ -39,7 +39,6 @@ set(SOURCES
         src/Input/CommandExecuter.cpp
         src/Input/CommandResolver.cpp
         src/Input/AppCommands.cpp
-        src/Persistence/test.cpp
         src/UI/UIManager.cpp
         src/Overlays/OverlayManager.cpp
         src/UI/ThumbnailPanelWnd.cpp
@@ -90,6 +89,7 @@ target_compile_options(QuickImageViewer PRIVATE
 # 3. Explicit Linker Flags (Safe & Industry Standard)
 target_link_options(QuickImageViewer PRIVATE
         /SUBSYSTEM:WINDOWS                     # Explicitly target Win32 subsystem to prevent console windows
+        /MANIFEST:NO                           # Prevent default manifest generation i provide my own in resources/app.manifest
         $<$<CONFIG:Release>:/LTCG>             # Link Time Code Generation
         $<$<CONFIG:Release>:/INCREMENTAL:NO>   # Clean, non-fragmented binary
         $<$<CONFIG:Release>:/OPT:REF>          # Eliminate unreferenced functions/data
@@ -127,14 +127,10 @@ target_link_libraries(QuickImageViewer PRIVATE
         shlwapi
 )
 
-# 6. Robust Manifest Embedding
-add_custom_command(TARGET QuickImageViewer POST_BUILD
-        COMMAND mt.exe
-        /manifest "${CMAKE_CURRENT_SOURCE_DIR}/app.manifest"
-        "/outputresource:$<TARGET_FILE:QuickImageViewer>;#1"
-        COMMENT "Embedding custom manifest via mt.exe..."
-        VERBATIM
-)
+# 6. Track Manifest Changes
+# This tells CMake that if app.manifest changes, resource.rc needs to be recompiled.
+set_property(SOURCE resources/resource.rc PROPERTY OBJECT_DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/resources/app.manifest")
+
 # Build Completion Notification
 add_custom_command(
         TARGET QuickImageViewer
