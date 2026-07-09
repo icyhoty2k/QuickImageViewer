@@ -1,0 +1,55 @@
+From 04d86f84f51b0b692a1e6bdafc664172cefc9d84 Mon Sep 17 00:00:00 2001
+From: Ivan Hristov Yanev <icyhoty2k@gmail.com>
+Date: Thu, 9 Jul 2026 22:38:31 +0000
+Subject: [PATCH] fix: DirWnd selection not shown on cache-miss image change
+
+After the previous patch removed SyncSelectionRectangle() from UpdateView()
+(to stop manual scrolling being interrupted), the cache-miss async path
+stopped scrolling DirWnd to the newly active image.
+
+On a cache hit, LoadImageIndex calls SyncDirSelectionRectangle() directly
+after setting app.currentIndex, so the highlight and scroll position are
+correct immediately.
+
+On a cache miss, the bitmap arrives asynchronously and WM_QIV_REPAINT fires
+on the UI thread. The handler called UpdateDirView() which rebuilds geometry
+and updates m_selectedIdx, but never called SyncDirSelectionRectangle()
+(which drives ScrollToSelected and actually moves m_offset). The selection
+highlight appeared correctly in place but the panel did not scroll to it if
+the thumbnail was outside the visible strip.
+
+Fix: call SyncDirSelectionRectangle() after UpdateDirView() in both the
+WM_QIV_REPAINT handler (raster cache-miss) and the WM_QIV_SVG_READY handler
+(SVG async path). These fire on the UI thread so it is safe to call Win32
+scroll/invalidate functions from there.
+---
+ src/AppMain.cpp | 6 ++++++
+ 1 file changed, 6 insertions(+)
+
+diff --git a/src/AppMain.cpp b/src/AppMain.cpp
+index a91e64d..8e078f7 100644
+--- a/src/AppMain.cpp
++++ b/src/AppMain.cpp
+@@ -304,6 +304,11 @@ LRESULT CALLBACK MainAppWndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM l
+                     InvalidateRect(hWnd, nullptr, FALSE); // Now, repaint with the correct image.
+                     uiManager.getCacheWindow().UpdateCacheView();
+                     uiManager.getDirWindow().UpdateDirView();
++                    // Scroll DirWnd to the newly active image. UpdateDirView()
++                    // rebuilds geometry and sets m_selectedIdx but does not move
++                    // m_offset (by design, so manual scrolling is not interrupted).
++                    // On a cache-miss arrival we always want to snap to selection.
++                    uiManager.getDirWindow().SyncDirSelectionRectangle();
+                 }
+             }
+             return 0;
+@@ -330,6 +335,7 @@ LRESULT CALLBACK MainAppWndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM l
+                     InvalidateRect(hWnd, nullptr, FALSE);
+                     uiManager.getCacheWindow().UpdateCacheView();
+                     uiManager.getDirWindow().UpdateDirView();
++                    uiManager.getDirWindow().SyncDirSelectionRectangle();
+                 }
+             }
+ 
+-- 
+2.43.0
+

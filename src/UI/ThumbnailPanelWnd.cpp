@@ -62,6 +62,7 @@ namespace UI {
             SetForegroundWindow(m_hWnd);
             SetFocus(m_hWnd);
             UpdateView();
+            SyncSelectionRectangle(); // snap to current image on panel open
         }
     }
 
@@ -97,6 +98,12 @@ namespace UI {
             }
         }
         ScrollToSelected();
+        // ScrollToSelected() may have changed m_offset. Recompute all thumbnail
+        // rects so the render sees positions that match the new scroll position.
+        // Without this, a large offset jump (e.g. image 800 → image 1) leaves
+        // m_thumbnails with rects computed from the old offset, causing the
+        // selection highlight to appear off-screen or at the wrong slot.
+        RebuildGeometry();
         InvalidateRect(m_hWnd, nullptr, TRUE);
         UpdateWindow(m_hWnd);
     }
@@ -172,7 +179,77 @@ namespace UI {
         }
 
         PostBuildHook();
-        SyncSelectionRectangle();
+
+        // Update m_selectedIdx to keep the highlight in sync with app.currentIndex,
+        // but do NOT call SyncSelectionRectangle() / ScrollToSelected() here.
+        // UpdateView() is called on every wheel tick and drag move; auto-scrolling
+        // to the selected thumbnail on each call would prevent the user from
+        // manually scrolling past it.  SyncSelectionRectangle() is called
+        // explicitly by external navigation sites (AppMain, FileHandler) and by
+        // WM_SIZE / Toggle() where a geometry rebuild warrants snapping to selection.
+        m_selectedIdx = -1;
+        for (size_t i = 0; i < m_thumbnails.size(); ++i) {
+            if (m_thumbnails[i].playlistIndex == app.currentIndex) {
+                m_selectedIdx = static_cast<int>(i);
+                break;
+            }
+        }
+
+        InvalidateRect(m_hWnd, nullptr, FALSE);
+    }
+
+    // =========================================================================
+    // RebuildGeometry
+    // Recomputes every thumbnail's rect from the current m_offset without
+    // touching m_thumbnails membership or calling PostBuildHook.
+    // Called by SyncSelectionRectangle after ScrollToSelected moves m_offset
+    // so the renderer draws geometry that matches the new scroll position.
+    // =========================================================================
+    void ThumbnailPanelWnd::RebuildGeometry() {
+        if (m_thumbnails.empty()) return;
+
+        RECT cr{};
+        GetClientRect(m_hWnd, &cr);
+        float surfaceW = static_cast<float>(cr.right);
+        float surfaceH = static_cast<float>(cr.bottom);
+        float thumbW   = Constants::CACHE_THUMB_WIDTH  * app.dpiScale;
+        float thumbH   = Constants::CACHE_THUMB_HEIGHT * app.dpiScale;
+        float margin   = Constants::CACHE_THUMB_MARGIN  * app.dpiScale;
+        float spacing  = Constants::CACHE_THUMB_SPACING * app.dpiScale;
+        bool  vertical = IsVertical();
+
+        float x = margin;
+        float y = margin;
+
+        size_t n = m_thumbnails.size();
+
+        if (!vertical) {
+            y = (surfaceH - thumbH) / 2.0f;
+            float totalW = static_cast<float>(n) * (thumbW + spacing) - spacing;
+            if (totalW <= surfaceW) {
+                x = (surfaceW - totalW) / 2.0f;
+            } else {
+                float minOff = surfaceW - totalW - margin;
+                m_offset = std::clamp(m_offset, minOff, 0.0f);
+                x = margin + m_offset;
+            }
+        } else {
+            x = (surfaceW - thumbW) / 2.0f;
+            float totalH = static_cast<float>(n) * (thumbH + spacing) - spacing;
+            if (totalH <= surfaceH) {
+                y = (surfaceH - totalH) / 2.0f;
+            } else {
+                float minOff = surfaceH - totalH - margin;
+                m_offset = std::clamp(m_offset, minOff, 0.0f);
+                y = margin + m_offset;
+            }
+        }
+
+        for (auto &t : m_thumbnails) {
+            t.rect = D2D1::RectF(x, y, x + thumbW, y + thumbH);
+            if (vertical) y += thumbH + spacing;
+            else          x += thumbW + spacing;
+        }
     }
 
     // =========================================================================
@@ -302,6 +379,7 @@ namespace UI {
             case WM_SIZE: {
                 ResizeSwapChain(LOWORD(lParam), HIWORD(lParam));
                 UpdateView();
+                SyncSelectionRectangle(); // geometry changed — snap to current image
                 return 0;
             }
 

@@ -79,10 +79,12 @@ namespace Constants {
     //==========================Cache optimization====================================
     constexpr const int VRAM_CACHE_IMAGES_COUNT = 30;
     constexpr const int VRAM_CACHE_SVG_COUNT = 10;
-    // Maximum number of small dir-panel thumbnails kept in VRAM.
-    // Each entry is ~CACHE_THUMB_WIDTH * CACHE_THUMB_HEIGHT * 4 bytes ≈ 37 KB,
-    // so 256 entries ≈ 9 MB — safe even on the RTX 3060 with 12 GB GDDR6.
-    constexpr const int DIR_THUMB_CACHE_MAX = 256;
+    // VRAM budget for the dir-panel thumbnail cache.
+    // Each entry is CACHE_THUMB_WIDTH * CACHE_THUMB_HEIGHT * 4 bytes ≈ 37 KB
+    // after scaling.  512 MB holds ~14 000 thumbnails — far more than any
+    // realistic folder.  Increase if you open folders with tens of thousands
+    // of images; decrease on low-VRAM cards.
+    constexpr const size_t DIR_THUMB_CACHE_BUDGET_MB = 512;
     constexpr const int PRELOAD_LOOKASIDE_COUNT = 1;
     constexpr const int PRELOAD_TIMER_COUNTDOWN = 150; // this is used to delay preloading if user scrolls very fast
     //==========================Cache optimization====================================

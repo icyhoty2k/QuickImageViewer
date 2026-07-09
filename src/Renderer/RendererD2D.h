@@ -9,6 +9,7 @@
 #include <wrl/client.h>
 #include <list>
 #include <unordered_map>
+#include <unordered_set>
 #include <string>
 #include <mutex>
 #include <vector>
@@ -149,8 +150,18 @@ class RendererD2D final : public IImageRenderer {
         // the current folder.  Separate from m_bitmapCache (which holds full-res
         // images) so it never evicts viewer bitmaps and is cleared on folder change.
         // Evicted LRU-style at DIR_THUMB_CACHE_MAX entries to cap VRAM usage.
+        // Dir thumbnail cache — maps file path → small scaled D2D bitmap.
+        // Evicted LRU-style when m_dirThumbCacheBytes exceeds the budget.
         std::unordered_map<std::wstring, Microsoft::WRL::ComPtr<ID2D1Bitmap1> > m_dirThumbCache;
         std::list<std::wstring> m_dirThumbLruList;
+        // Running total of VRAM bytes used by m_dirThumbCache entries.
+        // Incremented on insert, decremented on evict/clear.
+        // Each entry contributes pixelWidth * pixelHeight * 4 bytes.
+        size_t m_dirThumbCacheBytes = 0;
+        // Tracks paths for which an IO+decode task is already in flight.
+        // Guarded by m_dirThumbMutex. Prevents duplicate tasks being queued
+        // when UpdateView() is called multiple times before tasks complete.
+        std::unordered_set<std::wstring> m_dirThumbInFlight;
         std::mutex m_dirThumbMutex;
 
         // Cache

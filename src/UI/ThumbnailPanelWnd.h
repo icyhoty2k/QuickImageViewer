@@ -112,6 +112,12 @@ namespace UI {
         private:
             void ScrollToSelected();
 
+            // Recomputes m_thumbnails rect positions from the current m_offset
+            // without clearing the list or calling PostBuildHook / GetSourceItems.
+            // Called by SyncSelectionRectangle after ScrollToSelected changes
+            // m_offset, so the render sees geometry that matches the new scroll pos.
+            void RebuildGeometry();
+
             // Shared 5-slot geometry (same for both CacheWnd and DirWnd):
             //   0 = center floating  (80% wide, thumb-height tall)
             //   1 = top edge strip

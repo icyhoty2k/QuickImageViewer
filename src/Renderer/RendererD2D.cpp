@@ -1314,6 +1314,11 @@ void RendererD2D::ClearDirThumbnailCache() {
     std::lock_guard<std::mutex> lock(m_dirThumbMutex);
     m_dirThumbCache.clear();
     m_dirThumbLruList.clear();
+    m_dirThumbCacheBytes = 0;
+    // Clear in-flight too: any late-arriving task for the old folder will
+    // find its path absent from the cache, check the in-flight set, and
+    // skip the duplicate-insert guard correctly.
+    m_dirThumbInFlight.clear();
 }
 
 // =============================================================================
@@ -1322,7 +1327,12 @@ void RendererD2D::ClearDirThumbnailCache() {
 void RendererD2D::RequestDirThumbnail(const std::wstring &filePath) {
     {
         std::lock_guard<std::mutex> lock(m_dirThumbMutex);
+        // Skip if already cached OR if a decode task is already in flight.
+        // Both checks must be inside the same lock to eliminate the TOCTOU
+        // window between the check and the PushTask call below.
         if (m_dirThumbCache.count(filePath)) return;
+        if (m_dirThumbInFlight.count(filePath)) return;
+        m_dirThumbInFlight.insert(filePath);
     }
 
     Microsoft::WRL::ComPtr<ID2D1Device6> d2dDev = m_pD2DDevice;
@@ -1394,12 +1404,40 @@ void RendererD2D::RequestDirThumbnail(const std::wstring &filePath) {
 
             {
                 std::lock_guard<std::mutex> lock(m_dirThumbMutex);
-                if (m_dirThumbLruList.size() >= Constants::DIR_THUMB_CACHE_MAX) {
-                    m_dirThumbCache.erase(m_dirThumbLruList.back());
-                    m_dirThumbLruList.pop_back();
+                // Always clear in-flight — task is done regardless of outcome.
+                m_dirThumbInFlight.erase(filePath);
+                // A racing second task for the same file (queued before the
+                // in-flight set was introduced, or after a ClearDirThumbnailCache)
+                // may have already written this entry. Skip duplicate insertion
+                // to keep the LRU list free of duplicate path entries.
+                if (!m_dirThumbCache.count(filePath)) {
+                    // Byte size of this thumbnail in VRAM (BGRA = 4 bytes/pixel).
+                    D2D1_SIZE_U px = thumbBitmap->GetPixelSize();
+                    size_t entryBytes = static_cast<size_t>(px.width) * px.height * 4;
+                    size_t budgetBytes = Constants::DIR_THUMB_CACHE_BUDGET_MB * 1024 * 1024;
+
+                    // Evict LRU entries until we fit within the VRAM budget.
+                    while (!m_dirThumbLruList.empty() &&
+                           (m_dirThumbCacheBytes + entryBytes > budgetBytes)) {
+                        const std::wstring &evict = m_dirThumbLruList.back();
+                        auto it = m_dirThumbCache.find(evict);
+                        if (it != m_dirThumbCache.end() && it->second) {
+                            D2D1_SIZE_U epx = it->second->GetPixelSize();
+                            size_t evictBytes = static_cast<size_t>(epx.width) * epx.height * 4;
+                            m_dirThumbCacheBytes = (m_dirThumbCacheBytes > evictBytes)
+                                                       ? m_dirThumbCacheBytes - evictBytes
+                                                       : 0;
+                            m_dirThumbCache.erase(it);
+                        } else {
+                            m_dirThumbCache.erase(evict);
+                        }
+                        m_dirThumbLruList.pop_back();
+                    }
+
+                    m_dirThumbLruList.push_front(filePath);
+                    m_dirThumbCache[filePath] = thumbBitmap;
+                    m_dirThumbCacheBytes += entryBytes;
                 }
-                m_dirThumbLruList.push_front(filePath);
-                m_dirThumbCache[filePath] = thumbBitmap;
             }
             PostMessageW(hDir, Constants::WM_QIV_REPAINT, 0, 0);
         });
