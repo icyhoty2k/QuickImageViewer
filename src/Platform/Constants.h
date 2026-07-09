@@ -88,13 +88,6 @@ namespace Constants {
     //==========================Cache optimization====================================
     //end Saveable options
 
-    // =========================================================================
-    // Folder History (HistoryWindow)
-    // =========================================================================
-    constexpr int HISTORY_MAX_DIRS = 10; // how many folders to remember — change here
-    constexpr int HISTORY_ROW_HEIGHT = 28; // px at 96 DPI per history row
-    constexpr int HISTORY_PADDING = 16; // px at 96 DPI inner padding
-    constexpr int HISTORY_FONT_SIZE = 14; // pt at 96 DPI body font
 
     // Custom window messages
     constexpr UINT WM_QIV_PENDING_UPLOADS = WM_USER + 1; // Posted by background decoder thread
@@ -195,6 +188,17 @@ namespace Constants {
         constexpr float MSG_CENTER_HEIGHT = 36.0f;
         // Custom window messages
         constexpr UINT WM_QIV_CENTER_MSG_HIDE = WM_USER + 10; // Posted by WM_TIMER to hide center msg
+    }
+
+    namespace History {
+        // =========================================================================
+        // Folder History (HistoryWindow)
+        // =========================================================================
+        constexpr const wchar_t *HISTORY_FILE_NAME = L"qivHistory.txt";
+        constexpr int HISTORY_MAX_DIRS = 10; // how many folders to remember — change here
+        constexpr int HISTORY_ROW_HEIGHT = 28; // px at 96 DPI per history row
+        constexpr int HISTORY_PADDING = 16; // px at 96 DPI inner padding
+        constexpr int HISTORY_FONT_SIZE = 14; // pt at 96 DPI body font
     }
 
     // =========================================================================

@@ -30,3 +30,5 @@ You are pushing std::function<void()> tasks into your queues.
 The Cost: Every time you std::move a std::function or capture variables in a lambda, you might trigger a heap allocation if the lambda closure is larger than a small pointer size (usually 16–32 bytes).
 The Fix: If you find the decoder thread is "stuttering" during very high-speed scrolling, check the size of the lambdas you are pushing. For the g_decoderWorker, try to capture pointers rather than objects to keep the closure size under the "Small Object Optimization" limit, which avoids heap allocations during the task dispatch.
 how to fix where in conde
+
+hello i give up on custom cursors i have  leave this as is now its time to make the history persistent across reboots we need a way to save history on exit what is the best aproach

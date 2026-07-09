@@ -43,6 +43,7 @@ set(SOURCES
         src/UI/UIManager.cpp
         src/Overlays/OverlayManager.cpp
         src/UI/ThumbnailPanelWnd.cpp
+        src/Persistence/HistoryFoldersManager.cpp
 )
 find_program(SCCACHE_PROGRAM sccache)
 if (SCCACHE_PROGRAM)
