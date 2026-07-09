@@ -98,7 +98,7 @@ void MouseHandler::HandleButtonDown(HWND hWnd, UINT message, LPARAM lParam) {
         WORD cursorId = imageOverflows ? Constants::Cursors::LMB_PAN : Constants::Cursors::LMB_ZOOM;
         SetCursor(LoadCursor(nullptr, MAKEINTRESOURCEW(cursorId)));
 
-        // Save state so ButtonUp can restore if we zoomed.
+        // Save state so ButtonUp can restore if we zoomed...
         app.savedZoom    = app.viewport.zoom;
         app.savedOffsetX = app.viewport.offsetX;
         app.savedOffsetY = app.viewport.offsetY;
