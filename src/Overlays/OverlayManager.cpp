@@ -120,7 +120,7 @@ void OverlayManager::UpdateTextFormat() {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-//  Build center-center brush (independent colour)
+//  Build center-center brush (independent colour).
 // ─────────────────────────────────────────────────────────────────────────────
 
 void OverlayManager::BuildCenterBrush(ID2D1DeviceContext *ctx) {
