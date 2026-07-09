@@ -114,7 +114,7 @@ void OverlayManager::UpdateTextFormat() {
     }
 
     // -------------------------------------------------------------------------
-    // 3. Rebuild the outer slot layouts
+    // 3. Rebuild the outer slot layouts.
     // -------------------------------------------------------------------------
     BuildSlotFormats();
 }
