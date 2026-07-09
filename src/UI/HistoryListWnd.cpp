@@ -7,16 +7,10 @@
 #include <windowsx.h>
 #include <filesystem>
 
+#include "HistoryFoldersManager.h"
+
 // ---------------------------------------------------------------------------
 // HistoryListWnd.cpp  —  Last-visited folder history panel.
-//
-// Architecture:
-//   - Standalone WS_POPUP | WS_EX_TOPMOST | WS_EX_LAYERED window
-//   - Rendered with GDI (same approach as HelpWnd — no separate D2D swap chain)
-//   - g_folderHistory  : vector of folder paths, max Constants::HISTORY_MAX_DIRS entries
-//   - PushFolderHistory(): called by FileHandler after every folder load
-//   - Click on a row   : calls OpenSpecificImage with first image in that folder
-//   - F7 / Esc         : toggle / hide
 // ---------------------------------------------------------------------------
 
 namespace UI {
@@ -26,7 +20,8 @@ namespace UI {
     static HWND g_hHistOwner = nullptr;
     static int g_hoverRow = -1;
 
-    static std::vector<std::wstring> g_folderHistory;
+    // The single source of truth for history data
+    static HistoryFoldersManager historyFoldersManager;
     static std::vector<RECT> g_rowRects;
 
     // -------------------------------------------------------------------------
@@ -36,18 +31,24 @@ namespace UI {
         if (folderPath.empty())
             return;
 
-        auto it = std::find(g_folderHistory.begin(), g_folderHistory.end(), folderPath);
-        if (it != g_folderHistory.end())
-            g_folderHistory.erase(it);
+        // Create a quick reference to keep the code clean
+        auto &history = historyFoldersManager.folderHistory;
 
-        g_folderHistory.insert(g_folderHistory.begin(), folderPath);
+        auto it = std::find(history.begin(), history.end(), folderPath);
+        if (it != history.end())
+            history.erase(it);
 
-        if (g_folderHistory.size() > Constants::HISTORY_MAX_DIRS)
-            g_folderHistory.resize(Constants::HISTORY_MAX_DIRS);
+        history.insert(history.begin(), folderPath);
+
+        if (history.size() > Constants::History::HISTORY_MAX_DIRS)
+            history.resize(Constants::History::HISTORY_MAX_DIRS);
+
+        // Immediately save state to disk
+        historyFoldersManager.SaveHistoryToDisk();
     }
 
     const std::vector<std::wstring> &GetFolderHistory() {
-        return g_folderHistory;
+        return historyFoldersManager.folderHistory;
     }
 
     // -------------------------------------------------------------------------
@@ -64,10 +65,10 @@ namespace UI {
         int monH = mi.rcMonitor.bottom - mi.rcMonitor.top;
 
         UINT dpi = GetDpiForWindow(hRef);
-        int rowH = MulDiv(Constants::HISTORY_ROW_HEIGHT, dpi, 96);
-        int padding = MulDiv(Constants::HISTORY_PADDING, dpi, 96);
+        int rowH = MulDiv(Constants::History::HISTORY_ROW_HEIGHT, dpi, 96);
+        int padding = MulDiv(Constants::History::HISTORY_PADDING, dpi, 96);
 
-        int entries = std::max(1, static_cast<int>(g_folderHistory.size()));
+        int entries = std::max(1, static_cast<int>(historyFoldersManager.folderHistory.size()));
         int totalH = padding * 2
                      + MulDiv(30, dpi, 96) // title row
                      + MulDiv(8, dpi, 96) // gap below title
@@ -80,11 +81,10 @@ namespace UI {
     }
 
     // -------------------------------------------------------------------------
-    // Window procedure  (routes via IPanelWindow::WindowRouter → m_hWnd)
+    // Window procedure
     // -------------------------------------------------------------------------
     LRESULT HistoryListWnd::HandleMessage(UINT message, WPARAM wParam, LPARAM lParam) {
         switch (message) {
-            // -----------------------------------------------------------------
             case WM_PAINT: {
                 PAINTSTRUCT ps;
                 HDC hdc = BeginPaint(m_hWnd, &ps);
@@ -92,10 +92,10 @@ namespace UI {
                 GetClientRect(m_hWnd, &rc);
 
                 UINT dpi = GetDpiForWindow(m_hWnd);
-                int padding = MulDiv(Constants::HISTORY_PADDING, dpi, 96);
-                int rowH = MulDiv(Constants::HISTORY_ROW_HEIGHT, dpi, 96);
-                int fontSize = MulDiv(Constants::HISTORY_FONT_SIZE, dpi, 96);
-                int titleSz = MulDiv(Constants::HISTORY_FONT_SIZE + 2, dpi, 96);
+                int padding = MulDiv(Constants::History::HISTORY_PADDING, dpi, 96);
+                int rowH = MulDiv(Constants::History::HISTORY_ROW_HEIGHT, dpi, 96);
+                int fontSize = MulDiv(Constants::History::HISTORY_FONT_SIZE, dpi, 96);
+                int titleSz = MulDiv(Constants::History::HISTORY_FONT_SIZE + 2, dpi, 96);
                 int indexW = MulDiv(28, dpi, 96);
 
                 HBRUSH hBg = CreateSolidBrush(RGB(18, 18, 18));
@@ -114,12 +114,11 @@ namespace UI {
                         DEFAULT_CHARSET, OUT_OUTLINE_PRECIS, CLIP_DEFAULT_PRECIS,
                         CLEARTYPE_QUALITY, VARIABLE_PITCH, L"Segoe UI");
 
-                // ---- Title row ----
                 SelectObject(hdc, hTitleFont);
                 SetTextColor(hdc, RGB(100, 200, 255));
 
                 std::wstring title = L"Folder History  (last "
-                                     + std::to_wstring(Constants::HISTORY_MAX_DIRS) + L" folders)";
+                                     + std::to_wstring(Constants::History::HISTORY_MAX_DIRS) + L" folders)";
                 RECT titleRect = {
                     rc.left + padding, rc.top + padding,
                     rc.right - padding, rc.top + padding + titleSz + 4
@@ -134,18 +133,19 @@ namespace UI {
                 SelectObject(hdc, hOldPen);
                 DeleteObject(hPen);
 
-                // ---- History rows ----
                 SelectObject(hdc, hBodyFont);
                 g_rowRects.clear();
                 int y = sepY + MulDiv(6, dpi, 96);
 
-                if (g_folderHistory.empty()) {
+                const auto &history = historyFoldersManager.folderHistory;
+
+                if (history.empty()) {
                     SetTextColor(hdc, RGB(100, 100, 100));
                     RECT emptyRect = {rc.left + padding, y, rc.right - padding, y + rowH};
                     DrawTextW(hdc, L"No folders visited yet.", -1, &emptyRect,
                               DT_LEFT | DT_VCENTER | DT_SINGLELINE);
                 } else {
-                    for (int i = 0; i < static_cast<int>(g_folderHistory.size()); ++i) {
+                    for (int i = 0; i < static_cast<int>(history.size()); ++i) {
                         RECT rowRect = {rc.left, y, rc.right, y + rowH};
                         g_rowRects.push_back(rowRect);
 
@@ -171,7 +171,7 @@ namespace UI {
                             rc.right - padding,
                             y + rowH
                         };
-                        DrawTextW(hdc, g_folderHistory[i].c_str(), -1, &pathRect,
+                        DrawTextW(hdc, history[i].c_str(), -1, &pathRect,
                                   DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
 
                         y += rowH;
@@ -185,7 +185,6 @@ namespace UI {
                 return 0;
             }
 
-            // -----------------------------------------------------------------
             case WM_MOUSEMOVE: {
                 int mx = GET_X_LPARAM(lParam);
                 int my = GET_Y_LPARAM(lParam);
@@ -206,7 +205,6 @@ namespace UI {
                 return 0;
             }
 
-            // -----------------------------------------------------------------
             case WM_LBUTTONUP: {
                 int mx = GET_X_LPARAM(lParam);
                 int my = GET_Y_LPARAM(lParam);
@@ -214,7 +212,7 @@ namespace UI {
                 for (int i = 0; i < static_cast<int>(g_rowRects.size()); ++i) {
                     const RECT &r = g_rowRects[i];
                     if (mx >= r.left && mx < r.right && my >= r.top && my < r.bottom) {
-                        const std::wstring &folder = g_folderHistory[i];
+                        const std::wstring &folder = historyFoldersManager.folderHistory[i];
                         ShowWindow(m_hWnd, SW_HIDE);
                         try {
                             for (const auto &entry: std::filesystem::directory_iterator(folder)) {
@@ -230,15 +228,14 @@ namespace UI {
                 return 0;
             }
 
-            // -----------------------------------------------------------------
             case WM_MOUSELEAVE: {
                 g_hoverRow = -1;
                 InvalidateRect(m_hWnd, nullptr, FALSE);
                 return 0;
             }
 
-            // -----------------------------------------------------------------
             case WM_KEYDOWN: {
+                const auto &history = historyFoldersManager.folderHistory;
                 switch (wParam) {
                     case Shortcuts::SC_LOCAL_HIDE:
                         ShowWindow(m_hWnd, SW_HIDE);
@@ -248,9 +245,9 @@ namespace UI {
                         return 0;
 
                     case VK_UP: {
-                        if (!g_folderHistory.empty()) {
+                        if (!history.empty()) {
                             g_hoverRow = (g_hoverRow <= 0)
-                                             ? static_cast<int>(g_folderHistory.size()) - 1
+                                             ? static_cast<int>(history.size()) - 1
                                              : g_hoverRow - 1;
                             InvalidateRect(m_hWnd, nullptr, FALSE);
                         }
@@ -258,8 +255,8 @@ namespace UI {
                     }
 
                     case VK_DOWN: {
-                        if (!g_folderHistory.empty()) {
-                            g_hoverRow = (g_hoverRow < static_cast<int>(g_folderHistory.size()) - 1)
+                        if (!history.empty()) {
+                            g_hoverRow = (g_hoverRow < static_cast<int>(history.size()) - 1)
                                              ? g_hoverRow + 1
                                              : 0;
                             InvalidateRect(m_hWnd, nullptr, FALSE);
@@ -268,8 +265,8 @@ namespace UI {
                     }
 
                     case VK_RETURN: {
-                        if (g_hoverRow >= 0 && g_hoverRow < static_cast<int>(g_folderHistory.size())) {
-                            const std::wstring &folder = g_folderHistory[g_hoverRow];
+                        if (g_hoverRow >= 0 && g_hoverRow < static_cast<int>(history.size())) {
+                            const std::wstring &folder = history[g_hoverRow];
                             ShowWindow(m_hWnd, SW_HIDE);
                             try {
                                 for (const auto &entry: std::filesystem::directory_iterator(folder)) {
@@ -290,7 +287,6 @@ namespace UI {
                 break;
             }
 
-            // -----------------------------------------------------------------
             case WM_CLOSE:
                 ShowWindow(m_hWnd, SW_HIDE);
                 return 0;
@@ -308,6 +304,9 @@ namespace UI {
 
     void HistoryListWnd::Init(HINSTANCE hInstance, HWND hParent) {
         g_hHistOwner = hParent;
+
+        // LOAD DATA FROM DISK BEFORE CREATING THE WINDOW
+        historyFoldersManager.LoadHistoryFromDisk();
 
         WNDCLASSW wc{};
         wc.style = CS_DBLCLKS;
