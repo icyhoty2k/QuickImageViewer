@@ -168,7 +168,7 @@ namespace Constants {
         // Overlay — Center-Center message queue (MID_CENTER slot)
         // =========================================================================
         // How long the center-center notification stays visible before auto-hiding (ms)
-        constexpr UINT MSG_CENTER_DISPLAY_MS = 1500;
+        constexpr UINT MSG_CENTER_DISPLAY_MS = 1000;
         // Center-center text color  (R, G, B, A)
         constexpr float MSG_CENTER_COLOR_R = 1.0f;
         constexpr float MSG_CENTER_COLOR_G = 0.85f;
