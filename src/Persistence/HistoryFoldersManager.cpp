@@ -6,87 +6,123 @@
 
 namespace fs = std::filesystem;
 
-// -------------------------------------------------------------------------
-// Locates the text file alongside the portable executable
-// -------------------------------------------------------------------------
-std::wstring HistoryFoldersManager::GetQIVStateFilePath() const {
+// ---------------------------------------------------------------------------
+// GetFilePath  —  full path to qivHistory.txt next to the executable
+// ---------------------------------------------------------------------------
+std::wstring HistoryFoldersManager::GetFilePath() const {
     wchar_t buffer[MAX_PATH];
     DWORD size = GetModuleFileNameW(nullptr, buffer, MAX_PATH);
 
-    if (size == 0 || size == MAX_PATH) {
-        // Fallback to relative current working directory if the Win32 API fails
-        return historyFileName;
-    }
+    if (size == 0 || size == MAX_PATH)
+        return historyFileName; // fallback: relative to CWD
 
-    fs::path exePath(buffer);
-    fs::path appDir = exePath.parent_path();
+    fs::path appDir = fs::path(buffer).parent_path();
 
-    // If a subfolder is defined in the constants, append it and ensure it exists
     if (!historyFolderName.empty()) {
         appDir /= historyFolderName;
-        if (!fs::exists(appDir)) {
+        if (!fs::exists(appDir))
             fs::create_directories(appDir);
-        }
     }
 
     return (appDir / historyFileName).wstring();
 }
 
-// -------------------------------------------------------------------------
-// Dumps this struct's current data to the text file
-// -------------------------------------------------------------------------
-void HistoryFoldersManager::SaveHistoryToDisk() const {
-    std::wstring filePath = GetQIVStateFilePath();
+// ---------------------------------------------------------------------------
+// LoadHistoryFromDisk
+//   Reads the whole file once at startup.
+//   Lines starting with '*' are favorites; the '*' is stripped for the path.
+//   folderHistory is built in file order then reversed so index 0 = most
+//   recent (newest line = bottom of file = MRU).
+//   Caps at HISTORY_MAX_DIRS_TO_SAVE.
+// ---------------------------------------------------------------------------
+void HistoryFoldersManager::LoadHistoryFromDisk() {
+    folderHistory.clear();
+    favorites.clear();
 
-    // std::ios::trunc overwrites the old file with the complete current state
-    std::wofstream file(filePath, std::ios::out | std::ios::trunc);
+    std::wstring filePath = GetFilePath();
+    std::wifstream file(filePath);
+    if (!file.is_open())
+        return;
 
-    if (file.is_open()) {
-        // Line 1 is strictly for the last picture
-        file << lastPicture << L"\n";
+    std::wstring line;
+    while (std::getline(file, line)) {
+        // Strip CR for files written on Windows with \r\n
+        if (!line.empty() && line.back() == L'\r')
+            line.pop_back();
+        if (line.empty())
+            continue;
 
-        // Line 2 and beyond are the history paths
-        for (const auto &record: folderHistory) {
-            file << record << L"\n";
+        bool isFavorite = (line.front() == static_cast<wchar_t>(Constants::History::HISTORY_FAVORITES_MARK));
+        std::wstring path = isFavorite ? line.substr(1) : line;
+
+        if (path.empty())
+            continue;
+
+        // Skip duplicates that may exist in a hand-edited file
+        bool alreadyKnown = false;
+        for (const auto &entry : folderHistory) {
+            if (entry == path) { alreadyKnown = true; break; }
         }
+        if (alreadyKnown)
+            continue;
 
-        file.close();
+        if (static_cast<int>(folderHistory.size()) >= Constants::History::HISTORY_MAX_DIRS_TO_SAVE)
+            break;
+
+        folderHistory.push_back(path);
+        if (isFavorite)
+            favorites.insert(path);
     }
+
+    file.close();
+
+    // File is oldest-first; reverse so index 0 = most recently visited
+    std::reverse(folderHistory.begin(), folderHistory.end());
 }
 
-// -------------------------------------------------------------------------
-// Reads the text file from disk and populates this struct's variables
-// -------------------------------------------------------------------------
-void HistoryFoldersManager::LoadHistoryFromDisk() {
-    std::wstring filePath = GetQIVStateFilePath();
+// ---------------------------------------------------------------------------
+// AppendNewFolderToDisk
+//   Appends a single line to the file. The caller guarantees this path is
+//   not already in folderHistory (i.e. it is genuinely new).
+//   Favorites are prepended with '*' if applicable (new entries won't be
+//   favorites yet, but the function checks anyway for correctness).
+// ---------------------------------------------------------------------------
+void HistoryFoldersManager::AppendNewFolderToDisk(const std::wstring &folderPath) const {
+    std::wstring filePath = GetFilePath();
+    std::wofstream file(filePath, std::ios::out | std::ios::app);
+    if (!file.is_open())
+        return;
 
-    // Clear existing memory state in case this is called multiple times
-    lastPicture.clear();
-    folderHistory.clear();
+    bool isFav = (favorites.count(folderPath) > 0);
+    if (isFav)
+        file << static_cast<wchar_t>(Constants::History::HISTORY_FAVORITES_MARK);
+    file << folderPath << L"\n";
+    file.close();
+}
 
-    std::wifstream file(filePath);
-    if (file.is_open()) {
-        std::wstring line;
+// ---------------------------------------------------------------------------
+// RewriteFileToDisk
+//   Writes the entire current state to disk.
+//   Used when toggling a favorite or clearing history (both need to change
+//   existing lines, which append-only cannot do).
+//   File order: oldest first (reverse of folderHistory MRU order), so that
+//   new appends always go to the bottom and LoadHistoryFromDisk reverses
+//   correctly next time.
+// ---------------------------------------------------------------------------
+void HistoryFoldersManager::RewriteFileToDisk() const {
+    std::wstring filePath = GetFilePath();
+    std::wofstream file(filePath, std::ios::out | std::ios::trunc);
+    if (!file.is_open())
+        return;
 
-        // Parse Line 1: Last Picture
-        if (std::getline(file, line)) {
-            // Strip potential carriage return if saved on mixed line endings
-            if (!line.empty() && line.back() == L'\r') {
-                line.pop_back();
-            }
-            lastPicture = line;
-        }
-
-        // Parse Line 2+: Folder History
-        while (std::getline(file, line)) {
-            if (!line.empty() && line.back() == L'\r') {
-                line.pop_back();
-            }
-            if (!line.empty()) {
-                folderHistory.push_back(line);
-            }
-        }
-
-        file.close();
+    // Write oldest first (index size-1 down to 0)
+    for (int i = static_cast<int>(folderHistory.size()) - 1; i >= 0; --i) {
+        const std::wstring &path = folderHistory[i];
+        bool isFav = (favorites.count(path) > 0);
+        if (isFav)
+            file << static_cast<wchar_t>(Constants::History::HISTORY_FAVORITES_MARK);
+        file << path << L"\n";
     }
+
+    file.close();
 }

@@ -214,6 +214,7 @@ namespace Constants {
         // Folder History (HistoryWindow)
         // =========================================================================
         constexpr const wchar_t *HISTORY_FILE_NAME = L"qivHistory.txt";
+        constexpr const wchar_t *FAVORITES_FILE_NAME = L"qivFavorites.txt";
         //theese are kept im mot recently used order in ram , when addin a new one to file just append to end with no duplicates
         constexpr int HISTORY_MAX_DIRS_TO_SHOW = 10; // how many folders to show in historyWnd
         constexpr int HISTORY_MAX_DIRS_TO_SAVE = 1000; // how many folders to remember/sava in file , just append to end new ones until max is reached excluding duplicates
