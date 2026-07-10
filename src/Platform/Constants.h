@@ -215,6 +215,12 @@ namespace Constants {
         // =========================================================================
         constexpr const wchar_t *HISTORY_FILE_NAME = L"qivHistory.txt";
         constexpr const wchar_t *FAVORITES_FILE_NAME = L"qivFavorites.txt";
+        //backup name must be the same as the file name only append the currentDate ex: qivHistory_DATE.bak
+        //We Backup when we delete history/favorites only then we first backup then delete !
+        constexpr const wchar_t *HISTORY_FAVORITES_BACKUP_FOLDER = L"/QivBackup";
+        constexpr const wchar_t *HISTORY_FAVORITES_BACKUP_VERSION = L"Backup Version Schema : 1.0";
+        //when backing up history or favorites first line must be the date time and the QuickImageViewer backupVersion ,and COMPUTER_NAME ex:BACKUP COMPUTER_NAME, dd.MM.YYYY, HH:MM:SS.ms, HISTORY_FAVORITES_BACKUP_VERSION
+        constexpr const wchar_t *HISTORY_FAVORITES_BACKUP_EXTENSION = L".bak";
         //theese are kept im mot recently used order in ram , when addin a new one to file just append to end with no duplicates
         constexpr int HISTORY_MAX_DIRS_TO_SHOW = 10; // how many folders to show in historyWnd
         constexpr int HISTORY_MAX_DIRS_TO_SAVE = 1000; // how many folders to remember/sava in file , just append to end new ones until max is reached excluding duplicates
