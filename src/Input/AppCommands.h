@@ -1,4 +1,4 @@
-// CommandProvider.h
+// AppCommands.h
 #pragma once
 #include <windows.h>
 #define WM_TRAYICON (WM_APP + 1)
@@ -11,6 +11,8 @@ class AppCommands {
         static void ResetWindowLayoutAndEffects(HWND hWnd);
 
         static void AddTrayIcon(HWND hWnd);
+
+        static void changeAppThemeToDarkMode(HWND hWnd, bool isDarkThemed);
 
         static void RemoveTrayIcon(HWND hWnd);
 

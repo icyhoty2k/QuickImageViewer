@@ -12,37 +12,25 @@ extern void UpdateOverlaysForCurrentImage(HWND hWnd);
 #endif
 #include <dwmapi.h>
 #include <intsafe.h>
-
 #include "CacheWnd.h"
 #include "AppState.h"
 #include "WorkerThread.h"
 #include "Platform/Constants.h"
-
 #include "../DropTarget.h"
 #include "Platform/FileHandler.h"
-
 #include "UI/DirWnd.h"
-
-
 #include "MouseHandler.h"
 #include "Input/Command.h"
-
-
 #include <windows.h>
 #include <windowsx.h>
-
 #include <shellapi.h> // Parsing command line arguments
 #include <string>     // Handling string paths
 #include <memory>     // Needed for std::unique_ptr for renderer management
-
 #include "Platform/DpiAwareInit.h"
-
 #include "../resources/resource.h"
 #include "Platform/RegistrySetup.h"
-
 #include "Renderer/RendererD2D.h"
 #include "Renderer/RendererGDI.h"
-
 #include <shlobj.h>   // Required for SHOpenFolderAndSelectItems
 
 
@@ -363,7 +351,7 @@ LRESULT CALLBACK MainAppWndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM l
         case WM_ERASEBKGND:
             return 1;
         case WM_TRAYICON: {
-            if (lParam == WM_LBUTTONDBLCLK) {
+            if (LOWORD(lParam) == WM_LBUTTONDBLCLK) {
                 // 1. Remove the tray icon and make the window visible
 
                 ShowWindow(hWnd, SW_SHOW);
@@ -390,7 +378,7 @@ LRESULT CALLBACK MainAppWndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM l
                     // Fallback if we already have the rights
                     SetForegroundWindow(hWnd);
                 }
-            } else if (lParam == WM_RBUTTONUP) {
+            } else if (LOWORD(lParam) == WM_RBUTTONUP) {
                 // Right-click shows a context menu
                 POINT pt;
                 GetCursorPos(&pt);
@@ -405,6 +393,7 @@ LRESULT CALLBACK MainAppWndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM l
 
                 // TrackPopupMenu blocks until the user clicks an option or clicks away
                 int cmd = TrackPopupMenu(hMenu, TPM_RETURNCMD | TPM_NONOTIFY, pt.x, pt.y, 0, hWnd, nullptr);
+                PostMessage(hWnd, WM_NULL, 0, 0);
                 DestroyMenu(hMenu);
 
                 if (cmd == 1) { // Restore clicked
@@ -419,10 +408,14 @@ LRESULT CALLBACK MainAppWndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM l
             }
             return 0;
         }
+
+
         case WM_CLOSE: {
             // 1. "Hide" instead of "Destroy"
             // This removes the window from sight but keeps the process and message loop alive.
             ShowWindow(hWnd, SW_HIDE);
+            AppCommands::AddTrayIcon(hWnd);
+
             return 0; // Returning 0 prevents WM_DESTROY from being called
         }
 
@@ -433,10 +426,14 @@ LRESULT CALLBACK MainAppWndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM l
     return DefWindowProcW(hWnd, message, wParam, lParam);
 }
 
-//Main entry point
+//////////////////////////////////////////////////////
+//////////////////// Main entry point /////////////////
+////////////////////////////////////////////////////////
 int WINAPI wWinMain(HINSTANCE hInstance, [[maybe_unused]] HINSTANCE hPrevInstance, [[maybe_unused]] PWSTR pCmdLine, int nCmdShow) {
     // 1. Initialize OLE
     if (FAILED(OleInitialize(nullptr))) return 0;
+    // Enable process-wide dark standard controls for the tray menu
+
 
     // Set DPI awareness
     typedef BOOL (WINAPI *SETDPI)(DPI_AWARENESS_CONTEXT);
@@ -449,7 +446,7 @@ int WINAPI wWinMain(HINSTANCE hInstance, [[maybe_unused]] HINSTANCE hPrevInstanc
     app.hardwareThreads = static_cast<int>(hc > 0 ? hc : 1); // Default to 1 if OS returns 0
     //dynamic thread selection
     g_decoderWorker.setThreadCount(app.hardwareThreads > 3 ? Constants::VRAM_CACHE_DECODER_THREADS_COUNT : 1);
-    int dirThumbThreads = (app.hardwareThreads >= 8) ? (app.hardwareThreads / 2) : ( Constants::VRAM_CACHE_THUMBS_THREADS_COUNT);
+    int dirThumbThreads = (app.hardwareThreads >= 8) ? (app.hardwareThreads / 2) : (Constants::VRAM_CACHE_THUMBS_THREADS_COUNT);
     g_dirThumbWorker.setThreadCount(std::max(1, dirThumbThreads));
 #ifdef _DEBUG
     // Use the public getter instead of accessing private member m_threads
@@ -523,7 +520,7 @@ int WINAPI wWinMain(HINSTANCE hInstance, [[maybe_unused]] HINSTANCE hPrevInstanc
         LocalFree(argv);
         return 1;
     }
-
+    AppCommands::changeAppThemeToDarkMode(hWnd, true);
     // Init UI Manager (The New Controller)
     uiManager.Init(hInstance, hWnd);
 
@@ -555,6 +552,7 @@ int WINAPI wWinMain(HINSTANCE hInstance, [[maybe_unused]] HINSTANCE hPrevInstanc
     // Handle startup arguments using the already-parsed 'argv'
     if (argc > 1 && std::wstring(argv[1]) == L"-background") {
         ShowWindow(hWnd, SW_HIDE);
+        AppCommands::AddTrayIcon(hWnd);
     } else {
         ShowWindow(hWnd, nCmdShow);
         UpdateWindow(hWnd);
