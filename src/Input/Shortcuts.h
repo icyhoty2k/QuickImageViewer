@@ -165,6 +165,7 @@ namespace Shortcuts {
     // -------------------------------------------------------------------------
     constexpr UINT HISTORY_FAVORITES_TOGGLE_KEY = VK_SPACE;
     constexpr UINT HISTORY_CLEAR_ALL_HISTORY_BUT_NOT_FAVORITES = VK_DELETE; //ctrl+alt+delete only when historyWnd is open
+    constexpr UINT HISTORY_CLEAR_ALL_FAVORITES_BUT_NOT_HISTORY = VK_DELETE; //ctrl+alt+shift+delete only when historyWnd is open
 
     // -------------------------------------------------------------------------
     // Transform
