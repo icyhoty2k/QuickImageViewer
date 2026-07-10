@@ -210,17 +210,20 @@ namespace UI {
                 return 0;
             }
 
-            case WM_KEYDOWN:
-                if (wParam == Shortcuts::SC_LOCAL_HIDE || wParam == Shortcuts::SC_PANEL_HELP_TOGGLE) {
+            case WM_KEYDOWN: {
+                if (wParam == Shortcuts::SC_PANEL_HELP_TOGGLE) {
                     Hide();
                 }
                 return 0;
-
-            case WM_CLOSE:
+            }
+            case WM_CLOSE: {
                 Hide();
                 return 0;
+            }
         }
 
         return DefWindowProcW(m_hWnd, message, wParam, lParam);
     }
-} // namespace UI
+}
+
+// namespace UI
