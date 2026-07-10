@@ -25,14 +25,18 @@ namespace Shortcuts {
 
     // Esc  /  Ctrl+W  —  Hide to tray (keeps process alive); kills extra instances
     constexpr UINT SC_APP_HIDE = VK_ESCAPE;
-    constexpr UINT SC_APP_HIDE_ALT = 'W'; // requires ctrl
+    constexpr UINT SC_APP_HIDE_ALT = 'W'; // requires ctrl // used in IPanelWindow too ! to unifi behaviour
 
     // Ctrl+N  —  Spawn a new blank QIV window
     constexpr UINT SC_APP_NEW_WINDOW = 'N'; // requires ctrl
 
     // Shift+Delete  — Restore default application state
     constexpr UINT SC_APP_RESET_DEFAULTS = VK_DELETE;
+    // -------------------------------------------------------------------------
+    // IPanelWindow.h shortcuts for all chield windows
+    // -------------------------------------------------------------------------
 
+    constexpr UINT IPANNEL_WINDOW_LOCAL_HIDE = VK_ESCAPE;
     // -------------------------------------------------------------------------
     // Panels / Overlays
     // -------------------------------------------------------------------------
@@ -132,11 +136,6 @@ namespace Shortcuts {
     constexpr UINT SC_TRANSFORM_FLIP_H = 'H';
     constexpr UINT SC_TRANSFORM_FLIP_V = 'V';
 
-    // -------------------------------------------------------------------------
-    // Panel-local shortcuts (handled in each panel's own WndProc)
-    // -------------------------------------------------------------------------
-
-    constexpr UINT SC_LOCAL_HIDE = VK_ESCAPE;
 
     // -------------------------------------------------------------------------
     // Color Effects

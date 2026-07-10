@@ -353,7 +353,6 @@ LRESULT CALLBACK MainAppWndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM l
         case WM_TRAYICON: {
             if (LOWORD(lParam) == WM_LBUTTONDBLCLK) {
                 // 1. Remove the tray icon and make the window visible
-
                 ShowWindow(hWnd, SW_SHOW);
                 ShowWindow(hWnd, SW_RESTORE);
 
@@ -363,45 +362,50 @@ LRESULT CALLBACK MainAppWndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM l
                     DWORD foregroundThreadId = GetWindowThreadProcessId(hForegroundWnd, nullptr);
                     DWORD currentThreadId = GetCurrentThreadId();
 
-                    // Attach our thread to the current foreground thread
                     AttachThreadInput(foregroundThreadId, currentThreadId, TRUE);
 
-                    // Force the window to the absolute front and give it input focus
                     SetForegroundWindow(hWnd);
                     SetWindowPos(hWnd, HWND_TOP, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE);
                     SetActiveWindow(hWnd);
                     SetFocus(hWnd);
 
-                    // Detach safely
                     AttachThreadInput(foregroundThreadId, currentThreadId, FALSE);
                 } else {
-                    // Fallback if we already have the rights
                     SetForegroundWindow(hWnd);
                 }
             } else if (LOWORD(lParam) == WM_RBUTTONUP) {
-                // Right-click shows a context menu
-                POINT pt;
-                GetCursorPos(&pt);
+                // --- OPTIMIZED: Extract coordinates directly from wParam ---
+                int x = GET_X_LPARAM(wParam);
+                int y = GET_Y_LPARAM(wParam);
 
                 HMENU hMenu = CreatePopupMenu();
                 AppendMenuW(hMenu, MF_STRING, 1, L"Restore QuickImageViewer");
-                AppendMenuW(hMenu, MF_STRING, 2, L"Exit Completely");
+                AppendMenuW(hMenu, MF_STRING, 2, L"Help / Shortcuts"); // --- NEW ---
+                AppendMenuW(hMenu, MF_SEPARATOR, 0, nullptr); // Visual separator
+                AppendMenuW(hMenu, MF_STRING, 3, L"Exit Completely");
 
-                // SetForegroundWindow is REQUIRED here, otherwise the menu
-                // won't disappear if the user clicks away from it.
+                // SetForegroundWindow is REQUIRED here
                 SetForegroundWindow(hWnd);
 
-                // TrackPopupMenu blocks until the user clicks an option or clicks away
-                int cmd = TrackPopupMenu(hMenu, TPM_RETURNCMD | TPM_NONOTIFY, pt.x, pt.y, 0, hWnd, nullptr);
+                // Pass the extracted x and y directly
+                int cmd = TrackPopupMenu(hMenu, TPM_RETURNCMD | TPM_NONOTIFY, x, y, 0, hWnd, nullptr);
                 PostMessage(hWnd, WM_NULL, 0, 0);
                 DestroyMenu(hMenu);
 
                 if (cmd == 1) { // Restore clicked
-
                     ShowWindow(hWnd, SW_SHOW);
                     ShowWindow(hWnd, SW_RESTORE);
                     SetForegroundWindow(hWnd);
-                } else if (cmd == 2) { // Exit clicked
+                } else if (cmd == 2) { // --- NEW: Help clicked ---
+                    // 1. Bring the main app to the front first
+                    ShowWindow(hWnd, SW_SHOW);
+                    ShowWindow(hWnd, SW_RESTORE);
+                    SetForegroundWindow(hWnd);
+
+                    // 2. Trigger your help window.
+                    // Assuming uiManager holds the help window instance based on your architecture:
+                    uiManager.getHelpWindow().Show();
+                } else if (cmd == 3) { // Exit clicked
                     AppCommands::RemoveTrayIcon(hWnd);
                     DestroyWindow(hWnd);
                 }

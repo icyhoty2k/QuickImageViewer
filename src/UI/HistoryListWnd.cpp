@@ -234,9 +234,6 @@ namespace UI {
             case WM_KEYDOWN: {
                 const auto &history = historyFoldersManager.folderHistory;
                 switch (wParam) {
-                    case Shortcuts::SC_LOCAL_HIDE:
-                        ShowWindow(m_hWnd, SW_HIDE);
-                        return 0;
                     case Shortcuts::SC_PANEL_HISTORY_TOGGLE:
                         ToggleHistoryWindow();
                         return 0;

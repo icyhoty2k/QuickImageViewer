@@ -1,6 +1,10 @@
 #pragma once
 #include <cstdint>
 #include <windows.h>
+#include "Shortcuts.h"
+
+// Include your Shortcuts header if you want to use SC_LOCAL_HIDE
+// #include "Shortcuts.h"
 
 namespace UI {
     class IPanelWindow {
@@ -41,7 +45,6 @@ namespace UI {
                 return m_hWnd;
             }
 
-
         protected:
             HWND m_hWnd = nullptr;
             HWND m_hParent = nullptr;
@@ -67,11 +70,23 @@ namespace UI {
                 }
 
                 if (pThis) {
-                    // Route the message to the specific instance's handler
+                    // --- GLOBAL PANEL SHORTCUTS ---
+                    // Intercept keyboard commands before they reach the child class
+                    if (message == WM_KEYDOWN) {
+                        bool isCtrlDown = (GetKeyState(VK_CONTROL) & 0x8000) != 0;
+
+                        // If you include Shortcuts.h, use wParam == Shortcuts::SC_LOCAL_HIDE instead of VK_ESCAPE
+                        if ((isCtrlDown && wParam == Shortcuts::SC_APP_HIDE_ALT) || wParam == Shortcuts::IPANNEL_WINDOW_LOCAL_HIDE) {
+                            pThis->Hide();
+                            return 0; // Message handled, do not pass to child
+                        }
+                    }
+
+                    // Route remaining messages to the specific instance's handler
                     return pThis->HandleMessage(message, wParam, lParam);
                 }
 
                 return DefWindowProcW(hWnd, message, wParam, lParam);
             }
     };
-} // namespace UI
+}

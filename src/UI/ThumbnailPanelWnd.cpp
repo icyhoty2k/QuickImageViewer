@@ -405,10 +405,6 @@ namespace UI {
             case WM_KEYDOWN: {
                 int key = static_cast<int>(wParam);
 
-                if (key == Shortcuts::SC_LOCAL_HIDE) {
-                    ShowWindow(m_hWnd, SW_HIDE);
-                    return 0;
-                }
                 if (key == GetKeyToggle()) {
                     Toggle();
                     return 0;
