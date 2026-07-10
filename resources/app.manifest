@@ -1,6 +1,7 @@
 <?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <assembly xmlns="urn:schemas-microsoft-com:asm.v1" manifestVersion="1.0" xmlns:asmv3="urn:schemas-microsoft-com:asm.v3">
-  <assemblyIdentity type="win32" name="QuickImageViewer" version="1.0.0.0"/>
+  <assemblyIdentity type="win32" name="QuickImageViewer" version="1.0.0.0" processorArchitecture="amd64"/>
+  <description>QuickImageViewer - Fast Native Image Viewer, by Ivan Hristov Yanev</description>
 
   <compatibility xmlns="urn:schemas-microsoft-com:compatibility.v1">
     <application>
@@ -25,6 +26,12 @@
       <dpiAwareness xmlns="http://schemas.microsoft.com/SMI/2016/WindowsSettings">PerMonitorV2, PerMonitor</dpiAwareness>
       <longPathAware xmlns="http://schemas.microsoft.com/SMI/2016/WindowsSettings">true</longPathAware>
       <heapType xmlns="http://schemas.microsoft.com/SMI/2020/WindowsSettings">SegmentHeap</heapType>
+        <activeCodePage xmlns="http://schemas.microsoft.com/SMI/2019/WindowsSettings">UTF-8</activeCodePage>
+        <disableWindowFiltering xmlns="http://schemas.microsoft.com/SMI/2011/WindowsSettings">true</disableWindowFiltering>
+        <printerDriverIsolation xmlns="http://schemas.microsoft.com/SMI/2011/WindowsSettings">true</printerDriverIsolation>
+        <printDialogInfo xmlns="http://schemas.microsoft.com/SMI/2022/WindowsSettings">
+          <useDefaultDpi>false</useDefaultDpi>
+        </printDialogInfo>
     </windowsSettings>
   </application>
 
