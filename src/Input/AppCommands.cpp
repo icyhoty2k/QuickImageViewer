@@ -3,7 +3,7 @@
 #include "AppCommands.h"
 #include "../../resources/resource.h"
 #include <dwmapi.h>
-
+#include <uxtheme.h>
 #include "AppState.h" // Assuming this is the path
 // ... include other necessary headers
 
@@ -119,15 +119,58 @@ void AppCommands::AddTrayIcon(HWND hWnd) {
     nid.uCallbackMessage = WM_TRAYICON;
 
     // Use your existing app icon
-    nid.hIcon = LoadIcon(GetModuleHandle(NULL), MAKEINTRESOURCE(IDI_APP_ICON));
+    nid.hIcon = LoadIcon(GetModuleHandle(nullptr), MAKEINTRESOURCE(IDI_APP_ICON));
     wcscpy_s(nid.szTip, L"QuickImageViewer"); // Hover text
 
-    Shell_NotifyIconW(NIM_ADD, &nid);
+
+    if (!Shell_NotifyIconW(NIM_MODIFY, &nid)) {
+        if (!Shell_NotifyIconW(NIM_ADD, &nid))
+            return;
+    }
+    nid.uVersion = NOTIFYICON_VERSION_4;
+    Shell_NotifyIconW(NIM_SETVERSION, &nid);
 }
+
 
 void AppCommands::RemoveTrayIcon(HWND hWnd) {
     NOTIFYICONDATAW nid = {sizeof(nid)};
     nid.hWnd = hWnd;
     nid.uID = ID_TRAY_APP_ICON;
     Shell_NotifyIconW(NIM_DELETE, &nid);
+}
+
+
+void AppCommands::changeAppThemeToDarkMode(HWND hWnd, bool isDarkThemed) {
+    app.isDarkThemed = isDarkThemed;
+
+    // 1. Update the process-wide theme (Menus, standard UI controls)
+    HMODULE hUxtheme = LoadLibraryExW(L"uxtheme.dll", nullptr, LOAD_LIBRARY_SEARCH_SYSTEM32);
+    if (hUxtheme) {
+        // Ordinal 135: 0 = Default, 1 = AllowDark, 2 = ForceDark, 3 = ForceLight
+        using fnSetPreferredAppMode = int(WINAPI*)(int);
+        auto SetPreferredAppMode = (fnSetPreferredAppMode) GetProcAddress(hUxtheme, MAKEINTRESOURCEA(135));
+
+        if (SetPreferredAppMode) {
+            SetPreferredAppMode(isDarkThemed ? 2 : 3);
+        }
+
+        // Ordinal 136 flushes the cached theme so the OS redraws menus using the new mode
+        using fnFlushMenuThemes = void(WINAPI*)();
+        auto FlushMenuThemes = (fnFlushMenuThemes) GetProcAddress(hUxtheme, MAKEINTRESOURCEA(136));
+
+        if (FlushMenuThemes) {
+            FlushMenuThemes();
+        }
+
+        FreeLibrary(hUxtheme);
+    }
+
+    // 2. Update the specific window's DWM frame (Title bar and context menu ownership)
+    if (hWnd) {
+        BOOL darkMode = isDarkThemed ? TRUE : FALSE;
+        DwmSetWindowAttribute(hWnd, 20 /* DWMWA_USE_IMMERSIVE_DARK_MODE */, &darkMode, sizeof(darkMode));
+
+        // Force the OS to redraw the non-client area so title bar changes apply instantly
+        SetWindowPos(hWnd, nullptr, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | SWP_FRAMECHANGED);
+    }
 }

@@ -10,6 +10,18 @@ namespace Constants {
     constexpr const wchar_t *APP_HELP_FOOTER = L"Copyright® 06.2026 All rights reserved";
     constexpr const wchar_t *APP_TASKBAR_NAME = L"QIV";
     constexpr const wchar_t *APP_VERSION = L"1.0.0"; // major.minor.patch
+    constexpr const wchar_t *APP_NAME = BASE_NAME;
+    constexpr const wchar_t *WINDOW_CLASS_NAME = BASE_NAME;
+
+    // =========================================================================
+    // MAIN APP CORNER PREFERENCES AND DARK MODE CONTROL
+    // =========================================================================
+    constexpr const bool IS_APP_DARK_THEME = true;
+    // DWM API Attributes
+    constexpr DWORD DWMWA_WINDOW_CORNER_PREFERENCES = DWMWA_WINDOW_CORNER_PREFERENCE;
+    // 0 (DWMWCP_DEFAULT): Let Windows decide. 1 (DWMWCP_DONOTROUND): Square corners. 2 (DWMWCP_ROUND): Standard rounded corners. 3 (DWMWCP_ROUNDSMALL): Slightly rounded corners.
+    constexpr DWORD APP_CORNER_PREFERENCES = DWMWCP_ROUND;
+
 
     static constexpr float ZOOM_STEP = 1.1f; // +/- keys and ctrl+wheel
 
@@ -99,14 +111,10 @@ namespace Constants {
     constexpr UINT WM_QIV_PENDING_UPLOADS = WM_USER + 1; // Posted by background decoder thread
     constexpr UINT WM_QIV_REPAINT = WM_USER + 2; // Signal to UI thread that bitmap is ready
     constexpr UINT WM_QIV_SVG_READY = WM_USER + 3; // Posted by IO thread when SVG bytes are loaded
-    // DWM API Attributes
-    constexpr DWORD DWMWA_WINDOW_CORNER_PREFERENCES = DWMWA_WINDOW_CORNER_PREFERENCE;
-    // 0 (DWMWCP_DEFAULT): Let Windows decide. 1 (DWMWCP_DONOTROUND): Square corners. 2 (DWMWCP_ROUND): Standard rounded corners. 3 (DWMWCP_ROUNDSMALL): Slightly rounded corners.
-    constexpr DWORD APP_CORNER_PREFERENCES = DWMWCP_DEFAULT;
+
 
     // =============================================================================
-    constexpr const wchar_t *APP_NAME = BASE_NAME;
-    constexpr const wchar_t *WINDOW_CLASS_NAME = BASE_NAME;
+
 
     namespace Registry {
         // Switch this between HKEY_CURRENT_USER and HKEY_LOCAL_MACHINE
