@@ -89,8 +89,9 @@ namespace Constants {
         const D2D1::ColorF::Enum PLACEHOLDER = D2D1::ColorF::DarkSlateGray;
     }
 
-    //==========================Cache optimization====================================
-
+    // =========================================================================
+    // Cache optimization
+    // =========================================================================
     constexpr const int VRAM_CACHE_THUMBS_THREADS_COUNT = 4; // fallback if processor has less than 8 thread otherwise dynamic thread count / 2
     constexpr const int VRAM_CACHE_DECODER_THREADS_COUNT = 2;
     constexpr const int VRAM_CACHE_IMAGES_COUNT = 20;
@@ -175,10 +176,12 @@ namespace Constants {
         //         line 1: index / total + filename
         //         line 2: zoom% + WxH / size  (TOP_CENTER + BOT_RIGHT combined)
         inline int OVERLAY_LAYOUT_MODE = 0;
+
         // =========================================================================
         // Overlay — Center-Center message queue (MID_CENTER slot)
         // =========================================================================
         // How long the center-center notification stays visible before auto-hiding (ms)
+
         constexpr UINT MSG_CENTER_DISPLAY_MS = 1000;
         // Center-center text color  (R, G, B, A)
         constexpr float MSG_CENTER_COLOR_R = 1.0f;
@@ -193,10 +196,12 @@ namespace Constants {
         constexpr const wchar_t *MSG_CENTER__FONT_FAMILY_DEFAULT = L"Segoe UI";
         constexpr const wchar_t *MSG_ALL_FONT_FAMILY_FALLBACK = L"Arial";
         constexpr const wchar_t *MSG_ALL_FONT_LOCALE = L"en-us";
+
         // =========================================================================
         // Overlay — per-slot notification panel width / height
         // =========================================================================
         // Width of the center-center message box (pixels)
+
         constexpr float MSG_CENTER_WIDTH = 420.0f;
         // Height of a single-line center-center message box
         constexpr float MSG_CENTER_HEIGHT = 36.0f;
