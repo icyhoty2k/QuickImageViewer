@@ -1319,6 +1319,7 @@ void RendererD2D::ClearDirThumbnailCache() {
     // find its path absent from the cache, check the in-flight set, and
     // skip the duplicate-insert guard correctly.
     m_dirThumbInFlight.clear();
+    g_dirThumbWorker.ClearQueue();
 }
 
 // =============================================================================
