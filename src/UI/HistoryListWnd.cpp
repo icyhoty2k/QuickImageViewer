@@ -331,7 +331,7 @@ namespace UI {
 
         if (!m_hWnd) return;
 
-        SetLayeredWindowAttributes(m_hWnd, 0, Constants::CACHE_WINDOW_OPACITY, LWA_ALPHA);
+        SetLayeredWindowAttributes(m_hWnd, 0, Constants::THUMBNAIL_PANEL_WINDOW_OPACITY, LWA_ALPHA);
         ShowWindow(m_hWnd, SW_HIDE);
     }
 

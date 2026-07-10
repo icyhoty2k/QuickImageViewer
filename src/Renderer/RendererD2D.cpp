@@ -1045,14 +1045,14 @@ HRESULT RendererD2D::CreatePanelDeviceResources(ThumbnailPanelType type, HWND hw
 
     if (w == 0 || h == 0) {
         w = (type == ThumbnailPanelType::Dir) ? 1200 : 800;
-        h = Constants::CACHE_WINDOW_THICKNESS;
+        h = Constants::THUMBNAIL_PANEL_WINDOW_THICKNESS;
     }
 
     ResizePanel(type, w, h);
 
-    panel.deviceContext->CreateSolidColorBrush(D2D1::ColorF(Constants::CacheColors::PLACEHOLDER), &panel.placeholderBrush);
-    panel.deviceContext->CreateSolidColorBrush(D2D1::ColorF(Constants::CacheColors::SELECTION_BORDER), &panel.borderBrush);
-    panel.deviceContext->CreateSolidColorBrush(D2D1::ColorF(Constants::CacheColors::HOVER), &panel.hoverBrush);
+    panel.deviceContext->CreateSolidColorBrush(D2D1::ColorF(Constants::ThumbnailPanel::PLACEHOLDER), &panel.placeholderBrush);
+    panel.deviceContext->CreateSolidColorBrush(D2D1::ColorF(Constants::ThumbnailPanel::SELECTION_BORDER), &panel.borderBrush);
+    panel.deviceContext->CreateSolidColorBrush(D2D1::ColorF(Constants::ThumbnailPanel::HOVER), &panel.hoverBrush);
 
     return S_OK;
 }
@@ -1147,12 +1147,12 @@ void RendererD2D::RenderPanel(ThumbnailPanelType type, int selectedIndex, int ho
 
         if (static_cast<int>(i) == selectedIndex) {
             panel.deviceContext->DrawRectangle(r.rect, panel.borderBrush.Get(),
-                                               Constants::CacheColors::SELECTION_BORDER_THICKNESS);
+                                               Constants::ThumbnailPanel::SELECTION_BORDER_THICKNESS);
         }
 
         if (static_cast<int>(i) == hoverIndex) {
             panel.deviceContext->DrawRectangle(r.rect, panel.hoverBrush.Get(),
-                                               Constants::CacheColors::HOVER_THICKNESS);
+                                               Constants::ThumbnailPanel::HOVER_THICKNESS);
         }
     }
 
@@ -1340,8 +1340,8 @@ void RendererD2D::RequestDirThumbnail(const std::wstring &filePath) {
 
     if (!d2dDev || !hDir) return;
 
-    UINT thumbW = static_cast<UINT>(Constants::CACHE_THUMB_WIDTH);
-    UINT thumbH = static_cast<UINT>(Constants::CACHE_THUMB_HEIGHT);
+    UINT thumbW = static_cast<UINT>(Constants::THUMBNAIL_PANEL_THUMB_WIDTH);
+    UINT thumbH = static_cast<UINT>(Constants::THUMBNAIL_PANEL_THUMB_HEIGHT);
 
     g_ioWorker.PushTask([filePath, d2dDev, hDir, thumbW, thumbH, this]() {
         HANDLE hFile = CreateFileW(filePath.c_str(), GENERIC_READ, FILE_SHARE_READ, nullptr, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, nullptr);

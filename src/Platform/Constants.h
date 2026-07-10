@@ -49,25 +49,26 @@ namespace Constants {
     // =========================================================================
     // CACHE WINDOW AND CURRENT DIR WINDOW
     // =========================================================================
-    constexpr float CACHE_THUMB_WIDTH = 120.0f;
-    constexpr float CACHE_THUMB_HEIGHT = 80.0f;
-    constexpr float CACHE_THUMB_SPACING = 18.0f;
-    constexpr float CACHE_THUMB_MARGIN = 20.0f;
-    constexpr BYTE CACHE_WINDOW_OPACITY = 210;
-    constexpr float CACHE_WINDOW_MOUSE_WHEEL_SPEED = 120.0f;
-    constexpr int8_t CACHE_WINDOW_MOUSE_WHEEL_DIRECTION = 1; // 1 is forward -1 is reverse
-    constexpr int CACHE_WINDOW_THICKNESS = 120;
-    constexpr int8_t CACHE_WINDOW_POSITION = 2; // /0 top /1 right /2 bottom /3 left
-
+    constexpr float THUMBNAIL_PANEL_THUMB_WIDTH = 120.0f;
+    constexpr float THUMBNAIL_PANEL_THUMB_HEIGHT = 80.0f;
+    constexpr float THUMBNAIL_PANEL_THUMB_SPACING = 18.0f;
+    constexpr float THUMBNAIL_PANEL_THUMB_MARGIN = 20.0f;
+    constexpr BYTE THUMBNAIL_PANEL_WINDOW_OPACITY = 210;
+    constexpr float THUMBNAIL_PANEL_WINDOW_MOUSE_WHEEL_SPEED = 120.0f;
+    constexpr int8_t THUMBNAIL_PANEL_WINDOW_MOUSE_WHEEL_DIRECTION = 1; // 1 is forward -1 is reverse
+    constexpr int THUMBNAIL_PANEL_WINDOW_THICKNESS = 120;
     //   position 0 : centered floating panel (80 % wide, thumb-height tall)
     //   position 1 : top edge strip (full width)
     //   position 2 : right edge strip (full height)
     //   position 3 : bottom edge strip (full width)
     //   position 4 : left edge strip (full height)
-    constexpr int8_t CURRENT_DIR_WINDOW_POSITION = 1; // /0 top /1 right /2 bottom /3 left
+    //cache window
+    constexpr int8_t CACHE_WINDOW_POSITION = 2;
+    //current dir window
+    constexpr int8_t CURRENT_DIR_WINDOW_POSITION = 1;
 
 
-    namespace CacheColors {
+    namespace ThumbnailPanel {
         const D2D1::ColorF::Enum BACKGROUND = D2D1::ColorF::Black; // Or your custom 0.08f, 0.08f, 0.08f
         const D2D1::ColorF::Enum SELECTION_BORDER = D2D1::ColorF::LightGreen;
         const float SELECTION_BORDER_THICKNESS = 3.0f;
