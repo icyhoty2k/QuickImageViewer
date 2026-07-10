@@ -77,8 +77,8 @@ namespace Constants {
     }
 
     //==========================Cache optimization====================================
-    constexpr const int VRAM_CACHE_IMAGES_COUNT = 30;
-    constexpr const int VRAM_CACHE_SVG_COUNT = 10;
+    constexpr const int VRAM_CACHE_IMAGES_COUNT = 20;
+    constexpr const int VRAM_CACHE_SVG_COUNT = 20;
     // VRAM budget for the dir-panel thumbnail cache.
     // Each entry is CACHE_THUMB_WIDTH * CACHE_THUMB_HEIGHT * 4 bytes ≈ 37 KB
     // after scaling.  512 MB holds ~14 000 thumbnails — far more than any
@@ -86,7 +86,7 @@ namespace Constants {
     // of images; decrease on low-VRAM cards.
     constexpr const size_t DIR_THUMB_CACHE_BUDGET_MB = 512;
     constexpr const int PRELOAD_LOOKASIDE_COUNT = 1;
-    constexpr const int PRELOAD_TIMER_COUNTDOWN = 150; // this is used to delay preloading if user scrolls very fast
+    constexpr const int PRELOAD_TIMER_COUNTDOWN = 60; // {ms} this is used to delay preloading if user scrolls very fast
     //==========================Cache optimization====================================
     //end Saveable options
 
