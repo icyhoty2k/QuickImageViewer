@@ -14,7 +14,8 @@ extern void UpdateOverlaysForCurrentImage(HWND hWnd);
 #include <intsafe.h>
 
 #include "CacheWnd.h"
-#include "../AppState.h"
+#include "AppState.h"
+#include "WorkerThread.h"
 #include "Platform/Constants.h"
 
 #include "../DropTarget.h"
@@ -25,7 +26,6 @@ extern void UpdateOverlaysForCurrentImage(HWND hWnd);
 
 #include "MouseHandler.h"
 #include "Input/Command.h"
-#include "../WicDecoder.h"
 
 
 #include <windows.h>
@@ -42,19 +42,21 @@ extern void UpdateOverlaysForCurrentImage(HWND hWnd);
 
 #include "Renderer/RendererD2D.h"
 #include "Renderer/RendererGDI.h"
-#include "WorkerThread.h"
+
 #include <shlobj.h>   // Required for SHOpenFolderAndSelectItems
 
 
 // Global application state
-AppState app;
-DropTarget *g_pDropTarget = nullptr;
 
+DropTarget *g_pDropTarget = nullptr;
+AppState app;
 // Define the storage for the globals exactly once in your entry point file
 //   g_ioWorker      – IoThreadPool: started lazily in FileHandler once the
 //                     target drive is known (1 thread HDD, 2 threads SSD/NVMe)
 //   g_decoderWorker – WorkerThread(true): WIC decode + pixel convert
 IoThreadPool g_ioWorker;
+
+//Main app decoderThreadPool
 DecoderThreadPool g_decoderWorker;
 // Dedicated worker for DirWnd thumbnail decoding.
 // Kept separate so LoadImageIndex's ClearQueue() never wipes dir thumb tasks.
@@ -443,6 +445,21 @@ int WINAPI wWinMain(HINSTANCE hInstance, [[maybe_unused]] HINSTANCE hPrevInstanc
             setDpi(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2);
         }
     }
+    const unsigned int hc = std::thread::hardware_concurrency();
+    app.hardwareThreads = static_cast<int>(hc > 0 ? hc : 1); // Default to 1 if OS returns 0
+    g_decoderWorker.setThreadCount(app.hardwareThreads > 3 ? 2 : 1);
+    g_dirThumbWorker.setThreadCount(std::max(1, app.hardwareThreads - 2));
+#ifdef _DEBUG
+    // Use the public getter instead of accessing private member m_threads
+    std::wstring debugMsg = L"DecoderThreadPool: Initialized with " +
+                            std::to_wstring(g_decoderWorker.getThreadCount()) +
+                            L" threads.\n" +
+                            L"DecoderThreadPool: Initialized with " +
+                            std::to_wstring(g_dirThumbWorker.getThreadCount()) +
+                            L" threads.\n";
+    OutputDebugStringW(debugMsg.c_str());
+
+#endif
 
     CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED | COINIT_DISABLE_OLE1DDE);
     if (FAILED(CoCreateInstance(CLSID_WICImagingFactory, nullptr, CLSCTX_INPROC_SERVER, IID_PPV_ARGS(&app.wicFactory)))) return 0;

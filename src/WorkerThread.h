@@ -15,50 +15,7 @@
 
 class DecoderThreadPool {
     public:
-        DecoderThreadPool() : m_running(true) {
-            // Query available threads. Leave 2 free (1 for UI, 1 for IO/Disk).
-            unsigned int hc = std::thread::hardware_concurrency();
-            unsigned int threadCount = (hc > 2) ? hc - 2 : 1;
-
-            m_threads.reserve(threadCount);
-            for (unsigned int i = 0; i < threadCount; ++i) {
-                m_threads.emplace_back([this] {
-                    HRESULT hr = CoInitializeEx(nullptr, COINIT_MULTITHREADED);
-                    if (FAILED(hr)) {
-                        OutputDebugStringW(L"DecoderThreadPool: COM init failed\n");
-                    }
-
-                    // Isolate the WIC factory per-thread
-                    Microsoft::WRL::ComPtr<IWICImagingFactory2> localFactory;
-                    if (SUCCEEDED(hr)) {
-                        CoCreateInstance(CLSID_WICImagingFactory2, nullptr,
-                                         CLSCTX_INPROC_SERVER, IID_PPV_ARGS(&localFactory));
-                    }
-
-                    while (true) {
-                        // Notice the task signature now expects the factory pointer
-                        std::function<void(IWICImagingFactory2 *)> task;
-                        {
-                            std::unique_lock<std::mutex> lock(m_queueMutex);
-                            m_cv.wait(lock, [this] {
-                                return !m_queue.empty() || !m_running;
-                            });
-                            if (!m_running && m_queue.empty()) break;
-                            task = std::move(m_queue.front());
-                            m_queue.pop();
-                        }
-
-                        // Execute the payload, passing the thread's private factory
-                        if (task && localFactory) {
-                            task(localFactory.Get());
-                        }
-                    }
-
-                    localFactory.Reset();
-                    if (SUCCEEDED(hr)) CoUninitialize();
-                });
-            }
-        }
+        DecoderThreadPool() : m_running(true) {}
 
         ~DecoderThreadPool() {
             {
@@ -86,12 +43,78 @@ class DecoderThreadPool {
             std::swap(m_queue, empty);
         }
 
+        void setThreadCount(int threads) {
+            if (!m_threads.empty()) {
+                clearOldThreads();
+            }
+            //reset running flag
+            m_running = true;
+            // Safety: force at least 1 thread
+            int threadCount = (threads > 0) ? threads : 1;
+
+            m_threads.reserve(threadCount);
+            for (int i = 0; i < threadCount; ++i) {
+                m_threads.emplace_back([this] {
+                    // 1. Thread priority optimization
+                    // Setting this here ensures the worker threads don't starve the UI thread
+                    SetThreadPriority(GetCurrentThread(), THREAD_PRIORITY_BELOW_NORMAL);
+                    // 2. COM Init
+                    HRESULT hr = CoInitializeEx(nullptr, COINIT_MULTITHREADED);
+
+                    Microsoft::WRL::ComPtr<IWICImagingFactory2> localFactory;
+                    if (SUCCEEDED(hr)) {
+                        CoCreateInstance(CLSID_WICImagingFactory2, nullptr,
+                                         CLSCTX_INPROC_SERVER, IID_PPV_ARGS(&localFactory));
+                    }
+
+                    while (true) {
+                        std::function<void(IWICImagingFactory2 *)> task;
+                        {
+                            std::unique_lock<std::mutex> lock(m_queueMutex);
+                            m_cv.wait(lock, [this] {
+                                return !m_queue.empty() || !m_running;
+                            });
+                            if (!m_running && m_queue.empty()) break;
+                            task = std::move(m_queue.front());
+                            m_queue.pop();
+                        }
+
+                        if (task && localFactory) {
+                            task(localFactory.Get());
+                        }
+                    }
+
+                    localFactory.Reset();
+                    if (SUCCEEDED(hr)) CoUninitialize();
+                });
+            }
+        }
+
+        int getThreadCount() {
+            return static_cast<int>(m_threads.size());
+        }
+
     private:
         std::vector<std::thread> m_threads;
         std::mutex m_queueMutex;
         std::condition_variable m_cv;
         std::queue<std::function<void(IWICImagingFactory2 *)> > m_queue;
         std::atomic<bool> m_running;
+
+        void clearOldThreads() {
+            // 1. Signal threads to stop
+            {
+                std::lock_guard<std::mutex> lock(m_queueMutex);
+                m_running = false;
+            }
+            m_cv.notify_all();
+
+            // 2. Wait for current threads to exit (crucial)
+            for (auto &t: m_threads) {
+                if (t.joinable()) t.join();
+            }
+            m_threads.clear();
+        }
 };
 
 
@@ -217,3 +240,4 @@ class IoThreadPool {
 // ---------------------------------------------------------------------------
 extern IoThreadPool g_ioWorker;
 extern DecoderThreadPool g_decoderWorker;
+extern DecoderThreadPool g_dirThumbWorker;

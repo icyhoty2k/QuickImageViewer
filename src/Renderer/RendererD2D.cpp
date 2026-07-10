@@ -1359,7 +1359,7 @@ void RendererD2D::RequestDirThumbnail(const std::wstring &filePath) {
         CloseHandle(hFile);
         if (!ok) return;
 
-        g_decoderWorker.PushTask([bytes = std::move(bytes), filePath, d2dDev, hDir, thumbW, thumbH, this](IWICImagingFactory2 *wicFac) mutable {
+        g_dirThumbWorker.PushTask([bytes = std::move(bytes), filePath, d2dDev, hDir, thumbW, thumbH, this](IWICImagingFactory2 *wicFac) mutable {
             Microsoft::WRL::ComPtr<IWICStream> stream;
             if (FAILED(wicFac->CreateStream(&stream))) return;
             if (FAILED(stream->InitializeFromMemory(bytes.data(), static_cast<DWORD>(bytes.size())))) return;

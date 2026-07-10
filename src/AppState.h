@@ -28,7 +28,7 @@ struct AppState {
     // and draws the raw ID2D1Bitmap natively.
     bool hasActiveEffects = false; // if any effects are used then true else false and just skip and display image
     bool effectPreviewEnabled = false; // `
-
+    int hardwareThreads = 1;
     std::atomic<int> wantedIndex{-1};
     Microsoft::WRL::ComPtr<IWICImagingFactory> wicFactory;
     std::unique_ptr<IImageRenderer> renderer;
@@ -69,8 +69,8 @@ struct AppState {
     POINT lastMidMouse = {0, 0};
 
     // Left click temp zoom + saved state
-    bool  lmbDidZoom  = false; // true when LMB press actually applied the 3x zoom
-    float savedZoom   = 1.0f;
+    bool lmbDidZoom = false; // true when LMB press actually applied the 3x zoom
+    float savedZoom = 1.0f;
     float savedOffsetX = 0.0f;
     float savedOffsetY = 0.0f;
 

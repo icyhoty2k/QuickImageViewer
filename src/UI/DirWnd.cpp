@@ -1,6 +1,5 @@
 #include "DirWnd.h"
 #include "../AppState.h"
-#include "../Platform/Constants.h"
 #include "../Input/Shortcuts.h"
 #include "../Renderer/RendererD2D.h"
 
