@@ -32,3 +32,6 @@ The Fix: If you find the decoder thread is "stuttering" during very high-speed s
 how to fix where in conde
 
 hello i give up on custom cursors i have  leave this as is now its time to make the history persistent across reboots we need a way to save history on exit what is the best aproach
+
+
+why i have this strange behaviour when i open an image in explorer with F2 choose image and select the first image in folder its not first in my app it shows different number .Explorer is sorted by name but my app sorts them differently

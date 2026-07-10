@@ -30,6 +30,8 @@ struct AppState {
     bool effectPreviewEnabled = false; //
     int hardwareThreads = 1; //used to save cpu cores/threads query once on startup and use it
     int lastImageBeforeToggleFirstLastImageInCurrentFolder = 0; // used for saving the image index when using jump to first/last
+    int fileHandlerDefaultSortOrder = Constants::FileHandler::FILE_HANDLER_DEFAULT_SORT_ORDER;
+    bool fileHandlerIsReverseSortOrder = Constants::FileHandler::FILE_HANDLER_SORT_TYPE_IS_REVERSE;
     std::atomic<int> wantedIndex{-1};
     Microsoft::WRL::ComPtr<IWICImagingFactory> wicFactory;
     std::unique_ptr<IImageRenderer> renderer;

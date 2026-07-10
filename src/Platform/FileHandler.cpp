@@ -6,17 +6,17 @@
 #include <commdlg.h>
 #include <filesystem>
 #include <ranges>
+#include <shlwapi.h>
 #include <vector>
 #include "UI/UIManager.h"
-#include "UI/UIManager.h"
-
-
 #include "WorkerThread.h"
 #include "DriveInfo.h"
 #include "../SvgDecoder.h"
 #include "../UI/HistoryListWnd.h"
 
 namespace fs = std::filesystem;
+
+void sortCurrentPlaylistInOrder();
 
 // ---------------------------------------------------------------------------
 // EnsureIoWorkerStarted
@@ -132,6 +132,42 @@ static void SortPlaylistByDiskOrder(std::vector<std::wstring> &playlist) {
     playlist = std::move(sorted);
 }
 
+// Sort by "Natural" filename order (same as Windows Explorer)
+static void SortPlaylistAlphabetically(std::vector<std::wstring> &playlist, bool reverse) {
+    std::ranges::sort(playlist, [reverse](const std::wstring &a, const std::wstring &b) {
+        int cmp = StrCmpLogicalW(a.c_str(), b.c_str());
+        return reverse ? (cmp > 0) : (cmp < 0);
+    });
+}
+
+// Sort by File Date
+static void SortPlaylistByDate(std::vector<std::wstring> &playlist, bool reverse) {
+    std::ranges::sort(playlist, [reverse](const std::wstring &a, const std::wstring &b) {
+        return reverse
+                   ? (fs::last_write_time(a) < fs::last_write_time(b))
+                   : (fs::last_write_time(a) > fs::last_write_time(b));
+    });
+}
+
+// Sort by File Size
+static void SortPlaylistBySize(std::vector<std::wstring> &playlist, bool reverse) {
+    std::ranges::sort(playlist, [reverse](const std::wstring &a, const std::wstring &b) {
+        return reverse
+                   ? (fs::file_size(a) < fs::file_size(b))
+                   : (fs::file_size(a) > fs::file_size(b));
+    });
+}
+
+// Sort by Extension (Type)
+static void SortPlaylistByType(std::vector<std::wstring> &playlist, bool reverse) {
+    std::ranges::sort(playlist, [reverse](const std::wstring &a, const std::wstring &b) {
+        auto extA = fs::path(a).extension();
+        auto extB = fs::path(b).extension();
+        return reverse ? (extA > extB) : (extA < extB);
+    });
+}
+
+//=====================================end sorting ===========================
 
 void OpenInitialImage(HWND hWnd) {
     app.isDialogVisible = true;
@@ -219,8 +255,8 @@ void OpenInitialImage(HWND hWnd) {
     }
 
     EnsureIoWorkerStarted(selectedPath.parent_path().wstring());
-
-    SortPlaylistByDiskOrder(app.playlist);
+    // sort
+    sortCurrentPlaylistInOrder();
 
     // Rebuild the O(1) path → index lookup map
     app.playlistIndexMap.clear();
@@ -373,8 +409,9 @@ void OpenSpecificImage(HWND hWnd, const std::wstring &filePathStr) {
     // Start IO worker with correct thread count for this drive type (HDD=1, SSD/NVMe=2)
     EnsureIoWorkerStarted(filePath.parent_path().wstring());
 
-    // Sort by physical disk position to minimise HDD head seeks
-    SortPlaylistByDiskOrder(app.playlist);
+    // Sort
+    sortCurrentPlaylistInOrder();
+
 
     // Rebuild the O(1) path → index lookup map
     app.playlistIndexMap.clear();
@@ -394,5 +431,30 @@ void OpenSpecificImage(HWND hWnd, const std::wstring &filePathStr) {
     if (it != app.playlist.end()) {
         LoadImageIndex(hWnd, static_cast<int>(std::distance(app.playlist.begin(), it)));
         uiManager.getDirWindow().UpdateDirView();
+    }
+}
+
+void sortCurrentPlaylistInOrder() {
+    switch (app.fileHandlerDefaultSortOrder) {
+        case 0: {
+            SortPlaylistAlphabetically(app.playlist, app.fileHandlerIsReverseSortOrder);
+            break;
+        }
+        case 1: {
+            SortPlaylistByDate(app.playlist, app.fileHandlerIsReverseSortOrder);
+            break;
+        }
+        case 2: {
+            SortPlaylistBySize(app.playlist, app.fileHandlerIsReverseSortOrder);
+            break;
+        }
+        case 3: {
+            SortPlaylistByType(app.playlist, app.fileHandlerIsReverseSortOrder);
+            break;
+        }
+        case 4: {
+            SortPlaylistByDiskOrder(app.playlist);
+            break;
+        }
     }
 }
