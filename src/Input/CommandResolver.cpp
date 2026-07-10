@@ -70,6 +70,9 @@ Command InputManager::ResolveKeyboardKeys(UINT key) {
         // --- Navigation ---
         case Shortcuts::SC_NAV_NEXT: return Command::NextImage;
         case Shortcuts::SC_NAV_PREV: return Command::PrevImage;
+        //smart jump to first or last image depending which is further
+        case Shortcuts::SC_NAV_TOGGLE_FIRST_LAST_IMAGE_IN_CURR_FOLDER:
+            return shift ? Command::GoToLastImageInCurrentFolder : Command::ToggleFirstLastImageInCurrentFolder;
 
         case Shortcuts::SC_NAV_NEXT_SPACE:
             return shift ? Command::PrevImage : Command::NextImage;
@@ -154,6 +157,7 @@ Command InputManager::ResolveKeyboardKeys(UINT key) {
         case Shortcuts::ImageEffects::SC_COLOR_CONTRAST_DOWN: return Command::ContrastDown;
         case Shortcuts::ImageEffects::SC_COLOR_SAT_UP: return Command::SaturationUp;
         case Shortcuts::ImageEffects::SC_COLOR_SAT_DOWN: return Command::SaturationDown;
+
 
         // --- Save / reset ---
         case Shortcuts::ImageEffects::SC_COLOR_RESET_ALL_EFFECTS: return Command::ResetEffects;

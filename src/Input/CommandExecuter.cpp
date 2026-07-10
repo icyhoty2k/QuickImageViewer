@@ -174,7 +174,7 @@ void InputManager::ExecuteKeyboardShortcutCommand(HWND hWnd, Command cmd) {
             int &mode = Constants::Overlay::OVERLAY_LAYOUT_MODE;
             mode = (mode + 1) % 3;
             g_overlayManager.OnLayoutModeChanged(hWnd);
-            const wchar_t *labels[] = { Constants::Messages::LAYOUT_GRID, Constants::Messages::LAYOUT_STACKED, Constants::Messages::LAYOUT_SUMMARY };
+            const wchar_t *labels[] = {Constants::Messages::LAYOUT_GRID, Constants::Messages::LAYOUT_STACKED, Constants::Messages::LAYOUT_SUMMARY};
             g_overlayManager.PostCenterMessage(hWnd, labels[mode]);
             InvalidateRect(hWnd, nullptr, FALSE);
             break;
@@ -184,7 +184,7 @@ void InputManager::ExecuteKeyboardShortcutCommand(HWND hWnd, Command cmd) {
         case Command::ToggleOverlayBackground: {
             Constants::Overlay::OVERLAY_SHOW_BACKGROUND = !Constants::Overlay::OVERLAY_SHOW_BACKGROUND;
             g_overlayManager.PostCenterMessage(hWnd,
-                Constants::Overlay::OVERLAY_SHOW_BACKGROUND ? Constants::Messages::OVERLAY_BG_ON : Constants::Messages::OVERLAY_BG_OFF);
+                                               Constants::Overlay::OVERLAY_SHOW_BACKGROUND ? Constants::Messages::OVERLAY_BG_ON : Constants::Messages::OVERLAY_BG_OFF);
             InvalidateRect(hWnd, nullptr, FALSE);
             break;
         }
@@ -430,6 +430,31 @@ void InputManager::ExecuteKeyboardShortcutCommand(HWND hWnd, Command cmd) {
 
         case Command::SaveImage: {
             AppCommands::SaveImageToDisk(hWnd);
+            break;
+        }
+        case Command::ToggleFirstLastImageInCurrentFolder: {
+            if (app.playlist.empty()) return;
+
+            int total = static_cast<int>(app.playlist.size() - 1);
+            int distToStart = app.currentIndex;
+            int distToEnd = total - app.currentIndex;
+
+            // Use the further endpoint as the target
+            int targetIndex = (distToStart <= distToEnd) ? total : 0;
+            LoadImageIndex(hWnd, targetIndex);
+
+            g_overlayManager.PostCenterMessage(hWnd, std::wstring(
+                                                       (targetIndex == 0)
+                                                           ? Constants::Messages::TOGGLE_FIRST_IMAGE_IN_FOLDER + std::to_wstring(1)
+                                                           : Constants::Messages::TOGGLE_LAST_IMAGE_IN_FOLDER + std::to_wstring(targetIndex + 1)));
+            if (distToStart != 0 && distToStart != total) app.lastImageBeforeToggleFirstLastImageInCurrentFolder = distToStart;
+            break;
+        }
+        case Command::GoToLastImageInCurrentFolder: {
+            if (app.playlist.empty() || app.currentIndex == app.lastImageBeforeToggleFirstLastImageInCurrentFolder) return;
+            LoadImageIndex(hWnd, app.lastImageBeforeToggleFirstLastImageInCurrentFolder);
+            g_overlayManager.PostCenterMessage(hWnd, Constants::Messages::TOGGLE_LAST_IMAGE_IN_FOLDER
+                                                     + std::to_wstring(app.lastImageBeforeToggleFirstLastImageInCurrentFolder + 1));
             break;
         }
 
