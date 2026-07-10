@@ -7,7 +7,12 @@ namespace UI {
         m_hInstance = hInstance;
         m_hMainWnd = hMainWnd;
 
-        // Init all panels once here so they are ready before first toggle
+        // Load saved folder history into RAM before any folder is opened.
+        // PushFolderHistory is called by FileHandler during startup image open;
+        // if the data isn't in RAM yet, the first push will append a new entry
+        // but won't know what's already in the file, so nothing is lost.
+        // The full file is loaded here so duplicate detection works correctly.
+        LoadFolderHistoryFromDisk();
     }
 
     void UIManager::Show(IPanelWindow &panel) {
