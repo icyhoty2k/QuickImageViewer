@@ -27,8 +27,9 @@ struct AppState {
     // When false, the renderer completely ignores the GPU effect graph
     // and draws the raw ID2D1Bitmap natively.
     bool hasActiveEffects = false; // if any effects are used then true else false and just skip and display image
-    bool effectPreviewEnabled = false; // `
-    int hardwareThreads = 1;
+    bool effectPreviewEnabled = false; //
+    int hardwareThreads = 1; //used to save cpu cores/threads query once on startup and use it
+    int lastImageBeforeToggleFirstLastImageInCurrentFolder = 0; // used for saving the image index when using jump to first/last
     std::atomic<int> wantedIndex{-1};
     Microsoft::WRL::ComPtr<IWICImagingFactory> wicFactory;
     std::unique_ptr<IImageRenderer> renderer;

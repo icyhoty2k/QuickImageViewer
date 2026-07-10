@@ -15,6 +15,8 @@ enum class Command {
     // --- Navigation ---
     NextImage,
     PrevImage,
+    ToggleFirstLastImageInCurrentFolder,
+    GoToLastImageInCurrentFolder,
     ShowInExplorer,
 
     // --- View modes (1-5) ---

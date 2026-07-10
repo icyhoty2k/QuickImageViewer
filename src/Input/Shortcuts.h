@@ -106,6 +106,8 @@ namespace Shortcuts {
     constexpr UINT SC_NAV_NEXT = VK_RIGHT;
     constexpr UINT SC_NAV_NEXT_SPACE = VK_SPACE;
     constexpr UINT SC_NAV_SHOW_IN_EXPLORER = 'E';
+    // toggle first / last image in folder , Shift+Backspace go to last image which is not first or last
+    constexpr UINT SC_NAV_TOGGLE_FIRST_LAST_IMAGE_IN_CURR_FOLDER = VK_BACK;
 
     // -------------------------------------------------------------------------
     // Zoom
