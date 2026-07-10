@@ -67,7 +67,7 @@ namespace UI {
     }
 
     void ThumbnailPanelWnd::Hide() {
-        if (m_hWnd &&IsWindowVisible(m_hWnd))
+        if (m_hWnd && IsWindowVisible(m_hWnd))
             ShowWindow(m_hWnd, SW_HIDE);
     }
 
@@ -166,7 +166,9 @@ namespace UI {
 
         for (size_t i = 0; i < items.size(); ++i) {
             auto mapIt = app.playlistIndexMap.find(items[i]);
-            int idx = (mapIt != app.playlistIndexMap.end()) ? mapIt->second : static_cast<int>(i);
+
+            // Assign -1 if the cached file is not in the current folder
+            int idx = (mapIt != app.playlistIndexMap.end()) ? mapIt->second : -1;
 
             m_thumbnails.push_back({
                 D2D1::RectF(x, y, x + thumbW, y + thumbH),
@@ -478,7 +480,15 @@ namespace UI {
                         int y = GET_Y_LPARAM(lParam);
                         for (size_t i = 0; i < m_thumbnails.size(); ++i) {
                             if (m_thumbnails[i].HitTest(x, y)) {
-                                LoadImageIndex(m_hOwner, m_thumbnails[i].playlistIndex);
+                                // If it belongs to the current folder, just jump to the index
+                                if (m_thumbnails[i].playlistIndex >= 0) {
+                                    LoadImageIndex(m_hOwner, m_thumbnails[i].playlistIndex);
+                                }
+                                // If it is from another folder, open it as a specific file
+                                else {
+                                    OpenSpecificImage(m_hOwner, m_thumbnails[i].filePath);
+                                }
+                                UpdateView();
                                 break;
                             }
                         }
