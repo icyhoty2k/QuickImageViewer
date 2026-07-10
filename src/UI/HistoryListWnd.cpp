@@ -41,8 +41,8 @@ namespace UI {
 
         history.insert(history.begin(), folderPath);
 
-        if (history.size() > Constants::History::HISTORY_MAX_DIRS)
-            history.resize(Constants::History::HISTORY_MAX_DIRS);
+        if (history.size() > Constants::History::HISTORY_MAX_DIRS_TO_SHOW)
+            history.resize(Constants::History::HISTORY_MAX_DIRS_TO_SHOW);
 
         // Immediately save state to disk
         historyFoldersManager.SaveHistoryToDisk();
@@ -119,7 +119,7 @@ namespace UI {
                 SetTextColor(hdc, RGB(100, 200, 255));
 
                 std::wstring title = L"Folder History  (last "
-                                     + std::to_wstring(Constants::History::HISTORY_MAX_DIRS) + L" folders)";
+                                     + std::to_wstring(Constants::History::HISTORY_MAX_DIRS_TO_SHOW) + L" folders)";
                 RECT titleRect = {
                     rc.left + padding, rc.top + padding,
                     rc.right - padding, rc.top + padding + titleSz + 4

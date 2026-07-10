@@ -160,6 +160,15 @@ namespace Shortcuts {
         constexpr UINT SC_COLOR_SAVE_TO_DISK = 'S'; // requires ctrl
     }
 
+    // -------------------------------------------------------------------------
+    // HISTORY WINDOW
+    // -------------------------------------------------------------------------
+    constexpr UINT HISTORY_FAVORITES_TOGGLE_KEY = VK_SPACE;
+    constexpr UINT HISTORY_CLEAR_ALL_HISTORY_BUT_NOT_FAVORITES = VK_DELETE; //ctrl+alt+delete only when historyWnd is open
+
+    // -------------------------------------------------------------------------
+    // Transform
+    // -------------------------------------------------------------------------
     namespace REFERENCE_ONLY::MouseShortcuts {
         // Mouse buttons are NOT remapped via constants like keyboard keys —
         // WM_LBUTTONDOWN / WM_RBUTTONDOWN are intrinsic Windows messages.

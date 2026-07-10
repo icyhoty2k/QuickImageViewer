@@ -209,7 +209,12 @@ namespace Constants {
         // Folder History (HistoryWindow)
         // =========================================================================
         constexpr const wchar_t *HISTORY_FILE_NAME = L"qivHistory.txt";
-        constexpr int HISTORY_MAX_DIRS = 10; // how many folders to remember — change here
+        constexpr int HISTORY_MAX_DIRS_TO_SHOW = 10; // how many folders to show in historyWnd
+        constexpr int HISTORY_MAX_DIRS_TO_SAVE = 1000; // how many folders to remember/sava in file
+        constexpr char HISTORY_FAVORITES_MARK = '*'; // mark for favorites appened before the file name
+        constexpr int HISTORY_MAX_FAVORITES_TO_SHOW = 10; // how many favorites folders to show in HistoryWnd
+        constexpr int HISTORY_FAVORITES_POSITION = 0; // 0 on top , 1 on bottom , 2 don't change position(not pinned)
+
         constexpr int HISTORY_ROW_HEIGHT = 28; // px at 96 DPI per history row
         constexpr int HISTORY_PADDING = 16; // px at 96 DPI inner padding
         constexpr int HISTORY_FONT_SIZE = 14; // pt at 96 DPI body font
