@@ -217,4 +217,9 @@ namespace Constants {
         constexpr WORD RMB_DOWN = 32512; // IDC_ARROW  — RMB is held
         constexpr WORD DEFAULT = 32512; // IDC_ARROW  — restored after action
     }
+
+    namespace FileHandler {
+        constexpr const int FILE_HANDLER_DEFAULT_SORT_ORDER = 0; // 0 name, 1 date, 2 size,3 extension(type), 4 performance mode - SortPlaylistByDiskOrder
+        constexpr const bool FILE_HANDLER_SORT_TYPE_IS_REVERSE = false;
+    }
 }
