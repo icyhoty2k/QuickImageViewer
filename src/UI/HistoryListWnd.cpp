@@ -9,6 +9,7 @@
 
 #include "HistoryFoldersManager.h"
 
+
 // ---------------------------------------------------------------------------
 // HistoryListWnd.cpp  —  Last-visited folder history panel.
 // ---------------------------------------------------------------------------
@@ -214,14 +215,10 @@ namespace UI {
                     if (mx >= r.left && mx < r.right && my >= r.top && my < r.bottom) {
                         const std::wstring &folder = historyFoldersManager.folderHistory[i];
                         ShowWindow(m_hWnd, SW_HIDE);
-                        try {
-                            for (const auto &entry: std::filesystem::directory_iterator(folder)) {
-                                if (entry.is_regular_file() && is_image_ext(entry.path().extension().wstring())) {
-                                    OpenSpecificImage(g_hHistOwner, entry.path().wstring());
-                                    break;
-                                }
-                            }
-                        } catch (...) {}
+
+                        // Pass the folder path directly
+                        OpenDirectory(g_hHistOwner, folder);
+
                         return 0;
                     }
                 }
@@ -268,14 +265,9 @@ namespace UI {
                         if (g_hoverRow >= 0 && g_hoverRow < static_cast<int>(history.size())) {
                             const std::wstring &folder = history[g_hoverRow];
                             ShowWindow(m_hWnd, SW_HIDE);
-                            try {
-                                for (const auto &entry: std::filesystem::directory_iterator(folder)) {
-                                    if (entry.is_regular_file() && is_image_ext(entry.path().extension().wstring())) {
-                                        OpenSpecificImage(g_hHistOwner, entry.path().wstring());
-                                        break;
-                                    }
-                                }
-                            } catch (...) {}
+
+                            // Pass the folder path directly
+                            OpenDirectory(g_hHistOwner, folder);
                         }
                         return 0;
                     }

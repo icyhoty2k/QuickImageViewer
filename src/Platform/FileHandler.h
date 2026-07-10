@@ -4,6 +4,8 @@
 
 void OpenInitialImage(HWND hWnd);
 
+void OpenDirectory(HWND hWnd, const std::wstring &dirPathStr);
+
 void OpenSpecificImage(HWND hWnd, const std::wstring &filePath);
 
 bool is_image_ext(const std::wstring &ext);

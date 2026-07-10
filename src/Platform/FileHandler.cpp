@@ -376,6 +376,52 @@ void LoadImageIndex(HWND hWnd, int index) {
     SetTimer(hWnd, 1001, Constants::PRELOAD_TIMER_COUNTDOWN, nullptr);
 }
 
+void OpenDirectory(HWND hWnd, const std::wstring &dirPathStr) {
+    fs::path dirPath(dirPathStr);
+    if (!fs::exists(dirPath) || !fs::is_directory(dirPath)) return;
+    dirPath = fs::canonical(dirPath);
+
+    // If we are already in this directory, just jump to the first image
+    if (!app.playlist.empty()) {
+        if (dirPath == fs::path(app.playlist[0]).parent_path()) {
+            UI::PushFolderHistory(dirPath.wstring());
+            LoadImageIndex(hWnd, 0);
+            InvalidateRect(hWnd, nullptr, TRUE);
+            UpdateWindow(hWnd);
+            return;
+        }
+    }
+
+    // Declaratively build the playlist
+    app.playlist = fs::directory_iterator(dirPath)
+                   | std::views::filter([](const auto &e) {
+                       return e.is_regular_file() && is_image_ext(e.path().extension().wstring());
+                   })
+                   | std::views::transform([](const auto &e) {
+                       return fs::canonical(e.path()).wstring();
+                   })
+                   | std::ranges::to<std::vector<std::wstring> >();
+
+    if (app.playlist.empty()) return;
+
+    EnsureIoWorkerStarted(dirPath.wstring());
+    sortCurrentPlaylistInOrder();
+
+    // Declaratively rebuild the O(1) path → index lookup map
+    app.playlistIndexMap.clear();
+    app.playlistIndexMap.reserve(app.playlist.size());
+    std::ranges::for_each(std::views::iota(0, static_cast<int>(app.playlist.size())), [](int i) {
+        app.playlistIndexMap[app.playlist[i]] = i;
+    });
+
+    UI::PushFolderHistory(dirPath.wstring());
+    uiManager.getDirWindow().ClearDirThumbnailCache();
+
+    // Force load the first image (index 0) of the freshly sorted playlist
+    LoadImageIndex(hWnd, 0);
+    uiManager.getDirWindow().UpdateDirView();
+}
+
 void OpenSpecificImage(HWND hWnd, const std::wstring &filePathStr) {
     fs::path filePath(filePathStr);
     if (!fs::exists(filePath) || !fs::is_regular_file(filePath)) return;
@@ -425,7 +471,7 @@ void OpenSpecificImage(HWND hWnd, const std::wstring &filePathStr) {
 
     // New folder — drop stale dir window thumbnails before navigating
     uiManager.getDirWindow().ClearDirThumbnailCache();
-    uiManager.getDirWindow().UpdateDirView();
+    // uiManager.getDirWindow().UpdateDirView();
 
     auto it = std::ranges::find(app.playlist, filePath.wstring());
     if (it != app.playlist.end()) {
