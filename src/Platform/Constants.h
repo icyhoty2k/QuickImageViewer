@@ -78,6 +78,9 @@ namespace Constants {
     }
 
     //==========================Cache optimization====================================
+
+    constexpr const int VRAM_CACHE_THUMBS_THREADS_COUNT = 4; // fallback if processor has less than 8 thread
+    constexpr const int VRAM_CACHE_DECODER_THREADS_COUNT = 2;
     constexpr const int VRAM_CACHE_IMAGES_COUNT = 20;
     constexpr const int VRAM_CACHE_SVG_COUNT = 20;
     // VRAM budget for the dir-panel thumbnail cache.

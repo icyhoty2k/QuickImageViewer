@@ -447,8 +447,9 @@ int WINAPI wWinMain(HINSTANCE hInstance, [[maybe_unused]] HINSTANCE hPrevInstanc
     }
     const unsigned int hc = std::thread::hardware_concurrency();
     app.hardwareThreads = static_cast<int>(hc > 0 ? hc : 1); // Default to 1 if OS returns 0
-    g_decoderWorker.setThreadCount(app.hardwareThreads > 3 ? 2 : 1);
-    g_dirThumbWorker.setThreadCount(std::max(1, app.hardwareThreads - 2));
+    g_decoderWorker.setThreadCount(app.hardwareThreads > 3 ? Constants::VRAM_CACHE_DECODER_THREADS_COUNT : 1);
+    int dirThumbThreads = (app.hardwareThreads >= 8) ? (app.hardwareThreads / 2) : ( Constants::VRAM_CACHE_THUMBS_THREADS_COUNT);
+    g_dirThumbWorker.setThreadCount(std::max(1, dirThumbThreads));
 #ifdef _DEBUG
     // Use the public getter instead of accessing private member m_threads
     std::wstring debugMsg = L"DecoderThreadPool: Initialized with " +
