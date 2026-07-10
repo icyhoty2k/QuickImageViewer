@@ -44,7 +44,7 @@ namespace UI {
 
         if (!m_hWnd) return;
 
-        SetLayeredWindowAttributes(m_hWnd, 0, Constants::CACHE_WINDOW_OPACITY, LWA_ALPHA);
+        SetLayeredWindowAttributes(m_hWnd, 0, Constants::THUMBNAIL_PANEL_WINDOW_OPACITY, LWA_ALPHA);
         CreateDeviceResources();
         ShowWindow(m_hWnd, SW_HIDE);
     }
@@ -67,7 +67,7 @@ namespace UI {
     }
 
     void ThumbnailPanelWnd::Hide() {
-        if (m_hWnd && IsWindowVisible(m_hWnd))
+        if (m_hWnd &&IsWindowVisible(m_hWnd))
             ShowWindow(m_hWnd, SW_HIDE);
     }
 
@@ -133,10 +133,10 @@ namespace UI {
 
         float surfaceW = static_cast<float>(cr.right);
         float surfaceH = static_cast<float>(cr.bottom);
-        float thumbW = Constants::CACHE_THUMB_WIDTH * app.dpiScale;
-        float thumbH = Constants::CACHE_THUMB_HEIGHT * app.dpiScale;
-        float margin = Constants::CACHE_THUMB_MARGIN * app.dpiScale;
-        float spacing = Constants::CACHE_THUMB_SPACING * app.dpiScale;
+        float thumbW = Constants::THUMBNAIL_PANEL_THUMB_WIDTH * app.dpiScale;
+        float thumbH = Constants::THUMBNAIL_PANEL_THUMB_HEIGHT * app.dpiScale;
+        float margin = Constants::THUMBNAIL_PANEL_THUMB_MARGIN * app.dpiScale;
+        float spacing = Constants::THUMBNAIL_PANEL_THUMB_SPACING * app.dpiScale;
         bool vertical = IsVertical();
 
         float x = margin;
@@ -212,11 +212,11 @@ namespace UI {
         GetClientRect(m_hWnd, &cr);
         float surfaceW = static_cast<float>(cr.right);
         float surfaceH = static_cast<float>(cr.bottom);
-        float thumbW   = Constants::CACHE_THUMB_WIDTH  * app.dpiScale;
-        float thumbH   = Constants::CACHE_THUMB_HEIGHT * app.dpiScale;
-        float margin   = Constants::CACHE_THUMB_MARGIN  * app.dpiScale;
-        float spacing  = Constants::CACHE_THUMB_SPACING * app.dpiScale;
-        bool  vertical = IsVertical();
+        float thumbW = Constants::THUMBNAIL_PANEL_THUMB_WIDTH * app.dpiScale;
+        float thumbH = Constants::THUMBNAIL_PANEL_THUMB_HEIGHT * app.dpiScale;
+        float margin = Constants::THUMBNAIL_PANEL_THUMB_MARGIN * app.dpiScale;
+        float spacing = Constants::THUMBNAIL_PANEL_THUMB_SPACING * app.dpiScale;
+        bool vertical = IsVertical();
 
         float x = margin;
         float y = margin;
@@ -245,10 +245,10 @@ namespace UI {
             }
         }
 
-        for (auto &t : m_thumbnails) {
+        for (auto &t: m_thumbnails) {
             t.rect = D2D1::RectF(x, y, x + thumbW, y + thumbH);
             if (vertical) y += thumbH + spacing;
-            else          x += thumbW + spacing;
+            else x += thumbW + spacing;
         }
     }
 
@@ -264,10 +264,10 @@ namespace UI {
         float surfaceW = static_cast<float>(cr.right);
         float surfaceH = static_cast<float>(cr.bottom);
         bool vertical = IsVertical();
-        float thumbW = Constants::CACHE_THUMB_WIDTH * app.dpiScale;
-        float thumbH = Constants::CACHE_THUMB_HEIGHT * app.dpiScale;
-        float scaledSpacing = Constants::CACHE_THUMB_SPACING * app.dpiScale;
-        float scaledMargin = Constants::CACHE_THUMB_MARGIN * app.dpiScale;
+        float thumbW = Constants::THUMBNAIL_PANEL_THUMB_WIDTH * app.dpiScale;
+        float thumbH = Constants::THUMBNAIL_PANEL_THUMB_HEIGHT * app.dpiScale;
+        float scaledSpacing = Constants::THUMBNAIL_PANEL_THUMB_SPACING * app.dpiScale;
+        float scaledMargin = Constants::THUMBNAIL_PANEL_THUMB_MARGIN * app.dpiScale;
 
         if (!vertical) {
             float slotX = static_cast<float>(m_selectedIdx) * (thumbW + scaledSpacing);
@@ -309,9 +309,9 @@ namespace UI {
         int monH = mi.rcMonitor.bottom - mi.rcMonitor.top;
 
         int horzThick = static_cast<int>(
-            (Constants::CACHE_THUMB_HEIGHT + Constants::CACHE_THUMB_MARGIN * 2.0f) * app.dpiScale);
+            (Constants::THUMBNAIL_PANEL_THUMB_HEIGHT + Constants::THUMBNAIL_PANEL_THUMB_MARGIN * 2.0f) * app.dpiScale);
         int vertThick = static_cast<int>(
-            (Constants::CACHE_THUMB_WIDTH + Constants::CACHE_THUMB_MARGIN * 2.0f) * app.dpiScale);
+            (Constants::THUMBNAIL_PANEL_THUMB_WIDTH + Constants::THUMBNAIL_PANEL_THUMB_MARGIN * 2.0f) * app.dpiScale);
 
         switch (position) {
             case 0: { // center floating — 80% of monitor width, thumb-height tall
@@ -391,10 +391,10 @@ namespace UI {
             // -----------------------------------------------------------------
             case WM_MOUSEWHEEL: {
                 int delta = GET_WHEEL_DELTA_WPARAM(wParam);
-                float scroll = Constants::CACHE_WINDOW_MOUSE_WHEEL_SPEED;
+                float scroll = Constants::THUMBNAIL_PANEL_WINDOW_MOUSE_WHEEL_SPEED;
                 if (GetKeyState(VK_SHIFT) & 0x8000) scroll *= 3.0f;
                 m_offset += (delta > 0 ? scroll : -scroll)
-                        * Constants::CACHE_WINDOW_MOUSE_WHEEL_DIRECTION;
+                        * Constants::THUMBNAIL_PANEL_WINDOW_MOUSE_WHEEL_DIRECTION;
                 UpdateView();
                 return 0;
             }

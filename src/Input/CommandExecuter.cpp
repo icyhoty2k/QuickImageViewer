@@ -453,7 +453,7 @@ void InputManager::ExecuteKeyboardShortcutCommand(HWND hWnd, Command cmd) {
         case Command::GoToLastImageInCurrentFolder: {
             if (app.playlist.empty() || app.currentIndex == app.lastImageBeforeToggleFirstLastImageInCurrentFolder) return;
             LoadImageIndex(hWnd, app.lastImageBeforeToggleFirstLastImageInCurrentFolder);
-            g_overlayManager.PostCenterMessage(hWnd, Constants::Messages::TOGGLE_LAST_IMAGE_IN_FOLDER
+            g_overlayManager.PostCenterMessage(hWnd, Constants::Messages::GO_TO_LAST_IMAGE_BEFORE_TOGGLE
                                                      + std::to_wstring(app.lastImageBeforeToggleFirstLastImageInCurrentFolder + 1));
             break;
         }
