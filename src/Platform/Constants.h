@@ -34,8 +34,8 @@ namespace Constants {
     // ----- Outline (D2D EdgeDetection) -----
     constexpr float OUTLINE_STRENGTH = 0.5f;
     constexpr float OUTLINE_BLUR_RADIUS = 0.0f;
-    static constexpr float ZOOM_CLICK = 3.0f; // left click zoom multiplier
-    static constexpr int OPACITY_STEP = 10; // left click zoom multiplier from 10 to 255 step is 10
+    static constexpr float ZOOM_CLICK = 3.0f; //  left click zoom multiplier
+    static constexpr int OPACITY_STEP = 10; // 0 to 100
 
 
     // Custom window messages
