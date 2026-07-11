@@ -77,8 +77,20 @@ namespace Constants {
     //   position 4 : left edge strip (full height)
     //cache window
     constexpr int8_t CACHE_WINDOW_POSITION = 2;
-    //current dir window
+    //current dir window (F5 — always independent, always top strip)
     constexpr int8_t CURRENT_DIR_WINDOW_POSITION = 1;
+
+    // =========================================================================
+    // Spawned DirWnd instances (from HistoryWnd Shift+Enter)
+    // =========================================================================
+    // Maximum number of DirWnd instances that can be spawned from history.
+    // Slot assignment (0-based spawn index → panel position):
+    //   spawn 0 → left  strip (position 4)
+    //   spawn 1 → right strip (position 2)
+    //   spawn 2 → center floating (position 0)
+    //   spawn 3 → wraps back to 0 (oldest slot reused)
+    constexpr int DIR_WND_MAX_INSTANCES = 3; // left, right, center
+    constexpr int8_t DIR_WND_SPAWN_POSITIONS[DIR_WND_MAX_INSTANCES] = {4, 2, 0};
 
 
     namespace ThumbnailPanel {
