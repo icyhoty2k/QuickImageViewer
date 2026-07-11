@@ -268,9 +268,7 @@ void OpenInitialImage(HWND hWnd) {
     // Record this folder in the history panel
     UI::PushFolderHistory(selectedPath.parent_path().wstring());
 
-    // New folder — drop stale dir window thumbnails before navigating
     uiManager.getActiveDirWnd().ClearDirThumbnailCache();
-
 
     auto it = std::ranges::find(app.playlist, selectedPath.wstring());
     if (it != app.playlist.end()) {
@@ -307,9 +305,6 @@ void UpdateOverlaysForCurrentImage(HWND hWnd) {
 }
 
 void LoadImageIndex(HWND hWnd, int index) {
-    g_decoderWorker.ClearQueue();
-    g_ioWorker.ClearQueue();
-
     if (index < 0 || index >= static_cast<int>(app.playlist.size())) return;
 
     if (app.currentIndex != index) {
@@ -469,9 +464,7 @@ void OpenSpecificImage(HWND hWnd, const std::wstring &filePathStr) {
     // Record this folder in the history panel
     UI::PushFolderHistory(filePath.parent_path().wstring());
 
-    // New folder — drop stale dir window thumbnails before navigating
     uiManager.getActiveDirWnd().ClearDirThumbnailCache();
-    // uiManager.getActiveDirWnd().UpdateDirView();
 
     auto it = std::ranges::find(app.playlist, filePath.wstring());
     if (it != app.playlist.end()) {

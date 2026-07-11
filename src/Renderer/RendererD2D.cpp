@@ -1008,7 +1008,7 @@ void RendererD2D::RemoveFromCache(const std::wstring &filePath) {
 //  the minimum lock duration before any GPU work begins.
 // =============================================================================
 void RendererD2D::ResolveThumbnailBitmaps(const std::vector<UI::Thumbnail> &thumbnails,
-                                          bool useDirCache,
+                                          HWND hPanel,
                                           std::vector<ResolvedThumb> &out) {
     out.clear();
     out.reserve(thumbnails.size());
@@ -1016,19 +1016,24 @@ void RendererD2D::ResolveThumbnailBitmaps(const std::vector<UI::Thumbnail> &thum
     std::lock_guard<std::mutex> cacheLock(m_cacheMutex);
     std::lock_guard<std::mutex> dirLock(m_dirThumbMutex);
 
+    const PanelThumbEntry *panelEntry = nullptr;
+    if (hPanel) {
+        auto it = m_panelThumbCaches.find(hPanel);
+        if (it != m_panelThumbCaches.end())
+            panelEntry = &it->second;
+    }
+
     for (const auto &thumb : thumbnails) {
         ResolvedThumb r;
         r.rect = thumb.rect;
 
-        if (useDirCache) {
-            // Dir thumbnail cache has priority for DirWnd panels.
-            auto it = m_dirThumbCache.find(thumb.filePath);
-            if (it != m_dirThumbCache.end() && it->second)
+        if (panelEntry) {
+            auto it = panelEntry->bitmaps.find(thumb.filePath);
+            if (it != panelEntry->bitmaps.end() && it->second)
                 r.bitmap = it->second;
         }
 
-        // Fall back to the full-res VRAM cache (covers CacheWnd and dir hits
-        // that predate the dir thumb cache, e.g. already-loaded images).
+        // Fall back to the full-res VRAM cache (covers CacheWnd and already-loaded images).
         if (!r.bitmap) {
             auto it = m_bitmapCache.find(thumb.filePath);
             if (it != m_bitmapCache.end() && it->second.bitmap)
@@ -1169,16 +1174,9 @@ HRESULT RendererD2D::SaveCurrentImageWithEffects(const std::wstring &outPath) {
 // =============================================================================
 //  ClearDirThumbnailCache
 // =============================================================================
-void RendererD2D::ClearDirThumbnailCache() {
+void RendererD2D::ClearDirThumbnailCache(HWND hPanel) {
     std::lock_guard<std::mutex> lock(m_dirThumbMutex);
-    m_dirThumbCache.clear();
-    m_dirThumbLruList.clear();
-    m_dirThumbCacheBytes = 0;
-    // Clear in-flight too: any late-arriving task for the old folder will
-    // find its path absent from the cache, check the in-flight set, and
-    // skip the duplicate-insert guard correctly.
-    m_dirThumbInFlight.clear();
-    g_dirThumbWorker.ClearQueue();
+    m_panelThumbCaches.erase(hPanel);
 }
 
 // =============================================================================
@@ -1187,12 +1185,10 @@ void RendererD2D::ClearDirThumbnailCache() {
 void RendererD2D::RequestDirThumbnail(const std::wstring &filePath, HWND hPanel) {
     {
         std::lock_guard<std::mutex> lock(m_dirThumbMutex);
-        // Skip if already cached OR if a decode task is already in flight.
-        // Both checks must be inside the same lock to eliminate the TOCTOU
-        // window between the check and the PushTask call below.
-        if (m_dirThumbCache.count(filePath)) return;
-        if (m_dirThumbInFlight.count(filePath)) return;
-        m_dirThumbInFlight.insert(filePath);
+        auto &entry = m_panelThumbCaches[hPanel];
+        if (entry.bitmaps.count(filePath)) return;
+        if (entry.inFlight.count(filePath)) return;
+        entry.inFlight.insert(filePath);
     }
 
     Microsoft::WRL::ComPtr<ID2D1Device6> d2dDev = m_pD2DDevice;
@@ -1264,40 +1260,10 @@ void RendererD2D::RequestDirThumbnail(const std::wstring &filePath, HWND hPanel)
 
             {
                 std::lock_guard<std::mutex> lock(m_dirThumbMutex);
-                // Always clear in-flight — task is done regardless of outcome.
-                m_dirThumbInFlight.erase(filePath);
-                // A racing second task for the same file (queued before the
-                // in-flight set was introduced, or after a ClearDirThumbnailCache)
-                // may have already written this entry. Skip duplicate insertion
-                // to keep the LRU list free of duplicate path entries.
-                if (!m_dirThumbCache.count(filePath)) {
-                    // Byte size of this thumbnail in VRAM (BGRA = 4 bytes/pixel).
-                    D2D1_SIZE_U px = thumbBitmap->GetPixelSize();
-                    size_t entryBytes = static_cast<size_t>(px.width) * px.height * 4;
-                    size_t budgetBytes = Constants::DIR_THUMB_CACHE_BUDGET_MB * 1024 * 1024;
-
-                    // Evict LRU entries until we fit within the VRAM budget.
-                    while (!m_dirThumbLruList.empty() &&
-                           (m_dirThumbCacheBytes + entryBytes > budgetBytes)) {
-                        const std::wstring &evict = m_dirThumbLruList.back();
-                        auto it = m_dirThumbCache.find(evict);
-                        if (it != m_dirThumbCache.end() && it->second) {
-                            D2D1_SIZE_U epx = it->second->GetPixelSize();
-                            size_t evictBytes = static_cast<size_t>(epx.width) * epx.height * 4;
-                            m_dirThumbCacheBytes = (m_dirThumbCacheBytes > evictBytes)
-                                                       ? m_dirThumbCacheBytes - evictBytes
-                                                       : 0;
-                            m_dirThumbCache.erase(it);
-                        } else {
-                            m_dirThumbCache.erase(evict);
-                        }
-                        m_dirThumbLruList.pop_back();
-                    }
-
-                    m_dirThumbLruList.push_front(filePath);
-                    m_dirThumbCache[filePath] = thumbBitmap;
-                    m_dirThumbCacheBytes += entryBytes;
-                }
+                auto &entry = m_panelThumbCaches[hDir];
+                entry.inFlight.erase(filePath);
+                if (!entry.bitmaps.count(filePath))
+                    entry.bitmaps[filePath] = thumbBitmap;
             }
             PostMessageW(hDir, Constants::WM_QIV_REPAINT, 0, 0);
         });
