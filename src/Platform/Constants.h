@@ -71,15 +71,15 @@ namespace Constants {
     constexpr int8_t THUMBNAIL_PANEL_WINDOW_MOUSE_WHEEL_DIRECTION = 1; // 1 is forward -1 is reverse
     constexpr int THUMBNAIL_PANEL_WINDOW_THICKNESS = 120;
     // Pixel gap between a panel edge and the taskbar (visual breathing room)
-    constexpr int THUMBNAIL_PANEL_TASKBAR_BOTTOM_GAP_HORIZONTAL_PANEL = 2;
-    constexpr int THUMBNAIL_PANEL_NEIGHBOUR_GAP_VERTICAL_PANEL = 6; // gap between vertical and horizontal panels
+    constexpr int THUMBNAIL_PANEL_TASKBAR_BOTTOM_GAP_HORIZONTAL_PANEL = 6;
+    constexpr int THUMBNAIL_PANEL_NEIGHBOUR_GAP_VERTICAL_PANEL = 2; // gap between vertical and horizontal panels
     //   position 0 : centered floating panel (80 % wide, thumb-height tall)
     //   position 1 : top edge strip (full width)
     //   position 2 : right edge strip (full height)
     //   position 3 : bottom edge strip (full width)
     //   position 4 : left edge strip (full height)
     //cache window
-    constexpr int8_t CACHE_WINDOW_POSITION = 3;
+    constexpr int8_t CACHE_WINDOW_POSITION = 2;
     //current dir window (F5 — always independent, always top strip)
     constexpr int8_t CURRENT_DIR_WINDOW_POSITION = 1;
 
@@ -92,8 +92,8 @@ namespace Constants {
     //   spawn 1 → right strip (position 2)
     //   spawn 2 → center floating (position 0)
     //   spawn 3 → wraps back to 0 (oldest slot reused)
-    constexpr int DIR_WND_MAX_INSTANCES = 4; // left, right, center
-    constexpr int8_t DIR_WND_SPAWN_POSITIONS[DIR_WND_MAX_INSTANCES] = {1, 4, 2, 3}; // spawn only if position is free if not spwan at first free position
+    constexpr int DIR_WND_MAX_INSTANCES = 4; // top, left, right, bottom
+    constexpr int8_t DIR_WND_SPAWN_POSITIONS[DIR_WND_MAX_INSTANCES] = {1, 4, 2, 3};
 
 
     namespace ThumbnailPanel {

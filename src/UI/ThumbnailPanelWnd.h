@@ -38,6 +38,7 @@ namespace UI {
             void UpdateView();
 
             void Toggle() override;
+            void Show() override;
             void Hide() override;
             void MovePanel();
 

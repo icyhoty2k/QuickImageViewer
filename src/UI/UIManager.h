@@ -10,6 +10,7 @@
 #include "../Platform/Constants.h"
 
 namespace UI {
+
     // =========================================================================
     // PanelLayout — single source of truth for which panel occupies each slot.
     //
@@ -41,13 +42,8 @@ namespace UI {
             return pos >= 0 && pos <= 4 && slots[pos] != nullptr;
         }
 
-        bool topOccupied() const {
-            return slots[1] != nullptr;
-        }
-
-        bool bottomOccupied() const {
-            return slots[3] != nullptr;
-        }
+        bool topOccupied()    const { return slots[1] != nullptr; }
+        bool bottomOccupied() const { return slots[3] != nullptr; }
 
         // Returns the next free position after 'current', cycling 0-4.
         // Returns -1 if all positions are occupied (shouldn't happen in practice).
@@ -65,23 +61,16 @@ namespace UI {
             void Init(HINSTANCE hInstance, HWND hMainWnd);
 
             void Toggle(IPanelWindow &panel);
-
             void Show(IPanelWindow &panel);
-
             void Hide(IPanelWindow &panel);
-
             void HideAllPanelWindows();
 
-            HelpWnd &getHelpWindow();
-
-            CacheWnd &getCacheWindow();
-
-            DirWnd &getDirWindow();
-
-            HistoryListWnd &getHistoryListWindow();
+            HelpWnd         &getHelpWindow();
+            CacheWnd        &getCacheWindow();
+            DirWnd          &getDirWindow();
+            HistoryListWnd  &getHistoryListWindow();
 
             void SpawnDirWndForFolder(const std::wstring &folderPath, HWND hHistoryWnd);
-
             void HideAllSpawnedDirWnds();
 
             // Called by ThumbnailPanelWnd when a panel becomes visible at a position.
@@ -95,26 +84,24 @@ namespace UI {
             int8_t NextFreePosition(int8_t currentPosition) const;
 
             // Read-only access to the layout for GetWindowBounds.
-            const PanelLayout &GetLayout() const {
-                return m_layout;
-            }
+            const PanelLayout &GetLayout() const { return m_layout; }
 
             // Resize all currently-visible vertical panels to reflect
             // the current top/bottom occupation state.
             void RefreshVerticalPanels();
 
         private:
-            HelpWnd helpWnd;
-            CacheWnd cacheWnd;
-            DirWnd dirWnd;
+            HelpWnd        helpWnd;
+            CacheWnd       cacheWnd;
+            DirWnd         dirWnd;
             HistoryListWnd historyListWnd;
 
             std::array<SpawnedDirWnd *, Constants::DIR_WND_MAX_INSTANCES> m_spawnedDirWnds
-                    = {nullptr, nullptr, nullptr, nullptr};
+                = {nullptr, nullptr, nullptr, nullptr};
             int m_nextSpawnSlot = 0;
 
-            HINSTANCE m_hInstance = nullptr;
-            HWND m_hMainWnd = nullptr;
+            HINSTANCE m_hInstance  = nullptr;
+            HWND      m_hMainWnd   = nullptr;
 
             // The layout struct — single source of truth.
             PanelLayout m_layout;

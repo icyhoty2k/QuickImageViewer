@@ -59,21 +59,8 @@ namespace UI {
         if (IsWindowVisible(m_hWnd)) {
             Hide();
         } else {
-            // If the current position is occupied by another panel, find a free one.
-            const PanelLayout &layout = uiManager.GetLayout();
-            if (layout.occupied(m_position) && layout.slots[m_position] != this) {
-                int8_t free = uiManager.NextFreePosition(m_position);
-                if (free >= 0) m_position = free;
-            }
-            m_offset = 0.0f;
-
-            int x, y, w, h;
-            GetWindowBounds(m_hOwner ? m_hOwner : m_hWnd, m_position, x, y, w, h);
-            SetWindowPos(m_hWnd, HWND_TOPMOST, x, y, w, h,
-                         SWP_SHOWWINDOW | SWP_FRAMECHANGED);
-            SetForegroundWindow(m_hWnd);
+            Show();
             SetFocus(m_hWnd);
-            uiManager.OnPanelShown(this, m_position);
             UpdateView();
             SyncSelectionRectangle();
         }
@@ -84,6 +71,21 @@ namespace UI {
             ShowWindow(m_hWnd, SW_HIDE);
             uiManager.OnPanelHidden(this);
         }
+    }
+
+    void ThumbnailPanelWnd::Show() {
+        if (!m_hWnd) return;
+        const PanelLayout &layout = uiManager.GetLayout();
+        if (layout.occupied(m_position) && layout.slots[m_position] != this) {
+            int8_t free = uiManager.NextFreePosition(m_position);
+            if (free >= 0) m_position = free;
+        }
+        m_offset = 0.0f;
+        int x, y, w, h;
+        GetWindowBounds(m_hOwner ? m_hOwner : m_hWnd, m_position, x, y, w, h);
+        SetWindowPos(m_hWnd, HWND_TOPMOST, x, y, w, h, SWP_SHOWWINDOW | SWP_FRAMECHANGED);
+        SetForegroundWindow(m_hWnd);
+        uiManager.OnPanelShown(this, m_position);
     }
 
     void ThumbnailPanelWnd::MovePanel() {
@@ -341,26 +343,16 @@ namespace UI {
         // taskbar on whichever edge it sits. Use it directly for all positions.
         int wx = mi.rcWork.left;
         int wy = mi.rcWork.top;
-        int ww = mi.rcWork.right - mi.rcWork.left;
+        int ww = mi.rcWork.right  - mi.rcWork.left;
         int wh = mi.rcWork.bottom - mi.rcWork.top;
 
         // Shrink the work area by a small gap on every side that borders the
         // taskbar, so panels never appear glued to the taskbar edge.
         const int gap = Constants::THUMBNAIL_PANEL_TASKBAR_BOTTOM_GAP_HORIZONTAL_PANEL;
-        if (mi.rcWork.left > mi.rcMonitor.left) {
-            wx += gap;
-            ww -= gap;
-        }
-        if (mi.rcWork.top > mi.rcMonitor.top) {
-            wy += gap;
-            wh -= gap;
-        }
-        if (mi.rcWork.right < mi.rcMonitor.right) {
-            ww -= gap;
-        }
-        if (mi.rcWork.bottom < mi.rcMonitor.bottom) {
-            wh -= gap;
-        }
+        if (mi.rcWork.left   > mi.rcMonitor.left)   { wx += gap; ww -= gap; }
+        if (mi.rcWork.top    > mi.rcMonitor.top)     { wy += gap; wh -= gap; }
+        if (mi.rcWork.right  < mi.rcMonitor.right)   { ww -= gap; }
+        if (mi.rcWork.bottom < mi.rcMonitor.bottom)  { wh -= gap; }
 
         UINT dpiX = 96, dpiY = 96;
         GetDpiForMonitor(hMonitor, MDT_EFFECTIVE_DPI, &dpiX, &dpiY);
@@ -369,21 +361,21 @@ namespace UI {
         int horzThick = static_cast<int>(
             (Constants::THUMBNAIL_PANEL_THUMB_HEIGHT + Constants::THUMBNAIL_PANEL_THUMB_MARGIN * 2.0f) * dpiScale);
         int vertThick = static_cast<int>(
-            (Constants::THUMBNAIL_PANEL_THUMB_WIDTH + Constants::THUMBNAIL_PANEL_THUMB_MARGIN * 2.0f) * dpiScale);
+            (Constants::THUMBNAIL_PANEL_THUMB_WIDTH  + Constants::THUMBNAIL_PANEL_THUMB_MARGIN * 2.0f) * dpiScale);
 
         // Vertical panels shrink to avoid overlapping visible horizontal panels.
         // Read directly from PanelLayout — always current, no polling needed.
-        bool topOccupied = false;
+        bool topOccupied    = false;
         bool bottomOccupied = false;
         if (position == 2 || position == 4) {
             const PanelLayout &layout = uiManager.GetLayout();
-            topOccupied = layout.topOccupied();
+            topOccupied    = layout.topOccupied();
             bottomOccupied = layout.bottomOccupied();
         }
 
         int neighbourGap = Constants::THUMBNAIL_PANEL_NEIGHBOUR_GAP_VERTICAL_PANEL;
         auto verticalBounds = [&](int &vy, int &vh) {
-            vy = wy + (topOccupied ? horzThick + neighbourGap : 0);
+            vy       = wy + (topOccupied    ? horzThick + neighbourGap : 0);
             int vBot = wy + wh - (bottomOccupied ? horzThick + neighbourGap : 0);
             vh = vBot - vy;
             if (vh < 0) vh = 0;
@@ -612,8 +604,7 @@ namespace UI {
         if (FAILED(dxgiDevice->GetAdapter(&adapter))) return;
         if (FAILED(adapter->GetParent(IID_PPV_ARGS(&factory)))) return;
         if (FAILED(factory->CreateSwapChainForHwnd(d3dDev, m_hWnd, &swapDesc,
-            nullptr, nullptr, &m_swapChain)))
-            return;
+                                                    nullptr, nullptr, &m_swapChain))) return;
 
         // Create a D2D device context for this panel.
         Microsoft::WRL::ComPtr<ID2D1DeviceContext> baseCtx;
@@ -625,19 +616,16 @@ namespace UI {
         GetClientRect(m_hWnd, &rc);
         UINT w = static_cast<UINT>(rc.right - rc.left);
         UINT h = static_cast<UINT>(rc.bottom - rc.top);
-        if (w == 0 || h == 0) {
-            w = 1200;
-            h = Constants::THUMBNAIL_PANEL_WINDOW_THICKNESS;
-        }
+        if (w == 0 || h == 0) { w = 1200; h = Constants::THUMBNAIL_PANEL_WINDOW_THICKNESS; }
         ResizeSwapChain(w, h);
 
         // Create brushes.
         m_panelContext->CreateSolidColorBrush(
-                D2D1::ColorF(Constants::ThumbnailPanel::PLACEHOLDER), &m_placeholderBrush);
+            D2D1::ColorF(Constants::ThumbnailPanel::PLACEHOLDER), &m_placeholderBrush);
         m_panelContext->CreateSolidColorBrush(
-                D2D1::ColorF(Constants::ThumbnailPanel::SELECTION_BORDER), &m_borderBrush);
+            D2D1::ColorF(Constants::ThumbnailPanel::SELECTION_BORDER), &m_borderBrush);
         m_panelContext->CreateSolidColorBrush(
-                D2D1::ColorF(Constants::ThumbnailPanel::HOVER), &m_hoverBrush);
+            D2D1::ColorF(Constants::ThumbnailPanel::HOVER), &m_hoverBrush);
     }
 
     void ThumbnailPanelWnd::ResizeSwapChain(UINT w, UINT h) {
@@ -652,11 +640,10 @@ namespace UI {
         if (FAILED(m_swapChain->GetBuffer(0, IID_PPV_ARGS(&surface)))) return;
 
         D2D1_BITMAP_PROPERTIES1 props = D2D1::BitmapProperties1(
-                D2D1_BITMAP_OPTIONS_TARGET | D2D1_BITMAP_OPTIONS_CANNOT_DRAW,
-                D2D1::PixelFormat(DXGI_FORMAT_B8G8R8A8_UNORM, D2D1_ALPHA_MODE_IGNORE));
+            D2D1_BITMAP_OPTIONS_TARGET | D2D1_BITMAP_OPTIONS_CANNOT_DRAW,
+            D2D1::PixelFormat(DXGI_FORMAT_B8G8R8A8_UNORM, D2D1_ALPHA_MODE_IGNORE));
         if (FAILED(m_panelContext->CreateBitmapFromDxgiSurface(surface.Get(), &props,
-            &m_panelBackBuffer)))
-            return;
+                                                                &m_panelBackBuffer))) return;
 
         m_panelContext->SetTarget(m_panelBackBuffer.Get());
     }
@@ -680,6 +667,8 @@ namespace UI {
         m_panelContext->BeginDraw();
         m_panelContext->Clear(D2D1::ColorF(0.08f, 0.08f, 0.08f, 1.0f));
 
+        // Draw separator lines at the gap between this vertical panel and
+        // any horizontal neighbour above or below it.
         for (size_t i = 0; i < resolved.size(); ++i) {
             const auto &rv = resolved[i];
             if (rv.bitmap) {
