@@ -12,7 +12,7 @@
 namespace UI {
     class DirWnd : public ThumbnailPanelWnd {
         public:
-            void ClearDirThumbnailCache();
+            void DoClearDirThumbnailCache() override;
 
             void SyncDirSelectionRectangle() { ThumbnailPanelWnd::SyncSelectionRectangle(); }
             void UpdateDirView()             { ThumbnailPanelWnd::UpdateView(); }
@@ -24,6 +24,7 @@ namespace UI {
             const wchar_t *ClassName()    const override { return L"QIV_DirWindow"; }
             const wchar_t *WindowTitle()  const override { return L"Directory"; }
             bool UsesDirThumbCache()      const override { return true; }
+            bool IsDirPanel()             const override { return true; }
 
             int GetKeyToggle() const override;
             int GetKeyMove()   const override;

@@ -35,9 +35,9 @@ namespace UI {
     }
 
     // -------------------------------------------------------------------------
-    // ClearDirThumbnailCache
+    // DoClearDirThumbnailCache
     // -------------------------------------------------------------------------
-    void DirWnd::ClearDirThumbnailCache() {
+    void DirWnd::DoClearDirThumbnailCache() {
         if (!app.renderer) return;
         auto *r = dynamic_cast<RendererD2D *>(app.renderer.get());
         if (r) {

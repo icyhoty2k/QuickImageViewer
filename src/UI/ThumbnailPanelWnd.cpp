@@ -70,6 +70,8 @@ namespace UI {
         if (m_hWnd && IsWindowVisible(m_hWnd)) {
             ShowWindow(m_hWnd, SW_HIDE);
             uiManager.OnPanelHidden(this);
+            // If this was the active dir panel, clear it so we fall back to F5.
+            if (IsDirPanel()) uiManager.SetActiveDirWnd(nullptr);
         }
     }
 
@@ -107,6 +109,10 @@ namespace UI {
 
         // Register at new position — triggers RefreshVerticalPanels.
         uiManager.OnPanelShown(this, m_position);
+    }
+
+    void ThumbnailPanelWnd::ClearDirThumbnailCache() {
+        DoClearDirThumbnailCache();
     }
 
     void ThumbnailPanelWnd::RefreshBounds() {
@@ -497,6 +503,8 @@ namespace UI {
 
             // -----------------------------------------------------------------
             case WM_LBUTTONDOWN: {
+                // Any click in a DirWnd makes it the active one for nav updates.
+                if (IsDirPanel()) uiManager.SetActiveDirWnd(this);
                 s_clickPos.x = GET_X_LPARAM(lParam);
                 s_clickPos.y = GET_Y_LPARAM(lParam);
                 s_hasMoved = false;

@@ -37,6 +37,15 @@ namespace UI {
             void SyncSelectionRectangle();
             void UpdateView();
 
+            // Compat wrappers — named to match existing call sites in AppMain/FileHandler.
+            // All DirWnd and CacheWnd subclasses inherit these.
+            void SyncDirSelectionRectangle() { SyncSelectionRectangle(); }
+            void UpdateDirView()             { UpdateView(); }
+            void ClearDirThumbnailCache(); // implemented in DirWnd; no-op in CacheWnd
+
+            // Virtual so DirWnd can override with the actual renderer cache clear.
+            virtual void DoClearDirThumbnailCache() {}
+
             void Toggle() override;
             void Show() override;
             void Hide() override;
@@ -73,8 +82,8 @@ namespace UI {
             // Returns the ordered list of file paths this panel displays.
             virtual std::vector<std::wstring> GetSourceItems() const = 0;
 
-            // True when this panel owns its own playlist (SpawnedDirWnd).
-            // Skips the app.playlist-empty guard in UpdateView().
+            // True for DirWnd and SpawnedDirWnd — these track the active panel.
+            virtual bool IsDirPanel() const { return false; }
             virtual bool HasOwnPlaylist() const { return false; }
 
             // True when this panel should look up bitmaps from m_dirThumbCache

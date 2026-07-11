@@ -86,6 +86,16 @@ namespace UI {
         return dirWnd;
     }
 
+    ThumbnailPanelWnd &UIManager::getActiveDirWnd() {
+        if (m_activeDirWnd && m_activeDirWnd->GetHwnd() && IsWindowVisible(m_activeDirWnd->GetHwnd()))
+            return *m_activeDirWnd;
+        return getDirWindow();
+    }
+
+    void UIManager::SetActiveDirWnd(ThumbnailPanelWnd *panel) {
+        m_activeDirWnd = panel;
+    }
+
     HistoryListWnd &UIManager::getHistoryListWindow() {
         if (isInit(historyListWnd)) return historyListWnd;
         historyListWnd.Init(m_hInstance, m_hMainWnd);

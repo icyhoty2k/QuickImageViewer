@@ -68,6 +68,13 @@ namespace UI {
             HelpWnd         &getHelpWindow();
             CacheWnd        &getCacheWindow();
             DirWnd          &getDirWindow();
+
+            // Returns whichever DirWnd the user last clicked in.
+            // Defaults to the primary F5 DirWnd.
+            ThumbnailPanelWnd &getActiveDirWnd();
+
+            // Called by ThumbnailPanelWnd on LButtonUp to make it the active panel.
+            void SetActiveDirWnd(ThumbnailPanelWnd *panel);
             HistoryListWnd  &getHistoryListWindow();
 
             void SpawnDirWndForFolder(const std::wstring &folderPath, HWND hHistoryWnd);
@@ -105,6 +112,10 @@ namespace UI {
 
             // The layout struct — single source of truth.
             PanelLayout m_layout;
+
+            // Whichever DirWnd the user last clicked — receives navigation updates.
+            // nullptr = use primary dirWnd.
+            ThumbnailPanelWnd *m_activeDirWnd = nullptr;
 
             bool isInit(IPanelWindow &panel);
     };

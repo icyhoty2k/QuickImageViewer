@@ -269,13 +269,13 @@ void OpenInitialImage(HWND hWnd) {
     UI::PushFolderHistory(selectedPath.parent_path().wstring());
 
     // New folder — drop stale dir window thumbnails before navigating
-    uiManager.getDirWindow().ClearDirThumbnailCache();
+    uiManager.getActiveDirWnd().ClearDirThumbnailCache();
 
 
     auto it = std::ranges::find(app.playlist, selectedPath.wstring());
     if (it != app.playlist.end()) {
         LoadImageIndex(hWnd, static_cast<int>(std::distance(app.playlist.begin(), it)));
-        uiManager.getDirWindow().UpdateDirView();
+        uiManager.getActiveDirWnd().UpdateDirView();
     }
 }
 
@@ -318,7 +318,7 @@ void LoadImageIndex(HWND hWnd, int index) {
 
     app.currentIndex = index;
     app.wantedIndex.store(index, std::memory_order_release);
-    uiManager.getDirWindow().SyncDirSelectionRectangle();
+    uiManager.getActiveDirWnd().SyncDirSelectionRectangle();
 
     const std::wstring &currentPath = app.playlist[index];
     SetWindowTextW(hWnd, (currentPath.substr(currentPath.find_last_of(L"\\/") + 1) + L" - QuickImageViewer").c_str());
@@ -415,11 +415,11 @@ void OpenDirectory(HWND hWnd, const std::wstring &dirPathStr) {
     });
 
     UI::PushFolderHistory(dirPath.wstring());
-    uiManager.getDirWindow().ClearDirThumbnailCache();
+    uiManager.getActiveDirWnd().ClearDirThumbnailCache();
 
     // Force load the first image (index 0) of the freshly sorted playlist
     LoadImageIndex(hWnd, 0);
-    uiManager.getDirWindow().UpdateDirView();
+    uiManager.getActiveDirWnd().UpdateDirView();
 }
 
 void OpenSpecificImage(HWND hWnd, const std::wstring &filePathStr) {
@@ -470,13 +470,13 @@ void OpenSpecificImage(HWND hWnd, const std::wstring &filePathStr) {
     UI::PushFolderHistory(filePath.parent_path().wstring());
 
     // New folder — drop stale dir window thumbnails before navigating
-    uiManager.getDirWindow().ClearDirThumbnailCache();
-    // uiManager.getDirWindow().UpdateDirView();
+    uiManager.getActiveDirWnd().ClearDirThumbnailCache();
+    // uiManager.getActiveDirWnd().UpdateDirView();
 
     auto it = std::ranges::find(app.playlist, filePath.wstring());
     if (it != app.playlist.end()) {
         LoadImageIndex(hWnd, static_cast<int>(std::distance(app.playlist.begin(), it)));
-        uiManager.getDirWindow().UpdateDirView();
+        uiManager.getActiveDirWnd().UpdateDirView();
     }
 }
 
