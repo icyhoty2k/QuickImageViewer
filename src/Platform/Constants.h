@@ -15,6 +15,7 @@
 #include <iterator>
 #include <d2d1.h>
 #include <dwmapi.h>
+#include "ConstantsTheme.h"  // All application colors with theme support
 
 namespace Constants {
     constexpr const wchar_t *BASE_NAME = L"QuickImageViewer";
@@ -110,25 +111,14 @@ namespace Constants {
 
 
     namespace ThumbnailPanel {
-        const D2D1::ColorF::Enum BACKGROUND = D2D1::ColorF::Black; // Or your custom 0.08f, 0.08f, 0.08f
-        const D2D1::ColorF::Enum SELECTION_BORDER = D2D1::ColorF::LightGreen;
-        const float SELECTION_BORDER_THICKNESS = 3.0f;
-        const D2D1::ColorF::Enum HOVER = D2D1::ColorF::White;
-        const float HOVER_THICKNESS = 1.0f;
-        const D2D1::ColorF::Enum PLACEHOLDER = D2D1::ColorF::DarkSlateGray;
-        // Scrollbar (drawn as a strip along the panel edge)
+        // Geometry & Layout (non-color)
+        constexpr float SELECTION_BORDER_THICKNESS = 3.0f;
+        constexpr float HOVER_THICKNESS = 1.0f;
         constexpr float SCROLLBAR_THICKNESS = 4.0f; // px width of the strip
         constexpr float SCROLLBAR_MIN_THUMB = 20.0f; // minimum thumb length in px
-        // Track — near-black, semi-transparent
-        constexpr float SCROLLBAR_TRACK_R = 0.12f, SCROLLBAR_TRACK_G = 0.12f,
-                SCROLLBAR_TRACK_B = 0.12f, SCROLLBAR_TRACK_A = 0.70f;
-        // Thumb — mid-grey
-        constexpr float SCROLLBAR_THUMB_R = 0.65f, SCROLLBAR_THUMB_G = 0.65f,
-                SCROLLBAR_THUMB_B = 0.65f, SCROLLBAR_THUMB_A = 0.85f;
 
         // Scrollbar position enums
         enum class ScrollbarSide { LEFT = 0, RIGHT = 1 };
-
         enum class ScrollbarEdge { TOP = 0, BOTTOM = 1 };
 
         // Per-position scrollbar placement
@@ -137,18 +127,8 @@ namespace Constants {
         constexpr ScrollbarSide SCROLLBAR_POS_LEFT_PANEL = ScrollbarSide::RIGHT; // left panel (pos 4), scrollbar on right
         constexpr ScrollbarEdge SCROLLBAR_POS_TOP_PANEL = ScrollbarEdge::BOTTOM; // top panel (pos 1), scrollbar at bottom
         constexpr ScrollbarEdge SCROLLBAR_POS_BOTTOM_PANEL = ScrollbarEdge::BOTTOM; // bottom panel (pos 3), scrollbar at bottom
-        // we use mostly black so this variable is perfect also if you want to change to different color just input the color value for rgba and do not use this internal var
-        constexpr float PANEL_COLOR_ONE_COLOR_TO_RULE_THEM_ALL_INACTIVE = 0.08f;
-        constexpr float PANEL_COLOR_ONE_COLOR_TO_RULE_THEM_ALL_ACTIVE = 0.02f;
-        // Panel background colors — applies to all child panels (DirWnd, CacheWnd, SpawnedDirWnd, HistoryWnd)
-        // Normal (inactive) panel background
 
-        constexpr float PANEL_BACKGROUND_R = PANEL_COLOR_ONE_COLOR_TO_RULE_THEM_ALL_INACTIVE, PANEL_BACKGROUND_G = PANEL_COLOR_ONE_COLOR_TO_RULE_THEM_ALL_INACTIVE,
-                PANEL_BACKGROUND_B = PANEL_COLOR_ONE_COLOR_TO_RULE_THEM_ALL_INACTIVE, PANEL_BACKGROUND_A = 0.75f;
-
-        // Active panel background — when panel has focus
-        constexpr float PANEL_ACTIVE_R = PANEL_COLOR_ONE_COLOR_TO_RULE_THEM_ALL_ACTIVE, PANEL_ACTIVE_G = PANEL_COLOR_ONE_COLOR_TO_RULE_THEM_ALL_ACTIVE,
-                PANEL_ACTIVE_B = PANEL_COLOR_ONE_COLOR_TO_RULE_THEM_ALL_ACTIVE, PANEL_ACTIVE_A = 0.9f;
+        // Note: All colors moved to ConstantsTheme.h
     }
 
     // =========================================================================
@@ -174,8 +154,6 @@ namespace Constants {
     constexpr UINT WM_QIV_PENDING_UPLOADS = WM_USER + 1; // Posted by background decoder thread
     constexpr UINT WM_QIV_REPAINT = WM_USER + 2; // Signal to UI thread that bitmap is ready
     constexpr UINT WM_QIV_SVG_READY = WM_USER + 3; // Posted by IO thread when SVG bytes are loaded
-
-
     // =============================================================================
 
 
@@ -293,11 +271,10 @@ namespace Constants {
         constexpr int HISTORY_ROW_HEIGHT = 28; // px at 96 DPI per history row
         constexpr int HISTORY_PADDING = 16; // px at 96 DPI inner padding
         constexpr int HISTORY_FONT_SIZE = 14; // pt at 96 DPI body font
-        // Scrollbar (right-edge GDI strip)
+        // Scrollbar (right-edge GDI strip) - geometry only
         constexpr int SCROLLBAR_THICKNESS = 6; // px width
         constexpr int SCROLLBAR_MIN_THUMB = 16; // minimum thumb height in px
-        constexpr BYTE SCROLLBAR_TRACK_R = 28, SCROLLBAR_TRACK_G = 28, SCROLLBAR_TRACK_B = 28;
-        constexpr BYTE SCROLLBAR_THUMB_R = 110, SCROLLBAR_THUMB_G = 110, SCROLLBAR_THUMB_B = 110;
+        // Note: Scrollbar colors moved to ConstantsTheme.h
     }
 
     // =========================================================================
