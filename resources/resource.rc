@@ -1,6 +1,7 @@
 #include <windows.h> // Base Windows definitions
 #include <winver.h>  // Definitions for version constants (VS_FFI_FILEFLAGSMASK, etc.)
 #include "resource.h" // Project-specific resource IDs
+#include "Constants.h" // Include your constants for versioning
 
 // The icon is in the same folder as this .rc file
 IDI_APP_ICON ICON "QIV.ico"
@@ -10,8 +11,8 @@ IDI_APP_ICON ICON "QIV.ico"
 
 // Define the version information block
 VS_VERSION_INFO VERSIONINFO
-FILEVERSION     1,5,0,0 // Numeric version for file properties (4 comma-separated integers) must be exactly 4 numbers separated by commas
-PRODUCTVERSION  1,5,0,0 // Numeric version for file properties (4 comma-separated integers) must be exactly 4 numbers separated by commas
+FILEVERSION     VER_NUMERIC // Numeric version for file properties (4 comma-separated integers) must be exactly 4 numbers separated by commas
+PRODUCTVERSION  VER_NUMERIC // Numeric version for file properties (4 comma-separated integers) must be exactly 4 numbers separated by commas
 FILEFLAGSMASK   VS_FFI_FILEFLAGSMASK // Required mask for file flags. Specifies which bits in FILEFLAGS are valid
 FILEFLAGS       0                    // No special flags (e.g., Debug, Prerelease)
 FILEOS          VOS_NT_WINDOWS32     // Windows NT platform (used for both 32-bit and 64-bit Windows)
@@ -26,13 +27,13 @@ BEGIN
         // 04B0 = Unicode (UTF-16)
         BLOCK "040904B0"
         BEGIN
-            VALUE "FileDescription",  "qIV"                                 // Friendly name displayed in Task Manager/Explorer
-            VALUE "FileVersion",      "1.5.0"                               // Displayed version string, accepts anything even characters. Human-readable version string; may contain text such as "1.5 Beta"
-            VALUE "InternalName",     "QIV"                                 // Internal module name
-            VALUE "LegalCopyright",   "Copyright (C) 2026 Ivan Hristov Yanev" // Copyright notice
-            VALUE "OriginalFilename", "QuickImageViewer.exe"                // Original name of the binary
-            VALUE "ProductName",      "Quick Image Viewer"                  // Official product name
-            VALUE "ProductVersion",   "1.5.0"                               // Official product version, accepts anything even characters. Human-readable product version; may contain text
+            VALUE "FileDescription",  FILE_DESC                               // Friendly name displayed in Task Manager/Explorer
+            VALUE "FileVersion",      VER_STR                                 // Displayed version string, accepts anything even characters. Human-readable version string; may contain text such as "1.5 Beta"
+            VALUE "InternalName",     "QIV"                                   // Internal module name
+            VALUE "LegalCopyright",   COPYRIGHT                               // Copyright notice
+            VALUE "OriginalFilename", ORIG_FILENAME                           // Original name of the binary , so that windows knows name even if user changes exe name
+            VALUE "ProductName",      PROD_NAME                               // Official product name
+            VALUE "ProductVersion",   VER_STR                                 // Official product version, accepts anything even characters. Human-readable product version; may contain text
         END
     END
     // Block indicating the language/character set translations supported

@@ -1,15 +1,28 @@
 #pragma once
+
+// =========================================================================
+// RC COMPATIBLE DEFINITIONS
+// Used by the Resource Compiler for version metadata
+// =========================================================================
+#define VER_NUMERIC 1,5,1,0        // Numeric version for file properties (4 comma-separated integers) must be exactly 4 numbers separated by commas
+#define VER_STR "1.5.1"            // Human-readable version string; may contain text such as "1.5 Beta"
+#define FILE_DESC "qIV"            // Friendly name displayed in Task Manager/Explorer
+#define ORIG_FILENAME "QuickImageViewer.exe" // Original name of the binary
+#define PROD_NAME "Quick Image Viewer"       // Official product name
+#define COPYRIGHT "Copyright® 06.2026 All rights reserved, Ivan Hristov Yanev" // Copyright notice
+// =========================================================================
+
 #include <iterator>
 #include <d2d1.h>
 #include <dwmapi.h>
 
 namespace Constants {
     constexpr const wchar_t *BASE_NAME = L"QuickImageViewer";
-
     constexpr const wchar_t *APP_CREATOR = L"Ivan Hristov Yanev";
-    constexpr const wchar_t *APP_HELP_FOOTER = L"Copyright® 06.2026 All rights reserved";
-    constexpr const wchar_t *APP_TASKBAR_NAME = L"QIV";
-    constexpr const wchar_t *APP_VERSION = L"1.0.0"; // major.minor.patch
+
+    constexpr const wchar_t *APP_HELP_FOOTER = L"" COPYRIGHT;
+    constexpr const wchar_t *APP_TASKBAR_NAME = L"" FILE_DESC;
+    constexpr const wchar_t *APP_VERSION = L"" VER_STR; // major.minor.patch
     constexpr const wchar_t *APP_NAME = BASE_NAME;
     constexpr const wchar_t *WINDOW_CLASS_NAME = BASE_NAME;
     constexpr bool IS_ENABLE_RUN_ON_STARTUP = true; // enable or disable run on startup reg value add/delete
