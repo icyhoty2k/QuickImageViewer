@@ -42,6 +42,17 @@ namespace UI {
             // Hide all 3 spawned DirWnd instances (called from HideAllPanelWindows).
             void HideAllSpawnedDirWnds();
 
+            // Query which horizontal edges are currently occupied by a visible panel.
+            // top=true  → a panel is visible at position 1 (top strip)
+            // bottom=true → a panel is visible at position 3 (bottom strip)
+            // Used by ThumbnailPanelWnd::GetWindowBounds to size vertical panels.
+            void GetOccupiedEdges(bool &top, bool &bottom) const;
+
+            // Reposition all currently-visible vertical panels (left/right) to
+            // reflect the current top/bottom occupation state. Call whenever any
+            // panel is shown or hidden so vertical panels resize dynamically.
+            void RefreshVerticalPanels();
+
         private:
             HelpWnd helpWnd;
             CacheWnd cacheWnd;
