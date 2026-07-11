@@ -293,12 +293,12 @@ LRESULT CALLBACK MainAppWndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM l
 
                     InvalidateRect(hWnd, nullptr, FALSE); // Now, repaint with the correct image.
                     uiManager.getCacheWindow().UpdateCacheView();
-                    uiManager.getDirWindow().UpdateDirView();
+                    uiManager.getActiveDirWnd().UpdateDirView();
                     // Scroll DirWnd to the newly active image. UpdateDirView()
                     // rebuilds geometry and sets m_selectedIdx but does not move
                     // m_offset (by design, so manual scrolling is not interrupted).
                     // On a cache-miss arrival we always want to snap to selection.
-                    uiManager.getDirWindow().SyncDirSelectionRectangle();
+                    uiManager.getActiveDirWnd().SyncDirSelectionRectangle();
                 }
             }
             return 0;
@@ -324,8 +324,8 @@ LRESULT CALLBACK MainAppWndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM l
 
                     InvalidateRect(hWnd, nullptr, FALSE);
                     uiManager.getCacheWindow().UpdateCacheView();
-                    uiManager.getDirWindow().UpdateDirView();
-                    uiManager.getDirWindow().SyncDirSelectionRectangle();
+                    uiManager.getActiveDirWnd().UpdateDirView();
+                    uiManager.getActiveDirWnd().SyncDirSelectionRectangle();
                 }
             }
 
@@ -542,7 +542,7 @@ int WINAPI wWinMain(HINSTANCE hInstance, [[maybe_unused]] HINSTANCE hPrevInstanc
     }
     app.renderer->onImageChangedCallback = [](int) {
         uiManager.getCacheWindow().SyncSelectionRectangle();
-        uiManager.getDirWindow().SyncDirSelectionRectangle();
+        uiManager.getActiveDirWnd().SyncDirSelectionRectangle();
     };
 
     // Set initial overlay visibility from app defaults.
