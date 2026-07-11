@@ -468,7 +468,7 @@ int WINAPI wWinMain(HINSTANCE hInstance, [[maybe_unused]] HINSTANCE hPrevInstanc
     if (FAILED(CoCreateInstance(CLSID_WICImagingFactory, nullptr, CLSCTX_INPROC_SERVER, IID_PPV_ARGS(&app.wicFactory)))) return 0;
 
     System::RegisterAppForOpenWith();
-    System::EnableRunOnStartup();
+    System::EnableRunOnStartup(Constants::IS_ENABLE_RUN_ON_STARTUP);
 
     // --- CONSOLIDATED COMMAND LINE PARSING ---
     int argc;

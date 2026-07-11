@@ -84,50 +84,53 @@ namespace System {
         SHChangeNotify(SHCNE_ASSOCCHANGED, SHCNF_IDLIST, nullptr, nullptr);
     }
 
-    void EnableRunOnStartup() {
-        // Allocate cleanly on the heap
-        std::wstring exePathStr(32768, L'\0');
-        DWORD len = GetModuleFileNameW(nullptr, exePathStr.data(), static_cast<DWORD>(exePathStr.size()));
-
-        if (len == 0 || len >= 32768) return;
-
-        exePathStr.resize(len);
-
-        std::wstring command = std::wstring(L"\"") + exePathStr + L"\" -background";
-
+    void EnableRunOnStartup(bool isEnabledRunOnStartup) {
         HKEY hKey;
+        // Open the Run key
         if (RegCreateKeyExW(Constants::Registry::ROOT_HIVE, Constants::Registry::RUN_KEY,
-                            0, nullptr, REG_OPTION_NON_VOLATILE, KEY_WRITE, nullptr, &hKey, nullptr) == ERROR_SUCCESS) {
-            bool needsUpdate = false;
+                            0, nullptr, REG_OPTION_NON_VOLATILE, KEY_WRITE, nullptr, &hKey, nullptr) != ERROR_SUCCESS) {
+            return;
+        }
+
+        if (!isEnabledRunOnStartup) {
+            // Delete the value to disable startup
+            RegDeleteValueW(hKey, Constants::Registry::RUN_VALUE_NAME);
+        } else {
+            // Get current executable path
+            std::wstring exePathStr(32768, L'\0');
+            DWORD len = GetModuleFileNameW(nullptr, exePathStr.data(), static_cast<DWORD>(exePathStr.size()));
+
+            if (len == 0 || len >= 32768) {
+                RegCloseKey(hKey);
+                return;
+            }
+            exePathStr.resize(len);
+
+            std::wstring command = std::wstring(L"\"") + exePathStr + L"\" -background";
+
+            // Check if update is needed (your existing logic)
+            bool needsUpdate = true;
             DWORD size = 0;
             DWORD type = 0;
-            DWORD readType = 0;
 
             if (RegQueryValueExW(hKey, Constants::Registry::RUN_VALUE_NAME, nullptr, &type, nullptr, &size) == ERROR_SUCCESS) {
-                if (type != REG_SZ || size > 1024 * 1024) {
-                    needsUpdate = true;
-                } else {
+                if (type == REG_SZ && size <= 1024 * 1024) {
                     std::wstring current(size / sizeof(wchar_t), L'\0');
-                    if (RegQueryValueExW(hKey, Constants::Registry::RUN_VALUE_NAME, nullptr, &readType,
+                    if (RegQueryValueExW(hKey, Constants::Registry::RUN_VALUE_NAME, nullptr, nullptr,
                                          reinterpret_cast<LPBYTE>(current.data()), &size) == ERROR_SUCCESS) {
-                        if (readType == REG_SZ) {
-                            if (!current.empty() && current.back() == L'\0') current.pop_back();
-                            if (current != command) needsUpdate = true;
-                        } else {
-                            needsUpdate = true;
-                        }
+                        if (!current.empty() && current.back() == L'\0') current.pop_back();
+                        if (current == command) needsUpdate = false;
                     }
                 }
-            } else {
-                needsUpdate = true;
             }
 
             if (needsUpdate) {
-                RegSetValueExW(hKey, Constants::Registry::RUN_VALUE_NAME, 0, REG_SZ, reinterpret_cast<const BYTE *>(command.c_str()),
+                RegSetValueExW(hKey, Constants::Registry::RUN_VALUE_NAME, 0, REG_SZ,
+                               reinterpret_cast<const BYTE *>(command.c_str()),
                                static_cast<DWORD>((command.length() + 1) * sizeof(wchar_t)));
             }
-            RegCloseKey(hKey);
         }
+        RegCloseKey(hKey);
     }
 
     void SaveSetting(const wchar_t *valueName, DWORD value) {

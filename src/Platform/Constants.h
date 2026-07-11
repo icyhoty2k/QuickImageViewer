@@ -12,6 +12,7 @@ namespace Constants {
     constexpr const wchar_t *APP_VERSION = L"1.0.0"; // major.minor.patch
     constexpr const wchar_t *APP_NAME = BASE_NAME;
     constexpr const wchar_t *WINDOW_CLASS_NAME = BASE_NAME;
+    constexpr bool IS_ENABLE_RUN_ON_STARTUP = true; // enable or disable run on startup reg value add/delete
 
     // =========================================================================
     // MAIN APP CORNER PREFERENCES AND DARK MODE CONTROL
