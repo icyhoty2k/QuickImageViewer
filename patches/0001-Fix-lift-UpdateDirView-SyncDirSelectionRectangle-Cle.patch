@@ -1,0 +1,91 @@
+From 93dbba32c21ea8e8ec7897414e7c2f7c4eb6f9de Mon Sep 17 00:00:00 2001
+From: Ivan Hristov Yanev <icyhoty2k@gmail.com>
+Date: Sat, 11 Jul 2026 15:06:59 +0000
+Subject: [PATCH] Fix: lift
+ UpdateDirView/SyncDirSelectionRectangle/ClearDirThumbnailCache to
+ ThumbnailPanelWnd
+
+getActiveDirWnd() returns ThumbnailPanelWnd& so callers need these
+methods on the base class.
+
+- ThumbnailPanelWnd: add UpdateDirView()/SyncDirSelectionRectangle()
+  as inline wrappers to UpdateView()/SyncSelectionRectangle().
+  Add ClearDirThumbnailCache() delegating to virtual DoClearDirThumbnailCache()
+  (no-op in base, overridden in DirWnd).
+
+- DirWnd: rename ClearDirThumbnailCache() to DoClearDirThumbnailCache()
+  override.
+---
+ src/UI/DirWnd.cpp            | 4 ++--
+ src/UI/DirWnd.h              | 2 +-
+ src/UI/ThumbnailPanelWnd.cpp | 4 ++++
+ src/UI/ThumbnailPanelWnd.h   | 9 +++++++++
+ 4 files changed, 16 insertions(+), 3 deletions(-)
+
+diff --git a/src/UI/DirWnd.cpp b/src/UI/DirWnd.cpp
+index 76f2ec9..2fdd360 100644
+--- a/src/UI/DirWnd.cpp
++++ b/src/UI/DirWnd.cpp
+@@ -35,9 +35,9 @@ namespace UI {
+     }
+ 
+     // -------------------------------------------------------------------------
+-    // ClearDirThumbnailCache
++    // DoClearDirThumbnailCache
+     // -------------------------------------------------------------------------
+-    void DirWnd::ClearDirThumbnailCache() {
++    void DirWnd::DoClearDirThumbnailCache() {
+         if (!app.renderer) return;
+         auto *r = dynamic_cast<RendererD2D *>(app.renderer.get());
+         if (r) {
+diff --git a/src/UI/DirWnd.h b/src/UI/DirWnd.h
+index 0f7f928..2b3765a 100644
+--- a/src/UI/DirWnd.h
++++ b/src/UI/DirWnd.h
+@@ -12,7 +12,7 @@
+ namespace UI {
+     class DirWnd : public ThumbnailPanelWnd {
+         public:
+-            void ClearDirThumbnailCache();
++            void DoClearDirThumbnailCache() override;
+ 
+             void SyncDirSelectionRectangle() { ThumbnailPanelWnd::SyncSelectionRectangle(); }
+             void UpdateDirView()             { ThumbnailPanelWnd::UpdateView(); }
+diff --git a/src/UI/ThumbnailPanelWnd.cpp b/src/UI/ThumbnailPanelWnd.cpp
+index f22a3e8..1a2133b 100644
+--- a/src/UI/ThumbnailPanelWnd.cpp
++++ b/src/UI/ThumbnailPanelWnd.cpp
+@@ -111,6 +111,10 @@ namespace UI {
+         uiManager.OnPanelShown(this, m_position);
+     }
+ 
++    void ThumbnailPanelWnd::ClearDirThumbnailCache() {
++        DoClearDirThumbnailCache();
++    }
++
+     void ThumbnailPanelWnd::RefreshBounds() {
+         if (!m_hWnd) return;
+         int x, y, w, h;
+diff --git a/src/UI/ThumbnailPanelWnd.h b/src/UI/ThumbnailPanelWnd.h
+index f02490c..c383338 100644
+--- a/src/UI/ThumbnailPanelWnd.h
++++ b/src/UI/ThumbnailPanelWnd.h
+@@ -37,6 +37,15 @@ namespace UI {
+             void SyncSelectionRectangle();
+             void UpdateView();
+ 
++            // Compat wrappers — named to match existing call sites in AppMain/FileHandler.
++            // All DirWnd and CacheWnd subclasses inherit these.
++            void SyncDirSelectionRectangle() { SyncSelectionRectangle(); }
++            void UpdateDirView()             { UpdateView(); }
++            void ClearDirThumbnailCache(); // implemented in DirWnd; no-op in CacheWnd
++
++            // Virtual so DirWnd can override with the actual renderer cache clear.
++            virtual void DoClearDirThumbnailCache() {}
++
+             void Toggle() override;
+             void Show() override;
+             void Hide() override;
+-- 
+2.43.0
+
