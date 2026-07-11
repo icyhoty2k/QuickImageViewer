@@ -1,0 +1,63 @@
+From aef2829900f8643dd028b3ccfc94d658e2ba476d Mon Sep 17 00:00:00 2001
+From: Ivan Hristov Yanev <icyhoty2k@gmail.com>
+Date: Sat, 11 Jul 2026 13:18:41 +0000
+Subject: [PATCH] Fix: query Shell_TrayWnd directly for taskbar gap instead of
+ rcWork
+
+rcWork collapses to rcMonitor when a WS_EX_TOPMOST window covers the
+full monitor (e.g. the main viewer in windowed-maximized mode), making
+the rcMonitor - rcWork gap calculation return zero on all edges.
+
+Fix: FindWindowW(Shell_TrayWnd) + GetWindowRect to get the actual
+taskbar rect, then determine which monitor edge it sits on via
+IntersectRect. The gap values (gapTop/Bottom/Left/Right) are now
+always correct regardless of whether any other topmost window is
+covering the screen.
+---
+ src/UI/ThumbnailPanelWnd.cpp | 30 +++++++++++++++++++++++-------
+ 1 file changed, 23 insertions(+), 7 deletions(-)
+
+diff --git a/src/UI/ThumbnailPanelWnd.cpp b/src/UI/ThumbnailPanelWnd.cpp
+index 14ba913..a2e73e4 100644
+--- a/src/UI/ThumbnailPanelWnd.cpp
++++ b/src/UI/ThumbnailPanelWnd.cpp
+@@ -327,13 +327,29 @@ namespace UI {
+         int workW = mi.rcWork.right  - mi.rcWork.left;
+         int workH = mi.rcWork.bottom - mi.rcWork.top;
+ 
+-        // Explicit per-edge taskbar gaps in physical pixels.
+-        // Computed as the difference between rcMonitor and rcWork on each side.
+-        // Zero when the taskbar is on a different edge.
+-        int gapTop    = mi.rcWork.top    - mi.rcMonitor.top;
+-        int gapBottom = mi.rcMonitor.bottom - mi.rcWork.bottom;
+-        int gapLeft   = mi.rcWork.left   - mi.rcMonitor.left;
+-        int gapRight  = mi.rcMonitor.right  - mi.rcWork.right;
++        // Compute per-edge taskbar gaps by querying the taskbar window directly.
++        // Using rcMonitor - rcWork is unreliable when a WS_EX_TOPMOST fullscreen
++        // window is present — Windows collapses rcWork to rcMonitor in that case.
++        int gapTop = 0, gapBottom = 0, gapLeft = 0, gapRight = 0;
++        HWND hTaskbar = FindWindowW(L"Shell_TrayWnd", nullptr);
++        if (hTaskbar && IsWindowVisible(hTaskbar)) {
++            RECT tr{};
++            GetWindowRect(hTaskbar, &tr);
++            RECT mr = mi.rcMonitor;
++            // The taskbar belongs to this monitor if it significantly overlaps it.
++            RECT inter{};
++            if (IntersectRect(&inter, &tr, &mr)) {
++                // Determine which edge the taskbar is on by which side it touches.
++                if (tr.top <= mr.top && tr.bottom < mr.bottom)
++                    gapTop    = tr.bottom - mr.top;
++                else if (tr.bottom >= mr.bottom && tr.top > mr.top)
++                    gapBottom = mr.bottom - tr.top;
++                else if (tr.left <= mr.left && tr.right < mr.right)
++                    gapLeft   = tr.right - mr.left;
++                else if (tr.right >= mr.right && tr.left > mr.left)
++                    gapRight  = mr.right - tr.left;
++            }
++        }
+ 
+         // Query the monitor's own DPI — avoids any mismatch when hRef is on
+         // a different monitor or hasn't received WM_DPICHANGED yet.
+-- 
+2.43.0
+
