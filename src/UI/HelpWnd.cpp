@@ -3,7 +3,11 @@
 #include "Shortcuts.h"
 #include <string>
 #include <dwmapi.h>
+#include <shellapi.h>
 #include <algorithm>
+#include <shlobj.h>
+#include <fstream>
+#include <windowsx.h>
 
 namespace UI {
     void HelpWnd::Init(HINSTANCE hInstance, HWND hParent, int8_t /*position*/) {
@@ -22,8 +26,8 @@ namespace UI {
         RegisterClassW(&wc);
 
         UINT dpi = GetDpiForWindow(hParent);
-        int winW = MulDiv(640, dpi, 96);
-        int winH = MulDiv(760, dpi, 96);
+        int winW = MulDiv(600, dpi, 96);
+        int winH = MulDiv(800, dpi, 96);
 
         CreateWindowExW(
                 WS_EX_TOOLWINDOW | WS_EX_TOPMOST,
@@ -39,17 +43,110 @@ namespace UI {
         DwmSetWindowAttribute(m_hWnd, 20, &darkMode, sizeof(darkMode));
         DWORD corner = 2;
         DwmSetWindowAttribute(m_hWnd, 33, &corner, sizeof(corner));
-        COLORREF darkColor = RGB(24, 24, 24);
+        COLORREF darkColor = RGB(20, 20, 22);
         DwmSetWindowAttribute(m_hWnd, 35, &darkColor, sizeof(darkColor));
 
         SetWindowPos(m_hWnd, nullptr, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | SWP_FRAMECHANGED);
+
+        BuildHelpContent();
     }
 
+    struct Section {
+        std::wstring title;
+        std::wstring icon;
+        COLORREF color;
+        std::vector<std::pair<std::wstring, std::wstring> > entries; // shortcut, description
+    };
+
+    void HelpWnd::BuildHelpContent() {
+        m_entries.clear();
+
+        auto Add = [this](const std::wstring &shortcut, const std::wstring &desc, int section) {
+            m_entries.push_back({shortcut, desc, section});
+        };
+
+        // Section 0: Viewing & Navigation (Cyan)
+        Add(L"Left/Right", L"Previous / Next image", 0);
+        Add(L"Space / Shift+Space", L"Next / Previous image", 0);
+        Add(L"Wheel Scroll", L"Navigate images", 0);
+        Add(L"Backspace / Shift+Backspace", L"Toggle first / last in folder", 0);
+        Add(L"E", L"Open file location in Explorer", 0);
+        Add(L"Tab", L"Toggle History panel", 0);
+        Add(L"F1", L"Toggle Help window", 0);
+        Add(L"F2", L"Open file dialog", 0);
+        Add(L"F3 / F4", L"Toggle / Move VRAM cache panel", 0);
+        Add(L"F5 / F6", L"Toggle / Move directory panel", 0);
+        Add(L"F12", L"Clear VRAM cache", 0);
+        Add(L"1-5", L"Switch view mode", 0);
+
+        // Section 1: Interaction & Control (Orange)
+        Add(L"Left Click (hold+drag)", L"Quick 3x zoom and pan", 1);
+        Add(L"Right Click Drag", L"Move window", 1);
+        Add(L"RMB + Left Click", L"Open current image in Explorer", 1);
+        Add(L"Middle Click Drag", L"Resize window", 1);
+        Add(L"Middle Click", L"Reset window & center image", 1);
+        Add(L"Up/Down / Ctrl+Wheel", L"Zoom In / Out", 1);
+        Add(L"Numpad +/- / *", L"Zoom In/Out / Reset", 1);
+        Add(L"Shift+Wheel / H-Wheel", L"Adjust window opacity", 1);
+        Add(L"RMB + Wheel", L"Zoom while holding RMB", 1);
+        Add(L"RMB + H-Wheel", L"Resize from center", 1);
+        Add(L"F11 / Enter", L"Toggle Fullscreen", 1);
+        Add(L"N / I / Ctrl+0", L"Master overlay toggle", 1);
+        Add(L"Ctrl+1 to Ctrl+9", L"Toggle individual overlay slots", 1);
+        Add(L"Ctrl+Alt+1 to Ctrl+Alt+9", L"Toggle overlay compact mode", 1);
+        Add(L"O", L"Cycle overlay layout", 1);
+        Add(L"P", L"Toggle overlay text backgrounds", 1);
+
+        // Section 2: Effects & Customization (Purple)
+        Add(L"R / Ctrl+R", L"Rotate 90° CW / CCW", 2);
+        Add(L"H / V", L"Flip Horizontally / Vertically", 2);
+        Add(L"Delete", L"Toggle Grayscale", 2);
+        Add(L"Insert", L"Toggle Invert colors", 2);
+        Add(L"Home", L"Toggle Sepia", 2);
+        Add(L"End", L"Toggle Solarize", 2);
+        Add(L"Page Up / Page Down", L"Toggle Outline / B&W Threshold", 2);
+        Add(L"[ / ]", L"Saturation - / +", 2);
+        Add(L"' / \\", L"Brightness + / -", 2);
+        Add(L". / /", L"Contrast + / -", 2);
+        Add(L"+ / -", L"Gamma + / -", 2);
+        Add(L"Numpad 0", L"Reset all color effects", 2);
+        Add(L"`", L"Apply/Toggle effects on/off", 2);
+        Add(L"Ctrl+S", L"Save image with effects", 2);
+        Add(L"Ctrl+N", L"Open new window", 2);
+        Add(L"Esc / Ctrl+W", L"Hide to background", 2);
+        Add(L"Ctrl+Q", L"Hard quit application", 2);
+        Add(L"Shift+Delete", L"Reset all (layout + effects)", 2);
+        Add(L"Ctrl+E", L"Export help to Desktop", 2);
+        Add(L"Space (History)", L"Toggle favorite", 2);
+        Add(L"Shift+Enter (History)", L"Spawn DirWnd panel", 2);
+        Add(L"Ctrl+Alt+Delete", L"Clear history (keep favorites)", 2);
+        Add(L"Ctrl+Alt+Shift+Delete", L"Clear favorites (keep history)", 2);
+    }
+
+    void HelpWnd::ExportToText() const {
+        wchar_t path[MAX_PATH];
+        if (SUCCEEDED(SHGetFolderPathW(nullptr, CSIDL_DESKTOP, nullptr, 0, path))) {
+            wcscat_s(path, MAX_PATH, L"\\QIV_Help.txt");
+
+            std::wofstream file(path);
+            if (file.is_open()) {
+                file << L"Quick Image Viewer - Keyboard Shortcuts\n";
+                file << L"========================================\n\n";
+
+                for (const auto &entry: m_entries) {
+                    file << entry.shortcut << L"  →  " << entry.description << L"\n";
+                }
+                file.close();
+
+                MessageBoxW(m_hWnd, (std::wstring(L"Help exported to:\n") + path).c_str(),
+                            L"Export Complete", MB_OK | MB_ICONINFORMATION);
+            }
+        }
+    }
 
     void HelpWnd::Show() {
         if (m_hWnd) {
             if (m_hParent) {
-                // Dynamically re-center based on the parent window's current position
                 RECT rcParent, rcHelp;
                 GetWindowRect(m_hParent, &rcParent);
                 GetWindowRect(m_hWnd, &rcHelp);
@@ -71,151 +168,306 @@ namespace UI {
                 RECT rc;
                 GetClientRect(m_hWnd, &rc);
 
-                // 1. Dark Background
-                HBRUSH hBrush = CreateSolidBrush(RGB(24, 24, 24));
+                // Dark background
+                HBRUSH hBrush = CreateSolidBrush(RGB(20, 20, 22));
                 FillRect(hdc, &rc, hBrush);
                 DeleteObject(hBrush);
 
                 UINT dpi = GetDpiForWindow(m_hWnd);
-                int padding = MulDiv(20, dpi, 96);
-                int fontSize = MulDiv(16, dpi, 96);
+                int padding = MulDiv(30, dpi, 96);
+                int descFontSize = MulDiv(13, dpi, 96);
+                int shortcutFontSize = static_cast<int>(descFontSize * SHORTCUT_SIZE_MULTIPLIER);
+                int titleFontSize = MulDiv(32, dpi, 96);
+                int subtitleFontSize = MulDiv(14, dpi, 96);
+                int sectionHeaderSize = MulDiv(18, dpi, 96);
+                int lineHeight = shortcutFontSize + descFontSize + MulDiv(12, dpi, 96);
+                int sbWidth = MulDiv(10, dpi, 96);
 
-                HFONT hFont = CreateFontW(fontSize, 0, 0, 0, FW_NORMAL, FALSE, FALSE, FALSE,
-                                          DEFAULT_CHARSET, OUT_OUTLINE_PRECIS,
-                                          CLIP_DEFAULT_PRECIS, CLEARTYPE_QUALITY,
-                                          VARIABLE_PITCH, L"Segoe UI");
-                HFONT hOldFont = (HFONT) SelectObject(hdc, hFont);
                 SetBkMode(hdc, TRANSPARENT);
 
-                int y = padding + MulDiv(20, dpi, 96);
-
-                // Standard shortcut line helper
-                auto DrawLine = [&](const std::wstring &key, const std::wstring &desc) {
-                    RECT lineRect = {rc.left + padding, y, rc.right - padding, y + fontSize + 5};
-                    SetTextColor(hdc, RGB(255, 204, 0));
-                    DrawTextW(hdc, key.c_str(), -1, &lineRect, DT_LEFT);
-                    SetTextColor(hdc, RGB(220, 220, 220));
-                    lineRect.left += MulDiv(150, dpi, 96);
-                    DrawTextW(hdc, desc.c_str(), -1, &lineRect, DT_LEFT);
-                    y += fontSize + 3;
+                // Section colors with icons
+                COLORREF sectionColors[3] = {
+                    RGB(100, 200, 255), // Cyan
+                    RGB(255, 160, 80), // Orange
+                    RGB(200, 120, 255) // Purple
                 };
 
-                // Specialized helper for System Integration (Two-tone coloring)
-                auto DrawSystemLine = [&](const std::wstring &label, const std::wstring &desc) {
-                    RECT labelRect = {rc.left + padding, y, rc.right - padding, y + fontSize + 2};
-                    SetTextColor(hdc, RGB(100, 200, 255)); // Blue Label
-                    DrawTextW(hdc, label.c_str(), -1, &labelRect, DT_LEFT);
-
-                    RECT descRect = {rc.left + padding + MulDiv(100, dpi, 96), y, rc.right - padding, y + fontSize + 5};
-                    SetTextColor(hdc, RGB(200, 200, 200)); // Grey Description
-                    DrawTextW(hdc, desc.c_str(), -1, &descRect, DT_LEFT);
-                    y += fontSize + 3;
+                const wchar_t *sectionIcons[3] = {
+                    L"⌨️ ",
+                    L"🖱️ ",
+                    L"🎨 "
                 };
 
-                // Draw Header
-                SetTextColor(hdc, RGB(100, 200, 255));
-                DrawTextW(hdc, m_fullTitle.c_str(), -1, &rc, DT_CENTER);
-                y += fontSize / 2;
+                const wchar_t *sectionTitles[3] = {
+                    L"VIEWING & NAVIGATION",
+                    L"INTERACTION & CONTROL",
+                    L"EFFECTS & CUSTOMIZATION"
+                };
+
+                COLORREF yellowKey = RGB(255, 220, 0);
+                COLORREF whiteDesc = RGB(230, 230, 230);
+
+                // Draw centered title
+                HFONT hTitleFont = CreateFontW(titleFontSize, 0, 0, 0, FW_BOLD, FALSE, FALSE, FALSE,
+                                               DEFAULT_CHARSET, OUT_OUTLINE_PRECIS, CLIP_DEFAULT_PRECIS,
+                                               CLEARTYPE_QUALITY, VARIABLE_PITCH, L"Segoe UI");
 
                 SetTextColor(hdc, RGB(100, 200, 255));
-                RECT sysRect2 = {rc.left + padding, y, rc.right - padding, rc.bottom};
-                DrawTextW(hdc, L"Keyboard and mouse shortcuts :", -1, &sysRect2, DT_LEFT);
-                y += fontSize;
+                RECT titleRect = {rc.left + padding, rc.top + padding, rc.right - padding - sbWidth, rc.top + padding + titleFontSize};
+                DrawTextW(hdc, L"Quick Image Viewer", -1, &titleRect, DT_CENTER | DT_TOP);
 
-                // Render shortcuts
-                DrawLine(L"Left/Right", L": Previous / Next image in folder");
-                DrawLine(L"Space/Shift+Space", L": Next / Previous image in folder");
-                DrawLine(L"Wheel Scroll", L": Next / Previous image in folder");
-                DrawLine(L"E / Tab", L": Open file location in Windows Explorer");
-                DrawLine(L"R / Ctrl+R", L": Rotate image 90° Clockwise / Counter");
-                DrawLine(L"H", L": Flip image Horizontally");
-                DrawLine(L"V", L": Flip image Vertically");
-                y += fontSize / 2;
-                DrawLine(L"Shift + Wheel", L": Adjust Window/Image Opacity");
-                y += fontSize / 2;
-                DrawLine(L"Up/Down", L": Zoom image In / Out");
-                DrawLine(L"Ctrl + Wheel", L": Zoom image In / Out");
-                DrawLine(L"Numpad 0", L": Reset all color effects (saturation/brightness/etc.)");
-                DrawLine(L"Left Click", L": Quick 3x zoom (hold + drag to pan)");
-                y += fontSize / 2;
-                DrawLine(L"F11 / Enter", L": Toggle Fullscreen mode");
-                DrawLine(L"Right Click Drag", L": Move the window");
-                DrawLine(L"Middle Drag", L": Resize window dimensions");
-                DrawLine(L"Middle Click", L": Reset window and center image");
-                y += fontSize / 2;
-                DrawLine(L"RMB + Wheel", L": Zoom In / Out");
-                DrawLine(L"Horizontal Wheel", L": Adjust Window Opacity");
-                DrawLine(L"RMB + Horizontal Wheel", L": Resize Window from Center");
-                DrawLine(L"RMB + Left Click", L": Open current image location in Explorer");
-                DrawLine(L"N", L": Toggle overlay info (Index/Filename)");
-                y += fontSize / 2;
-                DrawLine(L"Ctrl+N", L": Open new viewer instance");
-                DrawLine(L"Esc / Ctrl+W", L": Hide window to background");
-                DrawLine(L"Ctrl+Q", L": Quit application process and kill background process");
-                DrawLine(L"F1", L": Toggle help menu");
-                DrawLine(L"ESC", L": Hide help menu");
-                DrawLine(L"F3 / F4", L": Toggle / move VRAM cache panel");
-                DrawLine(L"F12", L": Clear VRAM cache");
-                DrawLine(L"Shift+Delete", L": Reset window layout AND all image effects");
+                // Draw subtitle
+                RECT subtitleRect = {
+                    rc.left + padding, titleRect.bottom + MulDiv(5, dpi, 96),
+                    rc.right - padding - sbWidth, titleRect.bottom + MulDiv(25, dpi, 96)
+                };
+                HFONT hSubtitleFont = CreateFontW(subtitleFontSize, 0, 0, 0, FW_NORMAL, FALSE, FALSE, FALSE,
+                                                  DEFAULT_CHARSET, OUT_OUTLINE_PRECIS, CLIP_DEFAULT_PRECIS,
+                                                  CLEARTYPE_QUALITY, VARIABLE_PITCH, L"Segoe UI");
+                SelectObject(hdc, hSubtitleFont);
+                SetTextColor(hdc, RGB(140, 140, 140));
+                DrawTextW(hdc, L"Fast keyboard & mouse shortcuts", -1, &subtitleRect, DT_CENTER | DT_TOP);
 
-                y += fontSize + 1;
-                SetTextColor(hdc, RGB(100, 200, 255));
-                RECT colorRect = {rc.left + padding, y, rc.right - padding, rc.bottom};
-                DrawTextW(hdc, L"Color effects:", -1, &colorRect, DT_LEFT);
-                y += fontSize + 10;
+                // Content area
+                int contentTop = subtitleRect.bottom + MulDiv(25, dpi, 96);
+              
+                int contentHeight = rc.bottom - contentTop - padding;
 
-                DrawLine(L"Delete", L": Toggle grayscale");
-                DrawLine(L"Insert", L": Toggle invert colors");
-                DrawLine(L"Home", L": Toggle sepia");
-                DrawLine(L"End", L": Toggle solarize");
-                DrawLine(L"Page Up", L": Toggle outline");
-                DrawLine(L"Page Down", L": Toggle black & white threshold");
-                DrawLine(L"[ / ]", L": Saturation - / +");
-                DrawLine(L"' / \\", L": Brightness + / -");
-                DrawLine(L". / /", L": Contrast + / -");
-                DrawLine(L"+ / -", L": Gamma + / -");
-                DrawLine(L"Ctrl+S", L": Save image with effects to disk");
+                // Calculate total height
+                if (m_totalContentHeight == 0) {
+                    m_totalContentHeight = 0;
+                    for (int s = 0; s < 3; ++s) {
+                        m_totalContentHeight += sectionHeaderSize + MulDiv(15, dpi, 96); // Section header
+                        for (const auto &entry: m_entries) {
+                            if (entry.sectionId == s) {
+                                m_totalContentHeight += lineHeight;
+                            }
+                        }
+                        m_totalContentHeight += MulDiv(15, dpi, 96); // Gap between sections
+                    }
+                }
 
-                y += fontSize + 1;
-                SetTextColor(hdc, RGB(100, 200, 255));
-                RECT sysRect = {rc.left + padding, y, rc.right - padding, rc.bottom};
-                DrawTextW(hdc, L"System Integration & Healing:", -1, &sysRect, DT_LEFT);
-                y += fontSize + 10;
+                int maxScroll = std::max(0, m_totalContentHeight - contentHeight);
+                m_scrollOffsetY = std::clamp(m_scrollOffsetY, 0, maxScroll);
 
-                // Render colored System Integration lines
-                DrawSystemLine(L"Self-Healing:", L": Auto checks self path on every launch, updates windows registry");
-                DrawSystemLine(L"Auto-Start:", L": Enabled (runs hidden in background/cached, faster image show)");
-                DrawSystemLine(L"Associations:", L": Auto-checks associations common image formats on every launch");
-                DrawSystemLine(L"Cache:", L": Caches last 30 images in VRAM/RAM and preload next/previous image in folder");
-                DrawSystemLine(L"Move instructions:", L": Quit all instances Ctrl+Q, check Task Manager/background app/ EndTask");
-                DrawSystemLine(L"Relocation:", L": After moving QIV.exe, kill all background instances, run(exec) once to update registry");
+                // Clipping
+                HRGN hrgn = CreateRectRgn(rc.left + padding, contentTop, rc.right - padding - sbWidth, rc.bottom - padding);
+                SelectClipRgn(hdc, hrgn);
 
-                // --- FOOTER: Name and Copyright ---
-                int footerSize = MulDiv(14, dpi, 96);
-                HFONT hFooterFont = CreateFontW(footerSize, 0, 0, 0, FW_LIGHT, FALSE, FALSE, FALSE,
-                                                DEFAULT_CHARSET, OUT_OUTLINE_PRECIS,
-                                                CLIP_DEFAULT_PRECIS, CLEARTYPE_QUALITY,
-                                                VARIABLE_PITCH, L"Segoe UI");
+                int y = contentTop - m_scrollOffsetY;
+                HFONT hSectionFont = CreateFontW(sectionHeaderSize, 0, 0, 0, FW_BOLD, FALSE, FALSE, FALSE,
+                                                 DEFAULT_CHARSET, OUT_OUTLINE_PRECIS, CLIP_DEFAULT_PRECIS,
+                                                 CLEARTYPE_QUALITY, VARIABLE_PITCH, L"Segoe UI");
+                HFONT hShortcutFont = CreateFontW(shortcutFontSize, 0, 0, 0, FW_BOLD, FALSE, FALSE, FALSE,
+                                                  DEFAULT_CHARSET, OUT_OUTLINE_PRECIS, CLIP_DEFAULT_PRECIS,
+                                                  CLEARTYPE_QUALITY, VARIABLE_PITCH, L"Segoe UI");
+                HFONT hDescFont = CreateFontW(descFontSize, 0, 0, 0, FW_NORMAL, FALSE, FALSE, FALSE,
+                                              DEFAULT_CHARSET, OUT_OUTLINE_PRECIS, CLIP_DEFAULT_PRECIS,
+                                              CLEARTYPE_QUALITY, VARIABLE_PITCH, L"Segoe UI");
+
+                // Draw sections with entries
+                for (int s = 0; s < 3; ++s) {
+                    // Section header
+                    SelectObject(hdc, hSectionFont);
+                    SetTextColor(hdc, sectionColors[s]);
+                    std::wstring sectionText = std::wstring(sectionIcons[s]) + sectionTitles[s];
+                    RECT sectionRect = {rc.left + padding, y, rc.right - padding - sbWidth, y + sectionHeaderSize};
+                    DrawTextW(hdc, sectionText.c_str(), -1, &sectionRect, DT_LEFT | DT_TOP);
+                    y += sectionHeaderSize + MulDiv(10, dpi, 96);
+
+                    // Entries
+                    for (const auto &entry: m_entries) {
+                        if (entry.sectionId == s) {
+                            // Shortcut (yellow, bigger)
+                            SelectObject(hdc, hShortcutFont);
+                            SetTextColor(hdc, yellowKey);
+                            RECT shortcutRect = {
+                                rc.left + padding + MulDiv(20, dpi, 96), y,
+                                rc.right - padding - sbWidth, y + shortcutFontSize
+                            };
+                            DrawTextW(hdc, entry.shortcut.c_str(), -1, &shortcutRect, DT_LEFT | DT_TOP);
+
+                            // Description (white, smaller)
+                            SelectObject(hdc, hDescFont);
+                            SetTextColor(hdc, whiteDesc);
+                            RECT descRect = {
+                                rc.left + padding + MulDiv(20, dpi, 96), y + shortcutFontSize + MulDiv(2, dpi, 96),
+                                rc.right - padding - sbWidth, y + shortcutFontSize + descFontSize + MulDiv(10, dpi, 96)
+                            };
+                            DrawTextW(hdc, entry.description.c_str(), -1, &descRect, DT_LEFT | DT_TOP);
+
+                            y += lineHeight;
+                        }
+                    }
+                    y += MulDiv(15, dpi, 96); // Gap between sections
+                }
+
+                SelectClipRgn(hdc, nullptr);
+                DeleteObject(hrgn);
+
+                // Scrollbar
+                if (maxScroll > 0) {
+                    int sbX = rc.right - sbWidth - MulDiv(5, dpi, 96);
+                    int sbTrackTop = contentTop;
+                    int sbTrackBottom = rc.bottom - padding;
+                    int sbTrackHeight = sbTrackBottom - sbTrackTop;
+
+                    int thumbHeight = std::max(MulDiv(30, dpi, 96),
+                                               (sbTrackHeight * contentHeight) / m_totalContentHeight);
+                    int thumbY = sbTrackTop + (sbTrackHeight - thumbHeight) * m_scrollOffsetY / maxScroll;
+
+                    HBRUSH hTrack = CreateSolidBrush(RGB(50, 50, 55));
+                    RECT trackRect = {sbX, sbTrackTop, sbX + sbWidth, sbTrackBottom};
+                    FillRect(hdc, &trackRect, hTrack);
+                    DeleteObject(hTrack);
+
+                    HBRUSH hThumb = CreateSolidBrush(RGB(150, 150, 160));
+                    RECT thumbRect = {sbX, thumbY, sbX + sbWidth, thumbY + thumbHeight};
+                    FillRect(hdc, &thumbRect, hThumb);
+                    DeleteObject(hThumb);
+                }
+
+                // Footer
+                int footerFontSize = MulDiv(11, dpi, 96);
+                HFONT hFooterFont = CreateFontW(footerFontSize, 0, 0, 0, FW_NORMAL, FALSE, FALSE, FALSE,
+                                                DEFAULT_CHARSET, OUT_OUTLINE_PRECIS, CLIP_DEFAULT_PRECIS,
+                                                CLEARTYPE_QUALITY, VARIABLE_PITCH, L"Segoe UI");
                 SelectObject(hdc, hFooterFont);
-                SetTextColor(hdc, RGB(120, 120, 120));
+                SetTextColor(hdc, RGB(140, 140, 140));
 
-                std::wstring footer = std::wstring(L" ") + Constants::APP_CREATOR + L" | " + Constants::APP_HELP_FOOTER;
-                RECT footerRect = {rc.left, rc.bottom - padding, rc.right, rc.bottom};
-                DrawTextW(hdc, footer.c_str(), -1, &footerRect, DT_CENTER | DT_BOTTOM);
+                // Copyright text
+                RECT copyrightRect = {
+                    rc.left + padding, rc.bottom - MulDiv(40, dpi, 96),
+                    rc.right - padding - sbWidth, rc.bottom - MulDiv(20, dpi, 96)
+                };
+                std::wstring copyrightText = std::wstring(Constants::APP_CREATOR) + L" | " + Constants::APP_HELP_FOOTER;
+                DrawTextW(hdc, copyrightText.c_str(), -1, &copyrightRect, DT_CENTER | DT_TOP);
 
-                SelectObject(hdc, hOldFont);
-                DeleteObject(hFont);
+                // Facebook link (clickable)
+                m_footerLinkRect = {
+                    rc.left + padding, rc.bottom - MulDiv(18, dpi, 96),
+                    rc.right - padding - sbWidth, rc.bottom - MulDiv(2, dpi, 96)
+                };
+                SetTextColor(hdc, RGB(100, 180, 255)); // Light blue for link
+                DrawTextW(hdc, L"Follow on Facebook - Ivan Hristov Yanev", -1, &m_footerLinkRect, DT_CENTER | DT_TOP);
+
                 DeleteObject(hFooterFont);
+                DeleteObject(hTitleFont);
+                DeleteObject(hSubtitleFont);
+                DeleteObject(hSectionFont);
+                DeleteObject(hShortcutFont);
+                DeleteObject(hDescFont);
                 EndPaint(m_hWnd, &ps);
+                return 0;
+            }
+
+            case WM_MOUSEWHEEL: {
+                int delta = GET_WHEEL_DELTA_WPARAM(wParam);
+                m_scrollOffsetY -= (delta / WHEEL_DELTA) * MulDiv(50, GetDpiForWindow(m_hWnd), 96);
+                InvalidateRect(m_hWnd, nullptr, FALSE);
+                return 0;
+            }
+
+            case WM_LBUTTONDOWN: {
+                POINT pt = {GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam)};
+
+                // Check if clicking footer link
+                if (pt.x >= m_footerLinkRect.left && pt.x <= m_footerLinkRect.right &&
+                    pt.y >= m_footerLinkRect.top && pt.y <= m_footerLinkRect.bottom) {
+                    ShellExecuteW(nullptr, L"open", L"https://www.facebook.com/IvanHristovYanev", nullptr, nullptr, SW_SHOW);
+                    return 0;
+                }
+
+                // Scrollbar drag logic
+                RECT rc;
+                GetClientRect(m_hWnd, &rc);
+                UINT dpi = GetDpiForWindow(m_hWnd);
+                int sbWidth = MulDiv(10, dpi, 96);
+                int sbX = rc.right - sbWidth - MulDiv(5, dpi, 96);
+
+                if (pt.x >= sbX && pt.x < sbX + sbWidth) {
+                    m_sbDragging = true;
+                    m_sbDragStartY = pt.y;
+                    m_sbDragStartOffset = m_scrollOffsetY;
+                }
+                return 0;
+            }
+
+            case WM_MOUSEMOVE: {
+                POINT pt = {GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam)};
+
+                // Check if hovering over footer link
+                if (pt.x >= m_footerLinkRect.left && pt.x <= m_footerLinkRect.right &&
+                    pt.y >= m_footerLinkRect.top && pt.y <= m_footerLinkRect.bottom) {
+                    SetCursor(LoadCursor(nullptr, IDC_HAND));
+                } else {
+                    SetCursor(LoadCursor(nullptr, IDC_ARROW));
+                }
+
+                // Scrollbar drag logic
+                if (m_sbDragging) {
+                    RECT rc;
+                    GetClientRect(m_hWnd, &rc);
+                    UINT dpi = GetDpiForWindow(m_hWnd);
+                    int padding = MulDiv(30, dpi, 96);
+                    int titleFontSize = MulDiv(32, dpi, 96);
+                    int subtitleFontSize = MulDiv(14, dpi, 96);
+                    int contentTop = padding + titleFontSize + MulDiv(30, dpi, 96) + subtitleFontSize;
+                    int contentHeight = rc.bottom - contentTop - padding;
+
+                    int delta = pt.y - m_sbDragStartY;
+                    int maxScroll = std::max(0, m_totalContentHeight - contentHeight);
+                    m_scrollOffsetY = m_sbDragStartOffset + (delta * maxScroll) / contentHeight;
+                    InvalidateRect(m_hWnd, nullptr, FALSE);
+                }
+                return 0;
+            }
+
+            case WM_LBUTTONUP: {
+                m_sbDragging = false;
                 return 0;
             }
 
             case WM_KEYDOWN: {
                 if (wParam == Shortcuts::SC_PANEL_HELP_TOGGLE) {
                     Hide();
+                    return 0;
+                }
+                if (wParam == 'E' && (GetKeyState(VK_CONTROL) & 0x8000)) {
+                    ExportToText();
+                    return 0;
+                }
+                if (wParam == VK_PRIOR) {
+                    m_scrollOffsetY -= MulDiv(300, GetDpiForWindow(m_hWnd), 96);
+                    InvalidateRect(m_hWnd, nullptr, FALSE);
+                    return 0;
+                }
+                if (wParam == VK_NEXT) {
+                    m_scrollOffsetY += MulDiv(300, GetDpiForWindow(m_hWnd), 96);
+                    InvalidateRect(m_hWnd, nullptr, FALSE);
+                    return 0;
+                }
+                if (wParam == VK_HOME) {
+                    m_scrollOffsetY = 0;
+                    InvalidateRect(m_hWnd, nullptr, FALSE);
+                    return 0;
+                }
+                if (wParam == VK_END) {
+                    RECT rc;
+                    GetClientRect(m_hWnd, &rc);
+                    UINT dpi = GetDpiForWindow(m_hWnd);
+                    int padding = MulDiv(30, dpi, 96);
+                    int titleFontSize = MulDiv(32, dpi, 96);
+                    int subtitleFontSize = MulDiv(14, dpi, 96);
+                    int contentTop = padding + titleFontSize + MulDiv(30, dpi, 96) + subtitleFontSize;
+                    int contentHeight = rc.bottom - contentTop - padding;
+                    m_scrollOffsetY = std::max(0, m_totalContentHeight - contentHeight);
+                    InvalidateRect(m_hWnd, nullptr, FALSE);
+                    return 0;
                 }
                 return 0;
             }
+
             case WM_CLOSE: {
                 Hide();
                 return 0;
@@ -225,5 +477,3 @@ namespace UI {
         return DefWindowProcW(m_hWnd, message, wParam, lParam);
     }
 }
-
-// namespace UI

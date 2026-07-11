@@ -1,8 +1,3 @@
-Task notifications for qiv!
-Notifications must have theese positions:
-top : right center middle
-center : right center middle
-bottom : right center middle
 also each one must be toggable : on off , and a master key for toggle off all with "i"
 
 
@@ -20,8 +15,7 @@ right now shortcuts are ctrl+akt+1..9 i dont want that
 -- i want a key to toggle all backgrounds of all overlays currnty its black with little transperancy , first the color must be set from constants and a toogle in constants on /off
 
 implement:
- -Would you like to implement a quick "1:1 Pixel Mapping" command (e.g., double-clicking the zoom overlay).
- -that resets the view to exactly 100% to ensure the user is always looking at the native, non-interpolated data?
+ - implemnt a max/min zoom  store in constants , and when we are at the pixel level display a grid so i can clearly see each pixel
 
 
 !!!!!!!!!!!!!!!!!!!!!!
