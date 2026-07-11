@@ -28,6 +28,14 @@ namespace Constants::Messages {
     // Reset / effects
     constexpr const wchar_t *RESET_TO_DEFAULTS = L"Reset to Defaults";
     constexpr const wchar_t *ALL_EFFECTS_RESET = L"All Effects Reset";
+
+    // Spawned DirWnd messages
+    constexpr const wchar_t *SPAWN_DIR_TOP    = L"DirWnd Spawned: Top";
+    constexpr const wchar_t *SPAWN_DIR_LEFT   = L"DirWnd Spawned: Left";
+    constexpr const wchar_t *SPAWN_DIR_RIGHT  = L"DirWnd Spawned: Right";
+    constexpr const wchar_t *SPAWN_DIR_BOTTOM = L"DirWnd Spawned: Bottom";
+    constexpr const wchar_t *SPAWN_DIR_CLOSED = L"DirWnd Closed";
+    constexpr const wchar_t *SPAWN_DIR_NO_SPACE = L"No free positions for DirWnd";
 }
 
 namespace Constants::Strings {

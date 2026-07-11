@@ -14,42 +14,19 @@ namespace UI {
         public:
             void ClearDirThumbnailCache();
 
-            void SyncDirSelectionRectangle() {
-                ThumbnailPanelWnd::SyncSelectionRectangle();
-            }
-
-            void UpdateDirView() {
-                ThumbnailPanelWnd::UpdateView();
-            }
-
-            void ToggleDirWindow() {
-                ThumbnailPanelWnd::Toggle();
-            }
-
-            void MoveDirWindow() {
-                ThumbnailPanelWnd::MovePanel();
-            }
-
-            void HideDirWindow() {
-                ThumbnailPanelWnd::Hide();
-            }
+            void SyncDirSelectionRectangle() { ThumbnailPanelWnd::SyncSelectionRectangle(); }
+            void UpdateDirView()             { ThumbnailPanelWnd::UpdateView(); }
+            void ToggleDirWindow()           { ThumbnailPanelWnd::Toggle(); }
+            void MoveDirWindow()             { ThumbnailPanelWnd::MovePanel(); }
+            void HideDirWindow()             { ThumbnailPanelWnd::Hide(); }
 
         protected:
-            const wchar_t *ClassName() const override {
-                return L"QIV_DirWindow";
-            }
-
-            const wchar_t *WindowTitle() const override {
-                return L"Directory";
-            }
-
-            bool UsesDirThumbCache() const override {
-                return true;
-            }
+            const wchar_t *ClassName()    const override { return L"QIV_DirWindow"; }
+            const wchar_t *WindowTitle()  const override { return L"Directory"; }
+            bool UsesDirThumbCache()      const override { return true; }
 
             int GetKeyToggle() const override;
-
-            int GetKeyMove() const override;
+            int GetKeyMove()   const override;
 
             std::vector<std::wstring> GetSourceItems() const override;
 
@@ -77,7 +54,7 @@ namespace UI {
                 std::filesystem::path dir(folderPath);
                 if (!std::filesystem::exists(dir) || !std::filesystem::is_directory(dir))
                     return;
-                for (const auto &entry: std::filesystem::directory_iterator(dir)) {
+                for (const auto &entry : std::filesystem::directory_iterator(dir)) {
                     if (!entry.is_regular_file()) continue;
                     if (!is_image_ext(entry.path().extension().wstring())) continue;
                     m_localPlaylist.push_back(std::filesystem::canonical(entry.path()).wstring());
@@ -86,13 +63,8 @@ namespace UI {
             }
 
         protected:
-            std::vector<std::wstring> GetSourceItems() const override {
-                return m_localPlaylist;
-            }
-
-            bool HasOwnPlaylist() const override {
-                return true;
-            }
+            std::vector<std::wstring> GetSourceItems() const override { return m_localPlaylist; }
+            bool HasOwnPlaylist() const override { return true; }
 
             // Each slot gets a unique Win32 class name so RegisterClassW doesn't
             // silently reuse the first registration for all three slots.
@@ -107,12 +79,11 @@ namespace UI {
                 return names[m_slot < 4 ? m_slot : 0];
             }
 
-            const wchar_t *WindowTitle() const override {
-                return L"Directory (Spawned)";
-            }
+            const wchar_t *WindowTitle() const override { return L"Directory (Spawned)"; }
 
         private:
             std::vector<std::wstring> m_localPlaylist;
             int m_slot = 0;
     };
+
 } // namespace UI

@@ -1,4 +1,6 @@
 #include "UIManager.h"
+#include "../Overlays/OverlayManager.h"
+#include "../Platform/ConstantsStrings.h"
 
 UI::UIManager uiManager;
 
@@ -20,6 +22,14 @@ namespace UI {
     }
 
     void UIManager::OnPanelHidden(ThumbnailPanelWnd *panel) {
+        // Post a message if this is a spawned DirWnd being individually closed.
+        for (int i = 0; i < Constants::DIR_WND_MAX_INSTANCES; ++i) {
+            if (m_spawnedDirWnds[i] == panel) {
+                g_overlayManager.PostCenterMessage(m_hMainWnd,
+                    Constants::Messages::SPAWN_DIR_CLOSED);
+                break;
+            }
+        }
         m_layout.clearPanel(panel);
         RefreshVerticalPanels();
     }
@@ -87,24 +97,50 @@ namespace UI {
     // -------------------------------------------------------------------------
 
     void UIManager::SpawnDirWndForFolder(const std::wstring &folderPath, HWND hHistoryWnd) {
-        int slot = m_nextSpawnSlot;
-        m_nextSpawnSlot = (m_nextSpawnSlot + 1) % Constants::DIR_WND_MAX_INSTANCES;
+        // Try to find a free slot — check struct for occupied positions.
+        int chosenSlot = -1;
+        for (int i = 0; i < Constants::DIR_WND_MAX_INSTANCES; ++i) {
+            int8_t pos = Constants::DIR_WND_SPAWN_POSITIONS[i];
+            if (!m_layout.occupied(pos)) {
+                chosenSlot = i;
+                break;
+            }
+        }
 
-        int8_t position = Constants::DIR_WND_SPAWN_POSITIONS[slot];
+        // All positions taken — notify user and return.
+        if (chosenSlot < 0) {
+            g_overlayManager.PostCenterMessage(m_hMainWnd,
+                Constants::Messages::SPAWN_DIR_NO_SPACE);
+            if (hHistoryWnd) { SetForegroundWindow(hHistoryWnd); SetFocus(hHistoryWnd); }
+            return;
+        }
 
-        SpawnedDirWnd *target = m_spawnedDirWnds[slot];
+        m_nextSpawnSlot = (chosenSlot + 1) % Constants::DIR_WND_MAX_INSTANCES;
+
+        int8_t position = Constants::DIR_WND_SPAWN_POSITIONS[chosenSlot];
+
+        SpawnedDirWnd *target = m_spawnedDirWnds[chosenSlot];
         if (target == nullptr) {
-            target = new SpawnedDirWnd(slot);
+            target = new SpawnedDirWnd(chosenSlot);
             target->Init(m_hInstance, m_hMainWnd, position);
-            m_spawnedDirWnds[slot] = target;
+            m_spawnedDirWnds[chosenSlot] = target;
         }
 
         target->LoadFolder(folderPath);
         ShowWindow(target->GetHwnd(), SW_SHOWNOACTIVATE);
-        // Register in layout and refresh verticals
         m_layout.set(position, target);
         RefreshVerticalPanels();
         target->UpdateDirView();
+
+        // Notify user which position was used.
+        const wchar_t *msg = nullptr;
+        switch (position) {
+            case 1: msg = Constants::Messages::SPAWN_DIR_TOP;    break;
+            case 2: msg = Constants::Messages::SPAWN_DIR_RIGHT;  break;
+            case 3: msg = Constants::Messages::SPAWN_DIR_BOTTOM; break;
+            case 4: msg = Constants::Messages::SPAWN_DIR_LEFT;   break;
+        }
+        if (msg) g_overlayManager.PostCenterMessage(m_hMainWnd, msg);
 
         if (hHistoryWnd) {
             SetForegroundWindow(hHistoryWnd);
