@@ -16,6 +16,7 @@
 
 #include "Thumbnail.h"
 #include "WorkerThread.h"
+#include "Platform/ConstantsTheme.h"
 
 class RendererD2D final : public IImageRenderer {
     public:
@@ -171,7 +172,10 @@ class RendererD2D final : public IImageRenderer {
 
         // Window state
         HWND m_hwnd = nullptr;
-        D2D1_COLOR_F m_clearColor = D2D1::ColorF(0.08f, 0.08f, 0.08f);
+        D2D1_COLOR_F m_clearColor = D2D1::ColorF(
+                Constants::Theme::Background::MAIN_WINDOW,
+                Constants::Theme::Background::MAIN_WINDOW,
+                Constants::Theme::Background::MAIN_WINDOW);
 
         // Internal helpers
         HRESULT CreateDeviceResources();

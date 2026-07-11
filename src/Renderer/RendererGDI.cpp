@@ -1,5 +1,6 @@
 #include "RendererGDI.h"
 #include "../AppState.h"
+#include "../Platform/Constants.h"
 #include <algorithm>
 
 RendererGDI::RendererGDI() = default;
@@ -18,7 +19,8 @@ RendererGDI::~RendererGDI() {
 
 HRESULT RendererGDI::Initialize(HWND hwnd) {
     m_hwnd = hwnd;
-    m_backgroundBrush = CreateSolidBrush(RGB(20, 20, 20));
+    BYTE bgVal = static_cast<BYTE>(Constants::Theme::Background::MAIN_WINDOW * 255);
+    m_backgroundBrush = CreateSolidBrush(RGB(bgVal, bgVal, bgVal));
     return m_backgroundBrush ? S_OK : E_FAIL;
 }
 
@@ -164,7 +166,10 @@ HRESULT RendererGDI::Render() {
         if (hFont) {
             HFONT hOldFont = static_cast<HFONT>(SelectObject(m_backDC, hFont));
             SetBkMode(m_backDC, TRANSPARENT);
-            SetTextColor(m_backDC, RGB(0, 255, 0));
+            SetTextColor(m_backDC, Constants::Theme::Color(
+                    Constants::Theme::Renderer::TEXT_DEBUG_R,
+                    Constants::Theme::Renderer::TEXT_DEBUG_G,
+                    Constants::Theme::Renderer::TEXT_DEBUG_B));
             RECT textRect = {
                 0, static_cast<LONG>(m_windowHeight) - 35,
                 static_cast<LONG>(m_windowWidth) - 10,

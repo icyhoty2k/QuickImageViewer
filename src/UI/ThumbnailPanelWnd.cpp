@@ -815,23 +815,19 @@ namespace UI {
         if (w == 0 || h == 0) { w = 1200; h = Constants::THUMBNAIL_PANEL_WINDOW_THICKNESS; }
         ResizeSwapChain(w, h);
 
-        // Create brushes.
+        // Create brushes using theme colors
         m_panelContext->CreateSolidColorBrush(
-            D2D1::ColorF(Constants::ThumbnailPanel::PLACEHOLDER), &m_placeholderBrush);
+            D2D1::ColorF(D2D1::ColorF::DarkSlateGray), &m_placeholderBrush);
         m_panelContext->CreateSolidColorBrush(
-            D2D1::ColorF(Constants::ThumbnailPanel::SELECTION_BORDER), &m_borderBrush);
+            D2D1::ColorF(D2D1::ColorF::LightGreen), &m_borderBrush);
         m_panelContext->CreateSolidColorBrush(
-            D2D1::ColorF(Constants::ThumbnailPanel::HOVER), &m_hoverBrush);
+            D2D1::ColorF(D2D1::ColorF::White), &m_hoverBrush);
         m_panelContext->CreateSolidColorBrush(
-            D2D1::ColorF(Constants::ThumbnailPanel::SCROLLBAR_TRACK_R,
-                         Constants::ThumbnailPanel::SCROLLBAR_TRACK_G,
-                         Constants::ThumbnailPanel::SCROLLBAR_TRACK_B,
-                         Constants::ThumbnailPanel::SCROLLBAR_TRACK_A), &m_scrollTrackBrush);
+            Constants::Theme::GrayD2D(Constants::Theme::Panel::SCROLLBAR_TRACK,
+                                      Constants::Theme::Panel::SCROLLBAR_TRACK_ALPHA), &m_scrollTrackBrush);
         m_panelContext->CreateSolidColorBrush(
-            D2D1::ColorF(Constants::ThumbnailPanel::SCROLLBAR_THUMB_R,
-                         Constants::ThumbnailPanel::SCROLLBAR_THUMB_G,
-                         Constants::ThumbnailPanel::SCROLLBAR_THUMB_B,
-                         Constants::ThumbnailPanel::SCROLLBAR_THUMB_A), &m_scrollThumbBrush);
+            Constants::Theme::GrayD2D(Constants::Theme::Panel::SCROLLBAR_THUMB,
+                                      Constants::Theme::Panel::SCROLLBAR_THUMB_ALPHA), &m_scrollThumbBrush);
     }
 
     void ThumbnailPanelWnd::ResizeSwapChain(UINT w, UINT h) {
@@ -873,17 +869,13 @@ namespace UI {
         m_panelContext->BeginDraw();
 
         // Use active background color if this panel is active
-        D2D1_COLOR_F clearColor = D2D1::ColorF(
-            Constants::ThumbnailPanel::PANEL_BACKGROUND_R,
-            Constants::ThumbnailPanel::PANEL_BACKGROUND_G,
-            Constants::ThumbnailPanel::PANEL_BACKGROUND_B,
-            Constants::ThumbnailPanel::PANEL_BACKGROUND_A);
+        D2D1_COLOR_F clearColor = Constants::Theme::GrayD2D(
+            Constants::Theme::Panel::BACKGROUND_INACTIVE,
+            Constants::Theme::Panel::BACKGROUND_INACTIVE_ALPHA);
         if (g_activePanelHwnd == m_hWnd) {
-            clearColor = D2D1::ColorF(
-                Constants::ThumbnailPanel::PANEL_ACTIVE_R,
-                Constants::ThumbnailPanel::PANEL_ACTIVE_G,
-                Constants::ThumbnailPanel::PANEL_ACTIVE_B,
-                Constants::ThumbnailPanel::PANEL_ACTIVE_A);
+            clearColor = Constants::Theme::GrayD2D(
+                Constants::Theme::Panel::BACKGROUND_ACTIVE,
+                Constants::Theme::Panel::BACKGROUND_ACTIVE_ALPHA);
         }
         m_panelContext->Clear(clearColor);
 

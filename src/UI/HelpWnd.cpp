@@ -43,7 +43,10 @@ namespace UI {
         DwmSetWindowAttribute(m_hWnd, 20, &darkMode, sizeof(darkMode));
         DWORD corner = 2;
         DwmSetWindowAttribute(m_hWnd, 33, &corner, sizeof(corner));
-        COLORREF darkColor = RGB(20, 20, 22);
+        COLORREF darkColor = Constants::Theme::Color(
+                Constants::Theme::HelpWindow::BACKGROUND_R,
+                Constants::Theme::HelpWindow::BACKGROUND_G,
+                Constants::Theme::HelpWindow::BACKGROUND_B);
         DwmSetWindowAttribute(m_hWnd, 35, &darkColor, sizeof(darkColor));
 
         SetWindowPos(m_hWnd, nullptr, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | SWP_FRAMECHANGED);
@@ -168,8 +171,11 @@ namespace UI {
                 RECT rc;
                 GetClientRect(m_hWnd, &rc);
 
-                // Dark background
-                HBRUSH hBrush = CreateSolidBrush(RGB(20, 20, 22));
+                // Dark background using theme color
+                HBRUSH hBrush = CreateSolidBrush(Constants::Theme::Color(
+                        Constants::Theme::HelpWindow::BACKGROUND_R,
+                        Constants::Theme::HelpWindow::BACKGROUND_G,
+                        Constants::Theme::HelpWindow::BACKGROUND_B));
                 FillRect(hdc, &rc, hBrush);
                 DeleteObject(hBrush);
 
@@ -185,11 +191,17 @@ namespace UI {
 
                 SetBkMode(hdc, TRANSPARENT);
 
-                // Section colors with icons
+                // Section colors with theme support
                 COLORREF sectionColors[3] = {
-                    RGB(100, 200, 255), // Cyan
-                    RGB(255, 160, 80), // Orange
-                    RGB(200, 120, 255) // Purple
+                    Constants::Theme::Color(Constants::Theme::HelpWindow::SECTION_CYAN_R,
+                                            Constants::Theme::HelpWindow::SECTION_CYAN_G,
+                                            Constants::Theme::HelpWindow::SECTION_CYAN_B),   // Cyan
+                    Constants::Theme::Color(Constants::Theme::HelpWindow::SECTION_ORANGE_R,
+                                            Constants::Theme::HelpWindow::SECTION_ORANGE_G,
+                                            Constants::Theme::HelpWindow::SECTION_ORANGE_B), // Orange
+                    Constants::Theme::Color(Constants::Theme::HelpWindow::SECTION_PURPLE_R,
+                                            Constants::Theme::HelpWindow::SECTION_PURPLE_G,
+                                            Constants::Theme::HelpWindow::SECTION_PURPLE_B)  // Purple
                 };
 
                 const wchar_t *sectionIcons[3] = {
@@ -204,15 +216,22 @@ namespace UI {
                     L"EFFECTS & CUSTOMIZATION"
                 };
 
-                COLORREF yellowKey = RGB(255, 220, 0);
-                COLORREF whiteDesc = RGB(230, 230, 230);
+                COLORREF yellowKey = Constants::Theme::Color(
+                        Constants::Theme::HelpWindow::SHORTCUT_KEY_R,
+                        Constants::Theme::HelpWindow::SHORTCUT_KEY_G,
+                        Constants::Theme::HelpWindow::SHORTCUT_KEY_B);
+                COLORREF whiteDesc = Constants::Theme::Gray(
+                        Constants::Theme::HelpWindow::DESCRIPTION);
 
                 // Draw centered title
                 HFONT hTitleFont = CreateFontW(titleFontSize, 0, 0, 0, FW_BOLD, FALSE, FALSE, FALSE,
                                                DEFAULT_CHARSET, OUT_OUTLINE_PRECIS, CLIP_DEFAULT_PRECIS,
                                                CLEARTYPE_QUALITY, VARIABLE_PITCH, L"Segoe UI");
 
-                SetTextColor(hdc, RGB(100, 200, 255));
+                SetTextColor(hdc, Constants::Theme::Color(
+                        Constants::Theme::HelpWindow::TITLE_R,
+                        Constants::Theme::HelpWindow::TITLE_G,
+                        Constants::Theme::HelpWindow::TITLE_B));
                 RECT titleRect = {rc.left + padding, rc.top + padding, rc.right - padding - sbWidth, rc.top + padding + titleFontSize};
                 DrawTextW(hdc, L"Quick Image Viewer", -1, &titleRect, DT_CENTER | DT_TOP);
 
@@ -225,7 +244,7 @@ namespace UI {
                                                   DEFAULT_CHARSET, OUT_OUTLINE_PRECIS, CLIP_DEFAULT_PRECIS,
                                                   CLEARTYPE_QUALITY, VARIABLE_PITCH, L"Segoe UI");
                 SelectObject(hdc, hSubtitleFont);
-                SetTextColor(hdc, RGB(140, 140, 140));
+                SetTextColor(hdc, Constants::Theme::Gray(Constants::Theme::HelpWindow::SUBTITLE));
                 DrawTextW(hdc, L"Fast keyboard & mouse shortcuts", -1, &subtitleRect, DT_CENTER | DT_TOP);
 
                 // Content area
@@ -316,12 +335,18 @@ namespace UI {
                                                (sbTrackHeight * contentHeight) / m_totalContentHeight);
                     int thumbY = sbTrackTop + (sbTrackHeight - thumbHeight) * m_scrollOffsetY / maxScroll;
 
-                    HBRUSH hTrack = CreateSolidBrush(RGB(50, 50, 55));
+                    HBRUSH hTrack = CreateSolidBrush(Constants::Theme::Color(
+                            Constants::Theme::HelpWindow::SCROLLBAR_TRACK_R,
+                            Constants::Theme::HelpWindow::SCROLLBAR_TRACK_G,
+                            Constants::Theme::HelpWindow::SCROLLBAR_TRACK_B));
                     RECT trackRect = {sbX, sbTrackTop, sbX + sbWidth, sbTrackBottom};
                     FillRect(hdc, &trackRect, hTrack);
                     DeleteObject(hTrack);
 
-                    HBRUSH hThumb = CreateSolidBrush(RGB(150, 150, 160));
+                    HBRUSH hThumb = CreateSolidBrush(Constants::Theme::Color(
+                            Constants::Theme::HelpWindow::SCROLLBAR_THUMB_R,
+                            Constants::Theme::HelpWindow::SCROLLBAR_THUMB_G,
+                            Constants::Theme::HelpWindow::SCROLLBAR_THUMB_B));
                     RECT thumbRect = {sbX, thumbY, sbX + sbWidth, thumbY + thumbHeight};
                     FillRect(hdc, &thumbRect, hThumb);
                     DeleteObject(hThumb);
@@ -333,7 +358,7 @@ namespace UI {
                                                 DEFAULT_CHARSET, OUT_OUTLINE_PRECIS, CLIP_DEFAULT_PRECIS,
                                                 CLEARTYPE_QUALITY, VARIABLE_PITCH, L"Segoe UI");
                 SelectObject(hdc, hFooterFont);
-                SetTextColor(hdc, RGB(140, 140, 140));
+                SetTextColor(hdc, Constants::Theme::Gray(Constants::Theme::HelpWindow::SUBTITLE));
 
                 // Copyright text
                 RECT copyrightRect = {
@@ -348,7 +373,10 @@ namespace UI {
                     rc.left + padding, rc.bottom - MulDiv(18, dpi, 96),
                     rc.right - padding - sbWidth, rc.bottom - MulDiv(2, dpi, 96)
                 };
-                SetTextColor(hdc, RGB(100, 180, 255)); // Light blue for link
+                SetTextColor(hdc, Constants::Theme::Color(
+                        Constants::Theme::HelpWindow::LINK_R,
+                        Constants::Theme::HelpWindow::LINK_G,
+                        Constants::Theme::HelpWindow::LINK_B)); // Light blue for link
                 DrawTextW(hdc, L"Follow on Facebook - Ivan Hristov Yanev", -1, &m_footerLinkRect, DT_CENTER | DT_TOP);
 
                 DeleteObject(hFooterFont);

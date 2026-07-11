@@ -264,14 +264,14 @@ namespace UI {
 
                 // Background — use active color if this panel is active
                 COLORREF bgColor = RGB(
-                    static_cast<int>(Constants::ThumbnailPanel::PANEL_BACKGROUND_R * 255),
-                    static_cast<int>(Constants::ThumbnailPanel::PANEL_BACKGROUND_G * 255),
-                    static_cast<int>(Constants::ThumbnailPanel::PANEL_BACKGROUND_B * 255));
+                    static_cast<int>(Constants::Theme::Panel::BACKGROUND_INACTIVE * 255),
+                    static_cast<int>(Constants::Theme::Panel::BACKGROUND_INACTIVE * 255),
+                    static_cast<int>(Constants::Theme::Panel::BACKGROUND_INACTIVE * 255));
                 if (UI::g_activePanelHwnd == m_hWnd) {
                     bgColor = RGB(
-                        static_cast<int>(Constants::ThumbnailPanel::PANEL_ACTIVE_R * 255),
-                        static_cast<int>(Constants::ThumbnailPanel::PANEL_ACTIVE_G * 255),
-                        static_cast<int>(Constants::ThumbnailPanel::PANEL_ACTIVE_B * 255));
+                        static_cast<int>(Constants::Theme::Panel::BACKGROUND_ACTIVE * 255),
+                        static_cast<int>(Constants::Theme::Panel::BACKGROUND_ACTIVE * 255),
+                        static_cast<int>(Constants::Theme::Panel::BACKGROUND_ACTIVE * 255));
                 }
                 HBRUSH hBg = CreateSolidBrush(bgColor);
                 FillRect(hdc, &rc, hBg);
@@ -387,9 +387,8 @@ namespace UI {
                 if (needsScrollbar) {
                     int sbX = rc.right - SB_W;
 
-                    HBRUSH hTrack = CreateSolidBrush(RGB(Constants::History::SCROLLBAR_TRACK_R,
-                                                         Constants::History::SCROLLBAR_TRACK_G,
-                                                         Constants::History::SCROLLBAR_TRACK_B));
+                    HBRUSH hTrack = CreateSolidBrush(
+                        Constants::Theme::Gray(Constants::Theme::HistoryPanel::SCROLLBAR_TRACK));
                     RECT sbTrack  = {sbX, 0, rc.right, rc.bottom};
                     FillRect(hdc, &sbTrack, hTrack);
                     DeleteObject(hTrack);
@@ -402,9 +401,8 @@ namespace UI {
                         * static_cast<float>(windowH - thumbLen));
                     thumbOff = std::clamp(thumbOff, 0, windowH - thumbLen);
 
-                    HBRUSH hThumb = CreateSolidBrush(RGB(Constants::History::SCROLLBAR_THUMB_R,
-                                                         Constants::History::SCROLLBAR_THUMB_G,
-                                                         Constants::History::SCROLLBAR_THUMB_B));
+                    HBRUSH hThumb = CreateSolidBrush(
+                        Constants::Theme::Gray(Constants::Theme::HistoryPanel::SCROLLBAR_THUMB));
                     RECT sbThumb  = {sbX, thumbOff, rc.right, thumbOff + thumbLen};
                     FillRect(hdc, &sbThumb, hThumb);
                     DeleteObject(hThumb);
