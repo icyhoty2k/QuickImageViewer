@@ -12,6 +12,24 @@
 #include "../Renderer/RendererD2D.h"
 
 namespace UI {
+    // Track the currently active panel window for border styling
+    HWND g_activePanelHwnd = nullptr;
+
+    void SetActivePanelWindow(HWND hWnd) {
+        if (g_activePanelHwnd == hWnd) return; // Already active
+
+        // Just track which window is active; opacity stays at 210
+        HWND oldActive = g_activePanelHwnd;
+        g_activePanelHwnd = hWnd;
+
+        // Invalidate both old and new active windows so they redraw with updated border
+        if (oldActive && IsWindow(oldActive)) {
+            InvalidateRect(oldActive, nullptr, FALSE);
+        }
+        if (hWnd && IsWindow(hWnd)) {
+            InvalidateRect(hWnd, nullptr, FALSE);
+        }
+    }
     // =========================================================================
     // Init
     // =========================================================================
@@ -445,6 +463,19 @@ namespace UI {
         static bool s_hasMoved = false;
         static bool s_dragging = false;
 
+        // Handle focus events before the main switch
+        if (message == WM_SETFOCUS) {
+            SetActivePanelWindow(m_hWnd);
+            return 0;
+        }
+        if (message == WM_KILLFOCUS) {
+            // Invalidate to remove active border when focus is lost
+            if (g_activePanelHwnd == m_hWnd) {
+                InvalidateRect(m_hWnd, nullptr, FALSE);
+            }
+            return 0;
+        }
+
         switch (message) {
             // -----------------------------------------------------------------
             case WM_PAINT: {
@@ -503,8 +534,74 @@ namespace UI {
 
             // -----------------------------------------------------------------
             case WM_LBUTTONDOWN: {
-                // Any click in a DirWnd makes it the active one for nav updates.
                 if (IsDirPanel()) uiManager.SetActiveDirWnd(this);
+
+                // Check if the click landed on the scrollbar strip.
+                {
+                    const int cx = GET_X_LPARAM(lParam);
+                    const int cy = GET_Y_LPARAM(lParam);
+                    RECT cr2{};
+                    GetClientRect(m_hWnd, &cr2);
+                    const float sw2  = static_cast<float>(cr2.right);
+                    const float sh2  = static_cast<float>(cr2.bottom);
+                    const float bar  = Constants::ThumbnailPanel::SCROLLBAR_THICKNESS * app.dpiScale;
+                    const bool  vert = IsVertical();
+
+                    bool inScrollbar = false;
+                    if (vert) {
+                        // Vertical panels: check x position based on m_position
+                        if (m_position == 2) {
+                            // Right panel: scrollbar on LEFT if SCROLLBAR_POS_RIGHT_PANEL == LEFT
+                            inScrollbar = (Constants::ThumbnailPanel::SCROLLBAR_POS_RIGHT_PANEL
+                                          == Constants::ThumbnailPanel::ScrollbarSide::LEFT)
+                                          ? (static_cast<float>(cx) < bar)
+                                          : (static_cast<float>(cx) >= sw2 - bar);
+                        } else {
+                            // Left panel: scrollbar on RIGHT if SCROLLBAR_POS_LEFT_PANEL == RIGHT
+                            inScrollbar = (Constants::ThumbnailPanel::SCROLLBAR_POS_LEFT_PANEL
+                                          == Constants::ThumbnailPanel::ScrollbarSide::LEFT)
+                                          ? (static_cast<float>(cx) < bar)
+                                          : (static_cast<float>(cx) >= sw2 - bar);
+                        }
+                    } else {
+                        // Horizontal panels: check y position based on m_position
+                        if (m_position == 1) {
+                            // Top panel: scrollbar at TOP or BOTTOM
+                            inScrollbar = (Constants::ThumbnailPanel::SCROLLBAR_POS_TOP_PANEL
+                                          == Constants::ThumbnailPanel::ScrollbarEdge::TOP)
+                                          ? (static_cast<float>(cy) < bar)
+                                          : (static_cast<float>(cy) >= sh2 - bar);
+                        } else {
+                            // Bottom panel: scrollbar at TOP or BOTTOM
+                            inScrollbar = (Constants::ThumbnailPanel::SCROLLBAR_POS_BOTTOM_PANEL
+                                          == Constants::ThumbnailPanel::ScrollbarEdge::TOP)
+                                          ? (static_cast<float>(cy) < bar)
+                                          : (static_cast<float>(cy) >= sh2 - bar);
+                        }
+                    }
+
+                    if (inScrollbar && !m_thumbnails.empty()) {
+                        const float tw2 = Constants::THUMBNAIL_PANEL_THUMB_WIDTH  * app.dpiScale;
+                        const float th2 = Constants::THUMBNAIL_PANEL_THUMB_HEIGHT * app.dpiScale;
+                        const float sp2 = Constants::THUMBNAIL_PANEL_THUMB_SPACING * app.dpiScale;
+                        const float mg2 = Constants::THUMBNAIL_PANEL_THUMB_MARGIN  * app.dpiScale;
+                        const float n2  = static_cast<float>(m_thumbnails.size());
+                        const float tsz = vert ? th2 : tw2;
+                        const float content2 = n2 * (tsz + sp2) - sp2;
+                        const float visible2 = (vert ? sh2 : sw2) - 2.0f * mg2;
+
+                        if (content2 > visible2) {
+                            m_scrollDragging       = true;
+                            m_scrollDragStartMouse  = vert
+                                                      ? static_cast<float>(cy)
+                                                      : static_cast<float>(cx);
+                            m_scrollDragStartOffset = m_offset;
+                            SetCapture(m_hWnd);
+                            return 0;
+                        }
+                    }
+                }
+
                 s_clickPos.x = GET_X_LPARAM(lParam);
                 s_clickPos.y = GET_Y_LPARAM(lParam);
                 s_hasMoved = false;
@@ -519,6 +616,60 @@ namespace UI {
                 int x = GET_X_LPARAM(lParam);
                 int y = GET_Y_LPARAM(lParam);
 
+                // Check if hovering over scrollbar strip
+                RECT cr3{};
+                GetClientRect(m_hWnd, &cr3);
+                const float sw3  = static_cast<float>(cr3.right);
+                const float sh3  = static_cast<float>(cr3.bottom);
+                const float bar3 = Constants::ThumbnailPanel::SCROLLBAR_THICKNESS * app.dpiScale;
+                const bool  vert3 = IsVertical();
+
+                bool inScrollbar3 = false;
+                if (vert3) {
+                    if (m_position == 2) {
+                        inScrollbar3 = (Constants::ThumbnailPanel::SCROLLBAR_POS_RIGHT_PANEL
+                                       == Constants::ThumbnailPanel::ScrollbarSide::LEFT)
+                                       ? (static_cast<float>(x) < bar3)
+                                       : (static_cast<float>(x) >= sw3 - bar3);
+                    } else {
+                        inScrollbar3 = (Constants::ThumbnailPanel::SCROLLBAR_POS_LEFT_PANEL
+                                       == Constants::ThumbnailPanel::ScrollbarSide::LEFT)
+                                       ? (static_cast<float>(x) < bar3)
+                                       : (static_cast<float>(x) >= sw3 - bar3);
+                    }
+                } else {
+                    if (m_position == 1) {
+                        inScrollbar3 = (Constants::ThumbnailPanel::SCROLLBAR_POS_TOP_PANEL
+                                       == Constants::ThumbnailPanel::ScrollbarEdge::TOP)
+                                       ? (static_cast<float>(y) < bar3)
+                                       : (static_cast<float>(y) >= sh3 - bar3);
+                    } else {
+                        inScrollbar3 = (Constants::ThumbnailPanel::SCROLLBAR_POS_BOTTOM_PANEL
+                                       == Constants::ThumbnailPanel::ScrollbarEdge::TOP)
+                                       ? (static_cast<float>(y) < bar3)
+                                       : (static_cast<float>(y) >= sh3 - bar3);
+                    }
+                }
+
+                if (!m_thumbnails.empty() && inScrollbar3) {
+                    const float tw3 = Constants::THUMBNAIL_PANEL_THUMB_WIDTH  * app.dpiScale;
+                    const float th3 = Constants::THUMBNAIL_PANEL_THUMB_HEIGHT * app.dpiScale;
+                    const float sp3 = Constants::THUMBNAIL_PANEL_THUMB_SPACING * app.dpiScale;
+                    const float mg3 = Constants::THUMBNAIL_PANEL_THUMB_MARGIN  * app.dpiScale;
+                    const float n3  = static_cast<float>(m_thumbnails.size());
+                    const float tsz3 = vert3 ? th3 : tw3;
+                    const float content3 = n3 * (tsz3 + sp3) - sp3;
+                    const float visible3 = (vert3 ? sh3 : sw3) - 2.0f * mg3;
+
+                    if (content3 > visible3) {
+                        SetCursor(LoadCursor(nullptr, IDC_HAND));
+                    } else {
+                        SetCursor(LoadCursor(nullptr, IDC_ARROW));
+                    }
+                } else {
+                    SetCursor(LoadCursor(nullptr, IDC_ARROW));
+                }
+
                 int newHover = -1;
                 for (size_t i = 0; i < m_thumbnails.size(); ++i) {
                     if (m_thumbnails[i].HitTest(x, y)) {
@@ -529,6 +680,38 @@ namespace UI {
                 if (newHover != m_hoverIdx) {
                     m_hoverIdx = newHover;
                     InvalidateRect(m_hWnd, nullptr, FALSE);
+                }
+
+                if (m_scrollDragging) {
+                    RECT cr2{};
+                    GetClientRect(m_hWnd, &cr2);
+                    const float sw2  = static_cast<float>(cr2.right);
+                    const float sh2  = static_cast<float>(cr2.bottom);
+                    const bool  vert = IsVertical();
+                    const float mouseAxis = vert ? static_cast<float>(y) : static_cast<float>(x);
+                    const float tw2 = Constants::THUMBNAIL_PANEL_THUMB_WIDTH  * app.dpiScale;
+                    const float th2 = Constants::THUMBNAIL_PANEL_THUMB_HEIGHT * app.dpiScale;
+                    const float sp2 = Constants::THUMBNAIL_PANEL_THUMB_SPACING * app.dpiScale;
+                    const float mg2 = Constants::THUMBNAIL_PANEL_THUMB_MARGIN  * app.dpiScale;
+                    const float n2  = static_cast<float>(m_thumbnails.size());
+                    const float tsz = vert ? th2 : tw2;
+                    const float content2  = n2 * (tsz + sp2) - sp2;
+                    const float visible2  = (vert ? sh2 : sw2) - 2.0f * mg2;
+                    const float scrollMax = content2 - visible2;
+                    const float trackLen  = vert ? sh2 : sw2;
+                    const float barThumb  = std::max(Constants::ThumbnailPanel::SCROLLBAR_MIN_THUMB * app.dpiScale,
+                                                     trackLen * visible2 / content2);
+                    const float scrollPx  = trackLen - barThumb;
+                    if (scrollPx > 0.0f) {
+                        const float delta = mouseAxis - m_scrollDragStartMouse;
+                        const float newScroll = std::clamp(
+                            -m_scrollDragStartOffset + delta * scrollMax / scrollPx,
+                            0.0f, scrollMax);
+                        m_offset = -newScroll;
+                        RebuildGeometry();
+                        InvalidateRect(m_hWnd, nullptr, FALSE);
+                    }
+                    return 0;
                 }
 
                 if (s_dragging) {
@@ -549,6 +732,11 @@ namespace UI {
 
             // -----------------------------------------------------------------
             case WM_LBUTTONUP: {
+                if (m_scrollDragging) {
+                    m_scrollDragging = false;
+                    ReleaseCapture();
+                    return 0;
+                }
                 if (s_dragging) {
                     ReleaseCapture();
                     if (!s_hasMoved) {
@@ -634,6 +822,16 @@ namespace UI {
             D2D1::ColorF(Constants::ThumbnailPanel::SELECTION_BORDER), &m_borderBrush);
         m_panelContext->CreateSolidColorBrush(
             D2D1::ColorF(Constants::ThumbnailPanel::HOVER), &m_hoverBrush);
+        m_panelContext->CreateSolidColorBrush(
+            D2D1::ColorF(Constants::ThumbnailPanel::SCROLLBAR_TRACK_R,
+                         Constants::ThumbnailPanel::SCROLLBAR_TRACK_G,
+                         Constants::ThumbnailPanel::SCROLLBAR_TRACK_B,
+                         Constants::ThumbnailPanel::SCROLLBAR_TRACK_A), &m_scrollTrackBrush);
+        m_panelContext->CreateSolidColorBrush(
+            D2D1::ColorF(Constants::ThumbnailPanel::SCROLLBAR_THUMB_R,
+                         Constants::ThumbnailPanel::SCROLLBAR_THUMB_G,
+                         Constants::ThumbnailPanel::SCROLLBAR_THUMB_B,
+                         Constants::ThumbnailPanel::SCROLLBAR_THUMB_A), &m_scrollThumbBrush);
     }
 
     void ThumbnailPanelWnd::ResizeSwapChain(UINT w, UINT h) {
@@ -673,7 +871,21 @@ namespace UI {
         // Phase 2: GPU draw — no locks held.
         // -------------------------------------------------------------------------
         m_panelContext->BeginDraw();
-        m_panelContext->Clear(D2D1::ColorF(0.08f, 0.08f, 0.08f, 1.0f));
+
+        // Use active background color if this panel is active
+        D2D1_COLOR_F clearColor = D2D1::ColorF(
+            Constants::ThumbnailPanel::PANEL_BACKGROUND_R,
+            Constants::ThumbnailPanel::PANEL_BACKGROUND_G,
+            Constants::ThumbnailPanel::PANEL_BACKGROUND_B,
+            Constants::ThumbnailPanel::PANEL_BACKGROUND_A);
+        if (g_activePanelHwnd == m_hWnd) {
+            clearColor = D2D1::ColorF(
+                Constants::ThumbnailPanel::PANEL_ACTIVE_R,
+                Constants::ThumbnailPanel::PANEL_ACTIVE_G,
+                Constants::ThumbnailPanel::PANEL_ACTIVE_B,
+                Constants::ThumbnailPanel::PANEL_ACTIVE_A);
+        }
+        m_panelContext->Clear(clearColor);
 
         // Draw separator lines at the gap between this vertical panel and
         // any horizontal neighbour above or below it.
@@ -691,6 +903,83 @@ namespace UI {
             if (static_cast<int>(i) == hoverIdx)
                 m_panelContext->DrawRectangle(rv.rect, m_hoverBrush.Get(),
                                               Constants::ThumbnailPanel::HOVER_THICKNESS);
+        }
+
+        // Draw scrollbar when content overflows the visible area.
+        if (!m_thumbnails.empty() && m_scrollTrackBrush && m_scrollThumbBrush) {
+            RECT cr2{};
+            GetClientRect(m_hWnd, &cr2);
+            const float sw = static_cast<float>(cr2.right);
+            const float sh = static_cast<float>(cr2.bottom);
+            const float tw = Constants::THUMBNAIL_PANEL_THUMB_WIDTH  * app.dpiScale;
+            const float th = Constants::THUMBNAIL_PANEL_THUMB_HEIGHT * app.dpiScale;
+            const float sp = Constants::THUMBNAIL_PANEL_THUMB_SPACING * app.dpiScale;
+            const float mg = Constants::THUMBNAIL_PANEL_THUMB_MARGIN  * app.dpiScale;
+            const float n  = static_cast<float>(m_thumbnails.size());
+            const bool  vert = IsVertical();
+
+            const float thumbSz  = vert ? th : tw;
+            const float content  = n * (thumbSz + sp) - sp;
+            const float visible  = (vert ? sh : sw) - 2.0f * mg;
+
+            if (content > visible) {
+                const float BAR      = Constants::ThumbnailPanel::SCROLLBAR_THICKNESS * app.dpiScale;
+                const float trackLen = vert ? sh : sw;
+                const float barThumb = std::max(Constants::ThumbnailPanel::SCROLLBAR_MIN_THUMB * app.dpiScale,
+                                                trackLen * visible / content);
+                const float scrollMax = content - visible;
+                const float scrollNow = std::clamp(-m_offset, 0.0f, scrollMax);
+                const float thumbOff  = (scrollMax > 0.0f)
+                                        ? (scrollNow / scrollMax) * (trackLen - barThumb)
+                                        : 0.0f;
+
+                D2D1_RECT_F track, thumb;
+                if (vert) {
+                    // Vertical panels (positions 2=right, 4=left)
+                    if (m_position == 2) {
+                        // Right panel: use SCROLLBAR_POS_RIGHT_PANEL (LEFT)
+                        if (Constants::ThumbnailPanel::SCROLLBAR_POS_RIGHT_PANEL == Constants::ThumbnailPanel::ScrollbarSide::LEFT) {
+                            track = D2D1::RectF(0.0f, 0.0f, BAR, sh);
+                            thumb = D2D1::RectF(0.0f, thumbOff, BAR, thumbOff + barThumb);
+                        } else {
+                            track = D2D1::RectF(sw - BAR, 0.0f, sw, sh);
+                            thumb = D2D1::RectF(sw - BAR, thumbOff, sw, thumbOff + barThumb);
+                        }
+                    } else {
+                        // Left panel: use SCROLLBAR_POS_LEFT_PANEL (RIGHT)
+                        if (Constants::ThumbnailPanel::SCROLLBAR_POS_LEFT_PANEL == Constants::ThumbnailPanel::ScrollbarSide::LEFT) {
+                            track = D2D1::RectF(0.0f, 0.0f, BAR, sh);
+                            thumb = D2D1::RectF(0.0f, thumbOff, BAR, thumbOff + barThumb);
+                        } else {
+                            track = D2D1::RectF(sw - BAR, 0.0f, sw, sh);
+                            thumb = D2D1::RectF(sw - BAR, thumbOff, sw, thumbOff + barThumb);
+                        }
+                    }
+                } else {
+                    // Horizontal panels (positions 1=top, 3=bottom)
+                    if (m_position == 1) {
+                        // Top panel: use SCROLLBAR_POS_TOP_PANEL
+                        if (Constants::ThumbnailPanel::SCROLLBAR_POS_TOP_PANEL == Constants::ThumbnailPanel::ScrollbarEdge::TOP) {
+                            track = D2D1::RectF(0.0f, 0.0f, sw, BAR);
+                            thumb = D2D1::RectF(thumbOff, 0.0f, thumbOff + barThumb, BAR);
+                        } else {
+                            track = D2D1::RectF(0.0f, sh - BAR, sw, sh);
+                            thumb = D2D1::RectF(thumbOff, sh - BAR, thumbOff + barThumb, sh);
+                        }
+                    } else {
+                        // Bottom panel: use SCROLLBAR_POS_BOTTOM_PANEL
+                        if (Constants::ThumbnailPanel::SCROLLBAR_POS_BOTTOM_PANEL == Constants::ThumbnailPanel::ScrollbarEdge::TOP) {
+                            track = D2D1::RectF(0.0f, 0.0f, sw, BAR);
+                            thumb = D2D1::RectF(thumbOff, 0.0f, thumbOff + barThumb, BAR);
+                        } else {
+                            track = D2D1::RectF(0.0f, sh - BAR, sw, sh);
+                            thumb = D2D1::RectF(thumbOff, sh - BAR, thumbOff + barThumb, sh);
+                        }
+                    }
+                }
+                m_panelContext->FillRectangle(track, m_scrollTrackBrush.Get());
+                m_panelContext->FillRectangle(thumb, m_scrollThumbBrush.Get());
+            }
         }
 
         HRESULT hr = m_panelContext->EndDraw();
