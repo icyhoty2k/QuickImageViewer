@@ -35,3 +35,69 @@ hello i give up on custom cursors i have  leave this as is now its time to make 
 
 
 why i have this strange behaviour when i open an image in explorer with F2 choose image and select the first image in folder its not first in my app it shows different number .Explorer is sorted by name but my app sorts them differently
+
+NEXT BIG TASK for QuickImageViewer by Ivan Hristov Yanev:
+1.SLIDESHOW:
+
+▶️ Start/stop slideshow (e.g. F9)
+⏱️ Adjustable interval (1 s, 2 s, 5 s, 10 s, 30 s, etc.)
+🔁 Loop when reaching the last image
+🔀 Optional shuffle mode
+⏸️ Pause/resume with Space
+⌨️ Arrow keys to manually skip while the slideshow is running
+🖱️ Hide the mouse cursor after a few seconds of inactivity when in slideshow
+ℹ️ Show slideshow status using the existing overlay system Top Center, Bottom Center,Bottom Right , Center Center for permanent info like Slideshow Paused displays when paused and messages(in center center disapearing acoording to Constants::value) when commands
+are recieved like:Slideshow Started
+                  Slideshow Paused
+                  Interval: 5 seconds
+                  Shuffle: ON
+                  Loop: ON
+* new commandline parameters :
+ currently i have :1. -background(to start in background as a service like)
+ 1.1. -fullscreen(for fullscreen),
+ 1.2. -windowedView(for windowed view),
+ 1.3. -slideshow(autoStart slideShow mode),
+ 1.4. -monitorNum#3 (which monitor to start app display in),
+ 1.5  -startFolder (for slideshow and normal operation but mainly used in slideshow)
+ 1.6. -hideMouse(start with mouse hidden maily for slideshow)
+ 1.7. -lock(to lock the viewer so it does not move and does not accept keyboard and mouse.Like KIOSK),
+ 1.8. -awaysOnTop(make app aways on top)
+
+
+Optional but not top priority:
+-Fade transition (200–500 ms)
+-Ken Burns pan/zoom effect (optional)
+-Remember slideshow settings
+
+2.Fix Help Window its incomplete
+-make help window slider because text is overflown.
+-add all missing messages
+-make sections
+-add command line parameters with description in a section
+-make the help window button export to text file so help can be read from file
+
+
+LOW Priority furure Ideas:
+Once the slideshow mode is complete, QIV could also support:
+1.Low priority ideas
+1.1.Kiosk mode
+1.2.Photo frame mode
+1.3.Exhibition mode
+1.4.Digital signage mode
+1.5.Startup automation for information displays
+*without requiring major architectural changes.
+
+2. Presentation Mode 🎤:
+
+Useful during talks or meetings.
+
+Characteristics:
+
+Fullscreen
+Manual navigation
+Optional timer
+Minimal UI
+Black screen shortcut
+White screen shortcut
+
+Think PowerPoint, but for image collections.

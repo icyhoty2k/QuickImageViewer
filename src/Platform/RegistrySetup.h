@@ -6,7 +6,7 @@ namespace System {
     // Infrastructure
     void RegisterAppForOpenWith();
 
-    void EnableRunOnStartup();
+    void EnableRunOnStartup(bool isEnabledRunOnStartup);
 
     // Integer/Flag persistence (DWORD)
     void SaveSetting(const wchar_t *valueName, DWORD value);
