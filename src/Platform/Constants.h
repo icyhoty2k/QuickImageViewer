@@ -79,7 +79,7 @@ namespace Constants {
     //   position 3 : bottom edge strip (full width)
     //   position 4 : left edge strip (full height)
     //cache window
-    constexpr int8_t CACHE_WINDOW_POSITION = 2;
+    constexpr int8_t CACHE_WINDOW_POSITION = 3;
     //current dir window (F5 — always independent, always top strip)
     constexpr int8_t CURRENT_DIR_WINDOW_POSITION = 1;
 
