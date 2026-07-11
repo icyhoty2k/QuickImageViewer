@@ -1,0 +1,117 @@
+From 8bcc077f3f787b3f04881225f8d09b3da0c28207 Mon Sep 17 00:00:00 2001
+From: Ivan Hristov Yanev <icyhoty2k@gmail.com>
+Date: Sat, 11 Jul 2026 12:39:15 +0000
+Subject: [PATCH] =?UTF-8?q?Fix:=20panel=20geometry=20=E2=80=94=20taskbar?=
+ =?UTF-8?q?=20clearance=20and=20no=20overlap=20with=20top=20DirWnd?=
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+All panels now use mi.rcWork (work area) instead of mi.rcMonitor so
+they never draw over the taskbar regardless of where it is positioned.
+
+Position layout after fix:
+  1 (top/F5 DirWnd)  : workX, workY, workW x horzThick
+  2 (right spawned)  : workX+workW-vertThick, workY+horzThick,
+                       vertThick x (workH-horzThick)
+  3 (bottom)         : workX, workY+workH-horzThick, workW x horzThick
+  4 (left spawned)   : workX, workY+horzThick,
+                       vertThick x (workH-horzThick)
+  0 (center float)   : centered in work area
+
+Vertical panels (left/right) now start at workY+horzThick so they sit
+flush below the top DirWnd with no overlap. They end at the work area
+bottom so the taskbar is never covered.
+---
+ src/UI/ThumbnailPanelWnd.cpp | 55 ++++++++++++++++++------------------
+ 1 file changed, 28 insertions(+), 27 deletions(-)
+
+diff --git a/src/UI/ThumbnailPanelWnd.cpp b/src/UI/ThumbnailPanelWnd.cpp
+index 2833481..769db32 100644
+--- a/src/UI/ThumbnailPanelWnd.cpp
++++ b/src/UI/ThumbnailPanelWnd.cpp
+@@ -307,10 +307,11 @@ namespace UI {
+         MONITORINFO mi = {sizeof(mi)};
+         GetMonitorInfoW(hMonitor, &mi);
+ 
+-        int monX = mi.rcMonitor.left;
+-        int monY = mi.rcMonitor.top;
+-        int monW = mi.rcMonitor.right - mi.rcMonitor.left;
+-        int monH = mi.rcMonitor.bottom - mi.rcMonitor.top;
++        // rcWork: usable area after subtracting the taskbar (all panels use this)
++        int workX = mi.rcWork.left;
++        int workY = mi.rcWork.top;
++        int workW = mi.rcWork.right  - mi.rcWork.left;
++        int workH = mi.rcWork.bottom - mi.rcWork.top;
+ 
+         int horzThick = static_cast<int>(
+             (Constants::THUMBNAIL_PANEL_THUMB_HEIGHT + Constants::THUMBNAIL_PANEL_THUMB_MARGIN * 2.0f) * app.dpiScale);
+@@ -318,42 +319,42 @@ namespace UI {
+             (Constants::THUMBNAIL_PANEL_THUMB_WIDTH + Constants::THUMBNAIL_PANEL_THUMB_MARGIN * 2.0f) * app.dpiScale);
+ 
+         switch (position) {
+-            case 0: { // center floating — 80% of monitor width, thumb-height tall
+-                int panelW = static_cast<int>(monW * 0.80f);
+-                x = monX + (monW - panelW) / 2;
+-                y = monY + (monH - horzThick) / 2;
++            case 0: { // center floating — 80% of work width, thumb-height tall, vertically centered in work area
++                int panelW = static_cast<int>(workW * 0.80f);
++                x = workX + (workW - panelW) / 2;
++                y = workY + (workH - horzThick) / 2;
+                 w = panelW;
+                 h = horzThick;
+                 break;
+             }
+-            case 1: // top
+-                x = monX;
+-                y = monY;
+-                w = monW;
++            case 1: // top — full width at top of work area (respects taskbar if at top)
++                x = workX;
++                y = workY;
++                w = workW;
+                 h = horzThick;
+                 break;
+-            case 2: // right
+-                x = monX + monW - vertThick;
+-                y = monY;
++            case 2: // right — starts just below the top DirWnd, respects work area bottom
++                x = workX + workW - vertThick;
++                y = workY + horzThick;
+                 w = vertThick;
+-                h = monH;
++                h = workH - horzThick;
+                 break;
+-            case 3: // bottom
+-                x = monX;
+-                y = monY + monH - horzThick;
+-                w = monW;
++            case 3: // bottom — full work width, sits at bottom of work area (above taskbar)
++                x = workX;
++                y = workY + workH - horzThick;
++                w = workW;
+                 h = horzThick;
+                 break;
+-            case 4: // left
+-                x = monX;
+-                y = monY;
++            case 4: // left — starts just below the top DirWnd, respects work area bottom
++                x = workX;
++                y = workY + horzThick;
+                 w = vertThick;
+-                h = monH;
++                h = workH - horzThick;
+                 break;
+             default:
+-                x = monX;
+-                y = monY;
+-                w = monW;
++                x = workX;
++                y = workY;
++                w = workW;
+                 h = horzThick;
+                 break;
+         }
+-- 
+2.43.0
+

@@ -1,5 +1,4 @@
 #include "UIManager.h"
-#include "../Platform/FileHandler.h"
 
 UI::UIManager uiManager;
 
@@ -73,32 +72,39 @@ namespace UI {
     //
     // Called by HistoryListWnd when the user presses Shift+Enter on a row.
     // Assigns the next round-robin slot (0=left, 1=right, 2=center), allocates
-    // the DirWnd on first use, and loads the requested folder into it.
+    // a SpawnedDirWnd on first use, and loads the folder into its private
+    // playlist.  app.playlist and the main viewer are NOT touched.
     // The primary (F5) DirWnd is never touched here.
     // -------------------------------------------------------------------------
-    void UIManager::SpawnDirWndForFolder(const std::wstring &folderPath) {
+    void UIManager::SpawnDirWndForFolder(const std::wstring &folderPath, HWND hHistoryWnd) {
         int slot = m_nextSpawnSlot;
         m_nextSpawnSlot = (m_nextSpawnSlot + 1) % Constants::DIR_WND_MAX_INSTANCES;
 
         int8_t position = Constants::DIR_WND_SPAWN_POSITIONS[slot];
 
-        DirWnd *target = m_spawnedDirWnds[slot];
+        SpawnedDirWnd *target = m_spawnedDirWnds[slot];
 
         if (target == nullptr) {
-            // First time this slot is used — allocate and initialise the window.
-            target = new DirWnd();
+            target = new SpawnedDirWnd(slot);
             target->Init(m_hInstance, m_hMainWnd, position);
             m_spawnedDirWnds[slot] = target;
         }
 
-        // Load the chosen folder into this DirWnd instance.
-        // OpenDirectory updates app.playlist then calls UpdateDirView on the
-        // primary window via the callback — the spawned window needs its own
-        // explicit update after the playlist is ready.
-        OpenDirectory(m_hMainWnd, folderPath);
+        target->LoadFolder(folderPath);
+
+        // Show the window without stealing focus from HistoryListWnd.
+        // ShowWindow with SW_SHOWNOACTIVATE makes it visible without activating.
+        // UpdateDirView must be called after the window is visible so that
+        // IsWindowVisible() returns true inside UpdateView().
+        ShowWindow(target->GetHwnd(), SW_SHOWNOACTIVATE);
         target->UpdateDirView();
-        target->SyncDirSelectionRectangle();
-        target->Show();
+
+        // Return keyboard focus to the history panel so the user can keep
+        // navigating and spawning more folders without re-opening it.
+        if (hHistoryWnd) {
+            SetForegroundWindow(hHistoryWnd);
+            SetFocus(hHistoryWnd);
+        }
     }
 
     // -------------------------------------------------------------------------

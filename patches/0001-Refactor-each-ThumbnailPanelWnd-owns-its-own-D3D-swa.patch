@@ -1,0 +1,1148 @@
+From 8f0e60c3355efc127a2ae973c1e607e2778c4dcd Mon Sep 17 00:00:00 2001
+From: Ivan Hristov Yanev <icyhoty2k@gmail.com>
+Date: Sat, 11 Jul 2026 12:25:43 +0000
+Subject: [PATCH] Refactor: each ThumbnailPanelWnd owns its own D3D swap chain
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+Each panel (CacheWnd, DirWnd, SpawnedDirWnd) now manages its own DXGI
+swap chain and D2D device context as member variables. The shared
+RendererD2D is only borrowed for:
+  1. One-time device acquisition (GetD3DDevice/GetD2DDevice) during Init
+  2. Shared cache lookups (ResolveThumbnailBitmaps) at render time
+
+This means any number of DirWnd/SpawnedDirWnd instances can coexist with
+no coupling to each other or to the main viewer renderer.
+
+RendererD2D.h:
+- Remove ThumbnailPanelType enum (Cache/Dir/Spawned0/1/2) entirely
+- Remove ThumbnailPanel struct and all panel member vars
+- Remove CreatePanelDeviceResources/RenderPanel/ResizePanel/
+  DiscardPanelDeviceResources/GetPanelContext/GetPanel
+- Add GetD3DDevice(), GetD2DDevice() device accessors
+- Add ResolvedThumb struct + ResolveThumbnailBitmaps() for lock-safe
+  cache lookup shared by all panels
+- RequestDirThumbnail now takes HWND hPanel (caller passes its own HWND)
+
+RendererD2D.cpp:
+- Remove the above five panel management methods
+- Add ResolveThumbnailBitmaps (lock-under-mutex bitmap resolution for
+  both m_dirThumbCache and m_bitmapCache)
+- RequestDirThumbnail: hPanel parameter replaces GetPanel(Dir).hwnd
+
+ThumbnailPanelWnd.h:
+- Add per-instance panel resources: m_swapChain, m_panelContext,
+  m_panelBackBuffer, m_placeholderBrush, m_borderBrush, m_hoverBrush
+- Remove GetPanelType() virtual (no longer needed)
+- Add UsesDirThumbCache() virtual (false=CacheWnd, true=DirWnd variants)
+- CreateDeviceResources/ResizeSwapChain/Render now work on owned members
+
+ThumbnailPanelWnd.cpp:
+- Rewrite CreateDeviceResources: borrows d3d/d2d device once, creates
+  swap chain + device context + brushes as owned members
+- Rewrite ResizeSwapChain: operates on m_swapChain/m_panelContext
+- Rewrite Render: calls ResolveThumbnailBitmaps then draws on m_panelContext
+
+DirWnd.h:
+- Remove GetPanelType() override, SetSlotIndex(), m_slotIndex from
+  SpawnedDirWnd — no longer needed
+- Add UsesDirThumbCache() = true override to DirWnd
+
+DirWnd.cpp:
+- RequestDirThumbnail now passes m_hWnd as hPanel
+
+CacheWnd.h:
+- Remove GetPanelType() override
+
+UIManager.cpp:
+- Remove SetSlotIndex() call
+---
+ src/Renderer/RendererD2D.cpp | 461 +++--------------------------------
+ src/Renderer/RendererD2D.h   |  69 ++----
+ src/UI/CacheWnd.h            |   5 -
+ src/UI/DirWnd.cpp            |   2 +-
+ src/UI/DirWnd.h              |  94 ++-----
+ src/UI/ThumbnailPanelWnd.cpp | 113 +++++++--
+ src/UI/ThumbnailPanelWnd.h   | 127 ++++------
+ src/UI/UIManager.cpp         |   6 +-
+ 8 files changed, 218 insertions(+), 659 deletions(-)
+
+diff --git a/src/Renderer/RendererD2D.cpp b/src/Renderer/RendererD2D.cpp
+index e0c00ce..7f70571 100644
+--- a/src/Renderer/RendererD2D.cpp
++++ b/src/Renderer/RendererD2D.cpp
+@@ -1003,444 +1003,41 @@ void RendererD2D::RemoveFromCache(const std::wstring &filePath) {
+ }
+ 
+ // =============================================================================
+-//  Thumbnail Panels (Cache & Dir Windows)
++//  ResolveThumbnailBitmaps
++//  Called by ThumbnailPanelWnd::Render() to resolve bitmap pointers under
++//  the minimum lock duration before any GPU work begins.
+ // =============================================================================
+-
+-HRESULT RendererD2D::CreatePanelDeviceResources(ThumbnailPanelType type, HWND hwnd) {
+-    ThumbnailPanel &panel = GetPanel(type);
+-    panel.hwnd = hwnd;
+-
+-    DXGI_SWAP_CHAIN_DESC1 swapDesc{};
+-    swapDesc.Width = 0;
+-    swapDesc.Height = 0;
+-    swapDesc.Format = DXGI_FORMAT_B8G8R8A8_UNORM;
+-    swapDesc.BufferCount = 2;
+-    swapDesc.BufferUsage = DXGI_USAGE_RENDER_TARGET_OUTPUT;
+-    swapDesc.SwapEffect = DXGI_SWAP_EFFECT_FLIP_DISCARD;
+-    swapDesc.SampleDesc.Count = 1;
+-
+-    Microsoft::WRL::ComPtr<IDXGIDevice1> dxgiDevice;
+-    Microsoft::WRL::ComPtr<IDXGIAdapter> adapter;
+-    Microsoft::WRL::ComPtr<IDXGIFactory2> factory;
+-
+-    m_pD3DDevice.As(&dxgiDevice);
+-    dxgiDevice->GetAdapter(&adapter);
+-    adapter->GetParent(IID_PPV_ARGS(&factory));
+-
+-    HRESULT hr = factory->CreateSwapChainForHwnd(
+-            m_pD3DDevice.Get(), hwnd, &swapDesc, nullptr, nullptr, &panel.swapChain);
+-    if (FAILED(hr)) return hr;
+-
+-    Microsoft::WRL::ComPtr<ID2D1DeviceContext> baseContext;
+-    hr = m_pD2DDevice->CreateDeviceContext(D2D1_DEVICE_CONTEXT_OPTIONS_NONE, &baseContext);
+-    if (FAILED(hr)) return hr;
+-
+-    hr = baseContext.As(&panel.deviceContext);
+-    if (FAILED(hr)) return hr;
+-
+-    RECT rc{};
+-    GetClientRect(hwnd, &rc);
+-    UINT w = static_cast<UINT>(rc.right - rc.left);
+-    UINT h = static_cast<UINT>(rc.bottom - rc.top);
+-
+-    if (w == 0 || h == 0) {
+-        w = (type == ThumbnailPanelType::Dir) ? 1200 : 800;
+-        h = Constants::THUMBNAIL_PANEL_WINDOW_THICKNESS;
+-    }
+-
+-    ResizePanel(type, w, h);
+-
+-    panel.deviceContext->CreateSolidColorBrush(D2D1::ColorF(Constants::ThumbnailPanel::PLACEHOLDER), &panel.placeholderBrush);
+-    panel.deviceContext->CreateSolidColorBrush(D2D1::ColorF(Constants::ThumbnailPanel::SELECTION_BORDER), &panel.borderBrush);
+-    panel.deviceContext->CreateSolidColorBrush(D2D1::ColorF(Constants::ThumbnailPanel::HOVER), &panel.hoverBrush);
+-
+-    return S_OK;
+-}
+-
+-void RendererD2D::ResizePanel(ThumbnailPanelType type, UINT width, UINT height) {
+-    ThumbnailPanel &panel = GetPanel(type);
+-    if (!panel.swapChain || !panel.deviceContext) return;
+-
+-    panel.deviceContext->SetTarget(nullptr);
+-    panel.backBuffer.Reset();
+-
+-    HRESULT hr = panel.swapChain->ResizeBuffers(0, width, height, DXGI_FORMAT_UNKNOWN, 0);
+-    if (FAILED(hr)) return;
+-
+-    Microsoft::WRL::ComPtr<IDXGISurface> surface;
+-    hr = panel.swapChain->GetBuffer(0, IID_PPV_ARGS(&surface));
+-    if (FAILED(hr)) return;
+-
+-    D2D1_BITMAP_PROPERTIES1 props = D2D1::BitmapProperties1(
+-            D2D1_BITMAP_OPTIONS_TARGET | D2D1_BITMAP_OPTIONS_CANNOT_DRAW,
+-            D2D1::PixelFormat(DXGI_FORMAT_B8G8R8A8_UNORM, D2D1_ALPHA_MODE_IGNORE));
+-
+-    hr = panel.deviceContext->CreateBitmapFromDxgiSurface(surface.Get(), &props, &panel.backBuffer);
+-    if (FAILED(hr)) return;
+-
+-    panel.deviceContext->SetTarget(panel.backBuffer.Get());
+-}
+-
+-void RendererD2D::RenderPanel(ThumbnailPanelType type, int selectedIndex, int hoverIndex, const std::vector<UI::Thumbnail> &thumbnails) {
+-    ThumbnailPanel &panel = GetPanel(type);
+-    if (!panel.deviceContext || !panel.swapChain) return;
+-
+-    // -------------------------------------------------------------------------
+-    // Phase 1: resolve bitmap pointers under the minimum required lock duration.
+-    // We copy the ComPtr refs out (AddRef), then release both mutexes before
+-    // touching the GPU. This prevents the lock from being held across BeginDraw
+-    // / EndDraw, which would block PreloadBitmap and RequestDirThumbnail workers
+-    // for the full duration of the panel render — visible as thumbnail stutter
+-    // on large folders.
+-    // -------------------------------------------------------------------------
+-    struct ResolvedThumb {
+-        Microsoft::WRL::ComPtr<ID2D1Bitmap1> bitmap; // nullptr = draw placeholder
+-        D2D1_RECT_F rect;
+-    };
+-
+-    std::vector<ResolvedThumb> resolved;
+-    resolved.reserve(thumbnails.size());
+-
+-    {
+-        std::lock_guard<std::mutex> cacheLock(m_cacheMutex);
+-        std::lock_guard<std::mutex> dirLock(m_dirThumbMutex);
+-
+-        for (const auto &thumb: thumbnails) {
+-            ResolvedThumb r;
+-            r.rect = thumb.rect;
+-
+-            // 1. Dir thumbnail cache takes priority
+-            if (type == ThumbnailPanelType::Dir) {
+-                auto it = m_dirThumbCache.find(thumb.filePath);
+-                if (it != m_dirThumbCache.end() && it->second) {
+-                    r.bitmap = it->second;
+-                }
+-            }
+-
+-            // 2. Fall back to global VRAM cache
+-            if (!r.bitmap) {
+-                auto it = m_bitmapCache.find(thumb.filePath);
+-                if (it != m_bitmapCache.end() && it->second.bitmap) {
+-                    r.bitmap = it->second.bitmap;
+-                }
+-            }
+-
+-            resolved.push_back(std::move(r));
+-        }
+-    } // both locks released here — GPU work happens entirely outside
+-
+-    // -------------------------------------------------------------------------
+-    // Phase 2: GPU draw with no locks held.
+-    // -------------------------------------------------------------------------
+-    panel.deviceContext->BeginDraw();
+-    panel.deviceContext->Clear(D2D1::ColorF(0.08f, 0.08f, 0.08f, 1.0f));
+-
+-    for (size_t i = 0; i < resolved.size(); ++i) {
+-        const auto &r = resolved[i];
+-
+-        if (r.bitmap) {
+-            panel.deviceContext->DrawBitmap(r.bitmap.Get(), r.rect, 1.0f,
+-                                            D2D1_BITMAP_INTERPOLATION_MODE_LINEAR);
+-        } else {
+-            panel.deviceContext->FillRectangle(r.rect, panel.placeholderBrush.Get());
++void RendererD2D::ResolveThumbnailBitmaps(const std::vector<UI::Thumbnail> &thumbnails,
++                                          bool useDirCache,
++                                          std::vector<ResolvedThumb> &out) {
++    out.clear();
++    out.reserve(thumbnails.size());
++
++    std::lock_guard<std::mutex> cacheLock(m_cacheMutex);
++    std::lock_guard<std::mutex> dirLock(m_dirThumbMutex);
++
++    for (const auto &thumb : thumbnails) {
++        ResolvedThumb r;
++        r.rect = thumb.rect;
++
++        if (useDirCache) {
++            // Dir thumbnail cache has priority for DirWnd panels.
++            auto it = m_dirThumbCache.find(thumb.filePath);
++            if (it != m_dirThumbCache.end() && it->second)
++                r.bitmap = it->second;
+         }
+ 
+-        if (static_cast<int>(i) == selectedIndex) {
+-            panel.deviceContext->DrawRectangle(r.rect, panel.borderBrush.Get(),
+-                                               Constants::ThumbnailPanel::SELECTION_BORDER_THICKNESS);
++        // Fall back to the full-res VRAM cache (covers CacheWnd and dir hits
++        // that predate the dir thumb cache, e.g. already-loaded images).
++        if (!r.bitmap) {
++            auto it = m_bitmapCache.find(thumb.filePath);
++            if (it != m_bitmapCache.end() && it->second.bitmap)
++                r.bitmap = it->second.bitmap;
+         }
+ 
+-        if (static_cast<int>(i) == hoverIndex) {
+-            panel.deviceContext->DrawRectangle(r.rect, panel.hoverBrush.Get(),
+-                                               Constants::ThumbnailPanel::HOVER_THICKNESS);
+-        }
+-    }
+-
+-    HRESULT hr = panel.deviceContext->EndDraw();
+-    if (hr == D2DERR_RECREATE_TARGET || hr == static_cast<HRESULT>(DXGI_ERROR_DEVICE_REMOVED)) {
+-        // Device loss — handled on next render cycle
+-    }
+-
+-    panel.swapChain->Present(1, 0);
+-}
+-
+-void RendererD2D::DiscardPanelDeviceResources(ThumbnailPanelType type) {
+-    ThumbnailPanel &panel = GetPanel(type);
+-    if (panel.deviceContext) panel.deviceContext->SetTarget(nullptr);
+-    panel.backBuffer.Reset();
+-    panel.placeholderBrush.Reset();
+-    panel.borderBrush.Reset();
+-    panel.hoverBrush.Reset();
+-    panel.swapChain.Reset();
+-    panel.deviceContext.Reset();
+-    panel.hwnd = nullptr;
+-}
+-
+-ID2D1DeviceContext7 *RendererD2D::GetPanelContext(ThumbnailPanelType type) {
+-    return GetPanel(type).deviceContext.Get();
+-}
+-
+-// =============================================================================
+-//  SaveCurrentImageWithEffects
+-// =============================================================================
+-HRESULT RendererD2D::SaveCurrentImageWithEffects(const std::wstring &outPath) {
+-    if (!m_pBitmap || !m_pDeviceContext || !m_pD3DDevice) return E_FAIL;
+-
+-    HRESULT hr = S_OK;
+-    D2D1_SIZE_U pixelSize = m_pBitmap->GetPixelSize();
+-    if (pixelSize.width == 0 || pixelSize.height == 0) return E_FAIL;
+-
+-    D3D11_TEXTURE2D_DESC texDesc{};
+-    texDesc.Width = pixelSize.width;
+-    texDesc.Height = pixelSize.height;
+-    texDesc.MipLevels = 1;
+-    texDesc.ArraySize = 1;
+-    texDesc.Format = DXGI_FORMAT_B8G8R8A8_UNORM;
+-    texDesc.SampleDesc.Count = 1;
+-    texDesc.Usage = D3D11_USAGE_DEFAULT;
+-    texDesc.BindFlags = D3D11_BIND_RENDER_TARGET;
+-
+-    Microsoft::WRL::ComPtr<ID3D11Texture2D> offscreenTex;
+-    hr = m_pD3DDevice->CreateTexture2D(&texDesc, nullptr, &offscreenTex);
+-    if (FAILED(hr)) return hr;
+-
+-    Microsoft::WRL::ComPtr<IDXGISurface> dxgiSurface;
+-    hr = offscreenTex.As(&dxgiSurface);
+-    if (FAILED(hr)) return hr;
+-
+-    D2D1_BITMAP_PROPERTIES1 targetProps = D2D1::BitmapProperties1(
+-            D2D1_BITMAP_OPTIONS_TARGET | D2D1_BITMAP_OPTIONS_CANNOT_DRAW,
+-            D2D1::PixelFormat(DXGI_FORMAT_B8G8R8A8_UNORM, D2D1_ALPHA_MODE_IGNORE));
+-
+-    Microsoft::WRL::ComPtr<ID2D1Bitmap1> offscreenBitmap;
+-    hr = m_pDeviceContext->CreateBitmapFromDxgiSurface(dxgiSurface.Get(), &targetProps, &offscreenBitmap);
+-    if (FAILED(hr)) return hr;
+-
+-    Microsoft::WRL::ComPtr<ID2D1Image> previousTarget;
+-    m_pDeviceContext->GetTarget(&previousTarget);
+-
+-    m_pDeviceContext->SetTarget(offscreenBitmap.Get());
+-    m_pDeviceContext->BeginDraw();
+-    m_pDeviceContext->Clear(D2D1::ColorF(D2D1::ColorF::Black));
+-    m_pDeviceContext->SetTransform(D2D1::Matrix3x2F::Identity());
+-
+-    ID2D1Effect *finalEffect = BuildEffectChain(m_pBitmap.Get());
+-    if (finalEffect) {
+-        m_pDeviceContext->DrawImage(finalEffect, D2D1::Point2F(0.0f, 0.0f));
+-    } else {
+-        m_pDeviceContext->DrawBitmap(
+-                m_pBitmap.Get(),
+-                D2D1::RectF(0.0f, 0.0f,
+-                            static_cast<float>(pixelSize.width),
+-                            static_cast<float>(pixelSize.height)),
+-                1.0f,
+-                D2D1_BITMAP_INTERPOLATION_MODE_NEAREST_NEIGHBOR);
+-    }
+-
+-    hr = m_pDeviceContext->EndDraw();
+-    m_pDeviceContext->SetTarget(previousTarget.Get());
+-    if (FAILED(hr)) return hr;
+-
+-    D3D11_TEXTURE2D_DESC stagingDesc = texDesc;
+-    stagingDesc.Usage = D3D11_USAGE_STAGING;
+-    stagingDesc.BindFlags = 0;
+-    stagingDesc.CPUAccessFlags = D3D11_CPU_ACCESS_READ;
+-
+-    Microsoft::WRL::ComPtr<ID3D11Texture2D> stagingTex;
+-    hr = m_pD3DDevice->CreateTexture2D(&stagingDesc, nullptr, &stagingTex);
+-    if (FAILED(hr)) return hr;
+-
+-    m_pD3DContext->CopyResource(stagingTex.Get(), offscreenTex.Get());
+-
+-    D3D11_MAPPED_SUBRESOURCE mapped{};
+-    hr = m_pD3DContext->Map(stagingTex.Get(), 0, D3D11_MAP_READ, 0, &mapped);
+-    if (FAILED(hr)) return hr;
+-
+-    const UINT rowBytes = pixelSize.width * 4;
+-    std::vector<BYTE> pixels(static_cast<size_t>(pixelSize.width) * pixelSize.height * 4);
+-    for (UINT row = 0; row < pixelSize.height; ++row) {
+-        memcpy(pixels.data() + static_cast<size_t>(row) * rowBytes,
+-               static_cast<const BYTE *>(mapped.pData) + static_cast<size_t>(row) * mapped.RowPitch,
+-               rowBytes);
++        out.push_back(std::move(r));
+     }
+-    m_pD3DContext->Unmap(stagingTex.Get(), 0);
+-
+-    Microsoft::WRL::ComPtr<IWICImagingFactory> wicFac = app.wicFactory;
+-    if (!wicFac) return E_FAIL;
+-
+-    Microsoft::WRL::ComPtr<IWICStream> wicStream;
+-    hr = wicFac->CreateStream(&wicStream);
+-    if (FAILED(hr)) return hr;
+-
+-    hr = wicStream->InitializeFromFilename(outPath.c_str(), GENERIC_WRITE);
+-    if (FAILED(hr)) return hr;
+-
+-    Microsoft::WRL::ComPtr<IWICBitmapEncoder> encoder;
+-    hr = wicFac->CreateEncoder(GUID_ContainerFormatPng, nullptr, &encoder);
+-    if (FAILED(hr)) return hr;
+-
+-    hr = encoder->Initialize(wicStream.Get(), WICBitmapEncoderNoCache);
+-    if (FAILED(hr)) return hr;
+-
+-    Microsoft::WRL::ComPtr<IWICBitmapFrameEncode> frame;
+-    Microsoft::WRL::ComPtr<IPropertyBag2> frameProps;
+-    hr = encoder->CreateNewFrame(&frame, &frameProps);
+-    if (FAILED(hr)) return hr;
+-
+-    hr = frame->Initialize(frameProps.Get());
+-    if (FAILED(hr)) return hr;
+-
+-    hr = frame->SetSize(pixelSize.width, pixelSize.height);
+-    if (FAILED(hr)) return hr;
+-
+-    WICPixelFormatGUID fmt = GUID_WICPixelFormat32bppBGRA;
+-    hr = frame->SetPixelFormat(&fmt);
+-    if (FAILED(hr)) return hr;
+-
+-    hr = frame->WritePixels(pixelSize.height, rowBytes,
+-                            static_cast<UINT>(pixels.size()), pixels.data());
+-    if (FAILED(hr)) return hr;
+-
+-    hr = frame->Commit();
+-    if (FAILED(hr)) return hr;
+-
+-    return encoder->Commit();
+-}
+-
+-// =============================================================================
+-//  ClearDirThumbnailCache
+-// =============================================================================
+-void RendererD2D::ClearDirThumbnailCache() {
+-    std::lock_guard<std::mutex> lock(m_dirThumbMutex);
+-    m_dirThumbCache.clear();
+-    m_dirThumbLruList.clear();
+-    m_dirThumbCacheBytes = 0;
+-    // Clear in-flight too: any late-arriving task for the old folder will
+-    // find its path absent from the cache, check the in-flight set, and
+-    // skip the duplicate-insert guard correctly.
+-    m_dirThumbInFlight.clear();
+-    g_dirThumbWorker.ClearQueue();
+ }
+ 
+ // =============================================================================
+-//  RequestDirThumbnail
+-// =============================================================================
+-void RendererD2D::RequestDirThumbnail(const std::wstring &filePath) {
+-    {
+-        std::lock_guard<std::mutex> lock(m_dirThumbMutex);
+-        // Skip if already cached OR if a decode task is already in flight.
+-        // Both checks must be inside the same lock to eliminate the TOCTOU
+-        // window between the check and the PushTask call below.
+-        if (m_dirThumbCache.count(filePath)) return;
+-        if (m_dirThumbInFlight.count(filePath)) return;
+-        m_dirThumbInFlight.insert(filePath);
+-    }
+-
+-    Microsoft::WRL::ComPtr<ID2D1Device6> d2dDev = m_pD2DDevice;
+-    HWND hDir = GetPanel(ThumbnailPanelType::Dir).hwnd;
+-
+-    if (!d2dDev || !hDir) return;
+-
+-    UINT thumbW = static_cast<UINT>(Constants::THUMBNAIL_PANEL_THUMB_WIDTH);
+-    UINT thumbH = static_cast<UINT>(Constants::THUMBNAIL_PANEL_THUMB_HEIGHT);
+-
+-    g_ioWorker.PushTask([filePath, d2dDev, hDir, thumbW, thumbH, this]() {
+-        HANDLE hFile = CreateFileW(filePath.c_str(), GENERIC_READ, FILE_SHARE_READ, nullptr, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, nullptr);
+-        if (hFile == INVALID_HANDLE_VALUE) return;
+-
+-        LARGE_INTEGER fileSize{};
+-        if (!GetFileSizeEx(hFile, &fileSize)) {
+-            CloseHandle(hFile);
+-            return;
+-        }
+-
+-        std::vector<BYTE> bytes(static_cast<size_t>(fileSize.QuadPart));
+-        DWORD bytesRead = 0;
+-        bool ok = ReadFile(hFile, bytes.data(), static_cast<DWORD>(bytes.size()), &bytesRead, nullptr) && bytesRead == static_cast<DWORD>(bytes.size());
+-        CloseHandle(hFile);
+-        if (!ok) return;
+-
+-        g_dirThumbWorker.PushTask([bytes = std::move(bytes), filePath, d2dDev, hDir, thumbW, thumbH, this](IWICImagingFactory2 *wicFac) mutable {
+-            Microsoft::WRL::ComPtr<IWICStream> stream;
+-            if (FAILED(wicFac->CreateStream(&stream))) return;
+-            if (FAILED(stream->InitializeFromMemory(bytes.data(), static_cast<DWORD>(bytes.size())))) return;
+-
+-            Microsoft::WRL::ComPtr<IWICBitmapDecoder> decoder;
+-            if (FAILED(wicFac->CreateDecoderFromStream(stream.Get(), nullptr, WICDecodeMetadataCacheOnDemand, &decoder))) return;
+-
+-            Microsoft::WRL::ComPtr<IWICBitmapFrameDecode> frame;
+-            if (FAILED(decoder->GetFrame(0, &frame))) return;
+-
+-            UINT srcW = 0, srcH = 0;
+-            frame->GetSize(&srcW, &srcH);
+-            if (srcW == 0 || srcH == 0) return;
+-
+-            float scale = std::min(static_cast<float>(thumbW) / srcW, static_cast<float>(thumbH) / srcH);
+-            UINT dstW = std::max(1U, static_cast<UINT>(srcW * scale));
+-            UINT dstH = std::max(1U, static_cast<UINT>(srcH * scale));
+-
+-            Microsoft::WRL::ComPtr<IWICBitmapScaler> scaler;
+-            if (FAILED(wicFac->CreateBitmapScaler(&scaler))) return;
+-            if (FAILED(scaler->Initialize(frame.Get(), dstW, dstH, WICBitmapInterpolationModeFant))) return;
+-
+-            IWICBitmapSource *uploadSource = nullptr;
+-            Microsoft::WRL::ComPtr<IWICFormatConverter> converter;
+-            WICPixelFormatGUID scaledFmt{};
+-            if (FAILED(scaler->GetPixelFormat(&scaledFmt))) return;
+-
+-            if (scaledFmt == GUID_WICPixelFormat32bppPBGRA) {
+-                uploadSource = scaler.Get();
+-            } else {
+-                if (FAILED(wicFac->CreateFormatConverter(&converter))) return;
+-                if (FAILED(converter->Initialize(scaler.Get(), GUID_WICPixelFormat32bppPBGRA, WICBitmapDitherTypeNone, nullptr, 0.0f, WICBitmapPaletteTypeCustom)))
+-                    return;
+-                uploadSource = converter.Get();
+-            }
+-
+-            Microsoft::WRL::ComPtr<ID2D1DeviceContext> taskCtx;
+-            if (FAILED(d2dDev->CreateDeviceContext(D2D1_DEVICE_CONTEXT_OPTIONS_NONE, taskCtx.GetAddressOf()))) return;
+-
+-            Microsoft::WRL::ComPtr<ID2D1Bitmap1> thumbBitmap;
+-            if (FAILED(taskCtx->CreateBitmapFromWicBitmap(uploadSource, nullptr, &thumbBitmap))) return;
+-
+-            {
+-                std::lock_guard<std::mutex> lock(m_dirThumbMutex);
+-                // Always clear in-flight — task is done regardless of outcome.
+-                m_dirThumbInFlight.erase(filePath);
+-                // A racing second task for the same file (queued before the
+-                // in-flight set was introduced, or after a ClearDirThumbnailCache)
+-                // may have already written this entry. Skip duplicate insertion
+-                // to keep the LRU list free of duplicate path entries.
+-                if (!m_dirThumbCache.count(filePath)) {
+-                    // Byte size of this thumbnail in VRAM (BGRA = 4 bytes/pixel).
+-                    D2D1_SIZE_U px = thumbBitmap->GetPixelSize();
+-                    size_t entryBytes = static_cast<size_t>(px.width) * px.height * 4;
+-                    size_t budgetBytes = Constants::DIR_THUMB_CACHE_BUDGET_MB * 1024 * 1024;
+-
+-                    // Evict LRU entries until we fit within the VRAM budget.
+-                    while (!m_dirThumbLruList.empty() &&
+-                           (m_dirThumbCacheBytes + entryBytes > budgetBytes)) {
+-                        const std::wstring &evict = m_dirThumbLruList.back();
+-                        auto it = m_dirThumbCache.find(evict);
+-                        if (it != m_dirThumbCache.end() && it->second) {
+-                            D2D1_SIZE_U epx = it->second->GetPixelSize();
+-                            size_t evictBytes = static_cast<size_t>(epx.width) * epx.height * 4;
+-                            m_dirThumbCacheBytes = (m_dirThumbCacheBytes > evictBytes)
+-                                                       ? m_dirThumbCacheBytes - evictBytes
+-                                                       : 0;
+-                            m_dirThumbCache.erase(it);
+-                        } else {
+-                            m_dirThumbCache.erase(evict);
+-                        }
+-                        m_dirThumbLruList.pop_back();
+-                    }
+-
+-                    m_dirThumbLruList.push_front(filePath);
+-                    m_dirThumbCache[filePath] = thumbBitmap;
+-                    m_dirThumbCacheBytes += entryBytes;
+-                }
+-            }
+-            PostMessageW(hDir, Constants::WM_QIV_REPAINT, 0, 0);
+-        });
+-    });
+-}
++//  SaveCurrentImageWithEffects
+\ No newline at end of file
+diff --git a/src/Renderer/RendererD2D.h b/src/Renderer/RendererD2D.h
+index 4afc55c..2e46804 100644
+--- a/src/Renderer/RendererD2D.h
++++ b/src/Renderer/RendererD2D.h
+@@ -58,23 +58,28 @@ class RendererD2D final : public IImageRenderer {
+         void RemoveFromCache(const std::wstring &filePath) override;
+ 
+         // =====================================================================
+-        // Thumbnail Panel APIs (Cache & Dir Windows)
++        // Thumbnail Panel APIs
++        // Each ThumbnailPanelWnd owns its own swap chain — these two accessors
++        // let panels borrow the shared D3D/D2D device for one-time init.
+         // =====================================================================
+-        enum class ThumbnailPanelType { Cache, Dir, Spawned0, Spawned1, Spawned2 };
+-
+-        HRESULT CreatePanelDeviceResources(ThumbnailPanelType type, HWND hwnd);
+-
+-        void DiscardPanelDeviceResources(ThumbnailPanelType type);
+-
+-        void RenderPanel(ThumbnailPanelType type, int selectedIndex, int hoverIndex, const std::vector<UI::Thumbnail> &thumbnails);
+-
+-        void ResizePanel(ThumbnailPanelType type, UINT width, UINT height);
+-
+-        ID2D1DeviceContext7 *GetPanelContext(ThumbnailPanelType type);
++        ID3D11Device *GetD3DDevice() const { return m_pD3DDevice.Get(); }
++        ID2D1Device6 *GetD2DDevice() const { return m_pD2DDevice.Get(); }
++
++        // Resolve bitmap pointers for a set of thumbnails under the minimum lock
++        // duration. Called by ThumbnailPanelWnd::Render() before GPU work begins.
++        // useDirCache=true  → look in m_dirThumbCache first (DirWnd panels)
++        // useDirCache=false → look in m_bitmapCache only   (CacheWnd panel)
++        struct ResolvedThumb {
++            Microsoft::WRL::ComPtr<ID2D1Bitmap1> bitmap; // nullptr = placeholder
++            D2D1_RECT_F rect;
++        };
++        void ResolveThumbnailBitmaps(const std::vector<UI::Thumbnail> &thumbnails,
++                                     bool useDirCache,
++                                     std::vector<ResolvedThumb> &out);
+ 
+         // Queues an async decode+scale job for one file.
+-        // Posts WM_QIV_REPAINT to the dir panel HWND when the thumbnail lands.
+-        void RequestDirThumbnail(const std::wstring &filePath);
++        // Posts WM_QIV_REPAINT to all visible dir panel HWNDs when the thumbnail lands.
++        void RequestDirThumbnail(const std::wstring &filePath, HWND hPanel);
+ 
+         // Drops the entire dir thumbnail cache (call on folder change).
+         void ClearDirThumbnailCache();
+@@ -126,41 +131,7 @@ class RendererD2D final : public IImageRenderer {
+         Microsoft::WRL::ComPtr<ID2D1Effect> m_pScaleEffect;
+         Microsoft::WRL::ComPtr<ID2D1Bitmap1> m_pBackBufferBitmap;
+ 
+-        // =====================================================================
+-        // Thumbnail Panel Resources (Cache & Dir Windows)
+-        // =====================================================================
+-        struct ThumbnailPanel {
+-            HWND hwnd = nullptr;
+-            Microsoft::WRL::ComPtr<IDXGISwapChain1> swapChain;
+-            Microsoft::WRL::ComPtr<ID2D1DeviceContext7> deviceContext;
+-            Microsoft::WRL::ComPtr<ID2D1Bitmap1> backBuffer;
+-            Microsoft::WRL::ComPtr<ID2D1SolidColorBrush> placeholderBrush;
+-            Microsoft::WRL::ComPtr<ID2D1SolidColorBrush> borderBrush;
+-            Microsoft::WRL::ComPtr<ID2D1SolidColorBrush> hoverBrush;
+-        };
+-
+-        ThumbnailPanel m_cachePanel;
+-        ThumbnailPanel m_dirPanel;
+-        // One independent D3D swap chain per spawned DirWnd slot (history Shift+Enter).
+-        // Indexed 0-2, matching DIR_WND_SPAWN_POSITIONS slots.
+-        ThumbnailPanel m_spawnedPanels[3];
+-
+-        ThumbnailPanel &GetPanel(ThumbnailPanelType type) {
+-            switch (type) {
+-                case ThumbnailPanelType::Cache:    return m_cachePanel;
+-                case ThumbnailPanelType::Spawned0: return m_spawnedPanels[0];
+-                case ThumbnailPanelType::Spawned1: return m_spawnedPanels[1];
+-                case ThumbnailPanelType::Spawned2: return m_spawnedPanels[2];
+-                default:                           return m_dirPanel;
+-            }
+-        }
+-
+-        // Dir thumbnail cache  —  small scaled-down bitmaps for every file in
+-        // the current folder.  Separate from m_bitmapCache (which holds full-res
+-        // images) so it never evicts viewer bitmaps and is cleared on folder change.
+-        // Evicted LRU-style at DIR_THUMB_CACHE_MAX entries to cap VRAM usage.
+-        // Dir thumbnail cache — maps file path → small scaled D2D bitmap.
+-        // Evicted LRU-style when m_dirThumbCacheBytes exceeds the budget.
++        // Dir thumbnail cache  —  small scaled-down bitmaps, shared across all DirWnd instances.
+         std::unordered_map<std::wstring, Microsoft::WRL::ComPtr<ID2D1Bitmap1> > m_dirThumbCache;
+         std::list<std::wstring> m_dirThumbLruList;
+         // Running total of VRAM bytes used by m_dirThumbCache entries.
+diff --git a/src/UI/CacheWnd.h b/src/UI/CacheWnd.h
+index b4f945e..7b07bda 100644
+--- a/src/UI/CacheWnd.h
++++ b/src/UI/CacheWnd.h
+@@ -37,11 +37,6 @@ namespace UI {
+                 return L"Cache";
+             }
+ 
+-            // --- NEW: Tell the base class which panel this is ---
+-            RendererD2D::ThumbnailPanelType GetPanelType() const override {
+-                return RendererD2D::ThumbnailPanelType::Cache;
+-            }
+-
+             int GetKeyToggle() const override;
+ 
+             int GetKeyMove() const override;
+diff --git a/src/UI/DirWnd.cpp b/src/UI/DirWnd.cpp
+index e730b5f..76f2ec9 100644
+--- a/src/UI/DirWnd.cpp
++++ b/src/UI/DirWnd.cpp
+@@ -29,7 +29,7 @@ namespace UI {
+         auto *r = dynamic_cast<RendererD2D *>(app.renderer.get());
+         if (r) {
+             for (const auto &t: m_thumbnails) {
+-                r->RequestDirThumbnail(t.filePath);
++                r->RequestDirThumbnail(t.filePath, m_hWnd);
+             }
+         }
+     }
+diff --git a/src/UI/DirWnd.h b/src/UI/DirWnd.h
+index 9e13989..b89f2dd 100644
+--- a/src/UI/DirWnd.h
++++ b/src/UI/DirWnd.h
+@@ -4,6 +4,7 @@
+ #include <vector>
+ #include <string>
+ #include <filesystem>
++#include <algorithm>
+ #include "ThumbnailPanelWnd.h"
+ #include "Thumbnail.h"
+ #include "../Platform/FileHandler.h"
+@@ -13,67 +14,37 @@ namespace UI {
+         public:
+             void ClearDirThumbnailCache();
+ 
+-            // Compat wrappers
+-            void SyncDirSelectionRectangle() {
+-                ThumbnailPanelWnd::SyncSelectionRectangle();
+-            }
+-
+-            void UpdateDirView() {
+-                ThumbnailPanelWnd::UpdateView();
+-            }
+-
+-            void ToggleDirWindow() {
+-                ThumbnailPanelWnd::Toggle();
+-            }
+-
+-            void MoveDirWindow() {
+-                ThumbnailPanelWnd::MovePanel();
+-            }
+-
+-            void HideDirWindow() {
+-                ThumbnailPanelWnd::Hide();
+-            }
++            void SyncDirSelectionRectangle() { ThumbnailPanelWnd::SyncSelectionRectangle(); }
++            void UpdateDirView()             { ThumbnailPanelWnd::UpdateView(); }
++            void ToggleDirWindow()           { ThumbnailPanelWnd::Toggle(); }
++            void MoveDirWindow()             { ThumbnailPanelWnd::MovePanel(); }
++            void HideDirWindow()             { ThumbnailPanelWnd::Hide(); }
+ 
+         protected:
+-            const wchar_t *ClassName() const override {
+-                return L"QIV_DirWindow";
+-            }
+-
+-            const wchar_t *WindowTitle() const override {
+-                return L"Directory";
+-            }
+-
+-            // --- NEW: Tell the base class which panel this is ---
+-            RendererD2D::ThumbnailPanelType GetPanelType() const override {
+-                return RendererD2D::ThumbnailPanelType::Dir;
+-            }
++            const wchar_t *ClassName()    const override { return L"QIV_DirWindow"; }
++            const wchar_t *WindowTitle()  const override { return L"Directory"; }
++            bool UsesDirThumbCache()      const override { return true; }
+ 
+             int GetKeyToggle() const override;
++            int GetKeyMove()   const override;
+ 
+-            int GetKeyMove() const override;
+-
+-            // Returns the current folder playlist — base class handles all layout
+             std::vector<std::wstring> GetSourceItems() const override;
+ 
+-            void PostBuildHook() override; // async decodes + legacy global sync
++            void PostBuildHook() override;
+     };
++
+     // =========================================================================
+     // SpawnedDirWnd
+     //
+-    // A DirWnd variant spawned from HistoryListWnd (Shift+Enter).
+-    // Owns its own playlist so it never touches app.playlist.
+-    // Each slot gets its own renderer panel (Spawned0/1/2) so the primary
+-    // DirWnd's D3D swap chain is never disturbed.
+-    // Clicking a thumbnail calls OpenSpecificImage (via playlistIndex=-1 path
+-    // in ThumbnailPanelWnd) which loads that file into the main viewer.
++    // Spawned from HistoryListWnd (Shift+Enter). Owns its own playlist so it
++    // never touches app.playlist. Each instance gets its own swap chain via
++    // ThumbnailPanelWnd::CreateDeviceResources — no special panel type needed.
++    // Clicking a thumbnail calls OpenSpecificImage (playlistIndex == -1 path
++    // in ThumbnailPanelWnd) which loads the file into the main viewer.
+     // =========================================================================
+     class SpawnedDirWnd : public DirWnd {
+         public:
+-            // Set before Init() — tells this instance which renderer slot to use.
+-            // Valid values: 0, 1, 2  (matching DIR_WND_SPAWN_POSITIONS indices).
+-            void SetSlotIndex(int slot) { m_slotIndex = slot; }
+-
+-            // Scan folderPath and store the image list in m_localPlaylist.
++            // Scan folderPath and fill m_localPlaylist.
+             // Call before Show() / UpdateDirView().
+             void LoadFolder(const std::wstring &folderPath) {
+                 m_localPlaylist.clear();
+@@ -85,40 +56,19 @@ namespace UI {
+                     if (!is_image_ext(entry.path().extension().wstring())) continue;
+                     m_localPlaylist.push_back(std::filesystem::canonical(entry.path()).wstring());
+                 }
+-                // Sort alphabetically to match the primary DirWnd order.
+                 std::sort(m_localPlaylist.begin(), m_localPlaylist.end());
+             }
+ 
+         protected:
+-            // Return our private list instead of app.playlist.
+-            std::vector<std::wstring> GetSourceItems() const override {
+-                return m_localPlaylist;
+-            }
+-
+-            // Tell ThumbnailPanelWnd::UpdateView to skip the app.playlist guard.
++            std::vector<std::wstring> GetSourceItems() const override { return m_localPlaylist; }
+             bool HasOwnPlaylist() const override { return true; }
+ 
+-            // Each slot maps to its own renderer panel so swap chains don't collide.
+-            RendererD2D::ThumbnailPanelType GetPanelType() const override {
+-                switch (m_slotIndex) {
+-                    case 0:  return RendererD2D::ThumbnailPanelType::Spawned0;
+-                    case 1:  return RendererD2D::ThumbnailPanelType::Spawned1;
+-                    default: return RendererD2D::ThumbnailPanelType::Spawned2;
+-                }
+-            }
+-
+-            // Use a unique class name so Win32 registers a separate WNDCLASS.
+-            const wchar_t *ClassName() const override {
+-                return L"QIV_SpawnedDirWindow";
+-            }
+-
+-            const wchar_t *WindowTitle() const override {
+-                return L"Directory (Spawned)";
+-            }
++            // Unique Win32 class name so RegisterClassW doesn't collide with DirWnd.
++            const wchar_t *ClassName()   const override { return L"QIV_SpawnedDirWindow"; }
++            const wchar_t *WindowTitle() const override { return L"Directory (Spawned)"; }
+ 
+         private:
+             std::vector<std::wstring> m_localPlaylist;
+-            int m_slotIndex = 0;
+     };
+ 
+ } // namespace UI
+diff --git a/src/UI/ThumbnailPanelWnd.cpp b/src/UI/ThumbnailPanelWnd.cpp
+index 97f7760..2833481 100644
+--- a/src/UI/ThumbnailPanelWnd.cpp
++++ b/src/UI/ThumbnailPanelWnd.cpp
+@@ -508,30 +508,113 @@ namespace UI {
+     }
+ 
+     // =========================================================================
+-    // Unified Renderer Calls
++    // Unified Renderer Calls — each panel owns its swap chain + device context
+     // =========================================================================
+-    void ThumbnailPanelWnd::Render(int selectedIdx, int hoverIdx) {
++    void ThumbnailPanelWnd::CreateDeviceResources() {
+         if (!app.renderer) return;
+         auto *r = dynamic_cast<RendererD2D *>(app.renderer.get());
+-        if (r && r->GetPanelContext(GetPanelType())) {
+-            // Pass the protected m_thumbnails vector directly
+-            r->RenderPanel(GetPanelType(), selectedIdx, hoverIdx, m_thumbnails);
+-        }
++        if (!r) return;
++
++        ID3D11Device *d3dDev = r->GetD3DDevice();
++        ID2D1Device6 *d2dDev = r->GetD2DDevice();
++        if (!d3dDev || !d2dDev) return;
++
++        // Create a DXGI swap chain bound to this panel's HWND.
++        DXGI_SWAP_CHAIN_DESC1 swapDesc{};
++        swapDesc.Format = DXGI_FORMAT_B8G8R8A8_UNORM;
++        swapDesc.BufferCount = 2;
++        swapDesc.BufferUsage = DXGI_USAGE_RENDER_TARGET_OUTPUT;
++        swapDesc.SwapEffect = DXGI_SWAP_EFFECT_FLIP_DISCARD;
++        swapDesc.SampleDesc.Count = 1;
++
++        Microsoft::WRL::ComPtr<IDXGIDevice1> dxgiDevice;
++        Microsoft::WRL::ComPtr<IDXGIAdapter> adapter;
++        Microsoft::WRL::ComPtr<IDXGIFactory2> factory;
++        if (FAILED(d3dDev->QueryInterface(IID_PPV_ARGS(&dxgiDevice)))) return;
++        if (FAILED(dxgiDevice->GetAdapter(&adapter))) return;
++        if (FAILED(adapter->GetParent(IID_PPV_ARGS(&factory)))) return;
++        if (FAILED(factory->CreateSwapChainForHwnd(d3dDev, m_hWnd, &swapDesc,
++                                                    nullptr, nullptr, &m_swapChain))) return;
++
++        // Create a D2D device context for this panel.
++        Microsoft::WRL::ComPtr<ID2D1DeviceContext> baseCtx;
++        if (FAILED(d2dDev->CreateDeviceContext(D2D1_DEVICE_CONTEXT_OPTIONS_NONE, &baseCtx))) return;
++        if (FAILED(baseCtx.As(&m_panelContext))) return;
++
++        // Size the swap chain and wire the back buffer.
++        RECT rc{};
++        GetClientRect(m_hWnd, &rc);
++        UINT w = static_cast<UINT>(rc.right - rc.left);
++        UINT h = static_cast<UINT>(rc.bottom - rc.top);
++        if (w == 0 || h == 0) { w = 1200; h = Constants::THUMBNAIL_PANEL_WINDOW_THICKNESS; }
++        ResizeSwapChain(w, h);
++
++        // Create brushes.
++        m_panelContext->CreateSolidColorBrush(
++            D2D1::ColorF(Constants::ThumbnailPanel::PLACEHOLDER), &m_placeholderBrush);
++        m_panelContext->CreateSolidColorBrush(
++            D2D1::ColorF(Constants::ThumbnailPanel::SELECTION_BORDER), &m_borderBrush);
++        m_panelContext->CreateSolidColorBrush(
++            D2D1::ColorF(Constants::ThumbnailPanel::HOVER), &m_hoverBrush);
+     }
+ 
+     void ThumbnailPanelWnd::ResizeSwapChain(UINT w, UINT h) {
+-        if (!app.renderer) return;
+-        auto *r = dynamic_cast<RendererD2D *>(app.renderer.get());
+-        if (r) {
+-            r->ResizePanel(GetPanelType(), w, h);
+-        }
++        if (!m_swapChain || !m_panelContext) return;
++
++        m_panelContext->SetTarget(nullptr);
++        m_panelBackBuffer.Reset();
++
++        if (FAILED(m_swapChain->ResizeBuffers(0, w, h, DXGI_FORMAT_UNKNOWN, 0))) return;
++
++        Microsoft::WRL::ComPtr<IDXGISurface> surface;
++        if (FAILED(m_swapChain->GetBuffer(0, IID_PPV_ARGS(&surface)))) return;
++
++        D2D1_BITMAP_PROPERTIES1 props = D2D1::BitmapProperties1(
++            D2D1_BITMAP_OPTIONS_TARGET | D2D1_BITMAP_OPTIONS_CANNOT_DRAW,
++            D2D1::PixelFormat(DXGI_FORMAT_B8G8R8A8_UNORM, D2D1_ALPHA_MODE_IGNORE));
++        if (FAILED(m_panelContext->CreateBitmapFromDxgiSurface(surface.Get(), &props,
++                                                                &m_panelBackBuffer))) return;
++
++        m_panelContext->SetTarget(m_panelBackBuffer.Get());
+     }
+ 
+-    void ThumbnailPanelWnd::CreateDeviceResources() {
+-        if (!app.renderer) return;
++    void ThumbnailPanelWnd::Render(int selectedIdx, int hoverIdx) {
++        if (!m_panelContext || !m_swapChain || !app.renderer) return;
+         auto *r = dynamic_cast<RendererD2D *>(app.renderer.get());
+-        if (r) {
+-            r->CreatePanelDeviceResources(GetPanelType(), m_hWnd);
++        if (!r) return;
++
++        // -------------------------------------------------------------------------
++        // Phase 1: resolve bitmap pointers under lock, then release before GPU work.
++        // -------------------------------------------------------------------------
++        std::vector<RendererD2D::ResolvedThumb> resolved;
++        resolved.reserve(m_thumbnails.size());
++
++        r->ResolveThumbnailBitmaps(m_thumbnails, UsesDirThumbCache(), resolved);
++
++        // -------------------------------------------------------------------------
++        // Phase 2: GPU draw — no locks held.
++        // -------------------------------------------------------------------------
++        m_panelContext->BeginDraw();
++        m_panelContext->Clear(D2D1::ColorF(0.08f, 0.08f, 0.08f, 1.0f));
++
++        for (size_t i = 0; i < resolved.size(); ++i) {
++            const auto &rv = resolved[i];
++            if (rv.bitmap) {
++                m_panelContext->DrawBitmap(rv.bitmap.Get(), rv.rect, 1.0f,
++                                           D2D1_BITMAP_INTERPOLATION_MODE_LINEAR);
++            } else {
++                m_panelContext->FillRectangle(rv.rect, m_placeholderBrush.Get());
++            }
++            if (static_cast<int>(i) == selectedIdx)
++                m_panelContext->DrawRectangle(rv.rect, m_borderBrush.Get(),
++                                              Constants::ThumbnailPanel::SELECTION_BORDER_THICKNESS);
++            if (static_cast<int>(i) == hoverIdx)
++                m_panelContext->DrawRectangle(rv.rect, m_hoverBrush.Get(),
++                                              Constants::ThumbnailPanel::HOVER_THICKNESS);
+         }
++
++        HRESULT hr = m_panelContext->EndDraw();
++        if (hr != D2DERR_RECREATE_TARGET && hr != static_cast<HRESULT>(DXGI_ERROR_DEVICE_REMOVED))
++            m_swapChain->Present(1, 0);
+     }
+ } // namespace UI
+diff --git a/src/UI/ThumbnailPanelWnd.h b/src/UI/ThumbnailPanelWnd.h
+index e2083dd..32f6e64 100644
+--- a/src/UI/ThumbnailPanelWnd.h
++++ b/src/UI/ThumbnailPanelWnd.h
+@@ -3,133 +3,98 @@
+ #include <windows.h>
+ #include <cstdint>
+ #include <vector>
++#include <dxgi1_2.h>
++#include <d2d1_3.h>
++#include <wrl/client.h>
+ 
+ #include "IPanelWindow.h"
+-#include "RendererD2D.h"
+ #include "Thumbnail.h"
+ 
++// Forward-declare so we can borrow devices without pulling in the full header
++// in most translation units. ThumbnailPanelWnd.cpp includes RendererD2D.h.
++class RendererD2D;
++
+ namespace UI {
+     // =========================================================================
+     // ThumbnailPanelWnd
+     //
+-    // Shared base for any panel that displays a scrollable filmstrip of
+-    // thumbnails (CacheWnd, DirWnd).  Handles all common Win32 message
+-    // routing, scroll/drag logic, hover/selection hit-testing, and geometry
+-    // layout.  Subclasses implement the handful of virtual hooks that differ
+-    // between panels (data source, renderer calls, shortcuts, window bounds).
++    // Shared base for CacheWnd, DirWnd, and SpawnedDirWnd.
++    // Each instance owns its own DXGI swap chain + D2D device context so that
++    // any number of panels can be alive simultaneously without interfering with
++    // each other or with the main viewer renderer.
++    //
++    // The shared RendererD2D is used for two things only:
++    //   1. One-time borrow of ID3D11Device + ID2D1Device6 during Init to create
++    //      this panel's swap chain (CreateDeviceResources).
++    //   2. Shared thumbnail/bitmap cache lookups at render time
++    //      (m_dirThumbCache / m_bitmapCache stay in RendererD2D).
+     // =========================================================================
+     class ThumbnailPanelWnd : public IPanelWindow {
+-        // ---------------------------------------------------------------------
+-        // Public API (mirrors what callers used directly on CacheWnd / DirWnd)
+-        // ---------------------------------------------------------------------
+         public:
+-            // Init with default position
+             void Init(HINSTANCE hInstance, HWND hParent) override;
+-
+-            // Init with an explicit position slot
+             void Init(HINSTANCE hInstance, HWND hParent, int8_t position) override;
+ 
+-            // Re-anchor the selection highlight to app.currentIndex
+             void SyncSelectionRectangle();
+-
+-            // Rebuild thumbnail geometry and request async decodes where needed
+             void UpdateView();
+ 
+-            // Show/hide/move cycle
+             void Toggle() override;
+-
+             void Hide() override;
+-
+             void MovePanel();
+ 
+-            // ---------------------------------------------------------------------
+-            // Shared state — exposed so the renderer can read the vectors directly
+-            // (mirrors old g_thumbnailObjects / g_cacheOffset / g_dirOffset globals)
+-            // ---------------------------------------------------------------------
+         public:
++            // Shared geometry state — read by Render()
+             float m_offset = 0.0f;
+             int m_selectedIdx = -1;
+             int m_hoverIdx = -1;
+             std::vector<Thumbnail> m_thumbnails;
+ 
+-            // ---------------------------------------------------------------------
+-            // Message routing
+-            // ---------------------------------------------------------------------
+         protected:
+             LRESULT HandleMessage(UINT message, WPARAM wParam, LPARAM lParam) override;
+ 
+-            // ---------------------------------------------------------------------
+-            // Hooks — implemented by each concrete subclass
+-            // ---------------------------------------------------------------------
+-        protected:
+-            // Window class name (must be unique per subclass)
++            // ------------------------------------------------------------------
++            // Hooks — concrete subclasses implement these
++            // ------------------------------------------------------------------
+             virtual const wchar_t *ClassName() const = 0;
+-
+-            // Window title
+             virtual const wchar_t *WindowTitle() const = 0;
+-
+-            // Shortcuts this panel owns
+             virtual int GetKeyToggle() const = 0;
+-
+             virtual int GetKeyMove() const = 0;
+-
+-            // Optional extra key (e.g. SC_PANEL_CACHE_CLEAR); return -1 if unused
+-            virtual int GetKeyExtra() const {
+-                return -1;
+-            }
+-
++            virtual int GetKeyExtra() const { return -1; }
+             virtual void OnExtraKey() {}
+ 
+-            // True when the current position slot is a vertical strip (affects drag axis).
+-            // 5 shared slots:  0=center-float  1=top  2=right  3=bottom  4=left
+-            // Vertical = right(2) or left(4).  Override not needed by subclasses.
+-            bool IsVertical() const;
+-
+-            // --- NEW: Force derived classes to declare their Panel Type ---
+-            virtual RendererD2D::ThumbnailPanelType GetPanelType() const = 0;
+-
+-            // Paint — calls the correct renderer method
+-            virtual void Render(int selectedIdx, int hoverIdx);
+-
+-            // Resize the panel's D2D swap chain.
+-            // One line per subclass; kept virtual because each calls a different
+-            // renderer method (ResizeCacheWindow vs ResizeDirWindow).
+-            virtual void ResizeSwapChain(UINT w, UINT h);
+-
+-            // Create per-panel D2D device resources (called once in Init)
+-            virtual void CreateDeviceResources();
+-
+             // Returns the ordered list of file paths this panel displays.
+-            // Base class calls this inside UpdateView() and handles all layout math.
+             virtual std::vector<std::wstring> GetSourceItems() const = 0;
+ 
+-            // Override to true when the subclass maintains its own playlist
+-            // independent of app.playlist (e.g. SpawnedDirWnd).
+-            // When true, UpdateView() skips the app.playlist-empty guard so
+-            // the panel can display content even when no image is loaded.
++            // True when this panel owns its own playlist (SpawnedDirWnd).
++            // Skips the app.playlist-empty guard in UpdateView().
+             virtual bool HasOwnPlaylist() const { return false; }
+ 
+-            // Called after thumbnails are built (e.g. DirWnd queues async decodes)
++            // True when this panel should look up bitmaps from m_dirThumbCache
++            // (DirWnd + SpawnedDirWnd). False = CacheWnd uses m_bitmapCache.
++            virtual bool UsesDirThumbCache() const { return false; }
++
++            // Called after thumbnails are built (DirWnd queues async decodes).
+             virtual void PostBuildHook() {}
+ 
+-            // ---------------------------------------------------------------------
+-            // Internal helpers
+-            // ---------------------------------------------------------------------
++            bool IsVertical() const;
++
++            // ------------------------------------------------------------------
++            // Per-panel D3D/D2D resources — owned here, not in RendererD2D
++            // ------------------------------------------------------------------
++            void CreateDeviceResources();
++            void ResizeSwapChain(UINT w, UINT h);
++            void Render(int selectedIdx, int hoverIdx);
++
++            // Per-panel swap chain and D2D context (one per ThumbnailPanelWnd instance)
++            Microsoft::WRL::ComPtr<IDXGISwapChain1>       m_swapChain;
++            Microsoft::WRL::ComPtr<ID2D1DeviceContext7>   m_panelContext;
++            Microsoft::WRL::ComPtr<ID2D1Bitmap1>          m_panelBackBuffer;
++            Microsoft::WRL::ComPtr<ID2D1SolidColorBrush>  m_placeholderBrush;
++            Microsoft::WRL::ComPtr<ID2D1SolidColorBrush>  m_borderBrush;
++            Microsoft::WRL::ComPtr<ID2D1SolidColorBrush>  m_hoverBrush;
++
+         private:
+             void ScrollToSelected();
+-
+-            // Recomputes m_thumbnails rect positions from the current m_offset
+-            // without clearing the list or calling PostBuildHook / GetSourceItems.
+-            // Called by SyncSelectionRectangle after ScrollToSelected changes
+-            // m_offset, so the render sees geometry that matches the new scroll pos.
+             void RebuildGeometry();
+-
+-            // Shared 5-slot geometry (same for both CacheWnd and DirWnd):
+-            //   0 = center floating  (80% wide, thumb-height tall)
+-            //   1 = top edge strip
+-            //   2 = right edge strip
+-            //   3 = bottom edge strip
+-            //   4 = left edge strip
+             void GetWindowBounds(HWND hRef, int8_t position,
+                                  int &x, int &y, int &w, int &h) const;
+ 
+diff --git a/src/UI/UIManager.cpp b/src/UI/UIManager.cpp
+index 99506e9..3c000a3 100644
+--- a/src/UI/UIManager.cpp
++++ b/src/UI/UIManager.cpp
+@@ -86,11 +86,9 @@ namespace UI {
+ 
+         if (target == nullptr) {
+             // First time this slot is used — allocate and initialise the window.
+-            // SetSlotIndex must be called before Init so GetPanelType() returns
+-            // the correct ThumbnailPanelType (Spawned0/1/2) when
+-            // CreateDeviceResources is called inside Init.
++            // Each SpawnedDirWnd calls ThumbnailPanelWnd::CreateDeviceResources()
++            // which creates its own independent swap chain — no slot index needed.
+             target = new SpawnedDirWnd();
+-            target->SetSlotIndex(slot);
+             target->Init(m_hInstance, m_hMainWnd, position);
+             m_spawnedDirWnds[slot] = target;
+         }
+-- 
+2.43.0
+

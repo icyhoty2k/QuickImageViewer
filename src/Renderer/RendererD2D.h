@@ -58,23 +58,28 @@ class RendererD2D final : public IImageRenderer {
         void RemoveFromCache(const std::wstring &filePath) override;
 
         // =====================================================================
-        // Thumbnail Panel APIs (Cache & Dir Windows)
+        // Thumbnail Panel APIs
+        // Each ThumbnailPanelWnd owns its own swap chain — these two accessors
+        // let panels borrow the shared D3D/D2D device for one-time init.
         // =====================================================================
-        enum class ThumbnailPanelType { Cache, Dir };
+        ID3D11Device *GetD3DDevice() const { return m_pD3DDevice.Get(); }
+        ID2D1Device6 *GetD2DDevice() const { return m_pD2DDevice.Get(); }
 
-        HRESULT CreatePanelDeviceResources(ThumbnailPanelType type, HWND hwnd);
-
-        void DiscardPanelDeviceResources(ThumbnailPanelType type);
-
-        void RenderPanel(ThumbnailPanelType type, int selectedIndex, int hoverIndex, const std::vector<UI::Thumbnail> &thumbnails);
-
-        void ResizePanel(ThumbnailPanelType type, UINT width, UINT height);
-
-        ID2D1DeviceContext7 *GetPanelContext(ThumbnailPanelType type);
+        // Resolve bitmap pointers for a set of thumbnails under the minimum lock
+        // duration. Called by ThumbnailPanelWnd::Render() before GPU work begins.
+        // useDirCache=true  → look in m_dirThumbCache first (DirWnd panels)
+        // useDirCache=false → look in m_bitmapCache only   (CacheWnd panel)
+        struct ResolvedThumb {
+            Microsoft::WRL::ComPtr<ID2D1Bitmap1> bitmap; // nullptr = placeholder
+            D2D1_RECT_F rect;
+        };
+        void ResolveThumbnailBitmaps(const std::vector<UI::Thumbnail> &thumbnails,
+                                     bool useDirCache,
+                                     std::vector<ResolvedThumb> &out);
 
         // Queues an async decode+scale job for one file.
-        // Posts WM_QIV_REPAINT to the dir panel HWND when the thumbnail lands.
-        void RequestDirThumbnail(const std::wstring &filePath);
+        // Posts WM_QIV_REPAINT to all visible dir panel HWNDs when the thumbnail lands.
+        void RequestDirThumbnail(const std::wstring &filePath, HWND hPanel);
 
         // Drops the entire dir thumbnail cache (call on folder change).
         void ClearDirThumbnailCache();
@@ -126,32 +131,7 @@ class RendererD2D final : public IImageRenderer {
         Microsoft::WRL::ComPtr<ID2D1Effect> m_pScaleEffect;
         Microsoft::WRL::ComPtr<ID2D1Bitmap1> m_pBackBufferBitmap;
 
-        // =====================================================================
-        // Thumbnail Panel Resources (Cache & Dir Windows)
-        // =====================================================================
-        struct ThumbnailPanel {
-            HWND hwnd = nullptr;
-            Microsoft::WRL::ComPtr<IDXGISwapChain1> swapChain;
-            Microsoft::WRL::ComPtr<ID2D1DeviceContext7> deviceContext;
-            Microsoft::WRL::ComPtr<ID2D1Bitmap1> backBuffer;
-            Microsoft::WRL::ComPtr<ID2D1SolidColorBrush> placeholderBrush;
-            Microsoft::WRL::ComPtr<ID2D1SolidColorBrush> borderBrush;
-            Microsoft::WRL::ComPtr<ID2D1SolidColorBrush> hoverBrush;
-        };
-
-        ThumbnailPanel m_cachePanel;
-        ThumbnailPanel m_dirPanel;
-
-        ThumbnailPanel &GetPanel(ThumbnailPanelType type) {
-            return type == ThumbnailPanelType::Cache ? m_cachePanel : m_dirPanel;
-        }
-
-        // Dir thumbnail cache  —  small scaled-down bitmaps for every file in
-        // the current folder.  Separate from m_bitmapCache (which holds full-res
-        // images) so it never evicts viewer bitmaps and is cleared on folder change.
-        // Evicted LRU-style at DIR_THUMB_CACHE_MAX entries to cap VRAM usage.
-        // Dir thumbnail cache — maps file path → small scaled D2D bitmap.
-        // Evicted LRU-style when m_dirThumbCacheBytes exceeds the budget.
+        // Dir thumbnail cache  —  small scaled-down bitmaps, shared across all DirWnd instances.
         std::unordered_map<std::wstring, Microsoft::WRL::ComPtr<ID2D1Bitmap1> > m_dirThumbCache;
         std::list<std::wstring> m_dirThumbLruList;
         // Running total of VRAM bytes used by m_dirThumbCache entries.
