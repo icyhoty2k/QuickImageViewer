@@ -4,6 +4,7 @@
 #include <d2d1.h>
 
 #include "FileHandler.h"
+#include "UIManager.h"
 #include "../AppState.h"
 #include "../Platform/Constants.h"
 #include "../Input/Shortcuts.h"
@@ -82,6 +83,13 @@ namespace UI {
 
         SetWindowPos(m_hWnd, HWND_TOPMOST, x, y, w, h,
                      SWP_SHOWWINDOW | SWP_FRAMECHANGED);
+    }
+
+    void ThumbnailPanelWnd::RefreshBounds() {
+        if (!m_hWnd) return;
+        int x, y, w, h;
+        GetWindowBounds(m_hOwner ? m_hOwner : m_hWnd, m_position, x, y, w, h);
+        SetWindowPos(m_hWnd, HWND_TOPMOST, x, y, w, h, SWP_FRAMECHANGED | SWP_NOACTIVATE);
     }
 
     // =========================================================================
@@ -307,19 +315,45 @@ namespace UI {
         MONITORINFO mi = {sizeof(mi)};
         GetMonitorInfoW(hMonitor, &mi);
 
-        // rcWork: usable area after subtracting the taskbar (all panels use this)
+        // rcWork: usable area after subtracting the taskbar (all panels use this).
+        // All coordinates are in virtual screen space.
         int workX = mi.rcWork.left;
         int workY = mi.rcWork.top;
         int workW = mi.rcWork.right  - mi.rcWork.left;
         int workH = mi.rcWork.bottom - mi.rcWork.top;
+        int workBottom = mi.rcWork.bottom; // hard clamp for vertical panels
+
+        // Use per-monitor DPI for thickness so panels size correctly on any monitor.
+        UINT dpi = GetDpiForWindow(hRef);
+        if (dpi == 0) dpi = 96;
+        float dpiScale = static_cast<float>(dpi) / 96.0f;
 
         int horzThick = static_cast<int>(
-            (Constants::THUMBNAIL_PANEL_THUMB_HEIGHT + Constants::THUMBNAIL_PANEL_THUMB_MARGIN * 2.0f) * app.dpiScale);
+            (Constants::THUMBNAIL_PANEL_THUMB_HEIGHT + Constants::THUMBNAIL_PANEL_THUMB_MARGIN * 2.0f) * dpiScale);
         int vertThick = static_cast<int>(
-            (Constants::THUMBNAIL_PANEL_THUMB_WIDTH + Constants::THUMBNAIL_PANEL_THUMB_MARGIN * 2.0f) * app.dpiScale);
+            (Constants::THUMBNAIL_PANEL_THUMB_WIDTH + Constants::THUMBNAIL_PANEL_THUMB_MARGIN * 2.0f) * dpiScale);
+
+        // For vertical panels, query which horizontal edges are currently occupied
+        // by other visible panels so we can fit exactly into the remaining gap.
+        bool topOccupied    = false;
+        bool bottomOccupied = false;
+        if (position == 2 || position == 4) {
+            uiManager.GetOccupiedEdges(topOccupied, bottomOccupied);
+        }
+
+        // Vertical strip bounds: fit between any occupied horizontal panels,
+        // hard-clamped to rcWork so we never draw over the taskbar.
+        auto verticalBounds = [&](int &vy, int &vh) {
+            vy = workY + (topOccupied    ? horzThick : 0);
+            int vBottom = workBottom - (bottomOccupied ? horzThick : 0);
+            // Hard clamp: never exceed the work area bottom pixel
+            if (vBottom > workBottom) vBottom = workBottom;
+            vh = vBottom - vy;
+            if (vh < 0) vh = 0;
+        };
 
         switch (position) {
-            case 0: { // center floating — 80% of work width, thumb-height tall, vertically centered in work area
+            case 0: { // center floating — 80% of work width, vertically centred
                 int panelW = static_cast<int>(workW * 0.80f);
                 x = workX + (workW - panelW) / 2;
                 y = workY + (workH - horzThick) / 2;
@@ -327,30 +361,36 @@ namespace UI {
                 h = horzThick;
                 break;
             }
-            case 1: // top — full width at top of work area (respects taskbar if at top)
+            case 1: // top — full work width at top of work area
                 x = workX;
                 y = workY;
                 w = workW;
                 h = horzThick;
                 break;
-            case 2: // right — starts just below the top DirWnd, respects work area bottom
+            case 2: { // right — dynamic height, clamped to work area
+                int vy, vh;
+                verticalBounds(vy, vh);
                 x = workX + workW - vertThick;
-                y = workY + horzThick;
+                y = vy;
                 w = vertThick;
-                h = workH - horzThick;
+                h = vh;
                 break;
-            case 3: // bottom — full work width, sits at bottom of work area (above taskbar)
+            }
+            case 3: // bottom — full work width above taskbar
                 x = workX;
                 y = workY + workH - horzThick;
                 w = workW;
                 h = horzThick;
                 break;
-            case 4: // left — starts just below the top DirWnd, respects work area bottom
+            case 4: { // left — dynamic height, clamped to work area
+                int vy, vh;
+                verticalBounds(vy, vh);
                 x = workX;
-                y = workY + horzThick;
+                y = vy;
                 w = vertThick;
-                h = workH - horzThick;
+                h = vh;
                 break;
+            }
             default:
                 x = workX;
                 y = workY;
@@ -409,11 +449,12 @@ namespace UI {
                 int key = static_cast<int>(wParam);
 
                 if (key == GetKeyToggle()) {
-                    Toggle();
+                    uiManager.Toggle(*this);
                     return 0;
                 }
                 if (key == GetKeyMove()) {
                     MovePanel();
+                    uiManager.RefreshVerticalPanels(); // neighbours may need to resize
                     return 0;
                 }
                 if (GetKeyExtra() != -1 && key == GetKeyExtra()) {

@@ -41,6 +41,14 @@ namespace UI {
             void Hide() override;
             void MovePanel();
 
+            // Returns the current position slot (0=center,1=top,2=right,3=bottom,4=left)
+            int8_t GetPosition() const { return m_position; }
+
+            // Recompute and apply window bounds for the current position slot.
+            // Called by UIManager::RefreshVerticalPanels when a neighbouring
+            // horizontal panel is shown or hidden.
+            void RefreshBounds();
+
         public:
             // Shared geometry state — read by Render()
             float m_offset = 0.0f;

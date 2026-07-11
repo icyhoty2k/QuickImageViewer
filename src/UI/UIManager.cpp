@@ -17,14 +17,17 @@ namespace UI {
 
     void UIManager::Show(IPanelWindow &panel) {
         panel.Show();
+        RefreshVerticalPanels();
     }
 
     void UIManager::Hide(IPanelWindow &panel) {
         panel.Hide();
+        RefreshVerticalPanels();
     }
 
     void UIManager::Toggle(IPanelWindow &panel) {
-        panel.Toggle(); // panels are already initialized in Init()
+        panel.Toggle();
+        RefreshVerticalPanels();
     }
 
     void UIManager::HideAllPanelWindows() {
@@ -33,7 +36,10 @@ namespace UI {
         Hide(dirWnd);
         Hide(historyListWnd);
         HideAllSpawnedDirWnds();
+        // RefreshVerticalPanels already called by each Hide() above.
     }
+
+    // ...
 
     HelpWnd &UIManager::getHelpWindow() {
         if (isInit(helpWnd)) {
@@ -98,6 +104,7 @@ namespace UI {
         // IsWindowVisible() returns true inside UpdateView().
         ShowWindow(target->GetHwnd(), SW_SHOWNOACTIVATE);
         target->UpdateDirView();
+        RefreshVerticalPanels();
 
         // Return keyboard focus to the history panel so the user can keep
         // navigating and spawning more folders without re-opening it.
@@ -119,9 +126,57 @@ namespace UI {
                 m_spawnedDirWnds[i]->Hide();
             }
         }
+        RefreshVerticalPanels();
     }
 
     bool UIManager::isInit(IPanelWindow &panel) {
         return panel.GetHwnd() != nullptr;
+    }
+
+    void UIManager::RefreshVerticalPanels() {
+        // Reposition every visible vertical panel so its height reflects the
+        // current top/bottom occupation state. This runs after any show/hide.
+        auto refresh = [](ThumbnailPanelWnd &p) {
+            int8_t pos = p.GetPosition();
+            if ((pos != 2 && pos != 4) || !p.GetHwnd() || !IsWindowVisible(p.GetHwnd()))
+                return;
+            // Re-use MovePanel logic: recompute bounds and call SetWindowPos.
+            // We can't call GetWindowBounds directly (it's protected), but
+            // calling Toggle twice would flicker. Instead trigger WM_SIZE by
+            // doing a no-op SetWindowPos with SWP_FRAMECHANGED after a position
+            // re-query. The cleanest way: call the public MovePanel equivalent.
+            // Since we don't want to change m_position, we fake it:
+            // hide → show (recomputes bounds in Show/Toggle path).
+            // Actually the right path: p has a public UpdateBounds() we add.
+            p.RefreshBounds();
+        };
+
+        refresh(cacheWnd);
+        refresh(dirWnd);
+        for (int i = 0; i < Constants::DIR_WND_MAX_INSTANCES; ++i) {
+            if (m_spawnedDirWnds[i])
+                refresh(*m_spawnedDirWnds[i]);
+        }
+    }
+
+    void UIManager::GetOccupiedEdges(bool &top, bool &bottom) const {
+        top = false;
+        bottom = false;
+
+        // Helper: check one ThumbnailPanelWnd — visible and at the given position?
+        auto check = [&](const ThumbnailPanelWnd &p, int8_t pos) {
+            if (p.GetHwnd() && IsWindowVisible(p.GetHwnd()) && p.GetPosition() == pos) {
+                if (pos == 1) top    = true;
+                if (pos == 3) bottom = true;
+            }
+        };
+
+        check(cacheWnd, cacheWnd.GetPosition());
+        check(dirWnd,   dirWnd.GetPosition());
+
+        for (int i = 0; i < Constants::DIR_WND_MAX_INSTANCES; ++i) {
+            if (m_spawnedDirWnds[i])
+                check(*m_spawnedDirWnds[i], m_spawnedDirWnds[i]->GetPosition());
+        }
     }
 }

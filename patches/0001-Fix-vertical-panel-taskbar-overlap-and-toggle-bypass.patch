@@ -1,0 +1,133 @@
+From 6257a17570c27dbad4cf16c1cd1e838670d25ce6 Mon Sep 17 00:00:00 2001
+From: Ivan Hristov Yanev <icyhoty2k@gmail.com>
+Date: Sat, 11 Jul 2026 12:52:31 +0000
+Subject: [PATCH] Fix: vertical panel taskbar overlap and toggle-bypass missing
+ refresh
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+Bug 1 — vertical panels over taskbar:
+  - Switch from app.dpiScale to GetDpiForWindow(hRef) for per-monitor
+    accurate thickness calculation
+  - Introduce workBottom = mi.rcWork.bottom as an explicit hard clamp
+    in verticalBounds; vh is clamped to never exceed rcWork.bottom
+  - Added vh < 0 guard for safety
+
+Bug 2 — vertical panels don't stretch when F5 DirWnd is toggled off
+  while focus is on the DirWnd panel itself:
+  - ThumbnailPanelWnd::HandleMessage WM_KEYDOWN toggle key was calling
+    Toggle() directly, bypassing UIManager::Toggle() and therefore
+    never triggering RefreshVerticalPanels()
+  - Fixed: route through uiManager.Toggle(*this) instead
+  - MovePanel() key also now calls uiManager.RefreshVerticalPanels()
+    so neighbours resize when any panel changes position slot
+---
+ src/UI/ThumbnailPanelWnd.cpp | 40 +++++++++++++++++++++---------------
+ 1 file changed, 23 insertions(+), 17 deletions(-)
+
+diff --git a/src/UI/ThumbnailPanelWnd.cpp b/src/UI/ThumbnailPanelWnd.cpp
+index 6b07177..d38f081 100644
+--- a/src/UI/ThumbnailPanelWnd.cpp
++++ b/src/UI/ThumbnailPanelWnd.cpp
+@@ -315,16 +315,23 @@ namespace UI {
+         MONITORINFO mi = {sizeof(mi)};
+         GetMonitorInfoW(hMonitor, &mi);
+ 
+-        // rcWork: usable area after subtracting the taskbar (all panels use this)
++        // rcWork: usable area after subtracting the taskbar (all panels use this).
++        // All coordinates are in virtual screen space.
+         int workX = mi.rcWork.left;
+         int workY = mi.rcWork.top;
+         int workW = mi.rcWork.right  - mi.rcWork.left;
+         int workH = mi.rcWork.bottom - mi.rcWork.top;
++        int workBottom = mi.rcWork.bottom; // hard clamp for vertical panels
++
++        // Use per-monitor DPI for thickness so panels size correctly on any monitor.
++        UINT dpi = GetDpiForWindow(hRef);
++        if (dpi == 0) dpi = 96;
++        float dpiScale = static_cast<float>(dpi) / 96.0f;
+ 
+         int horzThick = static_cast<int>(
+-            (Constants::THUMBNAIL_PANEL_THUMB_HEIGHT + Constants::THUMBNAIL_PANEL_THUMB_MARGIN * 2.0f) * app.dpiScale);
++            (Constants::THUMBNAIL_PANEL_THUMB_HEIGHT + Constants::THUMBNAIL_PANEL_THUMB_MARGIN * 2.0f) * dpiScale);
+         int vertThick = static_cast<int>(
+-            (Constants::THUMBNAIL_PANEL_THUMB_WIDTH + Constants::THUMBNAIL_PANEL_THUMB_MARGIN * 2.0f) * app.dpiScale);
++            (Constants::THUMBNAIL_PANEL_THUMB_WIDTH + Constants::THUMBNAIL_PANEL_THUMB_MARGIN * 2.0f) * dpiScale);
+ 
+         // For vertical panels, query which horizontal edges are currently occupied
+         // by other visible panels so we can fit exactly into the remaining gap.
+@@ -332,23 +339,21 @@ namespace UI {
+         bool bottomOccupied = false;
+         if (position == 2 || position == 4) {
+             uiManager.GetOccupiedEdges(topOccupied, bottomOccupied);
+-            // Don't count this panel's own edge — only other panels matter.
+-            // (A vertical panel is never at top/bottom itself, so no self-exclusion needed.)
+         }
+ 
+-        // Compute the vertical strip's Y start and total height based on neighbours.
+-        //   Neither edge occupied  → full work height
+-        //   Only top occupied      → start below top strip, end at work bottom
+-        //   Only bottom occupied   → start at work top, end above bottom strip
+-        //   Both edges occupied    → start below top strip, end above bottom strip
++        // Vertical strip bounds: fit between any occupied horizontal panels,
++        // hard-clamped to rcWork so we never draw over the taskbar.
+         auto verticalBounds = [&](int &vy, int &vh) {
+             vy = workY + (topOccupied    ? horzThick : 0);
+-            int bottom = workY + workH - (bottomOccupied ? horzThick : 0);
+-            vh = bottom - vy;
++            int vBottom = workBottom - (bottomOccupied ? horzThick : 0);
++            // Hard clamp: never exceed the work area bottom pixel
++            if (vBottom > workBottom) vBottom = workBottom;
++            vh = vBottom - vy;
++            if (vh < 0) vh = 0;
+         };
+ 
+         switch (position) {
+-            case 0: { // center floating — 80% of work width, thumb-height tall, vertically centred
++            case 0: { // center floating — 80% of work width, vertically centred
+                 int panelW = static_cast<int>(workW * 0.80f);
+                 x = workX + (workW - panelW) / 2;
+                 y = workY + (workH - horzThick) / 2;
+@@ -362,7 +367,7 @@ namespace UI {
+                 w = workW;
+                 h = horzThick;
+                 break;
+-            case 2: { // right — dynamic height based on occupied edges
++            case 2: { // right — dynamic height, clamped to work area
+                 int vy, vh;
+                 verticalBounds(vy, vh);
+                 x = workX + workW - vertThick;
+@@ -371,13 +376,13 @@ namespace UI {
+                 h = vh;
+                 break;
+             }
+-            case 3: // bottom — full work width at bottom of work area (above taskbar)
++            case 3: // bottom — full work width above taskbar
+                 x = workX;
+                 y = workY + workH - horzThick;
+                 w = workW;
+                 h = horzThick;
+                 break;
+-            case 4: { // left — dynamic height based on occupied edges
++            case 4: { // left — dynamic height, clamped to work area
+                 int vy, vh;
+                 verticalBounds(vy, vh);
+                 x = workX;
+@@ -444,11 +449,12 @@ namespace UI {
+                 int key = static_cast<int>(wParam);
+ 
+                 if (key == GetKeyToggle()) {
+-                    Toggle();
++                    uiManager.Toggle(*this);
+                     return 0;
+                 }
+                 if (key == GetKeyMove()) {
+                     MovePanel();
++                    uiManager.RefreshVerticalPanels(); // neighbours may need to resize
+                     return 0;
+                 }
+                 if (GetKeyExtra() != -1 && key == GetKeyExtra()) {
+-- 
+2.43.0
+
