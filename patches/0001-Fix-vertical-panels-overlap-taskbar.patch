@@ -1,0 +1,87 @@
+From 7abd2c447dfbc10a3ac9ee9ebcd00ed44763dd7a Mon Sep 17 00:00:00 2001
+From: Ivan Hristov Yanev <icyhoty2k@gmail.com>
+Date: Sat, 11 Jul 2026 12:59:07 +0000
+Subject: [PATCH] Fix: vertical panels overlap taskbar
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+Two-pronged fix for vertical panels (left/right) drawing over taskbar:
+
+1. Switch DPI source from GetDpiForWindow(hRef) to GetDpiForMonitor()
+   queried directly from the hMonitor already retrieved by
+   MonitorFromWindow. This gives the monitor's true DPI regardless of
+   which HWND is passed as hRef and avoids any mismatch when the panel
+   window doesn't exist yet (Init-time) or is on a different monitor.
+   Requires shcore.lib — added to CMakeLists.txt.
+
+2. workBottom = mi.rcWork.bottom - 1 (compositor safety margin).
+   WS_EX_TOPMOST + WS_EX_LAYERED popup windows on Windows 11 can
+   visually bleed 1px into the taskbar due to subpixel rounding in
+   the DWM compositor. Horizontal panels never touch the bottom edge
+   so they are unaffected. Vertical panels extend to rcWork.bottom
+   and the -1 prevents the bleed.
+---
+ CMakeLists.txt               |  1 +
+ src/UI/ThumbnailPanelWnd.cpp | 26 ++++++++++++++------------
+ 2 files changed, 15 insertions(+), 12 deletions(-)
+
+diff --git a/CMakeLists.txt b/CMakeLists.txt
+index 689849e..d39e2a6 100644
+--- a/CMakeLists.txt
++++ b/CMakeLists.txt
+@@ -125,6 +125,7 @@ target_link_libraries(QuickImageViewer PRIVATE
+         oleaut32
+         uuid
+         shlwapi
++        shcore
+ )
+ 
+ # 6. Track Manifest Changes
+diff --git a/src/UI/ThumbnailPanelWnd.cpp b/src/UI/ThumbnailPanelWnd.cpp
+index d38f081..601b3b6 100644
+--- a/src/UI/ThumbnailPanelWnd.cpp
++++ b/src/UI/ThumbnailPanelWnd.cpp
+@@ -2,6 +2,7 @@
+ #include <algorithm>
+ #include <windowsx.h>
+ #include <d2d1.h>
++#include <shellscaling.h>
+ 
+ #include "FileHandler.h"
+ #include "UIManager.h"
+@@ -315,18 +316,19 @@ namespace UI {
+         MONITORINFO mi = {sizeof(mi)};
+         GetMonitorInfoW(hMonitor, &mi);
+ 
+-        // rcWork: usable area after subtracting the taskbar (all panels use this).
+-        // All coordinates are in virtual screen space.
+-        int workX = mi.rcWork.left;
+-        int workY = mi.rcWork.top;
+-        int workW = mi.rcWork.right  - mi.rcWork.left;
+-        int workH = mi.rcWork.bottom - mi.rcWork.top;
+-        int workBottom = mi.rcWork.bottom; // hard clamp for vertical panels
+-
+-        // Use per-monitor DPI for thickness so panels size correctly on any monitor.
+-        UINT dpi = GetDpiForWindow(hRef);
+-        if (dpi == 0) dpi = 96;
+-        float dpiScale = static_cast<float>(dpi) / 96.0f;
++        int workX      = mi.rcWork.left;
++        int workY      = mi.rcWork.top;
++        int workW      = mi.rcWork.right  - mi.rcWork.left;
++        int workH      = mi.rcWork.bottom - mi.rcWork.top;
++        // Subtract 1px so vertical panels (WS_EX_TOPMOST + WS_EX_LAYERED) never
++        // visually bleed into the taskbar due to compositor rounding.
++        int workBottom = mi.rcWork.bottom - 1;
++
++        // Query the monitor's own DPI — avoids any mismatch when hRef is on
++        // a different monitor or hasn't received WM_DPICHANGED yet.
++        UINT dpiX = 96, dpiY = 96;
++        GetDpiForMonitor(hMonitor, MDT_EFFECTIVE_DPI, &dpiX, &dpiY);
++        float dpiScale = static_cast<float>(dpiX) / 96.0f;
+ 
+         int horzThick = static_cast<int>(
+             (Constants::THUMBNAIL_PANEL_THUMB_HEIGHT + Constants::THUMBNAIL_PANEL_THUMB_MARGIN * 2.0f) * dpiScale);
+-- 
+2.43.0
+
