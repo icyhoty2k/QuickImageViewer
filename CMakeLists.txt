@@ -125,6 +125,7 @@ target_link_libraries(QuickImageViewer PRIVATE
         oleaut32
         uuid
         shlwapi
+        shcore
 )
 
 # 6. Track Manifest Changes

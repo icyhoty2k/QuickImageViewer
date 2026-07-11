@@ -2,6 +2,7 @@
 #include <algorithm>
 #include <windowsx.h>
 #include <d2d1.h>
+#include <ShellScalingApi.h>
 
 #include "FileHandler.h"
 #include "UIManager.h"
@@ -315,18 +316,19 @@ namespace UI {
         MONITORINFO mi = {sizeof(mi)};
         GetMonitorInfoW(hMonitor, &mi);
 
-        // rcWork: usable area after subtracting the taskbar (all panels use this).
-        // All coordinates are in virtual screen space.
         int workX = mi.rcWork.left;
         int workY = mi.rcWork.top;
-        int workW = mi.rcWork.right  - mi.rcWork.left;
+        int workW = mi.rcWork.right - mi.rcWork.left;
         int workH = mi.rcWork.bottom - mi.rcWork.top;
-        int workBottom = mi.rcWork.bottom; // hard clamp for vertical panels
+        // Subtract 1px so vertical panels (WS_EX_TOPMOST + WS_EX_LAYERED) never
+        // visually bleed into the taskbar due to compositor rounding.
+        int workBottom = mi.rcWork.bottom - 1;
 
-        // Use per-monitor DPI for thickness so panels size correctly on any monitor.
-        UINT dpi = GetDpiForWindow(hRef);
-        if (dpi == 0) dpi = 96;
-        float dpiScale = static_cast<float>(dpi) / 96.0f;
+        // Query the monitor's own DPI — avoids any mismatch when hRef is on
+        // a different monitor or hasn't received WM_DPICHANGED yet.
+        UINT dpiX = 96, dpiY = 96;
+        GetDpiForMonitor(hMonitor, MDT_EFFECTIVE_DPI, &dpiX, &dpiY);
+        float dpiScale = static_cast<float>(dpiX) / 96.0f;
 
         int horzThick = static_cast<int>(
             (Constants::THUMBNAIL_PANEL_THUMB_HEIGHT + Constants::THUMBNAIL_PANEL_THUMB_MARGIN * 2.0f) * dpiScale);
@@ -335,7 +337,7 @@ namespace UI {
 
         // For vertical panels, query which horizontal edges are currently occupied
         // by other visible panels so we can fit exactly into the remaining gap.
-        bool topOccupied    = false;
+        bool topOccupied = false;
         bool bottomOccupied = false;
         if (position == 2 || position == 4) {
             uiManager.GetOccupiedEdges(topOccupied, bottomOccupied);
@@ -344,7 +346,7 @@ namespace UI {
         // Vertical strip bounds: fit between any occupied horizontal panels,
         // hard-clamped to rcWork so we never draw over the taskbar.
         auto verticalBounds = [&](int &vy, int &vh) {
-            vy = workY + (topOccupied    ? horzThick : 0);
+            vy = workY + (topOccupied ? horzThick : 0);
             int vBottom = workBottom - (bottomOccupied ? horzThick : 0);
             // Hard clamp: never exceed the work area bottom pixel
             if (vBottom > workBottom) vBottom = workBottom;
@@ -576,7 +578,8 @@ namespace UI {
         if (FAILED(dxgiDevice->GetAdapter(&adapter))) return;
         if (FAILED(adapter->GetParent(IID_PPV_ARGS(&factory)))) return;
         if (FAILED(factory->CreateSwapChainForHwnd(d3dDev, m_hWnd, &swapDesc,
-                                                    nullptr, nullptr, &m_swapChain))) return;
+            nullptr, nullptr, &m_swapChain)))
+            return;
 
         // Create a D2D device context for this panel.
         Microsoft::WRL::ComPtr<ID2D1DeviceContext> baseCtx;
@@ -588,16 +591,19 @@ namespace UI {
         GetClientRect(m_hWnd, &rc);
         UINT w = static_cast<UINT>(rc.right - rc.left);
         UINT h = static_cast<UINT>(rc.bottom - rc.top);
-        if (w == 0 || h == 0) { w = 1200; h = Constants::THUMBNAIL_PANEL_WINDOW_THICKNESS; }
+        if (w == 0 || h == 0) {
+            w = 1200;
+            h = Constants::THUMBNAIL_PANEL_WINDOW_THICKNESS;
+        }
         ResizeSwapChain(w, h);
 
         // Create brushes.
         m_panelContext->CreateSolidColorBrush(
-            D2D1::ColorF(Constants::ThumbnailPanel::PLACEHOLDER), &m_placeholderBrush);
+                D2D1::ColorF(Constants::ThumbnailPanel::PLACEHOLDER), &m_placeholderBrush);
         m_panelContext->CreateSolidColorBrush(
-            D2D1::ColorF(Constants::ThumbnailPanel::SELECTION_BORDER), &m_borderBrush);
+                D2D1::ColorF(Constants::ThumbnailPanel::SELECTION_BORDER), &m_borderBrush);
         m_panelContext->CreateSolidColorBrush(
-            D2D1::ColorF(Constants::ThumbnailPanel::HOVER), &m_hoverBrush);
+                D2D1::ColorF(Constants::ThumbnailPanel::HOVER), &m_hoverBrush);
     }
 
     void ThumbnailPanelWnd::ResizeSwapChain(UINT w, UINT h) {
@@ -612,10 +618,11 @@ namespace UI {
         if (FAILED(m_swapChain->GetBuffer(0, IID_PPV_ARGS(&surface)))) return;
 
         D2D1_BITMAP_PROPERTIES1 props = D2D1::BitmapProperties1(
-            D2D1_BITMAP_OPTIONS_TARGET | D2D1_BITMAP_OPTIONS_CANNOT_DRAW,
-            D2D1::PixelFormat(DXGI_FORMAT_B8G8R8A8_UNORM, D2D1_ALPHA_MODE_IGNORE));
+                D2D1_BITMAP_OPTIONS_TARGET | D2D1_BITMAP_OPTIONS_CANNOT_DRAW,
+                D2D1::PixelFormat(DXGI_FORMAT_B8G8R8A8_UNORM, D2D1_ALPHA_MODE_IGNORE));
         if (FAILED(m_panelContext->CreateBitmapFromDxgiSurface(surface.Get(), &props,
-                                                                &m_panelBackBuffer))) return;
+            &m_panelBackBuffer)))
+            return;
 
         m_panelContext->SetTarget(m_panelBackBuffer.Get());
     }
