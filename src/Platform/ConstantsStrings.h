@@ -11,6 +11,10 @@ namespace Constants::Messages {
     constexpr const wchar_t *TOGGLE_FIRST_IMAGE_IN_FOLDER = L"First image: ";
     constexpr const wchar_t *TOGGLE_LAST_IMAGE_IN_FOLDER = L"Last image: ";
     constexpr const wchar_t *GO_TO_LAST_IMAGE_BEFORE_TOGGLE = L"Previous image: ";
+    constexpr const wchar_t *CACHE_WINDOW_VISIBLE_MSG = L"Cache Window ON ";
+    constexpr const wchar_t *CACHE_WINDOW_HIDDEN_MSG = L"Cache Window OFF ";
+    constexpr const wchar_t *CACHE_WINDOW_CLEAR_CACHE_MSG = L"Cache cleared ! ";
+
 
     // Overlay master toggle (N / I / Ctrl+0)
     constexpr const wchar_t *INFO_PANELS_ON = L"Info Panels: ON";
@@ -30,9 +34,9 @@ namespace Constants::Messages {
     constexpr const wchar_t *ALL_EFFECTS_RESET = L"All Effects Reset";
 
     // Spawned DirWnd messages
-    constexpr const wchar_t *SPAWN_DIR_TOP    = L"DirWnd Spawned: Top";
-    constexpr const wchar_t *SPAWN_DIR_LEFT   = L"DirWnd Spawned: Left";
-    constexpr const wchar_t *SPAWN_DIR_RIGHT  = L"DirWnd Spawned: Right";
+    constexpr const wchar_t *SPAWN_DIR_TOP = L"DirWnd Spawned: Top";
+    constexpr const wchar_t *SPAWN_DIR_LEFT = L"DirWnd Spawned: Left";
+    constexpr const wchar_t *SPAWN_DIR_RIGHT = L"DirWnd Spawned: Right";
     constexpr const wchar_t *SPAWN_DIR_BOTTOM = L"DirWnd Spawned: Bottom";
     constexpr const wchar_t *SPAWN_DIR_CLOSED = L"DirWnd Closed";
     constexpr const wchar_t *SPAWN_DIR_NO_SPACE = L"No free positions for DirWnd";

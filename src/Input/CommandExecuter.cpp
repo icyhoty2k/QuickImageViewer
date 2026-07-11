@@ -154,10 +154,16 @@ void InputManager::ExecuteKeyboardShortcutCommand(HWND hWnd, Command cmd) {
 
         case Command::ToggleCache:
             uiManager.Toggle(uiManager.getCacheWindow());
+            if (uiManager.getCacheWindow().IsVisible()) {
+                g_overlayManager.PostCenterMessage(hWnd, Constants::Messages::CACHE_WINDOW_VISIBLE_MSG);
+            } else {
+                g_overlayManager.PostCenterMessage(hWnd, Constants::Messages::CACHE_WINDOW_HIDDEN_MSG);
+            }
             break;
 
         case Command::ClearCache:
             uiManager.getCacheWindow().ClearThumbnailCache();
+            g_overlayManager.PostCenterMessage(hWnd, Constants::Messages::CACHE_WINDOW_CLEAR_CACHE_MSG);
 
             break;
 
