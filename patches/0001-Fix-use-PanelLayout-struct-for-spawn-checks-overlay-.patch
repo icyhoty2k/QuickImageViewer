@@ -1,0 +1,190 @@
+From a21974ae99510874b7090af4feca547ea4a3dd6e Mon Sep 17 00:00:00 2001
+From: Ivan Hristov Yanev <icyhoty2k@gmail.com>
+Date: Sat, 11 Jul 2026 14:50:47 +0000
+Subject: [PATCH] Fix: use PanelLayout struct for spawn checks + overlay
+ messages
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+- SpawnDirWndForFolder: checks m_layout.occupied() for all 4 positions,
+  posts SPAWN_DIR_NO_SPACE if all taken, posts SPAWN_DIR_{TOP/LEFT/RIGHT/BOTTOM}
+  on success — no more spawning over occupied slots
+
+- OnPanelHidden: posts SPAWN_DIR_CLOSED when a spawned DirWnd is hidden
+
+- ThumbnailPanelWnd::Show() override: checks layout, finds free position,
+  calls OnPanelShown — fixes F5/F3 not registering when shown via Show()
+
+- Toggle() simplified to delegate to Show()/Hide()
+
+- ConstantsStrings.h: SPAWN_DIR_TOP/LEFT/RIGHT/BOTTOM/CLOSED/NO_SPACE
+
+- UIManager.cpp: include OverlayManager.h + ConstantsStrings.h
+---
+ src/Platform/ConstantsStrings.h |  8 ++++++++
+ src/UI/ThumbnailPanelWnd.cpp    | 30 ++++++++++++++++--------------
+ src/UI/ThumbnailPanelWnd.h      |  1 +
+ src/UI/UIManager.cpp            | 33 ++++++++++++++++++++++++++-------
+ 4 files changed, 51 insertions(+), 21 deletions(-)
+
+diff --git a/src/Platform/ConstantsStrings.h b/src/Platform/ConstantsStrings.h
+index f29a56f..751daa4 100644
+--- a/src/Platform/ConstantsStrings.h
++++ b/src/Platform/ConstantsStrings.h
+@@ -28,6 +28,14 @@ namespace Constants::Messages {
+     // Reset / effects
+     constexpr const wchar_t *RESET_TO_DEFAULTS = L"Reset to Defaults";
+     constexpr const wchar_t *ALL_EFFECTS_RESET = L"All Effects Reset";
++
++    // Spawned DirWnd messages
++    constexpr const wchar_t *SPAWN_DIR_TOP    = L"DirWnd Spawned: Top";
++    constexpr const wchar_t *SPAWN_DIR_LEFT   = L"DirWnd Spawned: Left";
++    constexpr const wchar_t *SPAWN_DIR_RIGHT  = L"DirWnd Spawned: Right";
++    constexpr const wchar_t *SPAWN_DIR_BOTTOM = L"DirWnd Spawned: Bottom";
++    constexpr const wchar_t *SPAWN_DIR_CLOSED = L"DirWnd Closed";
++    constexpr const wchar_t *SPAWN_DIR_NO_SPACE = L"No free positions for DirWnd";
+ }
+ 
+ namespace Constants::Strings {
+diff --git a/src/UI/ThumbnailPanelWnd.cpp b/src/UI/ThumbnailPanelWnd.cpp
+index 9cb42ff..b974c84 100644
+--- a/src/UI/ThumbnailPanelWnd.cpp
++++ b/src/UI/ThumbnailPanelWnd.cpp
+@@ -59,21 +59,8 @@ namespace UI {
+         if (IsWindowVisible(m_hWnd)) {
+             Hide();
+         } else {
+-            // If the current position is occupied by another panel, find a free one.
+-            const PanelLayout &layout = uiManager.GetLayout();
+-            if (layout.occupied(m_position) && layout.slots[m_position] != this) {
+-                int8_t free = uiManager.NextFreePosition(m_position);
+-                if (free >= 0) m_position = free;
+-            }
+-            m_offset = 0.0f;
+-
+-            int x, y, w, h;
+-            GetWindowBounds(m_hOwner ? m_hOwner : m_hWnd, m_position, x, y, w, h);
+-            SetWindowPos(m_hWnd, HWND_TOPMOST, x, y, w, h,
+-                         SWP_SHOWWINDOW | SWP_FRAMECHANGED);
+-            SetForegroundWindow(m_hWnd);
++            Show();
+             SetFocus(m_hWnd);
+-            uiManager.OnPanelShown(this, m_position);
+             UpdateView();
+             SyncSelectionRectangle();
+         }
+@@ -86,6 +73,21 @@ namespace UI {
+         }
+     }
+ 
++    void ThumbnailPanelWnd::Show() {
++        if (!m_hWnd) return;
++        const PanelLayout &layout = uiManager.GetLayout();
++        if (layout.occupied(m_position) && layout.slots[m_position] != this) {
++            int8_t free = uiManager.NextFreePosition(m_position);
++            if (free >= 0) m_position = free;
++        }
++        m_offset = 0.0f;
++        int x, y, w, h;
++        GetWindowBounds(m_hOwner ? m_hOwner : m_hWnd, m_position, x, y, w, h);
++        SetWindowPos(m_hWnd, HWND_TOPMOST, x, y, w, h, SWP_SHOWWINDOW | SWP_FRAMECHANGED);
++        SetForegroundWindow(m_hWnd);
++        uiManager.OnPanelShown(this, m_position);
++    }
++
+     void ThumbnailPanelWnd::MovePanel() {
+         if (!m_hWnd) return;
+ 
+diff --git a/src/UI/ThumbnailPanelWnd.h b/src/UI/ThumbnailPanelWnd.h
+index 7fe8203..4f10daf 100644
+--- a/src/UI/ThumbnailPanelWnd.h
++++ b/src/UI/ThumbnailPanelWnd.h
+@@ -38,6 +38,7 @@ namespace UI {
+             void UpdateView();
+ 
+             void Toggle() override;
++            void Show() override;
+             void Hide() override;
+             void MovePanel();
+ 
+diff --git a/src/UI/UIManager.cpp b/src/UI/UIManager.cpp
+index fd4a2bb..e723c6b 100644
+--- a/src/UI/UIManager.cpp
++++ b/src/UI/UIManager.cpp
+@@ -1,4 +1,6 @@
+ #include "UIManager.h"
++#include "../Overlays/OverlayManager.h"
++#include "../Platform/ConstantsStrings.h"
+ 
+ UI::UIManager uiManager;
+ 
+@@ -20,6 +22,14 @@ namespace UI {
+     }
+ 
+     void UIManager::OnPanelHidden(ThumbnailPanelWnd *panel) {
++        // Post a message if this is a spawned DirWnd being individually closed.
++        for (int i = 0; i < Constants::DIR_WND_MAX_INSTANCES; ++i) {
++            if (m_spawnedDirWnds[i] == panel) {
++                g_overlayManager.PostCenterMessage(m_hMainWnd,
++                    Constants::Messages::SPAWN_DIR_CLOSED);
++                break;
++            }
++        }
+         m_layout.clearPanel(panel);
+         RefreshVerticalPanels();
+     }
+@@ -87,7 +97,7 @@ namespace UI {
+     // -------------------------------------------------------------------------
+ 
+     void UIManager::SpawnDirWndForFolder(const std::wstring &folderPath, HWND hHistoryWnd) {
+-        // Try to find a free slot among the 4 positions (top/left/right/bottom).
++        // Try to find a free slot — check struct for occupied positions.
+         int chosenSlot = -1;
+         for (int i = 0; i < Constants::DIR_WND_MAX_INSTANCES; ++i) {
+             int8_t pos = Constants::DIR_WND_SPAWN_POSITIONS[i];
+@@ -97,19 +107,18 @@ namespace UI {
+             }
+         }
+ 
+-        // All positions taken — replace the oldest via round-robin.
++        // All positions taken — notify user and return.
+         if (chosenSlot < 0) {
+-            chosenSlot = m_nextSpawnSlot;
++            g_overlayManager.PostCenterMessage(m_hMainWnd,
++                Constants::Messages::SPAWN_DIR_NO_SPACE);
++            if (hHistoryWnd) { SetForegroundWindow(hHistoryWnd); SetFocus(hHistoryWnd); }
++            return;
+         }
+ 
+         m_nextSpawnSlot = (chosenSlot + 1) % Constants::DIR_WND_MAX_INSTANCES;
+ 
+         int8_t position = Constants::DIR_WND_SPAWN_POSITIONS[chosenSlot];
+ 
+-        // Hide the old occupant of this position if we're replacing it.
+-        if (m_layout.occupied(position) && m_layout.slots[position] != m_spawnedDirWnds[chosenSlot])
+-            m_layout.slots[position]->Hide();
+-
+         SpawnedDirWnd *target = m_spawnedDirWnds[chosenSlot];
+         if (target == nullptr) {
+             target = new SpawnedDirWnd(chosenSlot);
+@@ -123,6 +132,16 @@ namespace UI {
+         RefreshVerticalPanels();
+         target->UpdateDirView();
+ 
++        // Notify user which position was used.
++        const wchar_t *msg = nullptr;
++        switch (position) {
++            case 1: msg = Constants::Messages::SPAWN_DIR_TOP;    break;
++            case 2: msg = Constants::Messages::SPAWN_DIR_RIGHT;  break;
++            case 3: msg = Constants::Messages::SPAWN_DIR_BOTTOM; break;
++            case 4: msg = Constants::Messages::SPAWN_DIR_LEFT;   break;
++        }
++        if (msg) g_overlayManager.PostCenterMessage(m_hMainWnd, msg);
++
+         if (hHistoryWnd) {
+             SetForegroundWindow(hHistoryWnd);
+             SetFocus(hHistoryWnd);
+-- 
+2.43.0
+
