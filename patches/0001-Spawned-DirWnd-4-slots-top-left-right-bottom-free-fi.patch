@@ -1,0 +1,115 @@
+From 3a5080d50f59be1697ba5ef2ab4036101eb2df90 Mon Sep 17 00:00:00 2001
+From: Ivan Hristov Yanev <icyhoty2k@gmail.com>
+Date: Sat, 11 Jul 2026 14:39:02 +0000
+Subject: [PATCH] Spawned DirWnd: 4 slots (top/left/right/bottom), free-first
+ then replace-oldest
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+DIR_WND_MAX_INSTANCES = 4
+DIR_WND_SPAWN_POSITIONS = {1, 4, 2, 3} (top, left, right, bottom)
+
+Spawn logic:
+- Scan all 4 positions in order, pick first free one
+- If all taken, replace oldest via round-robin (m_nextSpawnSlot)
+- Hides the old occupant if replacing a taken slot
+
+DirWnd.h: added QIV_SpawnedDirWindow_3 class name, guard 3→4
+---
+ src/Platform/Constants.h |  4 ++--
+ src/UI/DirWnd.h          |  5 +++--
+ src/UI/UIManager.cpp     | 17 +++++++++--------
+ src/UI/UIManager.h       |  2 +-
+ 4 files changed, 15 insertions(+), 13 deletions(-)
+
+diff --git a/src/Platform/Constants.h b/src/Platform/Constants.h
+index 3563489..12c3a60 100644
+--- a/src/Platform/Constants.h
++++ b/src/Platform/Constants.h
+@@ -92,8 +92,8 @@ namespace Constants {
+     //   spawn 1 → right strip (position 2)
+     //   spawn 2 → center floating (position 0)
+     //   spawn 3 → wraps back to 0 (oldest slot reused)
+-    constexpr int DIR_WND_MAX_INSTANCES = 2; // left, right only — no center spawning
+-    constexpr int8_t DIR_WND_SPAWN_POSITIONS[DIR_WND_MAX_INSTANCES] = {4, 2};
++    constexpr int DIR_WND_MAX_INSTANCES = 4; // top, left, right, bottom
++    constexpr int8_t DIR_WND_SPAWN_POSITIONS[DIR_WND_MAX_INSTANCES] = {1, 4, 2, 3};
+ 
+ 
+     namespace ThumbnailPanel {
+diff --git a/src/UI/DirWnd.h b/src/UI/DirWnd.h
+index 961028d..2a9c2c4 100644
+--- a/src/UI/DirWnd.h
++++ b/src/UI/DirWnd.h
+@@ -73,9 +73,10 @@ namespace UI {
+                 static const wchar_t *names[] = {
+                     L"QIV_SpawnedDirWindow_0",
+                     L"QIV_SpawnedDirWindow_1",
+-                    L"QIV_SpawnedDirWindow_2"
++                    L"QIV_SpawnedDirWindow_2",
++                    L"QIV_SpawnedDirWindow_3"
+                 };
+-                return names[m_slot < 3 ? m_slot : 0];
++                return names[m_slot < 4 ? m_slot : 0];
+             }
+ 
+             const wchar_t *WindowTitle() const override { return L"Directory (Spawned)"; }
+diff --git a/src/UI/UIManager.cpp b/src/UI/UIManager.cpp
+index 1c64450..fd4a2bb 100644
+--- a/src/UI/UIManager.cpp
++++ b/src/UI/UIManager.cpp
+@@ -87,28 +87,29 @@ namespace UI {
+     // -------------------------------------------------------------------------
+ 
+     void UIManager::SpawnDirWndForFolder(const std::wstring &folderPath, HWND hHistoryWnd) {
+-        // Find a free slot among left(4) and right(2) only — no center spawning.
+-        // Try each slot in order; skip any whose position is already occupied.
++        // Try to find a free slot among the 4 positions (top/left/right/bottom).
+         int chosenSlot = -1;
+         for (int i = 0; i < Constants::DIR_WND_MAX_INSTANCES; ++i) {
+-            int slot = (m_nextSpawnSlot + i) % Constants::DIR_WND_MAX_INSTANCES;
+-            int8_t pos = Constants::DIR_WND_SPAWN_POSITIONS[slot];
++            int8_t pos = Constants::DIR_WND_SPAWN_POSITIONS[i];
+             if (!m_layout.occupied(pos)) {
+-                chosenSlot = slot;
++                chosenSlot = i;
+                 break;
+             }
+         }
+ 
+-        // All left/right positions are taken — do nothing.
++        // All positions taken — replace the oldest via round-robin.
+         if (chosenSlot < 0) {
+-            if (hHistoryWnd) { SetForegroundWindow(hHistoryWnd); SetFocus(hHistoryWnd); }
+-            return;
++            chosenSlot = m_nextSpawnSlot;
+         }
+ 
+         m_nextSpawnSlot = (chosenSlot + 1) % Constants::DIR_WND_MAX_INSTANCES;
+ 
+         int8_t position = Constants::DIR_WND_SPAWN_POSITIONS[chosenSlot];
+ 
++        // Hide the old occupant of this position if we're replacing it.
++        if (m_layout.occupied(position) && m_layout.slots[position] != m_spawnedDirWnds[chosenSlot])
++            m_layout.slots[position]->Hide();
++
+         SpawnedDirWnd *target = m_spawnedDirWnds[chosenSlot];
+         if (target == nullptr) {
+             target = new SpawnedDirWnd(chosenSlot);
+diff --git a/src/UI/UIManager.h b/src/UI/UIManager.h
+index ddf0901..0723949 100644
+--- a/src/UI/UIManager.h
++++ b/src/UI/UIManager.h
+@@ -97,7 +97,7 @@ namespace UI {
+             HistoryListWnd historyListWnd;
+ 
+             std::array<SpawnedDirWnd *, Constants::DIR_WND_MAX_INSTANCES> m_spawnedDirWnds
+-                = {nullptr, nullptr};
++                = {nullptr, nullptr, nullptr, nullptr};
+             int m_nextSpawnSlot = 0;
+ 
+             HINSTANCE m_hInstance  = nullptr;
+-- 
+2.43.0
+
