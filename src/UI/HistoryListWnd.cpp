@@ -4,6 +4,7 @@
 #include "../AppState.h"
 #include "../Input/Shortcuts.h"
 #include "../Persistence/HistoryFoldersManager.h"
+#include "../UI/UIManager.h"
 #include <algorithm>
 #include <windowsx.h>
 #include <filesystem>
@@ -394,13 +395,23 @@ namespace UI {
                         }
                         return 0;
 
-                    case VK_RETURN:
+                    case VK_RETURN: {
                         if (g_hoverRow >= 0 && g_hoverRow < navMax) {
                             std::wstring folder = g_displayList[g_hoverRow].path;
-                            ShowWindow(m_hWnd, SW_HIDE);
-                            OpenDirectory(g_hHistOwner, folder);
+                            bool shiftHeld = (GetKeyState(VK_SHIFT) & 0x8000) != 0;
+                            if (shiftHeld) {
+                                // Shift+Enter — spawn a DirWnd for this folder.
+                                // History panel stays open so the user can
+                                // keep spawning more without re-opening it.
+                                uiManager.SpawnDirWndForFolder(folder);
+                            } else {
+                                // Plain Enter — load folder in main viewer (original behaviour).
+                                ShowWindow(m_hWnd, SW_HIDE);
+                                OpenDirectory(g_hHistOwner, folder);
+                            }
                         }
                         return 0;
+                    }
 
                     case Shortcuts::HISTORY_FAVORITES_TOGGLE_KEY: // Space
                         if (g_hoverRow >= 0 && g_hoverRow < navMax) {

@@ -166,6 +166,9 @@ namespace Shortcuts {
     constexpr UINT HISTORY_FAVORITES_TOGGLE_KEY = VK_SPACE;
     constexpr UINT HISTORY_CLEAR_ALL_HISTORY_BUT_NOT_FAVORITES = VK_DELETE; //ctrl+alt+delete only when historyWnd is open
     constexpr UINT HISTORY_CLEAR_ALL_FAVORITES_BUT_NOT_HISTORY = VK_DELETE; //ctrl+alt+shift+delete only when historyWnd is open
+    // Shift+Enter — spawn a DirWnd for the selected history folder (up to DIR_WND_MAX_INSTANCES)
+    // Plain Enter still opens the folder in the main viewer as before.
+    constexpr UINT HISTORY_OPEN_IN_DIR_WND = VK_RETURN; // requires Shift
 
     // -------------------------------------------------------------------------
     // Transform
