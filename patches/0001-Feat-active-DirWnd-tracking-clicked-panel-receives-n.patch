@@ -1,0 +1,230 @@
+From 3a6ddc4fd85645fcb5d0e9f2950767e9cbe77fda Mon Sep 17 00:00:00 2001
+From: Ivan Hristov Yanev <icyhoty2k@gmail.com>
+Date: Sat, 11 Jul 2026 15:04:50 +0000
+Subject: [PATCH] =?UTF-8?q?Feat:=20active=20DirWnd=20tracking=20=E2=80=94?=
+ =?UTF-8?q?=20clicked=20panel=20receives=20nav=20updates?=
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+Any DirWnd (F5 or spawned) becomes active on LButtonDown.
+All main-viewer navigation (image change, folder load) updates
+the active panel instead of always the F5 DirWnd.
+Falls back to F5 DirWnd when active panel is hidden or null.
+
+UIManager: getActiveDirWnd(), SetActiveDirWnd(panel*), m_activeDirWnd
+ThumbnailPanelWnd: IsDirPanel() virtual (false), SetActiveDirWnd on
+  LButtonDown, clear on Hide()
+DirWnd/SpawnedDirWnd: IsDirPanel() = true
+AppMain + FileHandler: getDirWindow() → getActiveDirWnd() everywhere
+---
+ src/AppMain.cpp              | 10 +++++-----
+ src/Platform/FileHandler.cpp | 16 ++++++++--------
+ src/UI/DirWnd.h              |  1 +
+ src/UI/ThumbnailPanelWnd.cpp |  4 ++++
+ src/UI/ThumbnailPanelWnd.h   |  4 ++--
+ src/UI/UIManager.cpp         | 10 ++++++++++
+ src/UI/UIManager.h           | 11 +++++++++++
+ 7 files changed, 41 insertions(+), 15 deletions(-)
+
+diff --git a/src/AppMain.cpp b/src/AppMain.cpp
+index 059bbb2..ded7d47 100644
+--- a/src/AppMain.cpp
++++ b/src/AppMain.cpp
+@@ -293,12 +293,12 @@ LRESULT CALLBACK MainAppWndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM l
+ 
+                     InvalidateRect(hWnd, nullptr, FALSE); // Now, repaint with the correct image.
+                     uiManager.getCacheWindow().UpdateCacheView();
+-                    uiManager.getDirWindow().UpdateDirView();
++                    uiManager.getActiveDirWnd().UpdateDirView();
+                     // Scroll DirWnd to the newly active image. UpdateDirView()
+                     // rebuilds geometry and sets m_selectedIdx but does not move
+                     // m_offset (by design, so manual scrolling is not interrupted).
+                     // On a cache-miss arrival we always want to snap to selection.
+-                    uiManager.getDirWindow().SyncDirSelectionRectangle();
++                    uiManager.getActiveDirWnd().SyncDirSelectionRectangle();
+                 }
+             }
+             return 0;
+@@ -324,8 +324,8 @@ LRESULT CALLBACK MainAppWndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM l
+ 
+                     InvalidateRect(hWnd, nullptr, FALSE);
+                     uiManager.getCacheWindow().UpdateCacheView();
+-                    uiManager.getDirWindow().UpdateDirView();
+-                    uiManager.getDirWindow().SyncDirSelectionRectangle();
++                    uiManager.getActiveDirWnd().UpdateDirView();
++                    uiManager.getActiveDirWnd().SyncDirSelectionRectangle();
+                 }
+             }
+ 
+@@ -542,7 +542,7 @@ int WINAPI wWinMain(HINSTANCE hInstance, [[maybe_unused]] HINSTANCE hPrevInstanc
+     }
+     app.renderer->onImageChangedCallback = [](int) {
+         uiManager.getCacheWindow().SyncSelectionRectangle();
+-        uiManager.getDirWindow().SyncDirSelectionRectangle();
++        uiManager.getActiveDirWnd().SyncDirSelectionRectangle();
+     };
+ 
+     // Set initial overlay visibility from app defaults.
+diff --git a/src/Platform/FileHandler.cpp b/src/Platform/FileHandler.cpp
+index d0208c4..1e261cb 100644
+--- a/src/Platform/FileHandler.cpp
++++ b/src/Platform/FileHandler.cpp
+@@ -269,13 +269,13 @@ void OpenInitialImage(HWND hWnd) {
+     UI::PushFolderHistory(selectedPath.parent_path().wstring());
+ 
+     // New folder — drop stale dir window thumbnails before navigating
+-    uiManager.getDirWindow().ClearDirThumbnailCache();
++    uiManager.getActiveDirWnd().ClearDirThumbnailCache();
+ 
+ 
+     auto it = std::ranges::find(app.playlist, selectedPath.wstring());
+     if (it != app.playlist.end()) {
+         LoadImageIndex(hWnd, static_cast<int>(std::distance(app.playlist.begin(), it)));
+-        uiManager.getDirWindow().UpdateDirView();
++        uiManager.getActiveDirWnd().UpdateDirView();
+     }
+ }
+ 
+@@ -318,7 +318,7 @@ void LoadImageIndex(HWND hWnd, int index) {
+ 
+     app.currentIndex = index;
+     app.wantedIndex.store(index, std::memory_order_release);
+-    uiManager.getDirWindow().SyncDirSelectionRectangle();
++    uiManager.getActiveDirWnd().SyncDirSelectionRectangle();
+ 
+     const std::wstring &currentPath = app.playlist[index];
+     SetWindowTextW(hWnd, (currentPath.substr(currentPath.find_last_of(L"\\/") + 1) + L" - QuickImageViewer").c_str());
+@@ -415,11 +415,11 @@ void OpenDirectory(HWND hWnd, const std::wstring &dirPathStr) {
+     });
+ 
+     UI::PushFolderHistory(dirPath.wstring());
+-    uiManager.getDirWindow().ClearDirThumbnailCache();
++    uiManager.getActiveDirWnd().ClearDirThumbnailCache();
+ 
+     // Force load the first image (index 0) of the freshly sorted playlist
+     LoadImageIndex(hWnd, 0);
+-    uiManager.getDirWindow().UpdateDirView();
++    uiManager.getActiveDirWnd().UpdateDirView();
+ }
+ 
+ void OpenSpecificImage(HWND hWnd, const std::wstring &filePathStr) {
+@@ -470,13 +470,13 @@ void OpenSpecificImage(HWND hWnd, const std::wstring &filePathStr) {
+     UI::PushFolderHistory(filePath.parent_path().wstring());
+ 
+     // New folder — drop stale dir window thumbnails before navigating
+-    uiManager.getDirWindow().ClearDirThumbnailCache();
+-    // uiManager.getDirWindow().UpdateDirView();
++    uiManager.getActiveDirWnd().ClearDirThumbnailCache();
++    // uiManager.getActiveDirWnd().UpdateDirView();
+ 
+     auto it = std::ranges::find(app.playlist, filePath.wstring());
+     if (it != app.playlist.end()) {
+         LoadImageIndex(hWnd, static_cast<int>(std::distance(app.playlist.begin(), it)));
+-        uiManager.getDirWindow().UpdateDirView();
++        uiManager.getActiveDirWnd().UpdateDirView();
+     }
+ }
+ 
+diff --git a/src/UI/DirWnd.h b/src/UI/DirWnd.h
+index 2a9c2c4..0f7f928 100644
+--- a/src/UI/DirWnd.h
++++ b/src/UI/DirWnd.h
+@@ -24,6 +24,7 @@ namespace UI {
+             const wchar_t *ClassName()    const override { return L"QIV_DirWindow"; }
+             const wchar_t *WindowTitle()  const override { return L"Directory"; }
+             bool UsesDirThumbCache()      const override { return true; }
++            bool IsDirPanel()             const override { return true; }
+ 
+             int GetKeyToggle() const override;
+             int GetKeyMove()   const override;
+diff --git a/src/UI/ThumbnailPanelWnd.cpp b/src/UI/ThumbnailPanelWnd.cpp
+index b974c84..f22a3e8 100644
+--- a/src/UI/ThumbnailPanelWnd.cpp
++++ b/src/UI/ThumbnailPanelWnd.cpp
+@@ -70,6 +70,8 @@ namespace UI {
+         if (m_hWnd && IsWindowVisible(m_hWnd)) {
+             ShowWindow(m_hWnd, SW_HIDE);
+             uiManager.OnPanelHidden(this);
++            // If this was the active dir panel, clear it so we fall back to F5.
++            if (IsDirPanel()) uiManager.SetActiveDirWnd(nullptr);
+         }
+     }
+ 
+@@ -497,6 +499,8 @@ namespace UI {
+ 
+             // -----------------------------------------------------------------
+             case WM_LBUTTONDOWN: {
++                // Any click in a DirWnd makes it the active one for nav updates.
++                if (IsDirPanel()) uiManager.SetActiveDirWnd(this);
+                 s_clickPos.x = GET_X_LPARAM(lParam);
+                 s_clickPos.y = GET_Y_LPARAM(lParam);
+                 s_hasMoved = false;
+diff --git a/src/UI/ThumbnailPanelWnd.h b/src/UI/ThumbnailPanelWnd.h
+index 4f10daf..f02490c 100644
+--- a/src/UI/ThumbnailPanelWnd.h
++++ b/src/UI/ThumbnailPanelWnd.h
+@@ -73,8 +73,8 @@ namespace UI {
+             // Returns the ordered list of file paths this panel displays.
+             virtual std::vector<std::wstring> GetSourceItems() const = 0;
+ 
+-            // True when this panel owns its own playlist (SpawnedDirWnd).
+-            // Skips the app.playlist-empty guard in UpdateView().
++            // True for DirWnd and SpawnedDirWnd — these track the active panel.
++            virtual bool IsDirPanel() const { return false; }
+             virtual bool HasOwnPlaylist() const { return false; }
+ 
+             // True when this panel should look up bitmaps from m_dirThumbCache
+diff --git a/src/UI/UIManager.cpp b/src/UI/UIManager.cpp
+index e723c6b..186dbbb 100644
+--- a/src/UI/UIManager.cpp
++++ b/src/UI/UIManager.cpp
+@@ -86,6 +86,16 @@ namespace UI {
+         return dirWnd;
+     }
+ 
++    ThumbnailPanelWnd &UIManager::getActiveDirWnd() {
++        if (m_activeDirWnd && m_activeDirWnd->GetHwnd() && IsWindowVisible(m_activeDirWnd->GetHwnd()))
++            return *m_activeDirWnd;
++        return getDirWindow();
++    }
++
++    void UIManager::SetActiveDirWnd(ThumbnailPanelWnd *panel) {
++        m_activeDirWnd = panel;
++    }
++
+     HistoryListWnd &UIManager::getHistoryListWindow() {
+         if (isInit(historyListWnd)) return historyListWnd;
+         historyListWnd.Init(m_hInstance, m_hMainWnd);
+diff --git a/src/UI/UIManager.h b/src/UI/UIManager.h
+index 0723949..989df27 100644
+--- a/src/UI/UIManager.h
++++ b/src/UI/UIManager.h
+@@ -68,6 +68,13 @@ namespace UI {
+             HelpWnd         &getHelpWindow();
+             CacheWnd        &getCacheWindow();
+             DirWnd          &getDirWindow();
++
++            // Returns whichever DirWnd the user last clicked in.
++            // Defaults to the primary F5 DirWnd.
++            ThumbnailPanelWnd &getActiveDirWnd();
++
++            // Called by ThumbnailPanelWnd on LButtonUp to make it the active panel.
++            void SetActiveDirWnd(ThumbnailPanelWnd *panel);
+             HistoryListWnd  &getHistoryListWindow();
+ 
+             void SpawnDirWndForFolder(const std::wstring &folderPath, HWND hHistoryWnd);
+@@ -106,6 +113,10 @@ namespace UI {
+             // The layout struct — single source of truth.
+             PanelLayout m_layout;
+ 
++            // Whichever DirWnd the user last clicked — receives navigation updates.
++            // nullptr = use primary dirWnd.
++            ThumbnailPanelWnd *m_activeDirWnd = nullptr;
++
+             bool isInit(IPanelWindow &panel);
+     };
+ }
+-- 
+2.43.0
+
