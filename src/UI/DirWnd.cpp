@@ -41,7 +41,7 @@ namespace UI {
         if (!app.renderer) return;
         auto *r = dynamic_cast<RendererD2D *>(app.renderer.get());
         if (r) {
-            r->ClearDirThumbnailCache();
+            r->ClearDirThumbnailCache(m_hWnd);
         }
     }
 } // namespace UI

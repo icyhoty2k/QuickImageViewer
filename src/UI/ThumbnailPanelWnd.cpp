@@ -667,7 +667,7 @@ namespace UI {
         std::vector<RendererD2D::ResolvedThumb> resolved;
         resolved.reserve(m_thumbnails.size());
 
-        r->ResolveThumbnailBitmaps(m_thumbnails, UsesDirThumbCache(), resolved);
+        r->ResolveThumbnailBitmaps(m_thumbnails, UsesDirThumbCache() ? m_hWnd : nullptr, resolved);
 
         // -------------------------------------------------------------------------
         // Phase 2: GPU draw — no locks held.

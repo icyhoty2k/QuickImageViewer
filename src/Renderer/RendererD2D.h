@@ -67,22 +67,23 @@ class RendererD2D final : public IImageRenderer {
 
         // Resolve bitmap pointers for a set of thumbnails under the minimum lock
         // duration. Called by ThumbnailPanelWnd::Render() before GPU work begins.
-        // useDirCache=true  → look in m_dirThumbCache first (DirWnd panels)
-        // useDirCache=false → look in m_bitmapCache only   (CacheWnd panel)
+        // hPanel = panel HWND → look in that panel's private dir-thumb cache (DirWnd)
+        // hPanel = nullptr   → look in m_bitmapCache only (CacheWnd)
         struct ResolvedThumb {
             Microsoft::WRL::ComPtr<ID2D1Bitmap1> bitmap; // nullptr = placeholder
             D2D1_RECT_F rect;
         };
         void ResolveThumbnailBitmaps(const std::vector<UI::Thumbnail> &thumbnails,
-                                     bool useDirCache,
+                                     HWND hPanel,
                                      std::vector<ResolvedThumb> &out);
 
         // Queues an async decode+scale job for one file.
-        // Posts WM_QIV_REPAINT to all visible dir panel HWNDs when the thumbnail lands.
+        // Posts WM_QIV_REPAINT to hPanel when the thumbnail lands.
         void RequestDirThumbnail(const std::wstring &filePath, HWND hPanel);
 
-        // Drops the entire dir thumbnail cache (call on folder change).
-        void ClearDirThumbnailCache();
+        // Drops the thumbnail cache that belongs to hPanel only.
+        // Other panels are completely unaffected.
+        void ClearDirThumbnailCache(HWND hPanel);
 
         void ApplyPreviousEffects() override;
 
@@ -131,17 +132,14 @@ class RendererD2D final : public IImageRenderer {
         Microsoft::WRL::ComPtr<ID2D1Effect> m_pScaleEffect;
         Microsoft::WRL::ComPtr<ID2D1Bitmap1> m_pBackBufferBitmap;
 
-        // Dir thumbnail cache  —  small scaled-down bitmaps, shared across all DirWnd instances.
-        std::unordered_map<std::wstring, Microsoft::WRL::ComPtr<ID2D1Bitmap1> > m_dirThumbCache;
-        std::list<std::wstring> m_dirThumbLruList;
-        // Running total of VRAM bytes used by m_dirThumbCache entries.
-        // Incremented on insert, decremented on evict/clear.
-        // Each entry contributes pixelWidth * pixelHeight * 4 bytes.
-        size_t m_dirThumbCacheBytes = 0;
-        // Tracks paths for which an IO+decode task is already in flight.
-        // Guarded by m_dirThumbMutex. Prevents duplicate tasks being queued
-        // when UpdateView() is called multiple times before tasks complete.
-        std::unordered_set<std::wstring> m_dirThumbInFlight;
+        // Per-panel dir-thumbnail cache.
+        // Each DirWnd / SpawnedDirWnd owns its own entry keyed by its HWND,
+        // so clearing one panel's cache never evicts thumbnails owned by another.
+        struct PanelThumbEntry {
+            std::unordered_map<std::wstring, Microsoft::WRL::ComPtr<ID2D1Bitmap1>> bitmaps;
+            std::unordered_set<std::wstring> inFlight;
+        };
+        std::unordered_map<HWND, PanelThumbEntry> m_panelThumbCaches;
         std::mutex m_dirThumbMutex;
 
         // Cache
