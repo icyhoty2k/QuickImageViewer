@@ -12,6 +12,7 @@
 // Forward declarations from ThumbnailPanelWnd.cpp
 namespace UI {
     extern void SetActivePanelWindow(HWND hWnd);
+
     extern HWND g_activePanelHwnd;
 }
 
@@ -40,12 +41,12 @@ namespace UI {
     // File-scope state
     // ---------------------------------------------------------------------------
     static HWND g_hHistOwner = nullptr;
-    static int  g_hoverRow       = -1;
-    static int  g_scrollOffsetY  = 0;
-    static bool g_sbDragging     = false;
-    static int  g_sbDragStartY   = 0;
-    static int  g_sbDragStartOff = 0;
-    static bool g_showFullHistory = false;  // Ctrl+Tab toggles full history view
+    static int g_hoverRow = -1;
+    static int g_scrollOffsetY = 0;
+    static bool g_sbDragging = false;
+    static int g_sbDragStartY = 0;
+    static int g_sbDragStartOff = 0;
+    static bool g_showFullHistory = false; // Ctrl+Tab toggles full history view
     static HistoryFoldersManager historyFoldersManager;
     static std::vector<RECT> g_rowRects;
 
@@ -244,34 +245,34 @@ namespace UI {
 
                 UINT dpi = GetDpiForWindow(m_hWnd);
                 int padding = MulDiv(Constants::History::HISTORY_PADDING, dpi, 96);
-                int rowH    = MulDiv(Constants::History::HISTORY_ROW_HEIGHT, dpi, 96);
+                int rowH = MulDiv(Constants::History::HISTORY_ROW_HEIGHT, dpi, 96);
                 int fontSize = MulDiv(Constants::History::HISTORY_FONT_SIZE, dpi, 96);
-                int titleSz  = MulDiv(Constants::History::HISTORY_FONT_SIZE + 2, dpi, 96);
-                int indexW  = MulDiv(28, dpi, 96);
-                int starW   = MulDiv(18, dpi, 96);
+                int titleSz = MulDiv(Constants::History::HISTORY_FONT_SIZE + 2, dpi, 96);
+                int indexW = MulDiv(28, dpi, 96);
+                int starW = MulDiv(18, dpi, 96);
 
                 // Scrollbar geometry — computed before any drawing.
                 int SB_W = static_cast<int>(
                     MulDiv(Constants::History::SCROLLBAR_THICKNESS, dpi, 96));
                 int totalContentH = padding * 2
-                                    + MulDiv(30, dpi, 96)   // title row
-                                    + MulDiv(8,  dpi, 96)   // gap below title/sep
+                                    + MulDiv(30, dpi, 96) // title row
+                                    + MulDiv(8, dpi, 96) // gap below title/sep
                                     + static_cast<int>(g_displayList.size()) * rowH;
-                int windowH   = rc.bottom - rc.top;
+                int windowH = rc.bottom - rc.top;
                 int maxScroll = std::max(0, totalContentH - windowH);
                 g_scrollOffsetY = std::clamp(g_scrollOffsetY, 0, maxScroll);
                 bool needsScrollbar = (maxScroll > 0);
 
                 // Background — use active color if this panel is active
                 COLORREF bgColor = RGB(
-                    static_cast<int>(Constants::Theme::Panel::BACKGROUND_INACTIVE * 255),
-                    static_cast<int>(Constants::Theme::Panel::BACKGROUND_INACTIVE * 255),
-                    static_cast<int>(Constants::Theme::Panel::BACKGROUND_INACTIVE * 255));
+                        static_cast<int>(Constants::Theme::Panel::BACKGROUND_INACTIVE * 255),
+                        static_cast<int>(Constants::Theme::Panel::BACKGROUND_INACTIVE * 255),
+                        static_cast<int>(Constants::Theme::Panel::BACKGROUND_INACTIVE * 255));
                 if (UI::g_activePanelHwnd == m_hWnd) {
                     bgColor = RGB(
-                        static_cast<int>(Constants::Theme::Panel::BACKGROUND_ACTIVE * 255),
-                        static_cast<int>(Constants::Theme::Panel::BACKGROUND_ACTIVE * 255),
-                        static_cast<int>(Constants::Theme::Panel::BACKGROUND_ACTIVE * 255));
+                            static_cast<int>(Constants::Theme::Panel::BACKGROUND_ACTIVE * 255),
+                            static_cast<int>(Constants::Theme::Panel::BACKGROUND_ACTIVE * 255),
+                            static_cast<int>(Constants::Theme::Panel::BACKGROUND_ACTIVE * 255));
                 }
                 HBRUSH hBg = CreateSolidBrush(bgColor);
                 FillRect(hdc, &rc, hBg);
@@ -279,7 +280,7 @@ namespace UI {
                 SetBkMode(hdc, TRANSPARENT);
 
                 HFONT hTitleFont = CreateFontW(
-                        titleSz, 0, 0, 0, FW_BOLD,   FALSE, FALSE, FALSE,
+                        titleSz, 0, 0, 0, FW_BOLD, FALSE, FALSE, FALSE,
                         DEFAULT_CHARSET, OUT_OUTLINE_PRECIS, CLIP_DEFAULT_PRECIS,
                         CLEARTYPE_QUALITY, VARIABLE_PITCH, L"Segoe UI");
                 HFONT hBodyFont = CreateFontW(
@@ -294,7 +295,7 @@ namespace UI {
                 int totalShown = static_cast<int>(g_displayList.size());
                 std::wstring title = L"Folder History  (showing "
                                      + std::to_wstring(totalShown) + L" of "
-                                     + std::to_wstring(totalSaved) + L" saved)  \x2605=Space";
+                                     + std::to_wstring(totalSaved) + L" saved)  \x2605=Space(toggle fav) , CTRL+Tab=full list";
                 RECT titleRect = {
                     rc.left + padding, rc.top + padding,
                     rc.right - padding, rc.top + padding + titleSz + 4
@@ -303,8 +304,8 @@ namespace UI {
 
                 // Separator (fixed)
                 int sepY = titleRect.bottom + MulDiv(4, dpi, 96);
-                HPEN hPen    = CreatePen(PS_SOLID, 1, RGB(50, 50, 50));
-                HPEN hOldPen = (HPEN)SelectObject(hdc, hPen);
+                HPEN hPen = CreatePen(PS_SOLID, 1, RGB(50, 50, 50));
+                HPEN hOldPen = (HPEN) SelectObject(hdc, hPen);
                 MoveToEx(hdc, rc.left + padding, sepY, nullptr);
                 LineTo(hdc, rc.right - padding, sepY);
                 SelectObject(hdc, hOldPen);
@@ -326,7 +327,7 @@ namespace UI {
                               DT_LEFT | DT_VCENTER | DT_SINGLELINE);
                 } else {
                     for (int i = 0; i < static_cast<int>(g_displayList.size()); ++i) {
-                        int rowTop    = rowsTop - g_scrollOffsetY + i * rowH;
+                        int rowTop = rowsTop - g_scrollOffsetY + i * rowH;
                         int rowBottom = rowTop + rowH;
 
                         const DisplayEntry &entry = g_displayList[i];
@@ -369,8 +370,8 @@ namespace UI {
 
                         // Path text
                         COLORREF pathColor = entry.isFavorite
-                                ? (i == g_hoverRow ? RGB(255, 255, 160) : RGB(255, 240, 120))
-                                : (i == g_hoverRow ? RGB(255, 255, 255) : RGB(200, 200, 200));
+                                                 ? (i == g_hoverRow ? RGB(255, 255, 160) : RGB(255, 240, 120))
+                                                 : (i == g_hoverRow ? RGB(255, 255, 255) : RGB(200, 200, 200));
                         SetTextColor(hdc, pathColor);
                         RECT pathRect = {
                             rc.left + padding + indexW + starW + MulDiv(10, dpi, 96), rowTop,
@@ -388,8 +389,8 @@ namespace UI {
                     int sbX = rc.right - SB_W;
 
                     HBRUSH hTrack = CreateSolidBrush(
-                        Constants::Theme::Gray(Constants::Theme::HistoryPanel::SCROLLBAR_TRACK));
-                    RECT sbTrack  = {sbX, 0, rc.right, rc.bottom};
+                            Constants::Theme::Gray(Constants::Theme::HistoryPanel::SCROLLBAR_TRACK));
+                    RECT sbTrack = {sbX, 0, rc.right, rc.bottom};
                     FillRect(hdc, &sbTrack, hTrack);
                     DeleteObject(hTrack);
 
@@ -402,8 +403,8 @@ namespace UI {
                     thumbOff = std::clamp(thumbOff, 0, windowH - thumbLen);
 
                     HBRUSH hThumb = CreateSolidBrush(
-                        Constants::Theme::Gray(Constants::Theme::HistoryPanel::SCROLLBAR_THUMB));
-                    RECT sbThumb  = {sbX, thumbOff, rc.right, thumbOff + thumbLen};
+                            Constants::Theme::Gray(Constants::Theme::HistoryPanel::SCROLLBAR_THUMB));
+                    RECT sbThumb = {sbX, thumbOff, rc.right, thumbOff + thumbLen};
                     FillRect(hdc, &sbThumb, hThumb);
                     DeleteObject(hThumb);
                 }
@@ -423,17 +424,17 @@ namespace UI {
                 UINT dpi2 = GetDpiForWindow(m_hWnd);
                 int sbW = MulDiv(Constants::History::SCROLLBAR_THICKNESS, dpi2, 96);
                 if (mx >= rc2.right - sbW) {
-                    int  rowH2    = MulDiv(Constants::History::HISTORY_ROW_HEIGHT, dpi2, 96);
-                    int  padding2 = MulDiv(Constants::History::HISTORY_PADDING, dpi2, 96);
-                    int  totalH2  = padding2 * 2
-                                    + MulDiv(30, dpi2, 96)
-                                    + MulDiv(8,  dpi2, 96)
-                                    + static_cast<int>(g_displayList.size()) * rowH2;
-                    int  winH2    = rc2.bottom - rc2.top;
-                    int  maxScr2  = std::max(0, totalH2 - winH2);
+                    int rowH2 = MulDiv(Constants::History::HISTORY_ROW_HEIGHT, dpi2, 96);
+                    int padding2 = MulDiv(Constants::History::HISTORY_PADDING, dpi2, 96);
+                    int totalH2 = padding2 * 2
+                                  + MulDiv(30, dpi2, 96)
+                                  + MulDiv(8, dpi2, 96)
+                                  + static_cast<int>(g_displayList.size()) * rowH2;
+                    int winH2 = rc2.bottom - rc2.top;
+                    int maxScr2 = std::max(0, totalH2 - winH2);
                     if (maxScr2 > 0) {
-                        g_sbDragging     = true;
-                        g_sbDragStartY   = my;
+                        g_sbDragging = true;
+                        g_sbDragStartY = my;
                         g_sbDragStartOff = g_scrollOffsetY;
                         SetCapture(m_hWnd);
                         return 0;
@@ -443,11 +444,11 @@ namespace UI {
             }
 
             case WM_MOUSEWHEEL: {
-                UINT dpi   = GetDpiForWindow(m_hWnd);
-                int  rowH  = MulDiv(Constants::History::HISTORY_ROW_HEIGHT, dpi, 96);
-                int  delta = GET_WHEEL_DELTA_WPARAM(wParam);
+                UINT dpi = GetDpiForWindow(m_hWnd);
+                int rowH = MulDiv(Constants::History::HISTORY_ROW_HEIGHT, dpi, 96);
+                int delta = GET_WHEEL_DELTA_WPARAM(wParam);
                 g_scrollOffsetY -= (delta / WHEEL_DELTA) * rowH;
-                g_scrollOffsetY  = std::max(0, g_scrollOffsetY);
+                g_scrollOffsetY = std::max(0, g_scrollOffsetY);
                 InvalidateRect(m_hWnd, nullptr, FALSE);
                 return 0;
             }
@@ -462,15 +463,15 @@ namespace UI {
                 UINT dpiSbHover = GetDpiForWindow(m_hWnd);
                 int sbWHover = MulDiv(Constants::History::SCROLLBAR_THICKNESS, dpiSbHover, 96);
                 if (mx >= rcSb.right - sbWHover) {
-                    UINT dpiSb     = GetDpiForWindow(m_hWnd);
-                    int  rowHSb    = MulDiv(Constants::History::HISTORY_ROW_HEIGHT, dpiSb, 96);
-                    int  paddingSb = MulDiv(Constants::History::HISTORY_PADDING, dpiSb, 96);
-                    int  totalHSb  = paddingSb * 2
-                                     + MulDiv(30, dpiSb, 96)
-                                     + MulDiv(8,  dpiSb, 96)
-                                     + static_cast<int>(g_displayList.size()) * rowHSb;
-                    int  winHSb    = rcSb.bottom - rcSb.top;
-                    int  maxScrSb  = std::max(0, totalHSb - winHSb);
+                    UINT dpiSb = GetDpiForWindow(m_hWnd);
+                    int rowHSb = MulDiv(Constants::History::HISTORY_ROW_HEIGHT, dpiSb, 96);
+                    int paddingSb = MulDiv(Constants::History::HISTORY_PADDING, dpiSb, 96);
+                    int totalHSb = paddingSb * 2
+                                   + MulDiv(30, dpiSb, 96)
+                                   + MulDiv(8, dpiSb, 96)
+                                   + static_cast<int>(g_displayList.size()) * rowHSb;
+                    int winHSb = rcSb.bottom - rcSb.top;
+                    int maxScrSb = std::max(0, totalHSb - winHSb);
                     SetCursor(LoadCursor(nullptr, (maxScrSb > 0) ? IDC_HAND : IDC_ARROW));
                 } else {
                     SetCursor(LoadCursor(nullptr, IDC_ARROW));
@@ -479,26 +480,26 @@ namespace UI {
                 if (g_sbDragging) {
                     RECT rc3{};
                     GetClientRect(m_hWnd, &rc3);
-                    UINT dpi3     = GetDpiForWindow(m_hWnd);
-                    int  rowH3    = MulDiv(Constants::History::HISTORY_ROW_HEIGHT, dpi3, 96);
-                    int  padding3 = MulDiv(Constants::History::HISTORY_PADDING, dpi3, 96);
-                    int  totalH3  = padding3 * 2
-                                    + MulDiv(30, dpi3, 96)
-                                    + MulDiv(8,  dpi3, 96)
-                                    + static_cast<int>(g_displayList.size()) * rowH3;
-                    int winH3   = rc3.bottom - rc3.top;
+                    UINT dpi3 = GetDpiForWindow(m_hWnd);
+                    int rowH3 = MulDiv(Constants::History::HISTORY_ROW_HEIGHT, dpi3, 96);
+                    int padding3 = MulDiv(Constants::History::HISTORY_PADDING, dpi3, 96);
+                    int totalH3 = padding3 * 2
+                                  + MulDiv(30, dpi3, 96)
+                                  + MulDiv(8, dpi3, 96)
+                                  + static_cast<int>(g_displayList.size()) * rowH3;
+                    int winH3 = rc3.bottom - rc3.top;
                     int maxScr3 = std::max(0, totalH3 - winH3);
                     if (maxScr3 > 0) {
-                        float visF    = static_cast<float>(winH3) / static_cast<float>(totalH3);
-                        int   minThumbD = MulDiv(static_cast<int>(Constants::History::SCROLLBAR_MIN_THUMB), dpi3, 96);
-                        int   thumbL  = std::max(minThumbD, static_cast<int>(winH3 * visF));
-                        int   scrollPx = winH3 - thumbL;
+                        float visF = static_cast<float>(winH3) / static_cast<float>(totalH3);
+                        int minThumbD = MulDiv(static_cast<int>(Constants::History::SCROLLBAR_MIN_THUMB), dpi3, 96);
+                        int thumbL = std::max(minThumbD, static_cast<int>(winH3 * visF));
+                        int scrollPx = winH3 - thumbL;
                         if (scrollPx > 0) {
                             int delta3 = my - g_sbDragStartY;
                             g_scrollOffsetY = std::clamp(
-                                g_sbDragStartOff + static_cast<int>(
-                                    static_cast<float>(delta3) * maxScr3 / scrollPx),
-                                0, maxScr3);
+                                    g_sbDragStartOff + static_cast<int>(
+                                        static_cast<float>(delta3) * maxScr3 / scrollPx),
+                                    0, maxScr3);
                             InvalidateRect(m_hWnd, nullptr, FALSE);
                         }
                     }
