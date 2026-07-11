@@ -109,6 +109,13 @@ namespace UI {
             Microsoft::WRL::ComPtr<ID2D1SolidColorBrush>  m_placeholderBrush;
             Microsoft::WRL::ComPtr<ID2D1SolidColorBrush>  m_borderBrush;
             Microsoft::WRL::ComPtr<ID2D1SolidColorBrush>  m_hoverBrush;
+            Microsoft::WRL::ComPtr<ID2D1SolidColorBrush>  m_scrollTrackBrush;
+            Microsoft::WRL::ComPtr<ID2D1SolidColorBrush>  m_scrollThumbBrush;
+
+            // Scrollbar LMB drag state
+            bool  m_scrollDragging      = false;
+            float m_scrollDragStartMouse  = 0.0f; // mouse axis at drag start
+            float m_scrollDragStartOffset = 0.0f; // m_offset at drag start
 
         private:
             void ScrollToSelected();
