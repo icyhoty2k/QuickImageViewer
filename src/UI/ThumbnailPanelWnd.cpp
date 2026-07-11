@@ -2,7 +2,7 @@
 #include <algorithm>
 #include <windowsx.h>
 #include <d2d1.h>
-#include <ShellScalingApi.h>
+#include <shellscalingapi.h>
 
 #include "FileHandler.h"
 #include "UIManager.h"
@@ -316,13 +316,38 @@ namespace UI {
         MONITORINFO mi = {sizeof(mi)};
         GetMonitorInfoW(hMonitor, &mi);
 
+        int monX = mi.rcMonitor.left;
+        int monY = mi.rcMonitor.top;
+        int monW = mi.rcMonitor.right - mi.rcMonitor.left;
+        int monH = mi.rcMonitor.bottom - mi.rcMonitor.top;
+
+        // Work area: the monitor minus the taskbar, in physical screen coordinates.
         int workX = mi.rcWork.left;
         int workY = mi.rcWork.top;
         int workW = mi.rcWork.right - mi.rcWork.left;
         int workH = mi.rcWork.bottom - mi.rcWork.top;
-        // Subtract 1px so vertical panels (WS_EX_TOPMOST + WS_EX_LAYERED) never
-        // visually bleed into the taskbar due to compositor rounding.
-        int workBottom = mi.rcWork.bottom - 1;
+
+        // Compute per-edge taskbar gaps by querying the taskbar window directly.
+        // Using rcMonitor - rcWork is unreliable when a WS_EX_TOPMOST fullscreen
+        // window is present — Windows collapses rcWork to rcMonitor in that case.
+        int gapTop = 0, gapBottom = 0, gapLeft = 0, gapRight = 0;
+        HWND hTaskbar = FindWindowW(L"Shell_TrayWnd", nullptr);
+        if (hTaskbar && IsWindowVisible(hTaskbar)) {
+            RECT tr{};
+            GetWindowRect(hTaskbar, &tr);
+            RECT mr = mi.rcMonitor;
+            RECT inter{};
+            if (IntersectRect(&inter, &tr, &mr)) {
+                if (tr.top <= mr.top && tr.bottom < mr.bottom)
+                    gapTop = tr.bottom - mr.top;
+                else if (tr.bottom >= mr.bottom && tr.top > mr.top)
+                    gapBottom = mr.bottom - tr.top;
+                else if (tr.left <= mr.left && tr.right < mr.right)
+                    gapLeft = tr.right - mr.left;
+                else if (tr.right >= mr.right && tr.left > mr.left)
+                    gapRight = mr.right - tr.left;
+            }
+        }
 
         // Query the monitor's own DPI — avoids any mismatch when hRef is on
         // a different monitor or hasn't received WM_DPICHANGED yet.
@@ -335,27 +360,26 @@ namespace UI {
         int vertThick = static_cast<int>(
             (Constants::THUMBNAIL_PANEL_THUMB_WIDTH + Constants::THUMBNAIL_PANEL_THUMB_MARGIN * 2.0f) * dpiScale);
 
-        // For vertical panels, query which horizontal edges are currently occupied
-        // by other visible panels so we can fit exactly into the remaining gap.
+        // For vertical panels, query which horizontal panels are currently visible
+        // so we can shrink to avoid overlapping them.
         bool topOccupied = false;
         bool bottomOccupied = false;
         if (position == 2 || position == 4) {
             uiManager.GetOccupiedEdges(topOccupied, bottomOccupied);
         }
 
-        // Vertical strip bounds: fit between any occupied horizontal panels,
-        // hard-clamped to rcWork so we never draw over the taskbar.
+        // Vertical strip bounds.
+        // Always start below any top panel AND any top taskbar gap.
+        // Always end above any bottom panel AND any bottom taskbar gap.
         auto verticalBounds = [&](int &vy, int &vh) {
-            vy = workY + (topOccupied ? horzThick : 0);
-            int vBottom = workBottom - (bottomOccupied ? horzThick : 0);
-            // Hard clamp: never exceed the work area bottom pixel
-            if (vBottom > workBottom) vBottom = workBottom;
+            vy = monY + gapTop + (topOccupied ? horzThick : 0);
+            int vBottom = monY + monH - gapBottom - (bottomOccupied ? horzThick : 0);
             vh = vBottom - vy;
             if (vh < 0) vh = 0;
         };
 
         switch (position) {
-            case 0: { // center floating — 80% of work width, vertically centred
+            case 0: { // center floating — 80% of work width, vertically centred in work area
                 int panelW = static_cast<int>(workW * 0.80f);
                 x = workX + (workW - panelW) / 2;
                 y = workY + (workH - horzThick) / 2;
@@ -363,40 +387,40 @@ namespace UI {
                 h = horzThick;
                 break;
             }
-            case 1: // top — full work width at top of work area
-                x = workX;
-                y = workY;
-                w = workW;
+            case 1: // top — full monitor width at top of work area (below top taskbar if present)
+                x = monX + gapLeft;
+                y = monY + gapTop;
+                w = monW - gapLeft - gapRight;
                 h = horzThick;
                 break;
-            case 2: { // right — dynamic height, clamped to work area
+            case 2: { // right — dynamic height, respects all taskbar edges
                 int vy, vh;
                 verticalBounds(vy, vh);
-                x = workX + workW - vertThick;
+                x = monX + monW - gapRight - vertThick;
                 y = vy;
                 w = vertThick;
                 h = vh;
                 break;
             }
-            case 3: // bottom — full work width above taskbar
-                x = workX;
-                y = workY + workH - horzThick;
-                w = workW;
+            case 3: // bottom — full width above bottom taskbar
+                x = monX + gapLeft;
+                y = monY + monH - gapBottom - horzThick;
+                w = monW - gapLeft - gapRight;
                 h = horzThick;
                 break;
-            case 4: { // left — dynamic height, clamped to work area
+            case 4: { // left — dynamic height, respects all taskbar edges
                 int vy, vh;
                 verticalBounds(vy, vh);
-                x = workX;
+                x = monX + gapLeft;
                 y = vy;
                 w = vertThick;
                 h = vh;
                 break;
             }
             default:
-                x = workX;
-                y = workY;
-                w = workW;
+                x = monX + gapLeft;
+                y = monY + gapTop;
+                w = monW - gapLeft - gapRight;
                 h = horzThick;
                 break;
         }
