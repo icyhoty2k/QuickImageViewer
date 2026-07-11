@@ -401,9 +401,8 @@ namespace UI {
                             bool shiftHeld = (GetKeyState(VK_SHIFT) & 0x8000) != 0;
                             if (shiftHeld) {
                                 // Shift+Enter — spawn a DirWnd for this folder.
-                                // History panel stays open so the user can
-                                // keep spawning more without re-opening it.
-                                uiManager.SpawnDirWndForFolder(folder);
+                                // Pass m_hWnd so focus is returned here after spawn.
+                                uiManager.SpawnDirWndForFolder(folder, m_hWnd);
                             } else {
                                 // Plain Enter — load folder in main viewer (original behaviour).
                                 ShowWindow(m_hWnd, SW_HIDE);

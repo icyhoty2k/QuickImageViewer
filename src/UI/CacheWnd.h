@@ -37,11 +37,6 @@ namespace UI {
                 return L"Cache";
             }
 
-            // --- NEW: Tell the base class which panel this is ---
-            RendererD2D::ThumbnailPanelType GetPanelType() const override {
-                return RendererD2D::ThumbnailPanelType::Cache;
-            }
-
             int GetKeyToggle() const override;
 
             int GetKeyMove() const override;

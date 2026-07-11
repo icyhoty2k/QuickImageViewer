@@ -29,7 +29,7 @@ namespace UI {
         auto *r = dynamic_cast<RendererD2D *>(app.renderer.get());
         if (r) {
             for (const auto &t: m_thumbnails) {
-                r->RequestDirThumbnail(t.filePath);
+                r->RequestDirThumbnail(t.filePath, m_hWnd);
             }
         }
     }

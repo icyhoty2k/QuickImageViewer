@@ -116,7 +116,9 @@ namespace UI {
 
         m_thumbnails.clear();
 
-        if (app.playlist.empty() || app.currentIndex < 0) {
+        // Spawned DirWnd instances own their own playlist and bypass this guard.
+        // Primary DirWnd and CacheWnd still require app.playlist to be populated.
+        if (!HasOwnPlaylist() && (app.playlist.empty() || app.currentIndex < 0)) {
             InvalidateRect(m_hWnd, nullptr, TRUE);
             return;
         }
@@ -305,10 +307,11 @@ namespace UI {
         MONITORINFO mi = {sizeof(mi)};
         GetMonitorInfoW(hMonitor, &mi);
 
-        int monX = mi.rcMonitor.left;
-        int monY = mi.rcMonitor.top;
-        int monW = mi.rcMonitor.right - mi.rcMonitor.left;
-        int monH = mi.rcMonitor.bottom - mi.rcMonitor.top;
+        // rcWork: usable area after subtracting the taskbar (all panels use this)
+        int workX = mi.rcWork.left;
+        int workY = mi.rcWork.top;
+        int workW = mi.rcWork.right  - mi.rcWork.left;
+        int workH = mi.rcWork.bottom - mi.rcWork.top;
 
         int horzThick = static_cast<int>(
             (Constants::THUMBNAIL_PANEL_THUMB_HEIGHT + Constants::THUMBNAIL_PANEL_THUMB_MARGIN * 2.0f) * app.dpiScale);
@@ -316,42 +319,42 @@ namespace UI {
             (Constants::THUMBNAIL_PANEL_THUMB_WIDTH + Constants::THUMBNAIL_PANEL_THUMB_MARGIN * 2.0f) * app.dpiScale);
 
         switch (position) {
-            case 0: { // center floating — 80% of monitor width, thumb-height tall
-                int panelW = static_cast<int>(monW * 0.80f);
-                x = monX + (monW - panelW) / 2;
-                y = monY + (monH - horzThick) / 2;
+            case 0: { // center floating — 80% of work width, thumb-height tall, vertically centered in work area
+                int panelW = static_cast<int>(workW * 0.80f);
+                x = workX + (workW - panelW) / 2;
+                y = workY + (workH - horzThick) / 2;
                 w = panelW;
                 h = horzThick;
                 break;
             }
-            case 1: // top
-                x = monX;
-                y = monY;
-                w = monW;
+            case 1: // top — full width at top of work area (respects taskbar if at top)
+                x = workX;
+                y = workY;
+                w = workW;
                 h = horzThick;
                 break;
-            case 2: // right
-                x = monX + monW - vertThick;
-                y = monY;
+            case 2: // right — starts just below the top DirWnd, respects work area bottom
+                x = workX + workW - vertThick;
+                y = workY + horzThick;
                 w = vertThick;
-                h = monH;
+                h = workH - horzThick;
                 break;
-            case 3: // bottom
-                x = monX;
-                y = monY + monH - horzThick;
-                w = monW;
+            case 3: // bottom — full work width, sits at bottom of work area (above taskbar)
+                x = workX;
+                y = workY + workH - horzThick;
+                w = workW;
                 h = horzThick;
                 break;
-            case 4: // left
-                x = monX;
-                y = monY;
+            case 4: // left — starts just below the top DirWnd, respects work area bottom
+                x = workX;
+                y = workY + horzThick;
                 w = vertThick;
-                h = monH;
+                h = workH - horzThick;
                 break;
             default:
-                x = monX;
-                y = monY;
-                w = monW;
+                x = workX;
+                y = workY;
+                w = workW;
                 h = horzThick;
                 break;
         }
@@ -506,30 +509,113 @@ namespace UI {
     }
 
     // =========================================================================
-    // Unified Renderer Calls
+    // Unified Renderer Calls — each panel owns its swap chain + device context
     // =========================================================================
-    void ThumbnailPanelWnd::Render(int selectedIdx, int hoverIdx) {
-        if (!app.renderer) return;
-        auto *r = dynamic_cast<RendererD2D *>(app.renderer.get());
-        if (r && r->GetPanelContext(GetPanelType())) {
-            // Pass the protected m_thumbnails vector directly
-            r->RenderPanel(GetPanelType(), selectedIdx, hoverIdx, m_thumbnails);
-        }
-    }
-
-    void ThumbnailPanelWnd::ResizeSwapChain(UINT w, UINT h) {
-        if (!app.renderer) return;
-        auto *r = dynamic_cast<RendererD2D *>(app.renderer.get());
-        if (r) {
-            r->ResizePanel(GetPanelType(), w, h);
-        }
-    }
-
     void ThumbnailPanelWnd::CreateDeviceResources() {
         if (!app.renderer) return;
         auto *r = dynamic_cast<RendererD2D *>(app.renderer.get());
-        if (r) {
-            r->CreatePanelDeviceResources(GetPanelType(), m_hWnd);
+        if (!r) return;
+
+        ID3D11Device *d3dDev = r->GetD3DDevice();
+        ID2D1Device6 *d2dDev = r->GetD2DDevice();
+        if (!d3dDev || !d2dDev) return;
+
+        // Create a DXGI swap chain bound to this panel's HWND.
+        DXGI_SWAP_CHAIN_DESC1 swapDesc{};
+        swapDesc.Format = DXGI_FORMAT_B8G8R8A8_UNORM;
+        swapDesc.BufferCount = 2;
+        swapDesc.BufferUsage = DXGI_USAGE_RENDER_TARGET_OUTPUT;
+        swapDesc.SwapEffect = DXGI_SWAP_EFFECT_FLIP_DISCARD;
+        swapDesc.SampleDesc.Count = 1;
+
+        Microsoft::WRL::ComPtr<IDXGIDevice1> dxgiDevice;
+        Microsoft::WRL::ComPtr<IDXGIAdapter> adapter;
+        Microsoft::WRL::ComPtr<IDXGIFactory2> factory;
+        if (FAILED(d3dDev->QueryInterface(IID_PPV_ARGS(&dxgiDevice)))) return;
+        if (FAILED(dxgiDevice->GetAdapter(&adapter))) return;
+        if (FAILED(adapter->GetParent(IID_PPV_ARGS(&factory)))) return;
+        if (FAILED(factory->CreateSwapChainForHwnd(d3dDev, m_hWnd, &swapDesc,
+                                                    nullptr, nullptr, &m_swapChain))) return;
+
+        // Create a D2D device context for this panel.
+        Microsoft::WRL::ComPtr<ID2D1DeviceContext> baseCtx;
+        if (FAILED(d2dDev->CreateDeviceContext(D2D1_DEVICE_CONTEXT_OPTIONS_NONE, &baseCtx))) return;
+        if (FAILED(baseCtx.As(&m_panelContext))) return;
+
+        // Size the swap chain and wire the back buffer.
+        RECT rc{};
+        GetClientRect(m_hWnd, &rc);
+        UINT w = static_cast<UINT>(rc.right - rc.left);
+        UINT h = static_cast<UINT>(rc.bottom - rc.top);
+        if (w == 0 || h == 0) { w = 1200; h = Constants::THUMBNAIL_PANEL_WINDOW_THICKNESS; }
+        ResizeSwapChain(w, h);
+
+        // Create brushes.
+        m_panelContext->CreateSolidColorBrush(
+            D2D1::ColorF(Constants::ThumbnailPanel::PLACEHOLDER), &m_placeholderBrush);
+        m_panelContext->CreateSolidColorBrush(
+            D2D1::ColorF(Constants::ThumbnailPanel::SELECTION_BORDER), &m_borderBrush);
+        m_panelContext->CreateSolidColorBrush(
+            D2D1::ColorF(Constants::ThumbnailPanel::HOVER), &m_hoverBrush);
+    }
+
+    void ThumbnailPanelWnd::ResizeSwapChain(UINT w, UINT h) {
+        if (!m_swapChain || !m_panelContext) return;
+
+        m_panelContext->SetTarget(nullptr);
+        m_panelBackBuffer.Reset();
+
+        if (FAILED(m_swapChain->ResizeBuffers(0, w, h, DXGI_FORMAT_UNKNOWN, 0))) return;
+
+        Microsoft::WRL::ComPtr<IDXGISurface> surface;
+        if (FAILED(m_swapChain->GetBuffer(0, IID_PPV_ARGS(&surface)))) return;
+
+        D2D1_BITMAP_PROPERTIES1 props = D2D1::BitmapProperties1(
+            D2D1_BITMAP_OPTIONS_TARGET | D2D1_BITMAP_OPTIONS_CANNOT_DRAW,
+            D2D1::PixelFormat(DXGI_FORMAT_B8G8R8A8_UNORM, D2D1_ALPHA_MODE_IGNORE));
+        if (FAILED(m_panelContext->CreateBitmapFromDxgiSurface(surface.Get(), &props,
+                                                                &m_panelBackBuffer))) return;
+
+        m_panelContext->SetTarget(m_panelBackBuffer.Get());
+    }
+
+    void ThumbnailPanelWnd::Render(int selectedIdx, int hoverIdx) {
+        if (!m_panelContext || !m_swapChain || !app.renderer) return;
+        auto *r = dynamic_cast<RendererD2D *>(app.renderer.get());
+        if (!r) return;
+
+        // -------------------------------------------------------------------------
+        // Phase 1: resolve bitmap pointers under lock, then release before GPU work.
+        // -------------------------------------------------------------------------
+        std::vector<RendererD2D::ResolvedThumb> resolved;
+        resolved.reserve(m_thumbnails.size());
+
+        r->ResolveThumbnailBitmaps(m_thumbnails, UsesDirThumbCache(), resolved);
+
+        // -------------------------------------------------------------------------
+        // Phase 2: GPU draw — no locks held.
+        // -------------------------------------------------------------------------
+        m_panelContext->BeginDraw();
+        m_panelContext->Clear(D2D1::ColorF(0.08f, 0.08f, 0.08f, 1.0f));
+
+        for (size_t i = 0; i < resolved.size(); ++i) {
+            const auto &rv = resolved[i];
+            if (rv.bitmap) {
+                m_panelContext->DrawBitmap(rv.bitmap.Get(), rv.rect, 1.0f,
+                                           D2D1_BITMAP_INTERPOLATION_MODE_LINEAR);
+            } else {
+                m_panelContext->FillRectangle(rv.rect, m_placeholderBrush.Get());
+            }
+            if (static_cast<int>(i) == selectedIdx)
+                m_panelContext->DrawRectangle(rv.rect, m_borderBrush.Get(),
+                                              Constants::ThumbnailPanel::SELECTION_BORDER_THICKNESS);
+            if (static_cast<int>(i) == hoverIdx)
+                m_panelContext->DrawRectangle(rv.rect, m_hoverBrush.Get(),
+                                              Constants::ThumbnailPanel::HOVER_THICKNESS);
         }
+
+        HRESULT hr = m_panelContext->EndDraw();
+        if (hr != D2DERR_RECREATE_TARGET && hr != static_cast<HRESULT>(DXGI_ERROR_DEVICE_REMOVED))
+            m_swapChain->Present(1, 0);
     }
 } // namespace UI

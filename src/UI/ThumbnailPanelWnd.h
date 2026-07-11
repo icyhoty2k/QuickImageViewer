@@ -3,127 +3,98 @@
 #include <windows.h>
 #include <cstdint>
 #include <vector>
+#include <dxgi1_2.h>
+#include <d2d1_3.h>
+#include <wrl/client.h>
 
 #include "IPanelWindow.h"
-#include "RendererD2D.h"
 #include "Thumbnail.h"
+
+// Forward-declare so we can borrow devices without pulling in the full header
+// in most translation units. ThumbnailPanelWnd.cpp includes RendererD2D.h.
+class RendererD2D;
 
 namespace UI {
     // =========================================================================
     // ThumbnailPanelWnd
     //
-    // Shared base for any panel that displays a scrollable filmstrip of
-    // thumbnails (CacheWnd, DirWnd).  Handles all common Win32 message
-    // routing, scroll/drag logic, hover/selection hit-testing, and geometry
-    // layout.  Subclasses implement the handful of virtual hooks that differ
-    // between panels (data source, renderer calls, shortcuts, window bounds).
+    // Shared base for CacheWnd, DirWnd, and SpawnedDirWnd.
+    // Each instance owns its own DXGI swap chain + D2D device context so that
+    // any number of panels can be alive simultaneously without interfering with
+    // each other or with the main viewer renderer.
+    //
+    // The shared RendererD2D is used for two things only:
+    //   1. One-time borrow of ID3D11Device + ID2D1Device6 during Init to create
+    //      this panel's swap chain (CreateDeviceResources).
+    //   2. Shared thumbnail/bitmap cache lookups at render time
+    //      (m_dirThumbCache / m_bitmapCache stay in RendererD2D).
     // =========================================================================
     class ThumbnailPanelWnd : public IPanelWindow {
-        // ---------------------------------------------------------------------
-        // Public API (mirrors what callers used directly on CacheWnd / DirWnd)
-        // ---------------------------------------------------------------------
         public:
-            // Init with default position
             void Init(HINSTANCE hInstance, HWND hParent) override;
-
-            // Init with an explicit position slot
             void Init(HINSTANCE hInstance, HWND hParent, int8_t position) override;
 
-            // Re-anchor the selection highlight to app.currentIndex
             void SyncSelectionRectangle();
-
-            // Rebuild thumbnail geometry and request async decodes where needed
             void UpdateView();
 
-            // Show/hide/move cycle
             void Toggle() override;
-
             void Hide() override;
-
             void MovePanel();
 
-            // ---------------------------------------------------------------------
-            // Shared state — exposed so the renderer can read the vectors directly
-            // (mirrors old g_thumbnailObjects / g_cacheOffset / g_dirOffset globals)
-            // ---------------------------------------------------------------------
         public:
+            // Shared geometry state — read by Render()
             float m_offset = 0.0f;
             int m_selectedIdx = -1;
             int m_hoverIdx = -1;
             std::vector<Thumbnail> m_thumbnails;
 
-            // ---------------------------------------------------------------------
-            // Message routing
-            // ---------------------------------------------------------------------
         protected:
             LRESULT HandleMessage(UINT message, WPARAM wParam, LPARAM lParam) override;
 
-            // ---------------------------------------------------------------------
-            // Hooks — implemented by each concrete subclass
-            // ---------------------------------------------------------------------
-        protected:
-            // Window class name (must be unique per subclass)
+            // ------------------------------------------------------------------
+            // Hooks — concrete subclasses implement these
+            // ------------------------------------------------------------------
             virtual const wchar_t *ClassName() const = 0;
-
-            // Window title
             virtual const wchar_t *WindowTitle() const = 0;
-
-            // Shortcuts this panel owns
             virtual int GetKeyToggle() const = 0;
-
             virtual int GetKeyMove() const = 0;
-
-            // Optional extra key (e.g. SC_PANEL_CACHE_CLEAR); return -1 if unused
-            virtual int GetKeyExtra() const {
-                return -1;
-            }
-
+            virtual int GetKeyExtra() const { return -1; }
             virtual void OnExtraKey() {}
 
-            // True when the current position slot is a vertical strip (affects drag axis).
-            // 5 shared slots:  0=center-float  1=top  2=right  3=bottom  4=left
-            // Vertical = right(2) or left(4).  Override not needed by subclasses.
-            bool IsVertical() const;
-
-            // --- NEW: Force derived classes to declare their Panel Type ---
-            virtual RendererD2D::ThumbnailPanelType GetPanelType() const = 0;
-
-            // Paint — calls the correct renderer method
-            virtual void Render(int selectedIdx, int hoverIdx);
-
-            // Resize the panel's D2D swap chain.
-            // One line per subclass; kept virtual because each calls a different
-            // renderer method (ResizeCacheWindow vs ResizeDirWindow).
-            virtual void ResizeSwapChain(UINT w, UINT h);
-
-            // Create per-panel D2D device resources (called once in Init)
-            virtual void CreateDeviceResources();
-
             // Returns the ordered list of file paths this panel displays.
-            // Base class calls this inside UpdateView() and handles all layout math.
             virtual std::vector<std::wstring> GetSourceItems() const = 0;
 
-            // Called after thumbnails are built (e.g. DirWnd queues async decodes)
+            // True when this panel owns its own playlist (SpawnedDirWnd).
+            // Skips the app.playlist-empty guard in UpdateView().
+            virtual bool HasOwnPlaylist() const { return false; }
+
+            // True when this panel should look up bitmaps from m_dirThumbCache
+            // (DirWnd + SpawnedDirWnd). False = CacheWnd uses m_bitmapCache.
+            virtual bool UsesDirThumbCache() const { return false; }
+
+            // Called after thumbnails are built (DirWnd queues async decodes).
             virtual void PostBuildHook() {}
 
-            // ---------------------------------------------------------------------
-            // Internal helpers
-            // ---------------------------------------------------------------------
+            bool IsVertical() const;
+
+            // ------------------------------------------------------------------
+            // Per-panel D3D/D2D resources — owned here, not in RendererD2D
+            // ------------------------------------------------------------------
+            void CreateDeviceResources();
+            void ResizeSwapChain(UINT w, UINT h);
+            void Render(int selectedIdx, int hoverIdx);
+
+            // Per-panel swap chain and D2D context (one per ThumbnailPanelWnd instance)
+            Microsoft::WRL::ComPtr<IDXGISwapChain1>       m_swapChain;
+            Microsoft::WRL::ComPtr<ID2D1DeviceContext7>   m_panelContext;
+            Microsoft::WRL::ComPtr<ID2D1Bitmap1>          m_panelBackBuffer;
+            Microsoft::WRL::ComPtr<ID2D1SolidColorBrush>  m_placeholderBrush;
+            Microsoft::WRL::ComPtr<ID2D1SolidColorBrush>  m_borderBrush;
+            Microsoft::WRL::ComPtr<ID2D1SolidColorBrush>  m_hoverBrush;
+
         private:
             void ScrollToSelected();
-
-            // Recomputes m_thumbnails rect positions from the current m_offset
-            // without clearing the list or calling PostBuildHook / GetSourceItems.
-            // Called by SyncSelectionRectangle after ScrollToSelected changes
-            // m_offset, so the render sees geometry that matches the new scroll pos.
             void RebuildGeometry();
-
-            // Shared 5-slot geometry (same for both CacheWnd and DirWnd):
-            //   0 = center floating  (80% wide, thumb-height tall)
-            //   1 = top edge strip
-            //   2 = right edge strip
-            //   3 = bottom edge strip
-            //   4 = left edge strip
             void GetWindowBounds(HWND hRef, int8_t position,
                                  int &x, int &y, int &w, int &h) const;
 

@@ -37,7 +37,7 @@ namespace UI {
             // Uses slots 0-2 in round-robin order (left, right, center).
             // If all 3 slots are already occupied the oldest one is reused.
             // The primary (F5) DirWnd is never touched.
-            void SpawnDirWndForFolder(const std::wstring &folderPath);
+            void SpawnDirWndForFolder(const std::wstring &folderPath, HWND hHistoryWnd);
 
             // Hide all 3 spawned DirWnd instances (called from HideAllPanelWindows).
             void HideAllSpawnedDirWnds();
@@ -57,7 +57,7 @@ namespace UI {
             // Slot 1 → right (position 2)
             // Slot 2 → center floating (position 0)
             // Pointers are nullptr until first use; memory owned here.
-            std::array<DirWnd *, Constants::DIR_WND_MAX_INSTANCES> m_spawnedDirWnds = {nullptr, nullptr, nullptr};
+            std::array<SpawnedDirWnd *, Constants::DIR_WND_MAX_INSTANCES> m_spawnedDirWnds = {nullptr, nullptr, nullptr};
 
             // Index of the next slot to use (round-robin, 0-2).
             int m_nextSpawnSlot = 0;
