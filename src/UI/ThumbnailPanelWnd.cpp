@@ -59,31 +59,52 @@ namespace UI {
         if (IsWindowVisible(m_hWnd)) {
             Hide();
         } else {
-            SetWindowPos(m_hWnd, HWND_TOPMOST, 0, 0, 0, 0,
-                         SWP_NOMOVE | SWP_NOSIZE | SWP_SHOWWINDOW);
+            // If the current position is occupied by another panel, find a free one.
+            const PanelLayout &layout = uiManager.GetLayout();
+            if (layout.occupied(m_position) && layout.slots[m_position] != this) {
+                int8_t free = uiManager.NextFreePosition(m_position);
+                if (free >= 0) m_position = free;
+            }
+            m_offset = 0.0f;
+
+            int x, y, w, h;
+            GetWindowBounds(m_hOwner ? m_hOwner : m_hWnd, m_position, x, y, w, h);
+            SetWindowPos(m_hWnd, HWND_TOPMOST, x, y, w, h,
+                         SWP_SHOWWINDOW | SWP_FRAMECHANGED);
             SetForegroundWindow(m_hWnd);
             SetFocus(m_hWnd);
+            uiManager.OnPanelShown(this, m_position);
             UpdateView();
-            SyncSelectionRectangle(); // snap to current image on panel open
+            SyncSelectionRectangle();
         }
     }
 
     void ThumbnailPanelWnd::Hide() {
-        if (m_hWnd && IsWindowVisible(m_hWnd))
+        if (m_hWnd && IsWindowVisible(m_hWnd)) {
             ShowWindow(m_hWnd, SW_HIDE);
+            uiManager.OnPanelHidden(this);
+        }
     }
 
     void ThumbnailPanelWnd::MovePanel() {
         if (!m_hWnd) return;
-        m_position++;
-        if (m_position > 4) m_position = 0; // slots 0..4
+
+        // Remove from current slot.
+        uiManager.OnPanelHidden(this);
+
+        // Find next free position — skip slots occupied by other panels.
+        int8_t next = uiManager.NextFreePosition(m_position);
+        if (next < 0) return; // all slots occupied
+        m_position = next;
+        m_offset = 0.0f;
 
         int x, y, w, h;
         GetWindowBounds(m_hOwner ? m_hOwner : m_hWnd, m_position, x, y, w, h);
-        m_offset = 0.0f;
-
         SetWindowPos(m_hWnd, HWND_TOPMOST, x, y, w, h,
                      SWP_SHOWWINDOW | SWP_FRAMECHANGED);
+
+        // Register at new position — triggers RefreshVerticalPanels.
+        uiManager.OnPanelShown(this, m_position);
     }
 
     void ThumbnailPanelWnd::RefreshBounds() {
@@ -156,20 +177,20 @@ namespace UI {
         if (!vertical) {
             y = (surfaceH - thumbH) / 2.0f;
             float totalW = static_cast<float>(items.size()) * (thumbW + spacing) - spacing;
-            if (totalW <= surfaceW) {
+            if (totalW <= surfaceW - 2.0f * margin) {
                 x = (surfaceW - totalW) / 2.0f;
             } else {
-                float minOff = surfaceW - totalW - margin;
+                float minOff = surfaceW - totalW - 2.0f * margin;
                 m_offset = std::clamp(m_offset, minOff, 0.0f);
                 x = margin + m_offset;
             }
         } else {
             x = (surfaceW - thumbW) / 2.0f;
             float totalH = static_cast<float>(items.size()) * (thumbH + spacing) - spacing;
-            if (totalH <= surfaceH) {
+            if (totalH <= surfaceH - 2.0f * margin) {
                 y = (surfaceH - totalH) / 2.0f;
             } else {
-                float minOff = surfaceH - totalH - margin;
+                float minOff = surfaceH - totalH - 2.0f * margin;
                 m_offset = std::clamp(m_offset, minOff, 0.0f);
                 y = margin + m_offset;
             }
@@ -239,20 +260,20 @@ namespace UI {
         if (!vertical) {
             y = (surfaceH - thumbH) / 2.0f;
             float totalW = static_cast<float>(n) * (thumbW + spacing) - spacing;
-            if (totalW <= surfaceW) {
+            if (totalW <= surfaceW - 2.0f * margin) {
                 x = (surfaceW - totalW) / 2.0f;
             } else {
-                float minOff = surfaceW - totalW - margin;
+                float minOff = surfaceW - totalW - 2.0f * margin;
                 m_offset = std::clamp(m_offset, minOff, 0.0f);
                 x = margin + m_offset;
             }
         } else {
             x = (surfaceW - thumbW) / 2.0f;
             float totalH = static_cast<float>(n) * (thumbH + spacing) - spacing;
-            if (totalH <= surfaceH) {
+            if (totalH <= surfaceH - 2.0f * margin) {
                 y = (surfaceH - totalH) / 2.0f;
             } else {
-                float minOff = surfaceH - totalH - margin;
+                float minOff = surfaceH - totalH - 2.0f * margin;
                 m_offset = std::clamp(m_offset, minOff, 0.0f);
                 y = margin + m_offset;
             }
@@ -316,41 +337,31 @@ namespace UI {
         MONITORINFO mi = {sizeof(mi)};
         GetMonitorInfoW(hMonitor, &mi);
 
-        int monX = mi.rcMonitor.left;
-        int monY = mi.rcMonitor.top;
-        int monW = mi.rcMonitor.right - mi.rcMonitor.left;
-        int monH = mi.rcMonitor.bottom - mi.rcMonitor.top;
+        // rcWork is the authoritative usable area — it already excludes the
+        // taskbar on whichever edge it sits. Use it directly for all positions.
+        int wx = mi.rcWork.left;
+        int wy = mi.rcWork.top;
+        int ww = mi.rcWork.right - mi.rcWork.left;
+        int wh = mi.rcWork.bottom - mi.rcWork.top;
 
-        // Work area: the monitor minus the taskbar, in physical screen coordinates.
-        int workX = mi.rcWork.left;
-        int workY = mi.rcWork.top;
-        int workW = mi.rcWork.right - mi.rcWork.left;
-        int workH = mi.rcWork.bottom - mi.rcWork.top;
-
-        // Compute per-edge taskbar gaps by querying the taskbar window directly.
-        // Using rcMonitor - rcWork is unreliable when a WS_EX_TOPMOST fullscreen
-        // window is present — Windows collapses rcWork to rcMonitor in that case.
-        int gapTop = 0, gapBottom = 0, gapLeft = 0, gapRight = 0;
-        HWND hTaskbar = FindWindowW(L"Shell_TrayWnd", nullptr);
-        if (hTaskbar && IsWindowVisible(hTaskbar)) {
-            RECT tr{};
-            GetWindowRect(hTaskbar, &tr);
-            RECT mr = mi.rcMonitor;
-            RECT inter{};
-            if (IntersectRect(&inter, &tr, &mr)) {
-                if (tr.top <= mr.top && tr.bottom < mr.bottom)
-                    gapTop = tr.bottom - mr.top;
-                else if (tr.bottom >= mr.bottom && tr.top > mr.top)
-                    gapBottom = mr.bottom - tr.top;
-                else if (tr.left <= mr.left && tr.right < mr.right)
-                    gapLeft = tr.right - mr.left;
-                else if (tr.right >= mr.right && tr.left > mr.left)
-                    gapRight = mr.right - tr.left;
-            }
+        // Shrink the work area by a small gap on every side that borders the
+        // taskbar, so panels never appear glued to the taskbar edge.
+        const int gap = Constants::THUMBNAIL_PANEL_TASKBAR_BOTTOM_GAP_HORIZONTAL_PANEL;
+        if (mi.rcWork.left > mi.rcMonitor.left) {
+            wx += gap;
+            ww -= gap;
+        }
+        if (mi.rcWork.top > mi.rcMonitor.top) {
+            wy += gap;
+            wh -= gap;
+        }
+        if (mi.rcWork.right < mi.rcMonitor.right) {
+            ww -= gap;
+        }
+        if (mi.rcWork.bottom < mi.rcMonitor.bottom) {
+            wh -= gap;
         }
 
-        // Query the monitor's own DPI — avoids any mismatch when hRef is on
-        // a different monitor or hasn't received WM_DPICHANGED yet.
         UINT dpiX = 96, dpiY = 96;
         GetDpiForMonitor(hMonitor, MDT_EFFECTIVE_DPI, &dpiX, &dpiY);
         float dpiScale = static_cast<float>(dpiX) / 96.0f;
@@ -360,67 +371,67 @@ namespace UI {
         int vertThick = static_cast<int>(
             (Constants::THUMBNAIL_PANEL_THUMB_WIDTH + Constants::THUMBNAIL_PANEL_THUMB_MARGIN * 2.0f) * dpiScale);
 
-        // For vertical panels, query which horizontal panels are currently visible
-        // so we can shrink to avoid overlapping them.
+        // Vertical panels shrink to avoid overlapping visible horizontal panels.
+        // Read directly from PanelLayout — always current, no polling needed.
         bool topOccupied = false;
         bool bottomOccupied = false;
         if (position == 2 || position == 4) {
-            uiManager.GetOccupiedEdges(topOccupied, bottomOccupied);
+            const PanelLayout &layout = uiManager.GetLayout();
+            topOccupied = layout.topOccupied();
+            bottomOccupied = layout.bottomOccupied();
         }
 
-        // Vertical strip bounds.
-        // Always start below any top panel AND any top taskbar gap.
-        // Always end above any bottom panel AND any bottom taskbar gap.
+        int neighbourGap = Constants::THUMBNAIL_PANEL_NEIGHBOUR_GAP_VERTICAL_PANEL;
         auto verticalBounds = [&](int &vy, int &vh) {
-            vy = monY + gapTop + (topOccupied ? horzThick : 0);
-            int vBottom = monY + monH - gapBottom - (bottomOccupied ? horzThick : 0);
-            vh = vBottom - vy;
+            vy = wy + (topOccupied ? horzThick + neighbourGap : 0);
+            int vBot = wy + wh - (bottomOccupied ? horzThick + neighbourGap : 0);
+            vh = vBot - vy;
             if (vh < 0) vh = 0;
         };
 
         switch (position) {
-            case 0: { // center floating — 80% of work width, vertically centred in work area
-                int panelW = static_cast<int>(workW * 0.80f);
-                x = workX + (workW - panelW) / 2;
-                y = workY + (workH - horzThick) / 2;
-                w = panelW;
+            case 0: { // center floating
+                int pw = static_cast<int>(ww * 0.80f);
+                x = wx + (ww - pw) / 2;
+                y = wy + (wh - horzThick) / 2;
+                w = pw;
                 h = horzThick;
                 break;
             }
-            case 1: // top — full monitor width at top of work area (below top taskbar if present)
-                x = monX + gapLeft;
-                y = monY + gapTop;
-                w = monW - gapLeft - gapRight;
+            case 1: // top
+                x = wx;
+                y = wy;
+                w = ww;
                 h = horzThick;
                 break;
-            case 2: { // right — dynamic height, respects all taskbar edges
+            case 2: { // right
                 int vy, vh;
                 verticalBounds(vy, vh);
-                x = monX + monW - gapRight - vertThick;
+                x = wx + ww - vertThick;
                 y = vy;
                 w = vertThick;
                 h = vh;
                 break;
             }
-            case 3: // bottom — full width above bottom taskbar
-                x = monX + gapLeft;
-                y = monY + monH - gapBottom - horzThick;
-                w = monW - gapLeft - gapRight;
+            case 3: // bottom
+                x = wx;
+                y = wy + wh - horzThick;
+                w = ww;
                 h = horzThick;
                 break;
-            case 4: { // left — dynamic height, respects all taskbar edges
+            case 4: { // left
                 int vy, vh;
                 verticalBounds(vy, vh);
-                x = monX + gapLeft;
+                x = wx;
                 y = vy;
                 w = vertThick;
                 h = vh;
                 break;
             }
             default:
-                x = monX + gapLeft;
-                y = monY + gapTop;
-                w = monW - gapLeft - gapRight;
+                x = wx;
+                y = wy;
+                w = ww;
                 h = horzThick;
                 break;
         }
@@ -479,8 +490,7 @@ namespace UI {
                     return 0;
                 }
                 if (key == GetKeyMove()) {
-                    MovePanel();
-                    uiManager.RefreshVerticalPanels(); // neighbours may need to resize
+                    MovePanel(); // notifies layout, refreshes verticals internally
                     return 0;
                 }
                 if (GetKeyExtra() != -1 && key == GetKeyExtra()) {

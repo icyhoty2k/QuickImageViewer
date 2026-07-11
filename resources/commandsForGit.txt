@@ -1,0 +1,6 @@
+//To your working directory (unstaged):
+git apply your_patch_file.patch
+
+
+Revert an applied patch:
+git apply -R your_patch_file.patch
