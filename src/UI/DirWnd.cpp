@@ -16,10 +16,29 @@ namespace UI {
     }
 
     // -------------------------------------------------------------------------
-    // GetSourceItems — returns the current folder's image playlist
+    // GetSourceItems — F5's own isolated playlist, auto-populated on first use
     // -------------------------------------------------------------------------
     std::vector<std::wstring> DirWnd::GetSourceItems() const {
-        return app.playlist;
+        // On first use, copy app.playlist and lock it in place (protect from spawned hijacking)
+        if (m_dirPlaylist.empty() && !app.playlist.empty()) {
+            const_cast<DirWnd *>(this)->m_dirPlaylist = app.playlist;
+        }
+        return m_dirPlaylist;
+    }
+
+    // -------------------------------------------------------------------------
+    // LoadPlaylist — populate F5's playlist from a folder
+    // -------------------------------------------------------------------------
+    void DirWnd::LoadPlaylist(const std::wstring &folderPath) {
+        m_dirPlaylist.clear();
+        std::filesystem::path dir(folderPath);
+        if (!std::filesystem::exists(dir) || !std::filesystem::is_directory(dir))
+            return;
+        for (const auto &entry : std::filesystem::directory_iterator(dir)) {
+            if (!entry.is_regular_file()) continue;
+            if (!is_image_ext(entry.path().extension().wstring())) continue;
+            m_dirPlaylist.push_back(std::filesystem::canonical(entry.path()).wstring());
+        }
     }
 
     // -------------------------------------------------------------------------
@@ -44,4 +63,5 @@ namespace UI {
             r->ClearDirThumbnailCache(m_hWnd);
         }
     }
+
 } // namespace UI

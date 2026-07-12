@@ -458,6 +458,12 @@ void OpenDirectory(HWND hWnd, const std::wstring &dirPathStr) {
     UI::PushFolderHistory(dirPath.wstring());
     uiManager.getActiveDirWnd().ClearDirThumbnailCache();
 
+    // Only update F5's playlist if F5 (main viewer) is opening this folder.
+    // Spawned panels can hijack app.playlist, but F5's copy stays protected.
+    if (&uiManager.getActiveDirWnd() == &uiManager.getDirWindow()) {
+        uiManager.getDirWindow().SetPlaylistCopy(app.playlist);
+    }
+
     // Force load the first image (index 0) of the freshly sorted playlist
     LoadImageIndex(hWnd, 0);
     uiManager.getActiveDirWnd().UpdateDirView();
