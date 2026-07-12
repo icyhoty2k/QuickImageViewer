@@ -288,4 +288,19 @@ namespace Constants {
         constexpr const int FILE_HANDLER_DEFAULT_SORT_ORDER = 0; // 0 name, 1 date, 2 size,3 extension(type), 4 performance mode - SortPlaylistByDiskOrder
         constexpr const bool FILE_HANDLER_SORT_TYPE_IS_REVERSE = false;
     }
+
+    // =========================================================================
+    // Slideshow  (Ctrl+F1 — play / pause / stop cycle)
+    // Init-only constants; runtime state lives in AppState::SlideshowState.
+    // =========================================================================
+    namespace Slideshow {
+        // WM_TIMER wParam IDs (1001/1002 are taken by lookaside/center-msg)
+        constexpr UINT_PTR TIMER_ID        = 1003; // slide-advance tick
+        constexpr UINT_PTR CURSOR_TIMER_ID = 1004; // cursor-hide inactivity tick
+
+        constexpr int  INTERVAL_MS    = 5000; // ms between auto-advances
+        constexpr bool LOOP           = true;  // wrap to first image at end
+        constexpr bool SHUFFLE        = false; // random order
+        constexpr int  CURSOR_HIDE_MS = 3000;  // ms of inactivity before hiding the cursor (0 = never)
+    }
 }

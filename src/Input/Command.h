@@ -106,6 +106,9 @@ enum class Command {
     ResetEffects,
     SaveImage,
 
+    // --- Navigation ---
+    ToggleLastDir, // Q — switch between current and previous folder
+
     // --- Runtime theme ---
     ThemeFactorUp,   // Ctrl+Alt+Shift+Numpad+
     ThemeFactorDown, // Ctrl+Alt+Shift+Numpad-
@@ -114,6 +117,12 @@ enum class Command {
     // --- Window chrome ---
     ToggleCornerPreference, // Ctrl+Shift+Numpad*   round ↔ square
     CycleBackdropType,      // Ctrl+Shift+Numpad/   None→Mica→Acrylic→MicaAlt→None
+
+    // --- Slideshow ---
+    SlideshowToggle,       // Ctrl+F1 — start / stop
+    SlideshowPauseResume,  // Space   — pause / resume (slideshow only)
+    SlideshowToggleLoop,   // R       — toggle loop/repeat (slideshow only)
+    SlideshowToggleShuffle,// S       — toggle shuffle (slideshow only)
 };
 
 class InputManager {

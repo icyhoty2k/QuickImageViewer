@@ -33,6 +33,10 @@ namespace Constants::Messages {
     constexpr const wchar_t *RESET_TO_DEFAULTS = L"Reset to Defaults";
     constexpr const wchar_t *ALL_EFFECTS_RESET = L"All Effects Reset";
 
+    // Q — toggle last/current dir
+    constexpr const wchar_t *TOGGLE_DIR_NO_PREV    = L"No previous folder";
+    constexpr const wchar_t *TOGGLE_DIR_CHANGED    = L"→ "; // prefix — append folder name
+
     // Runtime theme factor  (Ctrl+Alt+Shift+Numpad+/-/0)
     constexpr const wchar_t *THEME_FACTOR_PREFIX    = L"Theme: ";
     constexpr const wchar_t *THEME_FACTOR_RESET_MSG = L"Theme: Reset";
@@ -46,6 +50,15 @@ namespace Constants::Messages {
     constexpr const wchar_t *BACKDROP_MICA    = L"Backdrop: Mica";
     constexpr const wchar_t *BACKDROP_ACRYLIC = L"Backdrop: Acrylic";
     constexpr const wchar_t *BACKDROP_MICA_ALT = L"Backdrop: MicaAlt";
+
+    // Ctrl+F1 / Space / R / S — Slideshow
+    constexpr const wchar_t *SLIDESHOW_PLAYING      = L"▶ Slideshow"; // prefix; interval/loop/shuffle appended dynamically
+    constexpr const wchar_t *SLIDESHOW_PAUSED       = L"⏸ Slideshow Paused";
+    constexpr const wchar_t *SLIDESHOW_STOPPED      = L"■ Slideshow Stopped";
+    constexpr const wchar_t *SLIDESHOW_LOOP_ON      = L"Loop: ON";
+    constexpr const wchar_t *SLIDESHOW_LOOP_OFF     = L"Loop: OFF";
+    constexpr const wchar_t *SLIDESHOW_SHUFFLE_ON   = L"Shuffle: ON";
+    constexpr const wchar_t *SLIDESHOW_SHUFFLE_OFF  = L"Shuffle: OFF";
 
     // Spawned DirWnd messages
     constexpr const wchar_t *SPAWN_DIR_TOP = L"DirWnd Spawned: Top";
