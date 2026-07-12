@@ -187,3 +187,25 @@ task 12: make a key to start stop slideshow : i suggest ctrl+F1 play/stop toggle
                   Interval: 5 seconds
                   Shuffle: ON
                   Loop: ON
+
+
+task 13:new commandline parameters :
+for this i suggest we create a file in src CMDArgs.h and .cpp and all the logic to be in one place managed and handled by this file and just call from main
+ currently i have :1. -background(to start in background as a service like)
+ 1.1. -fullscreen(for fullscreen),
+ 1.2. -windowedView(for windowed view),
+ 1.3. -slideshow(autoStart slideShow mode),
+ 1.4. -monitorNum#3 (which monitor to start app display in),
+ 1.5  -startFolder (for slideshow and normal operation but mainly used in slideshow)
+ 1.6. -hideMouse(start with mouse hidden maily for slideshow)
+ 1.7. -lock(to lock the viewer so it does not move and does not accept keyboard and mouse.Like KIOSK),
+ 1.8. -awaysOnTop(make app aways on top)
+ 1.9. -repeat (for repeat slideshow On)
+ 1.9. -Shuffle (for shuffle slideshow On)
+ 1.10 -slideshowInterval(for interval to change images)
+ 1.11 -dedicated(when this is provided as cmd arg i want the app not to write to registry values and not to write supported extensions values
+ this is intended to be used if i have two exe files and one is for viewing and second is dedicated to slideshows the dedicated exe must not take any control only used for slideshows and does not write anything except history folder so i can see which folders are played in past
+ also if -dedicated history folder must be the same name qivHistory_dedicated.txt ex:constexpr const wchar_t *DEDICATED_FILE_NAME = HISTORY_FILE_NAME + L"qivHistory_dedicated.txt"; // for the -dedicated cmd arg
+ we must do this so that 1 qiv can be primary and another independant exe can be dedicated primary is used for viewing images dedicated is separate only used for kios/slideshow)
+ 1.12 -slideshowTransition= Dissolve, Ripple , Push , Cut , Fade , zoom for this we need to create a SlideShowTransitions.cpp and .h file and keep all of them there
+ 1.13 -slideshow transitions shuffle

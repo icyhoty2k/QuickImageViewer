@@ -432,7 +432,12 @@ void OverlayManager::UpdateInfo(int index, int total, const std::wstring &filena
 }
 
 void OverlayManager::UpdateZoom(float /*zoom*/, HWND hWnd) {
-    m_zoom = app.GetRealZoom(hWnd);
+    // Called on every Render() frame — skip the text formatting when the
+    // effective zoom hasn't changed (the common case for static frames).
+    const float newZoom = app.GetRealZoom(hWnd);
+    if (newZoom == m_zoom && !slotTopRight.text.empty())
+        return;
+    m_zoom = newZoom;
     wchar_t buf[32];
     swprintf_s(buf, L"%.0f%%", m_zoom * 100.0f);
     slotTopRight.UpdateText(buf);

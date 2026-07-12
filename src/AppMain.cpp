@@ -239,20 +239,17 @@ LRESULT CALLBACK MainAppWndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM l
             return HTCLIENT;
         }
 
-        // Window size changed: Update renderer
+        // Window size changed: Update renderer.
+        // No WM_SIZING handler on purpose: WM_SIZE already fires continuously
+        // during interactive resize with the correct CLIENT size. Resizing in
+        // WM_SIZING too meant two swap-chain ResizeBuffers per drag tick, one
+        // of them at the wrong size (window rect incl. frame).
         case WM_SIZE:
             if (app.renderer) {
                 app.renderer->Resize(LOWORD(lParam), HIWORD(lParam));
             }
             InvalidateRect(hWnd, nullptr, FALSE);
             return 0;
-        case WM_SIZING:
-            if (app.renderer) {
-                RECT *r = (RECT *) lParam;
-                app.renderer->Resize(r->right - r->left, r->bottom - r->top);
-            }
-            InvalidateRect(hWnd, nullptr, FALSE);
-            return TRUE;
 
         // --- CLEAN MOUSE HANDLERS ---
         case WM_LBUTTONDOWN:

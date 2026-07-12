@@ -5,8 +5,10 @@
 #include "Constants.h"
 #include <commdlg.h>
 #include <filesystem>
+#include <numeric>
 #include <ranges>
 #include <shlwapi.h>
+#include <unordered_set>
 #include <vector>
 #include "UI/UIManager.h"
 #include "WorkerThread.h"
@@ -33,12 +35,22 @@ static void EnsureIoWorkerStarted(const std::wstring &folderPath) {
 }
 
 bool is_image_ext(const std::wstring &ext) {
-    for (size_t i = 0; i < Constants::Registry::SUPPORTED_EXTENSIONS_COUNT; ++i) {
-        if (_wcsicmp(ext.c_str(), Constants::Registry::SUPPORTED_EXTENSIONS[i]) == 0) {
-            return true;
+    // O(1) lookup instead of a linear scan — this fires once per directory
+    // entry on every folder open. Set is built lowercased on first use.
+    static const std::unordered_set<std::wstring> extSet = [] {
+        std::unordered_set<std::wstring> s;
+        s.reserve(Constants::Registry::SUPPORTED_EXTENSIONS_COUNT);
+        for (size_t i = 0; i < Constants::Registry::SUPPORTED_EXTENSIONS_COUNT; ++i) {
+            std::wstring e = Constants::Registry::SUPPORTED_EXTENSIONS[i];
+            for (auto &c: e) c = towlower(c);
+            s.insert(std::move(e));
         }
-    }
-    return false;
+        return s;
+    }();
+
+    std::wstring lo = ext;
+    for (auto &c: lo) c = towlower(c);
+    return extSet.contains(lo);
 }
 
 // ---------------------------------------------------------------------------
@@ -140,30 +152,55 @@ static void SortPlaylistAlphabetically(std::vector<std::wstring> &playlist, bool
     });
 }
 
+// ---------------------------------------------------------------------------
+// SortPlaylistByKey
+// ---------------------------------------------------------------------------
+// Shared helper: computes one sort key per file up front (O(N) filesystem
+// calls), then sorts an index array and reorders the playlist. Calling the
+// filesystem inside the comparator would cost O(N log N) syscalls instead.
+// ---------------------------------------------------------------------------
+template<typename Key, typename GetKey>
+static void SortPlaylistByKey(std::vector<std::wstring> &playlist, bool ascending, GetKey getKey) {
+    std::vector<Key> keys;
+    keys.reserve(playlist.size());
+    for (const auto &p: playlist)
+        keys.push_back(getKey(p));
+
+    std::vector<size_t> idx(playlist.size());
+    std::iota(idx.begin(), idx.end(), size_t{0});
+
+    std::stable_sort(idx.begin(), idx.end(), [&](size_t a, size_t b) {
+        return ascending ? (keys[a] < keys[b]) : (keys[a] > keys[b]);
+    });
+
+    std::vector<std::wstring> sorted;
+    sorted.reserve(playlist.size());
+    for (size_t i: idx)
+        sorted.push_back(std::move(playlist[i]));
+    playlist = std::move(sorted);
+}
+
 // Sort by File Date
 static void SortPlaylistByDate(std::vector<std::wstring> &playlist, bool reverse) {
-    std::ranges::sort(playlist, [reverse](const std::wstring &a, const std::wstring &b) {
-        return reverse
-                   ? (fs::last_write_time(a) < fs::last_write_time(b))
-                   : (fs::last_write_time(a) > fs::last_write_time(b));
+    SortPlaylistByKey<fs::file_time_type>(playlist, reverse, [](const std::wstring &p) {
+        std::error_code ec;
+        return fs::last_write_time(p, ec); // ec: missing file sorts as epoch
     });
 }
 
 // Sort by File Size
 static void SortPlaylistBySize(std::vector<std::wstring> &playlist, bool reverse) {
-    std::ranges::sort(playlist, [reverse](const std::wstring &a, const std::wstring &b) {
-        return reverse
-                   ? (fs::file_size(a) < fs::file_size(b))
-                   : (fs::file_size(a) > fs::file_size(b));
+    SortPlaylistByKey<uintmax_t>(playlist, reverse, [](const std::wstring &p) {
+        std::error_code ec;
+        uintmax_t size = fs::file_size(p, ec);
+        return ec ? 0 : size;
     });
 }
 
 // Sort by Extension (Type)
 static void SortPlaylistByType(std::vector<std::wstring> &playlist, bool reverse) {
-    std::ranges::sort(playlist, [reverse](const std::wstring &a, const std::wstring &b) {
-        auto extA = fs::path(a).extension();
-        auto extB = fs::path(b).extension();
-        return reverse ? (extA > extB) : (extA < extB);
+    SortPlaylistByKey<std::wstring>(playlist, !reverse, [](const std::wstring &p) {
+        return fs::path(p).extension().wstring();
     });
 }
 
@@ -247,8 +284,9 @@ void OpenInitialImage(HWND hWnd) {
             if (!is_image_ext(entry.path().extension().wstring()))
                 continue;
 
-            app.playlist.push_back(
-                    std::filesystem::canonical(entry.path()).wstring());
+            // Parent dir is already canonical — entry paths are too.
+            // fs::canonical here would cost several syscalls per file.
+            app.playlist.push_back(entry.path().wstring());
         }
     } catch (...) {
         return;
@@ -387,13 +425,15 @@ void OpenDirectory(HWND hWnd, const std::wstring &dirPathStr) {
         }
     }
 
-    // Declaratively build the playlist
+    // Declaratively build the playlist.
+    // dirPath is already canonical, so entry paths are too — no per-file
+    // fs::canonical (several syscalls each) needed.
     app.playlist = fs::directory_iterator(dirPath)
                    | std::views::filter([](const auto &e) {
                        return e.is_regular_file() && is_image_ext(e.path().extension().wstring());
                    })
                    | std::views::transform([](const auto &e) {
-                       return fs::canonical(e.path()).wstring();
+                       return e.path().wstring();
                    })
                    | std::ranges::to<std::vector<std::wstring> >();
 
@@ -438,12 +478,14 @@ void OpenSpecificImage(HWND hWnd, const std::wstring &filePathStr) {
         }
     }
 
+    // filePath is already canonical, so its parent's entries are too — no
+    // per-file fs::canonical (several syscalls each) needed.
     app.playlist = fs::directory_iterator(filePath.parent_path())
                    | std::views::filter([](const auto &e) {
                        return e.is_regular_file() && is_image_ext(e.path().extension().wstring());
                    })
                    | std::views::transform([](const auto &e) {
-                       return fs::canonical(e.path()).wstring();
+                       return e.path().wstring();
                    })
                    | std::ranges::to<std::vector<std::wstring> >();
 

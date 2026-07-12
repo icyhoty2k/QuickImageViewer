@@ -66,6 +66,7 @@ HRESULT RendererD2D::Initialize(HWND hwnd) {
 
 void RendererD2D::UpdateColorEffects() {
     if (!m_pColorMatrixEffect) return;
+    // Non-linear effect nodes are created lazily here
     (void) EnsureExtraEffects();
     // 1. Check BOTH booleans. If effects are active AND the preview toggle is on...
     if (app.hasActiveEffects && app.effectPreviewEnabled && m_pBitmap) {
@@ -75,8 +76,6 @@ void RendererD2D::UpdateColorEffects() {
         // Safe bypass: no effects active OR preview toggled off.
         m_pActiveDisplayNode = m_pBitmap; // FAST PATH
     }
-    // Non-linear effect nodes are created lazily here
-    (void) EnsureExtraEffects();
 
     constexpr float lumR = 0.2126f;
     constexpr float lumG = 0.7152f;
@@ -511,9 +510,14 @@ HRESULT RendererD2D::LoadBitmap(IWICBitmapSource *bitmap, UINT width, UINT heigh
 //  PreloadBitmap
 // =============================================================================
 HRESULT RendererD2D::PreloadBitmap(const std::wstring &filePath, int requestIndex) {
-    std::lock_guard<std::mutex> lock(m_cacheMutex);
-    if (m_bitmapCache.find(filePath) != m_bitmapCache.end()) {
-        return S_OK;
+    // Hold the cache lock only for the lookup — not while building the task
+    // lambdas and pushing to the IO queue, so decode threads inserting into
+    // the cache are not blocked.
+    {
+        std::lock_guard<std::mutex> lock(m_cacheMutex);
+        if (m_bitmapCache.find(filePath) != m_bitmapCache.end()) {
+            return S_OK;
+        }
     }
 
     // Capture device context as a pointer for the task (D2D device contexts are thread-safe)
