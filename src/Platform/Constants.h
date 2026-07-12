@@ -119,6 +119,7 @@ namespace Constants {
 
         // Scrollbar position enums
         enum class ScrollbarSide { LEFT = 0, RIGHT = 1 };
+
         enum class ScrollbarEdge { TOP = 0, BOTTOM = 1 };
 
         // Per-position scrollbar placement
@@ -253,6 +254,7 @@ namespace Constants {
         // =========================================================================
         // Folder History (HistoryWindow)
         // =========================================================================
+        constexpr bool HISTORY_SHOW_FULL_HISTORY = false; // controls initial behaviour of HistoryWnd full or limited , you can swith with key comb that after you show but this is for inital behaviour
         constexpr const wchar_t *HISTORY_FILE_NAME = L"qivHistory.txt";
         constexpr const wchar_t *FAVORITES_FILE_NAME = L"qivFavorites.txt";
         //backup name must be the same as the file name only append the currentDate ex: qivHistory_DATE.bak
