@@ -96,3 +96,21 @@ Think PowerPoint, but for image collections.
 
 task 10: add keyboard shortcuts to change the global color and a variable to control step of THEME_FACTOR var name THEME_FACTOR_STEP and a key to revert to default:
 i suggest ctrl+alt+shift+ numpad plus and minus for up down for step i suggest 0.5 and for revert to default i suggest ctrl+alt+shift+numpad0
+
+task 11: make a key to toggle dirs : last dir/current dir i suggest q its closer to tab
+
+task 12: make a key to start stop slideshow : i suggest ctrl+F1 play/stop toggle
+
+task 13:new commandline parameters :
+ currently i have :1. -background(to start in background as a service like)
+ 1.1. -fullscreen(for fullscreen),
+ 1.2. -windowedView(for windowed view),
+ 1.3. -slideshow(autoStart slideShow mode),
+ 1.4. -monitorNum#3 (which monitor to start app display in),
+ 1.5  -startFolder (for slideshow and normal operation but mainly used in slideshow)
+ 1.6. -hideMouse(start with mouse hidden maily for slideshow)
+ 1.7. -lock(to lock the viewer so it does not move and does not accept keyboard and mouse.Like KIOSK),
+ 1.8. -awaysOnTop(make app aways on top)
+
+
+ task 14: all constants to be saved on disk and read from disk so i can have settings now which remembers the state and if no file exists use buildIn constants.
