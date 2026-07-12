@@ -119,10 +119,11 @@ enum class Command {
     CycleBackdropType,      // Ctrl+Shift+Numpad/   None→Mica→Acrylic→MicaAlt→None
 
     // --- Slideshow ---
-    SlideshowToggle,       // Ctrl+F1 — start / stop
-    SlideshowPauseResume,  // Space   — pause / resume (slideshow only)
-    SlideshowToggleLoop,   // R       — toggle loop/repeat (slideshow only)
-    SlideshowToggleShuffle,// S       — toggle shuffle (slideshow only)
+    SlideshowToggle,          // Ctrl+F1 — start / stop
+    SlideshowPauseResume,     // Space   — pause / resume (slideshow only)
+    SlideshowToggleLoop,      // R       — toggle loop/repeat (slideshow only)
+    SlideshowToggleShuffle,   // S       — toggle shuffle (slideshow only)
+    SlideshowCycleTransition, // T       — cycle transition type (slideshow only)
 };
 
 class InputManager {

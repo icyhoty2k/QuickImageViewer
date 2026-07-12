@@ -4,7 +4,8 @@
 #include "Constants.h" // Include your constants for versioning
 
 // The icon is in the same folder as this .rc file
-IDI_APP_ICON ICON "QIV.ico"
+IDI_APP_ICON           ICON "QIV.ico"
+IDI_APP_ICON_DEDICATED ICON "QIV_DEDICATED.ico"
 
 // Embed the application manifest for high DPI support and common controls
 1 24 "app.manifest"

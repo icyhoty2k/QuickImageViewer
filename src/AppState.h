@@ -9,6 +9,7 @@
 #include <memory>
 
 #include "Constants.h"
+#include "SlideshowTransitions.h"
 
 struct SlideshowState {
     bool running  = false;
@@ -23,6 +24,8 @@ struct SlideshowState {
 
     std::vector<int> shuffleOrder; // permutation of playlist indices
     int  shufflePos = 0;           // current position within shuffleOrder
+
+    SlideshowTransitionState transition;
 };
 
 struct ViewportState {
@@ -101,7 +104,8 @@ struct AppState {
     RECT savedWindowRect = {0, 0, 0, 0};
 
     bool isDialogVisible = false;
-    bool isLocked = false; // -lock: KIOSK mode — blocks all keyboard and mouse input
+    bool isLocked    = false; // -lock:      KIOSK mode — blocks all keyboard and mouse input
+    bool isDedicated = false; // -dedicated: no registry writes, separate history file
 
     // Slideshow
     SlideshowState slideshow;

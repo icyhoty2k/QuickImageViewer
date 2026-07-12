@@ -103,9 +103,10 @@ Command InputManager::ResolveKeyboardKeys(UINT key) {
     // Slideshow-only keys (Space / R / S) — only intercepted when slideshow is running
     // -------------------------------------------------------------------------
     if (!ctrl && !alt && !shift && app.slideshow.running) {
-        if (key == Shortcuts::SC_SLIDESHOW_PAUSE_RESUME)   return Command::SlideshowPauseResume;
-        if (key == Shortcuts::SC_SLIDESHOW_LOOP_TOGGLE)    return Command::SlideshowToggleLoop;
-        if (key == Shortcuts::SC_SLIDESHOW_SHUFFLE_TOGGLE) return Command::SlideshowToggleShuffle;
+        if (key == Shortcuts::SC_SLIDESHOW_PAUSE_RESUME)      return Command::SlideshowPauseResume;
+        if (key == Shortcuts::SC_SLIDESHOW_LOOP_TOGGLE)       return Command::SlideshowToggleLoop;
+        if (key == Shortcuts::SC_SLIDESHOW_SHUFFLE_TOGGLE)    return Command::SlideshowToggleShuffle;
+        if (key == Shortcuts::SC_SLIDESHOW_TRANSITION_CYCLE)  return Command::SlideshowCycleTransition;
     }
 
     // -------------------------------------------------------------------------

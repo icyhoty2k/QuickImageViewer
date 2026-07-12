@@ -572,6 +572,22 @@ void InputManager::ExecuteKeyboardShortcutCommand(HWND hWnd, Command cmd) {
             break;
         }
 
+        case Command::SlideshowCycleTransition: {
+            // Cycle through implemented types only (Dissolve/Ripple are stubs)
+            auto& t = app.slideshow.transition.type;
+            const wchar_t* msg = Constants::Messages::TRANSITION_CUT;
+            switch (t) {
+                case TransitionType::Cut:      t = TransitionType::Fade;  msg = Constants::Messages::TRANSITION_FADE;  break;
+                case TransitionType::Fade:     t = TransitionType::Push;  msg = Constants::Messages::TRANSITION_PUSH;  break;
+                case TransitionType::Push:     t = TransitionType::Zoom;  msg = Constants::Messages::TRANSITION_ZOOM;  break;
+                case TransitionType::Zoom:     t = TransitionType::Cut;   msg = Constants::Messages::TRANSITION_CUT;   break;
+                case TransitionType::Dissolve: t = TransitionType::Cut;   msg = Constants::Messages::TRANSITION_CUT;   break;
+                case TransitionType::Ripple:   t = TransitionType::Cut;   msg = Constants::Messages::TRANSITION_CUT;   break;
+            }
+            g_overlayManager.PostCenterMessage(hWnd, msg);
+            break;
+        }
+
         default:
             break;
     }

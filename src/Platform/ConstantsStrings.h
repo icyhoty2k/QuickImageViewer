@@ -59,6 +59,12 @@ namespace Constants::Messages {
     constexpr const wchar_t *SLIDESHOW_LOOP_OFF     = L"Loop: OFF";
     constexpr const wchar_t *SLIDESHOW_SHUFFLE_ON   = L"Shuffle: ON";
     constexpr const wchar_t *SLIDESHOW_SHUFFLE_OFF  = L"Shuffle: OFF";
+    constexpr const wchar_t *TRANSITION_CUT         = L"Transition: Cut";
+    constexpr const wchar_t *TRANSITION_FADE        = L"Transition: Fade";
+    constexpr const wchar_t *TRANSITION_DISSOLVE    = L"Transition: Dissolve";
+    constexpr const wchar_t *TRANSITION_RIPPLE      = L"Transition: Ripple";
+    constexpr const wchar_t *TRANSITION_PUSH        = L"Transition: Push";
+    constexpr const wchar_t *TRANSITION_ZOOM        = L"Transition: Zoom";
 
     // Spawned DirWnd messages
     constexpr const wchar_t *SPAWN_DIR_TOP = L"DirWnd Spawned: Top";

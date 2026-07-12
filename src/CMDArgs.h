@@ -4,6 +4,7 @@
 #pragma once
 #include <windows.h>
 #include <string>
+#include "SlideshowTransitions.h"
 
 struct CmdArgs {
     // --- Display ---
@@ -18,14 +19,17 @@ struct CmdArgs {
     std::wstring imageFile;             // positional arg      : open this specific file
 
     // --- Slideshow ---
-    bool         slideshow            = false; // -slideshow           : auto-start slideshow
-    bool         repeat               = false; // -repeat              : loop slideshow
-    bool         shuffle              = false; // -shuffle             : random order
-    int          slideshowIntervalMs  = -1;    // -slideshowInterval N : N seconds between slides
+    bool         slideshow            = false; // -slideshow                    : auto-start slideshow
+    bool         repeat               = false; // -repeat                       : loop slideshow
+    bool         shuffle              = false; // -shuffle                      : random order
+    int          slideshowIntervalMs  = -1;    // -slideshowInterval N          : N seconds between slides
+    TransitionType slideshowTransition = TransitionType::Cut; // -slideshowTransition=<type>
+    bool         transitionShuffle    = false; // -slideshowTransitionShuffle   : random transition each slide
 
     // --- Behavior ---
-    bool         hideMouse = false; // -hideMouse : hide cursor at startup
-    bool         lock      = false; // -lock      : KIOSK — no keyboard or mouse input accepted
+    bool         hideMouse  = false; // -hideMouse  : hide cursor at startup
+    bool         lock       = false; // -lock       : KIOSK — no keyboard or mouse input accepted
+    bool         dedicated  = false; // -dedicated  : no registry writes, separate history file, unique mutex
 };
 
 // Parse argc/argv into a CmdArgs struct.  Call immediately after CommandLineToArgvW.

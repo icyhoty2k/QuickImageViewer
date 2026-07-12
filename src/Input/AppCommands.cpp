@@ -122,9 +122,9 @@ void AppCommands::AddTrayIcon(HWND hWnd) {
     nid.uFlags = NIF_ICON | NIF_MESSAGE | NIF_TIP;
     nid.uCallbackMessage = WM_TRAYICON;
 
-    // Use your existing app icon
-    nid.hIcon = LoadIcon(GetModuleHandle(nullptr), MAKEINTRESOURCE(IDI_APP_ICON));
-    wcscpy_s(nid.szTip, L"QuickImageViewer"); // Hover text
+    UINT iconId = app.isDedicated ? IDI_APP_ICON_DEDICATED : IDI_APP_ICON;
+    nid.hIcon = LoadIcon(GetModuleHandle(nullptr), MAKEINTRESOURCE(iconId));
+    wcscpy_s(nid.szTip, app.isDedicated ? L"QuickImageViewer [Dedicated]" : L"QuickImageViewer");
 
 
     if (!Shell_NotifyIconW(NIM_MODIFY, &nid)) {

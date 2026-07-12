@@ -41,11 +41,12 @@ namespace Shortcuts {
     // Panels / Overlays
     // -------------------------------------------------------------------------
 
-    constexpr UINT SC_SLIDESHOW_TOGGLE        = VK_F1;    // Ctrl+F1 — start / stop
-    constexpr UINT SC_SLIDESHOW_PAUSE_RESUME  = VK_SPACE; // Space   — pause / resume (slideshow only)
-    constexpr UINT SC_SLIDESHOW_LOOP_TOGGLE   = 'R';      // R       — toggle loop/repeat (slideshow only)
-    constexpr UINT SC_SLIDESHOW_SHUFFLE_TOGGLE = 'S';     // S       — toggle shuffle (slideshow only)
-    constexpr UINT SC_PANEL_HELP_TOGGLE       = VK_F1;   // plain F1 — help window
+    constexpr UINT SC_SLIDESHOW_TOGGLE             = VK_F1;    // Ctrl+F1 — start / stop
+    constexpr UINT SC_SLIDESHOW_PAUSE_RESUME       = VK_SPACE; // Space   — pause / resume (slideshow only)
+    constexpr UINT SC_SLIDESHOW_LOOP_TOGGLE        = 'R';      // R       — toggle loop/repeat (slideshow only)
+    constexpr UINT SC_SLIDESHOW_SHUFFLE_TOGGLE     = 'S';      // S       — toggle shuffle (slideshow only)
+    constexpr UINT SC_SLIDESHOW_TRANSITION_CYCLE   = 'T';      // T       — cycle transition type (slideshow only)
+    constexpr UINT SC_PANEL_HELP_TOGGLE            = VK_F1;   // plain F1 — help window
     constexpr UINT SC_PANEL_OPEN_FILE = VK_F2;
     constexpr UINT SC_PANEL_CACHE_TOGGLE = VK_F3;
     constexpr UINT SC_PANEL_CACHE_MOVE = VK_F4;
