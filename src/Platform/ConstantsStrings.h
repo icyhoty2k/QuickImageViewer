@@ -66,6 +66,17 @@ namespace Constants::Messages {
     constexpr const wchar_t *TRANSITION_PUSH        = L"Transition: Push";
     constexpr const wchar_t *TRANSITION_ZOOM        = L"Transition: Zoom";
 
+    // Sort order  (Ctrl+Alt+Shift+0/6/7/8/9)  — press once: ascending, press again: descending
+    constexpr const wchar_t *SORT_BY_NAME      = L"Sort: Name (A→Z)";
+    constexpr const wchar_t *SORT_BY_NAME_REV  = L"Sort: Name (Z→A)";
+    constexpr const wchar_t *SORT_BY_DATE      = L"Sort: Date (Newest)";
+    constexpr const wchar_t *SORT_BY_DATE_REV  = L"Sort: Date (Oldest)";
+    constexpr const wchar_t *SORT_BY_SIZE      = L"Sort: Size (Largest)";
+    constexpr const wchar_t *SORT_BY_SIZE_REV  = L"Sort: Size (Smallest)";
+    constexpr const wchar_t *SORT_BY_TYPE      = L"Sort: Extension (A→Z)";
+    constexpr const wchar_t *SORT_BY_TYPE_REV  = L"Sort: Extension (Z→A)";
+    constexpr const wchar_t *SORT_BY_DISK      = L"Sort: Disk Order";
+
     // Spawned DirWnd messages
     constexpr const wchar_t *SPAWN_DIR_TOP = L"DirWnd Spawned: Top";
     constexpr const wchar_t *SPAWN_DIR_LEFT = L"DirWnd Spawned: Left";
