@@ -247,6 +247,7 @@ namespace Constants {
         constexpr bool HISTORY_SHOW_FULL_HISTORY = false; // controls initial behaviour of HistoryWnd full or limited , you can swith with key comb that after you show but this is for inital behaviour
         constexpr const wchar_t *HISTORY_FILE_NAME = L"qivHistory.txt";
         constexpr const wchar_t *FAVORITES_FILE_NAME = L"qivFavorites.txt";
+        constexpr const wchar_t *DEDICATED_FILE_NAME = HISTORY_FILE_NAME + L"qivHistory_dedicated.txt"; // for the -dedicated cmd arg
         //backup name must be the same as the file name only append the currentDate ex: qivHistory_DATE.bak
         //We Backup when we delete history/favorites only then we first backup then delete !
         constexpr const wchar_t *HISTORY_FAVORITES_BACKUP_FOLDER = L"/QivBackup";
@@ -260,10 +261,10 @@ namespace Constants {
         constexpr int HISTORY_MAX_FAVORITES_TO_SHOW = 10; // how many favorites folders to show in HistoryWnd
         constexpr int HISTORY_FAVORITES_POSITION = 0; // 0 on top , 1 on bottom , 2 don't change position(not pinned)
 
-        constexpr int HISTORY_ROW_HEIGHT = 28;     // px at 96 DPI per history row
-        constexpr int HISTORY_PADDING = 16;         // px at 96 DPI inner padding
-        constexpr int HISTORY_FONT_SIZE = 14;       // pt at 96 DPI — header / hint lines
-        constexpr int HISTORY_LIST_FONT_SIZE = 16;  // pt at 96 DPI — list item text (tune independently)
+        constexpr int HISTORY_ROW_HEIGHT = 28; // px at 96 DPI per history row
+        constexpr int HISTORY_PADDING = 16; // px at 96 DPI inner padding
+        constexpr int HISTORY_FONT_SIZE = 14; // pt at 96 DPI — header / hint lines
+        constexpr int HISTORY_LIST_FONT_SIZE = 16; // pt at 96 DPI — list item text (tune independently)
         // Scrollbar (right-edge GDI strip) - geometry only
         constexpr int SCROLLBAR_THICKNESS = 6; // px width
         constexpr int SCROLLBAR_MIN_THUMB = 16; // minimum thumb height in px
@@ -295,12 +296,12 @@ namespace Constants {
     // =========================================================================
     namespace Slideshow {
         // WM_TIMER wParam IDs (1001/1002 are taken by lookaside/center-msg)
-        constexpr UINT_PTR TIMER_ID        = 1003; // slide-advance tick
+        constexpr UINT_PTR TIMER_ID = 1003; // slide-advance tick
         constexpr UINT_PTR CURSOR_TIMER_ID = 1004; // cursor-hide inactivity tick
 
-        constexpr int  INTERVAL_MS    = 5000; // ms between auto-advances
-        constexpr bool LOOP           = true;  // wrap to first image at end
-        constexpr bool SHUFFLE        = false; // random order
-        constexpr int  CURSOR_HIDE_MS = 3000;  // ms of inactivity before hiding the cursor (0 = never)
+        constexpr int INTERVAL_MS = 5000; // ms between auto-advances
+        constexpr bool LOOP = true; // wrap to first image at end
+        constexpr bool SHUFFLE = false; // random order
+        constexpr int CURSOR_HIDE_MS = 3000; // ms of inactivity before hiding the cursor (0 = never)
     }
 }

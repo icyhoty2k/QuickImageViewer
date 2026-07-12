@@ -101,6 +101,7 @@ struct AppState {
     RECT savedWindowRect = {0, 0, 0, 0};
 
     bool isDialogVisible = false;
+    bool isLocked = false; // -lock: KIOSK mode — blocks all keyboard and mouse input
 
     // Slideshow
     SlideshowState slideshow;
