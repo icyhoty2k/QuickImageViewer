@@ -173,3 +173,17 @@ we must switch to light mode using the runtime functions! app.Commands and repai
 task 11: make a key to toggle dirs : last dir/current dir i suggest key q  its closer to tab
 check if only one dis is in historylist if one dir dismiss and write a overlay message in center center to inform me that dir did not change
 also inform me with center center overlay that dir changed if q changed a dir
+
+task 12: make a key to start stop slideshow : i suggest ctrl+F1 play/stop toggle , this task requires us create a slideshow struct or class because we will have parameters in it,also we need cente center overlays to tell us play stop etc..
+
+️ Adjustable interval (1 s, 2 s, 5 s, 10 s, 30 s, etc.) in constant.h
+🔁 Loop when reaching the last image - contant.h true /false
+🔀 Optional shuffle mode - contant.h true /false
+⏸️ Pause/resume with ctrl+F1 - also in constants.h
+⌨️ Arrow keys to manually skip while the slideshow is running
+🖱️ Hide the mouse cursor after a few seconds of inactivity when in slideshow - also controlabble in constants.h
+ℹ️ Show slideshow status using the existing overlay system example:Slideshow Started
+                  Slideshow Paused
+                  Interval: 5 seconds
+                  Shuffle: ON
+                  Loop: ON

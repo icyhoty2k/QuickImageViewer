@@ -1,5 +1,6 @@
 #include <algorithm>
 #include <random>
+#include "CMDArgs.h"
 
 #include "AppCommands.h"
 #include "Overlays/OverlayManager.h"
@@ -59,6 +60,22 @@ DecoderThreadPool g_dirThumbWorker;
 
 
 LRESULT CALLBACK MainAppWndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) {
+    // KIOSK lock: swallow all user-input messages so the viewer cannot be controlled
+    if (app.isLocked) {
+        switch (message) {
+            case WM_KEYDOWN:
+            case WM_KEYUP:
+            case WM_LBUTTONDOWN: case WM_LBUTTONUP: case WM_LBUTTONDBLCLK:
+            case WM_RBUTTONDOWN: case WM_RBUTTONUP:
+            case WM_MBUTTONDOWN: case WM_MBUTTONUP:
+            case WM_MOUSEWHEEL:
+            case WM_MOUSEMOVE:
+                return 0;
+            default:
+                break;
+        }
+    }
+
     switch (message) {
         case WM_DPICHANGED: {
             // 1. Update your global scale
@@ -605,19 +622,12 @@ int WINAPI wWinMain(HINSTANCE hInstance, [[maybe_unused]] HINSTANCE hPrevInstanc
     RegisterDragDrop(hWnd, (g_pDropTarget = new DropTarget(hWnd)));
 
     AppCommands::changeAppCornerPreference(hWnd, app.cornerPreference);
-    // Handle startup arguments using the already-parsed 'argv'
-    if (argc > 1 && std::wstring(argv[1]) == L"-background") {
-        ShowWindow(hWnd, SW_HIDE);
-        AppCommands::AddTrayIcon(hWnd);
-    } else {
-        ShowWindow(hWnd, nCmdShow);
-        UpdateWindow(hWnd);
-        if (argc > 1) OpenSpecificImage(hWnd, argv[1]);
-        else OpenInitialImage(hWnd);
-    }
 
-    // Cleanup command line memory ONCE
-    LocalFree(argv);
+    // Parse and apply all command-line arguments
+    const CmdArgs cmdArgs = ParseCmdArgs(argc, argv);
+    LocalFree(argv); // free early — ApplyCmdArgs works from the parsed struct
+
+    ApplyCmdArgs(hWnd, cmdArgs, nCmdShow);
 
     MSG msg{};
     while (GetMessage(&msg, nullptr, 0, 0)) {
