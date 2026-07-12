@@ -182,6 +182,20 @@ namespace Shortcuts {
     constexpr UINT SC_BACKDROP_TYPE_CYCLE      = VK_DIVIDE;   // Numpad/  — cycle backdrop types
 
     // -------------------------------------------------------------------------
+    // Sort order  (Ctrl+Alt+Shift + digit key)
+    // -------------------------------------------------------------------------
+    // Ctrl+Alt+Shift+0  —  Sort by Name (natural / Explorer order)
+    // Ctrl+Alt+Shift+9  —  Sort by Date Modified
+    // Ctrl+Alt+Shift+8  —  Sort by File Size
+    // Ctrl+Alt+Shift+7  —  Sort by Extension (type)
+    // Ctrl+Alt+Shift+6  —  Sort by Physical Disk Order (HDD performance mode)
+    constexpr UINT SC_SORT_BY_NAME = '0'; // requires ctrl+alt+shift
+    constexpr UINT SC_SORT_BY_DATE = '9'; // requires ctrl+alt+shift
+    constexpr UINT SC_SORT_BY_SIZE = '8'; // requires ctrl+alt+shift
+    constexpr UINT SC_SORT_BY_TYPE = '7'; // requires ctrl+alt+shift
+    constexpr UINT SC_SORT_BY_DISK = '6'; // requires ctrl+alt+shift
+
+    // -------------------------------------------------------------------------
     // HISTORY WINDOW
     // -------------------------------------------------------------------------
     constexpr UINT HISTORY_FAVORITES_TOGGLE_KEY = VK_SPACE;

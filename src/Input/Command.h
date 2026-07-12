@@ -118,6 +118,13 @@ enum class Command {
     ToggleCornerPreference, // Ctrl+Shift+Numpad*   round ↔ square
     CycleBackdropType,      // Ctrl+Shift+Numpad/   None→Mica→Acrylic→MicaAlt→None
 
+    // --- Sort order ---
+    SortByName,  // Ctrl+Alt+Shift+0
+    SortByDate,  // Ctrl+Alt+Shift+9
+    SortBySize,  // Ctrl+Alt+Shift+8
+    SortByType,  // Ctrl+Alt+Shift+7
+    SortByDisk,  // Ctrl+Alt+Shift+6
+
     // --- Slideshow ---
     SlideshowToggle,          // Ctrl+F1 — start / stop
     SlideshowPauseResume,     // Space   — pause / resume (slideshow only)

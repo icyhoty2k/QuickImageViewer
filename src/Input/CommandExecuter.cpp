@@ -523,6 +523,60 @@ void InputManager::ExecuteKeyboardShortcutCommand(HWND hWnd, Command cmd) {
             }
             break;
 
+        // -----------------------------------------------------------------------
+        // Sort order  (Ctrl+Alt+Shift+0/6/7/8/9)
+        // First press:  sets the sort mode ascending (reverse = false)
+        // Second press: toggles to descending (reverse = true), third press back, etc.
+        // -----------------------------------------------------------------------
+        case Command::SortByName: {
+            if (app.fileHandlerDefaultSortOrder == 0)
+                app.fileHandlerIsReverseSortOrder = !app.fileHandlerIsReverseSortOrder;
+            else { app.fileHandlerDefaultSortOrder = 0; app.fileHandlerIsReverseSortOrder = false; }
+            ReSortPlaylistAndRebuildMap(hWnd);
+            g_overlayManager.PostCenterMessage(hWnd, app.fileHandlerIsReverseSortOrder
+                ? Constants::Messages::SORT_BY_NAME_REV : Constants::Messages::SORT_BY_NAME);
+            break;
+        }
+
+        case Command::SortByDate: {
+            if (app.fileHandlerDefaultSortOrder == 1)
+                app.fileHandlerIsReverseSortOrder = !app.fileHandlerIsReverseSortOrder;
+            else { app.fileHandlerDefaultSortOrder = 1; app.fileHandlerIsReverseSortOrder = false; }
+            ReSortPlaylistAndRebuildMap(hWnd);
+            g_overlayManager.PostCenterMessage(hWnd, app.fileHandlerIsReverseSortOrder
+                ? Constants::Messages::SORT_BY_DATE_REV : Constants::Messages::SORT_BY_DATE);
+            break;
+        }
+
+        case Command::SortBySize: {
+            if (app.fileHandlerDefaultSortOrder == 2)
+                app.fileHandlerIsReverseSortOrder = !app.fileHandlerIsReverseSortOrder;
+            else { app.fileHandlerDefaultSortOrder = 2; app.fileHandlerIsReverseSortOrder = false; }
+            ReSortPlaylistAndRebuildMap(hWnd);
+            g_overlayManager.PostCenterMessage(hWnd, app.fileHandlerIsReverseSortOrder
+                ? Constants::Messages::SORT_BY_SIZE_REV : Constants::Messages::SORT_BY_SIZE);
+            break;
+        }
+
+        case Command::SortByType: {
+            if (app.fileHandlerDefaultSortOrder == 3)
+                app.fileHandlerIsReverseSortOrder = !app.fileHandlerIsReverseSortOrder;
+            else { app.fileHandlerDefaultSortOrder = 3; app.fileHandlerIsReverseSortOrder = false; }
+            ReSortPlaylistAndRebuildMap(hWnd);
+            g_overlayManager.PostCenterMessage(hWnd, app.fileHandlerIsReverseSortOrder
+                ? Constants::Messages::SORT_BY_TYPE_REV : Constants::Messages::SORT_BY_TYPE);
+            break;
+        }
+
+        case Command::SortByDisk: {
+            // Disk order has no meaningful reverse — pressing again is a no-op toggle
+            app.fileHandlerDefaultSortOrder = 4;
+            app.fileHandlerIsReverseSortOrder = false;
+            ReSortPlaylistAndRebuildMap(hWnd);
+            g_overlayManager.PostCenterMessage(hWnd, Constants::Messages::SORT_BY_DISK);
+            break;
+        }
+
         case Command::SlideshowToggle: {
             bool wasRunning = app.slideshow.running;
             AppCommands::toggleSlideshow(hWnd);

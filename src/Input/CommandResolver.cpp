@@ -19,6 +19,19 @@ Command InputManager::ResolveKeyboardKeys(UINT key) {
     bool alt = (GetKeyState(VK_MENU) & 0x8000) != 0;
 
     // -------------------------------------------------------------------------
+    // Sort order  Ctrl+Alt+Shift+0/6/7/8/9
+    // -------------------------------------------------------------------------
+    if (ctrl && alt && shift) {
+        switch (key) {
+            case Shortcuts::SC_SORT_BY_NAME: return Command::SortByName;
+            case Shortcuts::SC_SORT_BY_DATE: return Command::SortByDate;
+            case Shortcuts::SC_SORT_BY_SIZE: return Command::SortBySize;
+            case Shortcuts::SC_SORT_BY_TYPE: return Command::SortByType;
+            case Shortcuts::SC_SORT_BY_DISK: return Command::SortByDisk;
+        }
+    }
+
+    // -------------------------------------------------------------------------
     // Per-slot compact-mode toggles  Ctrl+Alt+1..9  (no shift)
     // -------------------------------------------------------------------------
     if (ctrl && !alt && shift) {

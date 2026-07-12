@@ -515,6 +515,37 @@ void OpenSpecificImage(HWND hWnd, const std::wstring &filePathStr) {
     }
 }
 
+void ReSortPlaylistAndRebuildMap(HWND hWnd) {
+    if (app.playlist.empty()) return;
+
+    // Remember which file is currently displayed so we can restore it.
+    const std::wstring currentPath = (app.currentIndex >= 0 &&
+                                      app.currentIndex < static_cast<int>(app.playlist.size()))
+                                         ? app.playlist[app.currentIndex]
+                                         : std::wstring{};
+
+    sortCurrentPlaylistInOrder();
+
+    // Rebuild O(1) lookup map.
+    app.playlistIndexMap.clear();
+    app.playlistIndexMap.reserve(app.playlist.size());
+    for (int i = 0; i < static_cast<int>(app.playlist.size()); ++i)
+        app.playlistIndexMap[app.playlist[i]] = i;
+
+    // Restore position so the same image stays current.
+    if (!currentPath.empty()) {
+        auto it = app.playlistIndexMap.find(currentPath);
+        if (it != app.playlistIndexMap.end())
+            app.currentIndex = it->second;
+    }
+
+    // Sync dir panel selection to the new index without reloading the image.
+    uiManager.getActiveDirWnd().SyncDirSelectionRectangle();
+    uiManager.getActiveDirWnd().UpdateDirView();
+    uiManager.getCacheWindow().UpdateCacheView();
+    InvalidateRect(hWnd, nullptr, FALSE);
+}
+
 void sortCurrentPlaylistInOrder() {
     switch (app.fileHandlerDefaultSortOrder) {
         case 0: {
