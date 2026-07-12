@@ -28,8 +28,6 @@ how to fix where in conde
 hello i give up on custom cursors i have  leave this as is now its time to make the history persistent across reboots we need a way to save history on exit what is the best aproach
 
 
-why i have this strange behaviour when i open an image in explorer with F2 choose image and select the first image in folder its not first in my app it shows different number .Explorer is sorted by name but my app sorts them differently
-
 NEXT BIG TASK for QuickImageViewer by Ivan Hristov Yanev:
 1.SLIDESHOW:
 
@@ -95,3 +93,6 @@ Black screen shortcut
 White screen shortcut
 
 Think PowerPoint, but for image collections.
+
+task 10: add keyboard shortcuts to change the global color and a variable to control step of THEME_FACTOR var name THEME_FACTOR_STEP and a key to revert to default:
+i suggest ctrl+alt+shift+ numpad plus and minus for up down for step i suggest 0.5 and for revert to default i suggest ctrl+alt+shift+numpad0
