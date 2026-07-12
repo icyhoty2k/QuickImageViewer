@@ -53,6 +53,7 @@ namespace UI {
 
             // Returns the current position slot (0=center,1=top,2=right,3=bottom,4=left)
             int8_t GetPosition() const { return m_position; }
+            void SetPosition(int8_t pos) { m_position = pos; }
 
             // Recompute and apply window bounds for the current position slot.
             // Called by UIManager::RefreshVerticalPanels when a neighbouring

@@ -23,13 +23,10 @@ namespace UI {
     }
 
     void UIManager::OnPanelHidden(ThumbnailPanelWnd *panel) {
-        // Post a message if this is a spawned DirWnd being individually closed.
-        for (int i = 0; i < Constants::DIR_WND_MAX_INSTANCES; ++i) {
-            if (m_spawnedDirWnds[i] == panel) {
-                g_overlayManager.PostCenterMessage(m_hMainWnd,
-                    Constants::Messages::SPAWN_DIR_CLOSED);
-                break;
-            }
+        // If this is a spawned DirWnd (not the primary ones), post a message
+        if (dynamic_cast<SpawnedDirWnd *>(panel) != nullptr) {
+            g_overlayManager.PostCenterMessage(m_hMainWnd,
+                Constants::Messages::SPAWN_DIR_CLOSED);
         }
         m_layout.clearPanel(panel);
         RefreshVerticalPanels();
@@ -108,44 +105,37 @@ namespace UI {
     // -------------------------------------------------------------------------
 
     void UIManager::SpawnDirWndForFolder(const std::wstring &folderPath, HWND hHistoryWnd) {
-        // Try to find a free slot — check struct for occupied positions.
-        int chosenSlot = -1;
-        for (int i = 0; i < Constants::DIR_WND_MAX_INSTANCES; ++i) {
-            int8_t pos = Constants::DIR_WND_SPAWN_POSITIONS[i];
+        // Find a free position in the layout (skip center — reserved for F5 DirWnd/CacheWnd)
+        int8_t freePos = -1;
+        for (int8_t pos = 1; pos <= 4; ++pos) {
             if (!m_layout.occupied(pos)) {
-                chosenSlot = i;
+                freePos = pos;
                 break;
             }
         }
 
-        // All positions taken — notify user and return.
-        if (chosenSlot < 0) {
+        if (freePos < 0) {
             g_overlayManager.PostCenterMessage(m_hMainWnd,
                 Constants::Messages::SPAWN_DIR_NO_SPACE);
             if (hHistoryWnd) { SetForegroundWindow(hHistoryWnd); SetFocus(hHistoryWnd); }
             return;
         }
 
-        m_nextSpawnSlot = (chosenSlot + 1) % Constants::DIR_WND_MAX_INSTANCES;
+        // Create a new spawned DirWnd for this position
+        static int slotCounter = 0;
+        SpawnedDirWnd *target = new SpawnedDirWnd(slotCounter % Constants::DIR_WND_MAX_INSTANCES);
+        slotCounter++;
 
-        int8_t position = Constants::DIR_WND_SPAWN_POSITIONS[chosenSlot];
-
-        SpawnedDirWnd *target = m_spawnedDirWnds[chosenSlot];
-        if (target == nullptr) {
-            target = new SpawnedDirWnd(chosenSlot);
-            target->Init(m_hInstance, m_hMainWnd, position);
-            m_spawnedDirWnds[chosenSlot] = target;
-        }
-
+        target->Init(m_hInstance, m_hMainWnd, freePos);
         target->LoadFolder(folderPath);
+        m_layout.set(freePos, target);
         ShowWindow(target->GetHwnd(), SW_SHOWNOACTIVATE);
-        m_layout.set(position, target);
         RefreshVerticalPanels();
         target->UpdateDirView();
 
-        // Notify user which position was used.
+        // Notify user which position was used
         const wchar_t *msg = nullptr;
-        switch (position) {
+        switch (freePos) {
             case 1: msg = Constants::Messages::SPAWN_DIR_TOP;    break;
             case 2: msg = Constants::Messages::SPAWN_DIR_RIGHT;  break;
             case 3: msg = Constants::Messages::SPAWN_DIR_BOTTOM; break;
@@ -160,11 +150,15 @@ namespace UI {
     }
 
     void UIManager::HideAllSpawnedDirWnds() {
-        for (int i = 0; i < Constants::DIR_WND_MAX_INSTANCES; ++i) {
-            if (m_spawnedDirWnds[i] != nullptr)
-                m_spawnedDirWnds[i]->Hide();
+        // Hide all panels that are spawned (not the primary dir/cache/help windows)
+        SlotInfo *slots[] = {&m_layout.center, &m_layout.top, &m_layout.right,
+                             &m_layout.bottom, &m_layout.left};
+        for (auto *slot : slots) {
+            if (slot->panel && dynamic_cast<SpawnedDirWnd *>(slot->panel)) {
+                slot->panel->Hide();
+            }
         }
-        // OnPanelHidden handles layout cleanup per-panel.
+        // OnPanelHidden handles layout cleanup per-panel
     }
 
     // -------------------------------------------------------------------------
@@ -174,16 +168,14 @@ namespace UI {
 
     void UIManager::RefreshVerticalPanels() {
         auto refresh = [](ThumbnailPanelWnd &p) {
-            int8_t pos = p.GetPosition();
-            if ((pos != 2 && pos != 4) || !p.GetHwnd() || !IsWindowVisible(p.GetHwnd()))
+            if (!p.GetHwnd() || !IsWindowVisible(p.GetHwnd()))
                 return;
             p.RefreshBounds();
         };
 
-        refresh(cacheWnd);
-        refresh(dirWnd);
-        for (int i = 0; i < Constants::DIR_WND_MAX_INSTANCES; ++i)
-            if (m_spawnedDirWnds[i]) refresh(*m_spawnedDirWnds[i]);
+        // Refresh vertical panels (positions 2=right, 4=left)
+        if (m_layout.right.panel) refresh(*m_layout.right.panel);
+        if (m_layout.left.panel) refresh(*m_layout.left.panel);
     }
 
     bool UIManager::isInit(IPanelWindow &panel) {
@@ -196,11 +188,17 @@ namespace UI {
     // spawned DirWnd open, else empty string.
     // -------------------------------------------------------------------------
     std::wstring UIManager::GetSpawnedDirWndPositionLabel(const std::wstring &folderPath) const {
-        for (int i = 0; i < Constants::DIR_WND_MAX_INSTANCES; ++i) {
-            if (m_spawnedDirWnds[i] == nullptr) continue;
+        // Check each slot to see if a spawned DirWnd is displaying this folder
+        const SlotInfo *slots[] = {&m_layout.center, &m_layout.top, &m_layout.right,
+                                   &m_layout.bottom, &m_layout.left};
+        for (auto *slot : slots) {
+            if (!slot->panel) continue;
 
-            // Get the folder path this spawned DirWnd is displaying
-            std::wstring spawnedFolder = m_spawnedDirWnds[i]->GetFolderPath();
+            // Only check spawned panels, not primary ones
+            auto *spawned = dynamic_cast<SpawnedDirWnd *>(slot->panel);
+            if (!spawned) continue;
+
+            std::wstring spawnedFolder = spawned->GetFolderPath();
             if (spawnedFolder.empty()) continue;
 
             // Compare paths, accounting for normalization differences
@@ -208,15 +206,11 @@ namespace UI {
                 std::filesystem::path normalized1(folderPath);
                 std::filesystem::path normalized2(spawnedFolder);
                 if (std::filesystem::equivalent(normalized1, normalized2)) {
-                    // Found a match; get position label
-                    int8_t pos = m_spawnedDirWnds[i]->GetPosition();
-                    switch (pos) {
-                        case 1: return L" (Top)";
-                        case 2: return L" (Right)";
-                        case 3: return L" (Bottom)";
-                        case 4: return L" (Left)";
-                        default: return L" (Center)";
+                    // Found a match; get position name from SlotInfo
+                    if (!slot->name.empty()) {
+                        return L" (" + slot->name + L")";
                     }
+                    return L"";
                 }
             } catch (...) {
                 // Path comparison failed, continue to next panel
@@ -224,6 +218,23 @@ namespace UI {
             }
         }
         return L"";
+    }
+
+    // -------------------------------------------------------------------------
+    // SlotInfo::OnSlotEmptyChanged
+    // Called when a slot's empty state changes (panel added or removed).
+    // Notifies HistoryListWnd to repaint immediately so position labels stay in sync.
+    // -------------------------------------------------------------------------
+    void SlotInfo::OnSlotEmptyChanged(bool /*empty*/) {
+        HistoryListWnd &historyWnd = uiManager.getHistoryListWindow();
+        HWND hWnd = historyWnd.GetHwnd();
+        if (hWnd) {
+            // Always invalidate, regardless of visibility, to ensure next show has current state
+            InvalidateRect(hWnd, nullptr, FALSE);
+            if (IsWindowVisible(hWnd)) {
+                UpdateWindow(hWnd); // Force immediate repaint if visible
+            }
+        }
     }
 
 } // namespace UI

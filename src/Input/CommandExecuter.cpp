@@ -179,9 +179,20 @@ void InputManager::ExecuteKeyboardShortcutCommand(HWND hWnd, Command cmd) {
 
             break;
 
-        case Command::ToggleDir:
-            uiManager.Toggle(uiManager.getDirWindow());
+        case Command::ToggleDir: {
+            UI::DirWnd &dirWnd = uiManager.getDirWindow();
+            // When showing F5 DirWnd, try its default position (top) if available
+            if (!dirWnd.IsVisible()) {
+                // Check if default position is free
+                const UI::PanelLayout &layout = uiManager.GetLayout();
+                if (!layout.occupied(Constants::CURRENT_DIR_WINDOW_POSITION)) {
+                    dirWnd.SetPosition(Constants::CURRENT_DIR_WINDOW_POSITION);
+                }
+                // Otherwise Show() will find a free position naturally
+            }
+            uiManager.Toggle(dirWnd);
             break;
+        }
 
         case Command::ToggleHistory:
             uiManager.Toggle(uiManager.getHistoryListWindow());

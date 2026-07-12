@@ -96,7 +96,8 @@ namespace UI {
     void ThumbnailPanelWnd::Show() {
         if (!m_hWnd) return;
         const PanelLayout &layout = uiManager.GetLayout();
-        if (layout.occupied(m_position) && layout.slots[m_position] != this) {
+        const SlotInfo *slot = layout.getSlot(m_position);
+        if (slot && slot->panel != nullptr && slot->panel != this) {
             int8_t free = uiManager.NextFreePosition(m_position);
             if (free >= 0) m_position = free;
         }
