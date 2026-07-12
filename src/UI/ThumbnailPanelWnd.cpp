@@ -161,6 +161,7 @@ namespace UI {
         // selection highlight to appear off-screen or at the wrong slot.
         RebuildGeometry();
         InvalidateRect(m_hWnd, nullptr, FALSE);
+        UpdateWindow(m_hWnd);
     }
 
     // =========================================================================

@@ -356,14 +356,16 @@ void LoadImageIndex(HWND hWnd, int index) {
 
     // =========================================================================
     // IMMEDIATE: Update overlay text INSTANTLY (filename, count, zoom, dims)
-    // This happens synchronously, so fast scrolling shows text changes right away
+    // UpdateWindow forces a synchronous render so text is never blocked by
+    // WM_PAINT being starved behind a flood of WM_MOUSEWHEEL messages.
+    // The main renderer uses Present(0,0) so this costs only ~1-2ms.
     // =========================================================================
     UpdateOverlaysForCurrentImage(hWnd);
     InvalidateRect(hWnd, nullptr, FALSE);
+    UpdateWindow(hWnd);
 
-    // Scroll the dir panel to track the selection. No UpdateWindow — just
-    // invalidate so the dirWnd repaints asynchronously and never blocks the
-    // main window's own WM_PAINT from being processed between keystrokes.
+    // Scroll the dir panel to track the selection (synchronous via UpdateWindow
+    // inside SyncSelectionRectangle; dirWnd also uses Present(0,0) so it's fast).
     uiManager.getActiveDirWnd().SyncDirSelectionRectangle();
 
     // -------------------------------------------------------------------------
