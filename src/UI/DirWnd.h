@@ -20,6 +20,12 @@ namespace UI {
             void MoveDirWindow()             { ThumbnailPanelWnd::MovePanel(); }
             void HideDirWindow()             { ThumbnailPanelWnd::Hide(); }
 
+        public:
+            // Load playlist from folder (only used when F5 actively navigates)
+            void LoadPlaylist(const std::wstring &folderPath);
+            // Copy the sorted playlist (used to keep F5 in sync with main folder, isolated from spawned hijacking)
+            void SetPlaylistCopy(const std::vector<std::wstring> &playlist) { m_dirPlaylist = playlist; }
+
         protected:
             const wchar_t *ClassName()    const override { return L"QIV_DirWindow"; }
             const wchar_t *WindowTitle()  const override { return L"Directory"; }
@@ -30,8 +36,12 @@ namespace UI {
             int GetKeyMove()   const override;
 
             std::vector<std::wstring> GetSourceItems() const override;
+            bool HasOwnPlaylist() const override { return true; }
 
             void PostBuildHook() override;
+
+        private:
+            std::vector<std::wstring> m_dirPlaylist;  // F5 owns its own playlist, isolated from app.playlist
     };
 
     // =========================================================================

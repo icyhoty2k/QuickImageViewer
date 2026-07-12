@@ -147,10 +147,23 @@ namespace UI {
         if (!m_hWnd) return;
 
         m_selectedIdx = -1;
-        for (size_t i = 0; i < m_thumbnails.size(); ++i) {
-            if (m_thumbnails[i].playlistIndex == app.currentIndex) {
-                m_selectedIdx = static_cast<int>(i);
-                break;
+
+        // For panels with own playlist (F5, spawned), match by file path instead of index
+        if (HasOwnPlaylist() && app.currentIndex >= 0 && app.currentIndex < static_cast<int>(app.playlist.size())) {
+            const std::wstring &currentPath = app.playlist[app.currentIndex];
+            for (size_t i = 0; i < m_thumbnails.size(); ++i) {
+                if (m_thumbnails[i].filePath == currentPath) {
+                    m_selectedIdx = static_cast<int>(i);
+                    break;
+                }
+            }
+        } else {
+            // For shared-playlist panels, match by index
+            for (size_t i = 0; i < m_thumbnails.size(); ++i) {
+                if (m_thumbnails[i].playlistIndex == app.currentIndex) {
+                    m_selectedIdx = static_cast<int>(i);
+                    break;
+                }
             }
         }
         ScrollToSelected();
