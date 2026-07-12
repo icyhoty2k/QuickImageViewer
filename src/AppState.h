@@ -19,6 +19,8 @@ struct SlideshowState {
     int  cursorHideMs = Constants::Slideshow::CURSOR_HIDE_MS;
     bool cursorHidden = false;
 
+    bool savedOverlayVisible = true; // overlay visibility saved at slideshow start, restored at stop
+
     std::vector<int> shuffleOrder; // permutation of playlist indices
     int  shufflePos = 0;           // current position within shuffleOrder
 };

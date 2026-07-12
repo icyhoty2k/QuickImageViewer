@@ -9,6 +9,7 @@
 #include <random>
 #include "AppState.h" // Assuming this is the path
 #include "../Platform/Constants.h"
+#include "../Overlays/OverlayManager.h"
 // ... include other necessary headers
 
 extern AppState app;
@@ -221,6 +222,11 @@ void AppCommands::stopSlideshow(HWND hWnd) {
         ShowCursor(TRUE);
         app.slideshow.cursorHidden = false;
     }
+    // Restore overlay panels to their pre-slideshow state
+    app.showOverlayInfoText = app.slideshow.savedOverlayVisible;
+    g_overlayManager.SetAllVisible(app.showOverlayInfoText);
+    InvalidateRect(hWnd, nullptr, FALSE);
+
     app.slideshow.running = false;
     app.slideshow.paused  = false;
     app.slideshow.shuffleOrder.clear();
@@ -238,6 +244,11 @@ void AppCommands::toggleSlideshow(HWND hWnd) {
                          std::mt19937{std::random_device{}()});
             app.slideshow.shufflePos = 0;
         }
+        // Save and hide info panels
+        app.slideshow.savedOverlayVisible = app.showOverlayInfoText;
+        app.showOverlayInfoText = false;
+        g_overlayManager.SetAllVisible(false);
+
         SetTimer(hWnd, Constants::Slideshow::TIMER_ID, app.slideshow.intervalMs, nullptr);
         if (app.slideshow.cursorHideMs > 0)
             SetTimer(hWnd, Constants::Slideshow::CURSOR_TIMER_ID, app.slideshow.cursorHideMs, nullptr);
