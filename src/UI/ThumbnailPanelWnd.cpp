@@ -160,8 +160,7 @@ namespace UI {
         // m_thumbnails with rects computed from the old offset, causing the
         // selection highlight to appear off-screen or at the wrong slot.
         RebuildGeometry();
-        InvalidateRect(m_hWnd, nullptr, TRUE);
-        UpdateWindow(m_hWnd);
+        InvalidateRect(m_hWnd, nullptr, FALSE);
     }
 
     // =========================================================================
@@ -976,6 +975,6 @@ namespace UI {
 
         HRESULT hr = m_panelContext->EndDraw();
         if (hr != D2DERR_RECREATE_TARGET && hr != static_cast<HRESULT>(DXGI_ERROR_DEVICE_REMOVED))
-            m_swapChain->Present(1, 0);
+            m_swapChain->Present(0, 0);
     }
 } // namespace UI
