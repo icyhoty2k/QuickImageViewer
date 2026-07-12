@@ -71,6 +71,7 @@ namespace UI {
             explicit SpawnedDirWnd(int slot) : m_slot(slot) {}
 
             void LoadFolder(const std::wstring &folderPath) {
+                m_folderPath = folderPath;
                 m_localPlaylist.clear();
                 std::filesystem::path dir(folderPath);
                 if (!std::filesystem::exists(dir) || !std::filesystem::is_directory(dir))
@@ -82,6 +83,8 @@ namespace UI {
                 }
                 std::sort(m_localPlaylist.begin(), m_localPlaylist.end());
             }
+
+            std::wstring GetFolderPath() const { return m_folderPath; }
 
         protected:
             std::vector<std::wstring> GetSourceItems() const override { return m_localPlaylist; }
@@ -104,6 +107,7 @@ namespace UI {
 
         private:
             std::vector<std::wstring> m_localPlaylist;
+            std::wstring m_folderPath;
             int m_slot = 0;
     };
 
