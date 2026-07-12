@@ -138,6 +138,11 @@ namespace Constants {
             constexpr float SECTION_PURPLE_G = 0.4706f + THEME_FACTOR * (1.0f - 2.0f * 0.4706f);
             constexpr float SECTION_PURPLE_B = 1.0000f + THEME_FACTOR * (1.0f - 2.0f * 1.0000f);
 
+            // Section header — green (80,220,120) — Advanced / Power User
+            constexpr float SECTION_GREEN_R = 0.3137f + THEME_FACTOR * (1.0f - 2.0f * 0.3137f);
+            constexpr float SECTION_GREEN_G = 0.8627f + THEME_FACTOR * (1.0f - 2.0f * 0.8627f);
+            constexpr float SECTION_GREEN_B = 0.4706f + THEME_FACTOR * (1.0f - 2.0f * 0.4706f);
+
             // Shortcut key text — yellow (255,220,0)
             constexpr float SHORTCUT_KEY_R = 1.0000f + THEME_FACTOR * (1.0f - 2.0f * 1.0000f);
             constexpr float SHORTCUT_KEY_G = 0.8627f + THEME_FACTOR * (1.0f - 2.0f * 0.8627f);

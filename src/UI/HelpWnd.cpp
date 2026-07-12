@@ -74,6 +74,7 @@ namespace UI {
         Add(L"Space / Shift+Space", L"Next / Previous image", 0);
         Add(L"Wheel Scroll", L"Navigate images", 0);
         Add(L"Backspace / Shift+Backspace", L"Toggle first / last in folder", 0);
+        Add(L"Q", L"Toggle previous / current folder", 0);
         Add(L"E", L"Open file location in Explorer", 0);
         Add(L"Tab", L"Toggle History panel", 0);
         Add(L"F1", L"Toggle Help window", 0);
@@ -99,7 +100,7 @@ namespace UI {
         Add(L"Shift+Wheel / H-Wheel", L"Adjust window opacity", 1);
         Add(L"RMB + Wheel", L"Zoom while holding RMB", 1);
         Add(L"RMB + H-Wheel", L"Resize from center", 1);
-        Add(L"F11 / Enter", L"Toggle Fullscreen", 1);
+        Add(L"F / F11 / Enter / Ctrl+Shift+T", L"Toggle Fullscreen", 1);
         Add(L"N / I / Ctrl+0", L"Master overlay toggle", 1);
         Add(L"Ctrl+1 to Ctrl+9", L"Toggle individual overlay slots", 1);
         Add(L"Ctrl+Alt+1 to Ctrl+Alt+9", L"Toggle overlay compact mode", 1);
@@ -107,7 +108,7 @@ namespace UI {
         Add(L"P", L"Toggle overlay text backgrounds", 1);
 
         // Section 2: Effects & Customization (Purple)
-        Add(L"R / Ctrl+R", L"Rotate 90° CW / CCW", 2);
+        Add(L"R / Shift+R", L"Rotate 90° CW / CCW", 2);
         Add(L"H / V", L"Flip Horizontally / Vertically", 2);
         Add(L"Delete", L"Toggle Grayscale", 2);
         Add(L"Insert", L"Toggle Invert colors", 2);
@@ -130,6 +131,17 @@ namespace UI {
         Add(L"Shift+Enter (History)", L"Spawn DirWnd panel", 2);
         Add(L"Ctrl+Alt+Delete", L"Clear history (keep favorites)", 2);
         Add(L"Ctrl+Alt+Shift+Delete", L"Clear favorites (keep history)", 2);
+
+        // Section 3: Advanced & Power User (Green)
+        Add(L"Ctrl+Alt+Shift+0", L"Sort by Name  (press again: reverse A→Z / Z→A)", 3);
+        Add(L"Ctrl+Alt+Shift+9", L"Sort by Date  (press again: Newest ↔ Oldest)", 3);
+        Add(L"Ctrl+Alt+Shift+8", L"Sort by Size  (press again: Largest ↔ Smallest)", 3);
+        Add(L"Ctrl+Alt+Shift+7", L"Sort by Extension  (press again: reverse A→Z / Z→A)", 3);
+        Add(L"Ctrl+Alt+Shift+6", L"Sort by Disk Order", 3);
+        Add(L"Ctrl+Alt+Numpad +/-", L"Theme brightness: lighter / darker", 3);
+        Add(L"Ctrl+Alt+Numpad 0", L"Theme brightness: reset to default", 3);
+        Add(L"Ctrl+Shift+Numpad *", L"Toggle window corners: Round ↔ Square", 3);
+        Add(L"Ctrl+Shift+Numpad /", L"Cycle backdrop: None → Mica → Acrylic → MicaAlt", 3);
     }
 
     void HelpWnd::ExportToText() const {
@@ -198,7 +210,7 @@ namespace UI {
                 SetBkMode(hdc, TRANSPARENT);
 
                 // Section colors with theme support
-                COLORREF sectionColors[3] = {
+                COLORREF sectionColors[4] = {
                     Constants::Theme::ThemedColor(Constants::Theme::HelpWindow::SECTION_CYAN_R,
                                                   Constants::Theme::HelpWindow::SECTION_CYAN_G,
                                                   Constants::Theme::HelpWindow::SECTION_CYAN_B, app.themeFactor),
@@ -207,19 +219,24 @@ namespace UI {
                                                   Constants::Theme::HelpWindow::SECTION_ORANGE_B, app.themeFactor),
                     Constants::Theme::ThemedColor(Constants::Theme::HelpWindow::SECTION_PURPLE_R,
                                                   Constants::Theme::HelpWindow::SECTION_PURPLE_G,
-                                                  Constants::Theme::HelpWindow::SECTION_PURPLE_B, app.themeFactor)
+                                                  Constants::Theme::HelpWindow::SECTION_PURPLE_B, app.themeFactor),
+                    Constants::Theme::ThemedColor(Constants::Theme::HelpWindow::SECTION_GREEN_R,
+                                                  Constants::Theme::HelpWindow::SECTION_GREEN_G,
+                                                  Constants::Theme::HelpWindow::SECTION_GREEN_B, app.themeFactor)
                 };
 
-                const wchar_t *sectionIcons[3] = {
+                const wchar_t *sectionIcons[4] = {
                     L"⌨️ ",
                     L"🖱️ ",
-                    L"🎨 "
+                    L"🎨 ",
+                    L"⚙️ "
                 };
 
-                const wchar_t *sectionTitles[3] = {
+                const wchar_t *sectionTitles[4] = {
                     L"VIEWING & NAVIGATION",
                     L"INTERACTION & CONTROL",
-                    L"EFFECTS & CUSTOMIZATION"
+                    L"EFFECTS & CUSTOMIZATION",
+                    L"ADVANCED & POWER USER"
                 };
 
                 COLORREF yellowKey = Constants::Theme::ThemedColor(
@@ -261,7 +278,7 @@ namespace UI {
                 // Calculate total height
                 if (m_totalContentHeight == 0) {
                     m_totalContentHeight = 0;
-                    for (int s = 0; s < 3; ++s) {
+                    for (int s = 0; s < 4; ++s) {
                         m_totalContentHeight += sectionHeaderSize + MulDiv(15, dpi, 96); // Section header
                         for (const auto &entry: m_entries) {
                             if (entry.sectionId == s) {
@@ -291,7 +308,7 @@ namespace UI {
                                               CLEARTYPE_QUALITY, VARIABLE_PITCH, L"Segoe UI");
 
                 // Draw sections with entries
-                for (int s = 0; s < 3; ++s) {
+                for (int s = 0; s < 4; ++s) {
                     // Section header
                     SelectObject(hdc, hSectionFont);
                     SetTextColor(hdc, sectionColors[s]);
