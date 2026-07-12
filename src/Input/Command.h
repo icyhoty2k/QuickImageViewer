@@ -105,6 +105,15 @@ enum class Command {
     // --- Save / reset ---
     ResetEffects,
     SaveImage,
+
+    // --- Runtime theme ---
+    ThemeFactorUp,   // Ctrl+Alt+Shift+Numpad+
+    ThemeFactorDown, // Ctrl+Alt+Shift+Numpad-
+    ThemeFactorReset,// Ctrl+Alt+Shift+Numpad0
+
+    // --- Window chrome ---
+    ToggleCornerPreference, // Ctrl+Shift+Numpad*   round ↔ square
+    CycleBackdropType,      // Ctrl+Shift+Numpad/   None→Mica→Acrylic→MicaAlt→None
 };
 
 class InputManager {

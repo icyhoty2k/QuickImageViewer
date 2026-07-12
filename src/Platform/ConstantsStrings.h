@@ -33,6 +33,20 @@ namespace Constants::Messages {
     constexpr const wchar_t *RESET_TO_DEFAULTS = L"Reset to Defaults";
     constexpr const wchar_t *ALL_EFFECTS_RESET = L"All Effects Reset";
 
+    // Runtime theme factor  (Ctrl+Alt+Shift+Numpad+/-/0)
+    constexpr const wchar_t *THEME_FACTOR_PREFIX    = L"Theme: ";
+    constexpr const wchar_t *THEME_FACTOR_RESET_MSG = L"Theme: Reset";
+
+    // Window chrome toggles  (Ctrl+Shift+Numpad*)
+    constexpr const wchar_t *CORNER_ROUND   = L"Corners: Round";
+    constexpr const wchar_t *CORNER_SQUARE  = L"Corners: Square";
+
+    // Backdrop cycle  (Ctrl+Shift+Numpad/)
+    constexpr const wchar_t *BACKDROP_NONE    = L"Backdrop: None";
+    constexpr const wchar_t *BACKDROP_MICA    = L"Backdrop: Mica";
+    constexpr const wchar_t *BACKDROP_ACRYLIC = L"Backdrop: Acrylic";
+    constexpr const wchar_t *BACKDROP_MICA_ALT = L"Backdrop: MicaAlt";
+
     // Spawned DirWnd messages
     constexpr const wchar_t *SPAWN_DIR_TOP = L"DirWnd Spawned: Top";
     constexpr const wchar_t *SPAWN_DIR_LEFT = L"DirWnd Spawned: Left";

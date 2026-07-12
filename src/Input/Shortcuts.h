@@ -161,6 +161,19 @@ namespace Shortcuts {
     }
 
     // -------------------------------------------------------------------------
+    // RUNTIME THEME FACTOR  (Ctrl+Alt + Numpad, no Shift — Shift+Numpad0 = VK_INSERT = Invert)
+    // -------------------------------------------------------------------------
+    constexpr UINT SC_THEME_FACTOR_UP    = VK_ADD;      // Ctrl+Alt+Numpad+  — step darker→lighter
+    constexpr UINT SC_THEME_FACTOR_DOWN  = VK_SUBTRACT; // Ctrl+Alt+Numpad-  — step lighter→darker
+    constexpr UINT SC_THEME_FACTOR_RESET = VK_NUMPAD0;  // Ctrl+Alt+Numpad0  — restore default THEME_FACTOR
+
+    // -------------------------------------------------------------------------
+    // WINDOW CHROME TOGGLES  (Ctrl+Shift + Numpad)
+    // -------------------------------------------------------------------------
+    constexpr UINT SC_CORNER_PREFERENCE_TOGGLE = VK_MULTIPLY; // Numpad*  — round ↔ square
+    constexpr UINT SC_BACKDROP_TYPE_CYCLE      = VK_DIVIDE;   // Numpad/  — cycle backdrop types
+
+    // -------------------------------------------------------------------------
     // HISTORY WINDOW
     // -------------------------------------------------------------------------
     constexpr UINT HISTORY_FAVORITES_TOGGLE_KEY = VK_SPACE;

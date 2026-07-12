@@ -49,6 +49,7 @@ namespace UI {
     static bool g_showFullHistory = false; // Ctrl+Tab toggles full history view
     static HistoryFoldersManager historyFoldersManager;
     static std::vector<RECT> g_rowRects;
+    static RECT g_exeLinkRect = {}; // clickable rect for the "QIV" exe-dir link
 
     // Display list: what the panel actually renders.
     // Each entry is (path, isFavorite).
@@ -128,8 +129,6 @@ namespace UI {
         if (folderPath.empty())
             return;
 
-        void LoadFolderHistoryFromDisk();
-
         auto &history = historyFoldersManager.folderHistory;
 
         // Check if this path is already known
@@ -176,6 +175,9 @@ namespace UI {
     }
 
     void ClearHistoryKeepFavorites() {
+        // Backup first — before any RAM or file change
+        historyFoldersManager.BackupHistoryToDisk();
+
         auto &history = historyFoldersManager.folderHistory;
         const auto &favSet = historyFoldersManager.favorites;
 
@@ -194,6 +196,9 @@ namespace UI {
     }
 
     void ClearFavoritesKeepHistory() {
+        // Backup first — before any RAM or file change
+        historyFoldersManager.BackupFavoritesToDisk();
+
         historyFoldersManager.favorites.clear();
 
         // Rewrite favorites file only — history file is untouched
@@ -224,8 +229,8 @@ namespace UI {
 
         int entries = std::max(1, static_cast<int>(g_displayList.size()));
         int totalH = padding * 2
-                     + MulDiv(30, dpi, 96) // title row
-                     + MulDiv(8, dpi, 96) // gap below title
+                     + MulDiv(30 + Constants::History::HISTORY_FONT_SIZE + 4, dpi, 96) // title + hint rows
+                     + MulDiv(8, dpi, 96) // gap below hint/sep
                      + entries * rowH;
 
         w = static_cast<int>(monW * 0.30f);
@@ -268,8 +273,8 @@ namespace UI {
                 int SB_W = static_cast<int>(
                     MulDiv(Constants::History::SCROLLBAR_THICKNESS, dpi, 96));
                 int totalContentH = padding * 2
-                                    + MulDiv(30, dpi, 96) // title row
-                                    + MulDiv(8, dpi, 96) // gap below title/sep
+                                    + MulDiv(30 + Constants::History::HISTORY_FONT_SIZE + 4, dpi, 96) // title + hint rows
+                                    + MulDiv(8, dpi, 96) // gap below hint/sep
                                     + static_cast<int>(g_displayList.size()) * rowH;
                 int windowH = rc.bottom - rc.top;
                 int maxScroll = std::max(0, totalContentH - windowH);
@@ -277,27 +282,26 @@ namespace UI {
                 bool needsScrollbar = (maxScroll > 0);
 
                 // Background — use active color if this panel is active
-                COLORREF bgColor = RGB(
-                        static_cast<int>(Constants::Theme::Panel::BACKGROUND_INACTIVE * 255),
-                        static_cast<int>(Constants::Theme::Panel::BACKGROUND_INACTIVE * 255),
-                        static_cast<int>(Constants::Theme::Panel::BACKGROUND_INACTIVE * 255));
+                COLORREF bgColor = Constants::Theme::ThemedGray(Constants::Theme::Panel::BACKGROUND_INACTIVE, app.themeFactor);
                 if (UI::g_activePanelHwnd == m_hWnd) {
-                    bgColor = RGB(
-                            static_cast<int>(Constants::Theme::Panel::BACKGROUND_ACTIVE * 255),
-                            static_cast<int>(Constants::Theme::Panel::BACKGROUND_ACTIVE * 255),
-                            static_cast<int>(Constants::Theme::Panel::BACKGROUND_ACTIVE * 255));
+                    bgColor = Constants::Theme::ThemedGray(Constants::Theme::Panel::BACKGROUND_ACTIVE, app.themeFactor);
                 }
                 HBRUSH hBg = CreateSolidBrush(bgColor);
                 FillRect(hdc, &rc, hBg);
                 DeleteObject(hBg);
                 SetBkMode(hdc, TRANSPARENT);
 
+                int listFontSz = MulDiv(Constants::History::HISTORY_LIST_FONT_SIZE, dpi, 96);
                 HFONT hTitleFont = CreateFontW(
                         titleSz, 0, 0, 0, FW_BOLD, FALSE, FALSE, FALSE,
                         DEFAULT_CHARSET, OUT_OUTLINE_PRECIS, CLIP_DEFAULT_PRECIS,
                         CLEARTYPE_QUALITY, VARIABLE_PITCH, L"Segoe UI");
                 HFONT hBodyFont = CreateFontW(
                         fontSize, 0, 0, 0, FW_NORMAL, FALSE, FALSE, FALSE,
+                        DEFAULT_CHARSET, OUT_OUTLINE_PRECIS, CLIP_DEFAULT_PRECIS,
+                        CLEARTYPE_QUALITY, VARIABLE_PITCH, L"Segoe UI");
+                HFONT hListFont = CreateFontW(
+                        listFontSz, 0, 0, 0, FW_NORMAL, FALSE, FALSE, FALSE,
                         DEFAULT_CHARSET, OUT_OUTLINE_PRECIS, CLIP_DEFAULT_PRECIS,
                         CLEARTYPE_QUALITY, VARIABLE_PITCH, L"Segoe UI");
 
@@ -315,8 +319,90 @@ namespace UI {
                 };
                 DrawTextW(hdc, title.c_str(), -1, &titleRect, DT_LEFT | DT_VCENTER | DT_SINGLELINE);
 
+                // Hint line 2: shortcuts | red size | blue underlined link
+                {
+                    SelectObject(hdc, hBodyFont);
+                    int lineTop = titleRect.bottom + MulDiv(2, dpi, 96);
+                    int lineBot = lineTop + fontSize + 2;
+
+                    // Part 1 — shortcuts in gray
+                    constexpr wchar_t SHORTCUTS[] =
+                        L"Ctrl+Shift+Del = clear history     Ctrl+Alt+Shift+Del = clear favorites";
+                    SetTextColor(hdc, RGB(150, 150, 150));
+                    SIZE szSC = {};
+                    GetTextExtentPoint32W(hdc, SHORTCUTS,
+                                         static_cast<int>(std::wcslen(SHORTCUTS)), &szSC);
+                    RECT scRect = { rc.left + padding, lineTop,
+                                    rc.left + padding + szSC.cx, lineBot };
+                    DrawTextW(hdc, SHORTCUTS, -1, &scRect,
+                              DT_LEFT | DT_VCENTER | DT_SINGLELINE);
+
+                    // Part 2a — "     History - " label in gray
+                    constexpr wchar_t SIZE_LABEL[] = L"     History - ";
+                    SetTextColor(hdc, RGB(150, 150, 150));
+                    SIZE szLabel = {};
+                    GetTextExtentPoint32W(hdc, SIZE_LABEL,
+                                         static_cast<int>(std::wcslen(SIZE_LABEL)), &szLabel);
+                    RECT labelRect = { scRect.right, lineTop,
+                                       scRect.right + szLabel.cx, lineBot };
+                    DrawTextW(hdc, SIZE_LABEL, -1, &labelRect,
+                              DT_LEFT | DT_VCENTER | DT_SINGLELINE);
+
+                    // Part 2b — numeric size value in red
+                    std::wstring sizeValue;
+                    {
+                        std::error_code ec;
+                        auto bytes = std::filesystem::file_size(
+                            historyFoldersManager.GetFilePath(), ec);
+                        if (!ec) {
+                            if (bytes >= 1024ULL * 1024)
+                                sizeValue = std::to_wstring(bytes / (1024 * 1024)) + L" MB";
+                            else if (bytes >= 1024)
+                                sizeValue = std::to_wstring(bytes / 1024) + L" KB";
+                            else
+                                sizeValue = std::to_wstring(bytes) + L" B";
+                        } else {
+                            sizeValue = L"n/a";
+                        }
+                        sizeValue += L"    ";
+                    }
+                    SetTextColor(hdc, Constants::Theme::HistoryPanel::SIZE_HIGHLIGHT);
+                    SIZE szSz = {};
+                    GetTextExtentPoint32W(hdc, sizeValue.c_str(),
+                                         static_cast<int>(sizeValue.size()), &szSz);
+                    RECT szRect = { labelRect.right, lineTop, labelRect.right + szSz.cx, lineBot };
+                    DrawTextW(hdc, sizeValue.c_str(), -1, &szRect,
+                              DT_LEFT | DT_VCENTER | DT_SINGLELINE);
+
+                    // Part 3 — "QIV → path" all blue underlined, clickable rect = actual text width
+                    wchar_t exeBuf[MAX_PATH] = {};
+                    GetModuleFileNameW(nullptr, exeBuf, MAX_PATH);
+                    std::wstring linkText = L"QIV → "
+                        + std::filesystem::path(exeBuf).parent_path().wstring() + L"\\";
+
+                    HFONT hLinkFont = CreateFontW(
+                        fontSize, 0, 0, 0, FW_NORMAL, FALSE, TRUE, FALSE,
+                        DEFAULT_CHARSET, OUT_OUTLINE_PRECIS, CLIP_DEFAULT_PRECIS,
+                        CLEARTYPE_QUALITY, VARIABLE_PITCH, L"Segoe UI");
+                    SelectObject(hdc, hLinkFont);
+                    SetTextColor(hdc, RGB(100, 180, 255));
+
+                    SIZE szLink = {};
+                    GetTextExtentPoint32W(hdc, linkText.c_str(),
+                                         static_cast<int>(linkText.size()), &szLink);
+                    // Clamp to available width; DT_END_ELLIPSIS will truncate the draw
+                    LONG linkRight = std::min(szRect.right + szLink.cx,
+                                             static_cast<LONG>(rc.right - padding));
+                    g_exeLinkRect = { szRect.right, lineTop, linkRight, lineBot };
+                    DrawTextW(hdc, linkText.c_str(), -1, &g_exeLinkRect,
+                              DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
+                    DeleteObject(hLinkFont);
+
+                    SelectObject(hdc, hTitleFont);
+                }
+
                 // Separator (fixed)
-                int sepY = titleRect.bottom + MulDiv(4, dpi, 96);
+                int sepY = titleRect.bottom + MulDiv(2 + fontSize + 2 + 4, dpi, 96);
                 HPEN hPen = CreatePen(PS_SOLID, 1, RGB(50, 50, 50));
                 HPEN hOldPen = (HPEN) SelectObject(hdc, hPen);
                 MoveToEx(hdc, rc.left + padding, sepY, nullptr);
@@ -325,7 +411,7 @@ namespace UI {
                 DeleteObject(hPen);
 
                 // Rows (scrolled) — clipped to the area below the separator.
-                SelectObject(hdc, hBodyFont);
+                SelectObject(hdc, hListFont);
                 g_rowRects.clear();
                 int rowsTop = sepY + MulDiv(6, dpi, 96);
 
@@ -381,17 +467,79 @@ namespace UI {
                                       DT_CENTER | DT_VCENTER | DT_SINGLELINE);
                         }
 
-                        // Path text
-                        COLORREF pathColor = entry.isFavorite
-                                                 ? (i == g_hoverRow ? RGB(255, 255, 160) : RGB(255, 240, 120))
-                                                 : (i == g_hoverRow ? RGB(255, 255, 255) : RGB(200, 200, 200));
-                        SetTextColor(hdc, pathColor);
-                        RECT pathRect = {
-                            rc.left + padding + indexW + starW + MulDiv(10, dpi, 96), rowTop,
-                            rc.right - padding - (needsScrollbar ? SB_W + 2 : 0), rowBottom
-                        };
-                        DrawTextW(hdc, entry.path.c_str(), -1, &pathRect,
-                                  DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
+                        // Path text — three segments: drive, middle, folder
+                        const bool isHov = (i == g_hoverRow);
+                        const bool isFav = entry.isFavorite;
+
+                        COLORREF driveColor  = isFav
+                            ? (isHov ? Constants::Theme::HistoryPanel::PATH_DRIVE_FAV_HOVER   : Constants::Theme::HistoryPanel::PATH_DRIVE_FAV)
+                            : (isHov ? Constants::Theme::HistoryPanel::PATH_DRIVE_HOVER        : Constants::Theme::HistoryPanel::PATH_DRIVE);
+                        COLORREF middleColor = isFav
+                            ? (isHov ? RGB(255, 255, 160) : RGB(255, 240, 120))
+                            : (isHov ? RGB(255, 255, 255) : RGB(200, 200, 200));
+                        COLORREF folderColor = isFav
+                            ? (isHov ? Constants::Theme::HistoryPanel::PATH_FOLDER_FAV_HOVER  : Constants::Theme::HistoryPanel::PATH_FOLDER_FAV)
+                            : (isHov ? Constants::Theme::HistoryPanel::PATH_FOLDER_HOVER       : Constants::Theme::HistoryPanel::PATH_FOLDER);
+
+                        // Split path into (drive, middle, folder)
+                        const std::wstring& fp = entry.path;
+                        std::wstring segDrive, segMiddle, segFolder;
+                        if (fp.size() >= 2 && fp[1] == L':') {
+                            segDrive = fp.substr(0, 2);
+                            size_t lastSep = fp.find_last_of(L"\\/");
+                            if (lastSep != std::wstring::npos && lastSep >= 2) {
+                                segMiddle = fp.substr(2, lastSep - 1); // "\rest\of\path\"
+                                segFolder = fp.substr(lastSep + 1);    // "FolderName"
+                            } else {
+                                segFolder = fp.substr(2);
+                            }
+                        } else {
+                            segMiddle = fp;
+                        }
+
+                        LONG rowLeft  = rc.left + padding + indexW + starW + MulDiv(10, dpi, 96);
+                        LONG rowRight = rc.right - padding - (needsScrollbar ? SB_W + 2 : 0);
+                        LONG curX     = rowLeft;
+
+                        // 1. Drive letter
+                        if (!segDrive.empty() && curX < rowRight) {
+                            SetTextColor(hdc, driveColor);
+                            SIZE sz = {};
+                            GetTextExtentPoint32W(hdc, segDrive.c_str(),
+                                                  static_cast<int>(segDrive.size()), &sz);
+                            RECT dr = { curX, rowTop, curX + sz.cx, rowBottom };
+                            DrawTextW(hdc, segDrive.c_str(), -1, &dr,
+                                      DT_LEFT | DT_VCENTER | DT_SINGLELINE);
+                            curX += sz.cx;
+                        }
+
+                        // 2. Middle path — reserve space for folder before drawing
+                        if (!segMiddle.empty() && curX < rowRight) {
+                            LONG folderReserve = 0;
+                            if (!segFolder.empty()) {
+                                SIZE szF = {};
+                                GetTextExtentPoint32W(hdc, segFolder.c_str(),
+                                                      static_cast<int>(segFolder.size()), &szF);
+                                folderReserve = std::min(szF.cx, (rowRight - curX) * 2 / 5);
+                            }
+                            LONG midRight = rowRight - folderReserve;
+                            SetTextColor(hdc, middleColor);
+                            SIZE szM = {};
+                            GetTextExtentPoint32W(hdc, segMiddle.c_str(),
+                                                  static_cast<int>(segMiddle.size()), &szM);
+                            RECT mr = { curX, rowTop, midRight, rowBottom };
+                            DrawTextW(hdc, segMiddle.c_str(), -1, &mr,
+                                      DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
+                            curX = (szM.cx < midRight - curX) ? curX + szM.cx : midRight;
+                        }
+
+                        // 3. Folder name
+                        if (!segFolder.empty() && curX < rowRight) {
+                            SetTextColor(hdc, folderColor);
+                            RECT fr = { curX, rowTop, rowRight, rowBottom };
+                            DrawTextW(hdc, segFolder.c_str(), -1, &fr,
+                                      DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
+                        }
                     }
                 }
 
@@ -402,7 +550,7 @@ namespace UI {
                     int sbX = rc.right - SB_W;
 
                     HBRUSH hTrack = CreateSolidBrush(
-                            Constants::Theme::Gray(Constants::Theme::HistoryPanel::SCROLLBAR_TRACK));
+                            Constants::Theme::ThemedGray(Constants::Theme::HistoryPanel::SCROLLBAR_TRACK, app.themeFactor));
                     RECT sbTrack = {sbX, 0, rc.right, rc.bottom};
                     FillRect(hdc, &sbTrack, hTrack);
                     DeleteObject(hTrack);
@@ -416,7 +564,7 @@ namespace UI {
                     thumbOff = std::clamp(thumbOff, 0, windowH - thumbLen);
 
                     HBRUSH hThumb = CreateSolidBrush(
-                            Constants::Theme::Gray(Constants::Theme::HistoryPanel::SCROLLBAR_THUMB));
+                            Constants::Theme::ThemedGray(Constants::Theme::HistoryPanel::SCROLLBAR_THUMB, app.themeFactor));
                     RECT sbThumb = {sbX, thumbOff, rc.right, thumbOff + thumbLen};
                     FillRect(hdc, &sbThumb, hThumb);
                     DeleteObject(hThumb);
@@ -425,6 +573,7 @@ namespace UI {
                 SelectObject(hdc, GetStockObject(SYSTEM_FONT));
                 DeleteObject(hTitleFont);
                 DeleteObject(hBodyFont);
+                DeleteObject(hListFont);
                 EndPaint(m_hWnd, &ps);
                 return 0;
             }
@@ -440,7 +589,7 @@ namespace UI {
                     int rowH2 = MulDiv(Constants::History::HISTORY_ROW_HEIGHT, dpi2, 96);
                     int padding2 = MulDiv(Constants::History::HISTORY_PADDING, dpi2, 96);
                     int totalH2 = padding2 * 2
-                                  + MulDiv(30, dpi2, 96)
+                                  + MulDiv(30 + Constants::History::HISTORY_FONT_SIZE + 4, dpi2, 96)
                                   + MulDiv(8, dpi2, 96)
                                   + static_cast<int>(g_displayList.size()) * rowH2;
                     int winH2 = rc2.bottom - rc2.top;
@@ -480,7 +629,7 @@ namespace UI {
                     int rowHSb = MulDiv(Constants::History::HISTORY_ROW_HEIGHT, dpiSb, 96);
                     int paddingSb = MulDiv(Constants::History::HISTORY_PADDING, dpiSb, 96);
                     int totalHSb = paddingSb * 2
-                                   + MulDiv(30, dpiSb, 96)
+                                   + MulDiv(30 + Constants::History::HISTORY_FONT_SIZE + 4, dpiSb, 96)
                                    + MulDiv(8, dpiSb, 96)
                                    + static_cast<int>(g_displayList.size()) * rowHSb;
                     int winHSb = rcSb.bottom - rcSb.top;
@@ -497,7 +646,7 @@ namespace UI {
                     int rowH3 = MulDiv(Constants::History::HISTORY_ROW_HEIGHT, dpi3, 96);
                     int padding3 = MulDiv(Constants::History::HISTORY_PADDING, dpi3, 96);
                     int totalH3 = padding3 * 2
-                                  + MulDiv(30, dpi3, 96)
+                                  + MulDiv(30 + Constants::History::HISTORY_FONT_SIZE + 4, dpi3, 96)
                                   + MulDiv(8, dpi3, 96)
                                   + static_cast<int>(g_displayList.size()) * rowH3;
                     int winH3 = rc3.bottom - rc3.top;
@@ -527,6 +676,15 @@ namespace UI {
                         break;
                     }
                 }
+                // Hand cursor over exe link
+                if (g_exeLinkRect.right > g_exeLinkRect.left) {
+                    POINT pt = { mx, my };
+                    if (PtInRect(&g_exeLinkRect, pt)) {
+                        SetCursor(LoadCursor(nullptr, IDC_HAND));
+                        return 0;
+                    }
+                }
+
                 if (newHover != g_hoverRow) {
                     g_hoverRow = newHover;
                     SetCursor(LoadCursor(nullptr, (g_hoverRow >= 0) ? IDC_HAND : IDC_ARROW));
@@ -543,6 +701,19 @@ namespace UI {
                 }
                 int mx = GET_X_LPARAM(lParam);
                 int my = GET_Y_LPARAM(lParam);
+
+                // Exe-dir link click
+                if (g_exeLinkRect.right > g_exeLinkRect.left) {
+                    POINT pt = { mx, my };
+                    if (PtInRect(&g_exeLinkRect, pt)) {
+                        wchar_t exeBuf[MAX_PATH] = {};
+                        GetModuleFileNameW(nullptr, exeBuf, MAX_PATH);
+                        std::wstring dir = std::filesystem::path(exeBuf).parent_path().wstring();
+                        ShellExecuteW(nullptr, L"open", dir.c_str(), nullptr, nullptr, SW_SHOW);
+                        return 0;
+                    }
+                }
+
                 for (int i = 0; i < static_cast<int>(g_rowRects.size()); ++i) {
                     const RECT &r = g_rowRects[i];
                     if (mx >= r.left && mx < r.right && my >= r.top && my < r.bottom) {

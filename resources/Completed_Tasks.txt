@@ -152,3 +152,18 @@ left notifications must grow to right and right must be right aligned and grow t
 center notifications must grow to both ends
 top left corner must be number / total (and below the number )
                          name of file with extension ex: image1.jpg
+
+task 9: separate history from favorites let history use qivHistory.txt and favorites use qivFavorites.txt keep then in one vector in ram but separate them on disk cause nvme writes are not
+prefered for 1000 dirs also we must keep nvme write as minimal as possible and not rewrite one file if just one favorite changes toggle , thats why favorites are in a separate file and limited to 10 folders.
+because toggling them consumes nvme writes , also fix clear history and favorites shortcuts and when i clear a file,pls look for details in Constans::History there i have comments too.
+
+
+task 10: add keyboard shortcuts to change the global color and a variable to control step of THEME_FACTOR var name THEME_FACTOR_STEP and a key to revert to default:
+i suggest ctrl+alt+shift+ numpad plus and minus for up down for step i suggest 0.05 and for revert to default i suggest ctrl+alt+shift+numpad0 , also when we pass 50% thats THEME_FACTOR>=0.5
+we must switch to light mode using the runtime functions! app.Commands and repaint all windows , also ad a toggle key for corner preferences ctrl+shift+* toggle round/not round change at runtime
+// Windows 11 Backdrop Type (Mica, Acrylic, Tabbed)
+    // Values: 0=None, 1=MainWindow, 2=TransientWindow, 3=TabbedWindow (MicaAlt)
+    constexpr DWORD DWMWA_SYSTEMBACKDROP_TYPE_ATTR = 38; ---- add this too and control it with ctrl+shift+numpad / toggle all modes 1.2.3.0 then back 1.2.3.0.1.2.3.... follow the same principle like dwm function in AppCommands consant in constants.h and variable in appState
+    i must warn you that all states must be present in AppState because appState keep the current state in sync and we query it for single source of truth do not touch constants they are only for init values,
+    everithing else goes updates modifies appState functions operate on it thats why we cahve constexpr in constants and variables in appstate
+    chage keys to ctrol+alt and numpad + / - and numpad 0 cause with shift it make nupad 0 invert and not reset

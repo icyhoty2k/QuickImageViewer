@@ -26,6 +26,7 @@ class RendererGDI final : public IImageRenderer {
         void ProcessPendingUploads() override;
 
         void UpdateColorEffects() override;
+        void SetThemeFactor(float factor) override;
 
         void ApplyPreviousEffects() override {
             // GDI does not use the effect pipeline, so this is just an empty implementation.

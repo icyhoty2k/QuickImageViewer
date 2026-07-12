@@ -56,4 +56,12 @@ struct HistoryFoldersManager {
     // Rewrites qivFavorites.txt only (used by ToggleFavorite and ClearFavorites).
     // Does NOT touch qivHistory.txt.
     void RewriteFavoritesToDisk() const;
+
+    // Backs up qivHistory.txt to QivBackup/ before a clear operation.
+    // Call BEFORE modifying RAM or rewriting the file.
+    void BackupHistoryToDisk() const;
+
+    // Backs up qivFavorites.txt to QivBackup/ before a clear operation.
+    // Call BEFORE modifying RAM or rewriting the file.
+    void BackupFavoritesToDisk() const;
 };

@@ -29,6 +29,12 @@ void RendererGDI::UpdateColorEffects() {
     // GDI renderer does not support D2D effects
 }
 
+void RendererGDI::SetThemeFactor(float factor) {
+    if (m_backgroundBrush) { DeleteObject(m_backgroundBrush); m_backgroundBrush = nullptr; }
+    const BYTE v = static_cast<BYTE>(Constants::Theme::Apply(Constants::Theme::Background::MAIN_WINDOW, factor) * 255.0f + 0.5f);
+    m_backgroundBrush = CreateSolidBrush(RGB(v, v, v));
+}
+
 void RendererGDI::Resize(UINT width, UINT height) {
     if (m_windowWidth == width && m_windowHeight == height) return;
     m_windowWidth = width;

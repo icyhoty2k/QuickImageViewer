@@ -177,6 +177,11 @@ class RendererD2D final : public IImageRenderer {
                 Constants::Theme::Background::MAIN_WINDOW,
                 Constants::Theme::Background::MAIN_WINDOW);
 
+        void SetThemeFactor(float factor) override {
+            const float v = Constants::Theme::Apply(Constants::Theme::Background::MAIN_WINDOW, factor);
+            m_clearColor = D2D1::ColorF(v, v, v);
+        }
+
         // Internal helpers
         HRESULT CreateDeviceResources();
 
