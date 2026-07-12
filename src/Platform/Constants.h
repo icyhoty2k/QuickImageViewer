@@ -172,10 +172,12 @@ namespace Constants {
         constexpr const wchar_t *RUN_VALUE_NAME = L"QuickImageViewer";
 
         constexpr const wchar_t *SUPPORTED_EXTENSIONS[] = {
-            L".jpg", L".jpeg", L".png", L".webp", L".bmp", L".gif", L".tiff", L".tif",
-            L".ico", L".cur", L".heic", L".heif", L".jxr", L".wdp", L".hdp", L".dds",
+            L".jpg", L".jpeg", L".jpe", L".png", L".apng", L".webp", L".bmp", L".gif", L".tiff", L".tif",
+            L".ico", L".cur", L".heic", L".heif", L".hif", L".heics", L".heifs",
+            L".jxr", L".wdp", L".hdp", L".dds", L".jxl",
+            L".avif", L".avcs", L".avci", L".avifs",
             L".dng", L".cr2", L".cr3", L".nef", L".arw",
-            L".svg", L".avif", L".tga"
+            L".svg", L".tga"
         };
 
         // Helper to get the number of elements
