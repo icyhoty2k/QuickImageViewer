@@ -350,7 +350,6 @@ void LoadImageIndex(HWND hWnd, int index) {
 
     app.currentIndex = index;
     app.wantedIndex.store(index, std::memory_order_release);
-    uiManager.getActiveDirWnd().SyncDirSelectionRectangle();
 
     const std::wstring &currentPath = app.playlist[index];
     SetWindowTextW(hWnd, (currentPath.substr(currentPath.find_last_of(L"\\/") + 1) + L" - QuickImageViewer").c_str());
@@ -361,6 +360,11 @@ void LoadImageIndex(HWND hWnd, int index) {
     // =========================================================================
     UpdateOverlaysForCurrentImage(hWnd);
     InvalidateRect(hWnd, nullptr, FALSE);
+
+    // Scroll the dir panel to track the selection. No UpdateWindow — just
+    // invalidate so the dirWnd repaints asynchronously and never blocks the
+    // main window's own WM_PAINT from being processed between keystrokes.
+    uiManager.getActiveDirWnd().SyncDirSelectionRectangle();
 
     // -------------------------------------------------------------------------
     // SVG path: load bytes on IO thread, call LoadSvgFromBytes on UI thread
@@ -399,7 +403,9 @@ void LoadImageIndex(HWND hWnd, int index) {
             // Rewire the effect graph to the new bitmap so the display node
             // is not left pointing at the previous image's effect output.
             app.UpdateRendererColorEffects(hWnd);
-            // Note: UpdateOverlaysForCurrentImage() was already called above
+            // Sync the dir panel selection only on actual image load, not on every
+            // keypress — async loads are handled by WM_QIV_REPAINT + the callback.
+            uiManager.getActiveDirWnd().SyncDirSelectionRectangle();
         } else {
             (void) app.renderer->PreloadBitmap(currentPath, index);
         }
