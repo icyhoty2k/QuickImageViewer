@@ -28,16 +28,6 @@ namespace Constants {
     constexpr const wchar_t *WINDOW_CLASS_NAME = BASE_NAME;
     constexpr bool IS_ENABLE_RUN_ON_STARTUP = true; // enable or disable run on startup reg value add/delete
 
-    // =========================================================================
-    // MAIN APP CORNER PREFERENCES AND DARK MODE CONTROL
-    // =========================================================================
-    constexpr const bool IS_APP_DARK_THEME = true;
-    // DWM API Attributes
-    constexpr DWORD DWMWA_WINDOW_CORNER_PREFERENCES = DWMWA_WINDOW_CORNER_PREFERENCE;
-    // 0 (DWMWCP_DEFAULT): Let Windows decide. 1 (DWMWCP_DONOTROUND): Square corners. 2 (DWMWCP_ROUND): Standard rounded corners. 3 (DWMWCP_ROUNDSMALL): Slightly rounded corners.
-    constexpr DWORD APP_CORNER_PREFERENCES = DWMWCP_ROUND;
-
-
     static constexpr float ZOOM_STEP = 1.1f; // +/- keys and ctrl+wheel
 
     constexpr float COLOR_ADJUST_STEP = 0.1f; // step for brightness contrast and saturation

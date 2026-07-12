@@ -17,8 +17,9 @@ namespace UI {
         //
         // Shortcuts (active when panel is focused):
         //   Tab        — Toggle panel (SC_PANEL_HISTORY_TOGGLE)
-        //   Space      — Toggle favorite on hovered row (HISTORY_FAVORITES_TOGGLE_KEY)
-        //   Delete     — Clear all history except favorites (HISTORY_CLEAR_ALL_HISTORY_BUT_NOT_FAVORITES)
+        //   Space          — Toggle favorite on hovered row (HISTORY_FAVORITES_TOGGLE_KEY)
+        //   Ctrl+Shift+Del — Clear all history except favorites (HISTORY_CLEAR_ALL_HISTORY_BUT_NOT_FAVORITES)
+        //   Ctrl+Alt+Shift+Del — Clear all favorites except history (HISTORY_CLEAR_ALL_FAVORITES_BUT_NOT_HISTORY)
         //   Up/Down    — Move selection
         //   Enter      — Open selected folder
         //   Esc        — Hide panel
@@ -54,8 +55,11 @@ namespace UI {
     // Toggle favorite status on the path at display index 'rowIndex'.
     void ToggleFavorite(int rowIndex);
 
-    // Remove all non-favorite entries from memory and rewrite the file.
+    // Remove all non-favorite entries from memory and rewrite qivHistory.txt only.
     void ClearHistoryKeepFavorites();
+
+    // Remove all favorites from memory and rewrite qivFavorites.txt only.
+    void ClearFavoritesKeepHistory();
 
     // Returns the full MRU list (index 0 = most recent).
     const std::vector<std::wstring> &GetFolderHistory();

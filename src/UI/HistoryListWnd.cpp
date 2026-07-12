@@ -162,13 +162,17 @@ namespace UI {
         const std::wstring &path = g_displayList[rowIndex].path;
         auto &favSet = historyFoldersManager.favorites;
 
-        if (favSet.count(path) > 0)
+        if (favSet.count(path) > 0) {
             favSet.erase(path);
-        else
+        } else {
+            // Enforce max favorites cap — silently ignore if already full
+            if (static_cast<int>(favSet.size()) >= Constants::History::HISTORY_MAX_FAVORITES_TO_SHOW)
+                return;
             favSet.insert(path);
+        }
 
-        // Favorite state is stored as a '*' prefix in the file — must rewrite
-        historyFoldersManager.RewriteFileToDisk();
+        // Only rewrite the small favorites file — history file is untouched
+        historyFoldersManager.RewriteFavoritesToDisk();
     }
 
     void ClearHistoryKeepFavorites() {
@@ -184,7 +188,16 @@ namespace UI {
                 history.end()
                 );
 
-        historyFoldersManager.RewriteFileToDisk();
+        // Rewrite history file only — favorites file is untouched
+        historyFoldersManager.RewriteHistoryToDisk();
+        g_hoverRow = -1;
+    }
+
+    void ClearFavoritesKeepHistory() {
+        historyFoldersManager.favorites.clear();
+
+        // Rewrite favorites file only — history file is untouched
+        historyFoldersManager.RewriteFavoritesToDisk();
         g_hoverRow = -1;
     }
 
@@ -616,8 +629,19 @@ namespace UI {
                         }
                         return 0;
 
-                    case Shortcuts::HISTORY_CLEAR_ALL_HISTORY_BUT_NOT_FAVORITES: // Delete
-                        if (ctrl && shift) {
+                    case VK_DELETE:
+                        if (ctrl && shift && alt) {
+                            // Ctrl+Alt+Shift+Delete — clear favorites, keep history
+                            ClearFavoritesKeepHistory();
+                            BuildDisplayList();
+                            {
+                                int x, y, w, h;
+                                GetHistoryWindowBounds(g_hHistOwner ? g_hHistOwner : m_hWnd, x, y, w, h);
+                                SetWindowPos(m_hWnd, HWND_TOPMOST, x, y, w, h, SWP_FRAMECHANGED);
+                            }
+                            InvalidateRect(m_hWnd, nullptr, TRUE);
+                        } else if (ctrl && shift) {
+                            // Ctrl+Shift+Delete — clear history, keep favorites
                             ClearHistoryKeepFavorites();
                             BuildDisplayList();
                             {

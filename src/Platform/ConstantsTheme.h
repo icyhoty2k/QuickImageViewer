@@ -1,8 +1,27 @@
 #pragma once
 #include <windows.h>
+#include <dwmapi.h>
 #include <d2d1.h>
 
 namespace Constants {
+
+    // =========================================================================
+    // APP THEME & WINDOW CHROME  —  single source of truth
+    // =========================================================================
+    // true = dark title bar / tray menu; false = light (system default)
+    constexpr bool IS_APP_DARK_THEME = true;
+
+    // DWM corner preference for the main window.
+    // Re-exported here; callers only need ConstantsTheme.h.
+    constexpr DWORD DWMWA_WINDOW_CORNER_PREFERENCES = DWMWA_WINDOW_CORNER_PREFERENCE;
+
+    // Corner style applied at window creation.
+    // 0 DWMWCP_DEFAULT    — let Windows decide
+    // 1 DWMWCP_DONOTROUND — square corners
+    // 2 DWMWCP_ROUND      — standard rounded corners
+    // 3 DWMWCP_ROUNDSMALL — slightly rounded corners
+    constexpr DWORD APP_CORNER_PREFERENCES = DWMWCP_ROUND;
+
     namespace Theme {
         // =====================================================================
         // MASTER THEME CONTROL
