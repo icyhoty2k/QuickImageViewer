@@ -549,8 +549,11 @@ namespace UI {
             }
 
             case WM_KEYDOWN: {
+                bool ctrl = (GetKeyState(VK_CONTROL) & 0x8000) != 0;
+                bool shift = (GetKeyState(VK_SHIFT) & 0x8000) != 0;
+                bool alt = (GetKeyState(VK_MENU) & 0x8000) != 0;
                 // Check Ctrl+Tab first (toggle full history view)
-                if (wParam == VK_TAB && (GetKeyState(VK_CONTROL) & 0x8000)) {
+                if (wParam == VK_TAB && ctrl) {
                     g_showFullHistory = !g_showFullHistory;
                     g_scrollOffsetY = 0; // Reset scroll when toggling
                     BuildDisplayList();
@@ -614,14 +617,16 @@ namespace UI {
                         return 0;
 
                     case Shortcuts::HISTORY_CLEAR_ALL_HISTORY_BUT_NOT_FAVORITES: // Delete
-                        ClearHistoryKeepFavorites();
-                        BuildDisplayList();
-                        {
-                            int x, y, w, h;
-                            GetHistoryWindowBounds(g_hHistOwner ? g_hHistOwner : m_hWnd, x, y, w, h);
-                            SetWindowPos(m_hWnd, HWND_TOPMOST, x, y, w, h, SWP_FRAMECHANGED);
+                        if (ctrl && shift) {
+                            ClearHistoryKeepFavorites();
+                            BuildDisplayList();
+                            {
+                                int x, y, w, h;
+                                GetHistoryWindowBounds(g_hHistOwner ? g_hHistOwner : m_hWnd, x, y, w, h);
+                                SetWindowPos(m_hWnd, HWND_TOPMOST, x, y, w, h, SWP_FRAMECHANGED);
+                            }
+                            InvalidateRect(m_hWnd, nullptr, TRUE);
                         }
-                        InvalidateRect(m_hWnd, nullptr, TRUE);
                         return 0;
 
                     default:
