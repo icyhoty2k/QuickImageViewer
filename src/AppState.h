@@ -10,6 +10,19 @@
 
 #include "Constants.h"
 
+struct SlideshowState {
+    bool running  = false;
+    bool paused   = false;
+    bool shuffle  = Constants::Slideshow::SHUFFLE;
+    bool loop     = Constants::Slideshow::LOOP;
+    int  intervalMs   = Constants::Slideshow::INTERVAL_MS;
+    int  cursorHideMs = Constants::Slideshow::CURSOR_HIDE_MS;
+    bool cursorHidden = false;
+
+    std::vector<int> shuffleOrder; // permutation of playlist indices
+    int  shufflePos = 0;           // current position within shuffleOrder
+};
+
 struct ViewportState {
     int rotation = 0; // 0, 90, 180, 270
     bool flippedH = false; //horizontal Flip
@@ -86,6 +99,9 @@ struct AppState {
     RECT savedWindowRect = {0, 0, 0, 0};
 
     bool isDialogVisible = false;
+
+    // Slideshow
+    SlideshowState slideshow;
 
     // Helper to count active instances of this specific class
     int GetInstanceCount() const {

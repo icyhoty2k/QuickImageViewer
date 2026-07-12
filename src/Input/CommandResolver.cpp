@@ -1,5 +1,8 @@
 #include "Command.h"
 #include "Shortcuts.h"
+#include "AppState.h"
+
+extern AppState app;
 
 // =============================================================================
 // CommandResolver.cpp  —  Stage 1: key + modifiers → Command.
@@ -82,6 +85,27 @@ Command InputManager::ResolveKeyboardKeys(UINT key) {
             case Shortcuts::SC_CORNER_PREFERENCE_TOGGLE: return Command::ToggleCornerPreference;
             case Shortcuts::SC_BACKDROP_TYPE_CYCLE:      return Command::CycleBackdropType;
         }
+    }
+
+    // -------------------------------------------------------------------------
+    // Q (no modifier)  —  toggle last/current dir
+    // -------------------------------------------------------------------------
+    if (!ctrl && !alt && !shift && key == Shortcuts::SC_TOGGLE_LAST_DIR)
+        return Command::ToggleLastDir;
+
+    // -------------------------------------------------------------------------
+    // Ctrl+F1  —  Slideshow start/stop (must precede plain F1 = ToggleHelp in switch)
+    // -------------------------------------------------------------------------
+    if (ctrl && !alt && !shift && key == Shortcuts::SC_SLIDESHOW_TOGGLE)
+        return Command::SlideshowToggle;
+
+    // -------------------------------------------------------------------------
+    // Slideshow-only keys (Space / R / S) — only intercepted when slideshow is running
+    // -------------------------------------------------------------------------
+    if (!ctrl && !alt && !shift && app.slideshow.running) {
+        if (key == Shortcuts::SC_SLIDESHOW_PAUSE_RESUME)   return Command::SlideshowPauseResume;
+        if (key == Shortcuts::SC_SLIDESHOW_LOOP_TOGGLE)    return Command::SlideshowToggleLoop;
+        if (key == Shortcuts::SC_SLIDESHOW_SHUFFLE_TOGGLE) return Command::SlideshowToggleShuffle;
     }
 
     // -------------------------------------------------------------------------

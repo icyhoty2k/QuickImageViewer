@@ -1,4 +1,5 @@
 #include <algorithm>
+#include <random>
 
 #include "AppCommands.h"
 #include "Overlays/OverlayManager.h"
@@ -16,6 +17,7 @@ extern void UpdateOverlaysForCurrentImage(HWND hWnd);
 #include "AppState.h"
 #include "WorkerThread.h"
 #include "Platform/Constants.h"
+#include "Platform/ConstantsStrings.h"
 #include "../DropTarget.h"
 #include "Platform/FileHandler.h"
 #include "UI/DirWnd.h"
@@ -98,6 +100,46 @@ LRESULT CALLBACK MainAppWndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM l
 
             if (wParam == TIMER_CENTER_MSG) {
                 g_overlayManager.OnCenterMessageTimer(hWnd);
+                return 0;
+            }
+
+            if (wParam == Constants::Slideshow::TIMER_ID) {
+                if (app.slideshow.running && !app.slideshow.paused && !app.playlist.empty()) {
+                    int size = static_cast<int>(app.playlist.size());
+                    if (app.slideshow.shuffle && !app.slideshow.shuffleOrder.empty()) {
+                        int next = app.slideshow.shufflePos + 1;
+                        if (next >= size) {
+                            if (!app.slideshow.loop) {
+                                AppCommands::stopSlideshow(hWnd);
+                                g_overlayManager.PostCenterMessage(hWnd, Constants::Messages::SLIDESHOW_STOPPED);
+                                return 0;
+                            }
+                            std::shuffle(app.slideshow.shuffleOrder.begin(), app.slideshow.shuffleOrder.end(),
+                                         std::mt19937{std::random_device{}()});
+                            next = 0;
+                        }
+                        app.slideshow.shufflePos = next;
+                        LoadImageIndex(hWnd, app.slideshow.shuffleOrder[next]);
+                    } else {
+                        int next = (app.currentIndex + 1) % size;
+                        if (next == 0 && !app.slideshow.loop) {
+                            AppCommands::stopSlideshow(hWnd);
+                            g_overlayManager.PostCenterMessage(hWnd, Constants::Messages::SLIDESHOW_STOPPED);
+                            return 0;
+                        }
+                        LoadImageIndex(hWnd, next);
+                    }
+                    InvalidateRect(hWnd, nullptr, FALSE);
+                }
+                return 0;
+            }
+
+            if (wParam == Constants::Slideshow::CURSOR_TIMER_ID) {
+                KillTimer(hWnd, Constants::Slideshow::CURSOR_TIMER_ID);
+                if (app.slideshow.running && !app.slideshow.paused && !app.slideshow.cursorHidden) {
+                    ShowCursor(FALSE);
+                    app.slideshow.cursorHidden = true;
+                }
                 return 0;
             }
 
@@ -195,6 +237,16 @@ LRESULT CALLBACK MainAppWndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM l
             return 0;
 
         case WM_MOUSEMOVE:
+            if (app.slideshow.running) {
+                if (app.slideshow.cursorHidden) {
+                    ShowCursor(TRUE);
+                    app.slideshow.cursorHidden = false;
+                }
+                if (app.slideshow.cursorHideMs > 0 && !app.slideshow.paused) {
+                    KillTimer(hWnd, Constants::Slideshow::CURSOR_TIMER_ID);
+                    SetTimer(hWnd, Constants::Slideshow::CURSOR_TIMER_ID, app.slideshow.cursorHideMs, nullptr);
+                }
+            }
             MouseHandler::HandleMouseMove(hWnd, lParam);
             return 0;
 

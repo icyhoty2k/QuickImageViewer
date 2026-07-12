@@ -5,6 +5,8 @@
 #include <dwmapi.h>
 #include <uxtheme.h>
 #include <algorithm>
+#include <numeric>
+#include <random>
 #include "AppState.h" // Assuming this is the path
 #include "../Platform/Constants.h"
 // ... include other necessary headers
@@ -210,4 +212,59 @@ void AppCommands::changeAppBackdropType(HWND hWnd, DWORD newType) {
     if (hWnd)
         DwmSetWindowAttribute(hWnd, Constants::DWMWA_SYSTEMBACKDROP_TYPE_ATTR,
                               &app.backdropType, sizeof(app.backdropType));
+}
+
+void AppCommands::stopSlideshow(HWND hWnd) {
+    KillTimer(hWnd, Constants::Slideshow::TIMER_ID);
+    KillTimer(hWnd, Constants::Slideshow::CURSOR_TIMER_ID);
+    if (app.slideshow.cursorHidden) {
+        ShowCursor(TRUE);
+        app.slideshow.cursorHidden = false;
+    }
+    app.slideshow.running = false;
+    app.slideshow.paused  = false;
+    app.slideshow.shuffleOrder.clear();
+    app.slideshow.shufflePos = 0;
+}
+
+void AppCommands::toggleSlideshow(HWND hWnd) {
+    if (!app.slideshow.running) {
+        // --- Start ---
+        if (!app.playlist.empty() && app.slideshow.shuffle) {
+            int n = static_cast<int>(app.playlist.size());
+            app.slideshow.shuffleOrder.resize(n);
+            std::iota(app.slideshow.shuffleOrder.begin(), app.slideshow.shuffleOrder.end(), 0);
+            std::shuffle(app.slideshow.shuffleOrder.begin(), app.slideshow.shuffleOrder.end(),
+                         std::mt19937{std::random_device{}()});
+            app.slideshow.shufflePos = 0;
+        }
+        SetTimer(hWnd, Constants::Slideshow::TIMER_ID, app.slideshow.intervalMs, nullptr);
+        if (app.slideshow.cursorHideMs > 0)
+            SetTimer(hWnd, Constants::Slideshow::CURSOR_TIMER_ID, app.slideshow.cursorHideMs, nullptr);
+        app.slideshow.running = true;
+        app.slideshow.paused  = false;
+    } else {
+        // --- Stop (whether playing or paused) ---
+        stopSlideshow(hWnd);
+    }
+}
+
+void AppCommands::pauseResumeSlideshow(HWND hWnd) {
+    if (!app.slideshow.running) return;
+    if (!app.slideshow.paused) {
+        // --- Pause ---
+        KillTimer(hWnd, Constants::Slideshow::TIMER_ID);
+        KillTimer(hWnd, Constants::Slideshow::CURSOR_TIMER_ID);
+        if (app.slideshow.cursorHidden) {
+            ShowCursor(TRUE);
+            app.slideshow.cursorHidden = false;
+        }
+        app.slideshow.paused = true;
+    } else {
+        // --- Resume ---
+        SetTimer(hWnd, Constants::Slideshow::TIMER_ID, app.slideshow.intervalMs, nullptr);
+        if (app.slideshow.cursorHideMs > 0)
+            SetTimer(hWnd, Constants::Slideshow::CURSOR_TIMER_ID, app.slideshow.cursorHideMs, nullptr);
+        app.slideshow.paused = false;
+    }
 }

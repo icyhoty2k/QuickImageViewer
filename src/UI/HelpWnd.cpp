@@ -77,6 +77,10 @@ namespace UI {
         Add(L"E", L"Open file location in Explorer", 0);
         Add(L"Tab", L"Toggle History panel", 0);
         Add(L"F1", L"Toggle Help window", 0);
+        Add(L"Ctrl+F1", L"Slideshow: start / stop", 0);
+        Add(L"Space", L"Slideshow: pause / resume  (slideshow only)", 0);
+        Add(L"R", L"Slideshow: toggle loop  (slideshow only)", 0);
+        Add(L"S", L"Slideshow: toggle shuffle  (slideshow only)", 0);
         Add(L"F2", L"Open file dialog", 0);
         Add(L"F3 / F4", L"Toggle / Move VRAM cache panel", 0);
         Add(L"F5 / F6", L"Toggle / Move directory panel", 0);

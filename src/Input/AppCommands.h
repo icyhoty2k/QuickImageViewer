@@ -17,6 +17,11 @@ class AppCommands {
         static void changeAppThemeFactor(HWND hWnd, float newFactor);
         static void changeAppBackdropType(HWND hWnd, DWORD newType);
 
+        // Slideshow
+        static void toggleSlideshow(HWND hWnd);      // Ctrl+F1: start / stop
+        static void pauseResumeSlideshow(HWND hWnd); // Space: pause / resume
+        static void stopSlideshow(HWND hWnd);        // also called from WM_TIMER (end of playlist)
+
         static void RemoveTrayIcon(HWND hWnd);
 
     private:

@@ -167,3 +167,9 @@ we must switch to light mode using the runtime functions! app.Commands and repai
     i must warn you that all states must be present in AppState because appState keep the current state in sync and we query it for single source of truth do not touch constants they are only for init values,
     everithing else goes updates modifies appState functions operate on it thats why we cahve constexpr in constants and variables in appstate
     chage keys to ctrol+alt and numpad + / - and numpad 0 cause with shift it make nupad 0 invert and not reset
+
+
+
+task 11: make a key to toggle dirs : last dir/current dir i suggest key q  its closer to tab
+check if only one dis is in historylist if one dir dismiss and write a overlay message in center center to inform me that dir did not change
+also inform me with center center overlay that dir changed if q changed a dir

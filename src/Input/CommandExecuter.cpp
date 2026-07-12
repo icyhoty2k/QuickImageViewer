@@ -9,6 +9,8 @@
 #include "../UI/HistoryListWnd.h"
 #include "../UI/HelpWnd.h"
 #include <algorithm>
+#include <numeric>
+#include <random>
 #include <cmath>
 #include <commdlg.h>
 #include <shlobj_core.h>
@@ -55,6 +57,18 @@ void InputManager::ExecuteKeyboardShortcutCommand(HWND hWnd, Command cmd) {
                 InvalidateRect(hWnd, nullptr, FALSE);
             }
             break;
+
+        case Command::ToggleLastDir: {
+            const auto &history = UI::GetFolderHistory();
+            if (history.size() < 2) {
+                g_overlayManager.PostCenterMessage(hWnd, Constants::Messages::TOGGLE_DIR_NO_PREV);
+            } else {
+                std::wstring prevDir = history[1];
+                OpenDirectory(hWnd, prevDir);
+                g_overlayManager.PostCenterMessage(hWnd, Constants::Messages::TOGGLE_DIR_CHANGED + prevDir);
+            }
+            break;
+        }
 
         case Command::ShowInExplorer:
             if (!app.playlist.empty() && app.currentIndex >= 0) {
@@ -508,6 +522,55 @@ void InputManager::ExecuteKeyboardShortcutCommand(HWND hWnd, Command cmd) {
                 g_overlayManager.PostCenterMessage(hWnd, labels[app.backdropType]);
             }
             break;
+
+        case Command::SlideshowToggle: {
+            bool wasRunning = app.slideshow.running;
+            AppCommands::toggleSlideshow(hWnd);
+            if (!wasRunning) {
+                std::wstring msg = std::wstring(Constants::Messages::SLIDESHOW_PLAYING)
+                    + L"  " + std::to_wstring(app.slideshow.intervalMs / 1000) + L"s"
+                    + (app.slideshow.loop    ? L"  Loop"    : L"")
+                    + (app.slideshow.shuffle ? L"  Shuffle" : L"");
+                g_overlayManager.PostCenterMessage(hWnd, msg);
+            } else {
+                g_overlayManager.PostCenterMessage(hWnd, Constants::Messages::SLIDESHOW_STOPPED);
+            }
+            break;
+        }
+
+        case Command::SlideshowPauseResume: {
+            bool wasPaused = app.slideshow.paused;
+            AppCommands::pauseResumeSlideshow(hWnd);
+            g_overlayManager.PostCenterMessage(hWnd,
+                wasPaused ? Constants::Messages::SLIDESHOW_PLAYING
+                          : Constants::Messages::SLIDESHOW_PAUSED);
+            break;
+        }
+
+        case Command::SlideshowToggleLoop:
+            app.slideshow.loop = !app.slideshow.loop;
+            g_overlayManager.PostCenterMessage(hWnd,
+                app.slideshow.loop ? Constants::Messages::SLIDESHOW_LOOP_ON
+                                   : Constants::Messages::SLIDESHOW_LOOP_OFF);
+            break;
+
+        case Command::SlideshowToggleShuffle: {
+            app.slideshow.shuffle = !app.slideshow.shuffle;
+            if (app.slideshow.shuffle && !app.playlist.empty()) {
+                int n = static_cast<int>(app.playlist.size());
+                app.slideshow.shuffleOrder.resize(n);
+                std::iota(app.slideshow.shuffleOrder.begin(), app.slideshow.shuffleOrder.end(), 0);
+                std::shuffle(app.slideshow.shuffleOrder.begin(), app.slideshow.shuffleOrder.end(),
+                             std::mt19937{std::random_device{}()});
+                app.slideshow.shufflePos = 0;
+            } else {
+                app.slideshow.shuffleOrder.clear();
+            }
+            g_overlayManager.PostCenterMessage(hWnd,
+                app.slideshow.shuffle ? Constants::Messages::SLIDESHOW_SHUFFLE_ON
+                                      : Constants::Messages::SLIDESHOW_SHUFFLE_OFF);
+            break;
+        }
 
         default:
             break;
