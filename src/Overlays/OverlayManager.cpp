@@ -58,6 +58,7 @@ void OverlayManager::Init(IDWriteFactory3 *dwriteFactory,
 
     BuildSlotFormats();
     BuildCenterBrush(ctx);
+    if (ctx) ctx->CreateSolidColorBrush(D2D1::ColorF(0.0f, 0.0f, 0.0f, BG_ALPHA), &m_pBgBrush);
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -193,19 +194,16 @@ void OverlayManager::BuildSlotFormats() {
     m_fmtBotRight.Attach(raw);
     raw = nullptr;
 
-    // --- Assign to slots ---
-    m_slots[TOP_LEFT].fmt = m_fmtLeft.Get();
-    m_slots[TOP_CENTER].fmt = m_fmtCenter.Get();
-    m_slots[TOP_RIGHT].fmt = m_fmtTrailing.Get();
-    m_slots[MID_LEFT].fmt = m_fmtLeft.Get();
-
-    // Wire up the independent center format
-    m_slots[MID_CENTER].fmt = m_fmtCenter5.Get();
-
-    m_slots[MID_RIGHT].fmt = m_fmtTrailing.Get();
-    m_slots[BOT_LEFT].fmt = m_fmtBotLeft.Get();
-    m_slots[BOT_CENTER].fmt = m_fmtBotCenter.Get();
-    m_slots[BOT_RIGHT].fmt = m_fmtBotRight.Get();
+    // --- Assign to slots (fmt + cachedAlignment kept in sync) ---
+    m_slots[TOP_LEFT].fmt = m_fmtLeft.Get();        m_slots[TOP_LEFT].cachedAlignment = DWRITE_TEXT_ALIGNMENT_LEADING;
+    m_slots[TOP_CENTER].fmt = m_fmtCenter.Get();    m_slots[TOP_CENTER].cachedAlignment = DWRITE_TEXT_ALIGNMENT_CENTER;
+    m_slots[TOP_RIGHT].fmt = m_fmtTrailing.Get();   m_slots[TOP_RIGHT].cachedAlignment = DWRITE_TEXT_ALIGNMENT_TRAILING;
+    m_slots[MID_LEFT].fmt = m_fmtLeft.Get();        m_slots[MID_LEFT].cachedAlignment = DWRITE_TEXT_ALIGNMENT_LEADING;
+    m_slots[MID_CENTER].fmt = m_fmtCenter5.Get();   m_slots[MID_CENTER].cachedAlignment = DWRITE_TEXT_ALIGNMENT_CENTER;
+    m_slots[MID_RIGHT].fmt = m_fmtTrailing.Get();   m_slots[MID_RIGHT].cachedAlignment = DWRITE_TEXT_ALIGNMENT_TRAILING;
+    m_slots[BOT_LEFT].fmt = m_fmtBotLeft.Get();     m_slots[BOT_LEFT].cachedAlignment = DWRITE_TEXT_ALIGNMENT_LEADING;
+    m_slots[BOT_CENTER].fmt = m_fmtBotCenter.Get(); m_slots[BOT_CENTER].cachedAlignment = DWRITE_TEXT_ALIGNMENT_CENTER;
+    m_slots[BOT_RIGHT].fmt = m_fmtBotRight.Get();   m_slots[BOT_RIGHT].cachedAlignment = DWRITE_TEXT_ALIGNMENT_TRAILING;
 
     InvalidateLayouts();
 }
@@ -401,15 +399,15 @@ void OverlayManager::OnLayoutModeChanged(HWND /*hWnd*/) {
         slotBotRight.active = false;
     } else {
         // Restore fmt assignments (mode 1 overrides them to LEADING for all slots)
-        m_slots[TOP_LEFT].fmt = m_fmtLeft.Get();
-        m_slots[TOP_CENTER].fmt = m_fmtCenter.Get();
-        m_slots[TOP_RIGHT].fmt = m_fmtTrailing.Get();
-        m_slots[MID_LEFT].fmt = m_fmtLeft.Get();
-        m_slots[MID_CENTER].fmt = m_fmtCenter5.Get();
-        m_slots[MID_RIGHT].fmt = m_fmtTrailing.Get();
-        m_slots[BOT_LEFT].fmt = m_fmtBotLeft.Get();
-        m_slots[BOT_CENTER].fmt = m_fmtBotCenter.Get();
-        m_slots[BOT_RIGHT].fmt = m_fmtBotRight.Get();
+        m_slots[TOP_LEFT].fmt = m_fmtLeft.Get();        m_slots[TOP_LEFT].cachedAlignment = DWRITE_TEXT_ALIGNMENT_LEADING;
+        m_slots[TOP_CENTER].fmt = m_fmtCenter.Get();    m_slots[TOP_CENTER].cachedAlignment = DWRITE_TEXT_ALIGNMENT_CENTER;
+        m_slots[TOP_RIGHT].fmt = m_fmtTrailing.Get();   m_slots[TOP_RIGHT].cachedAlignment = DWRITE_TEXT_ALIGNMENT_TRAILING;
+        m_slots[MID_LEFT].fmt = m_fmtLeft.Get();        m_slots[MID_LEFT].cachedAlignment = DWRITE_TEXT_ALIGNMENT_LEADING;
+        m_slots[MID_CENTER].fmt = m_fmtCenter5.Get();   m_slots[MID_CENTER].cachedAlignment = DWRITE_TEXT_ALIGNMENT_CENTER;
+        m_slots[MID_RIGHT].fmt = m_fmtTrailing.Get();   m_slots[MID_RIGHT].cachedAlignment = DWRITE_TEXT_ALIGNMENT_TRAILING;
+        m_slots[BOT_LEFT].fmt = m_fmtBotLeft.Get();     m_slots[BOT_LEFT].cachedAlignment = DWRITE_TEXT_ALIGNMENT_LEADING;
+        m_slots[BOT_CENTER].fmt = m_fmtBotCenter.Get(); m_slots[BOT_CENTER].cachedAlignment = DWRITE_TEXT_ALIGNMENT_CENTER;
+        m_slots[BOT_RIGHT].fmt = m_fmtBotRight.Get();   m_slots[BOT_RIGHT].cachedAlignment = DWRITE_TEXT_ALIGNMENT_TRAILING;
         // Clear the summary text that mode 2 wrote into slotTopCenter
         slotTopCenter.UpdateText(L"");
         // Restore active state from master + per-slot visibility
@@ -431,10 +429,15 @@ void OverlayManager::UpdateInfo(int index, int total, const std::wstring &filena
     RebuildTopLeft();
 }
 
-void OverlayManager::UpdateZoom(float /*zoom*/, HWND hWnd) {
-    // Called on every Render() frame — skip the text formatting when the
-    // effective zoom hasn't changed (the common case for static frames).
-    const float newZoom = app.GetRealZoom(hWnd);
+void OverlayManager::UpdateZoom(float /*zoom*/, HWND /*hWnd*/) {
+    // Compute effective zoom from cached render-target size — avoids a
+    // GetClientRect syscall on every frame (was called via app.GetRealZoom).
+    float newZoom = 1.0f;
+    if (app.imgWidth > 0 && app.imgHeight > 0 && m_rtW > 0.0f && m_rtH > 0.0f) {
+        const float fitScale = std::min(m_rtW / static_cast<float>(app.imgWidth),
+                                        m_rtH / static_cast<float>(app.imgHeight));
+        newZoom = fitScale * app.viewport.zoom;
+    }
     if (newZoom == m_zoom && !slotTopRight.text.empty())
         return;
     m_zoom = newZoom;
@@ -469,7 +472,6 @@ void OverlayManager::UpdateEffects() {
     if (!app.hasActiveEffects || !app.effectPreviewEnabled) {
         slotBotLeft.UpdateText(L"");
         slotBotLeft.InvalidateLayout();
-        RecomputeRects();
         return;
     }
 
@@ -501,7 +503,6 @@ void OverlayManager::UpdateEffects() {
 
     slotBotLeft.UpdateText(std::move(lines));
     slotBotLeft.InvalidateLayout();
-    RecomputeRects();
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -645,8 +646,7 @@ void OverlayManager::RenderAll(ID2D1DeviceContext *ctx) const {
                     m_pDWriteFactory, meta.fmt);
             if (!layout) continue;
 
-            DWRITE_TEXT_METRICS tm{};
-            layout->GetMetrics(&tm);
+            const DWRITE_TEXT_METRICS &tm = slotMidCenter.GetCachedMetrics();
 
             const D2D1_RECT_F &slotRect = slotMidCenter.rect;
             const float slotW = slotRect.right - slotRect.left;
@@ -695,15 +695,13 @@ void OverlayManager::RenderAll(ID2D1DeviceContext *ctx) const {
                 m_pDWriteFactory, meta.fmt);
         if (!layout) continue;
 
-        DWRITE_TEXT_METRICS tm{};
-        layout->GetMetrics(&tm);
+        const DWRITE_TEXT_METRICS &tm = ov->GetCachedMetrics();
 
         const D2D1_RECT_F &slotRect = ov->rect;
         const float slotW = slotRect.right - slotRect.left;
 
         float inkLeft;
-        DWRITE_TEXT_ALIGNMENT ta = meta.fmt->GetTextAlignment();
-        switch (ta) {
+        switch (meta.cachedAlignment) {
             case DWRITE_TEXT_ALIGNMENT_LEADING:
                 inkLeft = slotRect.left;
                 break;
@@ -730,12 +728,8 @@ void OverlayManager::RenderAll(ID2D1DeviceContext *ctx) const {
         bgRect.bottom = std::min(m_rtH, bgRect.bottom);
 
         // Semi-transparent background
-        if (Constants::Overlay::OVERLAY_SHOW_BACKGROUND) {
-            const D2D1_COLOR_F prevColor = m_pTextBrush->GetColor();
-            m_pTextBrush->SetColor(D2D1::ColorF(0.0f, 0.0f, 0.0f, BG_ALPHA));
-            ctx->FillRectangle(bgRect, m_pTextBrush);
-            m_pTextBrush->SetColor(prevColor);
-        }
+        if (Constants::Overlay::OVERLAY_SHOW_BACKGROUND && m_pBgBrush)
+            ctx->FillRectangle(bgRect, m_pBgBrush.Get());
 
         // Draw text
         ctx->DrawTextLayout(
@@ -759,11 +753,14 @@ void OverlayManager::InvalidateLayouts() {
 
 void OverlayManager::OnDeviceLost() {
     m_pCenterBrush.Reset();
+    m_pBgBrush.Reset();
     InvalidateLayouts();
 }
 
 void OverlayManager::OnDeviceRestored(ID2D1DeviceContext *ctx) {
     BuildCenterBrush(ctx);
+    m_pBgBrush.Reset();
+    if (ctx) ctx->CreateSolidColorBrush(D2D1::ColorF(0.0f, 0.0f, 0.0f, BG_ALPHA), &m_pBgBrush);
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

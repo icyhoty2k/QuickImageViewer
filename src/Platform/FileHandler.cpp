@@ -275,6 +275,7 @@ void OpenInitialImage(HWND hWnd) {
             selectedPath.parent_path().wstring());
 
     app.playlist.clear();
+    app.playlistFileSizes.clear();
 
     try {
         for (const auto &entry: std::filesystem::directory_iterator(selectedPath.parent_path())) {
@@ -286,7 +287,9 @@ void OpenInitialImage(HWND hWnd) {
 
             // Parent dir is already canonical — entry paths are too.
             // fs::canonical here would cost several syscalls per file.
-            app.playlist.push_back(entry.path().wstring());
+            std::wstring p = entry.path().wstring();
+            app.playlistFileSizes[p] = static_cast<int64_t>(entry.file_size());
+            app.playlist.push_back(std::move(p));
         }
     } catch (...) {
         return;
@@ -308,9 +311,9 @@ void OpenInitialImage(HWND hWnd) {
 
     uiManager.getActiveDirWnd().ClearDirThumbnailCache();
 
-    auto it = std::ranges::find(app.playlist, selectedPath.wstring());
-    if (it != app.playlist.end()) {
-        LoadImageIndex(hWnd, static_cast<int>(std::distance(app.playlist.begin(), it)));
+    auto mapIt = app.playlistIndexMap.find(selectedPath.wstring());
+    if (mapIt != app.playlistIndexMap.end()) {
+        LoadImageIndex(hWnd, mapIt->second);
         uiManager.getActiveDirWnd().UpdateDirView();
     }
 }
@@ -322,16 +325,12 @@ void UpdateOverlaysForCurrentImage(HWND hWnd) {
     const std::wstring &path = app.playlist[app.currentIndex];
     std::wstring fileName = path.substr(path.find_last_of(L"\\/") + 1);
 
-    // Get file size on disk for the BOT_RIGHT overlay.
+    // Get file size from scan-time cache — no extra syscall per navigation.
     int64_t fileSizeBytes = 0;
     {
-        WIN32_FILE_ATTRIBUTE_DATA fad{};
-        if (GetFileAttributesExW(path.c_str(), GetFileExInfoStandard, &fad)) {
-            LARGE_INTEGER li;
-            li.HighPart = static_cast<LONG>(fad.nFileSizeHigh);
-            li.LowPart = fad.nFileSizeLow;
-            fileSizeBytes = li.QuadPart;
-        }
+        auto sIt = app.playlistFileSizes.find(path);
+        if (sIt != app.playlistFileSizes.end())
+            fileSizeBytes = sIt->second;
     }
 
     g_overlayManager.UpdateInfo(app.currentIndex,
@@ -425,17 +424,16 @@ void OpenDirectory(HWND hWnd, const std::wstring &dirPathStr) {
         }
     }
 
-    // Declaratively build the playlist.
-    // dirPath is already canonical, so entry paths are too — no per-file
-    // fs::canonical (several syscalls each) needed.
-    app.playlist = fs::directory_iterator(dirPath)
-                   | std::views::filter([](const auto &e) {
-                       return e.is_regular_file() && is_image_ext(e.path().extension().wstring());
-                   })
-                   | std::views::transform([](const auto &e) {
-                       return e.path().wstring();
-                   })
-                   | std::ranges::to<std::vector<std::wstring> >();
+    // Build the playlist and collect file sizes from the scan (no extra syscalls).
+    // dirPath is already canonical, so entry paths are too.
+    app.playlist.clear();
+    app.playlistFileSizes.clear();
+    for (const auto &entry : fs::directory_iterator(dirPath)) {
+        if (!entry.is_regular_file() || !is_image_ext(entry.path().extension().wstring())) continue;
+        std::wstring p = entry.path().wstring();
+        app.playlistFileSizes[p] = static_cast<int64_t>(entry.file_size());
+        app.playlist.push_back(std::move(p));
+    }
 
     if (app.playlist.empty()) return;
 
@@ -464,13 +462,13 @@ void OpenSpecificImage(HWND hWnd, const std::wstring &filePathStr) {
 
     if (!app.playlist.empty()) {
         if (filePath.parent_path() == fs::path(app.playlist[0]).parent_path()) {
-            auto it = std::ranges::find(app.playlist, filePath.wstring());
-            if (it != app.playlist.end()) {
+            auto mapIt = app.playlistIndexMap.find(filePath.wstring());
+            if (mapIt != app.playlistIndexMap.end()) {
                 // Same folder — no need to rebuild playlist, but still record
                 // the folder in history so revisiting via the history panel
                 // bumps the entry to the top (PushFolderHistory deduplicates).
                 UI::PushFolderHistory(filePath.parent_path().wstring());
-                LoadImageIndex(hWnd, static_cast<int>(std::distance(app.playlist.begin(), it)));
+                LoadImageIndex(hWnd, mapIt->second);
                 InvalidateRect(hWnd, nullptr, TRUE);
                 UpdateWindow(hWnd);
                 return;
@@ -478,16 +476,16 @@ void OpenSpecificImage(HWND hWnd, const std::wstring &filePathStr) {
         }
     }
 
-    // filePath is already canonical, so its parent's entries are too — no
-    // per-file fs::canonical (several syscalls each) needed.
-    app.playlist = fs::directory_iterator(filePath.parent_path())
-                   | std::views::filter([](const auto &e) {
-                       return e.is_regular_file() && is_image_ext(e.path().extension().wstring());
-                   })
-                   | std::views::transform([](const auto &e) {
-                       return e.path().wstring();
-                   })
-                   | std::ranges::to<std::vector<std::wstring> >();
+    // Build playlist + collect file sizes from the scan (no extra syscalls).
+    // filePath is already canonical, so its parent's entries are too.
+    app.playlist.clear();
+    app.playlistFileSizes.clear();
+    for (const auto &entry : fs::directory_iterator(filePath.parent_path())) {
+        if (!entry.is_regular_file() || !is_image_ext(entry.path().extension().wstring())) continue;
+        std::wstring p = entry.path().wstring();
+        app.playlistFileSizes[p] = static_cast<int64_t>(entry.file_size());
+        app.playlist.push_back(std::move(p));
+    }
 
     // Start IO worker with correct thread count for this drive type (HDD=1, SSD/NVMe=2)
     EnsureIoWorkerStarted(filePath.parent_path().wstring());
@@ -508,9 +506,9 @@ void OpenSpecificImage(HWND hWnd, const std::wstring &filePathStr) {
 
     uiManager.getActiveDirWnd().ClearDirThumbnailCache();
 
-    auto it = std::ranges::find(app.playlist, filePath.wstring());
-    if (it != app.playlist.end()) {
-        LoadImageIndex(hWnd, static_cast<int>(std::distance(app.playlist.begin(), it)));
+    auto mapIt2 = app.playlistIndexMap.find(filePath.wstring());
+    if (mapIt2 != app.playlistIndexMap.end()) {
+        LoadImageIndex(hWnd, mapIt2->second);
         uiManager.getActiveDirWnd().UpdateDirView();
     }
 }
