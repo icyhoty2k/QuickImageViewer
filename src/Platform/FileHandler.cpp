@@ -311,6 +311,10 @@ void OpenInitialImage(HWND hWnd) {
 
     uiManager.getActiveDirWnd().ClearDirThumbnailCache();
 
+    // Update F5's isolated playlist copy (F2 file dialog always updates F5, independent of active panel)
+    // SetPlaylistCopy handles visibility check and rebuild internally
+    uiManager.getDirWindow().SetPlaylistCopy(app.playlist);
+
     auto mapIt = app.playlistIndexMap.find(selectedPath.wstring());
     if (mapIt != app.playlistIndexMap.end()) {
         LoadImageIndex(hWnd, mapIt->second);
@@ -507,7 +511,6 @@ void OpenSpecificImage(HWND hWnd, const std::wstring &filePathStr) {
     // Sort
     sortCurrentPlaylistInOrder();
 
-
     // Rebuild the O(1) path → index lookup map
     app.playlistIndexMap.clear();
     app.playlistIndexMap.reserve(app.playlist.size());
@@ -520,10 +523,20 @@ void OpenSpecificImage(HWND hWnd, const std::wstring &filePathStr) {
 
     uiManager.getActiveDirWnd().ClearDirThumbnailCache();
 
+    // Update F5 only if it's the active panel (spawned panels don't hijack F5)
+    if (&uiManager.getActiveDirWnd() == &uiManager.getDirWindow()) {
+        uiManager.getDirWindow().SetPlaylistCopy(app.playlist);
+    }
+
     auto mapIt2 = app.playlistIndexMap.find(filePath.wstring());
     if (mapIt2 != app.playlistIndexMap.end()) {
         LoadImageIndex(hWnd, mapIt2->second);
         uiManager.getActiveDirWnd().UpdateDirView();
+    }
+
+    // Refresh F5's view only if it's the active panel and visible
+    if (&uiManager.getActiveDirWnd() == &uiManager.getDirWindow()) {
+        uiManager.getDirWindow().UpdateDirView();
     }
 }
 

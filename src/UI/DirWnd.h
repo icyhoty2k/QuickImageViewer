@@ -24,7 +24,17 @@ namespace UI {
             // Load playlist from folder (only used when F5 actively navigates)
             void LoadPlaylist(const std::wstring &folderPath);
             // Copy the sorted playlist (used to keep F5 in sync with main folder, isolated from spawned hijacking)
-            void SetPlaylistCopy(const std::vector<std::wstring> &playlist) { m_dirPlaylist = playlist; }
+            void SetPlaylistCopy(const std::vector<std::wstring> &playlist) {
+                m_dirPlaylist = playlist;
+                m_thumbnails.clear();  // Clear cached thumbnails
+                if (m_hWnd) {
+                    // Force immediate rebuild: if visible, repaint now; if hidden, repaint when shown
+                    InvalidateRect(m_hWnd, nullptr, FALSE);
+                    if (IsWindowVisible(m_hWnd)) {
+                        UpdateView();  // Immediate rebuild if visible
+                    }
+                }
+            }
 
         protected:
             const wchar_t *ClassName()    const override { return L"QIV_DirWindow"; }
