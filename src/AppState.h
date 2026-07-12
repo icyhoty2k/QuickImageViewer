@@ -26,7 +26,10 @@ struct AppState {
     // --- THE MASTER BYPASS SWITCH ---
     // When false, the renderer completely ignores the GPU effect graph
     // and draws the raw ID2D1Bitmap natively.
-    bool isDarkThemed = Constants::IS_APP_DARK_THEME;
+    bool isDarkThemed         = Constants::IS_APP_DARK_THEME;
+    DWORD cornerPreference    = Constants::APP_CORNER_PREFERENCES;
+    float themeFactor         = Constants::Theme::THEME_FACTOR;      // runtime 0=dark … 1=light
+    DWORD backdropType        = Constants::APP_BACKDROP_TYPE_DEFAULT; // 0=None,1=Mica,2=Acrylic,3=MicaAlt
     bool hasActiveEffects = false; // if any effects are used then true else false and just skip and display image
     bool effectPreviewEnabled = false; //
     int hardwareThreads = 1; //used to save cpu cores/threads query once on startup and use it

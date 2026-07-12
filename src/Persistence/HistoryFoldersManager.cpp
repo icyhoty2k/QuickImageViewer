@@ -7,6 +7,62 @@
 namespace fs = std::filesystem;
 
 // ---------------------------------------------------------------------------
+// Backup helpers  (file-scope, not exposed in the header)
+// ---------------------------------------------------------------------------
+
+// Returns (creating if needed) the QivBackup folder next to the executable.
+static fs::path GetBackupDir() {
+    wchar_t buffer[MAX_PATH];
+    DWORD size = GetModuleFileNameW(nullptr, buffer, MAX_PATH);
+
+    fs::path exeDir = (size == 0 || size == MAX_PATH)
+                          ? fs::current_path()
+                          : fs::path(buffer).parent_path();
+
+    // Strip leading slash from the constant (it is stored as L"/QivBackup")
+    std::wstring folderName = Constants::History::HISTORY_FAVORITES_BACKUP_FOLDER;
+    if (!folderName.empty() && (folderName.front() == L'/' || folderName.front() == L'\\'))
+        folderName = folderName.substr(1);
+
+    fs::path backupDir = exeDir / folderName;
+    if (!fs::exists(backupDir))
+        fs::create_directories(backupDir);
+
+    return backupDir;
+}
+
+// Builds a dated backup file path:  QivBackup/qivHistory_dd.MM.YYYY_HH.MM.SS.bak
+static fs::path MakeBackupPath(const fs::path &backupDir,
+                                const std::wstring &origFileName,
+                                const SYSTEMTIME &st) {
+    wchar_t suffix[64];
+    swprintf_s(suffix, L"_%02d.%02d.%04d_%02d.%02d.%02d",
+               st.wDay, st.wMonth, st.wYear,
+               st.wHour, st.wMinute, st.wSecond);
+
+    std::wstring stem = fs::path(origFileName).stem().wstring();
+    std::wstring ext  = Constants::History::HISTORY_FAVORITES_BACKUP_EXTENSION;
+    return backupDir / (stem + suffix + ext);
+}
+
+// Writes the mandatory first line:
+//   BACKUP COMPUTER_NAME, dd.MM.YYYY, HH:MM:SS.ms, Backup Version Schema : 1.0
+static void WriteBackupHeader(std::wofstream &f, const SYSTEMTIME &st) {
+    wchar_t compName[MAX_COMPUTERNAME_LENGTH + 1] = {};
+    DWORD sz = MAX_COMPUTERNAME_LENGTH + 1;
+    GetComputerNameW(compName, &sz);
+
+    wchar_t header[512];
+    swprintf_s(header,
+               L"BACKUP %s, %02d.%02d.%04d, %02d:%02d:%02d.%03d, %s",
+               compName,
+               st.wDay, st.wMonth, st.wYear,
+               st.wHour, st.wMinute, st.wSecond, st.wMilliseconds,
+               Constants::History::HISTORY_FAVORITES_BACKUP_VERSION);
+    f << header << L"\n";
+}
+
+// ---------------------------------------------------------------------------
 // GetFilePath  —  full path to qivHistory.txt next to the executable
 // ---------------------------------------------------------------------------
 std::wstring HistoryFoldersManager::GetFilePath() const {
@@ -158,6 +214,53 @@ void HistoryFoldersManager::RewriteFavoritesToDisk() const {
     for (const auto &path : favorites) {
         if (written >= Constants::History::HISTORY_MAX_FAVORITES_TO_SHOW) break;
         file << path << L"\n";
+        ++written;
+    }
+}
+
+// ---------------------------------------------------------------------------
+// BackupHistoryToDisk
+//   Writes a dated snapshot of the current in-RAM history to QivBackup/.
+//   Must be called BEFORE clearing RAM and before RewriteHistoryToDisk.
+//   Format:  first line = header, then paths oldest-first (same as the live file).
+// ---------------------------------------------------------------------------
+void HistoryFoldersManager::BackupHistoryToDisk() const {
+    SYSTEMTIME st;
+    GetLocalTime(&st);
+
+    fs::path backupPath = MakeBackupPath(GetBackupDir(), historyFileName, st);
+    std::wofstream f(backupPath, std::ios::out | std::ios::trunc);
+    if (!f.is_open())
+        return;
+
+    WriteBackupHeader(f, st);
+
+    // Oldest-first — same order as the live qivHistory.txt
+    for (int i = static_cast<int>(folderHistory.size()) - 1; i >= 0; --i)
+        f << folderHistory[i] << L"\n";
+}
+
+// ---------------------------------------------------------------------------
+// BackupFavoritesToDisk
+//   Writes a dated snapshot of the current in-RAM favorites to QivBackup/.
+//   Must be called BEFORE clearing RAM and before RewriteFavoritesToDisk.
+//   Format:  first line = header, then favorite paths.
+// ---------------------------------------------------------------------------
+void HistoryFoldersManager::BackupFavoritesToDisk() const {
+    SYSTEMTIME st;
+    GetLocalTime(&st);
+
+    fs::path backupPath = MakeBackupPath(GetBackupDir(), favoritesFileName, st);
+    std::wofstream f(backupPath, std::ios::out | std::ios::trunc);
+    if (!f.is_open())
+        return;
+
+    WriteBackupHeader(f, st);
+
+    int written = 0;
+    for (const auto &path : favorites) {
+        if (written >= Constants::History::HISTORY_MAX_FAVORITES_TO_SHOW) break;
+        f << path << L"\n";
         ++written;
     }
 }

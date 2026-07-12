@@ -4,30 +4,49 @@
 #include <d2d1.h>
 
 namespace Constants {
-
     // =========================================================================
     // APP THEME & WINDOW CHROME  —  single source of truth
     // =========================================================================
     // true = dark title bar / tray menu; false = light (system default)
-    constexpr bool IS_APP_DARK_THEME = true;
+    constexpr bool IS_APP_DARK_THEME = false;
 
     // DWM corner preference for the main window.
     // Re-exported here; callers only need ConstantsTheme.h.
     constexpr DWORD DWMWA_WINDOW_CORNER_PREFERENCES = DWMWA_WINDOW_CORNER_PREFERENCE;
 
-    // Corner style applied at window creation.
+    // Corner style applied at window creation (and restored after fullscreen exit).
     // 0 DWMWCP_DEFAULT    — let Windows decide
     // 1 DWMWCP_DONOTROUND — square corners
     // 2 DWMWCP_ROUND      — standard rounded corners
     // 3 DWMWCP_ROUNDSMALL — slightly rounded corners
     constexpr DWORD APP_CORNER_PREFERENCES = DWMWCP_ROUND;
 
+    // DWM attribute ID for dark title bar (DWMWA_USE_IMMERSIVE_DARK_MODE).
+    // Named constant may be absent in older SDKs; value 20 is stable since Win10 19H1.
+    constexpr DWORD DWMWA_DARK_MODE = 20;
+
+    // DWM attribute ID for custom caption/title-bar background color (DWMWA_CAPTION_COLOR).
+    // Available on Windows 11+. Ignored silently on older versions.
+    constexpr DWORD DWMWA_CAPTION_COLOR_ATTR = 35;
+
+    // DWM attribute ID for system backdrop type (Mica, Acrylic, Tabbed).
+    // Values: 0=None, 1=MainWindow(Mica), 2=TransientWindow(Acrylic), 3=TabbedWindow(MicaAlt)
+    // Available on Windows 11 22H2+. Ignored silently on older versions.
+    constexpr DWORD DWMWA_SYSTEMBACKDROP_TYPE_ATTR = 38;
+
+    // Initial backdrop type — 0 = None (no Mica/Acrylic effect).
+    constexpr DWORD APP_BACKDROP_TYPE_DEFAULT = 0;
+
     namespace Theme {
         // =====================================================================
         // MASTER THEME CONTROL
         // =====================================================================
         // 0.0f = Dark Theme (original, exact), 1.0f = Inverted Light Theme, 0.5f = Mix
+        // This is the INIT VALUE only — runtime state lives in app.themeFactor.
         constexpr float THEME_FACTOR = 0.0f;
+
+        // Step size for runtime THEME_FACTOR adjustment (Ctrl+Alt+Shift+Numpad+/-).
+        constexpr float THEME_FACTOR_STEP = 0.05f;
 
         // Formula applied inline to every channel:
         //   Final = Base + THEME_FACTOR * (1.0f - 2.0f * Base)
@@ -71,6 +90,20 @@ namespace Constants {
             // Scrollbar — track (28,28,28), thumb (110,110,110)
             constexpr float SCROLLBAR_TRACK = 0.1098f + THEME_FACTOR * (1.0f - 2.0f * 0.1098f);
             constexpr float SCROLLBAR_THUMB = 0.4314f + THEME_FACTOR * (1.0f - 2.0f * 0.4314f);
+            // Accent color used for the history file-size value in the header
+            constexpr COLORREF SIZE_HIGHLIGHT = RGB(240, 50, 50);
+
+            // Path row — three segments: drive letter, middle path, final folder name.
+            // Non-favorite rows:
+            constexpr COLORREF PATH_DRIVE         = RGB(100, 185, 205); // muted teal
+            constexpr COLORREF PATH_DRIVE_HOVER   = RGB(140, 215, 235);
+            constexpr COLORREF PATH_FOLDER        = RGB(232, 215, 170); // warm tan — clearly distinct from gray middle
+            constexpr COLORREF PATH_FOLDER_HOVER  = RGB(255, 248, 210);
+            // Favorite rows:
+            constexpr COLORREF PATH_DRIVE_FAV         = RGB(195, 165, 70);  // amber/gold
+            constexpr COLORREF PATH_DRIVE_FAV_HOVER   = RGB(215, 195, 105);
+            constexpr COLORREF PATH_FOLDER_FAV        = RGB(255, 248, 152); // bright warm yellow
+            constexpr COLORREF PATH_FOLDER_FAV_HOVER  = RGB(255, 255, 195);
         }
 
         // =====================================================================
@@ -159,6 +192,30 @@ namespace Constants {
         // D2D color from grayscale value with optional alpha
         inline D2D1_COLOR_F GrayD2D(float gray, float alpha = 1.0f) {
             return D2D1::ColorF(gray, gray, gray, alpha);
+        }
+
+        // =====================================================================
+        // RUNTIME THEME HELPERS  —  apply app.themeFactor at the call site
+        // =====================================================================
+        // Core formula: mirrors compile-time formula, applied at runtime.
+        inline float Apply(float base, float factor) {
+            return base + factor * (1.0f - 2.0f * base);
+        }
+
+        // Runtime-themed grayscale D2D color
+        inline D2D1_COLOR_F ThemedGrayD2D(float base, float factor, float alpha = 1.0f) {
+            const float v = Apply(base, factor);
+            return D2D1::ColorF(v, v, v, alpha);
+        }
+
+        // Runtime-themed grayscale GDI color
+        inline COLORREF ThemedGray(float base, float factor) {
+            return RGB(ToByte(Apply(base, factor)), ToByte(Apply(base, factor)), ToByte(Apply(base, factor)));
+        }
+
+        // Runtime-themed RGB GDI color
+        inline COLORREF ThemedColor(float r, float g, float b, float factor) {
+            return RGB(ToByte(Apply(r, factor)), ToByte(Apply(g, factor)), ToByte(Apply(b, factor)));
         }
     } // namespace Theme
 } // namespace Constants

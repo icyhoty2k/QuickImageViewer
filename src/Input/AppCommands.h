@@ -13,6 +13,9 @@ class AppCommands {
         static void AddTrayIcon(HWND hWnd);
 
         static void changeAppThemeToDarkMode(HWND hWnd, bool isDarkThemed);
+        static void changeAppCornerPreference(HWND hWnd, DWORD cornerStyle);
+        static void changeAppThemeFactor(HWND hWnd, float newFactor);
+        static void changeAppBackdropType(HWND hWnd, DWORD newType);
 
         static void RemoveTrayIcon(HWND hWnd);
 

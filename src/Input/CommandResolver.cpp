@@ -64,6 +64,27 @@ Command InputManager::ResolveKeyboardKeys(UINT key) {
     }
 
     // -------------------------------------------------------------------------
+    // Theme factor  Ctrl+Alt+Numpad+/-/0  (no shift — Shift+Numpad0 = VK_INSERT = Invert)
+    // -------------------------------------------------------------------------
+    if (ctrl && alt && !shift) {
+        switch (key) {
+            case Shortcuts::SC_THEME_FACTOR_UP:    return Command::ThemeFactorUp;
+            case Shortcuts::SC_THEME_FACTOR_DOWN:  return Command::ThemeFactorDown;
+            case Shortcuts::SC_THEME_FACTOR_RESET: return Command::ThemeFactorReset;
+        }
+    }
+
+    // -------------------------------------------------------------------------
+    // Window chrome  Ctrl+Shift+Numpad* / Numpad/
+    // -------------------------------------------------------------------------
+    if (ctrl && shift && !alt) {
+        switch (key) {
+            case Shortcuts::SC_CORNER_PREFERENCE_TOGGLE: return Command::ToggleCornerPreference;
+            case Shortcuts::SC_BACKDROP_TYPE_CYCLE:      return Command::CycleBackdropType;
+        }
+    }
+
+    // -------------------------------------------------------------------------
     // All other keys
     // -------------------------------------------------------------------------
     switch (key) {

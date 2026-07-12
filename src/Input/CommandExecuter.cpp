@@ -9,6 +9,7 @@
 #include "../UI/HistoryListWnd.h"
 #include "../UI/HelpWnd.h"
 #include <algorithm>
+#include <cmath>
 #include <commdlg.h>
 #include <shlobj_core.h>
 #include <shtypes.h>
@@ -460,6 +461,53 @@ void InputManager::ExecuteKeyboardShortcutCommand(HWND hWnd, Command cmd) {
                                                      + std::to_wstring(app.lastImageBeforeToggleFirstLastImageInCurrentFolder + 1));
             break;
         }
+
+        // -----------------------------------------------------------------------
+        // Runtime theme factor  (Ctrl+Alt+Shift+Numpad+/-/0)
+        // -----------------------------------------------------------------------
+        case Command::ThemeFactorUp:
+            AppCommands::changeAppThemeFactor(hWnd, app.themeFactor + Constants::Theme::THEME_FACTOR_STEP);
+            g_overlayManager.PostCenterMessage(hWnd,
+                Constants::Messages::THEME_FACTOR_PREFIX +
+                std::to_wstring(static_cast<int>(std::round(app.themeFactor * 100))) + L"%");
+            break;
+
+        case Command::ThemeFactorDown:
+            AppCommands::changeAppThemeFactor(hWnd, app.themeFactor - Constants::Theme::THEME_FACTOR_STEP);
+            g_overlayManager.PostCenterMessage(hWnd,
+                Constants::Messages::THEME_FACTOR_PREFIX +
+                std::to_wstring(static_cast<int>(std::round(app.themeFactor * 100))) + L"%");
+            break;
+
+        case Command::ThemeFactorReset:
+            AppCommands::changeAppThemeFactor(hWnd, Constants::Theme::THEME_FACTOR);
+            g_overlayManager.PostCenterMessage(hWnd, Constants::Messages::THEME_FACTOR_RESET_MSG);
+            break;
+
+        // -----------------------------------------------------------------------
+        // Window chrome  (Ctrl+Shift+Numpad* / Numpad/)
+        // -----------------------------------------------------------------------
+        case Command::ToggleCornerPreference:
+            AppCommands::changeAppCornerPreference(hWnd,
+                app.cornerPreference == DWMWCP_ROUND ? DWMWCP_DONOTROUND : DWMWCP_ROUND);
+            g_overlayManager.PostCenterMessage(hWnd,
+                app.cornerPreference == DWMWCP_ROUND
+                    ? Constants::Messages::CORNER_ROUND
+                    : Constants::Messages::CORNER_SQUARE);
+            break;
+
+        case Command::CycleBackdropType:
+            AppCommands::changeAppBackdropType(hWnd, (app.backdropType + 1) % 4);
+            {
+                constexpr const wchar_t *labels[] = {
+                    Constants::Messages::BACKDROP_NONE,
+                    Constants::Messages::BACKDROP_MICA,
+                    Constants::Messages::BACKDROP_ACRYLIC,
+                    Constants::Messages::BACKDROP_MICA_ALT
+                };
+                g_overlayManager.PostCenterMessage(hWnd, labels[app.backdropType]);
+            }
+            break;
 
         default:
             break;

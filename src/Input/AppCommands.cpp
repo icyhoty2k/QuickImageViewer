@@ -4,7 +4,9 @@
 #include "../../resources/resource.h"
 #include <dwmapi.h>
 #include <uxtheme.h>
+#include <algorithm>
 #include "AppState.h" // Assuming this is the path
+#include "../Platform/Constants.h"
 // ... include other necessary headers
 
 extern AppState app;
@@ -73,8 +75,8 @@ void AppCommands::ToggleFullscreen(HWND hWnd) {
 
         DWMNCRENDERINGPOLICY policy = DWMNCRP_DISABLED;
         DwmSetWindowAttribute(hWnd, DWMWA_NCRENDERING_POLICY, &policy, sizeof(policy));
-        DWORD corner = 1; // DWMWCP_DONOTROUND
-        DwmSetWindowAttribute(hWnd, Constants::DWMWA_WINDOW_CORNER_PREFERENCES, &corner, sizeof(corner));
+        DWORD noRound = DWMWCP_DONOTROUND; // temporary override — does NOT update app.cornerPreference
+        DwmSetWindowAttribute(hWnd, Constants::DWMWA_WINDOW_CORNER_PREFERENCES, &noRound, sizeof(noRound));
         MARGINS margins = {0, 0, 0, 0};
         DwmExtendFrameIntoClientArea(hWnd, &margins);
 
@@ -89,8 +91,7 @@ void AppCommands::ToggleFullscreen(HWND hWnd) {
 
         DWMNCRENDERINGPOLICY policy = DWMNCRP_ENABLED;
         DwmSetWindowAttribute(hWnd, DWMWA_NCRENDERING_POLICY, &policy, sizeof(policy));
-        DWORD corner = 2; // DWMWCP_ROUND
-        DwmSetWindowAttribute(hWnd, Constants::DWMWA_WINDOW_CORNER_PREFERENCES, &corner, sizeof(corner));
+        changeAppCornerPreference(hWnd, app.cornerPreference); // restore saved preference
         MARGINS margins = {1, 1, 1, 1};
         DwmExtendFrameIntoClientArea(hWnd, &margins);
 
@@ -140,6 +141,15 @@ void AppCommands::RemoveTrayIcon(HWND hWnd) {
 }
 
 
+void AppCommands::changeAppCornerPreference(HWND hWnd, DWORD cornerStyle) {
+    app.cornerPreference = cornerStyle;
+
+    if (hWnd) {
+        DwmSetWindowAttribute(hWnd, Constants::DWMWA_WINDOW_CORNER_PREFERENCES, &app.cornerPreference, sizeof(app.cornerPreference));
+        SetWindowPos(hWnd, nullptr, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | SWP_FRAMECHANGED);
+    }
+}
+
 void AppCommands::changeAppThemeToDarkMode(HWND hWnd, bool isDarkThemed) {
     app.isDarkThemed = isDarkThemed;
 
@@ -168,9 +178,36 @@ void AppCommands::changeAppThemeToDarkMode(HWND hWnd, bool isDarkThemed) {
     // 2. Update the specific window's DWM frame (Title bar and context menu ownership)
     if (hWnd) {
         BOOL darkMode = isDarkThemed ? TRUE : FALSE;
-        DwmSetWindowAttribute(hWnd, 20 /* DWMWA_USE_IMMERSIVE_DARK_MODE */, &darkMode, sizeof(darkMode));
+        DwmSetWindowAttribute(hWnd, Constants::DWMWA_DARK_MODE, &darkMode, sizeof(darkMode));
 
         // Force the OS to redraw the non-client area so title bar changes apply instantly
         SetWindowPos(hWnd, nullptr, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | SWP_FRAMECHANGED);
     }
+}
+
+void AppCommands::changeAppThemeFactor(HWND hWnd, float newFactor) {
+    app.themeFactor = std::clamp(newFactor, 0.0f, 1.0f);
+
+    // Auto-switch dark/light at the 0.5 midpoint
+    bool shouldBeDark = app.themeFactor < 0.5f;
+    if (app.isDarkThemed != shouldBeDark)
+        changeAppThemeToDarkMode(hWnd, shouldBeDark);
+
+    // Update renderer background color
+    if (app.renderer)
+        app.renderer->SetThemeFactor(app.themeFactor);
+
+    // Repaint main window + all child panels
+    InvalidateRect(hWnd, nullptr, FALSE);
+    EnumChildWindows(hWnd, [](HWND hwnd, LPARAM) -> BOOL {
+        InvalidateRect(hwnd, nullptr, FALSE);
+        return TRUE;
+    }, 0);
+}
+
+void AppCommands::changeAppBackdropType(HWND hWnd, DWORD newType) {
+    app.backdropType = newType;
+    if (hWnd)
+        DwmSetWindowAttribute(hWnd, Constants::DWMWA_SYSTEMBACKDROP_TYPE_ATTR,
+                              &app.backdropType, sizeof(app.backdropType));
 }

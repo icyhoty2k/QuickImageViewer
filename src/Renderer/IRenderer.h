@@ -64,6 +64,10 @@ class IImageRenderer {
         /// support color effects saturation contrast brightness
         virtual void UpdateColorEffects() {}
 
+        /// Update the renderer's background color from the runtime theme factor.
+        /// Called by AppCommands::changeAppThemeFactor after app.themeFactor is updated.
+        virtual void SetThemeFactor(float /*factor*/) {}
+
         /// Renders the currently active image with all active color effects
         /// baked in and writes it to disk as a PNG, at native resolution
         /// (no resize, no aspect ratio change). Used by Ctrl+S

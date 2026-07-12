@@ -823,11 +823,11 @@ namespace UI {
         m_panelContext->CreateSolidColorBrush(
             D2D1::ColorF(D2D1::ColorF::White), &m_hoverBrush);
         m_panelContext->CreateSolidColorBrush(
-            Constants::Theme::GrayD2D(Constants::Theme::Panel::SCROLLBAR_TRACK,
-                                      Constants::Theme::Panel::SCROLLBAR_TRACK_ALPHA), &m_scrollTrackBrush);
+            Constants::Theme::ThemedGrayD2D(Constants::Theme::Panel::SCROLLBAR_TRACK,
+                                            app.themeFactor, Constants::Theme::Panel::SCROLLBAR_TRACK_ALPHA), &m_scrollTrackBrush);
         m_panelContext->CreateSolidColorBrush(
-            Constants::Theme::GrayD2D(Constants::Theme::Panel::SCROLLBAR_THUMB,
-                                      Constants::Theme::Panel::SCROLLBAR_THUMB_ALPHA), &m_scrollThumbBrush);
+            Constants::Theme::ThemedGrayD2D(Constants::Theme::Panel::SCROLLBAR_THUMB,
+                                            app.themeFactor, Constants::Theme::Panel::SCROLLBAR_THUMB_ALPHA), &m_scrollThumbBrush);
     }
 
     void ThumbnailPanelWnd::ResizeSwapChain(UINT w, UINT h) {
@@ -869,12 +869,12 @@ namespace UI {
         m_panelContext->BeginDraw();
 
         // Use active background color if this panel is active
-        D2D1_COLOR_F clearColor = Constants::Theme::GrayD2D(
-            Constants::Theme::Panel::BACKGROUND_INACTIVE,
+        D2D1_COLOR_F clearColor = Constants::Theme::ThemedGrayD2D(
+            Constants::Theme::Panel::BACKGROUND_INACTIVE, app.themeFactor,
             Constants::Theme::Panel::BACKGROUND_INACTIVE_ALPHA);
         if (g_activePanelHwnd == m_hWnd) {
-            clearColor = Constants::Theme::GrayD2D(
-                Constants::Theme::Panel::BACKGROUND_ACTIVE,
+            clearColor = Constants::Theme::ThemedGrayD2D(
+                Constants::Theme::Panel::BACKGROUND_ACTIVE, app.themeFactor,
                 Constants::Theme::Panel::BACKGROUND_ACTIVE_ALPHA);
         }
         m_panelContext->Clear(clearColor);

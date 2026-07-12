@@ -524,7 +524,7 @@ int WINAPI wWinMain(HINSTANCE hInstance, [[maybe_unused]] HINSTANCE hPrevInstanc
         LocalFree(argv);
         return 1;
     }
-    AppCommands::changeAppThemeToDarkMode(hWnd, true);
+    AppCommands::changeAppThemeToDarkMode(hWnd, app.isDarkThemed);
     // Init UI Manager (The New Controller)
     uiManager.Init(hInstance, hWnd);
 
@@ -552,7 +552,7 @@ int WINAPI wWinMain(HINSTANCE hInstance, [[maybe_unused]] HINSTANCE hPrevInstanc
 
     RegisterDragDrop(hWnd, (g_pDropTarget = new DropTarget(hWnd)));
 
-    DwmSetWindowAttribute(hWnd, Constants::DWMWA_WINDOW_CORNER_PREFERENCES, &Constants::APP_CORNER_PREFERENCES, sizeof(Constants::APP_CORNER_PREFERENCES));
+    AppCommands::changeAppCornerPreference(hWnd, app.cornerPreference);
     // Handle startup arguments using the already-parsed 'argv'
     if (argc > 1 && std::wstring(argv[1]) == L"-background") {
         ShowWindow(hWnd, SW_HIDE);
