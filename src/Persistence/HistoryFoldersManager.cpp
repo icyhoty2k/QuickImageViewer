@@ -3,8 +3,20 @@
 #include <windows.h>
 #include <filesystem>
 #include <fstream>
+#include "../AppState.h"
 
 namespace fs = std::filesystem;
+
+extern AppState app;
+
+// Returns the correct history filename: dedicated variant when -dedicated is active.
+static const std::wstring& ActiveHistoryFileName(const HistoryFoldersManager& mgr) {
+    if (app.isDedicated) {
+        static const std::wstring dedicated = Constants::History::DEDICATED_HISTORY_FILE_NAME;
+        return dedicated;
+    }
+    return mgr.historyFileName;
+}
 
 // ---------------------------------------------------------------------------
 // Backup helpers  (file-scope, not exposed in the header)
@@ -70,7 +82,7 @@ std::wstring HistoryFoldersManager::GetFilePath() const {
     DWORD size = GetModuleFileNameW(nullptr, buffer, MAX_PATH);
 
     if (size == 0 || size == MAX_PATH)
-        return historyFileName; // fallback: relative to CWD
+        return ActiveHistoryFileName(*this); // fallback: relative to CWD
 
     fs::path appDir = fs::path(buffer).parent_path();
 
@@ -80,7 +92,7 @@ std::wstring HistoryFoldersManager::GetFilePath() const {
             fs::create_directories(appDir);
     }
 
-    return (appDir / historyFileName).wstring();
+    return (appDir / ActiveHistoryFileName(*this)).wstring();
 }
 
 // ---------------------------------------------------------------------------
@@ -228,7 +240,7 @@ void HistoryFoldersManager::BackupHistoryToDisk() const {
     SYSTEMTIME st;
     GetLocalTime(&st);
 
-    fs::path backupPath = MakeBackupPath(GetBackupDir(), historyFileName, st);
+    fs::path backupPath = MakeBackupPath(GetBackupDir(), ActiveHistoryFileName(*this), st);
     std::wofstream f(backupPath, std::ios::out | std::ios::trunc);
     if (!f.is_open())
         return;

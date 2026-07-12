@@ -1,6 +1,7 @@
 #include <algorithm>
 #include <random>
 #include "CMDArgs.h"
+#include "SlideshowTransitions.h"
 
 #include "AppCommands.h"
 #include "Overlays/OverlayManager.h"
@@ -137,6 +138,7 @@ LRESULT CALLBACK MainAppWndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM l
                         }
                         app.slideshow.shufflePos = next;
                         LoadImageIndex(hWnd, app.slideshow.shuffleOrder[next]);
+                        StartTransition(hWnd, app.slideshow.transition);
                     } else {
                         int next = (app.currentIndex + 1) % size;
                         if (next == 0 && !app.slideshow.loop) {
@@ -145,6 +147,7 @@ LRESULT CALLBACK MainAppWndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM l
                             return 0;
                         }
                         LoadImageIndex(hWnd, next);
+                        StartTransition(hWnd, app.slideshow.transition);
                     }
                     InvalidateRect(hWnd, nullptr, FALSE);
                 }
@@ -156,6 +159,15 @@ LRESULT CALLBACK MainAppWndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM l
                 if (app.slideshow.running && !app.slideshow.paused && !app.slideshow.cursorHidden) {
                     ShowCursor(FALSE);
                     app.slideshow.cursorHidden = true;
+                }
+                return 0;
+            }
+
+            if (wParam == Constants::Slideshow::TRANSITION_TIMER_ID) {
+                StepTransition(hWnd, app.slideshow.transition);
+                if (IsTransitionComplete(app.slideshow.transition)) {
+                    KillTimer(hWnd, Constants::Slideshow::TRANSITION_TIMER_ID);
+                    FinishTransition(hWnd, app.slideshow.transition);
                 }
                 return 0;
             }
@@ -536,18 +548,25 @@ int WINAPI wWinMain(HINSTANCE hInstance, [[maybe_unused]] HINSTANCE hPrevInstanc
     CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED | COINIT_DISABLE_OLE1DDE);
     if (FAILED(CoCreateInstance(CLSID_WICImagingFactory, nullptr, CLSCTX_INPROC_SERVER, IID_PPV_ARGS(&app.wicFactory)))) return 0;
 
-    System::RegisterAppForOpenWith();
-    System::EnableRunOnStartup(Constants::IS_ENABLE_RUN_ON_STARTUP);
-
-    // --- CONSOLIDATED COMMAND LINE PARSING ---
+    // --- COMMAND LINE PARSING (early — -dedicated must be known before registry calls) ---
     int argc;
     LPWSTR *argv = CommandLineToArgvW(GetCommandLineW(), &argc);
+    for (int i = 1; i < argc; ++i) {
+        if (_wcsicmp(argv[i], L"-dedicated") == 0) { app.isDedicated = true; break; }
+    }
+
+    if (!app.isDedicated) {
+        System::RegisterAppForOpenWith();
+        System::EnableRunOnStartup(Constants::IS_ENABLE_RUN_ON_STARTUP);
+    }
 
     // --- SINGLE INSTANCE & RAM RESIDENT LOGIC ---
     bool bypassMutex = (GetAsyncKeyState(VK_SHIFT) & 0x8000) != 0;
     if (GetEnvironmentVariableW(L"QIV_NEW_INSTANCE", nullptr, 0) > 0) bypassMutex = true;
 
-    std::wstring mutexName = L"QuickImageViewer_SingleInstanceMutex" + (bypassMutex ? std::to_wstring(GetTickCount()) : L"");
+    std::wstring mutexName = L"QuickImageViewer_SingleInstanceMutex";
+    if (app.isDedicated) mutexName += L"_dedicated";
+    mutexName += (bypassMutex ? std::to_wstring(GetTickCount()) : L"");
     HANDLE hMutex = CreateMutexW(NULL, TRUE, mutexName.c_str());
 
     if (GetLastError() == ERROR_ALREADY_EXISTS) {
@@ -585,7 +604,7 @@ int WINAPI wWinMain(HINSTANCE hInstance, [[maybe_unused]] HINSTANCE hPrevInstanc
     wc.lpszClassName = Constants::WINDOW_CLASS_NAME;
     wc.style = CS_DBLCLKS;
     wc.hCursor = LoadCursor(nullptr, IDC_ARROW);
-    wc.hIcon = LoadIcon(hInstance, MAKEINTRESOURCE(IDI_APP_ICON));
+    wc.hIcon = LoadIcon(hInstance, MAKEINTRESOURCE(app.isDedicated ? IDI_APP_ICON_DEDICATED : IDI_APP_ICON));
     RegisterClassW(&wc);
 
     HWND hWnd = CreateViewerWindow(hInstance, wc.lpszClassName);

@@ -81,6 +81,7 @@ namespace UI {
         Add(L"Space", L"Slideshow: pause / resume  (slideshow only)", 0);
         Add(L"R", L"Slideshow: toggle loop  (slideshow only)", 0);
         Add(L"S", L"Slideshow: toggle shuffle  (slideshow only)", 0);
+        Add(L"T", L"Slideshow: cycle transition  Cut→Fade→Push→Zoom  (slideshow only)", 0);
         Add(L"F2", L"Open file dialog", 0);
         Add(L"F3 / F4", L"Toggle / Move VRAM cache panel", 0);
         Add(L"F5 / F6", L"Toggle / Move directory panel", 0);

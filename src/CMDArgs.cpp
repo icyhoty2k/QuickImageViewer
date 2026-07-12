@@ -1,6 +1,7 @@
 // CMDArgs.cpp — Command-line argument parsing and application for QIV.
 #include "CMDArgs.h"
 #include "AppState.h"
+#include "SlideshowTransitions.h"
 #include "Input/AppCommands.h"
 #include "Platform/Constants.h"
 #include "Platform/FileHandler.h"
@@ -72,6 +73,18 @@ CmdArgs ParseCmdArgs(int argc, LPWSTR* argv) {
         else if (arg == L"-hideMouse")                     args.hideMouse = true;
         else if (arg == L"-lock")                          args.lock      = true;
 
+        // -dedicated (no registry, separate history, unique mutex)
+        else if (arg == L"-dedicated")                     args.dedicated = true;
+
+        // -slideshowTransition=<type>  (Cut/Fade/Dissolve/Ripple/Push/Zoom)
+        else if (arg.size() > 20 &&
+                 _wcsnicmp(arg.c_str(), L"-slideshowTransition=", 21) == 0)
+            args.slideshowTransition = ParseTransitionType(arg.substr(21));
+
+        // -slideshowTransitionShuffle
+        else if (_wcsicmp(arg.c_str(), L"-slideshowTransitionShuffle") == 0)
+            args.transitionShuffle = true;
+
         // Positional: first non-flag token is the image file
         else if (!arg.empty() && arg[0] != L'-' && args.imageFile.empty())
             args.imageFile = arg;
@@ -89,9 +102,11 @@ void ApplyCmdArgs(HWND hWnd, const CmdArgs& args, int nCmdShow) {
     if (args.repeat)                        app.slideshow.loop    = true;
     if (args.shuffle)                       app.slideshow.shuffle = true;
     if (args.slideshowIntervalMs > 0)       app.slideshow.intervalMs = args.slideshowIntervalMs;
+    app.slideshow.transition.type    = args.slideshowTransition;
+    app.slideshow.transition.shuffle = args.transitionShuffle;
 
-    // Pre-build shuffle order if shuffle is on (playlist may not be populated yet;
-    // rebuild happens again in toggleSlideshow, so this is just a safety guard)
+    // 1a. Dedicated mode (affects history file and registry — must be set before any of that)
+    if (args.dedicated) app.isDedicated = true;
 
     // 2. KIOSK lock
     if (args.lock) app.isLocked = true;
@@ -131,6 +146,11 @@ void ApplyCmdArgs(HWND hWnd, const CmdArgs& args, int nCmdShow) {
     // 6. Show window normally
     ShowWindow(hWnd, nCmdShow);
     UpdateWindow(hWnd);
+
+    // In dedicated mode the tray icon is always present from startup —
+    // it is the only way to stop/start/quit the kiosk instance.
+    if (args.dedicated)
+        AppCommands::AddTrayIcon(hWnd);
 
     // 7. Load content
     if (!args.startFolder.empty())
