@@ -775,9 +775,20 @@ namespace UI {
                             std::wstring folder = g_displayList[g_hoverRow].path;
                             bool shiftHeld = (GetKeyState(VK_SHIFT) & 0x8000) != 0;
                             if (shiftHeld) {
-                                // Shift+Enter — spawn a DirWnd for this folder.
-                                // Pass m_hWnd so focus is returned here after spawn.
-                                uiManager.SpawnDirWndForFolder(folder, m_hWnd);
+                                // Shift+Enter — toggle spawned DirWnd for this folder.
+                                // Check if a panel already exists by reading the position label.
+                                std::wstring posLabel = uiManager.GetSpawnedDirWndPositionLabel(folder);
+                                if (!posLabel.empty()) {
+                                    // Extract position name from " (name)" format
+                                    std::wstring posName = posLabel.substr(2, posLabel.length() - 3);
+                                    SlotInfo *slot = uiManager.GetLayout().getSlotByName(posName);
+                                    if (slot && slot->panel) {
+                                        slot->panel->Hide();
+                                    }
+                                } else {
+                                    // No panel exists, spawn one
+                                    uiManager.SpawnDirWndForFolder(folder, m_hWnd);
+                                }
                             } else {
                                 // Plain Enter — load folder in main viewer (original behaviour).
                                 ShowWindow(m_hWnd, SW_HIDE);

@@ -12,9 +12,33 @@
 namespace UI {
 
     // =========================================================================
+    // SlotInfo — manages a single panel position with change notifications.
+    // =========================================================================
+    struct SlotInfo {
+        std::wstring name;
+        ThumbnailPanelWnd *panel = nullptr;
+
+    private:
+        bool m_isEmpty = true;
+
+    public:
+        bool isEmpty() const { return m_isEmpty; }
+
+        void setEmpty(bool empty) {
+            if (m_isEmpty != empty) {
+                m_isEmpty = empty;
+                OnSlotEmptyChanged(empty);
+            }
+        }
+
+    private:
+        void OnSlotEmptyChanged(bool empty);
+    };
+
+    // =========================================================================
     // PanelLayout — single source of truth for which panel occupies each slot.
     //
-    // Slots:  0=center  1=top  2=right  3=bottom  4=left
+    // Positions:  0=center  1=top  2=right  3=bottom  4=left
     //
     // A slot is "occupied" when a visible ThumbnailPanelWnd is at that position.
     // UIManager keeps this up to date on every show/hide/move.
@@ -22,34 +46,94 @@ namespace UI {
     // MovePanel skips occupied slots so panels never overlap.
     // =========================================================================
     struct PanelLayout {
-        ThumbnailPanelWnd *slots[5] = {nullptr, nullptr, nullptr, nullptr, nullptr};
+        SlotInfo center;
+        SlotInfo top;
+        SlotInfo right;
+        SlotInfo bottom;
+        SlotInfo left;
+
+        PanelLayout() {
+            center.name = L"center";
+            top.name = L"top";
+            right.name = L"right";
+            bottom.name = L"bottom";
+            left.name = L"left";
+        }
+
+        // Get slot by position index (0=center, 1=top, 2=right, 3=bottom, 4=left)
+        SlotInfo *getSlot(int8_t pos) {
+            switch (pos) {
+                case 0: return &center;
+                case 1: return &top;
+                case 2: return &right;
+                case 3: return &bottom;
+                case 4: return &left;
+                default: return nullptr;
+            }
+        }
+
+        const SlotInfo *getSlot(int8_t pos) const {
+            switch (pos) {
+                case 0: return &center;
+                case 1: return &top;
+                case 2: return &right;
+                case 3: return &bottom;
+                case 4: return &left;
+                default: return nullptr;
+            }
+        }
+
+        // Get slot by position name ("center", "top", "right", "bottom", "left")
+        SlotInfo *getSlotByName(const std::wstring &name) const {
+            if (name == L"center") return const_cast<SlotInfo *>(&center);
+            if (name == L"top") return const_cast<SlotInfo *>(&top);
+            if (name == L"right") return const_cast<SlotInfo *>(&right);
+            if (name == L"bottom") return const_cast<SlotInfo *>(&bottom);
+            if (name == L"left") return const_cast<SlotInfo *>(&left);
+            return nullptr;
+        }
 
         void set(int8_t pos, ThumbnailPanelWnd *p) {
-            if (pos >= 0 && pos <= 4) slots[pos] = p;
+            SlotInfo *slot = getSlot(pos);
+            if (slot) {
+                slot->panel = p;
+                slot->setEmpty(p == nullptr);
+            }
         }
 
         void clear(int8_t pos) {
-            if (pos >= 0 && pos <= 4) slots[pos] = nullptr;
+            SlotInfo *slot = getSlot(pos);
+            if (slot) {
+                slot->panel = nullptr;
+                slot->setEmpty(true);
+            }
         }
 
         // Clear any slot that points to this panel (used on hide when position unknown).
         void clearPanel(ThumbnailPanelWnd *p) {
-            for (int i = 0; i < 5; ++i)
-                if (slots[i] == p) slots[i] = nullptr;
+            SlotInfo *slots[] = {&center, &top, &right, &bottom, &left};
+            for (int i = 0; i < 5; ++i) {
+                if (slots[i]->panel == p) {
+                    slots[i]->panel = nullptr;
+                    slots[i]->setEmpty(true);
+                }
+            }
         }
 
         bool occupied(int8_t pos) const {
-            return pos >= 0 && pos <= 4 && slots[pos] != nullptr;
+            const SlotInfo *slot = getSlot(pos);
+            return slot && slot->panel != nullptr;
         }
 
-        bool topOccupied()    const { return slots[1] != nullptr; }
-        bool bottomOccupied() const { return slots[3] != nullptr; }
+        bool topOccupied()    const { return top.panel != nullptr; }
+        bool bottomOccupied() const { return bottom.panel != nullptr; }
 
-        // Returns the next free position after 'current', cycling 0-4.
-        // Returns -1 if all positions are occupied (shouldn't happen in practice).
+        // Returns the next free position after 'current', cycling 1-4.
+        // Never returns center (position 0) — center is reserved for primary panels.
+        // Returns -1 if all positions 1-4 are occupied.
         int8_t nextFreePosition(int8_t current) const {
-            for (int i = 1; i <= 5; ++i) {
-                int8_t candidate = (current + i) % 5;
+            for (int i = 1; i <= 4; ++i) {
+                int8_t candidate = ((current - 1 + i) % 4) + 1;  // Cycle 1-4 only
                 if (!occupied(candidate)) return candidate;
             }
             return -1;
@@ -106,14 +190,10 @@ namespace UI {
             DirWnd         dirWnd;
             HistoryListWnd historyListWnd;
 
-            std::array<SpawnedDirWnd *, Constants::DIR_WND_MAX_INSTANCES> m_spawnedDirWnds
-                = {nullptr, nullptr, nullptr, nullptr};
-            int m_nextSpawnSlot = 0;
-
             HINSTANCE m_hInstance  = nullptr;
             HWND      m_hMainWnd   = nullptr;
 
-            // The layout struct — single source of truth.
+            // The layout struct — single source of truth for all panel positions.
             PanelLayout m_layout;
 
             // Whichever DirWnd the user last clicked — receives navigation updates.
