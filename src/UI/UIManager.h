@@ -97,6 +97,9 @@ namespace UI {
             // the current top/bottom occupation state.
             void RefreshVerticalPanels();
 
+            // Get position label for a spawned DirWnd folder (e.g., " (Left)", " (Right)", or empty)
+            std::wstring GetSpawnedDirWndPositionLabel(const std::wstring &folderPath) const;
+
         private:
             HelpWnd        helpWnd;
             CacheWnd       cacheWnd;

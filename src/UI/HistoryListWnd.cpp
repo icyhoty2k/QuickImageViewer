@@ -497,6 +497,10 @@ namespace UI {
                             segMiddle = fp;
                         }
 
+                        // Append spawned DirWnd position label if this folder has one open
+                        std::wstring posLabel = uiManager.GetSpawnedDirWndPositionLabel(fp);
+                        segFolder += posLabel;
+
                         LONG rowLeft  = rc.left + padding + indexW + starW + MulDiv(10, dpi, 96);
                         LONG rowRight = rc.right - padding - (needsScrollbar ? SB_W + 2 : 0);
                         LONG curX     = rowLeft;

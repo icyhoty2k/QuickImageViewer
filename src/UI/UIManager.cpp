@@ -1,6 +1,7 @@
 #include "UIManager.h"
 #include "../Overlays/OverlayManager.h"
 #include "../Platform/ConstantsStrings.h"
+#include <filesystem>
 
 UI::UIManager uiManager;
 
@@ -187,6 +188,42 @@ namespace UI {
 
     bool UIManager::isInit(IPanelWindow &panel) {
         return panel.GetHwnd() != nullptr;
+    }
+
+    // -------------------------------------------------------------------------
+    // GetSpawnedDirWndPositionLabel
+    // Returns position label (e.g., " (Left)", " (Right)") if folder has a
+    // spawned DirWnd open, else empty string.
+    // -------------------------------------------------------------------------
+    std::wstring UIManager::GetSpawnedDirWndPositionLabel(const std::wstring &folderPath) const {
+        for (int i = 0; i < Constants::DIR_WND_MAX_INSTANCES; ++i) {
+            if (m_spawnedDirWnds[i] == nullptr) continue;
+
+            // Get the folder path this spawned DirWnd is displaying
+            std::wstring spawnedFolder = m_spawnedDirWnds[i]->GetFolderPath();
+            if (spawnedFolder.empty()) continue;
+
+            // Compare paths, accounting for normalization differences
+            try {
+                std::filesystem::path normalized1(folderPath);
+                std::filesystem::path normalized2(spawnedFolder);
+                if (std::filesystem::equivalent(normalized1, normalized2)) {
+                    // Found a match; get position label
+                    int8_t pos = m_spawnedDirWnds[i]->GetPosition();
+                    switch (pos) {
+                        case 1: return L" (Top)";
+                        case 2: return L" (Right)";
+                        case 3: return L" (Bottom)";
+                        case 4: return L" (Left)";
+                        default: return L" (Center)";
+                    }
+                }
+            } catch (...) {
+                // Path comparison failed, continue to next panel
+                continue;
+            }
+        }
+        return L"";
     }
 
 } // namespace UI
