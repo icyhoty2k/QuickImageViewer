@@ -134,13 +134,15 @@ class OverlayManager {
         void UpdateTextFormat();
 
     private:
-        // ── Resources (not owned, except m_pCenterBrush) ─────────────────────
+        // ── Resources (not owned, except m_pCenterBrush / m_pBgBrush) ────────
         IDWriteFactory3 *m_pDWriteFactory = nullptr;
         Microsoft::WRL::ComPtr<IDWriteTextFormat> m_pTextFormat; // base format (not owned)
         ID2D1SolidColorBrush *m_pTextBrush = nullptr; // normal brush (not owned)
 
         // Center-center owns its own brush and format (independent colour + size)
         Microsoft::WRL::ComPtr<ID2D1SolidColorBrush> m_pCenterBrush;
+        // Dedicated semi-transparent background brush — avoids GetColor/SetColor per slot per frame
+        Microsoft::WRL::ComPtr<ID2D1SolidColorBrush> m_pBgBrush;
         Microsoft::WRL::ComPtr<IDWriteTextFormat> m_fmtCenter5; // center-center format
 
         // Per-column text formats (derived from base format)
@@ -159,6 +161,7 @@ class OverlayManager {
             bool visible = false;
             bool compact = Constants::Overlay::IS_COMPACT_OVERLAY_MODE; // true → 1-line, false → 2-line
             IDWriteTextFormat *fmt = nullptr;
+            DWRITE_TEXT_ALIGNMENT cachedAlignment = DWRITE_TEXT_ALIGNMENT_LEADING;
         };
 
         SlotMeta m_slots[SLOT_COUNT];

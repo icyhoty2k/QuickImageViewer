@@ -80,7 +80,8 @@ struct AppState {
     int imgWidth = 0;
     int imgHeight = 0;
     std::vector<std::wstring> playlist;
-    std::unordered_map<std::wstring, int> playlistIndexMap; // path → index, rebuilt with playlist
+    std::unordered_map<std::wstring, int> playlistIndexMap;      // path → index, rebuilt with playlist
+    std::unordered_map<std::wstring, int64_t> playlistFileSizes; // path → file size bytes, from scan (no extra syscall)
     int currentIndex = -1;
     ViewportState viewport;
 

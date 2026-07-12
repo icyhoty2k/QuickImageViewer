@@ -180,26 +180,16 @@ LRESULT CALLBACK MainAppWndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM l
                 int index = app.currentIndex;
                 const int total = static_cast<int>(app.playlist.size());
 
+                // Push preloads directly to the IO worker via PreloadBitmap —
+                // no relay through g_decoderWorker (which woke a thread only to
+                // immediately push another task and go back to sleep).
                 for (int i = 1; i <= Constants::PRELOAD_LOOKASIDE_COUNT; ++i) {
                     int fwd = index + i;
                     int bwd = index - i;
-
-                    // Define the task builder as a lambda to avoid code duplication
-                    auto preloadTask = [index](const std::wstring &path) {
-                        return [path, index](IWICImagingFactory2 * /*unused_in_preload*/) {
-                            // PreloadBitmap currently handles its own factory internally
-                            // via the worker pool, but we must match the PushTask signature
-                            if (app.wantedIndex.load(std::memory_order_acquire) != index) return;
-                            if (app.renderer) (void) app.renderer->PreloadBitmap(path, index);
-                        };
-                    };
-
-                    if (fwd < total) {
-                        g_decoderWorker.PushTask(preloadTask(app.playlist[fwd]));
-                    }
-                    if (bwd >= 0) {
-                        g_decoderWorker.PushTask(preloadTask(app.playlist[bwd]));
-                    }
+                    if (fwd < total && app.renderer)
+                        (void) app.renderer->PreloadBitmap(app.playlist[fwd], index);
+                    if (bwd >= 0 && app.renderer)
+                        (void) app.renderer->PreloadBitmap(app.playlist[bwd], index);
                 }
             }
             return 0;
