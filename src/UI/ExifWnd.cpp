@@ -806,7 +806,7 @@ LRESULT ExifWnd::HandleMessage(UINT message, WPARAM wParam, LPARAM lParam) {
             InvalidateRect(m_hWnd, nullptr, FALSE);
             return 0;
         case VK_END:
-            m_scrollOffsetY = m_totalContentHeight;
+            m_scrollOffsetY = INT_MAX; // WM_PAINT clamps to maxScroll
             InvalidateRect(m_hWnd, nullptr, FALSE);
             return 0;
         }

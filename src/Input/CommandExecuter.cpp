@@ -429,6 +429,7 @@ void InputManager::ExecuteKeyboardShortcutCommand(HWND hWnd, Command cmd) {
         }
 
         case Command::HardQuit:
+            AppCommands::RemoveTrayIcon(hWnd);
             DestroyWindow(hWnd);
             break;
 
