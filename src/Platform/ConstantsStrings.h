@@ -66,6 +66,10 @@ namespace Constants::Messages {
     constexpr const wchar_t *TRANSITION_PUSH        = L"Transition: Push";
     constexpr const wchar_t *TRANSITION_ZOOM        = L"Transition: Zoom";
 
+    // Ctrl+T — always on top
+    constexpr const wchar_t *ALWAYS_ON_TOP_ON  = L"Always on Top: ON";
+    constexpr const wchar_t *ALWAYS_ON_TOP_OFF = L"Always on Top: OFF";
+
     // Sort order  (Ctrl+Alt+Shift+0/6/7/8/9)  — press once: ascending, press again: descending
     constexpr const wchar_t *SORT_BY_NAME      = L"Sort: Name (A→Z)";
     constexpr const wchar_t *SORT_BY_NAME_REV  = L"Sort: Name (Z→A)";

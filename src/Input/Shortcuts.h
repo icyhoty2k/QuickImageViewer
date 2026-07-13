@@ -57,6 +57,7 @@ namespace Shortcuts {
     constexpr UINT SC_PANEL_FULLSCREEN_F = 'F';
     constexpr UINT SC_PANEL_FULLSCREEN_ENTER = VK_RETURN;
     constexpr UINT SC_PANEL_FULLSCREEN_T = 'T'; // requires ctrl+shift
+    constexpr UINT SC_ALWAYS_ON_TOP     = 'T'; // Ctrl+T (no shift) — toggle always-on-top
     constexpr UINT SC_PANEL_CACHE_CLEAR = VK_F12;
 
     // N (no modifier)  —  Master overlay toggle (all slots on/off)
@@ -110,6 +111,12 @@ namespace Shortcuts {
     // -------------------------------------------------------------------------
     // Navigation
     // -------------------------------------------------------------------------
+
+    // W/A/S/D — viewport pan (plain) / window move (Shift)
+    // Note: SC_APP_HIDE_ALT = 'W' (ctrl+W hides; plain W pans up; Shift+W moves window up)
+    //       SC_COLOR_SAVE_TO_DISK = 'S' (ctrl+S saves; plain S pans down; Shift+S moves window down)
+    constexpr UINT SC_PAN_LEFT  = 'A'; // plain: pan left;  Shift: move window left
+    constexpr UINT SC_PAN_RIGHT = 'D'; // plain: pan right; Shift: move window right
 
     constexpr UINT SC_NAV_PREV = VK_LEFT;
     constexpr UINT SC_NAV_NEXT = VK_RIGHT;

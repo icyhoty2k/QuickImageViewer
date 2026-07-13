@@ -105,8 +105,9 @@ struct AppState {
     RECT savedWindowRect = {0, 0, 0, 0};
 
     bool isDialogVisible = false;
-    bool isLocked    = false; // -lock:      KIOSK mode — blocks all keyboard and mouse input
-    bool isDedicated = false; // -dedicated: no registry writes, separate history file
+    bool isLocked      = false; // -lock:      KIOSK mode — blocks all keyboard and mouse input
+    bool isDedicated   = false; // -dedicated: no registry writes, separate history file
+    bool isAlwaysOnTop = false; // Ctrl+T:    window stays above all others
 
     // Slideshow
     SlideshowState slideshow;
