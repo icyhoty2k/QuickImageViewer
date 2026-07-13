@@ -136,9 +136,12 @@ Command InputManager::ResolveKeyboardKeys(UINT key) {
         case Shortcuts::SC_NAV_NEXT_SPACE:
             return shift ? Command::PrevImage : Command::NextImage;
 
-        case Shortcuts::SC_NAV_SHOW_IN_EXPLORER: // 'E'
-            if (!ctrl && alt && !shift)   return Command::SnapTopRight;
+        case Shortcuts::SC_NAV_SHOW_IN_EXPLORER: // 'L'
             return Command::ShowInExplorer;
+
+        case 'E':
+            if (!ctrl && alt && !shift)   return Command::SnapTopRight;
+            break;
 
         // --- Zoom ---
         case Shortcuts::SC_ZOOM_IN_NUMPAD: // VK_ADD  plain=zoom-in  shift=resize-larger

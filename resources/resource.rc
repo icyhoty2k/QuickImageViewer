@@ -4,8 +4,12 @@
 #include "Constants.h" // Include your constants for versioning
 
 // The icon is in the same folder as this .rc file
-IDI_APP_ICON           ICON "QIV.ico"
-IDI_APP_ICON_DEDICATED ICON "QIV_DEDICATED.ico"
+IDI_APP_ICON           ICON     "QIV.ico"
+IDI_APP_ICON_DEDICATED ICON     "QIV_DEDICATED.ico"
+IDR_CITIES_DATA        RCDATA   "geoData/cities.bin"
+IDR_ADMIN1_DATA        RCDATA   "geoData/admin1.bin"
+IDR_ADMIN2_DATA        RCDATA   "geoData/admin2.bin"
+IDR_COUNTRY_DATA       RCDATA   "geoData/country.bin"
 
 // Embed the application manifest for high DPI support and common controls
 1 24 "app.manifest"

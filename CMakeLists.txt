@@ -47,6 +47,7 @@ set(SOURCES
         src/Persistence/HistoryFoldersManager.cpp
         src/CMDArgs.cpp
         src/SlideshowTransitions.cpp
+        src/GeoNames.cpp
         libs/lib/tinyexr/include/miniz.c
 )
 
