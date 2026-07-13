@@ -100,7 +100,10 @@ namespace UI {
         Add(L"Shift+Wheel / H-Wheel", L"Adjust window opacity", 1);
         Add(L"RMB + Wheel", L"Zoom while holding RMB", 1);
         Add(L"RMB + H-Wheel", L"Resize from center", 1);
+        Add(L"W / A / S / D", L"Pan viewport (when image overflows window)", 1);
+        Add(L"Shift+W/A/S/D", L"Move window by 20 px per keypress", 1);
         Add(L"F / F11 / Enter / Ctrl+Shift+T", L"Toggle Fullscreen", 1);
+        Add(L"Ctrl+T", L"Toggle Always on Top", 1);
         Add(L"N / I / Ctrl+0", L"Master overlay toggle", 1);
         Add(L"Ctrl+1 to Ctrl+9", L"Toggle individual overlay slots", 1);
         Add(L"Ctrl+Alt+1 to Ctrl+Alt+9", L"Toggle overlay compact mode", 1);
@@ -129,8 +132,10 @@ namespace UI {
         Add(L"Ctrl+E", L"Export help to Desktop", 2);
         Add(L"Space (History)", L"Toggle favorite", 2);
         Add(L"Shift+Enter (History)", L"Spawn DirWnd panel", 2);
-        Add(L"Ctrl+Alt+Delete", L"Clear history (keep favorites)", 2);
-        Add(L"Ctrl+Alt+Shift+Delete", L"Clear favorites (keep history)", 2);
+        Add(L"Del (History)", L"Delete hovered entry", 2);
+        Add(L"Ctrl+Z (History)", L"Restore last deleted entry", 2);
+        Add(L"Ctrl+Shift+Del (History)", L"Clear history (keep favorites)", 2);
+        Add(L"Ctrl+Alt+Shift+Del (History)", L"Clear favorites (keep history)", 2);
 
         // Section 3: Advanced & Power User (Green)
         Add(L"Ctrl+Alt+Shift+0", L"Sort by Name  (press again: reverse A→Z / Z→A)", 3);

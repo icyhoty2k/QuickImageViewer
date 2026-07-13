@@ -182,6 +182,39 @@ void MouseHandler::HandleButtonUp(HWND hWnd, UINT message, LPARAM /*lParam*/) {
     if (IsDragAction(message)) {
         app.isWindowDragging = false;
         ReleaseCapture();
+
+        // Edge-snap: if the cursor landed near a screen edge, snap the window
+        // to the corresponding half/full work-area zone (mirrors Aero Snap).
+        if (!app.isFullscreen) {
+            POINT cursor;
+            GetCursorPos(&cursor);
+            HMONITOR hMon = MonitorFromPoint(cursor, MONITOR_DEFAULTTONEAREST);
+            MONITORINFO mi = { sizeof(mi) };
+            if (GetMonitorInfo(hMon, &mi)) {
+                const RECT &wa  = mi.rcWork;
+                const int snap  = Constants::WINDOW_SNAP_DISTANCE;
+                bool nearLeft   = cursor.x <= wa.left  + snap;
+                bool nearRight  = cursor.x >= wa.right  - snap;
+                bool nearTop    = cursor.y <= wa.top    + snap;
+                int halfW = (wa.right  - wa.left) / 2;
+                int halfH = (wa.bottom - wa.top)  / 2;
+                RECT target = {};
+                bool doSnap = false;
+                if      (nearLeft  && nearTop) { target = { wa.left,        wa.top, wa.left + halfW, wa.top + halfH }; doSnap = true; }
+                else if (nearRight && nearTop) { target = { wa.left + halfW, wa.top, wa.right,        wa.top + halfH }; doSnap = true; }
+                else if (nearLeft)             { target = { wa.left,        wa.top, wa.left + halfW, wa.bottom       }; doSnap = true; }
+                else if (nearRight)            { target = { wa.left + halfW, wa.top, wa.right,        wa.bottom       }; doSnap = true; }
+                else if (nearTop)              { target = wa;                                                            doSnap = true; }
+                if (doSnap) {
+                    SetWindowPos(hWnd, nullptr,
+                                 target.left, target.top,
+                                 target.right  - target.left,
+                                 target.bottom - target.top,
+                                 SWP_NOZORDER | SWP_NOACTIVATE | SWP_FRAMECHANGED);
+                    InvalidateRect(hWnd, nullptr, FALSE);
+                }
+            }
+        }
     } else if (IsViewControlAction(message)) {
         SetCursor(LoadCursor(nullptr, MAKEINTRESOURCEW(Constants::Cursors::DEFAULT)));
 

@@ -117,6 +117,7 @@ enum class Command {
     // --- Window chrome ---
     ToggleCornerPreference, // Ctrl+Shift+Numpad*   round ↔ square
     CycleBackdropType,      // Ctrl+Shift+Numpad/   None→Mica→Acrylic→MicaAlt→None
+    ToggleAlwaysOnTop,      // Ctrl+T               always on top on/off
 
     // --- Sort order ---
     SortByName,  // Ctrl+Alt+Shift+0
@@ -131,6 +132,18 @@ enum class Command {
     SlideshowToggleLoop,      // R       — toggle loop/repeat (slideshow only)
     SlideshowToggleShuffle,   // S       — toggle shuffle (slideshow only)
     SlideshowCycleTransition, // T       — cycle transition type (slideshow only)
+
+    // --- Viewport pan (W/A/S/D, no modifier) ---
+    PanLeft,
+    PanRight,
+    PanUp,
+    PanDown,
+
+    // --- Window move (Shift+W/A/S/D) ---
+    MoveWindowLeft,
+    MoveWindowRight,
+    MoveWindowUp,
+    MoveWindowDown,
 };
 
 class InputManager {

@@ -155,8 +155,9 @@ Command InputManager::ResolveKeyboardKeys(UINT key) {
         case Shortcuts::SC_PANEL_FULLSCREEN_F: return Command::ToggleFullscreen;
         case Shortcuts::SC_PANEL_FULLSCREEN_ENTER: return Command::ToggleFullscreen;
 
-        case Shortcuts::SC_PANEL_FULLSCREEN_T:
-            if (ctrl && shift) return Command::ToggleFullscreen;
+        case Shortcuts::SC_PANEL_FULLSCREEN_T: // 'T' — shared key
+            if (ctrl && shift)          return Command::ToggleFullscreen;
+            if (ctrl && !shift && !alt) return Command::ToggleAlwaysOnTop;
             break;
 
         // --- Panels ---
@@ -187,8 +188,10 @@ Command InputManager::ResolveKeyboardKeys(UINT key) {
         // --- App control ---
         case Shortcuts::SC_APP_HIDE: return Command::HideToTray;
 
-        case Shortcuts::SC_APP_HIDE_ALT:
-            if (ctrl) return Command::HideToTray;
+        case Shortcuts::SC_APP_HIDE_ALT: // 'W'  ctrl=hide  plain=pan-up  shift=move-window-up
+            if (ctrl)                      return Command::HideToTray;
+            if (!ctrl && !alt && !shift)   return Command::PanUp;
+            if (!ctrl && !alt &&  shift)   return Command::MoveWindowUp;
             break;
 
         case Shortcuts::SC_APP_HARD_QUIT:
@@ -221,8 +224,20 @@ Command InputManager::ResolveKeyboardKeys(UINT key) {
         // --- Save / reset ---
         case Shortcuts::ImageEffects::SC_COLOR_RESET_ALL_EFFECTS: return Command::ResetEffects;
 
-        case Shortcuts::ImageEffects::SC_COLOR_SAVE_TO_DISK:
-            if (ctrl) return Command::SaveImage;
+        case Shortcuts::ImageEffects::SC_COLOR_SAVE_TO_DISK: // 'S'  ctrl=save  plain=pan-down  shift=move-window-down
+            if (ctrl)                      return Command::SaveImage;
+            if (!ctrl && !alt && !shift)   return Command::PanDown;
+            if (!ctrl && !alt &&  shift)   return Command::MoveWindowDown;
+            break;
+
+        case Shortcuts::SC_PAN_LEFT: // 'A'  plain=pan-left  shift=move-window-left
+            if (!ctrl && !alt && !shift)   return Command::PanLeft;
+            if (!ctrl && !alt &&  shift)   return Command::MoveWindowLeft;
+            break;
+
+        case Shortcuts::SC_PAN_RIGHT: // 'D'  plain=pan-right  shift=move-window-right
+            if (!ctrl && !alt && !shift)   return Command::PanRight;
+            if (!ctrl && !alt &&  shift)   return Command::MoveWindowRight;
             break;
     }
 

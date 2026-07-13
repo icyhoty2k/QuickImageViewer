@@ -53,6 +53,9 @@ namespace Constants {
     constexpr float OUTLINE_BLUR_RADIUS = 0.0f;
     static constexpr float ZOOM_CLICK = 3.0f; //  left click zoom multiplier
     static constexpr int OPACITY_STEP = 10; // 0 to 100
+    static constexpr int KEYBOARD_PAN_STEP = 30;         // W/A/S/D viewport pan step (DPI-scaled in executor)
+    static constexpr int KEYBOARD_WINDOW_MOVE_STEP = 20; // Shift+W/A/S/D window move step (DPI-scaled in executor)
+    static constexpr int WINDOW_SNAP_DISTANCE = 24;      // px from screen edge to trigger drag-end snap
 
 
     // Custom window messages
