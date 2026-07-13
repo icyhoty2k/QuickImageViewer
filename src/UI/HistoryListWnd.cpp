@@ -8,6 +8,7 @@
 #include <algorithm>
 #include <windowsx.h>
 #include <filesystem>
+#include <dwmapi.h>
 
 // Forward declarations from ThumbnailPanelWnd.cpp
 namespace UI {
@@ -47,9 +48,50 @@ namespace UI {
     static int g_sbDragStartY = 0;
     static int g_sbDragStartOff = 0;
     static bool g_showFullHistory = false; // Ctrl+Tab toggles full history view
+    static bool g_headerDragging = false;
+    static int g_headerDragStartX = 0;     // screen X at drag start
+    static int g_headerDragStartY = 0;     // screen Y at drag start
+    static RECT g_headerDragWindowRect = {}; // window rect at drag start
+    static int g_bodyTop = 0;    // updated each WM_PAINT — actual top of scrollable body
+    static int g_bodyBottom = 0; // updated each WM_PAINT — actual bottom of scrollable body
+    static int g_rowH = 0;       // updated each WM_PAINT — row height in pixels
     static HistoryFoldersManager historyFoldersManager;
+
+    // Ctrl+Z undo state for single-row Delete
+    static std::wstring g_lastDeletedPath;
+    static int          g_lastDeletedIndex      = -1;
+    static bool         g_lastDeletedWasFavorite = false;
+
+    // ---------------------------------------------------------------------------
+    // CalcTotalContentH — single formula for virtual scroll height used in
+    // GetHistoryWindowBounds, WM_PAINT, WM_LBUTTONDOWN and WM_MOUSEMOVE.
+    // Includes header area + rows + footer so window sizing and scroll are consistent.
+    // ---------------------------------------------------------------------------
+    static int CalcTotalContentH(int nEntries, UINT dpi) {
+        int padding = MulDiv(Constants::History::HISTORY_PADDING, dpi, 96);
+        int rowH    = MulDiv(Constants::History::HISTORY_ROW_HEIGHT, dpi, 96);
+        int footerH = MulDiv(Constants::History::HISTORY_FONT_SIZE + 2 + 8, dpi, 96);
+        return padding * 2
+               + MulDiv(30 + Constants::History::HISTORY_FONT_SIZE + 4, dpi, 96)
+               + MulDiv(8, dpi, 96)
+               + nEntries * rowH
+               + footerH;
+    }
+
+    // Convert a VK_Fx code to its display label ("F3", "F5", …).
+    static std::wstring FKeyLabel(UINT vk) {
+        if (vk >= VK_F1 && vk <= VK_F24)
+            return L"F" + std::to_wstring(vk - VK_F1 + 1);
+        UINT sc = MapVirtualKeyW(vk, MAPVK_VK_TO_VSC);
+        wchar_t buf[16] = {};
+        GetKeyNameTextW(static_cast<LONG>(sc) << 16, buf, 16);
+        return buf;
+    }
     static std::vector<RECT> g_rowRects;
+    static std::vector<RECT> g_indexRects; // clickable rects for directory indexes (parallel to g_displayList)
     static RECT g_exeLinkRect = {}; // clickable rect for the "QIV" exe-dir link
+    static RECT g_f5IndexRect = {}; // clickable rect for F5 directory index
+    static RECT g_cacheIndexRect = {}; // clickable rect for Cache index
 
     // Display list: what the panel actually renders.
     // Each entry is (path, isFavorite).
@@ -224,14 +266,9 @@ namespace UI {
         int monH = mi.rcMonitor.bottom - mi.rcMonitor.top;
 
         UINT dpi = GetDpiForWindow(hRef);
-        int rowH = MulDiv(Constants::History::HISTORY_ROW_HEIGHT, dpi, 96);
-        int padding = MulDiv(Constants::History::HISTORY_PADDING, dpi, 96);
 
         int entries = std::max(1, static_cast<int>(g_displayList.size()));
-        int totalH = padding * 2
-                     + MulDiv(30 + Constants::History::HISTORY_FONT_SIZE + 4, dpi, 96) // title + hint rows
-                     + MulDiv(8, dpi, 96) // gap below hint/sep
-                     + entries * rowH;
+        int totalH  = CalcTotalContentH(entries, dpi);
 
         w = static_cast<int>(monW * 0.30f);
         h = std::min(totalH, static_cast<int>(monH * 0.80f));
@@ -272,10 +309,8 @@ namespace UI {
                 // Scrollbar geometry — computed before any drawing.
                 int SB_W = static_cast<int>(
                     MulDiv(Constants::History::SCROLLBAR_THICKNESS, dpi, 96));
-                int totalContentH = padding * 2
-                                    + MulDiv(30 + Constants::History::HISTORY_FONT_SIZE + 4, dpi, 96) // title + hint rows
-                                    + MulDiv(8, dpi, 96) // gap below hint/sep
-                                    + static_cast<int>(g_displayList.size()) * rowH;
+                int totalContentH = CalcTotalContentH(
+                    static_cast<int>(g_displayList.size()), dpi);
                 int windowH = rc.bottom - rc.top;
                 int maxScroll = std::max(0, totalContentH - windowH);
                 g_scrollOffsetY = std::clamp(g_scrollOffsetY, 0, maxScroll);
@@ -319,89 +354,27 @@ namespace UI {
                 };
                 DrawTextW(hdc, title.c_str(), -1, &titleRect, DT_LEFT | DT_VCENTER | DT_SINGLELINE);
 
-                // Hint line 2: shortcuts | red size | blue underlined link
+                // Hint line 2: all shortcuts in gray (Del + Ctrl+Z added; QIV link moved to footer)
                 {
                     SelectObject(hdc, hBodyFont);
                     int lineTop = titleRect.bottom + MulDiv(2, dpi, 96);
                     int lineBot = lineTop + fontSize + 2;
 
-                    // Part 1 — shortcuts in gray
                     constexpr wchar_t SHORTCUTS[] =
-                        L"Ctrl+Shift+Del = clear history     Ctrl+Alt+Shift+Del = clear favorites";
+                        L"Ctrl+Shift+Del = clear history"
+                        L"     Ctrl+Alt+Shift+Del = clear favorites"
+                        L"     Del = delete entry"
+                        L"     Ctrl+Z = restore";
                     SetTextColor(hdc, RGB(150, 150, 150));
-                    SIZE szSC = {};
-                    GetTextExtentPoint32W(hdc, SHORTCUTS,
-                                         static_cast<int>(std::wcslen(SHORTCUTS)), &szSC);
-                    RECT scRect = { rc.left + padding, lineTop,
-                                    rc.left + padding + szSC.cx, lineBot };
+                    RECT scRect = { rc.left + padding, lineTop, rc.right - padding, lineBot };
                     DrawTextW(hdc, SHORTCUTS, -1, &scRect,
-                              DT_LEFT | DT_VCENTER | DT_SINGLELINE);
-
-                    // Part 2a — "     History - " label in gray
-                    constexpr wchar_t SIZE_LABEL[] = L"     History - ";
-                    SetTextColor(hdc, RGB(150, 150, 150));
-                    SIZE szLabel = {};
-                    GetTextExtentPoint32W(hdc, SIZE_LABEL,
-                                         static_cast<int>(std::wcslen(SIZE_LABEL)), &szLabel);
-                    RECT labelRect = { scRect.right, lineTop,
-                                       scRect.right + szLabel.cx, lineBot };
-                    DrawTextW(hdc, SIZE_LABEL, -1, &labelRect,
-                              DT_LEFT | DT_VCENTER | DT_SINGLELINE);
-
-                    // Part 2b — numeric size value in red
-                    std::wstring sizeValue;
-                    {
-                        std::error_code ec;
-                        auto bytes = std::filesystem::file_size(
-                            historyFoldersManager.GetFilePath(), ec);
-                        if (!ec) {
-                            if (bytes >= 1024ULL * 1024)
-                                sizeValue = std::to_wstring(bytes / (1024 * 1024)) + L" MB";
-                            else if (bytes >= 1024)
-                                sizeValue = std::to_wstring(bytes / 1024) + L" KB";
-                            else
-                                sizeValue = std::to_wstring(bytes) + L" B";
-                        } else {
-                            sizeValue = L"n/a";
-                        }
-                        sizeValue += L"    ";
-                    }
-                    SetTextColor(hdc, Constants::Theme::HistoryPanel::SIZE_HIGHLIGHT);
-                    SIZE szSz = {};
-                    GetTextExtentPoint32W(hdc, sizeValue.c_str(),
-                                         static_cast<int>(sizeValue.size()), &szSz);
-                    RECT szRect = { labelRect.right, lineTop, labelRect.right + szSz.cx, lineBot };
-                    DrawTextW(hdc, sizeValue.c_str(), -1, &szRect,
-                              DT_LEFT | DT_VCENTER | DT_SINGLELINE);
-
-                    // Part 3 — "QIV → path" all blue underlined, clickable rect = actual text width
-                    wchar_t exeBuf[MAX_PATH] = {};
-                    GetModuleFileNameW(nullptr, exeBuf, MAX_PATH);
-                    std::wstring linkText = L"QIV → "
-                        + std::filesystem::path(exeBuf).parent_path().wstring() + L"\\";
-
-                    HFONT hLinkFont = CreateFontW(
-                        fontSize, 0, 0, 0, FW_NORMAL, FALSE, TRUE, FALSE,
-                        DEFAULT_CHARSET, OUT_OUTLINE_PRECIS, CLIP_DEFAULT_PRECIS,
-                        CLEARTYPE_QUALITY, VARIABLE_PITCH, L"Segoe UI");
-                    SelectObject(hdc, hLinkFont);
-                    SetTextColor(hdc, RGB(100, 180, 255));
-
-                    SIZE szLink = {};
-                    GetTextExtentPoint32W(hdc, linkText.c_str(),
-                                         static_cast<int>(linkText.size()), &szLink);
-                    // Clamp to available width; DT_END_ELLIPSIS will truncate the draw
-                    LONG linkRight = std::min(szRect.right + szLink.cx,
-                                             static_cast<LONG>(rc.right - padding));
-                    g_exeLinkRect = { szRect.right, lineTop, linkRight, lineBot };
-                    DrawTextW(hdc, linkText.c_str(), -1, &g_exeLinkRect,
                               DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
-                    DeleteObject(hLinkFont);
 
+                    g_exeLinkRect = {}; // link now lives in footer
                     SelectObject(hdc, hTitleFont);
                 }
 
-                // Separator (fixed)
+                // Separator (fixed) — placed after hint line
                 int sepY = titleRect.bottom + MulDiv(2 + fontSize + 2 + 4, dpi, 96);
                 HPEN hPen = CreatePen(PS_SOLID, 1, RGB(50, 50, 50));
                 HPEN hOldPen = (HPEN) SelectObject(hdc, hPen);
@@ -410,13 +383,26 @@ namespace UI {
                 SelectObject(hdc, hOldPen);
                 DeleteObject(hPen);
 
-                // Rows (scrolled) — clipped to the area below the separator.
+                int footerSepY = rc.bottom - MulDiv(fontSize + 2 + 8, dpi, 96);
+
+                // Rows (scrolled) — clipped to the body area between separator and footer
                 SelectObject(hdc, hListFont);
                 g_rowRects.clear();
+                g_indexRects.clear();
                 int rowsTop = sepY + MulDiv(6, dpi, 96);
+                int bodyBottom = footerSepY;
+                g_bodyTop = rowsTop;
+                g_bodyBottom = bodyBottom;
+                g_rowH = rowH;
 
                 SaveDC(hdc);
-                IntersectClipRect(hdc, rc.left, rowsTop, rc.right, rc.bottom);
+                IntersectClipRect(hdc, rc.left, rowsTop, rc.right, bodyBottom);
+
+                // Create link font for indexes
+                HFONT hIndexLinkFont = CreateFontW(
+                    listFontSz, 0, 0, 0, FW_NORMAL, FALSE, TRUE, FALSE,
+                    DEFAULT_CHARSET, OUT_OUTLINE_PRECIS, CLIP_DEFAULT_PRECIS,
+                    CLEARTYPE_QUALITY, VARIABLE_PITCH, L"Segoe UI");
 
                 if (g_displayList.empty()) {
                     int y = rowsTop - g_scrollOffsetY;
@@ -434,7 +420,10 @@ namespace UI {
                         g_rowRects.push_back({rc.left, rowTop, rc.right, rowBottom});
 
                         // Skip drawing rows outside the visible area.
-                        if (rowBottom <= rowsTop || rowTop >= rc.bottom) continue;
+                        if (rowBottom <= rowsTop || rowTop >= rc.bottom) {
+                            g_indexRects.push_back({0, 0, 0, 0}); // placeholder for off-screen row
+                            continue;
+                        }
 
                         RECT rowRect = {rc.left, rowTop, rc.right, rowBottom};
 
@@ -446,8 +435,9 @@ namespace UI {
                             DeleteObject(hHover);
                         }
 
-                        // Row index number
-                        SetTextColor(hdc, RGB(255, 204, 0));
+                        // Row index number — blue, underlined, clickable
+                        SetTextColor(hdc, RGB(100, 180, 255));
+                        SelectObject(hdc, hIndexLinkFont);
                         std::wstring idxStr = std::to_wstring(i + 1);
                         RECT idxRect = {
                             rc.left + padding, rowTop,
@@ -455,6 +445,9 @@ namespace UI {
                         };
                         DrawTextW(hdc, idxStr.c_str(), -1, &idxRect,
                                   DT_RIGHT | DT_VCENTER | DT_SINGLELINE);
+                        // Store index rect for click detection
+                        g_indexRects.push_back(idxRect);
+                        SelectObject(hdc, hListFont);
 
                         // Favorite star
                         if (entry.isFavorite) {
@@ -549,37 +542,232 @@ namespace UI {
 
                 RestoreDC(hdc, -1);
 
-                // Scrollbar (drawn on top, not clipped)
+                // Scrollbar (drawn only in body area between header and footer)
                 if (needsScrollbar) {
                     int sbX = rc.right - SB_W;
+                    int bodyHeight = bodyBottom - rowsTop;
 
                     HBRUSH hTrack = CreateSolidBrush(
                             Constants::Theme::ThemedGray(Constants::Theme::HistoryPanel::SCROLLBAR_TRACK, app.themeFactor));
-                    RECT sbTrack = {sbX, 0, rc.right, rc.bottom};
+                    RECT sbTrack = {sbX, rowsTop, rc.right, bodyBottom};
                     FillRect(hdc, &sbTrack, hTrack);
                     DeleteObject(hTrack);
 
-                    float visibleFrac = static_cast<float>(windowH) / static_cast<float>(totalContentH);
+                    float visibleFrac = static_cast<float>(bodyHeight) / static_cast<float>(totalContentH);
                     int minThumb = MulDiv(static_cast<int>(Constants::History::SCROLLBAR_MIN_THUMB), dpi, 96);
-                    int thumbLen = std::max(minThumb, static_cast<int>(windowH * visibleFrac));
+                    int thumbLen = std::max(minThumb, static_cast<int>(bodyHeight * visibleFrac));
                     int thumbOff = static_cast<int>(
                         static_cast<float>(g_scrollOffsetY) / static_cast<float>(maxScroll)
-                        * static_cast<float>(windowH - thumbLen));
-                    thumbOff = std::clamp(thumbOff, 0, windowH - thumbLen);
+                        * static_cast<float>(bodyHeight - thumbLen));
+                    thumbOff = std::clamp(thumbOff, 0, bodyHeight - thumbLen);
 
                     HBRUSH hThumb = CreateSolidBrush(
                             Constants::Theme::ThemedGray(Constants::Theme::HistoryPanel::SCROLLBAR_THUMB, app.themeFactor));
-                    RECT sbThumb = {sbX, thumbOff, rc.right, thumbOff + thumbLen};
+                    RECT sbThumb = {sbX, rowsTop + thumbOff, rc.right, rowsTop + thumbOff + thumbLen};
                     FillRect(hdc, &sbThumb, hThumb);
                     DeleteObject(hThumb);
+                }
+
+                // Footer separator line
+                {
+                    HPEN hFooterPen = CreatePen(PS_SOLID, 1, RGB(50, 50, 50));
+                    HPEN hOldFooterPen = (HPEN) SelectObject(hdc, hFooterPen);
+                    MoveToEx(hdc, rc.left + padding, footerSepY, nullptr);
+                    LineTo(hdc, rc.right - padding, footerSepY);
+                    SelectObject(hdc, hOldFooterPen);
+                    DeleteObject(hFooterPen);
+                }
+
+                // FOOTER — Panel status (left) and file size (right)
+                {
+                    int footerTop = rc.bottom - MulDiv(fontSize + 2 + 4, dpi, 96);
+                    int footerBot = rc.bottom;
+
+                    SelectObject(hdc, hBodyFont);
+                    SetTextColor(hdc, RGB(150, 150, 150));
+
+                    // LEFT: Panel status
+                    {
+                        LONG curX = rc.left + padding;
+                        LONG midBound = rc.left + (rc.right - rc.left) / 2;
+
+                        HFONT hLinkFont = CreateFontW(
+                            fontSize, 0, 0, 0, FW_NORMAL, FALSE, TRUE, FALSE,
+                            DEFAULT_CHARSET, OUT_OUTLINE_PRECIS, CLIP_DEFAULT_PRECIS,
+                            CLEARTYPE_QUALITY, VARIABLE_PITCH, L"Segoe UI");
+
+                        const UI::PanelLayout &layout = uiManager.GetLayout();
+                        const UI::SlotInfo *slots[] = {&layout.center, &layout.top, &layout.right, &layout.bottom, &layout.left};
+
+                        // Cache toggle key label (derived from Shortcuts constant)
+                        std::wstring cacheKeyLabel = L"[" + FKeyLabel(Shortcuts::SC_PANEL_CACHE_TOGGLE) + L"]";
+                        SetTextColor(hdc, RGB(100, 180, 255));
+                        SelectObject(hdc, hLinkFont);
+                        RECT cacheToggleRect = {curX, footerTop, midBound, footerBot};
+                        DrawTextW(hdc, cacheKeyLabel.c_str(), -1, &cacheToggleRect, DT_LEFT | DT_VCENTER | DT_SINGLELINE);
+                        SIZE szToggle = {};
+                        GetTextExtentPoint32W(hdc, cacheKeyLabel.c_str(),
+                                             static_cast<int>(cacheKeyLabel.size()), &szToggle);
+                        g_cacheIndexRect = {curX, footerTop, curX + szToggle.cx, footerBot};
+                        curX += szToggle.cx;
+
+                        // Cache status
+                        SelectObject(hdc, hBodyFont);
+                        SetTextColor(hdc, RGB(150, 150, 150));
+                        bool cacheFound = false;
+                        std::wstring cachePosName;
+                        for (auto *slot : slots) {
+                            if (slot->panel == &uiManager.getCacheWindow() && slot->panel->IsVisible()) {
+                                cachePosName = slot->name;
+                                cacheFound = true;
+                                break;
+                            }
+                        }
+                        std::wstring cacheRest = cacheFound ? (L"Cache -> " + cachePosName) : L"Cache -> Hidden";
+                        RECT cacheRestRect = {curX, footerTop, midBound, footerBot};
+                        DrawTextW(hdc, cacheRest.c_str(), -1, &cacheRestRect, DT_LEFT | DT_VCENTER | DT_SINGLELINE);
+
+                        // Dir-panel toggle key label (derived from Shortcuts constant)
+                        std::wstring dirKeyLabel = L"[" + FKeyLabel(Shortcuts::SC_PANEL_DIR_TOGGLE) + L"]";
+                        curX = rc.left + padding + MulDiv(100, dpi, 96);
+                        SetTextColor(hdc, RGB(100, 180, 255));
+                        SelectObject(hdc, hLinkFont);
+                        RECT f5ToggleRect = {curX, footerTop, midBound, footerBot};
+                        DrawTextW(hdc, dirKeyLabel.c_str(), -1, &f5ToggleRect, DT_LEFT | DT_VCENTER | DT_SINGLELINE);
+                        SIZE szF5 = {};
+                        GetTextExtentPoint32W(hdc, dirKeyLabel.c_str(),
+                                             static_cast<int>(dirKeyLabel.size()), &szF5);
+                        g_f5IndexRect = {curX, footerTop, curX + szF5.cx, footerBot};
+                        curX += szF5.cx;
+
+                        // F5 status
+                        SelectObject(hdc, hBodyFont);
+                        SetTextColor(hdc, RGB(150, 150, 150));
+                        bool f5Found = false;
+                        std::wstring f5PosName;
+                        int f5HistoryIndex = -1;
+                        for (auto *slot : slots) {
+                            if (slot->panel == &uiManager.getDirWindow() && slot->panel->IsVisible()) {
+                                if (app.currentIndex >= 0 && app.currentIndex < static_cast<int>(app.playlist.size())) {
+                                    std::wstring currentImagePath = app.playlist[app.currentIndex];
+                                    std::wstring currentFolder = std::filesystem::path(currentImagePath).parent_path().wstring();
+                                    const auto &history = historyFoldersManager.folderHistory;
+                                    for (int i = 0; i < static_cast<int>(history.size()); ++i) {
+                                        try {
+                                            if (std::filesystem::equivalent(currentFolder, history[i])) {
+                                                f5HistoryIndex = i + 1;
+                                                break;
+                                            }
+                                        } catch (...) {}
+                                    }
+                                }
+                                f5PosName = slot->name;
+                                f5Found = true;
+                                break;
+                            }
+                        }
+                        if (f5Found) {
+                            std::wstring f5Rest = (f5HistoryIndex > 0) ? (L" #" + std::to_wstring(f5HistoryIndex) + L" " + f5PosName) : (L" #? " + f5PosName);
+                            RECT f5RestRect = {curX, footerTop, midBound, footerBot};
+                            DrawTextW(hdc, f5Rest.c_str(), -1, &f5RestRect, DT_LEFT | DT_VCENTER | DT_SINGLELINE);
+                        } else {
+                            RECT f5HiddenRect = {curX, footerTop, midBound, footerBot};
+                            DrawTextW(hdc, L" Hidden", -1, &f5HiddenRect, DT_LEFT | DT_VCENTER | DT_SINGLELINE);
+                        }
+
+                        DeleteObject(hLinkFont);
+                    }
+
+                    // RIGHT: QIV→dir link + file size
+                    {
+                        LONG rightHalfLeft = rc.left + (rc.right - rc.left) / 2;
+                        LONG rightEdge     = rc.right - padding;
+
+                        // File size — measure first so QIV link avoids it
+                        std::wstring sizeValue;
+                        {
+                            std::error_code ec;
+                            auto bytes = std::filesystem::file_size(
+                                historyFoldersManager.GetFilePath(), ec);
+                            if (!ec) {
+                                wchar_t sizeBuf[64];
+                                if (bytes >= 1024ULL * 1024)
+                                    swprintf_s(sizeBuf, L"History - %.3f MB",
+                                               static_cast<double>(bytes) / (1024.0 * 1024.0));
+                                else if (bytes >= 1024)
+                                    swprintf_s(sizeBuf, L"History - %.3f KB",
+                                               static_cast<double>(bytes) / 1024.0);
+                                else
+                                    swprintf_s(sizeBuf, L"History - %llu Bytes",
+                                               static_cast<unsigned long long>(bytes));
+                                sizeValue = sizeBuf;
+                            } else {
+                                sizeValue = L"History - n/a";
+                            }
+                        }
+                        SelectObject(hdc, hBodyFont);
+                        SIZE szSize = {};
+                        GetTextExtentPoint32W(hdc, sizeValue.c_str(),
+                                             static_cast<int>(sizeValue.size()), &szSize);
+                        LONG sizeLeft = rightEdge - szSize.cx;
+
+                        // QIV→dir link — blue underlined, clickable, left of file size
+                        {
+                            wchar_t exeBuf[MAX_PATH] = {};
+                            GetModuleFileNameW(nullptr, exeBuf, MAX_PATH);
+                            std::wstring linkText = L"QIV \x2192 "
+                                + std::filesystem::path(exeBuf).parent_path().wstring() + L"\\";
+
+                            HFONT hLinkFont = CreateFontW(
+                                fontSize, 0, 0, 0, FW_NORMAL, FALSE, TRUE, FALSE,
+                                DEFAULT_CHARSET, OUT_OUTLINE_PRECIS, CLIP_DEFAULT_PRECIS,
+                                CLEARTYPE_QUALITY, VARIABLE_PITCH, L"Segoe UI");
+                            SelectObject(hdc, hLinkFont);
+                            SetTextColor(hdc, RGB(100, 180, 255));
+
+                            LONG linkAreaRight = std::max(rightHalfLeft, sizeLeft - MulDiv(8, dpi, 96));
+                            g_exeLinkRect = { rightHalfLeft, footerTop, linkAreaRight, footerBot };
+                            DrawTextW(hdc, linkText.c_str(), -1, &g_exeLinkRect,
+                                      DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
+                            DeleteObject(hLinkFont);
+                            SelectObject(hdc, hBodyFont);
+                        }
+
+                        // File size — right-aligned
+                        SetTextColor(hdc, Constants::Theme::HistoryPanel::SIZE_HIGHLIGHT);
+                        RECT sizeRect = { sizeLeft, footerTop, rightEdge, footerBot };
+                        DrawTextW(hdc, sizeValue.c_str(), -1, &sizeRect,
+                                  DT_LEFT | DT_VCENTER | DT_SINGLELINE);
+                    }
                 }
 
                 SelectObject(hdc, GetStockObject(SYSTEM_FONT));
                 DeleteObject(hTitleFont);
                 DeleteObject(hBodyFont);
                 DeleteObject(hListFont);
+                if (hIndexLinkFont) DeleteObject(hIndexLinkFont);
                 EndPaint(m_hWnd, &ps);
                 return 0;
+            }
+
+            case WM_NCHITTEST: {
+                POINT pt = { GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam) };
+                RECT wrc;
+                GetWindowRect(m_hWnd, &wrc);
+                const int border = std::max(4, MulDiv(6, GetDpiForWindow(m_hWnd), 96));
+                bool top    = pt.y <  wrc.top    + border;
+                bool bottom = pt.y >= wrc.bottom - border;
+                bool left   = pt.x <  wrc.left   + border;
+                bool right  = pt.x >= wrc.right  - border;
+                if (top    && left)  return HTTOPLEFT;
+                if (top    && right) return HTTOPRIGHT;
+                if (bottom && left)  return HTBOTTOMLEFT;
+                if (bottom && right) return HTBOTTOMRIGHT;
+                if (top)             return HTTOP;
+                if (bottom)          return HTBOTTOM;
+                if (left)            return HTLEFT;
+                if (right)           return HTRIGHT;
+                return HTCLIENT;
             }
 
             case WM_LBUTTONDOWN: {
@@ -588,14 +776,29 @@ namespace UI {
                 RECT rc2{};
                 GetClientRect(m_hWnd, &rc2);
                 UINT dpi2 = GetDpiForWindow(m_hWnd);
+
+                // Calculate header area
+                int padding2 = MulDiv(Constants::History::HISTORY_PADDING, dpi2, 96);
+                int titleSz2 = MulDiv(Constants::History::HISTORY_FONT_SIZE + 2, dpi2, 96);
+                int fontSize2 = MulDiv(Constants::History::HISTORY_FONT_SIZE, dpi2, 96);
+                int headerBottom = padding2 + titleSz2 + 4 + MulDiv(2, dpi2, 96) + fontSize2 + 2 + MulDiv(4, dpi2, 96);
+
+                // Check if clicking in header area — track screen coords to avoid drift
+                if (my < headerBottom) {
+                    g_headerDragging = true;
+                    POINT ptScreen = { mx, my };
+                    ClientToScreen(m_hWnd, &ptScreen);
+                    g_headerDragStartX = ptScreen.x;
+                    g_headerDragStartY = ptScreen.y;
+                    GetWindowRect(m_hWnd, &g_headerDragWindowRect);
+                    SetCapture(m_hWnd);
+                    return 0;
+                }
+
+                // Check scrollbar drag
                 int sbW = MulDiv(Constants::History::SCROLLBAR_THICKNESS, dpi2, 96);
                 if (mx >= rc2.right - sbW) {
-                    int rowH2 = MulDiv(Constants::History::HISTORY_ROW_HEIGHT, dpi2, 96);
-                    int padding2 = MulDiv(Constants::History::HISTORY_PADDING, dpi2, 96);
-                    int totalH2 = padding2 * 2
-                                  + MulDiv(30 + Constants::History::HISTORY_FONT_SIZE + 4, dpi2, 96)
-                                  + MulDiv(8, dpi2, 96)
-                                  + static_cast<int>(g_displayList.size()) * rowH2;
+                    int totalH2 = CalcTotalContentH(static_cast<int>(g_displayList.size()), dpi2);
                     int winH2 = rc2.bottom - rc2.top;
                     int maxScr2 = std::max(0, totalH2 - winH2);
                     if (maxScr2 > 0) {
@@ -623,6 +826,17 @@ namespace UI {
                 int mx = GET_X_LPARAM(lParam);
                 int my = GET_Y_LPARAM(lParam);
 
+                // Handle header dragging to move window
+                if (g_headerDragging) {
+                    POINT ptScreen = { mx, my };
+                    ClientToScreen(m_hWnd, &ptScreen);
+                    int newX = g_headerDragWindowRect.left + (ptScreen.x - g_headerDragStartX);
+                    int newY = g_headerDragWindowRect.top  + (ptScreen.y - g_headerDragStartY);
+                    SetWindowPos(m_hWnd, nullptr, newX, newY, 0, 0,
+                                 SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE);
+                    return 0;
+                }
+
                 // Check if hovering over scrollbar
                 RECT rcSb{};
                 GetClientRect(m_hWnd, &rcSb);
@@ -630,12 +844,7 @@ namespace UI {
                 int sbWHover = MulDiv(Constants::History::SCROLLBAR_THICKNESS, dpiSbHover, 96);
                 if (mx >= rcSb.right - sbWHover) {
                     UINT dpiSb = GetDpiForWindow(m_hWnd);
-                    int rowHSb = MulDiv(Constants::History::HISTORY_ROW_HEIGHT, dpiSb, 96);
-                    int paddingSb = MulDiv(Constants::History::HISTORY_PADDING, dpiSb, 96);
-                    int totalHSb = paddingSb * 2
-                                   + MulDiv(30 + Constants::History::HISTORY_FONT_SIZE + 4, dpiSb, 96)
-                                   + MulDiv(8, dpiSb, 96)
-                                   + static_cast<int>(g_displayList.size()) * rowHSb;
+                    int totalHSb = CalcTotalContentH(static_cast<int>(g_displayList.size()), dpiSb);
                     int winHSb = rcSb.bottom - rcSb.top;
                     int maxScrSb = std::max(0, totalHSb - winHSb);
                     SetCursor(LoadCursor(nullptr, (maxScrSb > 0) ? IDC_HAND : IDC_ARROW));
@@ -647,12 +856,7 @@ namespace UI {
                     RECT rc3{};
                     GetClientRect(m_hWnd, &rc3);
                     UINT dpi3 = GetDpiForWindow(m_hWnd);
-                    int rowH3 = MulDiv(Constants::History::HISTORY_ROW_HEIGHT, dpi3, 96);
-                    int padding3 = MulDiv(Constants::History::HISTORY_PADDING, dpi3, 96);
-                    int totalH3 = padding3 * 2
-                                  + MulDiv(30 + Constants::History::HISTORY_FONT_SIZE + 4, dpi3, 96)
-                                  + MulDiv(8, dpi3, 96)
-                                  + static_cast<int>(g_displayList.size()) * rowH3;
+                    int totalH3 = CalcTotalContentH(static_cast<int>(g_displayList.size()), dpi3);
                     int winH3 = rc3.bottom - rc3.top;
                     int maxScr3 = std::max(0, totalH3 - winH3);
                     if (maxScr3 > 0) {
@@ -680,12 +884,29 @@ namespace UI {
                         break;
                     }
                 }
-                // Hand cursor over exe link
+                // Hand cursor over clickable links/indexes
                 if (g_exeLinkRect.right > g_exeLinkRect.left) {
                     POINT pt = { mx, my };
                     if (PtInRect(&g_exeLinkRect, pt)) {
                         SetCursor(LoadCursor(nullptr, IDC_HAND));
                         return 0;
+                    }
+                }
+                if (g_f5IndexRect.right > g_f5IndexRect.left) {
+                    POINT pt = { mx, my };
+                    if (PtInRect(&g_f5IndexRect, pt)) {
+                        SetCursor(LoadCursor(nullptr, IDC_HAND));
+                        return 0;
+                    }
+                }
+                // Hand cursor over history row indexes
+                for (const auto &idxRect : g_indexRects) {
+                    if (idxRect.right > idxRect.left) {
+                        POINT pt = { mx, my };
+                        if (PtInRect(&idxRect, pt)) {
+                            SetCursor(LoadCursor(nullptr, IDC_HAND));
+                            return 0;
+                        }
                     }
                 }
 
@@ -698,6 +919,11 @@ namespace UI {
             }
 
             case WM_LBUTTONUP: {
+                if (g_headerDragging) {
+                    g_headerDragging = false;
+                    ReleaseCapture();
+                    return 0;
+                }
                 if (g_sbDragging) {
                     g_sbDragging = false;
                     ReleaseCapture();
@@ -718,6 +944,40 @@ namespace UI {
                     }
                 }
 
+                // [F5] label click — toggle F5
+                if (g_f5IndexRect.right > g_f5IndexRect.left) {
+                    POINT pt = { mx, my };
+                    if (PtInRect(&g_f5IndexRect, pt)) {
+                        uiManager.Toggle(uiManager.getDirWindow());
+                        return 0;
+                    }
+                }
+
+                // [F3] (Cache) label click — toggle Cache
+                if (g_cacheIndexRect.right > g_cacheIndexRect.left) {
+                    POINT pt = { mx, my };
+                    if (PtInRect(&g_cacheIndexRect, pt)) {
+                        uiManager.Toggle(uiManager.getCacheWindow());
+                        return 0;
+                    }
+                }
+
+                // History row index click — open in explorer
+                for (int i = 0; i < static_cast<int>(g_indexRects.size()); ++i) {
+                    const RECT &idxRect = g_indexRects[i];
+                    if (idxRect.right > idxRect.left) {
+                        POINT pt = { mx, my };
+                        if (PtInRect(&idxRect, pt)) {
+                            if (i < static_cast<int>(g_displayList.size())) {
+                                std::wstring folder = g_displayList[i].path;
+                                ShellExecuteW(nullptr, L"open", folder.c_str(), nullptr, nullptr, SW_SHOW);
+                            }
+                            return 0;
+                        }
+                    }
+                }
+
+                // History row path click — open in app
                 for (int i = 0; i < static_cast<int>(g_rowRects.size()); ++i) {
                     const RECT &r = g_rowRects[i];
                     if (mx >= r.left && mx < r.right && my >= r.top && my < r.bottom) {
@@ -750,6 +1010,27 @@ namespace UI {
                     return 0;
                 }
 
+                // Ctrl+Z — restore last deleted entry
+                if (wParam == 'Z' && ctrl && !shift && !alt && g_lastDeletedIndex >= 0) {
+                    auto &hist = historyFoldersManager.folderHistory;
+                    int insertAt = std::min(g_lastDeletedIndex, static_cast<int>(hist.size()));
+                    hist.insert(hist.begin() + insertAt, g_lastDeletedPath);
+                    historyFoldersManager.RewriteHistoryToDisk();
+                    if (g_lastDeletedWasFavorite) {
+                        historyFoldersManager.favorites.insert(g_lastDeletedPath);
+                        historyFoldersManager.RewriteFavoritesToDisk();
+                    }
+                    g_lastDeletedIndex = -1; // consume undo slot
+                    BuildDisplayList();
+                    int newMax = static_cast<int>(g_displayList.size());
+                    if (g_hoverRow >= newMax) g_hoverRow = newMax - 1;
+                    int x, y, w, h;
+                    GetHistoryWindowBounds(g_hHistOwner ? g_hHistOwner : m_hWnd, x, y, w, h);
+                    SetWindowPos(m_hWnd, HWND_TOPMOST, x, y, w, h, SWP_FRAMECHANGED);
+                    InvalidateRect(m_hWnd, nullptr, TRUE);
+                    return 0;
+                }
+
                 int navMax = static_cast<int>(g_displayList.size());
                 switch (wParam) {
                     case Shortcuts::SC_PANEL_HISTORY_TOGGLE:
@@ -759,6 +1040,16 @@ namespace UI {
                     case VK_UP:
                         if (navMax > 0) {
                             g_hoverRow = (g_hoverRow <= 0) ? navMax - 1 : g_hoverRow - 1;
+                            if (g_rowH > 0) {
+                                int bodyH = g_bodyBottom - g_bodyTop;
+                                if (g_hoverRow == navMax - 1) { // wrapped to bottom
+                                    g_scrollOffsetY = std::max(0, navMax * g_rowH - bodyH);
+                                } else {
+                                    int rowStart = g_hoverRow * g_rowH;
+                                    if (rowStart < g_scrollOffsetY)
+                                        g_scrollOffsetY = rowStart;
+                                }
+                            }
                             InvalidateRect(m_hWnd, nullptr, FALSE);
                         }
                         return 0;
@@ -766,6 +1057,16 @@ namespace UI {
                     case VK_DOWN:
                         if (navMax > 0) {
                             g_hoverRow = (g_hoverRow < navMax - 1) ? g_hoverRow + 1 : 0;
+                            if (g_rowH > 0) {
+                                if (g_hoverRow == 0) {
+                                    g_scrollOffsetY = 0;
+                                } else {
+                                    int bodyH = g_bodyBottom - g_bodyTop;
+                                    int rowEnd = (g_hoverRow + 1) * g_rowH;
+                                    if (rowEnd - g_scrollOffsetY > bodyH)
+                                        g_scrollOffsetY = rowEnd - bodyH;
+                                }
+                            }
                             InvalidateRect(m_hWnd, nullptr, FALSE);
                         }
                         return 0;
@@ -836,6 +1137,43 @@ namespace UI {
                                 SetWindowPos(m_hWnd, HWND_TOPMOST, x, y, w, h, SWP_FRAMECHANGED);
                             }
                             InvalidateRect(m_hWnd, nullptr, TRUE);
+                        } else if (!ctrl && !shift && !alt) {
+                            // Plain Delete — remove hovered entry; Ctrl+Z restores it
+                            if (g_hoverRow >= 0 && g_hoverRow < navMax) {
+                                const std::wstring &path = g_displayList[g_hoverRow].path;
+                                bool wasFav = g_displayList[g_hoverRow].isFavorite;
+
+                                // Find the index in folderHistory for undo
+                                auto &hist = historyFoldersManager.folderHistory;
+                                int histIdx = -1;
+                                for (int i = 0; i < static_cast<int>(hist.size()); ++i) {
+                                    if (hist[i] == path) { histIdx = i; break; }
+                                }
+
+                                // Save undo state
+                                g_lastDeletedPath        = path;
+                                g_lastDeletedIndex       = histIdx;
+                                g_lastDeletedWasFavorite = wasFav;
+
+                                // Remove from history
+                                if (histIdx >= 0)
+                                    hist.erase(hist.begin() + histIdx);
+                                historyFoldersManager.RewriteHistoryToDisk();
+
+                                // Remove from favorites
+                                if (wasFav) {
+                                    historyFoldersManager.favorites.erase(path);
+                                    historyFoldersManager.RewriteFavoritesToDisk();
+                                }
+
+                                BuildDisplayList();
+                                int newMax = static_cast<int>(g_displayList.size());
+                                if (g_hoverRow >= newMax) g_hoverRow = newMax - 1;
+                                int x, y, w, h;
+                                GetHistoryWindowBounds(g_hHistOwner ? g_hHistOwner : m_hWnd, x, y, w, h);
+                                SetWindowPos(m_hWnd, HWND_TOPMOST, x, y, w, h, SWP_FRAMECHANGED);
+                                InvalidateRect(m_hWnd, nullptr, TRUE);
+                            }
                         }
                         return 0;
 
@@ -889,6 +1227,8 @@ namespace UI {
         if (!m_hWnd) return;
 
         SetLayeredWindowAttributes(m_hWnd, 0, Constants::THUMBNAIL_PANEL_WINDOW_OPACITY, LWA_ALPHA);
+        DWORD corner = app.cornerPreference;
+        DwmSetWindowAttribute(m_hWnd, Constants::DWMWA_WINDOW_CORNER_PREFERENCES, &corner, sizeof(corner));
         ShowWindow(m_hWnd, SW_HIDE);
     }
 

@@ -23,6 +23,9 @@ namespace UI {
         public:
             // Load playlist from folder (only used when F5 actively navigates)
             void LoadPlaylist(const std::wstring &folderPath);
+
+            // Get the folder path currently displayed in F5
+            std::wstring GetCurrentFolder() const { return m_currentFolder; }
             // Copy the sorted playlist (used to keep F5 in sync with main folder, isolated from spawned hijacking)
             void SetPlaylistCopy(const std::vector<std::wstring> &playlist) {
                 m_dirPlaylist = playlist;
@@ -51,6 +54,7 @@ namespace UI {
             void PostBuildHook() override;
 
         private:
+            std::wstring m_currentFolder;  // Track current folder for history marking
             std::vector<std::wstring> m_dirPlaylist;  // F5 owns its own playlist, isolated from app.playlist
     };
 

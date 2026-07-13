@@ -167,11 +167,21 @@ void InputManager::ExecuteKeyboardShortcutCommand(HWND hWnd, Command cmd) {
             OpenInitialImage(hWnd);
             break;
 
-        case Command::ToggleCache:
-            uiManager.Toggle(uiManager.getCacheWindow());
-            uiManager.getCacheWindow().IsVisible() ? g_overlayManager.PostCenterMessage(hWnd, Constants::Messages::CACHE_WINDOW_VISIBLE_MSG) : g_overlayManager.PostCenterMessage(hWnd, Constants::Messages::CACHE_WINDOW_HIDDEN_MSG);
-            
+        case Command::ToggleCache: {
+            UI::CacheWnd &cacheWnd = uiManager.getCacheWindow();
+            // When showing CacheWnd, try its default position (bottom) if available
+            if (!cacheWnd.IsVisible()) {
+                // Check if default position is free
+                const UI::PanelLayout &layout = uiManager.GetLayout();
+                if (!layout.occupied(Constants::CACHE_WINDOW_POSITION)) {
+                    cacheWnd.SetPosition(Constants::CACHE_WINDOW_POSITION);
+                }
+                // Otherwise Show() will find a free position naturally
+            }
+            uiManager.Toggle(cacheWnd);
+            cacheWnd.IsVisible() ? g_overlayManager.PostCenterMessage(hWnd, Constants::Messages::CACHE_WINDOW_VISIBLE_MSG) : g_overlayManager.PostCenterMessage(hWnd, Constants::Messages::CACHE_WINDOW_HIDDEN_MSG);
             break;
+        }
 
         case Command::ClearCache:
             uiManager.getCacheWindow().ClearThumbnailCache();

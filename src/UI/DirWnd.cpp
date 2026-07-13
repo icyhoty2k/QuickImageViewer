@@ -31,6 +31,7 @@ namespace UI {
     // -------------------------------------------------------------------------
     void DirWnd::LoadPlaylist(const std::wstring &folderPath) {
         m_dirPlaylist.clear();
+        m_currentFolder = folderPath;  // Track current folder for history marking
         std::filesystem::path dir(folderPath);
         if (!std::filesystem::exists(dir) || !std::filesystem::is_directory(dir))
             return;
