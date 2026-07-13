@@ -24,6 +24,33 @@
 
 extern AppState app;
 
+// Snaps the window to a half of the work area on its current monitor.
+// zone: 0=left  1=right  2=top  3=bottom
+static void SnapWindowToZone(HWND hWnd, int zone) {
+    HMONITOR hMon = MonitorFromWindow(hWnd, MONITOR_DEFAULTTONEAREST);
+    MONITORINFO mi = { sizeof(mi) };
+    if (!GetMonitorInfo(hMon, &mi)) return;
+    const RECT &wa = mi.rcWork;
+    int halfW = (wa.right  - wa.left) / 2;
+    int halfH = (wa.bottom - wa.top)  / 2;
+    RECT t;
+    switch (zone) {
+        case 0: t = { wa.left,         wa.top,          wa.left + halfW, wa.bottom        }; break; // left half
+        case 1: t = { wa.left + halfW,  wa.top,          wa.right,        wa.bottom        }; break; // right half
+        case 2: t = { wa.left,         wa.top,          wa.right,        wa.top + halfH   }; break; // top half
+        case 3: t = { wa.left,         wa.top + halfH,  wa.right,        wa.bottom        }; break; // bottom half
+        case 4: t = { wa.left,         wa.top,          wa.left + halfW, wa.top + halfH   }; break; // top-left quarter
+        case 5: t = { wa.left + halfW,  wa.top,          wa.right,        wa.top + halfH   }; break; // top-right quarter
+        case 6: t = { wa.left,         wa.top + halfH,  wa.left + halfW, wa.bottom        }; break; // bottom-left quarter
+        case 7: t = { wa.left + halfW,  wa.top + halfH,  wa.right,        wa.bottom        }; break; // bottom-right quarter
+        default: return;
+    }
+    SetWindowPos(hWnd, nullptr, t.left, t.top,
+                 t.right - t.left, t.bottom - t.top,
+                 SWP_NOZORDER | SWP_NOACTIVATE | SWP_FRAMECHANGED);
+    InvalidateRect(hWnd, nullptr, FALSE);
+}
+
 // Clamps viewport offsets to the maximum range the renderer allows for the
 // current view mode and zoom — mirrors the identical logic in MouseHandler.
 static void ClampViewportOffset(HWND hWnd) {
@@ -202,6 +229,10 @@ void InputManager::ExecuteKeyboardShortcutCommand(HWND hWnd, Command cmd) {
         // -----------------------------------------------------------------------
         case Command::ToggleHelp:
             uiManager.Toggle(uiManager.getHelpWindow());
+            break;
+
+        case Command::ShowInfo:
+            uiManager.Toggle(uiManager.getInfoWindow());
             break;
 
         case Command::OpenFile:
@@ -716,6 +747,46 @@ void InputManager::ExecuteKeyboardShortcutCommand(HWND hWnd, Command cmd) {
         }
 
         // -----------------------------------------------------------------------
+        // Keyboard snap to screen half  (Alt+W/A/S/D)
+        // -----------------------------------------------------------------------
+        case Command::SnapLeft:
+            SnapWindowToZone(hWnd, 0);
+            g_overlayManager.PostCenterMessage(hWnd, Constants::Messages::SNAP_LEFT);
+            break;
+        case Command::SnapRight:
+            SnapWindowToZone(hWnd, 1);
+            g_overlayManager.PostCenterMessage(hWnd, Constants::Messages::SNAP_RIGHT);
+            break;
+        case Command::SnapTop:
+            SnapWindowToZone(hWnd, 2);
+            g_overlayManager.PostCenterMessage(hWnd, Constants::Messages::SNAP_TOP);
+            break;
+        case Command::SnapBottom:
+            SnapWindowToZone(hWnd, 3);
+            g_overlayManager.PostCenterMessage(hWnd, Constants::Messages::SNAP_BOTTOM);
+            break;
+
+        // -----------------------------------------------------------------------
+        // Keyboard snap to screen quarter  (Alt+Q/E/Z/C)
+        // -----------------------------------------------------------------------
+        case Command::SnapTopLeft:
+            SnapWindowToZone(hWnd, 4);
+            g_overlayManager.PostCenterMessage(hWnd, Constants::Messages::SNAP_TOP_LEFT);
+            break;
+        case Command::SnapTopRight:
+            SnapWindowToZone(hWnd, 5);
+            g_overlayManager.PostCenterMessage(hWnd, Constants::Messages::SNAP_TOP_RIGHT);
+            break;
+        case Command::SnapBottomLeft:
+            SnapWindowToZone(hWnd, 6);
+            g_overlayManager.PostCenterMessage(hWnd, Constants::Messages::SNAP_BOTTOM_LEFT);
+            break;
+        case Command::SnapBottomRight:
+            SnapWindowToZone(hWnd, 7);
+            g_overlayManager.PostCenterMessage(hWnd, Constants::Messages::SNAP_BOTTOM_RIGHT);
+            break;
+
+        // -----------------------------------------------------------------------
         // Viewport pan  (W/A/S/D — DPI-scaled step)
         // Offsets match the mouse-drag convention: positive offsetX → see left side.
         // -----------------------------------------------------------------------
@@ -777,6 +848,30 @@ void InputManager::ExecuteKeyboardShortcutCommand(HWND hWnd, Command cmd) {
             RECT rc; GetWindowRect(hWnd, &rc);
             SetWindowPos(hWnd, nullptr, rc.left + step, rc.top, 0, 0,
                          SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE);
+            break;
+        }
+
+        // -----------------------------------------------------------------------
+        // Window resize from center  (Shift+Numpad+/- and Shift++/-)
+        // -----------------------------------------------------------------------
+        case Command::ResizeWindowLarger: {
+            int step = static_cast<int>(Constants::KEYBOARD_WINDOW_RESIZE_STEP * app.dpiScale);
+            RECT rc; GetWindowRect(hWnd, &rc);
+            SetWindowPos(hWnd, nullptr,
+                rc.left - step, rc.top - step,
+                (rc.right - rc.left) + 2 * step, (rc.bottom - rc.top) + 2 * step,
+                SWP_NOZORDER | SWP_NOACTIVATE);
+            break;
+        }
+        case Command::ResizeWindowSmaller: {
+            int step = static_cast<int>(Constants::KEYBOARD_WINDOW_RESIZE_STEP * app.dpiScale);
+            RECT rc; GetWindowRect(hWnd, &rc);
+            int newW = std::max(static_cast<int>(rc.right  - rc.left) - 2 * step, 100);
+            int newH = std::max(static_cast<int>(rc.bottom - rc.top)  - 2 * step, 100);
+            SetWindowPos(hWnd, nullptr,
+                rc.left + step, rc.top + step,
+                newW, newH,
+                SWP_NOZORDER | SWP_NOACTIVATE);
             break;
         }
 

@@ -136,11 +136,17 @@ Command InputManager::ResolveKeyboardKeys(UINT key) {
         case Shortcuts::SC_NAV_NEXT_SPACE:
             return shift ? Command::PrevImage : Command::NextImage;
 
-        case Shortcuts::SC_NAV_SHOW_IN_EXPLORER: return Command::ShowInExplorer;
+        case Shortcuts::SC_NAV_SHOW_IN_EXPLORER: // 'E'
+            if (!ctrl && alt && !shift)   return Command::SnapTopRight;
+            return Command::ShowInExplorer;
 
         // --- Zoom ---
-        case Shortcuts::SC_ZOOM_IN_NUMPAD: return Command::ZoomIn;
-        case Shortcuts::SC_ZOOM_OUT_NUMPAD: return Command::ZoomOut;
+        case Shortcuts::SC_ZOOM_IN_NUMPAD: // VK_ADD  plain=zoom-in  shift=resize-larger
+            if (shift) return Command::ResizeWindowLarger;
+            return Command::ZoomIn;
+        case Shortcuts::SC_ZOOM_OUT_NUMPAD: // VK_SUBTRACT  plain=zoom-out  shift=resize-smaller
+            if (shift) return Command::ResizeWindowSmaller;
+            return Command::ZoomOut;
         case Shortcuts::SC_ZOOM_RESET: return Command::ZoomReset;
 
         // --- Transform ---
@@ -188,14 +194,16 @@ Command InputManager::ResolveKeyboardKeys(UINT key) {
         // --- App control ---
         case Shortcuts::SC_APP_HIDE: return Command::HideToTray;
 
-        case Shortcuts::SC_APP_HIDE_ALT: // 'W'  ctrl=hide  plain=pan-up  shift=move-window-up
+        case Shortcuts::SC_APP_HIDE_ALT: // 'W'  ctrl=hide  plain=pan-up  shift=move-up  alt=snap-top
             if (ctrl)                      return Command::HideToTray;
+            if (!ctrl &&  alt && !shift)   return Command::SnapTop;
             if (!ctrl && !alt && !shift)   return Command::PanUp;
             if (!ctrl && !alt &&  shift)   return Command::MoveWindowUp;
             break;
 
-        case Shortcuts::SC_APP_HARD_QUIT:
-            if (ctrl) return Command::HardQuit;
+        case Shortcuts::SC_APP_HARD_QUIT: // 'Q'
+            if (ctrl)                     return Command::HardQuit;
+            if (!ctrl && alt && !shift)   return Command::SnapTopLeft;
             break;
 
         case Shortcuts::SC_APP_RESET_DEFAULTS:
@@ -211,8 +219,12 @@ Command InputManager::ResolveKeyboardKeys(UINT key) {
         case Shortcuts::ImageEffects::SC_COLOR_THRESHOLD: return Command::ToggleThreshold;
 
         // --- Continuous adjustments ---
-        case Shortcuts::ImageEffects::SC_COLOR_GAMMA_UP: return Command::GammaUp;
-        case Shortcuts::ImageEffects::SC_COLOR_GAMMA_DOWN: return Command::GammaDown;
+        case Shortcuts::ImageEffects::SC_COLOR_GAMMA_UP: // VK_OEM_PLUS  plain=gamma-up  shift=resize-larger
+            if (shift) return Command::ResizeWindowLarger;
+            return Command::GammaUp;
+        case Shortcuts::ImageEffects::SC_COLOR_GAMMA_DOWN: // VK_OEM_MINUS  plain=gamma-down  shift=resize-smaller
+            if (shift) return Command::ResizeWindowSmaller;
+            return Command::GammaDown;
         case Shortcuts::ImageEffects::SC_COLOR_BRIGHTNESS_UP: return Command::BrightnessUp;
         case Shortcuts::ImageEffects::SC_COLOR_BRIGHTNESS_DOWN: return Command::BrightnessDown;
         case Shortcuts::ImageEffects::SC_COLOR_CONTRAST_UP: return Command::ContrastUp;
@@ -224,20 +236,39 @@ Command InputManager::ResolveKeyboardKeys(UINT key) {
         // --- Save / reset ---
         case Shortcuts::ImageEffects::SC_COLOR_RESET_ALL_EFFECTS: return Command::ResetEffects;
 
-        case Shortcuts::ImageEffects::SC_COLOR_SAVE_TO_DISK: // 'S'  ctrl=save  plain=pan-down  shift=move-window-down
+        case Shortcuts::ImageEffects::SC_COLOR_SAVE_TO_DISK: // 'S'  ctrl=save  plain=pan-down  shift=move-down  alt=snap-bottom
             if (ctrl)                      return Command::SaveImage;
+            if (!ctrl &&  alt && !shift)   return Command::SnapBottom;
             if (!ctrl && !alt && !shift)   return Command::PanDown;
             if (!ctrl && !alt &&  shift)   return Command::MoveWindowDown;
             break;
 
-        case Shortcuts::SC_PAN_LEFT: // 'A'  plain=pan-left  shift=move-window-left
+        case Shortcuts::SC_PAN_LEFT: // 'A'  plain=pan-left  shift=move-left  alt=snap-left
+            if (!ctrl &&  alt && !shift)   return Command::SnapLeft;
             if (!ctrl && !alt && !shift)   return Command::PanLeft;
             if (!ctrl && !alt &&  shift)   return Command::MoveWindowLeft;
             break;
 
-        case Shortcuts::SC_PAN_RIGHT: // 'D'  plain=pan-right  shift=move-window-right
+        case Shortcuts::SC_PAN_RIGHT: // 'D'  plain=pan-right  shift=move-right  alt=snap-right
+            if (!ctrl &&  alt && !shift)   return Command::SnapRight;
             if (!ctrl && !alt && !shift)   return Command::PanRight;
             if (!ctrl && !alt &&  shift)   return Command::MoveWindowRight;
+            break;
+
+        case 'Z':
+            if (!ctrl && alt && !shift)    return Command::SnapBottomLeft;
+            break;
+
+        case 'C':
+            if (!ctrl && alt && !shift)    return Command::SnapBottomRight;
+            break;
+
+        case 'X':
+            if (!ctrl && alt && !shift)    return Command::ResetAll;
+            break;
+
+        case Shortcuts::SC_SHOW_INFO: // 'M'
+            if (!ctrl && !alt && !shift)   return Command::ShowInfo;
             break;
     }
 

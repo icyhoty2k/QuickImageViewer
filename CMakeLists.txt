@@ -33,6 +33,7 @@ set(SOURCES
         src/Renderer/RendererGDI.cpp
         src/Renderer/RendererD2D.cpp
         src/UI/HelpWnd.cpp
+        src/UI/ExifWnd.cpp
         src/UI/CacheWnd.cpp
         src/UI/DirWnd.cpp
         src/UI/HistoryListWnd.cpp
@@ -82,10 +83,8 @@ target_compile_options(QuickImageViewer PRIVATE
         $<$<CONFIG:Release>:/Gy>         # Function-level linking.
         $<$<CONFIG:Release>:/GF>         # Pool identical string literals. Small binary improvement. No downside.
         $<$<CONFIG:Release>:/Zc:inline>         # Optimize global data
-        $<$<CONFIG:Release>:/favor:AMD64>         # Optimize global data
-
-
-        # $<$<CONFIG:Release>:/GS->      # Uncomment to disable stack checks for absolute max speed
+        $<$<CONFIG:Release>:/favor:blend>
+        $<$<CONFIG:Release>:/GS->               # Disable buffer-overrun checks — safe for a local desktop app
 )
 
 # 3. Explicit Linker Flags (Safe & Industry Standard)
@@ -96,7 +95,7 @@ target_link_options(QuickImageViewer PRIVATE
         $<$<CONFIG:Release>:/INCREMENTAL:NO>   # Clean, non-fragmented binary
         $<$<CONFIG:Release>:/OPT:REF>          # Eliminate unreferenced functions/data
         $<$<CONFIG:Release>:/OPT:ICF>          # Fold identical functions to reduce executable size
-        #        $<$<CONFIG:Release>:/CGTHREADS:16>      # Multi-thread the LTCG code generation phase
+        $<$<CONFIG:Release>:/CGTHREADS:16>             # Multi-thread the LTCG code generation phase
 )
 
 # 4. Include Directories

@@ -108,6 +108,12 @@ class IImageRenderer {
             return {};
         }
 
+        // Returns the EXIF orientation tag (274) stored when the bitmap was decoded.
+        // 1 = normal (no transform). Returns 1 if the path is not in cache.
+        virtual USHORT GetCachedOrientation(const std::wstring & /*filePath*/) {
+            return 1;
+        }
+
         virtual void ClearCache() {}
         virtual void ClearCache(const std::wstring & /*excludePath*/) {}
         virtual void RemoveFromCache(const std::wstring & /*filePath*/) {}

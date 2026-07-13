@@ -345,6 +345,19 @@ void UpdateOverlaysForCurrentImage(HWND hWnd) {
     g_overlayManager.UpdateEffects();
 }
 
+void ApplyOrientationToViewport(USHORT orient) {
+    switch (orient) {
+        case 2: app.viewport.flippedH = true;  break;
+        case 3: app.viewport.rotation = 180;   break;
+        case 4: app.viewport.flippedV = true;  break;
+        case 5: app.viewport.rotation = 90;  app.viewport.flippedH = true; break;
+        case 6: app.viewport.rotation = 90;   break;
+        case 7: app.viewport.rotation = 270; app.viewport.flippedH = true; break;
+        case 8: app.viewport.rotation = 270;  break;
+        default: break; // 1 = normal
+    }
+}
+
 void LoadImageIndex(HWND hWnd, int index) {
     if (index < 0 || index >= static_cast<int>(app.playlist.size())) return;
 
@@ -406,9 +419,13 @@ void LoadImageIndex(HWND hWnd, int index) {
     if (app.renderer) {
         if (SUCCEEDED(app.renderer->LoadBitmap(nullptr, 0, 0, currentPath))) {
             // Cache hit: the new bitmap is now active in the renderer.
+            // Orientation was read during the original decode and stored in the
+            // cache entry — apply it now that the viewport has been reset.
+            ApplyOrientationToViewport(app.renderer->GetCachedOrientation(currentPath));
             // Rewire the effect graph to the new bitmap so the display node
             // is not left pointing at the previous image's effect output.
             app.UpdateRendererColorEffects(hWnd);
+            uiManager.RefreshInfoWindowIfVisible();
             // Sync the dir panel selection only on actual image load, not on every
             // keypress — async loads are handled by WM_QIV_REPAINT + the callback.
             uiManager.getActiveDirWnd().SyncDirSelectionRectangle();

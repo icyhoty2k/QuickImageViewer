@@ -560,6 +560,26 @@ HRESULT RendererD2D::PreloadBitmap(const std::wstring &filePath, int requestInde
             UINT width = 0, height = 0;
             frame->GetSize(&width, &height);
 
+            // Read EXIF orientation (tag 274) while the frame is open.
+            // The full file is already in compressedBytes (in-memory), so this
+            // triggers no extra I/O — just a small parse of the already-loaded bytes.
+            USHORT orientation = 1;
+            {
+                Microsoft::WRL::ComPtr<IWICMetadataQueryReader> metaRdr;
+                if (SUCCEEDED(frame->GetMetadataQueryReader(&metaRdr))) {
+                    PROPVARIANT pv;
+                    PropVariantInit(&pv);
+                    if (FAILED(metaRdr->GetMetadataByName(L"/app1/ifd/{ushort=274}", &pv)) || pv.vt == VT_EMPTY) {
+                        PropVariantClear(&pv);
+                        PropVariantInit(&pv);
+                        metaRdr->GetMetadataByName(L"/ifd/{ushort=274}", &pv); // TIFF / other
+                    }
+                    if      (pv.vt == VT_UI2) orientation = pv.uiVal;
+                    else if (pv.vt == VT_UI4) orientation = static_cast<USHORT>(pv.ulVal);
+                    PropVariantClear(&pv);
+                }
+            }
+
             IWICBitmapSource *uploadSource = nullptr;
             Microsoft::WRL::ComPtr<IWICFormatConverter> converter;
             WICPixelFormatGUID srcFmt{};
@@ -593,7 +613,7 @@ HRESULT RendererD2D::PreloadBitmap(const std::wstring &filePath, int requestInde
                     m_lruList.pop_back();
                 }
                 m_lruList.push_front(filePath);
-                m_bitmapCache[filePath] = {newBitmap, m_lruList.begin(), width, height};
+                m_bitmapCache[filePath] = {newBitmap, m_lruList.begin(), width, height, orientation};
             }
 
             if (app.wantedIndex.load(std::memory_order_acquire) == requestIndex) {
@@ -903,8 +923,8 @@ HRESULT RendererD2D::LoadSvgFromBytes(const std::vector<BYTE> &svgBytes,
         }
     }
 
-    if (nativeW <= 0.0f) nativeW = viewport.width;
-    if (nativeH <= 0.0f) nativeH = viewport.height;
+    // Leave nativeW/H at 0 when the SVG has no intrinsic size — Render() will
+    // treat it as "fill the current render target" and recalculate every frame.
 
     {
         std::lock_guard<std::mutex> lock(m_cacheMutex);
@@ -944,6 +964,12 @@ std::vector<IImageRenderer::CacheItem> RendererD2D::GetCachedBitmaps() {
         }
     }
     return items;
+}
+
+USHORT RendererD2D::GetCachedOrientation(const std::wstring &filePath) {
+    std::lock_guard<std::mutex> lock(m_cacheMutex);
+    auto it = m_bitmapCache.find(filePath);
+    return (it != m_bitmapCache.end()) ? it->second.orientation : 1;
 }
 
 void RendererD2D::ClearCache() {

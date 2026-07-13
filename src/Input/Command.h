@@ -144,6 +144,25 @@ enum class Command {
     MoveWindowRight,
     MoveWindowUp,
     MoveWindowDown,
+
+    // --- Keyboard snap to screen half (Alt+W/A/S/D) ---
+    SnapLeft,
+    SnapRight,
+    SnapTop,
+    SnapBottom,
+
+    // --- Keyboard snap to screen quarter (Alt+Q/E/Z/C) ---
+    SnapTopLeft,
+    SnapTopRight,
+    SnapBottomLeft,
+    SnapBottomRight,
+
+    // --- Window resize (Shift+Numpad+/- and Shift++/-) ---
+    ResizeWindowLarger,
+    ResizeWindowSmaller,
+
+    // --- Image info / EXIF panel (M) ---
+    ShowInfo,
 };
 
 class InputManager {
