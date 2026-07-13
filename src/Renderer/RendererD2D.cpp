@@ -3,13 +3,18 @@
 #include "../AppState.h"
 #include "../Platform/Constants.h"
 #include "../WorkerThread.h"
+#include "../SimpleFormats.h"
 
 #include <algorithm>
 #include <chrono>
+#include <mutex>
 #include <vector>
 #include <shlwapi.h>  // SHCreateMemStream
 
 #include "DirWnd.h"
+
+// resvg C API (static lib)
+#include <resvg.h>
 
 // Link the required import libraries
 #pragma comment(lib, "d3d11.lib")
@@ -395,11 +400,7 @@ void RendererD2D::DiscardDeviceResources() {
     m_pBitmap.Reset();
     m_bitmapCache.clear();
     m_lruList.clear();
-    m_svgCache.clear();
-    m_svgLruList.clear();
     m_pActiveSvg.Reset();
-    m_svgNativeW = 0.0f;
-    m_svgNativeH = 0.0f;
     m_pDeviceContext.Reset();
     m_pDeviceContext5.Reset();
     m_pD2DDevice.Reset();
@@ -547,59 +548,66 @@ HRESULT RendererD2D::PreloadBitmap(const std::wstring &filePath, int requestInde
         g_decoderWorker.PushTask([compressedBytes = std::move(compressedBytes), filePath, requestIndex, d2dDevice, this](IWICImagingFactory2 *wicFac) mutable {
             if (app.wantedIndex.load(std::memory_order_acquire) != requestIndex) return;
 
-            Microsoft::WRL::ComPtr<IWICStream> wicStream;
-            if (FAILED(wicFac->CreateStream(&wicStream))) return;
-            if (FAILED(wicStream->InitializeFromMemory(compressedBytes.data(), static_cast<DWORD>(compressedBytes.size())))) return;
-
-            Microsoft::WRL::ComPtr<IWICBitmapDecoder> decoder;
-            if (FAILED(wicFac->CreateDecoderFromStream(wicStream.Get(), nullptr, WICDecodeMetadataCacheOnDemand, &decoder))) return;
-
-            Microsoft::WRL::ComPtr<IWICBitmapFrameDecode> frame;
-            if (FAILED(decoder->GetFrame(0, &frame))) return;
-
-            UINT width = 0, height = 0;
-            frame->GetSize(&width, &height);
-
-            // Read EXIF orientation (tag 274) while the frame is open.
-            // The full file is already in compressedBytes (in-memory), so this
-            // triggers no extra I/O — just a small parse of the already-loaded bytes.
-            USHORT orientation = 1;
-            {
-                Microsoft::WRL::ComPtr<IWICMetadataQueryReader> metaRdr;
-                if (SUCCEEDED(frame->GetMetadataQueryReader(&metaRdr))) {
-                    PROPVARIANT pv;
-                    PropVariantInit(&pv);
-                    if (FAILED(metaRdr->GetMetadataByName(L"/app1/ifd/{ushort=274}", &pv)) || pv.vt == VT_EMPTY) {
-                        PropVariantClear(&pv);
-                        PropVariantInit(&pv);
-                        metaRdr->GetMetadataByName(L"/ifd/{ushort=274}", &pv); // TIFF / other
-                    }
-                    if      (pv.vt == VT_UI2) orientation = pv.uiVal;
-                    else if (pv.vt == VT_UI4) orientation = static_cast<USHORT>(pv.ulVal);
-                    PropVariantClear(&pv);
-                }
-            }
-
-            IWICBitmapSource *uploadSource = nullptr;
-            Microsoft::WRL::ComPtr<IWICFormatConverter> converter;
-            WICPixelFormatGUID srcFmt{};
-            if (FAILED(frame->GetPixelFormat(&srcFmt))) return;
-
-            if (srcFmt == GUID_WICPixelFormat32bppPBGRA) {
-                uploadSource = frame.Get();
-            } else {
-                if (FAILED(wicFac->CreateFormatConverter(&converter))) return;
-                if (FAILED(converter->Initialize(frame.Get(), GUID_WICPixelFormat32bppPBGRA, WICBitmapDitherTypeNone, nullptr, 0.0f, WICBitmapPaletteTypeCustom)))
-                    return;
-                uploadSource = converter.Get();
-            }
-
             Microsoft::WRL::ComPtr<ID2D1DeviceContext> taskCtx;
             if (FAILED(d2dDevice->CreateDeviceContext(D2D1_DEVICE_CONTEXT_OPTIONS_NONE, taskCtx.GetAddressOf()))) return;
 
             Microsoft::WRL::ComPtr<ID2D1Bitmap1> newBitmap;
-            HRESULT hr = taskCtx->CreateBitmapFromWicBitmap(uploadSource, nullptr, &newBitmap);
-            if (FAILED(hr)) return;
+            UINT width = 0, height = 0;
+            USHORT orientation = 1;
+
+            if (SimpleFormats::IsSimpleFormat(filePath)) {
+                Microsoft::WRL::ComPtr<IWICBitmap> sfBmp =
+                    SimpleFormats::Decode(filePath, compressedBytes, wicFac, width, height);
+                if (!sfBmp) return;
+                if (FAILED(taskCtx->CreateBitmapFromWicBitmap(sfBmp.Get(), nullptr, &newBitmap))) return;
+            } else {
+                // --- Standard WIC path ---
+                Microsoft::WRL::ComPtr<IWICStream> wicStream;
+                if (FAILED(wicFac->CreateStream(&wicStream))) return;
+                if (FAILED(wicStream->InitializeFromMemory(compressedBytes.data(), static_cast<DWORD>(compressedBytes.size())))) return;
+
+                Microsoft::WRL::ComPtr<IWICBitmapDecoder> decoder;
+                if (FAILED(wicFac->CreateDecoderFromStream(wicStream.Get(), nullptr, WICDecodeMetadataCacheOnDemand, &decoder))) return;
+
+                Microsoft::WRL::ComPtr<IWICBitmapFrameDecode> frame;
+                if (FAILED(decoder->GetFrame(0, &frame))) return;
+
+                frame->GetSize(&width, &height);
+
+                // Read EXIF orientation (tag 274) — no extra I/O, bytes are in RAM
+                {
+                    Microsoft::WRL::ComPtr<IWICMetadataQueryReader> metaRdr;
+                    if (SUCCEEDED(frame->GetMetadataQueryReader(&metaRdr))) {
+                        PROPVARIANT pv;
+                        PropVariantInit(&pv);
+                        if (FAILED(metaRdr->GetMetadataByName(L"/app1/ifd/{ushort=274}", &pv)) || pv.vt == VT_EMPTY) {
+                            PropVariantClear(&pv);
+                            PropVariantInit(&pv);
+                            metaRdr->GetMetadataByName(L"/ifd/{ushort=274}", &pv);
+                        }
+                        if      (pv.vt == VT_UI2) orientation = pv.uiVal;
+                        else if (pv.vt == VT_UI4) orientation = static_cast<USHORT>(pv.ulVal);
+                        PropVariantClear(&pv);
+                    }
+                }
+
+                IWICBitmapSource *uploadSource = nullptr;
+                Microsoft::WRL::ComPtr<IWICFormatConverter> converter;
+                WICPixelFormatGUID srcFmt{};
+                if (FAILED(frame->GetPixelFormat(&srcFmt))) return;
+
+                if (srcFmt == GUID_WICPixelFormat32bppPBGRA) {
+                    uploadSource = frame.Get();
+                } else {
+                    if (FAILED(wicFac->CreateFormatConverter(&converter))) return;
+                    if (FAILED(converter->Initialize(frame.Get(), GUID_WICPixelFormat32bppPBGRA,
+                                                     WICBitmapDitherTypeNone, nullptr, 0.0f,
+                                                     WICBitmapPaletteTypeCustom))) return;
+                    uploadSource = converter.Get();
+                }
+
+                if (FAILED(taskCtx->CreateBitmapFromWicBitmap(uploadSource, nullptr, &newBitmap))) return;
+            }
 
             {
                 std::lock_guard<std::mutex> lock(m_cacheMutex);
@@ -840,113 +848,113 @@ void RendererD2D::ClearActiveImage() {
 }
 
 // =============================================================================
-//  LoadSvgFromBytes
+//  LoadSvgFromBytes  — rasterized via resvg (fixes centering + text bugs)
 // =============================================================================
 HRESULT RendererD2D::LoadSvgFromBytes(const std::vector<BYTE> &svgBytes,
                                       const std::wstring &filePath) {
-    if (!m_pDeviceContext) return E_UNEXPECTED;
     if (svgBytes.empty()) return E_INVALIDARG;
+    if (!m_pD2DDevice) return E_UNEXPECTED;
 
-    m_pBitmap.Reset();
-    m_pActiveSvg.Reset();
-
-    bool isCacheHit = false;
-
+    // SVGs are now stored in the regular bitmap cache after rasterization.
     {
         std::lock_guard<std::mutex> lock(m_cacheMutex);
-        auto it = m_svgCache.find(filePath);
-        if (it != m_svgCache.end()) {
-            m_svgLruList.splice(m_svgLruList.begin(), m_svgLruList, it->second.lruIt);
-            m_pActiveSvg = it->second.document;
-            m_svgNativeW = it->second.viewportW;
-            m_svgNativeH = it->second.viewportH;
-            m_pBitmap.Reset();
-            app.imgWidth = static_cast<int>(m_svgNativeW);
-            app.imgHeight = static_cast<int>(m_svgNativeH);
-            isCacheHit = true;
+        auto it = m_bitmapCache.find(filePath);
+        if (it != m_bitmapCache.end()) {
+            m_lruList.splice(m_lruList.begin(), m_lruList, it->second.lruIt);
+            m_pBitmap = it->second.bitmap;
+            m_pActiveSvg.Reset();
+            m_pActiveDisplayNode = nullptr;
+            app.imgWidth  = static_cast<int>(it->second.width);
+            app.imgHeight = static_cast<int>(it->second.height);
+            if (onImageChangedCallback) onImageChangedCallback(app.currentIndex);
+            return S_OK;
         }
     }
 
-    if (isCacheHit) {
-        if (onImageChangedCallback) {
-            onImageChangedCallback(app.currentIndex);
-        }
-        return S_OK;
+    // --- resvg options: initialized once (system font scan is IO-heavy) ---
+    static resvg_options* s_opts = nullptr;
+    static std::once_flag  s_once;
+    std::call_once(s_once, []() {
+        s_opts = resvg_options_create();
+        if (s_opts) resvg_options_load_system_fonts(s_opts);
+    });
+    if (!s_opts) return E_FAIL;
+
+    // Parse SVG bytes
+    resvg_render_tree* tree = nullptr;
+    const int32_t parseErr = resvg_parse_tree_from_data(
+        reinterpret_cast<const char*>(svgBytes.data()),
+        svgBytes.size(),
+        s_opts,
+        &tree);
+    if (parseErr != RESVG_OK || !tree) return E_FAIL;
+
+    // Determine raster size (native SVG units, capped at 8192 px)
+    resvg_size sz = resvg_get_image_size(tree);
+    uint32_t w = (sz.width  > 0.5f) ? static_cast<uint32_t>(sz.width  + 0.5f) : 1920u;
+    uint32_t h = (sz.height > 0.5f) ? static_cast<uint32_t>(sz.height + 0.5f) : 1080u;
+    constexpr uint32_t kMaxDim = 8192u;
+    if (w > kMaxDim || h > kMaxDim) {
+        const float s = std::min(static_cast<float>(kMaxDim) / w,
+                                 static_cast<float>(kMaxDim) / h);
+        w = std::max(1u, static_cast<uint32_t>(w * s));
+        h = std::max(1u, static_cast<uint32_t>(h * s));
     }
 
-    if (!m_pDeviceContext5) return E_UNEXPECTED;
+    // Rasterize: resvg outputs premultiplied RGBA8888
+    const size_t bufBytes = static_cast<size_t>(w) * h * 4;
+    std::vector<char> rgba(bufBytes, 0);
+    resvg_render(tree, resvg_transform_identity(), w, h, rgba.data());
+    resvg_tree_destroy(tree);
 
-    IStream *pStream = SHCreateMemStream(svgBytes.data(),
-                                         static_cast<UINT>(svgBytes.size()));
-    if (!pStream) return E_OUTOFMEMORY;
+    // Swap R↔B to get premultiplied BGRA (D2D native format)
+    auto* p = reinterpret_cast<BYTE*>(rgba.data());
+    for (size_t i = 0; i < bufBytes; i += 4)
+        std::swap(p[i], p[i + 2]);
 
-    D2D1_SIZE_F rtSize = m_pDeviceContext->GetSize();
-    D2D1_SIZE_F viewport = (rtSize.width > 0 && rtSize.height > 0)
-                               ? rtSize
-                               : D2D1::SizeF(1920.0f, 1080.0f);
-
-    Microsoft::WRL::ComPtr<ID2D1SvgDocument> svgDoc;
-    HRESULT hr = m_pDeviceContext5->CreateSvgDocument(pStream, viewport, svgDoc.GetAddressOf());
-    pStream->Release();
+    // Create WIC bitmap wrapper around the pixel buffer
+    Microsoft::WRL::ComPtr<IWICBitmap> wicBmp;
+    HRESULT hr = app.wicFactory->CreateBitmapFromMemory(
+        w, h,
+        GUID_WICPixelFormat32bppPBGRA,
+        w * 4, static_cast<UINT>(bufBytes),
+        p,
+        &wicBmp);
     if (FAILED(hr)) return hr;
 
-    float nativeW = 0.0f;
-    float nativeH = 0.0f;
+    // Upload to VRAM using a short-lived device context (thread-safe)
+    Microsoft::WRL::ComPtr<ID2D1DeviceContext> uploadCtx;
+    hr = m_pD2DDevice->CreateDeviceContext(D2D1_DEVICE_CONTEXT_OPTIONS_NONE,
+                                           uploadCtx.GetAddressOf());
+    if (FAILED(hr)) return hr;
 
-    Microsoft::WRL::ComPtr<ID2D1SvgElement> root;
-    svgDoc->GetRoot(root.GetAddressOf());
-    if (root) {
-        D2D1_SVG_VIEWBOX vb{};
-        if (SUCCEEDED(root->GetAttributeValue(
-            L"viewBox",
-            D2D1_SVG_ATTRIBUTE_POD_TYPE_VIEWBOX,
-            &vb,
-            sizeof(vb)))) {
-            if (vb.width > 0.0f && vb.height > 0.0f) {
-                nativeW = vb.width;
-                nativeH = vb.height;
-            }
-        }
+    Microsoft::WRL::ComPtr<ID2D1Bitmap1> d2dBmp;
+    hr = uploadCtx->CreateBitmapFromWicBitmap(wicBmp.Get(), nullptr, &d2dBmp);
+    if (FAILED(hr)) return hr;
 
-        if (nativeW <= 0.0f || nativeH <= 0.0f) {
-            D2D1_SVG_LENGTH wLen{}, hLen{};
-            bool wOk = SUCCEEDED(root->GetAttributeValue(L"width", &wLen));
-            bool hOk = SUCCEEDED(root->GetAttributeValue(L"height", &hLen));
-
-            if (wOk && hOk &&
-                wLen.units == D2D1_SVG_LENGTH_UNITS_NUMBER &&
-                hLen.units == D2D1_SVG_LENGTH_UNITS_NUMBER &&
-                wLen.value > 0.0f && hLen.value > 0.0f) {
-                nativeW = wLen.value;
-                nativeH = hLen.value;
-            }
-        }
-    }
-
-    // Leave nativeW/H at 0 when the SVG has no intrinsic size — Render() will
-    // treat it as "fill the current render target" and recalculate every frame.
-
+    // Insert into bitmap cache (same LRU as regular images)
     {
         std::lock_guard<std::mutex> lock(m_cacheMutex);
-        if (m_svgLruList.size() >= Constants::VRAM_CACHE_SVG_COUNT) {
-            m_svgCache.erase(m_svgLruList.back());
-            m_svgLruList.pop_back();
+        auto it = m_bitmapCache.find(filePath);
+        if (it != m_bitmapCache.end()) {
+            m_lruList.erase(it->second.lruIt);
+            m_bitmapCache.erase(it);
         }
-        m_svgLruList.push_front(filePath);
-        m_svgCache[filePath] = CachedSvg{svgDoc, m_svgLruList.begin(), nativeW, nativeH};
+        if (m_lruList.size() >= Constants::VRAM_CACHE_IMAGES_COUNT) {
+            m_bitmapCache.erase(m_lruList.back());
+            m_lruList.pop_back();
+        }
+        m_lruList.push_front(filePath);
+        m_bitmapCache[filePath] = {d2dBmp, m_lruList.begin(), w, h};
     }
 
-    m_pActiveSvg = svgDoc;
-    m_svgNativeW = nativeW;
-    m_svgNativeH = nativeH;
-    m_pBitmap.Reset();
-    app.imgWidth = static_cast<int>(nativeW);
-    app.imgHeight = static_cast<int>(nativeH);
+    m_pBitmap = d2dBmp;
+    m_pActiveSvg.Reset();
+    m_pActiveDisplayNode = nullptr;
+    app.imgWidth  = static_cast<int>(w);
+    app.imgHeight = static_cast<int>(h);
 
-    if (onImageChangedCallback) {
-        onImageChangedCallback(app.currentIndex);
-    }
-
+    if (onImageChangedCallback) onImageChangedCallback(app.currentIndex);
     return S_OK;
 }
 
@@ -982,8 +990,6 @@ void RendererD2D::ClearCache(const std::wstring &excludePath) {
     if (excludePath.empty()) {
         m_bitmapCache.clear();
         m_lruList.clear();
-        m_svgCache.clear();
-        m_svgLruList.clear();
         m_pBitmap.Reset();
         m_pActiveSvg.Reset();
         return;
@@ -1002,20 +1008,6 @@ void RendererD2D::ClearCache(const std::wstring &excludePath) {
         savedBmp.lruIt = m_lruList.begin();
         m_bitmapCache[excludePath] = savedBmp;
     }
-
-    auto svgIt = m_svgCache.find(excludePath);
-    bool foundSvg = (svgIt != m_svgCache.end());
-    CachedSvg savedSvg;
-    if (foundSvg) savedSvg = svgIt->second;
-
-    m_svgCache.clear();
-    m_svgLruList.clear();
-
-    if (foundSvg) {
-        m_svgLruList.push_front(excludePath);
-        savedSvg.lruIt = m_svgLruList.begin();
-        m_svgCache[excludePath] = savedSvg;
-    }
 }
 
 void RendererD2D::RemoveFromCache(const std::wstring &filePath) {
@@ -1024,11 +1016,6 @@ void RendererD2D::RemoveFromCache(const std::wstring &filePath) {
     if (it != m_bitmapCache.end()) {
         m_lruList.erase(it->second.lruIt);
         m_bitmapCache.erase(it);
-    }
-    auto svg_it = m_svgCache.find(filePath);
-    if (svg_it != m_svgCache.end()) {
-        m_svgLruList.erase(svg_it->second.lruIt);
-        m_svgCache.erase(svg_it);
     }
 }
 

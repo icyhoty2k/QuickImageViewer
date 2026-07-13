@@ -158,16 +158,8 @@ class RendererD2D final : public IImageRenderer {
         std::list<std::wstring> m_lruList;
         std::mutex m_cacheMutex;
 
-        // SVG
-        struct CachedSvg {
-            Microsoft::WRL::ComPtr<ID2D1SvgDocument> document;
-            std::list<std::wstring>::iterator lruIt;
-            float viewportW = 0.0f;
-            float viewportH = 0.0f;
-        };
-
-        std::unordered_map<std::wstring, CachedSvg> m_svgCache;
-        std::list<std::wstring> m_svgLruList;
+        // SVG: active D2D SVG document (legacy path, never set by resvg;
+        // resvg-rasterized SVGs go into m_bitmapCache as bitmaps instead)
         Microsoft::WRL::ComPtr<ID2D1SvgDocument> m_pActiveSvg;
         float m_svgNativeW = 0.0f;
         float m_svgNativeH = 0.0f;
