@@ -100,6 +100,7 @@ namespace Constants::Messages {
     constexpr const wchar_t *SPAWN_DIR_BOTTOM = L"DirWnd Spawned: Bottom";
     constexpr const wchar_t *SPAWN_DIR_CLOSED = L"DirWnd Closed";
     constexpr const wchar_t *SPAWN_DIR_NO_SPACE = L"No free positions for DirWnd";
+    constexpr const wchar_t *COPIED_TO_CLIPBOARD = L"Copied to Clipboard";
 }
 
 namespace Constants::Strings {

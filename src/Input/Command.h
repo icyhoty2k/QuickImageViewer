@@ -163,6 +163,9 @@ enum class Command {
 
     // --- Image info / EXIF panel (M) ---
     ShowInfo,
+
+    // --- Clipboard ---
+    CopyToClipboard, // Ctrl+C
 };
 
 class InputManager {

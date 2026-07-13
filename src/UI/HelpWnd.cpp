@@ -132,6 +132,7 @@ namespace UI {
         Add(L"+ / -", L"Gamma + / -", 2);
         Add(L"Numpad 0", L"Reset all color effects", 2);
         Add(L"`", L"Apply/Toggle effects on/off", 2);
+        Add(L"Ctrl+C", L"Copy image to clipboard", 2);
         Add(L"Ctrl+S", L"Save image with effects", 2);
         Add(L"Ctrl+N", L"Open new window", 2);
         Add(L"Esc / Ctrl+W", L"Hide to background", 2);

@@ -27,6 +27,7 @@ class AppCommands {
     private:
         // This remains private and inaccessible to the rest of the app
         static void SaveImageToDisk(HWND hWnd);
+        static void CopyImageToClipboard(HWND hWnd);
 
 
         // Only the InputManager class can call the method above

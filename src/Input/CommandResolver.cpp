@@ -260,7 +260,8 @@ Command InputManager::ResolveKeyboardKeys(UINT key) {
             break;
 
         case 'C':
-            if (!ctrl && alt && !shift)    return Command::SnapBottomRight;
+            if ( ctrl && !alt && !shift)   return Command::CopyToClipboard;
+            if (!ctrl &&  alt && !shift)   return Command::SnapBottomRight;
             break;
 
         case 'X':
