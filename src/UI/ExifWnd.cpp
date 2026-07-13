@@ -168,7 +168,8 @@ void ExifWnd::Refresh() {
 
     g_ioWorker.PushTask([path, imgW, imgH, hwnd]() {
         auto* rows = new std::vector<ExifRow>(GatherExifRows(path, imgW, imgH));
-        PostMessageW(hwnd, WM_EXIF_READY, 0, reinterpret_cast<LPARAM>(rows));
+        if (!PostMessageW(hwnd, WM_EXIF_READY, 0, reinterpret_cast<LPARAM>(rows)))
+            delete rows;
     });
 }
 
