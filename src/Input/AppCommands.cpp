@@ -306,6 +306,7 @@ void AppCommands::CopyImageToClipboard(HWND hWnd) {
     HGLOBAL hDrop = GlobalAlloc(GMEM_MOVEABLE | GMEM_ZEROINIT, sizeof(DROPFILES) + pathBytes);
     if (!hDrop) { DeleteObject(hBmp); return; }
     auto* df = static_cast<DROPFILES*>(GlobalLock(hDrop));
+    if (!df) { GlobalFree(hDrop); DeleteObject(hBmp); return; }
     df->pFiles = sizeof(DROPFILES);
     df->fWide  = TRUE;
     memcpy(reinterpret_cast<BYTE*>(df) + sizeof(DROPFILES),
