@@ -128,12 +128,12 @@ namespace UI {
         bool topOccupied()    const { return top.panel != nullptr; }
         bool bottomOccupied() const { return bottom.panel != nullptr; }
 
-        // Returns the next free position after 'current', cycling 1-4.
-        // Never returns center (position 0) — center is reserved for primary panels.
-        // Returns -1 if all positions 1-4 are occupied.
+        // Returns the next free position after 'current', cycling 0-4.
+        // Can return center (position 0) as fallback for F5 DirWnd.
+        // Returns -1 if all positions are occupied.
         int8_t nextFreePosition(int8_t current) const {
-            for (int i = 1; i <= 4; ++i) {
-                int8_t candidate = ((current - 1 + i) % 4) + 1;  // Cycle 1-4 only
+            for (int i = 1; i <= 5; ++i) {
+                int8_t candidate = (current + i) % 5;
                 if (!occupied(candidate)) return candidate;
             }
             return -1;

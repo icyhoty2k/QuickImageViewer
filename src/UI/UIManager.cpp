@@ -1,4 +1,5 @@
 #include "UIManager.h"
+#include "../AppState.h"
 #include "../Overlays/OverlayManager.h"
 #include "../Platform/ConstantsStrings.h"
 #include <filesystem>
@@ -6,10 +7,9 @@
 UI::UIManager uiManager;
 
 namespace UI {
-
     void UIManager::Init(HINSTANCE hInstance, HWND hMainWnd) {
         m_hInstance = hInstance;
-        m_hMainWnd  = hMainWnd;
+        m_hMainWnd = hMainWnd;
         LoadFolderHistoryFromDisk();
     }
 
@@ -26,7 +26,7 @@ namespace UI {
         // If this is a spawned DirWnd (not the primary ones), post a message
         if (dynamic_cast<SpawnedDirWnd *>(panel) != nullptr) {
             g_overlayManager.PostCenterMessage(m_hMainWnd,
-                Constants::Messages::SPAWN_DIR_CLOSED);
+                                               Constants::Messages::SPAWN_DIR_CLOSED);
         }
         m_layout.clearPanel(panel);
         RefreshVerticalPanels();
@@ -116,8 +116,11 @@ namespace UI {
 
         if (freePos < 0) {
             g_overlayManager.PostCenterMessage(m_hMainWnd,
-                Constants::Messages::SPAWN_DIR_NO_SPACE);
-            if (hHistoryWnd) { SetForegroundWindow(hHistoryWnd); SetFocus(hHistoryWnd); }
+                                               Constants::Messages::SPAWN_DIR_NO_SPACE);
+            if (hHistoryWnd) {
+                SetForegroundWindow(hHistoryWnd);
+                SetFocus(hHistoryWnd);
+            }
             return;
         }
 
@@ -136,10 +139,14 @@ namespace UI {
         // Notify user which position was used
         const wchar_t *msg = nullptr;
         switch (freePos) {
-            case 1: msg = Constants::Messages::SPAWN_DIR_TOP;    break;
-            case 2: msg = Constants::Messages::SPAWN_DIR_RIGHT;  break;
-            case 3: msg = Constants::Messages::SPAWN_DIR_BOTTOM; break;
-            case 4: msg = Constants::Messages::SPAWN_DIR_LEFT;   break;
+            case 1: msg = Constants::Messages::SPAWN_DIR_TOP;
+                break;
+            case 2: msg = Constants::Messages::SPAWN_DIR_RIGHT;
+                break;
+            case 3: msg = Constants::Messages::SPAWN_DIR_BOTTOM;
+                break;
+            case 4: msg = Constants::Messages::SPAWN_DIR_LEFT;
+                break;
         }
         if (msg) g_overlayManager.PostCenterMessage(m_hMainWnd, msg);
 
@@ -151,9 +158,11 @@ namespace UI {
 
     void UIManager::HideAllSpawnedDirWnds() {
         // Hide all panels that are spawned (not the primary dir/cache/help windows)
-        SlotInfo *slots[] = {&m_layout.center, &m_layout.top, &m_layout.right,
-                             &m_layout.bottom, &m_layout.left};
-        for (auto *slot : slots) {
+        SlotInfo *slots[] = {
+            &m_layout.center, &m_layout.top, &m_layout.right,
+            &m_layout.bottom, &m_layout.left
+        };
+        for (auto *slot: slots) {
             if (slot->panel && dynamic_cast<SpawnedDirWnd *>(slot->panel)) {
                 slot->panel->Hide();
             }
@@ -188,36 +197,58 @@ namespace UI {
     // spawned DirWnd open, else empty string.
     // -------------------------------------------------------------------------
     std::wstring UIManager::GetSpawnedDirWndPositionLabel(const std::wstring &folderPath) const {
-        // Check each slot to see if a spawned DirWnd is displaying this folder
-        const SlotInfo *slots[] = {&m_layout.center, &m_layout.top, &m_layout.right,
-                                   &m_layout.bottom, &m_layout.left};
-        for (auto *slot : slots) {
+        // Collect all labels from panels displaying this folder
+        std::wstring allLabels;
+        const SlotInfo *slots[] = {
+            &m_layout.center, &m_layout.top, &m_layout.right,
+            &m_layout.bottom, &m_layout.left
+        };
+
+        // Check spawned panels
+        for (auto *slot: slots) {
             if (!slot->panel) continue;
 
-            // Only check spawned panels, not primary ones
             auto *spawned = dynamic_cast<SpawnedDirWnd *>(slot->panel);
-            if (!spawned) continue;
+            if (spawned) {
+                std::wstring panelFolder = spawned->GetFolderPath();
+                if (panelFolder.empty()) continue;
 
-            std::wstring spawnedFolder = spawned->GetFolderPath();
-            if (spawnedFolder.empty()) continue;
-
-            // Compare paths, accounting for normalization differences
-            try {
-                std::filesystem::path normalized1(folderPath);
-                std::filesystem::path normalized2(spawnedFolder);
-                if (std::filesystem::equivalent(normalized1, normalized2)) {
-                    // Found a match; get position name from SlotInfo
-                    if (!slot->name.empty()) {
-                        return L" (" + slot->name + L")";
+                try {
+                    std::filesystem::path normalized1(folderPath);
+                    std::filesystem::path normalized2(panelFolder);
+                    if (std::filesystem::equivalent(normalized1, normalized2)) {
+                        // Found a match; append position label
+                        if (!slot->name.empty()) {
+                            allLabels += L" (" + slot->name + L")";
+                        }
                     }
-                    return L"";
-                }
-            } catch (...) {
-                // Path comparison failed, continue to next panel
-                continue;
+                } catch (...) {}
             }
         }
-        return L"";
+
+        // Finally check F5 DirWnd
+        for (auto *slot: slots) {
+            if (slot->panel != &dirWnd) continue;
+
+            // Get current folder from current image path
+            if (app.currentIndex >= 0 && app.currentIndex < static_cast<int>(app.playlist.size())) {
+                std::wstring currentImagePath = app.playlist[app.currentIndex];
+                std::wstring currentFolder = std::filesystem::path(currentImagePath).parent_path().wstring();
+
+                try {
+                    std::filesystem::path normalized1(folderPath);
+                    std::filesystem::path normalized2(currentFolder);
+                    if (std::filesystem::equivalent(normalized1, normalized2)) {
+                        // This folder is what F5 is displaying
+                        if (slot->panel->IsVisible() && !slot->name.empty()) {
+                            allLabels += L" [F5 -> " + slot->name + L"]";
+                        }
+                    }
+                } catch (...) {}
+            }
+        }
+
+        return allLabels;
     }
 
     // -------------------------------------------------------------------------
@@ -236,5 +267,4 @@ namespace UI {
             }
         }
     }
-
 } // namespace UI
