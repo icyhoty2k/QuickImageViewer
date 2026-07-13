@@ -7,6 +7,7 @@
 #include "CacheWnd.h"
 #include "DirWnd.h"
 #include "HistoryListWnd.h"
+#include "ExifWnd.h"
 #include "../Platform/Constants.h"
 
 namespace UI {
@@ -152,6 +153,8 @@ namespace UI {
             HelpWnd         &getHelpWindow();
             CacheWnd        &getCacheWindow();
             DirWnd          &getDirWindow();
+            ExifWnd         &getInfoWindow();
+            void             RefreshInfoWindowIfVisible();
 
             // Returns whichever DirWnd the user last clicked in.
             // Defaults to the primary F5 DirWnd.
@@ -189,6 +192,7 @@ namespace UI {
             CacheWnd       cacheWnd;
             DirWnd         dirWnd;
             HistoryListWnd historyListWnd;
+            ExifWnd        exifWnd;
 
             HINSTANCE m_hInstance  = nullptr;
             HWND      m_hMainWnd   = nullptr;

@@ -59,6 +59,7 @@ namespace UI {
         cacheWnd.Hide();
         dirWnd.Hide();
         historyListWnd.Hide();
+        exifWnd.Hide();
         HideAllSpawnedDirWnds();
     }
 
@@ -98,6 +99,16 @@ namespace UI {
         if (isInit(historyListWnd)) return historyListWnd;
         historyListWnd.Init(m_hInstance, m_hMainWnd);
         return historyListWnd;
+    }
+
+    ExifWnd &UIManager::getInfoWindow() {
+        if (isInit(exifWnd)) return exifWnd;
+        exifWnd.Init(m_hInstance, m_hMainWnd);
+        return exifWnd;
+    }
+
+    void UIManager::RefreshInfoWindowIfVisible() {
+        exifWnd.Refresh(); // Refresh() is a no-op if the window is not initialized or not visible
     }
 
     // -------------------------------------------------------------------------

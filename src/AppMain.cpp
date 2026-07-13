@@ -201,6 +201,12 @@ LRESULT CALLBACK MainAppWndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM l
             InputManager::handleKeyboard(hWnd, wParam);
             return 0;
 
+        case WM_SYSKEYDOWN:
+            // Alt+key combinations arrive here (not WM_KEYDOWN).
+            // Pass to our handler first, then DefWindowProc so Alt+F4 still works.
+            InputManager::handleKeyboard(hWnd, wParam);
+            return DefWindowProcW(hWnd, message, wParam, lParam);
+
         case WM_NCACTIVATE:
             return TRUE;
 
@@ -357,9 +363,14 @@ LRESULT CALLBACK MainAppWndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM l
                 const std::wstring &currentPath = app.playlist[app.currentIndex];
                 // This call will find the bitmap in the cache and set it as active.
                 if (SUCCEEDED(app.renderer->LoadBitmap(nullptr, 0, 0, currentPath))) {
+                    // Apply EXIF orientation stored in the cache entry during decode.
+                    // The viewport was already reset in LoadImageIndex; orientation
+                    // could not be applied earlier because the file wasn't decoded yet.
+                    ApplyOrientationToViewport(app.renderer->GetCachedOrientation(currentPath));
                     // --- CALL THE EFFECT UPDATER HERE ---
                     // Now the bitmap is ready, we can safely wire the effect graph.
                     app.UpdateRendererColorEffects(hWnd);
+                    uiManager.RefreshInfoWindowIfVisible();
                     UpdateOverlaysForCurrentImage(hWnd);
 
                     InvalidateRect(hWnd, nullptr, FALSE); // Now, repaint with the correct image.

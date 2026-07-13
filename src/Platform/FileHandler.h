@@ -18,3 +18,7 @@ void LoadImageIndex(HWND hWnd, int index);
 // app.fileHandlerIsReverseSortOrder, then rebuilds the O(1) index map.
 // Call after changing either setting at runtime.
 void ReSortPlaylistAndRebuildMap(HWND hWnd);
+
+// Maps an EXIF orientation tag value (1-8) to app.viewport rotation + flip.
+// Call after app.viewport = ViewportState{} when the bitmap arrives in cache.
+void ApplyOrientationToViewport(USHORT orient);

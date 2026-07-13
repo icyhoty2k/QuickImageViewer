@@ -70,6 +70,18 @@ namespace Constants::Messages {
     constexpr const wchar_t *ALWAYS_ON_TOP_ON  = L"Always on Top: ON";
     constexpr const wchar_t *ALWAYS_ON_TOP_OFF = L"Always on Top: OFF";
 
+    // Alt+W/A/S/D — keyboard snap to screen half
+    constexpr const wchar_t *SNAP_LEFT         = L"Snap: Left Half";
+    constexpr const wchar_t *SNAP_RIGHT        = L"Snap: Right Half";
+    constexpr const wchar_t *SNAP_TOP          = L"Snap: Top Half";
+    constexpr const wchar_t *SNAP_BOTTOM       = L"Snap: Bottom Half";
+
+    // Alt+Q/E/Z/C — keyboard snap to screen quarter
+    constexpr const wchar_t *SNAP_TOP_LEFT     = L"Snap: Top-Left Quarter";
+    constexpr const wchar_t *SNAP_TOP_RIGHT    = L"Snap: Top-Right Quarter";
+    constexpr const wchar_t *SNAP_BOTTOM_LEFT  = L"Snap: Bottom-Left Quarter";
+    constexpr const wchar_t *SNAP_BOTTOM_RIGHT = L"Snap: Bottom-Right Quarter";
+
     // Sort order  (Ctrl+Alt+Shift+0/6/7/8/9)  — press once: ascending, press again: descending
     constexpr const wchar_t *SORT_BY_NAME      = L"Sort: Name (A→Z)";
     constexpr const wchar_t *SORT_BY_NAME_REV  = L"Sort: Name (Z→A)";

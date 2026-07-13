@@ -78,6 +78,7 @@ namespace UI {
         Add(L"E", L"Open file location in Explorer", 0);
         Add(L"Tab", L"Toggle History panel", 0);
         Add(L"F1", L"Toggle Help window", 0);
+        Add(L"M", L"Toggle Image Info / EXIF panel", 0);
         Add(L"Ctrl+F1", L"Slideshow: start / stop", 0);
         Add(L"Space", L"Slideshow: pause / resume  (slideshow only)", 0);
         Add(L"R", L"Slideshow: toggle loop  (slideshow only)", 0);
@@ -97,11 +98,18 @@ namespace UI {
         Add(L"Middle Click", L"Reset window & center image", 1);
         Add(L"Up/Down / Ctrl+Wheel", L"Zoom In / Out", 1);
         Add(L"Numpad +/- / *", L"Zoom In/Out / Reset", 1);
+        Add(L"Shift+Numpad+ / Shift++", L"Resize window larger (from center)", 1);
+        Add(L"Shift+Numpad- / Shift+-", L"Resize window smaller (from center)", 1);
         Add(L"Shift+Wheel / H-Wheel", L"Adjust window opacity", 1);
         Add(L"RMB + Wheel", L"Zoom while holding RMB", 1);
         Add(L"RMB + H-Wheel", L"Resize from center", 1);
         Add(L"W / A / S / D", L"Pan viewport (when image overflows window)", 1);
         Add(L"Shift+W/A/S/D", L"Move window by 20 px per keypress", 1);
+        Add(L"Alt+A / Alt+D", L"Snap window to left / right half of screen", 1);
+        Add(L"Alt+W / Alt+S", L"Snap window to top / bottom half of screen", 1);
+        Add(L"Alt+Q / Alt+E", L"Snap window to top-left / top-right quarter", 1);
+        Add(L"Alt+Z / Alt+C", L"Snap window to bottom-left / bottom-right quarter", 1);
+        Add(L"Alt+X", L"Restore window to defaults (same as Shift+Del)", 1);
         Add(L"F / F11 / Enter / Ctrl+Shift+T", L"Toggle Fullscreen", 1);
         Add(L"Ctrl+T", L"Toggle Always on Top", 1);
         Add(L"N / I / Ctrl+0", L"Master overlay toggle", 1);

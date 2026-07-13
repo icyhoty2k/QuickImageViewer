@@ -203,6 +203,11 @@ namespace Shortcuts {
     constexpr UINT SC_SORT_BY_DISK = '6'; // requires ctrl+alt+shift
 
     // -------------------------------------------------------------------------
+    // Image Info / EXIF panel
+    // -------------------------------------------------------------------------
+    constexpr UINT SC_SHOW_INFO = 'M'; // M (no modifier) — image info / EXIF window
+
+    // -------------------------------------------------------------------------
     // HISTORY WINDOW
     // -------------------------------------------------------------------------
     constexpr UINT HISTORY_FAVORITES_TOGGLE_KEY = VK_SPACE;

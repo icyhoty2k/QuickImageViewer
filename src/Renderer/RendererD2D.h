@@ -51,6 +51,7 @@ class RendererD2D final : public IImageRenderer {
 
         // Cache Management
         std::vector<CacheItem> GetCachedBitmaps() override;
+        USHORT GetCachedOrientation(const std::wstring &filePath) override;
 
         void ClearCache() override;
 
@@ -147,8 +148,9 @@ class RendererD2D final : public IImageRenderer {
         struct CachedBitmap {
             Microsoft::WRL::ComPtr<ID2D1Bitmap1> bitmap;
             std::list<std::wstring>::iterator lruIt;
-            UINT width = 0;
-            UINT height = 0;
+            UINT  width       = 0;
+            UINT  height      = 0;
+            USHORT orientation = 1; // EXIF tag 274: 1=normal, 3=180°, 6=90°CW, 8=270°CW, etc.
         };
 
         Microsoft::WRL::ComPtr<ID2D1Bitmap1> m_pBitmap;
