@@ -1,0 +1,23 @@
+https://download.geonames.org/export/dump/
+
+here you can download cities1000.txt or other cicies500.txt
+
+
+Run it from the project root in any terminal (cmd, PowerShell, or your cmder):
+
+cd I:\30_CppSources\QuickImageViewer
+python tools\preprocess_cities.py
+
+cityes1000.txt all cities in the workld with more than 1000 people.
+
+this turn cities1000.txt to cities.bin
+
+
+λ python tools\preprocess_cities.py
+Loaded 170,387 cities
+Uncompressed : 5531 KB
+Compressed   : 2196 KB
+Written to   : resources\cities.bin
+
+
+

@@ -75,7 +75,7 @@ namespace UI {
         Add(L"Wheel Scroll", L"Navigate images", 0);
         Add(L"Backspace / Shift+Backspace", L"Toggle first / last in folder", 0);
         Add(L"Q", L"Toggle previous / current folder", 0);
-        Add(L"E", L"Open file location in Explorer", 0);
+        Add(L"L", L"Open file location in Explorer", 0);
         Add(L"Tab", L"Toggle History panel", 0);
         Add(L"F1", L"Toggle Help window", 0);
         Add(L"M", L"Toggle Image Info / EXIF panel", 0);

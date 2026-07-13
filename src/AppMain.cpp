@@ -407,7 +407,7 @@ LRESULT CALLBACK MainAppWndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM l
                 app.renderer) {
                 if (SUCCEEDED(app.renderer->LoadSvgFromBytes(payload->bytes, payload->path))) {
                     UpdateOverlaysForCurrentImage(hWnd);
-
+                    uiManager.RefreshInfoWindowIfVisible();
                     InvalidateRect(hWnd, nullptr, FALSE);
                     uiManager.getCacheWindow().UpdateCacheView();
                     uiManager.getActiveDirWnd().UpdateDirView();

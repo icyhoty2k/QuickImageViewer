@@ -1,0 +1,607 @@
+<title>QuickImageViewer — Technical Overview</title>
+<style>
+  :root {
+    --bg:        #0d1117;
+    --surface:   #161b22;
+    --surface2:  #1c2128;
+    --border:    #30363d;
+    --border2:   #21262d;
+    --text:      #e6edf3;
+    --muted:     #8b949e;
+    --accent:    #58a6ff;
+    --green:     #3fb950;
+    --amber:     #d29922;
+    --red:       #f85149;
+    --tag-bg:    #1f2d3d;
+    --tag-text:  #58a6ff;
+    --code-bg:   #161b22;
+  }
+  @media (prefers-color-scheme: light) {
+    :root {
+      --bg:        #ffffff;
+      --surface:   #f6f8fa;
+      --surface2:  #eaeef2;
+      --border:    #d0d7de;
+      --border2:   #e1e4e8;
+      --text:      #1f2328;
+      --muted:     #656d76;
+      --accent:    #0969da;
+      --green:     #1a7f37;
+      --amber:     #9a6700;
+      --red:       #cf222e;
+      --tag-bg:    #ddf4ff;
+      --tag-text:  #0969da;
+      --code-bg:   #f6f8fa;
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg:#0d1117;--surface:#161b22;--surface2:#1c2128;--border:#30363d;
+    --border2:#21262d;--text:#e6edf3;--muted:#8b949e;--accent:#58a6ff;
+    --green:#3fb950;--amber:#d29922;--red:#f85149;
+    --tag-bg:#1f2d3d;--tag-text:#58a6ff;--code-bg:#161b22;
+  }
+  :root[data-theme="light"] {
+    --bg:#ffffff;--surface:#f6f8fa;--surface2:#eaeef2;--border:#d0d7de;
+    --border2:#e1e4e8;--text:#1f2328;--muted:#656d76;--accent:#0969da;
+    --green:#1a7f37;--amber:#9a6700;--red:#cf222e;
+    --tag-bg:#ddf4ff;--tag-text:#0969da;--code-bg:#f6f8fa;
+  }
+
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'Segoe UI', -apple-system, BlinkMacSystemFont, sans-serif;
+    font-size: 14px;
+    line-height: 1.6;
+    padding: 40px 24px 80px;
+  }
+
+  .page { max-width: 860px; margin: 0 auto; }
+
+  /* Header */
+  .header {
+    border-bottom: 1px solid var(--border);
+    padding-bottom: 28px;
+    margin-bottom: 40px;
+  }
+  .header-eyebrow {
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--accent);
+    margin-bottom: 10px;
+  }
+  .header h1 {
+    font-size: 32px;
+    font-weight: 700;
+    line-height: 1.2;
+    color: var(--text);
+    margin-bottom: 10px;
+    text-wrap: balance;
+  }
+  .header-sub {
+    color: var(--muted);
+    font-size: 15px;
+    max-width: 620px;
+    line-height: 1.5;
+  }
+  .header-meta {
+    display: flex;
+    gap: 20px;
+    flex-wrap: wrap;
+    margin-top: 18px;
+  }
+  .meta-item {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 12px;
+    color: var(--muted);
+  }
+  .meta-dot {
+    width: 6px; height: 6px;
+    border-radius: 50%;
+    background: var(--green);
+    flex-shrink: 0;
+  }
+
+  /* Sections */
+  section { margin-bottom: 44px; }
+  .section-label {
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--muted);
+    margin-bottom: 14px;
+    padding-bottom: 8px;
+    border-bottom: 1px solid var(--border2);
+  }
+  h2 { font-size: 18px; font-weight: 600; margin-bottom: 14px; color: var(--text); }
+  h3 { font-size: 13px; font-weight: 600; color: var(--text); margin-bottom: 8px; }
+  p { color: var(--muted); margin-bottom: 10px; line-height: 1.65; }
+  p:last-child { margin-bottom: 0; }
+
+  /* Arch grid */
+  .arch-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+    gap: 1px;
+    background: var(--border);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    overflow: hidden;
+  }
+  .arch-cell {
+    background: var(--surface);
+    padding: 16px 18px;
+  }
+  .arch-cell h3 { color: var(--accent); font-size: 11px; text-transform: uppercase; letter-spacing: 0.07em; margin-bottom: 6px; }
+  .arch-cell p { font-size: 13px; color: var(--muted); margin: 0; }
+
+  /* Format table */
+  .table-wrap { overflow-x: auto; }
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 13px;
+    font-variant-numeric: tabular-nums;
+  }
+  thead tr { border-bottom: 1px solid var(--border); }
+  thead th {
+    text-align: left;
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--muted);
+    padding: 8px 12px 10px;
+  }
+  tbody tr { border-bottom: 1px solid var(--border2); }
+  tbody tr:last-child { border-bottom: none; }
+  tbody td { padding: 9px 12px; color: var(--text); vertical-align: top; }
+  tbody td:first-child { font-family: 'Cascadia Code', 'Consolas', monospace; font-size: 12px; color: var(--accent); }
+  .td-muted { color: var(--muted) !important; font-size: 12px; }
+
+  /* Badges */
+  .badge {
+    display: inline-block;
+    font-size: 10px;
+    font-weight: 600;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+    padding: 2px 7px;
+    border-radius: 3px;
+    line-height: 1.6;
+  }
+  .badge-wic  { background: #1a2d1a; color: var(--green); }
+  .badge-lib  { background: #1f2d3d; color: var(--accent); }
+  .badge-inline { background: #2d2016; color: var(--amber); }
+  @media (prefers-color-scheme: light) {
+    .badge-wic   { background: #dafbe1; color: #1a7f37; }
+    .badge-lib   { background: #ddf4ff; color: #0969da; }
+    .badge-inline{ background: #fff8c5; color: #9a6700; }
+  }
+  :root[data-theme="light"] .badge-wic   { background:#dafbe1;color:#1a7f37; }
+  :root[data-theme="light"] .badge-lib   { background:#ddf4ff;color:#0969da; }
+  :root[data-theme="light"] .badge-inline{ background:#fff8c5;color:#9a6700; }
+
+  /* Shortcut list */
+  .shortcut-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 0 32px;
+  }
+  @media (max-width: 560px) { .shortcut-grid { grid-template-columns: 1fr; } }
+  .shortcut-group { margin-bottom: 20px; }
+  .shortcut-group h3 {
+    font-size: 10px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.09em;
+    color: var(--muted);
+    margin-bottom: 8px;
+    padding-bottom: 4px;
+    border-bottom: 1px solid var(--border2);
+  }
+  .shortcut-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    gap: 12px;
+    padding: 4px 0;
+    font-size: 12.5px;
+  }
+  .shortcut-row:not(:last-child) { border-bottom: 1px solid var(--border2); }
+  .shortcut-row .desc { color: var(--muted); }
+  kbd {
+    font-family: 'Cascadia Code','Consolas',monospace;
+    font-size: 11px;
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: 3px;
+    padding: 1px 5px;
+    color: var(--text);
+    white-space: nowrap;
+    flex-shrink: 0;
+  }
+
+  /* Panel list */
+  .panel-list { display: flex; flex-direction: column; gap: 1px; }
+  .panel-item {
+    background: var(--surface);
+    border: 1px solid var(--border2);
+    border-radius: 0;
+    padding: 13px 16px;
+    display: grid;
+    grid-template-columns: 130px 1fr;
+    gap: 12px;
+    align-items: start;
+  }
+  .panel-list .panel-item:first-child { border-radius: 6px 6px 0 0; }
+  .panel-list .panel-item:last-child  { border-radius: 0 0 6px 6px; border-top: none; }
+  .panel-list .panel-item:only-child  { border-radius: 6px; }
+  .panel-list .panel-item + .panel-item { border-top: none; }
+  .panel-name { font-size: 12px; font-weight: 600; color: var(--text); }
+  .panel-key  { font-size: 11px; color: var(--accent); font-family: 'Cascadia Code','Consolas',monospace; }
+  .panel-desc { font-size: 12.5px; color: var(--muted); }
+
+  /* Feature chips */
+  .chips { display: flex; flex-wrap: wrap; gap: 7px; }
+  .chip {
+    font-size: 12px;
+    padding: 4px 10px;
+    border-radius: 4px;
+    border: 1px solid var(--border);
+    background: var(--surface);
+    color: var(--muted);
+  }
+
+  /* Lib table */
+  .lib-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+    gap: 1px;
+    background: var(--border);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    overflow: hidden;
+  }
+  .lib-cell {
+    background: var(--surface);
+    padding: 13px 16px;
+  }
+  .lib-name { font-family: 'Cascadia Code','Consolas',monospace; font-size: 12px; color: var(--accent); margin-bottom: 3px; }
+  .lib-desc { font-size: 12px; color: var(--muted); }
+
+  /* GeoNames callout */
+  .callout {
+    border-left: 3px solid var(--accent);
+    background: var(--surface);
+    padding: 14px 16px;
+    border-radius: 0 4px 4px 0;
+    margin-bottom: 14px;
+  }
+  .callout-title { font-size: 12px; font-weight: 600; color: var(--text); margin-bottom: 4px; }
+  .callout p { font-size: 12.5px; margin: 0; }
+
+  /* Overlay slots diagram */
+  .slot-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 6px;
+    max-width: 340px;
+  }
+  .slot {
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 8px 10px;
+    font-size: 11px;
+    text-align: center;
+  }
+  .slot-key { color: var(--accent); font-family: monospace; font-weight: 700; }
+  .slot-pos { color: var(--muted); font-size: 10px; margin-top: 2px; }
+
+  /* Footer */
+  .footer {
+    border-top: 1px solid var(--border2);
+    padding-top: 24px;
+    margin-top: 60px;
+    font-size: 12px;
+    color: var(--muted);
+  }
+
+  @media (max-width: 600px) {
+    .panel-item { grid-template-columns: 1fr; }
+    body { padding: 24px 16px 60px; }
+  }
+</style>
+
+<div class="page">
+
+  <header class="header">
+    <div class="header-eyebrow">Technical Overview — July 2026</div>
+    <h1>QuickImageViewer (QIV)</h1>
+    <p class="header-sub">A fast, minimal, GPU-accelerated image viewer for Windows built on Direct2D and WIC. Designed for speed, low memory overhead, and broad format support without external codec dependencies where possible.</p>
+    <div class="header-meta">
+      <span class="meta-item"><span class="meta-dot"></span>Windows 10 / 11</span>
+      <span class="meta-item"><span class="meta-dot"></span>C++23</span>
+      <span class="meta-item"><span class="meta-dot"></span>Win32 / Direct2D / WIC</span>
+      <span class="meta-item"><span class="meta-dot"></span>Single EXE, no installer</span>
+      <span class="meta-item"><span class="meta-dot"></span>~4 MB binary</span>
+    </div>
+  </header>
+
+  <!-- Architecture -->
+  <section>
+    <div class="section-label">Architecture</div>
+    <div class="arch-grid">
+      <div class="arch-cell">
+        <h3>Renderer</h3>
+        <p>Direct2D + D3D11. GPU bitmap cache. Fallback software GDI renderer for edge cases. Effects pipeline via ID2D1Effect graph (brightness, contrast, saturation, gamma, grayscale, sepia, invert, outline, threshold, solarize).</p>
+      </div>
+      <div class="arch-cell">
+        <h3>Decoding</h3>
+        <p>Primary pipeline: WIC (Windows Imaging Component). Secondary pipeline: custom decoders in SimpleFormats.cpp for formats WIC doesn't cover. SVG via resvg (Rust, static lib).</p>
+      </div>
+      <div class="arch-cell">
+        <h3>Threading</h3>
+        <p>Worker thread pool for background decode and preload. Atomic wantedIndex prevents stale frames. WM_QIV_REPAINT / WM_QIV_SVG_READY messages signal UI thread when decode completes.</p>
+      </div>
+      <div class="arch-cell">
+        <h3>Caching</h3>
+        <p>GPU bitmap cache with configurable size. Preloads adjacent images in both directions. Cache window (F3) shows live occupancy and lets user inspect or evict entries.</p>
+      </div>
+      <div class="arch-cell">
+        <h3>DPI / HiDPI</h3>
+        <p>Per-monitor DPI aware (V2). All layout, fonts, and hit areas scale via MulDiv against GetDpiForWindow. No layout assumptions at 96 DPI.</p>
+      </div>
+      <div class="arch-cell">
+        <h3>Persistence</h3>
+        <p>Registry-backed settings. Folder history manager. Recent folders sorted by visit frequency and recency. Favorites system inside the history panel.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- Format Support -->
+  <section>
+    <div class="section-label">Format Support</div>
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>Format</th>
+            <th>Extensions</th>
+            <th>Decoder</th>
+            <th>Notes</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr><td>JPEG</td><td class="td-muted">.jpg .jpeg .jpe</td><td><span class="badge badge-wic">WIC</span></td><td class="td-muted">Full EXIF/GPS metadata</td></tr>
+          <tr><td>PNG</td><td class="td-muted">.png</td><td><span class="badge badge-wic">WIC</span></td><td class="td-muted">16-bit, alpha</td></tr>
+          <tr><td>BMP</td><td class="td-muted">.bmp</td><td><span class="badge badge-wic">WIC</span></td><td class="td-muted"></td></tr>
+          <tr><td>TIFF</td><td class="td-muted">.tif .tiff</td><td><span class="badge badge-wic">WIC</span></td><td class="td-muted">Multi-page (first frame)</td></tr>
+          <tr><td>GIF</td><td class="td-muted">.gif</td><td><span class="badge badge-wic">WIC</span></td><td class="td-muted">Static (first frame)</td></tr>
+          <tr><td>WebP</td><td class="td-muted">.webp</td><td><span class="badge badge-wic">WIC</span></td><td class="td-muted">Win10+ native codec</td></tr>
+          <tr><td>HEIF / HEIC</td><td class="td-muted">.heif .heic</td><td><span class="badge badge-wic">WIC</span></td><td class="td-muted">Requires MS HEIF Extensions</td></tr>
+          <tr><td>AVIF</td><td class="td-muted">.avif</td><td><span class="badge badge-wic">WIC</span></td><td class="td-muted">Win11 native codec</td></tr>
+          <tr><td>JPEG XL</td><td class="td-muted">.jxl</td><td><span class="badge badge-wic">WIC</span></td><td class="td-muted">Win11 24H2 native codec</td></tr>
+          <tr><td>JPEG 2000</td><td class="td-muted">.jp2 .j2k</td><td><span class="badge badge-lib">OpenJPEG</span></td><td class="td-muted">Static lib, OPJ_STATIC</td></tr>
+          <tr><td>SVG</td><td class="td-muted">.svg</td><td><span class="badge badge-lib">resvg</span></td><td class="td-muted">Rust static lib, async IO thread</td></tr>
+          <tr><td>OpenEXR</td><td class="td-muted">.exr</td><td><span class="badge badge-lib">tinyexr</span></td><td class="td-muted">Reinhard tone-map + γ2.2</td></tr>
+          <tr><td>Radiance HDR</td><td class="td-muted">.hdr</td><td><span class="badge badge-inline">Inline</span></td><td class="td-muted">RGBE adaptive RLE, Reinhard tone-map</td></tr>
+          <tr><td>PNM family</td><td class="td-muted">.ppm .pgm .pbm</td><td><span class="badge badge-inline">Inline</span></td><td class="td-muted">P1–P6, 16-bit maxval</td></tr>
+          <tr><td>QOI</td><td class="td-muted">.qoi</td><td><span class="badge badge-inline">Inline</span></td><td class="td-muted">Lossless fast format</td></tr>
+          <tr><td>ICO / CUR</td><td class="td-muted">.ico .cur</td><td><span class="badge badge-wic">WIC</span></td><td class="td-muted"></td></tr>
+        </tbody>
+      </table>
+    </div>
+    <div style="margin-top:10px; display:flex; gap:12px; flex-wrap:wrap;">
+      <span style="font-size:11px;color:var(--muted)"><span class="badge badge-wic">WIC</span> = Windows Imaging Component (OS native)</span>
+      <span style="font-size:11px;color:var(--muted)"><span class="badge badge-lib">Lib</span> = statically linked third-party library</span>
+      <span style="font-size:11px;color:var(--muted)"><span class="badge badge-inline">Inline</span> = implemented directly in SimpleFormats.cpp, no dependency</span>
+    </div>
+  </section>
+
+  <!-- UI Panels -->
+  <section>
+    <div class="section-label">UI Panels</div>
+    <div class="panel-list">
+      <div class="panel-item">
+        <div><div class="panel-name">EXIF / Info</div><div class="panel-key">M</div></div>
+        <div class="panel-desc">Floating panel showing full image metadata: file info, GPS coordinates with offline reverse geocoding (city, district, state, country, continent, capital, currency, phone prefix, timezone), camera make/model, capture settings (exposure, aperture, ISO, focal length, flash, white balance, metering, scene), and author/copyright. Click rows to copy. Action rows (map link) are clickable.</div>
+      </div>
+      <div class="panel-item">
+        <div><div class="panel-name">Directory</div><div class="panel-key">F5 / F6</div></div>
+        <div class="panel-desc">Side panel showing all images in the current folder. Scrollable thumbnail list. Click to navigate. Syncs selection rectangle with current image. Up to N simultaneous instances for comparing folders. Spawnable from history panel (Shift+Enter).</div>
+      </div>
+      <div class="panel-item">
+        <div><div class="panel-name">Cache</div><div class="panel-key">F3 / F4</div></div>
+        <div class="panel-desc">Shows live GPU bitmap cache occupancy. Displays cached images as thumbnails, total memory used, eviction status. Moveable. Lets user inspect what's preloaded.</div>
+      </div>
+      <div class="panel-item">
+        <div><div class="panel-name">History</div><div class="panel-key">Tab</div></div>
+        <div class="panel-desc">Recent folder list sorted by visit frequency. Space toggles favorite status on a folder. Ctrl+Shift+Delete clears history, Ctrl+Alt+Shift+Delete clears favorites. Shift+Enter opens selected folder in a DirWnd instance.</div>
+      </div>
+      <div class="panel-item">
+        <div><div class="panel-name">Thumbnail Strip</div><div class="panel-key">auto</div></div>
+        <div class="panel-desc">Horizontal thumbnail panel. Shows surrounding images in the playlist for quick navigation context.</div>
+      </div>
+      <div class="panel-item">
+        <div><div class="panel-name">Help</div><div class="panel-key">F1</div></div>
+        <div class="panel-desc">Full keyboard shortcut reference. Ctrl+E exports all shortcuts to a text file. Scrollable, searchable by eye.</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Overlay System -->
+  <section>
+    <div class="section-label">Overlay System</div>
+    <p>9 independently configurable overlay slots rendered on the image canvas. Each slot shows contextual data (filename, index, zoom, dimensions, file size, effects state, etc.) and can be toggled, repositioned, or set to compact mode independently.</p>
+    <div style="margin: 14px 0;">
+      <div class="slot-grid">
+        <div class="slot"><div class="slot-key">Ctrl+1</div><div class="slot-pos">Top Left</div></div>
+        <div class="slot"><div class="slot-key">Ctrl+2</div><div class="slot-pos">Top Center</div></div>
+        <div class="slot"><div class="slot-key">Ctrl+3</div><div class="slot-pos">Top Right</div></div>
+        <div class="slot"><div class="slot-key">Ctrl+4</div><div class="slot-pos">Mid Left</div></div>
+        <div class="slot"><div class="slot-key">Ctrl+5</div><div class="slot-pos">Center</div></div>
+        <div class="slot"><div class="slot-key">Ctrl+6</div><div class="slot-pos">Mid Right</div></div>
+        <div class="slot"><div class="slot-key">Ctrl+7</div><div class="slot-pos">Bot Left</div></div>
+        <div class="slot"><div class="slot-key">Ctrl+8</div><div class="slot-pos">Bot Center</div></div>
+        <div class="slot"><div class="slot-key">Ctrl+9</div><div class="slot-pos">Bot Right</div></div>
+      </div>
+    </div>
+    <p>Master toggle: <kbd>N</kbd> or <kbd>I</kbd> or <kbd>Ctrl+0</kbd>. Layout cycle: <kbd>O</kbd>. Background toggle: <kbd>P</kbd>. Compact mode per slot: <kbd>Ctrl+Alt+1–9</kbd>.</p>
+  </section>
+
+  <!-- Keyboard Shortcuts -->
+  <section>
+    <div class="section-label">Key Shortcuts (selected)</div>
+    <div class="shortcut-grid">
+
+      <div class="shortcut-group">
+        <h3>Navigation</h3>
+        <div class="shortcut-row"><span class="desc">Next / Prev image</span><kbd>→ / ←</kbd></div>
+        <div class="shortcut-row"><span class="desc">Toggle first / last</span><kbd>Backspace</kbd></div>
+        <div class="shortcut-row"><span class="desc">Toggle prev folder</span><kbd>Q</kbd></div>
+        <div class="shortcut-row"><span class="desc">Open in Explorer</span><kbd>L</kbd></div>
+        <div class="shortcut-row"><span class="desc">Open file dialog</span><kbd>F2</kbd></div>
+        <div class="shortcut-row"><span class="desc">New window</span><kbd>Ctrl+N</kbd></div>
+      </div>
+
+      <div class="shortcut-group">
+        <h3>Transform</h3>
+        <div class="shortcut-row"><span class="desc">Rotate view</span><kbd>R</kbd></div>
+        <div class="shortcut-row"><span class="desc">Flip horizontal</span><kbd>H</kbd></div>
+        <div class="shortcut-row"><span class="desc">Flip vertical</span><kbd>V</kbd></div>
+        <div class="shortcut-row"><span class="desc">Copy to clipboard</span><kbd>Ctrl+C</kbd></div>
+        <div class="shortcut-row"><span class="desc">Save w/ effects</span><kbd>Ctrl+S</kbd></div>
+      </div>
+
+      <div class="shortcut-group">
+        <h3>Zoom & Pan</h3>
+        <div class="shortcut-row"><span class="desc">Zoom in / out</span><kbd>Num+ / Num-</kbd></div>
+        <div class="shortcut-row"><span class="desc">Reset zoom</span><kbd>Num*</kbd></div>
+        <div class="shortcut-row"><span class="desc">Pan</span><kbd>W A S D</kbd></div>
+        <div class="shortcut-row"><span class="desc">Quick zoom (hold)</span><kbd>LMB hold</kbd></div>
+        <div class="shortcut-row"><span class="desc">Zoom smooth</span><kbd>Ctrl+Wheel</kbd></div>
+      </div>
+
+      <div class="shortcut-group">
+        <h3>Window</h3>
+        <div class="shortcut-row"><span class="desc">Fullscreen</span><kbd>F11 / F / Enter</kbd></div>
+        <div class="shortcut-row"><span class="desc">Always on top</span><kbd>Ctrl+T</kbd></div>
+        <div class="shortcut-row"><span class="desc">Hide to tray</span><kbd>Esc / Ctrl+W</kbd></div>
+        <div class="shortcut-row"><span class="desc">Hard quit</span><kbd>Ctrl+Q</kbd></div>
+        <div class="shortcut-row"><span class="desc">Move window</span><kbd>Shift+WASD</kbd></div>
+        <div class="shortcut-row"><span class="desc">Snap zones</span><kbd>Alt+WASD/Q/E…</kbd></div>
+      </div>
+
+      <div class="shortcut-group">
+        <h3>Color Effects</h3>
+        <div class="shortcut-row"><span class="desc">Toggle effects</span><kbd>`</kbd></div>
+        <div class="shortcut-row"><span class="desc">Grayscale</span><kbd>Delete</kbd></div>
+        <div class="shortcut-row"><span class="desc">Invert</span><kbd>Insert</kbd></div>
+        <div class="shortcut-row"><span class="desc">Sepia</span><kbd>Home</kbd></div>
+        <div class="shortcut-row"><span class="desc">Brightness ±</span><kbd>\ / '</kbd></div>
+        <div class="shortcut-row"><span class="desc">Contrast ±</span><kbd>/ / .</kbd></div>
+        <div class="shortcut-row"><span class="desc">Saturation ±</span><kbd>[ / ]</kbd></div>
+        <div class="shortcut-row"><span class="desc">Gamma ±</span><kbd>= / -</kbd></div>
+        <div class="shortcut-row"><span class="desc">Reset all effects</span><kbd>Num0</kbd></div>
+      </div>
+
+      <div class="shortcut-group">
+        <h3>Slideshow</h3>
+        <div class="shortcut-row"><span class="desc">Start / stop</span><kbd>Ctrl+F1</kbd></div>
+        <div class="shortcut-row"><span class="desc">Pause / resume</span><kbd>Space</kbd></div>
+        <div class="shortcut-row"><span class="desc">Loop toggle</span><kbd>R</kbd></div>
+        <div class="shortcut-row"><span class="desc">Shuffle toggle</span><kbd>S</kbd></div>
+        <div class="shortcut-row"><span class="desc">Cycle transition</span><kbd>T</kbd></div>
+      </div>
+
+    </div>
+  </section>
+
+  <!-- GeoNames -->
+  <section>
+    <div class="section-label">Offline Reverse Geocoding</div>
+    <div class="callout">
+      <div class="callout-title">Fully offline — zero network calls</div>
+      <p>GPS coordinates from EXIF are resolved to rich location data using GeoNames datasets compressed and embedded directly in the EXE as RCDATA resources.</p>
+    </div>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>Resource</th><th>Source</th><th>Entries</th><th>Compressed</th><th>Provides</th></tr></thead>
+        <tbody>
+          <tr><td>cities.bin</td><td class="td-muted">cities1000.txt</td><td class="td-muted">170,387</td><td class="td-muted">~2.5 MB</td><td class="td-muted">City name, lat/lon, timezone, admin codes</td></tr>
+          <tr><td>admin1.bin</td><td class="td-muted">admin1CodesASCII.txt</td><td class="td-muted">3,865</td><td class="td-muted">~32 KB</td><td class="td-muted">State / province names</td></tr>
+          <tr><td>admin2.bin</td><td class="td-muted">admin2Codes.txt</td><td class="td-muted">47,549</td><td class="td-muted">~423 KB</td><td class="td-muted">District / county names</td></tr>
+          <tr><td>country.bin</td><td class="td-muted">countryInfo.txt</td><td class="td-muted">252</td><td class="td-muted">~5 KB</td><td class="td-muted">Country, capital, continent, currency, phone prefix</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p style="margin-top:12px;">Nearest city found via linear scan with cosLat longitude correction. All 4 datasets loaded and decompressed (zlib/miniz) lazily on first GPS lookup. Fields displayed: City, District, State, Country, Continent, Capital, Currency, Phone, Timezone.</p>
+  </section>
+
+  <!-- Sort -->
+  <section>
+    <div class="section-label">Sort & Navigation</div>
+    <div class="chips">
+      <span class="chip">Sort by name (natural)</span>
+      <span class="chip">Sort by date modified</span>
+      <span class="chip">Sort by file size</span>
+      <span class="chip">Sort by extension</span>
+      <span class="chip">Sort by physical disk order</span>
+      <span class="chip">Drag &amp; drop to open</span>
+      <span class="chip">CLI argument support</span>
+      <span class="chip">Registered file handler</span>
+      <span class="chip">System tray (hide/restore)</span>
+      <span class="chip">Multi-instance aware</span>
+      <span class="chip">Per-monitor DPI</span>
+      <span class="chip">Snap to screen zones</span>
+    </div>
+  </section>
+
+  <!-- Libraries -->
+  <section>
+    <div class="section-label">Third-Party Libraries</div>
+    <div class="lib-grid">
+      <div class="lib-cell"><div class="lib-name">resvg</div><div class="lib-desc">SVG rasterizer (Rust). Fixes D2D centering and text bugs.</div></div>
+      <div class="lib-cell"><div class="lib-name">OpenJPEG</div><div class="lib-desc">JPEG 2000 decoder. Static, OPJ_STATIC defined.</div></div>
+      <div class="lib-cell"><div class="lib-name">tinyexr</div><div class="lib-desc">OpenEXR decoder. Header-only (4 files + miniz.c).</div></div>
+      <div class="lib-cell"><div class="lib-name">miniz</div><div class="lib-desc">zlib-compatible compression. Used for GeoNames resource decompression. Compiled as C file.</div></div>
+    </div>
+  </section>
+
+  <!-- Mouse Reference -->
+  <section>
+    <div class="section-label">Mouse Shortcuts</div>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>Input</th><th>Action</th></tr></thead>
+        <tbody>
+          <tr><td>Wheel up / down</td><td class="td-muted">Previous / next image</td></tr>
+          <tr><td>Ctrl + Wheel</td><td class="td-muted">Zoom in / out</td></tr>
+          <tr><td>Shift + Wheel</td><td class="td-muted">Adjust opacity</td></tr>
+          <tr><td>LMB hold</td><td class="td-muted">Quick zoom (3×) centered on cursor</td></tr>
+          <tr><td>LMB drag (while zoomed)</td><td class="td-muted">Pan; reverts on release</td></tr>
+          <tr><td>RMB hold / drag</td><td class="td-muted">Move window</td></tr>
+          <tr><td>RMB + LMB</td><td class="td-muted">Reveal current file in Explorer</td></tr>
+          <tr><td>MMB click</td><td class="td-muted">Reset zoom / pan / opacity, center window</td></tr>
+          <tr><td>MMB drag</td><td class="td-muted">Live-resize window from top-left</td></tr>
+          <tr><td>LMB double-click</td><td class="td-muted">Toggle fullscreen</td></tr>
+          <tr><td>RMB + H-Wheel</td><td class="td-muted">Live-resize window from center</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <footer class="footer">
+    QuickImageViewer — actively developed — Win32 / C++23 / Direct2D — single EXE, no installer, no telemetry.
+  </footer>
+
+</div>

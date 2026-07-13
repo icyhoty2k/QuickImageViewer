@@ -1,4 +1,5 @@
 #include "ExifWnd.h"
+#include "../GeoNames.h"
 #include "../Platform/Constants.h"
 #include "../AppState.h"
 #include "../WorkerThread.h"
@@ -282,6 +283,17 @@ std::vector<ExifWnd::ExifRow> ExifWnd::GatherExifRows(
                 swprintf_s(url,    L"https://maps.google.com/?q=%.6f,%.6f", latDec, lonDec);
                 swprintf_s(coords, L"%.6f, %.6f  →  open in maps", latDec, lonDec);
                 rows.push_back({ L"Location", std::wstring(coords), false, std::wstring(url) });
+
+                const auto loc = GeoNames::Lookup(latDec, lonDec);
+                if (!loc.city.empty())      addRow(L"City",      loc.city);
+                if (!loc.district.empty())  addRow(L"District",  loc.district);
+                if (!loc.state.empty())     addRow(L"State",     loc.state);
+                if (!loc.country.empty())   addRow(L"Country",   loc.country);
+                if (!loc.continent.empty()) addRow(L"Continent", loc.continent);
+                if (!loc.capital.empty())   addRow(L"Capital",   loc.capital);
+                if (!loc.currency.empty())  addRow(L"Currency",  loc.currency);
+                if (!loc.phone.empty())     addRow(L"Phone",     loc.phone);
+                if (!loc.timezone.empty())  addRow(L"Timezone",  loc.timezone);
             }
 
             if (pvAlt.vt == VT_UI8 && pvAlt.uhVal.HighPart > 0) {
