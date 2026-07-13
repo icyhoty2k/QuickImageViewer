@@ -9,7 +9,7 @@
 #define FILE_DESC "qIV"            // Friendly name displayed in Task Manager/Explorer
 #define ORIG_FILENAME "QuickImageViewer.exe" // Original name of the binary
 #define PROD_NAME "Quick Image Viewer"       // Official product name
-#define COPYRIGHT "Copyright® 06.2026 All rights reserved, Ivan Hristov Yanev" // Copyright notice
+#define COPYRIGHT   "Copyright \xA9 2026 All rights reserved, Ivan Hristov Yanev" // Copyright notice
 // =========================================================================
 
 #include <iterator>
@@ -53,9 +53,9 @@ namespace Constants {
     constexpr float OUTLINE_BLUR_RADIUS = 0.0f;
     static constexpr float ZOOM_CLICK = 3.0f; //  left click zoom multiplier
     static constexpr int OPACITY_STEP = 10; // 0 to 100
-    static constexpr int KEYBOARD_PAN_STEP = 30;         // W/A/S/D viewport pan step (DPI-scaled in executor)
+    static constexpr int KEYBOARD_PAN_STEP = 30; // W/A/S/D viewport pan step (DPI-scaled in executor)
     static constexpr int KEYBOARD_WINDOW_MOVE_STEP = 20; // Shift+W/A/S/D window move step (DPI-scaled in executor)
-    static constexpr int WINDOW_SNAP_DISTANCE = 24;      // px from screen edge to trigger drag-end snap
+    static constexpr int WINDOW_SNAP_DISTANCE = 24; // px from screen edge to trigger drag-end snap
 
 
     // Custom window messages
