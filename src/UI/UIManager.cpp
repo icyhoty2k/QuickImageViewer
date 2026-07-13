@@ -23,10 +23,15 @@ namespace UI {
     }
 
     void UIManager::OnPanelHidden(ThumbnailPanelWnd *panel) {
-        // If this is a spawned DirWnd (not the primary ones), post a message
-        if (dynamic_cast<SpawnedDirWnd *>(panel) != nullptr) {
+        if (auto *sp = dynamic_cast<SpawnedDirWnd *>(panel)) {
             g_overlayManager.PostCenterMessage(m_hMainWnd,
                                                Constants::Messages::SPAWN_DIR_CLOSED);
+            m_layout.clearPanel(panel);
+            RefreshVerticalPanels();
+            // Hide() still accesses 'this' after we return, so defer the delete.
+            PostMessageW(m_hMainWnd, WM_DELETE_SPAWNED_PANEL, 0,
+                         reinterpret_cast<LPARAM>(sp));
+            return;
         }
         m_layout.clearPanel(panel);
         RefreshVerticalPanels();

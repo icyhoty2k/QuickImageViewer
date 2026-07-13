@@ -2,6 +2,10 @@
 #include <windows.h>
 #include <array>
 
+// Posted by UIManager::OnPanelHidden to delete a SpawnedDirWnd after Hide() unwinds.
+// lParam is the SpawnedDirWnd* to delete. Handled in AppMain WndProc.
+#define WM_DELETE_SPAWNED_PANEL (WM_APP + 10)
+
 #include "IPanelWindow.h"
 #include "HelpWnd.h"
 #include "CacheWnd.h"

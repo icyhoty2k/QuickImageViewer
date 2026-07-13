@@ -66,9 +66,13 @@ LRESULT CALLBACK MainAppWndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM l
         switch (message) {
             case WM_KEYDOWN:
             case WM_KEYUP:
-            case WM_LBUTTONDOWN: case WM_LBUTTONUP: case WM_LBUTTONDBLCLK:
-            case WM_RBUTTONDOWN: case WM_RBUTTONUP:
-            case WM_MBUTTONDOWN: case WM_MBUTTONUP:
+            case WM_LBUTTONDOWN:
+            case WM_LBUTTONUP:
+            case WM_LBUTTONDBLCLK:
+            case WM_RBUTTONDOWN:
+            case WM_RBUTTONUP:
+            case WM_MBUTTONDOWN:
+            case WM_MBUTTONUP:
             case WM_MOUSEWHEEL:
             case WM_MOUSEMOVE:
                 return 0;
@@ -192,7 +196,7 @@ LRESULT CALLBACK MainAppWndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM l
                     int fwd = index + i;
                     int bwd = index - i;
                     if (fwd < total) g_decoderWorker.PushTask(preloadTask(app.playlist[fwd]));
-                    if (bwd >= 0)   g_decoderWorker.PushTask(preloadTask(app.playlist[bwd]));
+                    if (bwd >= 0) g_decoderWorker.PushTask(preloadTask(app.playlist[bwd]));
                 }
             }
             return 0;
@@ -496,6 +500,10 @@ LRESULT CALLBACK MainAppWndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM l
         }
 
 
+        case WM_DELETE_SPAWNED_PANEL:
+            delete reinterpret_cast<UI::SpawnedDirWnd *>(lParam);
+            return 0;
+
         case WM_CLOSE: {
             // 1. "Hide" instead of "Destroy"
             // This removes the window from sight but keeps the process and message loop alive.
@@ -553,7 +561,10 @@ int WINAPI wWinMain(HINSTANCE hInstance, [[maybe_unused]] HINSTANCE hPrevInstanc
     int argc;
     LPWSTR *argv = CommandLineToArgvW(GetCommandLineW(), &argc);
     for (int i = 1; i < argc; ++i) {
-        if (_wcsicmp(argv[i], L"-dedicated") == 0) { app.isDedicated = true; break; }
+        if (_wcsicmp(argv[i], L"-dedicated") == 0) {
+            app.isDedicated = true;
+            break;
+        }
     }
 
     if (!app.isDedicated) {
