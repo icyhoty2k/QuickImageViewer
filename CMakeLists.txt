@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.20)
 
-project(QuickImageViewer LANGUAGES CXX)
+project(QuickImageViewer LANGUAGES C CXX)
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 set(CMAKE_CXX_STANDARD 23)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -26,6 +26,7 @@ set(SOURCES
         src/Input/MouseHandler.cpp
         src/WicDecoder.cpp
         src/SvgDecoder.cpp
+        src/SimpleFormats.cpp
         src/Platform/DpiAwareInit.cpp
         src/Platform/DriveInfo.cpp
         src/Platform/FileHandler.cpp
@@ -46,7 +47,10 @@ set(SOURCES
         src/Persistence/HistoryFoldersManager.cpp
         src/CMDArgs.cpp
         src/SlideshowTransitions.cpp
+        libs/lib/tinyexr/include/miniz.c
 )
+
+set_source_files_properties(libs/lib/tinyexr/include/miniz.c PROPERTIES COMPILE_FLAGS "/wd4132")
 find_program(SCCACHE_PROGRAM sccache)
 if (SCCACHE_PROGRAM)
     set(CMAKE_CXX_COMPILER_LAUNCHER ${SCCACHE_PROGRAM})
@@ -60,6 +64,7 @@ target_compile_definitions(QuickImageViewer PRIVATE
         UNICODE
         _UNICODE
         $<$<CONFIG:Release>:NDEBUG> # Standard macro to strip assert() overhead in Release
+        OPJ_STATIC                  # Tell OpenJPEG headers we link the static lib, not a DLL
 )
 
 # 2. Compile Options (Warnings, MP, and Release Optimization)
@@ -98,7 +103,10 @@ target_link_options(QuickImageViewer PRIVATE
         $<$<CONFIG:Release>:/CGTHREADS:16>             # Multi-thread the LTCG code generation phase
 )
 
-# 4. Include Directories
+# 4. External Libraries (Static Linking: resvg only)
+set(STATIC_LIBS_DIR "${CMAKE_CURRENT_SOURCE_DIR}/libs/lib/static")
+
+# Include Directories
 target_include_directories(QuickImageViewer PRIVATE
         ${CMAKE_CURRENT_SOURCE_DIR}/src
         ${CMAKE_CURRENT_SOURCE_DIR}/src/Platform
@@ -107,9 +115,25 @@ target_include_directories(QuickImageViewer PRIVATE
         ${CMAKE_CURRENT_SOURCE_DIR}/src/Input
         ${CMAKE_CURRENT_SOURCE_DIR}/src/Persistence
         ${CMAKE_CURRENT_SOURCE_DIR}/src/Overlays
+        ${CMAKE_CURRENT_SOURCE_DIR}/libs/lib/resvg/include
+        ${CMAKE_CURRENT_SOURCE_DIR}/libs/lib/openjpeg/include
+        ${CMAKE_CURRENT_SOURCE_DIR}/libs/lib/tinyexr/include
 )
 
-# 5. Windows Libraries
+# Link Directories (Static Libraries)
+target_link_directories(QuickImageViewer PRIVATE
+        ${STATIC_LIBS_DIR}
+)
+
+# 5. External Codec Libraries (Static)
+target_link_libraries(QuickImageViewer PRIVATE
+        # resvg (SVG rasterizer — fixes D2D native SVG centering and text bugs)
+        resvg.lib
+        # OpenJPEG (JPEG 2000)
+        openjp2.lib
+)
+
+# 6. Windows Libraries
 target_link_libraries(QuickImageViewer PRIVATE
         d3d11
         dxgi
@@ -127,13 +151,17 @@ target_link_libraries(QuickImageViewer PRIVATE
         uuid
         shlwapi
         shcore
+        # Required by resvg (Rust std pulls in Winsock, NT native API, and user profile)
+        ws2_32
+        ntdll
+        userenv
 )
 
-# 6. Track Manifest Changes
+# 7. Track Manifest Changes
 # This tells CMake that if app.manifest changes, resource.rc needs to be recompiled.
 set_property(SOURCE resources/resource.rc PROPERTY OBJECT_DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/resources/app.manifest")
 
-# Build Completion Notification
+# 8. Build Completion Notification
 add_custom_command(
         TARGET QuickImageViewer
         POST_BUILD

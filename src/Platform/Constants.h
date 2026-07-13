@@ -132,7 +132,6 @@ namespace Constants {
     constexpr const int VRAM_CACHE_THUMBS_THREADS_COUNT = 4; // fallback if processor has less than 8 thread otherwise dynamic thread count / 2
     constexpr const int VRAM_CACHE_DECODER_THREADS_COUNT = 2;
     constexpr const int VRAM_CACHE_IMAGES_COUNT = 20;
-    constexpr const int VRAM_CACHE_SVG_COUNT = 20;
     // VRAM budget for the dir-panel thumbnail cache.
     // Each entry is CACHE_THUMB_WIDTH * CACHE_THUMB_HEIGHT * 4 bytes ≈ 37 KB
     // after scaling.  512 MB holds ~14 000 thumbnails — far more than any
@@ -181,7 +180,10 @@ namespace Constants {
             L".jxr", L".wdp", L".hdp", L".dds", L".jxl",
             L".avif", L".avcs", L".avci", L".avifs",
             L".dng", L".cr2", L".cr3", L".nef", L".arw",
-            L".svg", L".tga"
+            L".svg", L".tga", L".qoi",
+            L".jp2", L".j2k", L".j2c", L".jpf", L".jpx",
+            L".hdr", L".exr",
+            L".ppm", L".pgm", L".pbm"
         };
 
         // Helper to get the number of elements

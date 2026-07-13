@@ -59,3 +59,35 @@ Once the slideshow mode is complete, QIV could also support:
 
 
  task 14: all constants to be saved on disk and read from disk so i can have settings now which remembers the state and if no file exists use buildIn constants.
+
+
+
+ task 15:
+ That already covers about 98% of images most Windows users encounter.
+
+ If you don't want to add RAW formats, these are the most worthwhile remaining formats:
+
+ Format	Extension	Worth it?	Notes
+ AVIF	.avif	⭐⭐⭐⭐⭐	Modern replacement for JPEG. Increasingly common on the web. Windows 11 supports it if the AV1 extension is installed.
+ JPEG XL	.jxl	⭐⭐⭐⭐⭐	Excellent modern format. Smaller than JPEG with lossless support. Growing adoption. Windows support isn't built in yet, so you'd need libjxl.
+ QOI	.qoi	⭐⭐⭐⭐☆	Quite OK Image. Extremely simple decoder (~300 lines). Great for programmers and game assets.
+ TGA	.tga	⭐⭐⭐⭐☆	Still used in game development and 3D software. Easy to decode.
+ PPM/PGM/PBM/PNM	.ppm .pgm .pbm .pnm	⭐⭐⭐⭐☆	Very easy formats used in academia and graphics research.
+ PCX	.pcx	⭐⭐⭐☆☆	Old DOS format. Occasionally encountered in archives.
+ SGI RGB	.rgb .sgi	⭐⭐⭐☆☆	Used by old SGI software.
+ OpenEXR	.exr	⭐⭐⭐⭐☆	High Dynamic Range images used in VFX and Blender.
+ Radiance HDR	.hdr	⭐⭐⭐☆☆	HDR panoramas and lighting environments.
+ JPEG 2000	.jp2 .j2k	⭐⭐⭐☆☆	Used in medical imaging and archives.
+ PSD	.psd	⭐⭐⭐⭐☆	Photoshop documents. Even flattened preview support is useful.
+ KTX2	.ktx2	⭐⭐⭐☆☆	GPU texture container used by Vulkan/OpenGL.
+ SVG	.svg	⭐⭐⭐⭐⭐	Vector graphics. With Direct2D + Direct2D SVG support, this integrates well into your renderer.
+ Formats I would prioritize
+ ✅ AVIF
+ ✅ JPEG XL
+ ✅ SVG
+ ✅ TGA
+ ✅ QOI
+ ✅ OpenEXR
+ ✅ PSD (preview layer)
+
+ These would make QIV competitive with many modern image viewers.
