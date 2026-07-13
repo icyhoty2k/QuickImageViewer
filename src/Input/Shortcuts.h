@@ -208,6 +208,11 @@ namespace Shortcuts {
     constexpr UINT SC_SHOW_INFO = 'M'; // M (no modifier) — image info / EXIF window
 
     // -------------------------------------------------------------------------
+    // Clipboard
+    // -------------------------------------------------------------------------
+    constexpr UINT SC_COPY_TO_CLIPBOARD = 'C'; // Ctrl+C — copy current image to clipboard
+
+    // -------------------------------------------------------------------------
     // HISTORY WINDOW
     // -------------------------------------------------------------------------
     constexpr UINT HISTORY_FAVORITES_TOGGLE_KEY = VK_SPACE;

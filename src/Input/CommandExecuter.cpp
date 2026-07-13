@@ -543,6 +543,10 @@ void InputManager::ExecuteKeyboardShortcutCommand(HWND hWnd, Command cmd) {
             AppCommands::SaveImageToDisk(hWnd);
             break;
         }
+
+        case Command::CopyToClipboard:
+            AppCommands::CopyImageToClipboard(hWnd);
+            break;
         case Command::ToggleFirstLastImageInCurrentFolder: {
             if (app.playlist.empty()) return;
 

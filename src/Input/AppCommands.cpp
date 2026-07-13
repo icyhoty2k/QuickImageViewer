@@ -9,8 +9,10 @@
 #include <random>
 #include "AppState.h" // Assuming this is the path
 #include "../Platform/Constants.h"
+#include "../Platform/ConstantsStrings.h"
 #include "../Overlays/OverlayManager.h"
-// ... include other necessary headers
+#include "../WicDecoder.h"
+#include <shlobj_core.h>
 
 extern AppState app;
 
@@ -257,6 +259,73 @@ void AppCommands::toggleSlideshow(HWND hWnd) {
     } else {
         // --- Stop (whether playing or paused) ---
         stopSlideshow(hWnd);
+    }
+}
+
+void AppCommands::CopyImageToClipboard(HWND hWnd) {
+    if (app.playlist.empty() || app.currentIndex < 0 || !app.wicFactory) return;
+    const std::wstring& path = app.playlist[app.currentIndex];
+
+    DecodedImage img;
+    if (FAILED(WicDecoder::DecodeImage(path, img)) || !img.bitmap) return;
+
+    Microsoft::WRL::ComPtr<IWICFormatConverter> conv;
+    if (FAILED(app.wicFactory->CreateFormatConverter(&conv))) return;
+    if (FAILED(conv->Initialize(img.bitmap.Get(), GUID_WICPixelFormat32bppBGR,
+        WICBitmapDitherTypeNone, nullptr, 0.0, WICBitmapPaletteTypeCustom))) return;
+
+    UINT w = img.width, h = img.height;
+    UINT stride = w * 4;
+
+    // Create a top-down DIB section and copy WIC pixels directly into it.
+    // Putting CF_BITMAP on the clipboard lets Windows synthesize CF_DIB and
+    // CF_DIBV5 automatically — paste targets receive a standard bottom-up DIB
+    // regardless of whether they request CF_BITMAP or CF_DIB.
+    BITMAPINFO bi = {};
+    bi.bmiHeader.biSize        = sizeof(BITMAPINFOHEADER);
+    bi.bmiHeader.biWidth       = static_cast<LONG>(w);
+    bi.bmiHeader.biHeight      = -static_cast<LONG>(h); // top-down matches WIC pixel order
+    bi.bmiHeader.biPlanes      = 1;
+    bi.bmiHeader.biBitCount    = 32;
+    bi.bmiHeader.biCompression = BI_RGB;
+
+    void* bits = nullptr;
+    HDC hdc = GetDC(nullptr);
+    HBITMAP hBmp = CreateDIBSection(hdc, &bi, DIB_RGB_COLORS, &bits, nullptr, 0);
+    ReleaseDC(nullptr, hdc);
+    if (!hBmp || !bits) return;
+
+    if (FAILED(conv->CopyPixels(nullptr, stride, stride * h, static_cast<BYTE*>(bits)))) {
+        DeleteObject(hBmp);
+        return;
+    }
+
+    // Build CF_HDROP so Ctrl+V in Explorer pastes the file itself.
+    const std::wstring& filePath = path;
+    SIZE_T pathBytes = (filePath.size() + 2) * sizeof(wchar_t); // path + \0 + list \0
+    HGLOBAL hDrop = GlobalAlloc(GMEM_MOVEABLE | GMEM_ZEROINIT, sizeof(DROPFILES) + pathBytes);
+    if (!hDrop) { DeleteObject(hBmp); return; }
+    auto* df = static_cast<DROPFILES*>(GlobalLock(hDrop));
+    df->pFiles = sizeof(DROPFILES);
+    df->fWide  = TRUE;
+    memcpy(reinterpret_cast<BYTE*>(df) + sizeof(DROPFILES),
+           filePath.c_str(), filePath.size() * sizeof(wchar_t));
+    // remaining bytes are already zero (GMEM_ZEROINIT) → double-null terminator
+    GlobalUnlock(hDrop);
+
+    if (OpenClipboard(hWnd)) {
+        EmptyClipboard();
+        // CF_BITMAP: image editors (Paint, Photoshop, Word, …)
+        if (!SetClipboardData(CF_BITMAP, hBmp))
+            DeleteObject(hBmp); // OS owns hBmp on success — only delete on failure
+        // CF_HDROP: Explorer paste copies the actual file
+        if (!SetClipboardData(CF_HDROP, hDrop))
+            GlobalFree(hDrop);
+        CloseClipboard();
+        g_overlayManager.PostCenterMessage(hWnd, Constants::Messages::COPIED_TO_CLIPBOARD);
+    } else {
+        DeleteObject(hBmp);
+        GlobalFree(hDrop);
     }
 }
 
