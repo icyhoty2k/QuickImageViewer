@@ -9,6 +9,7 @@ class RendererGDI final : public IImageRenderer {
 
         ~RendererGDI() override;
 
+        const wchar_t* GetName() const override { return L"GDI"; }
         [[nodiscard]] HRESULT Initialize(HWND hwnd) override;
 
         void Resize(UINT width, UINT height) override;

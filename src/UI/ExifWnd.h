@@ -16,6 +16,7 @@ namespace UI {
         void Refresh();
 
     protected:
+        bool    OnKeyDown(WPARAM vk, bool ctrl, bool shift, bool alt) override;
         LRESULT HandlePanelMessage(UINT message, WPARAM wParam, LPARAM lParam) override;
 
     private:

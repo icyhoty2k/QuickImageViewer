@@ -163,6 +163,46 @@ namespace UI {
         }
     }
 
+    bool HelpWnd::OnKeyDown(WPARAM vk, bool ctrl, bool /*shift*/, bool /*alt*/) {
+        if (vk == Shortcuts::SC_PANEL_HELP_TOGGLE) {
+            Hide();
+            return true;
+        }
+        if (vk == 'E' && ctrl) {
+            ExportToText();
+            return true;
+        }
+        if (vk == VK_PRIOR) {
+            m_scrollOffsetY -= static_cast<int>(300 * app.dpiScale);
+            InvalidateRect(m_hWnd, nullptr, FALSE);
+            return true;
+        }
+        if (vk == VK_NEXT) {
+            m_scrollOffsetY += static_cast<int>(300 * app.dpiScale);
+            InvalidateRect(m_hWnd, nullptr, FALSE);
+            return true;
+        }
+        if (vk == VK_HOME) {
+            m_scrollOffsetY = 0;
+            InvalidateRect(m_hWnd, nullptr, FALSE);
+            return true;
+        }
+        if (vk == VK_END) {
+            RECT rc;
+            GetClientRect(m_hWnd, &rc);
+            UINT dpi = static_cast<UINT>(app.dpiScale * 96.0f);
+            int padding = MulDiv(30, dpi, 96);
+            int titleFontSize = MulDiv(32, dpi, 96);
+            int subtitleFontSize = MulDiv(14, dpi, 96);
+            int contentTop = padding + titleFontSize + MulDiv(30, dpi, 96) + subtitleFontSize;
+            int contentHeight = rc.bottom - contentTop - padding;
+            m_scrollOffsetY = std::max(0, m_totalContentHeight - contentHeight);
+            InvalidateRect(m_hWnd, nullptr, FALSE);
+            return true;
+        }
+        return false;
+    }
+
     LRESULT HelpWnd::HandlePanelMessage(UINT message, WPARAM wParam, LPARAM lParam) {
         switch (message) {
             case WM_PAINT: {
@@ -457,50 +497,11 @@ namespace UI {
                 return 0;
             }
 
-            case WM_KEYDOWN: {
-                if (wParam == Shortcuts::SC_PANEL_HELP_TOGGLE) {
-                    Hide();
-                    return 0;
-                }
-                if (wParam == 'E' && (GetKeyState(VK_CONTROL) & 0x8000)) {
-                    ExportToText();
-                    return 0;
-                }
-                if (wParam == VK_PRIOR) {
-                    m_scrollOffsetY -= static_cast<int>(300 * app.dpiScale);
-                    InvalidateRect(m_hWnd, nullptr, FALSE);
-                    return 0;
-                }
-                if (wParam == VK_NEXT) {
-                    m_scrollOffsetY += static_cast<int>(300 * app.dpiScale);
-                    InvalidateRect(m_hWnd, nullptr, FALSE);
-                    return 0;
-                }
-                if (wParam == VK_HOME) {
-                    m_scrollOffsetY = 0;
-                    InvalidateRect(m_hWnd, nullptr, FALSE);
-                    return 0;
-                }
-                if (wParam == VK_END) {
-                    RECT rc;
-                    GetClientRect(m_hWnd, &rc);
-                    UINT dpi = static_cast<UINT>(app.dpiScale * 96.0f);
-                    int padding = MulDiv(30, dpi, 96);
-                    int titleFontSize = MulDiv(32, dpi, 96);
-                    int subtitleFontSize = MulDiv(14, dpi, 96);
-                    int contentTop = padding + titleFontSize + MulDiv(30, dpi, 96) + subtitleFontSize;
-                    int contentHeight = rc.bottom - contentTop - padding;
-                    m_scrollOffsetY = std::max(0, m_totalContentHeight - contentHeight);
-                    InvalidateRect(m_hWnd, nullptr, FALSE);
-                    return 0;
-                }
-                return 0;
-            }
-
             case WM_CLOSE: {
                 Hide();
                 return 0;
             }
+
         }
 
         return DefWindowProcW(m_hWnd, message, wParam, lParam);

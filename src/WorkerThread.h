@@ -210,9 +210,9 @@ class IoThreadPool {
             std::swap(m_queue, empty);
         }
 
-        bool IsStarted() const {
-            return m_running.load();
-        }
+        bool IsStarted() const { return m_running.load(); }
+
+        int getThreadCount() const { return static_cast<int>(m_threads.size()); }
 
     private:
         std::vector<std::thread> m_threads;

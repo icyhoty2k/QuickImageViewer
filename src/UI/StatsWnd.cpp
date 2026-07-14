@@ -2,12 +2,14 @@
 #include "../AppState.h"
 #include "../Platform/Constants.h"
 #include "../WorkerThread.h"
+#include "../Renderer/IRenderer.h"
 #include "HistoryListWnd.h"
 #include <algorithm>
 #include <shellapi.h>
 #include <windowsx.h>
 #include <unordered_map>
 #include <cwctype>
+#include <psapi.h>
 
 extern AppState app;
 extern IoThreadPool g_ioWorker;
@@ -53,50 +55,31 @@ std::wstring StatsWnd::FormatCount(INT64 n) {
     return s;
 }
 
-// Walk thumbcache DB header + entries to count cached thumbnails.
-// Only reads 8 bytes per entry + seeks — safe for large files.
-INT64 StatsWnd::CountThumbcacheEntries(const std::wstring &path) {
-    HANDLE hFile = CreateFileW(path.c_str(), GENERIC_READ,
-                               FILE_SHARE_READ | FILE_SHARE_WRITE,
-                               nullptr, OPEN_EXISTING, FILE_FLAG_SEQUENTIAL_SCAN, nullptr);
-    if (hFile == INVALID_HANDLE_VALUE) return -2;
-
-    struct { DWORD sig, ver, type, firstEntry; } hdr;
-    DWORD got = 0;
-    if (!ReadFile(hFile, &hdr, sizeof(hdr), &got, nullptr) || got < sizeof(hdr)
-        || hdr.sig != CMMM_SIG || hdr.firstEntry < sizeof(hdr)) {
-        CloseHandle(hFile); return -2;
+// Estimate thumbnail count from file size and resolution in the filename.
+// thumbcache_256.db → res=256, bytes/thumb ≈ res²×3÷10 + 128 entry overhead.
+// Returns -1 for non-numeric names (sr, wide, exif, idx, …).
+INT64 StatsWnd::EstimateCount(const std::wstring& name, UINT64 fileBytes) {
+    int res = 0;
+    auto p = name.find(L"thumbcache_");
+    if (p != std::wstring::npos) {
+        p += 11;
+        while (p < name.size() && iswdigit(name[p]))
+            res = res * 10 + (name[p++] - L'0');
     }
-
-    LARGE_INTEGER pos; pos.QuadPart = hdr.firstEntry;
-    if (!SetFilePointerEx(hFile, pos, nullptr, FILE_BEGIN)) {
-        CloseHandle(hFile); return -2;
-    }
-
-    INT64 count = 0;
-    struct { DWORD sig, size; } entry;
-    while (count < 2'000'000) {
-        got = 0;
-        if (!ReadFile(hFile, &entry, sizeof(entry), &got, nullptr) || got < sizeof(entry)) break;
-        if (entry.sig != CMMM_SIG || entry.size < sizeof(entry) || entry.size > 64*1024*1024) break;
-        count++;
-        LARGE_INTEGER skip; skip.QuadPart = entry.size - sizeof(entry);
-        if (skip.QuadPart > 0 && !SetFilePointerEx(hFile, skip, nullptr, FILE_CURRENT)) break;
-    }
-
-    CloseHandle(hFile);
-    return count;
+    if (res <= 0 || fileBytes < 1024) return -1;
+    UINT64 bpt = static_cast<UINT64>(res) * res * 3 / 10 + 128;
+    return static_cast<INT64>(fileBytes / bpt);
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// GatherStats  — synchronous part (fast: no file reads except size queries)
+// GatherStats  — fully synchronous
 // ─────────────────────────────────────────────────────────────────────────────
 
 void StatsWnd::GatherStats() {
     // ── Thumbnail cache files ────────────────────────────────────────────────
     m_cacheFiles.clear();
     m_cacheTotalBytes = 0;
-    m_cacheTotalCount = -1;
+    m_cacheTotalCount = 0;
     m_thumbCachePath.clear();
 
     wchar_t localAppData[MAX_PATH] = {};
@@ -108,8 +91,10 @@ void StatsWnd::GatherStats() {
         if (hFind != INVALID_HANDLE_VALUE) {
             do {
                 UINT64 sz = ((UINT64)fd.nFileSizeHigh << 32) | fd.nFileSizeLow;
-                m_cacheFiles.push_back({ fd.cFileName, sz, -1 });
+                INT64  est = EstimateCount(fd.cFileName, sz);
+                m_cacheFiles.push_back({ fd.cFileName, sz, est });
                 m_cacheTotalBytes += sz;
+                if (est >= 0) m_cacheTotalCount += est;
             } while (FindNextFileW(hFind, &fd));
             FindClose(hFind);
         }
@@ -126,6 +111,8 @@ void StatsWnd::GatherStats() {
         if (it != app.playlistFileSizes.end())
             m_imgFileBytes = static_cast<UINT64>(std::max<int64_t>(0, it->second));
     }
+    m_decodedBytes = (m_imgW > 0 && m_imgH > 0)
+        ? static_cast<UINT64>(m_imgW) * m_imgH * 4 : 0;
 
     // ── Playlist ─────────────────────────────────────────────────────────────
     m_playlistSize  = static_cast<int>(app.playlist.size());
@@ -134,7 +121,6 @@ void StatsWnd::GatherStats() {
     for (auto &[path, sz] : app.playlistFileSizes)
         m_playlistBytes += static_cast<UINT64>(std::max<int64_t>(0, sz));
 
-    // Extension breakdown (top 6)
     std::unordered_map<std::wstring, int> extMap;
     for (auto &path : app.playlist) {
         auto dot = path.rfind(L'.');
@@ -150,37 +136,69 @@ void StatsWnd::GatherStats() {
         [](const ExtStat &a, const ExtStat &b) { return a.count > b.count; });
     if (m_extStats.size() > 6) m_extStats.resize(6);
 
-    // ── History ──────────────────────────────────────────────────────────────
-    m_historyCount = static_cast<int>(GetFolderHistory().size());
+    // ── History / instances ──────────────────────────────────────────────────
+    m_historyCount  = static_cast<int>(GetFolderHistory().size());
+    m_instanceCount = app.GetInstanceCount();
+
+    // ── Thread counts ─────────────────────────────────────────────────────────
+    m_ioThreads       = g_ioWorker.getThreadCount();
+    m_wicThreads      = g_decoderWorker.getThreadCount();
+    m_dirThumbThreads = g_dirThumbWorker.getThreadCount();
+
+    // ── Process memory ────────────────────────────────────────────────────────
+    PROCESS_MEMORY_COUNTERS_EX pmc = { sizeof(pmc) };
+    if (K32GetProcessMemoryInfo(GetCurrentProcess(),
+                                reinterpret_cast<PROCESS_MEMORY_COUNTERS*>(&pmc),
+                                sizeof(pmc))) {
+        m_memWorkingSet = pmc.WorkingSetSize;
+        m_memPeak       = pmc.PeakWorkingSetSize;
+        m_memPrivate    = pmc.PrivateUsage;
+    }
+
+    // ── Exe path ──────────────────────────────────────────────────────────────
+    wchar_t exeBuf[MAX_PATH] = {};
+    GetModuleFileNameW(nullptr, exeBuf, MAX_PATH);
+    m_exePath = exeBuf;
+
+    // ── Renderer name ─────────────────────────────────────────────────────────
+    m_rendererName = (app.renderer) ? app.renderer->GetName() : L"None";
+
+    // ── Autostart (HKCU Run key) ──────────────────────────────────────────────
+    m_autostartEnabled = false;
+    m_autostartCmd.clear();
+    {
+        HKEY hk = nullptr;
+        if (RegOpenKeyExW(HKEY_CURRENT_USER, Constants::Registry::RUN_KEY, 0,
+                          KEY_QUERY_VALUE, &hk) == ERROR_SUCCESS) {
+            wchar_t val[MAX_PATH * 2] = {};
+            DWORD   sz   = sizeof(val);
+            DWORD   type = 0;
+            if (RegQueryValueExW(hk, Constants::Registry::RUN_VALUE_NAME,
+                                 nullptr, &type,
+                                 reinterpret_cast<BYTE*>(val), &sz) == ERROR_SUCCESS) {
+                m_autostartEnabled = true;
+                m_autostartCmd     = val;
+            }
+            RegCloseKey(hk);
+        }
+    }
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// LaunchCountAsync  — counts entries in each DB on g_ioWorker
+// OpenRegedit  — navigate regedit to a full "Computer\HKEY_..." key path
 // ─────────────────────────────────────────────────────────────────────────────
 
-void StatsWnd::LaunchCountAsync() {
-    if (m_cacheFiles.empty()) return;
-
-    ++m_showSession;
-    UINT32 session  = m_showSession;
-    HWND   hwnd     = m_hWnd;
-    std::wstring basePath = m_thumbCachePath;
-
-    // Collect file names now (m_cacheFiles may change on next Show())
-    std::vector<std::wstring> names;
-    names.reserve(m_cacheFiles.size());
-    for (auto &e : m_cacheFiles) names.push_back(e.name);
-
-    g_ioWorker.PushTask([hwnd, session, basePath, names]() {
-        auto *counts = new std::vector<INT64>();
-        counts->reserve(names.size());
-        for (auto &name : names)
-            counts->push_back(CountThumbcacheEntries(basePath + L"\\" + name));
-        if (!PostMessageW(hwnd, WM_STATS_COUNTS_READY,
-                          static_cast<WPARAM>(session),
-                          reinterpret_cast<LPARAM>(counts)))
-            delete counts;
-    });
+void StatsWnd::OpenRegedit(const std::wstring& fullKeyPath) {
+    HKEY hk = nullptr;
+    if (RegCreateKeyExW(HKEY_CURRENT_USER,
+            L"Software\\Microsoft\\Windows\\CurrentVersion\\Applets\\Regedit",
+            0, nullptr, 0, KEY_SET_VALUE, nullptr, &hk, nullptr) == ERROR_SUCCESS) {
+        RegSetValueExW(hk, L"LastKey", 0, REG_SZ,
+            reinterpret_cast<const BYTE*>(fullKeyPath.c_str()),
+            static_cast<DWORD>((fullKeyPath.size() + 1) * sizeof(wchar_t)));
+        RegCloseKey(hk);
+    }
+    ShellExecuteW(nullptr, L"open", L"regedit.exe", nullptr, nullptr, SW_SHOW);
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -190,7 +208,7 @@ void StatsWnd::LaunchCountAsync() {
 void StatsWnd::Show() {
     if (!m_hWnd) return;
     m_scrollOffsetY = 0;
-    m_linkRect      = {};
+    m_links.clear();
     GatherStats();
 
     RECT pr; GetWindowRect(m_hParent, &pr);
@@ -202,8 +220,6 @@ void StatsWnd::Show() {
     ShowWindow(m_hWnd, SW_SHOW);
     SetForegroundWindow(m_hWnd);
     InvalidateRect(m_hWnd, nullptr, FALSE);
-
-    LaunchCountAsync();
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -212,22 +228,6 @@ void StatsWnd::Show() {
 
 LRESULT StatsWnd::HandlePanelMessage(UINT message, WPARAM wParam, LPARAM lParam) {
     switch (message) {
-
-    // ── Async count result ────────────────────────────────────────────────────
-    case WM_STATS_COUNTS_READY: {
-        auto *counts = reinterpret_cast<std::vector<INT64>*>(lParam);
-        if (static_cast<UINT32>(wParam) == m_showSession && counts) {
-            INT64 total = 0;
-            for (size_t i = 0; i < counts->size() && i < m_cacheFiles.size(); ++i) {
-                m_cacheFiles[i].count = (*counts)[i];
-                if ((*counts)[i] >= 0) total += (*counts)[i];
-            }
-            m_cacheTotalCount = total;
-            InvalidateRect(m_hWnd, nullptr, FALSE);
-        }
-        delete counts;
-        return 0;
-    }
 
     // ── Mouse wheel scroll ────────────────────────────────────────────────────
     case WM_MOUSEWHEEL: {
@@ -240,26 +240,36 @@ LRESULT StatsWnd::HandlePanelMessage(UINT message, WPARAM wParam, LPARAM lParam)
         return 0;
     }
 
-    // ── Click on folder link ──────────────────────────────────────────────────
+    // ── Click on a link ───────────────────────────────────────────────────────
     case WM_LBUTTONUP: {
         POINT pt = { GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam) };
-        if (!IsRectEmpty(&m_linkRect) && PtInRect(&m_linkRect, pt) && !m_thumbCachePath.empty())
-            ShellExecuteW(nullptr, L"explore", m_thumbCachePath.c_str(), nullptr, nullptr, SW_SHOW);
+        for (auto &lnk : m_links) {
+            if (PtInRect(&lnk.rect, pt)) {
+                if (lnk.isReg)
+                    OpenRegedit(lnk.target);
+                else
+                    ShellExecuteW(nullptr, L"explore", lnk.target.c_str(), nullptr, nullptr, SW_SHOW);
+                break;
+            }
+        }
         return 0;
     }
 
-    // ── Hand cursor over link ─────────────────────────────────────────────────
+    // ── Hand cursor over any link ─────────────────────────────────────────────
     case WM_SETCURSOR: {
         POINT pt; GetCursorPos(&pt); ScreenToClient(m_hWnd, &pt);
-        if (!IsRectEmpty(&m_linkRect) && PtInRect(&m_linkRect, pt)) {
-            SetCursor(LoadCursor(nullptr, IDC_HAND));
-            return TRUE;
+        for (auto &lnk : m_links) {
+            if (PtInRect(&lnk.rect, pt)) {
+                SetCursor(LoadCursor(nullptr, IDC_HAND));
+                return TRUE;
+            }
         }
         break;
     }
 
     // ── Paint ─────────────────────────────────────────────────────────────────
     case WM_PAINT: {
+        m_links.clear();
         PAINTSTRUCT ps;
         HDC hdc = BeginPaint(m_hWnd, &ps);
         RECT rc; GetClientRect(m_hWnd, &rc);
@@ -314,6 +324,24 @@ LRESULT StatsWnd::HandlePanelMessage(UINT message, WPARAM wParam, LPARAM lParam)
 
         // ── Drawing helpers ───────────────────────────────────────────────────
         int y = pad - m_scrollOffsetY;
+
+        // Label on left, underlined clickable value on right
+        auto linkRow = [&](const wchar_t* label, const std::wstring& display,
+                           const std::wstring& target, bool isReg) {
+            if (y + row > 0 && y < rc.bottom) {
+                SelectObject(hdc, hBody);
+                SetTextColor(hdc, clrLabel);
+                RECT rL = { pad + MulDiv(6,dpi,96), y, c3 - MulDiv(4,dpi,96), y + row };
+                DrawTextW(hdc, label, -1, &rL, DT_LEFT | DT_VCENTER | DT_SINGLELINE);
+                SelectObject(hdc, hLink);
+                SetTextColor(hdc, clrCyan);
+                RECT rV = { pad, y, c3, y + row };
+                DrawTextW(hdc, display.c_str(), -1, &rV,
+                          DT_RIGHT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
+                m_links.push_back({ { pad, y, c3, y + row }, target, isReg });
+            }
+            y += row;
+        };
 
         // Simple label + right-aligned value
         auto row2 = [&](const wchar_t *label, const std::wstring &val,
@@ -390,10 +418,8 @@ LRESULT StatsWnd::HandlePanelMessage(UINT message, WPARAM wParam, LPARAM lParam)
                 SetTextColor(hdc, clrGreen);
                 RECT rSz = { c2 - MulDiv(100,dpi,96), y, c2, y + row };
                 DrawTextW(hdc, FormatBytes(e.bytes).c_str(), -1, &rSz, DT_RIGHT | DT_VCENTER | DT_SINGLELINE);
-                // Count
-                std::wstring cntStr = (e.count == -1) ? L"…"
-                    : (e.count == -2 ? L"n/a"
-                    : FormatCount(e.count));
+                // Count  (estimated — prefix with ~)
+                std::wstring cntStr = (e.count < 0) ? L"–" : (L"~" + FormatCount(e.count));
                 SetTextColor(hdc, e.count >= 0 ? clrCyan : clrDim);
                 RECT rCnt = { c2 + MulDiv(4,dpi,96), y, c3, y + row };
                 DrawTextW(hdc, cntStr.c_str(), -1, &rCnt, DT_RIGHT | DT_VCENTER | DT_SINGLELINE);
@@ -436,26 +462,25 @@ LRESULT StatsWnd::HandlePanelMessage(UINT message, WPARAM wParam, LPARAM lParam)
             SetTextColor(hdc, clrYellow);
             RECT rSzT = { c2 - MulDiv(100,dpi,96), y, c2, y + row };
             DrawTextW(hdc, FormatBytes(m_cacheTotalBytes).c_str(), -1, &rSzT, DT_RIGHT | DT_VCENTER | DT_SINGLELINE);
-            std::wstring totCnt = (m_cacheTotalCount < 0)
-                ? L"…"
-                : FormatCount(m_cacheTotalCount) + L" thumbs";
-            SetTextColor(hdc, m_cacheTotalCount >= 0 ? clrYellow : clrDim);
+            std::wstring totCnt = L"~" + FormatCount(m_cacheTotalCount) + L" thumbs";
+            SetTextColor(hdc, clrYellow);
             RECT rCntT = { c2 + MulDiv(4,dpi,96), y, c3, y + row };
             DrawTextW(hdc, totCnt.c_str(), -1, &rCntT, DT_RIGHT | DT_VCENTER | DT_SINGLELINE);
         }
         y += row + MulDiv(4,dpi,96);
 
         // Clickable folder path link
-        if (y + row > 0 && y < rc.bottom && !m_thumbCachePath.empty()) {
-            SelectObject(hdc, hLink);
-            SetTextColor(hdc, clrCyan);
-            RECT rLink = { pad + MulDiv(6,dpi,96), y, c3, y + row };
-            DrawTextW(hdc, (L"▸  " + m_thumbCachePath).c_str(), -1, &rLink,
-                      DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
-            // Store link rect in client coords for click detection
-            m_linkRect = { rLink.left, y, c3, y + row };
+        if (!m_thumbCachePath.empty()) {
+            if (y + row > 0 && y < rc.bottom) {
+                SelectObject(hdc, hLink);
+                SetTextColor(hdc, clrCyan);
+                RECT rLink = { pad + MulDiv(6,dpi,96), y, c3, y + row };
+                DrawTextW(hdc, (L"▸  " + m_thumbCachePath).c_str(), -1, &rLink,
+                          DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
+                m_links.push_back({ { rLink.left, y, c3, y + row }, m_thumbCachePath, false });
+            }
+            y += row;
         }
-        y += row;
 
         y += sgap;
 
@@ -532,14 +557,59 @@ LRESULT StatsWnd::HandlePanelMessage(UINT message, WPARAM wParam, LPARAM lParam)
         // ═════════════════════════════════════════════════════════════════════
         section(L"  HISTORY & SESSION", clrYellow);
 
-        row2(L"Folders visited", FormatCount(m_historyCount), clrValue);
+        row2(L"Folders visited",  FormatCount(m_historyCount),  clrValue);
+        row2(L"App instances",    FormatCount(m_instanceCount),  clrValue);
 
         y += sgap;
 
         // ═════════════════════════════════════════════════════════════════════
-        // Section 5 — App & Display
+        // Section 5 — Threads & Memory
         // ═════════════════════════════════════════════════════════════════════
-        section(L"  APP & DISPLAY", Constants::Theme::ThemedColor(0.80f, 0.50f, 1.0f, app.themeFactor));
+        const COLORREF clrPurple = Constants::Theme::ThemedColor(0.80f, 0.50f, 1.0f, app.themeFactor);
+        section(L"  THREADS & MEMORY", clrPurple);
+
+        {
+            int totalThreads = 1 + m_ioThreads + m_wicThreads + m_dirThumbThreads;
+            wchar_t buf[32];
+            swprintf_s(buf, L"%d", totalThreads);
+            row2(L"Total app threads", buf, clrValue, true);
+        }
+        {
+            wchar_t buf[32]; swprintf_s(buf, L"%d  (UI + render)", 1);
+            row2(L"  UI thread", buf, clrValue);
+        }
+        {
+            wchar_t buf[32]; swprintf_s(buf, L"%d  (%s)", m_ioThreads,
+                m_ioThreads <= 1 ? L"HDD mode" : L"SSD/NVMe mode");
+            row2(L"  IO worker", buf, clrCyan);
+        }
+        {
+            wchar_t buf[32]; swprintf_s(buf, L"%d  (WIC decode)", m_wicThreads);
+            row2(L"  WIC decoder", buf, clrCyan);
+        }
+        {
+            wchar_t buf[32]; swprintf_s(buf, L"%d  (dir thumbnails)", m_dirThumbThreads);
+            row2(L"  Dir thumbnail", buf, clrCyan);
+        }
+        {
+            wchar_t buf[32]; swprintf_s(buf, L"%d", app.hardwareThreads);
+            row2(L"  CPU logical cores", buf, clrValue);
+        }
+
+        dotSep();
+
+        row2(L"Working set",       FormatBytes(m_memWorkingSet), clrGreen,  true);
+        row2(L"Peak working set",  FormatBytes(m_memPeak),       clrValue);
+        row2(L"Private bytes",     FormatBytes(m_memPrivate),    clrValue);
+        if (m_decodedBytes > 0)
+            row2(L"Decoded bitmap", FormatBytes(m_decodedBytes), clrOrange);
+
+        y += sgap;
+
+        // ═════════════════════════════════════════════════════════════════════
+        // Section 6 — App & Display
+        // ═════════════════════════════════════════════════════════════════════
+        section(L"  APP & DISPLAY", clrPurple);
 
         {
             const wchar_t *vmNames[] = { L"",
@@ -574,6 +644,55 @@ LRESULT StatsWnd::HandlePanelMessage(UINT message, WPARAM wParam, LPARAM lParam)
         {
             wchar_t buf[16]; swprintf_s(buf, L"%.0f%%", app.themeFactor * 100.0f);
             row2(L"Theme factor", buf, clrValue);
+        }
+        row2(L"Version", std::wstring(Constants::APP_VERSION), clrValue);
+        if (!m_rendererName.empty())
+            row2(L"Renderer", m_rendererName, clrCyan);
+
+        // Exe path — clickable, opens folder in Explorer
+        if (!m_exePath.empty()) {
+            std::wstring folder = m_exePath;
+            auto bs = folder.rfind(L'\\');
+            if (bs != std::wstring::npos) folder.resize(bs);
+            linkRow(L"Executable", m_exePath, folder, false);
+        }
+
+        y += sgap;
+
+        // ═════════════════════════════════════════════════════════════════════
+        // Section 7 — Registry
+        // ═════════════════════════════════════════════════════════════════════
+        section(L"  REGISTRY", clrPurple);
+
+        // App preferences key
+        {
+            std::wstring fullKey = L"Computer\\HKEY_CURRENT_USER\\" +
+                                   std::wstring(Constants::Registry::ROOT_KEY);
+            std::wstring display = L"HKCU\\" + std::wstring(Constants::Registry::ROOT_KEY);
+            linkRow(L"App settings", display, fullKey, true);
+        }
+
+        // Auto-start status
+        {
+            std::wstring status = m_autostartEnabled ? L"Enabled" : L"Disabled";
+            row2(L"Auto-start on login", status,
+                 m_autostartEnabled ? clrGreen : clrDim);
+        }
+
+        // Run key (always shown as clickable link)
+        {
+            std::wstring fullKey = L"Computer\\HKEY_CURRENT_USER\\" +
+                                   std::wstring(Constants::Registry::RUN_KEY);
+            std::wstring display = L"HKCU\\" + std::wstring(Constants::Registry::RUN_KEY);
+            linkRow(L"Startup key", display, fullKey, true);
+        }
+
+        // Open-with registration
+        {
+            std::wstring fullKey = L"Computer\\HKEY_CURRENT_USER\\" +
+                                   std::wstring(Constants::Registry::OPEN_WITH_ROOT);
+            std::wstring display = L"HKCU\\" + std::wstring(Constants::Registry::OPEN_WITH_ROOT);
+            linkRow(L"Open-with key", display, fullKey, true);
         }
 
         y += pad;

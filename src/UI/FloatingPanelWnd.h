@@ -3,35 +3,35 @@
 #include <windows.h>
 
 namespace UI {
-    // Intermediate base class for floating info-style panels (ExifWnd, HelpWnd,
-    // HistoryListWnd).  Owns the creation boilerplate that all three share:
-    //   - WS_EX_LAYERED + WS_CAPTION + WS_BORDER window style
-    //   - SetLayeredWindowAttributes (THUMBNAIL_PANEL_WINDOW_OPACITY)
-    //   - DWM dark-mode, corner preference, caption colour
-    //   - WM_SETFOCUS / WM_KILLFOCUS → InvalidateRect (active/inactive repaint)
-    //   - GetBgColor() — Panel::BACKGROUND_ACTIVE or INACTIVE per focus state
+    // Intermediate base class for all floating info-style panels.
     //
-    // Derived classes call InitFloating() from their Init() and implement
-    // HandlePanelMessage() instead of HandleMessage().
+    // Key behaviour (automatic for every subclass):
+    //   WM_KEYDOWN is intercepted here and routed through OnKeyDown().
+    //   If OnKeyDown() returns false the key is forwarded to the parent window
+    //   (main app command pipeline) via PostMessageW — so pressing J/K/M/Tab/…
+    //   while any panel has focus reaches the app's toggle/navigation commands.
+    //   New panels get this for free without writing any keyboard code.
     class FloatingPanelWnd : public IPanelWindow {
     protected:
-        // Creates the floating window and applies all common DWM / layered
-        // attributes.  pixelW / pixelH must already be DPI-scaled by the caller.
-        // classStyle is ORed into the WNDCLASSW.style field (e.g. CS_DBLCLKS).
+        // Called for every WM_KEYDOWN before the message reaches HandlePanelMessage.
+        // Return true  → key was consumed by the panel (not forwarded).
+        // Return false → key is forwarded to the parent (default: all keys forwarded).
+        virtual bool OnKeyDown(WPARAM /*vk*/, bool /*ctrl*/, bool /*shift*/, bool /*alt*/) {
+            return false;
+        }
+
+        // Creates the floating window and applies all common DWM / layered attrs.
+        // pixelW / pixelH must already be DPI-scaled by the caller.
         void InitFloating(HINSTANCE hInstance, HWND hParent,
                           LPCWSTR className, LPCWSTR title,
                           int pixelW, int pixelH,
                           UINT classStyle = 0);
 
-        // Returns a themed COLORREF for the window body background.
-        // Switches between Panel::BACKGROUND_ACTIVE and INACTIVE based on focus.
         COLORREF GetBgColor() const;
 
-        // Optional hooks — called by the base after InvalidateRect.
         virtual void OnSetFocus()  {}
         virtual void OnKillFocus() {}
 
-        // Derived classes implement this instead of HandleMessage.
         virtual LRESULT HandlePanelMessage(UINT message, WPARAM wParam, LPARAM lParam) = 0;
 
     private:

@@ -61,6 +61,14 @@ LRESULT FloatingPanelWnd::HandleMessage(UINT message, WPARAM wParam, LPARAM lPar
         OnKillFocus();
         return 0;
     }
+    if (message == WM_KEYDOWN) {
+        bool ctrl  = (GetKeyState(VK_CONTROL) & 0x8000) != 0;
+        bool shift = (GetKeyState(VK_SHIFT)   & 0x8000) != 0;
+        bool alt   = (GetKeyState(VK_MENU)    & 0x8000) != 0;
+        if (!OnKeyDown(wParam, ctrl, shift, alt))
+            PostMessageW(m_hParent, WM_KEYDOWN, wParam, lParam);
+        return 0;
+    }
     return HandlePanelMessage(message, wParam, lParam);
 }
 

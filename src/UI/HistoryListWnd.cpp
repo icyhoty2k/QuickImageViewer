@@ -368,6 +368,190 @@ namespace UI {
     }
 
     // ---------------------------------------------------------------------------
+    // Keyboard handling
+    // ---------------------------------------------------------------------------
+    bool HistoryListWnd::OnKeyDown(WPARAM vk, bool ctrl, bool shift, bool alt) {
+        if (vk == VK_TAB && ctrl) {
+            g_showFullHistory = !g_showFullHistory;
+            g_scrollOffsetY = 0;
+            BuildDisplayList();
+            CaptureNavigationSnapshot();
+            g_hoverRow = 0;
+            InvalidateRect(m_hWnd, nullptr, TRUE);
+            return true;
+        }
+
+        if (vk == 'Z' && ctrl && !shift && !alt && g_lastDeletedIndex >= 0) {
+            auto &hist = historyFoldersManager.folderHistory;
+            int insertAt = std::min(g_lastDeletedIndex, static_cast<int>(hist.size()));
+            hist.insert(hist.begin() + insertAt, g_lastDeletedPath);
+            historyFoldersManager.RewriteHistoryToDisk();
+            if (g_lastDeletedWasFavorite) {
+                historyFoldersManager.favorites.insert(g_lastDeletedPath);
+                historyFoldersManager.RewriteFavoritesToDisk();
+            }
+            g_lastDeletedIndex = -1;
+            BuildDisplayList();
+            int newMax = static_cast<int>(g_displayList.size());
+            if (g_hoverRow >= newMax) g_hoverRow = newMax - 1;
+            int x, y, w, h;
+            GetHistoryWindowBounds(g_hHistOwner ? g_hHistOwner : m_hWnd, x, y, w, h);
+            SetWindowPos(m_hWnd, HWND_TOPMOST, x, y, w, h, SWP_FRAMECHANGED);
+            InvalidateRect(m_hWnd, nullptr, TRUE);
+            return true;
+        }
+
+        int navMax = static_cast<int>(g_displayList.size());
+        switch (vk) {
+            case Shortcuts::SC_PANEL_HISTORY_TOGGLE:
+                ToggleHistoryWindow();
+                return true;
+
+            case VK_UP:
+                if (navMax > 0) {
+                    g_hoverRow = (g_hoverRow <= 0) ? navMax - 1 : g_hoverRow - 1;
+                    if (g_rowH > 0) {
+                        int bodyH = g_bodyBottom - g_bodyTop;
+                        if (g_hoverRow == navMax - 1) {
+                            g_scrollOffsetY = std::max(0, navMax * g_rowH - bodyH);
+                        } else {
+                            int rowStart = g_hoverRow * g_rowH;
+                            if (rowStart < g_scrollOffsetY)
+                                g_scrollOffsetY = rowStart;
+                        }
+                    }
+                    InvalidateRect(m_hWnd, nullptr, FALSE);
+                }
+                return true;
+
+            case VK_DOWN:
+                if (navMax > 0) {
+                    g_hoverRow = (g_hoverRow < navMax - 1) ? g_hoverRow + 1 : 0;
+                    if (g_rowH > 0) {
+                        if (g_hoverRow == 0) {
+                            g_scrollOffsetY = 0;
+                        } else {
+                            int bodyH = g_bodyBottom - g_bodyTop;
+                            int rowEnd = (g_hoverRow + 1) * g_rowH;
+                            if (rowEnd - g_scrollOffsetY > bodyH)
+                                g_scrollOffsetY = rowEnd - bodyH;
+                        }
+                    }
+                    InvalidateRect(m_hWnd, nullptr, FALSE);
+                }
+                return true;
+
+            case VK_RETURN: {
+                if (g_hoverRow >= 0 && g_hoverRow < navMax) {
+                    std::wstring folder = g_displayList[g_hoverRow].path;
+                    {
+                        FolderStatus fs = GetFolderStatus(folder);
+                        if (fs != FolderStatus::Valid) {
+                            const wchar_t *deadMsg = (fs == FolderStatus::Missing)
+                                                         ? Constants::Messages::FOLDER_DEAD_MISSING
+                                                         : Constants::Messages::FOLDER_DEAD_EMPTY;
+                            if (g_hHistOwner)
+                                g_overlayManager.PostCenterMessage(g_hHistOwner, deadMsg);
+                            return true;
+                        }
+                    }
+                    bool shiftHeld = (GetKeyState(VK_SHIFT) & 0x8000) != 0;
+                    if (shiftHeld) {
+                        std::wstring posLabel = uiManager.GetSpawnedDirWndPositionLabel(folder);
+                        if (!posLabel.empty()) {
+                            std::wstring posName = posLabel.substr(2, posLabel.length() - 3);
+                            SlotInfo *slot = uiManager.GetLayout().getSlotByName(posName);
+                            if (slot && slot->panel) {
+                                slot->panel->Hide();
+                            }
+                        } else {
+                            uiManager.SpawnDirWndForFolder(folder, m_hWnd);
+                        }
+                    } else {
+                        ShowWindow(m_hWnd, SW_HIDE);
+                        OpenDirectory(g_hHistOwner, folder);
+                    }
+                }
+                return true;
+            }
+
+            case Shortcuts::HISTORY_FAVORITES_TOGGLE_KEY:
+                if (g_hoverRow >= 0 && g_hoverRow < navMax) {
+                    ToggleFavorite(g_hoverRow);
+                    BuildDisplayList();
+                    int newMax = static_cast<int>(g_displayList.size());
+                    if (g_hoverRow >= newMax)
+                        g_hoverRow = newMax - 1;
+                    int x, y, w, h;
+                    GetHistoryWindowBounds(g_hHistOwner ? g_hHistOwner : m_hWnd, x, y, w, h);
+                    SetWindowPos(m_hWnd, HWND_TOPMOST, x, y, w, h, SWP_FRAMECHANGED);
+                    InvalidateRect(m_hWnd, nullptr, TRUE);
+                }
+                return true;
+
+            case VK_DELETE:
+                if (ctrl && shift && alt) {
+                    ClearFavoritesKeepHistory();
+                    BuildDisplayList();
+                    {
+                        int x, y, w, h;
+                        GetHistoryWindowBounds(g_hHistOwner ? g_hHistOwner : m_hWnd, x, y, w, h);
+                        SetWindowPos(m_hWnd, HWND_TOPMOST, x, y, w, h, SWP_FRAMECHANGED);
+                    }
+                    InvalidateRect(m_hWnd, nullptr, TRUE);
+                } else if (ctrl && shift) {
+                    ClearHistoryKeepFavorites();
+                    BuildDisplayList();
+                    {
+                        int x, y, w, h;
+                        GetHistoryWindowBounds(g_hHistOwner ? g_hHistOwner : m_hWnd, x, y, w, h);
+                        SetWindowPos(m_hWnd, HWND_TOPMOST, x, y, w, h, SWP_FRAMECHANGED);
+                    }
+                    InvalidateRect(m_hWnd, nullptr, TRUE);
+                } else if (!ctrl && !shift && !alt) {
+                    if (g_hoverRow >= 0 && g_hoverRow < navMax) {
+                        const std::wstring &path = g_displayList[g_hoverRow].path;
+                        bool wasFav = g_displayList[g_hoverRow].isFavorite;
+
+                        auto &hist = historyFoldersManager.folderHistory;
+                        int histIdx = -1;
+                        for (int i = 0; i < static_cast<int>(hist.size()); ++i) {
+                            if (hist[i] == path) {
+                                histIdx = i;
+                                break;
+                            }
+                        }
+
+                        g_lastDeletedPath = path;
+                        g_lastDeletedIndex = histIdx;
+                        g_lastDeletedWasFavorite = wasFav;
+
+                        if (histIdx >= 0)
+                            hist.erase(hist.begin() + histIdx);
+                        historyFoldersManager.RewriteHistoryToDisk();
+
+                        if (wasFav) {
+                            historyFoldersManager.favorites.erase(path);
+                            historyFoldersManager.RewriteFavoritesToDisk();
+                        }
+
+                        BuildDisplayList();
+                        int newMax = static_cast<int>(g_displayList.size());
+                        if (g_hoverRow >= newMax) g_hoverRow = newMax - 1;
+                        int x, y, w, h;
+                        GetHistoryWindowBounds(g_hHistOwner ? g_hHistOwner : m_hWnd, x, y, w, h);
+                        SetWindowPos(m_hWnd, HWND_TOPMOST, x, y, w, h, SWP_FRAMECHANGED);
+                        InvalidateRect(m_hWnd, nullptr, TRUE);
+                    }
+                }
+                return true;
+
+            default:
+                return false; // forward unhandled keys to main app
+        }
+    }
+
+    // ---------------------------------------------------------------------------
     // Window procedure
     // ---------------------------------------------------------------------------
     LRESULT HistoryListWnd::HandlePanelMessage(UINT message, WPARAM wParam, LPARAM lParam) {
@@ -1133,211 +1317,6 @@ namespace UI {
                 g_hoverRow = -1;
                 InvalidateRect(m_hWnd, nullptr, FALSE);
                 return 0;
-            }
-
-            case WM_KEYDOWN: {
-                bool ctrl = (GetKeyState(VK_CONTROL) & 0x8000) != 0;
-                bool shift = (GetKeyState(VK_SHIFT) & 0x8000) != 0;
-                bool alt = (GetKeyState(VK_MENU) & 0x8000) != 0;
-                // Check Ctrl+Tab first (toggle full history view)
-                if (wParam == VK_TAB && ctrl) {
-                    g_showFullHistory = !g_showFullHistory;
-                    g_scrollOffsetY = 0;
-                    BuildDisplayList();
-                    CaptureNavigationSnapshot();
-                    g_hoverRow = 0;
-                    InvalidateRect(m_hWnd, nullptr, TRUE);
-                    return 0;
-                }
-
-                // Ctrl+Z — restore last deleted entry
-                if (wParam == 'Z' && ctrl && !shift && !alt && g_lastDeletedIndex >= 0) {
-                    auto &hist = historyFoldersManager.folderHistory;
-                    int insertAt = std::min(g_lastDeletedIndex, static_cast<int>(hist.size()));
-                    hist.insert(hist.begin() + insertAt, g_lastDeletedPath);
-                    historyFoldersManager.RewriteHistoryToDisk();
-                    if (g_lastDeletedWasFavorite) {
-                        historyFoldersManager.favorites.insert(g_lastDeletedPath);
-                        historyFoldersManager.RewriteFavoritesToDisk();
-                    }
-                    g_lastDeletedIndex = -1; // consume undo slot
-                    BuildDisplayList();
-                    int newMax = static_cast<int>(g_displayList.size());
-                    if (g_hoverRow >= newMax) g_hoverRow = newMax - 1;
-                    int x, y, w, h;
-                    GetHistoryWindowBounds(g_hHistOwner ? g_hHistOwner : m_hWnd, x, y, w, h);
-                    SetWindowPos(m_hWnd, HWND_TOPMOST, x, y, w, h, SWP_FRAMECHANGED);
-                    InvalidateRect(m_hWnd, nullptr, TRUE);
-                    return 0;
-                }
-
-                int navMax = static_cast<int>(g_displayList.size());
-                switch (wParam) {
-                    case Shortcuts::SC_PANEL_HISTORY_TOGGLE:
-                        ToggleHistoryWindow();
-                        return 0;
-
-                    case VK_UP:
-                        if (navMax > 0) {
-                            g_hoverRow = (g_hoverRow <= 0) ? navMax - 1 : g_hoverRow - 1;
-                            if (g_rowH > 0) {
-                                int bodyH = g_bodyBottom - g_bodyTop;
-                                if (g_hoverRow == navMax - 1) { // wrapped to bottom
-                                    g_scrollOffsetY = std::max(0, navMax * g_rowH - bodyH);
-                                } else {
-                                    int rowStart = g_hoverRow * g_rowH;
-                                    if (rowStart < g_scrollOffsetY)
-                                        g_scrollOffsetY = rowStart;
-                                }
-                            }
-                            InvalidateRect(m_hWnd, nullptr, FALSE);
-                        }
-                        return 0;
-
-                    case VK_DOWN:
-                        if (navMax > 0) {
-                            g_hoverRow = (g_hoverRow < navMax - 1) ? g_hoverRow + 1 : 0;
-                            if (g_rowH > 0) {
-                                if (g_hoverRow == 0) {
-                                    g_scrollOffsetY = 0;
-                                } else {
-                                    int bodyH = g_bodyBottom - g_bodyTop;
-                                    int rowEnd = (g_hoverRow + 1) * g_rowH;
-                                    if (rowEnd - g_scrollOffsetY > bodyH)
-                                        g_scrollOffsetY = rowEnd - bodyH;
-                                }
-                            }
-                            InvalidateRect(m_hWnd, nullptr, FALSE);
-                        }
-                        return 0;
-
-                    case VK_RETURN: {
-                        if (g_hoverRow >= 0 && g_hoverRow < navMax) {
-                            std::wstring folder = g_displayList[g_hoverRow].path;
-                            // Dead folder guard — block navigation and show overlay message.
-                            {
-                                FolderStatus fs = GetFolderStatus(folder);
-                                if (fs != FolderStatus::Valid) {
-                                    const wchar_t *deadMsg = (fs == FolderStatus::Missing)
-                                                                 ? Constants::Messages::FOLDER_DEAD_MISSING
-                                                                 : Constants::Messages::FOLDER_DEAD_EMPTY;
-                                    if (g_hHistOwner)
-                                        g_overlayManager.PostCenterMessage(g_hHistOwner, deadMsg);
-                                    return 0;
-                                }
-                            }
-                            bool shiftHeld = (GetKeyState(VK_SHIFT) & 0x8000) != 0;
-                            if (shiftHeld) {
-                                // Shift+Enter — toggle spawned DirWnd for this folder.
-                                // Check if a panel already exists by reading the position label.
-                                std::wstring posLabel = uiManager.GetSpawnedDirWndPositionLabel(folder);
-                                if (!posLabel.empty()) {
-                                    // Extract position name from " (name)" format
-                                    std::wstring posName = posLabel.substr(2, posLabel.length() - 3);
-                                    SlotInfo *slot = uiManager.GetLayout().getSlotByName(posName);
-                                    if (slot && slot->panel) {
-                                        slot->panel->Hide();
-                                    }
-                                } else {
-                                    // No panel exists, spawn one
-                                    uiManager.SpawnDirWndForFolder(folder, m_hWnd);
-                                }
-                            } else {
-                                // Plain Enter — load folder in main viewer (original behaviour).
-                                ShowWindow(m_hWnd, SW_HIDE);
-                                OpenDirectory(g_hHistOwner, folder);
-                            }
-                        }
-                        return 0;
-                    }
-
-                    case Shortcuts::HISTORY_FAVORITES_TOGGLE_KEY: // Space
-                        if (g_hoverRow >= 0 && g_hoverRow < navMax) {
-                            ToggleFavorite(g_hoverRow);
-                            // Rebuild display list after favorite change
-                            BuildDisplayList();
-                            // Re-clamp hover in case list shrank
-                            int newMax = static_cast<int>(g_displayList.size());
-                            if (g_hoverRow >= newMax)
-                                g_hoverRow = newMax - 1;
-                            // Resize window to fit new list height
-                            int x, y, w, h;
-                            GetHistoryWindowBounds(g_hHistOwner ? g_hHistOwner : m_hWnd, x, y, w, h);
-                            SetWindowPos(m_hWnd, HWND_TOPMOST, x, y, w, h, SWP_FRAMECHANGED);
-                            InvalidateRect(m_hWnd, nullptr, TRUE);
-                        }
-                        return 0;
-
-                    case VK_DELETE:
-                        if (ctrl && shift && alt) {
-                            // Ctrl+Alt+Shift+Delete — clear favorites, keep history
-                            ClearFavoritesKeepHistory();
-                            BuildDisplayList();
-                            {
-                                int x, y, w, h;
-                                GetHistoryWindowBounds(g_hHistOwner ? g_hHistOwner : m_hWnd, x, y, w, h);
-                                SetWindowPos(m_hWnd, HWND_TOPMOST, x, y, w, h, SWP_FRAMECHANGED);
-                            }
-                            InvalidateRect(m_hWnd, nullptr, TRUE);
-                        } else if (ctrl && shift) {
-                            // Ctrl+Shift+Delete — clear history, keep favorites
-                            ClearHistoryKeepFavorites();
-                            BuildDisplayList();
-                            {
-                                int x, y, w, h;
-                                GetHistoryWindowBounds(g_hHistOwner ? g_hHistOwner : m_hWnd, x, y, w, h);
-                                SetWindowPos(m_hWnd, HWND_TOPMOST, x, y, w, h, SWP_FRAMECHANGED);
-                            }
-                            InvalidateRect(m_hWnd, nullptr, TRUE);
-                        } else if (!ctrl && !shift && !alt) {
-                            // Plain Delete — remove hovered entry; Ctrl+Z restores it
-                            if (g_hoverRow >= 0 && g_hoverRow < navMax) {
-                                const std::wstring &path = g_displayList[g_hoverRow].path;
-                                bool wasFav = g_displayList[g_hoverRow].isFavorite;
-
-                                // Find the index in folderHistory for undo
-                                auto &hist = historyFoldersManager.folderHistory;
-                                int histIdx = -1;
-                                for (int i = 0; i < static_cast<int>(hist.size()); ++i) {
-                                    if (hist[i] == path) {
-                                        histIdx = i;
-                                        break;
-                                    }
-                                }
-
-                                // Save undo state
-                                g_lastDeletedPath = path;
-                                g_lastDeletedIndex = histIdx;
-                                g_lastDeletedWasFavorite = wasFav;
-
-                                // Remove from history
-                                if (histIdx >= 0)
-                                    hist.erase(hist.begin() + histIdx);
-                                historyFoldersManager.RewriteHistoryToDisk();
-
-                                // Remove from favorites
-                                if (wasFav) {
-                                    historyFoldersManager.favorites.erase(path);
-                                    historyFoldersManager.RewriteFavoritesToDisk();
-                                }
-
-                                BuildDisplayList();
-                                int newMax = static_cast<int>(g_displayList.size());
-                                if (g_hoverRow >= newMax) g_hoverRow = newMax - 1;
-                                int x, y, w, h;
-                                GetHistoryWindowBounds(g_hHistOwner ? g_hHistOwner : m_hWnd, x, y, w, h);
-                                SetWindowPos(m_hWnd, HWND_TOPMOST, x, y, w, h, SWP_FRAMECHANGED);
-                                InvalidateRect(m_hWnd, nullptr, TRUE);
-                            }
-                        }
-                        return 0;
-
-                    default:
-                        if (g_hHistOwner)
-                            return SendMessageW(g_hHistOwner, message, wParam, lParam);
-                        break;
-                }
-                break;
             }
 
             case WM_CLOSE:
