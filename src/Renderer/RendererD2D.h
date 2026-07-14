@@ -26,6 +26,7 @@ class RendererD2D final : public IImageRenderer {
 
         ~RendererD2D() override = default;
 
+        const wchar_t* GetName() const override { return L"Direct2D"; }
         [[nodiscard]] HRESULT Initialize(HWND hwnd) override;
 
         void Resize(UINT width, UINT height) override;

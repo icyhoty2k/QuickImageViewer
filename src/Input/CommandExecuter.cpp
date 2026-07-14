@@ -238,7 +238,7 @@ void InputManager::ExecuteKeyboardShortcutCommand(HWND hWnd, Command cmd) {
             break;
 
         case Command::JumpToImage:
-            uiManager.getJumpToWindow().Show();
+            uiManager.Toggle(uiManager.getJumpToWindow());
             break;
 
         case Command::ToggleStats:

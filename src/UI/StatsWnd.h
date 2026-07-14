@@ -15,13 +15,10 @@ namespace UI {
         LRESULT HandlePanelMessage(UINT message, WPARAM wParam, LPARAM lParam) override;
 
     private:
-        static constexpr UINT WM_STATS_COUNTS_READY = WM_APP + 103;
-        static constexpr DWORD CMMM_SIG = 0x4D4D4D43; // 'CMMM' little-endian
-
         struct CacheFile {
             std::wstring name;
-            UINT64 bytes  = 0;
-            INT64  count  = -1; // -1=pending  -2=unreadable
+            UINT64 bytes = 0;
+            INT64  count = -1; // -1=no estimate  >=0=estimated
         };
 
         struct ExtStat {
@@ -29,39 +26,63 @@ namespace UI {
             int count = 0;
         };
 
+        // A clickable region: left-click opens a path in Explorer or regedit
+        struct ClickLink {
+            RECT         rect    = {};
+            std::wstring target;        // file/folder path OR full registry key path
+            bool         isReg   = false; // true → open regedit at target, false → Explorer
+        };
+
         // ── Thumbnail cache ──────────────────────────────────────
         std::vector<CacheFile> m_cacheFiles;
         UINT64       m_cacheTotalBytes = 0;
-        INT64        m_cacheTotalCount = -1;
+        INT64        m_cacheTotalCount = 0;
         std::wstring m_thumbCachePath;
-        RECT         m_linkRect        = {};
 
         // ── Current image ────────────────────────────────────────
-        int    m_imgW          = 0;
-        int    m_imgH          = 0;
-        UINT64 m_imgFileBytes  = 0;
+        int    m_imgW         = 0;
+        int    m_imgH         = 0;
+        UINT64 m_imgFileBytes = 0;
 
         // ── Playlist ─────────────────────────────────────────────
         int                  m_playlistSize  = 0;
         int                  m_currentIndex  = 0;
         UINT64               m_playlistBytes = 0;
-        std::vector<ExtStat> m_extStats;      // top 6, sorted by count desc
+        std::vector<ExtStat> m_extStats;
 
         // ── History ──────────────────────────────────────────────
-        int m_historyCount = 0;
+        int m_historyCount  = 0;
+        int m_instanceCount = 1;
+
+        // ── Memory ───────────────────────────────────────────────
+        SIZE_T m_memWorkingSet = 0;
+        SIZE_T m_memPeak       = 0;
+        SIZE_T m_memPrivate    = 0;
+        UINT64 m_decodedBytes  = 0;
+
+        // ── Threads ──────────────────────────────────────────────
+        int m_ioThreads       = 0;
+        int m_wicThreads      = 0;
+        int m_dirThumbThreads = 0;
+
+        // ── App / registry ───────────────────────────────────────
+        std::wstring m_exePath;
+        std::wstring m_rendererName;
+        bool         m_autostartEnabled = false;
+        std::wstring m_autostartCmd;        // what's stored in the Run value
+
+        // ── Clickable links (rebuilt each paint) ─────────────────
+        std::vector<ClickLink> m_links;
 
         // ── Scroll ───────────────────────────────────────────────
         int m_scrollOffsetY = 0;
         int m_totalContentH = 0;
 
-        // ── Async guard ──────────────────────────────────────────
-        UINT32 m_showSession = 0;
-
         void GatherStats();
-        void LaunchCountAsync();
+        static void OpenRegedit(const std::wstring& fullKeyPath);
 
         static std::wstring FormatBytes(UINT64 bytes);
         static std::wstring FormatCount(INT64 n);
-        static INT64        CountThumbcacheEntries(const std::wstring &path);
+        static INT64        EstimateCount(const std::wstring& name, UINT64 fileBytes);
     };
 } // namespace UI

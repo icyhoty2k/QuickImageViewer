@@ -52,6 +52,26 @@ void JumpToWnd::CommitJump() {
     InvalidateRect(m_hParent, nullptr, FALSE);
 }
 
+bool JumpToWnd::OnKeyDown(WPARAM vk, bool /*ctrl*/, bool /*shift*/, bool /*alt*/) {
+    if (vk == VK_BACK) {
+        if (m_inputLen > 0) {
+            m_input[--m_inputLen] = L'\0';
+            m_outOfRange          = false;
+            InvalidateRect(m_hWnd, nullptr, FALSE);
+        }
+        return true;
+    }
+    if (vk == VK_RETURN) {
+        CommitJump();
+        return true;
+    }
+    // Digits are handled by WM_CHAR — consume here so they are not
+    // forwarded to the main app's view-mode shortcuts (1–5).
+    if (vk >= '0' && vk <= '9')
+        return true;
+    return false;
+}
+
 LRESULT JumpToWnd::HandlePanelMessage(UINT message, WPARAM wParam, LPARAM lParam) {
     switch (message) {
 
@@ -162,22 +182,6 @@ LRESULT JumpToWnd::HandlePanelMessage(UINT message, WPARAM wParam, LPARAM lParam
                 InvalidateRect(m_hWnd, nullptr, FALSE);
             }
             return 0;
-        }
-
-        case WM_KEYDOWN: {
-            if (wParam == VK_BACK) {
-                if (m_inputLen > 0) {
-                    m_input[--m_inputLen] = L'\0';
-                    m_outOfRange          = false;
-                    InvalidateRect(m_hWnd, nullptr, FALSE);
-                }
-                return 0;
-            }
-            if (wParam == VK_RETURN) {
-                CommitJump();
-                return 0;
-            }
-            break;
         }
 
         default:

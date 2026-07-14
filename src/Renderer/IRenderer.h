@@ -117,4 +117,6 @@ class IImageRenderer {
         virtual void ClearCache() {}
         virtual void ClearCache(const std::wstring & /*excludePath*/) {}
         virtual void RemoveFromCache(const std::wstring & /*filePath*/) {}
+
+        virtual const wchar_t* GetName() const { return L"Unknown"; }
 };

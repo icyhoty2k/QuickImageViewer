@@ -501,6 +501,31 @@ ExifWnd::ExifResult ExifWnd::GatherExifData(
 // WM_PAINT + input
 // ---------------------------------------------------------------------------
 
+bool ExifWnd::OnKeyDown(WPARAM vk, bool /*ctrl*/, bool /*shift*/, bool /*alt*/) {
+    switch (vk) {
+    case 'M':
+        Hide();
+        return true;
+    case VK_PRIOR:
+        m_scrollOffsetY -= static_cast<int>(200 * app.dpiScale);
+        InvalidateRect(m_hWnd, nullptr, FALSE);
+        return true;
+    case VK_NEXT:
+        m_scrollOffsetY += static_cast<int>(200 * app.dpiScale);
+        InvalidateRect(m_hWnd, nullptr, FALSE);
+        return true;
+    case VK_HOME:
+        m_scrollOffsetY = 0;
+        InvalidateRect(m_hWnd, nullptr, FALSE);
+        return true;
+    case VK_END:
+        m_scrollOffsetY = INT_MAX;
+        InvalidateRect(m_hWnd, nullptr, FALSE);
+        return true;
+    }
+    return false;
+}
+
 LRESULT ExifWnd::HandlePanelMessage(UINT message, WPARAM wParam, LPARAM lParam) {
     switch (message) {
 
@@ -847,28 +872,6 @@ LRESULT ExifWnd::HandlePanelMessage(UINT message, WPARAM wParam, LPARAM lParam) 
             ReleaseCapture();
         }
         m_sbDragging = false;
-        return 0;
-
-    case WM_KEYDOWN:
-        switch (wParam) {
-        case 'M': Hide(); return 0;
-        case VK_PRIOR:
-            m_scrollOffsetY -= static_cast<int>(200 * app.dpiScale);
-            InvalidateRect(m_hWnd, nullptr, FALSE);
-            return 0;
-        case VK_NEXT:
-            m_scrollOffsetY += static_cast<int>(200 * app.dpiScale);
-            InvalidateRect(m_hWnd, nullptr, FALSE);
-            return 0;
-        case VK_HOME:
-            m_scrollOffsetY = 0;
-            InvalidateRect(m_hWnd, nullptr, FALSE);
-            return 0;
-        case VK_END:
-            m_scrollOffsetY = INT_MAX; // WM_PAINT clamps to maxScroll
-            InvalidateRect(m_hWnd, nullptr, FALSE);
-            return 0;
-        }
         return 0;
 
     case WM_EXIF_READY: {
