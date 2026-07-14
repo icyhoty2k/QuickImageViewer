@@ -68,8 +68,15 @@ namespace Constants {
 
     inline bool SWAP_MOUSE_BUTTONS = true; // Set this to true to swap Left and Right mouse button functions
     // =========================================================================
+    // EXIF WINDOW EMBEDDED THUMBNAIL PREVIEW
+    // =========================================================================
+    constexpr int EXIF_THUMB_DISPLAY_SIZE = 100; // logical px — max bounding box for embedded thumb
+    constexpr int EXIF_THUMB_COL_GAP = 8; // logical px — gap between text column and thumbnail
+
+    // =========================================================================
     // CACHE WINDOW AND CURRENT DIR WINDOW
     // =========================================================================
+    constexpr int THUMBNAIL_PANEL_WINDOW_THICKNESS = 120;
     constexpr float THUMBNAIL_PANEL_THUMB_WIDTH = 120.0f;
     constexpr float THUMBNAIL_PANEL_THUMB_HEIGHT = 80.0f;
     constexpr float THUMBNAIL_PANEL_THUMB_SPACING = 18.0f;
@@ -77,7 +84,6 @@ namespace Constants {
     constexpr BYTE THUMBNAIL_PANEL_WINDOW_OPACITY = 210;
     constexpr float THUMBNAIL_PANEL_WINDOW_MOUSE_WHEEL_SPEED = 120.0f;
     constexpr int8_t THUMBNAIL_PANEL_WINDOW_MOUSE_WHEEL_DIRECTION = 1; // 1 is forward -1 is reverse
-    constexpr int THUMBNAIL_PANEL_WINDOW_THICKNESS = 120;
     // Pixel gap between a panel edge and the taskbar (visual breathing room)
     constexpr int THUMBNAIL_PANEL_TASKBAR_BOTTOM_GAP_HORIZONTAL_PANEL = 6;
     constexpr int THUMBNAIL_PANEL_NEIGHBOUR_GAP_VERTICAL_PANEL = 2; // gap between vertical and horizontal panels
@@ -142,7 +148,6 @@ namespace Constants {
     constexpr const int PRELOAD_TIMER_COUNTDOWN = 60; // {ms} this is used to delay preloading if user scrolls very fast
     //==========================Cache optimization====================================
     //end Saveable options
-
 
     // Custom window messages
     constexpr UINT WM_QIV_PENDING_UPLOADS = WM_USER + 1; // Posted by background decoder thread
