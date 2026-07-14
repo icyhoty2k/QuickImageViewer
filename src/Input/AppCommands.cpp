@@ -21,7 +21,7 @@ void AppCommands::SaveImageToDisk(HWND hWnd) {
 
     const std::wstring &srcPath = app.playlist[app.currentIndex];
 
-    // Build default filename: original basename + "_edited.png"
+    // Default filename: keep original stem, no extension (dialog appends from filter).
     std::wstring defaultName;
     {
         size_t slash = srcPath.find_last_of(L"\\/");
@@ -30,21 +30,30 @@ void AppCommands::SaveImageToDisk(HWND hWnd) {
                                     : srcPath;
         size_t dot = nameOnly.find_last_of(L'.');
         if (dot != std::wstring::npos) nameOnly = nameOnly.substr(0, dot);
-        defaultName = nameOnly + L"_edited.png";
+        defaultName = nameOnly;
     }
 
     std::wstring outBuf(Constants::MAX_FILE_PATH, L'\0');
     wcsncpy_s(outBuf.data(), Constants::MAX_FILE_PATH, defaultName.c_str(), _TRUNCATE);
 
+    // Build the filter string from Constants::Save::FORMATS.
+    // OPENFILENAMEW requires pairs of "Description\0*.ext\0" with a final \0.
+    std::wstring filterStr;
+    for (const auto &fmt : Constants::Save::FORMATS) {
+        filterStr += fmt.description; filterStr += L'\0';
+        filterStr += fmt.pattern;     filterStr += L'\0';
+    }
+    filterStr += L'\0';
+
     OPENFILENAMEW ofn{};
     ofn.lStructSize = sizeof(ofn);
     ofn.hwndOwner = hWnd;
-    ofn.lpstrFilter = L"PNG Image\0*.png\0All Files\0*.*\0";
+    ofn.lpstrFilter = filterStr.c_str();
     ofn.nFilterIndex = 1;
     ofn.lpstrFile = outBuf.data();
     ofn.nMaxFile = Constants::MAX_FILE_PATH;
-    ofn.lpstrDefExt = L"png";
-    ofn.lpstrTitle = L"Save image with effects";
+    ofn.lpstrDefExt = Constants::Save::DEFAULT_EXT;
+    ofn.lpstrTitle = L"Save image";
     ofn.Flags = OFN_OVERWRITEPROMPT | OFN_PATHMUSTEXIST | OFN_NOCHANGEDIR;
 
     std::wstring initDir;
