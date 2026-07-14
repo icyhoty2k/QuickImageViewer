@@ -94,6 +94,11 @@ class DecoderThreadPool {
             return static_cast<int>(m_threads.size());
         }
 
+        size_t PendingTaskCount() {
+            std::lock_guard<std::mutex> lock(m_queueMutex);
+            return m_queue.size();
+        }
+
     private:
         std::vector<std::thread> m_threads;
         std::mutex m_queueMutex;
@@ -214,6 +219,11 @@ class IoThreadPool {
         bool IsStarted() const { return m_running.load(); }
 
         int getThreadCount() const { return static_cast<int>(m_threads.size()); }
+
+        size_t PendingTaskCount() {
+            std::lock_guard<std::mutex> lock(m_queueMutex);
+            return m_queue.size();
+        }
 
     private:
         std::vector<std::thread> m_threads;

@@ -118,5 +118,12 @@ class IImageRenderer {
         virtual void ClearCache(const std::wstring & /*excludePath*/) {}
         virtual void RemoveFromCache(const std::wstring & /*filePath*/) {}
 
+        virtual void GetImageCacheStats(int& count, UINT64& estimatedBytes) {
+            count = 0; estimatedBytes = 0;
+        }
+        virtual void GetDirThumbCacheStats(int& count, UINT64& estimatedBytes) {
+            count = 0; estimatedBytes = 0;
+        }
+
         virtual const wchar_t* GetName() const { return L"Unknown"; }
 };

@@ -3,6 +3,7 @@
 #include "../Overlays/OverlayManager.h"
 #include "RegistrySetup.h"
 #include "Constants.h"
+#include "../ImageLoadStats.h"
 #include <commdlg.h>
 #include <filesystem>
 #include <numeric>
@@ -460,6 +461,7 @@ void LoadImageIndex(HWND hWnd, int index) {
             // keypress — async loads are handled by WM_QIV_REPAINT + the callback.
             uiManager.getActiveDirWnd().SyncDirSelectionRectangle();
         } else {
+            ImageLoadStats::g_loadStartMs.store(ImageLoadStats::NowMs(), std::memory_order_relaxed);
             (void) app.renderer->PreloadBitmap(currentPath, index);
         }
     }

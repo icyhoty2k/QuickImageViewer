@@ -60,6 +60,9 @@ class RendererD2D final : public IImageRenderer {
 
         void RemoveFromCache(const std::wstring &filePath) override;
 
+        void GetImageCacheStats(int &count, UINT64 &estimatedBytes) override;
+        void GetDirThumbCacheStats(int &count, UINT64 &estimatedBytes) override;
+
         // =====================================================================
         // Thumbnail Panel APIs
         // Each ThumbnailPanelWnd owns its own swap chain — these two accessors
