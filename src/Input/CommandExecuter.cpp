@@ -9,6 +9,7 @@
 #include "../UI/HistoryListWnd.h"
 #include "../UI/HelpWnd.h"
 #include "../UI/JumpToWnd.h"
+#include "../UI/FindWnd.h"
 #include "../UI/StatsWnd.h"
 #include <algorithm>
 #include <numeric>
@@ -239,6 +240,10 @@ void InputManager::ExecuteKeyboardShortcutCommand(HWND hWnd, Command cmd) {
 
         case Command::JumpToImage:
             uiManager.Toggle(uiManager.getJumpToWindow());
+            break;
+
+        case Command::FindImage:
+            uiManager.Toggle(uiManager.getFindWindow());
             break;
 
         case Command::ToggleStats:

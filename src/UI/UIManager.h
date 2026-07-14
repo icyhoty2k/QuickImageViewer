@@ -13,6 +13,7 @@
 #include "HistoryListWnd.h"
 #include "ExifWnd.h"
 #include "JumpToWnd.h"
+#include "FindWnd.h"
 #include "StatsWnd.h"
 #include "../Platform/Constants.h"
 
@@ -171,6 +172,7 @@ namespace UI {
             void SetActiveDirWnd(ThumbnailPanelWnd *panel);
             HistoryListWnd  &getHistoryListWindow();
             JumpToWnd       &getJumpToWindow();
+            FindWnd         &getFindWindow();
             StatsWnd        &getStatsWindow();
 
             void SpawnDirWndForFolder(const std::wstring &folderPath, HWND hHistoryWnd);
@@ -203,6 +205,7 @@ namespace UI {
             HistoryListWnd historyListWnd;
             ExifWnd        exifWnd;
             JumpToWnd      jumpToWnd;
+            FindWnd        findWnd;
             StatsWnd       statsWnd;
 
             HINSTANCE m_hInstance  = nullptr;
