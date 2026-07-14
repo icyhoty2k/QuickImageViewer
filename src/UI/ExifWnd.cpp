@@ -168,9 +168,9 @@ void ExifWnd::Refresh() {
     HWND hwnd = m_hWnd;
 
     g_ioWorker.PushTask([path, imgW, imgH, hwnd]() {
-        auto* rows = new std::vector<ExifRow>(GatherExifRows(path, imgW, imgH));
-        if (!PostMessageW(hwnd, WM_EXIF_READY, 0, reinterpret_cast<LPARAM>(rows)))
-            delete rows;
+        auto* result = new ExifResult(GatherExifData(path, imgW, imgH));
+        if (!PostMessageW(hwnd, WM_EXIF_READY, 0, reinterpret_cast<LPARAM>(result)))
+            delete result;
     });
 }
 
@@ -198,9 +198,10 @@ void ExifWnd::Show() {
 // EXIF reading — static, callable from any COM-initialized thread
 // ---------------------------------------------------------------------------
 
-std::vector<ExifWnd::ExifRow> ExifWnd::GatherExifRows(
+ExifWnd::ExifResult ExifWnd::GatherExifData(
         const std::wstring& path, int imgW, int imgH) {
-    std::vector<ExifRow> rows;
+    ExifResult result;
+    auto& rows = result.rows;
 
     const auto addSection = [&](const wchar_t* title) {
         rows.push_back({ title, {}, true });
@@ -232,18 +233,72 @@ std::vector<ExifWnd::ExifRow> ExifWnd::GatherExifRows(
         addRow(L"Type", extUp);
     }
 
-    if (!app.wicFactory) return rows;
+    if (!app.wicFactory) return result;
 
     ComPtr<IWICBitmapDecoder> decoder;
     if (FAILED(app.wicFactory->CreateDecoderFromFilename(
             path.c_str(), nullptr, GENERIC_READ,
-            WICDecodeMetadataCacheOnDemand, &decoder))) return rows;
+            WICDecodeMetadataCacheOnDemand, &decoder))) return result;
 
     ComPtr<IWICBitmapFrameDecode> frame;
-    if (FAILED(decoder->GetFrame(0, &frame))) return rows;
+    if (FAILED(decoder->GetFrame(0, &frame))) return result;
+
+    // -- Embedded thumbnail -----------------------------------------------
+    {
+        ComPtr<IWICBitmapSource> wicThumb;
+        if (SUCCEEDED(frame->GetThumbnail(&wicThumb))) {
+            UINT tw = 0, th = 0;
+            wicThumb->GetSize(&tw, &th);
+            if (tw > 0 && th > 0) {
+                ComPtr<IWICFormatConverter> conv;
+                if (SUCCEEDED(app.wicFactory->CreateFormatConverter(&conv)) &&
+                    SUCCEEDED(conv->Initialize(wicThumb.Get(), GUID_WICPixelFormat32bppBGRA,
+                        WICBitmapDitherTypeNone, nullptr, 0.0f, WICBitmapPaletteTypeCustom))) {
+                    BITMAPINFO bmi = {};
+                    bmi.bmiHeader.biSize        = sizeof(BITMAPINFOHEADER);
+                    bmi.bmiHeader.biWidth       = static_cast<LONG>(tw);
+                    bmi.bmiHeader.biHeight      = -static_cast<LONG>(th);
+                    bmi.bmiHeader.biPlanes      = 1;
+                    bmi.bmiHeader.biBitCount    = 32;
+                    bmi.bmiHeader.biCompression = BI_RGB;
+                    void* pBits = nullptr;
+                    HBITMAP hbm = CreateDIBSection(nullptr, &bmi, DIB_RGB_COLORS, &pBits, nullptr, 0);
+                    if (hbm && pBits) {
+                        const UINT stride = tw * 4;
+                        if (SUCCEEDED(conv->CopyPixels(nullptr, stride, th * stride, static_cast<BYTE*>(pBits)))) {
+                            result.thumbBitmap = hbm;
+                            result.thumbW = static_cast<int>(tw);
+                            result.thumbH = static_cast<int>(th);
+                        } else {
+                            DeleteObject(hbm);
+                        }
+                    }
+                }
+            }
+        }
+
+        if (result.thumbW > 0) {
+            wchar_t tb[48];
+            swprintf_s(tb, L"%d × %d px (embedded)", result.thumbW, result.thumbH);
+            addRow(L"Thumbnail", tb);
+        } else {
+            addRow(L"Thumbnail", L"No embedded");
+        }
+    }
 
     ComPtr<IWICMetadataQueryReader> reader;
-    if (FAILED(frame->GetMetadataQueryReader(&reader))) return rows;
+    if (FAILED(frame->GetMetadataQueryReader(&reader))) return result;
+
+    // Query embedded thumbnail JPEG byte size (IFD1 tag 0x0202 = JPEGInterchangeFormatLength)
+    if (result.thumbW > 0) {
+        PROPVARIANT pvLen; PropVariantInit(&pvLen);
+        if (FAILED(reader->GetMetadataByName(L"/app1/ifd1/{ushort=514}", &pvLen)))
+            reader->GetMetadataByName(L"/ifd1/{ushort=514}", &pvLen);
+        if      (pvLen.vt == VT_UI4) result.thumbFileBytes = pvLen.ulVal;
+        else if (pvLen.vt == VT_UI2) result.thumbFileBytes = pvLen.uiVal;
+        else if (pvLen.vt == VT_I4)  result.thumbFileBytes = pvLen.lVal;
+        PropVariantClear(&pvLen);
+    }
 
     // Try JPEG path first; fall back to TIFF path on VT_EMPTY
     const auto q = [&](const wchar_t* jpegPath, const wchar_t* tiffPath = nullptr) -> PROPVARIANT {
@@ -493,15 +548,23 @@ std::vector<ExifWnd::ExifRow> ExifWnd::GatherExifRows(
         }
     }
 
-    return rows;
+    return result;
 }
 
 void ExifWnd::LoadExifData() {
     if (app.currentIndex < 0 || app.currentIndex >= static_cast<int>(app.playlist.size())) {
         m_rows.clear();
+        if (m_thumbBitmap) { DeleteObject(m_thumbBitmap); m_thumbBitmap = nullptr; }
+        m_thumbW = m_thumbH = 0;
         return;
     }
-    m_rows = GatherExifRows(app.playlist[app.currentIndex], app.imgWidth, app.imgHeight);
+    if (m_thumbBitmap) { DeleteObject(m_thumbBitmap); m_thumbBitmap = nullptr; }
+    ExifResult result = GatherExifData(app.playlist[app.currentIndex], app.imgWidth, app.imgHeight);
+    m_rows           = std::move(result.rows);
+    m_thumbBitmap    = result.thumbBitmap;
+    m_thumbW         = result.thumbW;
+    m_thumbH         = result.thumbH;
+    m_thumbFileBytes = result.thumbFileBytes;
     m_totalContentHeight = 0;
 }
 
@@ -567,6 +630,12 @@ LRESULT ExifWnd::HandleMessage(UINT message, WPARAM wParam, LPARAM lParam) {
         const int cH   = cBot - cTop;
         const int cR   = rc.right - sbW - pad / 2;
 
+        // Thumbnail column: right side of FILE section
+        const int exifThumbSize = m_thumbBitmap ? MulDiv(Constants::EXIF_THUMB_DISPLAY_SIZE, dpi, 96) : 0;
+        const int exifThumbGap  = m_thumbBitmap ? MulDiv(Constants::EXIF_THUMB_COL_GAP,      dpi, 96) : 0;
+        const int thumbColW     = exifThumbSize + exifThumbGap;
+        const int textCR        = cR - thumbColW; // right edge for FILE section text
+
         if (m_totalContentHeight == 0) {
             int h = 0;
             for (const auto& r : m_rows) h += r.isSection ? (sectH + gap) : rowH;
@@ -594,9 +663,64 @@ LRESULT ExifWnd::HandleMessage(UINT message, WPARAM wParam, LPARAM lParam) {
             DeleteObject(hSel);
         }
 
+        // Pre-scan FILE section bounds for right-side thumbnail positioning
+        int fileRowsY = 0, fileRowsH = 0;
+        {
+            bool inFile = false;
+            int scanY = cTop - m_scrollOffsetY;
+            for (const auto& r : m_rows) {
+                const int h = r.isSection ? (sectH + gap) : rowH;
+                if (r.isSection) {
+                    if (r.label == L"FILE") { inFile = true; fileRowsY = scanY + h; }
+                    else if (inFile)         { inFile = false; }
+                } else if (inFile) {
+                    fileRowsH += h;
+                }
+                scanY += h;
+            }
+        }
+
+        // Draw thumbnail in right column of FILE section
+        if (m_thumbBitmap && exifThumbSize > 0 && m_thumbW > 0 && m_thumbH > 0) {
+            const float scale = std::min(
+                static_cast<float>(exifThumbSize) / m_thumbW,
+                static_cast<float>(exifThumbSize) / m_thumbH);
+            const int dstW      = static_cast<int>(m_thumbW * scale);
+            const int dstH      = static_cast<int>(m_thumbH * scale);
+            const int szGap     = MulDiv(3, dpi, 96);
+            const int blockH    = dstH + szGap + rowH; // image + gap + size label
+            const int thumbX    = textCR + exifThumbGap + (exifThumbSize - dstW) / 2;
+            const int thumbY    = fileRowsY + std::max(0, (fileRowsH - blockH) / 2);
+
+            if (thumbY < cBot && thumbY + dstH > cTop) {
+                HDC hMem = CreateCompatibleDC(hdc);
+                HBITMAP hPrevBmp = static_cast<HBITMAP>(SelectObject(hMem, m_thumbBitmap));
+                StretchBlt(hdc, thumbX, thumbY, dstW, dstH, hMem, 0, 0, m_thumbW, m_thumbH, SRCCOPY);
+                SelectObject(hMem, hPrevBmp);
+                DeleteDC(hMem);
+
+                // "120 × 80 / 3.45 KB" label below thumbnail
+                const int szY = thumbY + dstH + szGap;
+                if (szY < cBot) {
+                    wchar_t sizeText[48];
+                    if (m_thumbFileBytes > 0)
+                        swprintf_s(sizeText, L"%d × %d  /  %.2f KB",
+                            m_thumbW, m_thumbH, m_thumbFileBytes / 1024.0);
+                    else
+                        swprintf_s(sizeText, L"%d × %d", m_thumbW, m_thumbH);
+                    RECT szR = { thumbX, szY, thumbX + dstW, szY + rowH };
+                    SelectObject(hdc, hFNorm);
+                    SetTextColor(hdc, clrVal);
+                    DrawTextW(hdc, sizeText, -1, &szR, DT_CENTER | DT_SINGLELINE | DT_VCENTER);
+                }
+            }
+        }
+
         int y = cTop - m_scrollOffsetY;
+        bool inFileSection = false;
         for (const auto& row : m_rows) {
             if (row.isSection) {
+                inFileSection = (row.label == L"FILE");
                 RECT sr = { 0, y, rc.right, y + sectH };
                 HBRUSH hSBr = CreateSolidBrush(clrSBg);
                 FillRect(hdc, &sr, hSBr);
@@ -615,7 +739,8 @@ LRESULT ExifWnd::HandleMessage(UINT message, WPARAM wParam, LPARAM lParam) {
 
                 const COLORREF valColor = row.action.empty() ? clrVal : RGB(100, 180, 255);
                 SetTextColor(hdc, valColor);
-                RECT vr = { pad + labelW + valGap, y, cR, y + rowH };
+                const int valCR = (inFileSection && thumbColW > 0) ? textCR : cR;
+                RECT vr = { pad + labelW + valGap, y, valCR, y + rowH };
                 DrawTextW(hdc, row.value.c_str(), -1, &vr,
                     DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
                 y += rowH;
@@ -825,9 +950,14 @@ LRESULT ExifWnd::HandleMessage(UINT message, WPARAM wParam, LPARAM lParam) {
         return 0;
 
     case WM_EXIF_READY: {
-        auto* rows = reinterpret_cast<std::vector<ExifRow>*>(lParam);
-        m_rows = std::move(*rows);
-        delete rows;
+        auto* result = reinterpret_cast<ExifResult*>(lParam);
+        if (m_thumbBitmap) { DeleteObject(m_thumbBitmap); m_thumbBitmap = nullptr; }
+        m_rows           = std::move(result->rows);
+        m_thumbBitmap    = result->thumbBitmap;
+        m_thumbW         = result->thumbW;
+        m_thumbH         = result->thumbH;
+        m_thumbFileBytes = result->thumbFileBytes;
+        delete result;
         m_totalContentHeight = 0;
         m_scrollOffsetY      = 0;
         m_selectedRows.clear();
@@ -835,6 +965,10 @@ LRESULT ExifWnd::HandleMessage(UINT message, WPARAM wParam, LPARAM lParam) {
         InvalidateRect(m_hWnd, nullptr, FALSE);
         return 0;
     }
+
+    case WM_DESTROY:
+        if (m_thumbBitmap) { DeleteObject(m_thumbBitmap); m_thumbBitmap = nullptr; }
+        return 0;
 
     case WM_CLOSE:
         Hide();

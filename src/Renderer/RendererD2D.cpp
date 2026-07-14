@@ -1213,10 +1213,11 @@ void RendererD2D::RequestDirThumbnail(const std::wstring &filePath, HWND hPanel)
 
     if (!d2dDev || !hDir) return;
 
-    UINT thumbW = static_cast<UINT>(Constants::THUMBNAIL_PANEL_THUMB_WIDTH);
-    UINT thumbH = static_cast<UINT>(Constants::THUMBNAIL_PANEL_THUMB_HEIGHT);
+    const UINT dpi    = GetDpiForWindow(hPanel);
+    const UINT thumbW = MulDiv(static_cast<int>(Constants::THUMBNAIL_PANEL_THUMB_WIDTH),  dpi, 96);
+    const UINT thumbH = MulDiv(static_cast<int>(Constants::THUMBNAIL_PANEL_THUMB_HEIGHT), dpi, 96);
 
-    g_ioWorker.PushTask([filePath, d2dDev, hDir, thumbW, thumbH, this]() {
+    g_ioWorker.PushTask([filePath, d2dDev, hDir, thumbW, thumbH, dpi, this]() {
         HANDLE hFile = CreateFileW(filePath.c_str(), GENERIC_READ, FILE_SHARE_READ, nullptr, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, nullptr);
         if (hFile == INVALID_HANDLE_VALUE) return;
 
@@ -1232,7 +1233,7 @@ void RendererD2D::RequestDirThumbnail(const std::wstring &filePath, HWND hPanel)
         CloseHandle(hFile);
         if (!ok) return;
 
-        g_dirThumbWorker.PushTask([bytes = std::move(bytes), filePath, d2dDev, hDir, thumbW, thumbH, this](IWICImagingFactory2 *wicFac) mutable {
+        g_dirThumbWorker.PushTask([bytes = std::move(bytes), filePath, d2dDev, hDir, thumbW, thumbH, dpi, this](IWICImagingFactory2 *wicFac) mutable {
             Microsoft::WRL::ComPtr<IWICStream> stream;
             if (FAILED(wicFac->CreateStream(&stream))) return;
             if (FAILED(stream->InitializeFromMemory(bytes.data(), static_cast<DWORD>(bytes.size())))) return;
@@ -1272,8 +1273,13 @@ void RendererD2D::RequestDirThumbnail(const std::wstring &filePath, HWND hPanel)
             Microsoft::WRL::ComPtr<ID2D1DeviceContext> taskCtx;
             if (FAILED(d2dDev->CreateDeviceContext(D2D1_DEVICE_CONTEXT_OPTIONS_NONE, taskCtx.GetAddressOf()))) return;
 
+            D2D1_BITMAP_PROPERTIES1 bmpProps = {};
+            bmpProps.pixelFormat = D2D1::PixelFormat(DXGI_FORMAT_B8G8R8A8_UNORM, D2D1_ALPHA_MODE_PREMULTIPLIED);
+            bmpProps.dpiX = static_cast<float>(dpi);
+            bmpProps.dpiY = static_cast<float>(dpi);
+
             Microsoft::WRL::ComPtr<ID2D1Bitmap1> thumbBitmap;
-            if (FAILED(taskCtx->CreateBitmapFromWicBitmap(uploadSource, nullptr, &thumbBitmap))) return;
+            if (FAILED(taskCtx->CreateBitmapFromWicBitmap(uploadSource, &bmpProps, &thumbBitmap))) return;
 
             {
                 std::lock_guard<std::mutex> lock(m_dirThumbMutex);

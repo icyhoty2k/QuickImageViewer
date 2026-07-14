@@ -26,13 +26,25 @@ namespace UI {
             std::wstring action; // non-empty: URL opened on plain click instead of copy
         };
 
-        // Builds EXIF rows for the given image — no AppState access except wicFactory.
+        struct ExifResult {
+            std::vector<ExifRow> rows;
+            HBITMAP thumbBitmap    = nullptr;
+            int     thumbW         = 0;
+            int     thumbH         = 0;
+            LONGLONG thumbFileBytes = 0; // compressed byte size of embedded JPEG thumbnail
+        };
+
+        // Builds EXIF rows + embedded thumbnail for the given image.
         // Safe to call from any COM-initialized thread.
-        static std::vector<ExifRow> GatherExifRows(const std::wstring& path, int imgW, int imgH);
+        static ExifResult GatherExifData(const std::wstring& path, int imgW, int imgH);
 
         void LoadExifData(); // thin wrapper for the Show() (UI-thread) path
 
         std::vector<ExifRow> m_rows;
+        HBITMAP  m_thumbBitmap     = nullptr;
+        int      m_thumbW          = 0;
+        int      m_thumbH          = 0;
+        LONGLONG m_thumbFileBytes  = 0;
         int  m_scrollOffsetY      = 0;
         int  m_totalContentHeight = 0;
         bool  m_sbDragging         = false;
