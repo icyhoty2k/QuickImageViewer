@@ -38,5 +38,14 @@ namespace UI {
         void RebuildMatches();
         void CommitOpen();
         void AdjustScroll();
+
+        ~FindWnd() {
+            if (m_hFontNorm) DeleteObject(m_hFontNorm);
+            if (m_hFontBold) DeleteObject(m_hFontBold);
+        }
+
+        HFONT m_hFontNorm    = nullptr;
+        HFONT m_hFontBold    = nullptr;
+        int   m_cachedFontDpi = 0;
     };
 } // namespace UI

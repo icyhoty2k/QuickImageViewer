@@ -91,11 +91,21 @@ LRESULT JumpToWnd::HandlePanelMessage(UINT message, WPARAM wParam, LPARAM lParam
             const int fs   = static_cast<int>(13.0f * app.dpiScale);
             const int fsIn = static_cast<int>(16.0f * app.dpiScale);
 
-            HFONT hFont = CreateFontW(-fs, 0, 0, 0, FW_NORMAL, 0, 0, 0,
-                                       DEFAULT_CHARSET, OUT_DEFAULT_PRECIS,
-                                       CLIP_DEFAULT_PRECIS, CLEARTYPE_QUALITY,
-                                       DEFAULT_PITCH | FF_SWISS, L"Segoe UI");
-            HFONT hOldFont = static_cast<HFONT>(SelectObject(hdc, hFont));
+            const int dpiKey = static_cast<int>(app.dpiScale * 96);
+            if (dpiKey != m_cachedFontDpi) {
+                if (m_hFont)      { DeleteObject(m_hFont);      m_hFont      = nullptr; }
+                if (m_hFontInput) { DeleteObject(m_hFontInput); m_hFontInput = nullptr; }
+                m_hFont = CreateFontW(-fs, 0, 0, 0, FW_NORMAL, 0, 0, 0,
+                                      DEFAULT_CHARSET, OUT_DEFAULT_PRECIS,
+                                      CLIP_DEFAULT_PRECIS, CLEARTYPE_QUALITY,
+                                      DEFAULT_PITCH | FF_SWISS, L"Segoe UI");
+                m_hFontInput = CreateFontW(-fsIn, 0, 0, 0, FW_BOLD, 0, 0, 0,
+                                           DEFAULT_CHARSET, OUT_DEFAULT_PRECIS,
+                                           CLIP_DEFAULT_PRECIS, CLEARTYPE_QUALITY,
+                                           DEFAULT_PITCH | FF_SWISS, L"Segoe UI");
+                m_cachedFontDpi = dpiKey;
+            }
+            HFONT hOldFont = static_cast<HFONT>(SelectObject(hdc, m_hFont));
 
             // Label: "Image number  ( 1 – N )"
             wchar_t label[80];
@@ -147,16 +157,11 @@ LRESULT JumpToWnd::HandlePanelMessage(UINT message, WPARAM wParam, LPARAM lParam
                 : Constants::Theme::ThemedColor(0.39f, 0.78f, 1.0f, app.themeFactor);
             SetTextColor(hdc, inputColor);
 
-            HFONT hInputFont = CreateFontW(-fsIn, 0, 0, 0, FW_BOLD, 0, 0, 0,
-                                            DEFAULT_CHARSET, OUT_DEFAULT_PRECIS,
-                                            CLIP_DEFAULT_PRECIS, CLEARTYPE_QUALITY,
-                                            DEFAULT_PITCH | FF_SWISS, L"Segoe UI");
-            SelectObject(hdc, hInputFont);
+            SelectObject(hdc, m_hFontInput);
             RECT inputRect = { boxRect.left + pad / 2, boxRect.top,
                                boxRect.right - pad / 2, boxRect.bottom };
             DrawTextW(hdc, display, -1, &inputRect, DT_CENTER | DT_VCENTER | DT_SINGLELINE);
-            SelectObject(hdc, hFont);
-            DeleteObject(hInputFont);
+            SelectObject(hdc, m_hFont);
 
             // Hint line
             RECT hintRect = { pad, boxRect.bottom + gap,
@@ -168,7 +173,6 @@ LRESULT JumpToWnd::HandlePanelMessage(UINT message, WPARAM wParam, LPARAM lParam
             DrawTextW(hdc, hint, -1, &hintRect, DT_CENTER | DT_VCENTER | DT_SINGLELINE);
 
             SelectObject(hdc, hOldFont);
-            DeleteObject(hFont);
             EndPaint(m_hWnd, &ps);
             return 0;
         }

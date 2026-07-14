@@ -281,15 +281,21 @@ LRESULT FindWnd::HandlePanelMessage(UINT message, WPARAM wParam, LPARAM lParam) 
         const int fsIn  = static_cast<int>(15.0f * dpi);
         const int rowH  = static_cast<int>(26.0f * dpi);
 
-        HFONT hFontNorm = CreateFontW(-fs, 0, 0, 0, FW_NORMAL, 0, 0, 0,
+        const int dpiKey = static_cast<int>(dpi * 96);
+        if (dpiKey != m_cachedFontDpi) {
+            if (m_hFontNorm) { DeleteObject(m_hFontNorm); m_hFontNorm = nullptr; }
+            if (m_hFontBold) { DeleteObject(m_hFontBold); m_hFontBold = nullptr; }
+            m_hFontNorm = CreateFontW(-fs, 0, 0, 0, FW_NORMAL, 0, 0, 0,
                                       DEFAULT_CHARSET, OUT_DEFAULT_PRECIS,
                                       CLIP_DEFAULT_PRECIS, CLEARTYPE_QUALITY,
                                       DEFAULT_PITCH | FF_SWISS, L"Segoe UI");
-        HFONT hFontBold = CreateFontW(-fsIn, 0, 0, 0, FW_BOLD, 0, 0, 0,
+            m_hFontBold = CreateFontW(-fsIn, 0, 0, 0, FW_BOLD, 0, 0, 0,
                                       DEFAULT_CHARSET, OUT_DEFAULT_PRECIS,
                                       CLIP_DEFAULT_PRECIS, CLEARTYPE_QUALITY,
                                       DEFAULT_PITCH | FF_SWISS, L"Segoe UI");
-        HFONT hOldFont = static_cast<HFONT>(SelectObject(hdc, hFontNorm));
+            m_cachedFontDpi = dpiKey;
+        }
+        HFONT hOldFont = static_cast<HFONT>(SelectObject(hdc, m_hFontNorm));
 
         const COLORREF clrLabel   = Constants::Theme::ThemedGray(0.90f, app.themeFactor);
         const COLORREF clrDim     = Constants::Theme::ThemedGray(0.45f, app.themeFactor);
@@ -342,7 +348,7 @@ LRESULT FindWnd::HandlePanelMessage(UINT message, WPARAM wParam, LPARAM lParam) 
         DeleteObject(hPen);
 
         // Query text + cursor
-        SelectObject(hdc, hFontBold);
+        SelectObject(hdc, m_hFontBold);
         SetTextColor(hdc, m_queryLen > 0 ? clrInput : clrDim);
 
         wchar_t display[MAX_QUERY + 4];
@@ -357,7 +363,7 @@ LRESULT FindWnd::HandlePanelMessage(UINT message, WPARAM wParam, LPARAM lParam) 
         RECT inRect = { boxRect.left + pad / 2, boxRect.top,
                         boxRect.right - pad / 2, boxRect.bottom };
         DrawTextW(hdc, display, -1, &inRect, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
-        SelectObject(hdc, hFontNorm);
+        SelectObject(hdc, m_hFontNorm);
 
         y += boxH + gap;
 
@@ -469,8 +475,6 @@ LRESULT FindWnd::HandlePanelMessage(UINT message, WPARAM wParam, LPARAM lParam) 
         }
 
         SelectObject(hdc, hOldFont);
-        DeleteObject(hFontNorm);
-        DeleteObject(hFontBold);
         EndPaint(m_hWnd, &ps);
         return 0;
     }
