@@ -36,6 +36,8 @@ set(SOURCES
         src/UI/FloatingPanelWnd.cpp
         src/UI/HelpWnd.cpp
         src/UI/ExifWnd.cpp
+        src/UI/JumpToWnd.cpp
+        src/UI/StatsWnd.cpp
         src/UI/CacheWnd.cpp
         src/UI/DirWnd.cpp
         src/UI/HistoryListWnd.cpp

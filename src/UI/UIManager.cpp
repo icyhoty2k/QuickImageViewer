@@ -65,6 +65,8 @@ namespace UI {
         dirWnd.Hide();
         historyListWnd.Hide();
         exifWnd.Hide();
+        jumpToWnd.Hide();
+        statsWnd.Hide();
         HideAllSpawnedDirWnds();
     }
 
@@ -110,6 +112,18 @@ namespace UI {
         if (isInit(exifWnd)) return exifWnd;
         exifWnd.Init(m_hInstance, m_hMainWnd);
         return exifWnd;
+    }
+
+    JumpToWnd &UIManager::getJumpToWindow() {
+        if (isInit(jumpToWnd)) return jumpToWnd;
+        jumpToWnd.Init(m_hInstance, m_hMainWnd);
+        return jumpToWnd;
+    }
+
+    StatsWnd &UIManager::getStatsWindow() {
+        if (isInit(statsWnd)) return statsWnd;
+        statsWnd.Init(m_hInstance, m_hMainWnd);
+        return statsWnd;
     }
 
     void UIManager::RefreshInfoWindowIfVisible() {
