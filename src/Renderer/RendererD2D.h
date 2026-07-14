@@ -33,7 +33,7 @@ class RendererD2D final : public IImageRenderer {
 
         [[nodiscard]] HRESULT LoadBitmap(IWICBitmapSource *bitmap, UINT width, UINT height, const std::wstring &filePath) override;
 
-        [[nodiscard]] HRESULT PreloadBitmap(const std::wstring &filePath, int requestIndex) override;
+        [[nodiscard]] HRESULT PreloadBitmap(const std::wstring &filePath, int requestIndex, int expectedCurrentIndex = -1) override;
 
         [[nodiscard]] HRESULT Render() override;
 
@@ -164,6 +164,7 @@ class RendererD2D final : public IImageRenderer {
         Microsoft::WRL::ComPtr<ID2D1Bitmap1> m_pBitmap;
         std::unordered_map<std::wstring, CachedBitmap> m_bitmapCache;
         std::list<std::wstring> m_lruList;
+        std::unordered_set<std::wstring> m_bitmapInFlight;
         std::mutex m_cacheMutex;
 
         // Animated GIF runtime state (active image only)

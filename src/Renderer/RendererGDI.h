@@ -22,7 +22,7 @@ class RendererGDI final : public IImageRenderer {
 
         [[nodiscard]] HRESULT Render() override;
 
-        [[nodiscard]] HRESULT PreloadBitmap(const std::wstring &filePath, int requestIndex) override;
+        [[nodiscard]] HRESULT PreloadBitmap(const std::wstring &filePath, int requestIndex, int expectedCurrentIndex = -1) override;
 
         void ProcessPendingUploads() override;
 

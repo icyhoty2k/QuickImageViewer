@@ -539,29 +539,41 @@ void RendererD2D::ResetGifAnimation() {
 // =============================================================================
 //  PreloadBitmap
 // =============================================================================
-HRESULT RendererD2D::PreloadBitmap(const std::wstring &filePath, int requestIndex) {
-    // Hold the cache lock only for the lookup — not while building the task
-    // lambdas and pushing to the IO queue, so decode threads inserting into
-    // the cache are not blocked.
+HRESULT RendererD2D::PreloadBitmap(const std::wstring &filePath, int requestIndex, int expectedCurrentIndex) {
+    // guardIndex: for neighbor preloads, expectedCurrentIndex is the image the user
+    // is currently viewing; cancel if the user has moved away from it.
+    // For the main-image load (default -1), fall back to requestIndex (same behavior).
+    const int guardIndex = (expectedCurrentIndex >= 0) ? expectedCurrentIndex : requestIndex;
+
     {
         std::lock_guard<std::mutex> lock(m_cacheMutex);
-        if (m_bitmapCache.find(filePath) != m_bitmapCache.end()) {
-            return S_OK;
-        }
+        if (m_bitmapCache.find(filePath) != m_bitmapCache.end()) return S_OK;
+        if (m_bitmapInFlight.count(filePath)) return S_OK;
+        m_bitmapInFlight.insert(filePath);
     }
 
     // Capture device context as a pointer for the task (D2D device contexts are thread-safe)
     Microsoft::WRL::ComPtr<ID2D1Device6> d2dDevice = m_pD2DDevice;
 
-    g_ioWorker.PushTask([filePath, requestIndex, d2dDevice, this]() {
-        if (app.wantedIndex.load(std::memory_order_acquire) != requestIndex) return;
+    g_ioWorker.PushTask([filePath, requestIndex, guardIndex, d2dDevice, this]() {
+        if (app.wantedIndex.load(std::memory_order_acquire) != guardIndex) {
+            std::lock_guard<std::mutex> lock(m_cacheMutex);
+            m_bitmapInFlight.erase(filePath);
+            return;
+        }
 
         HANDLE hFile = CreateFileW(filePath.c_str(), GENERIC_READ, FILE_SHARE_READ, NULL, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, NULL);
-        if (hFile == INVALID_HANDLE_VALUE) return;
+        if (hFile == INVALID_HANDLE_VALUE) {
+            std::lock_guard<std::mutex> lock(m_cacheMutex);
+            m_bitmapInFlight.erase(filePath);
+            return;
+        }
 
         LARGE_INTEGER fileSize;
         if (!GetFileSizeEx(hFile, &fileSize)) {
             CloseHandle(hFile);
+            std::lock_guard<std::mutex> lock(m_cacheMutex);
+            m_bitmapInFlight.erase(filePath);
             return;
         }
 
@@ -569,13 +581,19 @@ HRESULT RendererD2D::PreloadBitmap(const std::wstring &filePath, int requestInde
         DWORD bytesRead;
         if (!ReadFile(hFile, compressedBytes.data(), static_cast<DWORD>(fileSize.QuadPart), &bytesRead, NULL) || bytesRead != fileSize.QuadPart) {
             CloseHandle(hFile);
+            std::lock_guard<std::mutex> lock(m_cacheMutex);
+            m_bitmapInFlight.erase(filePath);
             return;
         }
         CloseHandle(hFile);
 
         // Pass the factory as a parameter to the lambda (injected by the thread pool)
-        g_decoderWorker.PushTask([compressedBytes = std::move(compressedBytes), filePath, requestIndex, d2dDevice, this](IWICImagingFactory2 *wicFac) mutable {
-            if (app.wantedIndex.load(std::memory_order_acquire) != requestIndex) return;
+        g_decoderWorker.PushTask([compressedBytes = std::move(compressedBytes), filePath, requestIndex, guardIndex, d2dDevice, this](IWICImagingFactory2 *wicFac) mutable {
+            // Release inFlight immediately so a new PreloadBitmap call can be queued
+            // while decode is still in progress (e.g. neighbour preload races).
+            { std::lock_guard<std::mutex> lock(m_cacheMutex); m_bitmapInFlight.erase(filePath); }
+
+            if (app.wantedIndex.load(std::memory_order_acquire) != guardIndex) return;
 
             Microsoft::WRL::ComPtr<ID2D1DeviceContext> taskCtx;
             if (FAILED(d2dDevice->CreateDeviceContext(D2D1_DEVICE_CONTEXT_OPTIONS_NONE, taskCtx.GetAddressOf()))) return;
@@ -641,7 +659,7 @@ HRESULT RendererD2D::PreloadBitmap(const std::wstring &filePath, int requestInde
                         D2D1::PixelFormat(DXGI_FORMAT_B8G8R8A8_UNORM, D2D1_ALPHA_MODE_PREMULTIPLIED));
 
                     for (UINT fi = 0; fi < frameCount; ++fi) {
-                        if (app.wantedIndex.load(std::memory_order_acquire) != requestIndex) return;
+                        if (app.wantedIndex.load(std::memory_order_acquire) != guardIndex) return;
 
                         prevCanvas = canvas;
 
