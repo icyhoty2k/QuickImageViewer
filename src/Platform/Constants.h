@@ -4,8 +4,8 @@
 // RC COMPATIBLE DEFINITIONS
 // Used by the Resource Compiler for version metadata
 // =========================================================================
-#define VER_NUMERIC 2,-,0,0        // Numeric version for file properties (4 comma-separated integers) must be exactly 4 numbers separated by commas
-#define VER_STR "2.0.0"            // Human-readable version string; may contain text such as "1.5 Beta"
+#define VER_NUMERIC 2,1,0,0        // Numeric version for file properties (4 comma-separated integers) must be exactly 4 numbers separated by commas
+#define VER_STR "2.1.0"            // Human-readable version string; may contain text such as "1.5 Beta"
 #define FILE_DESC "qIV"            // Friendly name displayed in Task Manager/Explorer
 #define ORIG_FILENAME "QuickImageViewer.exe" // Original name of the binary
 #define PROD_NAME "Quick Image Viewer"       // Official product name
