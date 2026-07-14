@@ -108,7 +108,8 @@ enum class Command {
     SaveImage,
 
     // --- Navigation ---
-    ToggleLastDir, // Q — switch between current and previous folder
+    ToggleLastDir,   // Q — switch between current and previous folder
+    ToggleLastImage, // E — switch between current and previously viewed image
 
     // --- Runtime theme ---
     ThemeFactorUp,   // Ctrl+Alt+Shift+Numpad+

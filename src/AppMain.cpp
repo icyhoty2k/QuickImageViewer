@@ -124,6 +124,15 @@ LRESULT CALLBACK MainAppWndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM l
             InvalidateRect(hWnd, nullptr, FALSE);
             return 0;
         }
+        case Constants::WM_QIV_SWITCH_TO_FIND:
+            uiManager.ToggleFindWindow();
+            return 0;
+        case Constants::WM_QIV_SWITCH_TO_JUMP:
+            uiManager.ToggleJumpToWindow();
+            return 0;
+        case Constants::WM_QIV_SCAN_COMPLETE:
+            HandleScanComplete(hWnd, reinterpret_cast<ScanResult *>(lParam));
+            return 0;
         case WM_TIMER: {
             constexpr UINT_PTR TIMER_LOOKASIDE = 1001;
             constexpr UINT_PTR TIMER_CENTER_MSG = 1002;
@@ -180,6 +189,16 @@ LRESULT CALLBACK MainAppWndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM l
                 if (IsTransitionComplete(app.slideshow.transition)) {
                     KillTimer(hWnd, Constants::Slideshow::TRANSITION_TIMER_ID);
                     FinishTransition(hWnd, app.slideshow.transition);
+                }
+                return 0;
+            }
+
+            if (wParam == Constants::Slideshow::GIF_TIMER_ID) {
+                KillTimer(hWnd, Constants::Slideshow::GIF_TIMER_ID);
+                if (app.renderer && app.renderer->IsAnimatedGif()) {
+                    int nextDelay = app.renderer->AdvanceGifFrame();
+                    InvalidateRect(hWnd, nullptr, FALSE);
+                    SetTimer(hWnd, Constants::Slideshow::GIF_TIMER_ID, nextDelay, nullptr);
                 }
                 return 0;
             }
@@ -329,6 +348,12 @@ LRESULT CALLBACK MainAppWndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM l
                     // m_offset (by design, so manual scrolling is not interrupted).
                     // On a cache-miss arrival we always want to snap to selection.
                     uiManager.getActiveDirWnd().SyncDirSelectionRectangle();
+
+                    // Arm the GIF animation timer if this is an animated GIF.
+                    KillTimer(hWnd, Constants::Slideshow::GIF_TIMER_ID);
+                    if (app.renderer->IsAnimatedGif())
+                        SetTimer(hWnd, Constants::Slideshow::GIF_TIMER_ID,
+                                 app.renderer->GetCurrentGifDelay(), nullptr);
                 }
             }
             return 0;
@@ -457,6 +482,13 @@ LRESULT CALLBACK MainAppWndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM l
 
             return 0; // Returning 0 prevents WM_DESTROY from being called
         }
+
+        case WM_SETCURSOR:
+            if (g_scanInProgress.load(std::memory_order_relaxed)) {
+                SetCursor(LoadCursorW(nullptr, IDC_APPSTARTING));
+                return TRUE;
+            }
+            break;
 
         case WM_DESTROY:
             PostQuitMessage(0);

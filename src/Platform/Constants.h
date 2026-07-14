@@ -175,6 +175,14 @@ namespace Constants {
     constexpr UINT WM_QIV_REPAINT        = WM_USER + 2; // Signal to UI thread that bitmap is ready
     constexpr UINT WM_QIV_SVG_READY      = WM_USER + 3; // Posted by IO thread when SVG bytes are loaded
     constexpr UINT WM_QIV_OPEN_FILE      = WM_USER + 4; // Posted by DropTarget/WM_COPYDATA; LPARAM = new std::wstring*
+    constexpr UINT WM_QIV_SWITCH_TO_FIND = WM_USER + 5; // FindWnd  ← PANEL_SWITCH_TO_FIND_CHAR typed in JumpToWnd
+    constexpr UINT WM_QIV_SWITCH_TO_JUMP = WM_USER + 6; // JumpToWnd ← PANEL_SWITCH_TO_JUMP_CHAR typed in FindWnd
+    constexpr UINT WM_QIV_SCAN_COMPLETE      = WM_USER + 7; // Background dir scan done; LPARAM = new ScanResult*
+    constexpr UINT WM_QIV_HISTORY_VALIDATED  = WM_USER + 8; // Background history validation done; LPARAM = new StatusMap*
+
+    // First-character panel-switch triggers
+    constexpr wchar_t PANEL_SWITCH_TO_JUMP_CHAR = L'#'; // type this in FindWnd  to open JumpToWnd
+    constexpr wchar_t PANEL_SWITCH_TO_FIND_CHAR = L'@'; // type this in JumpToWnd to open FindWnd
     // =============================================================================
 
 
@@ -340,6 +348,14 @@ namespace Constants {
         constexpr UINT_PTR TIMER_ID = 1003; // slide-advance tick
         constexpr UINT_PTR CURSOR_TIMER_ID = 1004; // cursor-hide inactivity tick
         constexpr UINT_PTR TRANSITION_TIMER_ID = 1005; // transition animation tick
+        constexpr UINT_PTR GIF_TIMER_ID = 1006; // animated GIF frame-advance tick
+
+    namespace History {
+        // How long the user must stay in the history panel before background
+        // folder validation starts. Prevents thrashing on rapid Tab presses.
+        constexpr UINT VALIDATION_DELAY_MS  = 3000;
+        constexpr UINT_PTR VALIDATION_TIMER_ID = 1007;
+    }
 
         constexpr int INTERVAL_MS = 5000; // ms between auto-advances
         constexpr bool LOOP = true; // wrap to first image at end
@@ -347,5 +363,26 @@ namespace Constants {
         constexpr int CURSOR_HIDE_MS = 3000; // ms of inactivity before hiding cursor (0 = never)
         constexpr int TRANSITION_TICK_MS = 16; // animation tick interval ~60 fps
         constexpr int TRANSITION_DURATION_MS = 800; // default transition length ms
+    }
+
+    // =========================================================================
+    // Save dialog formats  (Ctrl+S)
+    // Add a row here to expose a new format in the save dialog.
+    // SaveCurrentImageWithEffects() detects format from the chosen file extension.
+    // =========================================================================
+    namespace Save {
+        struct Format {
+            const wchar_t *description; // label shown in the dialog filter list
+            const wchar_t *pattern;     // file mask(s), e.g. L"*.jpg;*.jpeg"
+            const wchar_t *ext;         // extension auto-appended when user omits it
+        };
+        constexpr Format FORMATS[] = {
+            { L"PNG Image",  L"*.png",        L"png"  },
+            { L"JPEG Image", L"*.jpg;*.jpeg", L"jpg"  },
+            { L"BMP Image",  L"*.bmp",        L"bmp"  },
+            { L"TIFF Image", L"*.tif;*.tiff", L"tif"  },
+            { L"GIF Image",  L"*.gif",        L"gif"  },
+        };
+        constexpr wchar_t DEFAULT_EXT[] = L"png"; // used when no filter is selected
     }
 }

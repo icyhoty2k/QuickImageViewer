@@ -446,13 +446,17 @@ HRESULT RendererD2D::LoadBitmap(IWICBitmapSource *bitmap, UINT width, UINT heigh
         auto it = m_bitmapCache.find(filePath);
         if (it != m_bitmapCache.end()) {
             m_lruList.splice(m_lruList.begin(), m_lruList, it->second.lruIt);
-            m_pBitmap = it->second.bitmap;
             m_pActiveSvg.Reset();
             m_svgNativeW = 0.0f;
             m_svgNativeH = 0.0f;
             app.imgWidth = static_cast<int>(it->second.width);
             app.imgHeight = static_cast<int>(it->second.height);
-            isCacheHit = true;
+            // Restore GIF animation state (empty vectors = static image)
+            m_gifFrame  = 0;
+            m_gifFrames = it->second.gifFrames;
+            m_gifDelays = it->second.gifDelays;
+            m_pBitmap   = m_gifFrames.empty() ? it->second.bitmap : m_gifFrames[0];
+            isCacheHit  = true;
         }
     }
 
@@ -508,6 +512,28 @@ HRESULT RendererD2D::LoadBitmap(IWICBitmapSource *bitmap, UINT width, UINT heigh
         }
     }
     return hr;
+}
+
+// =============================================================================
+//  Animated GIF helpers
+// =============================================================================
+int RendererD2D::GetCurrentGifDelay() const {
+    if (m_gifDelays.empty()) return 100;
+    return m_gifDelays[m_gifFrame % static_cast<int>(m_gifDelays.size())];
+}
+
+int RendererD2D::AdvanceGifFrame() {
+    if (m_gifFrames.empty()) return 0;
+    m_gifFrame = (m_gifFrame + 1) % static_cast<int>(m_gifFrames.size());
+    m_pBitmap = m_gifFrames[m_gifFrame];
+    m_pActiveDisplayNode = nullptr; // bypass effect chain; draw m_pBitmap directly
+    return m_gifDelays[m_gifFrame];
+}
+
+void RendererD2D::ResetGifAnimation() {
+    m_gifFrame = 0;
+    m_gifFrames.clear();
+    m_gifDelays.clear();
 }
 
 // =============================================================================
@@ -572,6 +598,149 @@ HRESULT RendererD2D::PreloadBitmap(const std::wstring &filePath, int requestInde
                 Microsoft::WRL::ComPtr<IWICBitmapDecoder> decoder;
                 if (FAILED(wicFac->CreateDecoderFromStream(wicStream.Get(), nullptr, WICDecodeMetadataCacheOnDemand, &decoder))) return;
 
+                UINT frameCount = 1;
+                decoder->GetFrameCount(&frameCount);
+
+                if (frameCount > 1) {
+                    // ── Animated GIF path ──────────────────────────────────────────
+                    // Read logical screen size from the GIF container metadata.
+                    UINT screenW = 0, screenH = 0;
+                    {
+                        Microsoft::WRL::ComPtr<IWICMetadataQueryReader> cmr;
+                        if (SUCCEEDED(decoder->GetMetadataQueryReader(&cmr))) {
+                            PROPVARIANT pv;
+                            PropVariantInit(&pv);
+                            if (SUCCEEDED(cmr->GetMetadataByName(L"/logscrdesc/Width",  &pv)) && pv.vt == VT_UI2) screenW = pv.uiVal; PropVariantClear(&pv);
+                            if (SUCCEEDED(cmr->GetMetadataByName(L"/logscrdesc/Height", &pv)) && pv.vt == VT_UI2) screenH = pv.uiVal; PropVariantClear(&pv);
+                        }
+                    }
+
+                    // Fallback: use frame 0 size
+                    if (screenW == 0 || screenH == 0) {
+                        Microsoft::WRL::ComPtr<IWICBitmapFrameDecode> f0;
+                        if (SUCCEEDED(decoder->GetFrame(0, &f0))) f0->GetSize(&screenW, &screenH);
+                    }
+                    if (screenW == 0 || screenH == 0) return;
+
+                    width  = screenW;
+                    height = screenH;
+                    orientation = 1; // GIF has no EXIF
+
+                    // Compositing canvas — PBGRA32, transparent black
+                    const UINT canvasStride = screenW * 4;
+                    std::vector<BYTE> canvas(canvasStride * screenH, 0);
+                    std::vector<BYTE> prevCanvas; // for disposal mode 3
+
+                    std::vector<Microsoft::WRL::ComPtr<ID2D1Bitmap1>> gifFrames;
+                    std::vector<int> gifDelays;
+                    gifFrames.reserve(frameCount);
+                    gifDelays.reserve(frameCount);
+
+                    const D2D1_BITMAP_PROPERTIES1 bmpProps = D2D1::BitmapProperties1(
+                        D2D1_BITMAP_OPTIONS_NONE,
+                        D2D1::PixelFormat(DXGI_FORMAT_B8G8R8A8_UNORM, D2D1_ALPHA_MODE_PREMULTIPLIED));
+
+                    for (UINT fi = 0; fi < frameCount; ++fi) {
+                        if (app.wantedIndex.load(std::memory_order_acquire) != requestIndex) return;
+
+                        prevCanvas = canvas;
+
+                        Microsoft::WRL::ComPtr<IWICBitmapFrameDecode> gifFrame;
+                        if (FAILED(decoder->GetFrame(fi, &gifFrame))) break;
+
+                        UINT fw = 0, fh = 0;
+                        gifFrame->GetSize(&fw, &fh);
+
+                        int left = 0, top = 0, disposal = 0, delayCs = 10;
+                        {
+                            Microsoft::WRL::ComPtr<IWICMetadataQueryReader> fmr;
+                            if (SUCCEEDED(gifFrame->GetMetadataQueryReader(&fmr))) {
+                                PROPVARIANT pv;
+                                PropVariantInit(&pv);
+                                if (SUCCEEDED(fmr->GetMetadataByName(L"/imgdesc/Left",     &pv)) && pv.vt == VT_UI2) left     = pv.uiVal; PropVariantClear(&pv);
+                                if (SUCCEEDED(fmr->GetMetadataByName(L"/imgdesc/Top",      &pv)) && pv.vt == VT_UI2) top      = pv.uiVal; PropVariantClear(&pv);
+                                if (SUCCEEDED(fmr->GetMetadataByName(L"/grctlext/Disposal",&pv)) && pv.vt == VT_UI1) disposal = pv.bVal;   PropVariantClear(&pv);
+                                if (SUCCEEDED(fmr->GetMetadataByName(L"/grctlext/Delay",  &pv)) && pv.vt == VT_UI2) delayCs  = pv.uiVal;  PropVariantClear(&pv);
+                            }
+                        }
+
+                        const int delayMs = std::max(20, delayCs * 10);
+
+                        // Convert frame to PBGRA32 (WIC handles GIF transparency via palette)
+                        Microsoft::WRL::ComPtr<IWICFormatConverter> conv;
+                        if (FAILED(wicFac->CreateFormatConverter(&conv))) break;
+                        Microsoft::WRL::ComPtr<IWICPalette> pal;
+                        wicFac->CreatePalette(&pal);
+                        gifFrame->CopyPalette(pal.Get());
+                        if (FAILED(conv->Initialize(gifFrame.Get(), GUID_WICPixelFormat32bppPBGRA,
+                                                    WICBitmapDitherTypeNone, pal.Get(), 0.0,
+                                                    WICBitmapPaletteTypeCustom))) break;
+
+                        const UINT fStride = fw * 4;
+                        std::vector<BYTE> framePx(fStride * fh);
+                        if (FAILED(conv->CopyPixels(nullptr, fStride, static_cast<UINT>(framePx.size()), framePx.data()))) break;
+
+                        // Composite frame onto canvas: only copy non-transparent pixels
+                        const UINT clampW = std::min(fw, screenW > static_cast<UINT>(left) ? screenW - static_cast<UINT>(left) : 0u);
+                        const UINT clampH = std::min(fh, screenH > static_cast<UINT>(top)  ? screenH - static_cast<UINT>(top)  : 0u);
+                        for (UINT row = 0; row < clampH; ++row) {
+                            const BYTE *src = framePx.data() + row * fStride;
+                            BYTE *dst = canvas.data() + (static_cast<UINT>(top) + row) * canvasStride + static_cast<UINT>(left) * 4;
+                            for (UINT col = 0; col < clampW; ++col, src += 4, dst += 4) {
+                                if (src[3] > 0) { dst[0]=src[0]; dst[1]=src[1]; dst[2]=src[2]; dst[3]=src[3]; }
+                            }
+                        }
+
+                        // Upload canvas snapshot as D2D bitmap for this frame
+                        Microsoft::WRL::ComPtr<ID2D1Bitmap1> d2dFrame;
+                        if (SUCCEEDED(taskCtx->CreateBitmap(D2D1::SizeU(screenW, screenH),
+                                                            canvas.data(), canvasStride, bmpProps, &d2dFrame))) {
+                            gifFrames.push_back(d2dFrame);
+                            gifDelays.push_back(delayMs);
+                        }
+
+                        // Apply disposal mode before next frame
+                        switch (disposal) {
+                            case 2: { // Restore to background (transparent)
+                                for (UINT row = 0; row < clampH; ++row)
+                                    memset(canvas.data() + (static_cast<UINT>(top) + row) * canvasStride + static_cast<UINT>(left) * 4, 0, clampW * 4);
+                                break;
+                            }
+                            case 3: // Restore to previous
+                                canvas = prevCanvas;
+                                break;
+                            default: break; // 0 / 1: leave canvas as-is
+                        }
+                    }
+
+                    if (gifFrames.empty()) return;
+                    newBitmap = gifFrames[0];
+
+                    {
+                        std::lock_guard<std::mutex> lock(m_cacheMutex);
+                        auto it = m_bitmapCache.find(filePath);
+                        if (it != m_bitmapCache.end()) { m_lruList.erase(it->second.lruIt); m_bitmapCache.erase(it); }
+                        if (m_lruList.size() >= Constants::VRAM_CACHE_IMAGES_COUNT) { m_bitmapCache.erase(m_lruList.back()); m_lruList.pop_back(); }
+                        m_lruList.push_front(filePath);
+                        auto &entry = m_bitmapCache[filePath];
+                        entry.bitmap      = newBitmap;
+                        entry.lruIt       = m_lruList.begin();
+                        entry.width       = screenW;
+                        entry.height      = screenH;
+                        entry.orientation = 1;
+                        entry.gifFrames   = std::move(gifFrames);
+                        entry.gifDelays   = std::move(gifDelays);
+                    }
+
+                    if (app.wantedIndex.load(std::memory_order_acquire) == requestIndex) {
+                        long long start = ImageLoadStats::g_loadStartUs.load(std::memory_order_relaxed);
+                        if (start > 0) ImageLoadStats::g_lastLoadUs.store(ImageLoadStats::NowUs() - start, std::memory_order_relaxed);
+                        PostMessageW(m_hwnd, Constants::WM_QIV_REPAINT, 0, 0);
+                    }
+                    return; // GIF path handled everything — skip normal cache-store below
+                }
+
+                // ── Single-frame WIC path (non-GIF or static GIF) ─────────────
                 Microsoft::WRL::ComPtr<IWICBitmapFrameDecode> frame;
                 if (FAILED(decoder->GetFrame(0, &frame))) return;
 
@@ -1094,12 +1263,20 @@ HRESULT RendererD2D::SaveCurrentImageWithEffects(const std::wstring &outPath) {
     if (!m_pBitmap || !m_pDeviceContext || !m_pD3DDevice) return E_FAIL;
 
     HRESULT hr = S_OK;
-    D2D1_SIZE_U pixelSize = m_pBitmap->GetPixelSize();
-    if (pixelSize.width == 0 || pixelSize.height == 0) return E_FAIL;
+    const D2D1_SIZE_U imgSize = m_pBitmap->GetPixelSize();
+    if (imgSize.width == 0 || imgSize.height == 0) return E_FAIL;
+
+    // Bake rotation + flip into the output: 90°/270° swaps width and height.
+    const int  rot   = app.viewport.rotation;
+    const bool flipH = app.viewport.flippedH;
+    const bool flipV = app.viewport.flippedV;
+    const bool swapDims = (rot == 90 || rot == 270);
+    const UINT outW = swapDims ? imgSize.height : imgSize.width;
+    const UINT outH = swapDims ? imgSize.width  : imgSize.height;
 
     D3D11_TEXTURE2D_DESC texDesc{};
-    texDesc.Width = pixelSize.width;
-    texDesc.Height = pixelSize.height;
+    texDesc.Width  = outW;
+    texDesc.Height = outH;
     texDesc.MipLevels = 1;
     texDesc.ArraySize = 1;
     texDesc.Format = DXGI_FORMAT_B8G8R8A8_UNORM;
@@ -1125,11 +1302,23 @@ HRESULT RendererD2D::SaveCurrentImageWithEffects(const std::wstring &outPath) {
 
     Microsoft::WRL::ComPtr<ID2D1Image> previousTarget;
     m_pDeviceContext->GetTarget(&previousTarget);
-
     m_pDeviceContext->SetTarget(offscreenBitmap.Get());
     m_pDeviceContext->BeginDraw();
     m_pDeviceContext->Clear(D2D1::ColorF(D2D1::ColorF::Black));
-    m_pDeviceContext->SetTransform(D2D1::Matrix3x2F::Identity());
+
+    // Build transform that maps the source bitmap to the output canvas,
+    // mirroring the same flip-then-rotate order used in Render().
+    {
+        const D2D1_POINT_2F origin = D2D1::Point2F(0.0f, 0.0f);
+        D2D1_MATRIX_3X2_F tr = D2D1::Matrix3x2F::Translation(
+            -static_cast<float>(imgSize.width)  / 2.0f,
+            -static_cast<float>(imgSize.height) / 2.0f);
+        if (flipH) tr = tr * D2D1::Matrix3x2F::Scale(-1.0f,  1.0f, origin);
+        if (flipV) tr = tr * D2D1::Matrix3x2F::Scale( 1.0f, -1.0f, origin);
+        if (rot != 0) tr = tr * D2D1::Matrix3x2F::Rotation(static_cast<float>(rot), origin);
+        tr = tr * D2D1::Matrix3x2F::Translation(outW / 2.0f, outH / 2.0f);
+        m_pDeviceContext->SetTransform(tr);
+    }
 
     ID2D1Effect *finalEffect = BuildEffectChain(m_pBitmap.Get());
     if (finalEffect) {
@@ -1138,10 +1327,10 @@ HRESULT RendererD2D::SaveCurrentImageWithEffects(const std::wstring &outPath) {
         m_pDeviceContext->DrawBitmap(
                 m_pBitmap.Get(),
                 D2D1::RectF(0.0f, 0.0f,
-                            static_cast<float>(pixelSize.width),
-                            static_cast<float>(pixelSize.height)),
+                            static_cast<float>(imgSize.width),
+                            static_cast<float>(imgSize.height)),
                 1.0f,
-                D2D1_BITMAP_INTERPOLATION_MODE_NEAREST_NEIGHBOR);
+                D2D1_BITMAP_INTERPOLATION_MODE_LINEAR);
     }
 
     hr = m_pDeviceContext->EndDraw();
@@ -1163,9 +1352,9 @@ HRESULT RendererD2D::SaveCurrentImageWithEffects(const std::wstring &outPath) {
     hr = m_pD3DContext->Map(stagingTex.Get(), 0, D3D11_MAP_READ, 0, &mapped);
     if (FAILED(hr)) return hr;
 
-    const UINT rowBytes = pixelSize.width * 4;
-    std::vector<BYTE> pixels(static_cast<size_t>(pixelSize.width) * pixelSize.height * 4);
-    for (UINT row = 0; row < pixelSize.height; ++row) {
+    const UINT rowBytes = outW * 4;
+    std::vector<BYTE> pixels(static_cast<size_t>(outW) * outH * 4);
+    for (UINT row = 0; row < outH; ++row) {
         memcpy(pixels.data() + static_cast<size_t>(row) * rowBytes,
                static_cast<const BYTE *>(mapped.pData) + static_cast<size_t>(row) * mapped.RowPitch,
                rowBytes);
@@ -1175,6 +1364,22 @@ HRESULT RendererD2D::SaveCurrentImageWithEffects(const std::wstring &outPath) {
     Microsoft::WRL::ComPtr<IWICImagingFactory> wicFac = app.wicFactory;
     if (!wicFac) return E_FAIL;
 
+    // Map file extension → WIC container GUID.
+    GUID containerFmt = GUID_ContainerFormatPng; // default
+    bool isJpeg = false;
+    {
+        auto dot = outPath.rfind(L'.');
+        if (dot != std::wstring::npos) {
+            std::wstring ext = outPath.substr(dot + 1);
+            for (auto &c : ext) c = static_cast<wchar_t>(towlower(c));
+            if      (ext == L"jpg" || ext == L"jpeg") { containerFmt = GUID_ContainerFormatJpeg; isJpeg = true; }
+            else if (ext == L"bmp")                    { containerFmt = GUID_ContainerFormatBmp;  }
+            else if (ext == L"tif" || ext == L"tiff")  { containerFmt = GUID_ContainerFormatTiff; }
+            else if (ext == L"gif")                    { containerFmt = GUID_ContainerFormatGif;  }
+            // png and everything else → default GUID_ContainerFormatPng
+        }
+    }
+
     Microsoft::WRL::ComPtr<IWICStream> wicStream;
     hr = wicFac->CreateStream(&wicStream);
     if (FAILED(hr)) return hr;
@@ -1183,7 +1388,7 @@ HRESULT RendererD2D::SaveCurrentImageWithEffects(const std::wstring &outPath) {
     if (FAILED(hr)) return hr;
 
     Microsoft::WRL::ComPtr<IWICBitmapEncoder> encoder;
-    hr = wicFac->CreateEncoder(GUID_ContainerFormatPng, nullptr, &encoder);
+    hr = wicFac->CreateEncoder(containerFmt, nullptr, &encoder);
     if (FAILED(hr)) return hr;
 
     hr = encoder->Initialize(wicStream.Get(), WICBitmapEncoderNoCache);
@@ -1194,18 +1399,46 @@ HRESULT RendererD2D::SaveCurrentImageWithEffects(const std::wstring &outPath) {
     hr = encoder->CreateNewFrame(&frame, &frameProps);
     if (FAILED(hr)) return hr;
 
+    if (isJpeg) {
+        // Set JPEG quality to 92%.
+        PROPBAG2 qualityOpt{};
+        qualityOpt.pstrName = const_cast<LPOLESTR>(L"ImageQuality");
+        VARIANT qualityVal{};
+        qualityVal.vt = VT_R4;
+        qualityVal.fltVal = 0.92f;
+        frameProps->Write(1, &qualityOpt, &qualityVal);
+    }
+
     hr = frame->Initialize(frameProps.Get());
     if (FAILED(hr)) return hr;
 
-    hr = frame->SetSize(pixelSize.width, pixelSize.height);
+    hr = frame->SetSize(outW, outH);
     if (FAILED(hr)) return hr;
 
-    WICPixelFormatGUID fmt = GUID_WICPixelFormat32bppBGRA;
-    hr = frame->SetPixelFormat(&fmt);
-    if (FAILED(hr)) return hr;
+    if (isJpeg) {
+        // JPEG has no alpha channel — pack BGRA pixels down to BGR24.
+        WICPixelFormatGUID fmt = GUID_WICPixelFormat24bppBGR;
+        hr = frame->SetPixelFormat(&fmt);
+        if (FAILED(hr)) return hr;
 
-    hr = frame->WritePixels(pixelSize.height, rowBytes,
-                            static_cast<UINT>(pixels.size()), pixels.data());
+        const UINT jpegStride = outW * 3;
+        std::vector<BYTE> jpegPx(static_cast<size_t>(jpegStride) * outH);
+        const UINT srcPx = outW * outH;
+        for (UINT i = 0; i < srcPx; ++i) {
+            jpegPx[i * 3 + 0] = pixels[i * 4 + 0]; // B
+            jpegPx[i * 3 + 1] = pixels[i * 4 + 1]; // G
+            jpegPx[i * 3 + 2] = pixels[i * 4 + 2]; // R
+        }
+        hr = frame->WritePixels(outH, jpegStride,
+                                static_cast<UINT>(jpegPx.size()), jpegPx.data());
+    } else {
+        WICPixelFormatGUID fmt = GUID_WICPixelFormat32bppBGRA;
+        hr = frame->SetPixelFormat(&fmt);
+        if (FAILED(hr)) return hr;
+
+        hr = frame->WritePixels(outH, rowBytes,
+                                static_cast<UINT>(pixels.size()), pixels.data());
+    }
     if (FAILED(hr)) return hr;
 
     hr = frame->Commit();

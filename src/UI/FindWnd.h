@@ -1,5 +1,6 @@
 #pragma once
 #include <windows.h>
+#include <string>
 #include <vector>
 #include "FloatingPanelWnd.h"
 
@@ -19,11 +20,14 @@ namespace UI {
         static constexpr int VISIBLE_ROWS = 8;
 
         struct MatchResult {
-            int playlistIdx;
-            int score;
-            int positions[MAX_QUERY]; // matched char positions in filename
-            int posCount;
+            int          playlistIdx; // -1 for cache-only entries
+            std::wstring path;        // full path (always set)
+            int          score;
+            int          positions[MAX_QUERY];
+            int          posCount;
         };
+
+        int m_cachedExtraCount = 0; // entries from VRAM cache not in playlist
 
         wchar_t                  m_query[MAX_QUERY + 2] = {};
         int                      m_queryLen  = 0;

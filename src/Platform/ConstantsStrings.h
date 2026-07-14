@@ -36,6 +36,12 @@ namespace Constants::Messages {
     // Q — toggle last/current dir
     constexpr const wchar_t *TOGGLE_DIR_NO_PREV    = L"No previous folder";
     constexpr const wchar_t *TOGGLE_DIR_CHANGED    = L"→ "; // prefix — append folder name
+    constexpr const wchar_t *TOGGLE_DIR_MISSING    = L"⚠ Previous folder no longer exists";
+
+    // E — toggle last/current image
+    constexpr const wchar_t *TOGGLE_IMAGE_NO_PREV  = L"No previous image";
+    constexpr const wchar_t *TOGGLE_IMAGE_CHANGED  = L"→ "; // prefix — append filename
+    constexpr const wchar_t *TOGGLE_IMAGE_MISSING  = L"⚠ Previous image no longer exists";
 
     // Runtime theme factor  (Ctrl+Alt+Shift+Numpad+/-/0)
     constexpr const wchar_t *THEME_FACTOR_PREFIX    = L"Theme: ";

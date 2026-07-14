@@ -2,12 +2,26 @@
 #include "../AppState.h"
 #include "../Platform/Constants.h"
 #include "../Platform/FileHandler.h"
+#include "../Renderer/IRenderer.h"
 #include <algorithm>
 #include <cwctype>
 
 extern AppState app;
 
 namespace UI {
+
+// Case-insensitive wildcard match (* = any sequence, ? = any single char).
+static bool WildcardMatch(const wchar_t *pat, const wchar_t *text) {
+    const wchar_t *star = nullptr, *s = text;
+    while (*text) {
+        if (*pat == *text || *pat == L'?') { ++pat; ++text; }
+        else if (*pat == L'*')             { star = pat++; s = text; }
+        else if (star)                     { pat = star + 1; text = ++s; }
+        else return false;
+    }
+    while (*pat == L'*') ++pat;
+    return !*pat;
+}
 
 // =============================================================================
 //  Init / Show
@@ -50,8 +64,9 @@ void FindWnd::Show() {
 
 void FindWnd::RebuildMatches() {
     m_results.clear();
-    m_selIdx    = 0;
-    m_rowScroll = 0;
+    m_selIdx          = 0;
+    m_rowScroll       = 0;
+    m_cachedExtraCount = 0;
 
     if (m_queryLen == 0) return;
 
@@ -61,15 +76,28 @@ void FindWnd::RebuildMatches() {
     lq[m_queryLen] = L'\0';
     for (int i = 0; lq[i]; ++i) lq[i] = static_cast<wchar_t>(towlower(lq[i]));
 
-    wchar_t lname[512];
-    MatchResult r;
-    for (int i = 0; i < static_cast<int>(app.playlist.size()); ++i) {
-        const std::wstring &path = app.playlist[i];
+    // Wildcard mode: query contains '*' or '?'
+    bool hasWildcard = false;
+    for (int i = 0; i < m_queryLen; ++i)
+        if (lq[i] == L'*' || lq[i] == L'?') { hasWildcard = true; break; }
 
-        auto sep = path.rfind(L'\\');
-        const wchar_t *name = (sep == std::wstring::npos)
-                              ? path.c_str() : path.c_str() + sep + 1;
+    // Snapshot VRAM cache paths not already in the current playlist.
+    // Done fresh on every RebuildMatches so it reflects the live cache.
+    std::vector<std::wstring> extraPaths;
+    if (app.renderer) {
+        for (auto &item : app.renderer->GetCachedBitmaps()) {
+            if (app.playlistIndexMap.find(item.filePath) == app.playlistIndexMap.end())
+                extraPaths.push_back(item.filePath);
+        }
+    }
 
+    // Helper: match one path and push result if it matches.
+    auto tryMatch = [&](const std::wstring &path, int playlistIdx) {
+        const wchar_t *name = path.c_str();
+        size_t sl = path.find_last_of(L"\\/");
+        if (sl != std::wstring::npos) name += sl + 1;
+
+        wchar_t lname[512];
         int nameLen = 0;
         while (name[nameLen] && nameLen < 511) {
             lname[nameLen] = static_cast<wchar_t>(towlower(name[nameLen]));
@@ -77,15 +105,25 @@ void FindWnd::RebuildMatches() {
         }
         lname[nameLen] = L'\0';
 
-        // Fuzzy subsequence match
+        MatchResult r;
+        r.playlistIdx = playlistIdx;
+        r.path        = path;
+        r.score       = 0;
+        r.posCount    = 0;
+
+        if (hasWildcard) {
+            if (!WildcardMatch(lq, lname)) return;
+            m_results.push_back(std::move(r));
+            return;
+        }
+
         int ni = 0, qi = 0, pi = 0;
         while (ni < nameLen && qi < m_queryLen) {
             if (lname[ni] == lq[qi]) { r.positions[pi++] = ni; ++qi; }
             ++ni;
         }
-        if (qi < m_queryLen) continue; // not all query chars found
+        if (qi < m_queryLen) return;
 
-        // Score: consecutive runs, word-boundary hits, start bonus, span penalty
         int score = 0;
         if (r.positions[0] == 0) score += 8;
         for (int k = 0; k < pi; ++k) {
@@ -97,15 +135,23 @@ void FindWnd::RebuildMatches() {
             }
         }
         score -= (r.positions[pi - 1] - r.positions[0]);
+        r.score    = score;
+        r.posCount = pi;
+        m_results.push_back(std::move(r));
+    };
 
-        r.playlistIdx = i;
-        r.score       = score;
-        r.posCount    = pi;
-        m_results.push_back(r);
+    for (int i = 0; i < static_cast<int>(app.playlist.size()); ++i)
+        tryMatch(app.playlist[i], i);
+
+    int extraStart = static_cast<int>(m_results.size());
+    for (auto &p : extraPaths)
+        tryMatch(p, -1);
+    m_cachedExtraCount = static_cast<int>(m_results.size()) - extraStart;
+
+    if (!hasWildcard) {
+        std::sort(m_results.begin(), m_results.end(),
+                  [](const MatchResult &a, const MatchResult &b) { return a.score > b.score; });
     }
-
-    std::sort(m_results.begin(), m_results.end(),
-              [](const MatchResult &a, const MatchResult &b) { return a.score > b.score; });
 }
 
 void FindWnd::AdjustScroll() {
@@ -119,9 +165,13 @@ void FindWnd::AdjustScroll() {
 
 void FindWnd::CommitOpen() {
     if (m_results.empty()) return;
-    int playlistIdx = m_results[m_selIdx].playlistIdx;
+    const MatchResult &mr = m_results[m_selIdx];
     Hide();
-    LoadImageIndex(m_hParent, playlistIdx);
+    if (mr.playlistIdx >= 0) {
+        LoadImageIndex(m_hParent, mr.playlistIdx);
+    } else {
+        OpenSpecificImage(m_hParent, mr.path);
+    }
     InvalidateRect(m_hParent, nullptr, FALSE);
 }
 
@@ -197,7 +247,12 @@ LRESULT FindWnd::HandlePanelMessage(UINT message, WPARAM wParam, LPARAM lParam) 
 
     case WM_CHAR: {
         wchar_t ch = static_cast<wchar_t>(wParam);
-        // Accept any printable character, ignore control chars
+        // Switch to Jump-to dialog when the trigger char is the first input
+        if (ch == Constants::PANEL_SWITCH_TO_JUMP_CHAR && m_queryLen == 0) {
+            Hide();
+            PostMessageW(m_hParent, Constants::WM_QIV_SWITCH_TO_JUMP, 0, 0);
+            return 0;
+        }
         if (ch >= L' ' && m_queryLen < MAX_QUERY) {
             m_query[m_queryLen++] = ch;
             m_query[m_queryLen]   = L'\0';
@@ -249,9 +304,16 @@ LRESULT FindWnd::HandlePanelMessage(UINT message, WPARAM wParam, LPARAM lParam) 
 
         // ── Label ─────────────────────────────────────────────────────────────
         {
-            wchar_t lbl[64];
+            wchar_t lbl[96];
             int total = static_cast<int>(app.playlist.size());
-            if (total > 0)
+            int cached = app.renderer
+                         ? static_cast<int>(app.renderer->GetCachedBitmaps().size())
+                         : 0;
+            int extra = cached - static_cast<int>(app.playlist.size());
+            if (extra < 0) extra = 0;
+            if (total > 0 && extra > 0)
+                swprintf_s(lbl, L"Find in %d images  +  %d cached", total, extra);
+            else if (total > 0)
                 swprintf_s(lbl, L"Find in %d images", total);
             else
                 swprintf_s(lbl, L"No images loaded");
@@ -289,7 +351,7 @@ LRESULT FindWnd::HandlePanelMessage(UINT message, WPARAM wParam, LPARAM lParam) 
             display[m_queryLen]     = L'_';
             display[m_queryLen + 1] = L'\0';
         } else {
-            wcscpy_s(display, L"type filename…");
+            wcscpy_s(display, L"filename or *.ext…");
         }
 
         RECT inRect = { boxRect.left + pad / 2, boxRect.top,
@@ -339,7 +401,7 @@ LRESULT FindWnd::HandlePanelMessage(UINT message, WPARAM wParam, LPARAM lParam) 
                     DeleteObject(selBrush);
                 }
 
-                const std::wstring &fullPath = app.playlist[mr.playlistIdx];
+                const std::wstring &fullPath = mr.path;
                 auto sep = fullPath.rfind(L'\\');
                 const wchar_t *fname = (sep == std::wstring::npos)
                                        ? fullPath.c_str() : fullPath.c_str() + sep + 1;

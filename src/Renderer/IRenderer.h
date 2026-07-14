@@ -126,4 +126,14 @@ class IImageRenderer {
         }
 
         virtual const wchar_t* GetName() const { return L"Unknown"; }
+
+        // -------------------------------------------------------------------
+        // Animated GIF support
+        // -------------------------------------------------------------------
+        virtual bool IsAnimatedGif() const { return false; }
+        // Delay (ms) for the current frame — call before arming the timer.
+        virtual int  GetCurrentGifDelay() const { return 100; }
+        // Advances to next frame; returns the new current frame's delay.
+        virtual int  AdvanceGifFrame() { return 0; }
+        virtual void ResetGifAnimation() {}
 };

@@ -175,6 +175,12 @@ LRESULT JumpToWnd::HandlePanelMessage(UINT message, WPARAM wParam, LPARAM lParam
 
         case WM_CHAR: {
             wchar_t ch = static_cast<wchar_t>(wParam);
+            // Switch to Find dialog when the trigger char is the first input
+            if (ch == Constants::PANEL_SWITCH_TO_FIND_CHAR && m_inputLen == 0) {
+                Hide();
+                PostMessageW(m_hParent, Constants::WM_QIV_SWITCH_TO_FIND, 0, 0);
+                return 0;
+            }
             if (ch >= L'0' && ch <= L'9' && m_inputLen < 6) {
                 m_input[m_inputLen++] = ch;
                 m_input[m_inputLen]   = L'\0';
