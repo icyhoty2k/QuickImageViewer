@@ -40,8 +40,26 @@ namespace UI {
             bool    OnKeyDown(WPARAM vk, bool ctrl, bool shift, bool alt) override;
             LRESULT HandlePanelMessage(UINT message, WPARAM wParam, LPARAM lParam) override;
 
+        public:
+            ~HistoryListWnd() {
+                if (m_hFontTitle)     DeleteObject(m_hFontTitle);
+                if (m_hFontBody)      DeleteObject(m_hFontBody);
+                if (m_hFontList)      DeleteObject(m_hFontList);
+                if (m_hFontIndexLink) DeleteObject(m_hFontIndexLink);
+                if (m_hFontLink)      DeleteObject(m_hFontLink);
+            }
+
         private:
             void ToggleHistoryWindow();
+
+            HFONT m_hFontTitle     = nullptr;
+            HFONT m_hFontBody      = nullptr;
+            HFONT m_hFontList      = nullptr;
+            HFONT m_hFontIndexLink = nullptr;
+            HFONT m_hFontLink      = nullptr;
+            int   m_cachedFontDpi  = 0;
+
+            std::wstring m_cachedSizeStr;
     };
 
     // -----------------------------------------------------------------------

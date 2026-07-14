@@ -268,10 +268,36 @@ namespace UI {
                 COLORREF whiteDesc = Constants::Theme::ThemedGray(
                         Constants::Theme::HelpWindow::DESCRIPTION, app.themeFactor);
 
+                // Fonts — cached per DPI, recreated only on DPI change
+                if (static_cast<int>(dpi) != m_cachedFontDpi) {
+                    if (m_hFontTitle)    { DeleteObject(m_hFontTitle);    m_hFontTitle    = nullptr; }
+                    if (m_hFontSubtitle) { DeleteObject(m_hFontSubtitle); m_hFontSubtitle = nullptr; }
+                    if (m_hFontSection)  { DeleteObject(m_hFontSection);  m_hFontSection  = nullptr; }
+                    if (m_hFontShortcut) { DeleteObject(m_hFontShortcut); m_hFontShortcut = nullptr; }
+                    if (m_hFontDesc)     { DeleteObject(m_hFontDesc);     m_hFontDesc     = nullptr; }
+                    if (m_hFontFooter)   { DeleteObject(m_hFontFooter);   m_hFontFooter   = nullptr; }
+                    m_hFontTitle    = CreateFontW(titleFontSize, 0, 0, 0, FW_BOLD, FALSE, FALSE, FALSE,
+                                                  DEFAULT_CHARSET, OUT_OUTLINE_PRECIS, CLIP_DEFAULT_PRECIS,
+                                                  CLEARTYPE_QUALITY, VARIABLE_PITCH, L"Segoe UI");
+                    m_hFontSubtitle = CreateFontW(subtitleFontSize, 0, 0, 0, FW_NORMAL, FALSE, FALSE, FALSE,
+                                                  DEFAULT_CHARSET, OUT_OUTLINE_PRECIS, CLIP_DEFAULT_PRECIS,
+                                                  CLEARTYPE_QUALITY, VARIABLE_PITCH, L"Segoe UI");
+                    m_hFontSection  = CreateFontW(sectionHeaderSize, 0, 0, 0, FW_BOLD, FALSE, FALSE, FALSE,
+                                                  DEFAULT_CHARSET, OUT_OUTLINE_PRECIS, CLIP_DEFAULT_PRECIS,
+                                                  CLEARTYPE_QUALITY, VARIABLE_PITCH, L"Segoe UI");
+                    m_hFontShortcut = CreateFontW(shortcutFontSize, 0, 0, 0, FW_BOLD, FALSE, FALSE, FALSE,
+                                                  DEFAULT_CHARSET, OUT_OUTLINE_PRECIS, CLIP_DEFAULT_PRECIS,
+                                                  CLEARTYPE_QUALITY, VARIABLE_PITCH, L"Segoe UI");
+                    m_hFontDesc     = CreateFontW(descFontSize, 0, 0, 0, FW_NORMAL, FALSE, FALSE, FALSE,
+                                                  DEFAULT_CHARSET, OUT_OUTLINE_PRECIS, CLIP_DEFAULT_PRECIS,
+                                                  CLEARTYPE_QUALITY, VARIABLE_PITCH, L"Segoe UI");
+                    m_hFontFooter   = CreateFontW(MulDiv(11, dpi, 96), 0, 0, 0, FW_NORMAL, FALSE, FALSE, FALSE,
+                                                  DEFAULT_CHARSET, OUT_OUTLINE_PRECIS, CLIP_DEFAULT_PRECIS,
+                                                  CLEARTYPE_QUALITY, VARIABLE_PITCH, L"Segoe UI");
+                    m_cachedFontDpi = static_cast<int>(dpi);
+                }
+
                 // Draw centered title
-                HFONT hTitleFont = CreateFontW(titleFontSize, 0, 0, 0, FW_BOLD, FALSE, FALSE, FALSE,
-                                               DEFAULT_CHARSET, OUT_OUTLINE_PRECIS, CLIP_DEFAULT_PRECIS,
-                                               CLEARTYPE_QUALITY, VARIABLE_PITCH, L"Segoe UI");
 
                 SetTextColor(hdc, Constants::Theme::ThemedColor(
                         Constants::Theme::HelpWindow::TITLE_R,
@@ -285,10 +311,7 @@ namespace UI {
                     rc.left + padding, titleRect.bottom + MulDiv(5, dpi, 96),
                     rc.right - padding - sbWidth, titleRect.bottom + MulDiv(25, dpi, 96)
                 };
-                HFONT hSubtitleFont = CreateFontW(subtitleFontSize, 0, 0, 0, FW_NORMAL, FALSE, FALSE, FALSE,
-                                                  DEFAULT_CHARSET, OUT_OUTLINE_PRECIS, CLIP_DEFAULT_PRECIS,
-                                                  CLEARTYPE_QUALITY, VARIABLE_PITCH, L"Segoe UI");
-                SelectObject(hdc, hSubtitleFont);
+                SelectObject(hdc, m_hFontSubtitle);
                 SetTextColor(hdc, Constants::Theme::ThemedGray(Constants::Theme::HelpWindow::SUBTITLE, app.themeFactor));
                 DrawTextW(hdc, L"Fast keyboard & mouse shortcuts", -1, &subtitleRect, DT_CENTER | DT_TOP);
 
@@ -319,20 +342,10 @@ namespace UI {
                 SelectClipRgn(hdc, hrgn);
 
                 int y = contentTop - m_scrollOffsetY;
-                HFONT hSectionFont = CreateFontW(sectionHeaderSize, 0, 0, 0, FW_BOLD, FALSE, FALSE, FALSE,
-                                                 DEFAULT_CHARSET, OUT_OUTLINE_PRECIS, CLIP_DEFAULT_PRECIS,
-                                                 CLEARTYPE_QUALITY, VARIABLE_PITCH, L"Segoe UI");
-                HFONT hShortcutFont = CreateFontW(shortcutFontSize, 0, 0, 0, FW_BOLD, FALSE, FALSE, FALSE,
-                                                  DEFAULT_CHARSET, OUT_OUTLINE_PRECIS, CLIP_DEFAULT_PRECIS,
-                                                  CLEARTYPE_QUALITY, VARIABLE_PITCH, L"Segoe UI");
-                HFONT hDescFont = CreateFontW(descFontSize, 0, 0, 0, FW_NORMAL, FALSE, FALSE, FALSE,
-                                              DEFAULT_CHARSET, OUT_OUTLINE_PRECIS, CLIP_DEFAULT_PRECIS,
-                                              CLEARTYPE_QUALITY, VARIABLE_PITCH, L"Segoe UI");
-
                 // Draw sections with entries
                 for (int s = 0; s < 4; ++s) {
                     // Section header
-                    SelectObject(hdc, hSectionFont);
+                    SelectObject(hdc, m_hFontSection);
                     SetTextColor(hdc, sectionColors[s]);
                     std::wstring sectionText = std::wstring(sectionIcons[s]) + sectionTitles[s];
                     RECT sectionRect = {rc.left + padding, y, rc.right - padding - sbWidth, y + sectionHeaderSize};
@@ -343,7 +356,7 @@ namespace UI {
                     for (const auto &entry: m_entries) {
                         if (entry.sectionId == s) {
                             // Shortcut (yellow, bigger)
-                            SelectObject(hdc, hShortcutFont);
+                            SelectObject(hdc, m_hFontShortcut);
                             SetTextColor(hdc, yellowKey);
                             RECT shortcutRect = {
                                 rc.left + padding + MulDiv(20, dpi, 96), y,
@@ -352,7 +365,7 @@ namespace UI {
                             DrawTextW(hdc, entry.shortcut.c_str(), -1, &shortcutRect, DT_LEFT | DT_TOP);
 
                             // Description (white, smaller)
-                            SelectObject(hdc, hDescFont);
+                            SelectObject(hdc, m_hFontDesc);
                             SetTextColor(hdc, whiteDesc);
                             RECT descRect = {
                                 rc.left + padding + MulDiv(20, dpi, 96), y + shortcutFontSize + MulDiv(2, dpi, 96),
@@ -399,10 +412,7 @@ namespace UI {
 
                 // Footer
                 int footerFontSize = MulDiv(11, dpi, 96);
-                HFONT hFooterFont = CreateFontW(footerFontSize, 0, 0, 0, FW_NORMAL, FALSE, FALSE, FALSE,
-                                                DEFAULT_CHARSET, OUT_OUTLINE_PRECIS, CLIP_DEFAULT_PRECIS,
-                                                CLEARTYPE_QUALITY, VARIABLE_PITCH, L"Segoe UI");
-                SelectObject(hdc, hFooterFont);
+                SelectObject(hdc, m_hFontFooter);
                 SetTextColor(hdc, Constants::Theme::ThemedGray(Constants::Theme::HelpWindow::SUBTITLE, app.themeFactor));
 
                 // Copyright text
@@ -424,12 +434,6 @@ namespace UI {
                         Constants::Theme::HelpWindow::LINK_B, app.themeFactor));
                 DrawTextW(hdc, L"Follow on Facebook - Ivan Hristov Yanev", -1, &m_footerLinkRect, DT_CENTER | DT_TOP);
 
-                DeleteObject(hFooterFont);
-                DeleteObject(hTitleFont);
-                DeleteObject(hSubtitleFont);
-                DeleteObject(hSectionFont);
-                DeleteObject(hShortcutFont);
-                DeleteObject(hDescFont);
                 EndPaint(m_hWnd, &ps);
                 return 0;
             }

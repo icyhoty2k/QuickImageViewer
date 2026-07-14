@@ -47,5 +47,22 @@ namespace UI {
             // Layout settings
             static constexpr int COLUMNS = 3;
             static constexpr float SHORTCUT_SIZE_MULTIPLIER = 1.3f;  // Yellow is 1.3x bigger
+
+            ~HelpWnd() {
+                if (m_hFontTitle)    DeleteObject(m_hFontTitle);
+                if (m_hFontSubtitle) DeleteObject(m_hFontSubtitle);
+                if (m_hFontSection)  DeleteObject(m_hFontSection);
+                if (m_hFontShortcut) DeleteObject(m_hFontShortcut);
+                if (m_hFontDesc)     DeleteObject(m_hFontDesc);
+                if (m_hFontFooter)   DeleteObject(m_hFontFooter);
+            }
+
+            HFONT m_hFontTitle    = nullptr;
+            HFONT m_hFontSubtitle = nullptr;
+            HFONT m_hFontSection  = nullptr;
+            HFONT m_hFontShortcut = nullptr;
+            HFONT m_hFontDesc     = nullptr;
+            HFONT m_hFontFooter   = nullptr;
+            int   m_cachedFontDpi = 0;
     };
 } // namespace UI
