@@ -50,7 +50,7 @@ namespace UI {
         int          m_imgW         = 0;
         int          m_imgH         = 0;
         UINT64       m_imgFileBytes = 0;
-        int          m_lastLoadMs   = -1;   // -1 = no measurement yet
+        long long    m_lastLoadUs   = -1;   // -1 = no measurement yet; stored in µs
         std::wstring m_lastCodec;
 
         // ── Playlist ─────────────────────────────────────────────

@@ -5,16 +5,16 @@
 #include <cwctype>
 
 namespace ImageLoadStats {
-    // Timestamp (ms) recorded at cache-miss PreloadBitmap call on the UI thread.
-    inline std::atomic<long long> g_loadStartMs{0};
-    // Elapsed decode time in ms (UI thread→WM_QIV_REPAINT post). -1 = not yet set.
-    inline std::atomic<int>       g_lastLoadMs{-1};
+    // Timestamp (µs) set at the start of every navigation (before cache probe).
+    inline std::atomic<long long> g_loadStartUs{0};
+    // Elapsed time in µs when the image is ready. -1 = not yet set.
+    inline std::atomic<long long> g_lastLoadUs{-1};
 
-    inline long long NowMs() {
+    inline long long NowUs() {
         LARGE_INTEGER freq, counter;
         QueryPerformanceFrequency(&freq);
         QueryPerformanceCounter(&counter);
-        return (counter.QuadPart * 1000LL) / freq.QuadPart;
+        return (counter.QuadPart * 1000000LL) / freq.QuadPart;
     }
 
     // Returns human-readable codec/decoder name from file extension.
