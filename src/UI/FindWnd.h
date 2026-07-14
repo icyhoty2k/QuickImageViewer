@@ -10,6 +10,10 @@ namespace UI {
         void Init(HINSTANCE hInstance, HWND hParent) override;
         void Init(HINSTANCE hInstance, HWND hParent, int8_t position) override;
         void Show() override;
+        ~FindWnd() {
+            if (m_hFontNorm) DeleteObject(m_hFontNorm);
+            if (m_hFontBold) DeleteObject(m_hFontBold);
+        }
 
     protected:
         bool    OnKeyDown(WPARAM vk, bool ctrl, bool shift, bool alt) override;
@@ -38,11 +42,6 @@ namespace UI {
         void RebuildMatches();
         void CommitOpen();
         void AdjustScroll();
-
-        ~FindWnd() {
-            if (m_hFontNorm) DeleteObject(m_hFontNorm);
-            if (m_hFontBold) DeleteObject(m_hFontBold);
-        }
 
         HFONT m_hFontNorm    = nullptr;
         HFONT m_hFontBold    = nullptr;

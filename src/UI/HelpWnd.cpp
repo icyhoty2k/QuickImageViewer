@@ -411,7 +411,6 @@ namespace UI {
                 }
 
                 // Footer
-                int footerFontSize = MulDiv(11, dpi, 96);
                 SelectObject(hdc, m_hFontFooter);
                 SetTextColor(hdc, Constants::Theme::ThemedGray(Constants::Theme::HelpWindow::SUBTITLE, app.themeFactor));
 
