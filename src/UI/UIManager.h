@@ -176,6 +176,7 @@ namespace UI {
             void             ToggleJumpToWindow();   // hides FindWnd if visible, then toggles JumpToWnd
             void             ToggleFindWindow();     // hides JumpToWnd if visible, then toggles FindWnd
             StatsWnd        &getStatsWindow();
+            void             ApplyAlwaysOnTop(bool onTop);
 
             void SpawnDirWndForFolder(const std::wstring &folderPath, HWND hHistoryWnd);
             void HideAllSpawnedDirWnds();
