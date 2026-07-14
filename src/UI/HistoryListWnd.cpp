@@ -14,7 +14,7 @@
 #include <unordered_map>
 #include <windowsx.h>
 #include <filesystem>
-#include <dwmapi.h>
+#include <Constants.h>
 
 // Forward declarations from ThumbnailPanelWnd.cpp
 namespace UI {
@@ -208,7 +208,7 @@ namespace UI {
             }
         }
         // Mark unchecked entries as Unknown so WM_PAINT shows them in neutral colour.
-        for (const auto &e : g_displayList) {
+        for (const auto &e: g_displayList) {
             if (g_statusCache.find(e.path) == g_statusCache.end())
                 g_statusCache[e.path] = FolderStatus::Unknown;
         }
@@ -316,12 +316,18 @@ namespace UI {
             BuildDisplayList();
         g_navSnap.clear();
         g_navSnap.reserve(g_displayList.size());
-        for (const auto &e : g_displayList)
+        for (const auto &e: g_displayList)
             g_navSnap.push_back(e.path);
         ++g_navSnapVersion;
     }
-    const std::vector<std::wstring> &GetNavigationSnapshot() { return g_navSnap; }
-    int GetNavigationSnapshotVersion() { return g_navSnapVersion; }
+
+    const std::vector<std::wstring> &GetNavigationSnapshot() {
+        return g_navSnap;
+    }
+
+    int GetNavigationSnapshotVersion() {
+        return g_navSnapVersion;
+    }
 
     // ---------------------------------------------------------------------------
     // GetHistoryWindowBounds  —  centered on the parent's monitor
@@ -712,7 +718,8 @@ namespace UI {
                         const bool isCurrent = (!currentFolder.empty() && entry.path == currentFolder);
                         auto _sit = g_statusCache.find(entry.path);
                         const FolderStatus rowStatus = (_sit != g_statusCache.end())
-                                                       ? _sit->second : FolderStatus::Unknown;
+                                                           ? _sit->second
+                                                           : FolderStatus::Unknown;
                         const bool isDead = (rowStatus == FolderStatus::Missing ||
                                              rowStatus == FolderStatus::Empty);
 
@@ -1349,7 +1356,7 @@ namespace UI {
                     // Snapshot paths to check (avoids holding shared state on bg thread)
                     std::vector<std::wstring> paths;
                     paths.reserve(g_displayList.size());
-                    for (const auto &e : g_displayList) paths.push_back(e.path);
+                    for (const auto &e: g_displayList) paths.push_back(e.path);
 
                     HWND hWnd = m_hWnd;
                     std::thread([paths = std::move(paths), hWnd]() {
@@ -1358,19 +1365,22 @@ namespace UI {
                         auto *result = new Map();
                         result->reserve(paths.size());
 
-                        for (const auto &path : paths) {
+                        for (const auto &path: paths) {
                             std::error_code ec;
                             if (!fs::is_directory(path, ec) || ec) {
                                 (*result)[path] = FolderStatus::Missing;
                                 continue;
                             }
                             FolderStatus st = FolderStatus::Empty;
-                            for (const auto &ent : fs::directory_iterator(
-                                     path, fs::directory_options::skip_permission_denied, ec)) {
-                                if (ec) { ec.clear(); continue; }
+                            for (const auto &ent: fs::directory_iterator(
+                                         path, fs::directory_options::skip_permission_denied, ec)) {
+                                if (ec) {
+                                    ec.clear();
+                                    continue;
+                                }
                                 if (!ent.is_regular_file(ec)) continue;
                                 std::wstring ext = ent.path().extension().wstring();
-                                for (auto &c : ext) c = static_cast<wchar_t>(::towlower(c));
+                                for (auto &c: ext) c = static_cast<wchar_t>(::towlower(c));
                                 for (size_t i = 0; i < Constants::Registry::SUPPORTED_EXTENSIONS_COUNT; ++i) {
                                     if (ext == Constants::Registry::SUPPORTED_EXTENSIONS[i]) {
                                         st = FolderStatus::Valid;
@@ -1378,7 +1388,7 @@ namespace UI {
                                     }
                                 }
                             }
-                            next_path:
+                        next_path:
                             (*result)[path] = st;
                         }
 
@@ -1392,7 +1402,7 @@ namespace UI {
             case Constants::WM_QIV_HISTORY_VALIDATED: {
                 using Map = std::unordered_map<std::wstring, FolderStatus>;
                 auto *result = reinterpret_cast<Map *>(lParam);
-                for (auto &[path, status] : *result)
+                for (auto &[path, status]: *result)
                     g_statusCache[path] = status;
                 delete result;
                 InvalidateRect(m_hWnd, nullptr, FALSE);
