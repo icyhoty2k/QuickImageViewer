@@ -318,6 +318,7 @@ LRESULT CALLBACK MainAppWndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM l
                     // Now the bitmap is ready, we can safely wire the effect graph.
                     app.UpdateRendererColorEffects(hWnd);
                     uiManager.RefreshInfoWindowIfVisible();
+                    uiManager.RefreshStatsWindowIfVisible();
                     UpdateOverlaysForCurrentImage(hWnd);
 
                     InvalidateRect(hWnd, nullptr, FALSE); // Now, repaint with the correct image.
@@ -351,6 +352,7 @@ LRESULT CALLBACK MainAppWndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM l
                 if (SUCCEEDED(app.renderer->LoadSvgFromBytes(payload->bytes, payload->path))) {
                     UpdateOverlaysForCurrentImage(hWnd);
                     uiManager.RefreshInfoWindowIfVisible();
+                    uiManager.RefreshStatsWindowIfVisible();
                     InvalidateRect(hWnd, nullptr, FALSE);
                     uiManager.getCacheWindow().UpdateCacheView();
                     uiManager.getActiveDirWnd().UpdateDirView();

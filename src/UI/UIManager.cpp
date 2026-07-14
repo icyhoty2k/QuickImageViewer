@@ -130,6 +130,10 @@ namespace UI {
         exifWnd.Refresh(); // Refresh() is a no-op if the window is not initialized or not visible
     }
 
+    void UIManager::RefreshStatsWindowIfVisible() {
+        if (isInit(statsWnd)) statsWnd.Refresh();
+    }
+
     // -------------------------------------------------------------------------
     // SpawnDirWndForFolder
     // -------------------------------------------------------------------------
