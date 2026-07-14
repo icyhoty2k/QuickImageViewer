@@ -216,6 +216,7 @@ LRESULT FindWnd::HandlePanelMessage(UINT message, WPARAM wParam, LPARAM lParam) 
         const COLORREF clrSelText = Constants::Theme::ThemedGray(1.00f, app.themeFactor);
         const COLORREF clrRowText = Constants::Theme::ThemedGray(0.85f, app.themeFactor);
         const COLORREF clrOrange  = Constants::Theme::ThemedColor(1.0f, 0.65f, 0.1f, app.themeFactor);
+        const COLORREF clrYellow  = Constants::Theme::ThemedColor(1.0f, 0.87f, 0.0f, app.themeFactor);
 
         int y = pad;
 
@@ -296,21 +297,26 @@ LRESULT FindWnd::HandlePanelMessage(UINT message, WPARAM wParam, LPARAM lParam) 
             RECT r = { pad, y, rc.right - pad, y + rowH };
             DrawTextW(hdc, L"No matches", -1, &r, DT_CENTER | DT_VCENTER | DT_SINGLELINE);
         } else {
+            // Pre-compute lowercase query once for all rows
+            wchar_t lq[MAX_QUERY + 2];
+            wcsncpy_s(lq, m_query, m_queryLen);
+            lq[m_queryLen] = L'\0';
+            for (int k = 0; lq[k]; ++k) lq[k] = static_cast<wchar_t>(towlower(lq[k]));
+
+            // Measure font height once for vertical centering with TextOutW
+            TEXTMETRIC tm;
+            GetTextMetrics(hdc, &tm);
+
             int visible = std::min(VISIBLE_ROWS, static_cast<int>(m_matches.size()) - m_rowScroll);
             for (int i = 0; i < visible; ++i) {
                 int matchIdx = m_rowScroll + i;
                 bool selected = (matchIdx == m_selIdx);
-
-                RECT rowRect = { pad, y, rc.right - pad, y + rowH };
 
                 if (selected) {
                     HBRUSH selBrush = CreateSolidBrush(clrSelBg);
                     RECT fillRect = { 0, y, rc.right, y + rowH };
                     FillRect(hdc, &fillRect, selBrush);
                     DeleteObject(selBrush);
-                    SetTextColor(hdc, clrSelText);
-                } else {
-                    SetTextColor(hdc, clrRowText);
                 }
 
                 // Extract filename from full path
@@ -318,11 +324,48 @@ LRESULT FindWnd::HandlePanelMessage(UINT message, WPARAM wParam, LPARAM lParam) 
                 auto sep = fullPath.rfind(L'\\');
                 const wchar_t *fname = (sep == std::wstring::npos)
                                        ? fullPath.c_str() : fullPath.c_str() + sep + 1;
+                int fnameLen = static_cast<int>(wcslen(fname));
 
-                RECT textRect = { pad + (selected ? pad/2 : 0), y,
-                                  rc.right - pad, y + rowH };
-                DrawTextW(hdc, fname, -1, &textRect,
-                          DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
+                // Find match position in original filename
+                wchar_t lf[512];
+                int fl = 0;
+                while (fname[fl] && fl < 511) { lf[fl] = static_cast<wchar_t>(towlower(fname[fl])); ++fl; }
+                lf[fl] = L'\0';
+                const wchar_t *hit = wcsstr(lf, lq);
+                int matchStart = hit ? static_cast<int>(hit - lf) : -1;
+
+                // Vertically centred baseline
+                int textX = pad + (selected ? pad / 2 : 0);
+                int textY = y + (rowH - tm.tmHeight) / 2;
+                RECT clip  = { textX, y, rc.right - pad, y + rowH };
+
+                const COLORREF clrBase = selected ? clrSelText : clrRowText;
+                SIZE sz;
+
+                if (matchStart < 0) {
+                    SetTextColor(hdc, clrBase);
+                    ExtTextOutW(hdc, textX, textY, ETO_CLIPPED, &clip, fname, fnameLen, nullptr);
+                } else {
+                    // Prefix
+                    if (matchStart > 0) {
+                        SetTextColor(hdc, clrBase);
+                        ExtTextOutW(hdc, textX, textY, ETO_CLIPPED, &clip, fname, matchStart, nullptr);
+                        GetTextExtentPoint32W(hdc, fname, matchStart, &sz);
+                        textX += sz.cx;
+                    }
+                    // Highlighted match chars
+                    SetTextColor(hdc, clrYellow);
+                    ExtTextOutW(hdc, textX, textY, ETO_CLIPPED, &clip, fname + matchStart, m_queryLen, nullptr);
+                    GetTextExtentPoint32W(hdc, fname + matchStart, m_queryLen, &sz);
+                    textX += sz.cx;
+                    // Suffix
+                    int suffixStart = matchStart + m_queryLen;
+                    if (suffixStart < fnameLen) {
+                        SetTextColor(hdc, clrBase);
+                        ExtTextOutW(hdc, textX, textY, ETO_CLIPPED, &clip,
+                                    fname + suffixStart, fnameLen - suffixStart, nullptr);
+                    }
+                }
 
                 y += rowH;
             }
