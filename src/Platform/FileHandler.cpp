@@ -446,13 +446,13 @@ void LoadImageIndex(HWND hWnd, int index) {
     if (app.renderer) {
         // Start timing before cache check — measures wall-clock time the user waits
         // regardless of whether the image comes from VRAM cache or needs a full decode.
-        ImageLoadStats::g_loadStartMs.store(ImageLoadStats::NowMs(), std::memory_order_relaxed);
+        ImageLoadStats::g_loadStartUs.store(ImageLoadStats::NowUs(), std::memory_order_relaxed);
 
         if (SUCCEEDED(app.renderer->LoadBitmap(nullptr, 0, 0, currentPath))) {
-            // Cache hit — record immediately; typically 0–2 ms.
-            ImageLoadStats::g_lastLoadMs.store(
-                static_cast<int>(ImageLoadStats::NowMs() -
-                    ImageLoadStats::g_loadStartMs.load(std::memory_order_relaxed)),
+            // Cache hit — record immediately; typically < 1 ms.
+            ImageLoadStats::g_lastLoadUs.store(
+                ImageLoadStats::NowUs() -
+                    ImageLoadStats::g_loadStartUs.load(std::memory_order_relaxed),
                 std::memory_order_relaxed);
             // Orientation was read during the original decode and stored in the
             // cache entry — apply it now that the viewport has been reset.

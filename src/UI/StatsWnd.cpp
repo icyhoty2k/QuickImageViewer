@@ -161,7 +161,7 @@ void StatsWnd::GatherStats() {
     }
 
     // ── Last load time & codec ────────────────────────────────────────────────
-    m_lastLoadMs = ImageLoadStats::g_lastLoadMs.load(std::memory_order_relaxed);
+    m_lastLoadUs = ImageLoadStats::g_lastLoadUs.load(std::memory_order_relaxed);
     m_lastCodec.clear();
     if (app.currentIndex >= 0 && app.currentIndex < static_cast<int>(app.playlist.size()))
         m_lastCodec = ImageLoadStats::CodecForPath(app.playlist[app.currentIndex]);
@@ -553,11 +553,11 @@ LRESULT StatsWnd::HandlePanelMessage(UINT message, WPARAM wParam, LPARAM lParam)
             // Codec & load time
             if (!m_lastCodec.empty())
                 row2(L"Codec / decoder", m_lastCodec, clrCyan);
-            if (m_lastLoadMs >= 0) {
+            if (m_lastLoadUs >= 0) {
                 wchar_t lBuf[32];
-                swprintf_s(lBuf, L"%d ms", m_lastLoadMs);
-                COLORREF lClr = m_lastLoadMs < 100 ? clrGreen
-                              : m_lastLoadMs < 400 ? clrValue : clrOrange;
+                swprintf_s(lBuf, L"%.3f ms", m_lastLoadUs / 1000.0);
+                COLORREF lClr = m_lastLoadUs < 100'000 ? clrGreen
+                              : m_lastLoadUs < 400'000 ? clrValue : clrOrange;
                 row2(L"Last load time", lBuf, lClr);
             }
         } else {

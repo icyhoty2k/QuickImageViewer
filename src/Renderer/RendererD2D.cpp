@@ -628,10 +628,10 @@ HRESULT RendererD2D::PreloadBitmap(const std::wstring &filePath, int requestInde
             }
 
             if (app.wantedIndex.load(std::memory_order_acquire) == requestIndex) {
-                long long start = ImageLoadStats::g_loadStartMs.load(std::memory_order_relaxed);
+                long long start = ImageLoadStats::g_loadStartUs.load(std::memory_order_relaxed);
                 if (start > 0) {
-                    int ms = static_cast<int>(ImageLoadStats::NowMs() - start);
-                    ImageLoadStats::g_lastLoadMs.store(ms, std::memory_order_relaxed);
+                    ImageLoadStats::g_lastLoadUs.store(
+                        ImageLoadStats::NowUs() - start, std::memory_order_relaxed);
                 }
                 PostMessageW(m_hwnd, Constants::WM_QIV_REPAINT, 0, 0);
             }
