@@ -444,8 +444,16 @@ void LoadImageIndex(HWND hWnd, int index) {
     // Raster path (now fully async)
     // -------------------------------------------------------------------------
     if (app.renderer) {
+        // Start timing before cache check — measures wall-clock time the user waits
+        // regardless of whether the image comes from VRAM cache or needs a full decode.
+        ImageLoadStats::g_loadStartMs.store(ImageLoadStats::NowMs(), std::memory_order_relaxed);
+
         if (SUCCEEDED(app.renderer->LoadBitmap(nullptr, 0, 0, currentPath))) {
-            // Cache hit: the new bitmap is now active in the renderer.
+            // Cache hit — record immediately; typically 0 ms.
+            ImageLoadStats::g_lastLoadMs.store(
+                static_cast<int>(ImageLoadStats::NowMs() -
+                    ImageLoadStats::g_loadStartMs.load(std::memory_order_relaxed)),
+                std::memory_order_relaxed);
             // Orientation was read during the original decode and stored in the
             // cache entry — apply it now that the viewport has been reset.
             ApplyOrientationToViewport(app.renderer->GetCachedOrientation(currentPath));
@@ -457,7 +465,7 @@ void LoadImageIndex(HWND hWnd, int index) {
             // keypress — async loads are handled by WM_QIV_REPAINT + the callback.
             uiManager.getActiveDirWnd().SyncDirSelectionRectangle();
         } else {
-            ImageLoadStats::g_loadStartMs.store(ImageLoadStats::NowMs(), std::memory_order_relaxed);
+            // Cache miss — decoder lambda records the time when decode completes.
             (void) app.renderer->PreloadBitmap(currentPath, index);
         }
     }

@@ -194,17 +194,17 @@ LRESULT CALLBACK MainAppWndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM l
 
                 // Relay preloads through g_decoderWorker so they don't flood
                 // g_ioWorker directly and starve thumbnail IO tasks that share it.
-                auto preloadTask = [index](const std::wstring &path) {
-                    return [path, index](IWICImagingFactory2 * /*wic*/) {
+                auto preloadTask = [index](const std::wstring &path, int targetIdx) {
+                    return [path, index, targetIdx](IWICImagingFactory2 * /*wic*/) {
                         if (app.wantedIndex.load(std::memory_order_acquire) != index) return;
-                        if (app.renderer) (void) app.renderer->PreloadBitmap(path, index);
+                        if (app.renderer) (void) app.renderer->PreloadBitmap(path, targetIdx);
                     };
                 };
                 for (int i = 1; i <= Constants::PRELOAD_LOOKASIDE_COUNT; ++i) {
                     int fwd = index + i;
                     int bwd = index - i;
-                    if (fwd < total) g_decoderWorker.PushTask(preloadTask(app.playlist[fwd]));
-                    if (bwd >= 0) g_decoderWorker.PushTask(preloadTask(app.playlist[bwd]));
+                    if (fwd < total) g_decoderWorker.PushTask(preloadTask(app.playlist[fwd], fwd));
+                    if (bwd >= 0) g_decoderWorker.PushTask(preloadTask(app.playlist[bwd], bwd));
                 }
             }
             return 0;
