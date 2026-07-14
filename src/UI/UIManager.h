@@ -161,6 +161,7 @@ namespace UI {
             DirWnd          &getDirWindow();
             ExifWnd         &getInfoWindow();
             void             RefreshInfoWindowIfVisible();
+            void             RefreshStatsWindowIfVisible();
 
             // Returns whichever DirWnd the user last clicked in.
             // Defaults to the primary F5 DirWnd.

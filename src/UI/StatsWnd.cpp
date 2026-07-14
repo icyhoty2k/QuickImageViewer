@@ -240,6 +240,13 @@ void StatsWnd::Show() {
     InvalidateRect(m_hWnd, nullptr, FALSE);
 }
 
+void StatsWnd::Refresh() {
+    if (!m_hWnd || !IsWindowVisible(m_hWnd)) return;
+    m_links.clear();
+    GatherStats();
+    InvalidateRect(m_hWnd, nullptr, FALSE);
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // Message handler
 // ─────────────────────────────────────────────────────────────────────────────
