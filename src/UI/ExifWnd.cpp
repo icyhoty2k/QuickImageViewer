@@ -123,39 +123,9 @@ void ExifWnd::Init(HINSTANCE hInstance, HWND hParent, int8_t) {
 }
 
 void ExifWnd::Init(HINSTANCE hInstance, HWND hParent) {
-    m_hParent = hParent;
-
-    WNDCLASSW wc   = {};
-    wc.lpfnWndProc = IPanelWindow::WindowRouter;
-    wc.hInstance   = hInstance;
-    wc.hCursor     = LoadCursor(nullptr, IDC_ARROW);
-    wc.lpszClassName = L"QIV_InfoWindow";
-    RegisterClassW(&wc);
-
-    UINT dpi  = static_cast<UINT>(app.dpiScale * 96.0f);
-    int  winW = MulDiv(520, dpi, 96);
-    int  winH = MulDiv(640, dpi, 96);
-
-    CreateWindowExW(
-        WS_EX_TOOLWINDOW | WS_EX_TOPMOST,
-        wc.lpszClassName,
-        L"Image Info",
-        WS_POPUP | WS_CAPTION | WS_BORDER,
-        0, 0, winW, winH,
-        hParent, nullptr, hInstance, this);
-
-    BOOL darkMode = app.isDarkThemed ? TRUE : FALSE;
-    DwmSetWindowAttribute(m_hWnd, Constants::DWMWA_DARK_MODE, &darkMode, sizeof(darkMode));
-    DWORD corner = app.cornerPreference;
-    DwmSetWindowAttribute(m_hWnd, Constants::DWMWA_WINDOW_CORNER_PREFERENCES, &corner, sizeof(corner));
-    COLORREF capColor = Constants::Theme::Color(
-        Constants::Theme::HelpWindow::BACKGROUND_R,
-        Constants::Theme::HelpWindow::BACKGROUND_G,
-        Constants::Theme::HelpWindow::BACKGROUND_B);
-    DwmSetWindowAttribute(m_hWnd, Constants::DWMWA_CAPTION_COLOR_ATTR, &capColor, sizeof(capColor));
-
-    SetWindowPos(m_hWnd, nullptr, 0, 0, 0, 0,
-        SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | SWP_FRAMECHANGED);
+    UINT dpi = static_cast<UINT>(app.dpiScale * 96.0f);
+    InitFloating(hInstance, hParent, L"QIV_InfoWindow", L"Image Info",
+                 MulDiv(520, dpi, 96), MulDiv(640, dpi, 96));
 }
 
 void ExifWnd::Refresh() {
@@ -572,7 +542,7 @@ void ExifWnd::LoadExifData() {
 // WM_PAINT + input
 // ---------------------------------------------------------------------------
 
-LRESULT ExifWnd::HandleMessage(UINT message, WPARAM wParam, LPARAM lParam) {
+LRESULT ExifWnd::HandlePanelMessage(UINT message, WPARAM wParam, LPARAM lParam) {
     switch (message) {
 
     case WM_PAINT: {
@@ -592,24 +562,21 @@ LRESULT ExifWnd::HandleMessage(UINT message, WPARAM wParam, LPARAM lParam) {
         const int  sfSize  = MulDiv(10, dpi, 96);
         const int  valGap  = MulDiv(6,  dpi, 96);
 
-        const COLORREF clrBg  = Constants::Theme::ThemedColor(
-            Constants::Theme::HelpWindow::BACKGROUND_R,
-            Constants::Theme::HelpWindow::BACKGROUND_G,
-            Constants::Theme::HelpWindow::BACKGROUND_B, app.themeFactor);
+        const COLORREF clrBg  = GetBgColor();
         const COLORREF clrLbl  = Constants::Theme::ThemedColor(
-            Constants::Theme::HelpWindow::SHORTCUT_KEY_R,
-            Constants::Theme::HelpWindow::SHORTCUT_KEY_G,
-            Constants::Theme::HelpWindow::SHORTCUT_KEY_B, app.themeFactor);
+            Constants::Theme::ExifWindow::LABEL_R,
+            Constants::Theme::ExifWindow::LABEL_G,
+            Constants::Theme::ExifWindow::LABEL_B, app.themeFactor);
         const COLORREF clrVal  = Constants::Theme::ThemedGray(
-            Constants::Theme::HelpWindow::DESCRIPTION, app.themeFactor);
+            Constants::Theme::ExifWindow::VALUE, app.themeFactor);
         const COLORREF clrSect = Constants::Theme::ThemedColor(
-            Constants::Theme::HelpWindow::SECTION_CYAN_R,
-            Constants::Theme::HelpWindow::SECTION_CYAN_G,
-            Constants::Theme::HelpWindow::SECTION_CYAN_B, app.themeFactor);
+            Constants::Theme::ExifWindow::SECTION_R,
+            Constants::Theme::ExifWindow::SECTION_G,
+            Constants::Theme::ExifWindow::SECTION_B, app.themeFactor);
         const COLORREF clrSBg  = Constants::Theme::ThemedColor(
-            Constants::Theme::HelpWindow::SCROLLBAR_TRACK_R,
-            Constants::Theme::HelpWindow::SCROLLBAR_TRACK_G,
-            Constants::Theme::HelpWindow::SCROLLBAR_TRACK_B, app.themeFactor);
+            Constants::Theme::ExifWindow::SCROLLBAR_TRACK_R,
+            Constants::Theme::ExifWindow::SCROLLBAR_TRACK_G,
+            Constants::Theme::ExifWindow::SCROLLBAR_TRACK_B, app.themeFactor);
 
         HBRUSH hBg = CreateSolidBrush(clrBg);
         FillRect(hdc, &rc, hBg);
@@ -762,9 +729,9 @@ LRESULT ExifWnd::HandleMessage(UINT message, WPARAM wParam, LPARAM lParam) {
             DeleteObject(hTrBr);
 
             HBRUSH hThBr = CreateSolidBrush(Constants::Theme::ThemedColor(
-                Constants::Theme::HelpWindow::SCROLLBAR_THUMB_R,
-                Constants::Theme::HelpWindow::SCROLLBAR_THUMB_G,
-                Constants::Theme::HelpWindow::SCROLLBAR_THUMB_B, app.themeFactor));
+                Constants::Theme::ExifWindow::SCROLLBAR_THUMB_R,
+                Constants::Theme::ExifWindow::SCROLLBAR_THUMB_G,
+                Constants::Theme::ExifWindow::SCROLLBAR_THUMB_B, app.themeFactor));
             RECT thRc = { sbX, thY, sbX + sbW, thY + thH };
             FillRect(hdc, &thRc, hThBr);
             DeleteObject(hThBr);

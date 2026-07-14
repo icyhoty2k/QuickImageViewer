@@ -4,10 +4,10 @@
 #include <vector>
 #include <string>
 
-#include "IPanelWindow.h"
+#include "FloatingPanelWnd.h"
 
 namespace UI {
-    class HistoryListWnd : public IPanelWindow {
+    class HistoryListWnd : public FloatingPanelWnd {
         // -----------------------------------------------------------------------
         // HistoryListWnd  —  Last-visited folder history panel.
         //
@@ -35,7 +35,8 @@ namespace UI {
             const std::vector<std::wstring> &GetFolderHistory();
 
         protected:
-            LRESULT HandleMessage(UINT message, WPARAM wParam, LPARAM lParam) override;
+            void OnSetFocus() override;
+            LRESULT HandlePanelMessage(UINT message, WPARAM wParam, LPARAM lParam) override;
 
         private:
             void ToggleHistoryWindow();

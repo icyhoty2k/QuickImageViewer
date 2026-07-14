@@ -107,6 +107,32 @@ namespace Constants {
         }
 
         // =====================================================================
+        // EXIF / INFO WINDOW COLORS
+        // =====================================================================
+        namespace ExifWindow {
+            // Label text (EXIF field names) — yellow (255,220,0)
+            constexpr float LABEL_R = 1.0000f + THEME_FACTOR * (1.0f - 2.0f * 1.0000f);
+            constexpr float LABEL_G = 0.8627f + THEME_FACTOR * (1.0f - 2.0f * 0.8627f);
+            constexpr float LABEL_B = 0.0000f + THEME_FACTOR * (1.0f - 2.0f * 0.0000f);
+
+            // Value text — near-white (230,230,230)
+            constexpr float VALUE = 0.9020f + THEME_FACTOR * (1.0f - 2.0f * 0.9020f);
+
+            // Section header — cyan (100,200,255)
+            constexpr float SECTION_R = 0.3922f + THEME_FACTOR * (1.0f - 2.0f * 0.3922f);
+            constexpr float SECTION_G = 0.7843f + THEME_FACTOR * (1.0f - 2.0f * 0.7843f);
+            constexpr float SECTION_B = 1.0000f + THEME_FACTOR * (1.0f - 2.0f * 1.0000f);
+
+            // Scrollbar — track (50,50,55), thumb (150,150,160)
+            constexpr float SCROLLBAR_TRACK_R = 0.1961f + THEME_FACTOR * (1.0f - 2.0f * 0.1961f);
+            constexpr float SCROLLBAR_TRACK_G = 0.1961f + THEME_FACTOR * (1.0f - 2.0f * 0.1961f);
+            constexpr float SCROLLBAR_TRACK_B = 0.2157f + THEME_FACTOR * (1.0f - 2.0f * 0.2157f);
+            constexpr float SCROLLBAR_THUMB_R = 0.5882f + THEME_FACTOR * (1.0f - 2.0f * 0.5882f);
+            constexpr float SCROLLBAR_THUMB_G = 0.5882f + THEME_FACTOR * (1.0f - 2.0f * 0.5882f);
+            constexpr float SCROLLBAR_THUMB_B = 0.6275f + THEME_FACTOR * (1.0f - 2.0f * 0.6275f);
+        }
+
+        // =====================================================================
         // HELP WINDOW COLORS
         // =====================================================================
         namespace HelpWindow {

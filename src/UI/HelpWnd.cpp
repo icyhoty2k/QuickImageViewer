@@ -16,42 +16,10 @@ namespace UI {
     }
 
     void HelpWnd::Init(HINSTANCE hInstance, HWND hParent) {
-        m_hParent = hParent;
         m_fullTitle = std::wstring(Constants::BASE_NAME) + L" v" + Constants::APP_VERSION;
-
-        WNDCLASSW wc = {0};
-        wc.lpfnWndProc = IPanelWindow::WindowRouter;
-        wc.hInstance = hInstance;
-        wc.hCursor = LoadCursor(nullptr, IDC_ARROW);
-        wc.lpszClassName = L"QIV_HelpWindow";
-        RegisterClassW(&wc);
-
         UINT dpi = static_cast<UINT>(app.dpiScale * 96.0f);
-        int winW = MulDiv(600, dpi, 96);
-        int winH = MulDiv(800, dpi, 96);
-
-        CreateWindowExW(
-                WS_EX_TOOLWINDOW | WS_EX_TOPMOST,
-                wc.lpszClassName,
-                Constants::APP_TASKBAR_NAME,
-                WS_POPUP | WS_CAPTION | WS_BORDER,
-                0, 0, winW, winH,
-                hParent, nullptr, hInstance,
-                this
-                );
-
-        BOOL darkMode = app.isDarkThemed ? TRUE : FALSE;
-        DwmSetWindowAttribute(m_hWnd, Constants::DWMWA_DARK_MODE, &darkMode, sizeof(darkMode));
-        DWORD corner = app.cornerPreference;
-        DwmSetWindowAttribute(m_hWnd, Constants::DWMWA_WINDOW_CORNER_PREFERENCES, &corner, sizeof(corner));
-        COLORREF darkColor = Constants::Theme::Color(
-                Constants::Theme::HelpWindow::BACKGROUND_R,
-                Constants::Theme::HelpWindow::BACKGROUND_G,
-                Constants::Theme::HelpWindow::BACKGROUND_B);
-        DwmSetWindowAttribute(m_hWnd, Constants::DWMWA_CAPTION_COLOR_ATTR, &darkColor, sizeof(darkColor));
-
-        SetWindowPos(m_hWnd, nullptr, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | SWP_FRAMECHANGED);
-
+        InitFloating(hInstance, hParent, L"QIV_HelpWindow", Constants::APP_TASKBAR_NAME,
+                     MulDiv(600, dpi, 96), MulDiv(800, dpi, 96));
         BuildHelpContent();
     }
 
@@ -195,7 +163,7 @@ namespace UI {
         }
     }
 
-    LRESULT HelpWnd::HandleMessage(UINT message, WPARAM wParam, LPARAM lParam) {
+    LRESULT HelpWnd::HandlePanelMessage(UINT message, WPARAM wParam, LPARAM lParam) {
         switch (message) {
             case WM_PAINT: {
                 PAINTSTRUCT ps;
@@ -203,11 +171,7 @@ namespace UI {
                 RECT rc;
                 GetClientRect(m_hWnd, &rc);
 
-                // Dark background using theme color
-                HBRUSH hBrush = CreateSolidBrush(Constants::Theme::ThemedColor(
-                        Constants::Theme::HelpWindow::BACKGROUND_R,
-                        Constants::Theme::HelpWindow::BACKGROUND_G,
-                        Constants::Theme::HelpWindow::BACKGROUND_B, app.themeFactor));
+                HBRUSH hBrush = CreateSolidBrush(GetBgColor());
                 FillRect(hdc, &rc, hBrush);
                 DeleteObject(hBrush);
 
