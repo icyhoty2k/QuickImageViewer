@@ -216,7 +216,7 @@ LRESULT CALLBACK MainAppWndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM l
                 auto preloadTask = [index](const std::wstring &path, int targetIdx) {
                     return [path, index, targetIdx](IWICImagingFactory2 * /*wic*/) {
                         if (app.wantedIndex.load(std::memory_order_acquire) != index) return;
-                        if (app.renderer) (void) app.renderer->PreloadBitmap(path, targetIdx);
+                        if (app.renderer) (void) app.renderer->PreloadBitmap(path, targetIdx, index);
                     };
                 };
                 for (int i = 1; i <= Constants::PRELOAD_LOOKASIDE_COUNT; ++i) {

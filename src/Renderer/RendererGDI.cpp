@@ -196,7 +196,7 @@ HRESULT RendererGDI::Render() {
     return S_OK;
 }
 
-HRESULT RendererGDI::PreloadBitmap(const std::wstring &, int) {
+HRESULT RendererGDI::PreloadBitmap(const std::wstring &, int, int) {
     return S_OK;
 }
 
