@@ -239,11 +239,11 @@ void InputManager::ExecuteKeyboardShortcutCommand(HWND hWnd, Command cmd) {
             break;
 
         case Command::JumpToImage:
-            uiManager.Toggle(uiManager.getJumpToWindow());
+            uiManager.ToggleJumpToWindow();
             break;
 
         case Command::FindImage:
-            uiManager.Toggle(uiManager.getFindWindow());
+            uiManager.ToggleFindWindow();
             break;
 
         case Command::ToggleStats:
