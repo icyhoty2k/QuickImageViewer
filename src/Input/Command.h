@@ -168,6 +168,9 @@ enum class Command {
     // --- Jump to image by number (J) ---
     JumpToImage,
 
+    // --- Find image by name (Ctrl+F) ---
+    FindImage,
+
     // --- Statistics window (K) ---
     ToggleStats,
 

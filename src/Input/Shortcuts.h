@@ -214,6 +214,11 @@ namespace Shortcuts {
     constexpr UINT SC_NAV_JUMP_TO_IMAGE_ALT = 'G'; // Ctrl+G          — open jump dialog
 
     // -------------------------------------------------------------------------
+    // Find image by name  (shares 'F' with SC_PANEL_FULLSCREEN_F)
+    // -------------------------------------------------------------------------
+    constexpr UINT SC_NAV_FIND = 'F'; // Ctrl+F — open find-by-name dialog
+
+    // -------------------------------------------------------------------------
     // Statistics window
     // -------------------------------------------------------------------------
     constexpr UINT SC_TOGGLE_STATS = 'K'; // K (no modifier) — show statistics window
