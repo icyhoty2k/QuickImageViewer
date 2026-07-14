@@ -30,6 +30,7 @@ namespace UI {
     // LoadPlaylist — populate F5's playlist from a folder
     // -------------------------------------------------------------------------
     void DirWnd::LoadPlaylist(const std::wstring &folderPath) {
+        m_sourceDirty = true;
         m_dirPlaylist.clear();
         m_currentFolder = folderPath;  // Track current folder for history marking
         std::filesystem::path dir(folderPath);

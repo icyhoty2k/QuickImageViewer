@@ -132,6 +132,7 @@ namespace UI {
 
     void ThumbnailPanelWnd::ClearDirThumbnailCache() {
         DoClearDirThumbnailCache();
+        m_sourceDirty = true; // force PostBuildHook on next UpdateView to re-queue decodes
     }
 
     void ThumbnailPanelWnd::RefreshBounds() {
@@ -183,6 +184,16 @@ namespace UI {
     // =========================================================================
     void ThumbnailPanelWnd::UpdateView() {
         if (!m_hWnd || !app.renderer || !IsWindowVisible(m_hWnd)) return;
+
+        // Fast path for dir panels: skip membership rebuild + PostBuildHook when
+        // the source playlist hasn't changed (e.g. pure scroll / image navigation).
+        // CacheWnd is excluded (IsDirPanel() = false) so it always does a full rebuild.
+        if (IsDirPanel() && !m_sourceDirty && !m_thumbnails.empty()) {
+            RebuildGeometry();
+            InvalidateRect(m_hWnd, nullptr, FALSE);
+            return;
+        }
+        if (IsDirPanel()) m_sourceDirty = false;
 
         m_thumbnails.clear();
 
@@ -319,8 +330,11 @@ namespace UI {
             }
         }
 
-        for (auto &t: m_thumbnails) {
-            t.rect = D2D1::RectF(x, y, x + thumbW, y + thumbH);
+        m_selectedIdx = -1;
+        for (size_t i = 0; i < m_thumbnails.size(); ++i) {
+            m_thumbnails[i].rect = D2D1::RectF(x, y, x + thumbW, y + thumbH);
+            if (m_thumbnails[i].playlistIndex == app.currentIndex)
+                m_selectedIdx = static_cast<int>(i);
             if (vertical) y += thumbH + spacing;
             else x += thumbW + spacing;
         }
