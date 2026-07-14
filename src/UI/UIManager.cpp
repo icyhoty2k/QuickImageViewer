@@ -126,6 +126,16 @@ namespace UI {
         return findWnd;
     }
 
+    void UIManager::ToggleJumpToWindow() {
+        if (isInit(findWnd)) findWnd.Hide();
+        Toggle(getJumpToWindow());
+    }
+
+    void UIManager::ToggleFindWindow() {
+        if (isInit(jumpToWnd)) jumpToWnd.Hide();
+        Toggle(getFindWindow());
+    }
+
     StatsWnd &UIManager::getStatsWindow() {
         if (isInit(statsWnd)) return statsWnd;
         statsWnd.Init(m_hInstance, m_hMainWnd);
