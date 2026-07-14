@@ -449,7 +449,7 @@ void LoadImageIndex(HWND hWnd, int index) {
         ImageLoadStats::g_loadStartMs.store(ImageLoadStats::NowMs(), std::memory_order_relaxed);
 
         if (SUCCEEDED(app.renderer->LoadBitmap(nullptr, 0, 0, currentPath))) {
-            // Cache hit — record immediately; typically 0 ms.
+            // Cache hit — record immediately; typically 0–2 ms.
             ImageLoadStats::g_lastLoadMs.store(
                 static_cast<int>(ImageLoadStats::NowMs() -
                     ImageLoadStats::g_loadStartMs.load(std::memory_order_relaxed)),
@@ -460,7 +460,10 @@ void LoadImageIndex(HWND hWnd, int index) {
             // Rewire the effect graph to the new bitmap so the display node
             // is not left pointing at the previous image's effect output.
             app.UpdateRendererColorEffects(hWnd);
+            // Paint the new image — the UpdateWindow earlier drew the old bitmap.
+            InvalidateRect(hWnd, nullptr, FALSE);
             uiManager.RefreshInfoWindowIfVisible();
+            uiManager.RefreshStatsWindowIfVisible();
             // Sync the dir panel selection only on actual image load, not on every
             // keypress — async loads are handled by WM_QIV_REPAINT + the callback.
             uiManager.getActiveDirWnd().SyncDirSelectionRectangle();
