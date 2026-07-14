@@ -1,10 +1,17 @@
 #include "MouseHandler.h"
 #include "AppState.h"
+#include "AppCommands.h"
 #include "../Platform/Constants.h"
+#include "../Platform/ConstantsStrings.h"
 #include "../Platform/FileHandler.h"
+#include "../Overlays/OverlayManager.h"
+#include "../UI/HistoryListWnd.h"
+#include "../UI/UIManager.h"
 #include "WicDecoder.h"
 #include <windowsx.h>
 #include <algorithm>
+#include <cmath>
+#include <vector>
 #include <shlobj_core.h>
 #include <shtypes.h>
 
@@ -234,6 +241,17 @@ void MouseHandler::HandleButtonUp(HWND hWnd, UINT message, LPARAM /*lParam*/) {
 }
 
 void MouseHandler::HandleMouseMove(HWND hWnd, LPARAM lParam) {
+    if (app.slideshow.running) {
+        if (app.slideshow.cursorHidden) {
+            ShowCursor(TRUE);
+            app.slideshow.cursorHidden = false;
+        }
+        if (app.slideshow.cursorHideMs > 0 && !app.slideshow.paused) {
+            KillTimer(hWnd, Constants::Slideshow::CURSOR_TIMER_ID);
+            SetTimer(hWnd, Constants::Slideshow::CURSOR_TIMER_ID, app.slideshow.cursorHideMs, nullptr);
+        }
+    }
+
     if (app.isMidDragging) {
         POINT curMouse = {GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam)};
         ClientToScreen(hWnd, &curMouse);
@@ -331,26 +349,115 @@ void MouseHandler::HandleMouseMove(HWND hWnd, LPARAM lParam) {
 }
 
 void MouseHandler::HandleMouseWheel(HWND hWnd, WPARAM wParam, LPARAM /*lParam*/) {
+    const int rawDelta = GET_WHEEL_DELTA_WPARAM(wParam);
+    const int delta = Constants::MOUSE_VERTICAL_REVERSE_SCROLL_DIRECTION ? -rawDelta : rawDelta;
+
+    if ((GetKeyState(VK_SHIFT) & 0x8000) != 0) {
+        app.opacity = static_cast<BYTE>(
+            delta > 0
+                ? std::min(255, (int)app.opacity + Constants::OPACITY_STEP)
+                : std::max(10,  (int)app.opacity - Constants::OPACITY_STEP));
+        SetLayeredWindowAttributes(hWnd, 0, app.opacity, LWA_ALPHA);
+        return;
+    }
+
     if (app.playlist.empty()) return;
 
-    // Check if RMB is held down (0x8000 indicates the key is down)
     bool isRmbDown = (GetKeyState(VK_RBUTTON) & 0x8000) != 0;
 
-    int zDelta = GET_WHEEL_DELTA_WPARAM(wParam);
-
     if (isRmbDown) {
-        // Zoom logic when RMB is held
-        app.viewport.zoom *= (zDelta > 0) ? Constants::ZOOM_STEP : (1.0f / Constants::ZOOM_STEP);
+        app.viewport.zoom *= (delta > 0) ? Constants::ZOOM_STEP : (1.0f / Constants::ZOOM_STEP);
         InvalidateRect(hWnd, nullptr, FALSE);
     } else if (GET_KEYSTATE_WPARAM(wParam) & MK_CONTROL) {
-        // Existing Ctrl+Scroll zoom logic.
-        app.viewport.zoom *= (zDelta > 0) ? Constants::ZOOM_STEP : (1.0f / Constants::ZOOM_STEP);
+        app.viewport.zoom *= (delta > 0) ? Constants::ZOOM_STEP : (1.0f / Constants::ZOOM_STEP);
         InvalidateRect(hWnd, nullptr, FALSE);
     } else {
-        // Default: Image navigation
-        int step = (zDelta < 0) ? 1 : -1;
+        int step = (delta < 0) ? 1 : -1;
         int newIdx = (app.currentIndex + step + (int) app.playlist.size()) % (int) app.playlist.size();
         LoadImageIndex(hWnd, newIdx);
         InvalidateRect(hWnd, nullptr, FALSE);
     }
+}
+
+void MouseHandler::HandleMouseHWheel(HWND hWnd, WPARAM wParam, LPARAM /*lParam*/) {
+    bool isRmbDown = (GetKeyState(VK_RBUTTON) & 0x8000) != 0;
+    const int rawDelta = GET_WHEEL_DELTA_WPARAM(wParam);
+    const int hDelta = Constants::MOUSE_HORIZONTAL_REVERSE_SCROLL_DIRECTION ? -rawDelta : rawDelta;
+
+    if (isRmbDown) {
+        RECT rc;
+        GetWindowRect(hWnd, &rc);
+        int currentW = rc.right - rc.left;
+        int currentH = rc.bottom - rc.top;
+
+        int resizeStep = (hDelta > 0) ? 20 : -20;
+        int newW = currentW + resizeStep;
+        int newH = static_cast<int>(std::round(
+                currentH + resizeStep * (static_cast<float>(currentH) / currentW)));
+        int newX = rc.left - (resizeStep / 2);
+        int newY = rc.top  - (resizeStep / 2);
+
+        SetWindowPos(hWnd, nullptr, newX, newY, newW, newH,
+                     SWP_NOZORDER | SWP_NOACTIVATE | SWP_NOCOPYBITS);
+        InvalidateRect(hWnd, nullptr, FALSE);
+        return;
+    }
+
+    // Plain horizontal scroll: cycle through folder history
+    static int s_histIdx = 0;
+    static std::vector<std::wstring> s_histSnap;
+    static std::wstring s_lastNavFolder;
+    static int s_accumulator = 0;
+
+    const auto &history = UI::GetFolderHistory();
+    if (history.empty()) return;
+
+    // Reset snapshot whenever the current folder changed via non-scroll means
+    if (s_histSnap.empty() || history[0] != s_lastNavFolder) {
+        s_histSnap.assign(history.begin(), history.end());
+        s_histIdx = 0;
+        s_lastNavFolder = history[0];
+        s_accumulator = 0;
+    }
+
+    s_accumulator += hDelta;
+    const int threshold = WHEEL_DELTA * Constants::MOUSE_HSCROLL_FOLDER_TICKS;
+    if (std::abs(s_accumulator) < threshold) return;
+
+    const int total = (int)s_histSnap.size();
+    if (s_accumulator > 0) s_histIdx = (s_histIdx + 1) % total;
+    else                    s_histIdx = (s_histIdx - 1 + total) % total;
+    s_accumulator = 0;
+
+    const std::wstring &folder = s_histSnap[s_histIdx];
+
+    std::wstring displayName = folder;
+    const size_t sep = folder.find_last_of(L"\\/");
+    if (sep != std::wstring::npos) displayName = folder.substr(sep + 1);
+
+    if (!UI::IsFolderValidForViewer(folder)) {
+        // Dead folder — show warning but do not open; do not update s_lastNavFolder.
+        auto &histWnd = uiManager.getHistoryListWindow();
+        if (histWnd.IsVisible())
+            InvalidateRect(histWnd.GetHwnd(), nullptr, FALSE);
+        g_overlayManager.PostCenterMessage(hWnd,
+            std::wstring(L"⚠ ") +
+            std::to_wstring(s_histIdx + 1) + L"/" + std::to_wstring(total) + L" " + displayName);
+        return;
+    }
+
+    OpenDirectory(hWnd, folder);
+    s_lastNavFolder = folder;
+    s_histSnap.clear(); // Reset snapshot so next scroll recaptures updated history order
+
+    g_overlayManager.PostCenterMessage(hWnd,
+        Constants::Messages::HISTORY_NAV_FOLDER +
+        std::to_wstring(s_histIdx + 1) + L"/" + std::to_wstring(total) + L" " + displayName);
+}
+
+void MouseHandler::HandleDoubleClick(HWND hWnd) {
+    SendMessageW(hWnd, WM_SETREDRAW, FALSE, 0);
+    AppCommands::ToggleFullscreen(hWnd);
+    SendMessageW(hWnd, WM_SETREDRAW, TRUE, 0);
+    RedrawWindow(hWnd, nullptr, nullptr, RDW_INVALIDATE | RDW_UPDATENOW | RDW_FRAME);
 }

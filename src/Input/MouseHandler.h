@@ -22,4 +22,8 @@ namespace MouseHandler {
     void HandleMouseMove(HWND hWnd, LPARAM lParam);
 
     void HandleMouseWheel(HWND hWnd, WPARAM wParam, LPARAM lParam);
+
+    void HandleMouseHWheel(HWND hWnd, WPARAM wParam, LPARAM lParam);
+
+    void HandleDoubleClick(HWND hWnd);
 }

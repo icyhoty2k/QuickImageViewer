@@ -35,7 +35,6 @@ extern void UpdateOverlaysForCurrentImage(HWND hWnd);
 #include "Platform/RegistrySetup.h"
 #include "Renderer/RendererD2D.h"
 #include "Renderer/RendererGDI.h"
-#include <shlobj.h>   // Required for SHOpenFolderAndSelectItems
 
 
 // Global application state
@@ -254,7 +253,7 @@ LRESULT CALLBACK MainAppWndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM l
             InvalidateRect(hWnd, nullptr, FALSE);
             return 0;
 
-        // --- CLEAN MOUSE HANDLERS ---
+        // --- MOUSE HANDLERS ---
         case WM_LBUTTONDOWN:
         case WM_RBUTTONDOWN:
             MouseHandler::HandleButtonDown(hWnd, message, lParam);
@@ -265,94 +264,29 @@ LRESULT CALLBACK MainAppWndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM l
             MouseHandler::HandleButtonUp(hWnd, message, lParam);
             return 0;
 
+        case WM_MBUTTONDOWN:
+            MouseHandler::HandleButtonDown(hWnd, message, lParam);
+            return 0;
+
+        case WM_MBUTTONUP:
+            MouseHandler::HandleButtonUp(hWnd, message, lParam);
+            return 0;
+
         case WM_MOUSEMOVE:
-            if (app.slideshow.running) {
-                if (app.slideshow.cursorHidden) {
-                    ShowCursor(TRUE);
-                    app.slideshow.cursorHidden = false;
-                }
-                if (app.slideshow.cursorHideMs > 0 && !app.slideshow.paused) {
-                    KillTimer(hWnd, Constants::Slideshow::CURSOR_TIMER_ID);
-                    SetTimer(hWnd, Constants::Slideshow::CURSOR_TIMER_ID, app.slideshow.cursorHideMs, nullptr);
-                }
-            }
             MouseHandler::HandleMouseMove(hWnd, lParam);
             return 0;
 
-        case WM_MBUTTONDOWN:
-        case WM_MBUTTONUP:
-            if (message == WM_MBUTTONDOWN) MouseHandler::HandleButtonDown(hWnd, message, lParam);
-            else MouseHandler::HandleButtonUp(hWnd, message, lParam);
-            return 0;
-
-        case WM_MOUSEWHEEL: {
-            bool isShiftDown = (GetKeyState(VK_SHIFT) & 0x8000) != 0;
-
-            if (isShiftDown) {
-                int delta = GET_WHEEL_DELTA_WPARAM(wParam);
-
-                if (delta > 0) {
-                    app.opacity = static_cast<BYTE>(
-                        (app.opacity + Constants::OPACITY_STEP > 255)
-                            ? 255
-                            : (app.opacity + Constants::OPACITY_STEP));
-                } else {
-                    app.opacity = static_cast<BYTE>(
-                        (app.opacity - Constants::OPACITY_STEP < 10)
-                            ? 10
-                            : (app.opacity - Constants::OPACITY_STEP));
-                }
-
-                SetLayeredWindowAttributes(hWnd, 0, app.opacity, LWA_ALPHA);
-                return 0;
-            }
-
+        case WM_MOUSEWHEEL:
             MouseHandler::HandleMouseWheel(hWnd, wParam, lParam);
             return 0;
-        }
 
-        case WM_MOUSEHWHEEL: {
-            bool isRmbDown = (GetKeyState(VK_RBUTTON) & 0x8000) != 0;
-            int hDelta = GET_WHEEL_DELTA_WPARAM(wParam);
-
-            if (isRmbDown) {
-                RECT rc;
-                GetWindowRect(hWnd, &rc);
-                int currentW = rc.right - rc.left;
-                int currentH = rc.bottom - rc.top;
-
-                int resizeStep = (hDelta > 0) ? 20 : -20;
-                int newW = currentW + resizeStep;
-                int newH = static_cast<int>(std::round(
-                        currentH + resizeStep * (static_cast<float>(currentH) / currentW)));
-
-                int newX = rc.left - (resizeStep / 2);
-                int newY = rc.top - (resizeStep / 2);
-
-                SetWindowPos(hWnd, nullptr, newX, newY, newW, newH,
-                             SWP_NOZORDER | SWP_NOACTIVATE | SWP_NOCOPYBITS);
-                InvalidateRect(hWnd, nullptr, FALSE);
-                return 0;
-            }
-
-            if (hDelta > 0) {
-                app.opacity = static_cast<BYTE>(std::min(255, app.opacity + Constants::OPACITY_STEP));
-            } else {
-                app.opacity = static_cast<BYTE>(std::max(10, app.opacity - Constants::OPACITY_STEP));
-            }
-            SetLayeredWindowAttributes(hWnd, 0, app.opacity, LWA_ALPHA);
+        case WM_MOUSEHWHEEL:
+            MouseHandler::HandleMouseHWheel(hWnd, wParam, lParam);
             return 0;
-        }
 
-        case WM_LBUTTONDBLCLK: {
-            SendMessageW(hWnd, WM_SETREDRAW, FALSE, 0);
-
-            AppCommands::ToggleFullscreen(hWnd);
-
-            SendMessageW(hWnd, WM_SETREDRAW, TRUE, 0);
-            RedrawWindow(hWnd, nullptr, nullptr, RDW_INVALIDATE | RDW_UPDATENOW | RDW_FRAME);
+        case WM_LBUTTONDBLCLK:
+            MouseHandler::HandleDoubleClick(hWnd);
             return 0;
-        }
 
         case WM_CAPTURECHANGED: {
             app.viewport.isDragging = false;
