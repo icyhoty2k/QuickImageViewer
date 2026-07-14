@@ -132,7 +132,7 @@ void ExifWnd::Init(HINSTANCE hInstance, HWND hParent) {
     wc.lpszClassName = L"QIV_InfoWindow";
     RegisterClassW(&wc);
 
-    UINT dpi  = GetDpiForWindow(hParent);
+    UINT dpi  = static_cast<UINT>(app.dpiScale * 96.0f);
     int  winW = MulDiv(520, dpi, 96);
     int  winH = MulDiv(640, dpi, 96);
 
@@ -581,7 +581,7 @@ LRESULT ExifWnd::HandleMessage(UINT message, WPARAM wParam, LPARAM lParam) {
         RECT rc;
         GetClientRect(m_hWnd, &rc);
 
-        const UINT dpi     = GetDpiForWindow(m_hWnd);
+        const UINT dpi     = static_cast<UINT>(app.dpiScale * 96.0f);
         const int  pad     = MulDiv(12, dpi, 96);
         const int  sbW     = MulDiv(10, dpi, 96);
         const int  rowH    = MulDiv(22, dpi, 96);
@@ -779,7 +779,7 @@ LRESULT ExifWnd::HandleMessage(UINT message, WPARAM wParam, LPARAM lParam) {
 
     case WM_MOUSEWHEEL: {
         const int delta = GET_WHEEL_DELTA_WPARAM(wParam);
-        m_scrollOffsetY -= (delta / WHEEL_DELTA) * MulDiv(40, GetDpiForWindow(m_hWnd), 96);
+        m_scrollOffsetY -= (delta / WHEEL_DELTA) * static_cast<int>(40 * app.dpiScale);
         InvalidateRect(m_hWnd, nullptr, FALSE);
         return 0;
     }
@@ -787,7 +787,7 @@ LRESULT ExifWnd::HandleMessage(UINT message, WPARAM wParam, LPARAM lParam) {
     case WM_SETCURSOR: {
         if (LOWORD(lParam) != HTCLIENT) break;
         POINT pt; GetCursorPos(&pt); ScreenToClient(m_hWnd, &pt);
-        UINT dpi = GetDpiForWindow(m_hWnd);
+        UINT dpi = static_cast<UINT>(app.dpiScale * 96.0f);
         const int pad   = MulDiv(12, dpi, 96);
         const int rowH  = MulDiv(22, dpi, 96);
         const int sectH = MulDiv(28, dpi, 96);
@@ -828,7 +828,7 @@ LRESULT ExifWnd::HandleMessage(UINT message, WPARAM wParam, LPARAM lParam) {
         // View-control button: scrollbar drag or row selection
         RECT rc;
         GetClientRect(m_hWnd, &rc);
-        const UINT dpi = GetDpiForWindow(m_hWnd);
+        const UINT dpi = static_cast<UINT>(app.dpiScale * 96.0f);
         const int  sbW = MulDiv(10, dpi, 96);
         const int  sbX = rc.right - sbW - MulDiv(3, dpi, 96);
 
@@ -907,7 +907,7 @@ LRESULT ExifWnd::HandleMessage(UINT message, WPARAM wParam, LPARAM lParam) {
         if (m_sbDragging) {
             RECT rc;
             GetClientRect(m_hWnd, &rc);
-            const UINT dpi   = GetDpiForWindow(m_hWnd);
+            const UINT dpi   = static_cast<UINT>(app.dpiScale * 96.0f);
             const int  pad   = MulDiv(12, dpi, 96);
             const int  cH    = rc.bottom - 2 * pad;
             const int  maxSc = std::max(0, m_totalContentHeight - cH);
@@ -931,11 +931,11 @@ LRESULT ExifWnd::HandleMessage(UINT message, WPARAM wParam, LPARAM lParam) {
         switch (wParam) {
         case 'M': Hide(); return 0;
         case VK_PRIOR:
-            m_scrollOffsetY -= MulDiv(200, GetDpiForWindow(m_hWnd), 96);
+            m_scrollOffsetY -= static_cast<int>(200 * app.dpiScale);
             InvalidateRect(m_hWnd, nullptr, FALSE);
             return 0;
         case VK_NEXT:
-            m_scrollOffsetY += MulDiv(200, GetDpiForWindow(m_hWnd), 96);
+            m_scrollOffsetY += static_cast<int>(200 * app.dpiScale);
             InvalidateRect(m_hWnd, nullptr, FALSE);
             return 0;
         case VK_HOME:

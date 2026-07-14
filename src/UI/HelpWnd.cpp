@@ -26,7 +26,7 @@ namespace UI {
         wc.lpszClassName = L"QIV_HelpWindow";
         RegisterClassW(&wc);
 
-        UINT dpi = GetDpiForWindow(hParent);
+        UINT dpi = static_cast<UINT>(app.dpiScale * 96.0f);
         int winW = MulDiv(600, dpi, 96);
         int winH = MulDiv(800, dpi, 96);
 
@@ -211,7 +211,7 @@ namespace UI {
                 FillRect(hdc, &rc, hBrush);
                 DeleteObject(hBrush);
 
-                UINT dpi = GetDpiForWindow(m_hWnd);
+                UINT dpi = static_cast<UINT>(app.dpiScale * 96.0f);
                 int padding = MulDiv(30, dpi, 96);
                 int descFontSize = MulDiv(13, dpi, 96);
                 int shortcutFontSize = static_cast<int>(descFontSize * SHORTCUT_SIZE_MULTIPLIER);
@@ -428,7 +428,7 @@ namespace UI {
 
             case WM_MOUSEWHEEL: {
                 int delta = GET_WHEEL_DELTA_WPARAM(wParam);
-                m_scrollOffsetY -= (delta / WHEEL_DELTA) * MulDiv(50, GetDpiForWindow(m_hWnd), 96);
+                m_scrollOffsetY -= (delta / WHEEL_DELTA) * static_cast<int>(50 * app.dpiScale);
                 InvalidateRect(m_hWnd, nullptr, FALSE);
                 return 0;
             }
@@ -446,7 +446,7 @@ namespace UI {
                 // Scrollbar drag logic
                 RECT rc;
                 GetClientRect(m_hWnd, &rc);
-                UINT dpi = GetDpiForWindow(m_hWnd);
+                UINT dpi = static_cast<UINT>(app.dpiScale * 96.0f);
                 int sbWidth = MulDiv(10, dpi, 96);
                 int sbX = rc.right - sbWidth - MulDiv(5, dpi, 96);
 
@@ -473,7 +473,7 @@ namespace UI {
                 if (m_sbDragging) {
                     RECT rc;
                     GetClientRect(m_hWnd, &rc);
-                    UINT dpi = GetDpiForWindow(m_hWnd);
+                    UINT dpi = static_cast<UINT>(app.dpiScale * 96.0f);
                     int padding = MulDiv(30, dpi, 96);
                     int titleFontSize = MulDiv(32, dpi, 96);
                     int subtitleFontSize = MulDiv(14, dpi, 96);
@@ -503,12 +503,12 @@ namespace UI {
                     return 0;
                 }
                 if (wParam == VK_PRIOR) {
-                    m_scrollOffsetY -= MulDiv(300, GetDpiForWindow(m_hWnd), 96);
+                    m_scrollOffsetY -= static_cast<int>(300 * app.dpiScale);
                     InvalidateRect(m_hWnd, nullptr, FALSE);
                     return 0;
                 }
                 if (wParam == VK_NEXT) {
-                    m_scrollOffsetY += MulDiv(300, GetDpiForWindow(m_hWnd), 96);
+                    m_scrollOffsetY += static_cast<int>(300 * app.dpiScale);
                     InvalidateRect(m_hWnd, nullptr, FALSE);
                     return 0;
                 }
@@ -520,7 +520,7 @@ namespace UI {
                 if (wParam == VK_END) {
                     RECT rc;
                     GetClientRect(m_hWnd, &rc);
-                    UINT dpi = GetDpiForWindow(m_hWnd);
+                    UINT dpi = static_cast<UINT>(app.dpiScale * 96.0f);
                     int padding = MulDiv(30, dpi, 96);
                     int titleFontSize = MulDiv(32, dpi, 96);
                     int subtitleFontSize = MulDiv(14, dpi, 96);
