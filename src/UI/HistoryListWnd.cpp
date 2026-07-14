@@ -1,11 +1,15 @@
 #include "HistoryListWnd.h"
 #include "../Platform/Constants.h"
+#include "../Platform/ConstantsStrings.h"
 #include "../Platform/FileHandler.h"
+#include "../Overlays/OverlayManager.h"
 #include "../AppState.h"
 #include "../Input/Shortcuts.h"
 #include "../Persistence/HistoryFoldersManager.h"
 #include "../UI/UIManager.h"
 #include <algorithm>
+#include <cwctype>
+#include <unordered_map>
 #include <windowsx.h>
 #include <filesystem>
 #include <dwmapi.h>
@@ -49,18 +53,51 @@ namespace UI {
     static int g_sbDragStartOff = 0;
     static bool g_showFullHistory = false; // Ctrl+Tab toggles full history view
     static bool g_headerDragging = false;
-    static int g_headerDragStartX = 0;     // screen X at drag start
-    static int g_headerDragStartY = 0;     // screen Y at drag start
+    static int g_headerDragStartX = 0; // screen X at drag start
+    static int g_headerDragStartY = 0; // screen Y at drag start
     static RECT g_headerDragWindowRect = {}; // window rect at drag start
-    static int g_bodyTop = 0;    // updated each WM_PAINT — actual top of scrollable body
+    static int g_bodyTop = 0; // updated each WM_PAINT — actual top of scrollable body
     static int g_bodyBottom = 0; // updated each WM_PAINT — actual bottom of scrollable body
-    static int g_rowH = 0;       // updated each WM_PAINT — row height in pixels
+    static int g_rowH = 0; // updated each WM_PAINT — row height in pixels
     static HistoryFoldersManager historyFoldersManager;
 
     // Ctrl+Z undo state for single-row Delete
     static std::wstring g_lastDeletedPath;
-    static int          g_lastDeletedIndex      = -1;
-    static bool         g_lastDeletedWasFavorite = false;
+    static int g_lastDeletedIndex = -1;
+    static bool g_lastDeletedWasFavorite = false;
+
+    // ---------------------------------------------------------------------------
+    // Folder validity cache — rebuilt on each BuildDisplayList call.
+    // ---------------------------------------------------------------------------
+    enum class FolderStatus { Valid, Missing, Empty };
+
+    static std::unordered_map<std::wstring, FolderStatus> g_statusCache;
+
+    static FolderStatus GetFolderStatus(const std::wstring &path) {
+        auto it = g_statusCache.find(path);
+        if (it != g_statusCache.end()) return it->second;
+
+        namespace fs = std::filesystem;
+        std::error_code ec;
+        if (!fs::is_directory(fs::path(path), ec) || ec) {
+            return g_statusCache[path] = FolderStatus::Missing;
+        }
+        for (const auto &ent: fs::directory_iterator(
+                     fs::path(path), fs::directory_options::skip_permission_denied, ec)) {
+            if (ec) {
+                ec.clear();
+                continue;
+            }
+            if (!ent.is_regular_file(ec)) continue;
+            std::wstring ext = ent.path().extension().wstring();
+            for (auto &c: ext) c = static_cast<wchar_t>(::towlower(c));
+            for (size_t i = 0; i < Constants::Registry::SUPPORTED_EXTENSIONS_COUNT; ++i) {
+                if (ext == Constants::Registry::SUPPORTED_EXTENSIONS[i])
+                    return g_statusCache[path] = FolderStatus::Valid;
+            }
+        }
+        return g_statusCache[path] = FolderStatus::Empty;
+    }
 
     // ---------------------------------------------------------------------------
     // CalcTotalContentH — single formula for virtual scroll height used in
@@ -69,10 +106,10 @@ namespace UI {
     // ---------------------------------------------------------------------------
     static int CalcTotalContentH(int nEntries, UINT dpi) {
         int padding = MulDiv(Constants::History::HISTORY_PADDING, dpi, 96);
-        int rowH    = MulDiv(Constants::History::HISTORY_ROW_HEIGHT, dpi, 96);
+        int rowH = MulDiv(Constants::History::HISTORY_ROW_HEIGHT, dpi, 96);
         int footerH = MulDiv(Constants::History::HISTORY_FONT_SIZE + 2 + 8, dpi, 96);
         return padding * 2
-               + MulDiv(30 + Constants::History::HISTORY_FONT_SIZE + 4, dpi, 96)
+               + MulDiv(2 * Constants::History::HISTORY_FONT_SIZE + 16, dpi, 96)
                + MulDiv(8, dpi, 96)
                + nEntries * rowH
                + footerH;
@@ -87,6 +124,7 @@ namespace UI {
         GetKeyNameTextW(static_cast<LONG>(sc) << 16, buf, 16);
         return buf;
     }
+
     static std::vector<RECT> g_rowRects;
     static std::vector<RECT> g_indexRects; // clickable rects for directory indexes (parallel to g_displayList)
     static RECT g_exeLinkRect = {}; // clickable rect for the "QIV" exe-dir link
@@ -108,6 +146,7 @@ namespace UI {
     //   Respects HISTORY_FAVORITES_POSITION and per-category display caps.
     // ---------------------------------------------------------------------------
     static void BuildDisplayList() {
+        g_statusCache.clear();
         g_displayList.clear();
 
         const auto &history = historyFoldersManager.folderHistory;
@@ -157,11 +196,17 @@ namespace UI {
                 for (auto &e: favRows) g_displayList.push_back(e);
             }
         }
+        // Pre-populate cache so WM_PAINT hits only fast map lookups.
+        for (const auto &e: g_displayList) GetFolderStatus(e.path);
     }
 
     // ---------------------------------------------------------------------------
     // Free functions — used by FileHandler, UIManager, CommandExecuter
     // ---------------------------------------------------------------------------
+
+    bool IsFolderValidForViewer(const std::wstring &folderPath) {
+        return GetFolderStatus(folderPath) == FolderStatus::Valid;
+    }
 
     void LoadFolderHistoryFromDisk() {
         historyFoldersManager.LoadHistoryFromDisk();
@@ -172,28 +217,25 @@ namespace UI {
             return;
 
         auto &history = historyFoldersManager.folderHistory;
-
-        // Check if this path is already known
         auto it = std::find(history.begin(), history.end(), folderPath);
-        bool isNew = (it == history.end());
 
-        if (!isNew) {
+        if (it != history.end()) {
             // Already exists: promote to front (MRU), no file write needed
             std::wstring tmp = *it;
             history.erase(it);
             history.insert(history.begin(), tmp);
-            return;
+        } else {
+            // Genuinely new: prepend to RAM list
+            history.insert(history.begin(), folderPath);
+            if (static_cast<int>(history.size()) > Constants::History::HISTORY_MAX_DIRS_TO_SAVE)
+                history.resize(static_cast<size_t>(Constants::History::HISTORY_MAX_DIRS_TO_SAVE));
+            historyFoldersManager.AppendNewFolderToDisk(folderPath);
         }
 
-        // Genuinely new: prepend to RAM list
-        history.insert(history.begin(), folderPath);
-
-        // Cap RAM at HISTORY_MAX_DIRS_TO_SAVE
-        if (static_cast<int>(history.size()) > Constants::History::HISTORY_MAX_DIRS_TO_SAVE)
-            history.resize(static_cast<size_t>(Constants::History::HISTORY_MAX_DIRS_TO_SAVE));
-
-        // Append-only to disk — no rewrite
-        historyFoldersManager.AppendNewFolderToDisk(folderPath);
+        // Invalidate history window so the current-folder green updates immediately.
+        auto &histWnd = uiManager.getHistoryListWindow();
+        if (histWnd.IsVisible())
+            InvalidateRect(histWnd.GetHwnd(), nullptr, FALSE);
     }
 
     void ToggleFavorite(int rowIndex) {
@@ -268,10 +310,15 @@ namespace UI {
         UINT dpi = static_cast<UINT>(app.dpiScale * 96.0f);
 
         int entries = std::max(1, static_cast<int>(g_displayList.size()));
-        int totalH  = CalcTotalContentH(entries, dpi);
+        int totalH = CalcTotalContentH(entries, dpi);
 
-        w = static_cast<int>(monW * 0.30f);
-        h = std::min(totalH, static_cast<int>(monH * 0.80f));
+        int minW = MulDiv(Constants::History::HISTORY_MIN_W, dpi, 96);
+        int maxW = MulDiv(Constants::History::HISTORY_MAX_W, dpi, 96);
+        int minH = MulDiv(Constants::History::HISTORY_MIN_H, dpi, 96);
+        int maxH = MulDiv(Constants::History::HISTORY_MAX_H, dpi, 96);
+
+        w = std::clamp(static_cast<int>(monW * 0.30f), minW, maxW);
+        h = std::clamp(std::min(totalH, static_cast<int>(monH * 0.80f)), minH, std::min(maxH, static_cast<int>(monH * 0.80f)));
         x = monX + (monW - w) / 2;
         y = monY + (monH - h) / 2;
     }
@@ -299,7 +346,7 @@ namespace UI {
                 int SB_W = static_cast<int>(
                     MulDiv(Constants::History::SCROLLBAR_THICKNESS, dpi, 96));
                 int totalContentH = CalcTotalContentH(
-                    static_cast<int>(g_displayList.size()), dpi);
+                        static_cast<int>(g_displayList.size()), dpi);
                 int windowH = rc.bottom - rc.top;
                 int maxScroll = std::max(0, totalContentH - windowH);
                 g_scrollOffsetY = std::clamp(g_scrollOffsetY, 0, maxScroll);
@@ -325,42 +372,41 @@ namespace UI {
                         DEFAULT_CHARSET, OUT_OUTLINE_PRECIS, CLIP_DEFAULT_PRECIS,
                         CLEARTYPE_QUALITY, VARIABLE_PITCH, L"Segoe UI");
 
-                // Title (fixed — not scrolled)
-                SelectObject(hdc, hTitleFont);
-                SetTextColor(hdc, RGB(100, 200, 255));
+                // Push counts into the real title bar
                 int totalSaved = static_cast<int>(historyFoldersManager.folderHistory.size());
                 int totalShown = static_cast<int>(g_displayList.size());
-                std::wstring title = L"Folder History  (showing "
-                                     + std::to_wstring(totalShown) + L" of "
-                                     + std::to_wstring(totalSaved) + L" saved)  \x2605=Space(toggle fav) , CTRL+Tab=full list";
-                RECT titleRect = {
-                    rc.left + padding, rc.top + padding,
-                    rc.right - padding, rc.top + padding + titleSz + 4
-                };
-                DrawTextW(hdc, title.c_str(), -1, &titleRect, DT_LEFT | DT_VCENTER | DT_SINGLELINE);
-
-                // Hint line 2: all shortcuts in gray (Del + Ctrl+Z added; QIV link moved to footer)
+                int favCount = static_cast<int>(historyFoldersManager.favorites.size());
                 {
-                    SelectObject(hdc, hBodyFont);
-                    int lineTop = titleRect.bottom + MulDiv(2, dpi, 96);
-                    int lineBot = lineTop + fontSize + 2;
-
-                    constexpr wchar_t SHORTCUTS[] =
-                        L"Ctrl+Shift+Del = clear history"
-                        L"     Ctrl+Alt+Shift+Del = clear favorites"
-                        L"     Del = delete entry"
-                        L"     Ctrl+Z = restore";
-                    SetTextColor(hdc, RGB(150, 150, 150));
-                    RECT scRect = { rc.left + padding, lineTop, rc.right - padding, lineBot };
-                    DrawTextW(hdc, SHORTCUTS, -1, &scRect,
-                              DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
-
-                    g_exeLinkRect = {}; // link now lives in footer
-                    SelectObject(hdc, hTitleFont);
+                    std::wstring caption = L"Folder History  (showing "
+                                           + std::to_wstring(totalShown) + L" of "
+                                           + std::to_wstring(totalSaved) + L" saved)   \x2605 = Space (toggle fav)   "
+                                           + std::to_wstring(favCount) + L" / "
+                                           + std::to_wstring(Constants::History::HISTORY_MAX_FAVORITES_TO_SHOW)
+                                           + L" favorites";
+                    SetWindowTextW(m_hWnd, caption.c_str());
                 }
 
-                // Separator (fixed) — placed after hint line
-                int sepY = titleRect.bottom + MulDiv(2 + fontSize + 2 + 4, dpi, 96);
+                // Single shortcuts line
+                SelectObject(hdc, hBodyFont);
+                int hintTop = rc.top + padding;
+                int hintBot = hintTop + MulDiv(fontSize + 2, dpi, 96);
+                {
+                    constexpr wchar_t SHORTCUTS[] =
+                            L"Del = delete entry     Ctrl+Z = restore"
+                            L"     Ctrl+Tab = full list"
+                            L"     Ctrl+Shift+Del = clear history"
+                            L"     Ctrl+Alt+Shift+Del = clear favorites";
+                    SetTextColor(hdc, RGB(150, 150, 150));
+                    RECT scRect = {rc.left + padding, hintTop, rc.right - padding, hintBot};
+                    DrawTextW(hdc, SHORTCUTS, -1, &scRect,
+                              DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
+                }
+
+                g_exeLinkRect = {};
+                SelectObject(hdc, hTitleFont);
+
+                // Separator (fixed) — placed after shortcuts line
+                int sepY = hintBot + MulDiv(4, dpi, 96);
                 HPEN hPen = CreatePen(PS_SOLID, 1, RGB(50, 50, 50));
                 HPEN hOldPen = (HPEN) SelectObject(hdc, hPen);
                 MoveToEx(hdc, rc.left + padding, sepY, nullptr);
@@ -385,9 +431,18 @@ namespace UI {
 
                 // Create link font for indexes
                 HFONT hIndexLinkFont = CreateFontW(
-                    listFontSz, 0, 0, 0, FW_NORMAL, FALSE, TRUE, FALSE,
-                    DEFAULT_CHARSET, OUT_OUTLINE_PRECIS, CLIP_DEFAULT_PRECIS,
-                    CLEARTYPE_QUALITY, VARIABLE_PITCH, L"Segoe UI");
+                        listFontSz, 0, 0, 0, FW_NORMAL, FALSE, TRUE, FALSE,
+                        DEFAULT_CHARSET, OUT_OUTLINE_PRECIS, CLIP_DEFAULT_PRECIS,
+                        CLEARTYPE_QUALITY, VARIABLE_PITCH, L"Segoe UI");
+
+                // Derive the folder currently open in the main app
+                std::wstring currentFolder;
+                if (!app.playlist.empty() && app.currentIndex >= 0) {
+                    const std::wstring &cur = app.playlist[app.currentIndex];
+                    const size_t sep = cur.find_last_of(L"\\/");
+                    if (sep != std::wstring::npos)
+                        currentFolder = cur.substr(0, sep);
+                }
 
                 if (g_displayList.empty()) {
                     int y = rowsTop - g_scrollOffsetY;
@@ -412,16 +467,28 @@ namespace UI {
 
                         RECT rowRect = {rc.left, rowTop, rc.right, rowBottom};
 
+                        const bool isCurrent = (!currentFolder.empty() && entry.path == currentFolder);
+                        const FolderStatus rowStatus = GetFolderStatus(entry.path);
+                        const bool isDead = (rowStatus != FolderStatus::Valid);
+
                         // Hover background
                         if (i == g_hoverRow) {
                             HBRUSH hHover = CreateSolidBrush(
-                                    entry.isFavorite ? RGB(50, 50, 10) : RGB(40, 60, 80));
+                                    isDead
+                                        ? RGB(60, 20, 20)
+                                        : entry.isFavorite
+                                              ? RGB(50, 50, 10)
+                                              : RGB(40, 60, 80));
                             FillRect(hdc, &rowRect, hHover);
                             DeleteObject(hHover);
                         }
 
-                        // Row index number — blue, underlined, clickable
-                        SetTextColor(hdc, RGB(100, 180, 255));
+                        // Row index number — red for dead, green for current, blue otherwise
+                        SetTextColor(hdc, isDead
+                                              ? Constants::Theme::HistoryPanel::PATH_DEAD_DRIVE
+                                              : (isCurrent
+                                                     ? Constants::Theme::HistoryPanel::PATH_DRIVE_CURRENT
+                                                     : RGB(100, 180, 255)));
                         SelectObject(hdc, hIndexLinkFont);
                         std::wstring idxStr = std::to_wstring(i + 1);
                         RECT idxRect = {
@@ -434,40 +501,64 @@ namespace UI {
                         g_indexRects.push_back(idxRect);
                         SelectObject(hdc, hListFont);
 
-                        // Favorite star
-                        if (entry.isFavorite) {
-                            SetTextColor(hdc, RGB(255, 220, 0));
-                            RECT starRect = {
+                        // Warning glyph for dead folders; star for favorites
+                        {
+                            RECT slotRect = {
                                 rc.left + padding + indexW + MulDiv(4, dpi, 96), rowTop,
                                 rc.left + padding + indexW + MulDiv(4, dpi, 96) + starW, rowBottom
                             };
-                            DrawTextW(hdc, L"\x2605", -1, &starRect,
-                                      DT_CENTER | DT_VCENTER | DT_SINGLELINE);
+                            if (isDead) {
+                                SetTextColor(hdc, Constants::Theme::HistoryPanel::PATH_DEAD_DRIVE);
+                                DrawTextW(hdc, L"⚠", -1, &slotRect,
+                                          DT_CENTER | DT_VCENTER | DT_SINGLELINE);
+                            } else if (entry.isFavorite) {
+                                SetTextColor(hdc, RGB(255, 220, 0));
+                                DrawTextW(hdc, L"\x2605", -1, &slotRect,
+                                          DT_CENTER | DT_VCENTER | DT_SINGLELINE);
+                            }
                         }
 
                         // Path text — three segments: drive, middle, folder
                         const bool isHov = (i == g_hoverRow);
                         const bool isFav = entry.isFavorite;
 
-                        COLORREF driveColor  = isFav
-                            ? (isHov ? Constants::Theme::HistoryPanel::PATH_DRIVE_FAV_HOVER   : Constants::Theme::HistoryPanel::PATH_DRIVE_FAV)
-                            : (isHov ? Constants::Theme::HistoryPanel::PATH_DRIVE_HOVER        : Constants::Theme::HistoryPanel::PATH_DRIVE);
-                        COLORREF middleColor = isFav
-                            ? (isHov ? RGB(255, 255, 160) : RGB(255, 240, 120))
-                            : (isHov ? RGB(255, 255, 255) : RGB(200, 200, 200));
-                        COLORREF folderColor = isFav
-                            ? (isHov ? Constants::Theme::HistoryPanel::PATH_FOLDER_FAV_HOVER  : Constants::Theme::HistoryPanel::PATH_FOLDER_FAV)
-                            : (isHov ? Constants::Theme::HistoryPanel::PATH_FOLDER_HOVER       : Constants::Theme::HistoryPanel::PATH_FOLDER);
+                        COLORREF driveColor = isDead
+                                                  ? Constants::Theme::HistoryPanel::PATH_DEAD_DRIVE
+                                                  : (isCurrent
+                                                         ? Constants::Theme::HistoryPanel::PATH_DRIVE_CURRENT
+                                                         : (isFav
+                                                                ? (isHov ? Constants::Theme::HistoryPanel::PATH_DRIVE_FAV_HOVER : Constants::Theme::HistoryPanel::PATH_DRIVE_FAV)
+                                                                : (isHov
+                                                                       ? Constants::Theme::HistoryPanel::PATH_DRIVE_HOVER
+                                                                       : Constants::Theme::HistoryPanel::PATH_DRIVE)));
+                        COLORREF middleColor = isDead
+                                                   ? Constants::Theme::HistoryPanel::PATH_DEAD_MIDDLE
+                                                   : (isCurrent
+                                                          ? Constants::Theme::HistoryPanel::PATH_MIDDLE_CURRENT
+                                                          : (isFav
+                                                                 ? (isHov ? RGB(255, 255, 160) : RGB(255, 240, 120))
+                                                                 : (isHov
+                                                                        ? RGB(255, 255, 255)
+                                                                        : RGB(200, 200, 200))));
+                        COLORREF folderColor = isDead
+                                                   ? Constants::Theme::HistoryPanel::PATH_DEAD_FOLDER
+                                                   : (isCurrent
+                                                          ? Constants::Theme::HistoryPanel::PATH_FOLDER_CURRENT
+                                                          : (isFav
+                                                                 ? (isHov ? Constants::Theme::HistoryPanel::PATH_FOLDER_FAV_HOVER : Constants::Theme::HistoryPanel::PATH_FOLDER_FAV)
+                                                                 : (isHov
+                                                                        ? Constants::Theme::HistoryPanel::PATH_FOLDER_HOVER
+                                                                        : Constants::Theme::HistoryPanel::PATH_FOLDER)));
 
                         // Split path into (drive, middle, folder)
-                        const std::wstring& fp = entry.path;
+                        const std::wstring &fp = entry.path;
                         std::wstring segDrive, segMiddle, segFolder;
                         if (fp.size() >= 2 && fp[1] == L':') {
                             segDrive = fp.substr(0, 2);
                             size_t lastSep = fp.find_last_of(L"\\/");
                             if (lastSep != std::wstring::npos && lastSep >= 2) {
                                 segMiddle = fp.substr(2, lastSep - 1); // "\rest\of\path\"
-                                segFolder = fp.substr(lastSep + 1);    // "FolderName"
+                                segFolder = fp.substr(lastSep + 1); // "FolderName"
                             } else {
                                 segFolder = fp.substr(2);
                             }
@@ -479,9 +570,9 @@ namespace UI {
                         std::wstring posLabel = uiManager.GetSpawnedDirWndPositionLabel(fp);
                         segFolder += posLabel;
 
-                        LONG rowLeft  = rc.left + padding + indexW + starW + MulDiv(10, dpi, 96);
+                        LONG rowLeft = rc.left + padding + indexW + starW + MulDiv(10, dpi, 96);
                         LONG rowRight = rc.right - padding - (needsScrollbar ? SB_W + 2 : 0);
-                        LONG curX     = rowLeft;
+                        LONG curX = rowLeft;
 
                         // 1. Drive letter
                         if (!segDrive.empty() && curX < rowRight) {
@@ -489,7 +580,7 @@ namespace UI {
                             SIZE sz = {};
                             GetTextExtentPoint32W(hdc, segDrive.c_str(),
                                                   static_cast<int>(segDrive.size()), &sz);
-                            RECT dr = { curX, rowTop, curX + sz.cx, rowBottom };
+                            RECT dr = {curX, rowTop, curX + sz.cx, rowBottom};
                             DrawTextW(hdc, segDrive.c_str(), -1, &dr,
                                       DT_LEFT | DT_VCENTER | DT_SINGLELINE);
                             curX += sz.cx;
@@ -509,7 +600,7 @@ namespace UI {
                             SIZE szM = {};
                             GetTextExtentPoint32W(hdc, segMiddle.c_str(),
                                                   static_cast<int>(segMiddle.size()), &szM);
-                            RECT mr = { curX, rowTop, midRight, rowBottom };
+                            RECT mr = {curX, rowTop, midRight, rowBottom};
                             DrawTextW(hdc, segMiddle.c_str(), -1, &mr,
                                       DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
                             curX = (szM.cx < midRight - curX) ? curX + szM.cx : midRight;
@@ -518,7 +609,7 @@ namespace UI {
                         // 3. Folder name
                         if (!segFolder.empty() && curX < rowRight) {
                             SetTextColor(hdc, folderColor);
-                            RECT fr = { curX, rowTop, rowRight, rowBottom };
+                            RECT fr = {curX, rowTop, rowRight, rowBottom};
                             DrawTextW(hdc, segFolder.c_str(), -1, &fr,
                                       DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
                         }
@@ -577,9 +668,9 @@ namespace UI {
                         LONG midBound = rc.left + (rc.right - rc.left) / 2;
 
                         HFONT hLinkFont = CreateFontW(
-                            fontSize, 0, 0, 0, FW_NORMAL, FALSE, TRUE, FALSE,
-                            DEFAULT_CHARSET, OUT_OUTLINE_PRECIS, CLIP_DEFAULT_PRECIS,
-                            CLEARTYPE_QUALITY, VARIABLE_PITCH, L"Segoe UI");
+                                fontSize, 0, 0, 0, FW_NORMAL, FALSE, TRUE, FALSE,
+                                DEFAULT_CHARSET, OUT_OUTLINE_PRECIS, CLIP_DEFAULT_PRECIS,
+                                CLEARTYPE_QUALITY, VARIABLE_PITCH, L"Segoe UI");
 
                         const UI::PanelLayout &layout = uiManager.GetLayout();
                         const UI::SlotInfo *slots[] = {&layout.center, &layout.top, &layout.right, &layout.bottom, &layout.left};
@@ -592,7 +683,7 @@ namespace UI {
                         DrawTextW(hdc, cacheKeyLabel.c_str(), -1, &cacheToggleRect, DT_LEFT | DT_VCENTER | DT_SINGLELINE);
                         SIZE szToggle = {};
                         GetTextExtentPoint32W(hdc, cacheKeyLabel.c_str(),
-                                             static_cast<int>(cacheKeyLabel.size()), &szToggle);
+                                              static_cast<int>(cacheKeyLabel.size()), &szToggle);
                         g_cacheIndexRect = {curX, footerTop, curX + szToggle.cx, footerBot};
                         curX += szToggle.cx;
 
@@ -601,7 +692,7 @@ namespace UI {
                         SetTextColor(hdc, RGB(150, 150, 150));
                         bool cacheFound = false;
                         std::wstring cachePosName;
-                        for (auto *slot : slots) {
+                        for (auto *slot: slots) {
                             if (slot->panel == &uiManager.getCacheWindow() && slot->panel->IsVisible()) {
                                 cachePosName = slot->name;
                                 cacheFound = true;
@@ -621,7 +712,7 @@ namespace UI {
                         DrawTextW(hdc, dirKeyLabel.c_str(), -1, &f5ToggleRect, DT_LEFT | DT_VCENTER | DT_SINGLELINE);
                         SIZE szF5 = {};
                         GetTextExtentPoint32W(hdc, dirKeyLabel.c_str(),
-                                             static_cast<int>(dirKeyLabel.size()), &szF5);
+                                              static_cast<int>(dirKeyLabel.size()), &szF5);
                         g_f5IndexRect = {curX, footerTop, curX + szF5.cx, footerBot};
                         curX += szF5.cx;
 
@@ -631,15 +722,15 @@ namespace UI {
                         bool f5Found = false;
                         std::wstring f5PosName;
                         int f5HistoryIndex = -1;
-                        for (auto *slot : slots) {
+                        for (auto *slot: slots) {
                             if (slot->panel == &uiManager.getDirWindow() && slot->panel->IsVisible()) {
                                 if (app.currentIndex >= 0 && app.currentIndex < static_cast<int>(app.playlist.size())) {
                                     std::wstring currentImagePath = app.playlist[app.currentIndex];
-                                    std::wstring currentFolder = std::filesystem::path(currentImagePath).parent_path().wstring();
+                                    std::wstring f5Folder = std::filesystem::path(currentImagePath).parent_path().wstring();
                                     const auto &history = historyFoldersManager.folderHistory;
                                     for (int i = 0; i < static_cast<int>(history.size()); ++i) {
                                         try {
-                                            if (std::filesystem::equivalent(currentFolder, history[i])) {
+                                            if (std::filesystem::equivalent(f5Folder, history[i])) {
                                                 f5HistoryIndex = i + 1;
                                                 break;
                                             }
@@ -666,14 +757,14 @@ namespace UI {
                     // RIGHT: QIV→dir link + file size
                     {
                         LONG rightHalfLeft = rc.left + (rc.right - rc.left) / 2;
-                        LONG rightEdge     = rc.right - padding;
+                        LONG rightEdge = rc.right - padding;
 
                         // File size — measure first so QIV link avoids it
                         std::wstring sizeValue;
                         {
                             std::error_code ec;
                             auto bytes = std::filesystem::file_size(
-                                historyFoldersManager.GetFilePath(), ec);
+                                    historyFoldersManager.GetFilePath(), ec);
                             if (!ec) {
                                 wchar_t sizeBuf[64];
                                 if (bytes >= 1024ULL * 1024)
@@ -693,25 +784,25 @@ namespace UI {
                         SelectObject(hdc, hBodyFont);
                         SIZE szSize = {};
                         GetTextExtentPoint32W(hdc, sizeValue.c_str(),
-                                             static_cast<int>(sizeValue.size()), &szSize);
+                                              static_cast<int>(sizeValue.size()), &szSize);
                         LONG sizeLeft = rightEdge - szSize.cx;
 
                         // QIV→dir link — blue underlined, clickable, left of file size
                         {
                             wchar_t exeBuf[MAX_PATH] = {};
                             GetModuleFileNameW(nullptr, exeBuf, MAX_PATH);
-                            std::wstring linkText = L"QIV \x2192 "
-                                + std::filesystem::path(exeBuf).parent_path().wstring() + L"\\";
+                            std::wstring linkText = L"QIV.exe/path="
+                                                    + std::filesystem::path(exeBuf).parent_path().wstring() + L"\\";
 
                             HFONT hLinkFont = CreateFontW(
-                                fontSize, 0, 0, 0, FW_NORMAL, FALSE, TRUE, FALSE,
-                                DEFAULT_CHARSET, OUT_OUTLINE_PRECIS, CLIP_DEFAULT_PRECIS,
-                                CLEARTYPE_QUALITY, VARIABLE_PITCH, L"Segoe UI");
+                                    fontSize, 0, 0, 0, FW_NORMAL, FALSE, TRUE, FALSE,
+                                    DEFAULT_CHARSET, OUT_OUTLINE_PRECIS, CLIP_DEFAULT_PRECIS,
+                                    CLEARTYPE_QUALITY, VARIABLE_PITCH, L"Segoe UI");
                             SelectObject(hdc, hLinkFont);
                             SetTextColor(hdc, RGB(100, 180, 255));
 
                             LONG linkAreaRight = std::max(rightHalfLeft, sizeLeft - MulDiv(8, dpi, 96));
-                            g_exeLinkRect = { rightHalfLeft, footerTop, linkAreaRight, footerBot };
+                            g_exeLinkRect = {rightHalfLeft, footerTop, linkAreaRight, footerBot};
                             DrawTextW(hdc, linkText.c_str(), -1, &g_exeLinkRect,
                                       DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
                             DeleteObject(hLinkFont);
@@ -720,7 +811,7 @@ namespace UI {
 
                         // File size — right-aligned
                         SetTextColor(hdc, Constants::Theme::HistoryPanel::SIZE_HIGHLIGHT);
-                        RECT sizeRect = { sizeLeft, footerTop, rightEdge, footerBot };
+                        RECT sizeRect = {sizeLeft, footerTop, rightEdge, footerBot};
                         DrawTextW(hdc, sizeValue.c_str(), -1, &sizeRect,
                                   DT_LEFT | DT_VCENTER | DT_SINGLELINE);
                     }
@@ -735,23 +826,33 @@ namespace UI {
                 return 0;
             }
 
+            case WM_GETMINMAXINFO: {
+                UINT dpiMM = static_cast<UINT>(app.dpiScale * 96.0f);
+                auto *mmi = reinterpret_cast<MINMAXINFO *>(lParam);
+                mmi->ptMinTrackSize.x = MulDiv(Constants::History::HISTORY_MIN_W, dpiMM, 96);
+                mmi->ptMinTrackSize.y = MulDiv(Constants::History::HISTORY_MIN_H, dpiMM, 96);
+                mmi->ptMaxTrackSize.x = MulDiv(Constants::History::HISTORY_MAX_W, dpiMM, 96);
+                mmi->ptMaxTrackSize.y = MulDiv(Constants::History::HISTORY_MAX_H, dpiMM, 96);
+                return 0;
+            }
+
             case WM_NCHITTEST: {
-                POINT pt = { GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam) };
+                POINT pt = {GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam)};
                 RECT wrc;
                 GetWindowRect(m_hWnd, &wrc);
                 const int border = std::max(4, static_cast<int>(6 * app.dpiScale));
-                bool top    = pt.y <  wrc.top    + border;
+                bool top = pt.y < wrc.top + border;
                 bool bottom = pt.y >= wrc.bottom - border;
-                bool left   = pt.x <  wrc.left   + border;
-                bool right  = pt.x >= wrc.right  - border;
-                if (top    && left)  return HTTOPLEFT;
-                if (top    && right) return HTTOPRIGHT;
-                if (bottom && left)  return HTBOTTOMLEFT;
+                bool left = pt.x < wrc.left + border;
+                bool right = pt.x >= wrc.right - border;
+                if (top && left) return HTTOPLEFT;
+                if (top && right) return HTTOPRIGHT;
+                if (bottom && left) return HTBOTTOMLEFT;
                 if (bottom && right) return HTBOTTOMRIGHT;
-                if (top)             return HTTOP;
-                if (bottom)          return HTBOTTOM;
-                if (left)            return HTLEFT;
-                if (right)           return HTRIGHT;
+                if (top) return HTTOP;
+                if (bottom) return HTBOTTOM;
+                if (left) return HTLEFT;
+                if (right) return HTRIGHT;
                 return HTCLIENT;
             }
 
@@ -771,7 +872,7 @@ namespace UI {
                 // Check if clicking in header area — track screen coords to avoid drift
                 if (my < headerBottom) {
                     g_headerDragging = true;
-                    POINT ptScreen = { mx, my };
+                    POINT ptScreen = {mx, my};
                     ClientToScreen(m_hWnd, &ptScreen);
                     g_headerDragStartX = ptScreen.x;
                     g_headerDragStartY = ptScreen.y;
@@ -813,10 +914,10 @@ namespace UI {
 
                 // Handle header dragging to move window
                 if (g_headerDragging) {
-                    POINT ptScreen = { mx, my };
+                    POINT ptScreen = {mx, my};
                     ClientToScreen(m_hWnd, &ptScreen);
                     int newX = g_headerDragWindowRect.left + (ptScreen.x - g_headerDragStartX);
-                    int newY = g_headerDragWindowRect.top  + (ptScreen.y - g_headerDragStartY);
+                    int newY = g_headerDragWindowRect.top + (ptScreen.y - g_headerDragStartY);
                     SetWindowPos(m_hWnd, nullptr, newX, newY, 0, 0,
                                  SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE);
                     return 0;
@@ -871,23 +972,23 @@ namespace UI {
                 }
                 // Hand cursor over clickable links/indexes
                 if (g_exeLinkRect.right > g_exeLinkRect.left) {
-                    POINT pt = { mx, my };
+                    POINT pt = {mx, my};
                     if (PtInRect(&g_exeLinkRect, pt)) {
                         SetCursor(LoadCursor(nullptr, IDC_HAND));
                         return 0;
                     }
                 }
                 if (g_f5IndexRect.right > g_f5IndexRect.left) {
-                    POINT pt = { mx, my };
+                    POINT pt = {mx, my};
                     if (PtInRect(&g_f5IndexRect, pt)) {
                         SetCursor(LoadCursor(nullptr, IDC_HAND));
                         return 0;
                     }
                 }
                 // Hand cursor over history row indexes
-                for (const auto &idxRect : g_indexRects) {
+                for (const auto &idxRect: g_indexRects) {
                     if (idxRect.right > idxRect.left) {
-                        POINT pt = { mx, my };
+                        POINT pt = {mx, my};
                         if (PtInRect(&idxRect, pt)) {
                             SetCursor(LoadCursor(nullptr, IDC_HAND));
                             return 0;
@@ -919,7 +1020,7 @@ namespace UI {
 
                 // Exe-dir link click
                 if (g_exeLinkRect.right > g_exeLinkRect.left) {
-                    POINT pt = { mx, my };
+                    POINT pt = {mx, my};
                     if (PtInRect(&g_exeLinkRect, pt)) {
                         wchar_t exeBuf[MAX_PATH] = {};
                         GetModuleFileNameW(nullptr, exeBuf, MAX_PATH);
@@ -931,7 +1032,7 @@ namespace UI {
 
                 // [F5] label click — toggle F5
                 if (g_f5IndexRect.right > g_f5IndexRect.left) {
-                    POINT pt = { mx, my };
+                    POINT pt = {mx, my};
                     if (PtInRect(&g_f5IndexRect, pt)) {
                         uiManager.Toggle(uiManager.getDirWindow());
                         return 0;
@@ -940,7 +1041,7 @@ namespace UI {
 
                 // [F3] (Cache) label click — toggle Cache
                 if (g_cacheIndexRect.right > g_cacheIndexRect.left) {
-                    POINT pt = { mx, my };
+                    POINT pt = {mx, my};
                     if (PtInRect(&g_cacheIndexRect, pt)) {
                         uiManager.Toggle(uiManager.getCacheWindow());
                         return 0;
@@ -951,7 +1052,7 @@ namespace UI {
                 for (int i = 0; i < static_cast<int>(g_indexRects.size()); ++i) {
                     const RECT &idxRect = g_indexRects[i];
                     if (idxRect.right > idxRect.left) {
-                        POINT pt = { mx, my };
+                        POINT pt = {mx, my};
                         if (PtInRect(&idxRect, pt)) {
                             if (i < static_cast<int>(g_displayList.size())) {
                                 std::wstring folder = g_displayList[i].path;
@@ -967,6 +1068,15 @@ namespace UI {
                     const RECT &r = g_rowRects[i];
                     if (mx >= r.left && mx < r.right && my >= r.top && my < r.bottom) {
                         std::wstring folder = g_displayList[i].path;
+                        FolderStatus fs = GetFolderStatus(folder);
+                        if (fs != FolderStatus::Valid) {
+                            const wchar_t *deadMsg = (fs == FolderStatus::Missing)
+                                                         ? Constants::Messages::FOLDER_DEAD_MISSING
+                                                         : Constants::Messages::FOLDER_DEAD_EMPTY;
+                            if (g_hHistOwner)
+                                g_overlayManager.PostCenterMessage(g_hHistOwner, deadMsg);
+                            return 0;
+                        }
                         ShowWindow(m_hWnd, SW_HIDE);
                         OpenDirectory(g_hHistOwner, folder);
                         return 0;
@@ -1059,6 +1169,18 @@ namespace UI {
                     case VK_RETURN: {
                         if (g_hoverRow >= 0 && g_hoverRow < navMax) {
                             std::wstring folder = g_displayList[g_hoverRow].path;
+                            // Dead folder guard — block navigation and show overlay message.
+                            {
+                                FolderStatus fs = GetFolderStatus(folder);
+                                if (fs != FolderStatus::Valid) {
+                                    const wchar_t *deadMsg = (fs == FolderStatus::Missing)
+                                                                 ? Constants::Messages::FOLDER_DEAD_MISSING
+                                                                 : Constants::Messages::FOLDER_DEAD_EMPTY;
+                                    if (g_hHistOwner)
+                                        g_overlayManager.PostCenterMessage(g_hHistOwner, deadMsg);
+                                    return 0;
+                                }
+                            }
                             bool shiftHeld = (GetKeyState(VK_SHIFT) & 0x8000) != 0;
                             if (shiftHeld) {
                                 // Shift+Enter — toggle spawned DirWnd for this folder.
@@ -1132,12 +1254,15 @@ namespace UI {
                                 auto &hist = historyFoldersManager.folderHistory;
                                 int histIdx = -1;
                                 for (int i = 0; i < static_cast<int>(hist.size()); ++i) {
-                                    if (hist[i] == path) { histIdx = i; break; }
+                                    if (hist[i] == path) {
+                                        histIdx = i;
+                                        break;
+                                    }
                                 }
 
                                 // Save undo state
-                                g_lastDeletedPath        = path;
-                                g_lastDeletedIndex       = histIdx;
+                                g_lastDeletedPath = path;
+                                g_lastDeletedIndex = histIdx;
                                 g_lastDeletedWasFavorite = wasFav;
 
                                 // Remove from history
@@ -1199,6 +1324,11 @@ namespace UI {
 
     void HistoryListWnd::OnSetFocus() {
         UI::SetActivePanelWindow(m_hWnd);
+    }
+
+    void HistoryListWnd::OnKillFocus() {
+        g_hoverRow = -1;
+        // InvalidateRect is already called by FloatingPanelWnd before this hook.
     }
 
     void HistoryListWnd::Show() {

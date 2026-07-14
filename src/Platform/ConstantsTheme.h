@@ -8,7 +8,7 @@ namespace Constants {
     // APP THEME & WINDOW CHROME  —  single source of truth
     // =========================================================================
     // true = dark title bar / tray menu; false = light (system default)
-    constexpr bool IS_APP_DARK_THEME = false;
+    constexpr bool IS_APP_DARK_THEME = true;
 
     // DWM corner preference for the main window.
     // Re-exported here; callers only need ConstantsTheme.h.
@@ -95,15 +95,23 @@ namespace Constants {
 
             // Path row — three segments: drive letter, middle path, final folder name.
             // Non-favorite rows:
-            constexpr COLORREF PATH_DRIVE         = RGB(100, 185, 205); // muted teal
-            constexpr COLORREF PATH_DRIVE_HOVER   = RGB(140, 215, 235);
-            constexpr COLORREF PATH_FOLDER        = RGB(232, 215, 170); // warm tan — clearly distinct from gray middle
-            constexpr COLORREF PATH_FOLDER_HOVER  = RGB(255, 248, 210);
+            constexpr COLORREF PATH_DRIVE = RGB(100, 185, 205); // muted teal
+            constexpr COLORREF PATH_DRIVE_HOVER = RGB(140, 215, 235);
+            constexpr COLORREF PATH_FOLDER = RGB(232, 215, 170); // warm tan — clearly distinct from gray middle
+            constexpr COLORREF PATH_FOLDER_HOVER = RGB(255, 248, 210);
             // Favorite rows:
-            constexpr COLORREF PATH_DRIVE_FAV         = RGB(195, 165, 70);  // amber/gold
-            constexpr COLORREF PATH_DRIVE_FAV_HOVER   = RGB(215, 195, 105);
-            constexpr COLORREF PATH_FOLDER_FAV        = RGB(255, 248, 152); // bright warm yellow
-            constexpr COLORREF PATH_FOLDER_FAV_HOVER  = RGB(255, 255, 195);
+            constexpr COLORREF PATH_DRIVE_FAV = RGB(195, 165, 70); // amber/gold
+            constexpr COLORREF PATH_DRIVE_FAV_HOVER = RGB(215, 195, 105);
+            constexpr COLORREF PATH_FOLDER_FAV = RGB(255, 248, 152); // bright warm yellow
+            constexpr COLORREF PATH_FOLDER_FAV_HOVER = RGB(255, 255, 195);
+            // Current folder row text colors — "you are here" green, 3 distinct shades:
+            constexpr COLORREF PATH_DRIVE_CURRENT  = RGB(80,  195, 115); // mid-green for drive letter
+            constexpr COLORREF PATH_MIDDLE_CURRENT = RGB(100, 160, 120); // muted green for middle path
+            constexpr COLORREF PATH_FOLDER_CURRENT = RGB(160, 230, 165); // bright pale-green for folder name
+            // Dead folder row text colors — folder missing or contains no images:
+            constexpr COLORREF PATH_DEAD_DRIVE  = RGB(210,  70,  70); // red for drive / index / warning glyph
+            constexpr COLORREF PATH_DEAD_MIDDLE = RGB(160,  60,  60); // darker red for middle path
+            constexpr COLORREF PATH_DEAD_FOLDER = RGB(230, 100, 100); // lighter red for folder name
         }
 
         // =====================================================================

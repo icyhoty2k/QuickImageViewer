@@ -101,6 +101,9 @@ namespace Constants::Messages {
     constexpr const wchar_t *SPAWN_DIR_CLOSED = L"DirWnd Closed";
     constexpr const wchar_t *SPAWN_DIR_NO_SPACE = L"No free positions for DirWnd";
     constexpr const wchar_t *COPIED_TO_CLIPBOARD = L"Copied to Clipboard";
+    constexpr const wchar_t *HISTORY_NAV_FOLDER  = L"↔ "; // prefix — append folder name
+    constexpr const wchar_t *FOLDER_DEAD_MISSING = L"⚠ Folder not found";
+    constexpr const wchar_t *FOLDER_DEAD_EMPTY   = L"⚠ No images in folder";
 }
 
 namespace Constants::Strings {

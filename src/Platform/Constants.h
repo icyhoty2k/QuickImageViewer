@@ -28,6 +28,15 @@ namespace Constants {
     constexpr const wchar_t *WINDOW_CLASS_NAME = BASE_NAME;
     constexpr bool IS_ENABLE_RUN_ON_STARTUP = true; // enable or disable run on startup reg value add/delete
 
+    //Mouse
+    constexpr bool MOUSE_VERTICAL_REVERSE_SCROLL_DIRECTION = false;
+    constexpr bool MOUSE_HORIZONTAL_REVERSE_SCROLL_DIRECTION = false;
+    // How many WHEEL_DELTA ticks (each tick = 120) must accumulate before a
+    // horizontal scroll triggers a folder change. 1 = every tick, 2 = every
+    // other tick, 3 = three ticks, etc. Raise to reduce sensitivity.
+    constexpr int MOUSE_HSCROLL_FOLDER_TICKS = 3;
+
+
     static constexpr float ZOOM_STEP = 1.1f; // +/- keys and ctrl+wheel
 
     constexpr float COLOR_ADJUST_STEP = 0.1f; // step for brightness contrast and saturation
@@ -282,6 +291,12 @@ namespace Constants {
         constexpr int SCROLLBAR_THICKNESS = 6; // px width
         constexpr int SCROLLBAR_MIN_THUMB = 16; // minimum thumb height in px
         // Note: Scrollbar colors moved to ConstantsTheme.h
+
+        // Window size limits (px at 96 DPI — DPI-scaled at runtime)
+        constexpr int HISTORY_MIN_W = 610; // minimum panel width
+        constexpr int HISTORY_MAX_W = 900; // maximum panel width
+        constexpr int HISTORY_MIN_H = 620; // minimum panel height
+        constexpr int HISTORY_MAX_H = 1000; // maximum panel height (also capped to 80% of monitor)
     }
 
     // =========================================================================

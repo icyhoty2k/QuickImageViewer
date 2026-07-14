@@ -36,6 +36,7 @@ namespace UI {
 
         protected:
             void OnSetFocus() override;
+            void OnKillFocus() override;
             LRESULT HandlePanelMessage(UINT message, WPARAM wParam, LPARAM lParam) override;
 
         private:
@@ -64,5 +65,9 @@ namespace UI {
 
     // Returns the full MRU list (index 0 = most recent).
     const std::vector<std::wstring> &GetFolderHistory();
+
+    // Returns false if the folder does not exist or contains no supported images.
+    // Result is cached per BuildDisplayList cycle — safe to call from paint or navigation.
+    bool IsFolderValidForViewer(const std::wstring &folderPath);
 
 } // namespace UI
