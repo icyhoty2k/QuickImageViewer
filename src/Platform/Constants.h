@@ -86,7 +86,7 @@ namespace Constants {
     // CACHE WINDOW AND CURRENT DIR WINDOW
     // =========================================================================
     constexpr int THUMBNAIL_PANEL_WINDOW_THICKNESS = 120;
-    constexpr float THUMBNAIL_PANEL_THUMB_WIDTH = 120.0f;
+    constexpr float THUMBNAIL_PANEL_THUMB_WIDTH = 128.0f; // 128 * 2x DPI = 256px physical → exact Windows 256px thumbnail cache bucket
     constexpr float THUMBNAIL_PANEL_THUMB_HEIGHT = 80.0f;
     constexpr float THUMBNAIL_PANEL_THUMB_SPACING = 18.0f;
     constexpr float THUMBNAIL_PANEL_THUMB_MARGIN = 20.0f;
@@ -152,6 +152,14 @@ namespace Constants {
     // after scaling.  512 MB holds ~14 000 thumbnails — far more than any
     // realistic folder.  Increase if you open folders with tens of thousands
     // of images; decrease on low-VRAM cards.
+    // Shell thumbnail retrieval flags (SIIGBF — int bitmask from shobjidl.h):
+    //   0x00000000  SIIGBF_RESIZETOFIT    — fit within requested SIZE, generate+cache if needed (default)
+    //   0x00000001  SIIGBF_BIGGERSIZEOK   — allow returning a larger bitmap than requested
+    //   0x00000008  SIIGBF_THUMBNAILONLY  — only thumbnail, no icon fallback
+    //   0x00000010  SIIGBF_INCACHEONLY    — return cached entry only, never generate
+    // Default: let Windows generate and persistently cache thumbnails on first access.
+    constexpr int SHELL_THUMB_FLAGS = 0x00000000;
+
     constexpr const size_t DIR_THUMB_CACHE_BUDGET_MB = 512;
     constexpr const int PRELOAD_LOOKASIDE_COUNT = 1;
     constexpr const int PRELOAD_TIMER_COUNTDOWN = 60; // {ms} this is used to delay preloading if user scrolls very fast
