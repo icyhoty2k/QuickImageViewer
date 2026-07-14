@@ -265,7 +265,7 @@ namespace UI {
         int monW = mi.rcMonitor.right - mi.rcMonitor.left;
         int monH = mi.rcMonitor.bottom - mi.rcMonitor.top;
 
-        UINT dpi = GetDpiForWindow(hRef);
+        UINT dpi = static_cast<UINT>(app.dpiScale * 96.0f);
 
         int entries = std::max(1, static_cast<int>(g_displayList.size()));
         int totalH  = CalcTotalContentH(entries, dpi);
@@ -298,7 +298,7 @@ namespace UI {
                 RECT rc;
                 GetClientRect(m_hWnd, &rc);
 
-                UINT dpi = GetDpiForWindow(m_hWnd);
+                UINT dpi = static_cast<UINT>(app.dpiScale * 96.0f);
                 int padding = MulDiv(Constants::History::HISTORY_PADDING, dpi, 96);
                 int rowH = MulDiv(Constants::History::HISTORY_ROW_HEIGHT, dpi, 96);
                 int fontSize = MulDiv(Constants::History::HISTORY_FONT_SIZE, dpi, 96);
@@ -754,7 +754,7 @@ namespace UI {
                 POINT pt = { GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam) };
                 RECT wrc;
                 GetWindowRect(m_hWnd, &wrc);
-                const int border = std::max(4, MulDiv(6, GetDpiForWindow(m_hWnd), 96));
+                const int border = std::max(4, static_cast<int>(6 * app.dpiScale));
                 bool top    = pt.y <  wrc.top    + border;
                 bool bottom = pt.y >= wrc.bottom - border;
                 bool left   = pt.x <  wrc.left   + border;
@@ -775,7 +775,7 @@ namespace UI {
                 int my = GET_Y_LPARAM(lParam);
                 RECT rc2{};
                 GetClientRect(m_hWnd, &rc2);
-                UINT dpi2 = GetDpiForWindow(m_hWnd);
+                UINT dpi2 = static_cast<UINT>(app.dpiScale * 96.0f);
 
                 // Calculate header area
                 int padding2 = MulDiv(Constants::History::HISTORY_PADDING, dpi2, 96);
@@ -813,7 +813,7 @@ namespace UI {
             }
 
             case WM_MOUSEWHEEL: {
-                UINT dpi = GetDpiForWindow(m_hWnd);
+                UINT dpi = static_cast<UINT>(app.dpiScale * 96.0f);
                 int rowH = MulDiv(Constants::History::HISTORY_ROW_HEIGHT, dpi, 96);
                 int delta = GET_WHEEL_DELTA_WPARAM(wParam);
                 g_scrollOffsetY -= (delta / WHEEL_DELTA) * rowH;
@@ -840,10 +840,10 @@ namespace UI {
                 // Check if hovering over scrollbar
                 RECT rcSb{};
                 GetClientRect(m_hWnd, &rcSb);
-                UINT dpiSbHover = GetDpiForWindow(m_hWnd);
+                UINT dpiSbHover = static_cast<UINT>(app.dpiScale * 96.0f);
                 int sbWHover = MulDiv(Constants::History::SCROLLBAR_THICKNESS, dpiSbHover, 96);
                 if (mx >= rcSb.right - sbWHover) {
-                    UINT dpiSb = GetDpiForWindow(m_hWnd);
+                    UINT dpiSb = static_cast<UINT>(app.dpiScale * 96.0f);
                     int totalHSb = CalcTotalContentH(static_cast<int>(g_displayList.size()), dpiSb);
                     int winHSb = rcSb.bottom - rcSb.top;
                     int maxScrSb = std::max(0, totalHSb - winHSb);
@@ -855,7 +855,7 @@ namespace UI {
                 if (g_sbDragging) {
                     RECT rc3{};
                     GetClientRect(m_hWnd, &rc3);
-                    UINT dpi3 = GetDpiForWindow(m_hWnd);
+                    UINT dpi3 = static_cast<UINT>(app.dpiScale * 96.0f);
                     int totalH3 = CalcTotalContentH(static_cast<int>(g_displayList.size()), dpi3);
                     int winH3 = rc3.bottom - rc3.top;
                     int maxScr3 = std::max(0, totalH3 - winH3);
