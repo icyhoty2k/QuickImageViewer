@@ -3,10 +3,10 @@
 #include <string>
 #include <vector>
 #include <set>
-#include "IPanelWindow.h"
+#include "FloatingPanelWnd.h"
 
 namespace UI {
-    class ExifWnd : public IPanelWindow {
+    class ExifWnd : public FloatingPanelWnd {
     public:
         void Init(HINSTANCE hInstance, HWND hParent) override;
         void Init(HINSTANCE hInstance, HWND hParent, int8_t position) override;
@@ -16,7 +16,7 @@ namespace UI {
         void Refresh();
 
     protected:
-        LRESULT HandleMessage(UINT message, WPARAM wParam, LPARAM lParam) override;
+        LRESULT HandlePanelMessage(UINT message, WPARAM wParam, LPARAM lParam) override;
 
     private:
         struct ExifRow {

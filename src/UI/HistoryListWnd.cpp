@@ -279,18 +279,7 @@ namespace UI {
     // ---------------------------------------------------------------------------
     // Window procedure
     // ---------------------------------------------------------------------------
-    LRESULT HistoryListWnd::HandleMessage(UINT message, WPARAM wParam, LPARAM lParam) {
-        // Handle focus events before the main switch
-        if (message == WM_SETFOCUS) {
-            UI::SetActivePanelWindow(m_hWnd);
-            return 0;
-        }
-        if (message == WM_KILLFOCUS) {
-            // Invalidate to remove active border when focus is lost
-            InvalidateRect(m_hWnd, nullptr, FALSE);
-            return 0;
-        }
-
+    LRESULT HistoryListWnd::HandlePanelMessage(UINT message, WPARAM wParam, LPARAM lParam) {
         switch (message) {
             case WM_PAINT: {
                 PAINTSTRUCT ps;
@@ -317,11 +306,7 @@ namespace UI {
                 bool needsScrollbar = (maxScroll > 0);
 
                 // Background — use active color if this panel is active
-                COLORREF bgColor = Constants::Theme::ThemedGray(Constants::Theme::Panel::BACKGROUND_INACTIVE, app.themeFactor);
-                if (UI::g_activePanelHwnd == m_hWnd) {
-                    bgColor = Constants::Theme::ThemedGray(Constants::Theme::Panel::BACKGROUND_ACTIVE, app.themeFactor);
-                }
-                HBRUSH hBg = CreateSolidBrush(bgColor);
+                HBRUSH hBg = CreateSolidBrush(GetBgColor());
                 FillRect(hdc, &rc, hBg);
                 DeleteObject(hBg);
                 SetBkMode(hdc, TRANSPARENT);
@@ -1202,34 +1187,18 @@ namespace UI {
 
     void HistoryListWnd::Init(HINSTANCE hInstance, HWND hParent) {
         g_hHistOwner = hParent;
-
-        WNDCLASSW wc{};
-        wc.style = CS_DBLCLKS;
-        wc.lpfnWndProc = IPanelWindow::WindowRouter;
-        wc.hInstance = hInstance;
-        wc.hCursor = LoadCursor(nullptr, IDC_ARROW);
-        wc.lpszClassName = L"QIV_HistoryWindow";
-        RegisterClassW(&wc);
-
-        BuildDisplayList(); // use whatever is already in RAM (loaded by UIManager::Init)
+        BuildDisplayList();
         int x, y, w, h;
         GetHistoryWindowBounds(hParent, x, y, w, h);
-
-        CreateWindowExW(
-                WS_EX_TOPMOST | WS_EX_TOOLWINDOW | WS_EX_LAYERED,
-                wc.lpszClassName,
-                L"Folder History",
-                WS_POPUP,
-                x, y, w, h,
-                hParent, nullptr, hInstance,
-                this);
-
+        InitFloating(hInstance, hParent, L"QIV_HistoryWindow", L"Folder History",
+                     w, h, CS_DBLCLKS);
         if (!m_hWnd) return;
-
-        SetLayeredWindowAttributes(m_hWnd, 0, Constants::THUMBNAIL_PANEL_WINDOW_OPACITY, LWA_ALPHA);
-        DWORD corner = app.cornerPreference;
-        DwmSetWindowAttribute(m_hWnd, Constants::DWMWA_WINDOW_CORNER_PREFERENCES, &corner, sizeof(corner));
+        SetWindowPos(m_hWnd, nullptr, x, y, 0, 0, SWP_NOZORDER | SWP_NOSIZE);
         ShowWindow(m_hWnd, SW_HIDE);
+    }
+
+    void HistoryListWnd::OnSetFocus() {
+        UI::SetActivePanelWindow(m_hWnd);
     }
 
     void HistoryListWnd::Show() {

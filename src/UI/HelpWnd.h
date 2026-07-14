@@ -2,10 +2,10 @@
 #include <windows.h>
 #include <string>
 #include <vector>
-#include "IPanelWindow.h"
+#include "FloatingPanelWnd.h"
 
 namespace UI {
-    class HelpWnd : public IPanelWindow {
+    class HelpWnd : public FloatingPanelWnd {
         public:
             void Init(HINSTANCE hInstance, HWND hParent) override;
 
@@ -14,7 +14,7 @@ namespace UI {
             void Show() override;
 
         protected:
-            LRESULT HandleMessage(UINT message, WPARAM wParam, LPARAM lParam) override;
+            LRESULT HandlePanelMessage(UINT message, WPARAM wParam, LPARAM lParam) override;
 
         private:
             struct HelpEntry {

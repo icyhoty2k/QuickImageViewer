@@ -33,6 +33,7 @@ set(SOURCES
         src/Platform/RegistrySetup.cpp
         src/Renderer/RendererGDI.cpp
         src/Renderer/RendererD2D.cpp
+        src/UI/FloatingPanelWnd.cpp
         src/UI/HelpWnd.cpp
         src/UI/ExifWnd.cpp
         src/UI/CacheWnd.cpp
