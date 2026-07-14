@@ -155,12 +155,28 @@ class RendererD2D final : public IImageRenderer {
             UINT  width       = 0;
             UINT  height      = 0;
             USHORT orientation = 1; // EXIF tag 274: 1=normal, 3=180°, 6=90°CW, 8=270°CW, etc.
+            // Animated GIF: all composited frames + per-frame delays in ms.
+            // Empty for non-animated images.
+            std::vector<Microsoft::WRL::ComPtr<ID2D1Bitmap1>> gifFrames;
+            std::vector<int> gifDelays;
         };
 
         Microsoft::WRL::ComPtr<ID2D1Bitmap1> m_pBitmap;
         std::unordered_map<std::wstring, CachedBitmap> m_bitmapCache;
         std::list<std::wstring> m_lruList;
         std::mutex m_cacheMutex;
+
+        // Animated GIF runtime state (active image only)
+        std::vector<Microsoft::WRL::ComPtr<ID2D1Bitmap1>> m_gifFrames;
+        std::vector<int> m_gifDelays;
+        int m_gifFrame = 0;
+
+    public:
+        bool IsAnimatedGif()        const override { return !m_gifFrames.empty(); }
+        int  GetCurrentGifDelay()   const override;
+        int  AdvanceGifFrame()            override;
+        void ResetGifAnimation()          override;
+    private:
 
         // SVG: active D2D SVG document (legacy path, never set by resvg;
         // resvg-rasterized SVGs go into m_bitmapCache as bitmaps instead)

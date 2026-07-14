@@ -10,6 +10,7 @@
 #include "../UI/UIManager.h"
 #include <algorithm>
 #include <cwctype>
+#include <thread>
 #include <unordered_map>
 #include <windowsx.h>
 #include <filesystem>
@@ -68,15 +69,23 @@ namespace UI {
     static bool g_lastDeletedWasFavorite = false;
 
     // ---------------------------------------------------------------------------
-    // Folder validity cache — rebuilt on each BuildDisplayList call.
+    // Folder validity cache.
+    // Populated lazily by background validation; also set inline on Enter/click.
+    // Unknown = not yet checked → painted as normal (no warning colour).
     // ---------------------------------------------------------------------------
-    enum class FolderStatus { Valid, Missing, Empty };
+    enum class FolderStatus { Unknown, Valid, Missing, Empty };
 
     static std::unordered_map<std::wstring, FolderStatus> g_statusCache;
 
+    // Set whenever the display list changes (push, delete, restore, clear).
+    // Background validation only runs when this is true, preventing redundant
+    // filesystem work on rapid Tab / Tab / Tab presses.
+    static bool g_validationDirty = true;
+
     static FolderStatus GetFolderStatus(const std::wstring &path) {
         auto it = g_statusCache.find(path);
-        if (it != g_statusCache.end()) return it->second;
+        if (it != g_statusCache.end() && it->second != FolderStatus::Unknown)
+            return it->second;
 
         namespace fs = std::filesystem;
         std::error_code ec;
@@ -147,7 +156,8 @@ namespace UI {
     //   Respects HISTORY_FAVORITES_POSITION and per-category display caps.
     // ---------------------------------------------------------------------------
     static void BuildDisplayList() {
-        g_statusCache.clear();
+        // Preserve known statuses — only clear entries that are no longer in the list.
+        // Unknown entries get validated lazily by the background timer.
         g_displayList.clear();
 
         const auto &history = historyFoldersManager.folderHistory;
@@ -197,8 +207,11 @@ namespace UI {
                 for (auto &e: favRows) g_displayList.push_back(e);
             }
         }
-        // Pre-populate cache so WM_PAINT hits only fast map lookups.
-        for (const auto &e: g_displayList) GetFolderStatus(e.path);
+        // Mark unchecked entries as Unknown so WM_PAINT shows them in neutral colour.
+        for (const auto &e : g_displayList) {
+            if (g_statusCache.find(e.path) == g_statusCache.end())
+                g_statusCache[e.path] = FolderStatus::Unknown;
+        }
     }
 
     // ---------------------------------------------------------------------------
@@ -697,8 +710,11 @@ namespace UI {
                         RECT rowRect = {rc.left, rowTop, rc.right, rowBottom};
 
                         const bool isCurrent = (!currentFolder.empty() && entry.path == currentFolder);
-                        const FolderStatus rowStatus = GetFolderStatus(entry.path);
-                        const bool isDead = (rowStatus != FolderStatus::Valid);
+                        auto _sit = g_statusCache.find(entry.path);
+                        const FolderStatus rowStatus = (_sit != g_statusCache.end())
+                                                       ? _sit->second : FolderStatus::Unknown;
+                        const bool isDead = (rowStatus == FolderStatus::Missing ||
+                                             rowStatus == FolderStatus::Empty);
 
                         // Hover background
                         if (i == g_hoverRow) {
@@ -1314,9 +1330,74 @@ namespace UI {
                 return 0;
             }
 
+            case WM_SHOWWINDOW:
+                if (!wParam) // being hidden
+                    KillTimer(m_hWnd, Constants::History::VALIDATION_TIMER_ID);
+                break;
+
             case WM_CLOSE:
+                KillTimer(m_hWnd, Constants::History::VALIDATION_TIMER_ID);
                 ShowWindow(m_hWnd, SW_HIDE);
                 return 0;
+
+            case WM_TIMER:
+                if (wParam == Constants::History::VALIDATION_TIMER_ID) {
+                    KillTimer(m_hWnd, Constants::History::VALIDATION_TIMER_ID);
+                    if (!g_validationDirty) return 0;
+                    g_validationDirty = false;
+
+                    // Snapshot paths to check (avoids holding shared state on bg thread)
+                    std::vector<std::wstring> paths;
+                    paths.reserve(g_displayList.size());
+                    for (const auto &e : g_displayList) paths.push_back(e.path);
+
+                    HWND hWnd = m_hWnd;
+                    std::thread([paths = std::move(paths), hWnd]() {
+                        namespace fs = std::filesystem;
+                        using Map = std::unordered_map<std::wstring, FolderStatus>;
+                        auto *result = new Map();
+                        result->reserve(paths.size());
+
+                        for (const auto &path : paths) {
+                            std::error_code ec;
+                            if (!fs::is_directory(path, ec) || ec) {
+                                (*result)[path] = FolderStatus::Missing;
+                                continue;
+                            }
+                            FolderStatus st = FolderStatus::Empty;
+                            for (const auto &ent : fs::directory_iterator(
+                                     path, fs::directory_options::skip_permission_denied, ec)) {
+                                if (ec) { ec.clear(); continue; }
+                                if (!ent.is_regular_file(ec)) continue;
+                                std::wstring ext = ent.path().extension().wstring();
+                                for (auto &c : ext) c = static_cast<wchar_t>(::towlower(c));
+                                for (size_t i = 0; i < Constants::Registry::SUPPORTED_EXTENSIONS_COUNT; ++i) {
+                                    if (ext == Constants::Registry::SUPPORTED_EXTENSIONS[i]) {
+                                        st = FolderStatus::Valid;
+                                        goto next_path;
+                                    }
+                                }
+                            }
+                            next_path:
+                            (*result)[path] = st;
+                        }
+
+                        PostMessageW(hWnd, Constants::WM_QIV_HISTORY_VALIDATED,
+                                     0, reinterpret_cast<LPARAM>(result));
+                    }).detach();
+                    return 0;
+                }
+                break;
+
+            case Constants::WM_QIV_HISTORY_VALIDATED: {
+                using Map = std::unordered_map<std::wstring, FolderStatus>;
+                auto *result = reinterpret_cast<Map *>(lParam);
+                for (auto &[path, status] : *result)
+                    g_statusCache[path] = status;
+                delete result;
+                InvalidateRect(m_hWnd, nullptr, FALSE);
+                return 0;
+            }
         }
 
         return DefWindowProcW(m_hWnd, message, wParam, lParam);
@@ -1363,6 +1444,9 @@ namespace UI {
         ShowWindow(m_hWnd, SW_SHOW);
         SetForegroundWindow(m_hWnd);
         InvalidateRect(m_hWnd, nullptr, TRUE);
+        // Start lazy validation — fires after VALIDATION_DELAY_MS if user stays
+        SetTimer(m_hWnd, Constants::History::VALIDATION_TIMER_ID,
+                 Constants::History::VALIDATION_DELAY_MS, nullptr);
     }
 
     void HistoryListWnd::Toggle() {

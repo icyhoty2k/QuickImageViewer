@@ -13,6 +13,7 @@
 #include "../UI/FindWnd.h"
 #include "../UI/StatsWnd.h"
 #include <algorithm>
+#include <filesystem>
 #include <numeric>
 #include <random>
 #include <cmath>
@@ -136,9 +137,35 @@ void InputManager::ExecuteKeyboardShortcutCommand(HWND hWnd, Command cmd) {
                 g_overlayManager.PostCenterMessage(hWnd, Constants::Messages::TOGGLE_DIR_NO_PREV);
             } else {
                 std::wstring prevDir = history[1];
+                std::error_code ec;
+                if (!std::filesystem::is_directory(prevDir, ec) || ec) {
+                    g_overlayManager.PostCenterMessage(hWnd, Constants::Messages::TOGGLE_DIR_MISSING);
+                    break;
+                }
                 OpenDirectory(hWnd, prevDir);
                 g_overlayManager.PostCenterMessage(hWnd, Constants::Messages::TOGGLE_DIR_CHANGED + prevDir);
             }
+            break;
+        }
+
+        case Command::ToggleLastImage: {
+            if (app.previousImageIndex < 0 ||
+                app.previousImageIndex >= static_cast<int>(app.playlist.size())) {
+                g_overlayManager.PostCenterMessage(hWnd, Constants::Messages::TOGGLE_IMAGE_NO_PREV);
+                break;
+            }
+            int target = app.previousImageIndex;
+            const std::wstring &path = app.playlist[target];
+            std::error_code ec;
+            if (!std::filesystem::is_regular_file(path, ec) || ec) {
+                g_overlayManager.PostCenterMessage(hWnd, Constants::Messages::TOGGLE_IMAGE_MISSING);
+                app.previousImageIndex = -1;
+                break;
+            }
+            LoadImageIndex(hWnd, target);
+            size_t slash = path.find_last_of(L"\\/");
+            std::wstring name = (slash == std::wstring::npos) ? path : path.substr(slash + 1);
+            g_overlayManager.PostCenterMessage(hWnd, Constants::Messages::TOGGLE_IMAGE_CHANGED + name);
             break;
         }
 

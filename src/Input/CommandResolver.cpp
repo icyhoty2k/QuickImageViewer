@@ -140,7 +140,8 @@ Command InputManager::ResolveKeyboardKeys(UINT key) {
             return Command::ShowInExplorer;
 
         case 'E':
-            if (!ctrl && alt && !shift)   return Command::SnapTopRight;
+            if (!ctrl && !alt && !shift)  return Command::ToggleLastImage;
+            if (!ctrl && alt  && !shift)  return Command::SnapTopRight;
             break;
 
         // --- Zoom ---

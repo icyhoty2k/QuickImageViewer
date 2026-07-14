@@ -5,8 +5,11 @@
 #include <vector>
 #include <string>
 #include <unordered_map>
+#include <filesystem>
 #include "Renderer/IRenderer.h"
 #include <memory>
+
+namespace fs = std::filesystem;
 
 #include "Constants.h"
 #include "SlideshowTransitions.h"
@@ -81,8 +84,10 @@ struct AppState {
     int imgHeight = 0;
     std::vector<std::wstring> playlist;
     std::unordered_map<std::wstring, int> playlistIndexMap;      // path → index, rebuilt with playlist
-    std::unordered_map<std::wstring, int64_t> playlistFileSizes; // path → file size bytes, from scan (no extra syscall)
+    std::unordered_map<std::wstring, int64_t>              playlistFileSizes; // path → file size bytes, from scan
+    std::unordered_map<std::wstring, fs::file_time_type>   playlistFileTimes; // path → last_write_time, from scan
     int currentIndex = -1;
+    int previousImageIndex = -1; // E — toggle between last and current image
     ViewportState viewport;
 
     // Window dragging (RMB)
