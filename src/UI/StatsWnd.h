@@ -10,6 +10,7 @@ namespace UI {
         void Init(HINSTANCE hInstance, HWND hParent) override;
         void Init(HINSTANCE hInstance, HWND hParent, int8_t position) override;
         void Show() override;
+        void Refresh();   // no-op if hidden; re-gathers and repaints if visible
         ~StatsWnd() {
             if (m_hFontBody) DeleteObject(m_hFontBody);
             if (m_hFontBold) DeleteObject(m_hFontBold);
