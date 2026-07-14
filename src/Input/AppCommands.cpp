@@ -33,16 +33,16 @@ void AppCommands::SaveImageToDisk(HWND hWnd) {
         defaultName = nameOnly + L"_edited.png";
     }
 
-    wchar_t outBuf[MAX_PATH * 2] = {};
-    wcsncpy_s(outBuf, defaultName.c_str(), _TRUNCATE);
+    std::wstring outBuf(Constants::MAX_FILE_PATH, L'\0');
+    wcsncpy_s(outBuf.data(), Constants::MAX_FILE_PATH, defaultName.c_str(), _TRUNCATE);
 
     OPENFILENAMEW ofn{};
     ofn.lStructSize = sizeof(ofn);
     ofn.hwndOwner = hWnd;
     ofn.lpstrFilter = L"PNG Image\0*.png\0All Files\0*.*\0";
     ofn.nFilterIndex = 1;
-    ofn.lpstrFile = outBuf;
-    ofn.nMaxFile = ARRAYSIZE(outBuf);
+    ofn.lpstrFile = outBuf.data();
+    ofn.nMaxFile = Constants::MAX_FILE_PATH;
     ofn.lpstrDefExt = L"png";
     ofn.lpstrTitle = L"Save image with effects";
     ofn.Flags = OFN_OVERWRITEPROMPT | OFN_PATHMUSTEXIST | OFN_NOCHANGEDIR;

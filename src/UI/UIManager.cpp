@@ -150,6 +150,39 @@ namespace UI {
         if (isInit(statsWnd)) statsWnd.Refresh();
     }
 
+    void UIManager::ApplyAlwaysOnTop(bool onTop) {
+        HWND zOrder = onTop ? HWND_TOPMOST : HWND_NOTOPMOST;
+        constexpr UINT flags = SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE;
+
+        auto applyIfVisible = [&](IPanelWindow &panel) {
+            HWND h = panel.GetHwnd();
+            if (h && IsWindowVisible(h))
+                SetWindowPos(h, zOrder, 0, 0, 0, 0, flags);
+        };
+
+        applyIfVisible(helpWnd);
+        applyIfVisible(cacheWnd);
+        applyIfVisible(dirWnd);
+        applyIfVisible(historyListWnd);
+        applyIfVisible(exifWnd);
+        applyIfVisible(jumpToWnd);
+        applyIfVisible(findWnd);
+        applyIfVisible(statsWnd);
+
+        // Spawned DirWnds tracked in layout slots
+        SlotInfo *slots[] = {
+            &m_layout.center, &m_layout.top, &m_layout.right,
+            &m_layout.bottom, &m_layout.left
+        };
+        for (auto *slot : slots) {
+            if (slot->panel) {
+                HWND h = slot->panel->GetHwnd();
+                if (h && IsWindowVisible(h))
+                    SetWindowPos(h, zOrder, 0, 0, 0, 0, flags);
+            }
+        }
+    }
+
     // -------------------------------------------------------------------------
     // SpawnDirWndForFolder
     // -------------------------------------------------------------------------

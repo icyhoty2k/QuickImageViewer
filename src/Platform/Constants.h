@@ -160,6 +160,10 @@ namespace Constants {
     // Default: let Windows generate and persistently cache thumbnails on first access.
     constexpr int SHELL_THUMB_FLAGS = 0x00000000;
 
+    // Maximum path buffer size for Win32 file dialogs (OPENFILENAMEW documented max).
+    // Use everywhere a wchar_t buffer receives a user-selected or drag-dropped path.
+    constexpr DWORD MAX_FILE_PATH = 32767;
+
     constexpr const size_t DIR_THUMB_CACHE_BUDGET_MB = 512;
     constexpr const int PRELOAD_LOOKASIDE_COUNT = 1;
     constexpr const int PRELOAD_TIMER_COUNTDOWN = 60; // {ms} this is used to delay preloading if user scrolls very fast

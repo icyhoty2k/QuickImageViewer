@@ -265,14 +265,14 @@ void OpenInitialImage(HWND hWnd) {
     // End of filter list (double null)
     filterBuffer.push_back(L'\0');
 
-    wchar_t fileName[MAX_PATH] = {};
+    std::wstring fileName(Constants::MAX_FILE_PATH, L'\0');
 
     OPENFILENAMEW ofn{};
     ofn.lStructSize = sizeof(ofn);
     ofn.hwndOwner = hWnd;
     ofn.lpstrFilter = filterBuffer.data();
-    ofn.lpstrFile = fileName;
-    ofn.nMaxFile = MAX_PATH;
+    ofn.lpstrFile = fileName.data();
+    ofn.nMaxFile = Constants::MAX_FILE_PATH;
     ofn.Flags = OFN_EXPLORER | OFN_PATHMUSTEXIST | OFN_FILEMUSTEXIST;
 
     wchar_t lastFolder[MAX_PATH] = {};
@@ -296,7 +296,7 @@ void OpenInitialImage(HWND hWnd) {
     std::filesystem::path selectedPath;
 
     try {
-        selectedPath = std::filesystem::canonical(fileName);
+        selectedPath = std::filesystem::canonical(fileName.c_str());
     } catch (...) {
         return;
     }
