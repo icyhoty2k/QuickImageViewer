@@ -251,7 +251,8 @@ Command InputManager::ResolveKeyboardKeys(UINT key) {
             if (!ctrl && !alt &&  shift)   return Command::MoveWindowDown;
             break;
 
-        case Shortcuts::SC_PAN_LEFT: // 'A'  plain=pan-left  shift=move-left  alt=snap-left
+        case Shortcuts::SC_PAN_LEFT: // 'A'  ctrl=always-on-top  plain=pan-left  shift=move-left  alt=snap-left
+            if ( ctrl && !alt && !shift)   return Command::ToggleAlwaysOnTop;
             if (!ctrl &&  alt && !shift)   return Command::SnapLeft;
             if (!ctrl && !alt && !shift)   return Command::PanLeft;
             if (!ctrl && !alt &&  shift)   return Command::MoveWindowLeft;
