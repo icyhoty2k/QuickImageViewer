@@ -59,7 +59,7 @@ class IImageRenderer {
 
         /// support background preloading
         [[nodiscard]]
-        virtual HRESULT PreloadBitmap(const std::wstring &filePath, int requestIndex) = 0;
+        virtual HRESULT PreloadBitmap(const std::wstring &filePath, int requestIndex, int expectedCurrentIndex = -1) = 0;
 
         /// support color effects saturation contrast brightness
         virtual void UpdateColorEffects() {}
