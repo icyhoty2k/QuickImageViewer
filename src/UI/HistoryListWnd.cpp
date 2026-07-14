@@ -957,12 +957,10 @@ namespace UI {
                                     std::wstring f5Folder = std::filesystem::path(currentImagePath).parent_path().wstring();
                                     const auto &history = historyFoldersManager.folderHistory;
                                     for (int i = 0; i < static_cast<int>(history.size()); ++i) {
-                                        try {
-                                            if (std::filesystem::equivalent(f5Folder, history[i])) {
-                                                f5HistoryIndex = i + 1;
-                                                break;
-                                            }
-                                        } catch (...) {}
+                                        if (_wcsicmp(f5Folder.c_str(), history[i].c_str()) == 0) {
+                                            f5HistoryIndex = i + 1;
+                                            break;
+                                        }
                                     }
                                 }
                                 f5PosName = slot->name;

@@ -10,6 +10,12 @@ namespace UI {
         void Init(HINSTANCE hInstance, HWND hParent) override;
         void Init(HINSTANCE hInstance, HWND hParent, int8_t position) override;
         void Show() override;
+        ~StatsWnd() {
+            if (m_hFontBody) DeleteObject(m_hFontBody);
+            if (m_hFontBold) DeleteObject(m_hFontBold);
+            if (m_hFontSec)  DeleteObject(m_hFontSec);
+            if (m_hFontLink) DeleteObject(m_hFontLink);
+        }
 
     protected:
         LRESULT HandlePanelMessage(UINT message, WPARAM wParam, LPARAM lParam) override;
@@ -77,6 +83,13 @@ namespace UI {
         // ── Scroll ───────────────────────────────────────────────
         int m_scrollOffsetY = 0;
         int m_totalContentH = 0;
+
+        // Cached GDI fonts — recreated only when DPI changes
+        HFONT m_hFontBody = nullptr;
+        HFONT m_hFontBold = nullptr;
+        HFONT m_hFontSec  = nullptr;
+        HFONT m_hFontLink = nullptr;
+        int   m_cachedFontDpi = 0;
 
         void GatherStats();
         static void OpenRegedit(const std::wstring& fullKeyPath);

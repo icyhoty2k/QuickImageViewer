@@ -158,6 +158,7 @@ class IoThreadPool {
             m_threads.reserve(threadCount);
             for (size_t i = 0; i < threadCount; ++i) {
                 m_threads.emplace_back([this] {
+                    SetThreadPriority(GetCurrentThread(), THREAD_PRIORITY_BELOW_NORMAL);
                     HRESULT hr = CoInitializeEx(nullptr, COINIT_MULTITHREADED);
                     if (FAILED(hr))
                         OutputDebugStringW(L"IoThreadPool: COM init failed\n");

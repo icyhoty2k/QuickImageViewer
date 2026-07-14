@@ -22,6 +22,7 @@ extern void UpdateOverlaysForCurrentImage(HWND hWnd);
 #include "Platform/ConstantsStrings.h"
 #include "../DropTarget.h"
 #include "Platform/FileHandler.h"
+#include "GeoNames.h"
 #include "UI/DirWnd.h"
 #include "MouseHandler.h"
 #include "Input/Command.h"
@@ -103,17 +104,25 @@ LRESULT CALLBACK MainAppWndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM l
         case WM_COPYDATA: {
             COPYDATASTRUCT *cds = (COPYDATASTRUCT *) lParam;
             if (cds->dwData == 1) {
-                std::wstring safePath((LPCWSTR) cds->lpData);
-                OpenSpecificImage(hWnd, safePath.c_str());
-
+                // Post asynchronously — returning quickly unblocks the sending process.
+                // WM_QIV_OPEN_FILE handler owns the pointer and deletes it.
+                PostMessageW(hWnd, Constants::WM_QIV_OPEN_FILE, 0,
+                             reinterpret_cast<LPARAM>(new std::wstring((LPCWSTR)cds->lpData)));
                 ShowWindow(hWnd, SW_RESTORE);
                 SetForegroundWindow(hWnd);
-                InvalidateRect(hWnd, nullptr, FALSE);
             } else if (cds->dwData == 2) {
                 ShowWindow(hWnd, SW_RESTORE);
                 SetForegroundWindow(hWnd);
             }
             return TRUE;
+        }
+
+        case Constants::WM_QIV_OPEN_FILE: {
+            auto *path = reinterpret_cast<std::wstring *>(lParam);
+            OpenSpecificImage(hWnd, path->c_str());
+            delete path;
+            InvalidateRect(hWnd, nullptr, FALSE);
+            return 0;
         }
         case WM_TIMER: {
             constexpr UINT_PTR TIMER_LOOKASIDE = 1001;
@@ -475,7 +484,12 @@ int WINAPI wWinMain(HINSTANCE hInstance, [[maybe_unused]] HINSTANCE hPrevInstanc
     //dynamic thread selection
     g_decoderWorker.setThreadCount(app.hardwareThreads > 3 ? Constants::VRAM_CACHE_DECODER_THREADS_COUNT : 1);
     int dirThumbThreads = (app.hardwareThreads >= 8) ? (app.hardwareThreads / 2) : (Constants::VRAM_CACHE_THUMBS_THREADS_COUNT);
+    dirThumbThreads = std::min(dirThumbThreads, 8); // IShellItemImageFactory::GetImage serializes internally; >8 gives no gain
     g_dirThumbWorker.setThreadCount(std::max(1, dirThumbThreads));
+
+    // Warm up GeoNames data in the background so the first ExifWnd GPS lookup
+    // doesn't stall the IO worker with a 100-500 ms decompress+parse.
+    g_decoderWorker.PushTask([](IWICImagingFactory2*) { GeoNames::WarmUp(); });
 #ifdef _DEBUG
     // Use the public getter instead of accessing private member m_threads
     std::wstring debugMsg = L"DecoderThreadPool: Initialized with " +

@@ -8,6 +8,7 @@
 #include <numeric>
 #include <ranges>
 #include <shlwapi.h>
+#include <unordered_map>
 #include <unordered_set>
 #include <vector>
 #include "UI/UIManager.h"
@@ -21,17 +22,46 @@ namespace fs = std::filesystem;
 void sortCurrentPlaylistInOrder();
 
 // ---------------------------------------------------------------------------
-// EnsureIoWorkerStarted
+// UpdateIoWorkerForPath
 // ---------------------------------------------------------------------------
-// Called once per folder open with the folder path. Detects the drive type
-// and starts g_ioWorker with the right thread count on first call.
-// Subsequent calls are no-ops (IsStarted() guard).
+// Called on every folder/image open. Compares the new path's volume root
+// against the last known one. Skips detection entirely when browsing within
+// the same volume (the common case). When the volume changes, re-detects
+// the drive type and restarts the IO worker only if the optimal thread count
+// has actually changed (HDD↔NVMe). ClearQueue before Stop so the join is
+// instant — in-flight tasks for the old folder are abandoned safely.
 // ---------------------------------------------------------------------------
-static void EnsureIoWorkerStarted(const std::wstring &folderPath) {
-    if (!g_ioWorker.IsStarted()) {
+static std::wstring g_lastVolumeRoot;
+static std::unordered_map<std::wstring, size_t> g_driveThreadCache; // volume root → optimal thread count
+
+static void UpdateIoWorkerForPath(const std::wstring &folderPath) {
+    wchar_t volRoot[MAX_PATH] = {};
+    GetVolumePathNameW(folderPath.c_str(), volRoot, MAX_PATH);
+    std::wstring newRoot(volRoot);
+
+    // Look up cached result; detect only on first visit to each volume
+    auto it = g_driveThreadCache.find(newRoot);
+    if (it == g_driveThreadCache.end()) {
         size_t optimal = DriveInfo::GetOptimalIoThreadCount(folderPath);
+        g_driveThreadCache[newRoot] = optimal;
+        it = g_driveThreadCache.find(newRoot);
+    }
+    size_t optimal = it->second;
+
+    if (!g_ioWorker.IsStarted()) {
+        g_ioWorker.Start(optimal);
+        g_lastVolumeRoot = newRoot;
+        return;
+    }
+
+    if (newRoot == g_lastVolumeRoot) return;  // same volume, nothing to do
+
+    if (optimal != static_cast<size_t>(g_ioWorker.getThreadCount())) {
+        g_ioWorker.ClearQueue();
+        g_ioWorker.Stop();
         g_ioWorker.Start(optimal);
     }
+    g_lastVolumeRoot = newRoot;
 }
 
 bool is_image_ext(const std::wstring &ext) {
@@ -295,7 +325,7 @@ void OpenInitialImage(HWND hWnd) {
         return;
     }
 
-    EnsureIoWorkerStarted(selectedPath.parent_path().wstring());
+    UpdateIoWorkerForPath(selectedPath.parent_path().wstring());
     // sort
     sortCurrentPlaylistInOrder();
 
@@ -466,7 +496,7 @@ void OpenDirectory(HWND hWnd, const std::wstring &dirPathStr) {
 
     if (app.playlist.empty()) return;
 
-    EnsureIoWorkerStarted(dirPath.wstring());
+    UpdateIoWorkerForPath(dirPath.wstring());
     sortCurrentPlaylistInOrder();
 
     // Declaratively rebuild the O(1) path → index lookup map
@@ -523,7 +553,7 @@ void OpenSpecificImage(HWND hWnd, const std::wstring &filePathStr) {
     }
 
     // Start IO worker with correct thread count for this drive type (HDD=1, SSD/NVMe=2)
-    EnsureIoWorkerStarted(filePath.parent_path().wstring());
+    UpdateIoWorkerForPath(filePath.parent_path().wstring());
 
     // Sort
     sortCurrentPlaylistInOrder();

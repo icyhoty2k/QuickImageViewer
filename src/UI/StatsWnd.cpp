@@ -298,19 +298,26 @@ LRESULT StatsWnd::HandlePanelMessage(UINT message, WPARAM wParam, LPARAM lParam)
         const int c3 = colR;
 
         // ── Fonts ─────────────────────────────────────────────────────────────
-        HFONT hBody = CreateFontW(-fs,  0, 0, 0, FW_NORMAL,   0, 0, 0, DEFAULT_CHARSET,
-                                   OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS, CLEARTYPE_QUALITY,
-                                   DEFAULT_PITCH | FF_SWISS, L"Segoe UI");
-        HFONT hBold = CreateFontW(-fs,  0, 0, 0, FW_SEMIBOLD, 0, 0, 0, DEFAULT_CHARSET,
-                                   OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS, CLEARTYPE_QUALITY,
-                                   DEFAULT_PITCH | FF_SWISS, L"Segoe UI");
-        HFONT hSec  = CreateFontW(-fss, 0, 0, 0, FW_BOLD,     0, 0, 0, DEFAULT_CHARSET,
-                                   OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS, CLEARTYPE_QUALITY,
-                                   DEFAULT_PITCH | FF_SWISS, L"Segoe UI");
-        HFONT hLink = CreateFontW(-fs,  0, 0, 0, FW_NORMAL,   0, TRUE, 0, DEFAULT_CHARSET,
-                                   OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS, CLEARTYPE_QUALITY,
-                                   DEFAULT_PITCH | FF_SWISS, L"Segoe UI");
-        HFONT hOld  = static_cast<HFONT>(SelectObject(hdc, hBody));
+        if (dpi != m_cachedFontDpi) {
+            if (m_hFontBody) { DeleteObject(m_hFontBody); m_hFontBody = nullptr; }
+            if (m_hFontBold) { DeleteObject(m_hFontBold); m_hFontBold = nullptr; }
+            if (m_hFontSec)  { DeleteObject(m_hFontSec);  m_hFontSec  = nullptr; }
+            if (m_hFontLink) { DeleteObject(m_hFontLink); m_hFontLink = nullptr; }
+            m_hFontBody = CreateFontW(-fs,  0, 0, 0, FW_NORMAL,   0, 0,    0, DEFAULT_CHARSET,
+                                       OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS, CLEARTYPE_QUALITY,
+                                       DEFAULT_PITCH | FF_SWISS, L"Segoe UI");
+            m_hFontBold = CreateFontW(-fs,  0, 0, 0, FW_SEMIBOLD, 0, 0,    0, DEFAULT_CHARSET,
+                                       OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS, CLEARTYPE_QUALITY,
+                                       DEFAULT_PITCH | FF_SWISS, L"Segoe UI");
+            m_hFontSec  = CreateFontW(-fss, 0, 0, 0, FW_BOLD,     0, 0,    0, DEFAULT_CHARSET,
+                                       OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS, CLEARTYPE_QUALITY,
+                                       DEFAULT_PITCH | FF_SWISS, L"Segoe UI");
+            m_hFontLink = CreateFontW(-fs,  0, 0, 0, FW_NORMAL,   0, TRUE, 0, DEFAULT_CHARSET,
+                                       OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS, CLEARTYPE_QUALITY,
+                                       DEFAULT_PITCH | FF_SWISS, L"Segoe UI");
+            m_cachedFontDpi = dpi;
+        }
+        HFONT hOld  = static_cast<HFONT>(SelectObject(hdc, m_hFontBody));
 
         // ── Colors ────────────────────────────────────────────────────────────
         const COLORREF clrCyan   = Constants::Theme::ThemedColor(0.39f, 0.78f, 1.0f, app.themeFactor);
@@ -329,11 +336,11 @@ LRESULT StatsWnd::HandlePanelMessage(UINT message, WPARAM wParam, LPARAM lParam)
         auto linkRow = [&](const wchar_t* label, const std::wstring& display,
                            const std::wstring& target, bool isReg) {
             if (y + row > 0 && y < rc.bottom) {
-                SelectObject(hdc, hBody);
+                SelectObject(hdc, m_hFontBody);
                 SetTextColor(hdc, clrLabel);
                 RECT rL = { pad + MulDiv(6,dpi,96), y, c3 - MulDiv(4,dpi,96), y + row };
                 DrawTextW(hdc, label, -1, &rL, DT_LEFT | DT_VCENTER | DT_SINGLELINE);
-                SelectObject(hdc, hLink);
+                SelectObject(hdc, m_hFontLink);
                 SetTextColor(hdc, clrCyan);
                 RECT rV = { pad, y, c3, y + row };
                 DrawTextW(hdc, display.c_str(), -1, &rV,
@@ -347,7 +354,7 @@ LRESULT StatsWnd::HandlePanelMessage(UINT message, WPARAM wParam, LPARAM lParam)
         auto row2 = [&](const wchar_t *label, const std::wstring &val,
                         COLORREF valColor, bool bold = false) {
             if (y + row > 0 && y < rc.bottom) {
-                SelectObject(hdc, bold ? hBold : hBody);
+                SelectObject(hdc, bold ? m_hFontBold : m_hFontBody);
                 RECT rL = { pad + MulDiv(6,dpi,96), y, c3 - MulDiv(4,dpi,96), y + row };
                 RECT rV = { pad, y, c3, y + row };
                 SetTextColor(hdc, clrLabel);
@@ -368,7 +375,7 @@ LRESULT StatsWnd::HandlePanelMessage(UINT message, WPARAM wParam, LPARAM lParam)
                 FillRect(hdc, &strp, acBr);
                 DeleteObject(acBr);
                 // Title
-                SelectObject(hdc, hSec);
+                SelectObject(hdc, m_hFontSec);
                 SetTextColor(hdc, accentColor);
                 RECT r = { pad + MulDiv(8,dpi,96), y, c3, y + sec };
                 DrawTextW(hdc, title, -1, &r, DT_LEFT | DT_VCENTER | DT_SINGLELINE);
@@ -410,7 +417,7 @@ LRESULT StatsWnd::HandlePanelMessage(UINT message, WPARAM wParam, LPARAM lParam)
                     DeleteObject(altBr);
                 }
                 // Name
-                SelectObject(hdc, hBody);
+                SelectObject(hdc, m_hFontBody);
                 SetTextColor(hdc, clrValue);
                 RECT rName = { pad + MulDiv(6,dpi,96), y, c2 - MulDiv(4,dpi,96), y + row };
                 DrawTextW(hdc, e.name.c_str(), -1, &rName, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
@@ -434,7 +441,7 @@ LRESULT StatsWnd::HandlePanelMessage(UINT message, WPARAM wParam, LPARAM lParam)
 
         // Column header
         if (y + row > 0 && y < rc.bottom) {
-            SelectObject(hdc, hSec);
+            SelectObject(hdc, m_hFontSec);
             SetTextColor(hdc, clrDim);
             RECT rhFile = { pad + MulDiv(6,dpi,96), y, c2, y + row };
             RECT rhSize = { c2 - MulDiv(100,dpi,96), y, c2, y + row };
@@ -455,7 +462,7 @@ LRESULT StatsWnd::HandlePanelMessage(UINT message, WPARAM wParam, LPARAM lParam)
 
         // Total row
         if (y + row > 0 && y < rc.bottom) {
-            SelectObject(hdc, hBold);
+            SelectObject(hdc, m_hFontBold);
             SetTextColor(hdc, clrLabel);
             RECT rLabel = { pad + MulDiv(6,dpi,96), y, c2, y + row };
             DrawTextW(hdc, L"Total", -1, &rLabel, DT_LEFT | DT_VCENTER | DT_SINGLELINE);
@@ -472,7 +479,7 @@ LRESULT StatsWnd::HandlePanelMessage(UINT message, WPARAM wParam, LPARAM lParam)
         // Clickable folder path link
         if (!m_thumbCachePath.empty()) {
             if (y + row > 0 && y < rc.bottom) {
-                SelectObject(hdc, hLink);
+                SelectObject(hdc, m_hFontLink);
                 SetTextColor(hdc, clrCyan);
                 RECT rLink = { pad + MulDiv(6,dpi,96), y, c3, y + row };
                 DrawTextW(hdc, (L"▸  " + m_thumbCachePath).c_str(), -1, &rLink,
@@ -720,7 +727,7 @@ LRESULT StatsWnd::HandlePanelMessage(UINT message, WPARAM wParam, LPARAM lParam)
         }
 
         SelectObject(hdc, hOld);
-        DeleteObject(hBody); DeleteObject(hBold); DeleteObject(hSec); DeleteObject(hLink);
+        // Fonts are cached members — not deleted here
         EndPaint(m_hWnd, &ps);
         return 0;
     }
