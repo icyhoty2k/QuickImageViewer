@@ -276,6 +276,18 @@ Command InputManager::ResolveKeyboardKeys(UINT key) {
         case Shortcuts::SC_SHOW_INFO: // 'M'
             if (!ctrl && !alt && !shift)   return Command::ShowInfo;
             break;
+
+        case Shortcuts::SC_NAV_JUMP_TO_IMAGE: // 'J'
+            if (!ctrl && !alt && !shift)   return Command::JumpToImage;
+            break;
+
+        case Shortcuts::SC_NAV_JUMP_TO_IMAGE_ALT: // 'G'
+            if (ctrl && !alt && !shift)    return Command::JumpToImage;
+            break;
+
+        case Shortcuts::SC_TOGGLE_STATS: // 'K'
+            if (!ctrl && !alt && !shift)   return Command::ToggleStats;
+            break;
     }
 
     return Command::None;

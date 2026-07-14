@@ -8,6 +8,8 @@
 #include "../UI/DirWnd.h"
 #include "../UI/HistoryListWnd.h"
 #include "../UI/HelpWnd.h"
+#include "../UI/JumpToWnd.h"
+#include "../UI/StatsWnd.h"
 #include <algorithm>
 #include <numeric>
 #include <random>
@@ -233,6 +235,14 @@ void InputManager::ExecuteKeyboardShortcutCommand(HWND hWnd, Command cmd) {
 
         case Command::ShowInfo:
             uiManager.Toggle(uiManager.getInfoWindow());
+            break;
+
+        case Command::JumpToImage:
+            uiManager.getJumpToWindow().Show();
+            break;
+
+        case Command::ToggleStats:
+            uiManager.Toggle(uiManager.getStatsWindow());
             break;
 
         case Command::OpenFile:

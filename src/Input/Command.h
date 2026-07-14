@@ -165,6 +165,12 @@ enum class Command {
     // --- Image info / EXIF panel (M) ---
     ShowInfo,
 
+    // --- Jump to image by number (J) ---
+    JumpToImage,
+
+    // --- Statistics window (K) ---
+    ToggleStats,
+
     // --- Clipboard ---
     CopyToClipboard, // Ctrl+C
 };

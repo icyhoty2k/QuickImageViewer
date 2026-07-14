@@ -12,6 +12,8 @@
 #include "DirWnd.h"
 #include "HistoryListWnd.h"
 #include "ExifWnd.h"
+#include "JumpToWnd.h"
+#include "StatsWnd.h"
 #include "../Platform/Constants.h"
 
 namespace UI {
@@ -167,6 +169,8 @@ namespace UI {
             // Called by ThumbnailPanelWnd on LButtonUp to make it the active panel.
             void SetActiveDirWnd(ThumbnailPanelWnd *panel);
             HistoryListWnd  &getHistoryListWindow();
+            JumpToWnd       &getJumpToWindow();
+            StatsWnd        &getStatsWindow();
 
             void SpawnDirWndForFolder(const std::wstring &folderPath, HWND hHistoryWnd);
             void HideAllSpawnedDirWnds();
@@ -197,6 +201,8 @@ namespace UI {
             DirWnd         dirWnd;
             HistoryListWnd historyListWnd;
             ExifWnd        exifWnd;
+            JumpToWnd      jumpToWnd;
+            StatsWnd       statsWnd;
 
             HINSTANCE m_hInstance  = nullptr;
             HWND      m_hMainWnd   = nullptr;

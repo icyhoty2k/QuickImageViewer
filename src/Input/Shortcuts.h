@@ -208,6 +208,17 @@ namespace Shortcuts {
     constexpr UINT SC_SHOW_INFO = 'M'; // M (no modifier) — image info / EXIF window
 
     // -------------------------------------------------------------------------
+    // Jump to image by number
+    // -------------------------------------------------------------------------
+    constexpr UINT SC_NAV_JUMP_TO_IMAGE     = 'J'; // J (no modifier) — open jump dialog
+    constexpr UINT SC_NAV_JUMP_TO_IMAGE_ALT = 'G'; // Ctrl+G          — open jump dialog
+
+    // -------------------------------------------------------------------------
+    // Statistics window
+    // -------------------------------------------------------------------------
+    constexpr UINT SC_TOGGLE_STATS = 'K'; // K (no modifier) — show statistics window
+
+    // -------------------------------------------------------------------------
     // Clipboard
     // -------------------------------------------------------------------------
     constexpr UINT SC_COPY_TO_CLIPBOARD = 'C'; // Ctrl+C — copy current image to clipboard
