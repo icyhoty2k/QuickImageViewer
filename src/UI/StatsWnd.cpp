@@ -3,6 +3,7 @@
 #include "../Platform/Constants.h"
 #include "../WorkerThread.h"
 #include "../Renderer/IRenderer.h"
+#include "../ImageLoadStats.h"
 #include "HistoryListWnd.h"
 #include <algorithm>
 #include <shellapi.h>
@@ -140,10 +141,27 @@ void StatsWnd::GatherStats() {
     m_historyCount  = static_cast<int>(GetFolderHistory().size());
     m_instanceCount = app.GetInstanceCount();
 
-    // ── Thread counts ─────────────────────────────────────────────────────────
+    // ── Thread counts & queue depths ──────────────────────────────────────────
     m_ioThreads       = g_ioWorker.getThreadCount();
     m_wicThreads      = g_decoderWorker.getThreadCount();
     m_dirThumbThreads = g_dirThumbWorker.getThreadCount();
+    m_ioPending       = static_cast<int>(g_ioWorker.PendingTaskCount());
+    m_wicPending      = static_cast<int>(g_decoderWorker.PendingTaskCount());
+    m_dirThumbPending = static_cast<int>(g_dirThumbWorker.PendingTaskCount());
+
+    // ── VRAM cache stats ──────────────────────────────────────────────────────
+    m_imgCacheCount      = 0; m_imgCacheBytes      = 0;
+    m_dirThumbCacheCount = 0; m_dirThumbCacheBytes = 0;
+    if (app.renderer) {
+        app.renderer->GetImageCacheStats(m_imgCacheCount, m_imgCacheBytes);
+        app.renderer->GetDirThumbCacheStats(m_dirThumbCacheCount, m_dirThumbCacheBytes);
+    }
+
+    // ── Last load time & codec ────────────────────────────────────────────────
+    m_lastLoadMs = ImageLoadStats::g_lastLoadMs.load(std::memory_order_relaxed);
+    m_lastCodec.clear();
+    if (app.currentIndex >= 0 && app.currentIndex < static_cast<int>(app.playlist.size()))
+        m_lastCodec = ImageLoadStats::CodecForPath(app.playlist[app.currentIndex]);
 
     // ── Process memory ────────────────────────────────────────────────────────
     PROCESS_MEMORY_COUNTERS_EX pmc = { sizeof(pmc) };
@@ -520,6 +538,17 @@ LRESULT StatsWnd::HandlePanelMessage(UINT message, WPARAM wParam, LPARAM lParam)
                 swprintf_s(rBuf, L"%d°", app.viewport.rotation);
                 row2(L"Rotation", rBuf, clrOrange);
             }
+
+            // Codec & load time
+            if (!m_lastCodec.empty())
+                row2(L"Codec / decoder", m_lastCodec, clrCyan);
+            if (m_lastLoadMs >= 0) {
+                wchar_t lBuf[32];
+                swprintf_s(lBuf, L"%d ms", m_lastLoadMs);
+                COLORREF lClr = m_lastLoadMs < 100 ? clrGreen
+                              : m_lastLoadMs < 400 ? clrValue : clrOrange;
+                row2(L"Last load time", lBuf, lClr);
+            }
         } else {
             row2(L"No image loaded", L"", clrDim);
         }
@@ -589,14 +618,26 @@ LRESULT StatsWnd::HandlePanelMessage(UINT message, WPARAM wParam, LPARAM lParam)
             wchar_t buf[32]; swprintf_s(buf, L"%d  (%s)", m_ioThreads,
                 m_ioThreads <= 1 ? L"HDD mode" : L"SSD/NVMe mode");
             row2(L"  IO worker", buf, clrCyan);
+            if (m_ioPending > 0) {
+                wchar_t q[32]; swprintf_s(q, L"%d pending", m_ioPending);
+                row2(L"    queue", q, clrOrange);
+            }
         }
         {
             wchar_t buf[32]; swprintf_s(buf, L"%d  (WIC decode)", m_wicThreads);
             row2(L"  WIC decoder", buf, clrCyan);
+            if (m_wicPending > 0) {
+                wchar_t q[32]; swprintf_s(q, L"%d pending", m_wicPending);
+                row2(L"    queue", q, clrOrange);
+            }
         }
         {
             wchar_t buf[32]; swprintf_s(buf, L"%d  (dir thumbnails)", m_dirThumbThreads);
             row2(L"  Dir thumbnail", buf, clrCyan);
+            if (m_dirThumbPending > 0) {
+                wchar_t q[32]; swprintf_s(q, L"%d pending", m_dirThumbPending);
+                row2(L"    queue", q, clrOrange);
+            }
         }
         {
             wchar_t buf[32]; swprintf_s(buf, L"%d", app.hardwareThreads);
@@ -614,7 +655,36 @@ LRESULT StatsWnd::HandlePanelMessage(UINT message, WPARAM wParam, LPARAM lParam)
         y += sgap;
 
         // ═════════════════════════════════════════════════════════════════════
-        // Section 6 — App & Display
+        // Section 6 — VRAM Cache
+        // ═════════════════════════════════════════════════════════════════════
+        {
+            const COLORREF clrTeal = Constants::Theme::ThemedColor(0.0f, 0.85f, 0.85f, app.themeFactor);
+            section(L"  VRAM CACHE", clrTeal);
+
+            // Image (lookaside) cache
+            {
+                wchar_t buf[64];
+                swprintf_s(buf, L"%d / %d  slots", m_imgCacheCount,
+                           static_cast<int>(Constants::VRAM_CACHE_IMAGES_COUNT));
+                COLORREF c = (m_imgCacheCount == static_cast<int>(Constants::VRAM_CACHE_IMAGES_COUNT))
+                             ? clrOrange : clrValue;
+                row2(L"Image cache", buf, c, true);
+            }
+            if (m_imgCacheBytes > 0)
+                row2(L"  VRAM used", FormatBytes(m_imgCacheBytes), clrGreen);
+
+            if (m_dirThumbCacheCount > 0) {
+                dotSep();
+                wchar_t buf[32]; swprintf_s(buf, L"%d entries", m_dirThumbCacheCount);
+                row2(L"Dir thumbnails", buf, clrValue, true);
+                row2(L"  VRAM used", FormatBytes(m_dirThumbCacheBytes), clrGreen);
+            }
+        }
+
+        y += sgap;
+
+        // ═════════════════════════════════════════════════════════════════════
+        // Section 7 — App & Display
         // ═════════════════════════════════════════════════════════════════════
         section(L"  APP & DISPLAY", clrPurple);
 
@@ -667,7 +737,7 @@ LRESULT StatsWnd::HandlePanelMessage(UINT message, WPARAM wParam, LPARAM lParam)
         y += sgap;
 
         // ═════════════════════════════════════════════════════════════════════
-        // Section 7 — Registry
+        // Section 8 — Registry
         // ═════════════════════════════════════════════════════════════════════
         section(L"  REGISTRY", clrPurple);
 

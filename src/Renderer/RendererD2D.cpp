@@ -4,6 +4,7 @@
 #include "../Platform/Constants.h"
 #include "../WorkerThread.h"
 #include "../SimpleFormats.h"
+#include "../ImageLoadStats.h"
 
 #include <algorithm>
 #include <chrono>
@@ -627,6 +628,11 @@ HRESULT RendererD2D::PreloadBitmap(const std::wstring &filePath, int requestInde
             }
 
             if (app.wantedIndex.load(std::memory_order_acquire) == requestIndex) {
+                long long start = ImageLoadStats::g_loadStartMs.load(std::memory_order_relaxed);
+                if (start > 0) {
+                    int ms = static_cast<int>(ImageLoadStats::NowMs() - start);
+                    ImageLoadStats::g_lastLoadMs.store(ms, std::memory_order_relaxed);
+                }
                 PostMessageW(m_hwnd, Constants::WM_QIV_REPAINT, 0, 0);
             }
         });
@@ -1019,6 +1025,24 @@ void RendererD2D::RemoveFromCache(const std::wstring &filePath) {
         m_lruList.erase(it->second.lruIt);
         m_bitmapCache.erase(it);
     }
+}
+
+void RendererD2D::GetImageCacheStats(int &count, UINT64 &estimatedBytes) {
+    std::lock_guard<std::mutex> lock(m_cacheMutex);
+    count = static_cast<int>(m_bitmapCache.size());
+    estimatedBytes = 0;
+    for (auto &[path, entry] : m_bitmapCache)
+        estimatedBytes += static_cast<UINT64>(entry.width) * entry.height * 4;
+}
+
+void RendererD2D::GetDirThumbCacheStats(int &count, UINT64 &estimatedBytes) {
+    std::lock_guard<std::mutex> lock(m_dirThumbMutex);
+    count = 0;
+    for (auto &[hwnd, panel] : m_panelThumbCaches)
+        count += static_cast<int>(panel.bitmaps.size());
+    UINT64 physW = static_cast<UINT64>(Constants::THUMBNAIL_PANEL_THUMB_WIDTH  * app.dpiScale + 0.5f);
+    UINT64 physH = static_cast<UINT64>(Constants::THUMBNAIL_PANEL_THUMB_HEIGHT * app.dpiScale + 0.5f);
+    estimatedBytes = static_cast<UINT64>(count) * physW * physH * 4;
 }
 
 // =============================================================================

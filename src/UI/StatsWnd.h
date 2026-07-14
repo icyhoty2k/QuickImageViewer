@@ -46,9 +46,11 @@ namespace UI {
         std::wstring m_thumbCachePath;
 
         // ── Current image ────────────────────────────────────────
-        int    m_imgW         = 0;
-        int    m_imgH         = 0;
-        UINT64 m_imgFileBytes = 0;
+        int          m_imgW         = 0;
+        int          m_imgH         = 0;
+        UINT64       m_imgFileBytes = 0;
+        int          m_lastLoadMs   = -1;   // -1 = no measurement yet
+        std::wstring m_lastCodec;
 
         // ── Playlist ─────────────────────────────────────────────
         int                  m_playlistSize  = 0;
@@ -70,6 +72,15 @@ namespace UI {
         int m_ioThreads       = 0;
         int m_wicThreads      = 0;
         int m_dirThumbThreads = 0;
+        int m_ioPending       = 0;
+        int m_wicPending      = 0;
+        int m_dirThumbPending = 0;
+
+        // ── VRAM cache ───────────────────────────────────────────
+        int    m_imgCacheCount      = 0;
+        UINT64 m_imgCacheBytes      = 0;
+        int    m_dirThumbCacheCount = 0;
+        UINT64 m_dirThumbCacheBytes = 0;
 
         // ── App / registry ───────────────────────────────────────
         std::wstring m_exePath;
