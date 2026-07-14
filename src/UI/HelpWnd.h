@@ -8,10 +8,16 @@ namespace UI {
     class HelpWnd : public FloatingPanelWnd {
         public:
             void Init(HINSTANCE hInstance, HWND hParent) override;
-
             void Init(HINSTANCE hInstance, HWND hParent, int8_t position) override;
-
             void Show() override;
+            ~HelpWnd() {
+                if (m_hFontTitle)    DeleteObject(m_hFontTitle);
+                if (m_hFontSubtitle) DeleteObject(m_hFontSubtitle);
+                if (m_hFontSection)  DeleteObject(m_hFontSection);
+                if (m_hFontShortcut) DeleteObject(m_hFontShortcut);
+                if (m_hFontDesc)     DeleteObject(m_hFontDesc);
+                if (m_hFontFooter)   DeleteObject(m_hFontFooter);
+            }
 
         protected:
             bool    OnKeyDown(WPARAM vk, bool ctrl, bool shift, bool alt) override;
@@ -47,15 +53,6 @@ namespace UI {
             // Layout settings
             static constexpr int COLUMNS = 3;
             static constexpr float SHORTCUT_SIZE_MULTIPLIER = 1.3f;  // Yellow is 1.3x bigger
-
-            ~HelpWnd() {
-                if (m_hFontTitle)    DeleteObject(m_hFontTitle);
-                if (m_hFontSubtitle) DeleteObject(m_hFontSubtitle);
-                if (m_hFontSection)  DeleteObject(m_hFontSection);
-                if (m_hFontShortcut) DeleteObject(m_hFontShortcut);
-                if (m_hFontDesc)     DeleteObject(m_hFontDesc);
-                if (m_hFontFooter)   DeleteObject(m_hFontFooter);
-            }
 
             HFONT m_hFontTitle    = nullptr;
             HFONT m_hFontSubtitle = nullptr;

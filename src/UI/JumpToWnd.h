@@ -8,6 +8,10 @@ namespace UI {
         void Init(HINSTANCE hInstance, HWND hParent) override;
         void Init(HINSTANCE hInstance, HWND hParent, int8_t position) override;
         void Show() override;
+        ~JumpToWnd() {
+            if (m_hFont)      DeleteObject(m_hFont);
+            if (m_hFontInput) DeleteObject(m_hFontInput);
+        }
 
     protected:
         bool    OnKeyDown(WPARAM vk, bool ctrl, bool shift, bool alt) override;
@@ -20,11 +24,6 @@ namespace UI {
         bool    m_outOfRange = false;
 
         void CommitJump();
-
-        ~JumpToWnd() {
-            if (m_hFont)      DeleteObject(m_hFont);
-            if (m_hFontInput) DeleteObject(m_hFontInput);
-        }
 
         HFONT m_hFont        = nullptr;
         HFONT m_hFontInput   = nullptr;
