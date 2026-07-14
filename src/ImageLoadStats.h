@@ -11,7 +11,10 @@ namespace ImageLoadStats {
     inline std::atomic<int>       g_lastLoadMs{-1};
 
     inline long long NowMs() {
-        return static_cast<long long>(GetTickCount64());
+        LARGE_INTEGER freq, counter;
+        QueryPerformanceFrequency(&freq);
+        QueryPerformanceCounter(&counter);
+        return (counter.QuadPart * 1000LL) / freq.QuadPart;
     }
 
     // Returns human-readable codec/decoder name from file extension.
