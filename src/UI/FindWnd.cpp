@@ -102,7 +102,13 @@ void FindWnd::CommitOpen() {
 //  Input
 // =============================================================================
 
-bool FindWnd::OnKeyDown(WPARAM vk, bool /*ctrl*/, bool /*shift*/, bool /*alt*/) {
+bool FindWnd::OnKeyDown(WPARAM vk, bool ctrl, bool shift, bool alt) {
+    // Let Ctrl/Alt combos through to the parent so app shortcuts (e.g. Ctrl+F
+    // to close this window) still work while the find box has focus.
+    if (ctrl || alt) return false;
+
+    (void)shift; // shift is passed through WM_CHAR with the translated character
+
     switch (vk) {
         case VK_BACK:
             if (m_queryLen > 0) {
@@ -132,7 +138,7 @@ bool FindWnd::OnKeyDown(WPARAM vk, bool /*ctrl*/, bool /*shift*/, bool /*alt*/) 
             }
             return true;
 
-        case VK_PRIOR: // Page Up
+        case VK_PRIOR:
             if (!m_matches.empty()) {
                 m_selIdx -= VISIBLE_ROWS;
                 AdjustScroll();
@@ -140,7 +146,7 @@ bool FindWnd::OnKeyDown(WPARAM vk, bool /*ctrl*/, bool /*shift*/, bool /*alt*/) 
             }
             return true;
 
-        case VK_NEXT: // Page Down
+        case VK_NEXT:
             if (!m_matches.empty()) {
                 m_selIdx += VISIBLE_ROWS;
                 AdjustScroll();
@@ -149,9 +155,10 @@ bool FindWnd::OnKeyDown(WPARAM vk, bool /*ctrl*/, bool /*shift*/, bool /*alt*/) 
             return true;
 
         default:
-            break;
+            // Consume every other plain key so it never reaches the parent's
+            // shortcut handler. The character arrives via WM_CHAR instead.
+            return true;
     }
-    return false;
 }
 
 // =============================================================================
