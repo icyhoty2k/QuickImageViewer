@@ -4,6 +4,7 @@
 #include "../Platform/Constants.h"
 #include "../Platform/ConstantsStrings.h"
 #include "../Platform/FileHandler.h"
+#include "../Platform/RegistrySetup.h"
 #include "../UI/CacheWnd.h"
 #include "../UI/DirWnd.h"
 #include "../UI/HistoryListWnd.h"
@@ -439,11 +440,12 @@ void InputManager::ExecuteKeyboardShortcutCommand(HWND hWnd, Command cmd) {
             break;
         }
         case Command::NewWindow: {
-            wchar_t exePath[MAX_PATH];
-            GetModuleFileNameW(nullptr, exePath, MAX_PATH);
-            SetEnvironmentVariableW(L"QIV_NEW_INSTANCE", L"1");
-            ShellExecuteW(nullptr, L"open", exePath, nullptr, nullptr, SW_SHOW);
-            SetEnvironmentVariableW(L"QIV_NEW_INSTANCE", nullptr);
+            std::wstring exePath = System::GetExePathW();
+            if (!exePath.empty()) {
+                SetEnvironmentVariableW(L"QIV_NEW_INSTANCE", L"1");
+                ShellExecuteW(nullptr, L"open", exePath.c_str(), nullptr, nullptr, SW_SHOW);
+                SetEnvironmentVariableW(L"QIV_NEW_INSTANCE", nullptr);
+            }
             break;
         }
 
