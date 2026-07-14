@@ -174,7 +174,9 @@ Command InputManager::ResolveKeyboardKeys(UINT key) {
         case Shortcuts::SC_PANEL_OPEN_FILE: return Command::OpenFile;
         case Shortcuts::SC_PANEL_CACHE_TOGGLE: return Command::ToggleCache;
         case Shortcuts::SC_PANEL_DIR_TOGGLE: return Command::ToggleDir;
-        case Shortcuts::SC_PANEL_HISTORY_TOGGLE: return Command::ToggleHistory;
+        case Shortcuts::SC_PANEL_HISTORY_TOGGLE:
+            if (ctrl) return Command::ToggleHistoryFull;
+            return Command::ToggleHistory;
         case Shortcuts::SC_PANEL_CACHE_CLEAR: return Command::ClearCache;
 
         // --- Overlays ---

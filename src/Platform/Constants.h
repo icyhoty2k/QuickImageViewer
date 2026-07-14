@@ -294,9 +294,9 @@ namespace Constants {
 
         // Window size limits (px at 96 DPI — DPI-scaled at runtime)
         constexpr int HISTORY_MIN_W = 610; // minimum panel width
-        constexpr int HISTORY_MAX_W = 900; // maximum panel width
+        constexpr int HISTORY_MAX_W = BASE_WIDTH - 120; // maximum panel width
         constexpr int HISTORY_MIN_H = 620; // minimum panel height
-        constexpr int HISTORY_MAX_H = 1000; // maximum panel height (also capped to 80% of monitor)
+        constexpr int HISTORY_MAX_H = BASE_HEIGHT - 60; // maximum panel height (also capped to 80% of monitor)
     }
 
     // =========================================================================

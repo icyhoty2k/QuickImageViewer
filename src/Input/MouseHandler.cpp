@@ -403,40 +403,42 @@ void MouseHandler::HandleMouseHWheel(HWND hWnd, WPARAM wParam, LPARAM /*lParam*/
         return;
     }
 
-    // Plain horizontal scroll: cycle through folder history
+    // Plain horizontal scroll: cycle through the navigation snapshot.
+    // Snapshot is taken from the raw backing array (not display-capped).
+    // Refreshed explicitly when the user presses Ctrl+Tab in the history panel.
     static int s_histIdx = 0;
-    static std::vector<std::wstring> s_histSnap;
-    static std::wstring s_lastNavFolder;
     static int s_accumulator = 0;
+    static int s_snapVersion = -1;
 
-    const auto &history = UI::GetFolderHistory();
-    if (history.empty()) return;
+    if (UI::GetNavigationSnapshot().empty())
+        UI::CaptureNavigationSnapshot();
 
-    // Reset snapshot whenever the current folder changed via non-scroll means
-    if (s_histSnap.empty() || history[0] != s_lastNavFolder) {
-        s_histSnap.assign(history.begin(), history.end());
+    const auto &snap = UI::GetNavigationSnapshot();
+    if (snap.empty()) return;
+
+    // Reset index whenever the snapshot was refreshed via Ctrl+Tab
+    const int currentVersion = UI::GetNavigationSnapshotVersion();
+    if (currentVersion != s_snapVersion) {
         s_histIdx = 0;
-        s_lastNavFolder = history[0];
-        s_accumulator = 0;
+        s_snapVersion = currentVersion;
     }
 
     s_accumulator += hDelta;
     const int threshold = WHEEL_DELTA * Constants::MOUSE_HSCROLL_FOLDER_TICKS;
     if (std::abs(s_accumulator) < threshold) return;
 
-    const int total = (int)s_histSnap.size();
+    const int total = (int)snap.size();
     if (s_accumulator > 0) s_histIdx = (s_histIdx + 1) % total;
     else                    s_histIdx = (s_histIdx - 1 + total) % total;
     s_accumulator = 0;
 
-    const std::wstring &folder = s_histSnap[s_histIdx];
+    const std::wstring folder = snap[s_histIdx]; // copy — snap must not be used after OpenDirectory
 
     std::wstring displayName = folder;
     const size_t sep = folder.find_last_of(L"\\/");
     if (sep != std::wstring::npos) displayName = folder.substr(sep + 1);
 
     if (!UI::IsFolderValidForViewer(folder)) {
-        // Dead folder — show warning but do not open; do not update s_lastNavFolder.
         auto &histWnd = uiManager.getHistoryListWindow();
         if (histWnd.IsVisible())
             InvalidateRect(histWnd.GetHwnd(), nullptr, FALSE);
@@ -447,8 +449,6 @@ void MouseHandler::HandleMouseHWheel(HWND hWnd, WPARAM wParam, LPARAM /*lParam*/
     }
 
     OpenDirectory(hWnd, folder);
-    s_lastNavFolder = folder;
-    s_histSnap.clear(); // Reset snapshot so next scroll recaptures updated history order
 
     g_overlayManager.PostCenterMessage(hWnd,
         Constants::Messages::HISTORY_NAV_FOLDER +
