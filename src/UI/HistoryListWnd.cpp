@@ -208,10 +208,14 @@ namespace UI {
             }
         }
         // Mark unchecked entries as Unknown so WM_PAINT shows them in neutral colour.
+        bool hasUnknown = false;
         for (const auto &e: g_displayList) {
-            if (g_statusCache.find(e.path) == g_statusCache.end())
+            if (g_statusCache.find(e.path) == g_statusCache.end()) {
                 g_statusCache[e.path] = FolderStatus::Unknown;
+                hasUnknown = true;
+            }
         }
+        if (hasUnknown) g_validationDirty = true;
     }
 
     // ---------------------------------------------------------------------------
@@ -607,18 +611,34 @@ namespace UI {
                 SetBkMode(hdc, TRANSPARENT);
 
                 int listFontSz = MulDiv(Constants::History::HISTORY_LIST_FONT_SIZE, dpi, 96);
-                HFONT hTitleFont = CreateFontW(
-                        titleSz, 0, 0, 0, FW_BOLD, FALSE, FALSE, FALSE,
-                        DEFAULT_CHARSET, OUT_OUTLINE_PRECIS, CLIP_DEFAULT_PRECIS,
-                        CLEARTYPE_QUALITY, VARIABLE_PITCH, L"Segoe UI");
-                HFONT hBodyFont = CreateFontW(
-                        fontSize, 0, 0, 0, FW_NORMAL, FALSE, FALSE, FALSE,
-                        DEFAULT_CHARSET, OUT_OUTLINE_PRECIS, CLIP_DEFAULT_PRECIS,
-                        CLEARTYPE_QUALITY, VARIABLE_PITCH, L"Segoe UI");
-                HFONT hListFont = CreateFontW(
-                        listFontSz, 0, 0, 0, FW_NORMAL, FALSE, FALSE, FALSE,
-                        DEFAULT_CHARSET, OUT_OUTLINE_PRECIS, CLIP_DEFAULT_PRECIS,
-                        CLEARTYPE_QUALITY, VARIABLE_PITCH, L"Segoe UI");
+                if (static_cast<int>(dpi) != m_cachedFontDpi) {
+                    if (m_hFontTitle)     { DeleteObject(m_hFontTitle);     m_hFontTitle     = nullptr; }
+                    if (m_hFontBody)      { DeleteObject(m_hFontBody);      m_hFontBody      = nullptr; }
+                    if (m_hFontList)      { DeleteObject(m_hFontList);      m_hFontList      = nullptr; }
+                    if (m_hFontIndexLink) { DeleteObject(m_hFontIndexLink); m_hFontIndexLink = nullptr; }
+                    if (m_hFontLink)      { DeleteObject(m_hFontLink);      m_hFontLink      = nullptr; }
+                    m_hFontTitle = CreateFontW(
+                            titleSz, 0, 0, 0, FW_BOLD, FALSE, FALSE, FALSE,
+                            DEFAULT_CHARSET, OUT_OUTLINE_PRECIS, CLIP_DEFAULT_PRECIS,
+                            CLEARTYPE_QUALITY, VARIABLE_PITCH, L"Segoe UI");
+                    m_hFontBody = CreateFontW(
+                            fontSize, 0, 0, 0, FW_NORMAL, FALSE, FALSE, FALSE,
+                            DEFAULT_CHARSET, OUT_OUTLINE_PRECIS, CLIP_DEFAULT_PRECIS,
+                            CLEARTYPE_QUALITY, VARIABLE_PITCH, L"Segoe UI");
+                    m_hFontList = CreateFontW(
+                            listFontSz, 0, 0, 0, FW_NORMAL, FALSE, FALSE, FALSE,
+                            DEFAULT_CHARSET, OUT_OUTLINE_PRECIS, CLIP_DEFAULT_PRECIS,
+                            CLEARTYPE_QUALITY, VARIABLE_PITCH, L"Segoe UI");
+                    m_hFontIndexLink = CreateFontW(
+                            listFontSz, 0, 0, 0, FW_NORMAL, FALSE, TRUE, FALSE,
+                            DEFAULT_CHARSET, OUT_OUTLINE_PRECIS, CLIP_DEFAULT_PRECIS,
+                            CLEARTYPE_QUALITY, VARIABLE_PITCH, L"Segoe UI");
+                    m_hFontLink = CreateFontW(
+                            fontSize, 0, 0, 0, FW_NORMAL, FALSE, TRUE, FALSE,
+                            DEFAULT_CHARSET, OUT_OUTLINE_PRECIS, CLIP_DEFAULT_PRECIS,
+                            CLEARTYPE_QUALITY, VARIABLE_PITCH, L"Segoe UI");
+                    m_cachedFontDpi = static_cast<int>(dpi);
+                }
 
                 // Push counts into the real title bar
                 int totalSaved = static_cast<int>(historyFoldersManager.folderHistory.size());
@@ -635,7 +655,7 @@ namespace UI {
                 }
 
                 // Single shortcuts line
-                SelectObject(hdc, hBodyFont);
+                SelectObject(hdc, m_hFontBody);
                 int hintTop = rc.top + padding;
                 int hintBot = hintTop + MulDiv(fontSize + 2, dpi, 96);
                 {
@@ -651,7 +671,7 @@ namespace UI {
                 }
 
                 g_exeLinkRect = {};
-                SelectObject(hdc, hTitleFont);
+                SelectObject(hdc, m_hFontTitle);
 
                 // Separator (fixed) — placed after shortcuts line
                 int sepY = hintBot + MulDiv(4, dpi, 96);
@@ -665,7 +685,7 @@ namespace UI {
                 int footerSepY = rc.bottom - MulDiv(fontSize + 2 + 8, dpi, 96);
 
                 // Rows (scrolled) — clipped to the body area between separator and footer
-                SelectObject(hdc, hListFont);
+                SelectObject(hdc, m_hFontList);
                 g_rowRects.clear();
                 g_indexRects.clear();
                 int rowsTop = sepY + MulDiv(6, dpi, 96);
@@ -676,12 +696,6 @@ namespace UI {
 
                 SaveDC(hdc);
                 IntersectClipRect(hdc, rc.left, rowsTop, rc.right, bodyBottom);
-
-                // Create link font for indexes
-                HFONT hIndexLinkFont = CreateFontW(
-                        listFontSz, 0, 0, 0, FW_NORMAL, FALSE, TRUE, FALSE,
-                        DEFAULT_CHARSET, OUT_OUTLINE_PRECIS, CLIP_DEFAULT_PRECIS,
-                        CLEARTYPE_QUALITY, VARIABLE_PITCH, L"Segoe UI");
 
                 // Derive the folder currently open in the main app
                 std::wstring currentFolder;
@@ -741,7 +755,7 @@ namespace UI {
                                               : (isCurrent
                                                      ? Constants::Theme::HistoryPanel::PATH_DRIVE_CURRENT
                                                      : RGB(100, 180, 255)));
-                        SelectObject(hdc, hIndexLinkFont);
+                        SelectObject(hdc, m_hFontIndexLink);
                         std::wstring idxStr = std::to_wstring(i + 1);
                         RECT idxRect = {
                             rc.left + padding, rowTop,
@@ -751,7 +765,7 @@ namespace UI {
                                   DT_RIGHT | DT_VCENTER | DT_SINGLELINE);
                         // Store index rect for click detection
                         g_indexRects.push_back(idxRect);
-                        SelectObject(hdc, hListFont);
+                        SelectObject(hdc, m_hFontList);
 
                         // Warning glyph for dead folders; star for favorites
                         {
@@ -911,7 +925,7 @@ namespace UI {
                     int footerTop = rc.bottom - MulDiv(fontSize + 2 + 4, dpi, 96);
                     int footerBot = rc.bottom;
 
-                    SelectObject(hdc, hBodyFont);
+                    SelectObject(hdc, m_hFontBody);
                     SetTextColor(hdc, RGB(150, 150, 150));
 
                     // LEFT: Panel status
@@ -919,18 +933,13 @@ namespace UI {
                         LONG curX = rc.left + padding;
                         LONG midBound = rc.left + (rc.right - rc.left) / 2;
 
-                        HFONT hLinkFont = CreateFontW(
-                                fontSize, 0, 0, 0, FW_NORMAL, FALSE, TRUE, FALSE,
-                                DEFAULT_CHARSET, OUT_OUTLINE_PRECIS, CLIP_DEFAULT_PRECIS,
-                                CLEARTYPE_QUALITY, VARIABLE_PITCH, L"Segoe UI");
-
                         const UI::PanelLayout &layout = uiManager.GetLayout();
                         const UI::SlotInfo *slots[] = {&layout.center, &layout.top, &layout.right, &layout.bottom, &layout.left};
 
                         // Cache toggle key label (derived from Shortcuts constant)
                         std::wstring cacheKeyLabel = L"[" + FKeyLabel(Shortcuts::SC_PANEL_CACHE_TOGGLE) + L"]";
                         SetTextColor(hdc, RGB(100, 180, 255));
-                        SelectObject(hdc, hLinkFont);
+                        SelectObject(hdc, m_hFontLink);
                         RECT cacheToggleRect = {curX, footerTop, midBound, footerBot};
                         DrawTextW(hdc, cacheKeyLabel.c_str(), -1, &cacheToggleRect, DT_LEFT | DT_VCENTER | DT_SINGLELINE);
                         SIZE szToggle = {};
@@ -940,7 +949,7 @@ namespace UI {
                         curX += szToggle.cx;
 
                         // Cache status
-                        SelectObject(hdc, hBodyFont);
+                        SelectObject(hdc, m_hFontBody);
                         SetTextColor(hdc, RGB(150, 150, 150));
                         bool cacheFound = false;
                         std::wstring cachePosName;
@@ -959,7 +968,7 @@ namespace UI {
                         std::wstring dirKeyLabel = L"[" + FKeyLabel(Shortcuts::SC_PANEL_DIR_TOGGLE) + L"]";
                         curX = rc.left + padding + MulDiv(100, dpi, 96);
                         SetTextColor(hdc, RGB(100, 180, 255));
-                        SelectObject(hdc, hLinkFont);
+                        SelectObject(hdc, m_hFontLink);
                         RECT f5ToggleRect = {curX, footerTop, midBound, footerBot};
                         DrawTextW(hdc, dirKeyLabel.c_str(), -1, &f5ToggleRect, DT_LEFT | DT_VCENTER | DT_SINGLELINE);
                         SIZE szF5 = {};
@@ -969,7 +978,7 @@ namespace UI {
                         curX += szF5.cx;
 
                         // F5 status
-                        SelectObject(hdc, hBodyFont);
+                        SelectObject(hdc, m_hFontBody);
                         SetTextColor(hdc, RGB(150, 150, 150));
                         bool f5Found = false;
                         std::wstring f5PosName;
@@ -1001,7 +1010,6 @@ namespace UI {
                             DrawTextW(hdc, L" Hidden", -1, &f5HiddenRect, DT_LEFT | DT_VCENTER | DT_SINGLELINE);
                         }
 
-                        DeleteObject(hLinkFont);
                     }
 
                     // RIGHT: QIV→dir link + file size
@@ -1009,29 +1017,9 @@ namespace UI {
                         LONG rightHalfLeft = rc.left + (rc.right - rc.left) / 2;
                         LONG rightEdge = rc.right - padding;
 
-                        // File size — measure first so QIV link avoids it
-                        std::wstring sizeValue;
-                        {
-                            std::error_code ec;
-                            auto bytes = std::filesystem::file_size(
-                                    historyFoldersManager.GetFilePath(), ec);
-                            if (!ec) {
-                                wchar_t sizeBuf[64];
-                                if (bytes >= 1024ULL * 1024)
-                                    swprintf_s(sizeBuf, L"History - %.3f MB",
-                                               static_cast<double>(bytes) / (1024.0 * 1024.0));
-                                else if (bytes >= 1024)
-                                    swprintf_s(sizeBuf, L"History - %.3f KB",
-                                               static_cast<double>(bytes) / 1024.0);
-                                else
-                                    swprintf_s(sizeBuf, L"History - %llu Bytes",
-                                               static_cast<unsigned long long>(bytes));
-                                sizeValue = sizeBuf;
-                            } else {
-                                sizeValue = L"History - n/a";
-                            }
-                        }
-                        SelectObject(hdc, hBodyFont);
+                        // File size — pre-computed in Show() to avoid I/O in WM_PAINT
+                        const std::wstring &sizeValue = m_cachedSizeStr;
+                        SelectObject(hdc, m_hFontBody);
                         SIZE szSize = {};
                         GetTextExtentPoint32W(hdc, sizeValue.c_str(),
                                               static_cast<int>(sizeValue.size()), &szSize);
@@ -1042,19 +1030,14 @@ namespace UI {
                             std::wstring linkText = L"QIV.exe/path="
                                                     + std::filesystem::path(System::GetExePathW()).parent_path().wstring() + L"\\";
 
-                            HFONT hLinkFont = CreateFontW(
-                                    fontSize, 0, 0, 0, FW_NORMAL, FALSE, TRUE, FALSE,
-                                    DEFAULT_CHARSET, OUT_OUTLINE_PRECIS, CLIP_DEFAULT_PRECIS,
-                                    CLEARTYPE_QUALITY, VARIABLE_PITCH, L"Segoe UI");
-                            SelectObject(hdc, hLinkFont);
+                            SelectObject(hdc, m_hFontLink);
                             SetTextColor(hdc, RGB(100, 180, 255));
 
                             LONG linkAreaRight = std::max(rightHalfLeft, sizeLeft - MulDiv(8, dpi, 96));
                             g_exeLinkRect = {rightHalfLeft, footerTop, linkAreaRight, footerBot};
                             DrawTextW(hdc, linkText.c_str(), -1, &g_exeLinkRect,
                                       DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
-                            DeleteObject(hLinkFont);
-                            SelectObject(hdc, hBodyFont);
+                            SelectObject(hdc, m_hFontBody);
                         }
 
                         // File size — right-aligned
@@ -1066,10 +1049,6 @@ namespace UI {
                 }
 
                 SelectObject(hdc, GetStockObject(SYSTEM_FONT));
-                DeleteObject(hTitleFont);
-                DeleteObject(hBodyFont);
-                DeleteObject(hListFont);
-                if (hIndexLinkFont) DeleteObject(hIndexLinkFont);
                 EndPaint(m_hWnd, &ps);
                 return 0;
             }
@@ -1451,6 +1430,25 @@ namespace UI {
         SetWindowPos(m_hWnd, HWND_TOPMOST, x, y, w, h, SWP_FRAMECHANGED);
         g_hoverRow = 0;
         g_scrollOffsetY = 0;
+
+        // Cache history file size so WM_PAINT needs no I/O
+        {
+            std::error_code ec;
+            auto bytes = std::filesystem::file_size(historyFoldersManager.GetFilePath(), ec);
+            if (!ec) {
+                wchar_t buf[64];
+                if (bytes >= 1024ULL * 1024)
+                    swprintf_s(buf, L"History - %.3f MB", static_cast<double>(bytes) / (1024.0 * 1024.0));
+                else if (bytes >= 1024)
+                    swprintf_s(buf, L"History - %.3f KB", static_cast<double>(bytes) / 1024.0);
+                else
+                    swprintf_s(buf, L"History - %llu Bytes", static_cast<unsigned long long>(bytes));
+                m_cachedSizeStr = buf;
+            } else {
+                m_cachedSizeStr = L"History - n/a";
+            }
+        }
+
         ShowWindow(m_hWnd, SW_SHOW);
         SetForegroundWindow(m_hWnd);
         InvalidateRect(m_hWnd, nullptr, TRUE);

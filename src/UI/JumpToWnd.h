@@ -20,5 +20,14 @@ namespace UI {
         bool    m_outOfRange = false;
 
         void CommitJump();
+
+        ~JumpToWnd() {
+            if (m_hFont)      DeleteObject(m_hFont);
+            if (m_hFontInput) DeleteObject(m_hFontInput);
+        }
+
+        HFONT m_hFont        = nullptr;
+        HFONT m_hFontInput   = nullptr;
+        int   m_cachedFontDpi = 0;
     };
 } // namespace UI
