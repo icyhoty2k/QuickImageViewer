@@ -161,7 +161,10 @@ Command InputManager::ResolveKeyboardKeys(UINT key) {
 
         // --- Fullscreen ---
         case Shortcuts::SC_PANEL_FULLSCREEN: return Command::ToggleFullscreen;
-        case Shortcuts::SC_PANEL_FULLSCREEN_F: return Command::ToggleFullscreen;
+        case Shortcuts::SC_PANEL_FULLSCREEN_F: // 'F' — same value as SC_NAV_FIND
+            if (ctrl && !alt && !shift) return Command::FindImage;     // Ctrl+F → find
+            if (!ctrl && !alt && !shift) return Command::ToggleFullscreen; // F → fullscreen
+            break;
         case Shortcuts::SC_PANEL_FULLSCREEN_ENTER: return Command::ToggleFullscreen;
 
         case Shortcuts::SC_PANEL_FULLSCREEN_T: // 'T' — shared key

@@ -120,6 +120,12 @@ namespace UI {
         return jumpToWnd;
     }
 
+    FindWnd &UIManager::getFindWindow() {
+        if (isInit(findWnd)) return findWnd;
+        findWnd.Init(m_hInstance, m_hMainWnd);
+        return findWnd;
+    }
+
     StatsWnd &UIManager::getStatsWindow() {
         if (isInit(statsWnd)) return statsWnd;
         statsWnd.Init(m_hInstance, m_hMainWnd);
