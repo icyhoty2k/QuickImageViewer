@@ -115,7 +115,8 @@ namespace Shortcuts {
     // W/A/S/D — viewport pan (plain) / window move (Shift)
     // Note: SC_APP_HIDE_ALT = 'W' (ctrl+W hides; plain W pans up; Shift+W moves window up)
     //       SC_COLOR_SAVE_TO_DISK = 'S' (ctrl+S saves; plain S pans down; Shift+S moves window down)
-    constexpr UINT SC_PAN_LEFT  = 'A'; // plain: pan left;  Shift: move window left
+    constexpr UINT SC_PAN_LEFT      = 'A'; // plain: pan left;  Shift: move window left
+    constexpr UINT SC_ALWAYS_ON_TOP_A = 'A'; // Ctrl+A — toggle always-on-top
     constexpr UINT SC_PAN_RIGHT = 'D'; // plain: pan right; Shift: move window right
 
     constexpr UINT SC_NAV_PREV = VK_LEFT;
