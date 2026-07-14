@@ -9,7 +9,8 @@
 #include <chrono>
 #include <mutex>
 #include <vector>
-#include <shlwapi.h>  // SHCreateMemStream
+#include <shlwapi.h>   // SHCreateMemStream
+#include <shobjidl.h>  // IShellItemImageFactory, SHCreateItemFromParsingName
 
 #include "DirWnd.h"
 
@@ -22,6 +23,7 @@
 #pragma comment(lib, "d2d1.lib")
 #pragma comment(lib, "dwrite.lib")
 #pragma comment(lib, "dxguid.lib")
+#pragma comment(lib, "shell32.lib")
 
 // =============================================================================
 //  Initialize
@@ -1197,7 +1199,10 @@ void RendererD2D::ClearDirThumbnailCache(HWND hPanel) {
 }
 
 // =============================================================================
-//  RequestDirThumbnail
+//  RequestDirThumbnail  —  queries the Windows Shell thumbnail cache.
+//  Windows generates and persistently caches the thumbnail on first access;
+//  subsequent requests for the same file are near-instant cache lookups.
+//  The SHELL_THUMB_FLAGS constant controls caching/generation behavior.
 // =============================================================================
 void RendererD2D::RequestDirThumbnail(const std::wstring &filePath, HWND hPanel) {
     {
@@ -1209,85 +1214,67 @@ void RendererD2D::RequestDirThumbnail(const std::wstring &filePath, HWND hPanel)
     }
 
     Microsoft::WRL::ComPtr<ID2D1Device6> d2dDev = m_pD2DDevice;
+    if (!d2dDev || !hPanel) return;
+
+    const LONG  thumbW    = static_cast<LONG>(Constants::THUMBNAIL_PANEL_THUMB_WIDTH  * app.dpiScale);
+    const LONG  thumbH    = static_cast<LONG>(Constants::THUMBNAIL_PANEL_THUMB_HEIGHT * app.dpiScale);
+    const float dpiScale  = app.dpiScale;
     HWND hDir = hPanel;
 
-    if (!d2dDev || !hDir) return;
+    g_dirThumbWorker.PushTask([filePath, d2dDev, hDir, thumbW, thumbH, dpiScale, this](IWICImagingFactory2 *wicFac) {
+        auto releaseInFlight = [&] {
+            std::lock_guard<std::mutex> lk(m_dirThumbMutex);
+            m_panelThumbCaches[hDir].inFlight.erase(filePath);
+        };
 
-    const UINT thumbW = static_cast<UINT>(Constants::THUMBNAIL_PANEL_THUMB_WIDTH  * app.dpiScale);
-    const UINT thumbH = static_cast<UINT>(Constants::THUMBNAIL_PANEL_THUMB_HEIGHT * app.dpiScale);
+        // 1. Ask Windows Shell for the thumbnail — generates and caches if not present.
+        Microsoft::WRL::ComPtr<IShellItem> shellItem;
+        if (FAILED(SHCreateItemFromParsingName(filePath.c_str(), nullptr, IID_PPV_ARGS(&shellItem))))
+            { releaseInFlight(); return; }
 
-    g_ioWorker.PushTask([filePath, d2dDev, hDir, thumbW, thumbH, this]() {
-        HANDLE hFile = CreateFileW(filePath.c_str(), GENERIC_READ, FILE_SHARE_READ, nullptr, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, nullptr);
-        if (hFile == INVALID_HANDLE_VALUE) return;
+        Microsoft::WRL::ComPtr<IShellItemImageFactory> imgFactory;
+        if (FAILED(shellItem->QueryInterface(IID_PPV_ARGS(&imgFactory))))
+            { releaseInFlight(); return; }
 
-        LARGE_INTEGER fileSize{};
-        if (!GetFileSizeEx(hFile, &fileSize)) {
-            CloseHandle(hFile);
-            return;
+        HBITMAP hBitmap = nullptr;
+        const SIZE sz = { thumbW, thumbH };
+        if (FAILED(imgFactory->GetImage(sz, static_cast<SIIGBF>(Constants::SHELL_THUMB_FLAGS), &hBitmap)) || !hBitmap)
+            { releaseInFlight(); return; }
+
+        // 2. HBITMAP → IWICBitmap (pixel copy — DeleteObject immediately after).
+        Microsoft::WRL::ComPtr<IWICBitmap> wicBmp;
+        HRESULT hr = wicFac->CreateBitmapFromHBITMAP(hBitmap, nullptr, WICBitmapIgnoreAlpha, &wicBmp);
+        DeleteObject(hBitmap);
+        if (FAILED(hr)) { releaseInFlight(); return; }
+
+        // 3. Convert to PBGRA (required by D2D).
+        Microsoft::WRL::ComPtr<IWICFormatConverter> conv;
+        if (FAILED(wicFac->CreateFormatConverter(&conv)) ||
+            FAILED(conv->Initialize(wicBmp.Get(), GUID_WICPixelFormat32bppPBGRA,
+                                    WICBitmapDitherTypeNone, nullptr, 0.0f, WICBitmapPaletteTypeCustom)))
+            { releaseInFlight(); return; }
+
+        // 4. Upload to D2D.
+        Microsoft::WRL::ComPtr<ID2D1DeviceContext> taskCtx;
+        if (FAILED(d2dDev->CreateDeviceContext(D2D1_DEVICE_CONTEXT_OPTIONS_NONE, taskCtx.GetAddressOf())))
+            { releaseInFlight(); return; }
+
+        D2D1_BITMAP_PROPERTIES1 bmpProps{};
+        bmpProps.pixelFormat = D2D1::PixelFormat(DXGI_FORMAT_B8G8R8A8_UNORM, D2D1_ALPHA_MODE_PREMULTIPLIED);
+        bmpProps.dpiX = dpiScale * 96.0f;
+        bmpProps.dpiY = dpiScale * 96.0f;
+
+        Microsoft::WRL::ComPtr<ID2D1Bitmap1> thumbBitmap;
+        if (FAILED(taskCtx->CreateBitmapFromWicBitmap(conv.Get(), &bmpProps, &thumbBitmap)))
+            { releaseInFlight(); return; }
+
+        {
+            std::lock_guard<std::mutex> lk(m_dirThumbMutex);
+            auto &entry = m_panelThumbCaches[hDir];
+            entry.inFlight.erase(filePath);
+            if (!entry.bitmaps.count(filePath))
+                entry.bitmaps[filePath] = thumbBitmap;
         }
-
-        std::vector<BYTE> bytes(static_cast<size_t>(fileSize.QuadPart));
-        DWORD bytesRead = 0;
-        bool ok = ReadFile(hFile, bytes.data(), static_cast<DWORD>(bytes.size()), &bytesRead, nullptr) && bytesRead == static_cast<DWORD>(bytes.size());
-        CloseHandle(hFile);
-        if (!ok) return;
-
-        g_dirThumbWorker.PushTask([bytes = std::move(bytes), filePath, d2dDev, hDir, thumbW, thumbH, this](IWICImagingFactory2 *wicFac) mutable {
-            Microsoft::WRL::ComPtr<IWICStream> stream;
-            if (FAILED(wicFac->CreateStream(&stream))) return;
-            if (FAILED(stream->InitializeFromMemory(bytes.data(), static_cast<DWORD>(bytes.size())))) return;
-
-            Microsoft::WRL::ComPtr<IWICBitmapDecoder> decoder;
-            if (FAILED(wicFac->CreateDecoderFromStream(stream.Get(), nullptr, WICDecodeMetadataCacheOnDemand, &decoder))) return;
-
-            Microsoft::WRL::ComPtr<IWICBitmapFrameDecode> frame;
-            if (FAILED(decoder->GetFrame(0, &frame))) return;
-
-            UINT srcW = 0, srcH = 0;
-            frame->GetSize(&srcW, &srcH);
-            if (srcW == 0 || srcH == 0) return;
-
-            float scale = std::min(static_cast<float>(thumbW) / srcW, static_cast<float>(thumbH) / srcH);
-            UINT dstW = std::max(1U, static_cast<UINT>(srcW * scale));
-            UINT dstH = std::max(1U, static_cast<UINT>(srcH * scale));
-
-            Microsoft::WRL::ComPtr<IWICBitmapScaler> scaler;
-            if (FAILED(wicFac->CreateBitmapScaler(&scaler))) return;
-            if (FAILED(scaler->Initialize(frame.Get(), dstW, dstH, WICBitmapInterpolationModeFant))) return;
-
-            IWICBitmapSource *uploadSource = nullptr;
-            Microsoft::WRL::ComPtr<IWICFormatConverter> converter;
-            WICPixelFormatGUID scaledFmt{};
-            if (FAILED(scaler->GetPixelFormat(&scaledFmt))) return;
-
-            if (scaledFmt == GUID_WICPixelFormat32bppPBGRA) {
-                uploadSource = scaler.Get();
-            } else {
-                if (FAILED(wicFac->CreateFormatConverter(&converter))) return;
-                if (FAILED(converter->Initialize(scaler.Get(), GUID_WICPixelFormat32bppPBGRA, WICBitmapDitherTypeNone, nullptr, 0.0f, WICBitmapPaletteTypeCustom)))
-                    return;
-                uploadSource = converter.Get();
-            }
-
-            Microsoft::WRL::ComPtr<ID2D1DeviceContext> taskCtx;
-            if (FAILED(d2dDev->CreateDeviceContext(D2D1_DEVICE_CONTEXT_OPTIONS_NONE, taskCtx.GetAddressOf()))) return;
-
-            D2D1_BITMAP_PROPERTIES1 bmpProps = {};
-            bmpProps.pixelFormat = D2D1::PixelFormat(DXGI_FORMAT_B8G8R8A8_UNORM, D2D1_ALPHA_MODE_PREMULTIPLIED);
-            bmpProps.dpiX = app.dpiScale * 96.0f;
-            bmpProps.dpiY = app.dpiScale * 96.0f;
-
-            Microsoft::WRL::ComPtr<ID2D1Bitmap1> thumbBitmap;
-            if (FAILED(taskCtx->CreateBitmapFromWicBitmap(uploadSource, &bmpProps, &thumbBitmap))) return;
-
-            {
-                std::lock_guard<std::mutex> lock(m_dirThumbMutex);
-                auto &entry = m_panelThumbCaches[hDir];
-                entry.inFlight.erase(filePath);
-                if (!entry.bitmaps.count(filePath))
-                    entry.bitmaps[filePath] = thumbBitmap;
-            }
-            PostMessageW(hDir, Constants::WM_QIV_REPAINT, 0, 0);
-        });
+        PostMessageW(hDir, Constants::WM_QIV_REPAINT, 0, 0);
     });
 }
