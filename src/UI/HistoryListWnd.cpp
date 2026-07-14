@@ -2,6 +2,7 @@
 #include "../Platform/Constants.h"
 #include "../Platform/ConstantsStrings.h"
 #include "../Platform/FileHandler.h"
+#include "../Platform/RegistrySetup.h"
 #include "../Overlays/OverlayManager.h"
 #include "../AppState.h"
 #include "../Input/Shortcuts.h"
@@ -1015,10 +1016,8 @@ namespace UI {
 
                         // QIV→dir link — blue underlined, clickable, left of file size
                         {
-                            wchar_t exeBuf[MAX_PATH] = {};
-                            GetModuleFileNameW(nullptr, exeBuf, MAX_PATH);
                             std::wstring linkText = L"QIV.exe/path="
-                                                    + std::filesystem::path(exeBuf).parent_path().wstring() + L"\\";
+                                                    + std::filesystem::path(System::GetExePathW()).parent_path().wstring() + L"\\";
 
                             HFONT hLinkFont = CreateFontW(
                                     fontSize, 0, 0, 0, FW_NORMAL, FALSE, TRUE, FALSE,
@@ -1248,9 +1247,7 @@ namespace UI {
                 if (g_exeLinkRect.right > g_exeLinkRect.left) {
                     POINT pt = {mx, my};
                     if (PtInRect(&g_exeLinkRect, pt)) {
-                        wchar_t exeBuf[MAX_PATH] = {};
-                        GetModuleFileNameW(nullptr, exeBuf, MAX_PATH);
-                        std::wstring dir = std::filesystem::path(exeBuf).parent_path().wstring();
+                        std::wstring dir = std::filesystem::path(System::GetExePathW()).parent_path().wstring();
                         ShellExecuteW(nullptr, L"open", dir.c_str(), nullptr, nullptr, SW_SHOW);
                         return 0;
                     }
