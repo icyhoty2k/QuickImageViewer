@@ -294,6 +294,21 @@ namespace UI {
         return historyFoldersManager.folderHistory;
     }
 
+    static std::vector<std::wstring> g_navSnap;
+    static int g_navSnapVersion = 0;
+
+    void CaptureNavigationSnapshot() {
+        if (g_displayList.empty())
+            BuildDisplayList();
+        g_navSnap.clear();
+        g_navSnap.reserve(g_displayList.size());
+        for (const auto &e : g_displayList)
+            g_navSnap.push_back(e.path);
+        ++g_navSnapVersion;
+    }
+    const std::vector<std::wstring> &GetNavigationSnapshot() { return g_navSnap; }
+    int GetNavigationSnapshotVersion() { return g_navSnapVersion; }
+
     // ---------------------------------------------------------------------------
     // GetHistoryWindowBounds  —  centered on the parent's monitor
     // ---------------------------------------------------------------------------
@@ -321,6 +336,35 @@ namespace UI {
         h = std::clamp(std::min(totalH, static_cast<int>(monH * 0.80f)), minH, std::min(maxH, static_cast<int>(monH * 0.80f)));
         x = monX + (monW - w) / 2;
         y = monY + (monH - h) / 2;
+    }
+
+    void ToggleHistoryFull() {
+        auto &histWnd = uiManager.getHistoryListWindow();
+        if (!histWnd.GetHwnd()) return;
+        if (IsWindowVisible(histWnd.GetHwnd())) {
+            if (g_showFullHistory) {
+                histWnd.Hide();
+            } else {
+                g_showFullHistory = true;
+                g_scrollOffsetY = 0;
+                BuildDisplayList();
+                CaptureNavigationSnapshot();
+                g_hoverRow = 0;
+                InvalidateRect(histWnd.GetHwnd(), nullptr, TRUE);
+            }
+        } else {
+            g_showFullHistory = true;
+            BuildDisplayList();
+            CaptureNavigationSnapshot();
+            int x, y, w, h;
+            GetHistoryWindowBounds(g_hHistOwner ? g_hHistOwner : histWnd.GetHwnd(), x, y, w, h);
+            SetWindowPos(histWnd.GetHwnd(), HWND_TOPMOST, x, y, w, h, SWP_FRAMECHANGED);
+            g_hoverRow = 0;
+            g_scrollOffsetY = 0;
+            ShowWindow(histWnd.GetHwnd(), SW_SHOW);
+            SetForegroundWindow(histWnd.GetHwnd());
+            InvalidateRect(histWnd.GetHwnd(), nullptr, TRUE);
+        }
     }
 
     // ---------------------------------------------------------------------------
@@ -1098,8 +1142,9 @@ namespace UI {
                 // Check Ctrl+Tab first (toggle full history view)
                 if (wParam == VK_TAB && ctrl) {
                     g_showFullHistory = !g_showFullHistory;
-                    g_scrollOffsetY = 0; // Reset scroll when toggling
+                    g_scrollOffsetY = 0;
                     BuildDisplayList();
+                    CaptureNavigationSnapshot();
                     g_hoverRow = 0;
                     InvalidateRect(m_hWnd, nullptr, TRUE);
                     return 0;
@@ -1335,6 +1380,7 @@ namespace UI {
         if (!m_hWnd) return;
         g_showFullHistory = false; // Always start with limited view
         BuildDisplayList();
+        CaptureNavigationSnapshot();
         int x, y, w, h;
         GetHistoryWindowBounds(g_hHistOwner ? g_hHistOwner : m_hWnd, x, y, w, h);
         SetWindowPos(m_hWnd, HWND_TOPMOST, x, y, w, h, SWP_FRAMECHANGED);

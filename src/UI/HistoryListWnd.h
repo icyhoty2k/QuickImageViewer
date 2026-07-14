@@ -70,4 +70,15 @@ namespace UI {
     // Result is cached per BuildDisplayList cycle — safe to call from paint or navigation.
     bool IsFolderValidForViewer(const std::wstring &folderPath);
 
+    // Open the history panel showing the full (uncapped) list.
+    // Equivalent to Tab then Ctrl+Tab — used from the main app via Ctrl+Tab.
+    void ToggleHistoryFull();
+
+    // Horizontal-scroll navigation snapshot — taken from the raw backing array,
+    // not the capped display list. Call CaptureNavigationSnapshot() to refresh;
+    // version increments on each capture so callers can detect a change.
+    void CaptureNavigationSnapshot();
+    const std::vector<std::wstring> &GetNavigationSnapshot();
+    int GetNavigationSnapshotVersion();
+
 } // namespace UI

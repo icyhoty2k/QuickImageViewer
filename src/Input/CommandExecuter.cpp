@@ -280,6 +280,10 @@ void InputManager::ExecuteKeyboardShortcutCommand(HWND hWnd, Command cmd) {
             uiManager.Toggle(uiManager.getHistoryListWindow());
             break;
 
+        case Command::ToggleHistoryFull:
+            UI::ToggleHistoryFull();
+            break;
+
         // ── Cycle overlay layout mode (O) ────────────────────────────────────
         case Command::CycleOverlayLayout: {
             int &mode = Constants::Overlay::OVERLAY_LAYOUT_MODE;
