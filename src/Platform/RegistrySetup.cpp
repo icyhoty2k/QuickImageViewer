@@ -156,4 +156,19 @@ namespace System {
         RegGetValueW(Constants::Registry::ROOT_HIVE, Constants::Registry::ROOT_KEY, valueName,
                      RRF_RT_REG_SZ, nullptr, buffer, &size);
     }
+
+    std::wstring LoadStringSetting(const wchar_t *valueName) {
+        DWORD size = 0;
+        if (RegGetValueW(Constants::Registry::ROOT_HIVE, Constants::Registry::ROOT_KEY, valueName,
+                         RRF_RT_REG_SZ, nullptr, nullptr, &size) != ERROR_SUCCESS || size == 0)
+            return {};
+        std::wstring result(size / sizeof(wchar_t), L'\0');
+        if (RegGetValueW(Constants::Registry::ROOT_HIVE, Constants::Registry::ROOT_KEY, valueName,
+                         RRF_RT_REG_SZ, nullptr, result.data(), &size) != ERROR_SUCCESS)
+            return {};
+        // RegGetValueW includes the null terminator in size; trim it
+        while (!result.empty() && result.back() == L'\0')
+            result.pop_back();
+        return result;
+    }
 }

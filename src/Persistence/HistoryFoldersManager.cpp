@@ -4,6 +4,7 @@
 #include <filesystem>
 #include <fstream>
 #include "../AppState.h"
+#include "../Platform/RegistrySetup.h"
 
 namespace fs = std::filesystem;
 
@@ -24,12 +25,9 @@ static const std::wstring& ActiveHistoryFileName(const HistoryFoldersManager& mg
 
 // Returns (creating if needed) the QivBackup folder next to the executable.
 static fs::path GetBackupDir() {
-    wchar_t buffer[MAX_PATH];
-    DWORD size = GetModuleFileNameW(nullptr, buffer, MAX_PATH);
-
-    fs::path exeDir = (size == 0 || size == MAX_PATH)
-                          ? fs::current_path()
-                          : fs::path(buffer).parent_path();
+    std::wstring exePath = System::GetExePathW();
+    fs::path exeDir = exePath.empty() ? fs::current_path()
+                                      : fs::path(exePath).parent_path();
 
     // Strip leading slash from the constant (it is stored as L"/QivBackup")
     std::wstring folderName = Constants::History::HISTORY_FAVORITES_BACKUP_FOLDER;
@@ -78,13 +76,11 @@ static void WriteBackupHeader(std::wofstream &f, const SYSTEMTIME &st) {
 // GetFilePath  —  full path to qivHistory.txt next to the executable
 // ---------------------------------------------------------------------------
 std::wstring HistoryFoldersManager::GetFilePath() const {
-    wchar_t buffer[MAX_PATH];
-    DWORD size = GetModuleFileNameW(nullptr, buffer, MAX_PATH);
+    std::wstring exePath = System::GetExePathW();
+    if (exePath.empty())
+        return ActiveHistoryFileName(*this);
 
-    if (size == 0 || size == MAX_PATH)
-        return ActiveHistoryFileName(*this); // fallback: relative to CWD
-
-    fs::path appDir = fs::path(buffer).parent_path();
+    fs::path appDir = fs::path(exePath).parent_path();
 
     if (!historyFolderName.empty()) {
         appDir /= historyFolderName;
@@ -99,13 +95,11 @@ std::wstring HistoryFoldersManager::GetFilePath() const {
 // GetFavoritesFilePath  —  full path to qivFavorites.txt next to the executable
 // ---------------------------------------------------------------------------
 std::wstring HistoryFoldersManager::GetFavoritesFilePath() const {
-    wchar_t buffer[MAX_PATH];
-    DWORD size = GetModuleFileNameW(nullptr, buffer, MAX_PATH);
-
-    if (size == 0 || size == MAX_PATH)
+    std::wstring exePath = System::GetExePathW();
+    if (exePath.empty())
         return favoritesFileName;
 
-    fs::path appDir = fs::path(buffer).parent_path();
+    fs::path appDir = fs::path(exePath).parent_path();
 
     if (!historyFolderName.empty()) {
         appDir /= historyFolderName;

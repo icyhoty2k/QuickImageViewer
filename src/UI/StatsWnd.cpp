@@ -1,6 +1,7 @@
 #include "StatsWnd.h"
 #include "../AppState.h"
 #include "../Platform/Constants.h"
+#include "../Platform/RegistrySetup.h"
 #include "../WorkerThread.h"
 #include "../Renderer/IRenderer.h"
 #include "../ImageLoadStats.h"
@@ -83,9 +84,11 @@ void StatsWnd::GatherStats() {
     m_cacheTotalCount = 0;
     m_thumbCachePath.clear();
 
-    wchar_t localAppData[MAX_PATH] = {};
-    if (GetEnvironmentVariableW(L"LOCALAPPDATA", localAppData, MAX_PATH) > 0) {
-        m_thumbCachePath = std::wstring(localAppData) + L"\\Microsoft\\Windows\\Explorer";
+    DWORD needed = GetEnvironmentVariableW(L"LOCALAPPDATA", nullptr, 0);
+    std::wstring localAppData(needed > 0 ? needed : 1, L'\0');
+    if (needed > 0 && GetEnvironmentVariableW(L"LOCALAPPDATA", localAppData.data(), needed) > 0) {
+        localAppData.resize(needed - 1); // trim null terminator
+        m_thumbCachePath = localAppData + L"\\Microsoft\\Windows\\Explorer";
         std::wstring pattern = m_thumbCachePath + L"\\thumbcache_*.db";
         WIN32_FIND_DATAW fd;
         HANDLE hFind = FindFirstFileW(pattern.c_str(), &fd);
@@ -174,9 +177,7 @@ void StatsWnd::GatherStats() {
     }
 
     // ── Exe path ──────────────────────────────────────────────────────────────
-    wchar_t exeBuf[MAX_PATH] = {};
-    GetModuleFileNameW(nullptr, exeBuf, MAX_PATH);
-    m_exePath = exeBuf;
+    m_exePath = System::GetExePathW();
 
     // ── Renderer name ─────────────────────────────────────────────────────────
     m_rendererName = (app.renderer) ? app.renderer->GetName() : L"None";
@@ -188,14 +189,17 @@ void StatsWnd::GatherStats() {
         HKEY hk = nullptr;
         if (RegOpenKeyExW(HKEY_CURRENT_USER, Constants::Registry::RUN_KEY, 0,
                           KEY_QUERY_VALUE, &hk) == ERROR_SUCCESS) {
-            wchar_t val[MAX_PATH * 2] = {};
-            DWORD   sz   = sizeof(val);
-            DWORD   type = 0;
+            DWORD sz = 0, type = 0;
             if (RegQueryValueExW(hk, Constants::Registry::RUN_VALUE_NAME,
-                                 nullptr, &type,
-                                 reinterpret_cast<BYTE*>(val), &sz) == ERROR_SUCCESS) {
-                m_autostartEnabled = true;
-                m_autostartCmd     = val;
+                                 nullptr, &type, nullptr, &sz) == ERROR_SUCCESS && sz > 0) {
+                std::wstring val(sz / sizeof(wchar_t), L'\0');
+                if (RegQueryValueExW(hk, Constants::Registry::RUN_VALUE_NAME,
+                                     nullptr, &type,
+                                     reinterpret_cast<BYTE*>(val.data()), &sz) == ERROR_SUCCESS) {
+                    while (!val.empty() && val.back() == L'\0') val.pop_back();
+                    m_autostartEnabled = true;
+                    m_autostartCmd     = std::move(val);
+                }
             }
             RegCloseKey(hk);
         }

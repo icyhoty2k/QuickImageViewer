@@ -47,13 +47,13 @@ void AppCommands::SaveImageToDisk(HWND hWnd) {
     ofn.lpstrTitle = L"Save image with effects";
     ofn.Flags = OFN_OVERWRITEPROMPT | OFN_PATHMUSTEXIST | OFN_NOCHANGEDIR;
 
-    wchar_t initDir[MAX_PATH] = {};
+    std::wstring initDir;
     {
         size_t slash = srcPath.find_last_of(L"\\/");
         if (slash != std::wstring::npos)
-            wcsncpy_s(initDir, srcPath.substr(0, slash).c_str(), _TRUNCATE);
+            initDir = srcPath.substr(0, slash);
     }
-    ofn.lpstrInitialDir = initDir;
+    ofn.lpstrInitialDir = initDir.empty() ? nullptr : initDir.c_str();
 
     if (GetSaveFileNameW(&ofn)) {
         HRESULT hr = app.renderer->SaveCurrentImageWithEffects(outBuf);

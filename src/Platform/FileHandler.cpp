@@ -275,13 +275,9 @@ void OpenInitialImage(HWND hWnd) {
     ofn.nMaxFile = Constants::MAX_FILE_PATH;
     ofn.Flags = OFN_EXPLORER | OFN_PATHMUSTEXIST | OFN_FILEMUSTEXIST;
 
-    wchar_t lastFolder[MAX_PATH] = {};
-    System::LoadStringSetting(Constants::Registry::LAST_FOLDER,
-                              lastFolder,
-                              MAX_PATH);
-
-    if (lastFolder[0] != L'\0')
-        ofn.lpstrInitialDir = lastFolder;
+    std::wstring lastFolder = System::LoadStringSetting(Constants::Registry::LAST_FOLDER);
+    if (!lastFolder.empty())
+        ofn.lpstrInitialDir = lastFolder.c_str();
 
     const BOOL result = GetOpenFileNameW(&ofn);
 
