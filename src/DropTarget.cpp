@@ -1,6 +1,7 @@
 #include "../DropTarget.h"
-#include "Platform/FileHandler.h"
+#include "Platform/Constants.h"
 #include <shlobj.h>
+#include <string>
 
 HRESULT __stdcall DropTarget::QueryInterface(REFIID iid, void** ppvObject) {
     if (iid == IID_IDropTarget || iid == IID_IUnknown) {
@@ -33,11 +34,12 @@ HRESULT __stdcall DropTarget::Drop(IDataObject* pDataObj, DWORD, POINTL, DWORD* 
     if (SUCCEEDED(pDataObj->GetData(&fmte, &stgm))) {
         HDROP hDrop = (HDROP)stgm.hGlobal;
         wchar_t szFile[MAX_PATH];
-        DragQueryFileW(hDrop, 0, szFile, MAX_PATH);
-        
-        // Pass the dropped file to your existing image loader
-        OpenSpecificImage(m_hWnd, szFile);
-        
+        if (DragQueryFileW(hDrop, 0, szFile, MAX_PATH)) {
+            // Post asynchronously so the drag animation is released immediately.
+            // WM_QIV_OPEN_FILE handler owns the pointer and deletes it.
+            PostMessageW(m_hWnd, Constants::WM_QIV_OPEN_FILE, 0,
+                         reinterpret_cast<LPARAM>(new std::wstring(szFile)));
+        }
         DragFinish(hDrop);
         ReleaseStgMedium(&stgm);
     }

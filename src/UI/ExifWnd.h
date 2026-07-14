@@ -11,6 +11,10 @@ namespace UI {
         void Init(HINSTANCE hInstance, HWND hParent) override;
         void Init(HINSTANCE hInstance, HWND hParent, int8_t position) override;
         void Show() override;
+        ~ExifWnd() {
+            if (m_hFontNorm) { DeleteObject(m_hFontNorm); m_hFontNorm = nullptr; }
+            if (m_hFontBold) { DeleteObject(m_hFontBold); m_hFontBold = nullptr; }
+        }
         // Called when the displayed image changes while the window is open.
         // Queues EXIF reading on the IO thread — zero UI-thread cost.
         void Refresh();
@@ -49,5 +53,10 @@ namespace UI {
         RECT  m_moveStartRect      = {};
         int   m_anchorRow          = -1;
         std::set<int> m_selectedRows;
+
+        // Cached GDI fonts — recreated only when DPI changes
+        HFONT m_hFontNorm    = nullptr;
+        HFONT m_hFontBold    = nullptr;
+        UINT  m_cachedFontDpi = 0;
     };
 } // namespace UI

@@ -168,8 +168,9 @@ namespace Constants {
 
     // Custom window messages
     constexpr UINT WM_QIV_PENDING_UPLOADS = WM_USER + 1; // Posted by background decoder thread
-    constexpr UINT WM_QIV_REPAINT = WM_USER + 2; // Signal to UI thread that bitmap is ready
-    constexpr UINT WM_QIV_SVG_READY = WM_USER + 3; // Posted by IO thread when SVG bytes are loaded
+    constexpr UINT WM_QIV_REPAINT        = WM_USER + 2; // Signal to UI thread that bitmap is ready
+    constexpr UINT WM_QIV_SVG_READY      = WM_USER + 3; // Posted by IO thread when SVG bytes are loaded
+    constexpr UINT WM_QIV_OPEN_FILE      = WM_USER + 4; // Posted by DropTarget/WM_COPYDATA; LPARAM = new std::wstring*
     // =============================================================================
 
 

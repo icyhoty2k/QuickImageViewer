@@ -179,6 +179,10 @@ static void Load() {
 // ---------------------------------------------------------------------------
 // Public API
 // ---------------------------------------------------------------------------
+void WarmUp() {
+    std::call_once(s_loadOnce, Load);
+}
+
 Location Lookup(double lat, double lon) {
     std::call_once(s_loadOnce, Load);
     if (s_cities.empty()) return {};

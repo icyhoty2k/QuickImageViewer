@@ -233,10 +233,14 @@ ExifWnd::ExifResult ExifWnd::GatherExifData(
         addRow(L"Type", extUp);
     }
 
-    if (!app.wicFactory) return result;
+    // Create a thread-local WIC factory — the g_ioWorker thread is MTA, so using
+    // app.wicFactory (STA, owned by the UI thread) from here is a COM violation.
+    ComPtr<IWICImagingFactory> wicFactory;
+    if (FAILED(CoCreateInstance(CLSID_WICImagingFactory, nullptr, CLSCTX_INPROC_SERVER,
+            IID_PPV_ARGS(&wicFactory)))) return result;
 
     ComPtr<IWICBitmapDecoder> decoder;
-    if (FAILED(app.wicFactory->CreateDecoderFromFilename(
+    if (FAILED(wicFactory->CreateDecoderFromFilename(
             path.c_str(), nullptr, GENERIC_READ,
             WICDecodeMetadataCacheOnDemand, &decoder))) return result;
 
@@ -568,13 +572,18 @@ LRESULT ExifWnd::HandlePanelMessage(UINT message, WPARAM wParam, LPARAM lParam) 
 
         SetBkMode(hdc, TRANSPARENT);
 
-        HFONT hFNorm = CreateFontW(-fSize,  0, 0, 0, FW_NORMAL, FALSE, FALSE, FALSE,
-            DEFAULT_CHARSET, OUT_OUTLINE_PRECIS, CLIP_DEFAULT_PRECIS, CLEARTYPE_QUALITY,
-            VARIABLE_PITCH, L"Segoe UI");
-        HFONT hFBold = CreateFontW(-sfSize, 0, 0, 0, FW_BOLD, FALSE, FALSE, FALSE,
-            DEFAULT_CHARSET, OUT_OUTLINE_PRECIS, CLIP_DEFAULT_PRECIS, CLEARTYPE_QUALITY,
-            VARIABLE_PITCH, L"Segoe UI");
-        HFONT hOld = static_cast<HFONT>(SelectObject(hdc, hFNorm));
+        if (dpi != m_cachedFontDpi) {
+            if (m_hFontNorm) { DeleteObject(m_hFontNorm); m_hFontNorm = nullptr; }
+            if (m_hFontBold) { DeleteObject(m_hFontBold); m_hFontBold = nullptr; }
+            m_hFontNorm = CreateFontW(-fSize,  0, 0, 0, FW_NORMAL, FALSE, FALSE, FALSE,
+                DEFAULT_CHARSET, OUT_OUTLINE_PRECIS, CLIP_DEFAULT_PRECIS, CLEARTYPE_QUALITY,
+                VARIABLE_PITCH, L"Segoe UI");
+            m_hFontBold = CreateFontW(-sfSize, 0, 0, 0, FW_BOLD, FALSE, FALSE, FALSE,
+                DEFAULT_CHARSET, OUT_OUTLINE_PRECIS, CLIP_DEFAULT_PRECIS, CLEARTYPE_QUALITY,
+                VARIABLE_PITCH, L"Segoe UI");
+            m_cachedFontDpi = dpi;
+        }
+        HFONT hOld = static_cast<HFONT>(SelectObject(hdc, m_hFontNorm));
 
         const int cTop = pad;
         const int cBot = rc.bottom - pad;
@@ -656,7 +665,7 @@ LRESULT ExifWnd::HandlePanelMessage(UINT message, WPARAM wParam, LPARAM lParam) 
                     wchar_t sizeText[32];
                     swprintf_s(sizeText, L"%d × %d", m_thumbW, m_thumbH);
                     RECT szR = { thumbX, szY, thumbX + dstW, szY + rowH };
-                    SelectObject(hdc, hFNorm);
+                    SelectObject(hdc, m_hFontNorm);
                     SetTextColor(hdc, clrVal);
                     DrawTextW(hdc, sizeText, -1, &szR, DT_CENTER | DT_SINGLELINE | DT_VCENTER);
                 }
@@ -673,13 +682,13 @@ LRESULT ExifWnd::HandlePanelMessage(UINT message, WPARAM wParam, LPARAM lParam) 
                 FillRect(hdc, &sr, hSBr);
                 DeleteObject(hSBr);
 
-                SelectObject(hdc, hFBold);
+                SelectObject(hdc, m_hFontBold);
                 SetTextColor(hdc, clrSect);
                 RECT tr = { pad, y, cR, y + sectH };
                 DrawTextW(hdc, row.label.c_str(), -1, &tr, DT_LEFT | DT_VCENTER | DT_SINGLELINE);
                 y += sectH + gap;
             } else {
-                SelectObject(hdc, hFNorm);
+                SelectObject(hdc, m_hFontNorm);
                 SetTextColor(hdc, clrLbl);
                 RECT lr = { pad, y, pad + labelW, y + rowH };
                 DrawTextW(hdc, row.label.c_str(), -1, &lr, DT_LEFT | DT_VCENTER | DT_SINGLELINE);
@@ -718,8 +727,7 @@ LRESULT ExifWnd::HandlePanelMessage(UINT message, WPARAM wParam, LPARAM lParam) 
         }
 
         SelectObject(hdc, hOld);
-        DeleteObject(hFNorm);
-        DeleteObject(hFBold);
+        // Fonts are cached members — not deleted here
         EndPaint(m_hWnd, &ps);
         return 0;
     }
