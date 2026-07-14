@@ -127,5 +127,6 @@ namespace UI {
         protected:
             HWND m_hOwner = nullptr;
             int8_t m_position = 0;
+            bool m_sourceDirty = true;
     };
 } // namespace UI
