@@ -18,11 +18,18 @@ namespace UI {
         static constexpr int MAX_QUERY    = 200;
         static constexpr int VISIBLE_ROWS = 8;
 
-        wchar_t          m_query[MAX_QUERY + 2] = {};
-        int              m_queryLen  = 0;
-        std::vector<int> m_matches;    // indices into app.playlist
-        int              m_selIdx    = 0;   // selected row in m_matches
-        int              m_rowScroll = 0;   // first visible row index in m_matches
+        struct MatchResult {
+            int playlistIdx;
+            int score;
+            int positions[MAX_QUERY]; // matched char positions in filename
+            int posCount;
+        };
+
+        wchar_t                  m_query[MAX_QUERY + 2] = {};
+        int                      m_queryLen  = 0;
+        std::vector<MatchResult> m_results;
+        int                      m_selIdx    = 0;
+        int                      m_rowScroll = 0;
 
         void RebuildMatches();
         void CommitOpen();

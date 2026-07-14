@@ -30,7 +30,7 @@ void FindWnd::Show() {
     m_query[0]  = L'\0';
     m_selIdx    = 0;
     m_rowScroll = 0;
-    m_matches.clear();
+    m_results.clear();
 
     RECT pr; GetWindowRect(m_hParent, &pr);
     RECT wr; GetWindowRect(m_hWnd,    &wr);
@@ -49,7 +49,7 @@ void FindWnd::Show() {
 // =============================================================================
 
 void FindWnd::RebuildMatches() {
-    m_matches.clear();
+    m_results.clear();
     m_selIdx    = 0;
     m_rowScroll = 0;
 
@@ -62,28 +62,55 @@ void FindWnd::RebuildMatches() {
     for (int i = 0; lq[i]; ++i) lq[i] = static_cast<wchar_t>(towlower(lq[i]));
 
     wchar_t lname[512];
+    MatchResult r;
     for (int i = 0; i < static_cast<int>(app.playlist.size()); ++i) {
         const std::wstring &path = app.playlist[i];
 
-        // Extract filename only
         auto sep = path.rfind(L'\\');
         const wchar_t *name = (sep == std::wstring::npos)
                               ? path.c_str() : path.c_str() + sep + 1;
 
-        // Lowercase filename
-        int j = 0;
-        while (name[j] && j < 511) { lname[j] = static_cast<wchar_t>(towlower(name[j])); ++j; }
-        lname[j] = L'\0';
+        int nameLen = 0;
+        while (name[nameLen] && nameLen < 511) {
+            lname[nameLen] = static_cast<wchar_t>(towlower(name[nameLen]));
+            ++nameLen;
+        }
+        lname[nameLen] = L'\0';
 
-        if (wcsstr(lname, lq)) m_matches.push_back(i);
+        // Fuzzy subsequence match
+        int ni = 0, qi = 0, pi = 0;
+        while (ni < nameLen && qi < m_queryLen) {
+            if (lname[ni] == lq[qi]) { r.positions[pi++] = ni; ++qi; }
+            ++ni;
+        }
+        if (qi < m_queryLen) continue; // not all query chars found
+
+        // Score: consecutive runs, word-boundary hits, start bonus, span penalty
+        int score = 0;
+        if (r.positions[0] == 0) score += 8;
+        for (int k = 0; k < pi; ++k) {
+            if (k > 0 && r.positions[k] == r.positions[k - 1] + 1) score += 10;
+            if (r.positions[k] > 0) {
+                wchar_t prev = lname[r.positions[k] - 1];
+                if (prev == L'_' || prev == L'-' || prev == L'.' || prev == L' ')
+                    score += 4;
+            }
+        }
+        score -= (r.positions[pi - 1] - r.positions[0]);
+
+        r.playlistIdx = i;
+        r.score       = score;
+        r.posCount    = pi;
+        m_results.push_back(r);
     }
+
+    std::sort(m_results.begin(), m_results.end(),
+              [](const MatchResult &a, const MatchResult &b) { return a.score > b.score; });
 }
 
 void FindWnd::AdjustScroll() {
-    if (m_matches.empty()) return;
-    // Clamp selection
-    m_selIdx = std::max(0, std::min(m_selIdx, static_cast<int>(m_matches.size()) - 1));
-    // Scroll so selection is within the visible window
+    if (m_results.empty()) return;
+    m_selIdx = std::max(0, std::min(m_selIdx, static_cast<int>(m_results.size()) - 1));
     if (m_selIdx < m_rowScroll)
         m_rowScroll = m_selIdx;
     if (m_selIdx >= m_rowScroll + VISIBLE_ROWS)
@@ -91,8 +118,8 @@ void FindWnd::AdjustScroll() {
 }
 
 void FindWnd::CommitOpen() {
-    if (m_matches.empty()) return;
-    int playlistIdx = m_matches[m_selIdx];
+    if (m_results.empty()) return;
+    int playlistIdx = m_results[m_selIdx].playlistIdx;
     Hide();
     LoadImageIndex(m_hParent, playlistIdx);
     InvalidateRect(m_hParent, nullptr, FALSE);
@@ -123,7 +150,7 @@ bool FindWnd::OnKeyDown(WPARAM vk, bool ctrl, bool shift, bool alt) {
             return true;
 
         case VK_UP:
-            if (!m_matches.empty()) {
+            if (!m_results.empty()) {
                 --m_selIdx;
                 AdjustScroll();
                 InvalidateRect(m_hWnd, nullptr, FALSE);
@@ -131,7 +158,7 @@ bool FindWnd::OnKeyDown(WPARAM vk, bool ctrl, bool shift, bool alt) {
             return true;
 
         case VK_DOWN:
-            if (!m_matches.empty()) {
+            if (!m_results.empty()) {
                 ++m_selIdx;
                 AdjustScroll();
                 InvalidateRect(m_hWnd, nullptr, FALSE);
@@ -139,7 +166,7 @@ bool FindWnd::OnKeyDown(WPARAM vk, bool ctrl, bool shift, bool alt) {
             return true;
 
         case VK_PRIOR:
-            if (!m_matches.empty()) {
+            if (!m_results.empty()) {
                 m_selIdx -= VISIBLE_ROWS;
                 AdjustScroll();
                 InvalidateRect(m_hWnd, nullptr, FALSE);
@@ -147,7 +174,7 @@ bool FindWnd::OnKeyDown(WPARAM vk, bool ctrl, bool shift, bool alt) {
             return true;
 
         case VK_NEXT:
-            if (!m_matches.empty()) {
+            if (!m_results.empty()) {
                 m_selIdx += VISIBLE_ROWS;
                 AdjustScroll();
                 InvalidateRect(m_hWnd, nullptr, FALSE);
@@ -287,30 +314,23 @@ LRESULT FindWnd::HandlePanelMessage(UINT message, WPARAM wParam, LPARAM lParam) 
         const int listTop = y;
 
         if (m_queryLen == 0) {
-            // No query yet — placeholder
             SetTextColor(hdc, clrDim);
             RECT r = { pad, y, rc.right - pad, y + rowH * VISIBLE_ROWS };
             DrawTextW(hdc, L"Start typing to filter by filename", -1, &r,
                       DT_CENTER | DT_VCENTER | DT_SINGLELINE);
-        } else if (m_matches.empty()) {
+        } else if (m_results.empty()) {
             SetTextColor(hdc, clrOrange);
             RECT r = { pad, y, rc.right - pad, y + rowH };
             DrawTextW(hdc, L"No matches", -1, &r, DT_CENTER | DT_VCENTER | DT_SINGLELINE);
         } else {
-            // Pre-compute lowercase query once for all rows
-            wchar_t lq[MAX_QUERY + 2];
-            wcsncpy_s(lq, m_query, m_queryLen);
-            lq[m_queryLen] = L'\0';
-            for (int k = 0; lq[k]; ++k) lq[k] = static_cast<wchar_t>(towlower(lq[k]));
-
-            // Measure font height once for vertical centering with TextOutW
             TEXTMETRIC tm;
             GetTextMetrics(hdc, &tm);
 
-            int visible = std::min(VISIBLE_ROWS, static_cast<int>(m_matches.size()) - m_rowScroll);
+            int visible = std::min(VISIBLE_ROWS, static_cast<int>(m_results.size()) - m_rowScroll);
             for (int i = 0; i < visible; ++i) {
-                int matchIdx = m_rowScroll + i;
-                bool selected = (matchIdx == m_selIdx);
+                int ri = m_rowScroll + i;
+                bool selected = (ri == m_selIdx);
+                const MatchResult &mr = m_results[ri];
 
                 if (selected) {
                     HBRUSH selBrush = CreateSolidBrush(clrSelBg);
@@ -319,51 +339,37 @@ LRESULT FindWnd::HandlePanelMessage(UINT message, WPARAM wParam, LPARAM lParam) 
                     DeleteObject(selBrush);
                 }
 
-                // Extract filename from full path
-                const std::wstring &fullPath = app.playlist[m_matches[matchIdx]];
+                const std::wstring &fullPath = app.playlist[mr.playlistIdx];
                 auto sep = fullPath.rfind(L'\\');
                 const wchar_t *fname = (sep == std::wstring::npos)
                                        ? fullPath.c_str() : fullPath.c_str() + sep + 1;
                 int fnameLen = static_cast<int>(wcslen(fname));
 
-                // Find match position in original filename
-                wchar_t lf[512];
-                int fl = 0;
-                while (fname[fl] && fl < 511) { lf[fl] = static_cast<wchar_t>(towlower(fname[fl])); ++fl; }
-                lf[fl] = L'\0';
-                const wchar_t *hit = wcsstr(lf, lq);
-                int matchStart = hit ? static_cast<int>(hit - lf) : -1;
+                // Build highlight map from fuzzy match positions
+                bool isHL[512] = {};
+                for (int k = 0; k < mr.posCount; ++k)
+                    if (mr.positions[k] < 512) isHL[mr.positions[k]] = true;
 
-                // Vertically centred baseline
                 int textX = pad + (selected ? pad / 2 : 0);
                 int textY = y + (rowH - tm.tmHeight) / 2;
-                RECT clip  = { textX, y, rc.right - pad, y + rowH };
-
+                RECT clip = { textX, y, rc.right - pad, y + rowH };
                 const COLORREF clrBase = selected ? clrSelText : clrRowText;
-                SIZE sz;
 
-                if (matchStart < 0) {
-                    SetTextColor(hdc, clrBase);
-                    ExtTextOutW(hdc, textX, textY, ETO_CLIPPED, &clip, fname, fnameLen, nullptr);
-                } else {
-                    // Prefix
-                    if (matchStart > 0) {
-                        SetTextColor(hdc, clrBase);
-                        ExtTextOutW(hdc, textX, textY, ETO_CLIPPED, &clip, fname, matchStart, nullptr);
-                        GetTextExtentPoint32W(hdc, fname, matchStart, &sz);
-                        textX += sz.cx;
-                    }
-                    // Highlighted match chars
-                    SetTextColor(hdc, clrYellow);
-                    ExtTextOutW(hdc, textX, textY, ETO_CLIPPED, &clip, fname + matchStart, m_queryLen, nullptr);
-                    GetTextExtentPoint32W(hdc, fname + matchStart, m_queryLen, &sz);
-                    textX += sz.cx;
-                    // Suffix
-                    int suffixStart = matchStart + m_queryLen;
-                    if (suffixStart < fnameLen) {
-                        SetTextColor(hdc, clrBase);
+                // Draw segments: batch consecutive chars of the same color
+                int segStart = 0;
+                bool segHL = (fnameLen > 0) && isHL[0];
+                for (int ci = 1; ci <= fnameLen; ++ci) {
+                    bool curHL = (ci < fnameLen) && isHL[ci];
+                    if (curHL != segHL || ci == fnameLen) {
+                        int segLen = ci - segStart;
+                        SetTextColor(hdc, segHL ? clrYellow : clrBase);
                         ExtTextOutW(hdc, textX, textY, ETO_CLIPPED, &clip,
-                                    fname + suffixStart, fnameLen - suffixStart, nullptr);
+                                    fname + segStart, segLen, nullptr);
+                        SIZE sz;
+                        GetTextExtentPoint32W(hdc, fname + segStart, segLen, &sz);
+                        textX += sz.cx;
+                        segStart = ci;
+                        segHL = curHL;
                     }
                 }
 
@@ -387,9 +393,9 @@ LRESULT FindWnd::HandlePanelMessage(UINT message, WPARAM wParam, LPARAM lParam) 
         // ── Hint / count row ──────────────────────────────────────────────────
         {
             wchar_t hint[128];
-            if (!m_matches.empty()) {
+            if (!m_results.empty()) {
                 swprintf_s(hint, L"%d / %d    ↑↓ select  •  Enter open  •  Esc cancel",
-                           m_selIdx + 1, static_cast<int>(m_matches.size()));
+                           m_selIdx + 1, static_cast<int>(m_results.size()));
             } else if (m_queryLen > 0) {
                 wcscpy_s(hint, L"No matches  •  Esc cancel");
             } else {

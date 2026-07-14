@@ -47,6 +47,7 @@ set(SOURCES
         src/UI/UIManager.cpp
         src/Overlays/OverlayManager.cpp
         src/UI/ThumbnailPanelWnd.cpp
+        src/UI/FindWnd.cpp
         src/Persistence/HistoryFoldersManager.cpp
         src/CMDArgs.cpp
         src/SlideshowTransitions.cpp

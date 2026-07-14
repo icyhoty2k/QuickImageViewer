@@ -33,12 +33,16 @@ HRESULT __stdcall DropTarget::Drop(IDataObject* pDataObj, DWORD, POINTL, DWORD* 
     STGMEDIUM stgm;
     if (SUCCEEDED(pDataObj->GetData(&fmte, &stgm))) {
         HDROP hDrop = (HDROP)stgm.hGlobal;
-        wchar_t szFile[MAX_PATH];
-        if (DragQueryFileW(hDrop, 0, szFile, MAX_PATH)) {
-            // Post asynchronously so the drag animation is released immediately.
-            // WM_QIV_OPEN_FILE handler owns the pointer and deletes it.
-            PostMessageW(m_hWnd, Constants::WM_QIV_OPEN_FILE, 0,
-                         reinterpret_cast<LPARAM>(new std::wstring(szFile)));
+        UINT needed = DragQueryFileW(hDrop, 0, nullptr, 0);
+        if (needed > 0) {
+            std::wstring szFile(needed + 1, L'\0');
+            if (DragQueryFileW(hDrop, 0, szFile.data(), needed + 1)) {
+                szFile.resize(needed);
+                // Post asynchronously so the drag animation is released immediately.
+                // WM_QIV_OPEN_FILE handler owns the pointer and deletes it.
+                PostMessageW(m_hWnd, Constants::WM_QIV_OPEN_FILE, 0,
+                             reinterpret_cast<LPARAM>(new std::wstring(std::move(szFile))));
+            }
         }
         DragFinish(hDrop);
         ReleaseStgMedium(&stgm);

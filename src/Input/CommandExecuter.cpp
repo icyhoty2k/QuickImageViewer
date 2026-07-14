@@ -645,6 +645,7 @@ void InputManager::ExecuteKeyboardShortcutCommand(HWND hWnd, Command cmd) {
             SetWindowPos(hWnd,
                          app.isAlwaysOnTop ? HWND_TOPMOST : HWND_NOTOPMOST,
                          0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE);
+            uiManager.ApplyAlwaysOnTop(app.isAlwaysOnTop);
             g_overlayManager.PostCenterMessage(hWnd,
                 app.isAlwaysOnTop
                     ? Constants::Messages::ALWAYS_ON_TOP_ON
