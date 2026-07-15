@@ -1,7 +1,7 @@
 # QuickImageViewer (qIV)
 
 **A fast, GPU-accelerated image viewer for Windows.**  
-Built on Direct2D, WIC, and native Win32 APIs. Single EXE, no installer, no telemetry, ~7 MB.
+Built on Direct2D, WIC, and native Win32 APIs. Single EXE, no installer(portable), no telemetry, ~7 MB.
 
 ---
 
@@ -14,14 +14,14 @@ Built on Direct2D, WIC, and native Win32 APIs. Single EXE, no installer, no tele
 | Folder History Panel | EXIF Image info |
 |:---|:---|
 | ![App](resources/screenshots/2026-07-15_045155.png) | ![Shortcuts](resources/screenshots/2026-07-15_045342.png) |
-
+ ![](resources/screenshots/2026-07-15_045440.png)
  ![](resources/screenshots/2026-07-15_045130.png)
  ![](resources/screenshots/2026-07-15_045413.png)
  ![](resources/screenshots/2026-07-15_045219.png)
  ![](resources/screenshots/2026-07-15_045413.png)
  ![](resources/screenshots/2026-07-15_045311.png)
  ![](resources/screenshots/2026-07-15_045359.png)
-
+2026-07-15_045440.png
 ---
 
 ## Download
