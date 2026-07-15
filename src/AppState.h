@@ -65,6 +65,7 @@ struct AppState {
     float dpiScale = 1.0f;
     bool isRmbDown = false;
     bool showOverlayInfoText = Constants::Overlay::DEFAULT_SHOW_OVERLAY;
+    bool thumbnailPanelWheelWrapAround = Constants::THUMBNAIL_PANEL_WHEEL_WRAP_AROUND;
     BYTE opacity = 255;
     float saturation = Constants::DEFAULT_SATURATION;
     float brightness = Constants::DEFAULT_BRIGHTNESS;

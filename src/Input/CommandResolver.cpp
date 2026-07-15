@@ -159,6 +159,9 @@ Command InputManager::ResolveKeyboardKeys(UINT key) {
 
         case Shortcuts::SC_TRANSFORM_FLIP_H: return Command::FlipH;
         case Shortcuts::SC_TRANSFORM_FLIP_V: return Command::FlipV;
+        case Shortcuts::SC_THUMBNAIL_WRAP_TOGGLE:
+            if (!ctrl && !alt && !shift) return Command::ToggleThumbnailWrapAround;
+            break;
 
         // --- Fullscreen ---
         case Shortcuts::SC_PANEL_FULLSCREEN: return Command::ToggleFullscreen;
