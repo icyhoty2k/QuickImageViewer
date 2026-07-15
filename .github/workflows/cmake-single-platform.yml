@@ -20,15 +20,11 @@ jobs:
       - name: Setup MSVC
         uses: ilammy/msvc-dev-cmd@v1
 
-      - name: Setup vcpkg
-        uses: lukka/run-vcpkg@v11
-
       - name: Configure CMake
         run: >
           cmake
           -B build
           -DCMAKE_BUILD_TYPE=${{ env.BUILD_TYPE }}
-          -DCMAKE_TOOLCHAIN_FILE=${{ env.VCPKG_ROOT }}/scripts/buildsystems/vcpkg.cmake
 
       - name: Build
         run: cmake --build build --config ${{ env.BUILD_TYPE }}
