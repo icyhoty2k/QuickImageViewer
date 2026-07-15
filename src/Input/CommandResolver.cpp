@@ -139,7 +139,7 @@ Command InputManager::ResolveKeyboardKeys(UINT key) {
         case Shortcuts::SC_NAV_SHOW_IN_EXPLORER: // 'L'
             return Command::ShowInExplorer;
 
-        case 'E':
+        case Shortcuts::SC_TOGGLE_LAST_IMAGE: // 'E'
             if (!ctrl && !alt && !shift)  return Command::ToggleLastImage;
             if (!ctrl && alt  && !shift)  return Command::SnapTopRight;
             break;
@@ -268,7 +268,7 @@ Command InputManager::ResolveKeyboardKeys(UINT key) {
             if (!ctrl && !alt &&  shift)   return Command::MoveWindowRight;
             break;
 
-        case 'Z':
+        case Shortcuts::SC_SNAP_QUARTER_BOTTOM_LEFT: // 'Z'
             if (!ctrl && alt && !shift)    return Command::SnapBottomLeft;
             break;
 
@@ -277,7 +277,7 @@ Command InputManager::ResolveKeyboardKeys(UINT key) {
             if (!ctrl &&  alt && !shift)   return Command::SnapBottomRight;
             break;
 
-        case 'X':
+        case Shortcuts::SC_WINDOW_RESET_DEFAULTS: // 'X'
             if (!ctrl && alt && !shift)    return Command::ResetAll;
             break;
 
