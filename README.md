@@ -15,10 +15,12 @@ Built on Direct2D, WIC, and native Win32 APIs. Single EXE, no installer, no tele
 |:---|:---|
 | ![App](resources/screenshots/2026-07-15_045155.png) | ![Shortcuts](resources/screenshots/2026-07-15_045342.png) |
 
- ![1](resources/screenshots/2026-07-15_045130.png)
- ![1](resources/screenshots/2026-07-15_045413.png)
+ ![](resources/screenshots/2026-07-15_045130.png)
+ ![](resources/screenshots/2026-07-15_045413.png)
  ![](resources/screenshots/2026-07-15_045219.png)
  ![](resources/screenshots/2026-07-15_045413.png)
+ ![](resources/screenshots/2026-07-15_045311.png)
+ ![](resources/screenshots/2026-07-15_045359.png)
 
 ---
 
