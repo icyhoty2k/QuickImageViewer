@@ -9,7 +9,11 @@ Built on Direct2D, WIC, and native Win32 APIs. Single EXE, no installer, no tele
 
 | Main Interface | Shortcuts Reference |
 |:---|:---|
-| ![App](resources/screenshots/2026-07-15_045800.png) | ![Shortcuts](resources/screenshots/2026-07-15_045413.png) |
+| ![App](resources/screenshots/2026-07-15_045800.png) | ![Shortcuts](resources/screenshots/2026-07-15_045053.png) |
+
+| Folder History Panel | EXIF Image info |
+|:---|:---|
+| ![App](resources/screenshots/2026-07-15_045155.png) | ![Shortcuts](resources/screenshots/2026-07-15_045342.png) |
 
 ---
 
