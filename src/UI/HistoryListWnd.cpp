@@ -49,6 +49,10 @@ namespace UI {
     // ---------------------------------------------------------------------------
     static HWND g_hHistOwner = nullptr;
     static int g_hoverRow = -1;
+    // Row remembered across focus loss, restored on refocus. Focus bounces
+    // whenever a spawned panel opens/closes (Shift+Enter) — without this the
+    // keyboard selection resets every time. -1 = nothing to restore.
+    static int g_savedHoverRow = -1;
     static int g_scrollOffsetY = 0;
     static bool g_sbDragging = false;
     static int g_sbDragStartY = 0;
@@ -92,14 +96,15 @@ namespace UI {
         if (!fs::is_directory(fs::path(path), ec) || ec) {
             return g_statusCache[path] = FolderStatus::Missing;
         }
-        for (const auto &ent: fs::directory_iterator(
-                     fs::path(path), fs::directory_options::skip_permission_denied, ec)) {
-            if (ec) {
-                ec.clear();
-                continue;
-            }
-            if (!ent.is_regular_file(ec)) continue;
-            std::wstring ext = ent.path().extension().wstring();
+        // Non-throwing iteration: it.increment(ec) instead of range-for, whose
+        // operator++() throws filesystem_error on transient I/O errors. This
+        // runs on the UI thread (Enter/click handlers) — a throw here would
+        // escape the wndproc and terminate the process (0xC0000409).
+        for (auto dirIt = fs::directory_iterator(
+                     fs::path(path), fs::directory_options::skip_permission_denied, ec);
+             !ec && dirIt != fs::directory_iterator(); dirIt.increment(ec)) {
+            if (!dirIt->is_regular_file(ec)) { ec.clear(); continue; }
+            std::wstring ext = dirIt->path().extension().wstring();
             for (auto &c: ext) c = static_cast<wchar_t>(::towlower(c));
             for (size_t i = 0; i < Constants::Registry::SUPPORTED_EXTENSIONS_COUNT; ++i) {
                 if (ext == Constants::Registry::SUPPORTED_EXTENSIONS[i])
@@ -481,6 +486,10 @@ namespace UI {
                     }
                     bool shiftHeld = (GetKeyState(VK_SHIFT) & 0x8000) != 0;
                     if (shiftHeld) {
+                        // Creating or hiding a spawned panel briefly steals focus,
+                        // firing OnKillFocus which resets g_hoverRow. Save and
+                        // restore so the selection stays on the row after the call.
+                        const int savedRow = g_hoverRow;
                         std::wstring posLabel = uiManager.GetSpawnedDirWndPositionLabel(folder);
                         if (!posLabel.empty()) {
                             std::wstring posName = posLabel.substr(2, posLabel.length() - 3);
@@ -491,6 +500,8 @@ namespace UI {
                         } else {
                             uiManager.SpawnDirWndForFolder(folder, m_hWnd);
                         }
+                        g_hoverRow = savedRow;
+                        InvalidateRect(m_hWnd, nullptr, FALSE);
                     } else {
                         ShowWindow(m_hWnd, SW_HIDE);
                         OpenDirectory(g_hHistOwner, folder);
@@ -1139,6 +1150,16 @@ namespace UI {
                 int mx = GET_X_LPARAM(lParam);
                 int my = GET_Y_LPARAM(lParam);
 
+                // Windows synthesizes a WM_MOUSEMOVE (cursor stationary) whenever
+                // the window stack under the cursor changes — e.g. a spawned panel
+                // opening/closing. Acting on it would stomp the keyboard selection
+                // with whatever row happens to sit under the resting cursor.
+                // Only react when the cursor actually moved.
+                static POINT s_lastHoverPos = {LONG_MIN, LONG_MIN};
+                if (mx == s_lastHoverPos.x && my == s_lastHoverPos.y)
+                    return 0;
+                s_lastHoverPos = {mx, my};
+
                 // Handle header dragging to move window
                 if (g_headerDragging) {
                     POINT ptScreen = {mx, my};
@@ -1342,33 +1363,37 @@ namespace UI {
                         namespace fs = std::filesystem;
                         using Map = std::unordered_map<std::wstring, FolderStatus>;
                         auto *result = new Map();
-                        result->reserve(paths.size());
+                        try {
+                            result->reserve(paths.size());
 
-                        for (const auto &path: paths) {
-                            std::error_code ec;
-                            if (!fs::is_directory(path, ec) || ec) {
-                                (*result)[path] = FolderStatus::Missing;
-                                continue;
-                            }
-                            FolderStatus st = FolderStatus::Empty;
-                            for (const auto &ent: fs::directory_iterator(
-                                         path, fs::directory_options::skip_permission_denied, ec)) {
-                                if (ec) {
-                                    ec.clear();
+                            for (const auto &path: paths) {
+                                std::error_code ec;
+                                if (!fs::is_directory(path, ec) || ec) {
+                                    (*result)[path] = FolderStatus::Missing;
                                     continue;
                                 }
-                                if (!ent.is_regular_file(ec)) continue;
-                                std::wstring ext = ent.path().extension().wstring();
-                                for (auto &c: ext) c = static_cast<wchar_t>(::towlower(c));
-                                for (size_t i = 0; i < Constants::Registry::SUPPORTED_EXTENSIONS_COUNT; ++i) {
-                                    if (ext == Constants::Registry::SUPPORTED_EXTENSIONS[i]) {
-                                        st = FolderStatus::Valid;
-                                        goto next_path;
+                                FolderStatus st = FolderStatus::Empty;
+                                for (auto it = fs::directory_iterator(
+                                             path, fs::directory_options::skip_permission_denied, ec);
+                                     it != fs::directory_iterator(); it.increment(ec)) {
+                                    if (ec) { ec.clear(); continue; }
+                                    if (!it->is_regular_file(ec)) continue;
+                                    std::wstring ext = it->path().extension().wstring();
+                                    for (auto &c: ext) c = static_cast<wchar_t>(::towlower(c));
+                                    bool found = false;
+                                    for (size_t i = 0; i < Constants::Registry::SUPPORTED_EXTENSIONS_COUNT; ++i) {
+                                        if (ext == Constants::Registry::SUPPORTED_EXTENSIONS[i]) {
+                                            found = true;
+                                            break;
+                                        }
                                     }
+                                    if (found) { st = FolderStatus::Valid; break; }
                                 }
+                                (*result)[path] = st;
                             }
-                        next_path:
-                            (*result)[path] = st;
+                        } catch (...) {
+                            delete result;
+                            return;
                         }
 
                         PostMessageW(hWnd, Constants::WM_QIV_HISTORY_VALIDATED,
@@ -1413,9 +1438,17 @@ namespace UI {
 
     void HistoryListWnd::OnSetFocus() {
         UI::SetActivePanelWindow(m_hWnd);
+        // Restore the selection that OnKillFocus saved when focus bounced away
+        // (spawned panel open/close, overlay activation, etc.).
+        if (g_hoverRow < 0 && g_savedHoverRow >= 0) {
+            int navMax = static_cast<int>(g_displayList.size());
+            g_hoverRow = (g_savedHoverRow < navMax) ? g_savedHoverRow
+                                                    : (navMax > 0 ? navMax - 1 : -1);
+        }
     }
 
     void HistoryListWnd::OnKillFocus() {
+        if (g_hoverRow >= 0) g_savedHoverRow = g_hoverRow;
         g_hoverRow = -1;
         // InvalidateRect is already called by FloatingPanelWnd before this hook.
     }
@@ -1429,6 +1462,7 @@ namespace UI {
         GetHistoryWindowBounds(g_hHistOwner ? g_hHistOwner : m_hWnd, x, y, w, h);
         SetWindowPos(m_hWnd, HWND_TOPMOST, x, y, w, h, SWP_FRAMECHANGED);
         g_hoverRow = 0;
+        g_savedHoverRow = -1; // fresh open always starts at the top row
         g_scrollOffsetY = 0;
 
         // Cache history file size so WM_PAINT needs no I/O
