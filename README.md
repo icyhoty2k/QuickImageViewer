@@ -1,4 +1,4 @@
-# QuickImageViewer (QIV)
+# QuickImageViewer (qIV)
 
 **A fast, GPU-accelerated image viewer for Windows.**  
 Built on Direct2D, WIC, and native Win32 APIs. Single EXE, no installer, no telemetry, ~7 MB.
@@ -54,23 +54,42 @@ Built on Direct2D, WIC, and native Win32 APIs. Single EXE, no installer, no tele
 - **Software fallback** — GDI renderer for edge cases where Direct2D is unavailable
 
 ### Navigation
-- Next / prev with `→` `←` or scroll wheel
-- Sort by name, date modified, file size, extension, or physical disk order
-- Toggle between first and last image in folder (`Backspace`)
-- Toggle between current and previous folder (`Q`)
-- Full folder history with favorites, sorted by visit frequency
-- Drag & drop, CLI argument, registered file handler
-- Multi-instance aware — multiple windows supported
+
+| Shortcut | Action |
+|:---|:---|
+| `→` / `←` or Wheel | Next / previous image |
+| `Space` / `Shift+Space` | Next / previous image |
+| `Backspace` | Smart jump between first and last image (goes to whichever is further) |
+| `Shift+Backspace` | Return to image before the first/last jump |
+| `E` | Toggle between current and previously viewed image |
+| `Q` | Toggle between current and previously opened folder |
+| `J` / `Ctrl+G` | Jump to image by number (type `@` to switch to Find mode) |
+| `Ctrl+F` | Find by filename — wildcard support (`*`, `?`); type `#` to switch to Jump mode |
+| `L` | Reveal current file in Windows Explorer |
+| Horizontal Wheel | Cycle through navigation history folders (one change per 3 notches) |
+| `F2` | Open-file dialog |
+| Drag & Drop | Drop a file or folder onto the window |
+
+### Sorting
+
+| Shortcut | Order |
+|:---|:---|
+| `Ctrl+Alt+Shift+0` | By name (natural / Explorer order) — press again to reverse |
+| `Ctrl+Alt+Shift+9` | By date modified — press again to flip newest ↔ oldest |
+| `Ctrl+Alt+Shift+8` | By file size — press again to flip largest ↔ smallest |
+| `Ctrl+Alt+Shift+7` | By extension — press again to reverse |
+| `Ctrl+Alt+Shift+6` | By physical disk order (fastest for HDDs) |
 
 ### UI Panels
 
 | Panel | Shortcut | Description |
 |:---|:---|:---|
-| EXIF / Info | `M` | Full metadata: camera, capture settings, GPS with offline geocoding |
-| Directory | `F5` / `F6` | All images in current folder; syncs selection with viewer |
-| Cache | `F3` / `F4` | Live GPU cache occupancy, thumbnails of preloaded images |
-| History | `Tab` | Recent folders with favorites; Shift+Enter opens in DirWnd |
-| Help | `F1` | Full keyboard shortcut reference |
+| Help | `F1` | Full shortcut & CLI reference — 2-column, double-buffered, DPI-aware. `Ctrl+E` exports to Desktop as UTF-8 text. |
+| EXIF / Info | `M` | Full metadata: camera, exposure, GPS with offline geocoding, embedded preview thumbnail |
+| Statistics | `K` | Decode time, codec, file details and cache info for the current image |
+| Directory | `F5` / `F6` | All images in current folder; syncs selection with viewer / moves panel to next screen edge |
+| Cache | `F3` / `F4` | Live GPU cache occupancy, thumbnails of preloaded images / moves panel |
+| History | `Tab` | Recent folders with favorites — `Shift+Enter` spawns a DirWnd without leaving current folder |
 
 ### Offline Reverse Geocoding
 GPS coordinates in EXIF are resolved to full location data with **zero network calls**. All data is compressed (zlib) and embedded directly in the EXE.
@@ -95,26 +114,62 @@ Phone       +33
 Timezone    Europe/Paris
 ```
 
+### Thumbnail Strips
+All thumbnail panels (Cache, Directory, and spawned DirWnds) share the same behaviour:
+
+- **Scroll** — mouse wheel; hold Shift for 3× speed
+- **Wrap-around** — `B` toggles wheel wrap: scrolling past the last thumbnail jumps to the first (and vice-versa). A center overlay message confirms each wrap. Startup default is controlled by `THUMBNAIL_PANEL_WHEEL_WRAP_AROUND` in `Constants.h`.
+- **Open** — left-click any thumbnail to open it in the main viewer
+- **Drag** — click and drag the strip to scroll freely
+- **Scrollbar** — thin bar on the inner edge; click-drag for quick scrubbing
+- **Spawn DirWnd** — from the History panel, `Shift+Enter` on an entry opens a floating directory strip for that folder without leaving the current one (up to 4 simultaneous strips)
+
+### History Panel
+
+| Shortcut | Action |
+|:---|:---|
+| `Tab` | Toggle History panel |
+| `Ctrl+Tab` | Toggle full (uncapped) view and refresh the folder snapshot |
+| `Enter` | Open hovered folder in main viewer |
+| `Shift+Enter` | Spawn a floating DirWnd for the hovered folder |
+| `Space` | Toggle favorite on hovered entry |
+| `Delete` | Delete hovered entry (`Ctrl+Z` restores last deleted) |
+| `Ctrl+Shift+Delete` | Clear all history, keep favorites |
+| `Ctrl+Alt+Shift+Delete` | Clear all favorites, keep history |
+
+### Slideshow
+
+| Shortcut | Action |
+|:---|:---|
+| `Ctrl+F1` | Start / stop slideshow |
+| `Space` *(while running)* | Pause / resume |
+| `R` *(while running)* | Toggle loop |
+| `S` *(while running)* | Toggle shuffle |
+| `T` *(while running)* | Cycle transition: Cut → Fade → Dissolve → Ripple → Push → Zoom |
+
 ### Color Effects
 All effects are non-destructive and GPU-accelerated via the Direct2D effect graph. `Ctrl+S` saves the result to disk.
 
 | Effect | Key |
 |:---|:---|
-| Grayscale | `Del` |
-| Invert | `Ins` |
+| Rotate CW / CCW | `R` / `Shift+R` |
+| Flip horizontal / vertical | `H` / `V` |
+| Grayscale | `Delete` |
+| Invert | `Insert` |
 | Sepia | `Home` |
-| Solarize | `End` |
-| Outline | `PgUp` |
-| Threshold | `PgDn` |
+| Solarize (>50% brightness inverted) | `End` |
+| Outline (GPU edge detection) | `Page Up` |
+| Threshold (black & white at 50%) | `Page Down` |
 | Brightness ± | `\` / `'` |
 | Contrast ± | `/` / `.` |
 | Saturation ± | `[` / `]` |
 | Gamma ± | `=` / `-` |
-| Toggle all effects | `` ` `` |
-| Reset all | `Num0` |
+| Toggle all effects (bypass) | `` ` `` |
+| Reset all effects | `Num 0` |
+| Save with effects baked in | `Ctrl+S` |
 
 ### Overlay System
-9 independently configurable data slots rendered on the image canvas. Each slot shows contextual info (filename, index, zoom, dimensions, file size, effects state) and can be toggled, repositioned, or set to compact mode individually.
+9 independently configurable data slots rendered on the image canvas.
 
 ```
 [Ctrl+1] Top Left    [Ctrl+2] Top Center    [Ctrl+3] Top Right
@@ -122,40 +177,82 @@ All effects are non-destructive and GPU-accelerated via the Direct2D effect grap
 [Ctrl+7] Bot Left    [Ctrl+8] Bot Center    [Ctrl+9] Bot Right
 ```
 
-Master toggle: `N` or `I` — Layout cycle: `O` — Background: `P` — Compact per slot: `Ctrl+Alt+1–9`
-
-### Transform
-- Rotate view: `R`
-- Flip horizontal: `H`  
-- Flip vertical: `V`
-- Copy to clipboard: `Ctrl+C`
-- All transforms are non-destructive (view only)
+| Shortcut | Action |
+|:---|:---|
+| `N` / `I` / `Ctrl+0` | Master toggle — show / hide all slots |
+| `Ctrl+1` – `Ctrl+9` | Toggle individual slots |
+| `Ctrl+Shift+1` – `Ctrl+Shift+9` | Toggle compact mode per slot (1 line instead of 2) |
+| `O` | Cycle overlay layout: Grid → Stacked → Summary |
+| `P` | Toggle semi-transparent background behind overlay text |
 
 ### Window & Chrome
-- Fullscreen: `F11` / `F` / `Enter`
-- Always on top: `Ctrl+T`
-- Move window: `Shift+WASD`
-- Snap to screen zones: `Alt+WASD` and `Alt+Q/E/Z/C`
-- Opacity: `Shift+Wheel`
-- Resize: `MMB drag`
-- Round / square corners toggle: `Num*`
-- Backdrop type cycle: `Num/`
-- Runtime theme factor: `Ctrl+Alt+Num+/-`
+
+| Shortcut | Action |
+|:---|:---|
+| `F` / `F11` / `Enter` / `Ctrl+Shift+T` | Toggle borderless fullscreen |
+| `Ctrl+T` / `Ctrl+A` | Toggle always-on-top |
+| `Shift+W/A/S/D` | Nudge window 20 px up / left / down / right |
+| `Alt+W/A/S/D` | Snap to top / left / bottom / right half of work area |
+| `Alt+Q/E/Z/C` | Snap to top-left / top-right / bottom-left / bottom-right quarter |
+| `Alt+X` | Reset window size, position and all effects |
+| `Shift+Num+/-` / `Shift+=/−` | Grow / shrink window by 20 px per side |
+| Drag near screen edge | Snap to that edge (within 24 px) |
+| `Ctrl+Alt+Num+/-` | Step all panel colors lighter / darker at runtime |
+| `Ctrl+Alt+Num 0` | Reset theme brightness to compiled default |
+| `Ctrl+Shift+Num *` | Toggle window corners: rounded ↔ square |
+| `Ctrl+Shift+Num /` | Cycle backdrop material: None → Mica → Acrylic → MicaAlt |
 
 ### Mouse Shortcuts
 
 | Input | Action |
 |:---|:---|
 | Wheel | Previous / next image |
-| Ctrl+Wheel | Zoom in / out |
-| Shift+Wheel | Adjust opacity |
+| Ctrl+Wheel | Zoom in / out centered on cursor |
+| Shift+Wheel | Adjust window opacity in 10% steps |
+| Horizontal Wheel | Cycle navigation history folders |
 | LMB hold | Quick zoom 3× centered on cursor |
-| LMB drag (zoomed) | Pan; reverts on release |
-| RMB hold / drag | Move window |
+| LMB drag *(while zoomed)* | Pan; reverts on release |
+| LMB double-click | Toggle fullscreen |
+| RMB drag | Move window |
 | RMB + LMB | Reveal current file in Explorer |
-| MMB click | Reset zoom / pan / opacity, center window |
+| RMB + Wheel | Zoom in / out |
+| RMB + Horizontal Wheel | Live-resize window from center (20 px per notch) |
+| MMB click | Full visual reset: zoom, pan, opacity; center and resize window |
 | MMB drag | Live-resize window from top-left |
-| Double-click | Toggle fullscreen |
+
+> Button roles assume `SWAP_MOUSE_BUTTONS = true` in `Constants.h` (default). Set to `false` to exchange left and right button functions.
+
+---
+
+## Command-Line Arguments
+
+```
+QuickImageViewer.exe [image_path] [options]
+```
+
+| Argument | Description |
+|:---|:---|
+| `"path\to\image.jpg"` | Open this image at startup and browse its folder |
+| `-startFolder <path>` | Open this folder as the browse / slideshow source |
+| `-background` | Start hidden in the system tray (service mode) |
+| `-fullscreen` | Start in fullscreen |
+| `-windowedView` | Start windowed (explicit override) |
+| `-alwaysOnTop` | Keep window above all others from launch |
+| `-monitorNum#N` | Open centered on monitor N (1-based, e.g. `-monitorNum#2`) |
+| `-slideshow` | Auto-start slideshow after content loads |
+| `-slideshowInterval N` | Seconds between slides (e.g. `-slideshowInterval 8`) |
+| `-repeat` | Loop the slideshow when it reaches the end |
+| `-shuffle` | Play slideshow in random order |
+| `-slideshowTransition=<type>` | Transition: `Cut`, `Fade`, `Dissolve`, `Ripple`, `Push`, `Zoom` |
+| `-slideshowTransitionShuffle` | Pick a random transition per slide |
+| `-hideMouse` | Hide the mouse cursor at startup |
+| `-lock` | KIOSK mode — all keyboard and mouse input is ignored |
+| `-dedicated` | Isolated instance: separate history, tray icon and mutex |
+
+**Kiosk example:**
+```
+QuickImageViewer.exe -dedicated -lock -fullscreen -slideshow -shuffle -slideshowInterval 8 -startFolder "D:\Ads"
+```
 
 ---
 
