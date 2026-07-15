@@ -153,6 +153,17 @@ namespace Shortcuts {
     // Q (no modifier)  —  Toggle between current and previous folder in history
     constexpr UINT SC_TOGGLE_LAST_DIR = 'Q';
 
+    // E (no modifier)  —  Toggle between current and previously viewed image
+    //                     (Alt+E snaps window to top-right quarter)
+    constexpr UINT SC_TOGGLE_LAST_IMAGE = 'E';
+
+    // Alt+Z  —  snap window to bottom-left quarter
+    // (bottom-right quarter is Alt+C — same key as SC_COPY_TO_CLIPBOARD)
+    constexpr UINT SC_SNAP_QUARTER_BOTTOM_LEFT = 'Z';
+
+    // Alt+X  —  restore window to default size / position
+    constexpr UINT SC_WINDOW_RESET_DEFAULTS = 'X';
+
 
     // -------------------------------------------------------------------------
     // Color Effects
