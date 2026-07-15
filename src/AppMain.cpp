@@ -323,6 +323,11 @@ LRESULT CALLBACK MainAppWndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM l
             return 0;
         }
         case Constants::WM_QIV_REPAINT: {
+            // wParam=1: a neighbor preload landed — only refresh the cache panel.
+            if (wParam == 1) {
+                uiManager.getCacheWindow().UpdateCacheView();
+                return 0;
+            }
             // The background thread has finished decoding and caching the bitmap.
             // Now, on the UI thread, we probe the cache to make it the active bitmap.
             if (app.renderer && !app.playlist.empty()) {

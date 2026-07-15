@@ -754,6 +754,8 @@ HRESULT RendererD2D::PreloadBitmap(const std::wstring &filePath, int requestInde
                         long long start = ImageLoadStats::g_loadStartUs.load(std::memory_order_relaxed);
                         if (start > 0) ImageLoadStats::g_lastLoadUs.store(ImageLoadStats::NowUs() - start, std::memory_order_relaxed);
                         PostMessageW(m_hwnd, Constants::WM_QIV_REPAINT, 0, 0);
+                    } else {
+                        PostMessageW(m_hwnd, Constants::WM_QIV_REPAINT, 1, 0);
                     }
                     return; // GIF path handled everything — skip normal cache-store below
                 }
@@ -821,6 +823,8 @@ HRESULT RendererD2D::PreloadBitmap(const std::wstring &filePath, int requestInde
                         ImageLoadStats::NowUs() - start, std::memory_order_relaxed);
                 }
                 PostMessageW(m_hwnd, Constants::WM_QIV_REPAINT, 0, 0);
+            } else {
+                PostMessageW(m_hwnd, Constants::WM_QIV_REPAINT, 1, 0);
             }
         });
     });
