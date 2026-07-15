@@ -247,6 +247,7 @@ namespace UI {
             }
         }
 
+        m_thumbnails.reserve(items.size());
         for (size_t i = 0; i < items.size(); ++i) {
             auto mapIt = app.playlistIndexMap.find(items[i]);
 
@@ -532,8 +533,37 @@ namespace UI {
                 int delta = GET_WHEEL_DELTA_WPARAM(wParam);
                 float scroll = Constants::THUMBNAIL_PANEL_WINDOW_MOUSE_WHEEL_SPEED;
                 if (GetKeyState(VK_SHIFT) & 0x8000) scroll *= 3.0f;
-                m_offset += (delta > 0 ? scroll : -scroll)
+                const float step = (delta > 0 ? scroll : -scroll)
                         * Constants::THUMBNAIL_PANEL_WINDOW_MOUSE_WHEEL_DIRECTION;
+
+                // Wrap-around: when already at a boundary and the wheel pushes
+                // past it, jump to the opposite end instead of doing nothing.
+                // m_offset range is [minOff, 0]: 0 = start, minOff (<0) = end.
+                {
+                    RECT crw{};
+                    GetClientRect(m_hWnd, &crw);
+                    const bool vert = IsVertical();
+                    const float thumbSz = (vert ? Constants::THUMBNAIL_PANEL_THUMB_HEIGHT
+                                                : Constants::THUMBNAIL_PANEL_THUMB_WIDTH) * app.dpiScale;
+                    const float spacing = Constants::THUMBNAIL_PANEL_THUMB_SPACING * app.dpiScale;
+                    const float margin  = Constants::THUMBNAIL_PANEL_THUMB_MARGIN  * app.dpiScale;
+                    const float surface = static_cast<float>(vert ? crw.bottom : crw.right);
+                    const float total   = static_cast<float>(m_thumbnails.size()) * (thumbSz + spacing) - spacing;
+                    const float minOff  = surface - total - 2.0f * margin;
+
+                    if (minOff < 0.0f) { // content overflows — scrolling is possible
+                        const float eps = 0.5f;
+                        if (step < 0.0f && m_offset <= minOff + eps) {
+                            m_offset = 0.0f;      // at end, pushing further → wrap to start
+                        } else if (step > 0.0f && m_offset >= -eps) {
+                            m_offset = minOff;    // at start, pushing back → wrap to end
+                        } else {
+                            m_offset += step;     // normal scroll (clamped in rebuild)
+                        }
+                    } else {
+                        m_offset += step;
+                    }
+                }
                 UpdateView();
                 return 0;
             }
@@ -884,12 +914,28 @@ namespace UI {
         if (!r) return;
 
         // -------------------------------------------------------------------------
-        // Phase 1: resolve bitmap pointers under lock, then release before GPU work.
+        // Phase 1: cull to visible thumbnails, then resolve bitmap pointers under
+        // lock. This avoids mutex acquisition + two hashmap lookups per offscreen
+        // thumbnail — critical for large folders (1000 items → ~30 visible).
         // -------------------------------------------------------------------------
-        std::vector<RendererD2D::ResolvedThumb> resolved;
-        resolved.reserve(m_thumbnails.size());
+        RECT visRect{};
+        GetClientRect(m_hWnd, &visRect);
+        const float visW = static_cast<float>(visRect.right);
+        const float visH = static_cast<float>(visRect.bottom);
 
-        r->ResolveThumbnailBitmaps(m_thumbnails, UsesDirThumbCache() ? m_hWnd : nullptr, resolved);
+        std::vector<size_t> visIdx;
+        std::vector<Thumbnail> visThumbs;
+        for (size_t i = 0; i < m_thumbnails.size(); ++i) {
+            const D2D1_RECT_F &rc = m_thumbnails[i].rect;
+            if (rc.right > 0.0f && rc.left < visW && rc.bottom > 0.0f && rc.top < visH) {
+                visIdx.push_back(i);
+                visThumbs.push_back(m_thumbnails[i]);
+            }
+        }
+
+        std::vector<RendererD2D::ResolvedThumb> resolved;
+        resolved.reserve(visThumbs.size());
+        r->ResolveThumbnailBitmaps(visThumbs, UsesDirThumbCache() ? m_hWnd : nullptr, resolved);
 
         // -------------------------------------------------------------------------
         // Phase 2: GPU draw — no locks held.
@@ -909,18 +955,19 @@ namespace UI {
 
         // Draw separator lines at the gap between this vertical panel and
         // any horizontal neighbour above or below it.
-        for (size_t i = 0; i < resolved.size(); ++i) {
-            const auto &rv = resolved[i];
+        for (size_t j = 0; j < resolved.size(); ++j) {
+            const int origI = static_cast<int>(visIdx[j]);
+            const auto &rv = resolved[j];
             if (rv.bitmap) {
                 m_panelContext->DrawBitmap(rv.bitmap.Get(), rv.rect, 1.0f,
                                            D2D1_BITMAP_INTERPOLATION_MODE_LINEAR);
             } else {
                 m_panelContext->FillRectangle(rv.rect, m_placeholderBrush.Get());
             }
-            if (static_cast<int>(i) == selectedIdx)
+            if (origI == selectedIdx)
                 m_panelContext->DrawRectangle(rv.rect, m_borderBrush.Get(),
                                               Constants::ThumbnailPanel::SELECTION_BORDER_THICKNESS);
-            if (static_cast<int>(i) == hoverIdx)
+            if (origI == hoverIdx)
                 m_panelContext->DrawRectangle(rv.rect, m_hoverBrush.Get(),
                                               Constants::ThumbnailPanel::HOVER_THICKNESS);
         }

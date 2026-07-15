@@ -77,13 +77,22 @@ namespace UI {
             void LoadFolder(const std::wstring &folderPath) {
                 m_folderPath = folderPath;
                 m_localPlaylist.clear();
-                std::filesystem::path dir(folderPath);
-                if (!std::filesystem::exists(dir) || !std::filesystem::is_directory(dir))
+                namespace fs = std::filesystem;
+                fs::path dir(folderPath);
+                // Non-throwing filesystem calls only — this runs on the UI thread
+                // (Shift+Enter in HistoryListWnd). A filesystem_error escaping the
+                // wndproc terminates the process (0xC0000409).
+                std::error_code ec;
+                if (!fs::is_directory(dir, ec) || ec)
                     return;
-                for (const auto &entry : std::filesystem::directory_iterator(dir)) {
-                    if (!entry.is_regular_file()) continue;
-                    if (!is_image_ext(entry.path().extension().wstring())) continue;
-                    m_localPlaylist.push_back(std::filesystem::canonical(entry.path()).wstring());
+                for (auto it = fs::directory_iterator(
+                             dir, fs::directory_options::skip_permission_denied, ec);
+                     !ec && it != fs::directory_iterator(); it.increment(ec)) {
+                    if (!it->is_regular_file(ec)) { ec.clear(); continue; }
+                    if (!is_image_ext(it->path().extension().wstring())) continue;
+                    fs::path canon = fs::canonical(it->path(), ec);
+                    if (ec) { ec.clear(); canon = it->path(); }
+                    m_localPlaylist.push_back(canon.wstring());
                 }
                 std::sort(m_localPlaylist.begin(), m_localPlaylist.end());
             }

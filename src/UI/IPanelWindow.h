@@ -11,7 +11,15 @@ namespace UI {
         public:
             virtual ~IPanelWindow() {
                 if (m_hWnd) {
+                    // Unhook WindowRouter BEFORE DestroyWindow. By the time this
+                    // base destructor runs, the derived object is already gone and
+                    // the vtable points at IPanelWindow, where HandleMessage is
+                    // pure virtual. DestroyWindow sends WM_DESTROY/WM_NCDESTROY
+                    // synchronously; routing them through GWLP_USERDATA would be
+                    // a pure virtual call → _purecall → abort (0xC0000409).
+                    SetWindowLongPtrW(m_hWnd, GWLP_USERDATA, 0);
                     DestroyWindow(m_hWnd);
+                    m_hWnd = nullptr;
                 }
             }
 
