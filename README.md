@@ -9,7 +9,7 @@ Built on Direct2D, WIC, and native Win32 APIs. Single EXE, no installer, no tele
 
 | Main Interface | Shortcuts Reference |
 |:---|:---|
-| ![App](resources/Screenshot_App.png) | ![Shortcuts](resources/Screenshot_Shortcuts.png) |
+| ![App](resources/screenshots/2026-07-15_045800.png) | ![Shortcuts](resources/screenshots/2026-07-15_045413.png) |
 
 ---
 
