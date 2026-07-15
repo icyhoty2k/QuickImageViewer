@@ -242,6 +242,14 @@ void InputManager::ExecuteKeyboardShortcutCommand(HWND hWnd, Command cmd) {
             InvalidateRect(hWnd, nullptr, FALSE);
             break;
 
+        case Command::ToggleThumbnailWrapAround:
+            app.thumbnailPanelWheelWrapAround = !app.thumbnailPanelWheelWrapAround;
+            g_overlayManager.PostCenterMessage(hWnd,
+                app.thumbnailPanelWheelWrapAround
+                    ? Constants::Messages::THUMB_STRIP_WRAP_ON
+                    : Constants::Messages::THUMB_STRIP_WRAP_OFF);
+            break;
+
         case Command::FlipV:
             app.viewport.flippedV = !app.viewport.flippedV;
             InvalidateRect(hWnd, nullptr, FALSE);

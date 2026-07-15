@@ -10,6 +10,8 @@
 #include "../Platform/Constants.h"
 #include "../Input/Shortcuts.h"
 #include "../Renderer/RendererD2D.h"
+#include "../Overlays/OverlayManager.h"
+#include "../Platform/ConstantsStrings.h"
 
 namespace UI {
     // Track the currently active panel window for border styling
@@ -553,12 +555,22 @@ namespace UI {
 
                     if (minOff < 0.0f) { // content overflows — scrolling is possible
                         const float eps = 0.5f;
-                        if (step < 0.0f && m_offset <= minOff + eps) {
-                            m_offset = 0.0f;      // at end, pushing further → wrap to start
-                        } else if (step > 0.0f && m_offset >= -eps) {
-                            m_offset = minOff;    // at start, pushing back → wrap to end
+                        if (app.thumbnailPanelWheelWrapAround) {
+                            if (step < 0.0f && m_offset <= minOff + eps) {
+                                m_offset = 0.0f;  // at end, pushing further → wrap to start
+                                if constexpr (Constants::THUMBNAIL_PANEL_WHEEL_WRAP_OVERLAY)
+                                    g_overlayManager.PostCenterMessage(m_hOwner,
+                                        Constants::Messages::THUMB_STRIP_WRAP_TO_START);
+                            } else if (step > 0.0f && m_offset >= -eps) {
+                                m_offset = minOff; // at start, pushing back → wrap to end
+                                if constexpr (Constants::THUMBNAIL_PANEL_WHEEL_WRAP_OVERLAY)
+                                    g_overlayManager.PostCenterMessage(m_hOwner,
+                                        Constants::Messages::THUMB_STRIP_WRAP_TO_END);
+                            } else {
+                                m_offset += step;  // normal scroll (clamped in rebuild)
+                            }
                         } else {
-                            m_offset += step;     // normal scroll (clamped in rebuild)
+                            m_offset += step;      // wrap disabled — clamp in rebuild
                         }
                     } else {
                         m_offset += step;
