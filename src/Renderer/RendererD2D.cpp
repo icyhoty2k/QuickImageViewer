@@ -2,6 +2,7 @@
 #include "../Overlays/OverlayManager.h"
 #include "../AppState.h"
 #include "../Platform/Constants.h"
+#include "../Platform/ConstantsStrings.h"
 #include "../WorkerThread.h"
 #include "../SimpleFormats.h"
 #include "../ImageLoadStats.h"
@@ -355,6 +356,11 @@ HRESULT RendererD2D::CreateDeviceResources() {
     hr = m_pDeviceContext->CreateSolidColorBrush(D2D1::ColorF(D2D1::ColorF::LightGreen), &m_pTextBrush);
     if (FAILED(hr)) return hr;
 
+    hr = m_pDeviceContext->CreateSolidColorBrush(
+        D2D1::ColorF(210.0f / 255.0f, 70.0f / 255.0f, 70.0f / 255.0f),
+        &m_pFolderDeletedBrush);
+    if (FAILED(hr)) return hr;
+
     hr = m_pDeviceContext->CreateEffect(CLSID_D2D1ColorMatrix, &m_pColorMatrixEffect);
     if (FAILED(hr)) return hr;
 
@@ -399,6 +405,7 @@ void RendererD2D::DiscardDeviceResources() {
     if (m_pDeviceContext) m_pDeviceContext->SetTarget(nullptr);
 
     m_pTextBrush.Reset();
+    m_pFolderDeletedBrush.Reset();
     m_pBackBufferBitmap.Reset();
     m_pBitmap.Reset();
     m_bitmapCache.clear();
@@ -430,6 +437,7 @@ void RendererD2D::Resize(UINT width, UINT height) {
     HRESULT hr = m_pSwapChain->ResizeBuffers(0, width, height, DXGI_FORMAT_UNKNOWN, 0);
     if (SUCCEEDED(hr)) {
         (void) CreateBackBufferBitmap();
+        m_pFolderDeletedLayout.Reset();
         g_overlayManager.OnResize(static_cast<float>(width), static_cast<float>(height));
     }
 }
@@ -994,6 +1002,34 @@ HRESULT RendererD2D::Render() {
         m_pDeviceContext->SetTransform(D2D1::Matrix3x2F::Identity());
         g_overlayManager.UpdateZoom(app.viewport.zoom, m_hwnd);
         g_overlayManager.RenderAll(m_pDeviceContext.Get());
+    }
+
+    // Persistent "directory missing" notice — stays until user opens another folder.
+    if (app.folderDeletedActive && m_pFolderDeletedBrush && m_pTextFormat && m_pDWriteFactory) {
+        const D2D1_SIZE_F sz = m_pDeviceContext->GetSize();
+
+        if (m_lastFolderDeletedPath != app.folderDeletedPath || !m_pFolderDeletedLayout) {
+            m_pFolderDeletedLayout.Reset();
+            m_lastFolderDeletedPath = app.folderDeletedPath;
+            std::wstring msg = std::wstring(Constants::Messages::EMPTY_DIR_MISSING)
+                             + L"\n" + app.folderDeletedPath;
+            m_pDWriteFactory->CreateTextLayout(
+                msg.c_str(), static_cast<UINT32>(msg.size()),
+                m_pTextFormat.Get(), sz.width, sz.height,
+                m_pFolderDeletedLayout.GetAddressOf());
+            if (m_pFolderDeletedLayout) {
+                m_pFolderDeletedLayout->SetTextAlignment(DWRITE_TEXT_ALIGNMENT_CENTER);
+                m_pFolderDeletedLayout->SetParagraphAlignment(DWRITE_PARAGRAPH_ALIGNMENT_CENTER);
+                m_pFolderDeletedLayout->SetWordWrapping(DWRITE_WORD_WRAPPING_EMERGENCY_BREAK);
+            }
+        }
+
+        if (m_pFolderDeletedLayout) {
+            m_pDeviceContext->DrawTextLayout(
+                D2D1::Point2F(0.0f, 0.0f),
+                m_pFolderDeletedLayout.Get(),
+                m_pFolderDeletedBrush.Get());
+        }
     }
 
     HRESULT hr = m_pDeviceContext->EndDraw();

@@ -1,5 +1,6 @@
 #include <algorithm>
 #include <random>
+#include <intrin.h>
 #include "CMDArgs.h"
 #include "SlideshowTransitions.h"
 
@@ -133,6 +134,14 @@ LRESULT CALLBACK MainAppWndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM l
         case Constants::WM_QIV_SCAN_COMPLETE:
             HandleScanComplete(hWnd, reinterpret_cast<ScanResult *>(lParam));
             return 0;
+
+        case Constants::WM_QIV_DIR_CHANGED:
+            // File-system change in the watched folder: (re)start the debounce
+            // timer. Multiple rapid events collapse into a single reload.
+            KillTimer(hWnd, Constants::DIR_WATCHER_TIMER_ID);
+            SetTimer(hWnd, Constants::DIR_WATCHER_TIMER_ID,
+                     Constants::DIR_WATCHER_DEBOUNCE_MS, nullptr);
+            return 0;
         case WM_TIMER: {
             constexpr UINT_PTR TIMER_LOOKASIDE = 1001;
             constexpr UINT_PTR TIMER_CENTER_MSG = 1002;
@@ -200,6 +209,12 @@ LRESULT CALLBACK MainAppWndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM l
                     InvalidateRect(hWnd, nullptr, FALSE);
                     SetTimer(hWnd, Constants::Slideshow::GIF_TIMER_ID, nextDelay, nullptr);
                 }
+                return 0;
+            }
+
+            if (wParam == Constants::DIR_WATCHER_TIMER_ID) {
+                KillTimer(hWnd, Constants::DIR_WATCHER_TIMER_ID);
+                ReloadCurrentDirectory(hWnd);
                 return 0;
             }
 
@@ -496,6 +511,7 @@ LRESULT CALLBACK MainAppWndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM l
             break;
 
         case WM_DESTROY:
+            StopDirWatcher();
             PostQuitMessage(0);
             return 0;
     }
@@ -505,7 +521,27 @@ LRESULT CALLBACK MainAppWndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM l
 //////////////////////////////////////////////////////
 //////////////////// Main entry point /////////////////
 ////////////////////////////////////////////////////////
+static bool HasAVX2Support() {
+    int cpu[4] = {};
+    __cpuid(cpu, 1);
+    if ((cpu[2] & (1 << 27)) == 0) return false; // no OSXSAVE — OS didn't enable XSAVE
+    if ((cpu[2] & (1 << 28)) == 0) return false; // no AVX
+    if ((_xgetbv(0) & 0x6) != 0x6)  return false; // OS hasn't enabled YMM state saving
+    __cpuidex(cpu, 7, 0);
+    return (cpu[1] & (1 << 5)) != 0;             // EBX bit 5 = AVX2
+}
+
 int WINAPI wWinMain(HINSTANCE hInstance, [[maybe_unused]] HINSTANCE hPrevInstance, [[maybe_unused]] PWSTR pCmdLine, int nCmdShow) {
+    if (!HasAVX2Support()) {
+        MessageBoxW(nullptr,
+            L"Your CPU does not support AVX2 instructions.\n\n"
+            L"QIV requires a processor with AVX2 support\n"
+            L"(Intel Core 4th gen / AMD Ryzen or newer).",
+            L"QuickImageViewer — CPU not supported",
+            MB_ICONERROR | MB_OK);
+        return 1;
+    }
+
     // 1. Initialize OLE
     if (FAILED(OleInitialize(nullptr))) return 0;
     // Enable process-wide dark standard controls for the tray menu
