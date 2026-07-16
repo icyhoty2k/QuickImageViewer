@@ -185,10 +185,8 @@ namespace Constants {
             // Description text — near-white gray (230,230,230)
             constexpr float DESCRIPTION = 0.9020f + THEME_FACTOR * (1.0f - 2.0f * 0.9020f);
 
-            // Facebook link — light blue (100,180,255)
-            constexpr float LINK_R = 0.3922f + THEME_FACTOR * (1.0f - 2.0f * 0.3922f);
-            constexpr float LINK_G = 0.7059f + THEME_FACTOR * (1.0f - 2.0f * 0.7059f);
-            constexpr float LINK_B = 1.0000f + THEME_FACTOR * (1.0f - 2.0f * 1.0000f);
+            // Link colors: see Constants::Links in Constants.h — the app-wide
+            // single source of truth for clickable link color + underline.
 
             // Scrollbar — track (50,50,55), thumb (150,150,160)
             constexpr float SCROLLBAR_TRACK_R = 0.1961f + THEME_FACTOR * (1.0f - 2.0f * 0.1961f);

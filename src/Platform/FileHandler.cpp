@@ -400,30 +400,42 @@ void HandleScanComplete(HWND hWnd, ScanResult *result) {
 
     // Empty scan: folder has no images (or the directory itself was deleted).
     // Notify all visible panels so they can show the appropriate placeholder,
-    // and immediately mark the entry red in HistoryListWnd if the dir is gone.
+    // then clear the stale playlist and blank the main viewport regardless —
+    // navigating with a stale playlist would try to open files that no longer exist.
     if (result->playlist.empty()) {
         std::wstring dir = result->scannedDir;
         uiManager.NotifyFolderRefreshed(dir, {});
-        {
-            std::error_code ec;
-            if (!fs::is_directory(fs::path(dir), ec) || ec) {
-                UI::InvalidateHistoryFolderStatus(dir);
 
-                // Directory is gone (deleted, moved, renamed) — clear the stale
-                // playlist so navigation doesn't crash, blank the viewport, and
-                // activate the persistent "Directory Missing" renderer overlay.
-                app.playlist.clear();
-                app.playlistFileSizes.clear();
-                app.playlistFileTimes.clear();
-                app.playlistIndexMap.clear();
-                app.currentIndex       = -1;
-                app.previousImageIndex = -1;
-                if (app.renderer) app.renderer->ClearActiveImage();
-                app.folderDeletedActive = true;
-                app.folderDeletedPath   = dir;
-                InvalidateRect(hWnd, nullptr, FALSE);
-            }
+        // Hidden DirWnd is not in a slot and missed the notify — sync its
+        // missing/empty state directly (UpdateView self-guards while hidden).
+        // Base-class reference: OnFolderRefreshed is public on the base only.
+        {
+            UI::ThumbnailPanelWnd &dirPanel = uiManager.getDirWindow();
+            if (!dirPanel.IsPanelVisible())
+                dirPanel.OnFolderRefreshed(dir, {});
         }
+
+        app.playlist.clear();
+        app.playlistFileSizes.clear();
+        app.playlistFileTimes.clear();
+        app.playlistIndexMap.clear();
+        app.currentIndex       = -1;
+        app.previousImageIndex = -1;
+        if (app.renderer) app.renderer->ClearActiveImage();
+
+        std::error_code ec;
+        if (!fs::is_directory(fs::path(dir), ec) || ec) {
+            // Directory itself is gone (deleted, moved, renamed).
+            UI::InvalidateHistoryFolderStatus(dir);
+            app.folderOverlay     = AppState::FolderOverlayState::Missing;
+            app.folderOverlayPath = dir;
+        } else {
+            // Directory exists but contains no supported images.
+            app.folderOverlay     = AppState::FolderOverlayState::Empty;
+            app.folderOverlayPath = dir;
+        }
+
+        InvalidateRect(hWnd, nullptr, FALSE);
         delete result;
         return;
     }
@@ -460,9 +472,17 @@ void HandleScanComplete(HWND hWnd, ScanResult *result) {
     // SpawnedDirWnd instances watching the same dir, and CacheWnd.
     uiManager.NotifyFolderRefreshed(scannedDir, app.playlist);
 
-    // Folder is alive again — dismiss any "folder deleted" renderer overlay.
-    app.folderDeletedActive = false;
-    app.folderDeletedPath.clear();
+    // A hidden DirWnd is not in any layout slot and missed the notify above,
+    // leaving it stuck with the 1-item probe playlist from OpenDirectory.
+    // Sync it directly so F6 shows the full folder (cheap: vector copy only,
+    // SetPlaylistCopy skips UpdateView while the window is hidden).
+    UI::DirWnd &dirWnd = uiManager.getDirWindow();
+    if (!dirWnd.IsPanelVisible())
+        dirWnd.SetPlaylistCopy(app.playlist);
+
+    // Folder has images — dismiss any Missing/Empty renderer overlay.
+    app.folderOverlay = AppState::FolderOverlayState::None;
+    app.folderOverlayPath.clear();
 
     // Watch for future changes so the strip auto-refreshes on delete/add/rename.
     StartDirWatcher(hWnd, scannedDir);
@@ -713,9 +733,9 @@ void OpenDirectory(HWND hWnd, const std::wstring &dirPathStr) {
     if (ec) return;
     if (!fs::is_directory(dirPath, ec) || ec) return;
 
-    // Valid directory confirmed — dismiss any "folder deleted" overlay immediately.
-    app.folderDeletedActive = false;
-    app.folderDeletedPath.clear();
+    // Valid directory confirmed — dismiss any Missing/Empty overlay immediately.
+    app.folderOverlay = AppState::FolderOverlayState::None;
+    app.folderOverlayPath.clear();
 
     // If we are already in this directory, just jump to the first image.
     // Compare canonical paths to handle junctions and drive-letter case.
@@ -778,13 +798,21 @@ void OpenDirectory(HWND hWnd, const std::wstring &dirPathStr) {
 
 // Used to reload / refresh current dir with F5
 void ReloadCurrentDirectory(HWND hWnd) {
-    if (app.currentIndex < 0 ||
-        app.currentIndex >= static_cast<int>(app.playlist.size())) {
+    std::wstring currentImage;
+    std::wstring dir;
+
+    if (app.currentIndex >= 0 &&
+        app.currentIndex < static_cast<int>(app.playlist.size())) {
+        currentImage = app.playlist[app.currentIndex];
+        dir = fs::path(currentImage).parent_path().wstring();
+    } else if (app.folderOverlay != AppState::FolderOverlayState::None &&
+               !app.folderOverlayPath.empty()) {
+        // Playlist was cleared because the folder went missing/empty — rescan
+        // that folder so the viewer recovers when images (re)appear in it.
+        dir = app.folderOverlayPath;
+    } else {
         return;
     }
-
-    const std::wstring currentImage = app.playlist[app.currentIndex];
-    const std::wstring dir = fs::path(currentImage).parent_path().wstring();
 
     uint64_t gen = ++g_scanGeneration;
     UpdateIoWorkerForPath(dir);

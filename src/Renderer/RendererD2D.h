@@ -179,10 +179,14 @@ class RendererD2D final : public IImageRenderer {
         void ResetGifAnimation()          override;
     private:
 
-        // Persistent "folder deleted" overlay — drawn until user opens a new folder.
-        Microsoft::WRL::ComPtr<ID2D1SolidColorBrush> m_pFolderDeletedBrush;
+        // Persistent overlay (Missing / Empty) — drawn until user opens a new folder.
+        // Format + layout are DWrite (device-independent): created once, survive
+        // device loss and resize — only the brush is device-dependent.
+        Microsoft::WRL::ComPtr<ID2D1SolidColorBrush> m_pFolderDeletedBrush;   // red — Missing state
+        Microsoft::WRL::ComPtr<ID2D1SolidColorBrush> m_pLinkBrush;            // Constants::Links — clickable path
+        Microsoft::WRL::ComPtr<IDWriteTextFormat>     m_pFolderOverlayFormat;  // created lazily, cached forever
         Microsoft::WRL::ComPtr<IDWriteTextLayout>     m_pFolderDeletedLayout;
-        std::wstring                                  m_lastFolderDeletedPath;
+        std::wstring                                  m_lastFolderOverlayKey;  // state + path, drives lazy rebuild
 
         // SVG: active D2D SVG document (legacy path, never set by resvg;
         // resvg-rasterized SVGs go into m_bitmapCache as bitmaps instead)
