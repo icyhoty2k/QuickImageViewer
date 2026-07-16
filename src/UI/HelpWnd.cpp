@@ -893,9 +893,9 @@ namespace UI {
                 m_footerLinkRect = {contentLeft, rc.bottom - MulDiv(18, dpiI, 96),
                                     contentRight, rc.bottom - MulDiv(2, dpiI, 96)};
                 SetTextColor(hdc, Constants::Theme::ThemedColor(
-                        Constants::Theme::HelpWindow::LINK_R,
-                        Constants::Theme::HelpWindow::LINK_G,
-                        Constants::Theme::HelpWindow::LINK_B, app.themeFactor));
+                        Constants::Links::COLOR_R_F,
+                        Constants::Links::COLOR_G_F,
+                        Constants::Links::COLOR_B_F, app.themeFactor));
                 DrawTextW(hdc, L"Follow on Facebook - Ivan Hristov Yanev", -1,
                           &m_footerLinkRect, DT_CENTER | DT_TOP | DT_NOPREFIX);
 

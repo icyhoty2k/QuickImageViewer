@@ -14,11 +14,47 @@
 #include <vector>
 #include <shlobj_core.h>
 #include <shtypes.h>
+#include <shellapi.h>
 
 extern AppState app;
 
+namespace {
+    // True when the Missing/Empty overlay is visible and pt lies on its path line.
+    bool HitTestOverlayPath(const POINT &pt) {
+        if (app.folderOverlay == AppState::FolderOverlayState::None ||
+            app.folderOverlayPath.empty())
+            return false;
+        const D2D1_RECT_F &r = app.folderOverlayPathRect;
+        return static_cast<float>(pt.x) >= r.left && static_cast<float>(pt.x) <= r.right &&
+               static_cast<float>(pt.y) >= r.top  && static_cast<float>(pt.y) <= r.bottom;
+    }
+
+    // Open the overlay path in Explorer. If the directory itself is gone
+    // (Missing state), walk up to the nearest parent that still exists.
+    void OpenOverlayPathInExplorer(HWND hWnd) {
+        fs::path p(app.folderOverlayPath);
+        std::error_code ec;
+        while (!p.empty() && (!fs::is_directory(p, ec) || ec)) {
+            fs::path parent = p.parent_path();
+            if (parent == p) break; // reached the root
+            p = parent;
+            ec.clear();
+        }
+        if (fs::is_directory(p, ec) && !ec)
+            ShellExecuteW(hWnd, L"open", p.c_str(), nullptr, nullptr, SW_SHOWNORMAL);
+    }
+}
 
 void MouseHandler::HandleButtonDown(HWND hWnd, UINT message, LPARAM lParam) {
+    // Clickable path in the Missing/Empty overlay — opens Explorer.
+    if (message == WM_LBUTTONDOWN) {
+        POINT pt = {GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam)};
+        if (HitTestOverlayPath(pt)) {
+            OpenOverlayPathInExplorer(hWnd);
+            return;
+        }
+    }
+
     // Track RMB state
     if (message == WM_RBUTTONDOWN) {
         app.isRmbDown = true;
@@ -241,6 +277,13 @@ void MouseHandler::HandleButtonUp(HWND hWnd, UINT message, LPARAM /*lParam*/) {
 }
 
 void MouseHandler::HandleMouseMove(HWND hWnd, LPARAM lParam) {
+    // Hand cursor over the clickable path in the Missing/Empty overlay.
+    if (!app.isMidDragging && !app.viewport.isDragging && !app.isWindowDragging) {
+        POINT pt = {GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam)};
+        if (HitTestOverlayPath(pt))
+            SetCursor(LoadCursor(nullptr, MAKEINTRESOURCEW(Constants::Cursors::LMB_PAN)));
+    }
+
     if (app.slideshow.running) {
         if (app.slideshow.cursorHidden) {
             ShowCursor(TRUE);

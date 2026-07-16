@@ -118,9 +118,15 @@ struct AppState {
     // Slideshow
     SlideshowState slideshow;
 
-    // Set when the watched folder was deleted; cleared when a new folder opens.
-    bool folderDeletedActive = false;
-    std::wstring folderDeletedPath;
+    // Persistent main-window overlay shown when the current directory becomes
+    // unavailable.  Cleared when the user opens a new folder successfully.
+    enum class FolderOverlayState { None, Missing, Empty };
+    FolderOverlayState folderOverlay = FolderOverlayState::None;
+    std::wstring folderOverlayPath;
+    // Client-area rect of the path line in the overlay — written by the
+    // renderer each frame it draws, hit-tested by MouseHandler for
+    // click-to-open-in-Explorer. Zero rect = nothing clickable.
+    D2D1_RECT_F folderOverlayPathRect = {};
 
     // Helper to count active instances of this specific class
     int GetInstanceCount() const {

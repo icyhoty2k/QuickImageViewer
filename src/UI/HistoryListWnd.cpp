@@ -648,11 +648,11 @@ namespace UI {
                             DEFAULT_CHARSET, OUT_OUTLINE_PRECIS, CLIP_DEFAULT_PRECIS,
                             CLEARTYPE_QUALITY, VARIABLE_PITCH, L"Segoe UI");
                     m_hFontIndexLink = CreateFontW(
-                            listFontSz, 0, 0, 0, FW_NORMAL, FALSE, TRUE, FALSE,
+                            listFontSz, 0, 0, 0, FW_NORMAL, FALSE, Constants::Links::UNDERLINE, FALSE,
                             DEFAULT_CHARSET, OUT_OUTLINE_PRECIS, CLIP_DEFAULT_PRECIS,
                             CLEARTYPE_QUALITY, VARIABLE_PITCH, L"Segoe UI");
                     m_hFontLink = CreateFontW(
-                            fontSize, 0, 0, 0, FW_NORMAL, FALSE, TRUE, FALSE,
+                            fontSize, 0, 0, 0, FW_NORMAL, FALSE, Constants::Links::UNDERLINE, FALSE,
                             DEFAULT_CHARSET, OUT_OUTLINE_PRECIS, CLIP_DEFAULT_PRECIS,
                             CLEARTYPE_QUALITY, VARIABLE_PITCH, L"Segoe UI");
                     m_cachedFontDpi = static_cast<int>(dpi);

@@ -35,9 +35,9 @@ namespace Constants::Messages {
     // F5 Refresh/Reload current dir
     constexpr const wchar_t *RELOAD_CURRENT_DIR_MSG = L"Refreshed";
     // Empty-dir placeholder shown in DirWnd / SpawnedDirWnd when the folder has no images
-    constexpr const wchar_t *EMPTY_DIR_NO_IMAGES  = L"No Images";
+    constexpr const wchar_t *EMPTY_DIR_NO_IMAGES = L"No Images:";
     // Placeholder shown when the directory itself has been deleted
-    constexpr const wchar_t *EMPTY_DIR_MISSING    = L"⚠  Directory Missing";
+    constexpr const wchar_t *EMPTY_DIR_MISSING = L"⚠  Directory Missing";
 
     // Q — toggle last/current dir
     constexpr const wchar_t *TOGGLE_DIR_NO_PREV = L"No previous folder";
@@ -114,8 +114,8 @@ namespace Constants::Messages {
     constexpr const wchar_t *SPAWN_DIR_NO_SPACE = L"No free positions for DirWnd";
     constexpr const wchar_t *COPIED_TO_CLIPBOARD = L"Copied to Clipboard";
     constexpr const wchar_t *HISTORY_NAV_FOLDER = L"↔ "; // prefix — append folder name
-    constexpr const wchar_t *FOLDER_DEAD_MISSING   = L"⚠ Folder not found";
-    constexpr const wchar_t *FOLDER_DEAD_EMPTY     = L"⚠ No images in folder";
+    constexpr const wchar_t *FOLDER_DEAD_MISSING = L"⚠ Folder not found";
+    constexpr const wchar_t *FOLDER_DEAD_EMPTY = L"⚠ No images in folder";
     constexpr const wchar_t *FOLDER_DELETED_NOTIFY = L"⚠ Folder deleted";
 
     // Thumbnail strip wrap-around
