@@ -179,8 +179,16 @@ namespace Constants {
     constexpr UINT WM_QIV_OPEN_FILE = WM_USER + 4; // Posted by DropTarget/WM_COPYDATA; LPARAM = new std::wstring*
     constexpr UINT WM_QIV_SWITCH_TO_FIND = WM_USER + 5; // FindWnd  ← PANEL_SWITCH_TO_FIND_CHAR typed in JumpToWnd
     constexpr UINT WM_QIV_SWITCH_TO_JUMP = WM_USER + 6; // JumpToWnd ← PANEL_SWITCH_TO_JUMP_CHAR typed in FindWnd
-    constexpr UINT WM_QIV_SCAN_COMPLETE = WM_USER + 7; // Background dir scan done; LPARAM = new ScanResult*
-    constexpr UINT WM_QIV_HISTORY_VALIDATED = WM_USER + 8; // Background history validation done; LPARAM = new StatusMap*
+    constexpr UINT WM_QIV_SCAN_COMPLETE      = WM_USER + 7; // Background dir scan done; LPARAM = new ScanResult*
+    constexpr UINT WM_QIV_HISTORY_VALIDATED  = WM_USER + 8; // Background history validation done; LPARAM = new StatusMap*
+    constexpr UINT WM_QIV_DIR_CHANGED        = WM_USER + 9; // Posted by DirWatcher thread when a file-system change is detected
+
+    // ---------------------------------------------------------------------------
+    // Directory watcher (ReadDirectoryChangesW / FindFirstChangeNotification)
+    // ---------------------------------------------------------------------------
+    constexpr bool     WATCH_DIR_FOR_CHANGES   = true;  // master on/off switch
+    constexpr UINT     DIR_WATCHER_DEBOUNCE_MS = 400;   // quiet period before auto-refresh fires
+    constexpr UINT_PTR DIR_WATCHER_TIMER_ID    = 1008;  // WM_TIMER wParam used for the debounce tick
 
     // First-character panel-switch triggers
     constexpr wchar_t PANEL_SWITCH_TO_JUMP_CHAR = L'#'; // type this in FindWnd  to open JumpToWnd

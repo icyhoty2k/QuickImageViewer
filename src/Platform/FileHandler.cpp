@@ -21,6 +21,68 @@
 
 namespace fs = std::filesystem;
 
+// =============================================================================
+// DirWatcher — watches the current folder for file-system changes and posts
+// WM_QIV_DIR_CHANGED to the main HWND. AppMain debounces that message into a
+// ReloadCurrentDirectory call so the thumbnail strip stays in sync automatically.
+//
+// Uses FindFirstChangeNotificationW (simpler than ReadDirectoryChangesW for
+// this use-case) with a manual-reset stop event so the thread exits cleanly.
+// =============================================================================
+namespace {
+    static HANDLE      s_hWatchNotify = INVALID_HANDLE_VALUE;
+    static HANDLE      s_hWatchStop   = nullptr;
+    static std::thread s_watchThread;
+}
+
+void StopDirWatcher() {
+    // Signal the thread to wake and exit.
+    if (s_hWatchStop)
+        SetEvent(s_hWatchStop);
+
+    if (s_watchThread.joinable())
+        s_watchThread.join();
+
+    if (s_hWatchNotify != INVALID_HANDLE_VALUE) {
+        FindCloseChangeNotification(s_hWatchNotify);
+        s_hWatchNotify = INVALID_HANDLE_VALUE;
+    }
+    if (s_hWatchStop) {
+        CloseHandle(s_hWatchStop);
+        s_hWatchStop = nullptr;
+    }
+}
+
+void StartDirWatcher(HWND hWnd, const std::wstring &dir) {
+    if (!Constants::WATCH_DIR_FOR_CHANGES) return;
+
+    StopDirWatcher(); // stop any previous watcher before starting a new one
+
+    HANDLE hNotify = FindFirstChangeNotificationW(
+        dir.c_str(), FALSE,
+        FILE_NOTIFY_CHANGE_FILE_NAME  | // file added / deleted / renamed
+        FILE_NOTIFY_CHANGE_SIZE       | // file grew or shrank (image replaced)
+        FILE_NOTIFY_CHANGE_LAST_WRITE); // file modified in-place
+
+    if (hNotify == INVALID_HANDLE_VALUE) return;
+
+    HANDLE hStop = CreateEventW(nullptr, /*manualReset=*/TRUE, FALSE, nullptr);
+    if (!hStop) { FindCloseChangeNotification(hNotify); return; }
+
+    s_hWatchNotify = hNotify;
+    s_hWatchStop   = hStop;
+
+    s_watchThread = std::thread([hNotify, hStop, hWnd]() {
+        HANDLE handles[2] = { hNotify, hStop };
+        for (;;) {
+            DWORD result = WaitForMultipleObjects(2, handles, FALSE, INFINITE);
+            if (result != WAIT_OBJECT_0) break;         // stop event or error
+            PostMessageW(hWnd, Constants::WM_QIV_DIR_CHANGED, 0, 0);
+            if (!FindNextChangeNotification(hNotify)) break; // handle closed
+        }
+    });
+}
+
 void sortCurrentPlaylistInOrder();
 
 // ---------------------------------------------------------------------------
@@ -344,8 +406,23 @@ void HandleScanComplete(HWND hWnd, ScanResult *result) {
         uiManager.NotifyFolderRefreshed(dir, {});
         {
             std::error_code ec;
-            if (!fs::is_directory(fs::path(dir), ec) || ec)
+            if (!fs::is_directory(fs::path(dir), ec) || ec) {
                 UI::InvalidateHistoryFolderStatus(dir);
+
+                // Directory is gone (deleted, moved, renamed) — clear the stale
+                // playlist so navigation doesn't crash, blank the viewport, and
+                // activate the persistent "Directory Missing" renderer overlay.
+                app.playlist.clear();
+                app.playlistFileSizes.clear();
+                app.playlistFileTimes.clear();
+                app.playlistIndexMap.clear();
+                app.currentIndex       = -1;
+                app.previousImageIndex = -1;
+                if (app.renderer) app.renderer->ClearActiveImage();
+                app.folderDeletedActive = true;
+                app.folderDeletedPath   = dir;
+                InvalidateRect(hWnd, nullptr, FALSE);
+            }
         }
         delete result;
         return;
@@ -382,6 +459,13 @@ void HandleScanComplete(HWND hWnd, ScanResult *result) {
     // Refresh every visible panel that cares about this folder — DirWnd,
     // SpawnedDirWnd instances watching the same dir, and CacheWnd.
     uiManager.NotifyFolderRefreshed(scannedDir, app.playlist);
+
+    // Folder is alive again — dismiss any "folder deleted" renderer overlay.
+    app.folderDeletedActive = false;
+    app.folderDeletedPath.clear();
+
+    // Watch for future changes so the strip auto-refreshes on delete/add/rename.
+    StartDirWatcher(hWnd, scannedDir);
 
     LoadImageIndex(hWnd, targetIdx);
     InvalidateRect(hWnd, nullptr, FALSE);
@@ -628,6 +712,10 @@ void OpenDirectory(HWND hWnd, const std::wstring &dirPathStr) {
     fs::path dirPath = fs::canonical(fs::path(dirPathStr), ec);
     if (ec) return;
     if (!fs::is_directory(dirPath, ec) || ec) return;
+
+    // Valid directory confirmed — dismiss any "folder deleted" overlay immediately.
+    app.folderDeletedActive = false;
+    app.folderDeletedPath.clear();
 
     // If we are already in this directory, just jump to the first image.
     // Compare canonical paths to handle junctions and drive-letter case.

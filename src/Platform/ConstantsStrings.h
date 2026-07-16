@@ -114,8 +114,9 @@ namespace Constants::Messages {
     constexpr const wchar_t *SPAWN_DIR_NO_SPACE = L"No free positions for DirWnd";
     constexpr const wchar_t *COPIED_TO_CLIPBOARD = L"Copied to Clipboard";
     constexpr const wchar_t *HISTORY_NAV_FOLDER = L"↔ "; // prefix — append folder name
-    constexpr const wchar_t *FOLDER_DEAD_MISSING = L"⚠ Folder not found";
-    constexpr const wchar_t *FOLDER_DEAD_EMPTY = L"⚠ No images in folder";
+    constexpr const wchar_t *FOLDER_DEAD_MISSING   = L"⚠ Folder not found";
+    constexpr const wchar_t *FOLDER_DEAD_EMPTY     = L"⚠ No images in folder";
+    constexpr const wchar_t *FOLDER_DELETED_NOTIFY = L"⚠ Folder deleted";
 
     // Thumbnail strip wrap-around
     constexpr const wchar_t *THUMB_STRIP_WRAP_TO_START = L"↩ Start";

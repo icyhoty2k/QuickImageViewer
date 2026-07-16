@@ -118,6 +118,10 @@ struct AppState {
     // Slideshow
     SlideshowState slideshow;
 
+    // Set when the watched folder was deleted; cleared when a new folder opens.
+    bool folderDeletedActive = false;
+    std::wstring folderDeletedPath;
+
     // Helper to count active instances of this specific class
     int GetInstanceCount() const {
         int count = 0;
