@@ -3,13 +3,28 @@
 // =========================================================================
 // RC COMPATIBLE DEFINITIONS
 // Used by the Resource Compiler for version metadata
+// *** Update ONLY the four numbers below to bump the version everywhere ***
 // =========================================================================
-#define VER_NUMERIC 2,1,9,0        // Numeric version for file properties (4 comma-separated integers) must be exactly 4 numbers separated by commas
-#define VER_STR "2.1.9"            // Human-readable version string; may contain text such as "1.5 Beta"
-#define FILE_DESC "qIV"            // Friendly name displayed in Task Manager/Explorer
-#define ORIG_FILENAME "QuickImageViewer.exe" // Original name of the binary
-#define PROD_NAME "Quick Image Viewer"       // Official product name
-#define COPYRIGHT   "Copyright \xA9 2026 All rights reserved, Ivan Hristov Yanev" // Copyright notice
+#define VER_MAJOR 2
+#define VER_MINOR 3
+#define VER_PATCH 0
+#define VER_BUILD 0
+
+// Comma form  — FILEVERSION / PRODUCTVERSION in .rc  (e.g. 2,3,0,0)
+#define VER_NUMERIC   VER_MAJOR,VER_MINOR,VER_PATCH,VER_BUILD
+
+// String form — derived via C preprocessor stringification.
+// rc.exe (Windows SDK 10) runs a full C-preprocessor pass, so # works here.
+// In C++: L"" VER_STR  →  L"2.3.0.0"
+// In RC:  VALUE "FileVersion", VER_STR  →  "2.3.0.0"
+#define _QIV_S(x)     #x
+#define _QIV_STR(x)   _QIV_S(x)
+#define VER_STR       _QIV_STR(VER_MAJOR) "." _QIV_STR(VER_MINOR) "." _QIV_STR(VER_PATCH) "." _QIV_STR(VER_BUILD)
+
+#define FILE_DESC     "qIV"
+#define ORIG_FILENAME "QuickImageViewer.exe"
+#define PROD_NAME     "Quick Image Viewer"
+#define COPYRIGHT     "Copyright \xA9 2026 All rights reserved, Ivan Hristov Yanev"
 // =========================================================================
 
 #include <iterator>
@@ -23,7 +38,7 @@ namespace Constants {
 
     constexpr const wchar_t *APP_HELP_FOOTER = L"" COPYRIGHT;
     constexpr const wchar_t *APP_TASKBAR_NAME = L"" FILE_DESC;
-    constexpr const wchar_t *APP_VERSION = L"" VER_STR; // major.minor.patch
+    constexpr const wchar_t *APP_VERSION = L"" VER_STR; // major.minor.patch.build  e.g. 2.3.0.0
     constexpr const wchar_t *APP_NAME = BASE_NAME;
     constexpr const wchar_t *WINDOW_CLASS_NAME = BASE_NAME;
     constexpr bool IS_ENABLE_RUN_ON_STARTUP = true; // enable or disable run on startup reg value add/delete
@@ -179,16 +194,16 @@ namespace Constants {
     constexpr UINT WM_QIV_OPEN_FILE = WM_USER + 4; // Posted by DropTarget/WM_COPYDATA; LPARAM = new std::wstring*
     constexpr UINT WM_QIV_SWITCH_TO_FIND = WM_USER + 5; // FindWnd  ← PANEL_SWITCH_TO_FIND_CHAR typed in JumpToWnd
     constexpr UINT WM_QIV_SWITCH_TO_JUMP = WM_USER + 6; // JumpToWnd ← PANEL_SWITCH_TO_JUMP_CHAR typed in FindWnd
-    constexpr UINT WM_QIV_SCAN_COMPLETE      = WM_USER + 7; // Background dir scan done; LPARAM = new ScanResult*
-    constexpr UINT WM_QIV_HISTORY_VALIDATED  = WM_USER + 8; // Background history validation done; LPARAM = new StatusMap*
-    constexpr UINT WM_QIV_DIR_CHANGED        = WM_USER + 9; // Posted by DirWatcher thread when a file-system change is detected
+    constexpr UINT WM_QIV_SCAN_COMPLETE = WM_USER + 7; // Background dir scan done; LPARAM = new ScanResult*
+    constexpr UINT WM_QIV_HISTORY_VALIDATED = WM_USER + 8; // Background history validation done; LPARAM = new StatusMap*
+    constexpr UINT WM_QIV_DIR_CHANGED = WM_USER + 9; // Posted by DirWatcher thread when a file-system change is detected
 
     // ---------------------------------------------------------------------------
     // Directory watcher (ReadDirectoryChangesW / FindFirstChangeNotification)
     // ---------------------------------------------------------------------------
-    constexpr bool     WATCH_DIR_FOR_CHANGES   = true;  // master on/off switch
-    constexpr UINT     DIR_WATCHER_DEBOUNCE_MS = 400;   // quiet period before auto-refresh fires
-    constexpr UINT_PTR DIR_WATCHER_TIMER_ID    = 1008;  // WM_TIMER wParam used for the debounce tick
+    constexpr bool WATCH_DIR_FOR_CHANGES = true; // master on/off switch
+    constexpr UINT DIR_WATCHER_DEBOUNCE_MS = 400; // quiet period before auto-refresh fires
+    constexpr UINT_PTR DIR_WATCHER_TIMER_ID = 1008; // WM_TIMER wParam used for the debounce tick
 
     // First-character panel-switch triggers
     constexpr wchar_t PANEL_SWITCH_TO_JUMP_CHAR = L'#'; // type this in FindWnd  to open JumpToWnd
