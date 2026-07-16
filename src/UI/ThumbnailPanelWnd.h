@@ -152,6 +152,7 @@ namespace UI {
             void GetWindowBounds(HWND hRef, int8_t position,
                                  int &x, int &y, int &w, int &h) const;
 
+            Microsoft::WRL::ComPtr<IDWriteTextFormat> m_emptyFormat;
             Microsoft::WRL::ComPtr<IDWriteTextLayout> m_emptyNoImagesLayout;
             Microsoft::WRL::ComPtr<IDWriteTextLayout> m_emptyDirMissingLayout;
 

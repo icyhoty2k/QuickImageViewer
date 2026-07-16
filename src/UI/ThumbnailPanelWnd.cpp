@@ -863,7 +863,7 @@ namespace UI {
     void ThumbnailPanelWnd::RenderEmptyPlaceholder() {
         if (!m_panelContext || !app.renderer) return;
         auto *r = dynamic_cast<RendererD2D *>(app.renderer.get());
-        if (!r || !r->m_pDWriteFactory || !r->m_pTextFormat || !r->m_pTextBrush) return;
+        if (!r || !r->m_pDWriteFactory || !r->m_pTextBrush) return;
 
         RECT cr{};
         GetClientRect(m_hWnd, &cr);
@@ -871,6 +871,19 @@ namespace UI {
         const float sh     = static_cast<float>(cr.bottom);
         const float margin = Constants::THUMBNAIL_PANEL_THUMB_MARGIN * app.dpiScale;
         const float textW  = std::max(1.0f, sw - 2.0f * margin);
+
+        // Lazily create a DWrite format for the panel's own use.
+        // m_pTextFormat on the renderer is never initialized; own it here instead.
+        if (!m_emptyFormat) {
+            const float fontSize = std::max(8.0f, 11.0f * app.dpiScale);
+            r->m_pDWriteFactory->CreateTextFormat(
+                L"Segoe UI", nullptr,
+                DWRITE_FONT_WEIGHT_NORMAL, DWRITE_FONT_STYLE_NORMAL,
+                DWRITE_FONT_STRETCH_NORMAL, fontSize,
+                Constants::Overlay::MSG_ALL_FONT_LOCALE,
+                m_emptyFormat.GetAddressOf());
+        }
+        if (!m_emptyFormat) return;
 
         // Choose header text and brush based on missing vs empty-but-present state.
         ID2D1SolidColorBrush *headerBrush;
@@ -882,7 +895,7 @@ namespace UI {
                 const wchar_t *txt = Constants::Messages::EMPTY_DIR_MISSING;
                 r->m_pDWriteFactory->CreateTextLayout(
                     txt, static_cast<UINT32>(wcslen(txt)),
-                    r->m_pTextFormat.Get(), textW, sh,
+                    m_emptyFormat.Get(), textW, sh,
                     &m_emptyDirMissingLayout);
                 if (m_emptyDirMissingLayout) {
                     m_emptyDirMissingLayout->SetTextAlignment(DWRITE_TEXT_ALIGNMENT_CENTER);
@@ -897,7 +910,7 @@ namespace UI {
                 const wchar_t *txt = Constants::Messages::EMPTY_DIR_NO_IMAGES;
                 r->m_pDWriteFactory->CreateTextLayout(
                     txt, static_cast<UINT32>(wcslen(txt)),
-                    r->m_pTextFormat.Get(), textW, sh,
+                    m_emptyFormat.Get(), textW, sh,
                     &m_emptyNoImagesLayout);
                 if (m_emptyNoImagesLayout) {
                     m_emptyNoImagesLayout->SetTextAlignment(DWRITE_TEXT_ALIGNMENT_CENTER);
@@ -912,7 +925,7 @@ namespace UI {
         if (!m_emptyDirPathLayout && !m_emptyDir.empty()) {
             r->m_pDWriteFactory->CreateTextLayout(
                 m_emptyDir.c_str(), static_cast<UINT32>(m_emptyDir.size()),
-                r->m_pTextFormat.Get(), textW, sh,
+                m_emptyFormat.Get(), textW, sh,
                 &m_emptyDirPathLayout);
             if (m_emptyDirPathLayout) {
                 m_emptyDirPathLayout->SetTextAlignment(DWRITE_TEXT_ALIGNMENT_CENTER);
@@ -1003,6 +1016,8 @@ namespace UI {
         if (!m_swapChain || !m_panelContext) return;
 
         // Panel width/height changed — text wrap widths are no longer valid.
+        // m_emptyFormat encodes a DPI-scaled font size, so also reset it here.
+        m_emptyFormat.Reset();
         m_emptyNoImagesLayout.Reset();
         m_emptyDirMissingLayout.Reset();
         m_emptyDirPathLayout.Reset();

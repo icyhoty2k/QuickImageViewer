@@ -147,10 +147,9 @@ void ApplyCmdArgs(HWND hWnd, const CmdArgs& args, int nCmdShow) {
     ShowWindow(hWnd, nCmdShow);
     UpdateWindow(hWnd);
 
-    // In dedicated mode the tray icon is always present from startup —
-    // it is the only way to stop/start/quit the kiosk instance.
-    if (args.dedicated)
-        AppCommands::AddTrayIcon(hWnd);
+    // Tray icon is always present — dedicated mode requires it for kiosk control,
+    // and normal mode uses it as the "hide to tray on close" target.
+    AppCommands::AddTrayIcon(hWnd);
 
     // 7. Load content
     if (!args.startFolder.empty())
