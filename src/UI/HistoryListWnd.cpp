@@ -231,6 +231,13 @@ namespace UI {
         return GetFolderStatus(folderPath) == FolderStatus::Valid;
     }
 
+    void InvalidateHistoryFolderStatus(const std::wstring &path) {
+        g_statusCache[path] = FolderStatus::Missing;
+        HistoryListWnd &hw = uiManager.getHistoryListWindow();
+        HWND hwnd = hw.GetHwnd();
+        if (hwnd) InvalidateRect(hwnd, nullptr, FALSE);
+    }
+
     void LoadFolderHistoryFromDisk() {
         historyFoldersManager.LoadHistoryFromDisk();
     }
