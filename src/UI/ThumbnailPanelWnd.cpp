@@ -2,6 +2,7 @@
 #include <algorithm>
 #include <windowsx.h>
 #include <d2d1.h>
+#include <shellapi.h>
 #include <shellscalingapi.h>
 
 #include "FileHandler.h"
@@ -209,9 +210,12 @@ namespace UI {
         // Subclass provides the raw list; base owns all layout math.
         std::vector<std::wstring> items = GetSourceItems();
         if (items.empty()) {
+            if (IsDirPanel()) m_emptyDirActive = true;
             InvalidateRect(m_hWnd, nullptr, TRUE);
             return;
         }
+        m_emptyDirActive  = false;
+        m_emptyDirMissing = false;
 
         RECT cr{};
         GetClientRect(m_hWnd, &cr);
@@ -810,6 +814,13 @@ namespace UI {
                 if (s_dragging) {
                     ReleaseCapture();
                     if (!s_hasMoved) {
+                        // Empty-dir placeholder click → open folder in Explorer.
+                        if (m_emptyDirActive && m_thumbnails.empty() && !m_emptyDir.empty()) {
+                            ShellExecuteW(nullptr, L"explore", m_emptyDir.c_str(),
+                                          nullptr, nullptr, SW_SHOWNORMAL);
+                            s_dragging = false;
+                            return 0;
+                        }
                         int x = GET_X_LPARAM(lParam);
                         int y = GET_Y_LPARAM(lParam);
                         for (size_t i = 0; i < m_thumbnails.size(); ++i) {
@@ -841,6 +852,92 @@ namespace UI {
         }
 
         return DefWindowProcW(m_hWnd, message, wParam, lParam);
+    }
+
+    // =========================================================================
+    // RenderEmptyPlaceholder
+    // Drawn when the scanned folder has no images. Fills the full panel area
+    // with a centered two-line label: "No Images" + the folder path (wrapping
+    // at panel edges). A click anywhere opens the folder in Explorer.
+    // =========================================================================
+    void ThumbnailPanelWnd::RenderEmptyPlaceholder() {
+        if (!m_panelContext || !app.renderer) return;
+        auto *r = dynamic_cast<RendererD2D *>(app.renderer.get());
+        if (!r || !r->m_pDWriteFactory || !r->m_pTextFormat || !r->m_pTextBrush) return;
+
+        RECT cr{};
+        GetClientRect(m_hWnd, &cr);
+        const float sw     = static_cast<float>(cr.right);
+        const float sh     = static_cast<float>(cr.bottom);
+        const float margin = Constants::THUMBNAIL_PANEL_THUMB_MARGIN * app.dpiScale;
+        const float textW  = std::max(1.0f, sw - 2.0f * margin);
+
+        // Choose header text and brush based on missing vs empty-but-present state.
+        ID2D1SolidColorBrush *headerBrush;
+        IDWriteTextLayout    *headerLayout;
+
+        if (m_emptyDirMissing) {
+            // Directory itself is gone — red warning.
+            if (!m_emptyDirMissingLayout) {
+                const wchar_t *txt = Constants::Messages::EMPTY_DIR_MISSING;
+                r->m_pDWriteFactory->CreateTextLayout(
+                    txt, static_cast<UINT32>(wcslen(txt)),
+                    r->m_pTextFormat.Get(), textW, sh,
+                    &m_emptyDirMissingLayout);
+                if (m_emptyDirMissingLayout) {
+                    m_emptyDirMissingLayout->SetTextAlignment(DWRITE_TEXT_ALIGNMENT_CENTER);
+                    m_emptyDirMissingLayout->SetWordWrapping(DWRITE_WORD_WRAPPING_EMERGENCY_BREAK);
+                }
+            }
+            headerBrush  = m_emptyDirWarningBrush.Get();
+            headerLayout = m_emptyDirMissingLayout.Get();
+        } else {
+            // Directory exists but contains no supported images.
+            if (!m_emptyNoImagesLayout) {
+                const wchar_t *txt = Constants::Messages::EMPTY_DIR_NO_IMAGES;
+                r->m_pDWriteFactory->CreateTextLayout(
+                    txt, static_cast<UINT32>(wcslen(txt)),
+                    r->m_pTextFormat.Get(), textW, sh,
+                    &m_emptyNoImagesLayout);
+                if (m_emptyNoImagesLayout) {
+                    m_emptyNoImagesLayout->SetTextAlignment(DWRITE_TEXT_ALIGNMENT_CENTER);
+                    m_emptyNoImagesLayout->SetWordWrapping(DWRITE_WORD_WRAPPING_EMERGENCY_BREAK);
+                }
+            }
+            headerBrush  = r->m_pTextBrush.Get();
+            headerLayout = m_emptyNoImagesLayout.Get();
+        }
+
+        // Lazily create path layout (per-dir — reset when m_emptyDir changes).
+        if (!m_emptyDirPathLayout && !m_emptyDir.empty()) {
+            r->m_pDWriteFactory->CreateTextLayout(
+                m_emptyDir.c_str(), static_cast<UINT32>(m_emptyDir.size()),
+                r->m_pTextFormat.Get(), textW, sh,
+                &m_emptyDirPathLayout);
+            if (m_emptyDirPathLayout) {
+                m_emptyDirPathLayout->SetTextAlignment(DWRITE_TEXT_ALIGNMENT_CENTER);
+                m_emptyDirPathLayout->SetWordWrapping(DWRITE_WORD_WRAPPING_EMERGENCY_BREAK);
+            }
+        }
+
+        // Measure both blocks to vertically center the combined text.
+        DWRITE_TEXT_METRICS m1{}, m2{};
+        if (headerLayout)          headerLayout->GetMetrics(&m1);
+        if (m_emptyDirPathLayout)  m_emptyDirPathLayout->GetMetrics(&m2);
+
+        const float lineGap = 6.0f * app.dpiScale;
+        const float totalH  = m1.height + lineGap + m2.height;
+        const float startY  = (sh - totalH) / 2.0f;
+
+        if (headerLayout && headerBrush)
+            m_panelContext->DrawTextLayout({margin, startY},
+                                           headerLayout,
+                                           headerBrush);
+        // Path is drawn with the same brush as the header to stay visually consistent.
+        if (m_emptyDirPathLayout && headerBrush)
+            m_panelContext->DrawTextLayout({margin, startY + m1.height + lineGap},
+                                           m_emptyDirPathLayout.Get(),
+                                           headerBrush);
     }
 
     // =========================================================================
@@ -891,6 +988,8 @@ namespace UI {
         m_panelContext->CreateSolidColorBrush(
             D2D1::ColorF(D2D1::ColorF::LightGreen), &m_borderBrush);
         m_panelContext->CreateSolidColorBrush(
+            D2D1::ColorF(210.0f / 255, 70.0f / 255, 70.0f / 255), &m_emptyDirWarningBrush);
+        m_panelContext->CreateSolidColorBrush(
             D2D1::ColorF(D2D1::ColorF::White), &m_hoverBrush);
         m_panelContext->CreateSolidColorBrush(
             Constants::Theme::ThemedGrayD2D(Constants::Theme::Panel::SCROLLBAR_TRACK,
@@ -902,6 +1001,11 @@ namespace UI {
 
     void ThumbnailPanelWnd::ResizeSwapChain(UINT w, UINT h) {
         if (!m_swapChain || !m_panelContext) return;
+
+        // Panel width/height changed — text wrap widths are no longer valid.
+        m_emptyNoImagesLayout.Reset();
+        m_emptyDirMissingLayout.Reset();
+        m_emptyDirPathLayout.Reset();
 
         m_panelContext->SetTarget(nullptr);
         m_panelBackBuffer.Reset();
@@ -965,8 +1069,11 @@ namespace UI {
         }
         m_panelContext->Clear(clearColor);
 
-        // Draw separator lines at the gap between this vertical panel and
-        // any horizontal neighbour above or below it.
+        // Empty-dir placeholder — drawn instead of thumbnails when the scanned
+        // folder contained no images. Fills the full panel area, centered.
+        if (m_emptyDirActive && m_thumbnails.empty())
+            RenderEmptyPlaceholder();
+
         for (size_t j = 0; j < resolved.size(); ++j) {
             const int origI = static_cast<int>(visIdx[j]);
             const auto &rv = resolved[j];

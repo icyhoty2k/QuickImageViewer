@@ -34,6 +34,10 @@ namespace Constants::Messages {
     constexpr const wchar_t *ALL_EFFECTS_RESET = L"All Effects Reset";
     // F5 Refresh/Reload current dir
     constexpr const wchar_t *RELOAD_CURRENT_DIR_MSG = L"Refreshed";
+    // Empty-dir placeholder shown in DirWnd / SpawnedDirWnd when the folder has no images
+    constexpr const wchar_t *EMPTY_DIR_NO_IMAGES  = L"No Images";
+    // Placeholder shown when the directory itself has been deleted
+    constexpr const wchar_t *EMPTY_DIR_MISSING    = L"⚠  Directory Missing";
 
     // Q — toggle last/current dir
     constexpr const wchar_t *TOGGLE_DIR_NO_PREV = L"No previous folder";

@@ -89,6 +89,10 @@ namespace UI {
     // Result is cached per BuildDisplayList cycle — safe to call from paint or navigation.
     bool IsFolderValidForViewer(const std::wstring &folderPath);
 
+    // Force the status cache entry for 'path' to Missing and repaint the history
+    // panel if visible. Called by HandleScanComplete when F5 finds the dir gone.
+    void InvalidateHistoryFolderStatus(const std::wstring &path);
+
     // Open the history panel showing the full (uncapped) list.
     // Equivalent to Tab then Ctrl+Tab — used from the main app via Ctrl+Tab.
     void ToggleHistoryFull();

@@ -15,6 +15,7 @@ struct ScanResult {
     std::unordered_map<std::wstring, int64_t> fileSizes;
     std::unordered_map<std::wstring, fs::file_time_type> fileTimes;
     std::wstring targetPath; // navigate here after swap; empty = index 0
+    std::wstring scannedDir; // always set — valid even when playlist is empty
     uint64_t generation;
 };
 

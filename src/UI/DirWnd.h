@@ -53,6 +53,26 @@ namespace UI {
 
             void PostBuildHook() override;
 
+            // DirWnd always tracks app.playlist — no folder comparison needed.
+            void OnFolderRefreshed(const std::wstring &dir,
+                                   const std::vector<std::wstring> &playlist) override {
+                if (playlist.empty()) {
+                    std::error_code ec;
+                    m_emptyDirMissing = !std::filesystem::is_directory(std::filesystem::path(dir), ec) || ec;
+                    m_dirPlaylist.clear();
+                    m_emptyDir = dir;
+                    m_emptyDirPathLayout.Reset();
+                    m_sourceDirty = true;
+                    UpdateView();
+                } else {
+                    m_emptyDir.clear();
+                    m_emptyDirActive  = false;
+                    m_emptyDirMissing = false;
+                    m_emptyDirPathLayout.Reset();
+                    SetPlaylistCopy(playlist);
+                }
+            }
+
         private:
             std::wstring m_currentFolder;  // Track current folder for history marking
             std::vector<std::wstring> m_dirPlaylist;  // F5 owns its own playlist, isolated from app.playlist
@@ -102,6 +122,34 @@ namespace UI {
         protected:
             std::vector<std::wstring> GetSourceItems() const override { return m_localPlaylist; }
             bool HasOwnPlaylist() const override { return true; }
+
+            // Only sync when the scanned dir matches this panel's folder.
+            void OnFolderRefreshed(const std::wstring &dir,
+                                   const std::vector<std::wstring> &playlist) override {
+                namespace fs = std::filesystem;
+                bool match = false;
+                try { match = !m_folderPath.empty() && fs::equivalent(m_folderPath, dir); }
+                catch (...) { match = (m_folderPath == dir); }
+                if (!match) return;
+
+                if (playlist.empty()) {
+                    std::error_code ec;
+                    m_emptyDirMissing = !fs::is_directory(fs::path(dir), ec) || ec;
+                    m_localPlaylist.clear();
+                    m_emptyDir = dir;
+                    m_emptyDirPathLayout.Reset();
+                    m_sourceDirty = true;
+                    UpdateView();
+                } else {
+                    m_emptyDir.clear();
+                    m_emptyDirActive  = false;
+                    m_emptyDirMissing = false;
+                    m_emptyDirPathLayout.Reset();
+                    m_localPlaylist = playlist;
+                    m_sourceDirty = true;
+                    UpdateView();
+                }
+            }
 
             // Each slot gets a unique Win32 class name so RegisterClassW doesn't
             // silently reuse the first registration for all three slots.
