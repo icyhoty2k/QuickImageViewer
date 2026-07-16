@@ -7,7 +7,7 @@
 // =========================================================================
 #define VER_MAJOR 2
 #define VER_MINOR 3
-#define VER_PATCH 0
+#define VER_PATCH 6
 #define VER_BUILD 0
 
 // Comma form  — FILEVERSION / PRODUCTVERSION in .rc  (e.g. 2,3,0,0)
@@ -30,6 +30,25 @@
 #include <iterator>
 #include <d2d1.h>
 #include <dwmapi.h>
+
+// =========================================================================
+// CLICKABLE LINKS — app-wide appearance, single source of truth.
+// *** Change these TWO values to restyle every clickable link in the app ***
+// Consumers: RendererD2D overlay path, HelpWnd footer, StatsWnd link rows,
+// HistoryListWnd link fonts.
+// =========================================================================
+namespace Constants::Links {
+    constexpr COLORREF COLOR = RGB(100, 180, 255); // light blue
+    constexpr bool UNDERLINE = true;
+
+    // Derived float channels (0-1) for D2D / DWrite consumers — do not edit.
+    // Explicit masking instead of GetR/G/BValue: the macros cast COLORREF→BYTE
+    // which triggers C4310 (constant truncation) on /W4.
+    constexpr float COLOR_R_F = static_cast<float>(COLOR & 0xFF) / 255.0f;
+    constexpr float COLOR_G_F = static_cast<float>((COLOR >> 8) & 0xFF) / 255.0f;
+    constexpr float COLOR_B_F = static_cast<float>((COLOR >> 16) & 0xFF) / 255.0f;
+}
+
 #include "ConstantsTheme.h"  // All application colors with theme support
 
 namespace Constants {

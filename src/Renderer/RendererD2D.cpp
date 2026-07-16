@@ -361,6 +361,13 @@ HRESULT RendererD2D::CreateDeviceResources() {
         &m_pFolderDeletedBrush);
     if (FAILED(hr)) return hr;
 
+    hr = m_pDeviceContext->CreateSolidColorBrush(
+        D2D1::ColorF(Constants::Links::COLOR_R_F,
+                     Constants::Links::COLOR_G_F,
+                     Constants::Links::COLOR_B_F),
+        &m_pLinkBrush);
+    if (FAILED(hr)) return hr;
+
     hr = m_pDeviceContext->CreateEffect(CLSID_D2D1ColorMatrix, &m_pColorMatrixEffect);
     if (FAILED(hr)) return hr;
 
@@ -406,6 +413,11 @@ void RendererD2D::DiscardDeviceResources() {
 
     m_pTextBrush.Reset();
     m_pFolderDeletedBrush.Reset();
+    m_pLinkBrush.Reset();
+    // The overlay layout carries a drawing effect referencing m_pLinkBrush
+    // (device-bound) — drop it so it rebuilds cleanly on the new device.
+    m_pFolderDeletedLayout.Reset();
+    m_lastFolderOverlayKey.clear();
     m_pBackBufferBitmap.Reset();
     m_pBitmap.Reset();
     m_bitmapCache.clear();
@@ -437,7 +449,11 @@ void RendererD2D::Resize(UINT width, UINT height) {
     HRESULT hr = m_pSwapChain->ResizeBuffers(0, width, height, DXGI_FORMAT_UNKNOWN, 0);
     if (SUCCEEDED(hr)) {
         (void) CreateBackBufferBitmap();
-        m_pFolderDeletedLayout.Reset();
+        // Overlay layout is cached — just retarget its bounds, no recreation.
+        if (m_pFolderDeletedLayout) {
+            (void) m_pFolderDeletedLayout->SetMaxWidth(static_cast<float>(width));
+            (void) m_pFolderDeletedLayout->SetMaxHeight(static_cast<float>(height));
+        }
         g_overlayManager.OnResize(static_cast<float>(width), static_cast<float>(height));
     }
 }
@@ -1004,31 +1020,87 @@ HRESULT RendererD2D::Render() {
         g_overlayManager.RenderAll(m_pDeviceContext.Get());
     }
 
-    // Persistent "directory missing" notice — stays until user opens another folder.
-    if (app.folderDeletedActive && m_pFolderDeletedBrush && m_pTextFormat && m_pDWriteFactory) {
-        const D2D1_SIZE_F sz = m_pDeviceContext->GetSize();
+    // Persistent overlay: "Directory Missing" (red) or "No Images" (normal).
+    // Shown on a black viewport; stays until the user opens a new folder.
+    // Format + layout are DWrite objects — created once and cached; they survive
+    // device loss and resize, so per-frame cost is a single DrawTextLayout call.
+    if (app.folderOverlay != AppState::FolderOverlayState::None
+        && m_pFolderDeletedBrush && m_pDWriteFactory) {
 
-        if (m_lastFolderDeletedPath != app.folderDeletedPath || !m_pFolderDeletedLayout) {
+        if (!m_pFolderOverlayFormat) {
+            (void) m_pDWriteFactory->CreateTextFormat(
+                Constants::Overlay::MSG_CENTER__FONT_FAMILY_DEFAULT, nullptr,
+                DWRITE_FONT_WEIGHT_BOLD, DWRITE_FONT_STYLE_NORMAL, DWRITE_FONT_STRETCH_NORMAL,
+                Constants::Overlay::MSG_CENTER_FONT_SIZE * app.dpiScale,
+                Constants::Overlay::MSG_ALL_FONT_LOCALE,
+                m_pFolderOverlayFormat.GetAddressOf());
+        }
+
+        const bool isMissing = (app.folderOverlay == AppState::FolderOverlayState::Missing);
+        // Composite cache key — layout must rebuild when state or path changes.
+        std::wstring key = (isMissing ? L"M:" : L"E:") + app.folderOverlayPath;
+
+        if (m_pFolderOverlayFormat &&
+            (m_lastFolderOverlayKey != key || !m_pFolderDeletedLayout)) {
             m_pFolderDeletedLayout.Reset();
-            m_lastFolderDeletedPath = app.folderDeletedPath;
-            std::wstring msg = std::wstring(Constants::Messages::EMPTY_DIR_MISSING)
-                             + L"\n" + app.folderDeletedPath;
+            m_lastFolderOverlayKey = key;
+            const wchar_t *header = isMissing ? Constants::Messages::EMPTY_DIR_MISSING
+                                              : Constants::Messages::EMPTY_DIR_NO_IMAGES;
+            std::wstring msg = std::wstring(header) + L"\n" + app.folderOverlayPath;
+            const D2D1_SIZE_F sz = m_pDeviceContext->GetSize();
             m_pDWriteFactory->CreateTextLayout(
                 msg.c_str(), static_cast<UINT32>(msg.size()),
-                m_pTextFormat.Get(), sz.width, sz.height,
+                m_pFolderOverlayFormat.Get(), sz.width, sz.height,
                 m_pFolderDeletedLayout.GetAddressOf());
             if (m_pFolderDeletedLayout) {
                 m_pFolderDeletedLayout->SetTextAlignment(DWRITE_TEXT_ALIGNMENT_CENTER);
                 m_pFolderDeletedLayout->SetParagraphAlignment(DWRITE_PARAGRAPH_ALIGNMENT_CENTER);
                 m_pFolderDeletedLayout->SetWordWrapping(DWRITE_WORD_WRAPPING_EMERGENCY_BREAK);
+
+                // Style the path line as an app-standard clickable link
+                // (color + underline come from Constants::Links).
+                DWRITE_TEXT_RANGE linkRange = {
+                    static_cast<UINT32>(wcslen(header)) + 1, // +1 = '\n'
+                    static_cast<UINT32>(app.folderOverlayPath.size())
+                };
+                if (m_pLinkBrush)
+                    m_pFolderDeletedLayout->SetDrawingEffect(m_pLinkBrush.Get(), linkRange);
+                if (Constants::Links::UNDERLINE)
+                    m_pFolderDeletedLayout->SetUnderline(TRUE, linkRange);
             }
         }
 
         if (m_pFolderDeletedLayout) {
+            ID2D1SolidColorBrush *brush = isMissing ? m_pFolderDeletedBrush.Get()
+                                                    : m_pTextBrush.Get();
             m_pDeviceContext->DrawTextLayout(
                 D2D1::Point2F(0.0f, 0.0f),
                 m_pFolderDeletedLayout.Get(),
-                m_pFolderDeletedBrush.Get());
+                brush);
+
+            // Hit-test the path line (second line) so MouseHandler can make it
+            // clickable — layout is drawn at (0,0), so metrics are client coords.
+            const wchar_t *header = isMissing ? Constants::Messages::EMPTY_DIR_MISSING
+                                              : Constants::Messages::EMPTY_DIR_NO_IMAGES;
+            const UINT32 pathStart = static_cast<UINT32>(wcslen(header)) + 1; // +1 = '\n'
+            const UINT32 pathLen   = static_cast<UINT32>(app.folderOverlayPath.size());
+            DWRITE_HIT_TEST_METRICS htm[8];
+            UINT32 htmCount = 0;
+            if (pathLen > 0 &&
+                SUCCEEDED(m_pFolderDeletedLayout->HitTestTextRange(
+                    pathStart, pathLen, 0.0f, 0.0f, htm, 8, &htmCount)) &&
+                htmCount > 0) {
+                D2D1_RECT_F r = D2D1::RectF(htm[0].left, htm[0].top,
+                                            htm[0].left + htm[0].width,
+                                            htm[0].top + htm[0].height);
+                for (UINT32 i = 1; i < htmCount; ++i) {
+                    r.left   = std::min(r.left,   htm[i].left);
+                    r.top    = std::min(r.top,    htm[i].top);
+                    r.right  = std::max(r.right,  htm[i].left + htm[i].width);
+                    r.bottom = std::max(r.bottom, htm[i].top  + htm[i].height);
+                }
+                app.folderOverlayPathRect = r;
+            }
         }
     }
 

@@ -341,7 +341,7 @@ LRESULT StatsWnd::HandlePanelMessage(UINT message, WPARAM wParam, LPARAM lParam)
             m_hFontSec  = CreateFontW(-fss, 0, 0, 0, FW_BOLD,     0, 0,    0, DEFAULT_CHARSET,
                                        OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS, CLEARTYPE_QUALITY,
                                        DEFAULT_PITCH | FF_SWISS, L"Segoe UI");
-            m_hFontLink = CreateFontW(-fs,  0, 0, 0, FW_NORMAL,   0, TRUE, 0, DEFAULT_CHARSET,
+            m_hFontLink = CreateFontW(-fs,  0, 0, 0, FW_NORMAL,   0, Constants::Links::UNDERLINE, 0, DEFAULT_CHARSET,
                                        OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS, CLEARTYPE_QUALITY,
                                        DEFAULT_PITCH | FF_SWISS, L"Segoe UI");
             m_cachedFontDpi = dpi;
@@ -350,6 +350,9 @@ LRESULT StatsWnd::HandlePanelMessage(UINT message, WPARAM wParam, LPARAM lParam)
 
         // ── Colors ────────────────────────────────────────────────────────────
         const COLORREF clrCyan   = Constants::Theme::ThemedColor(0.39f, 0.78f, 1.0f, app.themeFactor);
+        const COLORREF clrLink   = Constants::Theme::ThemedColor(
+                Constants::Links::COLOR_R_F, Constants::Links::COLOR_G_F,
+                Constants::Links::COLOR_B_F, app.themeFactor);
         const COLORREF clrGreen  = Constants::Theme::ThemedColor(0.40f, 0.90f, 0.55f, app.themeFactor);
         const COLORREF clrYellow = Constants::Theme::ThemedColor(1.0f,  0.87f, 0.0f,  app.themeFactor);
         const COLORREF clrOrange = Constants::Theme::ThemedColor(1.0f,  0.62f, 0.25f, app.themeFactor);
@@ -370,7 +373,7 @@ LRESULT StatsWnd::HandlePanelMessage(UINT message, WPARAM wParam, LPARAM lParam)
                 RECT rL = { pad + MulDiv(6,dpi,96), y, c3 - MulDiv(4,dpi,96), y + row };
                 DrawTextW(hdc, label, -1, &rL, DT_LEFT | DT_VCENTER | DT_SINGLELINE);
                 SelectObject(hdc, m_hFontLink);
-                SetTextColor(hdc, clrCyan);
+                SetTextColor(hdc, clrLink);
                 RECT rV = { pad, y, c3, y + row };
                 DrawTextW(hdc, display.c_str(), -1, &rV,
                           DT_RIGHT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
@@ -509,7 +512,7 @@ LRESULT StatsWnd::HandlePanelMessage(UINT message, WPARAM wParam, LPARAM lParam)
         if (!m_thumbCachePath.empty()) {
             if (y + row > 0 && y < rc.bottom) {
                 SelectObject(hdc, m_hFontLink);
-                SetTextColor(hdc, clrCyan);
+                SetTextColor(hdc, clrLink);
                 RECT rLink = { pad + MulDiv(6,dpi,96), y, c3, y + row };
                 DrawTextW(hdc, (L"▸  " + m_thumbCachePath).c_str(), -1, &rLink,
                           DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);

@@ -57,6 +57,12 @@ namespace UI {
             int8_t GetPosition() const { return m_position; }
             void SetPosition(int8_t pos) { m_position = pos; }
 
+            // True when the panel window exists and is currently shown.
+            // Hidden panels are not in any layout slot and therefore miss
+            // UIManager::NotifyFolderRefreshed — callers use this to decide
+            // whether a panel needs a direct sync instead.
+            bool IsPanelVisible() const { return m_hWnd && IsWindowVisible(m_hWnd); }
+
             // Recompute and apply window bounds for the current position slot.
             // Called by UIManager::RefreshVerticalPanels when a neighbouring
             // horizontal panel is shown or hidden.
