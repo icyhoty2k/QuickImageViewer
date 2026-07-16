@@ -179,6 +179,11 @@ class RendererD2D final : public IImageRenderer {
         void ResetGifAnimation()          override;
     private:
 
+        // Persistent "folder deleted" overlay — drawn until user opens a new folder.
+        Microsoft::WRL::ComPtr<ID2D1SolidColorBrush> m_pFolderDeletedBrush;
+        Microsoft::WRL::ComPtr<IDWriteTextLayout>     m_pFolderDeletedLayout;
+        std::wstring                                  m_lastFolderDeletedPath;
+
         // SVG: active D2D SVG document (legacy path, never set by resvg;
         // resvg-rasterized SVGs go into m_bitmapCache as bitmaps instead)
         Microsoft::WRL::ComPtr<ID2D1SvgDocument> m_pActiveSvg;
