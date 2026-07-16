@@ -1,0 +1,20 @@
+name: Publish to WinGet
+
+on:
+  release:
+    types: [released]
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Publish to WinGet
+        uses: vedantmgoyal9/winget-releaser@v1
+        with:
+          identifier: icyhoty2k.QuickImageViewer
+          token: ${{ secrets.WINGET_TOKEN }}
+          
+          # Optional: Filter which release assets get picked up.
+          # If you publish multiple files (like a .zip and a setup .exe) 
+          # but only want WinGet to track the setup installer, uncomment the line below:
+          # installers-regex: '\.exe$'
