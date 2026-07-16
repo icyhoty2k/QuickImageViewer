@@ -9,8 +9,6 @@
 #include "../UI/DirWnd.h"
 #include "../UI/HistoryListWnd.h"
 #include "../UI/HelpWnd.h"
-#include "../UI/JumpToWnd.h"
-#include "../UI/FindWnd.h"
 #include "../UI/StatsWnd.h"
 #include <algorithm>
 #include <filesystem>
@@ -33,21 +31,29 @@ extern AppState app;
 // zone: 0=left  1=right  2=top  3=bottom
 static void SnapWindowToZone(HWND hWnd, int zone) {
     HMONITOR hMon = MonitorFromWindow(hWnd, MONITOR_DEFAULTTONEAREST);
-    MONITORINFO mi = { sizeof(mi) };
+    MONITORINFO mi = {sizeof(mi)};
     if (!GetMonitorInfo(hMon, &mi)) return;
     const RECT &wa = mi.rcWork;
-    int halfW = (wa.right  - wa.left) / 2;
-    int halfH = (wa.bottom - wa.top)  / 2;
+    int halfW = (wa.right - wa.left) / 2;
+    int halfH = (wa.bottom - wa.top) / 2;
     RECT t;
     switch (zone) {
-        case 0: t = { wa.left,         wa.top,          wa.left + halfW, wa.bottom        }; break; // left half
-        case 1: t = { wa.left + halfW,  wa.top,          wa.right,        wa.bottom        }; break; // right half
-        case 2: t = { wa.left,         wa.top,          wa.right,        wa.top + halfH   }; break; // top half
-        case 3: t = { wa.left,         wa.top + halfH,  wa.right,        wa.bottom        }; break; // bottom half
-        case 4: t = { wa.left,         wa.top,          wa.left + halfW, wa.top + halfH   }; break; // top-left quarter
-        case 5: t = { wa.left + halfW,  wa.top,          wa.right,        wa.top + halfH   }; break; // top-right quarter
-        case 6: t = { wa.left,         wa.top + halfH,  wa.left + halfW, wa.bottom        }; break; // bottom-left quarter
-        case 7: t = { wa.left + halfW,  wa.top + halfH,  wa.right,        wa.bottom        }; break; // bottom-right quarter
+        case 0: t = {wa.left, wa.top, wa.left + halfW, wa.bottom};
+            break; // left half
+        case 1: t = {wa.left + halfW, wa.top, wa.right, wa.bottom};
+            break; // right half
+        case 2: t = {wa.left, wa.top, wa.right, wa.top + halfH};
+            break; // top half
+        case 3: t = {wa.left, wa.top + halfH, wa.right, wa.bottom};
+            break; // bottom half
+        case 4: t = {wa.left, wa.top, wa.left + halfW, wa.top + halfH};
+            break; // top-left quarter
+        case 5: t = {wa.left + halfW, wa.top, wa.right, wa.top + halfH};
+            break; // top-right quarter
+        case 6: t = {wa.left, wa.top + halfH, wa.left + halfW, wa.bottom};
+            break; // bottom-left quarter
+        case 7: t = {wa.left + halfW, wa.top + halfH, wa.right, wa.bottom};
+            break; // bottom-right quarter
         default: return;
     }
     SetWindowPos(hWnd, nullptr, t.left, t.top,
@@ -70,18 +76,22 @@ static void ClampViewportOffset(HWND hWnd) {
     float renderW, renderH;
     switch (app.viewMode) {
         case Constants::ViewModes::ViewMode::FitToWidth_DoNotPreserveAspectRatio:
-            renderW = winW; renderH = imgH;
+            renderW = winW;
+            renderH = imgH;
             if (renderH > winH) renderH = winH;
             break;
         case Constants::ViewModes::ViewMode::FitToHeight_DoNotPreserveAspectRatio:
-            renderH = winH; renderW = imgW;
+            renderH = winH;
+            renderW = imgW;
             if (renderW > winW) renderW = winW;
             break;
         case Constants::ViewModes::ViewMode::FitToWindow_DoNotPreserveAspectRatio:
-            renderW = winW; renderH = winH;
+            renderW = winW;
+            renderH = winH;
             break;
         case Constants::ViewModes::ViewMode::OriginalImageSize_PreserveAspectRatio:
-            renderW = imgW; renderH = imgH;
+            renderW = imgW;
+            renderH = imgH;
             break;
         case Constants::ViewModes::ViewMode::FitToView_PreserveAspectRatio:
         default:
@@ -90,7 +100,8 @@ static void ClampViewportOffset(HWND hWnd) {
             break;
     }
     const float z = (app.viewport.zoom <= 0.0f) ? 1.0f : app.viewport.zoom;
-    renderW *= z; renderH *= z;
+    renderW *= z;
+    renderH *= z;
     float maxOffX = std::max(0.0f, (renderW - winW) / 2.0f);
     float maxOffY = std::max(0.0f, (renderH - winH) / 2.0f);
     app.viewport.offsetX = std::clamp(app.viewport.offsetX, -maxOffX, maxOffX);
@@ -245,9 +256,9 @@ void InputManager::ExecuteKeyboardShortcutCommand(HWND hWnd, Command cmd) {
         case Command::ToggleThumbnailWrapAround:
             app.thumbnailPanelWheelWrapAround = !app.thumbnailPanelWheelWrapAround;
             g_overlayManager.PostCenterMessage(hWnd,
-                app.thumbnailPanelWheelWrapAround
-                    ? Constants::Messages::THUMB_STRIP_WRAP_ON
-                    : Constants::Messages::THUMB_STRIP_WRAP_OFF);
+                                               app.thumbnailPanelWheelWrapAround
+                                                   ? Constants::Messages::THUMB_STRIP_WRAP_ON
+                                                   : Constants::Messages::THUMB_STRIP_WRAP_OFF);
             break;
 
         case Command::FlipV:
@@ -289,6 +300,11 @@ void InputManager::ExecuteKeyboardShortcutCommand(HWND hWnd, Command cmd) {
         case Command::OpenFile:
             OpenInitialImage(hWnd);
             break;
+        case Command::ReloadCurrentDir:
+            ReloadCurrentDirectory(hWnd);
+            g_overlayManager.PostCenterMessage(hWnd, Constants::Messages::RELOAD_CURRENT_DIR_MSG);
+            break;
+
 
         case Command::ToggleCache: {
             UI::CacheWnd &cacheWnd = uiManager.getCacheWindow();
@@ -636,15 +652,15 @@ void InputManager::ExecuteKeyboardShortcutCommand(HWND hWnd, Command cmd) {
         case Command::ThemeFactorUp:
             AppCommands::changeAppThemeFactor(hWnd, app.themeFactor + Constants::Theme::THEME_FACTOR_STEP);
             g_overlayManager.PostCenterMessage(hWnd,
-                Constants::Messages::THEME_FACTOR_PREFIX +
-                std::to_wstring(static_cast<int>(std::round(app.themeFactor * 100))) + L"%");
+                                               Constants::Messages::THEME_FACTOR_PREFIX +
+                                               std::to_wstring(static_cast<int>(std::round(app.themeFactor * 100))) + L"%");
             break;
 
         case Command::ThemeFactorDown:
             AppCommands::changeAppThemeFactor(hWnd, app.themeFactor - Constants::Theme::THEME_FACTOR_STEP);
             g_overlayManager.PostCenterMessage(hWnd,
-                Constants::Messages::THEME_FACTOR_PREFIX +
-                std::to_wstring(static_cast<int>(std::round(app.themeFactor * 100))) + L"%");
+                                               Constants::Messages::THEME_FACTOR_PREFIX +
+                                               std::to_wstring(static_cast<int>(std::round(app.themeFactor * 100))) + L"%");
             break;
 
         case Command::ThemeFactorReset:
@@ -657,11 +673,11 @@ void InputManager::ExecuteKeyboardShortcutCommand(HWND hWnd, Command cmd) {
         // -----------------------------------------------------------------------
         case Command::ToggleCornerPreference:
             AppCommands::changeAppCornerPreference(hWnd,
-                app.cornerPreference == DWMWCP_ROUND ? DWMWCP_DONOTROUND : DWMWCP_ROUND);
+                                                   app.cornerPreference == DWMWCP_ROUND ? DWMWCP_DONOTROUND : DWMWCP_ROUND);
             g_overlayManager.PostCenterMessage(hWnd,
-                app.cornerPreference == DWMWCP_ROUND
-                    ? Constants::Messages::CORNER_ROUND
-                    : Constants::Messages::CORNER_SQUARE);
+                                               app.cornerPreference == DWMWCP_ROUND
+                                                   ? Constants::Messages::CORNER_ROUND
+                                                   : Constants::Messages::CORNER_SQUARE);
             break;
 
         case Command::CycleBackdropType:
@@ -684,9 +700,9 @@ void InputManager::ExecuteKeyboardShortcutCommand(HWND hWnd, Command cmd) {
                          0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE);
             uiManager.ApplyAlwaysOnTop(app.isAlwaysOnTop);
             g_overlayManager.PostCenterMessage(hWnd,
-                app.isAlwaysOnTop
-                    ? Constants::Messages::ALWAYS_ON_TOP_ON
-                    : Constants::Messages::ALWAYS_ON_TOP_OFF);
+                                               app.isAlwaysOnTop
+                                                   ? Constants::Messages::ALWAYS_ON_TOP_ON
+                                                   : Constants::Messages::ALWAYS_ON_TOP_OFF);
             break;
 
         // -----------------------------------------------------------------------
@@ -697,40 +713,56 @@ void InputManager::ExecuteKeyboardShortcutCommand(HWND hWnd, Command cmd) {
         case Command::SortByName: {
             if (app.fileHandlerDefaultSortOrder == 0)
                 app.fileHandlerIsReverseSortOrder = !app.fileHandlerIsReverseSortOrder;
-            else { app.fileHandlerDefaultSortOrder = 0; app.fileHandlerIsReverseSortOrder = false; }
+            else {
+                app.fileHandlerDefaultSortOrder = 0;
+                app.fileHandlerIsReverseSortOrder = false;
+            }
             ReSortPlaylistAndRebuildMap(hWnd);
             g_overlayManager.PostCenterMessage(hWnd, app.fileHandlerIsReverseSortOrder
-                ? Constants::Messages::SORT_BY_NAME_REV : Constants::Messages::SORT_BY_NAME);
+                                                         ? Constants::Messages::SORT_BY_NAME_REV
+                                                         : Constants::Messages::SORT_BY_NAME);
             break;
         }
 
         case Command::SortByDate: {
             if (app.fileHandlerDefaultSortOrder == 1)
                 app.fileHandlerIsReverseSortOrder = !app.fileHandlerIsReverseSortOrder;
-            else { app.fileHandlerDefaultSortOrder = 1; app.fileHandlerIsReverseSortOrder = false; }
+            else {
+                app.fileHandlerDefaultSortOrder = 1;
+                app.fileHandlerIsReverseSortOrder = false;
+            }
             ReSortPlaylistAndRebuildMap(hWnd);
             g_overlayManager.PostCenterMessage(hWnd, app.fileHandlerIsReverseSortOrder
-                ? Constants::Messages::SORT_BY_DATE_REV : Constants::Messages::SORT_BY_DATE);
+                                                         ? Constants::Messages::SORT_BY_DATE_REV
+                                                         : Constants::Messages::SORT_BY_DATE);
             break;
         }
 
         case Command::SortBySize: {
             if (app.fileHandlerDefaultSortOrder == 2)
                 app.fileHandlerIsReverseSortOrder = !app.fileHandlerIsReverseSortOrder;
-            else { app.fileHandlerDefaultSortOrder = 2; app.fileHandlerIsReverseSortOrder = false; }
+            else {
+                app.fileHandlerDefaultSortOrder = 2;
+                app.fileHandlerIsReverseSortOrder = false;
+            }
             ReSortPlaylistAndRebuildMap(hWnd);
             g_overlayManager.PostCenterMessage(hWnd, app.fileHandlerIsReverseSortOrder
-                ? Constants::Messages::SORT_BY_SIZE_REV : Constants::Messages::SORT_BY_SIZE);
+                                                         ? Constants::Messages::SORT_BY_SIZE_REV
+                                                         : Constants::Messages::SORT_BY_SIZE);
             break;
         }
 
         case Command::SortByType: {
             if (app.fileHandlerDefaultSortOrder == 3)
                 app.fileHandlerIsReverseSortOrder = !app.fileHandlerIsReverseSortOrder;
-            else { app.fileHandlerDefaultSortOrder = 3; app.fileHandlerIsReverseSortOrder = false; }
+            else {
+                app.fileHandlerDefaultSortOrder = 3;
+                app.fileHandlerIsReverseSortOrder = false;
+            }
             ReSortPlaylistAndRebuildMap(hWnd);
             g_overlayManager.PostCenterMessage(hWnd, app.fileHandlerIsReverseSortOrder
-                ? Constants::Messages::SORT_BY_TYPE_REV : Constants::Messages::SORT_BY_TYPE);
+                                                         ? Constants::Messages::SORT_BY_TYPE_REV
+                                                         : Constants::Messages::SORT_BY_TYPE);
             break;
         }
 
@@ -748,9 +780,9 @@ void InputManager::ExecuteKeyboardShortcutCommand(HWND hWnd, Command cmd) {
             AppCommands::toggleSlideshow(hWnd);
             if (!wasRunning) {
                 std::wstring msg = std::wstring(Constants::Messages::SLIDESHOW_PLAYING)
-                    + L"  " + std::to_wstring(app.slideshow.intervalMs / 1000) + L"s"
-                    + (app.slideshow.loop    ? L"  Loop"    : L"")
-                    + (app.slideshow.shuffle ? L"  Shuffle" : L"");
+                                   + L"  " + std::to_wstring(app.slideshow.intervalMs / 1000) + L"s"
+                                   + (app.slideshow.loop ? L"  Loop" : L"")
+                                   + (app.slideshow.shuffle ? L"  Shuffle" : L"");
                 g_overlayManager.PostCenterMessage(hWnd, msg);
             } else {
                 g_overlayManager.PostCenterMessage(hWnd, Constants::Messages::SLIDESHOW_STOPPED);
@@ -762,16 +794,18 @@ void InputManager::ExecuteKeyboardShortcutCommand(HWND hWnd, Command cmd) {
             bool wasPaused = app.slideshow.paused;
             AppCommands::pauseResumeSlideshow(hWnd);
             g_overlayManager.PostCenterMessage(hWnd,
-                wasPaused ? Constants::Messages::SLIDESHOW_PLAYING
-                          : Constants::Messages::SLIDESHOW_PAUSED);
+                                               wasPaused
+                                                   ? Constants::Messages::SLIDESHOW_PLAYING
+                                                   : Constants::Messages::SLIDESHOW_PAUSED);
             break;
         }
 
         case Command::SlideshowToggleLoop:
             app.slideshow.loop = !app.slideshow.loop;
             g_overlayManager.PostCenterMessage(hWnd,
-                app.slideshow.loop ? Constants::Messages::SLIDESHOW_LOOP_ON
-                                   : Constants::Messages::SLIDESHOW_LOOP_OFF);
+                                               app.slideshow.loop
+                                                   ? Constants::Messages::SLIDESHOW_LOOP_ON
+                                                   : Constants::Messages::SLIDESHOW_LOOP_OFF);
             break;
 
         case Command::SlideshowToggleShuffle: {
@@ -787,22 +821,35 @@ void InputManager::ExecuteKeyboardShortcutCommand(HWND hWnd, Command cmd) {
                 app.slideshow.shuffleOrder.clear();
             }
             g_overlayManager.PostCenterMessage(hWnd,
-                app.slideshow.shuffle ? Constants::Messages::SLIDESHOW_SHUFFLE_ON
-                                      : Constants::Messages::SLIDESHOW_SHUFFLE_OFF);
+                                               app.slideshow.shuffle
+                                                   ? Constants::Messages::SLIDESHOW_SHUFFLE_ON
+                                                   : Constants::Messages::SLIDESHOW_SHUFFLE_OFF);
             break;
         }
 
         case Command::SlideshowCycleTransition: {
             // Cycle through implemented types only (Dissolve/Ripple are stubs)
-            auto& t = app.slideshow.transition.type;
-            const wchar_t* msg = Constants::Messages::TRANSITION_CUT;
+            auto &t = app.slideshow.transition.type;
+            const wchar_t *msg = Constants::Messages::TRANSITION_CUT;
             switch (t) {
-                case TransitionType::Cut:      t = TransitionType::Fade;  msg = Constants::Messages::TRANSITION_FADE;  break;
-                case TransitionType::Fade:     t = TransitionType::Push;  msg = Constants::Messages::TRANSITION_PUSH;  break;
-                case TransitionType::Push:     t = TransitionType::Zoom;  msg = Constants::Messages::TRANSITION_ZOOM;  break;
-                case TransitionType::Zoom:     t = TransitionType::Cut;   msg = Constants::Messages::TRANSITION_CUT;   break;
-                case TransitionType::Dissolve: t = TransitionType::Cut;   msg = Constants::Messages::TRANSITION_CUT;   break;
-                case TransitionType::Ripple:   t = TransitionType::Cut;   msg = Constants::Messages::TRANSITION_CUT;   break;
+                case TransitionType::Cut: t = TransitionType::Fade;
+                    msg = Constants::Messages::TRANSITION_FADE;
+                    break;
+                case TransitionType::Fade: t = TransitionType::Push;
+                    msg = Constants::Messages::TRANSITION_PUSH;
+                    break;
+                case TransitionType::Push: t = TransitionType::Zoom;
+                    msg = Constants::Messages::TRANSITION_ZOOM;
+                    break;
+                case TransitionType::Zoom: t = TransitionType::Cut;
+                    msg = Constants::Messages::TRANSITION_CUT;
+                    break;
+                case TransitionType::Dissolve: t = TransitionType::Cut;
+                    msg = Constants::Messages::TRANSITION_CUT;
+                    break;
+                case TransitionType::Ripple: t = TransitionType::Cut;
+                    msg = Constants::Messages::TRANSITION_CUT;
+                    break;
             }
             g_overlayManager.PostCenterMessage(hWnd, msg);
             break;
@@ -886,28 +933,32 @@ void InputManager::ExecuteKeyboardShortcutCommand(HWND hWnd, Command cmd) {
         // -----------------------------------------------------------------------
         case Command::MoveWindowUp: {
             int step = static_cast<int>(Constants::KEYBOARD_WINDOW_MOVE_STEP * app.dpiScale);
-            RECT rc; GetWindowRect(hWnd, &rc);
+            RECT rc;
+            GetWindowRect(hWnd, &rc);
             SetWindowPos(hWnd, nullptr, rc.left, rc.top - step, 0, 0,
                          SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE);
             break;
         }
         case Command::MoveWindowDown: {
             int step = static_cast<int>(Constants::KEYBOARD_WINDOW_MOVE_STEP * app.dpiScale);
-            RECT rc; GetWindowRect(hWnd, &rc);
+            RECT rc;
+            GetWindowRect(hWnd, &rc);
             SetWindowPos(hWnd, nullptr, rc.left, rc.top + step, 0, 0,
                          SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE);
             break;
         }
         case Command::MoveWindowLeft: {
             int step = static_cast<int>(Constants::KEYBOARD_WINDOW_MOVE_STEP * app.dpiScale);
-            RECT rc; GetWindowRect(hWnd, &rc);
+            RECT rc;
+            GetWindowRect(hWnd, &rc);
             SetWindowPos(hWnd, nullptr, rc.left - step, rc.top, 0, 0,
                          SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE);
             break;
         }
         case Command::MoveWindowRight: {
             int step = static_cast<int>(Constants::KEYBOARD_WINDOW_MOVE_STEP * app.dpiScale);
-            RECT rc; GetWindowRect(hWnd, &rc);
+            RECT rc;
+            GetWindowRect(hWnd, &rc);
             SetWindowPos(hWnd, nullptr, rc.left + step, rc.top, 0, 0,
                          SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE);
             break;
@@ -918,22 +969,24 @@ void InputManager::ExecuteKeyboardShortcutCommand(HWND hWnd, Command cmd) {
         // -----------------------------------------------------------------------
         case Command::ResizeWindowLarger: {
             int step = static_cast<int>(Constants::KEYBOARD_WINDOW_RESIZE_STEP * app.dpiScale);
-            RECT rc; GetWindowRect(hWnd, &rc);
+            RECT rc;
+            GetWindowRect(hWnd, &rc);
             SetWindowPos(hWnd, nullptr,
-                rc.left - step, rc.top - step,
-                (rc.right - rc.left) + 2 * step, (rc.bottom - rc.top) + 2 * step,
-                SWP_NOZORDER | SWP_NOACTIVATE);
+                         rc.left - step, rc.top - step,
+                         (rc.right - rc.left) + 2 * step, (rc.bottom - rc.top) + 2 * step,
+                         SWP_NOZORDER | SWP_NOACTIVATE);
             break;
         }
         case Command::ResizeWindowSmaller: {
             int step = static_cast<int>(Constants::KEYBOARD_WINDOW_RESIZE_STEP * app.dpiScale);
-            RECT rc; GetWindowRect(hWnd, &rc);
-            int newW = std::max(static_cast<int>(rc.right  - rc.left) - 2 * step, 100);
-            int newH = std::max(static_cast<int>(rc.bottom - rc.top)  - 2 * step, 100);
+            RECT rc;
+            GetWindowRect(hWnd, &rc);
+            int newW = std::max(static_cast<int>(rc.right - rc.left) - 2 * step, 100);
+            int newH = std::max(static_cast<int>(rc.bottom - rc.top) - 2 * step, 100);
             SetWindowPos(hWnd, nullptr,
-                rc.left + step, rc.top + step,
-                newW, newH,
-                SWP_NOZORDER | SWP_NOACTIVATE);
+                         rc.left + step, rc.top + step,
+                         newW, newH,
+                         SWP_NOZORDER | SWP_NOACTIVATE);
             break;
         }
 

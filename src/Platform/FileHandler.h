@@ -11,14 +11,16 @@ namespace fs = std::filesystem;
 // Heap-allocated result from a background directory scan.
 // Ownership transfers to the UI thread via WM_QIV_SCAN_COMPLETE (LPARAM).
 struct ScanResult {
-    std::vector<std::wstring>                            playlist;
-    std::unordered_map<std::wstring, int64_t>            fileSizes;
+    std::vector<std::wstring> playlist;
+    std::unordered_map<std::wstring, int64_t> fileSizes;
     std::unordered_map<std::wstring, fs::file_time_type> fileTimes;
-    std::wstring                                         targetPath; // navigate here after swap; empty = index 0
-    uint64_t                                             generation;
+    std::wstring targetPath; // navigate here after swap; empty = index 0
+    uint64_t generation;
 };
 
 void OpenInitialImage(HWND hWnd);
+
+void ReloadCurrentDirectory(HWND hWnd);
 
 void OpenDirectory(HWND hWnd, const std::wstring &dirPathStr);
 

@@ -23,6 +23,7 @@ namespace Shortcuts {
     // Ctrl+Q  —  Hard quit: removes process from RAM completely
     constexpr UINT SC_APP_HARD_QUIT = 'Q'; // requires ctrl
 
+
     // Esc  /  Ctrl+W  —  Hide to tray (keeps process alive); kills extra instances
     constexpr UINT SC_APP_HIDE = VK_ESCAPE;
     constexpr UINT SC_APP_HIDE_ALT = 'W'; // requires ctrl // used in IPanelWindow too ! to unifi behaviour
@@ -41,23 +42,24 @@ namespace Shortcuts {
     // Panels / Overlays
     // -------------------------------------------------------------------------
 
-    constexpr UINT SC_SLIDESHOW_TOGGLE             = VK_F1;    // Ctrl+F1 — start / stop
-    constexpr UINT SC_SLIDESHOW_PAUSE_RESUME       = VK_SPACE; // Space   — pause / resume (slideshow only)
-    constexpr UINT SC_SLIDESHOW_LOOP_TOGGLE        = 'R';      // R       — toggle loop/repeat (slideshow only)
-    constexpr UINT SC_SLIDESHOW_SHUFFLE_TOGGLE     = 'S';      // S       — toggle shuffle (slideshow only)
-    constexpr UINT SC_SLIDESHOW_TRANSITION_CYCLE   = 'T';      // T       — cycle transition type (slideshow only)
-    constexpr UINT SC_PANEL_HELP_TOGGLE            = VK_F1;   // plain F1 — help window
+    constexpr UINT SC_SLIDESHOW_TOGGLE = VK_F1; // Ctrl+F1 — start / stop
+    constexpr UINT SC_SLIDESHOW_PAUSE_RESUME = VK_SPACE; // Space   — pause / resume (slideshow only)
+    constexpr UINT SC_SLIDESHOW_LOOP_TOGGLE = 'R'; // R       — toggle loop/repeat (slideshow only)
+    constexpr UINT SC_SLIDESHOW_SHUFFLE_TOGGLE = 'S'; // S       — toggle shuffle (slideshow only)
+    constexpr UINT SC_SLIDESHOW_TRANSITION_CYCLE = 'T'; // T       — cycle transition type (slideshow only)
+    constexpr UINT SC_PANEL_HELP_TOGGLE = VK_F1; // plain F1 — help window
     constexpr UINT SC_PANEL_OPEN_FILE = VK_F2;
     constexpr UINT SC_PANEL_CACHE_TOGGLE = VK_F3;
     constexpr UINT SC_PANEL_CACHE_MOVE = VK_F4;
-    constexpr UINT SC_PANEL_DIR_TOGGLE = VK_F5;
-    constexpr UINT SC_PANEL_DIR_MOVE = VK_F6;
+    constexpr UINT SC_APP_RELOAD_CURRENT_DIR = VK_F5; //refresh / reload current dir !
+    constexpr UINT SC_PANEL_DIR_TOGGLE = VK_F6;
+    constexpr UINT SC_PANEL_DIR_MOVE = VK_F7;
     constexpr UINT SC_PANEL_HISTORY_TOGGLE = VK_TAB;
     constexpr UINT SC_PANEL_FULLSCREEN = VK_F11;
     constexpr UINT SC_PANEL_FULLSCREEN_F = 'F';
     constexpr UINT SC_PANEL_FULLSCREEN_ENTER = VK_RETURN;
     constexpr UINT SC_PANEL_FULLSCREEN_T = 'T'; // requires ctrl+shift
-    constexpr UINT SC_ALWAYS_ON_TOP     = 'T'; // Ctrl+T (no shift) — toggle always-on-top
+    constexpr UINT SC_ALWAYS_ON_TOP = 'T'; // Ctrl+T (no shift) — toggle always-on-top
     constexpr UINT SC_PANEL_CACHE_CLEAR = VK_F12;
 
     // N (no modifier)  —  Master overlay toggle (all slots on/off)
@@ -115,7 +117,7 @@ namespace Shortcuts {
     // W/A/S/D — viewport pan (plain) / window move (Shift)
     // Note: SC_APP_HIDE_ALT = 'W' (ctrl+W hides; plain W pans up; Shift+W moves window up)
     //       SC_COLOR_SAVE_TO_DISK = 'S' (ctrl+S saves; plain S pans down; Shift+S moves window down)
-    constexpr UINT SC_PAN_LEFT      = 'A'; // plain: pan left;  Shift: move window left
+    constexpr UINT SC_PAN_LEFT = 'A'; // plain: pan left;  Shift: move window left
     constexpr UINT SC_ALWAYS_ON_TOP_A = 'A'; // Ctrl+A — toggle always-on-top
     constexpr UINT SC_PAN_RIGHT = 'D'; // plain: pan right; Shift: move window right
 
@@ -191,15 +193,15 @@ namespace Shortcuts {
     // -------------------------------------------------------------------------
     // RUNTIME THEME FACTOR  (Ctrl+Alt + Numpad, no Shift — Shift+Numpad0 = VK_INSERT = Invert)
     // -------------------------------------------------------------------------
-    constexpr UINT SC_THEME_FACTOR_UP    = VK_ADD;      // Ctrl+Alt+Numpad+  — step darker→lighter
-    constexpr UINT SC_THEME_FACTOR_DOWN  = VK_SUBTRACT; // Ctrl+Alt+Numpad-  — step lighter→darker
-    constexpr UINT SC_THEME_FACTOR_RESET = VK_NUMPAD0;  // Ctrl+Alt+Numpad0  — restore default THEME_FACTOR
+    constexpr UINT SC_THEME_FACTOR_UP = VK_ADD; // Ctrl+Alt+Numpad+  — step darker→lighter
+    constexpr UINT SC_THEME_FACTOR_DOWN = VK_SUBTRACT; // Ctrl+Alt+Numpad-  — step lighter→darker
+    constexpr UINT SC_THEME_FACTOR_RESET = VK_NUMPAD0; // Ctrl+Alt+Numpad0  — restore default THEME_FACTOR
 
     // -------------------------------------------------------------------------
     // WINDOW CHROME TOGGLES  (Ctrl+Shift + Numpad)
     // -------------------------------------------------------------------------
     constexpr UINT SC_CORNER_PREFERENCE_TOGGLE = VK_MULTIPLY; // Numpad*  — round ↔ square
-    constexpr UINT SC_BACKDROP_TYPE_CYCLE      = VK_DIVIDE;   // Numpad/  — cycle backdrop types
+    constexpr UINT SC_BACKDROP_TYPE_CYCLE = VK_DIVIDE; // Numpad/  — cycle backdrop types
 
     // -------------------------------------------------------------------------
     // Sort order  (Ctrl+Alt+Shift + digit key)
@@ -223,7 +225,7 @@ namespace Shortcuts {
     // -------------------------------------------------------------------------
     // Jump to image by number
     // -------------------------------------------------------------------------
-    constexpr UINT SC_NAV_JUMP_TO_IMAGE     = 'J'; // J (no modifier) — open jump dialog
+    constexpr UINT SC_NAV_JUMP_TO_IMAGE = 'J'; // J (no modifier) — open jump dialog
     constexpr UINT SC_NAV_JUMP_TO_IMAGE_ALT = 'G'; // Ctrl+G          — open jump dialog
 
     // -------------------------------------------------------------------------

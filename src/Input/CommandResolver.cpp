@@ -84,8 +84,8 @@ Command InputManager::ResolveKeyboardKeys(UINT key) {
     // -------------------------------------------------------------------------
     if (ctrl && alt && !shift) {
         switch (key) {
-            case Shortcuts::SC_THEME_FACTOR_UP:    return Command::ThemeFactorUp;
-            case Shortcuts::SC_THEME_FACTOR_DOWN:  return Command::ThemeFactorDown;
+            case Shortcuts::SC_THEME_FACTOR_UP: return Command::ThemeFactorUp;
+            case Shortcuts::SC_THEME_FACTOR_DOWN: return Command::ThemeFactorDown;
             case Shortcuts::SC_THEME_FACTOR_RESET: return Command::ThemeFactorReset;
         }
     }
@@ -96,7 +96,7 @@ Command InputManager::ResolveKeyboardKeys(UINT key) {
     if (ctrl && shift && !alt) {
         switch (key) {
             case Shortcuts::SC_CORNER_PREFERENCE_TOGGLE: return Command::ToggleCornerPreference;
-            case Shortcuts::SC_BACKDROP_TYPE_CYCLE:      return Command::CycleBackdropType;
+            case Shortcuts::SC_BACKDROP_TYPE_CYCLE: return Command::CycleBackdropType;
         }
     }
 
@@ -116,10 +116,10 @@ Command InputManager::ResolveKeyboardKeys(UINT key) {
     // Slideshow-only keys (Space / R / S) — only intercepted when slideshow is running
     // -------------------------------------------------------------------------
     if (!ctrl && !alt && !shift && app.slideshow.running) {
-        if (key == Shortcuts::SC_SLIDESHOW_PAUSE_RESUME)      return Command::SlideshowPauseResume;
-        if (key == Shortcuts::SC_SLIDESHOW_LOOP_TOGGLE)       return Command::SlideshowToggleLoop;
-        if (key == Shortcuts::SC_SLIDESHOW_SHUFFLE_TOGGLE)    return Command::SlideshowToggleShuffle;
-        if (key == Shortcuts::SC_SLIDESHOW_TRANSITION_CYCLE)  return Command::SlideshowCycleTransition;
+        if (key == Shortcuts::SC_SLIDESHOW_PAUSE_RESUME) return Command::SlideshowPauseResume;
+        if (key == Shortcuts::SC_SLIDESHOW_LOOP_TOGGLE) return Command::SlideshowToggleLoop;
+        if (key == Shortcuts::SC_SLIDESHOW_SHUFFLE_TOGGLE) return Command::SlideshowToggleShuffle;
+        if (key == Shortcuts::SC_SLIDESHOW_TRANSITION_CYCLE) return Command::SlideshowCycleTransition;
     }
 
     // -------------------------------------------------------------------------
@@ -140,8 +140,8 @@ Command InputManager::ResolveKeyboardKeys(UINT key) {
             return Command::ShowInExplorer;
 
         case Shortcuts::SC_TOGGLE_LAST_IMAGE: // 'E'
-            if (!ctrl && !alt && !shift)  return Command::ToggleLastImage;
-            if (!ctrl && alt  && !shift)  return Command::SnapTopRight;
+            if (!ctrl && !alt && !shift) return Command::ToggleLastImage;
+            if (!ctrl && alt && !shift) return Command::SnapTopRight;
             break;
 
         // --- Zoom ---
@@ -166,19 +166,20 @@ Command InputManager::ResolveKeyboardKeys(UINT key) {
         // --- Fullscreen ---
         case Shortcuts::SC_PANEL_FULLSCREEN: return Command::ToggleFullscreen;
         case Shortcuts::SC_PANEL_FULLSCREEN_F: // 'F' — same value as SC_NAV_FIND
-            if (ctrl && !alt && !shift) return Command::FindImage;     // Ctrl+F → find
+            if (ctrl && !alt && !shift) return Command::FindImage; // Ctrl+F → find
             if (!ctrl && !alt && !shift) return Command::ToggleFullscreen; // F → fullscreen
             break;
         case Shortcuts::SC_PANEL_FULLSCREEN_ENTER: return Command::ToggleFullscreen;
 
         case Shortcuts::SC_PANEL_FULLSCREEN_T: // 'T' — shared key
-            if (ctrl && shift)          return Command::ToggleFullscreen;
+            if (ctrl && shift) return Command::ToggleFullscreen;
             if (ctrl && !shift && !alt) return Command::ToggleAlwaysOnTop;
             break;
 
         // --- Panels ---
         case Shortcuts::SC_PANEL_HELP_TOGGLE: return Command::ToggleHelp;
         case Shortcuts::SC_PANEL_OPEN_FILE: return Command::OpenFile;
+        case Shortcuts::SC_APP_RELOAD_CURRENT_DIR: return Command::ReloadCurrentDir;
         case Shortcuts::SC_PANEL_CACHE_TOGGLE: return Command::ToggleCache;
         case Shortcuts::SC_PANEL_DIR_TOGGLE: return Command::ToggleDir;
         case Shortcuts::SC_PANEL_HISTORY_TOGGLE:
@@ -207,15 +208,15 @@ Command InputManager::ResolveKeyboardKeys(UINT key) {
         case Shortcuts::SC_APP_HIDE: return Command::HideToTray;
 
         case Shortcuts::SC_APP_HIDE_ALT: // 'W'  ctrl=hide  plain=pan-up  shift=move-up  alt=snap-top
-            if (ctrl)                      return Command::HideToTray;
-            if (!ctrl &&  alt && !shift)   return Command::SnapTop;
-            if (!ctrl && !alt && !shift)   return Command::PanUp;
-            if (!ctrl && !alt &&  shift)   return Command::MoveWindowUp;
+            if (ctrl) return Command::HideToTray;
+            if (!ctrl && alt && !shift) return Command::SnapTop;
+            if (!ctrl && !alt && !shift) return Command::PanUp;
+            if (!ctrl && !alt && shift) return Command::MoveWindowUp;
             break;
 
         case Shortcuts::SC_APP_HARD_QUIT: // 'Q'
-            if (ctrl)                     return Command::HardQuit;
-            if (!ctrl && alt && !shift)   return Command::SnapTopLeft;
+            if (ctrl) return Command::HardQuit;
+            if (!ctrl && alt && !shift) return Command::SnapTopLeft;
             break;
 
         case Shortcuts::SC_APP_RESET_DEFAULTS:
@@ -249,52 +250,52 @@ Command InputManager::ResolveKeyboardKeys(UINT key) {
         case Shortcuts::ImageEffects::SC_COLOR_RESET_ALL_EFFECTS: return Command::ResetEffects;
 
         case Shortcuts::ImageEffects::SC_COLOR_SAVE_TO_DISK: // 'S'  ctrl=save  plain=pan-down  shift=move-down  alt=snap-bottom
-            if (ctrl)                      return Command::SaveImage;
-            if (!ctrl &&  alt && !shift)   return Command::SnapBottom;
-            if (!ctrl && !alt && !shift)   return Command::PanDown;
-            if (!ctrl && !alt &&  shift)   return Command::MoveWindowDown;
+            if (ctrl) return Command::SaveImage;
+            if (!ctrl && alt && !shift) return Command::SnapBottom;
+            if (!ctrl && !alt && !shift) return Command::PanDown;
+            if (!ctrl && !alt && shift) return Command::MoveWindowDown;
             break;
 
         case Shortcuts::SC_PAN_LEFT: // 'A'  ctrl=always-on-top  plain=pan-left  shift=move-left  alt=snap-left
-            if ( ctrl && !alt && !shift)   return Command::ToggleAlwaysOnTop;
-            if (!ctrl &&  alt && !shift)   return Command::SnapLeft;
-            if (!ctrl && !alt && !shift)   return Command::PanLeft;
-            if (!ctrl && !alt &&  shift)   return Command::MoveWindowLeft;
+            if (ctrl && !alt && !shift) return Command::ToggleAlwaysOnTop;
+            if (!ctrl && alt && !shift) return Command::SnapLeft;
+            if (!ctrl && !alt && !shift) return Command::PanLeft;
+            if (!ctrl && !alt && shift) return Command::MoveWindowLeft;
             break;
 
         case Shortcuts::SC_PAN_RIGHT: // 'D'  plain=pan-right  shift=move-right  alt=snap-right
-            if (!ctrl &&  alt && !shift)   return Command::SnapRight;
-            if (!ctrl && !alt && !shift)   return Command::PanRight;
-            if (!ctrl && !alt &&  shift)   return Command::MoveWindowRight;
+            if (!ctrl && alt && !shift) return Command::SnapRight;
+            if (!ctrl && !alt && !shift) return Command::PanRight;
+            if (!ctrl && !alt && shift) return Command::MoveWindowRight;
             break;
 
         case Shortcuts::SC_SNAP_QUARTER_BOTTOM_LEFT: // 'Z'
-            if (!ctrl && alt && !shift)    return Command::SnapBottomLeft;
+            if (!ctrl && alt && !shift) return Command::SnapBottomLeft;
             break;
 
         case 'C':
-            if ( ctrl && !alt && !shift)   return Command::CopyToClipboard;
-            if (!ctrl &&  alt && !shift)   return Command::SnapBottomRight;
+            if (ctrl && !alt && !shift) return Command::CopyToClipboard;
+            if (!ctrl && alt && !shift) return Command::SnapBottomRight;
             break;
 
         case Shortcuts::SC_WINDOW_RESET_DEFAULTS: // 'X'
-            if (!ctrl && alt && !shift)    return Command::ResetAll;
+            if (!ctrl && alt && !shift) return Command::ResetAll;
             break;
 
         case Shortcuts::SC_SHOW_INFO: // 'M'
-            if (!ctrl && !alt && !shift)   return Command::ShowInfo;
+            if (!ctrl && !alt && !shift) return Command::ShowInfo;
             break;
 
         case Shortcuts::SC_NAV_JUMP_TO_IMAGE: // 'J'
-            if (!ctrl && !alt && !shift)   return Command::JumpToImage;
+            if (!ctrl && !alt && !shift) return Command::JumpToImage;
             break;
 
         case Shortcuts::SC_NAV_JUMP_TO_IMAGE_ALT: // 'G'
-            if (ctrl && !alt && !shift)    return Command::JumpToImage;
+            if (ctrl && !alt && !shift) return Command::JumpToImage;
             break;
 
         case Shortcuts::SC_TOGGLE_STATS: // 'K'
-            if (!ctrl && !alt && !shift)   return Command::ToggleStats;
+            if (!ctrl && !alt && !shift) return Command::ToggleStats;
             break;
     }
 

@@ -44,6 +44,7 @@ enum class Command {
     // --- Panels / Overlays ---
     ToggleHelp,
     OpenFile,
+    ReloadCurrentDir,
     ToggleCache,
     ClearCache,
     ToggleDir,
@@ -109,31 +110,31 @@ enum class Command {
     SaveImage,
 
     // --- Navigation ---
-    ToggleLastDir,   // Q — switch between current and previous folder
+    ToggleLastDir, // Q — switch between current and previous folder
     ToggleLastImage, // E — switch between current and previously viewed image
 
     // --- Runtime theme ---
-    ThemeFactorUp,   // Ctrl+Alt+Shift+Numpad+
+    ThemeFactorUp, // Ctrl+Alt+Shift+Numpad+
     ThemeFactorDown, // Ctrl+Alt+Shift+Numpad-
-    ThemeFactorReset,// Ctrl+Alt+Shift+Numpad0
+    ThemeFactorReset, // Ctrl+Alt+Shift+Numpad0
 
     // --- Window chrome ---
     ToggleCornerPreference, // Ctrl+Shift+Numpad*   round ↔ square
-    CycleBackdropType,      // Ctrl+Shift+Numpad/   None→Mica→Acrylic→MicaAlt→None
-    ToggleAlwaysOnTop,      // Ctrl+T               always on top on/off
+    CycleBackdropType, // Ctrl+Shift+Numpad/   None→Mica→Acrylic→MicaAlt→None
+    ToggleAlwaysOnTop, // Ctrl+T               always on top on/off
 
     // --- Sort order ---
-    SortByName,  // Ctrl+Alt+Shift+0
-    SortByDate,  // Ctrl+Alt+Shift+9
-    SortBySize,  // Ctrl+Alt+Shift+8
-    SortByType,  // Ctrl+Alt+Shift+7
-    SortByDisk,  // Ctrl+Alt+Shift+6
+    SortByName, // Ctrl+Alt+Shift+0
+    SortByDate, // Ctrl+Alt+Shift+9
+    SortBySize, // Ctrl+Alt+Shift+8
+    SortByType, // Ctrl+Alt+Shift+7
+    SortByDisk, // Ctrl+Alt+Shift+6
 
     // --- Slideshow ---
-    SlideshowToggle,          // Ctrl+F1 — start / stop
-    SlideshowPauseResume,     // Space   — pause / resume (slideshow only)
-    SlideshowToggleLoop,      // R       — toggle loop/repeat (slideshow only)
-    SlideshowToggleShuffle,   // S       — toggle shuffle (slideshow only)
+    SlideshowToggle, // Ctrl+F1 — start / stop
+    SlideshowPauseResume, // Space   — pause / resume (slideshow only)
+    SlideshowToggleLoop, // R       — toggle loop/repeat (slideshow only)
+    SlideshowToggleShuffle, // S       — toggle shuffle (slideshow only)
     SlideshowCycleTransition, // T       — cycle transition type (slideshow only)
 
     // --- Viewport pan (W/A/S/D, no modifier) ---
