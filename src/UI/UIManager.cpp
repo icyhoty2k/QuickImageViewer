@@ -335,6 +335,25 @@ namespace UI {
     }
 
     // -------------------------------------------------------------------------
+    // NotifyFolderRefreshed
+    // Iterates every layout slot (panels in slots are always visible) and calls
+    // the virtual OnFolderRefreshed on each present panel. Each subclass decides
+    // what to do: DirWnd updates unconditionally, SpawnedDirWnd checks its folder,
+    // CacheWnd refreshes its view.
+    // -------------------------------------------------------------------------
+    void UIManager::NotifyFolderRefreshed(const std::wstring &dir,
+                                          const std::vector<std::wstring> &playlist) {
+        SlotInfo *slots[] = {
+            &m_layout.center, &m_layout.top, &m_layout.right,
+            &m_layout.bottom, &m_layout.left
+        };
+        for (auto *slot : slots) {
+            if (slot->panel)
+                slot->panel->OnFolderRefreshed(dir, playlist);
+        }
+    }
+
+    // -------------------------------------------------------------------------
     // SlotInfo::OnSlotEmptyChanged
     // Called when a slot's empty state changes (panel added or removed).
     // Notifies HistoryListWnd to repaint immediately so position labels stay in sync.

@@ -290,6 +290,7 @@ static void LaunchBackgroundScan(HWND hWnd, std::wstring dir,
                 auto *result = new ScanResult();
                 result->generation = gen;
                 result->targetPath = targetPath;
+                result->scannedDir = dir;
 
                 std::error_code ec;
                 for (const auto &entry: fs::directory_iterator(dir, ec)) {
@@ -310,12 +311,6 @@ static void LaunchBackgroundScan(HWND hWnd, std::wstring dir,
                     delete result;
                     return;
                 }
-                if (result->playlist.empty()) {
-                    g_scanInProgress.store(false, std::memory_order_relaxed);
-                    delete result;
-                    return;
-                }
-
                 SortStandalonePlaylist(*result, sortOrder, reverse);
 
                 if (g_scanGeneration.load(std::memory_order_relaxed) != gen) {
@@ -336,46 +331,34 @@ static void LaunchBackgroundScan(HWND hWnd, std::wstring dir,
 void HandleScanComplete(HWND hWnd, ScanResult *result) {
     SetCursor(LoadCursorW(nullptr, IDC_ARROW));
 
-    if (result->generation != g_scanGeneration.load(std::memory_order_relaxed) ||
-        result->playlist.empty()) {
+    if (result->generation != g_scanGeneration.load(std::memory_order_relaxed)) {
         delete result;
         return;
     }
-    // --- PRUNING LOGIC: Only run if list size decreased ---
-    // 1. Check if the playlist content actually changed
-    bool playlistChanged = (result->playlist != app.playlist);
 
-    if (playlistChanged && app.renderer) {
-        // Prune removed files
+    // Empty scan: folder has no images (or the directory itself was deleted).
+    // Notify all visible panels so they can show the appropriate placeholder,
+    // and immediately mark the entry red in HistoryListWnd if the dir is gone.
+    if (result->playlist.empty()) {
+        std::wstring dir = result->scannedDir;
+        uiManager.NotifyFolderRefreshed(dir, {});
+        {
+            std::error_code ec;
+            if (!fs::is_directory(fs::path(dir), ec) || ec)
+                UI::InvalidateHistoryFolderStatus(dir);
+        }
+        delete result;
+        return;
+    }
+
+    // Prune VRAM cache entries for files that no longer exist in the folder.
+    if (result->playlist != app.playlist && app.renderer) {
         std::unordered_set<std::wstring> newSet(result->playlist.begin(), result->playlist.end());
         for (const auto &path: app.playlist) {
-            if (newSet.find(path) == newSet.end()) {
+            if (newSet.find(path) == newSet.end())
                 app.renderer->RemoveFromCache(path);
-            }
         }
-        // Always update the UI if the content changed
-        uiManager.getCacheWindow().UpdateCacheView();
-        //TODO FIX SYNC FOR SPAWNED FOLDERS
-        // 2. Sync ONLY actively spawned panels looking at the same folder
-        // const UI::PanelLayout &layout = uiManager.GetLayout();
-        // // Check all 5 layout slots (0=center, 1=top, 2=right, 3=bottom, 4=left)
-        // // 3. Calculate scanned folder directly from the new result (we know it's not empty here)
-        // std::wstring scannedFolder = std::filesystem::path(result->playlist[0]).parent_path().wstring();
-        // for (int8_t i = 0; i < 5; ++i) {
-        //     if (layout.occupied(i)) {
-        //         UI::ThumbnailPanelWnd *panel = layout.getSlot(i)->panel;
-        // // If it's a directory panel, but NOT the main dirWnd, it MUST be a SpawnedDirWnd
-        // if (panel->IsDirPanel() && panel != &uiManager.getDirWindow()) {
-        //     // Safe to static_cast since we verified its identity
-        //     UI::SpawnedDirWnd *spawned = static_cast<UI::SpawnedDirWnd *>(panel);
-        //     if (spawned->GetFolderPath() == scannedFolder) {
-        //         spawned->SyncLocalPlaylist(result->playlist);
-        //     }
-        // }
-        //     }
-        // }
     }
-    // -----------------------------------------------------
 
     app.playlist = std::move(result->playlist);
     app.playlistFileSizes = std::move(result->fileSizes);
@@ -386,20 +369,20 @@ void HandleScanComplete(HWND hWnd, ScanResult *result) {
     for (int i = 0; i < static_cast<int>(app.playlist.size()); ++i)
         app.playlistIndexMap[app.playlist[i]] = i;
 
-    // Navigate to the target file (cache hit — already in VRAM), or index 0.
     int targetIdx = 0;
     if (!result->targetPath.empty()) {
         auto it = app.playlistIndexMap.find(result->targetPath);
         if (it != app.playlistIndexMap.end())
             targetIdx = it->second;
     }
+
+    std::wstring scannedDir = result->scannedDir;
     delete result;
 
-    if (&uiManager.getActiveDirWnd() == &uiManager.getDirWindow())
-        uiManager.getDirWindow().SetPlaylistCopy(app.playlist);
-    uiManager.getActiveDirWnd().UpdateDirView();
+    // Refresh every visible panel that cares about this folder — DirWnd,
+    // SpawnedDirWnd instances watching the same dir, and CacheWnd.
+    uiManager.NotifyFolderRefreshed(scannedDir, app.playlist);
 
-    // LoadImageIndex will be a VRAM cache hit; it also arms preload of neighbors.
     LoadImageIndex(hWnd, targetIdx);
     InvalidateRect(hWnd, nullptr, FALSE);
 }
@@ -639,13 +622,18 @@ void LoadImageIndex(HWND hWnd, int index) {
 }
 
 void OpenDirectory(HWND hWnd, const std::wstring &dirPathStr) {
-    fs::path dirPath(dirPathStr);
-    if (!fs::exists(dirPath) || !fs::is_directory(dirPath)) return;
-    dirPath = fs::canonical(dirPath);
+    // canonical(ec) resolves symlinks and fails if path doesn't exist — one call
+    // instead of exists + is_directory + canonical. Then one is_directory check.
+    std::error_code ec;
+    fs::path dirPath = fs::canonical(fs::path(dirPathStr), ec);
+    if (ec) return;
+    if (!fs::is_directory(dirPath, ec) || ec) return;
 
-    // If we are already in this directory, just jump to the first image
+    // If we are already in this directory, just jump to the first image.
+    // Compare canonical paths to handle junctions and drive-letter case.
     if (!app.playlist.empty()) {
-        if (dirPath == fs::path(app.playlist[0]).parent_path()) {
+        fs::path curParent = fs::canonical(fs::path(app.playlist[0]).parent_path(), ec);
+        if (!ec && dirPath == curParent) {
             UI::PushFolderHistory(dirPath.wstring());
             LoadImageIndex(hWnd, 0);
             InvalidateRect(hWnd, nullptr, TRUE);
@@ -661,14 +649,18 @@ void OpenDirectory(HWND hWnd, const std::wstring &dirPathStr) {
     int64_t firstSize = 0;
     fs::file_time_type firstTime;
     {
-        std::error_code ec;
-        for (const auto &entry: fs::directory_iterator(dirPath, ec)) {
-            if (entry.is_regular_file() && is_image_ext(entry.path().extension().wstring())) {
-                firstFile = entry.path().wstring();
-                firstSize = static_cast<int64_t>(entry.file_size());
-                firstTime = entry.last_write_time(ec);
-                break;
-            }
+        ec.clear();
+        for (auto it = fs::directory_iterator(
+                     dirPath, fs::directory_options::skip_permission_denied, ec);
+             !ec && it != fs::directory_iterator(); it.increment(ec)) {
+            if (!it->is_regular_file(ec)) { ec.clear(); continue; }
+            if (!is_image_ext(it->path().extension().wstring())) continue;
+            firstFile = it->path().wstring();
+            firstSize = static_cast<int64_t>(it->file_size(ec));
+            ec.clear();
+            firstTime = it->last_write_time(ec);
+            ec.clear();
+            break;
         }
     }
     if (firstFile.empty()) return;

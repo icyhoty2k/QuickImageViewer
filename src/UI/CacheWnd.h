@@ -49,5 +49,12 @@ namespace UI {
 
             // Returns VRAM-cached file paths — base class handles all layout
             std::vector<std::wstring> GetSourceItems() const override;
+
+            // Refresh the view whenever the active folder is rescanned so pruned
+            // entries are removed from the display immediately.
+            void OnFolderRefreshed(const std::wstring & /*dir*/,
+                                   const std::vector<std::wstring> & /*playlist*/) override {
+                UpdateCacheView();
+            }
     };
 } // namespace UI

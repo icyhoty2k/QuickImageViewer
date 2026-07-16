@@ -2,9 +2,11 @@
 
 #include <windows.h>
 #include <cstdint>
+#include <string>
 #include <vector>
 #include <dxgi1_2.h>
 #include <d2d1_3.h>
+#include <dwrite_3.h>
 #include <wrl/client.h>
 
 #include "IPanelWindow.h"
@@ -94,7 +96,25 @@ namespace UI {
             // Called after thumbnails are built (DirWnd queues async decodes).
             virtual void PostBuildHook() {}
 
+        public:
+            // Called by UIManager::NotifyFolderRefreshed on every visible panel.
+            // Subclasses decide whether the dir matches and what to update.
+            // Default: no-op (HelpWnd, JumpToWnd, etc. ignore this).
+            virtual void OnFolderRefreshed(const std::wstring & /*dir*/,
+                                           const std::vector<std::wstring> & /*playlist*/) {}
+
+        protected:
+
             bool IsVertical() const;
+
+            // Empty-dir placeholder state — written by subclass OnFolderRefreshed,
+            // read by base-class Render() / RenderEmptyPlaceholder().
+            std::wstring m_emptyDir;
+            bool         m_emptyDirActive  = false;
+            bool         m_emptyDirMissing = false; // true when dir was deleted entirely
+            // Cached DWrite path layout — reset by subclass when m_emptyDir changes
+            // or by ResizeSwapChain when panel dimensions change.
+            Microsoft::WRL::ComPtr<IDWriteTextLayout> m_emptyDirPathLayout;
 
             // ------------------------------------------------------------------
             // Per-panel D3D/D2D resources — owned here, not in RendererD2D
@@ -112,6 +132,7 @@ namespace UI {
             Microsoft::WRL::ComPtr<ID2D1SolidColorBrush>  m_hoverBrush;
             Microsoft::WRL::ComPtr<ID2D1SolidColorBrush>  m_scrollTrackBrush;
             Microsoft::WRL::ComPtr<ID2D1SolidColorBrush>  m_scrollThumbBrush;
+            Microsoft::WRL::ComPtr<ID2D1SolidColorBrush>  m_emptyDirWarningBrush;
 
             // Scrollbar LMB drag state
             bool  m_scrollDragging      = false;
@@ -121,8 +142,12 @@ namespace UI {
         private:
             void ScrollToSelected();
             void RebuildGeometry();
+            void RenderEmptyPlaceholder();
             void GetWindowBounds(HWND hRef, int8_t position,
                                  int &x, int &y, int &w, int &h) const;
+
+            Microsoft::WRL::ComPtr<IDWriteTextLayout> m_emptyNoImagesLayout;
+            Microsoft::WRL::ComPtr<IDWriteTextLayout> m_emptyDirMissingLayout;
 
         protected:
             HWND m_hOwner = nullptr;

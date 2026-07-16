@@ -1,6 +1,8 @@
 #pragma once
 #include <windows.h>
 #include <array>
+#include <string>
+#include <vector>
 
 // Posted by UIManager::OnPanelHidden to delete a SpawnedDirWnd after Hide() unwinds.
 // lParam is the SpawnedDirWnd* to delete. Handled in AppMain WndProc.
@@ -200,6 +202,12 @@ namespace UI {
 
             // Get position label for a spawned DirWnd folder (e.g., " (Left)", " (Right)", or empty)
             std::wstring GetSpawnedDirWndPositionLabel(const std::wstring &folderPath) const;
+
+            // Called by HandleScanComplete after every directory scan (including empty
+            // results). Fans out to every visible panel so each can decide whether to
+            // sync its playlist, show the empty-dir placeholder, or refresh its view.
+            void NotifyFolderRefreshed(const std::wstring &dir,
+                                       const std::vector<std::wstring> &playlist);
 
         private:
             HelpWnd        helpWnd;
