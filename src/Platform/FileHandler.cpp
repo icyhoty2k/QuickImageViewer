@@ -56,7 +56,7 @@ static void UpdateIoWorkerForPath(const std::wstring &folderPath) {
         return;
     }
 
-    if (newRoot == g_lastVolumeRoot) return;  // same volume, nothing to do
+    if (newRoot == g_lastVolumeRoot) return; // same volume, nothing to do
 
     if (optimal != static_cast<size_t>(g_ioWorker.getThreadCount())) {
         g_ioWorker.ClearQueue();
@@ -251,7 +251,8 @@ std::atomic<bool> g_scanInProgress{false};
 // Sort a ScanResult's playlist using its own size/time maps (runs on background thread).
 static void SortStandalonePlaylist(ScanResult &sr, int sortOrder, bool reverse) {
     switch (sortOrder) {
-        case 0: SortPlaylistAlphabetically(sr.playlist, reverse); break;
+        case 0: SortPlaylistAlphabetically(sr.playlist, reverse);
+            break;
         case 1:
             SortPlaylistByKey<fs::file_time_type>(sr.playlist, reverse, [&](const std::wstring &p) {
                 auto it = sr.fileTimes.find(p);
@@ -269,7 +270,8 @@ static void SortStandalonePlaylist(ScanResult &sr, int sortOrder, bool reverse) 
                 return fs::path(p).extension().wstring();
             });
             break;
-        case 4: SortPlaylistByDiskOrder(sr.playlist); break;
+        case 4: SortPlaylistByDiskOrder(sr.playlist);
+            break;
     }
 }
 
@@ -282,49 +284,52 @@ static void LaunchBackgroundScan(HWND hWnd, std::wstring dir,
                                  int sortOrder, bool reverse) {
     g_scanInProgress.store(true, std::memory_order_relaxed);
     std::thread([hWnd, dir = std::move(dir), targetPath = std::move(targetPath),
-                 gen, sortOrder, reverse]() {
-        SetThreadPriority(GetCurrentThread(), THREAD_PRIORITY_BELOW_NORMAL);
+                gen, sortOrder, reverse]() {
+                SetThreadPriority(GetCurrentThread(), THREAD_PRIORITY_BELOW_NORMAL);
 
-        auto *result = new ScanResult();
-        result->generation = gen;
-        result->targetPath = targetPath;
+                auto *result = new ScanResult();
+                result->generation = gen;
+                result->targetPath = targetPath;
 
-        std::error_code ec;
-        for (const auto &entry : fs::directory_iterator(dir, ec)) {
-            if (g_scanGeneration.load(std::memory_order_relaxed) != gen) {
-                delete result;
-                return;
-            }
-            if (!entry.is_regular_file()) continue;
-            if (!is_image_ext(entry.path().extension().wstring())) continue;
-            std::wstring p = entry.path().wstring();
-            result->fileSizes[p] = static_cast<int64_t>(entry.file_size());
-            result->fileTimes[p] = entry.last_write_time(ec);
-            result->playlist.push_back(std::move(p));
-        }
+                std::error_code ec;
+                for (const auto &entry: fs::directory_iterator(dir, ec)) {
+                    if (g_scanGeneration.load(std::memory_order_relaxed) != gen) {
+                        delete result;
+                        return;
+                    }
+                    if (!entry.is_regular_file()) continue;
+                    if (!is_image_ext(entry.path().extension().wstring())) continue;
+                    std::wstring p = entry.path().wstring();
+                    result->fileSizes[p] = static_cast<int64_t>(entry.file_size());
+                    result->fileTimes[p] = entry.last_write_time(ec);
+                    result->playlist.push_back(std::move(p));
+                }
 
-        if (g_scanGeneration.load(std::memory_order_relaxed) != gen) {
-            g_scanInProgress.store(false, std::memory_order_relaxed);
-            delete result; return;
-        }
-        if (result->playlist.empty()) {
-            g_scanInProgress.store(false, std::memory_order_relaxed);
-            delete result; return;
-        }
+                if (g_scanGeneration.load(std::memory_order_relaxed) != gen) {
+                    g_scanInProgress.store(false, std::memory_order_relaxed);
+                    delete result;
+                    return;
+                }
+                if (result->playlist.empty()) {
+                    g_scanInProgress.store(false, std::memory_order_relaxed);
+                    delete result;
+                    return;
+                }
 
-        SortStandalonePlaylist(*result, sortOrder, reverse);
+                SortStandalonePlaylist(*result, sortOrder, reverse);
 
-        if (g_scanGeneration.load(std::memory_order_relaxed) != gen) {
-            g_scanInProgress.store(false, std::memory_order_relaxed);
-            delete result; return;
-        }
+                if (g_scanGeneration.load(std::memory_order_relaxed) != gen) {
+                    g_scanInProgress.store(false, std::memory_order_relaxed);
+                    delete result;
+                    return;
+                }
 
-        // Clear the flag BEFORE posting — UI thread may process the message
-        // before this thread's next instruction, and the cursor must reset.
-        g_scanInProgress.store(false, std::memory_order_release);
-        PostMessageW(hWnd, Constants::WM_QIV_SCAN_COMPLETE, 0,
-                     reinterpret_cast<LPARAM>(result));
-    }).detach();
+                // Clear the flag BEFORE posting — UI thread may process the message
+                // before this thread's next instruction, and the cursor must reset.
+                g_scanInProgress.store(false, std::memory_order_release);
+                PostMessageW(hWnd, Constants::WM_QIV_SCAN_COMPLETE, 0,
+                             reinterpret_cast<LPARAM>(result));
+            }).detach();
 }
 
 // Called on the UI thread from the WM_QIV_SCAN_COMPLETE handler.
@@ -336,8 +341,43 @@ void HandleScanComplete(HWND hWnd, ScanResult *result) {
         delete result;
         return;
     }
+    // --- PRUNING LOGIC: Only run if list size decreased ---
+    // 1. Check if the playlist content actually changed
+    bool playlistChanged = (result->playlist != app.playlist);
 
-    app.playlist         = std::move(result->playlist);
+    if (playlistChanged && app.renderer) {
+        // Prune removed files
+        std::unordered_set<std::wstring> newSet(result->playlist.begin(), result->playlist.end());
+        for (const auto &path: app.playlist) {
+            if (newSet.find(path) == newSet.end()) {
+                app.renderer->RemoveFromCache(path);
+            }
+        }
+        // Always update the UI if the content changed
+        uiManager.getCacheWindow().UpdateCacheView();
+        //TODO FIX SYNC FOR SPAWNED FOLDERS
+        // 2. Sync ONLY actively spawned panels looking at the same folder
+        // const UI::PanelLayout &layout = uiManager.GetLayout();
+        // // Check all 5 layout slots (0=center, 1=top, 2=right, 3=bottom, 4=left)
+        // // 3. Calculate scanned folder directly from the new result (we know it's not empty here)
+        // std::wstring scannedFolder = std::filesystem::path(result->playlist[0]).parent_path().wstring();
+        // for (int8_t i = 0; i < 5; ++i) {
+        //     if (layout.occupied(i)) {
+        //         UI::ThumbnailPanelWnd *panel = layout.getSlot(i)->panel;
+        // // If it's a directory panel, but NOT the main dirWnd, it MUST be a SpawnedDirWnd
+        // if (panel->IsDirPanel() && panel != &uiManager.getDirWindow()) {
+        //     // Safe to static_cast since we verified its identity
+        //     UI::SpawnedDirWnd *spawned = static_cast<UI::SpawnedDirWnd *>(panel);
+        //     if (spawned->GetFolderPath() == scannedFolder) {
+        //         spawned->SyncLocalPlaylist(result->playlist);
+        //     }
+        // }
+        //     }
+        // }
+    }
+    // -----------------------------------------------------
+
+    app.playlist = std::move(result->playlist);
     app.playlistFileSizes = std::move(result->fileSizes);
     app.playlistFileTimes = std::move(result->fileTimes);
 
@@ -433,10 +473,10 @@ void OpenInitialImage(HWND hWnd) {
     std::wstring target = selectedPath.wstring();
     {
         std::error_code ec;
-        app.playlist         = { target };
-        app.playlistFileSizes = { { target, static_cast<int64_t>(fs::file_size(selectedPath, ec)) } };
-        app.playlistFileTimes = { { target, fs::last_write_time(selectedPath, ec) } };
-        app.playlistIndexMap  = { { target, 0 } };
+        app.playlist = {target};
+        app.playlistFileSizes = {{target, static_cast<int64_t>(fs::file_size(selectedPath, ec))}};
+        app.playlistFileTimes = {{target, fs::last_write_time(selectedPath, ec)}};
+        app.playlistIndexMap = {{target, 0}};
     }
     app.previousImageIndex = -1;
 
@@ -478,13 +518,22 @@ void UpdateOverlaysForCurrentImage(HWND hWnd) {
 
 void ApplyOrientationToViewport(USHORT orient) {
     switch (orient) {
-        case 2: app.viewport.flippedH = true;  break;
-        case 3: app.viewport.rotation = 180;   break;
-        case 4: app.viewport.flippedV = true;  break;
-        case 5: app.viewport.rotation = 90;  app.viewport.flippedH = true; break;
-        case 6: app.viewport.rotation = 90;   break;
-        case 7: app.viewport.rotation = 270; app.viewport.flippedH = true; break;
-        case 8: app.viewport.rotation = 270;  break;
+        case 2: app.viewport.flippedH = true;
+            break;
+        case 3: app.viewport.rotation = 180;
+            break;
+        case 4: app.viewport.flippedV = true;
+            break;
+        case 5: app.viewport.rotation = 90;
+            app.viewport.flippedH = true;
+            break;
+        case 6: app.viewport.rotation = 90;
+            break;
+        case 7: app.viewport.rotation = 270;
+            app.viewport.flippedH = true;
+            break;
+        case 8: app.viewport.rotation = 270;
+            break;
         default: break; // 1 = normal
     }
 }
@@ -560,9 +609,9 @@ void LoadImageIndex(HWND hWnd, int index) {
         if (SUCCEEDED(app.renderer->LoadBitmap(nullptr, 0, 0, currentPath))) {
             // Cache hit — record immediately; typically < 1 ms.
             ImageLoadStats::g_lastLoadUs.store(
-                ImageLoadStats::NowUs() -
+                    ImageLoadStats::NowUs() -
                     ImageLoadStats::g_loadStartUs.load(std::memory_order_relaxed),
-                std::memory_order_relaxed);
+                    std::memory_order_relaxed);
             // Orientation was read during the original decode and stored in the
             // cache entry — apply it now that the viewport has been reset.
             ApplyOrientationToViewport(app.renderer->GetCachedOrientation(currentPath));
@@ -609,11 +658,11 @@ void OpenDirectory(HWND hWnd, const std::wstring &dirPathStr) {
     // entry.file_size() / entry.last_write_time() come free from WIN32_FIND_DATA —
     // no extra syscalls beyond reading the directory itself.
     std::wstring firstFile;
-    int64_t            firstSize = 0;
+    int64_t firstSize = 0;
     fs::file_time_type firstTime;
     {
         std::error_code ec;
-        for (const auto &entry : fs::directory_iterator(dirPath, ec)) {
+        for (const auto &entry: fs::directory_iterator(dirPath, ec)) {
             if (entry.is_regular_file() && is_image_ext(entry.path().extension().wstring())) {
                 firstFile = entry.path().wstring();
                 firstSize = static_cast<int64_t>(entry.file_size());
@@ -626,10 +675,10 @@ void OpenDirectory(HWND hWnd, const std::wstring &dirPathStr) {
 
     uint64_t gen = ++g_scanGeneration;
     {
-        app.playlist         = { firstFile };
-        app.playlistFileSizes = { { firstFile, firstSize } };
-        app.playlistFileTimes = { { firstFile, firstTime } };
-        app.playlistIndexMap  = { { firstFile, 0 } };
+        app.playlist = {firstFile};
+        app.playlistFileSizes = {{firstFile, firstSize}};
+        app.playlistFileTimes = {{firstFile, firstTime}};
+        app.playlistIndexMap = {{firstFile, 0}};
     }
     app.previousImageIndex = -1;
 
@@ -646,6 +695,29 @@ void OpenDirectory(HWND hWnd, const std::wstring &dirPathStr) {
     LaunchBackgroundScan(hWnd, dirPath.wstring(), L"", gen,
                          app.fileHandlerDefaultSortOrder, app.fileHandlerIsReverseSortOrder);
 }
+
+// Used to reload / refresh current dir with F5
+void ReloadCurrentDirectory(HWND hWnd) {
+    if (app.currentIndex < 0 ||
+        app.currentIndex >= static_cast<int>(app.playlist.size())) {
+        return;
+    }
+
+    const std::wstring currentImage = app.playlist[app.currentIndex];
+    const std::wstring dir = fs::path(currentImage).parent_path().wstring();
+
+    uint64_t gen = ++g_scanGeneration;
+    UpdateIoWorkerForPath(dir);
+
+    LaunchBackgroundScan(
+            hWnd,
+            dir,
+            currentImage,
+            gen,
+            app.fileHandlerDefaultSortOrder,
+            app.fileHandlerIsReverseSortOrder);
+}
+
 
 void OpenSpecificImage(HWND hWnd, const std::wstring &filePathStr) {
     fs::path filePath(filePathStr);
@@ -673,10 +745,10 @@ void OpenSpecificImage(HWND hWnd, const std::wstring &filePathStr) {
     std::wstring target = filePath.wstring();
     {
         std::error_code ec;
-        app.playlist         = { target };
-        app.playlistFileSizes = { { target, static_cast<int64_t>(fs::file_size(filePath, ec)) } };
-        app.playlistFileTimes = { { target, fs::last_write_time(filePath, ec) } };
-        app.playlistIndexMap  = { { target, 0 } };
+        app.playlist = {target};
+        app.playlistFileSizes = {{target, static_cast<int64_t>(fs::file_size(filePath, ec))}};
+        app.playlistFileTimes = {{target, fs::last_write_time(filePath, ec)}};
+        app.playlistIndexMap = {{target, 0}};
     }
     app.previousImageIndex = -1;
 
