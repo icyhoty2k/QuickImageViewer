@@ -415,6 +415,13 @@ void HandleScanComplete(HWND hWnd, ScanResult *result) {
                 dirPanel.OnFolderRefreshed(dir, {});
         }
 
+        // Prune every previously cached file from the VRAM cache so CacheWnd
+        // clears properly instead of showing stale entries.
+        if (app.renderer) {
+            for (const auto &path : app.playlist)
+                app.renderer->RemoveFromCache(path);
+        }
+
         app.playlist.clear();
         app.playlistFileSizes.clear();
         app.playlistFileTimes.clear();
@@ -422,6 +429,10 @@ void HandleScanComplete(HWND hWnd, ScanResult *result) {
         app.currentIndex       = -1;
         app.previousImageIndex = -1;
         if (app.renderer) app.renderer->ClearActiveImage();
+
+        // Re-notify CacheWnd after the playlist is cleared so it rebuilds from
+        // the now-empty VRAM cache (first notify above ran before the prune).
+        uiManager.getCacheWindow().UpdateCacheView();
 
         std::error_code ec;
         if (!fs::is_directory(fs::path(dir), ec) || ec) {
