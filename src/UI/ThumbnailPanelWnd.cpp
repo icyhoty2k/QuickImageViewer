@@ -438,6 +438,15 @@ namespace UI {
         RebuildGeometry();
         InvalidateRect(m_hWnd, nullptr, FALSE);
         UpdateWindow(m_hWnd);
+
+        // Persist the final scroll+selection state so it can be restored
+        // instantly when the user switches back to this panel.
+        if (IsDirPanel() && m_selectedIdx >= 0 &&
+            m_selectedIdx < static_cast<int>(m_thumbnails.size())) {
+            m_savedSelectedIdx = m_selectedIdx;
+            m_savedOffset      = m_offset;
+            m_savedImagePath   = m_thumbnails[m_selectedIdx].filePath;
+        }
     }
 
     // =========================================================================
@@ -965,7 +974,23 @@ namespace UI {
 
             // -----------------------------------------------------------------
             case WM_LBUTTONDOWN: {
+                m_justActivated = IsDirPanel() && (&uiManager.getActiveDirWnd() != this);
                 if (IsDirPanel()) uiManager.SetActiveDirWnd(this);
+                // Silently pre-restore saved scroll + selection so that:
+                //  (a) empty-space clicks reload the saved image without a jump, and
+                //  (b) thumbnail clicks produce a movement from the saved position to the
+                //      new one rather than from some stale/wrong position.
+                // We deliberately skip RebuildGeometry and InvalidateRect here:
+                // m_thumbnails[i].rect stays based on the current visible offset so the
+                // hit test in WM_LBUTTONUP still maps click coordinates correctly.
+                // SyncSelectionRectangle (fired by the load) calls RebuildGeometry and
+                // triggers the first paint once the new image is ready.
+                if (m_justActivated && m_savedSelectedIdx >= 0 &&
+                    m_savedSelectedIdx < static_cast<int>(m_thumbnails.size()) &&
+                    m_thumbnails[m_savedSelectedIdx].filePath == m_savedImagePath) {
+                    m_selectedIdx = m_savedSelectedIdx;
+                    m_offset      = m_savedOffset;
+                }
 
                 // Check if the click landed on the scrollbar strip.
                 {
@@ -1226,15 +1251,27 @@ namespace UI {
                         }
 
                         if (hitIdx < 0) {
-                            // Click on empty strip space — clear any multi-selection
-                            // (Explorer behavior). Applies to all strips.
-                            if (!m_selectedPaths.empty()) {
+                            if (m_justActivated && !m_savedImagePath.empty()) {
+                                // Reload the image last viewed in this panel.
+                                // m_offset and m_selectedIdx were already pre-set in
+                                // WM_LBUTTONDOWN, so SyncSelectionRectangle will find the
+                                // saved item in view and the rectangle will not jump.
+                                auto restoreIt = app.playlistIndexMap.find(m_savedImagePath);
+                                if (restoreIt != app.playlistIndexMap.end())
+                                    LoadImageIndex(m_hOwner, restoreIt->second);
+                                else
+                                    OpenSpecificImage(m_hOwner, m_savedImagePath);
+                            } else if (!m_selectedPaths.empty()) {
+                                // Plain empty-space click — clear multi-selection
+                                // (Explorer behavior).
                                 m_selectedPaths.clear();
                                 m_anchorPath.clear();
                                 NotifySelectionOverlay();
                                 InvalidateRect(m_hWnd, nullptr, FALSE);
                             }
+                            m_justActivated = false;
                         } else {
+                            m_justActivated = false;
                             const std::wstring &hitPath = m_thumbnails[hitIdx].filePath;
 
                             if (ctrlDown && !shiftDown) {
@@ -1286,7 +1323,6 @@ namespace UI {
                                 // Re-check the live index map at click time — the cached
                                 // playlistIndex can be stale if the folder changed since
                                 // the last UpdateView (e.g. clicking between spawned panels).
-                                m_lastViewedPath = hitPath;
                                 auto mapIt = app.playlistIndexMap.find(hitPath);
                                 if (mapIt != app.playlistIndexMap.end()) {
                                     LoadImageIndex(m_hOwner, mapIt->second);
