@@ -3,21 +3,107 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>QuickImageViewer (qIV) | High-Performance C++23 Native Image Viewer for Windows</title>
-    
-    <!-- SEO Meta Tags -->
-    <meta name="description" content="QuickImageViewer (qIV) is a blazing fast, GPU-accelerated image viewer for Windows. Built natively in C++23 with Win32 API, Direct2D, and WIC for zero-flicker performance.">
-    <meta name="keywords" content="image viewer, Windows image viewer, C++23, Win32 API, Direct2D, GPU-accelerated, WIC, zero-flicker, fast image viewer, portable image viewer">
-    <meta name="author" content="Ivan Hristov Yanev (IcyHoty2k)">
-    <meta name="robots" content="index, follow">
+    <title>QuickImageViewer (qIV) — Fast, Free, Portable Image Viewer for Windows 10/11</title>
 
-    <!-- Open Graph / Social Media Meta Tags -->
-    <meta property="og:title" content="QuickImageViewer (qIV) | Native C++23 Windows Viewer">
-    <meta property="og:description" content="A blazing fast, single-executable, GPU-accelerated image viewer for Windows built on Win32 API and Direct2D. No installers, no telemetry.">
+    <!-- SEO Meta Tags -->
+    <meta name="description" content="QuickImageViewer (qIV) is a free, blazing fast, GPU-accelerated image viewer for Windows 10 and 11. Opens JPEG, PNG, WebP, HEIC, AVIF, JPEG XL, SVG, EXR, HDR and more. Single portable 7 MB EXE — no installer, no ads, no telemetry.">
+    <meta name="author" content="Ivan Hristov Yanev (IcyHoty2k)">
+    <meta name="robots" content="index, follow, max-image-preview:large">
+    <link rel="canonical" href="https://icyhoty2k.github.io/QuickImageViewer/">
+
+    <!-- Open Graph / Social Media -->
+    <meta property="og:title" content="QuickImageViewer (qIV) — Fast, Free, Portable Image Viewer for Windows">
+    <meta property="og:description" content="GPU-accelerated native image viewer for Windows. Opens HEIC, AVIF, JPEG XL, WebP, SVG, EXR and 17+ formats instantly. 7 MB portable EXE — no installer, no telemetry.">
     <meta property="og:type" content="website">
     <meta property="og:url" content="https://icyhoty2k.github.io/QuickImageViewer/">
-    <!-- You can update this image link to a hosted screenshot URL later -->
-    <meta property="og:image" content="https://via.placeholder.com/1200x630.png?text=QuickImageViewer">
+    <meta property="og:image" content="https://raw.githubusercontent.com/icyhoty2k/QuickImageViewer/main/resources/screenshots/2026-07-15_045800.png">
+    <meta property="og:site_name" content="QuickImageViewer">
+
+    <!-- Twitter Card -->
+    <meta name="twitter:card" content="summary_large_image">
+    <meta name="twitter:title" content="QuickImageViewer (qIV) — Fast, Free, Portable Image Viewer for Windows">
+    <meta name="twitter:description" content="GPU-accelerated native image viewer for Windows. HEIC, AVIF, JPEG XL, WebP, SVG, EXR and more. 7 MB portable EXE.">
+    <meta name="twitter:image" content="https://raw.githubusercontent.com/icyhoty2k/QuickImageViewer/main/resources/screenshots/2026-07-15_045800.png">
+
+    <!-- Structured Data: Software Application -->
+    <script type="application/ld+json">
+    {
+      "@context": "https://schema.org",
+      "@type": "SoftwareApplication",
+      "name": "QuickImageViewer",
+      "alternateName": "qIV",
+      "operatingSystem": "Windows 10, Windows 11",
+      "applicationCategory": "MultimediaApplication",
+      "applicationSubCategory": "Image Viewer",
+      "description": "A free, GPU-accelerated, portable image viewer for Windows. Opens JPEG, PNG, WebP, HEIC, AVIF, JPEG XL, SVG, OpenEXR, Radiance HDR and more with zero-flicker Direct2D rendering. Single 7 MB executable with no installer and no telemetry.",
+      "offers": {
+        "@type": "Offer",
+        "price": "0",
+        "priceCurrency": "USD"
+      },
+      "downloadUrl": "https://github.com/icyhoty2k/QuickImageViewer/releases/latest",
+      "softwareRequirements": "Windows 10 or newer",
+      "fileSize": "7MB",
+      "license": "https://www.gnu.org/licenses/agpl-3.0.html",
+      "screenshot": "https://raw.githubusercontent.com/icyhoty2k/QuickImageViewer/main/resources/screenshots/2026-07-15_045800.png",
+      "author": {
+        "@type": "Person",
+        "name": "Ivan Hristov Yanev"
+      },
+      "url": "https://icyhoty2k.github.io/QuickImageViewer/",
+      "sameAs": "https://github.com/icyhoty2k/QuickImageViewer"
+    }
+    </script>
+
+    <!-- Structured Data: FAQ -->
+    <script type="application/ld+json">
+    {
+      "@context": "https://schema.org",
+      "@type": "FAQPage",
+      "mainEntity": [
+        {
+          "@type": "Question",
+          "name": "Is QuickImageViewer free?",
+          "acceptedAnswer": {
+            "@type": "Answer",
+            "text": "Yes. QuickImageViewer is completely free and open source under the AGPLv3 license. There are no ads, no telemetry, and no paid version."
+          }
+        },
+        {
+          "@type": "Question",
+          "name": "Can QuickImageViewer open HEIC, AVIF and JPEG XL files on Windows?",
+          "acceptedAnswer": {
+            "@type": "Answer",
+            "text": "Yes. AVIF is supported natively on Windows 11, JPEG XL on Windows 11 24H2+, and HEIC/HEIF via the Microsoft HEIF Extensions. It also opens WebP, SVG, OpenEXR, Radiance HDR, JPEG 2000, QOI, PNM and all common formats like JPEG, PNG, BMP, GIF and TIFF."
+          }
+        },
+        {
+          "@type": "Question",
+          "name": "Does QuickImageViewer need to be installed?",
+          "acceptedAnswer": {
+            "@type": "Answer",
+            "text": "No. It is a single portable 7 MB executable. Download it and run it — no installer, no registry pollution, no background services."
+          }
+        },
+        {
+          "@type": "Question",
+          "name": "Why is QuickImageViewer so fast?",
+          "acceptedAnswer": {
+            "@type": "Answer",
+            "text": "It is written in native C++23 on the raw Win32 API with Direct2D GPU rendering. Decoded images are cached in VRAM and neighbouring images are pre-decoded on background threads, so switching images is instant. The process can stay resident in the system tray for instant recall."
+          }
+        },
+        {
+          "@type": "Question",
+          "name": "Can it manage files — copy, move or delete images?",
+          "acceptedAnswer": {
+            "@type": "Answer",
+            "text": "Yes. Directory thumbnail strips support drag & drop between folders (move, or Ctrl+drag to copy), plus right-click Copy, Cut, Paste and Delete that integrate with the Windows clipboard and Recycle Bin."
+          }
+        }
+      ]
+    }
+    </script>
 
     <!-- Google Fonts -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -115,6 +201,14 @@
             color: #ffffff;
         }
 
+        .hero-screenshot {
+            max-width: 100%;
+            border-radius: 12px;
+            border: 1px solid var(--border-color);
+            margin-top: 40px;
+            box-shadow: 0 20px 50px rgba(0,0,0,0.5);
+        }
+
         section {
             padding: 60px 0;
             border-bottom: 1px solid var(--border-color);
@@ -128,7 +222,7 @@
             display: flex;
             align-items: center;
         }
-        
+
         h2::after {
             content: "";
             flex: 1;
@@ -187,7 +281,7 @@
             overflow-x: auto;
             border: 1px solid var(--border-color);
         }
-        
+
         pre code {
             background-color: transparent;
             padding: 0;
@@ -208,12 +302,33 @@
             border: 1px solid var(--border-color);
         }
 
+        .card h3 { margin-top: 0; }
+
         ul {
             padding-left: 20px;
         }
 
         li {
             margin-bottom: 10px;
+        }
+
+        details {
+            background-color: var(--surface-color);
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            padding: 16px 20px;
+            margin-bottom: 12px;
+        }
+
+        details summary {
+            cursor: pointer;
+            font-weight: 600;
+            color: var(--text-main);
+        }
+
+        details p {
+            color: var(--text-muted);
+            margin-bottom: 0;
         }
 
         footer {
@@ -232,26 +347,6 @@
             text-decoration: underline;
         }
 
-        /* Image placeholders for preview section */
-        .preview-grid {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
-            gap: 20px;
-            margin-bottom: 40px;
-        }
-        
-        .preview-box {
-            background-color: var(--surface-color);
-            border: 1px dashed var(--border-color);
-            border-radius: 8px;
-            aspect-ratio: 16/9;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            color: var(--text-muted);
-            font-size: 0.9rem;
-        }
-
         @media (max-width: 768px) {
             h1 { font-size: 2.5rem; }
             .grid-2 { grid-template-columns: 1fr; }
@@ -264,42 +359,56 @@
     <header>
         <div class="container">
             <h1>QuickImageViewer (qIV)</h1>
-            <p class="subtitle">A blisteringly fast, GPU-accelerated native C++23 image viewer for Windows. Zero flicker, zero telemetry, ~7 MB portable executable.</p>
-            
+            <p class="subtitle">A blisteringly fast, GPU-accelerated native C++23 image viewer for Windows 10 and 11. Zero flicker, zero telemetry, ~7 MB portable executable — no installer needed.</p>
+
             <div class="badges">
+                <span class="badge">Free &amp; Open Source</span>
                 <span class="badge">C++23 Native</span>
-                <span class="badge">Win32 API</span>
                 <span class="badge">Direct2D GPU Cache</span>
                 <span class="badge">Portable App</span>
+                <span class="badge">17+ Formats</span>
             </div>
 
             <a href="https://github.com/icyhoty2k/QuickImageViewer/releases/latest" class="cta-button">Download Latest Release</a>
             <p style="margin-top: 15px; font-size: 0.9rem; color: var(--text-muted);">
                 <a href="https://github.com/icyhoty2k/QuickImageViewer" style="color: inherit; text-decoration: underline;">View Source on GitHub</a>
             </p>
+
+            <img class="hero-screenshot"
+                 src="https://raw.githubusercontent.com/icyhoty2k/QuickImageViewer/main/resources/screenshots/2026-07-15_045800.png"
+                 alt="QuickImageViewer main interface showing an image with thumbnail strips and info overlays on Windows 11"
+                 loading="lazy" width="1000">
         </div>
     </header>
 
     <main class="container">
-        
+
         <!-- SEO Targeted Introduction -->
         <section id="about">
             <h2>Why QuickImageViewer?</h2>
             <div class="grid-2">
                 <div class="card">
                     <h3>Built for Speed</h3>
-                    <p>Unlike modern web-based electron wrappers, qIV is a pure native application. It uses a <strong>GPU bitmap cache</strong> to keep decoded images in VRAM, preloading in both directions on a background thread. The UI thread never blocks.</p>
+                    <p>Unlike modern web-based Electron wrappers, qIV is a pure native application. It uses a <strong>GPU bitmap cache</strong> to keep decoded images in VRAM, preloading in both directions on a background thread pool. The UI thread never blocks — switching between images is instant.</p>
                 </div>
                 <div class="card">
                     <h3>Hardware Accelerated</h3>
-                    <p>Built directly on top of <strong>Direct2D</strong> and the <strong>Windows Imaging Component (WIC)</strong>. It achieves zero-flicker rendering and instantly falls back to GDI software rendering only when necessary.</p>
+                    <p>Built directly on top of <strong>Direct2D</strong>, <strong>D3D11</strong> and the <strong>Windows Imaging Component (WIC)</strong>. Zero-flicker rendering with per-panel DXGI swap chains, full per-monitor DPI awareness for crisp 4K rendering, and a GDI software fallback when needed.</p>
+                </div>
+                <div class="card">
+                    <h3>Genuinely Portable</h3>
+                    <p>One 7 MB EXE. No installer, no background services, no telemetry, no ads. Hide it to the system tray with <code>Esc</code> and the process stays resident in RAM — the next image opens instantly.</p>
+                </div>
+                <div class="card">
+                    <h3>More Than a Viewer</h3>
+                    <p>Thumbnail strips double as a lightweight file manager: <strong>drag &amp; drop files between folders</strong>, right-click Copy / Cut / Paste / Delete with full Windows clipboard and Recycle Bin integration, plus offline EXIF GPS geocoding.</p>
                 </div>
             </div>
         </section>
 
         <section id="formats">
             <h2>Format Support</h2>
-            <p>Native OS formats are handled by the zero-dependency Windows Imaging Component, while complex formats utilize highly optimized custom and static library decoders.</p>
+            <p>Open <strong>HEIC, AVIF, JPEG XL, WebP, SVG, OpenEXR and Radiance HDR on Windows</strong> — plus every classic format. Native OS formats are handled by the zero-dependency Windows Imaging Component, while complex formats use optimized custom and static-library decoders.</p>
             <table>
                 <thead>
                     <tr>
@@ -312,65 +421,334 @@
                 <tbody>
                     <tr><td>JPEG</td><td><code>.jpg</code> <code>.jpeg</code></td><td>WIC</td><td>Full EXIF / GPS metadata</td></tr>
                     <tr><td>PNG</td><td><code>.png</code></td><td>WIC</td><td>16-bit, alpha</td></tr>
+                    <tr><td>BMP</td><td><code>.bmp</code></td><td>WIC</td><td></td></tr>
+                    <tr><td>TIFF</td><td><code>.tif</code> <code>.tiff</code></td><td>WIC</td><td>Multi-page (first frame)</td></tr>
+                    <tr><td>GIF</td><td><code>.gif</code></td><td>WIC</td><td></td></tr>
                     <tr><td>WebP</td><td><code>.webp</code></td><td>WIC</td><td>Windows 10+ native codec</td></tr>
+                    <tr><td>HEIF / HEIC</td><td><code>.heif</code> <code>.heic</code></td><td>WIC</td><td>Requires MS HEIF Extensions</td></tr>
                     <tr><td>AVIF</td><td><code>.avif</code></td><td>WIC</td><td>Windows 11 native codec</td></tr>
                     <tr><td>JPEG XL</td><td><code>.jxl</code></td><td>WIC</td><td>Windows 11 24H2+ native codec</td></tr>
+                    <tr><td>JPEG 2000</td><td><code>.jp2</code> <code>.j2k</code></td><td>OpenJPEG</td><td>Static lib</td></tr>
                     <tr><td>SVG</td><td><code>.svg</code></td><td>resvg</td><td>Rust static lib, async IO thread</td></tr>
                     <tr><td>OpenEXR</td><td><code>.exr</code></td><td>tinyexr</td><td>Reinhard tone-map + γ2.2</td></tr>
                     <tr><td>Radiance HDR</td><td><code>.hdr</code></td><td>Inline</td><td>RGBE adaptive RLE, Reinhard tone-map</td></tr>
-                    <tr><td>HEIF / HEIC</td><td><code>.heif</code> <code>.heic</code></td><td>WIC</td><td>Requires MS HEIF Extensions</td></tr>
+                    <tr><td>PNM</td><td><code>.ppm</code> <code>.pgm</code> <code>.pbm</code></td><td>Inline</td><td>P1–P6, up to 16-bit maxval</td></tr>
+                    <tr><td>QOI</td><td><code>.qoi</code></td><td>Inline</td><td>Lossless fast format</td></tr>
+                    <tr><td>ICO / CUR</td><td><code>.ico</code> <code>.cur</code></td><td>WIC</td><td></td></tr>
                 </tbody>
             </table>
         </section>
 
         <section id="features">
             <h2>Core Features</h2>
-            
-            <h3>Navigation & UI</h3>
+
+            <h3>Performance</h3>
             <ul>
-                <li><strong>Instant Startup:</strong> Hide to tray with <code>Esc</code> and recall instantly, process stays resident in RAM.</li>
-                <li><strong>Thumbnail Strips:</strong> Scrollable, wrap-around thumbnail previews for cache, directory, and history.</li>
-                <li><strong>Smart Navigation:</strong> Smart jump between first/last images, instant folder history toggling, and Find mode with wildcard support.</li>
-                <li><strong>Overlay System:</strong> 9 independently configurable data slots rendered directly on the canvas.</li>
+                <li><strong>GPU bitmap cache</strong> — decoded images live in VRAM, preloaded in both directions</li>
+                <li><strong>Background decode</strong> — worker thread pool; the UI thread never blocks on IO</li>
+                <li><strong>Instant startup</strong> — process stays resident in RAM after first launch (hide to tray with <code>Esc</code>, recall instantly)</li>
+                <li><strong>Software fallback</strong> — GDI renderer for edge cases where Direct2D is unavailable</li>
+                <li><strong>Per-monitor DPI awareness V2</strong> — pixel-perfect rendering on 4K and mixed-DPI setups</li>
+            </ul>
+
+            <h3>File Management</h3>
+            <ul>
+                <li><strong>Drag &amp; Drop between folders:</strong> Drag a thumbnail from one directory strip onto another to move the file; hold <code>Ctrl</code> to copy. The cursor shows the active operation and both panels refresh instantly.</li>
+                <li><strong>Clipboard integration:</strong> Right-click any thumbnail for Copy / Cut / Paste / Delete. Works both ways with Windows Explorer; cut files are shown dimmed; deletes go to the Recycle Bin.</li>
             </ul>
 
             <h3>Offline Reverse Geocoding</h3>
-            <p>GPS coordinates in EXIF data are resolved to full location details (City, State, Country, Timezone) with <strong>zero network calls</strong>. A compressed zlib database of GeoNames data is embedded directly into the executable.</p>
-            
-            <h3>GPU Color Effects</h3>
-            <p>Real-time, non-destructive image adjustments via the Direct2D effect graph. Bake and save directly to disk with <code>Ctrl+S</code>.</p>
+            <p>GPS coordinates in EXIF data are resolved to full location details with <strong>zero network calls</strong>. All data is compressed (zlib) and embedded directly in the EXE.</p>
             <table>
                 <thead>
-                    <tr>
-                        <th>Effect</th>
-                        <th>Shortcut Key</th>
-                    </tr>
+                    <tr><th>Data</th><th>Source</th><th>Entries</th><th>Shows</th></tr>
                 </thead>
                 <tbody>
+                    <tr><td>Cities</td><td>GeoNames cities1000</td><td>170,387</td><td>City name, timezone</td></tr>
+                    <tr><td>Admin1</td><td>admin1CodesASCII</td><td>3,865</td><td>State / Province</td></tr>
+                    <tr><td>Admin2</td><td>admin2Codes</td><td>47,549</td><td>District / County</td></tr>
+                    <tr><td>Country</td><td>countryInfo</td><td>252</td><td>Country, Capital, Continent, Currency, Phone prefix</td></tr>
+                </tbody>
+            </table>
+        </section>
+
+        <section id="shortcuts">
+            <h2>Complete Shortcut Reference</h2>
+            <p>Every shortcut in qIV, grouped exactly like the built-in help window (<code>F1</code>).</p>
+
+            <h3>Navigation</h3>
+            <table>
+                <thead><tr><th>Shortcut</th><th>Action</th></tr></thead>
+                <tbody>
+                    <tr><td><code>→</code> / <code>←</code> or Wheel</td><td>Next / previous image</td></tr>
+                    <tr><td><code>Space</code> / <code>Shift+Space</code></td><td>Next / previous image</td></tr>
+                    <tr><td><code>Backspace</code></td><td>Smart jump between first and last image (goes to whichever is further)</td></tr>
+                    <tr><td><code>Shift+Backspace</code></td><td>Return to the image before the first/last jump</td></tr>
+                    <tr><td><code>E</code></td><td>Toggle between current and previously viewed image</td></tr>
+                    <tr><td><code>Q</code></td><td>Toggle between current and previously opened folder</td></tr>
+                    <tr><td><code>J</code> / <code>Ctrl+G</code></td><td>Jump to image by number (type <code>@</code> to switch to Find mode)</td></tr>
+                    <tr><td><code>Ctrl+F</code></td><td>Find by filename — wildcards <code>*</code> and <code>?</code>; type <code>#</code> to switch to Jump mode</td></tr>
+                    <tr><td><code>L</code></td><td>Reveal current file in Windows Explorer</td></tr>
+                    <tr><td>Horizontal Wheel</td><td>Cycle through navigation history folders</td></tr>
+                    <tr><td><code>F2</code></td><td>Open-file dialog</td></tr>
+                    <tr><td>Drag &amp; Drop</td><td>Drop a file or folder onto the window to open it</td></tr>
+                </tbody>
+            </table>
+
+            <h3>Zoom, Pan &amp; View Modes</h3>
+            <table>
+                <thead><tr><th>Shortcut</th><th>Action</th></tr></thead>
+                <tbody>
+                    <tr><td><code>Up</code> / <code>Down</code> or <code>Num +</code> / <code>Num −</code></td><td>Zoom in / out</td></tr>
+                    <tr><td><code>Num *</code></td><td>Reset zoom and pan to the active view mode's default fit</td></tr>
+                    <tr><td><code>Ctrl+Wheel</code></td><td>Zoom in / out centered on the mouse cursor</td></tr>
+                    <tr><td><code>W</code> / <code>A</code> / <code>S</code> / <code>D</code></td><td>Pan the viewport when the image is larger than the window</td></tr>
+                    <tr><td><code>1</code> – <code>5</code></td><td>View modes: 1 Fit to view • 2 Fit to width • 3 Fit to height • 4 Fill window • 5 Original 1:1 pixels</td></tr>
+                </tbody>
+            </table>
+
+            <h3>UI Panels</h3>
+            <table>
+                <thead><tr><th>Panel</th><th>Shortcut</th><th>Description</th></tr></thead>
+                <tbody>
+                    <tr><td>Help</td><td><code>F1</code></td><td>Full shortcut &amp; CLI reference — <code>Ctrl+E</code> exports it to Desktop as UTF-8 text</td></tr>
+                    <tr><td>EXIF / Info</td><td><code>M</code></td><td>Full metadata: camera, exposure, GPS with offline geocoding, embedded preview thumbnail</td></tr>
+                    <tr><td>Statistics</td><td><code>K</code></td><td>Decode time, codec, file details and cache info for the current image</td></tr>
+                    <tr><td>Directory</td><td><code>F6</code> / <code>F7</code></td><td>All images in current folder; syncs selection with viewer / moves panel to next screen edge</td></tr>
+                    <tr><td>Cache</td><td><code>F3</code> / <code>F4</code></td><td>Live GPU cache occupancy with thumbnails / moves panel</td></tr>
+                    <tr><td>History</td><td><code>Tab</code></td><td>Recent folders with favorites — <code>Shift+Enter</code> spawns a directory strip</td></tr>
+                    <tr><td>Reload</td><td><code>F5</code></td><td>Refresh / reload the current directory from disk</td></tr>
+                    <tr><td>Clear cache</td><td><code>F12</code></td><td>Clear the VRAM cache; images re-decode on demand</td></tr>
+                    <tr><td>Close panel</td><td><code>Esc</code> / <code>Ctrl+W</code></td><td>Close the focused panel — works in every panel window</td></tr>
+                </tbody>
+            </table>
+
+            <h3>Thumbnail Strips</h3>
+            <table>
+                <thead><tr><th>Input</th><th>Action</th></tr></thead>
+                <tbody>
+                    <tr><td>Mouse Wheel</td><td>Scroll the strip; hold <code>Shift</code> for 3× speed</td></tr>
+                    <tr><td><code>B</code></td><td>Toggle wheel wrap-around (past last thumbnail jumps to first and vice-versa)</td></tr>
+                    <tr><td>Left Click</td><td>Open the clicked thumbnail in the main viewer</td></tr>
+                    <tr><td>Click + drag</td><td>Grab the strip and drag to scroll freely</td></tr>
+                    <tr><td>Scrollbar edge</td><td>Thin scrollbar on the inner edge — click-drag for quick scrubbing</td></tr>
+                    <tr><td>Drag thumbnail → other strip</td><td><strong>Move</strong> the file to that folder; hold <code>Ctrl</code> to <strong>copy</strong> — cursor shows the operation</td></tr>
+                    <tr><td>Right Click</td><td>Context menu: Copy, Cut, Delete (Recycle Bin), Paste — full Explorer clipboard interop</td></tr>
+                </tbody>
+            </table>
+
+            <h3>History Panel</h3>
+            <table>
+                <thead><tr><th>Shortcut</th><th>Action</th></tr></thead>
+                <tbody>
+                    <tr><td><code>Tab</code></td><td>Toggle History panel</td></tr>
+                    <tr><td><code>Ctrl+Tab</code></td><td>Toggle full (uncapped) view and refresh the folder snapshot</td></tr>
+                    <tr><td><code>Enter</code></td><td>Open hovered folder in main viewer</td></tr>
+                    <tr><td><code>Shift+Enter</code></td><td>Spawn a floating directory strip for the hovered folder (up to 4)</td></tr>
+                    <tr><td><code>Space</code></td><td>Toggle favorite on hovered entry</td></tr>
+                    <tr><td><code>Delete</code></td><td>Delete hovered entry (<code>Ctrl+Z</code> restores last deleted)</td></tr>
+                    <tr><td><code>Ctrl+Shift+Delete</code></td><td>Clear all history, keep favorites</td></tr>
+                    <tr><td><code>Ctrl+Alt+Shift+Delete</code></td><td>Clear all favorites, keep history</td></tr>
+                </tbody>
+            </table>
+
+            <h3>Slideshow</h3>
+            <table>
+                <thead><tr><th>Shortcut</th><th>Action</th></tr></thead>
+                <tbody>
+                    <tr><td><code>Ctrl+F1</code></td><td>Start / stop slideshow</td></tr>
+                    <tr><td><code>Space</code> <em>(while running)</em></td><td>Pause / resume</td></tr>
+                    <tr><td><code>R</code> <em>(while running)</em></td><td>Toggle loop</td></tr>
+                    <tr><td><code>S</code> <em>(while running)</em></td><td>Toggle shuffle</td></tr>
+                    <tr><td><code>T</code> <em>(while running)</em></td><td>Cycle transition: Cut → Fade → Dissolve → Ripple → Push → Zoom</td></tr>
+                </tbody>
+            </table>
+
+            <h3>Color Effects</h3>
+            <p>All effects are non-destructive and GPU-accelerated via the Direct2D effect graph — the file on disk is never touched. <code>Ctrl+S</code> saves the result to disk.</p>
+            <table>
+                <thead><tr><th>Effect</th><th>Key</th></tr></thead>
+                <tbody>
                     <tr><td>Rotate CW / CCW</td><td><code>R</code> / <code>Shift+R</code></td></tr>
-                    <tr><td>Grayscale / Sepia</td><td><code>Delete</code> / <code>Home</code></td></tr>
-                    <tr><td>Brightness / Contrast</td><td><code>\</code> <code>'</code> / <code>/</code> <code>.</code></td></tr>
-                    <tr><td>Outline (Edge Detection)</td><td><code>Page Up</code></td></tr>
-                    <tr><td>Toggle all effects (Bypass)</td><td><code>`</code> (Backtick)</td></tr>
+                    <tr><td>Flip horizontal / vertical</td><td><code>H</code> / <code>V</code></td></tr>
+                    <tr><td>Grayscale</td><td><code>Delete</code></td></tr>
+                    <tr><td>Invert</td><td><code>Insert</code></td></tr>
+                    <tr><td>Sepia</td><td><code>Home</code></td></tr>
+                    <tr><td>Solarize (&gt;50% brightness inverted)</td><td><code>End</code></td></tr>
+                    <tr><td>Outline (GPU edge detection)</td><td><code>Page Up</code></td></tr>
+                    <tr><td>Threshold (black &amp; white at 50%)</td><td><code>Page Down</code></td></tr>
+                    <tr><td>Brightness ±</td><td><code>\</code> / <code>'</code></td></tr>
+                    <tr><td>Contrast ±</td><td><code>/</code> / <code>.</code></td></tr>
+                    <tr><td>Saturation ±</td><td><code>[</code> / <code>]</code></td></tr>
+                    <tr><td>Gamma ±</td><td><code>=</code> / <code>-</code></td></tr>
+                    <tr><td>Toggle all effects (bypass)</td><td><code>`</code> (backtick)</td></tr>
+                    <tr><td>Reset all effects</td><td><code>Num 0</code></td></tr>
+                    <tr><td>Save with effects baked in</td><td><code>Ctrl+S</code></td></tr>
+                </tbody>
+            </table>
+
+            <h3>Overlay System</h3>
+            <p>9 independently configurable data slots rendered on the image canvas in a 3×3 grid.</p>
+            <table>
+                <thead><tr><th>Shortcut</th><th>Action</th></tr></thead>
+                <tbody>
+                    <tr><td><code>N</code> / <code>I</code> / <code>Ctrl+0</code></td><td>Master toggle — show / hide all slots</td></tr>
+                    <tr><td><code>Ctrl+1</code> – <code>Ctrl+9</code></td><td>Toggle individual slots (1 index+filename • 2 zoom % • 5 center messages • 7 active effects • 9 dimensions+size)</td></tr>
+                    <tr><td><code>Ctrl+Alt+1</code> – <code>Ctrl+Alt+9</code></td><td>Toggle compact mode per slot (1 line instead of 2)</td></tr>
+                    <tr><td><code>O</code></td><td>Cycle overlay layout: Grid → Stacked → Summary</td></tr>
+                    <tr><td><code>P</code></td><td>Toggle semi-transparent background behind overlay text</td></tr>
+                </tbody>
+            </table>
+
+            <h3>Sorting</h3>
+            <table>
+                <thead><tr><th>Shortcut</th><th>Order</th></tr></thead>
+                <tbody>
+                    <tr><td><code>Ctrl+Alt+Shift+0</code></td><td>By name (natural / Explorer order) — press again to reverse</td></tr>
+                    <tr><td><code>Ctrl+Alt+Shift+9</code></td><td>By date modified — press again to flip newest ↔ oldest</td></tr>
+                    <tr><td><code>Ctrl+Alt+Shift+8</code></td><td>By file size — press again to flip largest ↔ smallest</td></tr>
+                    <tr><td><code>Ctrl+Alt+Shift+7</code></td><td>By extension — press again to reverse</td></tr>
+                    <tr><td><code>Ctrl+Alt+Shift+6</code></td><td>By physical disk order (fastest for HDDs)</td></tr>
+                </tbody>
+            </table>
+
+            <h3>Window &amp; Chrome</h3>
+            <table>
+                <thead><tr><th>Shortcut</th><th>Action</th></tr></thead>
+                <tbody>
+                    <tr><td><code>F</code> / <code>F11</code> / <code>Enter</code> / <code>Ctrl+Shift+T</code></td><td>Toggle borderless fullscreen</td></tr>
+                    <tr><td><code>Ctrl+T</code> / <code>Ctrl+A</code></td><td>Toggle always-on-top (main window + all panels)</td></tr>
+                    <tr><td><code>Shift+W/A/S/D</code></td><td>Nudge window 20 px up / left / down / right</td></tr>
+                    <tr><td><code>Alt+W/A/S/D</code></td><td>Snap to top / left / bottom / right half of work area</td></tr>
+                    <tr><td><code>Alt+Q/E/Z/C</code></td><td>Snap to top-left / top-right / bottom-left / bottom-right quarter</td></tr>
+                    <tr><td><code>Alt+X</code></td><td>Reset window size, position and all effects</td></tr>
+                    <tr><td><code>Shift+Num +/−</code> or <code>Shift+=/−</code></td><td>Grow / shrink window by 20 px per side</td></tr>
+                    <tr><td>Drag near screen edge</td><td>Snap to that edge (within 24 px)</td></tr>
+                    <tr><td><code>Ctrl+Alt+Num +/−</code></td><td>Step all panel colors lighter / darker at runtime</td></tr>
+                    <tr><td><code>Ctrl+Alt+Num 0</code></td><td>Reset theme brightness to compiled default</td></tr>
+                    <tr><td><code>Ctrl+Shift+Num *</code></td><td>Toggle window corners: rounded ↔ square</td></tr>
+                    <tr><td><code>Ctrl+Shift+Num /</code></td><td>Cycle backdrop material: None → Mica → Acrylic → MicaAlt</td></tr>
+                </tbody>
+            </table>
+
+            <h3>Mouse Controls</h3>
+            <table>
+                <thead><tr><th>Input</th><th>Action</th></tr></thead>
+                <tbody>
+                    <tr><td>Wheel</td><td>Previous / next image</td></tr>
+                    <tr><td><code>Ctrl</code>+Wheel</td><td>Zoom in / out centered on cursor</td></tr>
+                    <tr><td><code>Shift</code>+Wheel</td><td>Adjust window opacity in 10% steps</td></tr>
+                    <tr><td>Horizontal Wheel</td><td>Cycle navigation history folders</td></tr>
+                    <tr><td>LMB hold</td><td>Quick zoom 3× centered on cursor</td></tr>
+                    <tr><td>LMB drag <em>(while zoomed)</em></td><td>Pan; reverts on release</td></tr>
+                    <tr><td>LMB double-click</td><td>Toggle fullscreen</td></tr>
+                    <tr><td>RMB drag</td><td>Move window</td></tr>
+                    <tr><td>RMB + LMB</td><td>Reveal current file in Explorer</td></tr>
+                    <tr><td>RMB + Wheel</td><td>Zoom in / out</td></tr>
+                    <tr><td>RMB + Horizontal Wheel</td><td>Live-resize window from center (20 px per notch)</td></tr>
+                    <tr><td>MMB click</td><td>Full visual reset: zoom, pan, opacity; center and resize window</td></tr>
+                    <tr><td>MMB drag</td><td>Live-resize window from top-left</td></tr>
+                </tbody>
+            </table>
+
+            <h3>Application Lifecycle</h3>
+            <table>
+                <thead><tr><th>Shortcut</th><th>Action</th></tr></thead>
+                <tbody>
+                    <tr><td><code>Esc</code> / <code>Ctrl+W</code></td><td>Hide to system tray — process stays resident for instant recall</td></tr>
+                    <tr><td><code>Ctrl+Q</code></td><td>Hard quit — fully removes the process from memory</td></tr>
+                    <tr><td><code>Ctrl+N</code></td><td>Open a new independent qIV window</td></tr>
+                    <tr><td><code>Shift+Delete</code></td><td>Reset everything — window layout and all effects return to defaults</td></tr>
+                    <tr><td><code>Ctrl+C</code></td><td>Copy the current image to the clipboard</td></tr>
                 </tbody>
             </table>
         </section>
 
         <section id="kiosk-cli">
-            <h2>Command-Line & Kiosk Mode</h2>
-            <p>qIV supports extensive CLI arguments for automation, slideshows, and locked-down kiosk environments.</p>
+            <h2>Command-Line &amp; Kiosk Mode</h2>
+            <p>qIV supports extensive CLI arguments for automation, digital signage, slideshows and locked-down kiosk environments.</p>
+            <pre><code>QuickImageViewer.exe [image_path] [options]</code></pre>
+            <table>
+                <thead><tr><th>Argument</th><th>Description</th></tr></thead>
+                <tbody>
+                    <tr><td><code>"path\to\image.jpg"</code></td><td>Open this image at startup and browse its folder</td></tr>
+                    <tr><td><code>-startFolder &lt;path&gt;</code></td><td>Open this folder as the browse / slideshow source</td></tr>
+                    <tr><td><code>-background</code></td><td>Start hidden in the system tray (service mode)</td></tr>
+                    <tr><td><code>-fullscreen</code></td><td>Start in fullscreen</td></tr>
+                    <tr><td><code>-windowedView</code></td><td>Start windowed (explicit override)</td></tr>
+                    <tr><td><code>-alwaysOnTop</code></td><td>Keep window above all others from launch</td></tr>
+                    <tr><td><code>-monitorNum#N</code></td><td>Open centered on monitor N (1-based, e.g. <code>-monitorNum#2</code>)</td></tr>
+                    <tr><td><code>-slideshow</code></td><td>Auto-start slideshow after content loads</td></tr>
+                    <tr><td><code>-slideshowInterval N</code></td><td>Seconds between slides (e.g. <code>-slideshowInterval 8</code>)</td></tr>
+                    <tr><td><code>-repeat</code></td><td>Loop the slideshow when it reaches the end</td></tr>
+                    <tr><td><code>-shuffle</code></td><td>Play slideshow in random order</td></tr>
+                    <tr><td><code>-slideshowTransition=&lt;type&gt;</code></td><td>Transition: <code>Cut</code>, <code>Fade</code>, <code>Dissolve</code>, <code>Ripple</code>, <code>Push</code>, <code>Zoom</code></td></tr>
+                    <tr><td><code>-slideshowTransitionShuffle</code></td><td>Pick a random transition per slide</td></tr>
+                    <tr><td><code>-hideMouse</code></td><td>Hide the mouse cursor at startup</td></tr>
+                    <tr><td><code>-lock</code></td><td>KIOSK mode — all keyboard and mouse input is ignored</td></tr>
+                    <tr><td><code>-dedicated</code></td><td>Isolated instance: separate history, tray icon and mutex</td></tr>
+                </tbody>
+            </table>
+            <p><strong>Kiosk example:</strong></p>
             <pre><code>QuickImageViewer.exe -dedicated -lock -fullscreen -slideshow -shuffle -slideshowInterval 8 -startFolder "D:\Ads"</code></pre>
-            <p style="margin-top: 10px; color: var(--text-muted); font-size: 0.9rem;">Runs an isolated instance on a dedicated monitor, loops a shuffled slideshow every 8 seconds, and ignores all user mouse/keyboard input.</p>
+            <p style="margin-top: 10px; color: var(--text-muted); font-size: 0.9rem;">Runs an isolated instance, loops a shuffled slideshow every 8 seconds, and ignores all user mouse/keyboard input — ideal for unattended public displays.</p>
+        </section>
+
+        <section id="faq">
+            <h2>Frequently Asked Questions</h2>
+
+            <details>
+                <summary>Is QuickImageViewer free?</summary>
+                <p>Yes. QuickImageViewer is completely free and open source under the AGPLv3 license. No ads, no telemetry, no paid version.</p>
+            </details>
+            <details>
+                <summary>Can it open HEIC, AVIF and JPEG XL files on Windows?</summary>
+                <p>Yes. AVIF works natively on Windows 11, JPEG XL on Windows 11 24H2+, and HEIC/HEIF via the Microsoft HEIF Extensions. WebP, SVG, OpenEXR, Radiance HDR, JPEG 2000, QOI and all classic formats are supported too.</p>
+            </details>
+            <details>
+                <summary>Does it need to be installed?</summary>
+                <p>No. It is a single portable 7 MB executable — download and run. No installer, no registry pollution, no background services.</p>
+            </details>
+            <details>
+                <summary>Why is it so fast?</summary>
+                <p>Native C++23 on the raw Win32 API with Direct2D GPU rendering. Decoded images live in a VRAM cache, neighbours are pre-decoded on background threads, and the process can stay resident in the tray for instant recall.</p>
+            </details>
+            <details>
+                <summary>Can it manage files — copy, move or delete images?</summary>
+                <p>Yes. Directory thumbnail strips support drag &amp; drop between folders (move, or Ctrl+drag to copy) plus right-click Copy, Cut, Paste and Delete with full Windows clipboard and Recycle Bin integration.</p>
+            </details>
         </section>
 
         <section id="build">
-            <h2>Architecture & Building</h2>
-            <p>Written in <strong>C++23</strong>. Requires CMake and MSVC (Visual Studio 2022 or CLion). The threading model utilizes atomic indices and <code>WM_QIV_REPAINT</code> messages to synchronize the worker thread pool back to the UI thread seamlessly.</p>
+            <h2>Architecture &amp; Building</h2>
+            <ul>
+                <li><strong>Renderer</strong> — Direct2D + D3D11 with GPU bitmap cache. GDI software fallback. Full ID2D1Effect graph for color operations.</li>
+                <li><strong>Decoding</strong> — WIC pipeline for OS-native formats. Custom decoders for EXR, HDR, PNM, QOI. SVG via resvg on a background IO thread.</li>
+                <li><strong>Threading</strong> — Worker thread pool for background decode and preload. Atomic indices prevent stale frames; window messages synchronize back to the UI thread.</li>
+                <li><strong>Caching</strong> — GPU bitmap cache with configurable size, preloading adjacent images in both directions. Live cache inspector panel.</li>
+                <li><strong>DPI</strong> — Per-monitor DPI aware V2; pixel-perfect on 4K and mixed-DPI setups.</li>
+                <li><strong>Persistence</strong> — Registry-backed settings, folder history manager, favorites system.</li>
+            </ul>
+
+            <h3>Third-Party Libraries</h3>
+            <table>
+                <thead><tr><th>Library</th><th>Purpose</th></tr></thead>
+                <tbody>
+                    <tr><td><a href="https://github.com/RazrFalcon/resvg" style="color: var(--accent-primary);">resvg</a></td><td>SVG rasterizer (Rust static lib)</td></tr>
+                    <tr><td><a href="https://github.com/uclouvain/openjpeg" style="color: var(--accent-primary);">OpenJPEG</a></td><td>JPEG 2000 decoder</td></tr>
+                    <tr><td><a href="https://github.com/syoyo/tinyexr" style="color: var(--accent-primary);">tinyexr</a></td><td>OpenEXR decoder</td></tr>
+                    <tr><td><a href="https://github.com/richgel999/miniz" style="color: var(--accent-primary);">miniz</a></td><td>zlib compression for embedded GeoNames data</td></tr>
+                </tbody>
+            </table>
+
+            <h3>Building from Source</h3>
+            <p>Written in <strong>C++23</strong>. Requires CMake and MSVC (Visual Studio 2022 or CLion).</p>
             <pre><code>git clone https://github.com/icyhoty2k/QuickImageViewer.git
 cd QuickImageViewer
 mkdir build && cd build
 cmake .. -DCMAKE_BUILD_TYPE=Release
 cmake --build . --config Release</code></pre>
+            <p>For offline geocoding, generate the GeoNames binary resources before building — download <code>cities1000.txt</code>, <code>admin1CodesASCII.txt</code>, <code>admin2Codes.txt</code> and <code>countryInfo.txt</code> from geonames.org into <code>resources/geoData/</code>, then run <code>python tools/preprocess_cities.py</code>.</p>
         </section>
 
     </main>
@@ -379,7 +757,7 @@ cmake --build . --config Release</code></pre>
         <div class="container">
             <p>Developed by <strong>Ivan Hristov Yanev (IcyHoty2k)</strong>. Licensed under the AGPLv3.</p>
             <p>
-                <a href="https://github.com/icyhoty2k/QuickImageViewer">GitHub Repository</a> • 
+                <a href="https://github.com/icyhoty2k/QuickImageViewer">GitHub Repository</a> •
                 <a href="https://github.com/icyhoty2k/QuickImageViewer/releases">Releases</a>
             </p>
         </div>
@@ -387,5 +765,3 @@ cmake --build . --config Release</code></pre>
 
 </body>
 </html>
-index.html
-Displaying index.html.

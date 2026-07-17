@@ -1,0 +1,4 @@
+User-agent: *
+Allow: /
+
+Sitemap: https://icyhoty2k.github.io/QuickImageViewer/sitemap.xml
