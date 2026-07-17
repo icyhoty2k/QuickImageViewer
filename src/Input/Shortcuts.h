@@ -151,6 +151,7 @@ namespace Shortcuts {
     constexpr UINT SC_TRANSFORM_FLIP_H = 'H';
     constexpr UINT SC_TRANSFORM_FLIP_V = 'V';
     constexpr UINT SC_THUMBNAIL_WRAP_TOGGLE = 'B'; // toggle thumbnail strip wheel wrap-around
+    constexpr UINT SC_THUMBNAIL_EFFECTS_TOGGLE = 'U'; // U — toggle thumbnail strip visual effects on/off
 
     // Q (no modifier)  —  Toggle between current and previous folder in history
     constexpr UINT SC_TOGGLE_LAST_DIR = 'Q';

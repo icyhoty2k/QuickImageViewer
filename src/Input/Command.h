@@ -36,7 +36,8 @@ enum class Command {
     RotateCCW,
     FlipH,
     FlipV,
-    ToggleThumbnailWrapAround, // B — toggle thumbnail strip wheel wrap-around
+    ToggleThumbnailWrapAround,  // B — toggle thumbnail strip wheel wrap-around
+    ToggleThumbnailEffects,     // U — toggle thumbnail strip visual effects (rounded corners, glow, hover scale)
 
     // --- Fullscreen ---
     ToggleFullscreen,

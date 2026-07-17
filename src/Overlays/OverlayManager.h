@@ -94,6 +94,13 @@ class OverlayManager {
         // BOT_LEFT   — rebuild from current AppState effects
         void UpdateEffects();
 
+        // Panel selection overlay — called by ThumbnailPanelWnd whenever m_selectedPaths
+        // changes. Maps panel position to the nearest free overlay slot:
+        //   1 (top) → TOP_CENTER,  2 (right) → MID_RIGHT,
+        //   3 (bot) → BOT_CENTER,  4 (left)  → MID_LEFT,  0 → no-op.
+        // Clears the slot when selected == 0 (text made empty → not rendered).
+        void UpdatePanelSelectionOverlay(int8_t position, int selected, int total);
+
         // MID_CENTER — post a transient message; auto-hides after MSG_CENTER_DISPLAY_MS.
         // Pass hWnd so the timer can be set/reset on the main window.
         // Center-center must be enabled (slot visible) for the message to appear.

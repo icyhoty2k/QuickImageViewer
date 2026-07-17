@@ -2,6 +2,7 @@
 #pragma once
 #include <windows.h>
 #include <string>
+#include <vector>
 #define WM_TRAYICON (WM_APP + 1)
 #define ID_TRAY_APP_ICON 1001
 
@@ -27,7 +28,9 @@ class AppCommands {
 
         // File clipboard / shell operations (used by thumbnail panel context menu)
         static void CopyFileToClipboard(HWND hWnd, const std::wstring &path, bool cut = false);
+        static void CopyFilesToClipboard(HWND hWnd, const std::vector<std::wstring> &paths, bool cut = false);
         static void DeleteFileToRecycleBin(const std::wstring &path);
+        static void DeleteFilesToRecycleBin(const std::vector<std::wstring> &paths);
         static void PasteFilesFromClipboard(HWND hWnd, const std::wstring &targetDir);
         static bool ClipboardHasFiles();
 

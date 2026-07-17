@@ -812,7 +812,8 @@ void OpenDirectory(HWND hWnd, const std::wstring &dirPathStr) {
     UpdateIoWorkerForPath(dirPath.wstring());
     UI::PushFolderHistory(dirPath.wstring());
     uiManager.getActiveDirWnd().ClearDirThumbnailCache();
-    if (&uiManager.getActiveDirWnd() == &uiManager.getDirWindow())
+    const bool activeIsPrimary = (&uiManager.getActiveDirWnd() == &uiManager.getDirWindow());
+    if (activeIsPrimary)
         uiManager.getDirWindow().SetPlaylistCopy(app.playlist);
 
     LoadImageIndex(hWnd, 0);
@@ -820,7 +821,8 @@ void OpenDirectory(HWND hWnd, const std::wstring &dirPathStr) {
 
     // Background: full scan + sort. targetPath empty → navigate to index 0 after sort.
     LaunchBackgroundScan(hWnd, dirPath.wstring(), L"", gen,
-                         app.fileHandlerDefaultSortOrder, app.fileHandlerIsReverseSortOrder);
+                         app.fileHandlerDefaultSortOrder, app.fileHandlerIsReverseSortOrder,
+                         activeIsPrimary);
 }
 
 // Used to reload / refresh current dir with F5
@@ -844,13 +846,15 @@ void ReloadCurrentDirectory(HWND hWnd) {
     uint64_t gen = ++g_scanGeneration;
     UpdateIoWorkerForPath(dir);
 
+    const bool activeIsPrimary = (&uiManager.getActiveDirWnd() == &uiManager.getDirWindow());
     LaunchBackgroundScan(
             hWnd,
             dir,
             currentImage,
             gen,
             app.fileHandlerDefaultSortOrder,
-            app.fileHandlerIsReverseSortOrder);
+            app.fileHandlerIsReverseSortOrder,
+            activeIsPrimary);
 }
 
 

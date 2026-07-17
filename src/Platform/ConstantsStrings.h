@@ -127,6 +127,10 @@ namespace Constants::Messages {
     constexpr const wchar_t *THUMB_STRIP_WRAP_TO_END = L"↪ End";
     constexpr const wchar_t *THUMB_STRIP_WRAP_ON = L"Thumbnail Strip Wrap: ON";
     constexpr const wchar_t *THUMB_STRIP_WRAP_OFF = L"Thumbnail Strip Wrap: OFF";
+
+    // Thumbnail strip visual effects
+    constexpr const wchar_t *THUMB_EFFECTS_ON  = L"Thumbnail Effects: ON";
+    constexpr const wchar_t *THUMB_EFFECTS_OFF = L"Thumbnail Effects: OFF";
 }
 
 namespace Constants::Strings {

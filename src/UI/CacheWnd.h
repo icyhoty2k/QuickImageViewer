@@ -6,6 +6,7 @@
 #include "ThumbnailPanelWnd.h"
 #include "Thumbnail.h"
 #include "../AppState.h"
+#include "../Platform/Constants.h"
 
 namespace UI {
     class CacheWnd : public ThumbnailPanelWnd {
@@ -63,8 +64,10 @@ namespace UI {
             }
 
             // Delete from CacheWnd = evict from VRAM only; never touch the file on disk.
-            void OnContextMenuDelete(const std::wstring &path) override {
-                if (app.renderer) app.renderer->RemoveFromCache(path);
+            void OnContextMenuDelete(const std::vector<std::wstring> &paths) override {
+                if (app.renderer) {
+                    for (const auto &p : paths) app.renderer->RemoveFromCache(p);
+                }
                 UpdateCacheView();
             }
 
@@ -72,5 +75,19 @@ namespace UI {
             const wchar_t *ContextMenuExtraLabel()  const override { return L"Clear VCache"; }
             void           OnContextMenuExtra()           override { ClearThumbnailCache(); }
             bool           ShowContextMenuPaste()   const override { return false; }
+
+            // vRam(current/max) → VRAM size — uses actual GPU pixel dimensions, not disk size.
+            std::pair<std::wstring, UINT32> BuildScrollbarLabel() const override {
+                if (!app.renderer) return {{}, 0};
+                int count = 0;
+                UINT64 bytes = 0;
+                app.renderer->GetImageCacheStats(count, bytes);
+                std::wstring text = L"vRam";
+                const UINT32 boldStart = 4; // everything after "vRam" is bold
+                text += L'(' + std::to_wstring(count)
+                      + L'/' + std::to_wstring(Constants::VRAM_CACHE_IMAGES_COUNT) + L')';
+                text += L" → " + FormatDirSize(static_cast<int64_t>(bytes));
+                return {std::move(text), boldStart};
+            }
     };
 } // namespace UI
