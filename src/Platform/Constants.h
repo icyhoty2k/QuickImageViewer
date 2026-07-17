@@ -160,10 +160,31 @@ namespace Constants {
         // Geometry & Layout (non-color)
         constexpr float SELECTION_BORDER_THICKNESS = 3.0f;
         constexpr float HOVER_THICKNESS = 1.0f;
-        constexpr float SCROLLBAR_THICKNESS = 4.0f; // px width of the strip
+        constexpr float SCROLLBAR_THICKNESS = 8.0f; // px width of the strip
         constexpr float SCROLLBAR_MIN_THUMB = 20.0f; // minimum thumb length in px
         // Opacity (0.0–1.0) applied to a thumbnail that has been cut to the clipboard.
         constexpr float THUMBNAIL_CUT_OPACITY = 0.35f;
+
+        // =====================================================================
+        // Visual Effects (U key toggles master at runtime)
+        // Each bool can be independently disabled here; all are guarded by
+        // AppState::thumbnailEffectsEnabled (the runtime master switch).
+        // =====================================================================
+        namespace ThumbnailEffects {
+            constexpr bool EFFECTS_MASTER_ENABLED = false; // AppState init default
+            constexpr bool EFFECT_ROUNDED_CORNERS = true; // overdraw corner bites with bg color
+            constexpr bool EFFECT_GLOW_BORDER = true; // accent-color border on selected thumb
+            constexpr bool EFFECT_HOVER_SCALE = true; // scale hovered thumb by HOVER_SCALE_FACTOR
+
+            constexpr float CORNER_RADIUS = 6.0f; // logical px — DPI-scaled at runtime
+            constexpr float HOVER_SCALE_FACTOR = 1.05f; // uniform enlarge on hover
+            // Glow border: Windows 11 accent blue #60CDFF
+            constexpr float GLOW_COLOR_R = 0.376f;
+            constexpr float GLOW_COLOR_G = 0.804f;
+            constexpr float GLOW_COLOR_B = 1.0f;
+            constexpr float GLOW_COLOR_A = 1.0f;
+            constexpr float GLOW_THICKNESS = 2.5f; // logical px
+        }
 
         // Scrollbar position enums
         enum class ScrollbarSide { LEFT = 0, RIGHT = 1 };

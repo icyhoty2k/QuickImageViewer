@@ -166,9 +166,13 @@ void AppCommands::RemoveTrayIcon(HWND hWnd) {
 }
 
 
-void AppCommands::CopyFileToClipboard(HWND hWnd, const std::wstring &path, bool cut) {
-    const size_t pathLen  = path.size() + 1; // include null terminator
-    const size_t dropSize = sizeof(DROPFILES) + (pathLen + 1) * sizeof(wchar_t); // +1 for double-null
+void AppCommands::CopyFilesToClipboard(HWND hWnd, const std::vector<std::wstring> &paths, bool cut) {
+    if (paths.empty()) return;
+
+    // Build a double-null-terminated multi-path string for CF_HDROP.
+    size_t totalChars = 1; // final terminating null
+    for (const auto &p : paths) totalChars += p.size() + 1;
+    const size_t dropSize = sizeof(DROPFILES) + totalChars * sizeof(wchar_t);
     HGLOBAL hDrop = GlobalAlloc(GHND, dropSize);
     if (!hDrop) return;
 
@@ -177,11 +181,13 @@ void AppCommands::CopyFileToClipboard(HWND hWnd, const std::wstring &path, bool 
     df->pFiles = sizeof(DROPFILES);
     df->fWide  = TRUE;
     wchar_t *dst = reinterpret_cast<wchar_t *>(df + 1);
-    wmemcpy(dst, path.c_str(), pathLen);
-    dst[pathLen] = L'\0'; // double-null terminator
+    for (const auto &p : paths) {
+        wmemcpy(dst, p.c_str(), p.size() + 1);
+        dst += p.size() + 1;
+    }
+    *dst = L'\0'; // final double-null
     GlobalUnlock(hDrop);
 
-    // Preferred drop effect tells the paste target whether to copy or move.
     UINT cfEffect = RegisterClipboardFormatW(CFSTR_PREFERREDDROPEFFECT);
     HGLOBAL hEffect = GlobalAlloc(GHND, sizeof(DWORD));
     if (hEffect) {
@@ -212,14 +218,25 @@ void AppCommands::CopyFileToClipboard(HWND hWnd, const std::wstring &path, bool 
     }
 }
 
-void AppCommands::DeleteFileToRecycleBin(const std::wstring &path) {
-    // SHFileOperationW requires a double-null terminated source path.
-    std::wstring src = path + L'\0';
+void AppCommands::CopyFileToClipboard(HWND hWnd, const std::wstring &path, bool cut) {
+    CopyFilesToClipboard(hWnd, {path}, cut);
+}
+
+void AppCommands::DeleteFilesToRecycleBin(const std::vector<std::wstring> &paths) {
+    if (paths.empty()) return;
+    // Build a double-null-terminated multi-path string.
+    std::wstring from;
+    for (const auto &p : paths) { from += p; from += L'\0'; }
+    from += L'\0';
     SHFILEOPSTRUCTW op = {};
     op.wFunc  = FO_DELETE;
-    op.pFrom  = src.c_str();
+    op.pFrom  = from.c_str();
     op.fFlags = FOF_ALLOWUNDO | FOF_NOCONFIRMATION | FOF_SILENT;
     SHFileOperationW(&op);
+}
+
+void AppCommands::DeleteFileToRecycleBin(const std::wstring &path) {
+    DeleteFilesToRecycleBin({path});
 }
 
 bool AppCommands::ClipboardHasFiles() {

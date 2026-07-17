@@ -261,6 +261,15 @@ void InputManager::ExecuteKeyboardShortcutCommand(HWND hWnd, Command cmd) {
                                                    : Constants::Messages::THUMB_STRIP_WRAP_OFF);
             break;
 
+        case Command::ToggleThumbnailEffects:
+            app.thumbnailEffectsEnabled = !app.thumbnailEffectsEnabled;
+            g_overlayManager.PostCenterMessage(hWnd,
+                                               app.thumbnailEffectsEnabled
+                                                   ? Constants::Messages::THUMB_EFFECTS_ON
+                                                   : Constants::Messages::THUMB_EFFECTS_OFF);
+            uiManager.RepaintAllPanels();
+            break;
+
         case Command::FlipV:
             app.viewport.flippedV = !app.viewport.flippedV;
             InvalidateRect(hWnd, nullptr, FALSE);

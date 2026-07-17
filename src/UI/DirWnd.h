@@ -106,6 +106,7 @@ namespace UI {
             void LoadFolder(const std::wstring &folderPath) {
                 m_folderPath = folderPath;
                 m_localPlaylist.clear();
+                m_thumbnails.clear(); // force full rebuild; recycled panel may have stale thumbnails
                 namespace fs = std::filesystem;
                 fs::path dir(folderPath);
                 // Non-throwing filesystem calls only — this runs on the UI thread
