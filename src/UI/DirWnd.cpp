@@ -44,6 +44,26 @@ namespace UI {
     }
 
     // -------------------------------------------------------------------------
+    // RefreshFromDisk — rescan this panel's folder if it matches `dir`
+    // -------------------------------------------------------------------------
+    void DirWnd::RefreshFromDisk(const std::wstring &dir) {
+        // Determine which folder F6 is currently showing.
+        std::wstring myDir = m_currentFolder;
+        if (myDir.empty() && !m_dirPlaylist.empty())
+            myDir = std::filesystem::path(m_dirPlaylist[0]).parent_path().wstring();
+        if (myDir.empty()) return;
+
+        bool match = false;
+        try { match = std::filesystem::equivalent(std::filesystem::path(myDir),
+                                                  std::filesystem::path(dir)); }
+        catch (...) { match = (myDir == dir); }
+        if (!match) return;
+
+        LoadPlaylist(dir);
+        UpdateDirView();
+    }
+
+    // -------------------------------------------------------------------------
     // PostBuildHook — queue async decodes for RendererD2D
     // -------------------------------------------------------------------------
     void DirWnd::PostBuildHook() {

@@ -17,6 +17,9 @@ struct ScanResult {
     std::wstring targetPath; // navigate here after swap; empty = index 0
     std::wstring scannedDir; // always set — valid even when playlist is empty
     uint64_t generation;
+    // false when the scan was triggered by a SpawnedDirWnd click — F6 DirWnd
+    // must not follow because it tracks a different, user-pinned folder.
+    bool updatePrimaryDirWnd = true;
 };
 
 void OpenInitialImage(HWND hWnd);

@@ -1,6 +1,7 @@
 // AppCommands.h
 #pragma once
 #include <windows.h>
+#include <string>
 #define WM_TRAYICON (WM_APP + 1)
 #define ID_TRAY_APP_ICON 1001
 
@@ -23,6 +24,12 @@ class AppCommands {
         static void stopSlideshow(HWND hWnd);        // also called from WM_TIMER (end of playlist)
 
         static void RemoveTrayIcon(HWND hWnd);
+
+        // File clipboard / shell operations (used by thumbnail panel context menu)
+        static void CopyFileToClipboard(HWND hWnd, const std::wstring &path, bool cut = false);
+        static void DeleteFileToRecycleBin(const std::wstring &path);
+        static void PasteFilesFromClipboard(HWND hWnd, const std::wstring &targetDir);
+        static bool ClipboardHasFiles();
 
     private:
         // This remains private and inaccessible to the rest of the app

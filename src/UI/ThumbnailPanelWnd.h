@@ -63,6 +63,8 @@ namespace UI {
             // whether a panel needs a direct sync instead.
             bool IsPanelVisible() const { return m_hWnd && IsWindowVisible(m_hWnd); }
 
+            void Repaint() { if (m_hWnd) InvalidateRect(m_hWnd, nullptr, FALSE); }
+
             // Recompute and apply window bounds for the current position slot.
             // Called by UIManager::RefreshVerticalPanels when a neighbouring
             // horizontal panel is shown or hidden.
@@ -102,12 +104,40 @@ namespace UI {
             // Called after thumbnails are built (DirWnd queues async decodes).
             virtual void PostBuildHook() {}
 
+            // Called by the context menu Delete action.
+            // Default: moves the file to the Recycle Bin.
+            // CacheWnd overrides to remove only from the VRAM cache.
+            virtual void OnContextMenuDelete(const std::wstring &path);
+
+            // Label for the Delete item in the right-click context menu.
+            // CacheWnd overrides to clarify the action is VRAM-only.
+            virtual const wchar_t *ContextMenuDeleteLabel() const { return L"Delete"; }
+
+            // Optional extra context menu item appended below Paste.
+            // Return nullptr (default) to omit it; CacheWnd returns "Clear VCache".
+            virtual const wchar_t *ContextMenuExtraLabel() const { return nullptr; }
+            virtual void           OnContextMenuExtra() {}
+
+            // Return false to hide the Paste item entirely (CacheWnd — files can't be pasted there).
+            virtual bool ShowContextMenuPaste() const { return true; }
+
         public:
             // Called by UIManager::NotifyFolderRefreshed on every visible panel.
             // Subclasses decide whether the dir matches and what to update.
             // Default: no-op (HelpWnd, JumpToWnd, etc. ignore this).
             virtual void OnFolderRefreshed(const std::wstring & /*dir*/,
                                            const std::vector<std::wstring> & /*playlist*/) {}
+
+            // Re-read the panel's folder from disk if it matches `dir`.
+            // Called after a cut/paste so the strip reflects reality immediately,
+            // without waiting for the dir watcher (which only watches one dir).
+            virtual void RefreshFromDisk(const std::wstring & /*dir*/) {}
+
+            // Returns the folder path currently displayed by this panel.
+            // DirWnd and SpawnedDirWnd override; base returns empty (CacheWnd).
+            virtual std::wstring GetPanelFolder() const { return {}; }
+
+            HWND GetOwnerHwnd() const { return m_hOwner; }
 
         protected:
 
@@ -155,6 +185,15 @@ namespace UI {
             Microsoft::WRL::ComPtr<IDWriteTextFormat> m_emptyFormat;
             Microsoft::WRL::ComPtr<IDWriteTextLayout> m_emptyNoImagesLayout;
             Microsoft::WRL::ComPtr<IDWriteTextLayout> m_emptyDirMissingLayout;
+            Microsoft::WRL::ComPtr<IDWriteTextLayout> m_emptyCacheLayout;
+
+            // Path of the file currently "cut" to the clipboard — shown at reduced opacity.
+            // Static so all panel instances see the same cut state.
+            static std::wstring s_cutFilePath;
+
+            // Path recorded on LMB-down to seed an OLE drag if the mouse moves far enough.
+            // Cleared at drag start and on LMB-up. Static: only one drag at a time.
+            static std::wstring s_dragSourcePath;
 
         protected:
             HWND m_hOwner = nullptr;

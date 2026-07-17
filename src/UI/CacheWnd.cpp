@@ -36,15 +36,8 @@ namespace UI {
     // ClearThumbnailCache
     // -------------------------------------------------------------------------
     void CacheWnd::ClearThumbnailCache() {
-        std::wstring activeFile;
-        if (!app.playlist.empty() && app.currentIndex >= 0 &&
-            app.currentIndex < static_cast<int>(app.playlist.size())) {
-            activeFile = app.playlist[app.currentIndex];
-        }
-
-        if (app.renderer) {
-            app.renderer->ClearCache(activeFile);
-        }
+        if (app.renderer)
+            app.renderer->ClearCache();
         UpdateView();
     }
 } // namespace UI

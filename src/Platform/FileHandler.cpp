@@ -343,16 +343,18 @@ static void SortStandalonePlaylist(ScanResult &sr, int sortOrder, bool reverse) 
 // or the result is discarded.
 static void LaunchBackgroundScan(HWND hWnd, std::wstring dir,
                                  std::wstring targetPath, uint64_t gen,
-                                 int sortOrder, bool reverse) {
+                                 int sortOrder, bool reverse,
+                                 bool updatePrimaryDirWnd = true) {
     g_scanInProgress.store(true, std::memory_order_relaxed);
     std::thread([hWnd, dir = std::move(dir), targetPath = std::move(targetPath),
-                gen, sortOrder, reverse]() {
+                gen, sortOrder, reverse, updatePrimaryDirWnd]() {
                 SetThreadPriority(GetCurrentThread(), THREAD_PRIORITY_BELOW_NORMAL);
 
                 auto *result = new ScanResult();
                 result->generation = gen;
                 result->targetPath = targetPath;
                 result->scannedDir = dir;
+                result->updatePrimaryDirWnd = updatePrimaryDirWnd;
 
                 std::error_code ec;
                 for (const auto &entry: fs::directory_iterator(dir, ec)) {
@@ -404,24 +406,21 @@ void HandleScanComplete(HWND hWnd, ScanResult *result) {
     // navigating with a stale playlist would try to open files that no longer exist.
     if (result->playlist.empty()) {
         std::wstring dir = result->scannedDir;
-        uiManager.NotifyFolderRefreshed(dir, {});
 
-        // Hidden DirWnd is not in a slot and missed the notify — sync its
-        // missing/empty state directly (UpdateView self-guards while hidden).
-        // Base-class reference: OnFolderRefreshed is public on the base only.
-        {
-            UI::ThumbnailPanelWnd &dirPanel = uiManager.getDirWindow();
-            if (!dirPanel.IsPanelVisible())
-                dirPanel.OnFolderRefreshed(dir, {});
-        }
-
-        // Prune every previously cached file from the VRAM cache so CacheWnd
-        // clears properly instead of showing stale entries.
+        // Prune only the files confirmed gone from disk — keeps images from other
+        // dirs that happen to share the VRAM cache intact.
         if (app.renderer) {
-            for (const auto &path : app.playlist)
-                app.renderer->RemoveFromCache(path);
+            for (const auto &path : app.playlist) {
+                std::error_code ec;
+                if (!fs::exists(fs::path(path), ec) || ec)
+                    app.renderer->RemoveFromCache(path);
+            }
         }
 
+        // Clear app state BEFORE notifying panels.
+        // DirWnd::GetSourceItems() auto-populates from app.playlist when its own
+        // playlist is empty — if we notify first, it immediately refills from the
+        // still-live app.playlist and shows old thumbnails instead of the placeholder.
         app.playlist.clear();
         app.playlistFileSizes.clear();
         app.playlistFileTimes.clear();
@@ -430,8 +429,18 @@ void HandleScanComplete(HWND hWnd, ScanResult *result) {
         app.previousImageIndex = -1;
         if (app.renderer) app.renderer->ClearActiveImage();
 
-        // Re-notify CacheWnd after the playlist is cleared so it rebuilds from
-        // the now-empty VRAM cache (first notify above ran before the prune).
+        // Now notify all visible panels — app state is zeroed so GetSourceItems()
+        // correctly returns empty and every panel shows its empty placeholder.
+        uiManager.NotifyFolderRefreshed(dir, {});
+
+        // Hidden DirWnd is not in a slot and missed the notify — sync directly.
+        {
+            UI::ThumbnailPanelWnd &dirPanel = uiManager.getDirWindow();
+            if (!dirPanel.IsPanelVisible())
+                dirPanel.OnFolderRefreshed(dir, {});
+        }
+
+        // CacheWnd needs a second kick since its UpdateView guard checks app.playlist.
         uiManager.getCacheWindow().UpdateCacheView();
 
         std::error_code ec;
@@ -451,12 +460,17 @@ void HandleScanComplete(HWND hWnd, ScanResult *result) {
         return;
     }
 
-    // Prune VRAM cache entries for files that no longer exist in the folder.
+    // Prune VRAM cache entries only for files confirmed deleted from disk.
+    // Files that exist on disk but aren't in the new playlist (different folder,
+    // rename, etc.) are kept so CacheWnd shows a true cross-folder history.
     if (result->playlist != app.playlist && app.renderer) {
         std::unordered_set<std::wstring> newSet(result->playlist.begin(), result->playlist.end());
-        for (const auto &path: app.playlist) {
-            if (newSet.find(path) == newSet.end())
-                app.renderer->RemoveFromCache(path);
+        for (const auto &path : app.playlist) {
+            if (newSet.find(path) == newSet.end()) {
+                std::error_code ec;
+                if (!fs::exists(fs::path(path), ec) || ec)
+                    app.renderer->RemoveFromCache(path);
+            }
         }
     }
 
@@ -477,18 +491,20 @@ void HandleScanComplete(HWND hWnd, ScanResult *result) {
     }
 
     std::wstring scannedDir = result->scannedDir;
+    const bool updatePrimaryDir = result->updatePrimaryDirWnd;
     delete result;
 
     // Refresh every visible panel that cares about this folder — DirWnd,
     // SpawnedDirWnd instances watching the same dir, and CacheWnd.
-    uiManager.NotifyFolderRefreshed(scannedDir, app.playlist);
+    // Pass updatePrimaryDir = false when the scan was triggered by a SpawnedDirWnd
+    // click so F6 DirWnd keeps its own folder's thumbnails.
+    uiManager.NotifyFolderRefreshed(scannedDir, app.playlist, updatePrimaryDir);
 
-    // A hidden DirWnd is not in any layout slot and missed the notify above,
-    // leaving it stuck with the 1-item probe playlist from OpenDirectory.
-    // Sync it directly so F6 shows the full folder (cheap: vector copy only,
-    // SetPlaylistCopy skips UpdateView while the window is hidden).
+    // A hidden DirWnd is not in any layout slot and missed the notify above.
+    // Only sync it when the scan belongs to the primary context; a SpawnedDirWnd
+    // click must not overwrite F6's folder while it's hidden.
     UI::DirWnd &dirWnd = uiManager.getDirWindow();
-    if (!dirWnd.IsPanelVisible())
+    if (updatePrimaryDir && !dirWnd.IsPanelVisible())
         dirWnd.SetPlaylistCopy(app.playlist);
 
     // Folder has images — dismiss any Missing/Empty renderer overlay.
@@ -882,8 +898,12 @@ void OpenSpecificImage(HWND hWnd, const std::wstring &filePathStr) {
     uiManager.getActiveDirWnd().UpdateDirView();
 
     // Background: full directory scan + sort.
+    // If the click came from a SpawnedDirWnd, keep F6 DirWnd showing its own
+    // folder — pass false so HandleScanComplete skips the primary DirWnd update.
+    const bool activeIsPrimary = (&uiManager.getActiveDirWnd() == &uiManager.getDirWindow());
     LaunchBackgroundScan(hWnd, filePath.parent_path().wstring(), target, gen,
-                         app.fileHandlerDefaultSortOrder, app.fileHandlerIsReverseSortOrder);
+                         app.fileHandlerDefaultSortOrder, app.fileHandlerIsReverseSortOrder,
+                         activeIsPrimary);
 }
 
 void ReSortPlaylistAndRebuildMap(HWND hWnd) {
