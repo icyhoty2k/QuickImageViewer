@@ -5,6 +5,7 @@
 #include <string>
 #include "ThumbnailPanelWnd.h"
 #include "Thumbnail.h"
+#include "../AppState.h"
 
 namespace UI {
     class CacheWnd : public ThumbnailPanelWnd {
@@ -47,6 +48,10 @@ namespace UI {
                 ClearThumbnailCache();
             }
 
+            // CacheWnd owns its own data source (the VRAM bitmap cache) — it must
+            // not be gated on app.playlist being populated.
+            bool HasOwnPlaylist() const override { return true; }
+
             // Returns VRAM-cached file paths — base class handles all layout
             std::vector<std::wstring> GetSourceItems() const override;
 
@@ -56,5 +61,16 @@ namespace UI {
                                    const std::vector<std::wstring> & /*playlist*/) override {
                 UpdateCacheView();
             }
+
+            // Delete from CacheWnd = evict from VRAM only; never touch the file on disk.
+            void OnContextMenuDelete(const std::wstring &path) override {
+                if (app.renderer) app.renderer->RemoveFromCache(path);
+                UpdateCacheView();
+            }
+
+            const wchar_t *ContextMenuDeleteLabel() const override { return L"Remove from VCache"; }
+            const wchar_t *ContextMenuExtraLabel()  const override { return L"Clear VCache"; }
+            void           OnContextMenuExtra()           override { ClearThumbnailCache(); }
+            bool           ShowContextMenuPaste()   const override { return false; }
     };
 } // namespace UI

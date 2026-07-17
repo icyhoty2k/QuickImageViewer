@@ -53,6 +53,15 @@ namespace UI {
 
             void PostBuildHook() override;
 
+            void RefreshFromDisk(const std::wstring &dir) override;
+
+            std::wstring GetPanelFolder() const override {
+                if (!m_currentFolder.empty()) return m_currentFolder;
+                if (!m_dirPlaylist.empty())
+                    return fs::path(m_dirPlaylist[0]).parent_path().wstring();
+                return {};
+            }
+
             // DirWnd always tracks app.playlist — no folder comparison needed.
             void OnFolderRefreshed(const std::wstring &dir,
                                    const std::vector<std::wstring> &playlist) override {
@@ -150,6 +159,20 @@ namespace UI {
                     UpdateView();
                 }
             }
+
+            void RefreshFromDisk(const std::wstring &dir) override {
+                if (m_folderPath.empty()) return;
+                namespace fs = std::filesystem;
+                bool match = false;
+                try { match = fs::equivalent(fs::path(m_folderPath), fs::path(dir)); }
+                catch (...) { match = (m_folderPath == dir); }
+                if (!match) return;
+                LoadFolder(dir);
+                m_sourceDirty = true; // force full thumbnail rebuild, not just geometry
+                UpdateDirView();
+            }
+
+            std::wstring GetPanelFolder() const override { return m_folderPath; }
 
             // Each slot gets a unique Win32 class name so RegisterClassW doesn't
             // silently reuse the first registration for all three slots.

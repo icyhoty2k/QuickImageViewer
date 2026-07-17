@@ -2,7 +2,9 @@
 #include <algorithm>
 #include <windowsx.h>
 #include <d2d1.h>
+#include <ole2.h>
 #include <shellapi.h>
+#include <shlobj.h>
 #include <shellscalingapi.h>
 
 #include "FileHandler.h"
@@ -10,11 +12,15 @@
 #include "../AppState.h"
 #include "../Platform/Constants.h"
 #include "../Input/Shortcuts.h"
+#include "../Input/AppCommands.h"
 #include "../Renderer/RendererD2D.h"
 #include "../Overlays/OverlayManager.h"
 #include "../Platform/ConstantsStrings.h"
 
 namespace UI {
+    std::wstring ThumbnailPanelWnd::s_cutFilePath;
+    std::wstring ThumbnailPanelWnd::s_dragSourcePath;
+
     // Track the currently active panel window for border styling
     HWND g_activePanelHwnd = nullptr;
 
@@ -33,6 +39,188 @@ namespace UI {
             InvalidateRect(hWnd, nullptr, FALSE);
         }
     }
+    // =========================================================================
+    // OLE drag-and-drop helpers
+    // =========================================================================
+
+    // IDataObject carrying one CF_HDROP file path.
+    class PanelDataObject final : public IDataObject {
+        std::wstring m_path;
+        ULONG        m_ref = 1;
+    public:
+        explicit PanelDataObject(std::wstring path) : m_path(std::move(path)) {}
+
+        HRESULT __stdcall QueryInterface(REFIID riid, void **ppv) override {
+            if (riid == IID_IUnknown || riid == IID_IDataObject)
+                { *ppv = this; AddRef(); return S_OK; }
+            *ppv = nullptr; return E_NOINTERFACE;
+        }
+        ULONG __stdcall AddRef()  override { return InterlockedIncrement(&m_ref); }
+        ULONG __stdcall Release() override {
+            ULONG r = InterlockedDecrement(&m_ref);
+            if (!r) delete this;
+            return r;
+        }
+
+        HRESULT __stdcall GetData(FORMATETC *fmt, STGMEDIUM *med) override {
+            if (!fmt || !med) return E_INVALIDARG;
+            if (fmt->cfFormat != CF_HDROP || !(fmt->tymed & TYMED_HGLOBAL))
+                return DV_E_FORMATETC;
+            const size_t pathLen = m_path.size() + 1;
+            const size_t total   = sizeof(DROPFILES) + (pathLen + 1) * sizeof(wchar_t);
+            HGLOBAL hg = GlobalAlloc(GHND, total);
+            if (!hg) return E_OUTOFMEMORY;
+            auto *df     = static_cast<DROPFILES *>(GlobalLock(hg));
+            df->pFiles   = sizeof(DROPFILES);
+            df->fWide    = TRUE;
+            df->pt       = {};
+            df->fNC      = FALSE;
+            wchar_t *dst = reinterpret_cast<wchar_t *>(df + 1);
+            std::copy(m_path.begin(), m_path.end(), dst);
+            dst[m_path.size()]     = L'\0';
+            dst[m_path.size() + 1] = L'\0';
+            GlobalUnlock(hg);
+            med->tymed          = TYMED_HGLOBAL;
+            med->hGlobal        = hg;
+            med->pUnkForRelease = nullptr;
+            return S_OK;
+        }
+
+        HRESULT __stdcall QueryGetData(FORMATETC *fmt) override {
+            if (!fmt) return E_INVALIDARG;
+            return (fmt->cfFormat == CF_HDROP && (fmt->tymed & TYMED_HGLOBAL))
+                   ? S_OK : DV_E_FORMATETC;
+        }
+
+        HRESULT __stdcall GetDataHere(FORMATETC *, STGMEDIUM *)               override { return E_NOTIMPL; }
+        HRESULT __stdcall GetCanonicalFormatEtc(FORMATETC *, FORMATETC *pOut) override {
+            pOut->ptd = nullptr; return DATA_S_SAMEFORMATETC;
+        }
+        HRESULT __stdcall SetData(FORMATETC *, STGMEDIUM *, BOOL)             override { return E_NOTIMPL; }
+        HRESULT __stdcall EnumFormatEtc(DWORD, IEnumFORMATETC **)             override { return E_NOTIMPL; }
+        HRESULT __stdcall DAdvise(FORMATETC *, DWORD, IAdviseSink *, DWORD *) override { return E_NOTIMPL; }
+        HRESULT __stdcall DUnadvise(DWORD)                                    override { return E_NOTIMPL; }
+        HRESULT __stdcall EnumDAdvise(IEnumSTATDATA **)                       override { return E_NOTIMPL; }
+    };
+
+    // IDropSource — uses OLE default cursors; Ctrl switches to copy.
+    class PanelDropSource final : public IDropSource {
+        ULONG m_ref = 1;
+    public:
+        HRESULT __stdcall QueryInterface(REFIID riid, void **ppv) override {
+            if (riid == IID_IUnknown || riid == IID_IDropSource)
+                { *ppv = this; AddRef(); return S_OK; }
+            *ppv = nullptr; return E_NOINTERFACE;
+        }
+        ULONG __stdcall AddRef()  override { return InterlockedIncrement(&m_ref); }
+        ULONG __stdcall Release() override {
+            ULONG r = InterlockedDecrement(&m_ref);
+            if (!r) delete this;
+            return r;
+        }
+        HRESULT __stdcall QueryContinueDrag(BOOL fEscPressed, DWORD grfKeyState) override {
+            if (fEscPressed)              return DRAGDROP_S_CANCEL;
+            if (!(grfKeyState & MK_LBUTTON)) return DRAGDROP_S_DROP;
+            return S_OK;
+        }
+        HRESULT __stdcall GiveFeedback(DWORD) override {
+            return DRAGDROP_S_USEDEFAULTCURSORS;
+        }
+    };
+
+    // IDropTarget registered on each DirWnd panel window.
+    // Default = move; Ctrl held = copy.
+    class PanelDropTarget final : public IDropTarget {
+        ThumbnailPanelWnd *m_panel;
+        ULONG              m_ref = 1;
+    public:
+        explicit PanelDropTarget(ThumbnailPanelWnd *panel) : m_panel(panel) {}
+
+        HRESULT __stdcall QueryInterface(REFIID riid, void **ppv) override {
+            if (riid == IID_IUnknown || riid == IID_IDropTarget)
+                { *ppv = this; AddRef(); return S_OK; }
+            *ppv = nullptr; return E_NOINTERFACE;
+        }
+        ULONG __stdcall AddRef()  override { return InterlockedIncrement(&m_ref); }
+        ULONG __stdcall Release() override {
+            ULONG r = InterlockedDecrement(&m_ref);
+            if (!r) delete this;
+            return r;
+        }
+
+        static DWORD calcEffect(DWORD keyState) {
+            return (keyState & MK_CONTROL) ? DROPEFFECT_COPY : DROPEFFECT_MOVE;
+        }
+
+        HRESULT __stdcall DragEnter(IDataObject *pDataObj, DWORD keyState, POINTL, DWORD *pdwEffect) override {
+            FORMATETC fe = { CF_HDROP, nullptr, DVASPECT_CONTENT, -1, TYMED_HGLOBAL };
+            if (FAILED(pDataObj->QueryGetData(&fe))) { *pdwEffect = DROPEFFECT_NONE; return S_OK; }
+            *pdwEffect = calcEffect(keyState);
+            return S_OK;
+        }
+        HRESULT __stdcall DragOver(DWORD keyState, POINTL, DWORD *pdwEffect) override {
+            *pdwEffect = calcEffect(keyState);
+            return S_OK;
+        }
+        HRESULT __stdcall DragLeave() override { return S_OK; }
+
+        HRESULT __stdcall Drop(IDataObject *pDataObj, DWORD keyState, POINTL, DWORD *pdwEffect) override {
+            const bool isCopy = (keyState & MK_CONTROL) != 0;
+            *pdwEffect = isCopy ? DROPEFFECT_COPY : DROPEFFECT_MOVE;
+
+            FORMATETC fe = { CF_HDROP, nullptr, DVASPECT_CONTENT, -1, TYMED_HGLOBAL };
+            STGMEDIUM stg = {};
+            if (FAILED(pDataObj->GetData(&fe, &stg))) return S_OK;
+
+            auto *hd = static_cast<HDROP>(GlobalLock(stg.hGlobal));
+            if (!hd) { ReleaseStgMedium(&stg); return S_OK; }
+
+            const UINT count = DragQueryFileW(hd, 0xFFFFFFFF, nullptr, 0);
+            std::wstring doubleNull;
+            std::wstring firstSrcDir;
+            for (UINT i = 0; i < count; ++i) {
+                const UINT len = DragQueryFileW(hd, i, nullptr, 0);
+                if (!len) continue;
+                std::wstring p(len + 1, L'\0');
+                DragQueryFileW(hd, i, p.data(), len + 1);
+                p.resize(len);
+                if (firstSrcDir.empty())
+                    firstSrcDir = fs::path(p).parent_path().wstring();
+                doubleNull += p;
+                doubleNull += L'\0';
+            }
+            GlobalUnlock(stg.hGlobal);
+            ReleaseStgMedium(&stg);
+
+            if (doubleNull.empty()) return S_OK;
+            doubleNull += L'\0';
+
+            const std::wstring targetDir = m_panel->GetPanelFolder();
+            if (targetDir.empty()) return S_OK;
+
+            // Guard: don't move/copy within the same folder.
+            if (!firstSrcDir.empty()) {
+                bool same = false;
+                try { same = fs::equivalent(fs::path(firstSrcDir), fs::path(targetDir)); }
+                catch (...) { same = (firstSrcDir == targetDir); }
+                if (same) return S_OK;
+            }
+
+            std::wstring to = targetDir + L'\0' + L'\0';
+            SHFILEOPSTRUCTW op = {};
+            op.hwnd   = m_panel->GetOwnerHwnd();
+            op.wFunc  = isCopy ? FO_COPY : FO_MOVE;
+            op.pFrom  = doubleNull.c_str();
+            op.pTo    = to.c_str();
+            op.fFlags = FOF_ALLOWUNDO | FOF_NOCONFIRMATION;
+            SHFileOperationW(&op);
+
+            uiManager.RefreshPanelDirs(firstSrcDir, targetDir);
+            uiManager.RepaintAllPanels();
+            return S_OK;
+        }
+    };
+
     // =========================================================================
     // Init
     // =========================================================================
@@ -70,6 +258,9 @@ namespace UI {
         SetLayeredWindowAttributes(m_hWnd, 0, Constants::THUMBNAIL_PANEL_WINDOW_OPACITY, LWA_ALPHA);
         CreateDeviceResources();
         ShowWindow(m_hWnd, SW_HIDE);
+
+        if (IsDirPanel())
+            RegisterDragDrop(m_hWnd, new PanelDropTarget(this));
     }
 
     // =========================================================================
@@ -210,7 +401,7 @@ namespace UI {
         // Subclass provides the raw list; base owns all layout math.
         std::vector<std::wstring> items = GetSourceItems();
         if (items.empty()) {
-            if (IsDirPanel()) m_emptyDirActive = true;
+            m_emptyDirActive = true;
             InvalidateRect(m_hWnd, nullptr, TRUE);
             return;
         }
@@ -676,6 +867,16 @@ namespace UI {
                     }
                 }
 
+                // Record which thumbnail the LMB landed on (for OLE drag).
+                if (IsDirPanel()) {
+                    s_dragSourcePath.clear();
+                    const int hx = GET_X_LPARAM(lParam);
+                    const int hy = GET_Y_LPARAM(lParam);
+                    for (const auto &t : m_thumbnails) {
+                        if (t.HitTest(hx, hy)) { s_dragSourcePath = t.filePath; break; }
+                    }
+                }
+
                 s_clickPos.x = GET_X_LPARAM(lParam);
                 s_clickPos.y = GET_Y_LPARAM(lParam);
                 s_hasMoved = false;
@@ -789,8 +990,25 @@ namespace UI {
                 }
 
                 if (s_dragging) {
-                    if (abs(x - s_clickPos.x) > 5 || abs(y - s_clickPos.y) > 5)
-                        s_hasMoved = true;
+                    const int dx = abs(x - s_clickPos.x);
+                    const int dy = abs(y - s_clickPos.y);
+                    if (dx > 5 || dy > 5) s_hasMoved = true;
+
+                    // Initiate OLE drag-and-drop when mouse exceeds the system drag threshold.
+                    if (IsDirPanel() && !s_dragSourcePath.empty() &&
+                        (dx > GetSystemMetrics(SM_CXDRAG) || dy > GetSystemMetrics(SM_CYDRAG))) {
+                        std::wstring dragPath = std::move(s_dragSourcePath);
+                        s_dragSourcePath.clear();
+                        s_dragging = false;
+                        ReleaseCapture();
+                        auto *pData = new PanelDataObject(std::move(dragPath));
+                        auto *pSrc  = new PanelDropSource();
+                        DWORD dwEffect = 0;
+                        DoDragDrop(pData, pSrc, DROPEFFECT_COPY | DROPEFFECT_MOVE, &dwEffect);
+                        pData->Release();
+                        pSrc->Release();
+                        return 0;
+                    }
 
                     POINT cur;
                     GetCursorPos(&cur);
@@ -806,6 +1024,7 @@ namespace UI {
 
             // -----------------------------------------------------------------
             case WM_LBUTTONUP: {
+                s_dragSourcePath.clear();
                 if (m_scrollDragging) {
                     m_scrollDragging = false;
                     ReleaseCapture();
@@ -825,12 +1044,13 @@ namespace UI {
                         int y = GET_Y_LPARAM(lParam);
                         for (size_t i = 0; i < m_thumbnails.size(); ++i) {
                             if (m_thumbnails[i].HitTest(x, y)) {
-                                // If it belongs to the current folder, just jump to the index
-                                if (m_thumbnails[i].playlistIndex >= 0) {
-                                    LoadImageIndex(m_hOwner, m_thumbnails[i].playlistIndex);
-                                }
-                                // If it is from another folder, open it as a specific file
-                                else {
+                                // Re-check the live index map at click time — the cached
+                                // playlistIndex can be stale if the folder changed since
+                                // the last UpdateView (e.g. clicking between spawned panels).
+                                auto mapIt = app.playlistIndexMap.find(m_thumbnails[i].filePath);
+                                if (mapIt != app.playlistIndexMap.end()) {
+                                    LoadImageIndex(m_hOwner, mapIt->second);
+                                } else {
                                     OpenSpecificImage(m_hOwner, m_thumbnails[i].filePath);
                                 }
                                 UpdateView();
@@ -842,12 +1062,115 @@ namespace UI {
                 }
                 return 0;
             }
+            // -----------------------------------------------------------------
+            case WM_RBUTTONUP: {
+                const int rx = GET_X_LPARAM(lParam);
+                const int ry = GET_Y_LPARAM(lParam);
+
+                // Identify which thumbnail was right-clicked.
+                std::wstring hitPath;
+                for (const auto &t : m_thumbnails) {
+                    if (t.HitTest(rx, ry)) { hitPath = t.filePath; break; }
+                }
+
+                // Paste target: prefer the hit item's folder, then any visible
+                // thumbnail's folder, then the empty-dir path shown as placeholder.
+                std::wstring pasteDir;
+                if (!hitPath.empty())
+                    pasteDir = fs::path(hitPath).parent_path().wstring();
+                else if (!m_thumbnails.empty())
+                    pasteDir = fs::path(m_thumbnails[0].filePath).parent_path().wstring();
+                else if (!m_emptyDir.empty())
+                    pasteDir = m_emptyDir;
+
+                constexpr UINT ID_CTX_COPY   = 1;
+                constexpr UINT ID_CTX_CUT    = 2;
+                constexpr UINT ID_CTX_DELETE = 3;
+                constexpr UINT ID_CTX_PASTE  = 4;
+                constexpr UINT ID_CTX_EXTRA  = 5;
+                constexpr UINT ID_CTX_CLOSE  = 6;
+
+                const bool hasFile      = !hitPath.empty();
+                const bool canPaste     = !pasteDir.empty() && AppCommands::ClipboardHasFiles();
+                const bool showPaste    = ShowContextMenuPaste();
+                const wchar_t *delLabel   = ContextMenuDeleteLabel();
+                const wchar_t *extraLabel = ContextMenuExtraLabel();
+
+                HMENU hMenu = CreatePopupMenu();
+                if (!hMenu) return 0;
+                AppendMenuW(hMenu, hasFile  ? MF_STRING : (MF_STRING | MF_GRAYED), ID_CTX_COPY,   L"Copy");
+                AppendMenuW(hMenu, hasFile  ? MF_STRING : (MF_STRING | MF_GRAYED), ID_CTX_CUT,    L"Cut");
+                AppendMenuW(hMenu, hasFile  ? MF_STRING : (MF_STRING | MF_GRAYED), ID_CTX_DELETE, delLabel);
+                if (showPaste) {
+                    AppendMenuW(hMenu, MF_SEPARATOR, 0, nullptr);
+                    AppendMenuW(hMenu, canPaste ? MF_STRING : (MF_STRING | MF_GRAYED), ID_CTX_PASTE, L"Paste");
+                }
+                if (extraLabel) {
+                    AppendMenuW(hMenu, MF_SEPARATOR, 0, nullptr);
+                    AppendMenuW(hMenu, MF_STRING, ID_CTX_EXTRA, extraLabel);
+                }
+                AppendMenuW(hMenu, MF_SEPARATOR, 0, nullptr);
+                AppendMenuW(hMenu, MF_STRING, ID_CTX_CLOSE, L"Close");
+
+                POINT pt = {rx, ry};
+                ClientToScreen(m_hWnd, &pt);
+                const UINT cmd = TrackPopupMenu(hMenu, TPM_RETURNCMD | TPM_RIGHTBUTTON,
+                                                pt.x, pt.y, 0, m_hWnd, nullptr);
+                DestroyMenu(hMenu);
+
+                switch (cmd) {
+                    case ID_CTX_COPY:
+                        s_cutFilePath.clear();
+                        AppCommands::CopyFileToClipboard(m_hOwner, hitPath);
+                        break;
+                    case ID_CTX_CUT:
+                        AppCommands::CopyFileToClipboard(m_hOwner, hitPath, true);
+                        s_cutFilePath = hitPath;
+                        uiManager.RepaintAllPanels();
+                        break;
+                    case ID_CTX_DELETE:
+                        if (hitPath == s_cutFilePath) s_cutFilePath.clear();
+                        OnContextMenuDelete(hitPath);
+                        break;
+                    case ID_CTX_PASTE: {
+                        const std::wstring srcDir = s_cutFilePath.empty() ? std::wstring{}
+                            : fs::path(s_cutFilePath).parent_path().wstring();
+                        AppCommands::PasteFilesFromClipboard(m_hOwner, pasteDir);
+                        s_cutFilePath.clear();
+                        uiManager.RefreshPanelDirs(srcDir, pasteDir);
+                        uiManager.RepaintAllPanels();
+                        break;
+                    }
+                    case ID_CTX_EXTRA:
+                        OnContextMenuExtra();
+                        break;
+                    case ID_CTX_CLOSE:
+                        Hide();
+                        break;
+                }
+                return 0;
+            }
+
             case Constants::WM_QIV_REPAINT:
                 InvalidateRect(m_hWnd, nullptr, FALSE);
                 return 0;
             // -----------------------------------------------------------------
             case WM_CLOSE:
                 ShowWindow(m_hWnd, SW_HIDE);
+                return 0;
+            // -----------------------------------------------------------------
+            case WM_DPICHANGED: {
+                // Thumbnail cache holds bitmaps decoded at the old physical resolution.
+                // Clear them so new requests use the updated app.dpiScale.
+                ClearDirThumbnailCache();
+                // RefreshBounds recomputes physical panel size at the new DPI and calls
+                // SetWindowPos, which generates WM_SIZE → ResizeSwapChain + UpdateView.
+                RefreshBounds();
+                return 0;
+            }
+            // -----------------------------------------------------------------
+            case WM_DESTROY:
+                if (IsDirPanel()) RevokeDragDrop(m_hWnd);
                 return 0;
         }
 
@@ -856,6 +1179,10 @@ namespace UI {
 
     // =========================================================================
     // RenderEmptyPlaceholder
+    void ThumbnailPanelWnd::OnContextMenuDelete(const std::wstring &path) {
+        AppCommands::DeleteFileToRecycleBin(path);
+    }
+
     // Drawn when the scanned folder has no images. Fills the full panel area
     // with a centered two-line label: "No Images" + the folder path (wrapping
     // at panel edges). A click anywhere opens the folder in Explorer.
@@ -884,6 +1211,30 @@ namespace UI {
                 m_emptyFormat.GetAddressOf());
         }
         if (!m_emptyFormat) return;
+
+        // CacheWnd: not a dir panel — show a single centered "Thumbnail Cache Empty" line.
+        if (!IsDirPanel()) {
+            if (!m_emptyCacheLayout) {
+                const wchar_t *txt = Constants::Messages::EMPTY_CACHE;
+                r->m_pDWriteFactory->CreateTextLayout(
+                    txt, static_cast<UINT32>(wcslen(txt)),
+                    m_emptyFormat.Get(), std::max(1.0f, sw - 2.0f * margin), sh,
+                    &m_emptyCacheLayout);
+                if (m_emptyCacheLayout) {
+                    m_emptyCacheLayout->SetTextAlignment(DWRITE_TEXT_ALIGNMENT_CENTER);
+                    m_emptyCacheLayout->SetWordWrapping(DWRITE_WORD_WRAPPING_EMERGENCY_BREAK);
+                }
+            }
+            if (m_emptyCacheLayout) {
+                DWRITE_TEXT_METRICS m{};
+                m_emptyCacheLayout->GetMetrics(&m);
+                m_panelContext->DrawTextLayout(
+                    {margin, (sh - m.height) / 2.0f},
+                    m_emptyCacheLayout.Get(),
+                    r->m_pTextBrush.Get());
+            }
+            return;
+        }
 
         // Choose header text and brush based on missing vs empty-but-present state.
         ID2D1SolidColorBrush *headerBrush;
@@ -986,6 +1337,10 @@ namespace UI {
         Microsoft::WRL::ComPtr<ID2D1DeviceContext> baseCtx;
         if (FAILED(d2dDev->CreateDeviceContext(D2D1_DEVICE_CONTEXT_OPTIONS_NONE, &baseCtx))) return;
         if (FAILED(baseCtx.As(&m_panelContext))) return;
+        // All geometry is computed in physical pixels (coords * app.dpiScale).
+        // Tell D2D to accept pixel coordinates directly so DirectWrite uses
+        // physical-pixel hinting rather than 96-DPI logical hinting.
+        m_panelContext->SetUnitMode(D2D1_UNIT_MODE_PIXELS);
 
         // Size the swap chain and wire the back buffer.
         RECT rc{};
@@ -1021,6 +1376,7 @@ namespace UI {
         m_emptyNoImagesLayout.Reset();
         m_emptyDirMissingLayout.Reset();
         m_emptyDirPathLayout.Reset();
+        m_emptyCacheLayout.Reset();
 
         m_panelContext->SetTarget(nullptr);
         m_panelBackBuffer.Reset();
@@ -1092,11 +1448,17 @@ namespace UI {
         for (size_t j = 0; j < resolved.size(); ++j) {
             const int origI = static_cast<int>(visIdx[j]);
             const auto &rv = resolved[j];
+            const float thumbOpacity =
+                (!s_cutFilePath.empty() && m_thumbnails[origI].filePath == s_cutFilePath)
+                ? Constants::ThumbnailPanel::THUMBNAIL_CUT_OPACITY
+                : 1.0f;
             if (rv.bitmap) {
-                m_panelContext->DrawBitmap(rv.bitmap.Get(), rv.rect, 1.0f,
+                m_panelContext->DrawBitmap(rv.bitmap.Get(), rv.rect, thumbOpacity,
                                            D2D1_BITMAP_INTERPOLATION_MODE_LINEAR);
             } else {
+                m_placeholderBrush->SetOpacity(thumbOpacity);
                 m_panelContext->FillRectangle(rv.rect, m_placeholderBrush.Get());
+                m_placeholderBrush->SetOpacity(1.0f);
             }
             if (origI == selectedIdx)
                 m_panelContext->DrawRectangle(rv.rect, m_borderBrush.Get(),

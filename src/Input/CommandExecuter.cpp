@@ -308,17 +308,16 @@ void InputManager::ExecuteKeyboardShortcutCommand(HWND hWnd, Command cmd) {
 
         case Command::ToggleCache: {
             UI::CacheWnd &cacheWnd = uiManager.getCacheWindow();
-            // When showing CacheWnd, try its default position (bottom) if available
-            if (!cacheWnd.IsVisible()) {
-                // Check if default position is free
+            const bool cacheWasVisible = cacheWnd.IsVisible();
+            if (!cacheWasVisible) {
                 const UI::PanelLayout &layout = uiManager.GetLayout();
-                if (!layout.occupied(Constants::CACHE_WINDOW_POSITION)) {
+                if (!layout.occupied(Constants::CACHE_WINDOW_POSITION))
                     cacheWnd.SetPosition(Constants::CACHE_WINDOW_POSITION);
-                }
-                // Otherwise Show() will find a free position naturally
             }
             uiManager.Toggle(cacheWnd);
-            cacheWnd.IsVisible() ? g_overlayManager.PostCenterMessage(hWnd, Constants::Messages::CACHE_WINDOW_VISIBLE_MSG) : g_overlayManager.PostCenterMessage(hWnd, Constants::Messages::CACHE_WINDOW_HIDDEN_MSG);
+            g_overlayManager.PostCenterMessage(hWnd, cacheWasVisible
+                ? Constants::Messages::CACHE_WINDOW_HIDDEN_MSG
+                : Constants::Messages::CACHE_WINDOW_VISIBLE_MSG);
             break;
         }
 
@@ -330,16 +329,16 @@ void InputManager::ExecuteKeyboardShortcutCommand(HWND hWnd, Command cmd) {
 
         case Command::ToggleDir: {
             UI::DirWnd &dirWnd = uiManager.getDirWindow();
-            // When showing F5 DirWnd, try its default position (top) if available
-            if (!dirWnd.IsVisible()) {
-                // Check if default position is free
+            const bool dirWasVisible = dirWnd.IsVisible();
+            if (!dirWasVisible) {
                 const UI::PanelLayout &layout = uiManager.GetLayout();
-                if (!layout.occupied(Constants::CURRENT_DIR_WINDOW_POSITION)) {
+                if (!layout.occupied(Constants::CURRENT_DIR_WINDOW_POSITION))
                     dirWnd.SetPosition(Constants::CURRENT_DIR_WINDOW_POSITION);
-                }
-                // Otherwise Show() will find a free position naturally
             }
             uiManager.Toggle(dirWnd);
+            g_overlayManager.PostCenterMessage(hWnd, dirWasVisible
+                ? Constants::Messages::DIR_WINDOW_HIDDEN_MSG
+                : Constants::Messages::DIR_WINDOW_VISIBLE_MSG);
             break;
         }
 

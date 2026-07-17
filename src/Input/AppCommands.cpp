@@ -133,9 +133,13 @@ void AppCommands::AddTrayIcon(HWND hWnd) {
     nid.uFlags = NIF_ICON | NIF_MESSAGE | NIF_TIP;
     nid.uCallbackMessage = WM_TRAYICON;
 
-    UINT iconId = app.isDedicated ? IDI_APP_ICON_DEDICATED : IDI_APP_ICON;
+    const bool useDedicatedIcon = app.isDedicated || app.slideshow.running;
+    UINT iconId = useDedicatedIcon ? IDI_APP_ICON_DEDICATED : IDI_APP_ICON;
     nid.hIcon = LoadIcon(GetModuleHandle(nullptr), MAKEINTRESOURCE(iconId));
-    wcscpy_s(nid.szTip, app.isDedicated ? L"QuickImageViewer [Dedicated]" : L"QuickImageViewer");
+    const wchar_t *tip = app.slideshow.running  ? L"QuickImageViewer [Slideshow]"
+                       : app.isDedicated        ? L"QuickImageViewer [Dedicated]"
+                                               : L"QuickImageViewer";
+    wcscpy_s(nid.szTip, tip);
 
 
     if (!Shell_NotifyIconW(NIM_MODIFY, &nid)) {
@@ -144,6 +148,13 @@ void AppCommands::AddTrayIcon(HWND hWnd) {
     }
     nid.uVersion = NOTIFYICON_VERSION_4;
     Shell_NotifyIconW(NIM_SETVERSION, &nid);
+
+    // Keep the taskbar button icon in sync with the tray icon.
+    HICON hSmall = reinterpret_cast<HICON>(
+        LoadImageW(GetModuleHandle(nullptr), MAKEINTRESOURCEW(iconId),
+                   IMAGE_ICON, GetSystemMetrics(SM_CXSMICON), GetSystemMetrics(SM_CYSMICON), 0));
+    SendMessageW(hWnd, WM_SETICON, ICON_BIG,   reinterpret_cast<LPARAM>(nid.hIcon));
+    SendMessageW(hWnd, WM_SETICON, ICON_SMALL, reinterpret_cast<LPARAM>(hSmall ? hSmall : nid.hIcon));
 }
 
 
@@ -152,6 +163,119 @@ void AppCommands::RemoveTrayIcon(HWND hWnd) {
     nid.hWnd = hWnd;
     nid.uID = ID_TRAY_APP_ICON;
     Shell_NotifyIconW(NIM_DELETE, &nid);
+}
+
+
+void AppCommands::CopyFileToClipboard(HWND hWnd, const std::wstring &path, bool cut) {
+    const size_t pathLen  = path.size() + 1; // include null terminator
+    const size_t dropSize = sizeof(DROPFILES) + (pathLen + 1) * sizeof(wchar_t); // +1 for double-null
+    HGLOBAL hDrop = GlobalAlloc(GHND, dropSize);
+    if (!hDrop) return;
+
+    auto *df = static_cast<DROPFILES *>(GlobalLock(hDrop));
+    if (!df) { GlobalFree(hDrop); return; }
+    df->pFiles = sizeof(DROPFILES);
+    df->fWide  = TRUE;
+    wchar_t *dst = reinterpret_cast<wchar_t *>(df + 1);
+    wmemcpy(dst, path.c_str(), pathLen);
+    dst[pathLen] = L'\0'; // double-null terminator
+    GlobalUnlock(hDrop);
+
+    // Preferred drop effect tells the paste target whether to copy or move.
+    UINT cfEffect = RegisterClipboardFormatW(CFSTR_PREFERREDDROPEFFECT);
+    HGLOBAL hEffect = GlobalAlloc(GHND, sizeof(DWORD));
+    if (hEffect) {
+        auto *pEff = static_cast<DWORD *>(GlobalLock(hEffect));
+        if (pEff) {
+            *pEff = cut ? DROPEFFECT_MOVE : DROPEFFECT_COPY;
+            GlobalUnlock(hEffect);
+        } else {
+            GlobalFree(hEffect);
+            hEffect = nullptr;
+        }
+    }
+
+    if (OpenClipboard(hWnd)) {
+        EmptyClipboard();
+        if (!SetClipboardData(CF_HDROP, hDrop))
+            GlobalFree(hDrop);
+        if (hEffect && cfEffect) {
+            if (!SetClipboardData(cfEffect, hEffect))
+                GlobalFree(hEffect);
+        } else if (hEffect) {
+            GlobalFree(hEffect);
+        }
+        CloseClipboard();
+    } else {
+        GlobalFree(hDrop);
+        if (hEffect) GlobalFree(hEffect);
+    }
+}
+
+void AppCommands::DeleteFileToRecycleBin(const std::wstring &path) {
+    // SHFileOperationW requires a double-null terminated source path.
+    std::wstring src = path + L'\0';
+    SHFILEOPSTRUCTW op = {};
+    op.wFunc  = FO_DELETE;
+    op.pFrom  = src.c_str();
+    op.fFlags = FOF_ALLOWUNDO | FOF_NOCONFIRMATION | FOF_SILENT;
+    SHFileOperationW(&op);
+}
+
+bool AppCommands::ClipboardHasFiles() {
+    return IsClipboardFormatAvailable(CF_HDROP) == TRUE;
+}
+
+void AppCommands::PasteFilesFromClipboard(HWND hWnd, const std::wstring &targetDir) {
+    if (targetDir.empty()) return;
+    if (!OpenClipboard(hWnd)) return;
+
+    // Determine whether the clipboard contents were cut (move) or copied.
+    bool isCut = false;
+    UINT cfEffect = RegisterClipboardFormatW(CFSTR_PREFERREDDROPEFFECT);
+    if (cfEffect) {
+        HGLOBAL hEff = GetClipboardData(cfEffect);
+        if (hEff) {
+            auto *pEff = static_cast<const DWORD *>(GlobalLock(hEff));
+            if (pEff) {
+                isCut = (*pEff & DROPEFFECT_MOVE) != 0;
+                GlobalUnlock(hEff);
+            }
+        }
+    }
+
+    HGLOBAL hDrop = GetClipboardData(CF_HDROP);
+    if (!hDrop) { CloseClipboard(); return; }
+
+    HDROP hd = static_cast<HDROP>(GlobalLock(hDrop));
+    if (!hd) { CloseClipboard(); return; }
+
+    UINT count = DragQueryFileW(hd, 0xFFFFFFFF, nullptr, 0);
+    std::wstring from;
+    for (UINT i = 0; i < count; ++i) {
+        UINT len = DragQueryFileW(hd, i, nullptr, 0);
+        if (!len) continue;
+        std::wstring buf(len + 1, L'\0');
+        DragQueryFileW(hd, i, buf.data(), len + 1);
+        buf.resize(len);
+        from += buf;
+        from += L'\0';
+    }
+    GlobalUnlock(hDrop);
+    CloseClipboard();
+
+    if (from.empty()) return;
+    from += L'\0'; // double-null
+
+    std::wstring to = targetDir + L'\0' + L'\0';
+
+    SHFILEOPSTRUCTW op = {};
+    op.hwnd   = hWnd;
+    op.wFunc  = isCut ? FO_MOVE : FO_COPY;
+    op.pFrom  = from.c_str();
+    op.pTo    = to.c_str();
+    op.fFlags = FOF_ALLOWUNDO;
+    SHFileOperationW(&op);
 }
 
 
@@ -242,6 +366,7 @@ void AppCommands::stopSlideshow(HWND hWnd) {
     app.slideshow.paused  = false;
     app.slideshow.shuffleOrder.clear();
     app.slideshow.shufflePos = 0;
+    AddTrayIcon(hWnd);
 }
 
 void AppCommands::toggleSlideshow(HWND hWnd) {
@@ -265,6 +390,7 @@ void AppCommands::toggleSlideshow(HWND hWnd) {
             SetTimer(hWnd, Constants::Slideshow::CURSOR_TIMER_ID, app.slideshow.cursorHideMs, nullptr);
         app.slideshow.running = true;
         app.slideshow.paused  = false;
+        AddTrayIcon(hWnd);
     } else {
         // --- Stop (whether playing or paused) ---
         stopSlideshow(hWnd);

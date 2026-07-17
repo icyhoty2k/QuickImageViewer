@@ -97,6 +97,8 @@ LRESULT CALLBACK MainAppWndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM l
                          prcNewWindow->right - prcNewWindow->left,
                          prcNewWindow->bottom - prcNewWindow->top,
                          SWP_NOZORDER | SWP_NOACTIVATE);
+            // 3. Reposition vertical panels — their physical thickness changed.
+            uiManager.RefreshVerticalPanels();
             InvalidateRect(hWnd, nullptr, FALSE);
             return 0;
         }
@@ -489,10 +491,6 @@ LRESULT CALLBACK MainAppWndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM l
             return 0;
         }
 
-
-        case WM_DELETE_SPAWNED_PANEL:
-            delete reinterpret_cast<UI::SpawnedDirWnd *>(lParam);
-            return 0;
 
         case WM_CLOSE: {
             // 1. "Hide" instead of "Destroy"
