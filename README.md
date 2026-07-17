@@ -21,7 +21,6 @@ Built on Direct2D, WIC, and native Win32 APIs. Single EXE, no installer(portable
  ![](resources/screenshots/2026-07-15_045413.png)
  ![](resources/screenshots/2026-07-15_045311.png)
  ![](resources/screenshots/2026-07-15_045359.png)
-2026-07-15_045440.png
 ---
 
 ## Download
@@ -133,7 +132,16 @@ All thumbnail panels (Cache, Directory, and spawned DirWnds) share the same beha
 - **Open** — left-click any thumbnail to open it in the main viewer
 - **Drag** — click and drag the strip to scroll freely
 - **Scrollbar** — thin bar on the inner edge; click-drag for quick scrubbing
-- **Spawn DirWnd** — from the History panel, `Shift+Enter` on an entry opens a floating directory strip for that folder without leaving the current one (up to 4 simultaneous strips)
+- **Spawn DirWnd** — from the History panel, `Shift+Enter` on an entry opens a floating directory strip for that folder without leaving the current one (up to 4 simultaneous strips, pre-allocated and reused for instant spawning)
+
+### File Management on Thumbnail Strips
+Directory strips double as a lightweight file manager:
+
+- **Drag & drop between strips** — drag a thumbnail from one directory strip and drop it on another to **move** the file. Hold `Ctrl` while dropping to **copy** instead; the mouse cursor shows which operation is active. Both panels refresh automatically and every operation goes through the Recycle-Bin-aware Windows shell (undo with `Ctrl+Z` in Explorer).
+- **Right-click context menu** — Copy, Cut, Delete and Paste on any thumbnail:
+  - **Copy / Cut** — puts the file on the Windows clipboard (works with Explorer too). A cut file is shown dimmed until pasted.
+  - **Paste** — drops clipboard files into the strip's folder; both source and destination strips refresh instantly.
+  - **Delete** — sends the file to the Recycle Bin.
 
 ### History Panel
 
