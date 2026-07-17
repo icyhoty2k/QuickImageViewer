@@ -201,12 +201,99 @@
             color: #ffffff;
         }
 
-        .hero-screenshot {
-            max-width: 100%;
+        /* ── Screenshot carousel ── */
+        .carousel {
+            position: relative;
+            max-width: 1000px;
+            margin: 40px auto 0;
+            user-select: none;
+        }
+
+        .carousel-frame {
+            position: relative;
             border-radius: 12px;
             border: 1px solid var(--border-color);
-            margin-top: 40px;
+            overflow: hidden;
             box-shadow: 0 20px 50px rgba(0,0,0,0.5);
+            background: #000;
+            aspect-ratio: 16 / 9;
+        }
+
+        .carousel-frame img {
+            width: 100%;
+            height: 100%;
+            object-fit: contain;
+            display: block;
+        }
+
+        .carousel-btn {
+            position: absolute;
+            top: 50%;
+            transform: translateY(-50%);
+            width: 46px;
+            height: 46px;
+            border-radius: 50%;
+            border: 1px solid var(--border-color);
+            background: rgba(15, 23, 42, 0.85);
+            color: var(--accent-primary);
+            font-size: 1.3rem;
+            line-height: 1;
+            cursor: pointer;
+            transition: all 0.15s ease;
+            z-index: 2;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .carousel-btn:hover {
+            background: var(--accent-primary);
+            color: #0f172a;
+        }
+
+        .carousel-btn:focus-visible {
+            outline: 2px solid var(--accent-primary);
+            outline-offset: 2px;
+        }
+
+        .carousel-btn.prev { left: 12px; }
+        .carousel-btn.next { right: 12px; }
+
+        .carousel-caption {
+            margin-top: 14px;
+            color: var(--text-muted);
+            font-size: 0.95rem;
+            min-height: 1.4em;
+        }
+
+        .carousel-counter {
+            color: var(--accent-primary);
+            font-weight: 600;
+            font-size: 0.85rem;
+        }
+
+        .carousel-dots {
+            display: flex;
+            justify-content: center;
+            gap: 8px;
+            margin-top: 12px;
+        }
+
+        .carousel-dot {
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+            border: none;
+            padding: 0;
+            background: var(--border-color);
+            cursor: pointer;
+            transition: all 0.15s ease;
+        }
+
+        .carousel-dot:hover { background: var(--text-muted); }
+        .carousel-dot.active {
+            background: var(--accent-primary);
+            transform: scale(1.25);
         }
 
         section {
@@ -374,10 +461,88 @@
                 <a href="https://github.com/icyhoty2k/QuickImageViewer" style="color: inherit; text-decoration: underline;">View Source on GitHub</a>
             </p>
 
-            <img class="hero-screenshot"
-                 src="https://raw.githubusercontent.com/icyhoty2k/QuickImageViewer/main/resources/screenshots/2026-07-15_045800.png"
-                 alt="QuickImageViewer main interface showing an image with thumbnail strips and info overlays on Windows 11"
-                 loading="lazy" width="1000">
+            <div class="carousel" id="shotCarousel" aria-label="Screenshot gallery">
+                <div class="carousel-frame">
+                    <button class="carousel-btn prev" id="shotPrev" aria-label="Previous screenshot">&#10094;</button>
+                    <img id="shotImg"
+                         src="https://raw.githubusercontent.com/icyhoty2k/QuickImageViewer/main/resources/screenshots/2026-07-15_045800.png"
+                         alt="QuickImageViewer main interface showing an image with thumbnail strips and info overlays on Windows 11">
+                    <button class="carousel-btn next" id="shotNext" aria-label="Next screenshot">&#10095;</button>
+                </div>
+                <p class="carousel-caption">
+                    <span class="carousel-counter" id="shotCounter">1 / 10</span>
+                    &nbsp;—&nbsp; <span id="shotCaption">Main interface with thumbnail strips and info overlays</span>
+                </p>
+                <div class="carousel-dots" id="shotDots" role="tablist"></div>
+            </div>
+
+            <script>
+            (function () {
+                const BASE = "https://raw.githubusercontent.com/icyhoty2k/QuickImageViewer/main/resources/screenshots/";
+                const SHOTS = [
+                    ["2026-07-15_045800.png", "Main interface with thumbnail strips and info overlays"],
+                    ["2026-07-15_045053.png", "Built-in help window (F1) — full shortcut reference"],
+                    ["2026-07-15_045155.png", "Folder History panel with favorites"],
+                    ["2026-07-15_045342.png", "EXIF / Image Info panel with offline GPS geocoding"],
+                    ["2026-07-15_045130.png", "Dual thumbnail strips — VRAM cache (top) and current directory (bottom)"],
+                    ["2026-07-15_045219.png", "Four floating directory strips around the viewer + Folder History"],
+                    ["2026-07-15_045311.png", "Browsing a 4K wallpaper folder with the directory strip"],
+                    ["2026-07-15_045359.png", "Jump-to-image dialog — go straight to any image number"],
+                    ["2026-07-15_045413.png", "Find dialog — filename search with * and ? wildcards"],
+                    ["2026-07-15_045440.png", "Statistics panel — Windows thumbnail cache, codec and playlist info"]
+                ];
+
+                const img     = document.getElementById("shotImg");
+                const caption = document.getElementById("shotCaption");
+                const counter = document.getElementById("shotCounter");
+                const dots    = document.getElementById("shotDots");
+                let idx = 0;
+
+                SHOTS.forEach((_, i) => {
+                    const d = document.createElement("button");
+                    d.className = "carousel-dot" + (i === 0 ? " active" : "");
+                    d.setAttribute("aria-label", "Screenshot " + (i + 1));
+                    d.addEventListener("click", () => show(i));
+                    dots.appendChild(d);
+                });
+
+                function show(i) {
+                    idx = (i + SHOTS.length) % SHOTS.length;
+                    img.src = BASE + SHOTS[idx][0];
+                    img.alt = "QuickImageViewer screenshot: " + SHOTS[idx][1];
+                    caption.textContent = SHOTS[idx][1];
+                    counter.textContent = (idx + 1) + " / " + SHOTS.length;
+                    dots.querySelectorAll(".carousel-dot").forEach(
+                        (d, n) => d.classList.toggle("active", n === idx));
+                    // Preload neighbours for instant arrow clicks
+                    [idx + 1, idx - 1].forEach(n => {
+                        const p = new Image();
+                        p.src = BASE + SHOTS[(n + SHOTS.length) % SHOTS.length][0];
+                    });
+                }
+
+                document.getElementById("shotPrev").addEventListener("click", () => show(idx - 1));
+                document.getElementById("shotNext").addEventListener("click", () => show(idx + 1));
+
+                // Keyboard arrows work anywhere on the page
+                document.addEventListener("keydown", e => {
+                    if (e.key === "ArrowLeft")  show(idx - 1);
+                    if (e.key === "ArrowRight") show(idx + 1);
+                });
+
+                // Touch swipe
+                let touchX = null;
+                img.addEventListener("touchstart", e => { touchX = e.touches[0].clientX; }, { passive: true });
+                img.addEventListener("touchend", e => {
+                    if (touchX === null) return;
+                    const dx = e.changedTouches[0].clientX - touchX;
+                    if (Math.abs(dx) > 40) show(dx < 0 ? idx + 1 : idx - 1);
+                    touchX = null;
+                }, { passive: true });
+
+                show(0);
+            })();
+            </script>
         </div>
     </header>
 
