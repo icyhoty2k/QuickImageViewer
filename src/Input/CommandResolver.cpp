@@ -163,6 +163,10 @@ Command InputManager::ResolveKeyboardKeys(UINT key) {
             if (!ctrl && !alt && !shift) return Command::ToggleThumbnailWrapAround;
             break;
 
+        case Shortcuts::SC_THUMBNAIL_EFFECTS_TOGGLE:
+            if (!ctrl && !alt && !shift) return Command::ToggleThumbnailEffects;
+            break;
+
         // --- Fullscreen ---
         case Shortcuts::SC_PANEL_FULLSCREEN: return Command::ToggleFullscreen;
         case Shortcuts::SC_PANEL_FULLSCREEN_F: // 'F' — same value as SC_NAV_FIND

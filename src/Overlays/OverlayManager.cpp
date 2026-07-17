@@ -45,11 +45,11 @@ void OverlayManager::Init(IDWriteFactory3 *dwriteFactory,
     wire(TOP_LEFT, &slotTopLeft, true);
     wire(TOP_CENTER, &slotTopCenter, true); // used when switching with o do not disable for now
     wire(TOP_RIGHT, &slotTopRight, true); // zoom
-    wire(MID_LEFT, &slotMidLeft, false);
+    wire(MID_LEFT, &slotMidLeft, true);     // panel-selection overlay (left panel)
     wire(MID_CENTER, &slotMidCenter, true); // center-center message queue
-    wire(MID_RIGHT, &slotMidRight, false);
+    wire(MID_RIGHT, &slotMidRight, true);   // panel-selection overlay (right panel)
     wire(BOT_LEFT, &slotBotLeft, true); // effects
-    wire(BOT_CENTER, &slotBotCenter, false);
+    wire(BOT_CENTER, &slotBotCenter, true); // panel-selection overlay (bottom panel)
     wire(BOT_RIGHT, &slotBotRight, true); // dims / size
 
     // MID_CENTER is never shown until a message is posted
@@ -503,6 +503,30 @@ void OverlayManager::UpdateEffects() {
 
     slotBotLeft.UpdateText(std::move(lines));
     slotBotLeft.InvalidateLayout();
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+//  Panel selection overlay
+// ─────────────────────────────────────────────────────────────────────────────
+
+void OverlayManager::UpdatePanelSelectionOverlay(int8_t position, int selected, int total) {
+    TextOverlay *ov = nullptr;
+    int slotIdx = -1;
+    switch (position) {
+        case 1: ov = &slotTopCenter; slotIdx = TOP_CENTER; break;
+        case 2: ov = &slotMidRight;  slotIdx = MID_RIGHT;  break;
+        case 3: ov = &slotBotCenter; slotIdx = BOT_CENTER; break;
+        case 4: ov = &slotMidLeft;   slotIdx = MID_LEFT;   break;
+        default: return;
+    }
+    if (selected <= 0) {
+        ov->UpdateText(L"");
+        return;
+    }
+    const bool compact = m_slots[slotIdx].compact;
+    std::wstring text = std::to_wstring(selected) + L" / " + std::to_wstring(total);
+    text += compact ? L" sel" : L"\nselected";
+    ov->UpdateText(std::move(text));
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

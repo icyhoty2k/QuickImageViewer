@@ -1,5 +1,7 @@
 #include "ThumbnailPanelWnd.h"
 #include <algorithm>
+#include <filesystem>
+#include <unordered_set>
 #include <windowsx.h>
 #include <d2d1.h>
 #include <ole2.h>
@@ -18,8 +20,45 @@
 #include "../Platform/ConstantsStrings.h"
 
 namespace UI {
-    std::wstring ThumbnailPanelWnd::s_cutFilePath;
+    std::unordered_set<std::wstring> ThumbnailPanelWnd::s_cutPaths;
     std::wstring ThumbnailPanelWnd::s_dragSourcePath;
+
+    std::wstring ThumbnailPanelWnd::FormatDirSize(int64_t bytes) {
+        wchar_t buf[32];
+        if (bytes >= 1024LL * 1024 * 1024)
+            swprintf_s(buf, L"%.2f GB", bytes / (1024.0 * 1024 * 1024));
+        else if (bytes >= 1024 * 1024)
+            swprintf_s(buf, L"%.2f MB", bytes / (1024.0 * 1024));
+        else if (bytes >= 1024)
+            swprintf_s(buf, L"%.2f KB", bytes / 1024.0);
+        else
+            swprintf_s(buf, L"%lld B", bytes);
+        return buf;
+    }
+
+    std::pair<std::wstring, UINT32> ThumbnailPanelWnd::BuildScrollbarLabel() const {
+        const std::wstring folder = GetPanelFolder();
+        if (folder.empty()) return {{}, 0};
+        std::wstring text = folder;
+        if (!m_dirSizeStr.empty()) text += L" → " + m_dirSizeStr;
+        const auto lastSlash = folder.find_last_of(L"\\/");
+        const UINT32 boldStart = (lastSlash != std::wstring::npos)
+                                 ? static_cast<UINT32>(lastSlash + 1) : 0;
+        return {std::move(text), boldStart};
+    }
+
+    void ThumbnailPanelWnd::ComputeDirSize() {
+        if (GetPanelFolder().empty()) return;
+        int64_t total = 0;
+        std::error_code ec;
+        for (const auto &t : m_thumbnails) {
+            const auto sz = std::filesystem::file_size(t.filePath, ec);
+            if (!ec) total += static_cast<int64_t>(sz);
+            ec.clear();
+        }
+        m_dirSizeStr = FormatDirSize(total);
+        m_dirLabelLayout.Reset(); // force label rebuild with new size
+    }
 
     // Track the currently active panel window for border styling
     HWND g_activePanelHwnd = nullptr;
@@ -43,12 +82,12 @@ namespace UI {
     // OLE drag-and-drop helpers
     // =========================================================================
 
-    // IDataObject carrying one CF_HDROP file path.
+    // IDataObject carrying one or more CF_HDROP file paths.
     class PanelDataObject final : public IDataObject {
-        std::wstring m_path;
-        ULONG        m_ref = 1;
+        std::vector<std::wstring> m_paths;
+        ULONG                     m_ref = 1;
     public:
-        explicit PanelDataObject(std::wstring path) : m_path(std::move(path)) {}
+        explicit PanelDataObject(std::vector<std::wstring> paths) : m_paths(std::move(paths)) {}
 
         HRESULT __stdcall QueryInterface(REFIID riid, void **ppv) override {
             if (riid == IID_IUnknown || riid == IID_IDataObject)
@@ -66,19 +105,23 @@ namespace UI {
             if (!fmt || !med) return E_INVALIDARG;
             if (fmt->cfFormat != CF_HDROP || !(fmt->tymed & TYMED_HGLOBAL))
                 return DV_E_FORMATETC;
-            const size_t pathLen = m_path.size() + 1;
-            const size_t total   = sizeof(DROPFILES) + (pathLen + 1) * sizeof(wchar_t);
+            // Build a double-null-terminated multi-path block.
+            size_t totalChars = 1; // final null
+            for (const auto &p : m_paths) totalChars += p.size() + 1;
+            const size_t total = sizeof(DROPFILES) + totalChars * sizeof(wchar_t);
             HGLOBAL hg = GlobalAlloc(GHND, total);
             if (!hg) return E_OUTOFMEMORY;
-            auto *df     = static_cast<DROPFILES *>(GlobalLock(hg));
-            df->pFiles   = sizeof(DROPFILES);
-            df->fWide    = TRUE;
-            df->pt       = {};
-            df->fNC      = FALSE;
+            auto *df   = static_cast<DROPFILES *>(GlobalLock(hg));
+            df->pFiles = sizeof(DROPFILES);
+            df->fWide  = TRUE;
+            df->pt     = {};
+            df->fNC    = FALSE;
             wchar_t *dst = reinterpret_cast<wchar_t *>(df + 1);
-            std::copy(m_path.begin(), m_path.end(), dst);
-            dst[m_path.size()]     = L'\0';
-            dst[m_path.size() + 1] = L'\0';
+            for (const auto &p : m_paths) {
+                wmemcpy(dst, p.c_str(), p.size() + 1);
+                dst += p.size() + 1;
+            }
+            *dst = L'\0';
             GlobalUnlock(hg);
             med->tymed          = TYMED_HGLOBAL;
             med->hGlobal        = hg;
@@ -280,6 +323,11 @@ namespace UI {
 
     void ThumbnailPanelWnd::Hide() {
         if (m_hWnd && IsWindowVisible(m_hWnd)) {
+            // Unbind: release all selection state and the position overlay slot.
+            m_selectedPaths.clear();
+            m_anchorPath.clear();
+            g_overlayManager.UpdatePanelSelectionOverlay(m_position, 0, 0);
+            if (m_hOwner) InvalidateRect(m_hOwner, nullptr, FALSE);
             ShowWindow(m_hWnd, SW_HIDE);
             uiManager.OnPanelHidden(this);
             // If this was the active dir panel, clear it so we fall back to F5.
@@ -296,6 +344,10 @@ namespace UI {
             if (free >= 0) m_position = free;
         }
         m_offset = 0.0f;
+        // Bind: initialize selection state and claim the position overlay slot.
+        m_selectedPaths.clear();
+        m_anchorPath.clear();
+        NotifySelectionOverlay();
         int x, y, w, h;
         GetWindowBounds(m_hOwner ? m_hOwner : m_hWnd, m_position, x, y, w, h);
         SetWindowPos(m_hWnd, HWND_TOPMOST, x, y, w, h, SWP_SHOWWINDOW | SWP_FRAMECHANGED);
@@ -305,6 +357,10 @@ namespace UI {
 
     void ThumbnailPanelWnd::MovePanel() {
         if (!m_hWnd) return;
+
+        // Clear the selection overlay at the old position before moving.
+        const int8_t oldPos = m_position;
+        g_overlayManager.UpdatePanelSelectionOverlay(oldPos, 0, 0);
 
         // Remove from current slot.
         uiManager.OnPanelHidden(this);
@@ -322,11 +378,21 @@ namespace UI {
 
         // Register at new position — triggers RefreshVerticalPanels.
         uiManager.OnPanelShown(this, m_position);
+
+        // Re-bind the selection overlay to the new position.
+        NotifySelectionOverlay();
     }
 
     void ThumbnailPanelWnd::ClearDirThumbnailCache() {
         DoClearDirThumbnailCache();
         m_sourceDirty = true; // force PostBuildHook on next UpdateView to re-queue decodes
+    }
+
+    void ThumbnailPanelWnd::NotifySelectionOverlay() {
+        const int sel   = static_cast<int>(m_selectedPaths.size());
+        const int total = static_cast<int>(m_thumbnails.size());
+        g_overlayManager.UpdatePanelSelectionOverlay(m_position, sel, total);
+        if (m_hOwner) InvalidateRect(m_hOwner, nullptr, FALSE);
     }
 
     void ThumbnailPanelWnd::RefreshBounds() {
@@ -388,6 +454,11 @@ namespace UI {
             return;
         }
         if (IsDirPanel()) m_sourceDirty = false;
+
+        // Source content changed — discard any multi-selection since paths may no longer exist.
+        m_selectedPaths.clear();
+        m_anchorPath.clear();
+        NotifySelectionOverlay();
 
         m_thumbnails.clear();
 
@@ -462,6 +533,7 @@ namespace UI {
         }
 
         PostBuildHook();
+        ComputeDirSize(); // uses m_thumbnails already built above; resets m_dirLabelLayout
 
         // Update m_selectedIdx to keep the highlight in sync with app.currentIndex,
         // but do NOT call SyncSelectionRectangle() / ScrollToSelected() here.
@@ -784,12 +856,89 @@ namespace UI {
                     return 0;
                 }
                 if (key == GetKeyMove()) {
-                    MovePanel(); // notifies layout, refreshes verticals internally
+                    MovePanel();
                     return 0;
                 }
                 if (GetKeyExtra() != -1 && key == GetKeyExtra()) {
                     OnExtraKey();
                     return 0;
+                }
+
+                // Panel-level file operations — act on multi-selection if active,
+                // otherwise act on the currently hovered / single item.
+                if (IsDirPanel()) {
+                    const bool ctrl = (GetKeyState(VK_CONTROL) & 0x8000) != 0;
+
+                    // Build operation set: selection if non-empty, else hovered item.
+                    auto buildOpPaths = [&]() -> std::vector<std::wstring> {
+                        if (!m_selectedPaths.empty())
+                            return std::vector<std::wstring>(m_selectedPaths.begin(), m_selectedPaths.end());
+                        if (m_hoverIdx >= 0 && m_hoverIdx < static_cast<int>(m_thumbnails.size()))
+                            return { m_thumbnails[m_hoverIdx].filePath };
+                        return {};
+                    };
+
+                    if (ctrl && key == 'C') {
+                        const auto paths = buildOpPaths();
+                        if (!paths.empty()) {
+                            s_cutPaths.clear();
+                            AppCommands::CopyFilesToClipboard(m_hOwner, paths);
+                            uiManager.RepaintAllPanels();
+                        }
+                        return 0;
+                    }
+                    if (ctrl && key == 'X') {
+                        const auto paths = buildOpPaths();
+                        if (!paths.empty()) {
+                            AppCommands::CopyFilesToClipboard(m_hOwner, paths, true);
+                            s_cutPaths.clear();
+                            for (const auto &p : paths) s_cutPaths.insert(p);
+                            uiManager.RepaintAllPanels();
+                        }
+                        return 0;
+                    }
+                    if (ctrl && key == 'V') {
+                        std::wstring pasteDir = GetPanelFolder();
+                        if (!pasteDir.empty() && AppCommands::ClipboardHasFiles()) {
+                            std::wstring srcDir;
+                            if (!s_cutPaths.empty())
+                                srcDir = fs::path(*s_cutPaths.begin()).parent_path().wstring();
+                            AppCommands::PasteFilesFromClipboard(m_hOwner, pasteDir);
+                            s_cutPaths.clear();
+                            uiManager.RefreshPanelDirs(srcDir, pasteDir);
+                            uiManager.RepaintAllPanels();
+                        }
+                        return 0;
+                    }
+                    if (ctrl && key == 'A') {
+                        if (m_selectedPaths.size() == m_thumbnails.size())
+                            m_selectedPaths.clear();
+                        else
+                            for (const auto &t : m_thumbnails) m_selectedPaths.insert(t.filePath);
+                        m_anchorPath = (!m_selectedPaths.empty() && !m_thumbnails.empty())
+                                       ? m_thumbnails[0].filePath : L"";
+                        NotifySelectionOverlay();
+                        InvalidateRect(m_hWnd, nullptr, FALSE);
+                        return 0;
+                    }
+                    if (key == VK_DELETE) {
+                        const auto paths = buildOpPaths();
+                        if (!paths.empty()) {
+                            for (const auto &p : paths) s_cutPaths.erase(p);
+                            OnContextMenuDelete(paths);
+                            m_selectedPaths.clear();
+                            m_anchorPath.clear();
+                            NotifySelectionOverlay();
+                        }
+                        return 0;
+                    }
+                    if (key == VK_ESCAPE && !m_selectedPaths.empty()) {
+                        m_selectedPaths.clear();
+                        m_anchorPath.clear();
+                        NotifySelectionOverlay();
+                        InvalidateRect(m_hWnd, nullptr, FALSE);
+                        return 0;
+                    }
                 }
 
                 // Forward unhandled keys to the main window
@@ -997,11 +1146,18 @@ namespace UI {
                     // Initiate OLE drag-and-drop when mouse exceeds the system drag threshold.
                     if (IsDirPanel() && !s_dragSourcePath.empty() &&
                         (dx > GetSystemMetrics(SM_CXDRAG) || dy > GetSystemMetrics(SM_CYDRAG))) {
-                        std::wstring dragPath = std::move(s_dragSourcePath);
+                        // If the item under the cursor is part of the multi-selection,
+                        // drag the entire selection; otherwise drag only that item.
+                        std::vector<std::wstring> dragPaths;
+                        if (!m_selectedPaths.empty() && m_selectedPaths.count(s_dragSourcePath)) {
+                            dragPaths.assign(m_selectedPaths.begin(), m_selectedPaths.end());
+                        } else {
+                            dragPaths = {std::move(s_dragSourcePath)};
+                        }
                         s_dragSourcePath.clear();
                         s_dragging = false;
                         ReleaseCapture();
-                        auto *pData = new PanelDataObject(std::move(dragPath));
+                        auto *pData = new PanelDataObject(std::move(dragPaths));
                         auto *pSrc  = new PanelDropSource();
                         DWORD dwEffect = 0;
                         DoDragDrop(pData, pSrc, DROPEFFECT_COPY | DROPEFFECT_MOVE, &dwEffect);
@@ -1040,22 +1196,60 @@ namespace UI {
                             s_dragging = false;
                             return 0;
                         }
-                        int x = GET_X_LPARAM(lParam);
-                        int y = GET_Y_LPARAM(lParam);
+                        const int cx = GET_X_LPARAM(lParam);
+                        const int cy = GET_Y_LPARAM(lParam);
+                        const bool ctrlDown  = (GetKeyState(VK_CONTROL) & 0x8000) != 0;
+                        const bool shiftDown = (GetKeyState(VK_SHIFT)   & 0x8000) != 0;
                         for (size_t i = 0; i < m_thumbnails.size(); ++i) {
-                            if (m_thumbnails[i].HitTest(x, y)) {
+                            if (!m_thumbnails[i].HitTest(cx, cy)) continue;
+                            const std::wstring &hitPath = m_thumbnails[i].filePath;
+
+                            if (ctrlDown) {
+                                // Toggle item in multi-selection; update anchor.
+                                if (m_selectedPaths.count(hitPath))
+                                    m_selectedPaths.erase(hitPath);
+                                else
+                                    m_selectedPaths.insert(hitPath);
+                                m_anchorPath = hitPath;
+                                NotifySelectionOverlay();
+                                InvalidateRect(m_hWnd, nullptr, FALSE);
+                            } else if (shiftDown && !m_anchorPath.empty()) {
+                                // Range-select from anchor to clicked item.
+                                int anchorIdx = -1;
+                                for (size_t k = 0; k < m_thumbnails.size(); ++k) {
+                                    if (m_thumbnails[k].filePath == m_anchorPath) {
+                                        anchorIdx = static_cast<int>(k); break;
+                                    }
+                                }
+                                const int clickIdx = static_cast<int>(i);
+                                if (anchorIdx >= 0) {
+                                    const int lo = std::min(anchorIdx, clickIdx);
+                                    const int hi = std::max(anchorIdx, clickIdx);
+                                    for (int k = lo; k <= hi; ++k)
+                                        m_selectedPaths.insert(m_thumbnails[k].filePath);
+                                } else {
+                                    m_selectedPaths.insert(hitPath);
+                                    m_anchorPath = hitPath;
+                                }
+                                NotifySelectionOverlay();
+                                InvalidateRect(m_hWnd, nullptr, FALSE);
+                            } else {
+                                // Plain click: clear selection, open image, set anchor.
+                                m_selectedPaths.clear();
+                                m_anchorPath = hitPath;
+                                NotifySelectionOverlay();
                                 // Re-check the live index map at click time — the cached
                                 // playlistIndex can be stale if the folder changed since
                                 // the last UpdateView (e.g. clicking between spawned panels).
-                                auto mapIt = app.playlistIndexMap.find(m_thumbnails[i].filePath);
+                                auto mapIt = app.playlistIndexMap.find(hitPath);
                                 if (mapIt != app.playlistIndexMap.end()) {
                                     LoadImageIndex(m_hOwner, mapIt->second);
                                 } else {
-                                    OpenSpecificImage(m_hOwner, m_thumbnails[i].filePath);
+                                    OpenSpecificImage(m_hOwner, hitPath);
                                 }
                                 UpdateView();
-                                break;
                             }
+                            break;
                         }
                     }
                     s_dragging = false;
@@ -1073,6 +1267,18 @@ namespace UI {
                     if (t.HitTest(rx, ry)) { hitPath = t.filePath; break; }
                 }
 
+                // Determine the effective operation set:
+                // - hit item is in the multi-selection → operate on the whole selection
+                // - hit item not in selection (or no selection) → operate on hit item only
+                // - right-click on empty space with selection active → operate on selection
+                std::vector<std::wstring> opPaths;
+                const bool hitInSel = !hitPath.empty() && m_selectedPaths.count(hitPath) > 0;
+                if (!m_selectedPaths.empty() && (hitPath.empty() || hitInSel)) {
+                    opPaths.assign(m_selectedPaths.begin(), m_selectedPaths.end());
+                } else if (!hitPath.empty()) {
+                    opPaths = {hitPath};
+                }
+
                 // Paste target: prefer the hit item's folder, then any visible
                 // thumbnail's folder, then the empty-dir path shown as placeholder.
                 std::wstring pasteDir;
@@ -1083,24 +1289,39 @@ namespace UI {
                 else if (!m_emptyDir.empty())
                     pasteDir = m_emptyDir;
 
-                constexpr UINT ID_CTX_COPY   = 1;
-                constexpr UINT ID_CTX_CUT    = 2;
-                constexpr UINT ID_CTX_DELETE = 3;
-                constexpr UINT ID_CTX_PASTE  = 4;
-                constexpr UINT ID_CTX_EXTRA  = 5;
-                constexpr UINT ID_CTX_CLOSE  = 6;
+                constexpr UINT ID_CTX_COPY        = 1;
+                constexpr UINT ID_CTX_CUT         = 2;
+                constexpr UINT ID_CTX_DELETE      = 3;
+                constexpr UINT ID_CTX_PASTE       = 4;
+                constexpr UINT ID_CTX_EXTRA       = 5;
+                constexpr UINT ID_CTX_CLOSE       = 6;
+                constexpr UINT ID_CTX_SELECT_ALL  = 7;
+                constexpr UINT ID_CTX_SELECT_NONE = 8;
 
-                const bool hasFile      = !hitPath.empty();
+                const bool hasFiles     = !opPaths.empty();
                 const bool canPaste     = !pasteDir.empty() && AppCommands::ClipboardHasFiles();
                 const bool showPaste    = ShowContextMenuPaste();
                 const wchar_t *delLabel   = ContextMenuDeleteLabel();
                 const wchar_t *extraLabel = ContextMenuExtraLabel();
 
+                // Build labels that show the count when multiple files are selected.
+                std::wstring copyLabel = L"Copy";
+                std::wstring cutLabel  = L"Cut";
+                std::wstring deleteLabel = delLabel;
+                if (opPaths.size() > 1) {
+                    const std::wstring cnt = L" (" + std::to_wstring(opPaths.size()) + L" files)";
+                    copyLabel   += cnt;
+                    cutLabel    += cnt;
+                    deleteLabel += cnt;
+                }
+
+                const bool hasAny = !m_thumbnails.empty();
+
                 HMENU hMenu = CreatePopupMenu();
                 if (!hMenu) return 0;
-                AppendMenuW(hMenu, hasFile  ? MF_STRING : (MF_STRING | MF_GRAYED), ID_CTX_COPY,   L"Copy");
-                AppendMenuW(hMenu, hasFile  ? MF_STRING : (MF_STRING | MF_GRAYED), ID_CTX_CUT,    L"Cut");
-                AppendMenuW(hMenu, hasFile  ? MF_STRING : (MF_STRING | MF_GRAYED), ID_CTX_DELETE, delLabel);
+                AppendMenuW(hMenu, hasFiles ? MF_STRING : (MF_STRING | MF_GRAYED), ID_CTX_COPY,   copyLabel.c_str());
+                AppendMenuW(hMenu, hasFiles ? MF_STRING : (MF_STRING | MF_GRAYED), ID_CTX_CUT,    cutLabel.c_str());
+                AppendMenuW(hMenu, hasFiles ? MF_STRING : (MF_STRING | MF_GRAYED), ID_CTX_DELETE, deleteLabel.c_str());
                 if (showPaste) {
                     AppendMenuW(hMenu, MF_SEPARATOR, 0, nullptr);
                     AppendMenuW(hMenu, canPaste ? MF_STRING : (MF_STRING | MF_GRAYED), ID_CTX_PASTE, L"Paste");
@@ -1109,6 +1330,10 @@ namespace UI {
                     AppendMenuW(hMenu, MF_SEPARATOR, 0, nullptr);
                     AppendMenuW(hMenu, MF_STRING, ID_CTX_EXTRA, extraLabel);
                 }
+                AppendMenuW(hMenu, MF_SEPARATOR, 0, nullptr);
+                AppendMenuW(hMenu, hasAny ? MF_STRING : (MF_STRING | MF_GRAYED), ID_CTX_SELECT_ALL,  L"Select All");
+                AppendMenuW(hMenu, !m_selectedPaths.empty() ? MF_STRING : (MF_STRING | MF_GRAYED),
+                                   ID_CTX_SELECT_NONE, L"Select None");
                 AppendMenuW(hMenu, MF_SEPARATOR, 0, nullptr);
                 AppendMenuW(hMenu, MF_STRING, ID_CTX_CLOSE, L"Close");
 
@@ -1120,29 +1345,47 @@ namespace UI {
 
                 switch (cmd) {
                     case ID_CTX_COPY:
-                        s_cutFilePath.clear();
-                        AppCommands::CopyFileToClipboard(m_hOwner, hitPath);
+                        s_cutPaths.clear();
+                        AppCommands::CopyFilesToClipboard(m_hOwner, opPaths);
+                        uiManager.RepaintAllPanels();
                         break;
                     case ID_CTX_CUT:
-                        AppCommands::CopyFileToClipboard(m_hOwner, hitPath, true);
-                        s_cutFilePath = hitPath;
+                        AppCommands::CopyFilesToClipboard(m_hOwner, opPaths, true);
+                        s_cutPaths.clear();
+                        for (const auto &p : opPaths) s_cutPaths.insert(p);
                         uiManager.RepaintAllPanels();
                         break;
                     case ID_CTX_DELETE:
-                        if (hitPath == s_cutFilePath) s_cutFilePath.clear();
-                        OnContextMenuDelete(hitPath);
+                        for (const auto &p : opPaths) s_cutPaths.erase(p);
+                        OnContextMenuDelete(opPaths);
+                        m_selectedPaths.clear();
+                        m_anchorPath.clear();
+                        NotifySelectionOverlay();
                         break;
                     case ID_CTX_PASTE: {
-                        const std::wstring srcDir = s_cutFilePath.empty() ? std::wstring{}
-                            : fs::path(s_cutFilePath).parent_path().wstring();
+                        std::wstring srcDir;
+                        if (!s_cutPaths.empty())
+                            srcDir = fs::path(*s_cutPaths.begin()).parent_path().wstring();
                         AppCommands::PasteFilesFromClipboard(m_hOwner, pasteDir);
-                        s_cutFilePath.clear();
+                        s_cutPaths.clear();
                         uiManager.RefreshPanelDirs(srcDir, pasteDir);
                         uiManager.RepaintAllPanels();
                         break;
                     }
                     case ID_CTX_EXTRA:
                         OnContextMenuExtra();
+                        break;
+                    case ID_CTX_SELECT_ALL:
+                        for (const auto &t : m_thumbnails) m_selectedPaths.insert(t.filePath);
+                        if (!m_thumbnails.empty()) m_anchorPath = m_thumbnails[0].filePath;
+                        NotifySelectionOverlay();
+                        InvalidateRect(m_hWnd, nullptr, FALSE);
+                        break;
+                    case ID_CTX_SELECT_NONE:
+                        m_selectedPaths.clear();
+                        m_anchorPath.clear();
+                        NotifySelectionOverlay();
+                        InvalidateRect(m_hWnd, nullptr, FALSE);
                         break;
                     case ID_CTX_CLOSE:
                         Hide();
@@ -1179,8 +1422,8 @@ namespace UI {
 
     // =========================================================================
     // RenderEmptyPlaceholder
-    void ThumbnailPanelWnd::OnContextMenuDelete(const std::wstring &path) {
-        AppCommands::DeleteFileToRecycleBin(path);
+    void ThumbnailPanelWnd::OnContextMenuDelete(const std::vector<std::wstring> &paths) {
+        AppCommands::DeleteFilesToRecycleBin(paths);
     }
 
     // Drawn when the scanned folder has no images. Fills the full panel area
@@ -1365,6 +1608,82 @@ namespace UI {
         m_panelContext->CreateSolidColorBrush(
             Constants::Theme::ThemedGrayD2D(Constants::Theme::Panel::SCROLLBAR_THUMB,
                                             app.themeFactor, Constants::Theme::Panel::SCROLLBAR_THUMB_ALPHA), &m_scrollThumbBrush);
+        // Multi-select: steel blue — distinct from green (viewer selection) and white (hover)
+        m_panelContext->CreateSolidColorBrush(
+            D2D1::ColorF(0.28f, 0.56f, 1.0f), &m_multiSelBrush);
+        // Active-panel label: same LightGreen as the selection border — signals focus consistently
+        m_panelContext->CreateSolidColorBrush(
+            D2D1::ColorF(D2D1::ColorF::LightGreen), &m_dirLabelActiveBrush);
+        // Inactive label: inverted track gray (0.88 base) — contrasts against both
+        // the track (0.12 base) and thumb (0.65 base) in both light and dark themes.
+        m_panelContext->CreateSolidColorBrush(
+            Constants::Theme::ThemedGrayD2D(0.88f, app.themeFactor, 0.65f),
+            &m_dirLabelInactiveBrush);
+        // Visual effects brushes (U key master toggle)
+        namespace TE = Constants::ThumbnailPanel::ThumbnailEffects;
+        m_panelContext->CreateSolidColorBrush(
+            D2D1::ColorF(TE::GLOW_COLOR_R, TE::GLOW_COLOR_G, TE::GLOW_COLOR_B, TE::GLOW_COLOR_A),
+            &m_glowBrush);
+        // Corner bg brush — color is set to clearColor at the start of every Render() call
+        m_panelContext->CreateSolidColorBrush(D2D1::ColorF(0.f, 0.f, 0.f, 1.f), &m_cornerBgBrush);
+    }
+
+    // Builds four corner-bite path geometry shapes for thumbnail corner rounding.
+    // Each "bite" is the area of a corner square that lies OUTSIDE the quarter-circle arc
+    // (the part that would be clipped if we had a rounded rect).  Filled with the panel
+    // background color, they overdraw the bitmap corners to produce rounded corners without
+    // the cost of a per-thumbnail PushLayer.
+    // Geometry is normalized to origin (0,0); caller applies a translation transform.
+    void ThumbnailPanelWnd::BuildCornerGeometry(float W, float H, float r) {
+        m_cornerGeometry.Reset();
+        Microsoft::WRL::ComPtr<ID2D1Factory> factory;
+        m_panelContext->GetFactory(&factory);
+        if (!factory) return;
+
+        Microsoft::WRL::ComPtr<ID2D1PathGeometry> geom;
+        if (FAILED(factory->CreatePathGeometry(&geom))) return;
+
+        Microsoft::WRL::ComPtr<ID2D1GeometrySink> sink;
+        if (FAILED(geom->Open(&sink))) return;
+
+        // All four bites share CW / CCW from Microsoft's D2D screen-coords convention:
+        //   CW  = angle increases going clockwise on screen (Y down)
+        //   Arc directions verified per-corner so the 90° arc passes through the
+        //   bite interior (not the exterior 270° long-way arc).
+        const auto CW  = D2D1_SWEEP_DIRECTION_CLOCKWISE;
+        const auto CCW = D2D1_SWEEP_DIRECTION_COUNTER_CLOCKWISE;
+        const auto SML = D2D1_ARC_SIZE_SMALL;
+
+        // Top-left: (r,0)→(0,0)→(0,r) → arc CW small → (r,0)
+        sink->BeginFigure(D2D1::Point2F(r, 0.f), D2D1_FIGURE_BEGIN_FILLED);
+        sink->AddLine(D2D1::Point2F(0.f, 0.f));
+        sink->AddLine(D2D1::Point2F(0.f, r));
+        sink->AddArc(D2D1::ArcSegment(D2D1::Point2F(r, 0.f), D2D1::SizeF(r, r), 0.f, CW, SML));
+        sink->EndFigure(D2D1_FIGURE_END_CLOSED);
+
+        // Top-right: (W-r,0)→(W,0)→(W,r) → arc CCW small → (W-r,0)
+        sink->BeginFigure(D2D1::Point2F(W - r, 0.f), D2D1_FIGURE_BEGIN_FILLED);
+        sink->AddLine(D2D1::Point2F(W, 0.f));
+        sink->AddLine(D2D1::Point2F(W, r));
+        sink->AddArc(D2D1::ArcSegment(D2D1::Point2F(W - r, 0.f), D2D1::SizeF(r, r), 0.f, CCW, SML));
+        sink->EndFigure(D2D1_FIGURE_END_CLOSED);
+
+        // Bottom-right: (W,H-r)→(W,H)→(W-r,H) → arc CCW small → (W,H-r)
+        sink->BeginFigure(D2D1::Point2F(W, H - r), D2D1_FIGURE_BEGIN_FILLED);
+        sink->AddLine(D2D1::Point2F(W, H));
+        sink->AddLine(D2D1::Point2F(W - r, H));
+        sink->AddArc(D2D1::ArcSegment(D2D1::Point2F(W, H - r), D2D1::SizeF(r, r), 0.f, CCW, SML));
+        sink->EndFigure(D2D1_FIGURE_END_CLOSED);
+
+        // Bottom-left: (r,H)→(0,H)→(0,H-r) → arc CW small → (r,H)
+        sink->BeginFigure(D2D1::Point2F(r, H), D2D1_FIGURE_BEGIN_FILLED);
+        sink->AddLine(D2D1::Point2F(0.f, H));
+        sink->AddLine(D2D1::Point2F(0.f, H - r));
+        sink->AddArc(D2D1::ArcSegment(D2D1::Point2F(r, H), D2D1::SizeF(r, r), 0.f, CW, SML));
+        sink->EndFigure(D2D1_FIGURE_END_CLOSED);
+
+        if (SUCCEEDED(sink->Close()))
+            m_cornerGeometry = std::move(geom);
     }
 
     void ThumbnailPanelWnd::ResizeSwapChain(UINT w, UINT h) {
@@ -1377,6 +1696,7 @@ namespace UI {
         m_emptyDirMissingLayout.Reset();
         m_emptyDirPathLayout.Reset();
         m_emptyCacheLayout.Reset();
+        m_dirLabelLayout.Reset();
 
         m_panelContext->SetTarget(nullptr);
         m_panelBackBuffer.Reset();
@@ -1445,26 +1765,89 @@ namespace UI {
         if (m_emptyDirActive && m_thumbnails.empty())
             RenderEmptyPlaceholder();
 
+        // ── Visual effects setup (U key master toggle) ───────────────────────
+        namespace TE = Constants::ThumbnailPanel::ThumbnailEffects;
+        const bool effectsOn = app.thumbnailEffectsEnabled;
+
+        if (effectsOn && TE::EFFECT_ROUNDED_CORNERS && m_cornerBgBrush)
+            m_cornerBgBrush->SetColor(clearColor);
+
+        if (effectsOn && TE::EFFECT_ROUNDED_CORNERS && m_panelContext) {
+            if (!m_cornerGeometry || m_cornerGeomDpi != app.dpiScale) {
+                const float tw = Constants::THUMBNAIL_PANEL_THUMB_WIDTH  * app.dpiScale;
+                const float th = Constants::THUMBNAIL_PANEL_THUMB_HEIGHT * app.dpiScale;
+                const float cr = TE::CORNER_RADIUS * app.dpiScale;
+                BuildCornerGeometry(tw, th, cr);
+                m_cornerGeomDpi = app.dpiScale;
+            }
+        }
+        // ─────────────────────────────────────────────────────────────────────
+
         for (size_t j = 0; j < resolved.size(); ++j) {
             const int origI = static_cast<int>(visIdx[j]);
             const auto &rv = resolved[j];
+            const std::wstring &thumbPath = m_thumbnails[origI].filePath;
+            const bool isHover    = (origI == hoverIdx);
+            const bool isSelected = (origI == selectedIdx);
             const float thumbOpacity =
-                (!s_cutFilePath.empty() && m_thumbnails[origI].filePath == s_cutFilePath)
+                (!s_cutPaths.empty() && s_cutPaths.count(thumbPath))
                 ? Constants::ThumbnailPanel::THUMBNAIL_CUT_OPACITY
                 : 1.0f;
+
+            // EFFECT: Hover scale — expand draw rect by HOVER_SCALE_FACTOR around center
+            D2D1_RECT_F drawRect = rv.rect;
+            if (effectsOn && TE::EFFECT_HOVER_SCALE && isHover) {
+                const float s  = TE::HOVER_SCALE_FACTOR;
+                const float cx = (rv.rect.left + rv.rect.right)  * 0.5f;
+                const float cy = (rv.rect.top  + rv.rect.bottom) * 0.5f;
+                const float hw = (rv.rect.right  - rv.rect.left) * 0.5f * s;
+                const float hh = (rv.rect.bottom - rv.rect.top)  * 0.5f * s;
+                drawRect = D2D1::RectF(cx - hw, cy - hh, cx + hw, cy + hh);
+            }
+
             if (rv.bitmap) {
-                m_panelContext->DrawBitmap(rv.bitmap.Get(), rv.rect, thumbOpacity,
+                m_panelContext->DrawBitmap(rv.bitmap.Get(), drawRect, thumbOpacity,
                                            D2D1_BITMAP_INTERPOLATION_MODE_LINEAR);
             } else {
                 m_placeholderBrush->SetOpacity(thumbOpacity);
-                m_panelContext->FillRectangle(rv.rect, m_placeholderBrush.Get());
+                m_panelContext->FillRectangle(drawRect, m_placeholderBrush.Get());
                 m_placeholderBrush->SetOpacity(1.0f);
             }
-            if (origI == selectedIdx)
-                m_panelContext->DrawRectangle(rv.rect, m_borderBrush.Get(),
+
+            // EFFECT: Rounded corners — overdraw corner bites at the ORIGINAL (unscaled)
+            // rect so hover-scale geometry mismatch is imperceptible (only ~5% diff).
+            if (effectsOn && TE::EFFECT_ROUNDED_CORNERS && m_cornerGeometry && m_cornerBgBrush) {
+                D2D1::Matrix3x2F oldXform;
+                m_panelContext->GetTransform(&oldXform);
+                m_panelContext->SetTransform(
+                    D2D1::Matrix3x2F::Translation(rv.rect.left, rv.rect.top) * oldXform);
+                m_panelContext->FillGeometry(m_cornerGeometry.Get(), m_cornerBgBrush.Get());
+                m_panelContext->SetTransform(oldXform);
+            }
+
+            // Multi-selection: semi-transparent fill + solid border (drawn before
+            // the viewer-selection green so green always wins on the same item).
+            if (!m_selectedPaths.empty() && m_selectedPaths.count(thumbPath) && m_multiSelBrush) {
+                m_multiSelBrush->SetOpacity(0.22f);
+                m_panelContext->FillRectangle(drawRect, m_multiSelBrush.Get());
+                m_multiSelBrush->SetOpacity(1.0f);
+                m_panelContext->DrawRectangle(drawRect, m_multiSelBrush.Get(),
                                               Constants::ThumbnailPanel::SELECTION_BORDER_THICKNESS);
-            if (origI == hoverIdx)
-                m_panelContext->DrawRectangle(rv.rect, m_hoverBrush.Get(),
+            }
+
+            // EFFECT: Glow border — accent-color outline on selected thumb;
+            // falls back to plain green when effects are off.
+            if (isSelected) {
+                if (effectsOn && TE::EFFECT_GLOW_BORDER && m_glowBrush)
+                    m_panelContext->DrawRectangle(drawRect, m_glowBrush.Get(),
+                                                  TE::GLOW_THICKNESS * app.dpiScale);
+                else
+                    m_panelContext->DrawRectangle(drawRect, m_borderBrush.Get(),
+                                                  Constants::ThumbnailPanel::SELECTION_BORDER_THICKNESS);
+            }
+
+            if (isHover)
+                m_panelContext->DrawRectangle(drawRect, m_hoverBrush.Get(),
                                               Constants::ThumbnailPanel::HOVER_THICKNESS);
         }
 
@@ -1542,6 +1925,107 @@ namespace UI {
                 }
                 m_panelContext->FillRectangle(track, m_scrollTrackBrush.Get());
                 m_panelContext->FillRectangle(thumb, m_scrollThumbBrush.Get());
+            }
+        }
+
+        // Dir label — drawn AFTER the scrollbar so text is always on top.
+        // Active panel: LightGreen. Inactive: inverted-track gray (high contrast
+        // against both the track and the thumb regardless of thumb size).
+        {
+            auto [labelText, boldStart] = BuildScrollbarLabel();
+            if (!labelText.empty() && r->m_pDWriteFactory) {
+                RECT crl{};
+                GetClientRect(m_hWnd, &crl);
+                const float sw2 = static_cast<float>(crl.right);
+                const float sh2 = static_cast<float>(crl.bottom);
+                const float BAR = Constants::ThumbnailPanel::SCROLLBAR_THICKNESS * app.dpiScale;
+                const bool  vert = IsVertical();
+                const float dim  = vert ? sh2 : sw2;
+
+                if (!m_dirLabelLayout
+                    || labelText != m_dirLabelTextCache
+                    || dim  != m_dirLabelDimCache
+                    || BAR  != m_dirLabelBarCache)
+                {
+                    m_dirLabelLayout.Reset();
+                    m_dirLabelTextCache = labelText;
+                    m_dirLabelDimCache  = dim;
+                    m_dirLabelBarCache  = BAR;
+
+                    const float fontSize = std::max(6.0f, BAR - 2.0f);
+                    Microsoft::WRL::ComPtr<IDWriteTextFormat> fmt;
+                    r->m_pDWriteFactory->CreateTextFormat(
+                        L"Segoe UI", nullptr,
+                        DWRITE_FONT_WEIGHT_NORMAL, DWRITE_FONT_STYLE_NORMAL,
+                        DWRITE_FONT_STRETCH_NORMAL, fontSize,
+                        Constants::Overlay::MSG_ALL_FONT_LOCALE,
+                        &fmt);
+
+                    if (fmt) {
+                        fmt->SetTextAlignment(DWRITE_TEXT_ALIGNMENT_CENTER);
+                        fmt->SetParagraphAlignment(DWRITE_PARAGRAPH_ALIGNMENT_CENTER);
+                        r->m_pDWriteFactory->CreateTextLayout(
+                            labelText.c_str(), static_cast<UINT32>(labelText.size()),
+                            fmt.Get(), dim, BAR, &m_dirLabelLayout);
+
+                        if (m_dirLabelLayout) {
+                            const UINT32 boldLen = static_cast<UINT32>(labelText.size()) - boldStart;
+                            if (boldLen > 0)
+                                m_dirLabelLayout->SetFontWeight(DWRITE_FONT_WEIGHT_BOLD,
+                                                                { boldStart, boldLen });
+                            m_dirLabelLayout->SetWordWrapping(DWRITE_WORD_WRAPPING_NO_WRAP);
+                            Microsoft::WRL::ComPtr<IDWriteInlineObject> ellipsis;
+                            r->m_pDWriteFactory->CreateEllipsisTrimmingSign(fmt.Get(), &ellipsis);
+                            DWRITE_TRIMMING trim = { DWRITE_TRIMMING_GRANULARITY_CHARACTER, 0, 0 };
+                            m_dirLabelLayout->SetTrimming(&trim, ellipsis.Get());
+                        }
+                    }
+                }
+
+                if (m_dirLabelLayout) {
+                    ID2D1SolidColorBrush *labelBrush =
+                        (m_hWnd == g_activePanelHwnd && m_dirLabelActiveBrush)
+                        ? m_dirLabelActiveBrush.Get()
+                        : m_dirLabelInactiveBrush.Get();
+
+                    float cx = 0.0f, stripY = 0.0f;
+                    if (vert) {
+                        if (m_position == 2)
+                            cx = (Constants::ThumbnailPanel::SCROLLBAR_POS_RIGHT_PANEL
+                                  == Constants::ThumbnailPanel::ScrollbarSide::LEFT)
+                                 ? BAR / 2.0f : sw2 - BAR / 2.0f;
+                        else
+                            cx = (Constants::ThumbnailPanel::SCROLLBAR_POS_LEFT_PANEL
+                                  == Constants::ThumbnailPanel::ScrollbarSide::LEFT)
+                                 ? BAR / 2.0f : sw2 - BAR / 2.0f;
+                    } else {
+                        if (m_position == 1)
+                            stripY = (Constants::ThumbnailPanel::SCROLLBAR_POS_TOP_PANEL
+                                      == Constants::ThumbnailPanel::ScrollbarEdge::TOP)
+                                     ? 0.0f : sh2 - BAR;
+                        else
+                            stripY = (Constants::ThumbnailPanel::SCROLLBAR_POS_BOTTOM_PANEL
+                                      == Constants::ThumbnailPanel::ScrollbarEdge::TOP)
+                                     ? 0.0f : sh2 - BAR;
+                    }
+
+                    D2D1::Matrix3x2F oldXform;
+                    m_panelContext->GetTransform(&oldXform);
+
+                    if (vert) {
+                        m_panelContext->SetTransform(
+                            D2D1::Matrix3x2F::Rotation(-90.0f, D2D1::Point2F(cx, sh2 / 2.0f)));
+                        m_panelContext->DrawTextLayout(
+                            D2D1::Point2F(cx - sh2 / 2.0f, sh2 / 2.0f - BAR / 2.0f),
+                            m_dirLabelLayout.Get(), labelBrush);
+                    } else {
+                        m_panelContext->DrawTextLayout(
+                            D2D1::Point2F(0.0f, stripY),
+                            m_dirLabelLayout.Get(), labelBrush);
+                    }
+
+                    m_panelContext->SetTransform(oldXform);
+                }
             }
         }
 

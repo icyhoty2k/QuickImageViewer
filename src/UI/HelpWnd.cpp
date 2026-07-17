@@ -264,6 +264,14 @@ namespace UI {
             L"Each wrap shows a message in the center overlay. Startup default: ") +
             (Constants::THUMBNAIL_PANEL_WHEEL_WRAP_AROUND ? L"ON" : L"OFF") +
             L" (THUMBNAIL_PANEL_WHEEL_WRAP_AROUND in Constants.h).", sThumbs);
+        Add(K(SC::SC_THUMBNAIL_EFFECTS_TOGGLE),
+            std::wstring(L"Toggle thumbnail strip visual effects on/off (master runtime switch). "
+            L"Effects include: rounded corners (corner overdraw), accent-color glow border on the "
+            L"selected thumbnail, and a subtle hover-scale enlarge on the hovered thumbnail. "
+            L"Each effect can also be individually disabled in Constants.h "
+            L"(ThumbnailPanel::ThumbnailEffects). Startup default: ") +
+            (Constants::ThumbnailPanel::ThumbnailEffects::EFFECTS_MASTER_ENABLED ? L"ON" : L"OFF") +
+            L".", sThumbs);
         Add(L"Left Click",
             L"Open the clicked thumbnail in the main viewer. Thumbnails from another folder "
             L"(e.g. in the cache strip) are opened as new files.", sThumbs);

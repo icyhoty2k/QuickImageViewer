@@ -4,6 +4,7 @@
 #include <cstdint>
 #include <string>
 #include <vector>
+#include <unordered_set>
 #include <dxgi1_2.h>
 #include <d2d1_3.h>
 #include <dwrite_3.h>
@@ -77,6 +78,9 @@ namespace UI {
             int m_hoverIdx = -1;
             std::vector<Thumbnail> m_thumbnails;
 
+            // Multi-select state — path-stable across geometry rebuilds
+            std::unordered_set<std::wstring> m_selectedPaths;
+
         protected:
             LRESULT HandleMessage(UINT message, WPARAM wParam, LPARAM lParam) override;
 
@@ -105,9 +109,9 @@ namespace UI {
             virtual void PostBuildHook() {}
 
             // Called by the context menu Delete action.
-            // Default: moves the file to the Recycle Bin.
+            // Default: moves the files to the Recycle Bin.
             // CacheWnd overrides to remove only from the VRAM cache.
-            virtual void OnContextMenuDelete(const std::wstring &path);
+            virtual void OnContextMenuDelete(const std::vector<std::wstring> &paths);
 
             // Label for the Delete item in the right-click context menu.
             // CacheWnd overrides to clarify the action is VRAM-only.
@@ -152,6 +156,15 @@ namespace UI {
             // or by ResizeSwapChain when panel dimensions change.
             Microsoft::WRL::ComPtr<IDWriteTextLayout> m_emptyDirPathLayout;
 
+            // Dir label rendered inside the scrollbar strip (z-order below the thumb).
+            // Shows the full folder path with the last component + size in bold.
+            // Cached; rebuilt when path, panel dimension, or strip thickness changes.
+            Microsoft::WRL::ComPtr<IDWriteTextLayout> m_dirLabelLayout;
+            std::wstring m_dirLabelTextCache;
+            float        m_dirLabelDimCache = 0.0f;
+            float        m_dirLabelBarCache = 0.0f;
+            std::wstring m_dirSizeStr; // e.g. "3.56 MB" — set by ComputeDirSize()
+
             // ------------------------------------------------------------------
             // Per-panel D3D/D2D resources — owned here, not in RendererD2D
             // ------------------------------------------------------------------
@@ -169,16 +182,35 @@ namespace UI {
             Microsoft::WRL::ComPtr<ID2D1SolidColorBrush>  m_scrollTrackBrush;
             Microsoft::WRL::ComPtr<ID2D1SolidColorBrush>  m_scrollThumbBrush;
             Microsoft::WRL::ComPtr<ID2D1SolidColorBrush>  m_emptyDirWarningBrush;
+            Microsoft::WRL::ComPtr<ID2D1SolidColorBrush>  m_multiSelBrush;
+            Microsoft::WRL::ComPtr<ID2D1SolidColorBrush>  m_dirLabelActiveBrush;
+            // Visual effects brushes and geometry (U key master toggle)
+            Microsoft::WRL::ComPtr<ID2D1SolidColorBrush>  m_glowBrush;       // accent-color border for selected thumb
+            Microsoft::WRL::ComPtr<ID2D1SolidColorBrush>  m_cornerBgBrush;   // background color for corner overdraw
+            Microsoft::WRL::ComPtr<ID2D1PathGeometry>     m_cornerGeometry;   // 4-corner bite shapes (DPI-dependent)
+            float m_cornerGeomDpi = 0.0f;                                      // dpiScale used when m_cornerGeometry was built
+            Microsoft::WRL::ComPtr<ID2D1SolidColorBrush>  m_dirLabelInactiveBrush;
 
             // Scrollbar LMB drag state
             bool  m_scrollDragging      = false;
             float m_scrollDragStartMouse  = 0.0f; // mouse axis at drag start
             float m_scrollDragStartOffset = 0.0f; // m_offset at drag start
 
+        protected:
+            // Builds the text shown in the scrollbar strip.
+            // Returns {fullText, boldStartIndex}. Empty text = no label.
+            // CacheWnd overrides to show vRam stats instead of a folder path.
+            virtual std::pair<std::wstring, UINT32> BuildScrollbarLabel() const;
+
+            // Utility used by subclass overrides of BuildScrollbarLabel().
+            static std::wstring FormatDirSize(int64_t bytes);
+
         private:
             void ScrollToSelected();
             void RebuildGeometry();
             void RenderEmptyPlaceholder();
+            void ComputeDirSize();
+            void BuildCornerGeometry(float w, float h, float r);
             void GetWindowBounds(HWND hRef, int8_t position,
                                  int &x, int &y, int &w, int &h) const;
 
@@ -187,17 +219,23 @@ namespace UI {
             Microsoft::WRL::ComPtr<IDWriteTextLayout> m_emptyDirMissingLayout;
             Microsoft::WRL::ComPtr<IDWriteTextLayout> m_emptyCacheLayout;
 
-            // Path of the file currently "cut" to the clipboard — shown at reduced opacity.
+            // Files currently "cut" to the clipboard — shown at reduced opacity.
             // Static so all panel instances see the same cut state.
-            static std::wstring s_cutFilePath;
+            static std::unordered_set<std::wstring> s_cutPaths;
 
             // Path recorded on LMB-down to seed an OLE drag if the mouse moves far enough.
             // Cleared at drag start and on LMB-up. Static: only one drag at a time.
             static std::wstring s_dragSourcePath;
 
         protected:
+            // Update the panel-position overlay in g_overlayManager to reflect the
+            // current selection count, then invalidate the main window to repaint.
+            // Call at every point where m_selectedPaths changes.
+            void NotifySelectionOverlay();
+
             HWND m_hOwner = nullptr;
             int8_t m_position = 0;
             bool m_sourceDirty = true;
+            std::wstring m_anchorPath; // anchor for Shift+Click range selection
     };
 } // namespace UI

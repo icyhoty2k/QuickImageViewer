@@ -66,6 +66,7 @@ struct AppState {
     bool isRmbDown = false;
     bool showOverlayInfoText = Constants::Overlay::DEFAULT_SHOW_OVERLAY;
     bool thumbnailPanelWheelWrapAround = Constants::THUMBNAIL_PANEL_WHEEL_WRAP_AROUND;
+    bool thumbnailEffectsEnabled = Constants::ThumbnailPanel::ThumbnailEffects::EFFECTS_MASTER_ENABLED;
     BYTE opacity = 255;
     float saturation = Constants::DEFAULT_SATURATION;
     float brightness = Constants::DEFAULT_BRIGHTNESS;
