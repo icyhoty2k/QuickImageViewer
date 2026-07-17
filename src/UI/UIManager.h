@@ -4,10 +4,6 @@
 #include <string>
 #include <vector>
 
-// Posted by UIManager::OnPanelHidden to delete a SpawnedDirWnd after Hide() unwinds.
-// lParam is the SpawnedDirWnd* to delete. Handled in AppMain WndProc.
-#define WM_DELETE_SPAWNED_PANEL (WM_APP + 10)
-
 #include "IPanelWindow.h"
 #include "HelpWnd.h"
 #include "CacheWnd.h"
@@ -207,7 +203,11 @@ namespace UI {
             // results). Fans out to every visible panel so each can decide whether to
             // sync its playlist, show the empty-dir placeholder, or refresh its view.
             void NotifyFolderRefreshed(const std::wstring &dir,
-                                       const std::vector<std::wstring> &playlist);
+                                       const std::vector<std::wstring> &playlist,
+                                       bool updatePrimaryDirWnd = true);
+
+            void RepaintAllPanels();
+            void RefreshPanelDirs(const std::wstring &dir1, const std::wstring &dir2);
 
         private:
             HelpWnd        helpWnd;
@@ -218,6 +218,16 @@ namespace UI {
             JumpToWnd      jumpToWnd;
             FindWnd        findWnd;
             StatsWnd       statsWnd;
+
+            // Fixed pool of 4 pre-allocated SpawnedDirWnd instances — one per layout slot
+            // (top, left, right, bottom). Reused across spawns; never deleted at runtime.
+            SpawnedDirWnd m_spawned0{0};
+            SpawnedDirWnd m_spawned1{1};
+            SpawnedDirWnd m_spawned2{2};
+            SpawnedDirWnd m_spawned3{3};
+            SpawnedDirWnd* const m_spawnedPool[Constants::DIR_WND_MAX_INSTANCES] {
+                &m_spawned0, &m_spawned1, &m_spawned2, &m_spawned3
+            };
 
             HINSTANCE m_hInstance  = nullptr;
             HWND      m_hMainWnd   = nullptr;

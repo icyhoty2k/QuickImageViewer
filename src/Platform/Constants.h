@@ -6,8 +6,8 @@
 // *** Update ONLY the four numbers below to bump the version everywhere ***
 // =========================================================================
 #define VER_MAJOR 2
-#define VER_MINOR 3
-#define VER_PATCH 7
+#define VER_MINOR 4
+#define VER_PATCH 0
 #define VER_BUILD 0
 
 // Comma form  — FILEVERSION / PRODUCTVERSION in .rc  (e.g. 2,3,0,0)
@@ -162,6 +162,8 @@ namespace Constants {
         constexpr float HOVER_THICKNESS = 1.0f;
         constexpr float SCROLLBAR_THICKNESS = 4.0f; // px width of the strip
         constexpr float SCROLLBAR_MIN_THUMB = 20.0f; // minimum thumb length in px
+        // Opacity (0.0–1.0) applied to a thumbnail that has been cut to the clipboard.
+        constexpr float THUMBNAIL_CUT_OPACITY = 0.35f;
 
         // Scrollbar position enums
         enum class ScrollbarSide { LEFT = 0, RIGHT = 1 };

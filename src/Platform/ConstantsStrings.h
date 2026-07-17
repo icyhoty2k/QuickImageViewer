@@ -14,6 +14,8 @@ namespace Constants::Messages {
     constexpr const wchar_t *CACHE_WINDOW_VISIBLE_MSG = L"Cache Window ON ";
     constexpr const wchar_t *CACHE_WINDOW_HIDDEN_MSG = L"Cache Window OFF ";
     constexpr const wchar_t *CACHE_WINDOW_CLEAR_CACHE_MSG = L"Cache cleared ! ";
+    constexpr const wchar_t *DIR_WINDOW_VISIBLE_MSG = L"Dir Window ON ";
+    constexpr const wchar_t *DIR_WINDOW_HIDDEN_MSG = L"Dir Window OFF ";
 
 
     // Overlay master toggle (N / I / Ctrl+0)
@@ -38,6 +40,8 @@ namespace Constants::Messages {
     constexpr const wchar_t *EMPTY_DIR_NO_IMAGES = L"No Images:";
     // Placeholder shown when the directory itself has been deleted
     constexpr const wchar_t *EMPTY_DIR_MISSING = L"⚠  Directory Missing";
+    // Placeholder shown in CacheWnd when the VRAM thumbnail cache is empty
+    constexpr const wchar_t *EMPTY_CACHE = L"Thumbnail Cache Empty";
 
     // Q — toggle last/current dir
     constexpr const wchar_t *TOGGLE_DIR_NO_PREV = L"No previous folder";
