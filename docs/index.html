@@ -1,0 +1,754 @@
+
+Gemini
+New chat
+Search chats
+Images
+Library
+Gems
+New notebook
+C++ Method Overloading Explained
+Избор на дигитална скала за фреза
+Глоба за нерегистрирано МПС
+Ryzen 9 BIOS Tuning Guide
+Определяне на произход на универсал
+Fronius MagicWave 2000 Fuzzy
+Татусите са болестно състояние на душата и сигурен признак за бесовска намеса в съзнанието на човека!!!
+Възползване от Pro акаунт
+Защита на знанията
+Научен подход към бодибилдинга
+Втория ми авторски труд
+My contribution to bodybuilding
+Cellwar water manipulation Milos nad jay Himalayan Salt vs. Table Salt Benefits
+Growth Hormone Timing and Protein
+CMake and Ninja: Build System Roles
+Winget Install Command Verification
+Image File Handling and Sorting
+Reload QIV Directory With Key
+PostgreSQL vs. MySQL for Finance
+C++ Windows 11 Native Window
+Горещо срещу студено поцинкована ламарина
+Sharing Your C++ Image Viewer
+GitHub Actions Workflow for C++23
+Portable Markdown Editors For Developers
+Understanding Double Buffering Graphics
+Debugging Crash on Window Close
+Image Preload and Cache Fixes
+Subscription End Date Inquiry
+
+Activity
+Montana, Bulgaria
+From your device
+Update location
+Conversation with Gemini
+what is the connection between cmake and ninja
+
+The connection between CMake and Ninja is best understood as a division of labor between a meta-build system (CMake) and a build system (Ninja).
+
+They are frequently paired in C++ development, such as in your QuickImageViewer project, because they provide a highly efficient, cross-platform workflow.
+
+The Roles
+Feature	CMake (The Architect)	Ninja (The Construction Crew)
+Primary Goal	Generate build configuration files.	Execute the build process.
+Input	CMakeLists.txt (Human-readable logic).	build.ninja (Machine-generated instructions).
+Nature	Meta-build system. It doesn't compile your C++ code directly.	Low-level build system. It calls the compiler/linker directly.
+Key Strength	Handles cross-platform abstraction and dependency discovery.	Designed for extreme speed and parallel execution.
+How They Connect
+The connection is a sequential workflow where CMake produces the precise "blueprint" that Ninja follows.
+
+Configuration Phase: You run CMake. It reads your CMakeLists.txt files, analyzes your system environment (compilers, libraries, include paths), and determines exactly what needs to be built.
+
+Generation Phase: Instead of generating old-fashioned Makefiles, CMake generates a build.ninja file. This file contains the exact sequence of commands and dependency relationships required for Ninja to succeed.
+
+Execution Phase: You run the Ninja command. Ninja reads its generated build.ninja file and executes the actual compilation and linking commands (invoking your C++ compiler, like MSVC or GCC).
+
+Why They Are a Powerful Combination
+Speed: Ninja is intentionally minimal. It is optimized to be as fast as possible, often rebuilding faster than traditional Make-based systems. It handles dependencies and parallel task execution very efficiently.
+
+Modernization: Using CMake with Ninja is the industry standard for modern C++ development. It keeps your build logic (in CMakeLists.txt) clean and platform-independent, while offloading the heavy lifting of process management to Ninja.
+
+IDE Integration: Since you work with IntelliJ IDEA, you likely notice that the IDE treats CMake as the source of truth. When you open a project, IntelliJ (via the CLion plugin or similar C++ tools) calls CMake to generate the Ninja files, and then uses Ninja to provide real-time feedback on errors and build status.
+
+Typical Workflow
+In your terminal or build process, the interaction looks like this:
+
+Configure: cmake -G Ninja -S . -B build
+
+This tells CMake to use the Ninja generator.
+
+Build: cmake --build build
+
+This invokes the underlying build tool (Ninja) automatically.
+
+Because Ninja is focused solely on executing the build commands quickly, it does not need to handle complex logic—it just needs the "marching orders" that CMake provides.
+
+is it optimized in clion because i use clion 2026.1
+
+Yes, the combination of CMake and Ninja is considered highly optimized in CLion 2026.1. It is essentially the "golden standard" workflow for modern C++ development within the IDE.
+
+Rather than being a specific "new feature" added in 2026.1, this integration has been matured over many years to be the default, high-performance path for building projects.
+
+Why it is "Optimized" in CLion
+CMake File API Integration: CLion uses the CMake File API to communicate with your build system. When you use Ninja as your generator, CLion consumes these files efficiently to map your project structure, targets, and dependencies without the overhead of older, legacy parsers. This ensures that your IDE understands your source tree, namespaces, and include paths almost instantly after a build sync.
+
+Default Behavior: CLion treats Ninja as a first-class citizen. Because Ninja is designed for speed (parallel execution and minimal overhead), it pairs perfectly with CLion's background indexing. You get rapid build times and accurate code completion/navigation because CLion isn't fighting a slow build generator.
+
+Seamless Switching: CLion handles the "Reload CMake Project" flow elegantly when using Ninja. If you change a CMakeLists.txt file, CLion triggers a refresh that is generally much faster with Ninja than with legacy Makefiles, keeping your development loop tight.
+
+What is actually new in 2026.1?
+While the CMake/Ninja engine is already highly optimized, the 2026.1 release improves your interaction with those systems rather than the build system itself:
+
+Faster CMake Configuration: You now have better code completion for CMake options and build presets directly in your configuration fields. This helps you manage complex Ninja-based builds with less typing and fewer syntax errors.
+
+Stability & Tooling: The 2026.1 release focuses heavily on stability and IDE responsiveness. This means that while Ninja is doing the heavy lifting of compiling your code, the IDE's UI (the frontend) is smoother, with new caret modes and cleaner rendering, allowing you to stay focused on your code while the background build processes run.
+
+Enhanced AI & Debugging: If you use the new AI agents or the expanded DAP (Debug Adapter Protocol) support in 2026.1, these features run alongside your Ninja builds, providing a much more modern ecosystem for managing your project (like PosMan or your C++ projects) than in older versions.
+
+Pro-Tip for your Setup
+Since you are working with C++23 (for QuickImageViewer) and JavaFX (for PosMan), keep using CMake Presets if you aren't already. CLion 2026.1 has refined the way it imports these presets, making it easier to share your build configurations across different machines or team members without modifying the IDE's local settings.
+
+Are you noticing any specific lag or build performance issues in your current workflow, or are you just looking to ensure you're utilizing the latest best practices?
+
+why when i type quick image viewer in google it does not show my app
+
+The reason your app doesn't appear when you search for "quick image viewer" is a classic problem in SEO (Search Engine Optimization): name collision and keyword saturation.
+
+When you search for a generic term like "Quick Image Viewer," Google prioritizes established, high-traffic software that has been indexed for years (like pqiv or general-purpose viewers). Your repository QuickImageViewer is likely indexed, but it is currently fighting against thousands of other results that use those exact same words.
+
+Here is why it’s currently buried and how you can actually improve its visibility.
+
+1. The "Generic Name" Problem
+"Quick," "Image," and "Viewer" are common English words. Google's algorithm assumes that anyone searching for that phrase is looking for the most popular or "authority" results. Unless your repo has significant traffic, a high volume of backlinks from other sites, or high-quality engagement, Google will rank established software providers or curated listicles (like "Top 10 Image Viewers") above your GitHub link.
+
+2. How to Improve Discoverability
+If you want people to find your specific version of QuickImageViewer, you need to optimize your repository so that it stands out as an "entity" rather than just another code folder.
+
+Rename for Uniqueness (Recommended): If you are willing, adding a unique prefix makes a huge difference. For example, IcyImageViewer or QIV-Win is much easier to rank for than a generic term. If you keep the name, you have to be much more aggressive with the steps below.
+
+Optimize the README: Google crawls your README.md to understand what the project is.
+
+Add a clear "About" section: Use a subheading like ## What is QuickImageViewer? and write a 2-3 sentence summary that includes keywords but also clearly distinguishes it from the generic term (e.g., "A native C++23, GPU-accelerated image viewer for Windows...").
+
+Add Tags: Ensure your GitHub repository has "Topics" (e.g., cpp23, win32, image-viewer, gpu-accelerated). This helps GitHub's internal search and helps Google categorize your repo.
+
+Create a GitHub Pages Site: GitHub repositories themselves are sometimes treated as "code-first" by Google. A GitHub Pages site is treated as a "webpage."
+
+Create a simple index.html or a Markdown file hosted on GitHub Pages for the project.
+
+This allows you to add meta-tags and better structured data, which Google can index more effectively than a raw repository page.
+
+Backlinks (The Secret Sauce): This is the most important factor for ranking. Google looks for "signals" that your site is important.
+
+Share your GitHub link on platforms like Reddit (e.g., r/software, r/cpp, r/windowsapps) with a brief, helpful post about why you built it.
+
+When other people link to your repository from their own blogs, sites, or forums, your "domain authority" increases.
+
+Use the GitHub "About" section: Ensure the "About" sidebar on the right side of your GitHub repository is filled out with a URL to your website (if you have one) or a clear, one-sentence description. This sidebar is often pulled directly into search snippets.
+
+Summary Checklist
+[ ] Add Topics/Tags to your GitHub repo sidebar.
+
+[ ] Write a killer README that explains why yours is different (highlight the C++23/Win32 performance).
+
+[ ] Get it mentioned: If you share the link on relevant subreddits or forums, it creates the "backlink" signal that tells Google your repository is a legitimate project people are visiting.
+
+You don't need to be a marketing expert; just focus on making it clear what your project is, and ensure that when someone does find it, they have a clear path to understanding that this is the specific version of QuickImageViewer they need.
+
+you mean this ?:
+
+https://github.com/icyhoty2k/QuickImageViewer/wiki/_new
+
+That is certainly a place to put information, but it is not the most effective place to solve your search ranking problem.
+
+Think of your GitHub repository like a storefront:
+
+The README (README.md): This is your billboard on the highway. It is the first thing people see when they land on your repository. It is the most heavily weighted file for Google indexing and determines if a user stays or leaves.
+
+The Wiki: This is the manual inside the store. It is excellent for deep technical dives (e.g., explaining your C++23 architectural decisions, Win32 API usage, or build instructions), but it is secondary to the README in terms of search authority.
+
+Where to Focus Your Efforts
+Prioritize the README (High Impact):
+Ensure your README.md has a clear, compelling title and an "About" section that explains exactly what QuickImageViewer does. Use bold keywords that people might actually type into Google, like: "Fast C++23 native Windows image viewer," or "Win32 API image viewer with zero flicker."
+
+Google crawls this page first and assigns it the highest authority.
+
+Use the Wiki for Long-Form Content (Medium Impact):
+The Wiki is perfect for what you're doing with C++23 and your custom m_bitmapInFlight mutex logic. Use it to provide documentation that would clutter the main page. This adds "content depth" to your repository, which Google likes, but it won't fix your search visibility as fast as an optimized README will.
+
+GitHub Pages (Highest Impact for Web Search):
+If you really want to rank on Google, a GitHub Pages site is superior to both the README and the Wiki. It allows you to create a dedicated website ([https://icyhoty2k.github.io/QuickImageViewer/](https://icyhoty2k.github.io/QuickImageViewer/)) that you can optimize specifically for search engines, complete with metadata and a clean landing page design that the average user (who isn't a developer) will find much friendlier.
+
+Summary Strategy
+Fix the README first: This is your "quick win." Make it clear, concise, and keyword-rich.
+
+Build the Wiki second: Use this to dump all your technical knowledge and project notes.
+
+Consider GitHub Pages third: Do this only if you want to market the app to non-developers.
+
+Since you are already documenting your technical process, would you like me to help you draft a high-impact, SEO-friendly README section that highlights your C++23 and Win32 performance wins?
+
+GitHub Pages
+
+GitHub Pages is designed to host your personal, organization, or project pages from a GitHub repository.
+
+Build and deployment
+
+Source
+
+Branch
+
+Your GitHub Pages site is currently being built from the /docs folder in the main branch. Learn more about configuring the publishing source for your site.
+
+
+
+
+
+Learn how to add a Jekyll theme to your site.
+
+Custom domain
+
+Custom domain
+
+Custom domains allow you to serve your site from a domain other than icyhoty2k.github.io. Learn more about configuring custom domains.
+
+
+
+ 
+
+That is a huge head start. Since you already have GitHub Pages enabled and sourcing from /docs, you have the infrastructure in place. The reason it is likely still not appearing in search results is that Google hasn't yet indexed the content as a "branded product" or "software entity," or the content within those pages isn't optimized for search crawlers.
+
+When you have a generic name like "Quick Image Viewer," Google’s algorithm acts as a filter, pushing your site to the back because it looks like a generic repository rather than a dedicated project homepage.
+
+Here is how to optimize the content inside your /docs folder to make it rank:
+
+1. Optimize Your "Title" and "Metadata"
+Search engines primarily look at the <title> and <meta description> tags of your HTML files.
+
+The Title: Your site title should not just be "QuickImageViewer." It should be distinct. Change it to something like "QuickImageViewer | High-Performance C++23 Windows Viewer | by IcyHoty2k".
+
+The Meta Description: Include a summary that Google will display under the link.
+
+Example: "A native, high-performance image viewer for Windows, built with C++23 and Win32 API. Optimized for zero-flicker and hardware acceleration."
+
+2. The "Unique" Content Strategy
+Since you cannot easily change the repo name without breaking existing links, you must create "uniqueness" through your content.
+
+Header H1 Tags: Ensure your landing page starts with a very clear, bold heading that includes your specific keywords.
+
+Instead of just: QuickImageViewer
+
+Try: QuickImageViewer for Windows: Native C++23 Performance
+
+Unique Keywords: Sprinkle specific terms that your target users would search for but that are specific to your stack.
+
+Keywords to include: "Win32 API C++ implementation," "Hardware accelerated image preloading," "Zero-flicker Windows viewer."
+
+The "Why" Section: Add a section explaining why a user should choose your viewer over others. (e.g., "Unlike Electron-based viewers, this is a native C++23 application...")
+
+3. Help Google Find You (Indexation)
+Even if your content is perfect, Google needs to know it exists.
+
+Submit to Search Console:
+
+Go to Google Search Console.
+
+Add your GitHub Pages URL as a property.
+
+Submit your sitemap.xml (if you are using a site generator) or request indexing for your home page.
+
+Internal Linking: If you have other projects (like PosMan) or a personal profile page, link to your QuickImageViewer project from those pages. This creates "authority" signals.
+
+4. Wait for the "Crawl"
+Google is not real-time. Even after you make these changes, it can take anywhere from a few days to a few weeks for the crawler to re-index your page with the new title and descriptions.
+
+A Note on your GitHub Pages Setup
+Since you mentioned you are sourcing from /docs, check if you are using a static site generator (like Jekyll, which is the default for GitHub Pages).
+
+If you are using Jekyll: You can edit the _config.yml file to set the title and description globally.
+
+If you are using raw HTML: Ensure you have <meta name="description" content="..."> tags in the <head> section of your index.html file.
+
+Do you have access to modify the files inside your /docs folder right now to update the <title> and <meta> tags, or would you like a template snippet for what those tags should look like?
+
+i dont have a docs folder in repo
+
+If your GitHub Pages settings say it is building from the /docs folder but that folder doesn't exist, your site is likely failing to build or serving a 404 error.
+
+You have two paths to fix this:
+
+Option 1: Create the /docs folder (The "Organized" Approach)
+If you want to keep your repository root clean and put your website files in a dedicated subdirectory:
+
+Create a folder named docs in the root of your QuickImageViewer repository.
+
+Move or create your index.html (or README.md if you are using a theme) inside that docs folder.
+
+Commit and push these changes.
+
+GitHub Pages will detect the folder and build your site.
+
+Option 2: Change the Build Source (The "Root" Approach)
+If you prefer to have your website files directly in your main repository folder (which is very common for simple project sites), you need to update the configuration:
+
+Go to your Repository Settings on GitHub.
+
+Click Pages in the left sidebar.
+
+Under the Build and deployment section, look for Source.
+
+Change it from /docs to /(root).
+
+Click Save.
+
+Important: If you choose Option 2, make sure you have an index.html file (or a README.md that acts as the homepage) in the root of your repository, or the site won't have anything to display.
+
+Which should you choose?
+Choose /docs if you want to keep your project documentation separate from your code files.
+
+Choose /(root) if you want the project landing page to be the main point of entry right next to your source code.
+
+Quick Check:
+Open your repository in IntelliJ IDEA. Look at the file tree in the project view. Do you see a docs folder there? If not, the GitHub setting is definitely pointing to a non-existent location.
+
+Which path do you prefer to take? I can help you set up the basic index.html file with the SEO meta-tags we discussed once you decide where you want the file to live.
+
+look i makde a docs folder but dont have index.html can i post you my readme.md and you build me a index.html . here it is my readme.md
+
+make the html optimized for google and beautifull
+
+Your HTML file is ready.
+HTML icon
+index
+ HTML 
+Open
+
+I have built the index.html file based entirely on your README.md.
+
+Here is what I did to optimize it for Google (SEO) and make it look beautiful:
+
+1. SEO Optimizations (The "Under the Hood" Work)
+Targeted Meta Tags: I added explicit <meta> description and keyword tags targeting phrases people actually search for: "high-performance C++23 native image viewer," "Win32 API," "zero-flicker," and "GPU-accelerated."
+
+Title Tag: Changed the page title from just the app name to QuickImageViewer (qIV) | High-Performance C++23 Native Image Viewer for Windows so Google knows exactly what the page is about.
+
+Semantic Structure: Used proper <header>, <main>, <section>, <h1>, and <h2> tags. Google gives higher priority to keywords placed inside <h1> and <h2> tags.
+
+Open Graph Tags: Added metadata so that if you paste this link into Discord, Reddit, or Facebook, it generates a nice preview card instead of a plain text link.
+
+2. Design & Layout (The "Beautiful" Part)
+Dark Mode Theme: I gave it a sleek, modern, dark-mode design using CSS variables that fit a high-performance C++ tool.
+
+Hero Section: Replaced the plain text top with a large, centered header featuring a gradient title, feature "badges" (like C++23, Win32 API), and a prominent "Download" button.
+
+Clean Tables: Styled your shortcut and format tables to look like modern data grids with zebra striping and accent borders, rather than clunky standard HTML tables.
+
+"Why QuickImageViewer?" Section: I extracted your technical highlights (VRAM cache, Direct2D, no blocking IO) and put them into a two-column highlight grid at the very top. This tells users why your app is better immediately.
+
+Code Blocks: Styled your command-line arguments and build instructions with a specific monospaced font and a dark background so they look like a real terminal.
+
+Next Steps for You:
+Download this index.html file.
+
+If you chose Option 1 (The /docs folder), put this file inside the docs folder in your repository.
+
+If you chose Option 2 (The Root folder), put this file right next to your README.md in the main folder.
+
+Commit and push the change to GitHub.
+
+Once GitHub Pages builds the site, it will serve this beautiful HTML page to anyone visiting your icyhoty2k.github.io/QuickImageViewer link, and Google will finally have properly formatted metadata to crawl.
+
+
+
+
+Gemini is AI and can make mistakes, including about people. Your privacy & GeminiOpens in a new window
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>QuickImageViewer (qIV) | High-Performance C++23 Native Image Viewer for Windows</title>
+    
+    <!-- SEO Meta Tags -->
+    <meta name="description" content="QuickImageViewer (qIV) is a blazing fast, GPU-accelerated image viewer for Windows. Built natively in C++23 with Win32 API, Direct2D, and WIC for zero-flicker performance.">
+    <meta name="keywords" content="image viewer, Windows image viewer, C++23, Win32 API, Direct2D, GPU-accelerated, WIC, zero-flicker, fast image viewer, portable image viewer">
+    <meta name="author" content="Ivan Hristov Yanev (IcyHoty2k)">
+    <meta name="robots" content="index, follow">
+
+    <!-- Open Graph / Social Media Meta Tags -->
+    <meta property="og:title" content="QuickImageViewer (qIV) | Native C++23 Windows Viewer">
+    <meta property="og:description" content="A blazing fast, single-executable, GPU-accelerated image viewer for Windows built on Win32 API and Direct2D. No installers, no telemetry.">
+    <meta property="og:type" content="website">
+    <meta property="og:url" content="https://icyhoty2k.github.io/QuickImageViewer/">
+    <!-- You can update this image link to a hosted screenshot URL later -->
+    <meta property="og:image" content="https://via.placeholder.com/1200x630.png?text=QuickImageViewer">
+
+    <!-- Google Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Fira+Code:wght@400;500&display=swap" rel="stylesheet">
+
+    <!-- Styling -->
+    <style>
+        :root {
+            --bg-color: #0f172a;
+            --surface-color: #1e293b;
+            --text-main: #f8fafc;
+            --text-muted: #94a3b8;
+            --accent-primary: #38bdf8;
+            --accent-hover: #0284c7;
+            --border-color: #334155;
+            --code-bg: #0b1120;
+        }
+
+        body {
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+            background-color: var(--bg-color);
+            color: var(--text-main);
+            line-height: 1.6;
+            margin: 0;
+            padding: 0;
+            -webkit-font-smoothing: antialiased;
+        }
+
+        .container {
+            max-width: 1000px;
+            margin: 0 auto;
+            padding: 0 20px;
+        }
+
+        header {
+            text-align: center;
+            padding: 80px 20px 60px;
+            background: linear-gradient(180deg, rgba(30,41,59,1) 0%, rgba(15,23,42,1) 100%);
+            border-bottom: 1px solid var(--border-color);
+        }
+
+        h1 {
+            font-size: 3.5rem;
+            font-weight: 800;
+            margin: 0 0 15px 0;
+            background: -webkit-linear-gradient(45deg, #38bdf8, #818cf8);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            letter-spacing: -1px;
+        }
+
+        .subtitle {
+            font-size: 1.25rem;
+            color: var(--text-muted);
+            max-width: 700px;
+            margin: 0 auto 30px auto;
+            font-weight: 500;
+        }
+
+        .badges {
+            display: flex;
+            justify-content: center;
+            gap: 10px;
+            margin-bottom: 30px;
+            flex-wrap: wrap;
+        }
+
+        .badge {
+            background-color: var(--surface-color);
+            border: 1px solid var(--border-color);
+            padding: 6px 12px;
+            border-radius: 20px;
+            font-size: 0.85rem;
+            font-weight: 600;
+            color: var(--accent-primary);
+        }
+
+        .cta-button {
+            display: inline-block;
+            background-color: var(--accent-primary);
+            color: #0f172a;
+            font-weight: 700;
+            padding: 12px 28px;
+            border-radius: 8px;
+            text-decoration: none;
+            transition: all 0.2s ease;
+            font-size: 1.1rem;
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+        }
+
+        .cta-button:hover {
+            background-color: var(--accent-hover);
+            transform: translateY(-2px);
+            color: #ffffff;
+        }
+
+        section {
+            padding: 60px 0;
+            border-bottom: 1px solid var(--border-color);
+        }
+
+        h2 {
+            font-size: 2rem;
+            font-weight: 700;
+            margin-bottom: 30px;
+            color: var(--text-main);
+            display: flex;
+            align-items: center;
+        }
+        
+        h2::after {
+            content: "";
+            flex: 1;
+            margin-left: 20px;
+            height: 1px;
+            background-color: var(--border-color);
+        }
+
+        h3 {
+            font-size: 1.4rem;
+            color: #e2e8f0;
+            margin-top: 40px;
+            margin-bottom: 15px;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 25px 0;
+            background-color: var(--surface-color);
+            border-radius: 8px;
+            overflow: hidden;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.3);
+        }
+
+        th, td {
+            padding: 14px 20px;
+            text-align: left;
+            border-bottom: 1px solid var(--border-color);
+        }
+
+        th {
+            background-color: rgba(0,0,0,0.2);
+            font-weight: 600;
+            color: var(--accent-primary);
+        }
+
+        tr:last-child td {
+            border-bottom: none;
+        }
+
+        code {
+            font-family: 'Fira Code', monospace;
+            background-color: var(--code-bg);
+            padding: 3px 6px;
+            border-radius: 4px;
+            font-size: 0.9em;
+            color: #e2e8f0;
+            border: 1px solid var(--border-color);
+        }
+
+        pre {
+            background-color: var(--code-bg);
+            padding: 20px;
+            border-radius: 8px;
+            overflow-x: auto;
+            border: 1px solid var(--border-color);
+        }
+        
+        pre code {
+            background-color: transparent;
+            padding: 0;
+            border: none;
+            color: #a5b4fc;
+        }
+
+        .grid-2 {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 30px;
+        }
+
+        .card {
+            background-color: var(--surface-color);
+            padding: 25px;
+            border-radius: 12px;
+            border: 1px solid var(--border-color);
+        }
+
+        ul {
+            padding-left: 20px;
+        }
+
+        li {
+            margin-bottom: 10px;
+        }
+
+        footer {
+            text-align: center;
+            padding: 40px 20px;
+            color: var(--text-muted);
+            font-size: 0.9rem;
+        }
+
+        footer a {
+            color: var(--accent-primary);
+            text-decoration: none;
+        }
+
+        footer a:hover {
+            text-decoration: underline;
+        }
+
+        /* Image placeholders for preview section */
+        .preview-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 20px;
+            margin-bottom: 40px;
+        }
+        
+        .preview-box {
+            background-color: var(--surface-color);
+            border: 1px dashed var(--border-color);
+            border-radius: 8px;
+            aspect-ratio: 16/9;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: var(--text-muted);
+            font-size: 0.9rem;
+        }
+
+        @media (max-width: 768px) {
+            h1 { font-size: 2.5rem; }
+            .grid-2 { grid-template-columns: 1fr; }
+            table { display: block; overflow-x: auto; white-space: nowrap; }
+        }
+    </style>
+</head>
+<body>
+
+    <header>
+        <div class="container">
+            <h1>QuickImageViewer (qIV)</h1>
+            <p class="subtitle">A blisteringly fast, GPU-accelerated native C++23 image viewer for Windows. Zero flicker, zero telemetry, ~7 MB portable executable.</p>
+            
+            <div class="badges">
+                <span class="badge">C++23 Native</span>
+                <span class="badge">Win32 API</span>
+                <span class="badge">Direct2D GPU Cache</span>
+                <span class="badge">Portable App</span>
+            </div>
+
+            <a href="https://github.com/icyhoty2k/QuickImageViewer/releases/latest" class="cta-button">Download Latest Release</a>
+            <p style="margin-top: 15px; font-size: 0.9rem; color: var(--text-muted);">
+                <a href="https://github.com/icyhoty2k/QuickImageViewer" style="color: inherit; text-decoration: underline;">View Source on GitHub</a>
+            </p>
+        </div>
+    </header>
+
+    <main class="container">
+        
+        <!-- SEO Targeted Introduction -->
+        <section id="about">
+            <h2>Why QuickImageViewer?</h2>
+            <div class="grid-2">
+                <div class="card">
+                    <h3>Built for Speed</h3>
+                    <p>Unlike modern web-based electron wrappers, qIV is a pure native application. It uses a <strong>GPU bitmap cache</strong> to keep decoded images in VRAM, preloading in both directions on a background thread. The UI thread never blocks.</p>
+                </div>
+                <div class="card">
+                    <h3>Hardware Accelerated</h3>
+                    <p>Built directly on top of <strong>Direct2D</strong> and the <strong>Windows Imaging Component (WIC)</strong>. It achieves zero-flicker rendering and instantly falls back to GDI software rendering only when necessary.</p>
+                </div>
+            </div>
+        </section>
+
+        <section id="formats">
+            <h2>Format Support</h2>
+            <p>Native OS formats are handled by the zero-dependency Windows Imaging Component, while complex formats utilize highly optimized custom and static library decoders.</p>
+            <table>
+                <thead>
+                    <tr>
+                        <th>Format</th>
+                        <th>Extensions</th>
+                        <th>Decoder</th>
+                        <th>Notes</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr><td>JPEG</td><td><code>.jpg</code> <code>.jpeg</code></td><td>WIC</td><td>Full EXIF / GPS metadata</td></tr>
+                    <tr><td>PNG</td><td><code>.png</code></td><td>WIC</td><td>16-bit, alpha</td></tr>
+                    <tr><td>WebP</td><td><code>.webp</code></td><td>WIC</td><td>Windows 10+ native codec</td></tr>
+                    <tr><td>AVIF</td><td><code>.avif</code></td><td>WIC</td><td>Windows 11 native codec</td></tr>
+                    <tr><td>JPEG XL</td><td><code>.jxl</code></td><td>WIC</td><td>Windows 11 24H2+ native codec</td></tr>
+                    <tr><td>SVG</td><td><code>.svg</code></td><td>resvg</td><td>Rust static lib, async IO thread</td></tr>
+                    <tr><td>OpenEXR</td><td><code>.exr</code></td><td>tinyexr</td><td>Reinhard tone-map + γ2.2</td></tr>
+                    <tr><td>Radiance HDR</td><td><code>.hdr</code></td><td>Inline</td><td>RGBE adaptive RLE, Reinhard tone-map</td></tr>
+                    <tr><td>HEIF / HEIC</td><td><code>.heif</code> <code>.heic</code></td><td>WIC</td><td>Requires MS HEIF Extensions</td></tr>
+                </tbody>
+            </table>
+        </section>
+
+        <section id="features">
+            <h2>Core Features</h2>
+            
+            <h3>Navigation & UI</h3>
+            <ul>
+                <li><strong>Instant Startup:</strong> Hide to tray with <code>Esc</code> and recall instantly, process stays resident in RAM.</li>
+                <li><strong>Thumbnail Strips:</strong> Scrollable, wrap-around thumbnail previews for cache, directory, and history.</li>
+                <li><strong>Smart Navigation:</strong> Smart jump between first/last images, instant folder history toggling, and Find mode with wildcard support.</li>
+                <li><strong>Overlay System:</strong> 9 independently configurable data slots rendered directly on the canvas.</li>
+            </ul>
+
+            <h3>Offline Reverse Geocoding</h3>
+            <p>GPS coordinates in EXIF data are resolved to full location details (City, State, Country, Timezone) with <strong>zero network calls</strong>. A compressed zlib database of GeoNames data is embedded directly into the executable.</p>
+            
+            <h3>GPU Color Effects</h3>
+            <p>Real-time, non-destructive image adjustments via the Direct2D effect graph. Bake and save directly to disk with <code>Ctrl+S</code>.</p>
+            <table>
+                <thead>
+                    <tr>
+                        <th>Effect</th>
+                        <th>Shortcut Key</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr><td>Rotate CW / CCW</td><td><code>R</code> / <code>Shift+R</code></td></tr>
+                    <tr><td>Grayscale / Sepia</td><td><code>Delete</code> / <code>Home</code></td></tr>
+                    <tr><td>Brightness / Contrast</td><td><code>\</code> <code>'</code> / <code>/</code> <code>.</code></td></tr>
+                    <tr><td>Outline (Edge Detection)</td><td><code>Page Up</code></td></tr>
+                    <tr><td>Toggle all effects (Bypass)</td><td><code>`</code> (Backtick)</td></tr>
+                </tbody>
+            </table>
+        </section>
+
+        <section id="kiosk-cli">
+            <h2>Command-Line & Kiosk Mode</h2>
+            <p>qIV supports extensive CLI arguments for automation, slideshows, and locked-down kiosk environments.</p>
+            <pre><code>QuickImageViewer.exe -dedicated -lock -fullscreen -slideshow -shuffle -slideshowInterval 8 -startFolder "D:\Ads"</code></pre>
+            <p style="margin-top: 10px; color: var(--text-muted); font-size: 0.9rem;">Runs an isolated instance on a dedicated monitor, loops a shuffled slideshow every 8 seconds, and ignores all user mouse/keyboard input.</p>
+        </section>
+
+        <section id="build">
+            <h2>Architecture & Building</h2>
+            <p>Written in <strong>C++23</strong>. Requires CMake and MSVC (Visual Studio 2022 or CLion). The threading model utilizes atomic indices and <code>WM_QIV_REPAINT</code> messages to synchronize the worker thread pool back to the UI thread seamlessly.</p>
+            <pre><code>git clone https://github.com/icyhoty2k/QuickImageViewer.git
+cd QuickImageViewer
+mkdir build && cd build
+cmake .. -DCMAKE_BUILD_TYPE=Release
+cmake --build . --config Release</code></pre>
+        </section>
+
+    </main>
+
+    <footer>
+        <div class="container">
+            <p>Developed by <strong>Ivan Hristov Yanev (IcyHoty2k)</strong>. Licensed under the AGPLv3.</p>
+            <p>
+                <a href="https://github.com/icyhoty2k/QuickImageViewer">GitHub Repository</a> • 
+                <a href="https://github.com/icyhoty2k/QuickImageViewer/releases">Releases</a>
+            </p>
+        </div>
+    </footer>
+
+</body>
+</html>
+index.html
+Displaying index.html.
