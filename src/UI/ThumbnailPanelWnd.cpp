@@ -18,6 +18,7 @@
 #include "../Renderer/RendererD2D.h"
 #include "../Overlays/OverlayManager.h"
 #include "../Platform/ConstantsStrings.h"
+#include "ThemedDialog.h"
 
 namespace UI {
     std::unordered_set<std::wstring> ThumbnailPanelWnd::s_cutPaths;
@@ -455,16 +456,14 @@ namespace UI {
         }
         if (IsDirPanel()) m_sourceDirty = false;
 
-        // Source content changed — discard any multi-selection since paths may no longer exist.
-        m_selectedPaths.clear();
-        m_anchorPath.clear();
-        NotifySelectionOverlay();
-
         m_thumbnails.clear();
 
         // Spawned DirWnd instances own their own playlist and bypass this guard.
         // Primary DirWnd and CacheWnd still require app.playlist to be populated.
         if (!HasOwnPlaylist() && (app.playlist.empty() || app.currentIndex < 0)) {
+            m_selectedPaths.clear();
+            m_anchorPath.clear();
+            NotifySelectionOverlay();
             InvalidateRect(m_hWnd, nullptr, TRUE);
             return;
         }
@@ -472,9 +471,27 @@ namespace UI {
         // Subclass provides the raw list; base owns all layout math.
         std::vector<std::wstring> items = GetSourceItems();
         if (items.empty()) {
+            m_selectedPaths.clear();
+            m_anchorPath.clear();
+            NotifySelectionOverlay();
             m_emptyDirActive = true;
             InvalidateRect(m_hWnd, nullptr, TRUE);
             return;
+        }
+
+        // Source content changed — prune the multi-selection to paths that still
+        // exist instead of wiping it. CacheWnd rebuilds on every cache reorder
+        // (each image view), so a full clear here made Ctrl/Shift+Click selections
+        // vanish almost immediately on that panel. Selection is path-keyed, so it
+        // is stable across the MRU reordering; only genuinely evicted/deleted
+        // entries are dropped.
+        if (!m_selectedPaths.empty() || !m_anchorPath.empty()) {
+            const std::unordered_set<std::wstring> live(items.begin(), items.end());
+            std::erase_if(m_selectedPaths,
+                          [&](const std::wstring &p) { return !live.count(p); });
+            if (!m_anchorPath.empty() && !live.count(m_anchorPath))
+                m_anchorPath.clear();
+            NotifySelectionOverlay();
         }
         m_emptyDirActive  = false;
         m_emptyDirMissing = false;
@@ -1200,12 +1217,28 @@ namespace UI {
                         const int cy = GET_Y_LPARAM(lParam);
                         const bool ctrlDown  = (GetKeyState(VK_CONTROL) & 0x8000) != 0;
                         const bool shiftDown = (GetKeyState(VK_SHIFT)   & 0x8000) != 0;
+                        int hitIdx = -1;
                         for (size_t i = 0; i < m_thumbnails.size(); ++i) {
-                            if (!m_thumbnails[i].HitTest(cx, cy)) continue;
-                            const std::wstring &hitPath = m_thumbnails[i].filePath;
+                            if (m_thumbnails[i].HitTest(cx, cy)) {
+                                hitIdx = static_cast<int>(i);
+                                break;
+                            }
+                        }
 
-                            if (ctrlDown) {
-                                // Toggle item in multi-selection; update anchor.
+                        if (hitIdx < 0) {
+                            // Click on empty strip space — clear any multi-selection
+                            // (Explorer behavior). Applies to all strips.
+                            if (!m_selectedPaths.empty()) {
+                                m_selectedPaths.clear();
+                                m_anchorPath.clear();
+                                NotifySelectionOverlay();
+                                InvalidateRect(m_hWnd, nullptr, FALSE);
+                            }
+                        } else {
+                            const std::wstring &hitPath = m_thumbnails[hitIdx].filePath;
+
+                            if (ctrlDown && !shiftDown) {
+                                // Ctrl+Click: toggle item in multi-selection; update anchor.
                                 if (m_selectedPaths.count(hitPath))
                                     m_selectedPaths.erase(hitPath);
                                 else
@@ -1213,21 +1246,33 @@ namespace UI {
                                 m_anchorPath = hitPath;
                                 NotifySelectionOverlay();
                                 InvalidateRect(m_hWnd, nullptr, FALSE);
-                            } else if (shiftDown && !m_anchorPath.empty()) {
-                                // Range-select from anchor to clicked item.
+                            } else if (shiftDown) {
+                                // Shift+Click: REPLACE selection with anchor→click range
+                                // (Explorer semantics). Ctrl+Shift+Click ADDS the range
+                                // to the existing selection instead.
+                                // Must NEVER fall through to the plain-click branch —
+                                // a Shift+Click that activated the image (because no
+                                // anchor existed yet) read as a stray left click.
                                 int anchorIdx = -1;
-                                for (size_t k = 0; k < m_thumbnails.size(); ++k) {
-                                    if (m_thumbnails[k].filePath == m_anchorPath) {
-                                        anchorIdx = static_cast<int>(k); break;
+                                if (!m_anchorPath.empty()) {
+                                    for (size_t k = 0; k < m_thumbnails.size(); ++k) {
+                                        if (m_thumbnails[k].filePath == m_anchorPath) {
+                                            anchorIdx = static_cast<int>(k); break;
+                                        }
                                     }
                                 }
-                                const int clickIdx = static_cast<int>(i);
+                                if (!ctrlDown) m_selectedPaths.clear();
                                 if (anchorIdx >= 0) {
-                                    const int lo = std::min(anchorIdx, clickIdx);
-                                    const int hi = std::max(anchorIdx, clickIdx);
+                                    const int lo = std::min(anchorIdx, hitIdx);
+                                    const int hi = std::max(anchorIdx, hitIdx);
                                     for (int k = lo; k <= hi; ++k)
                                         m_selectedPaths.insert(m_thumbnails[k].filePath);
+                                    // Anchor stays put so a subsequent Shift+Click
+                                    // re-ranges from the same origin (Explorer behavior).
                                 } else {
+                                    // First Shift+Click with no anchor: mark just this
+                                    // item and make it the range start — the next
+                                    // Shift+Click selects from here.
                                     m_selectedPaths.insert(hitPath);
                                     m_anchorPath = hitPath;
                                 }
@@ -1241,6 +1286,7 @@ namespace UI {
                                 // Re-check the live index map at click time — the cached
                                 // playlistIndex can be stale if the folder changed since
                                 // the last UpdateView (e.g. clicking between spawned panels).
+                                m_lastViewedPath = hitPath;
                                 auto mapIt = app.playlistIndexMap.find(hitPath);
                                 if (mapIt != app.playlistIndexMap.end()) {
                                     LoadImageIndex(m_hOwner, mapIt->second);
@@ -1249,7 +1295,6 @@ namespace UI {
                                 }
                                 UpdateView();
                             }
-                            break;
                         }
                     }
                     s_dragging = false;
@@ -1295,8 +1340,9 @@ namespace UI {
                 constexpr UINT ID_CTX_PASTE       = 4;
                 constexpr UINT ID_CTX_EXTRA       = 5;
                 constexpr UINT ID_CTX_CLOSE       = 6;
-                constexpr UINT ID_CTX_SELECT_ALL  = 7;
-                constexpr UINT ID_CTX_SELECT_NONE = 8;
+                constexpr UINT ID_CTX_SELECT_ALL     = 7;
+                constexpr UINT ID_CTX_SELECT_NONE    = 8;
+                constexpr UINT ID_CTX_SELECT_INVERSE = 9;
 
                 const bool hasFiles     = !opPaths.empty();
                 const bool canPaste     = !pasteDir.empty() && AppCommands::ClipboardHasFiles();
@@ -1332,6 +1378,8 @@ namespace UI {
                 }
                 AppendMenuW(hMenu, MF_SEPARATOR, 0, nullptr);
                 AppendMenuW(hMenu, hasAny ? MF_STRING : (MF_STRING | MF_GRAYED), ID_CTX_SELECT_ALL,  L"Select All");
+                AppendMenuW(hMenu, hasAny ? MF_STRING : (MF_STRING | MF_GRAYED),
+                                   ID_CTX_SELECT_INVERSE, L"Select Inverse");
                 AppendMenuW(hMenu, !m_selectedPaths.empty() ? MF_STRING : (MF_STRING | MF_GRAYED),
                                    ID_CTX_SELECT_NONE, L"Select None");
                 AppendMenuW(hMenu, MF_SEPARATOR, 0, nullptr);
@@ -1381,6 +1429,22 @@ namespace UI {
                         NotifySelectionOverlay();
                         InvalidateRect(m_hWnd, nullptr, FALSE);
                         break;
+                    case ID_CTX_SELECT_INVERSE: {
+                        // Selected → unselected, unselected → selected.
+                        std::unordered_set<std::wstring> inverted;
+                        for (const auto &t : m_thumbnails)
+                            if (!m_selectedPaths.count(t.filePath))
+                                inverted.insert(t.filePath);
+                        m_selectedPaths = std::move(inverted);
+                        // Keep a valid anchor: first selected item in strip order,
+                        // or cleared when the inversion selected nothing.
+                        m_anchorPath.clear();
+                        for (const auto &t : m_thumbnails)
+                            if (m_selectedPaths.count(t.filePath)) { m_anchorPath = t.filePath; break; }
+                        NotifySelectionOverlay();
+                        InvalidateRect(m_hWnd, nullptr, FALSE);
+                        break;
+                    }
                     case ID_CTX_SELECT_NONE:
                         m_selectedPaths.clear();
                         m_anchorPath.clear();
@@ -1423,6 +1487,23 @@ namespace UI {
     // =========================================================================
     // RenderEmptyPlaceholder
     void ThumbnailPanelWnd::OnContextMenuDelete(const std::vector<std::wstring> &paths) {
+        if (paths.empty()) return;
+
+        std::wstring msg;
+        if (paths.size() == 1) {
+            const std::wstring &name = paths[0].substr(paths[0].find_last_of(L"\\/") + 1);
+            msg = L"Move to Recycle Bin?\n\n" + name;
+        } else {
+            msg = L"Move " + std::to_wstring(paths.size()) + L" files to Recycle Bin?";
+            constexpr size_t MAX_LISTED = 5;
+            for (size_t i = 0; i < std::min(paths.size(), MAX_LISTED); ++i)
+                msg += L"\n  " + paths[i].substr(paths[i].find_last_of(L"\\/") + 1);
+            if (paths.size() > MAX_LISTED)
+                msg += L"\n  … and " + std::to_wstring(paths.size() - MAX_LISTED) + L" more";
+        }
+
+        if (!ThemedDialog::Confirm(m_hOwner, msg.c_str(), L"Delete")) return;
+
         AppCommands::DeleteFilesToRecycleBin(paths);
     }
 
@@ -1783,6 +1864,25 @@ namespace UI {
         }
         // ─────────────────────────────────────────────────────────────────────
 
+        // Rounded-rect helpers: when corner rounding is active, EVERY border
+        // (selection glow, hover, multi-select) uses the same radius so the
+        // whole strip reads as one consistent design.
+        const bool  roundedOn = effectsOn && TE::EFFECT_ROUNDED_CORNERS;
+        const float cornerR   = TE::CORNER_RADIUS * app.dpiScale;
+        const auto inflate = [](const D2D1_RECT_F &rc, float d) {
+            return D2D1::RectF(rc.left - d, rc.top - d, rc.right + d, rc.bottom + d);
+        };
+        // Stroke a rect rounded or square depending on the effects state.
+        const auto strokeRect = [&](const D2D1_RECT_F &rc, ID2D1Brush *brush,
+                                    float thickness, float extraRadius = 0.0f) {
+            if (roundedOn)
+                m_panelContext->DrawRoundedRectangle(
+                    D2D1::RoundedRect(rc, cornerR + extraRadius, cornerR + extraRadius),
+                    brush, thickness);
+            else
+                m_panelContext->DrawRectangle(rc, brush, thickness);
+        };
+
         for (size_t j = 0; j < resolved.size(); ++j) {
             const int origI = static_cast<int>(visIdx[j]);
             const auto &rv = resolved[j];
@@ -1827,28 +1927,45 @@ namespace UI {
 
             // Multi-selection: semi-transparent fill + solid border (drawn before
             // the viewer-selection green so green always wins on the same item).
+            // Fill + border follow the corner radius when rounding is active.
             if (!m_selectedPaths.empty() && m_selectedPaths.count(thumbPath) && m_multiSelBrush) {
                 m_multiSelBrush->SetOpacity(0.22f);
-                m_panelContext->FillRectangle(drawRect, m_multiSelBrush.Get());
+                if (roundedOn)
+                    m_panelContext->FillRoundedRectangle(
+                        D2D1::RoundedRect(drawRect, cornerR, cornerR), m_multiSelBrush.Get());
+                else
+                    m_panelContext->FillRectangle(drawRect, m_multiSelBrush.Get());
                 m_multiSelBrush->SetOpacity(1.0f);
-                m_panelContext->DrawRectangle(drawRect, m_multiSelBrush.Get(),
-                                              Constants::ThumbnailPanel::SELECTION_BORDER_THICKNESS);
+                strokeRect(drawRect, m_multiSelBrush.Get(),
+                           Constants::ThumbnailPanel::SELECTION_BORDER_THICKNESS);
             }
 
-            // EFFECT: Glow border — accent-color outline on selected thumb;
-            // falls back to plain green when effects are off.
+            // EFFECT: Glow border — soft green halo on the selected thumb: three
+            // rounded strokes at decreasing opacity fake a blur with zero GPU
+            // effect cost. Falls back to the classic flat green border when off.
             if (isSelected) {
-                if (effectsOn && TE::EFFECT_GLOW_BORDER && m_glowBrush)
-                    m_panelContext->DrawRectangle(drawRect, m_glowBrush.Get(),
-                                                  TE::GLOW_THICKNESS * app.dpiScale);
-                else
-                    m_panelContext->DrawRectangle(drawRect, m_borderBrush.Get(),
-                                                  Constants::ThumbnailPanel::SELECTION_BORDER_THICKNESS);
+                if (effectsOn && TE::EFFECT_GLOW_BORDER && m_glowBrush) {
+                    const float d = app.dpiScale;
+                    m_glowBrush->SetOpacity(TE::GLOW_OUTER_OPACITY);
+                    strokeRect(inflate(drawRect, TE::GLOW_OUTER_OFFSET * d),
+                               m_glowBrush.Get(), TE::GLOW_OUTER_STROKE * d,
+                               TE::GLOW_OUTER_OFFSET * d);
+                    m_glowBrush->SetOpacity(TE::GLOW_MID_OPACITY);
+                    strokeRect(inflate(drawRect, TE::GLOW_MID_OFFSET * d),
+                               m_glowBrush.Get(), TE::GLOW_MID_STROKE * d,
+                               TE::GLOW_MID_OFFSET * d);
+                    m_glowBrush->SetOpacity(TE::GLOW_CORE_OPACITY);
+                    strokeRect(drawRect, m_glowBrush.Get(), TE::GLOW_CORE_STROKE * d);
+                    m_glowBrush->SetOpacity(1.0f);
+                } else {
+                    strokeRect(drawRect, m_borderBrush.Get(),
+                               Constants::ThumbnailPanel::SELECTION_BORDER_THICKNESS);
+                }
             }
 
             if (isHover)
-                m_panelContext->DrawRectangle(drawRect, m_hoverBrush.Get(),
-                                              Constants::ThumbnailPanel::HOVER_THICKNESS);
+                strokeRect(drawRect, m_hoverBrush.Get(),
+                           Constants::ThumbnailPanel::HOVER_THICKNESS);
         }
 
         // Draw scrollbar when content overflows the visible area.

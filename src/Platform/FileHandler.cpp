@@ -893,13 +893,31 @@ void OpenSpecificImage(HWND hWnd, const std::wstring &filePathStr) {
 
     UpdateIoWorkerForPath(filePath.parent_path().wstring());
     UI::PushFolderHistory(filePath.parent_path().wstring());
-    uiManager.getActiveDirWnd().ClearDirThumbnailCache();
-    if (&uiManager.getActiveDirWnd() == &uiManager.getDirWindow())
-        uiManager.getDirWindow().SetPlaylistCopy(app.playlist);
+
+    // If the active dir panel is already displaying the clicked file's folder
+    // (e.g. clicking back into the F6 DirWnd after viewing an image from a
+    // spawned panel), keep its thumbnails and full item list intact — wiping
+    // the cache and collapsing the copy to a 1-file playlist causes a visible
+    // flicker while the background scan rebuilds what the panel already shows.
+    bool panelShowsDir = false;
+    {
+        const std::wstring panelFolder = uiManager.getActiveDirWnd().GetPanelFolder();
+        if (!panelFolder.empty()) {
+            std::error_code ec;
+            panelShowsDir = fs::equivalent(fs::path(panelFolder), filePath.parent_path(), ec) && !ec;
+        }
+    }
+
+    if (!panelShowsDir) {
+        uiManager.getActiveDirWnd().ClearDirThumbnailCache();
+        if (&uiManager.getActiveDirWnd() == &uiManager.getDirWindow())
+            uiManager.getDirWindow().SetPlaylistCopy(app.playlist);
+    }
 
     LoadImageIndex(hWnd, 0);
     app.previousImageIndex = -1;
-    uiManager.getActiveDirWnd().UpdateDirView();
+    if (!panelShowsDir)
+        uiManager.getActiveDirWnd().UpdateDirView();
 
     // Background: full directory scan + sort.
     // If the click came from a SpawnedDirWnd, keep F6 DirWnd showing its own

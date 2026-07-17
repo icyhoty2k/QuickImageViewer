@@ -2,6 +2,7 @@
 #include "../AppState.h"
 #include "../Overlays/OverlayManager.h"
 #include "../Platform/ConstantsStrings.h"
+#include "../Platform/FileHandler.h"
 #include <filesystem>
 
 UI::UIManager uiManager;
@@ -96,7 +97,19 @@ namespace UI {
     }
 
     void UIManager::SetActiveDirWnd(ThumbnailPanelWnd *panel) {
+        if (m_activeDirWnd == panel) return;
         m_activeDirWnd = panel;
+
+        // Restore the viewer to the last image this panel navigated to so
+        // switching panels feels like picking up where you left off.
+        if (!panel) return;
+        const std::wstring &last = panel->GetLastViewedPath();
+        if (last.empty()) return;
+        auto it = app.playlistIndexMap.find(last);
+        if (it != app.playlistIndexMap.end())
+            LoadImageIndex(m_hMainWnd, it->second);
+        else
+            OpenSpecificImage(m_hMainWnd, last);
     }
 
     HistoryListWnd &UIManager::getHistoryListWindow() {

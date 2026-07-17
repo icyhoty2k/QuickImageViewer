@@ -142,6 +142,7 @@ namespace UI {
             virtual std::wstring GetPanelFolder() const { return {}; }
 
             HWND GetOwnerHwnd() const { return m_hOwner; }
+            const std::wstring &GetLastViewedPath() const { return m_lastViewedPath; }
 
         protected:
 
@@ -236,6 +237,7 @@ namespace UI {
             HWND m_hOwner = nullptr;
             int8_t m_position = 0;
             bool m_sourceDirty = true;
-            std::wstring m_anchorPath; // anchor for Shift+Click range selection
+            std::wstring m_anchorPath;      // anchor for Shift+Click range selection
+            std::wstring m_lastViewedPath;  // last image loaded from this panel
     };
 } // namespace UI

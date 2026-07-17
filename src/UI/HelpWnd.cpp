@@ -289,7 +289,8 @@ namespace UI {
             L"Context menu on any thumbnail: Copy, Cut, Delete and Paste. Copy / Cut use "
             L"the Windows clipboard, so files can also be pasted in Explorer. A cut file "
             L"is shown dimmed until it is pasted. Delete sends the file to the Recycle "
-            L"Bin. Paste drops clipboard files into the strip's folder.", sThumbs);
+            L"Bin. Paste drops clipboard files into the strip's folder. Also: Select All, "
+            L"Select Inverse (flips the current selection) and Select None.", sThumbs);
 
         // ---------------------------------------------------------------
         const int sHist = Sec(L"📜", L"HISTORY PANEL",
