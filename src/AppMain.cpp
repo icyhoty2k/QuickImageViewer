@@ -25,6 +25,7 @@ extern void UpdateOverlaysForCurrentImage(HWND hWnd);
 #include "Platform/FileHandler.h"
 #include "GeoNames.h"
 #include "UI/DirWnd.h"
+#include "UI/ThemedDialog.h"
 #include "MouseHandler.h"
 #include "Input/Command.h"
 #include <windows.h>
@@ -646,6 +647,7 @@ int WINAPI wWinMain(HINSTANCE hInstance, [[maybe_unused]] HINSTANCE hPrevInstanc
         return 1;
     }
     AppCommands::changeAppThemeToDarkMode(hWnd, app.isDarkThemed);
+    UI::ThemedDialog::Init(hWnd);
     // Init UI Manager (The New Controller)
     uiManager.Init(hInstance, hWnd);
 

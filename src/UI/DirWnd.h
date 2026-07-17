@@ -62,9 +62,20 @@ namespace UI {
                 return {};
             }
 
-            // DirWnd always tracks app.playlist — no folder comparison needed.
             void OnFolderRefreshed(const std::wstring &dir,
                                    const std::vector<std::wstring> &playlist) override {
+                // Reject scan results that belong to a different folder.
+                // When a SpawnedDirWnd triggers a scan, F6 must not adopt
+                // that result and wipe its own playlist and selection.
+                const std::wstring myFolder = GetPanelFolder();
+                if (!myFolder.empty()) {
+                    bool match = false;
+                    try { match = std::filesystem::equivalent(
+                              std::filesystem::path(myFolder), std::filesystem::path(dir)); }
+                    catch (...) { match = (myFolder == dir); }
+                    if (!match) return;
+                }
+
                 if (playlist.empty()) {
                     std::error_code ec;
                     m_emptyDirMissing = !std::filesystem::is_directory(std::filesystem::path(dir), ec) || ec;

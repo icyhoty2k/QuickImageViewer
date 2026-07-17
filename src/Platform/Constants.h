@@ -8,7 +8,7 @@
 #define VER_MAJOR 2
 #define VER_MINOR 5
 #define VER_PATCH 0
-#define VER_BUILD 17072026
+#define VER_BUILD 0
 
 // Comma form  — FILEVERSION / PRODUCTVERSION in .rc  (e.g. 2,3,0,0)
 #define VER_NUMERIC   VER_MAJOR,VER_MINOR,VER_PATCH,VER_BUILD
@@ -178,12 +178,21 @@ namespace Constants {
 
             constexpr float CORNER_RADIUS = 6.0f; // logical px — DPI-scaled at runtime
             constexpr float HOVER_SCALE_FACTOR = 1.05f; // uniform enlarge on hover
-            // Glow border: Windows 11 accent blue #60CDFF
-            constexpr float GLOW_COLOR_R = 0.376f;
-            constexpr float GLOW_COLOR_G = 0.804f;
-            constexpr float GLOW_COLOR_B = 1.0f;
+            // Glow border: LightGreen — same hue as the classic selection border
+            constexpr float GLOW_COLOR_R = 0.565f;
+            constexpr float GLOW_COLOR_G = 0.933f;
+            constexpr float GLOW_COLOR_B = 0.565f;
             constexpr float GLOW_COLOR_A = 1.0f;
-            constexpr float GLOW_THICKNESS = 2.5f; // logical px
+            // Fake glow: three rounded strokes at decreasing opacity — reads as a
+            // soft halo with zero GPU-blur cost. All values logical px, DPI-scaled.
+            constexpr float GLOW_OUTER_OFFSET = 5.0f; // rect inflation of outermost pass
+            constexpr float GLOW_OUTER_STROKE = 6.0f;
+            constexpr float GLOW_OUTER_OPACITY = 0.12f;
+            constexpr float GLOW_MID_OFFSET = 2.0f;
+            constexpr float GLOW_MID_STROKE = 3.0f;
+            constexpr float GLOW_MID_OPACITY = 0.30f;
+            constexpr float GLOW_CORE_STROKE = 2.0f; // crisp innermost border
+            constexpr float GLOW_CORE_OPACITY = 0.95f;
         }
 
         // Scrollbar position enums

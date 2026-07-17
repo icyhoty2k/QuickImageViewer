@@ -52,6 +52,7 @@ set(SOURCES
         src/CMDArgs.cpp
         src/SlideshowTransitions.cpp
         src/GeoNames.cpp
+        src/UI/ThemedDialog.cpp
         libs/lib/tinyexr/include/miniz.c
 )
 
@@ -149,6 +150,7 @@ target_link_libraries(QuickImageViewer PRIVATE
         windowscodecs
         gdi32
         dwmapi
+        uxtheme
         advapi32
         shell32
         ole32
