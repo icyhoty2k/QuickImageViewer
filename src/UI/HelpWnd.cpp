@@ -272,6 +272,16 @@ namespace UI {
         Add(L"Scrollbar edge",
             L"Every strip has a thin scrollbar on its inner edge — click and drag it to "
             L"scrub through large folders quickly.", sThumbs);
+        Add(L"Drag thumbnail → other strip",
+            L"Drag a thumbnail from one directory strip onto another to MOVE the file "
+            L"there. Hold Ctrl while dropping to COPY instead — the mouse cursor shows "
+            L"which operation is active. Both strips refresh automatically and files can "
+            L"be restored from the Recycle Bin.", sThumbs);
+        Add(L"Right Click",
+            L"Context menu on any thumbnail: Copy, Cut, Delete and Paste. Copy / Cut use "
+            L"the Windows clipboard, so files can also be pasted in Explorer. A cut file "
+            L"is shown dimmed until it is pasted. Delete sends the file to the Recycle "
+            L"Bin. Paste drops clipboard files into the strip's folder.", sThumbs);
 
         // ---------------------------------------------------------------
         const int sHist = Sec(L"📜", L"HISTORY PANEL",
