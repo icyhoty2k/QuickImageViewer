@@ -6,8 +6,8 @@
 // *** Update ONLY the four numbers below to bump the version everywhere ***
 // =========================================================================
 #define VER_MAJOR 2
-#define VER_MINOR 4
-#define VER_PATCH 1
+#define VER_MINOR 5
+#define VER_PATCH 0
 #define VER_BUILD 17072026
 
 // Comma form  — FILEVERSION / PRODUCTVERSION in .rc  (e.g. 2,3,0,0)
