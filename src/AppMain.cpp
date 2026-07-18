@@ -302,20 +302,22 @@ LRESULT CALLBACK MainAppWndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM l
         // --- MOUSE HANDLERS ---
         case WM_LBUTTONDOWN:
         case WM_RBUTTONDOWN:
-            MouseHandler::HandleButtonDown(hWnd, message, lParam);
+        case WM_XBUTTONDOWN:
+            MouseHandler::HandleButtonDown(hWnd, message, wParam, lParam);
             return 0;
 
         case WM_LBUTTONUP:
         case WM_RBUTTONUP:
-            MouseHandler::HandleButtonUp(hWnd, message, lParam);
+        case WM_XBUTTONUP:
+            MouseHandler::HandleButtonUp(hWnd, message, wParam, lParam);
             return 0;
 
         case WM_MBUTTONDOWN:
-            MouseHandler::HandleButtonDown(hWnd, message, lParam);
+            MouseHandler::HandleButtonDown(hWnd, message, wParam, lParam);
             return 0;
 
         case WM_MBUTTONUP:
-            MouseHandler::HandleButtonUp(hWnd, message, lParam);
+            MouseHandler::HandleButtonDown(hWnd, message, wParam, lParam);
             return 0;
 
         case WM_MOUSEMOVE:
