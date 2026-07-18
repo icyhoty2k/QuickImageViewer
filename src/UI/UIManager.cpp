@@ -2,7 +2,9 @@
 #include "../AppState.h"
 #include "../Overlays/OverlayManager.h"
 #include "../Platform/ConstantsStrings.h"
+#include "../Platform/ConstantsTheme.h"
 #include <filesystem>
+#include <dwmapi.h>
 
 UI::UIManager uiManager;
 
@@ -321,6 +323,35 @@ namespace UI {
             if (!dir1.empty()) slot->panel->RefreshFromDisk(dir1);
             if (!dir2.empty() && dir2 != dir1) slot->panel->RefreshFromDisk(dir2);
         }
+    }
+
+    // -------------------------------------------------------------------------
+    // NotifyThemeChanged
+    // Called whenever app.isDarkThemed or app.themeFactor changes.
+    // Updates the DWM title-bar on every floating panel window and forces a
+    // client-area repaint so text/background colors follow the new factor.
+    // -------------------------------------------------------------------------
+    void UIManager::NotifyThemeChanged() {
+        const BOOL dark = app.isDarkThemed ? TRUE : FALSE;
+        const COLORREF capColor = Constants::Theme::ThemedGray(
+            Constants::Theme::Panel::BACKGROUND_INACTIVE, app.themeFactor);
+
+        auto applyAndRepaint = [&](IPanelWindow &panel) {
+            HWND h = panel.GetHwnd();
+            if (!h) return;
+            DwmSetWindowAttribute(h, Constants::DWMWA_DARK_MODE, &dark, sizeof(dark));
+            DwmSetWindowAttribute(h, Constants::DWMWA_CAPTION_COLOR_ATTR, &capColor, sizeof(capColor));
+            SetWindowPos(h, nullptr, 0, 0, 0, 0,
+                         SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | SWP_FRAMECHANGED | SWP_NOACTIVATE);
+            InvalidateRect(h, nullptr, FALSE);
+        };
+
+        applyAndRepaint(helpWnd);
+        applyAndRepaint(historyListWnd);
+        applyAndRepaint(exifWnd);
+        applyAndRepaint(jumpToWnd);
+        applyAndRepaint(findWnd);
+        applyAndRepaint(statsWnd);
     }
 
     void UIManager::RepaintAllPanels() {

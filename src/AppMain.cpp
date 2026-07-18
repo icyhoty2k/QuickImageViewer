@@ -35,7 +35,7 @@ extern void UpdateOverlaysForCurrentImage(HWND hWnd);
 #include <memory>     // Needed for std::unique_ptr for renderer management
 #include "Platform/DpiAwareInit.h"
 #include "../resources/resource.h"
-#include "Platform/RegistrySetup.h"
+#include "Persistence/RegistryManager.h"
 #include "Renderer/RendererD2D.h"
 #include "Renderer/RendererGDI.h"
 
@@ -455,40 +455,48 @@ LRESULT CALLBACK MainAppWndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM l
                     SetForegroundWindow(hWnd);
                 }
             } else if (LOWORD(lParam) == WM_RBUTTONUP) {
-                // --- OPTIMIZED: Extract coordinates directly from wParam ---
                 int x = GET_X_LPARAM(wParam);
                 int y = GET_Y_LPARAM(wParam);
 
                 HMENU hMenu = CreatePopupMenu();
                 AppendMenuW(hMenu, MF_STRING, 1, L"Restore QuickImageViewer");
-                AppendMenuW(hMenu, MF_STRING, 2, L"Help / Shortcuts"); // --- NEW ---
-                AppendMenuW(hMenu, MF_SEPARATOR, 0, nullptr); // Visual separator
+                AppendMenuW(hMenu, MF_STRING, 2, L"Help / Shortcuts");
+                AppendMenuW(hMenu, MF_SEPARATOR, 0, nullptr);
+                AppendMenuW(hMenu,
+                    MF_STRING | (app.isKeepInBackground ? MF_CHECKED : MF_UNCHECKED),
+                    4, L"Keep in Background");
+                AppendMenuW(hMenu,
+                    MF_STRING | (app.isEnableRunOnStartup ? MF_CHECKED : MF_UNCHECKED),
+                    5, L"Run on Startup");
+                AppendMenuW(hMenu, MF_SEPARATOR, 0, nullptr);
                 AppendMenuW(hMenu, MF_STRING, 3, L"Exit Completely");
 
-                // SetForegroundWindow is REQUIRED here
                 SetForegroundWindow(hWnd);
-
-                // Pass the extracted x and y directly
                 int cmd = TrackPopupMenu(hMenu, TPM_RETURNCMD | TPM_NONOTIFY, x, y, 0, hWnd, nullptr);
                 PostMessage(hWnd, WM_NULL, 0, 0);
                 DestroyMenu(hMenu);
 
-                if (cmd == 1) { // Restore clicked
+                if (cmd == 1) {
                     ShowWindow(hWnd, SW_SHOW);
                     ShowWindow(hWnd, SW_RESTORE);
                     SetForegroundWindow(hWnd);
-                } else if (cmd == 2) { // --- NEW: Help clicked ---
-                    // 1. Bring the main app to the front first
+                } else if (cmd == 2) {
                     ShowWindow(hWnd, SW_SHOW);
                     ShowWindow(hWnd, SW_RESTORE);
                     SetForegroundWindow(hWnd);
-
-                    // 2. Trigger your help window.
-                    // Assuming uiManager holds the help window instance based on your architecture:
                     uiManager.getHelpWindow().Show();
-                } else if (cmd == 3) { // Exit clicked
+                } else if (cmd == 3) {
                     AppCommands::RemoveTrayIcon(hWnd);
                     DestroyWindow(hWnd);
+                } else if (cmd == 4) {
+                    app.isKeepInBackground = !app.isKeepInBackground;
+                    Persistence::Registry::SaveSetting(Constants::Registry::KEEP_IN_BACKGROUND,
+                        static_cast<DWORD>(app.isKeepInBackground));
+                } else if (cmd == 5) {
+                    app.isEnableRunOnStartup = !app.isEnableRunOnStartup;
+                    Persistence::Registry::SaveSetting(Constants::Registry::RUN_ON_STARTUP,
+                        static_cast<DWORD>(app.isEnableRunOnStartup));
+                    Persistence::Registry::EnableRunOnStartup(app.isEnableRunOnStartup);
                 }
             }
             return 0;
@@ -496,12 +504,14 @@ LRESULT CALLBACK MainAppWndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM l
 
 
         case WM_CLOSE: {
-            // 1. "Hide" instead of "Destroy"
-            // This removes the window from sight but keeps the process and message loop alive.
-            ShowWindow(hWnd, SW_HIDE);
-            AppCommands::AddTrayIcon(hWnd);
-
-            return 0; // Returning 0 prevents WM_DESTROY from being called
+            if (app.isKeepInBackground) {
+                ShowWindow(hWnd, SW_HIDE);
+                AppCommands::AddTrayIcon(hWnd);
+            } else {
+                AppCommands::RemoveTrayIcon(hWnd);
+                DestroyWindow(hWnd);
+            }
+            return 0;
         }
 
         case WM_SETCURSOR:
@@ -583,20 +593,36 @@ int WINAPI wWinMain(HINSTANCE hInstance, [[maybe_unused]] HINSTANCE hPrevInstanc
     CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED | COINIT_DISABLE_OLE1DDE);
     if (FAILED(CoCreateInstance(CLSID_WICImagingFactory, nullptr, CLSCTX_INPROC_SERVER, IID_PPV_ARGS(&app.wicFactory)))) return 0;
 
-    // --- COMMAND LINE PARSING (early — -dedicated must be known before registry calls) ---
+    // --- COMMAND LINE PARSING (before registry — args are highest priority) ---
     int argc;
     LPWSTR *argv = CommandLineToArgvW(GetCommandLineW(), &argc);
-    for (int i = 1; i < argc; ++i) {
-        if (_wcsicmp(argv[i], L"-dedicated") == 0) {
-            app.isDedicated = true;
-            break;
-        }
-    }
+    const CmdArgs earlyArgs = ParseCmdArgs(argc, argv);
+    // Save the raw first argument before freeing — used by the single-instance wake signal.
+    const std::wstring firstRawArg = (argc > 1) ? std::wstring(argv[1]) : L"";
+    LocalFree(argv);
+    argv = nullptr; // guard against accidental use below
 
-    if (!app.isDedicated) {
-        System::RegisterAppForOpenWith();
-        System::EnableRunOnStartup(Constants::IS_ENABLE_RUN_ON_STARTUP);
-    }
+    // Dedicated mode must be known before any registry call so PrefixedName() works.
+    if (earlyArgs.dedicated) app.isDedicated = true;
+
+    // Registry is the source of truth for user preferences in all modes.
+    app.isEnableRunOnStartup = Persistence::Registry::LoadSetting(
+        Constants::Registry::RUN_ON_STARTUP,
+        static_cast<DWORD>(Constants::IS_ENABLE_RUN_ON_STARTUP)) != 0;
+    app.isKeepInBackground = Persistence::Registry::LoadSetting(
+        Constants::Registry::KEEP_IN_BACKGROUND,
+        static_cast<DWORD>(Constants::IS_KEEP_IN_BACKGROUND)) != 0;
+
+    // Command-line overrides: args beat registry values.
+    if (earlyArgs.runOnStartup) app.isEnableRunOnStartup = true;
+
+    // Shell integration (open-with) only for normal instances.
+    if (!app.isDedicated)
+        Persistence::Registry::RegisterAppForOpenWith();
+
+    // Startup entry: always apply so exe relocation is picked up automatically.
+    // EnableRunOnStartup is mode-aware — dedicated writes to its own Run key entry.
+    Persistence::Registry::EnableRunOnStartup(app.isEnableRunOnStartup);
 
     // --- SINGLE INSTANCE & RAM RESIDENT LOGIC ---
     bool bypassMutex = (GetAsyncKeyState(VK_SHIFT) & 0x8000) != 0;
@@ -616,11 +642,11 @@ int WINAPI wWinMain(HINSTANCE hInstance, [[maybe_unused]] HINSTANCE hPrevInstanc
             AllowSetForegroundWindow(existingProcId);
 
             COPYDATASTRUCT cds;
-            if (argc > 1) {
+            if (!firstRawArg.empty()) {
                 // Signal 1: Load new image and wake up
                 cds.dwData = 1;
-                cds.cbData = (DWORD) ((wcslen(argv[1]) + 1) * sizeof(wchar_t));
-                cds.lpData = (void *) argv[1];
+                cds.cbData = (DWORD) ((firstRawArg.size() + 1) * sizeof(wchar_t));
+                cds.lpData = (void *) firstRawArg.c_str();
             } else {
                 // Signal 2: Wake up only (no file passed)
                 cds.dwData = 2;
@@ -629,7 +655,6 @@ int WINAPI wWinMain(HINSTANCE hInstance, [[maybe_unused]] HINSTANCE hPrevInstanc
             }
             SendMessageW(hExistingWnd, WM_COPYDATA, 0, (LPARAM) &cds);
         }
-        LocalFree(argv);
         ReleaseMutex(hMutex);
         CloseHandle(hMutex);
         return 0;
@@ -647,7 +672,6 @@ int WINAPI wWinMain(HINSTANCE hInstance, [[maybe_unused]] HINSTANCE hPrevInstanc
 
     HWND hWnd = CreateViewerWindow(hInstance, wc.lpszClassName);
     if (!hWnd) {
-        LocalFree(argv);
         return 1;
     }
     AppCommands::changeAppThemeToDarkMode(hWnd, app.isDarkThemed);
@@ -680,12 +704,13 @@ int WINAPI wWinMain(HINSTANCE hInstance, [[maybe_unused]] HINSTANCE hPrevInstanc
     RegisterDragDrop(hWnd, (g_pDropTarget = new DropTarget(hWnd)));
 
     AppCommands::changeAppCornerPreference(hWnd, app.cornerPreference);
-
-    // Parse and apply all command-line arguments
-    const CmdArgs cmdArgs = ParseCmdArgs(argc, argv);
-    LocalFree(argv); // free early — ApplyCmdArgs works from the parsed struct
-
-    ApplyCmdArgs(hWnd, cmdArgs, nCmdShow);
+    // 1. Load your saved persistent settings FIRST
+    // This establishes the user's baseline state.
+    DWORD savedFactor = Persistence::Registry::LoadSetting(Constants::Registry::THEME_FACTOR, static_cast<DWORD>(Constants::Theme::DEFAULT_THEME_FACTOR));
+    app.themeFactor = static_cast<float>(savedFactor) / 100.0f;
+    AppCommands::changeAppThemeFactor(hWnd, app.themeFactor);
+    // 2. Apply command-line arguments SECOND (already parsed above; args beat registry)
+    ApplyCmdArgs(hWnd, earlyArgs, nCmdShow);
 
     MSG msg{};
     while (GetMessage(&msg, nullptr, 0, 0)) {

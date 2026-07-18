@@ -1,10 +1,21 @@
-#include "RegistrySetup.h"
+#include "RegistryManager.h"
 #include <windows.h>
 #include <string>
 #include <shlobj.h>
-#include "Constants.h"
+#include "../Platform/Constants.h"
+#include "../AppState.h"
 
-namespace System {
+extern AppState app;
+
+namespace Persistence::Registry {
+    // Returns the value name to use in the registry, prepending the dedicated-mode
+    // prefix when this instance was launched with -dedicated.
+    static std::wstring PrefixedName(const wchar_t *valueName) {
+        if (app.isDedicated)
+            return std::wstring(Constants::DedicatedMode::DEDICATED_MODE_GLOBAL_PREFIX) + valueName;
+        return valueName;
+    }
+
     bool NeedsRegistration(const std::wstring &expectedCommand) {
         HKEY hKey;
         // Uses dynamic ROOT_HIVE
@@ -85,38 +96,40 @@ namespace System {
     }
 
     void EnableRunOnStartup(bool isEnabledRunOnStartup) {
+        // Dedicated and normal instances each get their own Run key entry so they
+        // can coexist without clobbering each other. The dedicated entry name is
+        // built from the same prefix that governs all other dedicated-mode names.
+        const std::wstring runValueName = app.isDedicated
+            ? std::wstring(Constants::DedicatedMode::DEDICATED_MODE_GLOBAL_PREFIX) + Constants::Registry::RUN_VALUE_NAME
+            : Constants::Registry::RUN_VALUE_NAME;
+
         HKEY hKey;
-        // Open the Run key
         if (RegCreateKeyExW(Constants::Registry::ROOT_HIVE, Constants::Registry::RUN_KEY,
                             0, nullptr, REG_OPTION_NON_VOLATILE, KEY_WRITE, nullptr, &hKey, nullptr) != ERROR_SUCCESS) {
             return;
         }
 
         if (!isEnabledRunOnStartup) {
-            // Delete the value to disable startup
-            RegDeleteValueW(hKey, Constants::Registry::RUN_VALUE_NAME);
+            RegDeleteValueW(hKey, runValueName.c_str());
         } else {
-            // Get current executable path
             std::wstring exePathStr(32768, L'\0');
             DWORD len = GetModuleFileNameW(nullptr, exePathStr.data(), static_cast<DWORD>(exePathStr.size()));
-
             if (len == 0 || len >= 32768) {
                 RegCloseKey(hKey);
                 return;
             }
             exePathStr.resize(len);
 
-            std::wstring command = std::wstring(L"\"") + exePathStr + L"\" -background";
+            // Dedicated instances must relaunch with -dedicated so they stay isolated.
+            std::wstring command = std::wstring(L"\"") + exePathStr +
+                                   (app.isDedicated ? L"\" -dedicated -background" : L"\" -background");
 
-            // Check if update is needed (your existing logic)
             bool needsUpdate = true;
-            DWORD size = 0;
-            DWORD type = 0;
-
-            if (RegQueryValueExW(hKey, Constants::Registry::RUN_VALUE_NAME, nullptr, &type, nullptr, &size) == ERROR_SUCCESS) {
+            DWORD size = 0, type = 0;
+            if (RegQueryValueExW(hKey, runValueName.c_str(), nullptr, &type, nullptr, &size) == ERROR_SUCCESS) {
                 if (type == REG_SZ && size <= 1024 * 1024) {
                     std::wstring current(size / sizeof(wchar_t), L'\0');
-                    if (RegQueryValueExW(hKey, Constants::Registry::RUN_VALUE_NAME, nullptr, nullptr,
+                    if (RegQueryValueExW(hKey, runValueName.c_str(), nullptr, nullptr,
                                          reinterpret_cast<LPBYTE>(current.data()), &size) == ERROR_SUCCESS) {
                         if (!current.empty() && current.back() == L'\0') current.pop_back();
                         if (current == command) needsUpdate = false;
@@ -125,7 +138,7 @@ namespace System {
             }
 
             if (needsUpdate) {
-                RegSetValueExW(hKey, Constants::Registry::RUN_VALUE_NAME, 0, REG_SZ,
+                RegSetValueExW(hKey, runValueName.c_str(), 0, REG_SZ,
                                reinterpret_cast<const BYTE *>(command.c_str()),
                                static_cast<DWORD>((command.length() + 1) * sizeof(wchar_t)));
             }
@@ -134,36 +147,41 @@ namespace System {
     }
 
     void SaveSetting(const wchar_t *valueName, DWORD value) {
+        const std::wstring key = PrefixedName(valueName);
         RegSetKeyValueW(Constants::Registry::ROOT_HIVE, Constants::Registry::ROOT_KEY,
-                        valueName, REG_DWORD, &value, sizeof(DWORD));
+                        key.c_str(), REG_DWORD, &value, sizeof(DWORD));
     }
 
     DWORD LoadSetting(const wchar_t *valueName, DWORD defaultValue) {
+        const std::wstring key = PrefixedName(valueName);
         DWORD value = defaultValue;
         DWORD size = sizeof(DWORD);
         RegGetValueW(Constants::Registry::ROOT_HIVE, Constants::Registry::ROOT_KEY,
-                     valueName, RRF_RT_REG_DWORD, nullptr, &value, &size);
+                     key.c_str(), RRF_RT_REG_DWORD, nullptr, &value, &size);
         return value;
     }
 
     void SaveStringSetting(const wchar_t *valueName, const std::wstring &value) {
-        RegSetKeyValueW(Constants::Registry::ROOT_HIVE, Constants::Registry::ROOT_KEY, valueName,
+        const std::wstring key = PrefixedName(valueName);
+        RegSetKeyValueW(Constants::Registry::ROOT_HIVE, Constants::Registry::ROOT_KEY, key.c_str(),
                         REG_SZ, value.c_str(), static_cast<DWORD>((value.length() + 1) * sizeof(wchar_t)));
     }
 
     void LoadStringSetting(const wchar_t *valueName, wchar_t *buffer, DWORD bufferSize) {
+        const std::wstring key = PrefixedName(valueName);
         DWORD size = bufferSize * sizeof(wchar_t);
-        RegGetValueW(Constants::Registry::ROOT_HIVE, Constants::Registry::ROOT_KEY, valueName,
+        RegGetValueW(Constants::Registry::ROOT_HIVE, Constants::Registry::ROOT_KEY, key.c_str(),
                      RRF_RT_REG_SZ, nullptr, buffer, &size);
     }
 
     std::wstring LoadStringSetting(const wchar_t *valueName) {
+        const std::wstring key = PrefixedName(valueName);
         DWORD size = 0;
-        if (RegGetValueW(Constants::Registry::ROOT_HIVE, Constants::Registry::ROOT_KEY, valueName,
+        if (RegGetValueW(Constants::Registry::ROOT_HIVE, Constants::Registry::ROOT_KEY, key.c_str(),
                          RRF_RT_REG_SZ, nullptr, nullptr, &size) != ERROR_SUCCESS || size == 0)
             return {};
         std::wstring result(size / sizeof(wchar_t), L'\0');
-        if (RegGetValueW(Constants::Registry::ROOT_HIVE, Constants::Registry::ROOT_KEY, valueName,
+        if (RegGetValueW(Constants::Registry::ROOT_HIVE, Constants::Registry::ROOT_KEY, key.c_str(),
                          RRF_RT_REG_SZ, nullptr, result.data(), &size) != ERROR_SUCCESS)
             return {};
         // RegGetValueW includes the null terminator in size; trim it

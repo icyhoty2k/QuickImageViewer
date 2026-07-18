@@ -209,6 +209,10 @@ namespace UI {
             void RepaintAllPanels();
             void RefreshPanelDirs(const std::wstring &dir1, const std::wstring &dir2);
 
+            // Update DWM title-bar theme and repaint all floating panel windows.
+            // Call whenever app.isDarkThemed or app.themeFactor changes.
+            void NotifyThemeChanged();
+
         private:
             HelpWnd        helpWnd;
             CacheWnd       cacheWnd;
