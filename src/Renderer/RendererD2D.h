@@ -14,7 +14,7 @@
 #include <mutex>
 #include <vector>
 
-#include "Thumbnail.h"
+#include "../UI/ThumbnailPanels/Thumbnail.h"
 #include "WorkerThread.h"
 #include "Platform/ConstantsTheme.h"
 

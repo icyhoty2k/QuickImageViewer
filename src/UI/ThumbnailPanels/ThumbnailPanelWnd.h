@@ -10,7 +10,7 @@
 #include <dwrite_3.h>
 #include <wrl/client.h>
 
-#include "IPanelWindow.h"
+#include "../IPanelWindow.h"
 #include "Thumbnail.h"
 
 // Forward-declare so we can borrow devices without pulling in the full header

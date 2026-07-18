@@ -1,8 +1,8 @@
 #include "FindWnd.h"
-#include "../AppState.h"
-#include "../Platform/Constants.h"
-#include "../Platform/FileHandler.h"
-#include "../Renderer/IRenderer.h"
+#include "../../AppState.h"
+#include "../../Platform/Constants.h"
+#include "../../Platform/FileHandler.h"
+#include "../../Renderer/IRenderer.h"
 #include <algorithm>
 #include <cwctype>
 

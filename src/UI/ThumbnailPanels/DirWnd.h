@@ -7,49 +7,81 @@
 #include <algorithm>
 #include "ThumbnailPanelWnd.h"
 #include "Thumbnail.h"
-#include "../Platform/FileHandler.h"
+#include "../../Platform/FileHandler.h"
 
 namespace UI {
     class DirWnd : public ThumbnailPanelWnd {
         public:
             void DoClearDirThumbnailCache() override;
 
-            void SyncDirSelectionRectangle() { ThumbnailPanelWnd::SyncSelectionRectangle(); }
-            void UpdateDirView()             { ThumbnailPanelWnd::UpdateView(); }
-            void ToggleDirWindow()           { ThumbnailPanelWnd::Toggle(); }
-            void MoveDirWindow()             { ThumbnailPanelWnd::MovePanel(); }
-            void HideDirWindow()             { ThumbnailPanelWnd::Hide(); }
+            void SyncDirSelectionRectangle() {
+                ThumbnailPanelWnd::SyncSelectionRectangle();
+            }
+
+            void UpdateDirView() {
+                ThumbnailPanelWnd::UpdateView();
+            }
+
+            void ToggleDirWindow() {
+                ThumbnailPanelWnd::Toggle();
+            }
+
+            void MoveDirWindow() {
+                ThumbnailPanelWnd::MovePanel();
+            }
+
+            void HideDirWindow() {
+                ThumbnailPanelWnd::Hide();
+            }
 
         public:
             // Load playlist from folder (only used when F5 actively navigates)
             void LoadPlaylist(const std::wstring &folderPath);
 
             // Get the folder path currently displayed in F5
-            std::wstring GetCurrentFolder() const { return m_currentFolder; }
+            std::wstring GetCurrentFolder() const {
+                return m_currentFolder;
+            }
+
             // Copy the sorted playlist (used to keep F5 in sync with main folder, isolated from spawned hijacking)
             void SetPlaylistCopy(const std::vector<std::wstring> &playlist) {
                 m_dirPlaylist = playlist;
-                m_thumbnails.clear();  // Clear cached thumbnails
+                m_thumbnails.clear(); // Clear cached thumbnails
                 if (m_hWnd) {
                     // Force immediate rebuild: if visible, repaint now; if hidden, repaint when shown
                     InvalidateRect(m_hWnd, nullptr, FALSE);
                     if (IsWindowVisible(m_hWnd)) {
-                        UpdateView();  // Immediate rebuild if visible
+                        UpdateView(); // Immediate rebuild if visible
                     }
                 }
             }
 
         protected:
-            const wchar_t *ClassName()    const override { return L"QIV_DirWindow"; }
-            const wchar_t *WindowTitle()  const override { return L"Directory"; }
-            bool UsesDirThumbCache()      const override { return true; }
-            bool IsDirPanel()             const override { return true; }
+            const wchar_t *ClassName() const override {
+                return L"QIV_DirWindow";
+            }
+
+            const wchar_t *WindowTitle() const override {
+                return L"Directory";
+            }
+
+            bool UsesDirThumbCache() const override {
+                return true;
+            }
+
+            bool IsDirPanel() const override {
+                return true;
+            }
 
             int GetKeyToggle() const override;
-            int GetKeyMove()   const override;
+
+            int GetKeyMove() const override;
 
             std::vector<std::wstring> GetSourceItems() const override;
-            bool HasOwnPlaylist() const override { return true; }
+
+            bool HasOwnPlaylist() const override {
+                return true;
+            }
 
             void PostBuildHook() override;
 
@@ -70,9 +102,12 @@ namespace UI {
                 const std::wstring myFolder = GetPanelFolder();
                 if (!myFolder.empty()) {
                     bool match = false;
-                    try { match = std::filesystem::equivalent(
-                              std::filesystem::path(myFolder), std::filesystem::path(dir)); }
-                    catch (...) { match = (myFolder == dir); }
+                    try {
+                        match = std::filesystem::equivalent(
+                                std::filesystem::path(myFolder), std::filesystem::path(dir));
+                    } catch (...) {
+                        match = (myFolder == dir);
+                    }
                     if (!match) return;
                 }
 
@@ -86,7 +121,7 @@ namespace UI {
                     UpdateView();
                 } else {
                     m_emptyDir.clear();
-                    m_emptyDirActive  = false;
+                    m_emptyDirActive = false;
                     m_emptyDirMissing = false;
                     m_emptyDirPathLayout.Reset();
                     SetPlaylistCopy(playlist);
@@ -94,8 +129,8 @@ namespace UI {
             }
 
         private:
-            std::wstring m_currentFolder;  // Track current folder for history marking
-            std::vector<std::wstring> m_dirPlaylist;  // F5 owns its own playlist, isolated from app.playlist
+            std::wstring m_currentFolder; // Track current folder for history marking
+            std::vector<std::wstring> m_dirPlaylist; // F5 owns its own playlist, isolated from app.playlist
     };
 
     // =========================================================================
@@ -129,28 +164,44 @@ namespace UI {
                 for (auto it = fs::directory_iterator(
                              dir, fs::directory_options::skip_permission_denied, ec);
                      !ec && it != fs::directory_iterator(); it.increment(ec)) {
-                    if (!it->is_regular_file(ec)) { ec.clear(); continue; }
+                    if (!it->is_regular_file(ec)) {
+                        ec.clear();
+                        continue;
+                    }
                     if (!is_image_ext(it->path().extension().wstring())) continue;
                     fs::path canon = fs::canonical(it->path(), ec);
-                    if (ec) { ec.clear(); canon = it->path(); }
+                    if (ec) {
+                        ec.clear();
+                        canon = it->path();
+                    }
                     m_localPlaylist.push_back(canon.wstring());
                 }
                 std::sort(m_localPlaylist.begin(), m_localPlaylist.end());
             }
 
-            std::wstring GetFolderPath() const { return m_folderPath; }
+            std::wstring GetFolderPath() const {
+                return m_folderPath;
+            }
 
         protected:
-            std::vector<std::wstring> GetSourceItems() const override { return m_localPlaylist; }
-            bool HasOwnPlaylist() const override { return true; }
+            std::vector<std::wstring> GetSourceItems() const override {
+                return m_localPlaylist;
+            }
+
+            bool HasOwnPlaylist() const override {
+                return true;
+            }
 
             // Only sync when the scanned dir matches this panel's folder.
             void OnFolderRefreshed(const std::wstring &dir,
                                    const std::vector<std::wstring> &playlist) override {
                 namespace fs = std::filesystem;
                 bool match = false;
-                try { match = !m_folderPath.empty() && fs::equivalent(m_folderPath, dir); }
-                catch (...) { match = (m_folderPath == dir); }
+                try {
+                    match = !m_folderPath.empty() && fs::equivalent(m_folderPath, dir);
+                } catch (...) {
+                    match = (m_folderPath == dir);
+                }
                 if (!match) return;
 
                 if (playlist.empty()) {
@@ -163,7 +214,7 @@ namespace UI {
                     UpdateView();
                 } else {
                     m_emptyDir.clear();
-                    m_emptyDirActive  = false;
+                    m_emptyDirActive = false;
                     m_emptyDirMissing = false;
                     m_emptyDirPathLayout.Reset();
                     m_localPlaylist = playlist;
@@ -176,15 +227,20 @@ namespace UI {
                 if (m_folderPath.empty()) return;
                 namespace fs = std::filesystem;
                 bool match = false;
-                try { match = fs::equivalent(fs::path(m_folderPath), fs::path(dir)); }
-                catch (...) { match = (m_folderPath == dir); }
+                try {
+                    match = fs::equivalent(fs::path(m_folderPath), fs::path(dir));
+                } catch (...) {
+                    match = (m_folderPath == dir);
+                }
                 if (!match) return;
                 LoadFolder(dir);
                 m_sourceDirty = true; // force full thumbnail rebuild, not just geometry
                 UpdateDirView();
             }
 
-            std::wstring GetPanelFolder() const override { return m_folderPath; }
+            std::wstring GetPanelFolder() const override {
+                return m_folderPath;
+            }
 
             // Each slot gets a unique Win32 class name so RegisterClassW doesn't
             // silently reuse the first registration for all three slots.
@@ -199,12 +255,13 @@ namespace UI {
                 return names[m_slot < 4 ? m_slot : 0];
             }
 
-            const wchar_t *WindowTitle() const override { return L"Directory (Spawned)"; }
+            const wchar_t *WindowTitle() const override {
+                return L"Directory (Spawned)";
+            }
 
         private:
             std::vector<std::wstring> m_localPlaylist;
             std::wstring m_folderPath;
             int m_slot = 0;
     };
-
 } // namespace UI

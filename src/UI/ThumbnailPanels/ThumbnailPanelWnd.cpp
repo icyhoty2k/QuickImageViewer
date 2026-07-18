@@ -10,15 +10,15 @@
 #include <shellscalingapi.h>
 
 #include "FileHandler.h"
-#include "UIManager.h"
-#include "../AppState.h"
-#include "../Platform/Constants.h"
-#include "../Input/Shortcuts.h"
-#include "../Input/AppCommands.h"
-#include "../Renderer/RendererD2D.h"
-#include "../Overlays/OverlayManager.h"
-#include "../Platform/ConstantsStrings.h"
-#include "ThemedDialog.h"
+#include "../UIManager.h"
+#include "../../AppState.h"
+#include "../../Platform/Constants.h"
+#include "../../Input/Shortcuts.h"
+#include "../../Input/AppCommands.h"
+#include "../../Renderer/RendererD2D.h"
+#include "../../Overlays/OverlayManager.h"
+#include "../../Platform/ConstantsStrings.h"
+#include "../ThemedDialog.h"
 
 namespace UI {
     std::unordered_set<std::wstring> ThumbnailPanelWnd::s_cutPaths;
@@ -44,7 +44,8 @@ namespace UI {
         if (!m_dirSizeStr.empty()) text += L" → " + m_dirSizeStr;
         const auto lastSlash = folder.find_last_of(L"\\/");
         const UINT32 boldStart = (lastSlash != std::wstring::npos)
-                                 ? static_cast<UINT32>(lastSlash + 1) : 0;
+                                     ? static_cast<UINT32>(lastSlash + 1)
+                                     : 0;
         return {std::move(text), boldStart};
     }
 
@@ -52,7 +53,7 @@ namespace UI {
         if (GetPanelFolder().empty()) return;
         int64_t total = 0;
         std::error_code ec;
-        for (const auto &t : m_thumbnails) {
+        for (const auto &t: m_thumbnails) {
             const auto sz = std::filesystem::file_size(t.filePath, ec);
             if (!ec) total += static_cast<int64_t>(sz);
             ec.clear();
@@ -79,6 +80,7 @@ namespace UI {
             InvalidateRect(hWnd, nullptr, FALSE);
         }
     }
+
     // =========================================================================
     // OLE drag-and-drop helpers
     // =========================================================================
@@ -86,183 +88,245 @@ namespace UI {
     // IDataObject carrying one or more CF_HDROP file paths.
     class PanelDataObject final : public IDataObject {
         std::vector<std::wstring> m_paths;
-        ULONG                     m_ref = 1;
-    public:
-        explicit PanelDataObject(std::vector<std::wstring> paths) : m_paths(std::move(paths)) {}
+        ULONG m_ref = 1;
 
-        HRESULT __stdcall QueryInterface(REFIID riid, void **ppv) override {
-            if (riid == IID_IUnknown || riid == IID_IDataObject)
-                { *ppv = this; AddRef(); return S_OK; }
-            *ppv = nullptr; return E_NOINTERFACE;
-        }
-        ULONG __stdcall AddRef()  override { return InterlockedIncrement(&m_ref); }
-        ULONG __stdcall Release() override {
-            ULONG r = InterlockedDecrement(&m_ref);
-            if (!r) delete this;
-            return r;
-        }
+        public:
+            explicit PanelDataObject(std::vector<std::wstring> paths) : m_paths(std::move(paths)) {}
 
-        HRESULT __stdcall GetData(FORMATETC *fmt, STGMEDIUM *med) override {
-            if (!fmt || !med) return E_INVALIDARG;
-            if (fmt->cfFormat != CF_HDROP || !(fmt->tymed & TYMED_HGLOBAL))
-                return DV_E_FORMATETC;
-            // Build a double-null-terminated multi-path block.
-            size_t totalChars = 1; // final null
-            for (const auto &p : m_paths) totalChars += p.size() + 1;
-            const size_t total = sizeof(DROPFILES) + totalChars * sizeof(wchar_t);
-            HGLOBAL hg = GlobalAlloc(GHND, total);
-            if (!hg) return E_OUTOFMEMORY;
-            auto *df   = static_cast<DROPFILES *>(GlobalLock(hg));
-            df->pFiles = sizeof(DROPFILES);
-            df->fWide  = TRUE;
-            df->pt     = {};
-            df->fNC    = FALSE;
-            wchar_t *dst = reinterpret_cast<wchar_t *>(df + 1);
-            for (const auto &p : m_paths) {
-                wmemcpy(dst, p.c_str(), p.size() + 1);
-                dst += p.size() + 1;
+            HRESULT __stdcall QueryInterface(REFIID riid, void **ppv) override {
+                if (riid == IID_IUnknown || riid == IID_IDataObject) {
+                    *ppv = this;
+                    AddRef();
+                    return S_OK;
+                }
+                *ppv = nullptr;
+                return E_NOINTERFACE;
             }
-            *dst = L'\0';
-            GlobalUnlock(hg);
-            med->tymed          = TYMED_HGLOBAL;
-            med->hGlobal        = hg;
-            med->pUnkForRelease = nullptr;
-            return S_OK;
-        }
 
-        HRESULT __stdcall QueryGetData(FORMATETC *fmt) override {
-            if (!fmt) return E_INVALIDARG;
-            return (fmt->cfFormat == CF_HDROP && (fmt->tymed & TYMED_HGLOBAL))
-                   ? S_OK : DV_E_FORMATETC;
-        }
+            ULONG __stdcall AddRef() override {
+                return InterlockedIncrement(&m_ref);
+            }
 
-        HRESULT __stdcall GetDataHere(FORMATETC *, STGMEDIUM *)               override { return E_NOTIMPL; }
-        HRESULT __stdcall GetCanonicalFormatEtc(FORMATETC *, FORMATETC *pOut) override {
-            pOut->ptd = nullptr; return DATA_S_SAMEFORMATETC;
-        }
-        HRESULT __stdcall SetData(FORMATETC *, STGMEDIUM *, BOOL)             override { return E_NOTIMPL; }
-        HRESULT __stdcall EnumFormatEtc(DWORD, IEnumFORMATETC **)             override { return E_NOTIMPL; }
-        HRESULT __stdcall DAdvise(FORMATETC *, DWORD, IAdviseSink *, DWORD *) override { return E_NOTIMPL; }
-        HRESULT __stdcall DUnadvise(DWORD)                                    override { return E_NOTIMPL; }
-        HRESULT __stdcall EnumDAdvise(IEnumSTATDATA **)                       override { return E_NOTIMPL; }
+            ULONG __stdcall Release() override {
+                ULONG r = InterlockedDecrement(&m_ref);
+                if (!r) delete this;
+                return r;
+            }
+
+            HRESULT __stdcall GetData(FORMATETC *fmt, STGMEDIUM *med) override {
+                if (!fmt || !med) return E_INVALIDARG;
+                if (fmt->cfFormat != CF_HDROP || !(fmt->tymed & TYMED_HGLOBAL))
+                    return DV_E_FORMATETC;
+                // Build a double-null-terminated multi-path block.
+                size_t totalChars = 1; // final null
+                for (const auto &p: m_paths) totalChars += p.size() + 1;
+                const size_t total = sizeof(DROPFILES) + totalChars * sizeof(wchar_t);
+                HGLOBAL hg = GlobalAlloc(GHND, total);
+                if (!hg) return E_OUTOFMEMORY;
+                auto *df = static_cast<DROPFILES *>(GlobalLock(hg));
+                df->pFiles = sizeof(DROPFILES);
+                df->fWide = TRUE;
+                df->pt = {};
+                df->fNC = FALSE;
+                wchar_t *dst = reinterpret_cast<wchar_t *>(df + 1);
+                for (const auto &p: m_paths) {
+                    wmemcpy(dst, p.c_str(), p.size() + 1);
+                    dst += p.size() + 1;
+                }
+                *dst = L'\0';
+                GlobalUnlock(hg);
+                med->tymed = TYMED_HGLOBAL;
+                med->hGlobal = hg;
+                med->pUnkForRelease = nullptr;
+                return S_OK;
+            }
+
+            HRESULT __stdcall QueryGetData(FORMATETC *fmt) override {
+                if (!fmt) return E_INVALIDARG;
+                return (fmt->cfFormat == CF_HDROP && (fmt->tymed & TYMED_HGLOBAL))
+                           ? S_OK
+                           : DV_E_FORMATETC;
+            }
+
+            HRESULT __stdcall GetDataHere(FORMATETC *, STGMEDIUM *) override {
+                return E_NOTIMPL;
+            }
+
+            HRESULT __stdcall GetCanonicalFormatEtc(FORMATETC *, FORMATETC *pOut) override {
+                pOut->ptd = nullptr;
+                return DATA_S_SAMEFORMATETC;
+            }
+
+            HRESULT __stdcall SetData(FORMATETC *, STGMEDIUM *, BOOL) override {
+                return E_NOTIMPL;
+            }
+
+            HRESULT __stdcall EnumFormatEtc(DWORD, IEnumFORMATETC **) override {
+                return E_NOTIMPL;
+            }
+
+            HRESULT __stdcall DAdvise(FORMATETC *, DWORD, IAdviseSink *, DWORD *) override {
+                return E_NOTIMPL;
+            }
+
+            HRESULT __stdcall DUnadvise(DWORD) override {
+                return E_NOTIMPL;
+            }
+
+            HRESULT __stdcall EnumDAdvise(IEnumSTATDATA **) override {
+                return E_NOTIMPL;
+            }
     };
 
     // IDropSource — uses OLE default cursors; Ctrl switches to copy.
     class PanelDropSource final : public IDropSource {
         ULONG m_ref = 1;
-    public:
-        HRESULT __stdcall QueryInterface(REFIID riid, void **ppv) override {
-            if (riid == IID_IUnknown || riid == IID_IDropSource)
-                { *ppv = this; AddRef(); return S_OK; }
-            *ppv = nullptr; return E_NOINTERFACE;
-        }
-        ULONG __stdcall AddRef()  override { return InterlockedIncrement(&m_ref); }
-        ULONG __stdcall Release() override {
-            ULONG r = InterlockedDecrement(&m_ref);
-            if (!r) delete this;
-            return r;
-        }
-        HRESULT __stdcall QueryContinueDrag(BOOL fEscPressed, DWORD grfKeyState) override {
-            if (fEscPressed)              return DRAGDROP_S_CANCEL;
-            if (!(grfKeyState & MK_LBUTTON)) return DRAGDROP_S_DROP;
-            return S_OK;
-        }
-        HRESULT __stdcall GiveFeedback(DWORD) override {
-            return DRAGDROP_S_USEDEFAULTCURSORS;
-        }
+
+        public:
+            HRESULT __stdcall QueryInterface(REFIID riid, void **ppv) override {
+                if (riid == IID_IUnknown || riid == IID_IDropSource) {
+                    *ppv = this;
+                    AddRef();
+                    return S_OK;
+                }
+                *ppv = nullptr;
+                return E_NOINTERFACE;
+            }
+
+            ULONG __stdcall AddRef() override {
+                return InterlockedIncrement(&m_ref);
+            }
+
+            ULONG __stdcall Release() override {
+                ULONG r = InterlockedDecrement(&m_ref);
+                if (!r) delete this;
+                return r;
+            }
+
+            HRESULT __stdcall QueryContinueDrag(BOOL fEscPressed, DWORD grfKeyState) override {
+                if (fEscPressed) return DRAGDROP_S_CANCEL;
+                if (!(grfKeyState & MK_LBUTTON)) return DRAGDROP_S_DROP;
+                return S_OK;
+            }
+
+            HRESULT __stdcall GiveFeedback(DWORD) override {
+                return DRAGDROP_S_USEDEFAULTCURSORS;
+            }
     };
 
     // IDropTarget registered on each DirWnd panel window.
     // Default = move; Ctrl held = copy.
     class PanelDropTarget final : public IDropTarget {
         ThumbnailPanelWnd *m_panel;
-        ULONG              m_ref = 1;
-    public:
-        explicit PanelDropTarget(ThumbnailPanelWnd *panel) : m_panel(panel) {}
+        ULONG m_ref = 1;
 
-        HRESULT __stdcall QueryInterface(REFIID riid, void **ppv) override {
-            if (riid == IID_IUnknown || riid == IID_IDropTarget)
-                { *ppv = this; AddRef(); return S_OK; }
-            *ppv = nullptr; return E_NOINTERFACE;
-        }
-        ULONG __stdcall AddRef()  override { return InterlockedIncrement(&m_ref); }
-        ULONG __stdcall Release() override {
-            ULONG r = InterlockedDecrement(&m_ref);
-            if (!r) delete this;
-            return r;
-        }
+        public:
+            explicit PanelDropTarget(ThumbnailPanelWnd *panel) : m_panel(panel) {}
 
-        static DWORD calcEffect(DWORD keyState) {
-            return (keyState & MK_CONTROL) ? DROPEFFECT_COPY : DROPEFFECT_MOVE;
-        }
+            HRESULT __stdcall QueryInterface(REFIID riid, void **ppv) override {
+                if (riid == IID_IUnknown || riid == IID_IDropTarget) {
+                    *ppv = this;
+                    AddRef();
+                    return S_OK;
+                }
+                *ppv = nullptr;
+                return E_NOINTERFACE;
+            }
 
-        HRESULT __stdcall DragEnter(IDataObject *pDataObj, DWORD keyState, POINTL, DWORD *pdwEffect) override {
-            FORMATETC fe = { CF_HDROP, nullptr, DVASPECT_CONTENT, -1, TYMED_HGLOBAL };
-            if (FAILED(pDataObj->QueryGetData(&fe))) { *pdwEffect = DROPEFFECT_NONE; return S_OK; }
-            *pdwEffect = calcEffect(keyState);
-            return S_OK;
-        }
-        HRESULT __stdcall DragOver(DWORD keyState, POINTL, DWORD *pdwEffect) override {
-            *pdwEffect = calcEffect(keyState);
-            return S_OK;
-        }
-        HRESULT __stdcall DragLeave() override { return S_OK; }
+            ULONG __stdcall AddRef() override {
+                return InterlockedIncrement(&m_ref);
+            }
 
-        HRESULT __stdcall Drop(IDataObject *pDataObj, DWORD keyState, POINTL, DWORD *pdwEffect) override {
-            const bool isCopy = (keyState & MK_CONTROL) != 0;
-            *pdwEffect = isCopy ? DROPEFFECT_COPY : DROPEFFECT_MOVE;
+            ULONG __stdcall Release() override {
+                ULONG r = InterlockedDecrement(&m_ref);
+                if (!r) delete this;
+                return r;
+            }
 
-            FORMATETC fe = { CF_HDROP, nullptr, DVASPECT_CONTENT, -1, TYMED_HGLOBAL };
-            STGMEDIUM stg = {};
-            if (FAILED(pDataObj->GetData(&fe, &stg))) return S_OK;
+            static DWORD calcEffect(DWORD keyState) {
+                return (keyState & MK_CONTROL) ? DROPEFFECT_COPY : DROPEFFECT_MOVE;
+            }
 
-            auto *hd = static_cast<HDROP>(GlobalLock(stg.hGlobal));
-            if (!hd) { ReleaseStgMedium(&stg); return S_OK; }
+            HRESULT __stdcall DragEnter(IDataObject *pDataObj, DWORD keyState, POINTL, DWORD *pdwEffect) override {
+                FORMATETC fe = {CF_HDROP, nullptr, DVASPECT_CONTENT, -1, TYMED_HGLOBAL};
+                if (FAILED(pDataObj->QueryGetData(&fe))) {
+                    *pdwEffect = DROPEFFECT_NONE;
+                    return S_OK;
+                }
+                *pdwEffect = calcEffect(keyState);
+                return S_OK;
+            }
 
-            const UINT count = DragQueryFileW(hd, 0xFFFFFFFF, nullptr, 0);
-            std::wstring doubleNull;
-            std::wstring firstSrcDir;
-            for (UINT i = 0; i < count; ++i) {
-                const UINT len = DragQueryFileW(hd, i, nullptr, 0);
-                if (!len) continue;
-                std::wstring p(len + 1, L'\0');
-                DragQueryFileW(hd, i, p.data(), len + 1);
-                p.resize(len);
-                if (firstSrcDir.empty())
-                    firstSrcDir = fs::path(p).parent_path().wstring();
-                doubleNull += p;
+            HRESULT __stdcall DragOver(DWORD keyState, POINTL, DWORD *pdwEffect) override {
+                *pdwEffect = calcEffect(keyState);
+                return S_OK;
+            }
+
+            HRESULT __stdcall DragLeave() override {
+                return S_OK;
+            }
+
+            HRESULT __stdcall Drop(IDataObject *pDataObj, DWORD keyState, POINTL, DWORD *pdwEffect) override {
+                const bool isCopy = (keyState & MK_CONTROL) != 0;
+                *pdwEffect = isCopy ? DROPEFFECT_COPY : DROPEFFECT_MOVE;
+
+                FORMATETC fe = {CF_HDROP, nullptr, DVASPECT_CONTENT, -1, TYMED_HGLOBAL};
+                STGMEDIUM stg = {};
+                if (FAILED(pDataObj->GetData(&fe, &stg))) return S_OK;
+
+                auto *hd = static_cast<HDROP>(GlobalLock(stg.hGlobal));
+                if (!hd) {
+                    ReleaseStgMedium(&stg);
+                    return S_OK;
+                }
+
+                const UINT count = DragQueryFileW(hd, 0xFFFFFFFF, nullptr, 0);
+                std::wstring doubleNull;
+                std::wstring firstSrcDir;
+                for (UINT i = 0; i < count; ++i) {
+                    const UINT len = DragQueryFileW(hd, i, nullptr, 0);
+                    if (!len) continue;
+                    std::wstring p(len + 1, L'\0');
+                    DragQueryFileW(hd, i, p.data(), len + 1);
+                    p.resize(len);
+                    if (firstSrcDir.empty())
+                        firstSrcDir = fs::path(p).parent_path().wstring();
+                    doubleNull += p;
+                    doubleNull += L'\0';
+                }
+                GlobalUnlock(stg.hGlobal);
+                ReleaseStgMedium(&stg);
+
+                if (doubleNull.empty()) return S_OK;
                 doubleNull += L'\0';
+
+                const std::wstring targetDir = m_panel->GetPanelFolder();
+                if (targetDir.empty()) return S_OK;
+
+                // Guard: don't move/copy within the same folder.
+                if (!firstSrcDir.empty()) {
+                    bool same = false;
+                    try {
+                        same = fs::equivalent(fs::path(firstSrcDir), fs::path(targetDir));
+                    } catch (...) {
+                        same = (firstSrcDir == targetDir);
+                    }
+                    if (same) return S_OK;
+                }
+
+                std::wstring to = targetDir + L'\0' + L'\0';
+                SHFILEOPSTRUCTW op = {};
+                op.hwnd = m_panel->GetOwnerHwnd();
+                op.wFunc = isCopy ? FO_COPY : FO_MOVE;
+                op.pFrom = doubleNull.c_str();
+                op.pTo = to.c_str();
+                op.fFlags = FOF_ALLOWUNDO | FOF_NOCONFIRMATION;
+                SHFileOperationW(&op);
+
+                uiManager.RefreshPanelDirs(firstSrcDir, targetDir);
+                uiManager.RepaintAllPanels();
+                return S_OK;
             }
-            GlobalUnlock(stg.hGlobal);
-            ReleaseStgMedium(&stg);
-
-            if (doubleNull.empty()) return S_OK;
-            doubleNull += L'\0';
-
-            const std::wstring targetDir = m_panel->GetPanelFolder();
-            if (targetDir.empty()) return S_OK;
-
-            // Guard: don't move/copy within the same folder.
-            if (!firstSrcDir.empty()) {
-                bool same = false;
-                try { same = fs::equivalent(fs::path(firstSrcDir), fs::path(targetDir)); }
-                catch (...) { same = (firstSrcDir == targetDir); }
-                if (same) return S_OK;
-            }
-
-            std::wstring to = targetDir + L'\0' + L'\0';
-            SHFILEOPSTRUCTW op = {};
-            op.hwnd   = m_panel->GetOwnerHwnd();
-            op.wFunc  = isCopy ? FO_COPY : FO_MOVE;
-            op.pFrom  = doubleNull.c_str();
-            op.pTo    = to.c_str();
-            op.fFlags = FOF_ALLOWUNDO | FOF_NOCONFIRMATION;
-            SHFileOperationW(&op);
-
-            uiManager.RefreshPanelDirs(firstSrcDir, targetDir);
-            uiManager.RepaintAllPanels();
-            return S_OK;
-        }
     };
 
     // =========================================================================
@@ -390,7 +454,7 @@ namespace UI {
     }
 
     void ThumbnailPanelWnd::NotifySelectionOverlay() {
-        const int sel   = static_cast<int>(m_selectedPaths.size());
+        const int sel = static_cast<int>(m_selectedPaths.size());
         const int total = static_cast<int>(m_thumbnails.size());
         g_overlayManager.UpdatePanelSelectionOverlay(m_position, sel, total);
         if (m_hOwner) InvalidateRect(m_hOwner, nullptr, FALSE);
@@ -444,8 +508,8 @@ namespace UI {
         if (IsDirPanel() && m_selectedIdx >= 0 &&
             m_selectedIdx < static_cast<int>(m_thumbnails.size())) {
             m_savedSelectedIdx = m_selectedIdx;
-            m_savedOffset      = m_offset;
-            m_savedImagePath   = m_thumbnails[m_selectedIdx].filePath;
+            m_savedOffset = m_offset;
+            m_savedImagePath = m_thumbnails[m_selectedIdx].filePath;
         }
     }
 
@@ -497,12 +561,14 @@ namespace UI {
         if (!m_selectedPaths.empty() || !m_anchorPath.empty()) {
             const std::unordered_set<std::wstring> live(items.begin(), items.end());
             std::erase_if(m_selectedPaths,
-                          [&](const std::wstring &p) { return !live.count(p); });
+                          [&](const std::wstring &p) {
+                              return !live.count(p);
+                          });
             if (!m_anchorPath.empty() && !live.count(m_anchorPath))
                 m_anchorPath.clear();
             NotifySelectionOverlay();
         }
-        m_emptyDirActive  = false;
+        m_emptyDirActive = false;
         m_emptyDirMissing = false;
 
         RECT cr{};
@@ -691,16 +757,26 @@ namespace UI {
         // taskbar on whichever edge it sits. Use it directly for all positions.
         int wx = mi.rcWork.left;
         int wy = mi.rcWork.top;
-        int ww = mi.rcWork.right  - mi.rcWork.left;
+        int ww = mi.rcWork.right - mi.rcWork.left;
         int wh = mi.rcWork.bottom - mi.rcWork.top;
 
         // Shrink the work area by a small gap on every side that borders the
         // taskbar, so panels never appear glued to the taskbar edge.
         const int gap = Constants::THUMBNAIL_PANEL_TASKBAR_BOTTOM_GAP_HORIZONTAL_PANEL;
-        if (mi.rcWork.left   > mi.rcMonitor.left)   { wx += gap; ww -= gap; }
-        if (mi.rcWork.top    > mi.rcMonitor.top)     { wy += gap; wh -= gap; }
-        if (mi.rcWork.right  < mi.rcMonitor.right)   { ww -= gap; }
-        if (mi.rcWork.bottom < mi.rcMonitor.bottom)  { wh -= gap; }
+        if (mi.rcWork.left > mi.rcMonitor.left) {
+            wx += gap;
+            ww -= gap;
+        }
+        if (mi.rcWork.top > mi.rcMonitor.top) {
+            wy += gap;
+            wh -= gap;
+        }
+        if (mi.rcWork.right < mi.rcMonitor.right) {
+            ww -= gap;
+        }
+        if (mi.rcWork.bottom < mi.rcMonitor.bottom) {
+            wh -= gap;
+        }
 
         UINT dpiX = 96, dpiY = 96;
         GetDpiForMonitor(hMonitor, MDT_EFFECTIVE_DPI, &dpiX, &dpiY);
@@ -709,21 +785,21 @@ namespace UI {
         int horzThick = static_cast<int>(
             (Constants::THUMBNAIL_PANEL_THUMB_HEIGHT + Constants::THUMBNAIL_PANEL_THUMB_MARGIN * 2.0f) * dpiScale);
         int vertThick = static_cast<int>(
-            (Constants::THUMBNAIL_PANEL_THUMB_WIDTH  + Constants::THUMBNAIL_PANEL_THUMB_MARGIN * 2.0f) * dpiScale);
+            (Constants::THUMBNAIL_PANEL_THUMB_WIDTH + Constants::THUMBNAIL_PANEL_THUMB_MARGIN * 2.0f) * dpiScale);
 
         // Vertical panels shrink to avoid overlapping visible horizontal panels.
         // Read directly from PanelLayout — always current, no polling needed.
-        bool topOccupied    = false;
+        bool topOccupied = false;
         bool bottomOccupied = false;
         if (position == 2 || position == 4) {
             const PanelLayout &layout = uiManager.GetLayout();
-            topOccupied    = layout.topOccupied();
+            topOccupied = layout.topOccupied();
             bottomOccupied = layout.bottomOccupied();
         }
 
         int neighbourGap = Constants::THUMBNAIL_PANEL_NEIGHBOUR_GAP_VERTICAL_PANEL;
         auto verticalBounds = [&](int &vy, int &vh) {
-            vy       = wy + (topOccupied    ? horzThick + neighbourGap : 0);
+            vy = wy + (topOccupied ? horzThick + neighbourGap : 0);
             int vBot = wy + wh - (bottomOccupied ? horzThick + neighbourGap : 0);
             vh = vBot - vy;
             if (vh < 0) vh = 0;
@@ -781,6 +857,13 @@ namespace UI {
     // HandleMessage  —  all shared Win32 logic
     // =========================================================================
     LRESULT ThumbnailPanelWnd::HandleMessage(UINT message, WPARAM wParam, LPARAM lParam) {
+        if (message == WM_XBUTTONDOWN) {
+            // Forward the event to the parent so MouseHandler can process it
+            if (m_hOwner) {
+                SendMessageW(m_hOwner, WM_XBUTTONDOWN, wParam, lParam);
+            }
+            return 0;
+        }
         // File-scope drag state (per-instance via member vars)
         static POINT s_clickPos = {0, 0};
         static POINT s_lastMouse = {0, 0};
@@ -829,7 +912,7 @@ namespace UI {
                 float scroll = Constants::THUMBNAIL_PANEL_WINDOW_MOUSE_WHEEL_SPEED;
                 if (GetKeyState(VK_SHIFT) & 0x8000) scroll *= 3.0f;
                 const float step = (delta > 0 ? scroll : -scroll)
-                        * Constants::THUMBNAIL_PANEL_WINDOW_MOUSE_WHEEL_DIRECTION;
+                                   * Constants::THUMBNAIL_PANEL_WINDOW_MOUSE_WHEEL_DIRECTION;
 
                 // Wrap-around: when already at a boundary and the wheel pushes
                 // past it, jump to the opposite end instead of doing nothing.
@@ -838,32 +921,33 @@ namespace UI {
                     RECT crw{};
                     GetClientRect(m_hWnd, &crw);
                     const bool vert = IsVertical();
-                    const float thumbSz = (vert ? Constants::THUMBNAIL_PANEL_THUMB_HEIGHT
-                                                : Constants::THUMBNAIL_PANEL_THUMB_WIDTH) * app.dpiScale;
+                    const float thumbSz = (vert
+                                               ? Constants::THUMBNAIL_PANEL_THUMB_HEIGHT
+                                               : Constants::THUMBNAIL_PANEL_THUMB_WIDTH) * app.dpiScale;
                     const float spacing = Constants::THUMBNAIL_PANEL_THUMB_SPACING * app.dpiScale;
-                    const float margin  = Constants::THUMBNAIL_PANEL_THUMB_MARGIN  * app.dpiScale;
+                    const float margin = Constants::THUMBNAIL_PANEL_THUMB_MARGIN * app.dpiScale;
                     const float surface = static_cast<float>(vert ? crw.bottom : crw.right);
-                    const float total   = static_cast<float>(m_thumbnails.size()) * (thumbSz + spacing) - spacing;
-                    const float minOff  = surface - total - 2.0f * margin;
+                    const float total = static_cast<float>(m_thumbnails.size()) * (thumbSz + spacing) - spacing;
+                    const float minOff = surface - total - 2.0f * margin;
 
                     if (minOff < 0.0f) { // content overflows — scrolling is possible
                         const float eps = 0.5f;
                         if (app.thumbnailPanelWheelWrapAround) {
                             if (step < 0.0f && m_offset <= minOff + eps) {
-                                m_offset = 0.0f;  // at end, pushing further → wrap to start
+                                m_offset = 0.0f; // at end, pushing further → wrap to start
                                 if constexpr (Constants::THUMBNAIL_PANEL_WHEEL_WRAP_OVERLAY)
                                     g_overlayManager.PostCenterMessage(m_hOwner,
-                                        Constants::Messages::THUMB_STRIP_WRAP_TO_START);
+                                                                       Constants::Messages::THUMB_STRIP_WRAP_TO_START);
                             } else if (step > 0.0f && m_offset >= -eps) {
                                 m_offset = minOff; // at start, pushing back → wrap to end
                                 if constexpr (Constants::THUMBNAIL_PANEL_WHEEL_WRAP_OVERLAY)
                                     g_overlayManager.PostCenterMessage(m_hOwner,
-                                        Constants::Messages::THUMB_STRIP_WRAP_TO_END);
+                                                                       Constants::Messages::THUMB_STRIP_WRAP_TO_END);
                             } else {
-                                m_offset += step;  // normal scroll (clamped in rebuild)
+                                m_offset += step; // normal scroll (clamped in rebuild)
                             }
                         } else {
-                            m_offset += step;      // wrap disabled — clamp in rebuild
+                            m_offset += step; // wrap disabled — clamp in rebuild
                         }
                     } else {
                         m_offset += step;
@@ -900,7 +984,7 @@ namespace UI {
                         if (!m_selectedPaths.empty())
                             return std::vector<std::wstring>(m_selectedPaths.begin(), m_selectedPaths.end());
                         if (m_hoverIdx >= 0 && m_hoverIdx < static_cast<int>(m_thumbnails.size()))
-                            return { m_thumbnails[m_hoverIdx].filePath };
+                            return {m_thumbnails[m_hoverIdx].filePath};
                         return {};
                     };
 
@@ -918,7 +1002,7 @@ namespace UI {
                         if (!paths.empty()) {
                             AppCommands::CopyFilesToClipboard(m_hOwner, paths, true);
                             s_cutPaths.clear();
-                            for (const auto &p : paths) s_cutPaths.insert(p);
+                            for (const auto &p: paths) s_cutPaths.insert(p);
                             uiManager.RepaintAllPanels();
                         }
                         return 0;
@@ -940,9 +1024,10 @@ namespace UI {
                         if (m_selectedPaths.size() == m_thumbnails.size())
                             m_selectedPaths.clear();
                         else
-                            for (const auto &t : m_thumbnails) m_selectedPaths.insert(t.filePath);
+                            for (const auto &t: m_thumbnails) m_selectedPaths.insert(t.filePath);
                         m_anchorPath = (!m_selectedPaths.empty() && !m_thumbnails.empty())
-                                       ? m_thumbnails[0].filePath : L"";
+                                           ? m_thumbnails[0].filePath
+                                           : L"";
                         NotifySelectionOverlay();
                         InvalidateRect(m_hWnd, nullptr, FALSE);
                         return 0;
@@ -950,7 +1035,7 @@ namespace UI {
                     if (key == VK_DELETE) {
                         const auto paths = buildOpPaths();
                         if (!paths.empty()) {
-                            for (const auto &p : paths) s_cutPaths.erase(p);
+                            for (const auto &p: paths) s_cutPaths.erase(p);
                             OnContextMenuDelete(paths);
                             m_selectedPaths.clear();
                             m_anchorPath.clear();
@@ -989,7 +1074,7 @@ namespace UI {
                     m_savedSelectedIdx < static_cast<int>(m_thumbnails.size()) &&
                     m_thumbnails[m_savedSelectedIdx].filePath == m_savedImagePath) {
                     m_selectedIdx = m_savedSelectedIdx;
-                    m_offset      = m_savedOffset;
+                    m_offset = m_savedOffset;
                 }
 
                 // Check if the click landed on the scrollbar strip.
@@ -998,10 +1083,10 @@ namespace UI {
                     const int cy = GET_Y_LPARAM(lParam);
                     RECT cr2{};
                     GetClientRect(m_hWnd, &cr2);
-                    const float sw2  = static_cast<float>(cr2.right);
-                    const float sh2  = static_cast<float>(cr2.bottom);
-                    const float bar  = Constants::ThumbnailPanel::SCROLLBAR_THICKNESS * app.dpiScale;
-                    const bool  vert = IsVertical();
+                    const float sw2 = static_cast<float>(cr2.right);
+                    const float sh2 = static_cast<float>(cr2.bottom);
+                    const float bar = Constants::ThumbnailPanel::SCROLLBAR_THICKNESS * app.dpiScale;
+                    const bool vert = IsVertical();
 
                     bool inScrollbar = false;
                     if (vert) {
@@ -1009,48 +1094,48 @@ namespace UI {
                         if (m_position == 2) {
                             // Right panel: scrollbar on LEFT if SCROLLBAR_POS_RIGHT_PANEL == LEFT
                             inScrollbar = (Constants::ThumbnailPanel::SCROLLBAR_POS_RIGHT_PANEL
-                                          == Constants::ThumbnailPanel::ScrollbarSide::LEFT)
-                                          ? (static_cast<float>(cx) < bar)
-                                          : (static_cast<float>(cx) >= sw2 - bar);
+                                           == Constants::ThumbnailPanel::ScrollbarSide::LEFT)
+                                              ? (static_cast<float>(cx) < bar)
+                                              : (static_cast<float>(cx) >= sw2 - bar);
                         } else {
                             // Left panel: scrollbar on RIGHT if SCROLLBAR_POS_LEFT_PANEL == RIGHT
                             inScrollbar = (Constants::ThumbnailPanel::SCROLLBAR_POS_LEFT_PANEL
-                                          == Constants::ThumbnailPanel::ScrollbarSide::LEFT)
-                                          ? (static_cast<float>(cx) < bar)
-                                          : (static_cast<float>(cx) >= sw2 - bar);
+                                           == Constants::ThumbnailPanel::ScrollbarSide::LEFT)
+                                              ? (static_cast<float>(cx) < bar)
+                                              : (static_cast<float>(cx) >= sw2 - bar);
                         }
                     } else {
                         // Horizontal panels: check y position based on m_position
                         if (m_position == 1) {
                             // Top panel: scrollbar at TOP or BOTTOM
                             inScrollbar = (Constants::ThumbnailPanel::SCROLLBAR_POS_TOP_PANEL
-                                          == Constants::ThumbnailPanel::ScrollbarEdge::TOP)
-                                          ? (static_cast<float>(cy) < bar)
-                                          : (static_cast<float>(cy) >= sh2 - bar);
+                                           == Constants::ThumbnailPanel::ScrollbarEdge::TOP)
+                                              ? (static_cast<float>(cy) < bar)
+                                              : (static_cast<float>(cy) >= sh2 - bar);
                         } else {
                             // Bottom panel: scrollbar at TOP or BOTTOM
                             inScrollbar = (Constants::ThumbnailPanel::SCROLLBAR_POS_BOTTOM_PANEL
-                                          == Constants::ThumbnailPanel::ScrollbarEdge::TOP)
-                                          ? (static_cast<float>(cy) < bar)
-                                          : (static_cast<float>(cy) >= sh2 - bar);
+                                           == Constants::ThumbnailPanel::ScrollbarEdge::TOP)
+                                              ? (static_cast<float>(cy) < bar)
+                                              : (static_cast<float>(cy) >= sh2 - bar);
                         }
                     }
 
                     if (inScrollbar && !m_thumbnails.empty()) {
-                        const float tw2 = Constants::THUMBNAIL_PANEL_THUMB_WIDTH  * app.dpiScale;
+                        const float tw2 = Constants::THUMBNAIL_PANEL_THUMB_WIDTH * app.dpiScale;
                         const float th2 = Constants::THUMBNAIL_PANEL_THUMB_HEIGHT * app.dpiScale;
                         const float sp2 = Constants::THUMBNAIL_PANEL_THUMB_SPACING * app.dpiScale;
-                        const float mg2 = Constants::THUMBNAIL_PANEL_THUMB_MARGIN  * app.dpiScale;
-                        const float n2  = static_cast<float>(m_thumbnails.size());
+                        const float mg2 = Constants::THUMBNAIL_PANEL_THUMB_MARGIN * app.dpiScale;
+                        const float n2 = static_cast<float>(m_thumbnails.size());
                         const float tsz = vert ? th2 : tw2;
                         const float content2 = n2 * (tsz + sp2) - sp2;
                         const float visible2 = (vert ? sh2 : sw2) - 2.0f * mg2;
 
                         if (content2 > visible2) {
-                            m_scrollDragging       = true;
-                            m_scrollDragStartMouse  = vert
-                                                      ? static_cast<float>(cy)
-                                                      : static_cast<float>(cx);
+                            m_scrollDragging = true;
+                            m_scrollDragStartMouse = vert
+                                                         ? static_cast<float>(cy)
+                                                         : static_cast<float>(cx);
                             m_scrollDragStartOffset = m_offset;
                             SetCapture(m_hWnd);
                             return 0;
@@ -1063,8 +1148,11 @@ namespace UI {
                     s_dragSourcePath.clear();
                     const int hx = GET_X_LPARAM(lParam);
                     const int hy = GET_Y_LPARAM(lParam);
-                    for (const auto &t : m_thumbnails) {
-                        if (t.HitTest(hx, hy)) { s_dragSourcePath = t.filePath; break; }
+                    for (const auto &t: m_thumbnails) {
+                        if (t.HitTest(hx, hy)) {
+                            s_dragSourcePath = t.filePath;
+                            break;
+                        }
                     }
                 }
 
@@ -1085,44 +1173,44 @@ namespace UI {
                 // Check if hovering over scrollbar strip
                 RECT cr3{};
                 GetClientRect(m_hWnd, &cr3);
-                const float sw3  = static_cast<float>(cr3.right);
-                const float sh3  = static_cast<float>(cr3.bottom);
+                const float sw3 = static_cast<float>(cr3.right);
+                const float sh3 = static_cast<float>(cr3.bottom);
                 const float bar3 = Constants::ThumbnailPanel::SCROLLBAR_THICKNESS * app.dpiScale;
-                const bool  vert3 = IsVertical();
+                const bool vert3 = IsVertical();
 
                 bool inScrollbar3 = false;
                 if (vert3) {
                     if (m_position == 2) {
                         inScrollbar3 = (Constants::ThumbnailPanel::SCROLLBAR_POS_RIGHT_PANEL
-                                       == Constants::ThumbnailPanel::ScrollbarSide::LEFT)
-                                       ? (static_cast<float>(x) < bar3)
-                                       : (static_cast<float>(x) >= sw3 - bar3);
+                                        == Constants::ThumbnailPanel::ScrollbarSide::LEFT)
+                                           ? (static_cast<float>(x) < bar3)
+                                           : (static_cast<float>(x) >= sw3 - bar3);
                     } else {
                         inScrollbar3 = (Constants::ThumbnailPanel::SCROLLBAR_POS_LEFT_PANEL
-                                       == Constants::ThumbnailPanel::ScrollbarSide::LEFT)
-                                       ? (static_cast<float>(x) < bar3)
-                                       : (static_cast<float>(x) >= sw3 - bar3);
+                                        == Constants::ThumbnailPanel::ScrollbarSide::LEFT)
+                                           ? (static_cast<float>(x) < bar3)
+                                           : (static_cast<float>(x) >= sw3 - bar3);
                     }
                 } else {
                     if (m_position == 1) {
                         inScrollbar3 = (Constants::ThumbnailPanel::SCROLLBAR_POS_TOP_PANEL
-                                       == Constants::ThumbnailPanel::ScrollbarEdge::TOP)
-                                       ? (static_cast<float>(y) < bar3)
-                                       : (static_cast<float>(y) >= sh3 - bar3);
+                                        == Constants::ThumbnailPanel::ScrollbarEdge::TOP)
+                                           ? (static_cast<float>(y) < bar3)
+                                           : (static_cast<float>(y) >= sh3 - bar3);
                     } else {
                         inScrollbar3 = (Constants::ThumbnailPanel::SCROLLBAR_POS_BOTTOM_PANEL
-                                       == Constants::ThumbnailPanel::ScrollbarEdge::TOP)
-                                       ? (static_cast<float>(y) < bar3)
-                                       : (static_cast<float>(y) >= sh3 - bar3);
+                                        == Constants::ThumbnailPanel::ScrollbarEdge::TOP)
+                                           ? (static_cast<float>(y) < bar3)
+                                           : (static_cast<float>(y) >= sh3 - bar3);
                     }
                 }
 
                 if (!m_thumbnails.empty() && inScrollbar3) {
-                    const float tw3 = Constants::THUMBNAIL_PANEL_THUMB_WIDTH  * app.dpiScale;
+                    const float tw3 = Constants::THUMBNAIL_PANEL_THUMB_WIDTH * app.dpiScale;
                     const float th3 = Constants::THUMBNAIL_PANEL_THUMB_HEIGHT * app.dpiScale;
                     const float sp3 = Constants::THUMBNAIL_PANEL_THUMB_SPACING * app.dpiScale;
-                    const float mg3 = Constants::THUMBNAIL_PANEL_THUMB_MARGIN  * app.dpiScale;
-                    const float n3  = static_cast<float>(m_thumbnails.size());
+                    const float mg3 = Constants::THUMBNAIL_PANEL_THUMB_MARGIN * app.dpiScale;
+                    const float n3 = static_cast<float>(m_thumbnails.size());
                     const float tsz3 = vert3 ? th3 : tw3;
                     const float content3 = n3 * (tsz3 + sp3) - sp3;
                     const float visible3 = (vert3 ? sh3 : sw3) - 2.0f * mg3;
@@ -1151,28 +1239,28 @@ namespace UI {
                 if (m_scrollDragging) {
                     RECT cr2{};
                     GetClientRect(m_hWnd, &cr2);
-                    const float sw2  = static_cast<float>(cr2.right);
-                    const float sh2  = static_cast<float>(cr2.bottom);
-                    const bool  vert = IsVertical();
+                    const float sw2 = static_cast<float>(cr2.right);
+                    const float sh2 = static_cast<float>(cr2.bottom);
+                    const bool vert = IsVertical();
                     const float mouseAxis = vert ? static_cast<float>(y) : static_cast<float>(x);
-                    const float tw2 = Constants::THUMBNAIL_PANEL_THUMB_WIDTH  * app.dpiScale;
+                    const float tw2 = Constants::THUMBNAIL_PANEL_THUMB_WIDTH * app.dpiScale;
                     const float th2 = Constants::THUMBNAIL_PANEL_THUMB_HEIGHT * app.dpiScale;
                     const float sp2 = Constants::THUMBNAIL_PANEL_THUMB_SPACING * app.dpiScale;
-                    const float mg2 = Constants::THUMBNAIL_PANEL_THUMB_MARGIN  * app.dpiScale;
-                    const float n2  = static_cast<float>(m_thumbnails.size());
+                    const float mg2 = Constants::THUMBNAIL_PANEL_THUMB_MARGIN * app.dpiScale;
+                    const float n2 = static_cast<float>(m_thumbnails.size());
                     const float tsz = vert ? th2 : tw2;
-                    const float content2  = n2 * (tsz + sp2) - sp2;
-                    const float visible2  = (vert ? sh2 : sw2) - 2.0f * mg2;
+                    const float content2 = n2 * (tsz + sp2) - sp2;
+                    const float visible2 = (vert ? sh2 : sw2) - 2.0f * mg2;
                     const float scrollMax = content2 - visible2;
-                    const float trackLen  = vert ? sh2 : sw2;
-                    const float barThumb  = std::max(Constants::ThumbnailPanel::SCROLLBAR_MIN_THUMB * app.dpiScale,
-                                                     trackLen * visible2 / content2);
-                    const float scrollPx  = trackLen - barThumb;
+                    const float trackLen = vert ? sh2 : sw2;
+                    const float barThumb = std::max(Constants::ThumbnailPanel::SCROLLBAR_MIN_THUMB * app.dpiScale,
+                                                    trackLen * visible2 / content2);
+                    const float scrollPx = trackLen - barThumb;
                     if (scrollPx > 0.0f) {
                         const float delta = mouseAxis - m_scrollDragStartMouse;
                         const float newScroll = std::clamp(
-                            -m_scrollDragStartOffset + delta * scrollMax / scrollPx,
-                            0.0f, scrollMax);
+                                -m_scrollDragStartOffset + delta * scrollMax / scrollPx,
+                                0.0f, scrollMax);
                         m_offset = -newScroll;
                         RebuildGeometry();
                         InvalidateRect(m_hWnd, nullptr, FALSE);
@@ -1200,7 +1288,7 @@ namespace UI {
                         s_dragging = false;
                         ReleaseCapture();
                         auto *pData = new PanelDataObject(std::move(dragPaths));
-                        auto *pSrc  = new PanelDropSource();
+                        auto *pSrc = new PanelDropSource();
                         DWORD dwEffect = 0;
                         DoDragDrop(pData, pSrc, DROPEFFECT_COPY | DROPEFFECT_MOVE, &dwEffect);
                         pData->Release();
@@ -1240,8 +1328,8 @@ namespace UI {
                         }
                         const int cx = GET_X_LPARAM(lParam);
                         const int cy = GET_Y_LPARAM(lParam);
-                        const bool ctrlDown  = (GetKeyState(VK_CONTROL) & 0x8000) != 0;
-                        const bool shiftDown = (GetKeyState(VK_SHIFT)   & 0x8000) != 0;
+                        const bool ctrlDown = (GetKeyState(VK_CONTROL) & 0x8000) != 0;
+                        const bool shiftDown = (GetKeyState(VK_SHIFT) & 0x8000) != 0;
                         int hitIdx = -1;
                         for (size_t i = 0; i < m_thumbnails.size(); ++i) {
                             if (m_thumbnails[i].HitTest(cx, cy)) {
@@ -1294,7 +1382,8 @@ namespace UI {
                                 if (!m_anchorPath.empty()) {
                                     for (size_t k = 0; k < m_thumbnails.size(); ++k) {
                                         if (m_thumbnails[k].filePath == m_anchorPath) {
-                                            anchorIdx = static_cast<int>(k); break;
+                                            anchorIdx = static_cast<int>(k);
+                                            break;
                                         }
                                     }
                                 }
@@ -1344,8 +1433,11 @@ namespace UI {
 
                 // Identify which thumbnail was right-clicked.
                 std::wstring hitPath;
-                for (const auto &t : m_thumbnails) {
-                    if (t.HitTest(rx, ry)) { hitPath = t.filePath; break; }
+                for (const auto &t: m_thumbnails) {
+                    if (t.HitTest(rx, ry)) {
+                        hitPath = t.filePath;
+                        break;
+                    }
                 }
 
                 // Determine the effective operation set:
@@ -1370,30 +1462,30 @@ namespace UI {
                 else if (!m_emptyDir.empty())
                     pasteDir = m_emptyDir;
 
-                constexpr UINT ID_CTX_COPY        = 1;
-                constexpr UINT ID_CTX_CUT         = 2;
-                constexpr UINT ID_CTX_DELETE      = 3;
-                constexpr UINT ID_CTX_PASTE       = 4;
-                constexpr UINT ID_CTX_EXTRA       = 5;
-                constexpr UINT ID_CTX_CLOSE       = 6;
-                constexpr UINT ID_CTX_SELECT_ALL     = 7;
-                constexpr UINT ID_CTX_SELECT_NONE    = 8;
+                constexpr UINT ID_CTX_COPY = 1;
+                constexpr UINT ID_CTX_CUT = 2;
+                constexpr UINT ID_CTX_DELETE = 3;
+                constexpr UINT ID_CTX_PASTE = 4;
+                constexpr UINT ID_CTX_EXTRA = 5;
+                constexpr UINT ID_CTX_CLOSE = 6;
+                constexpr UINT ID_CTX_SELECT_ALL = 7;
+                constexpr UINT ID_CTX_SELECT_NONE = 8;
                 constexpr UINT ID_CTX_SELECT_INVERSE = 9;
 
-                const bool hasFiles     = !opPaths.empty();
-                const bool canPaste     = !pasteDir.empty() && AppCommands::ClipboardHasFiles();
-                const bool showPaste    = ShowContextMenuPaste();
-                const wchar_t *delLabel   = ContextMenuDeleteLabel();
+                const bool hasFiles = !opPaths.empty();
+                const bool canPaste = !pasteDir.empty() && AppCommands::ClipboardHasFiles();
+                const bool showPaste = ShowContextMenuPaste();
+                const wchar_t *delLabel = ContextMenuDeleteLabel();
                 const wchar_t *extraLabel = ContextMenuExtraLabel();
 
                 // Build labels that show the count when multiple files are selected.
                 std::wstring copyLabel = L"Copy";
-                std::wstring cutLabel  = L"Cut";
+                std::wstring cutLabel = L"Cut";
                 std::wstring deleteLabel = delLabel;
                 if (opPaths.size() > 1) {
                     const std::wstring cnt = L" (" + std::to_wstring(opPaths.size()) + L" files)";
-                    copyLabel   += cnt;
-                    cutLabel    += cnt;
+                    copyLabel += cnt;
+                    cutLabel += cnt;
                     deleteLabel += cnt;
                 }
 
@@ -1401,8 +1493,8 @@ namespace UI {
 
                 HMENU hMenu = CreatePopupMenu();
                 if (!hMenu) return 0;
-                AppendMenuW(hMenu, hasFiles ? MF_STRING : (MF_STRING | MF_GRAYED), ID_CTX_COPY,   copyLabel.c_str());
-                AppendMenuW(hMenu, hasFiles ? MF_STRING : (MF_STRING | MF_GRAYED), ID_CTX_CUT,    cutLabel.c_str());
+                AppendMenuW(hMenu, hasFiles ? MF_STRING : (MF_STRING | MF_GRAYED), ID_CTX_COPY, copyLabel.c_str());
+                AppendMenuW(hMenu, hasFiles ? MF_STRING : (MF_STRING | MF_GRAYED), ID_CTX_CUT, cutLabel.c_str());
                 AppendMenuW(hMenu, hasFiles ? MF_STRING : (MF_STRING | MF_GRAYED), ID_CTX_DELETE, deleteLabel.c_str());
                 if (showPaste) {
                     AppendMenuW(hMenu, MF_SEPARATOR, 0, nullptr);
@@ -1413,11 +1505,11 @@ namespace UI {
                     AppendMenuW(hMenu, MF_STRING, ID_CTX_EXTRA, extraLabel);
                 }
                 AppendMenuW(hMenu, MF_SEPARATOR, 0, nullptr);
-                AppendMenuW(hMenu, hasAny ? MF_STRING : (MF_STRING | MF_GRAYED), ID_CTX_SELECT_ALL,  L"Select All");
+                AppendMenuW(hMenu, hasAny ? MF_STRING : (MF_STRING | MF_GRAYED), ID_CTX_SELECT_ALL, L"Select All");
                 AppendMenuW(hMenu, hasAny ? MF_STRING : (MF_STRING | MF_GRAYED),
-                                   ID_CTX_SELECT_INVERSE, L"Select Inverse");
+                            ID_CTX_SELECT_INVERSE, L"Select Inverse");
                 AppendMenuW(hMenu, !m_selectedPaths.empty() ? MF_STRING : (MF_STRING | MF_GRAYED),
-                                   ID_CTX_SELECT_NONE, L"Select None");
+                            ID_CTX_SELECT_NONE, L"Select None");
                 AppendMenuW(hMenu, MF_SEPARATOR, 0, nullptr);
                 AppendMenuW(hMenu, MF_STRING, ID_CTX_CLOSE, L"Close");
 
@@ -1436,11 +1528,11 @@ namespace UI {
                     case ID_CTX_CUT:
                         AppCommands::CopyFilesToClipboard(m_hOwner, opPaths, true);
                         s_cutPaths.clear();
-                        for (const auto &p : opPaths) s_cutPaths.insert(p);
+                        for (const auto &p: opPaths) s_cutPaths.insert(p);
                         uiManager.RepaintAllPanels();
                         break;
                     case ID_CTX_DELETE:
-                        for (const auto &p : opPaths) s_cutPaths.erase(p);
+                        for (const auto &p: opPaths) s_cutPaths.erase(p);
                         OnContextMenuDelete(opPaths);
                         m_selectedPaths.clear();
                         m_anchorPath.clear();
@@ -1460,7 +1552,7 @@ namespace UI {
                         OnContextMenuExtra();
                         break;
                     case ID_CTX_SELECT_ALL:
-                        for (const auto &t : m_thumbnails) m_selectedPaths.insert(t.filePath);
+                        for (const auto &t: m_thumbnails) m_selectedPaths.insert(t.filePath);
                         if (!m_thumbnails.empty()) m_anchorPath = m_thumbnails[0].filePath;
                         NotifySelectionOverlay();
                         InvalidateRect(m_hWnd, nullptr, FALSE);
@@ -1468,15 +1560,18 @@ namespace UI {
                     case ID_CTX_SELECT_INVERSE: {
                         // Selected → unselected, unselected → selected.
                         std::unordered_set<std::wstring> inverted;
-                        for (const auto &t : m_thumbnails)
+                        for (const auto &t: m_thumbnails)
                             if (!m_selectedPaths.count(t.filePath))
                                 inverted.insert(t.filePath);
                         m_selectedPaths = std::move(inverted);
                         // Keep a valid anchor: first selected item in strip order,
                         // or cleared when the inversion selected nothing.
                         m_anchorPath.clear();
-                        for (const auto &t : m_thumbnails)
-                            if (m_selectedPaths.count(t.filePath)) { m_anchorPath = t.filePath; break; }
+                        for (const auto &t: m_thumbnails)
+                            if (m_selectedPaths.count(t.filePath)) {
+                                m_anchorPath = t.filePath;
+                                break;
+                            }
                         NotifySelectionOverlay();
                         InvalidateRect(m_hWnd, nullptr, FALSE);
                         break;
@@ -1554,21 +1649,21 @@ namespace UI {
 
         RECT cr{};
         GetClientRect(m_hWnd, &cr);
-        const float sw     = static_cast<float>(cr.right);
-        const float sh     = static_cast<float>(cr.bottom);
+        const float sw = static_cast<float>(cr.right);
+        const float sh = static_cast<float>(cr.bottom);
         const float margin = Constants::THUMBNAIL_PANEL_THUMB_MARGIN * app.dpiScale;
-        const float textW  = std::max(1.0f, sw - 2.0f * margin);
+        const float textW = std::max(1.0f, sw - 2.0f * margin);
 
         // Lazily create a DWrite format for the panel's own use.
         // m_pTextFormat on the renderer is never initialized; own it here instead.
         if (!m_emptyFormat) {
             const float fontSize = std::max(8.0f, 11.0f * app.dpiScale);
             r->m_pDWriteFactory->CreateTextFormat(
-                L"Segoe UI", nullptr,
-                DWRITE_FONT_WEIGHT_NORMAL, DWRITE_FONT_STYLE_NORMAL,
-                DWRITE_FONT_STRETCH_NORMAL, fontSize,
-                Constants::Overlay::MSG_ALL_FONT_LOCALE,
-                m_emptyFormat.GetAddressOf());
+                    L"Segoe UI", nullptr,
+                    DWRITE_FONT_WEIGHT_NORMAL, DWRITE_FONT_STYLE_NORMAL,
+                    DWRITE_FONT_STRETCH_NORMAL, fontSize,
+                    Constants::Overlay::MSG_ALL_FONT_LOCALE,
+                    m_emptyFormat.GetAddressOf());
         }
         if (!m_emptyFormat) return;
 
@@ -1577,9 +1672,9 @@ namespace UI {
             if (!m_emptyCacheLayout) {
                 const wchar_t *txt = Constants::Messages::EMPTY_CACHE;
                 r->m_pDWriteFactory->CreateTextLayout(
-                    txt, static_cast<UINT32>(wcslen(txt)),
-                    m_emptyFormat.Get(), std::max(1.0f, sw - 2.0f * margin), sh,
-                    &m_emptyCacheLayout);
+                        txt, static_cast<UINT32>(wcslen(txt)),
+                        m_emptyFormat.Get(), std::max(1.0f, sw - 2.0f * margin), sh,
+                        &m_emptyCacheLayout);
                 if (m_emptyCacheLayout) {
                     m_emptyCacheLayout->SetTextAlignment(DWRITE_TEXT_ALIGNMENT_CENTER);
                     m_emptyCacheLayout->SetWordWrapping(DWRITE_WORD_WRAPPING_EMERGENCY_BREAK);
@@ -1589,55 +1684,55 @@ namespace UI {
                 DWRITE_TEXT_METRICS m{};
                 m_emptyCacheLayout->GetMetrics(&m);
                 m_panelContext->DrawTextLayout(
-                    {margin, (sh - m.height) / 2.0f},
-                    m_emptyCacheLayout.Get(),
-                    r->m_pTextBrush.Get());
+                        {margin, (sh - m.height) / 2.0f},
+                        m_emptyCacheLayout.Get(),
+                        r->m_pTextBrush.Get());
             }
             return;
         }
 
         // Choose header text and brush based on missing vs empty-but-present state.
         ID2D1SolidColorBrush *headerBrush;
-        IDWriteTextLayout    *headerLayout;
+        IDWriteTextLayout *headerLayout;
 
         if (m_emptyDirMissing) {
             // Directory itself is gone — red warning.
             if (!m_emptyDirMissingLayout) {
                 const wchar_t *txt = Constants::Messages::EMPTY_DIR_MISSING;
                 r->m_pDWriteFactory->CreateTextLayout(
-                    txt, static_cast<UINT32>(wcslen(txt)),
-                    m_emptyFormat.Get(), textW, sh,
-                    &m_emptyDirMissingLayout);
+                        txt, static_cast<UINT32>(wcslen(txt)),
+                        m_emptyFormat.Get(), textW, sh,
+                        &m_emptyDirMissingLayout);
                 if (m_emptyDirMissingLayout) {
                     m_emptyDirMissingLayout->SetTextAlignment(DWRITE_TEXT_ALIGNMENT_CENTER);
                     m_emptyDirMissingLayout->SetWordWrapping(DWRITE_WORD_WRAPPING_EMERGENCY_BREAK);
                 }
             }
-            headerBrush  = m_emptyDirWarningBrush.Get();
+            headerBrush = m_emptyDirWarningBrush.Get();
             headerLayout = m_emptyDirMissingLayout.Get();
         } else {
             // Directory exists but contains no supported images.
             if (!m_emptyNoImagesLayout) {
                 const wchar_t *txt = Constants::Messages::EMPTY_DIR_NO_IMAGES;
                 r->m_pDWriteFactory->CreateTextLayout(
-                    txt, static_cast<UINT32>(wcslen(txt)),
-                    m_emptyFormat.Get(), textW, sh,
-                    &m_emptyNoImagesLayout);
+                        txt, static_cast<UINT32>(wcslen(txt)),
+                        m_emptyFormat.Get(), textW, sh,
+                        &m_emptyNoImagesLayout);
                 if (m_emptyNoImagesLayout) {
                     m_emptyNoImagesLayout->SetTextAlignment(DWRITE_TEXT_ALIGNMENT_CENTER);
                     m_emptyNoImagesLayout->SetWordWrapping(DWRITE_WORD_WRAPPING_EMERGENCY_BREAK);
                 }
             }
-            headerBrush  = r->m_pTextBrush.Get();
+            headerBrush = r->m_pTextBrush.Get();
             headerLayout = m_emptyNoImagesLayout.Get();
         }
 
         // Lazily create path layout (per-dir — reset when m_emptyDir changes).
         if (!m_emptyDirPathLayout && !m_emptyDir.empty()) {
             r->m_pDWriteFactory->CreateTextLayout(
-                m_emptyDir.c_str(), static_cast<UINT32>(m_emptyDir.size()),
-                m_emptyFormat.Get(), textW, sh,
-                &m_emptyDirPathLayout);
+                    m_emptyDir.c_str(), static_cast<UINT32>(m_emptyDir.size()),
+                    m_emptyFormat.Get(), textW, sh,
+                    &m_emptyDirPathLayout);
             if (m_emptyDirPathLayout) {
                 m_emptyDirPathLayout->SetTextAlignment(DWRITE_TEXT_ALIGNMENT_CENTER);
                 m_emptyDirPathLayout->SetWordWrapping(DWRITE_WORD_WRAPPING_EMERGENCY_BREAK);
@@ -1646,12 +1741,12 @@ namespace UI {
 
         // Measure both blocks to vertically center the combined text.
         DWRITE_TEXT_METRICS m1{}, m2{};
-        if (headerLayout)          headerLayout->GetMetrics(&m1);
-        if (m_emptyDirPathLayout)  m_emptyDirPathLayout->GetMetrics(&m2);
+        if (headerLayout) headerLayout->GetMetrics(&m1);
+        if (m_emptyDirPathLayout) m_emptyDirPathLayout->GetMetrics(&m2);
 
         const float lineGap = 6.0f * app.dpiScale;
-        const float totalH  = m1.height + lineGap + m2.height;
-        const float startY  = (sh - totalH) / 2.0f;
+        const float totalH = m1.height + lineGap + m2.height;
+        const float startY = (sh - totalH) / 2.0f;
 
         if (headerLayout && headerBrush)
             m_panelContext->DrawTextLayout({margin, startY},
@@ -1691,7 +1786,8 @@ namespace UI {
         if (FAILED(dxgiDevice->GetAdapter(&adapter))) return;
         if (FAILED(adapter->GetParent(IID_PPV_ARGS(&factory)))) return;
         if (FAILED(factory->CreateSwapChainForHwnd(d3dDev, m_hWnd, &swapDesc,
-                                                    nullptr, nullptr, &m_swapChain))) return;
+            nullptr, nullptr, &m_swapChain)))
+            return;
 
         // Create a D2D device context for this panel.
         Microsoft::WRL::ComPtr<ID2D1DeviceContext> baseCtx;
@@ -1707,40 +1803,43 @@ namespace UI {
         GetClientRect(m_hWnd, &rc);
         UINT w = static_cast<UINT>(rc.right - rc.left);
         UINT h = static_cast<UINT>(rc.bottom - rc.top);
-        if (w == 0 || h == 0) { w = 1200; h = Constants::THUMBNAIL_PANEL_WINDOW_THICKNESS; }
+        if (w == 0 || h == 0) {
+            w = 1200;
+            h = Constants::THUMBNAIL_PANEL_WINDOW_THICKNESS;
+        }
         ResizeSwapChain(w, h);
 
         // Create brushes using theme colors
         m_panelContext->CreateSolidColorBrush(
-            D2D1::ColorF(D2D1::ColorF::DarkSlateGray), &m_placeholderBrush);
+                D2D1::ColorF(D2D1::ColorF::DarkSlateGray), &m_placeholderBrush);
         m_panelContext->CreateSolidColorBrush(
-            D2D1::ColorF(D2D1::ColorF::LightGreen), &m_borderBrush);
+                D2D1::ColorF(D2D1::ColorF::LightGreen), &m_borderBrush);
         m_panelContext->CreateSolidColorBrush(
-            D2D1::ColorF(210.0f / 255, 70.0f / 255, 70.0f / 255), &m_emptyDirWarningBrush);
+                D2D1::ColorF(210.0f / 255, 70.0f / 255, 70.0f / 255), &m_emptyDirWarningBrush);
         m_panelContext->CreateSolidColorBrush(
-            D2D1::ColorF(D2D1::ColorF::White), &m_hoverBrush);
+                D2D1::ColorF(D2D1::ColorF::White), &m_hoverBrush);
         m_panelContext->CreateSolidColorBrush(
-            Constants::Theme::ThemedGrayD2D(Constants::Theme::Panel::SCROLLBAR_TRACK,
-                                            app.themeFactor, Constants::Theme::Panel::SCROLLBAR_TRACK_ALPHA), &m_scrollTrackBrush);
+                Constants::Theme::ThemedGrayD2D(Constants::Theme::Panel::SCROLLBAR_TRACK,
+                                                app.themeFactor, Constants::Theme::Panel::SCROLLBAR_TRACK_ALPHA), &m_scrollTrackBrush);
         m_panelContext->CreateSolidColorBrush(
-            Constants::Theme::ThemedGrayD2D(Constants::Theme::Panel::SCROLLBAR_THUMB,
-                                            app.themeFactor, Constants::Theme::Panel::SCROLLBAR_THUMB_ALPHA), &m_scrollThumbBrush);
+                Constants::Theme::ThemedGrayD2D(Constants::Theme::Panel::SCROLLBAR_THUMB,
+                                                app.themeFactor, Constants::Theme::Panel::SCROLLBAR_THUMB_ALPHA), &m_scrollThumbBrush);
         // Multi-select: steel blue — distinct from green (viewer selection) and white (hover)
         m_panelContext->CreateSolidColorBrush(
-            D2D1::ColorF(0.28f, 0.56f, 1.0f), &m_multiSelBrush);
+                D2D1::ColorF(0.28f, 0.56f, 1.0f), &m_multiSelBrush);
         // Active-panel label: same LightGreen as the selection border — signals focus consistently
         m_panelContext->CreateSolidColorBrush(
-            D2D1::ColorF(D2D1::ColorF::LightGreen), &m_dirLabelActiveBrush);
+                D2D1::ColorF(D2D1::ColorF::LightGreen), &m_dirLabelActiveBrush);
         // Inactive label: inverted track gray (0.88 base) — contrasts against both
         // the track (0.12 base) and thumb (0.65 base) in both light and dark themes.
         m_panelContext->CreateSolidColorBrush(
-            Constants::Theme::ThemedGrayD2D(0.88f, app.themeFactor, 0.65f),
-            &m_dirLabelInactiveBrush);
+                Constants::Theme::ThemedGrayD2D(0.88f, app.themeFactor, 0.65f),
+                &m_dirLabelInactiveBrush);
         // Visual effects brushes (U key master toggle)
         namespace TE = Constants::ThumbnailPanel::ThumbnailEffects;
         m_panelContext->CreateSolidColorBrush(
-            D2D1::ColorF(TE::GLOW_COLOR_R, TE::GLOW_COLOR_G, TE::GLOW_COLOR_B, TE::GLOW_COLOR_A),
-            &m_glowBrush);
+                D2D1::ColorF(TE::GLOW_COLOR_R, TE::GLOW_COLOR_G, TE::GLOW_COLOR_B, TE::GLOW_COLOR_A),
+                &m_glowBrush);
         // Corner bg brush — color is set to clearColor at the start of every Render() call
         m_panelContext->CreateSolidColorBrush(D2D1::ColorF(0.f, 0.f, 0.f, 1.f), &m_cornerBgBrush);
     }
@@ -1767,7 +1866,7 @@ namespace UI {
         //   CW  = angle increases going clockwise on screen (Y down)
         //   Arc directions verified per-corner so the 90° arc passes through the
         //   bite interior (not the exterior 270° long-way arc).
-        const auto CW  = D2D1_SWEEP_DIRECTION_CLOCKWISE;
+        const auto CW = D2D1_SWEEP_DIRECTION_CLOCKWISE;
         const auto CCW = D2D1_SWEEP_DIRECTION_COUNTER_CLOCKWISE;
         const auto SML = D2D1_ARC_SIZE_SMALL;
 
@@ -1824,10 +1923,11 @@ namespace UI {
         if (FAILED(m_swapChain->GetBuffer(0, IID_PPV_ARGS(&surface)))) return;
 
         D2D1_BITMAP_PROPERTIES1 props = D2D1::BitmapProperties1(
-            D2D1_BITMAP_OPTIONS_TARGET | D2D1_BITMAP_OPTIONS_CANNOT_DRAW,
-            D2D1::PixelFormat(DXGI_FORMAT_B8G8R8A8_UNORM, D2D1_ALPHA_MODE_IGNORE));
+                D2D1_BITMAP_OPTIONS_TARGET | D2D1_BITMAP_OPTIONS_CANNOT_DRAW,
+                D2D1::PixelFormat(DXGI_FORMAT_B8G8R8A8_UNORM, D2D1_ALPHA_MODE_IGNORE));
         if (FAILED(m_panelContext->CreateBitmapFromDxgiSurface(surface.Get(), &props,
-                                                                &m_panelBackBuffer))) return;
+            &m_panelBackBuffer)))
+            return;
 
         m_panelContext->SetTarget(m_panelBackBuffer.Get());
     }
@@ -1868,12 +1968,12 @@ namespace UI {
 
         // Use active background color if this panel is active
         D2D1_COLOR_F clearColor = Constants::Theme::ThemedGrayD2D(
-            Constants::Theme::Panel::BACKGROUND_INACTIVE, app.themeFactor,
-            Constants::Theme::Panel::BACKGROUND_INACTIVE_ALPHA);
+                Constants::Theme::Panel::BACKGROUND_INACTIVE, app.themeFactor,
+                Constants::Theme::Panel::BACKGROUND_INACTIVE_ALPHA);
         if (g_activePanelHwnd == m_hWnd) {
             clearColor = Constants::Theme::ThemedGrayD2D(
-                Constants::Theme::Panel::BACKGROUND_ACTIVE, app.themeFactor,
-                Constants::Theme::Panel::BACKGROUND_ACTIVE_ALPHA);
+                    Constants::Theme::Panel::BACKGROUND_ACTIVE, app.themeFactor,
+                    Constants::Theme::Panel::BACKGROUND_ACTIVE_ALPHA);
         }
         m_panelContext->Clear(clearColor);
 
@@ -1891,7 +1991,7 @@ namespace UI {
 
         if (effectsOn && TE::EFFECT_ROUNDED_CORNERS && m_panelContext) {
             if (!m_cornerGeometry || m_cornerGeomDpi != app.dpiScale) {
-                const float tw = Constants::THUMBNAIL_PANEL_THUMB_WIDTH  * app.dpiScale;
+                const float tw = Constants::THUMBNAIL_PANEL_THUMB_WIDTH * app.dpiScale;
                 const float th = Constants::THUMBNAIL_PANEL_THUMB_HEIGHT * app.dpiScale;
                 const float cr = TE::CORNER_RADIUS * app.dpiScale;
                 BuildCornerGeometry(tw, th, cr);
@@ -1903,8 +2003,8 @@ namespace UI {
         // Rounded-rect helpers: when corner rounding is active, EVERY border
         // (selection glow, hover, multi-select) uses the same radius so the
         // whole strip reads as one consistent design.
-        const bool  roundedOn = effectsOn && TE::EFFECT_ROUNDED_CORNERS;
-        const float cornerR   = TE::CORNER_RADIUS * app.dpiScale;
+        const bool roundedOn = effectsOn && TE::EFFECT_ROUNDED_CORNERS;
+        const float cornerR = TE::CORNER_RADIUS * app.dpiScale;
         const auto inflate = [](const D2D1_RECT_F &rc, float d) {
             return D2D1::RectF(rc.left - d, rc.top - d, rc.right + d, rc.bottom + d);
         };
@@ -1913,8 +2013,8 @@ namespace UI {
                                     float thickness, float extraRadius = 0.0f) {
             if (roundedOn)
                 m_panelContext->DrawRoundedRectangle(
-                    D2D1::RoundedRect(rc, cornerR + extraRadius, cornerR + extraRadius),
-                    brush, thickness);
+                        D2D1::RoundedRect(rc, cornerR + extraRadius, cornerR + extraRadius),
+                        brush, thickness);
             else
                 m_panelContext->DrawRectangle(rc, brush, thickness);
         };
@@ -1923,21 +2023,21 @@ namespace UI {
             const int origI = static_cast<int>(visIdx[j]);
             const auto &rv = resolved[j];
             const std::wstring &thumbPath = m_thumbnails[origI].filePath;
-            const bool isHover    = (origI == hoverIdx);
+            const bool isHover = (origI == hoverIdx);
             const bool isSelected = (origI == selectedIdx);
             const float thumbOpacity =
-                (!s_cutPaths.empty() && s_cutPaths.count(thumbPath))
-                ? Constants::ThumbnailPanel::THUMBNAIL_CUT_OPACITY
-                : 1.0f;
+                    (!s_cutPaths.empty() && s_cutPaths.count(thumbPath))
+                        ? Constants::ThumbnailPanel::THUMBNAIL_CUT_OPACITY
+                        : 1.0f;
 
             // EFFECT: Hover scale — expand draw rect by HOVER_SCALE_FACTOR around center
             D2D1_RECT_F drawRect = rv.rect;
             if (effectsOn && TE::EFFECT_HOVER_SCALE && isHover) {
-                const float s  = TE::HOVER_SCALE_FACTOR;
-                const float cx = (rv.rect.left + rv.rect.right)  * 0.5f;
-                const float cy = (rv.rect.top  + rv.rect.bottom) * 0.5f;
-                const float hw = (rv.rect.right  - rv.rect.left) * 0.5f * s;
-                const float hh = (rv.rect.bottom - rv.rect.top)  * 0.5f * s;
+                const float s = TE::HOVER_SCALE_FACTOR;
+                const float cx = (rv.rect.left + rv.rect.right) * 0.5f;
+                const float cy = (rv.rect.top + rv.rect.bottom) * 0.5f;
+                const float hw = (rv.rect.right - rv.rect.left) * 0.5f * s;
+                const float hh = (rv.rect.bottom - rv.rect.top) * 0.5f * s;
                 drawRect = D2D1::RectF(cx - hw, cy - hh, cx + hw, cy + hh);
             }
 
@@ -1956,7 +2056,7 @@ namespace UI {
                 D2D1::Matrix3x2F oldXform;
                 m_panelContext->GetTransform(&oldXform);
                 m_panelContext->SetTransform(
-                    D2D1::Matrix3x2F::Translation(rv.rect.left, rv.rect.top) * oldXform);
+                        D2D1::Matrix3x2F::Translation(rv.rect.left, rv.rect.top) * oldXform);
                 m_panelContext->FillGeometry(m_cornerGeometry.Get(), m_cornerBgBrush.Get());
                 m_panelContext->SetTransform(oldXform);
             }
@@ -1968,7 +2068,7 @@ namespace UI {
                 m_multiSelBrush->SetOpacity(0.22f);
                 if (roundedOn)
                     m_panelContext->FillRoundedRectangle(
-                        D2D1::RoundedRect(drawRect, cornerR, cornerR), m_multiSelBrush.Get());
+                            D2D1::RoundedRect(drawRect, cornerR, cornerR), m_multiSelBrush.Get());
                 else
                     m_panelContext->FillRectangle(drawRect, m_multiSelBrush.Get());
                 m_multiSelBrush->SetOpacity(1.0f);
@@ -2010,27 +2110,27 @@ namespace UI {
             GetClientRect(m_hWnd, &cr2);
             const float sw = static_cast<float>(cr2.right);
             const float sh = static_cast<float>(cr2.bottom);
-            const float tw = Constants::THUMBNAIL_PANEL_THUMB_WIDTH  * app.dpiScale;
+            const float tw = Constants::THUMBNAIL_PANEL_THUMB_WIDTH * app.dpiScale;
             const float th = Constants::THUMBNAIL_PANEL_THUMB_HEIGHT * app.dpiScale;
             const float sp = Constants::THUMBNAIL_PANEL_THUMB_SPACING * app.dpiScale;
-            const float mg = Constants::THUMBNAIL_PANEL_THUMB_MARGIN  * app.dpiScale;
-            const float n  = static_cast<float>(m_thumbnails.size());
-            const bool  vert = IsVertical();
+            const float mg = Constants::THUMBNAIL_PANEL_THUMB_MARGIN * app.dpiScale;
+            const float n = static_cast<float>(m_thumbnails.size());
+            const bool vert = IsVertical();
 
-            const float thumbSz  = vert ? th : tw;
-            const float content  = n * (thumbSz + sp) - sp;
-            const float visible  = (vert ? sh : sw) - 2.0f * mg;
+            const float thumbSz = vert ? th : tw;
+            const float content = n * (thumbSz + sp) - sp;
+            const float visible = (vert ? sh : sw) - 2.0f * mg;
 
             if (content > visible) {
-                const float BAR      = Constants::ThumbnailPanel::SCROLLBAR_THICKNESS * app.dpiScale;
+                const float BAR = Constants::ThumbnailPanel::SCROLLBAR_THICKNESS * app.dpiScale;
                 const float trackLen = vert ? sh : sw;
                 const float barThumb = std::max(Constants::ThumbnailPanel::SCROLLBAR_MIN_THUMB * app.dpiScale,
                                                 trackLen * visible / content);
                 const float scrollMax = content - visible;
                 const float scrollNow = std::clamp(-m_offset, 0.0f, scrollMax);
-                const float thumbOff  = (scrollMax > 0.0f)
-                                        ? (scrollNow / scrollMax) * (trackLen - barThumb)
-                                        : 0.0f;
+                const float thumbOff = (scrollMax > 0.0f)
+                                           ? (scrollNow / scrollMax) * (trackLen - barThumb)
+                                           : 0.0f;
 
                 D2D1_RECT_F track, thumb;
                 if (vert) {
@@ -2092,44 +2192,43 @@ namespace UI {
                 const float sw2 = static_cast<float>(crl.right);
                 const float sh2 = static_cast<float>(crl.bottom);
                 const float BAR = Constants::ThumbnailPanel::SCROLLBAR_THICKNESS * app.dpiScale;
-                const bool  vert = IsVertical();
-                const float dim  = vert ? sh2 : sw2;
+                const bool vert = IsVertical();
+                const float dim = vert ? sh2 : sw2;
 
                 if (!m_dirLabelLayout
                     || labelText != m_dirLabelTextCache
-                    || dim  != m_dirLabelDimCache
-                    || BAR  != m_dirLabelBarCache)
-                {
+                    || dim != m_dirLabelDimCache
+                    || BAR != m_dirLabelBarCache) {
                     m_dirLabelLayout.Reset();
                     m_dirLabelTextCache = labelText;
-                    m_dirLabelDimCache  = dim;
-                    m_dirLabelBarCache  = BAR;
+                    m_dirLabelDimCache = dim;
+                    m_dirLabelBarCache = BAR;
 
                     const float fontSize = std::max(6.0f, BAR - 2.0f);
                     Microsoft::WRL::ComPtr<IDWriteTextFormat> fmt;
                     r->m_pDWriteFactory->CreateTextFormat(
-                        L"Segoe UI", nullptr,
-                        DWRITE_FONT_WEIGHT_NORMAL, DWRITE_FONT_STYLE_NORMAL,
-                        DWRITE_FONT_STRETCH_NORMAL, fontSize,
-                        Constants::Overlay::MSG_ALL_FONT_LOCALE,
-                        &fmt);
+                            L"Segoe UI", nullptr,
+                            DWRITE_FONT_WEIGHT_NORMAL, DWRITE_FONT_STYLE_NORMAL,
+                            DWRITE_FONT_STRETCH_NORMAL, fontSize,
+                            Constants::Overlay::MSG_ALL_FONT_LOCALE,
+                            &fmt);
 
                     if (fmt) {
                         fmt->SetTextAlignment(DWRITE_TEXT_ALIGNMENT_CENTER);
                         fmt->SetParagraphAlignment(DWRITE_PARAGRAPH_ALIGNMENT_CENTER);
                         r->m_pDWriteFactory->CreateTextLayout(
-                            labelText.c_str(), static_cast<UINT32>(labelText.size()),
-                            fmt.Get(), dim, BAR, &m_dirLabelLayout);
+                                labelText.c_str(), static_cast<UINT32>(labelText.size()),
+                                fmt.Get(), dim, BAR, &m_dirLabelLayout);
 
                         if (m_dirLabelLayout) {
                             const UINT32 boldLen = static_cast<UINT32>(labelText.size()) - boldStart;
                             if (boldLen > 0)
                                 m_dirLabelLayout->SetFontWeight(DWRITE_FONT_WEIGHT_BOLD,
-                                                                { boldStart, boldLen });
+                                                                {boldStart, boldLen});
                             m_dirLabelLayout->SetWordWrapping(DWRITE_WORD_WRAPPING_NO_WRAP);
                             Microsoft::WRL::ComPtr<IDWriteInlineObject> ellipsis;
                             r->m_pDWriteFactory->CreateEllipsisTrimmingSign(fmt.Get(), &ellipsis);
-                            DWRITE_TRIMMING trim = { DWRITE_TRIMMING_GRANULARITY_CHARACTER, 0, 0 };
+                            DWRITE_TRIMMING trim = {DWRITE_TRIMMING_GRANULARITY_CHARACTER, 0, 0};
                             m_dirLabelLayout->SetTrimming(&trim, ellipsis.Get());
                         }
                     }
@@ -2137,29 +2236,33 @@ namespace UI {
 
                 if (m_dirLabelLayout) {
                     ID2D1SolidColorBrush *labelBrush =
-                        (m_hWnd == g_activePanelHwnd && m_dirLabelActiveBrush)
-                        ? m_dirLabelActiveBrush.Get()
-                        : m_dirLabelInactiveBrush.Get();
+                            (m_hWnd == g_activePanelHwnd && m_dirLabelActiveBrush)
+                                ? m_dirLabelActiveBrush.Get()
+                                : m_dirLabelInactiveBrush.Get();
 
                     float cx = 0.0f, stripY = 0.0f;
                     if (vert) {
                         if (m_position == 2)
                             cx = (Constants::ThumbnailPanel::SCROLLBAR_POS_RIGHT_PANEL
                                   == Constants::ThumbnailPanel::ScrollbarSide::LEFT)
-                                 ? BAR / 2.0f : sw2 - BAR / 2.0f;
+                                     ? BAR / 2.0f
+                                     : sw2 - BAR / 2.0f;
                         else
                             cx = (Constants::ThumbnailPanel::SCROLLBAR_POS_LEFT_PANEL
                                   == Constants::ThumbnailPanel::ScrollbarSide::LEFT)
-                                 ? BAR / 2.0f : sw2 - BAR / 2.0f;
+                                     ? BAR / 2.0f
+                                     : sw2 - BAR / 2.0f;
                     } else {
                         if (m_position == 1)
                             stripY = (Constants::ThumbnailPanel::SCROLLBAR_POS_TOP_PANEL
                                       == Constants::ThumbnailPanel::ScrollbarEdge::TOP)
-                                     ? 0.0f : sh2 - BAR;
+                                         ? 0.0f
+                                         : sh2 - BAR;
                         else
                             stripY = (Constants::ThumbnailPanel::SCROLLBAR_POS_BOTTOM_PANEL
                                       == Constants::ThumbnailPanel::ScrollbarEdge::TOP)
-                                     ? 0.0f : sh2 - BAR;
+                                         ? 0.0f
+                                         : sh2 - BAR;
                     }
 
                     D2D1::Matrix3x2F oldXform;
@@ -2167,14 +2270,14 @@ namespace UI {
 
                     if (vert) {
                         m_panelContext->SetTransform(
-                            D2D1::Matrix3x2F::Rotation(-90.0f, D2D1::Point2F(cx, sh2 / 2.0f)));
+                                D2D1::Matrix3x2F::Rotation(-90.0f, D2D1::Point2F(cx, sh2 / 2.0f)));
                         m_panelContext->DrawTextLayout(
-                            D2D1::Point2F(cx - sh2 / 2.0f, sh2 / 2.0f - BAR / 2.0f),
-                            m_dirLabelLayout.Get(), labelBrush);
+                                D2D1::Point2F(cx - sh2 / 2.0f, sh2 / 2.0f - BAR / 2.0f),
+                                m_dirLabelLayout.Get(), labelBrush);
                     } else {
                         m_panelContext->DrawTextLayout(
-                            D2D1::Point2F(0.0f, stripY),
-                            m_dirLabelLayout.Get(), labelBrush);
+                                D2D1::Point2F(0.0f, stripY),
+                                m_dirLabelLayout.Get(), labelBrush);
                     }
 
                     m_panelContext->SetTransform(oldXform);

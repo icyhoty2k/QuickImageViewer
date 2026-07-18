@@ -16,7 +16,7 @@ extern void UpdateOverlaysForCurrentImage(HWND hWnd);
 #endif
 #include <dwmapi.h>
 #include <intsafe.h>
-#include "CacheWnd.h"
+#include "UI/ThumbnailPanels/CacheWnd.h"
 #include "AppState.h"
 #include "WorkerThread.h"
 #include "Platform/Constants.h"
@@ -24,7 +24,7 @@ extern void UpdateOverlaysForCurrentImage(HWND hWnd);
 #include "../DropTarget.h"
 #include "Platform/FileHandler.h"
 #include "GeoNames.h"
-#include "UI/DirWnd.h"
+#include "UI/ThumbnailPanels/DirWnd.h"
 #include "UI/ThemedDialog.h"
 #include "MouseHandler.h"
 #include "Input/Command.h"

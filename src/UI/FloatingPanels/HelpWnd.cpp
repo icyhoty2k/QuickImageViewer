@@ -1,6 +1,6 @@
 #include "HelpWnd.h"
-#include "../Platform/Constants.h"
-#include "../AppState.h"
+#include "../../Platform/Constants.h"
+#include "../../AppState.h"
 #include "Shortcuts.h"
 #include <string>
 #include <vector>
@@ -28,25 +28,25 @@ namespace UI {
                 return L"Num " + std::to_wstring(vk - VK_NUMPAD0);
 
             switch (vk) {
-                case VK_ESCAPE:   return L"Esc";
-                case VK_TAB:      return L"Tab";
-                case VK_RETURN:   return L"Enter";
-                case VK_SPACE:    return L"Space";
-                case VK_BACK:     return L"Backspace";
-                case VK_DELETE:   return L"Delete";
-                case VK_INSERT:   return L"Insert";
-                case VK_HOME:     return L"Home";
-                case VK_END:      return L"End";
-                case VK_PRIOR:    return L"Page Up";
-                case VK_NEXT:     return L"Page Down";
-                case VK_LEFT:     return L"Left";
-                case VK_RIGHT:    return L"Right";
-                case VK_UP:       return L"Up";
-                case VK_DOWN:     return L"Down";
-                case VK_ADD:      return L"Num +";
+                case VK_ESCAPE: return L"Esc";
+                case VK_TAB: return L"Tab";
+                case VK_RETURN: return L"Enter";
+                case VK_SPACE: return L"Space";
+                case VK_BACK: return L"Backspace";
+                case VK_DELETE: return L"Delete";
+                case VK_INSERT: return L"Insert";
+                case VK_HOME: return L"Home";
+                case VK_END: return L"End";
+                case VK_PRIOR: return L"Page Up";
+                case VK_NEXT: return L"Page Down";
+                case VK_LEFT: return L"Left";
+                case VK_RIGHT: return L"Right";
+                case VK_UP: return L"Up";
+                case VK_DOWN: return L"Down";
+                case VK_ADD: return L"Num +";
                 case VK_SUBTRACT: return L"Num −";
                 case VK_MULTIPLY: return L"Num *";
-                case VK_DIVIDE:   return L"Num /";
+                case VK_DIVIDE: return L"Num /";
                 default: break;
             }
 
@@ -54,19 +54,41 @@ namespace UI {
             UINT ch = MapVirtualKeyW(vk, MAPVK_VK_TO_CHAR) & 0x7FFF;
             if (ch >= 32)
                 return std::wstring(1, static_cast<wchar_t>(
-                        towupper(static_cast<wint_t>(ch))));
+                                        towupper(static_cast<wint_t>(ch))));
             return L"?";
         }
 
-        std::wstring K(UINT vk)          { return KeyName(vk); }
-        std::wstring Ctrl(UINT vk)       { return L"Ctrl+"  + KeyName(vk); }
-        std::wstring Shift(UINT vk)      { return L"Shift+" + KeyName(vk); }
-        std::wstring Alt(UINT vk)        { return L"Alt+"   + KeyName(vk); }
-        std::wstring CtrlShift(UINT vk)  { return L"Ctrl+Shift+" + KeyName(vk); }
-        std::wstring CtrlAlt(UINT vk)    { return L"Ctrl+Alt+"   + KeyName(vk); }
-        std::wstring CtrlAltShift(UINT vk) { return L"Ctrl+Alt+Shift+" + KeyName(vk); }
+        std::wstring K(UINT vk) {
+            return KeyName(vk);
+        }
 
-        std::wstring NumI(int v) { return std::to_wstring(v); }
+        std::wstring Ctrl(UINT vk) {
+            return L"Ctrl+" + KeyName(vk);
+        }
+
+        std::wstring Shift(UINT vk) {
+            return L"Shift+" + KeyName(vk);
+        }
+
+        std::wstring Alt(UINT vk) {
+            return L"Alt+" + KeyName(vk);
+        }
+
+        std::wstring CtrlShift(UINT vk) {
+            return L"Ctrl+Shift+" + KeyName(vk);
+        }
+
+        std::wstring CtrlAlt(UINT vk) {
+            return L"Ctrl+Alt+" + KeyName(vk);
+        }
+
+        std::wstring CtrlAltShift(UINT vk) {
+            return L"Ctrl+Alt+Shift+" + KeyName(vk);
+        }
+
+        std::wstring NumI(int v) {
+            return std::to_wstring(v);
+        }
 
         std::wstring NumF(float v) {
             wchar_t buf[32];
@@ -260,16 +282,16 @@ namespace UI {
             L"Scroll the strip. Hold Shift to scroll 3× faster.", sThumbs);
         Add(K(SC::SC_THUMBNAIL_WRAP_TOGGLE),
             std::wstring(L"Toggle wheel wrap-around. When ON, scrolling past the last thumbnail "
-            L"jumps back to the first — and scrolling before the first jumps to the last. "
-            L"Each wrap shows a message in the center overlay. Startup default: ") +
+                    L"jumps back to the first — and scrolling before the first jumps to the last. "
+                    L"Each wrap shows a message in the center overlay. Startup default: ") +
             (Constants::THUMBNAIL_PANEL_WHEEL_WRAP_AROUND ? L"ON" : L"OFF") +
             L" (THUMBNAIL_PANEL_WHEEL_WRAP_AROUND in Constants.h).", sThumbs);
         Add(K(SC::SC_THUMBNAIL_EFFECTS_TOGGLE),
             std::wstring(L"Toggle thumbnail strip visual effects on/off (master runtime switch). "
-            L"Effects include: rounded corners (corner overdraw), accent-color glow border on the "
-            L"selected thumbnail, and a subtle hover-scale enlarge on the hovered thumbnail. "
-            L"Each effect can also be individually disabled in Constants.h "
-            L"(ThumbnailPanel::ThumbnailEffects). Startup default: ") +
+                    L"Effects include: rounded corners (corner overdraw), accent-color glow border on the "
+                    L"selected thumbnail, and a subtle hover-scale enlarge on the hovered thumbnail. "
+                    L"Each effect can also be individually disabled in Constants.h "
+                    L"(ThumbnailPanel::ThumbnailEffects). Startup default: ") +
             (Constants::ThumbnailPanel::ThumbnailEffects::EFFECTS_MASTER_ENABLED ? L"ON" : L"OFF") +
             L".", sThumbs);
         Add(L"Left Click",
@@ -488,7 +510,7 @@ namespace UI {
         for (size_t s = 0; s < m_sections.size(); ++s) {
             out += L"\n" + m_sections[s].title + L"  —  " + m_sections[s].subtitle + L"\n";
             out += std::wstring(60, L'-') + L"\n";
-            for (const auto &e : m_entries) {
+            for (const auto &e: m_entries) {
                 if (e.sectionId != static_cast<int>(s)) continue;
                 out += e.shortcut + L"\n    " + e.description + L"\n";
             }
@@ -525,21 +547,26 @@ namespace UI {
                                CLEARTYPE_QUALITY, VARIABLE_PITCH, L"Segoe UI");
         };
 
-        m_hFontTitle      = Make(30, FW_BOLD, false);
-        m_hFontSubtitle   = Make(13, FW_NORMAL, false);
-        m_hFontSection    = Make(17, FW_BOLD, false);
+        m_hFontTitle = Make(30, FW_BOLD, false);
+        m_hFontSubtitle = Make(13, FW_NORMAL, false);
+        m_hFontSection = Make(17, FW_BOLD, false);
         m_hFontSectionSub = Make(12, FW_NORMAL, true);
-        m_hFontShortcut   = Make(static_cast<int>(13 * KEY_FONT_SCALE), FW_BOLD, false);
-        m_hFontDesc       = Make(13, FW_NORMAL, false);
-        m_hFontFooter     = Make(11, FW_NORMAL, false);
-        m_cachedFontDpi   = static_cast<int>(dpi);
-        m_measuredWidth   = 0; // font change invalidates measurements
+        m_hFontShortcut = Make(static_cast<int>(13 * KEY_FONT_SCALE), FW_BOLD, false);
+        m_hFontDesc = Make(13, FW_NORMAL, false);
+        m_hFontFooter = Make(11, FW_NORMAL, false);
+        m_cachedFontDpi = static_cast<int>(dpi);
+        m_measuredWidth = 0; // font change invalidates measurements
     }
 
     void HelpWnd::DestroyFonts() {
-        for (HFONT *f : {&m_hFontTitle, &m_hFontSubtitle, &m_hFontSection, &m_hFontSectionSub,
-                         &m_hFontShortcut, &m_hFontDesc, &m_hFontFooter}) {
-            if (*f) { DeleteObject(*f); *f = nullptr; }
+        for (HFONT *f: {
+                 &m_hFontTitle, &m_hFontSubtitle, &m_hFontSection, &m_hFontSectionSub,
+                 &m_hFontShortcut, &m_hFontDesc, &m_hFontFooter
+             }) {
+            if (*f) {
+                DeleteObject(*f);
+                *f = nullptr;
+            }
         }
         m_cachedFontDpi = 0;
     }
@@ -547,7 +574,7 @@ namespace UI {
     void HelpWnd::EnsureBackBuffer(HDC refDC, int w, int h) {
         if (m_memDC && w == m_bufW && h == m_bufH) return;
         DestroyBackBuffer();
-        m_memDC  = CreateCompatibleDC(refDC);
+        m_memDC = CreateCompatibleDC(refDC);
         m_memBmp = CreateCompatibleBitmap(refDC, std::max(w, 1), std::max(h, 1));
         m_memBmpOld = static_cast<HBITMAP>(SelectObject(m_memDC, m_memBmp));
         m_bufW = w;
@@ -560,7 +587,10 @@ namespace UI {
             DeleteDC(m_memDC);
             m_memDC = nullptr;
         }
-        if (m_memBmp) { DeleteObject(m_memBmp); m_memBmp = nullptr; }
+        if (m_memBmp) {
+            DeleteObject(m_memBmp);
+            m_memBmp = nullptr;
+        }
         m_memBmpOld = nullptr;
         m_bufW = m_bufH = 0;
     }
@@ -576,10 +606,10 @@ namespace UI {
         m_rowHeights.assign(m_entries.size(), 0);
         m_headerHeights.assign(m_sections.size(), 0);
 
-        const int rowPadY        = MulDiv(6, static_cast<int>(dpi), 96);
-        const int headGapTop     = MulDiv(22, static_cast<int>(dpi), 96);
-        const int headGapBottom  = MulDiv(10, static_cast<int>(dpi), 96);
-        const int subGap         = MulDiv(3, static_cast<int>(dpi), 96);
+        const int rowPadY = MulDiv(6, static_cast<int>(dpi), 96);
+        const int headGapTop = MulDiv(22, static_cast<int>(dpi), 96);
+        const int headGapBottom = MulDiv(10, static_cast<int>(dpi), 96);
+        const int subGap = MulDiv(3, static_cast<int>(dpi), 96);
 
         HGDIOBJ oldFont = SelectObject(hdc, m_hFontShortcut);
 
@@ -710,16 +740,16 @@ namespace UI {
                 SetBkMode(hdc, TRANSPARENT);
 
                 // ---- metrics ------------------------------------------------
-                const int padding   = MulDiv(28, dpiI, 96);
-                const int sbWidth   = MulDiv(10, dpiI, 96);
+                const int padding = MulDiv(28, dpiI, 96);
+                const int sbWidth = MulDiv(10, dpiI, 96);
                 const int rowIndent = MulDiv(14, dpiI, 96);
-                const int colGap    = MulDiv(14, dpiI, 96);
-                const int rowPadY   = MulDiv(6, dpiI, 96);
-                const int barW      = MulDiv(4, dpiI, 96);
-                const int headGapTop    = MulDiv(22, dpiI, 96);
-                const int subGap        = MulDiv(3, dpiI, 96);
+                const int colGap = MulDiv(14, dpiI, 96);
+                const int rowPadY = MulDiv(6, dpiI, 96);
+                const int barW = MulDiv(4, dpiI, 96);
+                const int headGapTop = MulDiv(22, dpiI, 96);
+                const int subGap = MulDiv(3, dpiI, 96);
 
-                const int contentLeft  = rc.left + padding;
+                const int contentLeft = rc.left + padding;
                 const int contentRight = rc.right - padding - sbWidth;
 
                 // Key column: 33% of the content width, clamped
@@ -756,9 +786,9 @@ namespace UI {
                 // ---- title + subtitle ---------------------------------------
                 SelectObject(hdc, m_hFontTitle);
                 SetTextColor(hdc, Constants::Theme::ThemedColor(
-                        Constants::Theme::HelpWindow::TITLE_R,
-                        Constants::Theme::HelpWindow::TITLE_G,
-                        Constants::Theme::HelpWindow::TITLE_B, app.themeFactor));
+                                     Constants::Theme::HelpWindow::TITLE_R,
+                                     Constants::Theme::HelpWindow::TITLE_G,
+                                     Constants::Theme::HelpWindow::TITLE_B, app.themeFactor));
                 RECT titleRect = {contentLeft, rc.top + padding, contentRight, 0};
                 DrawTextW(hdc, L"Quick Image Viewer", -1, &titleRect,
                           DT_CALCRECT | DT_SINGLELINE | DT_NOPREFIX);
@@ -768,15 +798,17 @@ namespace UI {
 
                 SelectObject(hdc, m_hFontSubtitle);
                 SetTextColor(hdc, subColor);
-                RECT subtitleRect = {contentLeft, titleRect.bottom + MulDiv(5, dpiI, 96),
-                                     contentRight, titleRect.bottom + MulDiv(25, dpiI, 96)};
+                RECT subtitleRect = {
+                    contentLeft, titleRect.bottom + MulDiv(5, dpiI, 96),
+                    contentRight, titleRect.bottom + MulDiv(25, dpiI, 96)
+                };
                 std::wstring subtitle = m_fullTitle + L"  —  shortcuts & command-line reference";
                 DrawTextW(hdc, subtitle.c_str(), -1, &subtitleRect,
                           DT_CENTER | DT_TOP | DT_SINGLELINE | DT_NOPREFIX);
 
                 // ---- content geometry ---------------------------------------
                 const int contentTop = subtitleRect.bottom + MulDiv(20, dpiI, 96);
-                const int footerH   = MulDiv(44, dpiI, 96);
+                const int footerH = MulDiv(44, dpiI, 96);
                 const int contentBottom = rc.bottom - footerH;
                 const int contentHeight = std::max(contentBottom - contentTop, 1);
 
@@ -823,16 +855,20 @@ namespace UI {
                     DeleteObject(hBar);
 
                     SetTextColor(hdc, secColor);
-                    RECT headRect = {contentLeft + barW + MulDiv(10, dpiI, 96), hy,
-                                     contentRight, hy + rt.bottom};
+                    RECT headRect = {
+                        contentLeft + barW + MulDiv(10, dpiI, 96), hy,
+                        contentRight, hy + rt.bottom
+                    };
                     DrawTextW(hdc, head.c_str(), -1, &headRect,
                               DT_LEFT | DT_TOP | DT_SINGLELINE | DT_NOPREFIX);
                     hy += rt.bottom + subGap;
 
                     SelectObject(hdc, m_hFontSectionSub);
                     SetTextColor(hdc, subColor);
-                    RECT subRect = {contentLeft + barW + MulDiv(10, dpiI, 96), hy,
-                                    contentRight, y + headH};
+                    RECT subRect = {
+                        contentLeft + barW + MulDiv(10, dpiI, 96), hy,
+                        contentRight, y + headH
+                    };
                     DrawTextW(hdc, m_sections[s].subtitle.c_str(), -1, &subRect,
                               DT_LEFT | DT_TOP | DT_WORDBREAK | DT_NOPREFIX);
 
@@ -846,15 +882,19 @@ namespace UI {
                         if (y + rowH >= contentTop && y <= contentBottom) {
                             SelectObject(hdc, m_hFontShortcut);
                             SetTextColor(hdc, keyColor);
-                            RECT keyRect = {contentLeft + rowIndent, y + rowPadY,
-                                            contentLeft + rowIndent + keyColW, y + rowH - rowPadY};
+                            RECT keyRect = {
+                                contentLeft + rowIndent, y + rowPadY,
+                                contentLeft + rowIndent + keyColW, y + rowH - rowPadY
+                            };
                             DrawTextW(hdc, m_entries[i].shortcut.c_str(), -1, &keyRect,
                                       DT_LEFT | DT_TOP | DT_WORDBREAK | DT_NOPREFIX);
 
                             SelectObject(hdc, m_hFontDesc);
                             SetTextColor(hdc, descColor);
-                            RECT descRect = {contentLeft + rowIndent + keyColW + colGap, y + rowPadY,
-                                             contentRight, y + rowH - rowPadY};
+                            RECT descRect = {
+                                contentLeft + rowIndent + keyColW + colGap, y + rowPadY,
+                                contentRight, y + rowH - rowPadY
+                            };
                             DrawTextW(hdc, m_entries[i].description.c_str(), -1, &descRect,
                                       DT_LEFT | DT_TOP | DT_WORDBREAK | DT_NOPREFIX);
 
@@ -902,19 +942,23 @@ namespace UI {
                 // ---- footer --------------------------------------------------
                 SelectObject(hdc, m_hFontFooter);
                 SetTextColor(hdc, subColor);
-                RECT copyrightRect = {contentLeft, rc.bottom - MulDiv(38, dpiI, 96),
-                                      contentRight, rc.bottom - MulDiv(20, dpiI, 96)};
+                RECT copyrightRect = {
+                    contentLeft, rc.bottom - MulDiv(38, dpiI, 96),
+                    contentRight, rc.bottom - MulDiv(20, dpiI, 96)
+                };
                 std::wstring copyrightText = std::wstring(Constants::APP_CREATOR) + L" | " +
                                              Constants::APP_HELP_FOOTER;
                 DrawTextW(hdc, copyrightText.c_str(), -1, &copyrightRect,
                           DT_CENTER | DT_TOP | DT_NOPREFIX);
 
-                m_footerLinkRect = {contentLeft, rc.bottom - MulDiv(18, dpiI, 96),
-                                    contentRight, rc.bottom - MulDiv(2, dpiI, 96)};
+                m_footerLinkRect = {
+                    contentLeft, rc.bottom - MulDiv(18, dpiI, 96),
+                    contentRight, rc.bottom - MulDiv(2, dpiI, 96)
+                };
                 SetTextColor(hdc, Constants::Theme::ThemedColor(
-                        Constants::Links::COLOR_R_F,
-                        Constants::Links::COLOR_G_F,
-                        Constants::Links::COLOR_B_F, app.themeFactor));
+                                     Constants::Links::COLOR_R_F,
+                                     Constants::Links::COLOR_G_F,
+                                     Constants::Links::COLOR_B_F, app.themeFactor));
                 DrawTextW(hdc, L"Follow on Facebook - Ivan Hristov Yanev", -1,
                           &m_footerLinkRect, DT_CENTER | DT_TOP | DT_NOPREFIX);
 

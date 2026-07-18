@@ -1,5 +1,5 @@
 #pragma once
-#include "IPanelWindow.h"
+#include "../IPanelWindow.h"
 #include <windows.h>
 
 namespace UI {

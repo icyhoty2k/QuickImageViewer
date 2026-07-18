@@ -5,11 +5,11 @@
 #include "../Platform/ConstantsStrings.h"
 #include "../Platform/FileHandler.h"
 #include "../Platform/RegistrySetup.h"
-#include "../UI/CacheWnd.h"
-#include "../UI/DirWnd.h"
-#include "../UI/HistoryListWnd.h"
-#include "../UI/HelpWnd.h"
-#include "../UI/StatsWnd.h"
+#include "../UI/ThumbnailPanels/CacheWnd.h"
+#include "../UI/ThumbnailPanels/DirWnd.h"
+#include "../UI/FloatingPanels/HistoryListWnd.h"
+#include "../UI/FloatingPanels/HelpWnd.h"
+#include "../UI/FloatingPanels/StatsWnd.h"
 #include <algorithm>
 #include <filesystem>
 #include <numeric>
