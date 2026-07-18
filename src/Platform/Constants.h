@@ -73,8 +73,8 @@ namespace Constants {
 
 
     //Mouse
-    constexpr bool MOUSE_VERTICAL_REVERSE_SCROLL_DIRECTION = false;
-    constexpr bool MOUSE_HORIZONTAL_REVERSE_SCROLL_DIRECTION = false;
+    constexpr bool IS_MOUSE_VERTICAL_REVERSE_SCROLL_DIRECTION = false;
+    constexpr bool IS_MOUSE_HORIZONTAL_REVERSE_SCROLL_DIRECTION = false;
     // How many WHEEL_DELTA ticks (each tick = 120) must accumulate before a
     // horizontal scroll triggers a folder change. 1 = every tick, 2 = every
     // other tick, 3 = three ticks, etc. Raise to reduce sensitivity.
@@ -116,10 +116,10 @@ namespace Constants {
     constexpr UINT WM_QIV_CENTER_MSG_HIDE = WM_USER + 10; // Posted by WM_TIMER to hide center msg
 
 
-    constexpr int BASE_WIDTH = 1200;
-    constexpr int BASE_HEIGHT = 800;
+    constexpr int IS_BASE_WIDTH  = 1200;
+    constexpr int IS_BASE_HEIGHT = 800;
 
-    inline bool SWAP_MOUSE_BUTTONS = true; // Set this to true to swap Left and Right mouse button functions
+    constexpr bool IS_SWAP_MOUSE_BUTTONS = true;
     // =========================================================================
     // EXIF WINDOW EMBEDDED THUMBNAIL PREVIEW
     // =========================================================================
@@ -224,7 +224,7 @@ namespace Constants {
     // =========================================================================
     constexpr const int VRAM_CACHE_THUMBS_THREADS_COUNT = 4; // fallback if processor has less than 8 thread otherwise dynamic thread count / 2
     constexpr const int VRAM_CACHE_DECODER_THREADS_COUNT = 2;
-    constexpr const int VRAM_CACHE_IMAGES_COUNT = 20;
+    constexpr int IS_VRAM_CACHE_IMAGES_COUNT = 20;
     // VRAM budget for the dir-panel thumbnail cache.
     // Each entry is CACHE_THUMB_WIDTH * CACHE_THUMB_HEIGHT * 4 bytes ≈ 37 KB
     // after scaling.  512 MB holds ~14 000 thumbnails — far more than any
@@ -242,8 +242,8 @@ namespace Constants {
     // Use everywhere a wchar_t buffer receives a user-selected or drag-dropped path.
     constexpr DWORD MAX_FILE_PATH = 32767;
 
-    constexpr const size_t DIR_THUMB_CACHE_BUDGET_MB = 512;
-    constexpr const int PRELOAD_LOOKASIDE_COUNT = 1;
+    constexpr int IS_DIR_THUMB_CACHE_BUDGET_MB = 512;
+    constexpr int IS_PRELOAD_LOOKASIDE_COUNT = 1;
     constexpr const int PRELOAD_TIMER_COUNTDOWN = 60; // {ms} this is used to delay preloading if user scrolls very fast
     //==========================Cache optimization====================================
     //end Saveable options
@@ -316,13 +316,38 @@ namespace Constants {
         constexpr const wchar_t *THUMBNAIL_EFFECTS = L"qivThumbnailEffects";
         constexpr const wchar_t *HISTORY_FULL_MODE = L"qivHistoryFullMode";
         constexpr const wchar_t *OVERLAY_VISIBLE = L"qivOverlayVisible";
+        constexpr const wchar_t *OVERLAY_SHOW_BG = L"qivOverlayShowBg";
         constexpr const wchar_t *OPEN_DIRWND_ON_START = L"qivOpenDirWndOnStart";
+        constexpr const wchar_t *SWAP_MOUSE_BUTTONS = L"qivSwapMouseButtons";
+        constexpr const wchar_t *WHEEL_INVERT   = L"qivWheelInvert";
+        constexpr const wchar_t *WHEEL_INVERT_H = L"qivWheelInvertH";
+        constexpr const wchar_t *VRAM_CACHE_COUNT = L"qivVramCacheCount";
+        constexpr const wchar_t *VIEW_MODE        = L"qivViewMode";
+        constexpr const wchar_t *BASE_WIDTH_KEY   = L"qivBaseWidth";
+        constexpr const wchar_t *BASE_HEIGHT_KEY  = L"qivBaseHeight";
+        constexpr const wchar_t *START_FULLSCREEN      = L"qivStartFullscreen";
+        constexpr const wchar_t *HISTORY_MAX_DIRS      = L"qivHistoryMaxDirs";
+        constexpr const wchar_t *HISTORY_MAX_FAVS      = L"qivHistoryMaxFavs";
+        constexpr const wchar_t *DIR_THUMB_CACHE_MB    = L"qivDirThumbCacheMB";
+        constexpr const wchar_t *PRELOAD_LOOKASIDE      = L"qivPreloadLookaside";
+        constexpr const wchar_t *MSG_CENTER_MS          = L"qivMsgCenterMs";
+        constexpr const wchar_t *HISTORY_MAX_DIRS_SAVE  = L"qivHistoryMaxDirsSave";
+        constexpr const wchar_t *SLIDESHOW_INTERVAL_MS  = L"qivSlideshowIntervalMs";
+        constexpr const wchar_t *SLIDESHOW_LOOP          = L"qivSlideshowLoop";
+        constexpr const wchar_t *SLIDESHOW_SHUFFLE       = L"qivSlideshowShuffle";
+        constexpr const wchar_t *SLIDESHOW_TRANSITION    = L"qivSlideshowTransition";
+        constexpr const wchar_t *SORT_ORDER              = L"qivSortOrder";
+        constexpr const wchar_t *SORT_REVERSE            = L"qivSortReverse";
     }
 
     namespace SettingsFile {
         constexpr const wchar_t *EXPORT_PREFIX = L"QIVSettings_";
         constexpr const wchar_t *EXPORT_EXTENSION = L".ini";
         constexpr const wchar_t *EXPORT_FILTER = L"INI Settings (*.ini)\0*.ini\0All Files (*.*)\0*.*\0";
+    }
+
+    namespace Backup {
+        constexpr const wchar_t *BACKUP_PREFIX = L"qIVBackup_";
     }
 
     namespace ViewModes {
@@ -342,7 +367,7 @@ namespace Constants {
         constexpr const bool IS_COMPACT_OVERLAY_MODE = true; // true → 1-line, false → 2-line
         // P key — toggle semi-transparent background behind all overlay text.
         // Text is always drawn; only the background rect is suppressed when false.
-        inline bool OVERLAY_SHOW_BACKGROUND = true;
+        constexpr bool IS_OVERLAY_SHOW_BACKGROUND = true;
         // Layout mode cycled with O key:
         //   0 — default 3×3 grid
         //   1 — all slots stacked vertically on top-left
@@ -356,7 +381,7 @@ namespace Constants {
         // =========================================================================
         // How long the center-center notification stays visible before auto-hiding (ms)
 
-        constexpr UINT MSG_CENTER_DISPLAY_MS = 1000;
+        constexpr UINT IS_MSG_CENTER_DISPLAY_MS = 1000;
         // Center-center text color  (R, G, B, A)
         constexpr float MSG_CENTER_COLOR_R = 1.0f;
         constexpr float MSG_CENTER_COLOR_G = 0.85f;
@@ -397,10 +422,10 @@ namespace Constants {
         //when backing up history or favorites first line must be the date time and the QuickImageViewer backupVersion ,and COMPUTER_NAME ex:BACKUP COMPUTER_NAME, dd.MM.YYYY, HH:MM:SS.ms, HISTORY_FAVORITES_BACKUP_VERSION
         constexpr const wchar_t *HISTORY_FAVORITES_BACKUP_EXTENSION = L".bak";
         //theese are kept im mot recently used order in ram , when addin a new one to file just append to end with no duplicates
-        constexpr int HISTORY_MAX_DIRS_TO_SHOW = 10; // how many folders to show in historyWnd
-        constexpr int HISTORY_MAX_DIRS_TO_SAVE = 1000; // how many folders to remember/sava in file , just append to end new ones until max is reached excluding duplicates
+        constexpr int IS_HISTORY_MAX_DIRS_TO_SHOW = 10; // how many folders to show in historyWnd
+        constexpr int IS_HISTORY_MAX_DIRS_TO_SAVE = 1000; // how many folders to remember/sava in file , just append to end new ones until max is reached excluding duplicates
         constexpr char HISTORY_FAVORITES_MARK = '*'; // mark for favorites appened before the file name
-        constexpr int HISTORY_MAX_FAVORITES_TO_SHOW = 10; // how many favorites folders to show in HistoryWnd
+        constexpr int IS_HISTORY_MAX_FAVORITES_TO_SHOW = 10; // how many favorites folders to show in HistoryWnd
         constexpr int HISTORY_FAVORITES_POSITION = 0; // 0 on top , 1 on bottom , 2 don't change position(not pinned)
 
         constexpr int HISTORY_ROW_HEIGHT = 28; // px at 96 DPI per history row
@@ -414,9 +439,9 @@ namespace Constants {
 
         // Window size limits (px at 96 DPI — DPI-scaled at runtime)
         constexpr int HISTORY_MIN_W = 690; // minimum panel width
-        constexpr int HISTORY_MAX_W = BASE_WIDTH - 120; // maximum panel width
+        constexpr int HISTORY_MAX_W = IS_BASE_WIDTH  - 120; // maximum panel width
         constexpr int HISTORY_MIN_H = 620; // minimum panel height
-        constexpr int HISTORY_MAX_H = BASE_HEIGHT - 60; // maximum panel height (also capped to 80% of monitor)
+        constexpr int HISTORY_MAX_H = IS_BASE_HEIGHT - 60; // maximum panel height (also capped to 80% of monitor)
     }
 
     // =========================================================================
@@ -450,9 +475,9 @@ namespace Constants {
         constexpr UINT_PTR GIF_TIMER_ID = 1006; // animated GIF frame-advance tick
 
 
-        constexpr int INTERVAL_MS = 5000; // ms between auto-advances
-        constexpr bool LOOP = true; // wrap to first image at end
-        constexpr bool SHUFFLE = false; // random order
+        constexpr int IS_INTERVAL_MS = 5000; // ms between auto-advances
+        constexpr bool IS_LOOP = true; // wrap to first image at end
+        constexpr bool IS_SHUFFLE = false; // random order
         constexpr int CURSOR_HIDE_MS = 3000; // ms of inactivity before hiding cursor (0 = never)
         constexpr int TRANSITION_TICK_MS = 16; // animation tick interval ~60 fps
         constexpr int TRANSITION_DURATION_MS = 800; // default transition length ms

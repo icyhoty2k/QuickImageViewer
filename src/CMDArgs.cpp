@@ -135,8 +135,8 @@ void ApplyCmdArgs(HWND hWnd, const CmdArgs &args, int nCmdShow) {
                             reinterpret_cast<LPARAM>(&mi));
 
         if (mi.found) {
-            int w = static_cast<int>(Constants::BASE_WIDTH * app.dpiScale);
-            int h = static_cast<int>(Constants::BASE_HEIGHT * app.dpiScale);
+            int w = static_cast<int>(app.baseWidth  * app.dpiScale);
+            int h = static_cast<int>(app.baseHeight * app.dpiScale);
             int x = mi.rc.left + (mi.rc.right - mi.rc.left - w) / 2;
             int y = mi.rc.top + (mi.rc.bottom - mi.rc.top - h) / 2;
             SetWindowPos(hWnd, nullptr, x, y, w, h, SWP_NOZORDER | SWP_NOACTIVATE);

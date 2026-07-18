@@ -211,8 +211,8 @@ void MouseHandler::HandleButtonUp(HWND hWnd, UINT message, WPARAM, LPARAM) {
             SetLayeredWindowAttributes(hWnd, 0, app.opacity, LWA_ALPHA);
 
             // 2. Calculate DPI-scaled dimensions
-            int targetW = (int) (Constants::BASE_WIDTH * app.dpiScale);
-            int targetH = (int) (Constants::BASE_HEIGHT * app.dpiScale);
+            int targetW = (int) (app.baseWidth  * app.dpiScale);
+            int targetH = (int) (app.baseHeight * app.dpiScale);
 
             // 4. Center and RESIZE the window
             HMONITOR hMonitor = MonitorFromWindow(hWnd, MONITOR_DEFAULTTONEAREST);
@@ -418,7 +418,7 @@ void MouseHandler::HandleMouseMove(HWND hWnd, LPARAM lParam) {
 
 void MouseHandler::HandleMouseWheel(HWND hWnd, WPARAM wParam, LPARAM /*lParam*/) {
     const int rawDelta = GET_WHEEL_DELTA_WPARAM(wParam);
-    const int delta = Constants::MOUSE_VERTICAL_REVERSE_SCROLL_DIRECTION ? -rawDelta : rawDelta;
+    const int delta = app.invertWheelDirection ? -rawDelta : rawDelta;
 
     if ((GetKeyState(VK_SHIFT) & 0x8000) != 0) {
         app.opacity = static_cast<BYTE>(
@@ -450,7 +450,7 @@ void MouseHandler::HandleMouseWheel(HWND hWnd, WPARAM wParam, LPARAM /*lParam*/)
 void MouseHandler::HandleMouseHWheel(HWND hWnd, WPARAM wParam, LPARAM /*lParam*/) {
     bool isRmbDown = (GetKeyState(VK_RBUTTON) & 0x8000) != 0;
     const int rawDelta = GET_WHEEL_DELTA_WPARAM(wParam);
-    const int hDelta = Constants::MOUSE_HORIZONTAL_REVERSE_SCROLL_DIRECTION ? -rawDelta : rawDelta;
+    const int hDelta = app.invertWheelDirectionH ? -rawDelta : rawDelta;
 
     if (isRmbDown) {
         RECT rc;

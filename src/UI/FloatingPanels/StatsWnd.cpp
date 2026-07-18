@@ -741,8 +741,8 @@ namespace UI {
                     {
                         wchar_t buf[64];
                         swprintf_s(buf, L"%d / %d  slots", m_imgCacheCount,
-                                   static_cast<int>(Constants::VRAM_CACHE_IMAGES_COUNT));
-                        COLORREF c = (m_imgCacheCount == static_cast<int>(Constants::VRAM_CACHE_IMAGES_COUNT))
+                                   static_cast<int>(app.vramCacheCount));
+                        COLORREF c = (m_imgCacheCount == static_cast<int>(app.vramCacheCount))
                                          ? clrOrange
                                          : clrValue;
                         row2(L"Image cache", buf, c, true);

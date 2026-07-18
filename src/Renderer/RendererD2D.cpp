@@ -513,7 +513,7 @@ HRESULT RendererD2D::LoadBitmap(IWICBitmapSource *bitmap, UINT width, UINT heigh
                 m_lruList.erase(it->second.lruIt);
                 m_bitmapCache.erase(it);
             }
-            if (m_lruList.size() >= Constants::VRAM_CACHE_IMAGES_COUNT) {
+            if (m_lruList.size() >= static_cast<size_t>(app.vramCacheCount)) {
                 m_bitmapCache.erase(m_lruList.back());
                 m_lruList.pop_back();
             }
@@ -762,7 +762,7 @@ HRESULT RendererD2D::PreloadBitmap(const std::wstring &filePath, int requestInde
                         std::lock_guard<std::mutex> lock(m_cacheMutex);
                         auto it = m_bitmapCache.find(filePath);
                         if (it != m_bitmapCache.end()) { m_lruList.erase(it->second.lruIt); m_bitmapCache.erase(it); }
-                        if (m_lruList.size() >= Constants::VRAM_CACHE_IMAGES_COUNT) { m_bitmapCache.erase(m_lruList.back()); m_lruList.pop_back(); }
+                        if (m_lruList.size() >= static_cast<size_t>(app.vramCacheCount)) { m_bitmapCache.erase(m_lruList.back()); m_lruList.pop_back(); }
                         m_lruList.push_front(filePath);
                         auto &entry = m_bitmapCache[filePath];
                         entry.bitmap      = newBitmap;
@@ -832,7 +832,7 @@ HRESULT RendererD2D::PreloadBitmap(const std::wstring &filePath, int requestInde
                     m_lruList.erase(it->second.lruIt);
                     m_bitmapCache.erase(it);
                 }
-                if (m_lruList.size() >= Constants::VRAM_CACHE_IMAGES_COUNT) {
+                if (m_lruList.size() >= static_cast<size_t>(app.vramCacheCount)) {
                     m_bitmapCache.erase(m_lruList.back());
                     m_lruList.pop_back();
                 }
@@ -1247,7 +1247,7 @@ HRESULT RendererD2D::LoadSvgFromBytes(const std::vector<BYTE> &svgBytes,
             m_lruList.erase(it->second.lruIt);
             m_bitmapCache.erase(it);
         }
-        if (m_lruList.size() >= Constants::VRAM_CACHE_IMAGES_COUNT) {
+        if (m_lruList.size() >= static_cast<size_t>(app.vramCacheCount)) {
             m_bitmapCache.erase(m_lruList.back());
             m_lruList.pop_back();
         }
