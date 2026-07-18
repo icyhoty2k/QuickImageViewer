@@ -15,18 +15,18 @@ namespace fs = std::filesystem;
 #include "SlideshowTransitions.h"
 
 struct SlideshowState {
-    bool running  = false;
-    bool paused   = false;
-    bool shuffle  = Constants::Slideshow::SHUFFLE;
-    bool loop     = Constants::Slideshow::LOOP;
-    int  intervalMs   = Constants::Slideshow::INTERVAL_MS;
-    int  cursorHideMs = Constants::Slideshow::CURSOR_HIDE_MS;
+    bool running = false;
+    bool paused = false;
+    bool shuffle = Constants::Slideshow::SHUFFLE;
+    bool loop = Constants::Slideshow::LOOP;
+    int intervalMs = Constants::Slideshow::INTERVAL_MS;
+    int cursorHideMs = Constants::Slideshow::CURSOR_HIDE_MS;
     bool cursorHidden = false;
 
     bool savedOverlayVisible = true; // overlay visibility saved at slideshow start, restored at stop
 
     std::vector<int> shuffleOrder; // permutation of playlist indices
-    int  shufflePos = 0;           // current position within shuffleOrder
+    int shufflePos = 0; // current position within shuffleOrder
 
     SlideshowTransitionState transition;
 };
@@ -44,13 +44,13 @@ struct ViewportState {
 };
 
 struct AppState {
-    // --- THE MASTER BYPASS SWITCH ---
-    // When false, the renderer completely ignores the GPU effect graph
-    // and draws the raw ID2D1Bitmap natively.
-    bool isDarkThemed         = Constants::IS_APP_DARK_THEME;
-    DWORD cornerPreference    = Constants::APP_CORNER_PREFERENCES;
-    float themeFactor         = Constants::Theme::THEME_FACTOR;      // runtime 0=dark … 1=light
-    DWORD backdropType        = Constants::APP_BACKDROP_TYPE_DEFAULT; // 0=None,1=Mica,2=Acrylic,3=MicaAlt
+    bool isKeepInBackground = Constants::IS_KEEP_IN_BACKGROUND;
+    bool isEnableRunOnStartup = Constants::IS_ENABLE_RUN_ON_STARTUP;
+
+    bool isDarkThemed = Constants::IS_APP_DARK_THEME;
+    DWORD cornerPreference = Constants::APP_CORNER_PREFERENCES;
+    float themeFactor = Constants::Theme::DEFAULT_THEME_FACTOR; // runtime 0=dark … 1=light
+    DWORD backdropType = Constants::APP_BACKDROP_TYPE_DEFAULT; // 0=None,1=Mica,2=Acrylic,3=MicaAlt
     bool hasActiveEffects = false; // if any effects are used then true else false and just skip and display image
     bool effectPreviewEnabled = false; //
     int hardwareThreads = 1; //used to save cpu cores/threads query once on startup and use it
@@ -85,9 +85,9 @@ struct AppState {
     int imgWidth = 0;
     int imgHeight = 0;
     std::vector<std::wstring> playlist;
-    std::unordered_map<std::wstring, int> playlistIndexMap;      // path → index, rebuilt with playlist
-    std::unordered_map<std::wstring, int64_t>              playlistFileSizes; // path → file size bytes, from scan
-    std::unordered_map<std::wstring, fs::file_time_type>   playlistFileTimes; // path → last_write_time, from scan
+    std::unordered_map<std::wstring, int> playlistIndexMap; // path → index, rebuilt with playlist
+    std::unordered_map<std::wstring, int64_t> playlistFileSizes; // path → file size bytes, from scan
+    std::unordered_map<std::wstring, fs::file_time_type> playlistFileTimes; // path → last_write_time, from scan
     int currentIndex = -1;
     int previousImageIndex = -1; // E — toggle between last and current image
     ViewportState viewport;
@@ -112,8 +112,8 @@ struct AppState {
     RECT savedWindowRect = {0, 0, 0, 0};
 
     bool isDialogVisible = false;
-    bool isLocked      = false; // -lock:      KIOSK mode — blocks all keyboard and mouse input
-    bool isDedicated   = false; // -dedicated: no registry writes, separate history file
+    bool isLocked = false; // -lock:      KIOSK mode — blocks all keyboard and mouse input
+    bool isDedicated = false; // -dedicated: no registry writes, separate history file
     bool isAlwaysOnTop = false; // Ctrl+T:    window stays above all others
 
     // Slideshow
@@ -122,6 +122,7 @@ struct AppState {
     // Persistent main-window overlay shown when the current directory becomes
     // unavailable.  Cleared when the user opens a new folder successfully.
     enum class FolderOverlayState { None, Missing, Empty };
+
     FolderOverlayState folderOverlay = FolderOverlayState::None;
     std::wstring folderOverlayPath;
     // Client-area rect of the path line in the overlay — written by the

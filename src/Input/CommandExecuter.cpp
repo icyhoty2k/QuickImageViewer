@@ -4,7 +4,7 @@
 #include "../Platform/Constants.h"
 #include "../Platform/ConstantsStrings.h"
 #include "../Platform/FileHandler.h"
-#include "../Platform/RegistrySetup.h"
+#include "../Persistence/RegistryManager.h"
 #include "../UI/ThumbnailPanels/CacheWnd.h"
 #include "../UI/ThumbnailPanels/DirWnd.h"
 #include "../UI/FloatingPanels/HistoryListWnd.h"
@@ -489,17 +489,17 @@ void InputManager::ExecuteKeyboardShortcutCommand(HWND hWnd, Command cmd) {
         // -----------------------------------------------------------------------
         case Command::HideToTray: {
             uiManager.HideAllPanelWindows();
-            if (app.GetInstanceCount() <= 1) {
-                //Tray icon on close
+            if (!app.isKeepInBackground || app.GetInstanceCount() > 1) {
+                AppCommands::RemoveTrayIcon(hWnd);
+                DestroyWindow(hWnd);
+            } else {
                 AppCommands::AddTrayIcon(hWnd);
                 ShowWindow(hWnd, SW_HIDE);
-            } else {
-                DestroyWindow(hWnd);
             }
             break;
         }
         case Command::NewWindow: {
-            std::wstring exePath = System::GetExePathW();
+            std::wstring exePath = Persistence::Registry::GetExePathW();
             if (!exePath.empty()) {
                 SetEnvironmentVariableW(L"QIV_NEW_INSTANCE", L"1");
                 ShellExecuteW(nullptr, L"open", exePath.c_str(), nullptr, nullptr, SW_SHOW);
@@ -659,6 +659,8 @@ void InputManager::ExecuteKeyboardShortcutCommand(HWND hWnd, Command cmd) {
         // -----------------------------------------------------------------------
         case Command::ThemeFactorUp:
             AppCommands::changeAppThemeFactor(hWnd, app.themeFactor + Constants::Theme::THEME_FACTOR_STEP);
+            Persistence::Registry::SaveSetting(Constants::Registry::THEME_FACTOR,
+                                               static_cast<DWORD>(std::round(app.themeFactor * 100.0f)));
             g_overlayManager.PostCenterMessage(hWnd,
                                                Constants::Messages::THEME_FACTOR_PREFIX +
                                                std::to_wstring(static_cast<int>(std::round(app.themeFactor * 100))) + L"%");
@@ -666,13 +668,17 @@ void InputManager::ExecuteKeyboardShortcutCommand(HWND hWnd, Command cmd) {
 
         case Command::ThemeFactorDown:
             AppCommands::changeAppThemeFactor(hWnd, app.themeFactor - Constants::Theme::THEME_FACTOR_STEP);
+            Persistence::Registry::SaveSetting(Constants::Registry::THEME_FACTOR,
+                                               static_cast<DWORD>(std::round(app.themeFactor * 100.0f)));
             g_overlayManager.PostCenterMessage(hWnd,
                                                Constants::Messages::THEME_FACTOR_PREFIX +
                                                std::to_wstring(static_cast<int>(std::round(app.themeFactor * 100))) + L"%");
             break;
 
         case Command::ThemeFactorReset:
-            AppCommands::changeAppThemeFactor(hWnd, Constants::Theme::THEME_FACTOR);
+            AppCommands::changeAppThemeFactor(hWnd, Constants::Theme::DEFAULT_THEME_FACTOR);
+            Persistence::Registry::SaveSetting(Constants::Registry::THEME_FACTOR,
+                                               static_cast<DWORD>(std::round(app.themeFactor * 100.0f)));
             g_overlayManager.PostCenterMessage(hWnd, Constants::Messages::THEME_FACTOR_RESET_MSG);
             break;
 

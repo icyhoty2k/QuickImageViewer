@@ -4,19 +4,18 @@
 #include <filesystem>
 #include <fstream>
 #include "../AppState.h"
-#include "../Platform/RegistrySetup.h"
+#include "RegistryManager.h"
 
 namespace fs = std::filesystem;
 
 extern AppState app;
 
-// Returns the correct history filename: dedicated variant when -dedicated is active.
-static const std::wstring& ActiveHistoryFileName(const HistoryFoldersManager& mgr) {
-    if (app.isDedicated) {
-        static const std::wstring dedicated = Constants::History::DEDICATED_HISTORY_FILE_NAME;
-        return dedicated;
-    }
-    return mgr.historyFileName;
+// Returns the filename to use on disk, prepending the dedicated-mode prefix when needed.
+// Both history and favorites go through this so neither instance ever touches the other's files.
+static std::wstring PrefixedFileName(const std::wstring &baseName) {
+    if (app.isDedicated)
+        return std::wstring(Constants::DedicatedMode::DEDICATED_MODE_GLOBAL_PREFIX) + baseName;
+    return baseName;
 }
 
 // ---------------------------------------------------------------------------
@@ -25,9 +24,10 @@ static const std::wstring& ActiveHistoryFileName(const HistoryFoldersManager& mg
 
 // Returns (creating if needed) the QivBackup folder next to the executable.
 static fs::path GetBackupDir() {
-    std::wstring exePath = System::GetExePathW();
-    fs::path exeDir = exePath.empty() ? fs::current_path()
-                                      : fs::path(exePath).parent_path();
+    std::wstring exePath = Persistence::Registry::GetExePathW();
+    fs::path exeDir = exePath.empty()
+                          ? fs::current_path()
+                          : fs::path(exePath).parent_path();
 
     // Strip leading slash from the constant (it is stored as L"/QivBackup")
     std::wstring folderName = Constants::History::HISTORY_FAVORITES_BACKUP_FOLDER;
@@ -43,15 +43,15 @@ static fs::path GetBackupDir() {
 
 // Builds a dated backup file path:  QivBackup/qivHistory_dd.MM.YYYY_HH.MM.SS.bak
 static fs::path MakeBackupPath(const fs::path &backupDir,
-                                const std::wstring &origFileName,
-                                const SYSTEMTIME &st) {
+                               const std::wstring &origFileName,
+                               const SYSTEMTIME &st) {
     wchar_t suffix[64];
     swprintf_s(suffix, L"_%02d.%02d.%04d_%02d.%02d.%02d",
                st.wDay, st.wMonth, st.wYear,
                st.wHour, st.wMinute, st.wSecond);
 
     std::wstring stem = fs::path(origFileName).stem().wstring();
-    std::wstring ext  = Constants::History::HISTORY_FAVORITES_BACKUP_EXTENSION;
+    std::wstring ext = Constants::History::HISTORY_FAVORITES_BACKUP_EXTENSION;
     return backupDir / (stem + suffix + ext);
 }
 
@@ -76,9 +76,10 @@ static void WriteBackupHeader(std::wofstream &f, const SYSTEMTIME &st) {
 // GetFilePath  —  full path to qivHistory.txt next to the executable
 // ---------------------------------------------------------------------------
 std::wstring HistoryFoldersManager::GetFilePath() const {
-    std::wstring exePath = System::GetExePathW();
+    const std::wstring name = PrefixedFileName(historyFileName);
+    std::wstring exePath = Persistence::Registry::GetExePathW();
     if (exePath.empty())
-        return ActiveHistoryFileName(*this);
+        return name;
 
     fs::path appDir = fs::path(exePath).parent_path();
 
@@ -88,16 +89,17 @@ std::wstring HistoryFoldersManager::GetFilePath() const {
             fs::create_directories(appDir);
     }
 
-    return (appDir / ActiveHistoryFileName(*this)).wstring();
+    return (appDir / name).wstring();
 }
 
 // ---------------------------------------------------------------------------
 // GetFavoritesFilePath  —  full path to qivFavorites.txt next to the executable
 // ---------------------------------------------------------------------------
 std::wstring HistoryFoldersManager::GetFavoritesFilePath() const {
-    std::wstring exePath = System::GetExePathW();
+    const std::wstring name = PrefixedFileName(favoritesFileName);
+    std::wstring exePath = Persistence::Registry::GetExePathW();
     if (exePath.empty())
-        return favoritesFileName;
+        return name;
 
     fs::path appDir = fs::path(exePath).parent_path();
 
@@ -107,7 +109,7 @@ std::wstring HistoryFoldersManager::GetFavoritesFilePath() const {
             fs::create_directories(appDir);
     }
 
-    return (appDir / favoritesFileName).wstring();
+    return (appDir / name).wstring();
 }
 
 // ---------------------------------------------------------------------------
@@ -161,8 +163,11 @@ void HistoryFoldersManager::LoadHistoryFromDisk() {
 
             // Skip duplicates (hand-edited files)
             bool alreadyKnown = false;
-            for (const auto &entry : folderHistory) {
-                if (entry == line) { alreadyKnown = true; break; }
+            for (const auto &entry: folderHistory) {
+                if (entry == line) {
+                    alreadyKnown = true;
+                    break;
+                }
             }
             if (alreadyKnown) continue;
 
@@ -217,7 +222,7 @@ void HistoryFoldersManager::RewriteFavoritesToDisk() const {
         return;
 
     int written = 0;
-    for (const auto &path : favorites) {
+    for (const auto &path: favorites) {
         if (written >= Constants::History::HISTORY_MAX_FAVORITES_TO_SHOW) break;
         file << path << L"\n";
         ++written;
@@ -234,7 +239,7 @@ void HistoryFoldersManager::BackupHistoryToDisk() const {
     SYSTEMTIME st;
     GetLocalTime(&st);
 
-    fs::path backupPath = MakeBackupPath(GetBackupDir(), ActiveHistoryFileName(*this), st);
+    fs::path backupPath = MakeBackupPath(GetBackupDir(), PrefixedFileName(historyFileName), st);
     std::wofstream f(backupPath, std::ios::out | std::ios::trunc);
     if (!f.is_open())
         return;
@@ -256,7 +261,7 @@ void HistoryFoldersManager::BackupFavoritesToDisk() const {
     SYSTEMTIME st;
     GetLocalTime(&st);
 
-    fs::path backupPath = MakeBackupPath(GetBackupDir(), favoritesFileName, st);
+    fs::path backupPath = MakeBackupPath(GetBackupDir(), PrefixedFileName(favoritesFileName), st);
     std::wofstream f(backupPath, std::ios::out | std::ios::trunc);
     if (!f.is_open())
         return;
@@ -264,7 +269,7 @@ void HistoryFoldersManager::BackupFavoritesToDisk() const {
     WriteBackupHeader(f, st);
 
     int written = 0;
-    for (const auto &path : favorites) {
+    for (const auto &path: favorites) {
         if (written >= Constants::History::HISTORY_MAX_FAVORITES_TO_SHOW) break;
         f << path << L"\n";
         ++written;

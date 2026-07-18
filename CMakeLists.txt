@@ -30,7 +30,7 @@ set(SOURCES
         src/Platform/DpiAwareInit.cpp
         src/Platform/DriveInfo.cpp
         src/Platform/FileHandler.cpp
-        src/Platform/RegistrySetup.cpp
+        src/Persistence/RegistryManager.cpp
         src/Renderer/RendererGDI.cpp
         src/Renderer/RendererD2D.cpp
         src/UI/FloatingPanels/FloatingPanelWnd.cpp

@@ -1,7 +1,7 @@
 #include "FileHandler.h"
 #include "../AppState.h"
 #include "../Overlays/OverlayManager.h"
-#include "RegistrySetup.h"
+#include "../Persistence/RegistryManager.h"
 #include "Constants.h"
 #include "../ImageLoadStats.h"
 #include <commdlg.h>
@@ -30,8 +30,8 @@ namespace fs = std::filesystem;
 // this use-case) with a manual-reset stop event so the thread exits cleanly.
 // =============================================================================
 namespace {
-    static HANDLE      s_hWatchNotify = INVALID_HANDLE_VALUE;
-    static HANDLE      s_hWatchStop   = nullptr;
+    static HANDLE s_hWatchNotify = INVALID_HANDLE_VALUE;
+    static HANDLE s_hWatchStop = nullptr;
     static std::thread s_watchThread;
 }
 
@@ -59,24 +59,27 @@ void StartDirWatcher(HWND hWnd, const std::wstring &dir) {
     StopDirWatcher(); // stop any previous watcher before starting a new one
 
     HANDLE hNotify = FindFirstChangeNotificationW(
-        dir.c_str(), FALSE,
-        FILE_NOTIFY_CHANGE_FILE_NAME  | // file added / deleted / renamed
-        FILE_NOTIFY_CHANGE_SIZE       | // file grew or shrank (image replaced)
-        FILE_NOTIFY_CHANGE_LAST_WRITE); // file modified in-place
+            dir.c_str(), FALSE,
+            FILE_NOTIFY_CHANGE_FILE_NAME | // file added / deleted / renamed
+            FILE_NOTIFY_CHANGE_SIZE | // file grew or shrank (image replaced)
+            FILE_NOTIFY_CHANGE_LAST_WRITE); // file modified in-place
 
     if (hNotify == INVALID_HANDLE_VALUE) return;
 
     HANDLE hStop = CreateEventW(nullptr, /*manualReset=*/TRUE, FALSE, nullptr);
-    if (!hStop) { FindCloseChangeNotification(hNotify); return; }
+    if (!hStop) {
+        FindCloseChangeNotification(hNotify);
+        return;
+    }
 
     s_hWatchNotify = hNotify;
-    s_hWatchStop   = hStop;
+    s_hWatchStop = hStop;
 
     s_watchThread = std::thread([hNotify, hStop, hWnd]() {
-        HANDLE handles[2] = { hNotify, hStop };
+        HANDLE handles[2] = {hNotify, hStop};
         for (;;) {
             DWORD result = WaitForMultipleObjects(2, handles, FALSE, INFINITE);
-            if (result != WAIT_OBJECT_0) break;         // stop event or error
+            if (result != WAIT_OBJECT_0) break; // stop event or error
             PostMessageW(hWnd, Constants::WM_QIV_DIR_CHANGED, 0, 0);
             if (!FindNextChangeNotification(hNotify)) break; // handle closed
         }
@@ -410,7 +413,7 @@ void HandleScanComplete(HWND hWnd, ScanResult *result) {
         // Prune only the files confirmed gone from disk — keeps images from other
         // dirs that happen to share the VRAM cache intact.
         if (app.renderer) {
-            for (const auto &path : app.playlist) {
+            for (const auto &path: app.playlist) {
                 std::error_code ec;
                 if (!fs::exists(fs::path(path), ec) || ec)
                     app.renderer->RemoveFromCache(path);
@@ -425,7 +428,7 @@ void HandleScanComplete(HWND hWnd, ScanResult *result) {
         app.playlistFileSizes.clear();
         app.playlistFileTimes.clear();
         app.playlistIndexMap.clear();
-        app.currentIndex       = -1;
+        app.currentIndex = -1;
         app.previousImageIndex = -1;
         if (app.renderer) app.renderer->ClearActiveImage();
 
@@ -447,11 +450,11 @@ void HandleScanComplete(HWND hWnd, ScanResult *result) {
         if (!fs::is_directory(fs::path(dir), ec) || ec) {
             // Directory itself is gone (deleted, moved, renamed).
             UI::InvalidateHistoryFolderStatus(dir);
-            app.folderOverlay     = AppState::FolderOverlayState::Missing;
+            app.folderOverlay = AppState::FolderOverlayState::Missing;
             app.folderOverlayPath = dir;
         } else {
             // Directory exists but contains no supported images.
-            app.folderOverlay     = AppState::FolderOverlayState::Empty;
+            app.folderOverlay = AppState::FolderOverlayState::Empty;
             app.folderOverlayPath = dir;
         }
 
@@ -465,7 +468,7 @@ void HandleScanComplete(HWND hWnd, ScanResult *result) {
     // rename, etc.) are kept so CacheWnd shows a true cross-folder history.
     if (result->playlist != app.playlist && app.renderer) {
         std::unordered_set<std::wstring> newSet(result->playlist.begin(), result->playlist.end());
-        for (const auto &path : app.playlist) {
+        for (const auto &path: app.playlist) {
             if (newSet.find(path) == newSet.end()) {
                 std::error_code ec;
                 if (!fs::exists(fs::path(path), ec) || ec)
@@ -556,7 +559,7 @@ void OpenInitialImage(HWND hWnd) {
     ofn.nMaxFile = Constants::MAX_FILE_PATH;
     ofn.Flags = OFN_EXPLORER | OFN_PATHMUSTEXIST | OFN_FILEMUSTEXIST;
 
-    std::wstring lastFolder = System::LoadStringSetting(Constants::Registry::LAST_FOLDER);
+    std::wstring lastFolder = Persistence::Registry::LoadStringSetting(Constants::Registry::LAST_FOLDER);
     if (!lastFolder.empty())
         ofn.lpstrInitialDir = lastFolder.c_str();
 
@@ -578,7 +581,7 @@ void OpenInitialImage(HWND hWnd) {
         return;
     }
 
-    System::SaveStringSetting(
+    Persistence::Registry::SaveStringSetting(
             Constants::Registry::LAST_FOLDER,
             selectedPath.parent_path().wstring());
 
@@ -788,7 +791,10 @@ void OpenDirectory(HWND hWnd, const std::wstring &dirPathStr) {
         for (auto it = fs::directory_iterator(
                      dirPath, fs::directory_options::skip_permission_denied, ec);
              !ec && it != fs::directory_iterator(); it.increment(ec)) {
-            if (!it->is_regular_file(ec)) { ec.clear(); continue; }
+            if (!it->is_regular_file(ec)) {
+                ec.clear();
+                continue;
+            }
             if (!is_image_ext(it->path().extension().wstring())) continue;
             firstFile = it->path().wstring();
             firstSize = static_cast<int64_t>(it->file_size(ec));

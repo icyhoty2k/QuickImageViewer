@@ -6,9 +6,9 @@
 // *** Update ONLY the four numbers below to bump the version everywhere ***
 // =========================================================================
 #define VER_MAJOR 2
-#define VER_MINOR 5
-#define VER_PATCH 1
-#define VER_BUILD 1
+#define VER_MINOR 6
+#define VER_PATCH 0
+#define VER_BUILD 0
 
 // Comma form  — FILEVERSION / PRODUCTVERSION in .rc  (e.g. 2,3,0,0)
 #define VER_NUMERIC   VER_MAJOR,VER_MINOR,VER_PATCH,VER_BUILD
@@ -42,6 +42,14 @@ namespace Constants {
     constexpr const wchar_t *APP_NAME = BASE_NAME;
     constexpr const wchar_t *WINDOW_CLASS_NAME = BASE_NAME;
     constexpr bool IS_ENABLE_RUN_ON_STARTUP = true; // enable or disable run on startup reg value add/delete
+    constexpr bool IS_KEEP_IN_BACKGROUND = true; // enable or disable run on startup reg value add/delete
+    // Prefix applied to every registry value name and every data file name
+    // when the app is running in dedicated (-dedicated) mode.
+    // Guarantees that a dedicated instance and a normal instance never share
+    // any persistent state even when running side-by-side on the same machine.
+    namespace DedicatedMode {
+        constexpr const wchar_t *DEDICATED_MODE_GLOBAL_PREFIX = L"qivDedicated_";
+    }
 
     // =========================================================================
     // CLICKABLE LINKS — app-wide appearance, single source of truth.
@@ -300,7 +308,11 @@ namespace Constants {
 
         // Helper to get the number of elements
         constexpr size_t SUPPORTED_EXTENSIONS_COUNT = std::size(SUPPORTED_EXTENSIONS);
+        constexpr const wchar_t *THEME_FACTOR = L"qivThemeFactor";
+        constexpr const wchar_t *KEEP_IN_BACKGROUND = L"qivKeepInBackground";
+        constexpr const wchar_t *RUN_ON_STARTUP = L"qivRunOnStartup";
     }
+
 
     namespace ViewModes {
         enum class ViewMode {
@@ -366,7 +378,6 @@ namespace Constants {
         // =========================================================================
         constexpr bool HISTORY_SHOW_FULL_HISTORY = false; // controls initial behaviour of HistoryWnd full or limited , you can swith with key comb that after you show but this is for inital behaviour
         constexpr const wchar_t *HISTORY_FILE_NAME = L"qivHistory.txt";
-        constexpr const wchar_t *DEDICATED_HISTORY_FILE_NAME = L"qivHistory_dedicated.txt"; // -dedicated mode
         constexpr const wchar_t *FAVORITES_FILE_NAME = L"qivFavorites.txt";
         //backup name must be the same as the file name only append the currentDate ex: qivHistory_DATE.bak
         //We Backup when we delete history/favorites only then we first backup then delete !

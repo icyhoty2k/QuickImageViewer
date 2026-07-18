@@ -2,7 +2,7 @@
 #include "../../Platform/Constants.h"
 #include "../../Platform/ConstantsStrings.h"
 #include "../../Platform/FileHandler.h"
-#include "../../Platform/RegistrySetup.h"
+#include "../../Persistence/RegistryManager.h"
 #include "../../Overlays/OverlayManager.h"
 #include "../../AppState.h"
 #include "../../Input/Shortcuts.h"
@@ -1063,7 +1063,7 @@ namespace UI {
                         // QIV→dir link — blue underlined, clickable, left of file size
                         {
                             std::wstring linkText = L"QIV.exe/path="
-                                                    + std::filesystem::path(System::GetExePathW()).parent_path().wstring() + L"\\";
+                                                    + std::filesystem::path(Persistence::Registry::GetExePathW()).parent_path().wstring() + L"\\";
 
                             SelectObject(hdc, m_hFontLink);
                             SetTextColor(hdc, RGB(100, 180, 255));
@@ -1294,7 +1294,7 @@ namespace UI {
                 if (g_exeLinkRect.right > g_exeLinkRect.left) {
                     POINT pt = {mx, my};
                     if (PtInRect(&g_exeLinkRect, pt)) {
-                        std::wstring dir = std::filesystem::path(System::GetExePathW()).parent_path().wstring();
+                        std::wstring dir = std::filesystem::path(Persistence::Registry::GetExePathW()).parent_path().wstring();
                         ShellExecuteW(nullptr, L"open", dir.c_str(), nullptr, nullptr, SW_SHOW);
                         return 0;
                     }
