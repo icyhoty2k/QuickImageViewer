@@ -908,10 +908,10 @@ namespace UI {
                         const bool isHov = (i == g_hoverRow);
                         const bool isFav = entry.isFavorite;
 
-                        // Normal-row colors scale with theme factor so they stay readable in light mode
-                        const COLORREF clrNormDrive  = Constants::Theme::ThemedColor(0.392f, 0.725f, 0.804f, app.themeFactor);
-                        const COLORREF clrNormMiddle = Constants::Theme::ThemedGray(0.784f, app.themeFactor);
-                        const COLORREF clrNormFolder = Constants::Theme::ThemedColor(0.910f, 0.843f, 0.667f, app.themeFactor);
+                        // Normal-row colors: light alternatives when in white mode
+                        const COLORREF clrNormDrive  = app.isDarkThemed ? Constants::Theme::HistoryPanel::PATH_DRIVE  : Constants::Theme::HistoryPanel::PATH_DRIVE_LIGHT;
+                        const COLORREF clrNormMiddle = app.isDarkThemed ? Constants::Theme::HistoryPanel::PATH_MIDDLE : Constants::Theme::HistoryPanel::PATH_MIDDLE_LIGHT;
+                        const COLORREF clrNormFolder = app.isDarkThemed ? Constants::Theme::HistoryPanel::PATH_FOLDER : Constants::Theme::HistoryPanel::PATH_FOLDER_LIGHT;
 
                         COLORREF driveColor = isMissing
                                                   ? Constants::Theme::HistoryPanel::PATH_DEAD_DRIVE

@@ -94,11 +94,16 @@ namespace Constants {
             constexpr COLORREF SIZE_HIGHLIGHT = RGB(240, 50, 50);
 
             // Path row — three segments: drive letter, middle path, final folder name.
-            // Non-favorite rows:
+            // Non-favorite rows (dark mode):
             constexpr COLORREF PATH_DRIVE = RGB(100, 185, 205); // muted teal
             constexpr COLORREF PATH_DRIVE_HOVER = RGB(140, 215, 235);
+            constexpr COLORREF PATH_MIDDLE = RGB(200, 200, 200); // light gray
             constexpr COLORREF PATH_FOLDER = RGB(232, 215, 170); // warm tan — clearly distinct from gray middle
             constexpr COLORREF PATH_FOLDER_HOVER = RGB(255, 248, 210);
+            // Non-favorite rows (light mode — isDarkThemed == false):
+            constexpr COLORREF PATH_DRIVE_LIGHT  = RGB(30, 110, 150);  // deep teal
+            constexpr COLORREF PATH_MIDDLE_LIGHT = RGB(60, 60, 60);    // dark gray
+            constexpr COLORREF PATH_FOLDER_LIGHT = RGB(100, 75, 20);   // dark tan/brown
             // Favorite rows:
             constexpr COLORREF PATH_DRIVE_FAV = RGB(195, 165, 70); // amber/gold
             constexpr COLORREF PATH_DRIVE_FAV_HOVER = RGB(215, 195, 105);
