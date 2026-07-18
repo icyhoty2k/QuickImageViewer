@@ -2,35 +2,52 @@
 #include <windows.h>
 
 namespace UI {
-    // Single cached dialog window.  Created once at startup, reused for every
-    // confirmation prompt and informational message.  Automatically matches the
-    // app's dark-mode, corner preference, caption color, and per-monitor DPI.
+    // Three permanently-cached dialog windows, each pre-wired for its role:
+    //   s_hwndMsg  — informational,  single OK
+    //   s_hwndCfm  — confirmation,   Yes / No
+    //   s_hwndInt  — numeric input,  Reset Default / Cancel / OK  +  edit field
     class ThemedDialog {
-        public:
-            // Call once from wWinMain after the main window exists.
-            static void Init(HWND hMainWnd);
+    public:
+        static void Init(HWND hMainWnd);
+        static void Message(HWND hOwner, const wchar_t *text, const wchar_t *caption);
+        static bool Confirm(HWND hOwner, const wchar_t *text, const wchar_t *caption);
+        static int  PromptInt(HWND hOwner, const wchar_t *caption, const wchar_t *label,
+                              int currentValue, int minVal, int maxVal, int defaultValue);
 
-            // Modal confirmation — returns true when the user clicks Yes, false for No / Escape / X.
-            static bool Confirm(HWND hOwner, const wchar_t *text, const wchar_t *caption);
+        static void ApplyTheme(); // called externally on theme change
 
-            // Modal informational message — single OK button.
-            static void Message(HWND hOwner, const wchar_t *text, const wchar_t *caption);
+    private:
+        static void RunModalLoop(HWND hwndDlg, HWND hOwner, HWND focusCtrl = nullptr);
+        static LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam);
 
-        private:
-            static int RunModal(HWND hOwner, const wchar_t *text, const wchar_t *caption, bool confirm);
+        // ── shared runtime state ────────────────────────────────────────────────
+        static int    s_result;
+        static bool   s_running;
+        static HWND   s_hOwner;
+        static HFONT  s_font;
+        static HBRUSH s_bgBrush;
+        static HBRUSH s_editBrush;
+        static int    s_intMin;
+        static int    s_intMax;
+        static int    s_defaultValue;
 
-            static void ApplyTheme();
+        // ── Window 1: Message  [OK] ─────────────────────────────────────────────
+        static HWND s_hwndMsg;
+        static HWND s_textMsg;
+        static HWND s_btnMsgOk;
 
-            static LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam);
+        // ── Window 2: Confirm  [Yes] [No] ──────────────────────────────────────
+        static HWND s_hwndCfm;
+        static HWND s_textCfm;
+        static HWND s_btnCfmYes;
+        static HWND s_btnCfmNo;
 
-            static HWND s_hwnd;
-            static HWND s_hwndText;
-            static HWND s_hwndBtn1; // Yes / OK  (IDOK)
-            static HWND s_hwndBtn2; // No        (IDCANCEL) — hidden in message mode
-            static HFONT s_font;
-            static HBRUSH s_bgBrush; // client-area fill, rebuilt on each ApplyTheme()
-            static int s_result;
-            static bool s_running;
-            static HWND s_hOwner;
+        // ── Window 3: PromptInt  [Reset Default]  [Cancel] [OK] ───────────────
+        static HWND s_hwndInt;
+        static HWND s_textInt;
+        static HWND s_editInt;
+        static HWND s_btnIntOk;
+        static HWND s_btnIntCancel;
+        static HWND s_btnIntReset;
     };
 }

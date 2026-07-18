@@ -133,7 +133,7 @@ void HistoryFoldersManager::LoadHistoryFromDisk() {
             while (std::getline(fav, line)) {
                 if (!line.empty() && line.back() == L'\r') line.pop_back();
                 if (line.empty()) continue;
-                if (static_cast<int>(favorites.size()) >= Constants::History::HISTORY_MAX_FAVORITES_TO_SHOW)
+                if (static_cast<int>(favorites.size()) >= app.historyMaxFavs)
                     break;
                 favorites.insert(line);
             }
@@ -155,7 +155,7 @@ void HistoryFoldersManager::LoadHistoryFromDisk() {
             if (line.front() == static_cast<wchar_t>(Constants::History::HISTORY_FAVORITES_MARK)) {
                 line = line.substr(1);
                 if (!line.empty() &&
-                    static_cast<int>(favorites.size()) < Constants::History::HISTORY_MAX_FAVORITES_TO_SHOW)
+                    static_cast<int>(favorites.size()) < app.historyMaxFavs)
                     favorites.insert(line);
             }
 
@@ -171,7 +171,7 @@ void HistoryFoldersManager::LoadHistoryFromDisk() {
             }
             if (alreadyKnown) continue;
 
-            if (static_cast<int>(folderHistory.size()) >= Constants::History::HISTORY_MAX_DIRS_TO_SAVE)
+            if (static_cast<int>(folderHistory.size()) >= app.historyMaxDirsSave)
                 break;
 
             folderHistory.push_back(line);
@@ -223,7 +223,7 @@ void HistoryFoldersManager::RewriteFavoritesToDisk() const {
 
     int written = 0;
     for (const auto &path: favorites) {
-        if (written >= Constants::History::HISTORY_MAX_FAVORITES_TO_SHOW) break;
+        if (written >= app.historyMaxFavs) break;
         file << path << L"\n";
         ++written;
     }
@@ -270,7 +270,7 @@ void HistoryFoldersManager::BackupFavoritesToDisk() const {
 
     int written = 0;
     for (const auto &path: favorites) {
-        if (written >= Constants::History::HISTORY_MAX_FAVORITES_TO_SHOW) break;
+        if (written >= app.historyMaxFavs) break;
         f << path << L"\n";
         ++written;
     }
