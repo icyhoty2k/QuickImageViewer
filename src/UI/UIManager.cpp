@@ -306,6 +306,54 @@ namespace UI {
         return allLabels;
     }
 
+    std::pair<std::wstring, int> UIManager::GetSpawnedDirWndSizeInfo(const std::wstring &folderPath) const {
+        for (auto *p : m_spawnedPool) {
+            if (!p->IsPanelVisible()) continue;
+            const std::wstring panelFolder = p->GetFolderPath();
+            if (panelFolder.empty()) continue;
+            try {
+                if (std::filesystem::equivalent(
+                        std::filesystem::path(folderPath),
+                        std::filesystem::path(panelFolder))) {
+                    return {p->GetDirSizeStr(), static_cast<int>(p->m_thumbnails.size())};
+                }
+            } catch (...) {}
+        }
+        // Also check the F6 DirWnd
+        if (dirWnd.IsPanelVisible()) {
+            const std::wstring panelFolder = static_cast<const ThumbnailPanelWnd &>(dirWnd).GetPanelFolder();
+            if (!panelFolder.empty()) {
+                try {
+                    if (std::filesystem::equivalent(
+                            std::filesystem::path(folderPath),
+                            std::filesystem::path(panelFolder))) {
+                        return {dirWnd.GetDirSizeStr(), static_cast<int>(dirWnd.m_thumbnails.size())};
+                    }
+                } catch (...) {}
+            }
+        }
+        return {{}, 0};
+    }
+
+    std::pair<std::wstring, int> UIManager::GetAllOpenDirWndsSummary() const {
+        int64_t totalBytes = 0;
+        int     totalCount = 0;
+        bool    anyOpen    = false;
+
+        auto accumulate = [&](const ThumbnailPanelWnd &p) {
+            if (!p.IsPanelVisible()) return;
+            anyOpen = true;
+            totalBytes += p.GetDirSizeBytes();
+            totalCount += static_cast<int>(p.m_thumbnails.size());
+        };
+
+        accumulate(static_cast<const ThumbnailPanelWnd &>(dirWnd));
+        for (auto *p : m_spawnedPool) accumulate(*p);
+
+        if (!anyOpen) return {{}, 0};
+        return {ThumbnailPanelWnd::FormatDirSize(totalBytes), totalCount};
+    }
+
     // -------------------------------------------------------------------------
     // NotifyFolderRefreshed
     // Iterates every layout slot (panels in slots are always visible) and calls

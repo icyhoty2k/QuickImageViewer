@@ -199,6 +199,14 @@ namespace UI {
             // Get position label for a spawned DirWnd folder (e.g., " (Left)", " (Right)", or empty)
             std::wstring GetSpawnedDirWndPositionLabel(const std::wstring &folderPath) const;
 
+            // Get {sizeStr, imageCount} from the open SpawnedDirWnd showing folderPath.
+            // Returns {"", 0} when no SpawnedDirWnd is open for that path.
+            std::pair<std::wstring, int> GetSpawnedDirWndSizeInfo(const std::wstring &folderPath) const;
+
+            // Sum size (bytes) and image count across ALL currently-visible DirWnds (F6 + spawned).
+            // Returns {"", 0} when no DirWnd is open.
+            std::pair<std::wstring, int> GetAllOpenDirWndsSummary() const;
+
             // Called by HandleScanComplete after every directory scan (including empty
             // results). Fans out to every visible panel so each can decide whether to
             // sync its playlist, show the empty-dir placeholder, or refresh its view.

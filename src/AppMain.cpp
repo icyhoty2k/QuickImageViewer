@@ -522,7 +522,6 @@ LRESULT CALLBACK MainAppWndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM l
             break;
 
         case WM_DESTROY:
-            StopDirWatcher();
             PostQuitMessage(0);
             return 0;
     }

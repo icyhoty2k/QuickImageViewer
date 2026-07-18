@@ -21,71 +21,6 @@
 
 namespace fs = std::filesystem;
 
-// =============================================================================
-// DirWatcher — watches the current folder for file-system changes and posts
-// WM_QIV_DIR_CHANGED to the main HWND. AppMain debounces that message into a
-// ReloadCurrentDirectory call so the thumbnail strip stays in sync automatically.
-//
-// Uses FindFirstChangeNotificationW (simpler than ReadDirectoryChangesW for
-// this use-case) with a manual-reset stop event so the thread exits cleanly.
-// =============================================================================
-namespace {
-    static HANDLE s_hWatchNotify = INVALID_HANDLE_VALUE;
-    static HANDLE s_hWatchStop = nullptr;
-    static std::thread s_watchThread;
-}
-
-void StopDirWatcher() {
-    // Signal the thread to wake and exit.
-    if (s_hWatchStop)
-        SetEvent(s_hWatchStop);
-
-    if (s_watchThread.joinable())
-        s_watchThread.join();
-
-    if (s_hWatchNotify != INVALID_HANDLE_VALUE) {
-        FindCloseChangeNotification(s_hWatchNotify);
-        s_hWatchNotify = INVALID_HANDLE_VALUE;
-    }
-    if (s_hWatchStop) {
-        CloseHandle(s_hWatchStop);
-        s_hWatchStop = nullptr;
-    }
-}
-
-void StartDirWatcher(HWND hWnd, const std::wstring &dir) {
-    if (!Constants::WATCH_DIR_FOR_CHANGES) return;
-
-    StopDirWatcher(); // stop any previous watcher before starting a new one
-
-    HANDLE hNotify = FindFirstChangeNotificationW(
-            dir.c_str(), FALSE,
-            FILE_NOTIFY_CHANGE_FILE_NAME | // file added / deleted / renamed
-            FILE_NOTIFY_CHANGE_SIZE | // file grew or shrank (image replaced)
-            FILE_NOTIFY_CHANGE_LAST_WRITE); // file modified in-place
-
-    if (hNotify == INVALID_HANDLE_VALUE) return;
-
-    HANDLE hStop = CreateEventW(nullptr, /*manualReset=*/TRUE, FALSE, nullptr);
-    if (!hStop) {
-        FindCloseChangeNotification(hNotify);
-        return;
-    }
-
-    s_hWatchNotify = hNotify;
-    s_hWatchStop = hStop;
-
-    s_watchThread = std::thread([hNotify, hStop, hWnd]() {
-        HANDLE handles[2] = {hNotify, hStop};
-        for (;;) {
-            DWORD result = WaitForMultipleObjects(2, handles, FALSE, INFINITE);
-            if (result != WAIT_OBJECT_0) break; // stop event or error
-            PostMessageW(hWnd, Constants::WM_QIV_DIR_CHANGED, 0, 0);
-            if (!FindNextChangeNotification(hNotify)) break; // handle closed
-        }
-    });
-}
-
 void sortCurrentPlaylistInOrder();
 
 // ---------------------------------------------------------------------------
@@ -454,6 +389,7 @@ void HandleScanComplete(HWND hWnd, ScanResult *result) {
             app.folderOverlayPath = dir;
         } else {
             // Directory exists but contains no supported images.
+            UI::NotifyFolderContentsChanged(dir);
             app.folderOverlay = AppState::FolderOverlayState::Empty;
             app.folderOverlayPath = dir;
         }
@@ -513,9 +449,7 @@ void HandleScanComplete(HWND hWnd, ScanResult *result) {
     // Folder has images — dismiss any Missing/Empty renderer overlay.
     app.folderOverlay = AppState::FolderOverlayState::None;
     app.folderOverlayPath.clear();
-
-    // Watch for future changes so the strip auto-refreshes on delete/add/rename.
-    StartDirWatcher(hWnd, scannedDir);
+    UI::NotifyFolderContentsChanged(scannedDir);
 
     LoadImageIndex(hWnd, targetIdx);
     InvalidateRect(hWnd, nullptr, FALSE);
@@ -557,7 +491,7 @@ void OpenInitialImage(HWND hWnd) {
     ofn.lpstrFilter = filterBuffer.data();
     ofn.lpstrFile = fileName.data();
     ofn.nMaxFile = Constants::MAX_FILE_PATH;
-    ofn.Flags = OFN_EXPLORER | OFN_PATHMUSTEXIST | OFN_FILEMUSTEXIST;
+    ofn.Flags = OFN_EXPLORER | OFN_PATHMUSTEXIST; // no OFN_FILEMUSTEXIST — allows typing a folder path
 
     std::wstring lastFolder = Persistence::Registry::LoadStringSetting(Constants::Registry::LAST_FOLDER);
     if (!lastFolder.empty())
@@ -578,6 +512,12 @@ void OpenInitialImage(HWND hWnd) {
     try {
         selectedPath = std::filesystem::canonical(fileName.c_str());
     } catch (...) {
+        return;
+    }
+
+    // User typed or navigated to a folder path — treat it like opening a directory.
+    if (std::filesystem::is_directory(selectedPath)) {
+        OpenDirectory(hWnd, selectedPath.wstring());
         return;
     }
 
@@ -804,7 +744,19 @@ void OpenDirectory(HWND hWnd, const std::wstring &dirPathStr) {
             break;
         }
     }
-    if (firstFile.empty()) return;
+    if (firstFile.empty()) {
+        // Empty directory — still navigate to it so history records it, the panel
+        // shows the empty-dir placeholder, and F5 can recover when images appear.
+        UI::PushFolderHistory(dirPath.wstring());
+        UpdateIoWorkerForPath(dirPath.wstring());
+        uiManager.getActiveDirWnd().ClearDirThumbnailCache();
+        const bool activeIsPrimary = (&uiManager.getActiveDirWnd() == &uiManager.getDirWindow());
+        uint64_t emptyGen = ++g_scanGeneration;
+        LaunchBackgroundScan(hWnd, dirPath.wstring(), L"", emptyGen,
+                             app.fileHandlerDefaultSortOrder, app.fileHandlerIsReverseSortOrder,
+                             activeIsPrimary);
+        return;
+    }
 
     uint64_t gen = ++g_scanGeneration;
     {
