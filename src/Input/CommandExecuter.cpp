@@ -195,25 +195,17 @@ void InputManager::ExecuteKeyboardShortcutCommand(HWND hWnd, Command cmd) {
         // View modes
         // -----------------------------------------------------------------------
         case Command::ViewMode1:
-            app.viewMode = static_cast<Constants::ViewModes::ViewMode>(1);
-            InvalidateRect(hWnd, nullptr, FALSE);
-            break;
         case Command::ViewMode2:
-            app.viewMode = static_cast<Constants::ViewModes::ViewMode>(2);
-            InvalidateRect(hWnd, nullptr, FALSE);
-            break;
         case Command::ViewMode3:
-            app.viewMode = static_cast<Constants::ViewModes::ViewMode>(3);
-            InvalidateRect(hWnd, nullptr, FALSE);
-            break;
         case Command::ViewMode4:
-            app.viewMode = static_cast<Constants::ViewModes::ViewMode>(4);
+        case Command::ViewMode5: {
+            int modeNum = static_cast<int>(cmd) - static_cast<int>(Command::ViewMode1) + 1;
+            app.viewMode = static_cast<Constants::ViewModes::ViewMode>(modeNum);
+            Persistence::Registry::SaveSetting(Constants::Registry::VIEW_MODE,
+                                               static_cast<DWORD>(modeNum));
             InvalidateRect(hWnd, nullptr, FALSE);
             break;
-        case Command::ViewMode5:
-            app.viewMode = static_cast<Constants::ViewModes::ViewMode>(5);
-            InvalidateRect(hWnd, nullptr, FALSE);
-            break;
+        }
 
         // -----------------------------------------------------------------------
         // Zoom
@@ -374,9 +366,11 @@ void InputManager::ExecuteKeyboardShortcutCommand(HWND hWnd, Command cmd) {
 
         // ── Toggle overlay background (P) ─────────────────────────────────────
         case Command::ToggleOverlayBackground: {
-            Constants::Overlay::OVERLAY_SHOW_BACKGROUND = !Constants::Overlay::OVERLAY_SHOW_BACKGROUND;
+            app.overlayShowBackground = !app.overlayShowBackground;
+            Persistence::Registry::SaveSetting(Constants::Registry::OVERLAY_SHOW_BG,
+                                               static_cast<DWORD>(app.overlayShowBackground));
             g_overlayManager.PostCenterMessage(hWnd,
-                                               Constants::Overlay::OVERLAY_SHOW_BACKGROUND ? Constants::Messages::OVERLAY_BG_ON : Constants::Messages::OVERLAY_BG_OFF);
+                                               app.overlayShowBackground ? Constants::Messages::OVERLAY_BG_ON : Constants::Messages::OVERLAY_BG_OFF);
             InvalidateRect(hWnd, nullptr, FALSE);
             break;
         }
@@ -735,6 +729,8 @@ void InputManager::ExecuteKeyboardShortcutCommand(HWND hWnd, Command cmd) {
                 app.fileHandlerDefaultSortOrder = 0;
                 app.fileHandlerIsReverseSortOrder = false;
             }
+            Persistence::Registry::SaveSetting(Constants::Registry::SORT_ORDER,   static_cast<DWORD>(app.fileHandlerDefaultSortOrder));
+            Persistence::Registry::SaveSetting(Constants::Registry::SORT_REVERSE, static_cast<DWORD>(app.fileHandlerIsReverseSortOrder));
             ReSortPlaylistAndRebuildMap(hWnd);
             g_overlayManager.PostCenterMessage(hWnd, app.fileHandlerIsReverseSortOrder
                                                          ? Constants::Messages::SORT_BY_NAME_REV
@@ -749,6 +745,8 @@ void InputManager::ExecuteKeyboardShortcutCommand(HWND hWnd, Command cmd) {
                 app.fileHandlerDefaultSortOrder = 1;
                 app.fileHandlerIsReverseSortOrder = false;
             }
+            Persistence::Registry::SaveSetting(Constants::Registry::SORT_ORDER,   static_cast<DWORD>(app.fileHandlerDefaultSortOrder));
+            Persistence::Registry::SaveSetting(Constants::Registry::SORT_REVERSE, static_cast<DWORD>(app.fileHandlerIsReverseSortOrder));
             ReSortPlaylistAndRebuildMap(hWnd);
             g_overlayManager.PostCenterMessage(hWnd, app.fileHandlerIsReverseSortOrder
                                                          ? Constants::Messages::SORT_BY_DATE_REV
@@ -763,6 +761,8 @@ void InputManager::ExecuteKeyboardShortcutCommand(HWND hWnd, Command cmd) {
                 app.fileHandlerDefaultSortOrder = 2;
                 app.fileHandlerIsReverseSortOrder = false;
             }
+            Persistence::Registry::SaveSetting(Constants::Registry::SORT_ORDER,   static_cast<DWORD>(app.fileHandlerDefaultSortOrder));
+            Persistence::Registry::SaveSetting(Constants::Registry::SORT_REVERSE, static_cast<DWORD>(app.fileHandlerIsReverseSortOrder));
             ReSortPlaylistAndRebuildMap(hWnd);
             g_overlayManager.PostCenterMessage(hWnd, app.fileHandlerIsReverseSortOrder
                                                          ? Constants::Messages::SORT_BY_SIZE_REV
@@ -777,6 +777,8 @@ void InputManager::ExecuteKeyboardShortcutCommand(HWND hWnd, Command cmd) {
                 app.fileHandlerDefaultSortOrder = 3;
                 app.fileHandlerIsReverseSortOrder = false;
             }
+            Persistence::Registry::SaveSetting(Constants::Registry::SORT_ORDER,   static_cast<DWORD>(app.fileHandlerDefaultSortOrder));
+            Persistence::Registry::SaveSetting(Constants::Registry::SORT_REVERSE, static_cast<DWORD>(app.fileHandlerIsReverseSortOrder));
             ReSortPlaylistAndRebuildMap(hWnd);
             g_overlayManager.PostCenterMessage(hWnd, app.fileHandlerIsReverseSortOrder
                                                          ? Constants::Messages::SORT_BY_TYPE_REV
@@ -788,6 +790,8 @@ void InputManager::ExecuteKeyboardShortcutCommand(HWND hWnd, Command cmd) {
             // Disk order has no meaningful reverse — pressing again is a no-op toggle
             app.fileHandlerDefaultSortOrder = 4;
             app.fileHandlerIsReverseSortOrder = false;
+            Persistence::Registry::SaveSetting(Constants::Registry::SORT_ORDER,   static_cast<DWORD>(app.fileHandlerDefaultSortOrder));
+            Persistence::Registry::SaveSetting(Constants::Registry::SORT_REVERSE, static_cast<DWORD>(app.fileHandlerIsReverseSortOrder));
             ReSortPlaylistAndRebuildMap(hWnd);
             g_overlayManager.PostCenterMessage(hWnd, Constants::Messages::SORT_BY_DISK);
             break;

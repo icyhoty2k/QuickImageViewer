@@ -17,9 +17,9 @@ namespace fs = std::filesystem;
 struct SlideshowState {
     bool running = false;
     bool paused = false;
-    bool shuffle = Constants::Slideshow::SHUFFLE;
-    bool loop = Constants::Slideshow::LOOP;
-    int intervalMs = Constants::Slideshow::INTERVAL_MS;
+    bool shuffle = Constants::Slideshow::IS_SHUFFLE;
+    bool loop = Constants::Slideshow::IS_LOOP;
+    int intervalMs = Constants::Slideshow::IS_INTERVAL_MS;
     int cursorHideMs = Constants::Slideshow::CURSOR_HIDE_MS;
     bool cursorHidden = false;
 
@@ -69,6 +69,20 @@ struct AppState {
     bool thumbnailEffectsEnabled = Constants::ThumbnailPanel::ThumbnailEffects::EFFECTS_MASTER_ENABLED;
     bool historyFullModeEnabled  = Constants::History::HISTORY_SHOW_FULL_HISTORY;
     bool openDirWndOnStart       = Constants::IS_OPEN_DIRWND_ON_START;
+    bool overlayShowBackground   = Constants::Overlay::IS_OVERLAY_SHOW_BACKGROUND;
+    bool swapMouseButtons        = Constants::IS_SWAP_MOUSE_BUTTONS;
+    bool invertWheelDirection    = Constants::IS_MOUSE_VERTICAL_REVERSE_SCROLL_DIRECTION;
+    bool invertWheelDirectionH   = Constants::IS_MOUSE_HORIZONTAL_REVERSE_SCROLL_DIRECTION;
+    int  vramCacheCount          = Constants::IS_VRAM_CACHE_IMAGES_COUNT;
+    int  baseWidth               = Constants::IS_BASE_WIDTH;
+    int  baseHeight              = Constants::IS_BASE_HEIGHT;
+    bool startInFullscreen       = false;
+    int  historyMaxDirs          = Constants::History::IS_HISTORY_MAX_DIRS_TO_SHOW;
+    int  historyMaxFavs          = Constants::History::IS_HISTORY_MAX_FAVORITES_TO_SHOW;
+    int  dirThumbCacheMB         = Constants::IS_DIR_THUMB_CACHE_BUDGET_MB;
+    int  preloadLookaside        = Constants::IS_PRELOAD_LOOKASIDE_COUNT;
+    int  msgCenterDisplayMs      = static_cast<int>(Constants::Overlay::IS_MSG_CENTER_DISPLAY_MS);
+    int  historyMaxDirsSave      = Constants::History::IS_HISTORY_MAX_DIRS_TO_SAVE;
     BYTE opacity = 255;
     float saturation = Constants::DEFAULT_SATURATION;
     float brightness = Constants::DEFAULT_BRIGHTNESS;
@@ -179,8 +193,8 @@ struct AppState {
         opacity = 255;
         SetLayeredWindowAttributes(hWnd, 0, opacity, LWA_ALPHA);
 
-        int targetW = (int) (Constants::BASE_WIDTH * dpiScale);
-        int targetH = (int) (Constants::BASE_HEIGHT * dpiScale);
+        int targetW = (int) (baseWidth  * dpiScale);
+        int targetH = (int) (baseHeight * dpiScale);
 
         HMONITOR hMonitor = MonitorFromWindow(hWnd, MONITOR_DEFAULTTONEAREST);
         MONITORINFO mi = {sizeof(mi)};

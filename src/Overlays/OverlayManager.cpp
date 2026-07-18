@@ -542,7 +542,7 @@ void OverlayManager::PostCenterMessage(HWND hWnd, const std::wstring &msg) {
 
     // Reset (or start) the auto-hide timer on the main window
     KillTimer(hWnd, TIMER_CENTER_MSG);
-    SetTimer(hWnd, TIMER_CENTER_MSG, Constants::Overlay::MSG_CENTER_DISPLAY_MS, nullptr);
+    SetTimer(hWnd, TIMER_CENTER_MSG, static_cast<UINT>(app.msgCenterDisplayMs), nullptr);
     m_centerMsgActive = true;
 
     InvalidateRect(hWnd, nullptr, FALSE);
@@ -689,7 +689,7 @@ void OverlayManager::RenderAll(ID2D1DeviceContext *ctx) const {
             bgRect.bottom = std::min(m_rtH, bgRect.bottom);
 
             // Draw semi-transparent dark background
-            if (Constants::Overlay::OVERLAY_SHOW_BACKGROUND) {
+            if (app.overlayShowBackground) {
                 m_pCenterBrush->SetColor(D2D1::ColorF(0.0f, 0.0f, 0.0f, 0.60f));
                 ctx->FillRectangle(bgRect, m_pCenterBrush.Get());
             }
@@ -752,7 +752,7 @@ void OverlayManager::RenderAll(ID2D1DeviceContext *ctx) const {
         bgRect.bottom = std::min(m_rtH, bgRect.bottom);
 
         // Semi-transparent background
-        if (Constants::Overlay::OVERLAY_SHOW_BACKGROUND && m_pBgBrush)
+        if (app.overlayShowBackground && m_pBgBrush)
             ctx->FillRectangle(bgRect, m_pBgBrush.Get());
 
         // Draw text

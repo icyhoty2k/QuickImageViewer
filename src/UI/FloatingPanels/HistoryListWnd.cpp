@@ -200,8 +200,8 @@ namespace UI {
         const auto &favSet = historyFoldersManager.favorites;
         const int favPos = Constants::History::HISTORY_FAVORITES_POSITION;
         // Use unlimited caps when showing full history, otherwise use the constants
-        const int maxNormal = g_showFullHistory ? INT_MAX : Constants::History::HISTORY_MAX_DIRS_TO_SHOW;
-        const int maxFavs = g_showFullHistory ? INT_MAX : Constants::History::HISTORY_MAX_FAVORITES_TO_SHOW;
+        const int maxNormal = g_showFullHistory ? INT_MAX : app.historyMaxDirs;
+        const int maxFavs = g_showFullHistory ? INT_MAX : app.historyMaxFavs;
 
         if (favPos == 2) {
             // In-place: iterate MRU order, count normals and favs separately
@@ -295,8 +295,8 @@ namespace UI {
         } else {
             // Genuinely new: prepend to RAM list
             history.insert(history.begin(), folderPath);
-            if (static_cast<int>(history.size()) > Constants::History::HISTORY_MAX_DIRS_TO_SAVE)
-                history.resize(static_cast<size_t>(Constants::History::HISTORY_MAX_DIRS_TO_SAVE));
+            if (static_cast<int>(history.size()) > app.historyMaxDirsSave)
+                history.resize(static_cast<size_t>(app.historyMaxDirsSave));
             historyFoldersManager.AppendNewFolderToDisk(folderPath);
         }
 
@@ -317,7 +317,7 @@ namespace UI {
             favSet.erase(path);
         } else {
             // Enforce max favorites cap — silently ignore if already full
-            if (static_cast<int>(favSet.size()) >= Constants::History::HISTORY_MAX_FAVORITES_TO_SHOW)
+            if (static_cast<int>(favSet.size()) >= app.historyMaxFavs)
                 return;
             favSet.insert(path);
         }
@@ -761,7 +761,7 @@ namespace UI {
                                            + std::to_wstring(totalShown) + L" of "
                                            + std::to_wstring(totalSaved) + L" saved)   \x2605 = Space (toggle fav)   "
                                            + std::to_wstring(favCount) + L" / "
-                                           + std::to_wstring(Constants::History::HISTORY_MAX_FAVORITES_TO_SHOW)
+                                           + std::to_wstring(app.historyMaxFavs)
                                            + L" favorites";
                     SetWindowTextW(m_hWnd, caption.c_str());
                 }

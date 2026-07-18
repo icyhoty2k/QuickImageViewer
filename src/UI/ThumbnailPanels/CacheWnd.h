@@ -98,7 +98,7 @@ namespace UI {
                 std::wstring text = L"vRam";
                 const UINT32 boldStart = 4; // everything after "vRam" is bold
                 text += L'(' + std::to_wstring(count)
-                        + L'/' + std::to_wstring(Constants::VRAM_CACHE_IMAGES_COUNT) + L')';
+                        + L'/' + std::to_wstring(app.vramCacheCount) + L')';
                 text += L" → " + FormatDirSize(static_cast<int64_t>(bytes));
                 return {std::move(text), boldStart};
             }
