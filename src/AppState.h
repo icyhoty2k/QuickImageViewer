@@ -67,6 +67,8 @@ struct AppState {
     bool showOverlayInfoText = Constants::Overlay::DEFAULT_SHOW_OVERLAY;
     bool thumbnailPanelWheelWrapAround = Constants::THUMBNAIL_PANEL_WHEEL_WRAP_AROUND;
     bool thumbnailEffectsEnabled = Constants::ThumbnailPanel::ThumbnailEffects::EFFECTS_MASTER_ENABLED;
+    bool historyFullModeEnabled  = Constants::History::HISTORY_SHOW_FULL_HISTORY;
+    bool openDirWndOnStart       = Constants::IS_OPEN_DIRWND_ON_START;
     BYTE opacity = 255;
     float saturation = Constants::DEFAULT_SATURATION;
     float brightness = Constants::DEFAULT_BRIGHTNESS;

@@ -239,10 +239,39 @@ bool FindWnd::OnKeyDown(WPARAM vk, bool ctrl, bool shift, bool alt) {
 }
 
 // =============================================================================
+//  Back-buffer helpers
+// =============================================================================
+
+void FindWnd::EnsureBackBuffer(HDC refDC, int w, int h) {
+    if (m_bbDC && w == m_bbW && h == m_bbH) return;
+    DestroyBackBuffer();
+    m_bbDC = CreateCompatibleDC(refDC);
+    m_bbBmp = CreateCompatibleBitmap(refDC, w, h);
+    m_bbBmpOld = static_cast<HBITMAP>(SelectObject(m_bbDC, m_bbBmp));
+    m_bbW = w;
+    m_bbH = h;
+}
+
+void FindWnd::DestroyBackBuffer() {
+    if (m_bbDC) {
+        if (m_bbBmpOld) SelectObject(m_bbDC, m_bbBmpOld);
+        DeleteDC(m_bbDC);
+        m_bbDC = nullptr;
+    }
+    if (m_bbBmp) {
+        DeleteObject(m_bbBmp);
+        m_bbBmp = nullptr;
+    }
+    m_bbBmpOld = nullptr;
+    m_bbW = m_bbH = 0;
+}
+
+// =============================================================================
 //  Paint
 // =============================================================================
 
 LRESULT FindWnd::HandlePanelMessage(UINT message, WPARAM wParam, LPARAM lParam) {
+    if (message == WM_ERASEBKGND) return 1;
     switch (message) {
 
     case WM_CHAR: {
@@ -264,9 +293,11 @@ LRESULT FindWnd::HandlePanelMessage(UINT message, WPARAM wParam, LPARAM lParam) 
 
     case WM_PAINT: {
         PAINTSTRUCT ps;
-        HDC hdc = BeginPaint(m_hWnd, &ps);
+        HDC screenDC = BeginPaint(m_hWnd, &ps);
         RECT rc;
         GetClientRect(m_hWnd, &rc);
+        EnsureBackBuffer(screenDC, rc.right, rc.bottom);
+        HDC hdc = m_bbDC;
 
         // ── Background ───────────────────────────────────────────────────────
         HBRUSH bgBrush = CreateSolidBrush(GetBgColor());
@@ -475,6 +506,7 @@ LRESULT FindWnd::HandlePanelMessage(UINT message, WPARAM wParam, LPARAM lParam) 
         }
 
         SelectObject(hdc, hOldFont);
+        BitBlt(screenDC, 0, 0, rc.right, rc.bottom, hdc, 0, 0, SRCCOPY);
         EndPaint(m_hWnd, &ps);
         return 0;
     }

@@ -1,5 +1,6 @@
 #include <algorithm>
 #include <random>
+#include <cstdio>
 #include <intrin.h>
 #include "CMDArgs.h"
 #include "SlideshowTransitions.h"
@@ -30,6 +31,7 @@ extern void UpdateOverlaysForCurrentImage(HWND hWnd);
 #include "Input/Command.h"
 #include <windows.h>
 #include <windowsx.h>
+#include <commdlg.h>
 #include <shellapi.h> // Parsing command line arguments
 #include <string>     // Handling string paths
 #include <memory>     // Needed for std::unique_ptr for renderer management
@@ -458,23 +460,43 @@ LRESULT CALLBACK MainAppWndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM l
                 int x = GET_X_LPARAM(wParam);
                 int y = GET_Y_LPARAM(wParam);
 
+                HMENU hSubMenu = CreatePopupMenu();
+                AppendMenuW(hSubMenu,
+                    MF_STRING | (app.isKeepInBackground ? MF_CHECKED : MF_UNCHECKED),
+                    4, L"Keep in Background");
+                AppendMenuW(hSubMenu,
+                    MF_STRING | (app.isEnableRunOnStartup ? MF_CHECKED : MF_UNCHECKED),
+                    5, L"Run on Startup");
+                AppendMenuW(hSubMenu,
+                    MF_STRING | (app.thumbnailEffectsEnabled ? MF_CHECKED : MF_UNCHECKED),
+                    6, L"Thumbnail Effects");
+                AppendMenuW(hSubMenu,
+                    MF_STRING | (app.historyFullModeEnabled ? MF_CHECKED : MF_UNCHECKED),
+                    7, L"History: Open Full List");
+                AppendMenuW(hSubMenu,
+                    MF_STRING | (app.showOverlayInfoText ? MF_CHECKED : MF_UNCHECKED),
+                    8, L"Info Overlays");
+                AppendMenuW(hSubMenu,
+                    MF_STRING | (app.openDirWndOnStart ? MF_CHECKED : MF_UNCHECKED),
+                    9, L"Open Thumbnail Strip on Start");
+                AppendMenuW(hSubMenu, MF_SEPARATOR, 0, nullptr);
+                AppendMenuW(hSubMenu, MF_STRING, 10, L"Export Settings");
+                AppendMenuW(hSubMenu, MF_STRING, 11, L"Import Settings");
+                AppendMenuW(hSubMenu, MF_SEPARATOR, 0, nullptr);
+                AppendMenuW(hSubMenu, MF_STRING, 12, L"Restore Defaults");
+
                 HMENU hMenu = CreatePopupMenu();
                 AppendMenuW(hMenu, MF_STRING, 1, L"Restore QuickImageViewer");
                 AppendMenuW(hMenu, MF_STRING, 2, L"Help / Shortcuts");
                 AppendMenuW(hMenu, MF_SEPARATOR, 0, nullptr);
-                AppendMenuW(hMenu,
-                    MF_STRING | (app.isKeepInBackground ? MF_CHECKED : MF_UNCHECKED),
-                    4, L"Keep in Background");
-                AppendMenuW(hMenu,
-                    MF_STRING | (app.isEnableRunOnStartup ? MF_CHECKED : MF_UNCHECKED),
-                    5, L"Run on Startup");
+                AppendMenuW(hMenu, MF_POPUP, reinterpret_cast<UINT_PTR>(hSubMenu), L"Settings");
                 AppendMenuW(hMenu, MF_SEPARATOR, 0, nullptr);
                 AppendMenuW(hMenu, MF_STRING, 3, L"Exit Completely");
 
                 SetForegroundWindow(hWnd);
                 int cmd = TrackPopupMenu(hMenu, TPM_RETURNCMD | TPM_NONOTIFY, x, y, 0, hWnd, nullptr);
                 PostMessage(hWnd, WM_NULL, 0, 0);
-                DestroyMenu(hMenu);
+                DestroyMenu(hMenu); // also destroys hSubMenu
 
                 if (cmd == 1) {
                     ShowWindow(hWnd, SW_SHOW);
@@ -497,6 +519,157 @@ LRESULT CALLBACK MainAppWndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM l
                     Persistence::Registry::SaveSetting(Constants::Registry::RUN_ON_STARTUP,
                         static_cast<DWORD>(app.isEnableRunOnStartup));
                     Persistence::Registry::EnableRunOnStartup(app.isEnableRunOnStartup);
+                } else if (cmd == 6) {
+                    app.thumbnailEffectsEnabled = !app.thumbnailEffectsEnabled;
+                    Persistence::Registry::SaveSetting(Constants::Registry::THUMBNAIL_EFFECTS,
+                        static_cast<DWORD>(app.thumbnailEffectsEnabled));
+                    uiManager.RepaintAllPanels();
+                } else if (cmd == 7) {
+                    app.historyFullModeEnabled = !app.historyFullModeEnabled;
+                    Persistence::Registry::SaveSetting(Constants::Registry::HISTORY_FULL_MODE,
+                        static_cast<DWORD>(app.historyFullModeEnabled));
+                } else if (cmd == 8) {
+                    app.showOverlayInfoText = !app.showOverlayInfoText;
+                    Persistence::Registry::SaveSetting(Constants::Registry::OVERLAY_VISIBLE,
+                        static_cast<DWORD>(app.showOverlayInfoText));
+                    g_overlayManager.SetAllVisible(app.showOverlayInfoText);
+                    InvalidateRect(hWnd, nullptr, FALSE);
+                } else if (cmd == 9) {
+                    app.openDirWndOnStart = !app.openDirWndOnStart;
+                    Persistence::Registry::SaveSetting(Constants::Registry::OPEN_DIRWND_ON_START,
+                        static_cast<DWORD>(app.openDirWndOnStart));
+                } else if (cmd == 10) {
+                    SYSTEMTIME st{};
+                    GetLocalTime(&st);
+                    wchar_t szFile[MAX_PATH];
+                    swprintf_s(szFile, L"%s%04d%02d%02d%s",
+                               Constants::SettingsFile::EXPORT_PREFIX,
+                               st.wYear, st.wMonth, st.wDay,
+                               Constants::SettingsFile::EXPORT_EXTENSION);
+                    OPENFILENAMEW ofn{};
+                    ofn.lStructSize = sizeof(ofn);
+                    ofn.hwndOwner   = hWnd;
+                    ofn.lpstrFilter = Constants::SettingsFile::EXPORT_FILTER;
+                    ofn.lpstrFile   = szFile;
+                    ofn.nMaxFile    = MAX_PATH;
+                    ofn.lpstrDefExt = Constants::SettingsFile::EXPORT_EXTENSION + 1; // skip the leading '.'
+                    ofn.Flags       = OFN_OVERWRITEPROMPT | OFN_PATHMUSTEXIST;
+                    if (GetSaveFileNameW(&ofn)) {
+                        FILE *f = nullptr;
+                        if (_wfopen_s(&f, szFile, L"w,ccs=UTF-8") == 0 && f) {
+                            fwprintf(f, L"[QuickImageViewer]\n");
+                            fwprintf(f, L"%s=%d\n", Constants::Registry::KEEP_IN_BACKGROUND,  (int)app.isKeepInBackground);
+                            fwprintf(f, L"%s=%d\n", Constants::Registry::RUN_ON_STARTUP,       (int)app.isEnableRunOnStartup);
+                            fwprintf(f, L"%s=%d\n", Constants::Registry::THUMBNAIL_EFFECTS,    (int)app.thumbnailEffectsEnabled);
+                            fwprintf(f, L"%s=%d\n", Constants::Registry::HISTORY_FULL_MODE,    (int)app.historyFullModeEnabled);
+                            fwprintf(f, L"%s=%d\n", Constants::Registry::OVERLAY_VISIBLE,      (int)app.showOverlayInfoText);
+                            fwprintf(f, L"%s=%d\n", Constants::Registry::OPEN_DIRWND_ON_START, (int)app.openDirWndOnStart);
+                            fwprintf(f, L"%s=%d\n", Constants::Registry::THEME_FACTOR,         (int)(app.themeFactor * 100.0f));
+                            fclose(f);
+                            UI::ThemedDialog::Message(hWnd, L"Settings exported successfully.", L"Export Settings");
+                        } else {
+                            UI::ThemedDialog::Message(hWnd, L"Failed to write the settings file.", L"Export Settings");
+                        }
+                    }
+                } else if (cmd == 11) {
+                    wchar_t szFile[MAX_PATH] = L"";
+                    OPENFILENAMEW ofn{};
+                    ofn.lStructSize = sizeof(ofn);
+                    ofn.hwndOwner   = hWnd;
+                    ofn.lpstrFilter = Constants::SettingsFile::EXPORT_FILTER;
+                    ofn.lpstrFile   = szFile;
+                    ofn.nMaxFile    = MAX_PATH;
+                    ofn.lpstrDefExt = Constants::SettingsFile::EXPORT_EXTENSION + 1;
+                    ofn.Flags       = OFN_FILEMUSTEXIST | OFN_PATHMUSTEXIST;
+                    if (GetOpenFileNameW(&ofn) &&
+                        UI::ThemedDialog::Confirm(hWnd, L"Importing will overwrite all current settings. Continue?", L"Import Settings")) {
+                        FILE *f = nullptr;
+                        if (_wfopen_s(&f, szFile, L"r,ccs=UTF-8") == 0 && f) {
+                            wchar_t line[512];
+                            bool anyKey = false;
+                            while (fgetws(line, 512, f)) {
+                                size_t len = wcslen(line);
+                                while (len > 0 && (line[len-1] == L'\n' || line[len-1] == L'\r')) line[--len] = L'\0';
+                                if (len == 0 || line[0] == L'[') continue;
+                                wchar_t *eq = wcschr(line, L'=');
+                                if (!eq) continue;
+                                *eq = L'\0';
+                                const wchar_t *key = line;
+                                int val = _wtoi(eq + 1);
+                                anyKey = true;
+                                auto applyBool = [&](const wchar_t *regKey, bool &field) {
+                                    if (wcscmp(key, regKey) == 0) {
+                                        field = val != 0;
+                                        Persistence::Registry::SaveSetting(regKey, static_cast<DWORD>(field));
+                                    }
+                                };
+                                applyBool(Constants::Registry::KEEP_IN_BACKGROUND,  app.isKeepInBackground);
+                                applyBool(Constants::Registry::RUN_ON_STARTUP,       app.isEnableRunOnStartup);
+                                applyBool(Constants::Registry::THUMBNAIL_EFFECTS,    app.thumbnailEffectsEnabled);
+                                applyBool(Constants::Registry::HISTORY_FULL_MODE,    app.historyFullModeEnabled);
+                                applyBool(Constants::Registry::OVERLAY_VISIBLE,      app.showOverlayInfoText);
+                                applyBool(Constants::Registry::OPEN_DIRWND_ON_START, app.openDirWndOnStart);
+                                if (wcscmp(key, Constants::Registry::THEME_FACTOR) == 0) {
+                                    app.themeFactor = static_cast<float>(val) / 100.0f;
+                                    Persistence::Registry::SaveSetting(Constants::Registry::THEME_FACTOR, static_cast<DWORD>(val));
+                                }
+                            }
+                            fclose(f);
+                            if (anyKey) {
+                                // Re-init AppState from registry (mirrors startup logic)
+                                app.isEnableRunOnStartup = Persistence::Registry::LoadSetting(
+                                    Constants::Registry::RUN_ON_STARTUP,
+                                    static_cast<DWORD>(Constants::IS_ENABLE_RUN_ON_STARTUP)) != 0;
+                                app.isKeepInBackground = Persistence::Registry::LoadSetting(
+                                    Constants::Registry::KEEP_IN_BACKGROUND,
+                                    static_cast<DWORD>(Constants::IS_KEEP_IN_BACKGROUND)) != 0;
+                                app.thumbnailEffectsEnabled = Persistence::Registry::LoadSetting(
+                                    Constants::Registry::THUMBNAIL_EFFECTS,
+                                    static_cast<DWORD>(Constants::ThumbnailPanel::ThumbnailEffects::EFFECTS_MASTER_ENABLED)) != 0;
+                                app.historyFullModeEnabled = Persistence::Registry::LoadSetting(
+                                    Constants::Registry::HISTORY_FULL_MODE,
+                                    static_cast<DWORD>(Constants::History::HISTORY_SHOW_FULL_HISTORY)) != 0;
+                                app.showOverlayInfoText = Persistence::Registry::LoadSetting(
+                                    Constants::Registry::OVERLAY_VISIBLE,
+                                    static_cast<DWORD>(Constants::Overlay::DEFAULT_SHOW_OVERLAY)) != 0;
+                                app.openDirWndOnStart = Persistence::Registry::LoadSetting(
+                                    Constants::Registry::OPEN_DIRWND_ON_START,
+                                    static_cast<DWORD>(Constants::IS_OPEN_DIRWND_ON_START)) != 0;
+                                DWORD themeFactorDWORD = Persistence::Registry::LoadSetting(
+                                    Constants::Registry::THEME_FACTOR,
+                                    static_cast<DWORD>(Constants::Theme::DEFAULT_THEME_FACTOR));
+                                app.themeFactor = static_cast<float>(themeFactorDWORD) / 100.0f;
+                                // Apply side effects
+                                Persistence::Registry::EnableRunOnStartup(app.isEnableRunOnStartup);
+                                g_overlayManager.SetAllVisible(app.showOverlayInfoText);
+                                AppCommands::changeAppThemeFactor(hWnd, app.themeFactor);
+                                uiManager.RepaintAllPanels();
+                                InvalidateRect(hWnd, nullptr, FALSE);
+                                UI::ThemedDialog::Message(hWnd, L"Settings imported successfully.", L"Import Settings");
+                            } else {
+                                UI::ThemedDialog::Message(hWnd, L"The file appears to be empty or invalid.", L"Import Settings");
+                            }
+                        } else {
+                            UI::ThemedDialog::Message(hWnd, L"Failed to read the settings file.", L"Import Settings");
+                        }
+                    }
+                } else if (cmd == 12) {
+                    app.isKeepInBackground   = Constants::IS_KEEP_IN_BACKGROUND;
+                    app.isEnableRunOnStartup = Constants::IS_ENABLE_RUN_ON_STARTUP;
+                    app.thumbnailEffectsEnabled = Constants::ThumbnailPanel::ThumbnailEffects::EFFECTS_MASTER_ENABLED;
+                    app.historyFullModeEnabled  = Constants::History::HISTORY_SHOW_FULL_HISTORY;
+                    app.showOverlayInfoText     = Constants::Overlay::DEFAULT_SHOW_OVERLAY;
+                    app.openDirWndOnStart       = Constants::IS_OPEN_DIRWND_ON_START;
+                    Persistence::Registry::SaveSetting(Constants::Registry::KEEP_IN_BACKGROUND,   static_cast<DWORD>(app.isKeepInBackground));
+                    Persistence::Registry::SaveSetting(Constants::Registry::RUN_ON_STARTUP,        static_cast<DWORD>(app.isEnableRunOnStartup));
+                    Persistence::Registry::SaveSetting(Constants::Registry::THUMBNAIL_EFFECTS,     static_cast<DWORD>(app.thumbnailEffectsEnabled));
+                    Persistence::Registry::SaveSetting(Constants::Registry::HISTORY_FULL_MODE,     static_cast<DWORD>(app.historyFullModeEnabled));
+                    Persistence::Registry::SaveSetting(Constants::Registry::OVERLAY_VISIBLE,       static_cast<DWORD>(app.showOverlayInfoText));
+                    Persistence::Registry::SaveSetting(Constants::Registry::OPEN_DIRWND_ON_START,  static_cast<DWORD>(app.openDirWndOnStart));
+                    Persistence::Registry::EnableRunOnStartup(app.isEnableRunOnStartup);
+                    g_overlayManager.SetAllVisible(app.showOverlayInfoText);
+                    uiManager.RepaintAllPanels();
+                    InvalidateRect(hWnd, nullptr, FALSE);
                 }
             }
             return 0;
@@ -611,6 +784,18 @@ int WINAPI wWinMain(HINSTANCE hInstance, [[maybe_unused]] HINSTANCE hPrevInstanc
     app.isKeepInBackground = Persistence::Registry::LoadSetting(
         Constants::Registry::KEEP_IN_BACKGROUND,
         static_cast<DWORD>(Constants::IS_KEEP_IN_BACKGROUND)) != 0;
+    app.thumbnailEffectsEnabled = Persistence::Registry::LoadSetting(
+        Constants::Registry::THUMBNAIL_EFFECTS,
+        static_cast<DWORD>(Constants::ThumbnailPanel::ThumbnailEffects::EFFECTS_MASTER_ENABLED)) != 0;
+    app.historyFullModeEnabled = Persistence::Registry::LoadSetting(
+        Constants::Registry::HISTORY_FULL_MODE,
+        static_cast<DWORD>(Constants::History::HISTORY_SHOW_FULL_HISTORY)) != 0;
+    app.showOverlayInfoText = Persistence::Registry::LoadSetting(
+        Constants::Registry::OVERLAY_VISIBLE,
+        static_cast<DWORD>(Constants::Overlay::DEFAULT_SHOW_OVERLAY)) != 0;
+    app.openDirWndOnStart = Persistence::Registry::LoadSetting(
+        Constants::Registry::OPEN_DIRWND_ON_START,
+        static_cast<DWORD>(Constants::IS_OPEN_DIRWND_ON_START)) != 0;
 
     // Command-line overrides: args beat registry values.
     if (earlyArgs.runOnStartup) app.isEnableRunOnStartup = true;
@@ -710,6 +895,9 @@ int WINAPI wWinMain(HINSTANCE hInstance, [[maybe_unused]] HINSTANCE hPrevInstanc
     AppCommands::changeAppThemeFactor(hWnd, app.themeFactor);
     // 2. Apply command-line arguments SECOND (already parsed above; args beat registry)
     ApplyCmdArgs(hWnd, earlyArgs, nCmdShow);
+
+    if (app.openDirWndOnStart)
+        uiManager.getDirWindow().Show();
 
     MSG msg{};
     while (GetMessage(&msg, nullptr, 0, 0)) {
