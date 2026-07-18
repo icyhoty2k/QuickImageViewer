@@ -43,6 +43,7 @@ namespace Constants {
     constexpr const wchar_t *WINDOW_CLASS_NAME = BASE_NAME;
     constexpr bool IS_ENABLE_RUN_ON_STARTUP = true; // enable or disable run on startup reg value add/delete
     constexpr bool IS_KEEP_IN_BACKGROUND = true; // enable or disable run on startup reg value add/delete
+    constexpr bool IS_OPEN_DIRWND_ON_START = false; // open F6 DirWnd automatically when the app starts
     // Prefix applied to every registry value name and every data file name
     // when the app is running in dedicated (-dedicated) mode.
     // Guarantees that a dedicated instance and a normal instance never share
@@ -312,8 +313,17 @@ namespace Constants {
         constexpr const wchar_t *THEME_FACTOR = L"qivThemeFactor";
         constexpr const wchar_t *KEEP_IN_BACKGROUND = L"qivKeepInBackground";
         constexpr const wchar_t *RUN_ON_STARTUP = L"qivRunOnStartup";
+        constexpr const wchar_t *THUMBNAIL_EFFECTS  = L"qivThumbnailEffects";
+        constexpr const wchar_t *HISTORY_FULL_MODE  = L"qivHistoryFullMode";
+        constexpr const wchar_t *OVERLAY_VISIBLE      = L"qivOverlayVisible";
+        constexpr const wchar_t *OPEN_DIRWND_ON_START = L"qivOpenDirWndOnStart";
     }
 
+    namespace SettingsFile {
+        constexpr const wchar_t *EXPORT_PREFIX    = L"QIVSettings_";
+        constexpr const wchar_t *EXPORT_EXTENSION = L".ini";
+        constexpr const wchar_t *EXPORT_FILTER    = L"INI Settings (*.ini)\0*.ini\0All Files (*.*)\0*.*\0";
+    }
 
     namespace ViewModes {
         enum class ViewMode {

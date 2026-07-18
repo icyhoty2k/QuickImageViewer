@@ -642,6 +642,33 @@ namespace UI {
     }
 
     // ---------------------------------------------------------------------------
+    // Back-buffer helpers
+    // ---------------------------------------------------------------------------
+    void HistoryListWnd::EnsureBackBuffer(HDC refDC, int w, int h) {
+        if (m_bbDC && w == m_bbW && h == m_bbH) return;
+        DestroyBackBuffer();
+        m_bbDC = CreateCompatibleDC(refDC);
+        m_bbBmp = CreateCompatibleBitmap(refDC, w, h);
+        m_bbBmpOld = static_cast<HBITMAP>(SelectObject(m_bbDC, m_bbBmp));
+        m_bbW = w;
+        m_bbH = h;
+    }
+
+    void HistoryListWnd::DestroyBackBuffer() {
+        if (m_bbDC) {
+            if (m_bbBmpOld) SelectObject(m_bbDC, m_bbBmpOld);
+            DeleteDC(m_bbDC);
+            m_bbDC = nullptr;
+        }
+        if (m_bbBmp) {
+            DeleteObject(m_bbBmp);
+            m_bbBmp = nullptr;
+        }
+        m_bbBmpOld = nullptr;
+        m_bbW = m_bbH = 0;
+    }
+
+    // ---------------------------------------------------------------------------
     // Window procedure
     // ---------------------------------------------------------------------------
     LRESULT HistoryListWnd::HandlePanelMessage(UINT message, WPARAM wParam, LPARAM lParam) {
@@ -653,10 +680,8 @@ namespace UI {
                 RECT rc;
                 GetClientRect(m_hWnd, &rc);
 
-                // Double-buffer: draw into memory DC, blit atomically to avoid flicker
-                HDC hdc = CreateCompatibleDC(screenDC);
-                HBITMAP hBmp = CreateCompatibleBitmap(screenDC, rc.right, rc.bottom);
-                HBITMAP hOldBmp = static_cast<HBITMAP>(SelectObject(hdc, hBmp));
+                EnsureBackBuffer(screenDC, rc.right, rc.bottom);
+                HDC hdc = m_bbDC;
 
                 UINT dpi = static_cast<UINT>(app.dpiScale * 96.0f);
                 int padding = MulDiv(Constants::History::HISTORY_PADDING, dpi, 96);
@@ -1188,11 +1213,7 @@ namespace UI {
                     }
                 }
 
-                SelectObject(hdc, GetStockObject(SYSTEM_FONT));
                 BitBlt(screenDC, 0, 0, rc.right, rc.bottom, hdc, 0, 0, SRCCOPY);
-                SelectObject(hdc, hOldBmp);
-                DeleteObject(hBmp);
-                DeleteDC(hdc);
                 EndPaint(m_hWnd, &ps);
                 return 0;
             }
@@ -1517,7 +1538,7 @@ namespace UI {
 
     void HistoryListWnd::Show() {
         if (!m_hWnd) return;
-        g_showFullHistory = false; // Always start with limited view
+        g_showFullHistory = app.historyFullModeEnabled;
         BuildDisplayList();
         CaptureNavigationSnapshot();
         int x, y, w, h;

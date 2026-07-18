@@ -600,13 +600,40 @@ namespace UI {
         return false;
     }
 
+    void ExifWnd::EnsureBackBuffer(HDC refDC, int w, int h) {
+        if (m_bbDC && w == m_bbW && h == m_bbH) return;
+        DestroyBackBuffer();
+        m_bbDC = CreateCompatibleDC(refDC);
+        m_bbBmp = CreateCompatibleBitmap(refDC, w, h);
+        m_bbBmpOld = static_cast<HBITMAP>(SelectObject(m_bbDC, m_bbBmp));
+        m_bbW = w;
+        m_bbH = h;
+    }
+
+    void ExifWnd::DestroyBackBuffer() {
+        if (m_bbDC) {
+            if (m_bbBmpOld) SelectObject(m_bbDC, m_bbBmpOld);
+            DeleteDC(m_bbDC);
+            m_bbDC = nullptr;
+        }
+        if (m_bbBmp) {
+            DeleteObject(m_bbBmp);
+            m_bbBmp = nullptr;
+        }
+        m_bbBmpOld = nullptr;
+        m_bbW = m_bbH = 0;
+    }
+
     LRESULT ExifWnd::HandlePanelMessage(UINT message, WPARAM wParam, LPARAM lParam) {
+        if (message == WM_ERASEBKGND) return 1;
         switch (message) {
             case WM_PAINT: {
                 PAINTSTRUCT ps;
-                HDC hdc = BeginPaint(m_hWnd, &ps);
+                HDC screenDC = BeginPaint(m_hWnd, &ps);
                 RECT rc;
                 GetClientRect(m_hWnd, &rc);
+                EnsureBackBuffer(screenDC, rc.right, rc.bottom);
+                HDC hdc = m_bbDC;
 
                 const UINT dpi = static_cast<UINT>(app.dpiScale * 96.0f);
                 const int pad = MulDiv(12, dpi, 96);
@@ -807,6 +834,7 @@ namespace UI {
 
                 SelectObject(hdc, hOld);
                 // Fonts are cached members — not deleted here
+                BitBlt(screenDC, 0, 0, rc.right, rc.bottom, hdc, 0, 0, SRCCOPY);
                 EndPaint(m_hWnd, &ps);
                 return 0;
             }

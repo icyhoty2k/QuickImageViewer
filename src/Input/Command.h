@@ -51,7 +51,7 @@ enum class Command {
     ToggleDir,
     ToggleHistory,
     ToggleHistoryFull,
-    // Master toggle  (N / I / Ctrl+0)
+    // Master toggle  (I / Ctrl+0)
     ToggleOverlay,
     // Cycle layout mode 0→1→2→0  (O)
     CycleOverlayLayout,

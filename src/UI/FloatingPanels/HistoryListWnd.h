@@ -47,9 +47,18 @@ namespace UI {
                 if (m_hFontList)      DeleteObject(m_hFontList);
                 if (m_hFontIndexLink) DeleteObject(m_hFontIndexLink);
                 if (m_hFontLink)      DeleteObject(m_hFontLink);
+                DestroyBackBuffer();
             }
 
         private:
+            void EnsureBackBuffer(HDC refDC, int w, int h);
+            void DestroyBackBuffer();
+            HDC     m_bbDC     = nullptr;
+            HBITMAP m_bbBmp    = nullptr;
+            HBITMAP m_bbBmpOld = nullptr;
+            int     m_bbW      = 0;
+            int     m_bbH      = 0;
+
             void ToggleHistoryWindow();
 
             HFONT m_hFontTitle     = nullptr;

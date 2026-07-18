@@ -361,8 +361,7 @@ namespace UI {
         const int sOverlay = Sec(L"ℹ️", L"INFO OVERLAYS",
                                  L"The 3×3 on-screen information grid");
 
-        Add(K(SC::SC_PANEL_OVERLAY_TOGGLE) + L" / " + K(SC::SC_PANEL_OVERLAY_MASTER) +
-            L" / " + Ctrl(SC::SC_PANEL_OVERLAY_MASTER_CTRL0),
+        Add(K(SC::SC_PANEL_OVERLAY_MASTER) + L" / " + Ctrl(SC::SC_PANEL_OVERLAY_MASTER_CTRL0),
             L"Master toggle — show / hide all overlay slots at once.", sOverlay);
         Add(Ctrl(SC::SC_OVERLAY_SLOT_1) + L" – " + Ctrl(SC::SC_OVERLAY_SLOT_9),
             L"Toggle an individual slot of the 3×3 grid. Assignments:  1 index + filename  •  "

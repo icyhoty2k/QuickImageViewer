@@ -201,9 +201,9 @@ Command InputManager::ResolveKeyboardKeys(UINT key, LPARAM lParam) {
         case Shortcuts::SC_PANEL_CACHE_CLEAR: return Command::ClearCache;
 
         // --- Overlays ---
-        case Shortcuts::SC_PANEL_OVERLAY_TOGGLE: // N
-            if (!ctrl) return Command::ToggleOverlay;
-            return Command::NewWindow; // Ctrl+N
+        case Shortcuts::SC_PANEL_OVERLAY_TOGGLE: // N — Ctrl+N only
+            if (ctrl && !alt && !shift) return Command::NewWindow;
+            break;
 
         case Shortcuts::SC_PANEL_OVERLAY_MASTER: // I
             if (!ctrl) return Command::ToggleOverlay;

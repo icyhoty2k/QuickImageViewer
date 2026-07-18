@@ -14,6 +14,7 @@ namespace UI {
         ~ExifWnd() {
             if (m_hFontNorm) { DeleteObject(m_hFontNorm); m_hFontNorm = nullptr; }
             if (m_hFontBold) { DeleteObject(m_hFontBold); m_hFontBold = nullptr; }
+            DestroyBackBuffer();
         }
         // Called when the displayed image changes while the window is open.
         // Queues EXIF reading on the IO thread — zero UI-thread cost.
@@ -58,5 +59,13 @@ namespace UI {
         HFONT m_hFontNorm    = nullptr;
         HFONT m_hFontBold    = nullptr;
         UINT  m_cachedFontDpi = 0;
+
+        void EnsureBackBuffer(HDC refDC, int w, int h);
+        void DestroyBackBuffer();
+        HDC     m_bbDC     = nullptr;
+        HBITMAP m_bbBmp    = nullptr;
+        HBITMAP m_bbBmpOld = nullptr;
+        int     m_bbW      = 0;
+        int     m_bbH      = 0;
     };
 } // namespace UI
