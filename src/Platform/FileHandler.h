@@ -53,11 +53,3 @@ void HandleScanComplete(HWND hWnd, ScanResult *result);
 // Read on the UI thread to show/hide the wait cursor.
 extern std::atomic<bool> g_scanInProgress;
 
-// Start watching 'dir' for file-system changes. Posts WM_QIV_DIR_CHANGED to
-// hWnd on any change. Stops any previously active watcher automatically.
-// No-op when Constants::WATCH_DIR_FOR_CHANGES is false.
-void StartDirWatcher(HWND hWnd, const std::wstring &dir);
-
-// Stop the active directory watcher and join its thread. Safe to call when
-// no watcher is running. Called on WM_DESTROY.
-void StopDirWatcher();
