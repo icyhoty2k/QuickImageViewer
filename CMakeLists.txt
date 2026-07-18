@@ -33,21 +33,21 @@ set(SOURCES
         src/Platform/RegistrySetup.cpp
         src/Renderer/RendererGDI.cpp
         src/Renderer/RendererD2D.cpp
-        src/UI/FloatingPanelWnd.cpp
-        src/UI/HelpWnd.cpp
-        src/UI/ExifWnd.cpp
-        src/UI/JumpToWnd.cpp
-        src/UI/StatsWnd.cpp
-        src/UI/CacheWnd.cpp
-        src/UI/DirWnd.cpp
-        src/UI/HistoryListWnd.cpp
+        src/UI/FloatingPanels/FloatingPanelWnd.cpp
+        src/UI/FloatingPanels/HelpWnd.cpp
+        src/UI/FloatingPanels/ExifWnd.cpp
+        src/UI/FloatingPanels/JumpToWnd.cpp
+        src/UI/FloatingPanels/StatsWnd.cpp
+        src/UI/ThumbnailPanels/CacheWnd.cpp
+        src/UI/ThumbnailPanels/DirWnd.cpp
+        src/UI/FloatingPanels/HistoryListWnd.cpp
         src/Input/CommandExecuter.cpp
         src/Input/CommandResolver.cpp
         src/Input/AppCommands.cpp
         src/UI/UIManager.cpp
         src/Overlays/OverlayManager.cpp
-        src/UI/ThumbnailPanelWnd.cpp
-        src/UI/FindWnd.cpp
+        src/UI/ThumbnailPanels/ThumbnailPanelWnd.cpp
+        src/UI/FloatingPanels/FindWnd.cpp
         src/Persistence/HistoryFoldersManager.cpp
         src/CMDArgs.cpp
         src/SlideshowTransitions.cpp

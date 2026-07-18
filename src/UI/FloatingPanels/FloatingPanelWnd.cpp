@@ -1,6 +1,6 @@
 #include "FloatingPanelWnd.h"
-#include "../Platform/Constants.h"
-#include "../AppState.h"
+#include "../../Platform/Constants.h"
+#include "../../AppState.h"
 #include <dwmapi.h>
 
 namespace UI {
@@ -51,9 +51,11 @@ namespace UI {
 
     LRESULT FloatingPanelWnd::HandleMessage(UINT message, WPARAM wParam, LPARAM lParam) {
         if (message == WM_XBUTTONDOWN) {
-            // Forward the event to the parent so MouseHandler can process it
-            SendMessageW(m_hParent, WM_XBUTTONDOWN, wParam, lParam);
-            return 0;
+            if (m_hParent) {
+                // Forward the event to the parent so MouseHandler can process it
+                SendMessageW(m_hParent, WM_XBUTTONDOWN, wParam, lParam);
+                return 0;
+            }
         }
         if (message == WM_SETFOCUS) {
             InvalidateRect(m_hWnd, nullptr, FALSE);

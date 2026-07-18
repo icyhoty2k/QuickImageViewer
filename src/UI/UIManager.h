@@ -5,14 +5,14 @@
 #include <vector>
 
 #include "IPanelWindow.h"
-#include "HelpWnd.h"
-#include "CacheWnd.h"
-#include "DirWnd.h"
-#include "HistoryListWnd.h"
-#include "ExifWnd.h"
-#include "JumpToWnd.h"
-#include "FindWnd.h"
-#include "StatsWnd.h"
+#include "FloatingPanels/HelpWnd.h"
+#include "ThumbnailPanels/CacheWnd.h"
+#include "ThumbnailPanels/DirWnd.h"
+#include "FloatingPanels/HistoryListWnd.h"
+#include "FloatingPanels/ExifWnd.h"
+#include "FloatingPanels/JumpToWnd.h"
+#include "FloatingPanels/FindWnd.h"
+#include "FloatingPanels/StatsWnd.h"
 #include "../Platform/Constants.h"
 
 namespace UI {

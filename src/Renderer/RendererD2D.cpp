@@ -14,7 +14,7 @@
 #include <shlwapi.h>   // SHCreateMemStream
 #include <shobjidl.h>  // IShellItemImageFactory, SHCreateItemFromParsingName
 
-#include "DirWnd.h"
+#include "../UI/ThumbnailPanels/DirWnd.h"
 
 // resvg C API (static lib)
 #include <resvg.h>

@@ -17,7 +17,7 @@
 #include "WorkerThread.h"
 #include "DriveInfo.h"
 #include "../SvgDecoder.h"
-#include "../UI/HistoryListWnd.h"
+#include "../UI/FloatingPanels/HistoryListWnd.h"
 
 namespace fs = std::filesystem;
 

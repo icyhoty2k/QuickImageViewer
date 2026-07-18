@@ -1,13 +1,13 @@
 #include "HistoryListWnd.h"
-#include "../Platform/Constants.h"
-#include "../Platform/ConstantsStrings.h"
-#include "../Platform/FileHandler.h"
-#include "../Platform/RegistrySetup.h"
-#include "../Overlays/OverlayManager.h"
-#include "../AppState.h"
-#include "../Input/Shortcuts.h"
-#include "../Persistence/HistoryFoldersManager.h"
-#include "../UI/UIManager.h"
+#include "../../Platform/Constants.h"
+#include "../../Platform/ConstantsStrings.h"
+#include "../../Platform/FileHandler.h"
+#include "../../Platform/RegistrySetup.h"
+#include "../../Overlays/OverlayManager.h"
+#include "../../AppState.h"
+#include "../../Input/Shortcuts.h"
+#include "../../Persistence/HistoryFoldersManager.h"
+#include "../UIManager.h"
 #include <algorithm>
 #include <cwctype>
 #include <thread>
@@ -103,7 +103,10 @@ namespace UI {
         for (auto dirIt = fs::directory_iterator(
                      fs::path(path), fs::directory_options::skip_permission_denied, ec);
              !ec && dirIt != fs::directory_iterator(); dirIt.increment(ec)) {
-            if (!dirIt->is_regular_file(ec)) { ec.clear(); continue; }
+            if (!dirIt->is_regular_file(ec)) {
+                ec.clear();
+                continue;
+            }
             std::wstring ext = dirIt->path().extension().wstring();
             for (auto &c: ext) c = static_cast<wchar_t>(::towlower(c));
             for (size_t i = 0; i < Constants::Registry::SUPPORTED_EXTENSIONS_COUNT; ++i) {
@@ -630,11 +633,26 @@ namespace UI {
 
                 int listFontSz = MulDiv(Constants::History::HISTORY_LIST_FONT_SIZE, dpi, 96);
                 if (static_cast<int>(dpi) != m_cachedFontDpi) {
-                    if (m_hFontTitle)     { DeleteObject(m_hFontTitle);     m_hFontTitle     = nullptr; }
-                    if (m_hFontBody)      { DeleteObject(m_hFontBody);      m_hFontBody      = nullptr; }
-                    if (m_hFontList)      { DeleteObject(m_hFontList);      m_hFontList      = nullptr; }
-                    if (m_hFontIndexLink) { DeleteObject(m_hFontIndexLink); m_hFontIndexLink = nullptr; }
-                    if (m_hFontLink)      { DeleteObject(m_hFontLink);      m_hFontLink      = nullptr; }
+                    if (m_hFontTitle) {
+                        DeleteObject(m_hFontTitle);
+                        m_hFontTitle = nullptr;
+                    }
+                    if (m_hFontBody) {
+                        DeleteObject(m_hFontBody);
+                        m_hFontBody = nullptr;
+                    }
+                    if (m_hFontList) {
+                        DeleteObject(m_hFontList);
+                        m_hFontList = nullptr;
+                    }
+                    if (m_hFontIndexLink) {
+                        DeleteObject(m_hFontIndexLink);
+                        m_hFontIndexLink = nullptr;
+                    }
+                    if (m_hFontLink) {
+                        DeleteObject(m_hFontLink);
+                        m_hFontLink = nullptr;
+                    }
                     m_hFontTitle = CreateFontW(
                             titleSz, 0, 0, 0, FW_BOLD, FALSE, FALSE, FALSE,
                             DEFAULT_CHARSET, OUT_OUTLINE_PRECIS, CLIP_DEFAULT_PRECIS,
@@ -1027,7 +1045,6 @@ namespace UI {
                             RECT f5HiddenRect = {curX, footerTop, midBound, footerBot};
                             DrawTextW(hdc, L" Hidden", -1, &f5HiddenRect, DT_LEFT | DT_VCENTER | DT_SINGLELINE);
                         }
-
                     }
 
                     // RIGHT: QIV→dir link + file size
@@ -1383,7 +1400,10 @@ namespace UI {
                                 for (auto it = fs::directory_iterator(
                                              path, fs::directory_options::skip_permission_denied, ec);
                                      it != fs::directory_iterator(); it.increment(ec)) {
-                                    if (ec) { ec.clear(); continue; }
+                                    if (ec) {
+                                        ec.clear();
+                                        continue;
+                                    }
                                     if (!it->is_regular_file(ec)) continue;
                                     std::wstring ext = it->path().extension().wstring();
                                     for (auto &c: ext) c = static_cast<wchar_t>(::towlower(c));
@@ -1394,7 +1414,10 @@ namespace UI {
                                             break;
                                         }
                                     }
-                                    if (found) { st = FolderStatus::Valid; break; }
+                                    if (found) {
+                                        st = FolderStatus::Valid;
+                                        break;
+                                    }
                                 }
                                 (*result)[path] = st;
                             }
@@ -1449,8 +1472,9 @@ namespace UI {
         // (spawned panel open/close, overlay activation, etc.).
         if (g_hoverRow < 0 && g_savedHoverRow >= 0) {
             int navMax = static_cast<int>(g_displayList.size());
-            g_hoverRow = (g_savedHoverRow < navMax) ? g_savedHoverRow
-                                                    : (navMax > 0 ? navMax - 1 : -1);
+            g_hoverRow = (g_savedHoverRow < navMax)
+                             ? g_savedHoverRow
+                             : (navMax > 0 ? navMax - 1 : -1);
         }
     }
 

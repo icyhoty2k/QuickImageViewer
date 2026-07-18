@@ -5,7 +5,7 @@
 #include "../Platform/ConstantsStrings.h"
 #include "../Platform/FileHandler.h"
 #include "../Overlays/OverlayManager.h"
-#include "../UI/HistoryListWnd.h"
+#include "../UI/FloatingPanels/HistoryListWnd.h"
 #include "../UI/UIManager.h"
 #include "WicDecoder.h"
 #include <windowsx.h>
