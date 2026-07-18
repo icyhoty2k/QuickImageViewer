@@ -1,7 +1,7 @@
 #include "CacheWnd.h"
-#include "../AppState.h"
-#include "../Input/Shortcuts.h"
-#include "../Renderer/RendererD2D.h"
+#include "../../AppState.h"
+#include "../../Input/Shortcuts.h"
+#include "../../Renderer/RendererD2D.h"
 
 namespace UI {
     // -------------------------------------------------------------------------

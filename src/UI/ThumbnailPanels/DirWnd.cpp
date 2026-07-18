@@ -1,7 +1,7 @@
 #include "DirWnd.h"
-#include "../AppState.h"
-#include "../Input/Shortcuts.h"
-#include "../Renderer/RendererD2D.h"
+#include "../../AppState.h"
+#include "../../Input/Shortcuts.h"
+#include "../../Renderer/RendererD2D.h"
 
 namespace UI {
     // -------------------------------------------------------------------------
@@ -32,11 +32,11 @@ namespace UI {
     void DirWnd::LoadPlaylist(const std::wstring &folderPath) {
         m_sourceDirty = true;
         m_dirPlaylist.clear();
-        m_currentFolder = folderPath;  // Track current folder for history marking
+        m_currentFolder = folderPath; // Track current folder for history marking
         std::filesystem::path dir(folderPath);
         if (!std::filesystem::exists(dir) || !std::filesystem::is_directory(dir))
             return;
-        for (const auto &entry : std::filesystem::directory_iterator(dir)) {
+        for (const auto &entry: std::filesystem::directory_iterator(dir)) {
             if (!entry.is_regular_file()) continue;
             if (!is_image_ext(entry.path().extension().wstring())) continue;
             m_dirPlaylist.push_back(std::filesystem::canonical(entry.path()).wstring());
@@ -54,9 +54,12 @@ namespace UI {
         if (myDir.empty()) return;
 
         bool match = false;
-        try { match = std::filesystem::equivalent(std::filesystem::path(myDir),
-                                                  std::filesystem::path(dir)); }
-        catch (...) { match = (myDir == dir); }
+        try {
+            match = std::filesystem::equivalent(std::filesystem::path(myDir),
+                                                std::filesystem::path(dir));
+        } catch (...) {
+            match = (myDir == dir);
+        }
         if (!match) return;
 
         LoadPlaylist(dir);
@@ -85,5 +88,4 @@ namespace UI {
             r->ClearDirThumbnailCache(m_hWnd);
         }
     }
-
 } // namespace UI
