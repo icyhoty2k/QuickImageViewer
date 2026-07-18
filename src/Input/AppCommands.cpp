@@ -4,6 +4,8 @@
 #include "../../resources/resource.h"
 #include <dwmapi.h>
 #include <uxtheme.h>
+#include <commctrl.h>
+#pragma comment(lib, "comctl32.lib")
 #include <algorithm>
 #include <numeric>
 #include <random>
@@ -34,48 +36,55 @@ void AppCommands::SaveImageToDisk(HWND hWnd) {
         defaultName = nameOnly;
     }
 
-    std::wstring outBuf(Constants::MAX_FILE_PATH, L'\0');
-    wcsncpy_s(outBuf.data(), Constants::MAX_FILE_PATH, defaultName.c_str(), _TRUNCATE);
+    IFileSaveDialog *pfd = nullptr;
+    if (FAILED(CoCreateInstance(CLSID_FileSaveDialog, nullptr,
+                                CLSCTX_INPROC_SERVER, IID_PPV_ARGS(&pfd))))
+        return;
 
-    // Build the filter string from Constants::Save::FORMATS.
-    // OPENFILENAMEW requires pairs of "Description\0*.ext\0" with a final \0.
-    std::wstring filterStr;
-    for (const auto &fmt: Constants::Save::FORMATS) {
-        filterStr += fmt.description;
-        filterStr += L'\0';
-        filterStr += fmt.pattern;
-        filterStr += L'\0';
+    constexpr size_t nFmt = std::size(Constants::Save::FORMATS);
+    COMDLG_FILTERSPEC filters[nFmt];
+    for (size_t i = 0; i < nFmt; ++i) {
+        filters[i].pszName = Constants::Save::FORMATS[i].description;
+        filters[i].pszSpec = Constants::Save::FORMATS[i].pattern;
     }
-    filterStr += L'\0';
+    pfd->SetFileTypes(static_cast<UINT>(nFmt), filters);
+    pfd->SetFileTypeIndex(1);
+    pfd->SetDefaultExtension(Constants::Save::DEFAULT_EXT);
+    pfd->SetTitle(L"Save Image");
+    pfd->SetFileName(defaultName.c_str());
 
-    OPENFILENAMEW ofn{};
-    ofn.lStructSize = sizeof(ofn);
-    ofn.hwndOwner = hWnd;
-    ofn.lpstrFilter = filterStr.c_str();
-    ofn.nFilterIndex = 1;
-    ofn.lpstrFile = outBuf.data();
-    ofn.nMaxFile = Constants::MAX_FILE_PATH;
-    ofn.lpstrDefExt = Constants::Save::DEFAULT_EXT;
-    ofn.lpstrTitle = L"Save image";
-    ofn.Flags = OFN_OVERWRITEPROMPT | OFN_PATHMUSTEXIST | OFN_NOCHANGEDIR;
-
-    std::wstring initDir;
     {
         size_t slash = srcPath.find_last_of(L"\\/");
-        if (slash != std::wstring::npos)
-            initDir = srcPath.substr(0, slash);
-    }
-    ofn.lpstrInitialDir = initDir.empty() ? nullptr : initDir.c_str();
-
-    if (GetSaveFileNameW(&ofn)) {
-        HRESULT hr = app.renderer->SaveCurrentImageWithEffects(outBuf);
-        if (FAILED(hr)) {
-            wchar_t errBuf[128];
-            swprintf_s(errBuf, L"Failed to save image.\nHRESULT: 0x%08X",
-                       static_cast<unsigned>(hr));
-            MessageBoxW(hWnd, errBuf, L"QuickImageViewer", MB_OK | MB_ICONERROR);
+        if (slash != std::wstring::npos) {
+            IShellItem *psi = nullptr;
+            if (SUCCEEDED(SHCreateItemFromParsingName(srcPath.substr(0, slash).c_str(),
+                                                      nullptr, IID_PPV_ARGS(&psi)))) {
+                pfd->SetFolder(psi);
+                psi->Release();
+            }
         }
     }
+
+    if (SUCCEEDED(pfd->Show(hWnd))) {
+        IShellItem *psi = nullptr;
+        if (SUCCEEDED(pfd->GetResult(&psi))) {
+            PWSTR path = nullptr;
+            if (SUCCEEDED(psi->GetDisplayName(SIGDN_FILESYSPATH, &path))) {
+                std::wstring savePath(path);
+                CoTaskMemFree(path);
+                HRESULT hr = app.renderer->SaveCurrentImageWithEffects(savePath);
+                if (FAILED(hr)) {
+                    wchar_t errBuf[128];
+                    swprintf_s(errBuf, L"HRESULT: 0x%08X", static_cast<unsigned>(hr));
+                    TaskDialog(hWnd, nullptr, L"QuickImageViewer",
+                               L"Failed to save image", errBuf,
+                               TDCBF_OK_BUTTON, TD_ERROR_ICON, nullptr);
+                }
+            }
+            psi->Release();
+        }
+    }
+    pfd->Release();
 }
 
 void AppCommands::ToggleFullscreen(HWND hWnd) {

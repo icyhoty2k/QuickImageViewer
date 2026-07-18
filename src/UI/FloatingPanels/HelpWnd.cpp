@@ -8,6 +8,7 @@
 #include <shellapi.h>
 #include <algorithm>
 #include <shlobj.h>
+#include <commctrl.h>
 #include <fstream>
 #include <windowsx.h>
 #include <cwchar>
@@ -531,8 +532,9 @@ namespace UI {
             file.write("\xEF\xBB\xBF", 3);
             file.write(utf8.data(), static_cast<std::streamsize>(utf8.size()));
             file.close();
-            MessageBoxW(m_hWnd, (std::wstring(L"Help exported to:\n") + path).c_str(),
-                        L"Export Complete", MB_OK | MB_ICONINFORMATION);
+            TaskDialog(m_hWnd, nullptr, L"Export Complete",
+                       L"Help exported successfully", path,
+                       TDCBF_OK_BUTTON, TD_INFORMATION_ICON, nullptr);
         }
     }
 

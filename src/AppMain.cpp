@@ -32,6 +32,8 @@ extern void UpdateOverlaysForCurrentImage(HWND hWnd);
 #include <windows.h>
 #include <windowsx.h>
 #include <commdlg.h>
+#include <shobjidl.h>
+#include <commctrl.h>
 #include <shellapi.h> // Parsing command line arguments
 #include <string>     // Handling string paths
 #include <memory>     // Needed for std::unique_ptr for renderer management
@@ -541,22 +543,40 @@ LRESULT CALLBACK MainAppWndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM l
                 } else if (cmd == 10) {
                     SYSTEMTIME st{};
                     GetLocalTime(&st);
-                    wchar_t szFile[MAX_PATH];
-                    swprintf_s(szFile, L"%s%04d%02d%02d%s",
+                    wchar_t defaultName[MAX_PATH];
+                    swprintf_s(defaultName, L"%s%04d%02d%02d%s",
                                Constants::SettingsFile::EXPORT_PREFIX,
                                st.wYear, st.wMonth, st.wDay,
                                Constants::SettingsFile::EXPORT_EXTENSION);
-                    OPENFILENAMEW ofn{};
-                    ofn.lStructSize = sizeof(ofn);
-                    ofn.hwndOwner   = hWnd;
-                    ofn.lpstrFilter = Constants::SettingsFile::EXPORT_FILTER;
-                    ofn.lpstrFile   = szFile;
-                    ofn.nMaxFile    = MAX_PATH;
-                    ofn.lpstrDefExt = Constants::SettingsFile::EXPORT_EXTENSION + 1; // skip the leading '.'
-                    ofn.Flags       = OFN_OVERWRITEPROMPT | OFN_PATHMUSTEXIST;
-                    if (GetSaveFileNameW(&ofn)) {
+                    std::wstring exportPath;
+                    {
+                        IFileSaveDialog *pfd = nullptr;
+                        if (SUCCEEDED(CoCreateInstance(CLSID_FileSaveDialog, nullptr,
+                                                       CLSCTX_INPROC_SERVER, IID_PPV_ARGS(&pfd)))) {
+                            COMDLG_FILTERSPEC filters[] = {
+                                {L"INI Settings", L"*.ini"},
+                                {L"All Files",    L"*.*" }
+                            };
+                            pfd->SetFileTypes(ARRAYSIZE(filters), filters);
+                            pfd->SetDefaultExtension(L"ini");
+                            pfd->SetFileName(defaultName);
+                            if (SUCCEEDED(pfd->Show(hWnd))) {
+                                IShellItem *psi = nullptr;
+                                if (SUCCEEDED(pfd->GetResult(&psi))) {
+                                    PWSTR path = nullptr;
+                                    if (SUCCEEDED(psi->GetDisplayName(SIGDN_FILESYSPATH, &path))) {
+                                        exportPath = path;
+                                        CoTaskMemFree(path);
+                                    }
+                                    psi->Release();
+                                }
+                            }
+                            pfd->Release();
+                        }
+                    }
+                    if (!exportPath.empty()) {
                         FILE *f = nullptr;
-                        if (_wfopen_s(&f, szFile, L"w,ccs=UTF-8") == 0 && f) {
+                        if (_wfopen_s(&f, exportPath.c_str(), L"w,ccs=UTF-8") == 0 && f) {
                             fwprintf(f, L"[QuickImageViewer]\n");
                             fwprintf(f, L"%s=%d\n", Constants::Registry::KEEP_IN_BACKGROUND,  (int)app.isKeepInBackground);
                             fwprintf(f, L"%s=%d\n", Constants::Registry::RUN_ON_STARTUP,       (int)app.isEnableRunOnStartup);
@@ -572,19 +592,37 @@ LRESULT CALLBACK MainAppWndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM l
                         }
                     }
                 } else if (cmd == 11) {
-                    wchar_t szFile[MAX_PATH] = L"";
-                    OPENFILENAMEW ofn{};
-                    ofn.lStructSize = sizeof(ofn);
-                    ofn.hwndOwner   = hWnd;
-                    ofn.lpstrFilter = Constants::SettingsFile::EXPORT_FILTER;
-                    ofn.lpstrFile   = szFile;
-                    ofn.nMaxFile    = MAX_PATH;
-                    ofn.lpstrDefExt = Constants::SettingsFile::EXPORT_EXTENSION + 1;
-                    ofn.Flags       = OFN_FILEMUSTEXIST | OFN_PATHMUSTEXIST;
-                    if (GetOpenFileNameW(&ofn) &&
+                    std::wstring importPath;
+                    {
+                        IFileOpenDialog *pfd = nullptr;
+                        if (SUCCEEDED(CoCreateInstance(CLSID_FileOpenDialog, nullptr,
+                                                       CLSCTX_INPROC_SERVER, IID_PPV_ARGS(&pfd)))) {
+                            COMDLG_FILTERSPEC filters[] = {
+                                {L"INI Settings", L"*.ini"},
+                                {L"All Files",    L"*.*" }
+                            };
+                            pfd->SetFileTypes(ARRAYSIZE(filters), filters);
+                            DWORD opts = 0;
+                            pfd->GetOptions(&opts);
+                            pfd->SetOptions(opts | FOS_FILEMUSTEXIST);
+                            if (SUCCEEDED(pfd->Show(hWnd))) {
+                                IShellItem *psi = nullptr;
+                                if (SUCCEEDED(pfd->GetResult(&psi))) {
+                                    PWSTR path = nullptr;
+                                    if (SUCCEEDED(psi->GetDisplayName(SIGDN_FILESYSPATH, &path))) {
+                                        importPath = path;
+                                        CoTaskMemFree(path);
+                                    }
+                                    psi->Release();
+                                }
+                            }
+                            pfd->Release();
+                        }
+                    }
+                    if (!importPath.empty() &&
                         UI::ThemedDialog::Confirm(hWnd, L"Importing will overwrite all current settings. Continue?", L"Import Settings")) {
                         FILE *f = nullptr;
-                        if (_wfopen_s(&f, szFile, L"r,ccs=UTF-8") == 0 && f) {
+                        if (_wfopen_s(&f, importPath.c_str(), L"r,ccs=UTF-8") == 0 && f) {
                             wchar_t line[512];
                             bool anyKey = false;
                             while (fgetws(line, 512, f)) {
@@ -716,12 +754,13 @@ static bool HasAVX2Support() {
 
 int WINAPI wWinMain(HINSTANCE hInstance, [[maybe_unused]] HINSTANCE hPrevInstance, [[maybe_unused]] PWSTR pCmdLine, int nCmdShow) {
     if (!HasAVX2Support()) {
-        MessageBoxW(nullptr,
-                    L"Your CPU does not support AVX2 instructions.\n\n"
-                    L"QIV requires a processor with AVX2 support\n"
-                    L"(Intel Core 4th gen / AMD Ryzen or newer).",
-                    L"QuickImageViewer — CPU not supported",
-                    MB_ICONERROR | MB_OK);
+        TaskDialog(nullptr, nullptr,
+                   L"QuickImageViewer — CPU not supported",
+                   L"AVX2 instructions are required",
+                   L"Your CPU does not support AVX2 instructions.\n\n"
+                   L"QIV requires a processor with AVX2 support\n"
+                   L"(Intel Core 4th gen / AMD Ryzen or newer).",
+                   TDCBF_OK_BUTTON, TD_ERROR_ICON, nullptr);
         return 1;
     }
 

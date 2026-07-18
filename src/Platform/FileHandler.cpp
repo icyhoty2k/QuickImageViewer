@@ -5,6 +5,7 @@
 #include "Constants.h"
 #include "../ImageLoadStats.h"
 #include <commdlg.h>
+#include <shobjidl.h>
 #include <filesystem>
 #include <numeric>
 #include <ranges>
@@ -458,65 +459,142 @@ void HandleScanComplete(HWND hWnd, ScanResult *result) {
 void OpenInitialImage(HWND hWnd) {
     app.isDialogVisible = true;
 
-    // Helper for building the filter string
-    std::vector<wchar_t> filterBuffer;
-    auto AppendFilterString = [&](std::wstring_view text) {
-        filterBuffer.insert(filterBuffer.end(), text.begin(), text.end());
-        filterBuffer.push_back(L'\0');
+    // Event sink: implements IFileDialogEvents + IFileDialogControlEvents so we
+    // can receive the "Open Folder" custom button click. Stack-allocated — the
+    // dialog holds no reference past pfd->Show(), so lifetime is safe.
+    struct DlgEvents : IFileDialogEvents, IFileDialogControlEvents {
+        IFileDialog *dlg = nullptr;
+        std::wstring folderPath; // set by OnButtonClicked when "Open Folder" is clicked
+
+        ULONG   STDMETHODCALLTYPE AddRef()  override { return 2; }
+        ULONG   STDMETHODCALLTYPE Release() override { return 1; }
+        HRESULT STDMETHODCALLTYPE QueryInterface(REFIID riid, void **ppv) override {
+            if (riid == IID_IUnknown || riid == IID_IFileDialogEvents)
+                { *ppv = static_cast<IFileDialogEvents *>(this); return S_OK; }
+            if (riid == IID_IFileDialogControlEvents)
+                { *ppv = static_cast<IFileDialogControlEvents *>(this); return S_OK; }
+            *ppv = nullptr; return E_NOINTERFACE;
+        }
+        // IFileDialogEvents — all no-ops
+        HRESULT STDMETHODCALLTYPE OnFileOk(IFileDialog *)                                                      override { return S_OK; }
+        HRESULT STDMETHODCALLTYPE OnFolderChanging(IFileDialog *, IShellItem *)                                override { return S_OK; }
+        HRESULT STDMETHODCALLTYPE OnFolderChange(IFileDialog *)                                                override { return S_OK; }
+        HRESULT STDMETHODCALLTYPE OnSelectionChange(IFileDialog *)                                             override { return S_OK; }
+        HRESULT STDMETHODCALLTYPE OnShareViolation(IFileDialog *, IShellItem *, FDE_SHAREVIOLATION_RESPONSE *) override { return S_OK; }
+        HRESULT STDMETHODCALLTYPE OnTypeChange(IFileDialog *)                                                  override { return S_OK; }
+        HRESULT STDMETHODCALLTYPE OnOverwrite(IFileDialog *, IShellItem *, FDE_OVERWRITE_RESPONSE *)           override { return S_OK; }
+        // IFileDialogControlEvents
+        HRESULT STDMETHODCALLTYPE OnItemSelected(IFileDialogCustomize *, DWORD, DWORD) override { return S_OK; }
+        HRESULT STDMETHODCALLTYPE OnCheckButtonToggled(IFileDialogCustomize *, DWORD, BOOL) override { return S_OK; }
+        HRESULT STDMETHODCALLTYPE OnControlActivating(IFileDialogCustomize *, DWORD) override { return S_OK; }
+        HRESULT STDMETHODCALLTYPE OnButtonClicked(IFileDialogCustomize *, DWORD id) override {
+            if (id == 1 && dlg) {
+                IShellItem *psi = nullptr;
+                if (SUCCEEDED(dlg->GetFolder(&psi))) {
+                    PWSTR path = nullptr;
+                    if (SUCCEEDED(psi->GetDisplayName(SIGDN_FILESYSPATH, &path))) {
+                        folderPath = path;
+                        CoTaskMemFree(path);
+                    }
+                    psi->Release();
+                }
+                dlg->Close(S_OK);
+            }
+            return S_OK;
+        }
     };
 
-    // Build supported extensions
-    std::wstring extensions;
-    for (size_t i = 0; i < Constants::Registry::SUPPORTED_EXTENSIONS_COUNT; ++i) {
-        extensions += L"*";
-        extensions += Constants::Registry::SUPPORTED_EXTENSIONS[i];
-        if (i + 1 < Constants::Registry::SUPPORTED_EXTENSIONS_COUNT)
-            extensions += L";";
-    }
-
-    // Filter entries
-    AppendFilterString(L"All Supported Images");
-    AppendFilterString(extensions);
-    AppendFilterString(L"All Files (*.*)");
-    AppendFilterString(L"*.*");
-
-    // End of filter list (double null)
-    filterBuffer.push_back(L'\0');
-
-    std::wstring fileName(Constants::MAX_FILE_PATH, L'\0');
-
-    OPENFILENAMEW ofn{};
-    ofn.lStructSize = sizeof(ofn);
-    ofn.hwndOwner = hWnd;
-    ofn.lpstrFilter = filterBuffer.data();
-    ofn.lpstrFile = fileName.data();
-    ofn.nMaxFile = Constants::MAX_FILE_PATH;
-    ofn.Flags = OFN_EXPLORER | OFN_PATHMUSTEXIST; // no OFN_FILEMUSTEXIST — allows typing a folder path
-
-    std::wstring lastFolder = Persistence::Registry::LoadStringSetting(Constants::Registry::LAST_FOLDER);
-    if (!lastFolder.empty())
-        ofn.lpstrInitialDir = lastFolder.c_str();
-
-    const BOOL result = GetOpenFileNameW(&ofn);
-
-    app.isDialogVisible = false;
-
-    if (!result) {
-        if (app.playlist.empty())
-            PostQuitMessage(0);
+    IFileOpenDialog *pfd = nullptr;
+    if (FAILED(CoCreateInstance(CLSID_FileOpenDialog, nullptr,
+                                CLSCTX_INPROC_SERVER, IID_PPV_ARGS(&pfd)))) {
+        app.isDialogVisible = false;
+        if (app.playlist.empty()) PostQuitMessage(0);
         return;
     }
 
-    std::filesystem::path selectedPath;
+    // File type filters
+    std::wstring extList;
+    for (size_t i = 0; i < Constants::Registry::SUPPORTED_EXTENSIONS_COUNT; ++i) {
+        extList += L"*";
+        extList += Constants::Registry::SUPPORTED_EXTENSIONS[i];
+        if (i + 1 < Constants::Registry::SUPPORTED_EXTENSIONS_COUNT)
+            extList += L";";
+    }
+    COMDLG_FILTERSPEC filters[] = {
+        { L"All Supported Images", extList.c_str() },
+        { L"All Files",            L"*.*"           }
+    };
+    pfd->SetFileTypes(ARRAYSIZE(filters), filters);
+    pfd->SetFileTypeIndex(1);
 
+    // Restore last-used folder
+    std::wstring lastFolder = Persistence::Registry::LoadStringSetting(Constants::Registry::LAST_FOLDER);
+    if (!lastFolder.empty()) {
+        IShellItem *psi = nullptr;
+        if (SUCCEEDED(SHCreateItemFromParsingName(lastFolder.c_str(), nullptr, IID_PPV_ARGS(&psi)))) {
+            pfd->SetFolder(psi);
+            psi->Release();
+        }
+    }
+
+    // Add "Open Folder" button and register event sink
+    DlgEvents events;
+    events.dlg = pfd;
+    DWORD cookie = 0;
+    IFileDialogCustomize *pfdc = nullptr;
+    if (SUCCEEDED(pfd->QueryInterface(IID_PPV_ARGS(&pfdc)))) {
+        pfdc->AddPushButton(1, L"Open Folder");
+        pfd->Advise(&events, &cookie);
+        pfdc->Release();
+    }
+
+    HRESULT hr = pfd->Show(hWnd);
+
+    if (cookie) pfd->Unadvise(cookie);
+    app.isDialogVisible = false;
+
+    // "Open Folder" button was clicked — open the directory shown in the dialog
+    if (!events.folderPath.empty()) {
+        pfd->Release();
+        OpenDirectory(hWnd, events.folderPath);
+        return;
+    }
+
+    if (FAILED(hr)) {
+        pfd->Release();
+        if (app.playlist.empty()) PostQuitMessage(0);
+        return;
+    }
+
+    // Normal file selection
+    std::wstring filePath;
+    {
+        IShellItem *psi = nullptr;
+        if (SUCCEEDED(pfd->GetResult(&psi))) {
+            PWSTR path = nullptr;
+            if (SUCCEEDED(psi->GetDisplayName(SIGDN_FILESYSPATH, &path))) {
+                filePath = path;
+                CoTaskMemFree(path);
+            }
+            psi->Release();
+        }
+    }
+    pfd->Release();
+
+    if (filePath.empty()) {
+        if (app.playlist.empty()) PostQuitMessage(0);
+        return;
+    }
+
+    fs::path selectedPath;
     try {
-        selectedPath = std::filesystem::canonical(fileName.c_str());
+        selectedPath = fs::canonical(filePath);
     } catch (...) {
         return;
     }
 
-    // User typed or navigated to a folder path — treat it like opening a directory.
-    if (std::filesystem::is_directory(selectedPath)) {
+    // User typed a folder path in the filename field
+    if (fs::is_directory(selectedPath)) {
         OpenDirectory(hWnd, selectedPath.wstring());
         return;
     }
