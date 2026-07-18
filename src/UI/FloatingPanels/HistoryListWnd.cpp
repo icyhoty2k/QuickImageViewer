@@ -81,6 +81,35 @@ namespace UI {
 
     static std::unordered_map<std::wstring, FolderStatus> g_statusCache;
 
+    struct DirSizeInfo { int64_t bytes = 0; int count = 0; };
+    static std::unordered_map<std::wstring, DirSizeInfo> g_dirSizeCache;
+
+    // Scan a folder synchronously: count image files and sum their sizes.
+    // Updates g_statusCache and g_dirSizeCache for the given path.
+    static void ScanDirForHistory(const std::wstring &path) {
+        namespace fs = std::filesystem;
+        std::error_code ec;
+        if (!fs::is_directory(fs::path(path), ec) || ec) {
+            g_statusCache[path] = FolderStatus::Missing;
+            g_dirSizeCache.erase(path);
+            return;
+        }
+        int64_t totalBytes = 0;
+        int count = 0;
+        for (auto it = fs::directory_iterator(fs::path(path),
+                         fs::directory_options::skip_permission_denied, ec);
+             !ec && it != fs::directory_iterator(); it.increment(ec)) {
+            if (!it->is_regular_file(ec)) { ec.clear(); continue; }
+            if (!is_image_ext(it->path().extension().wstring())) continue;
+            auto sz = fs::file_size(it->path(), ec);
+            if (!ec) totalBytes += static_cast<int64_t>(sz);
+            ec.clear();
+            ++count;
+        }
+        g_statusCache[path] = (count > 0) ? FolderStatus::Valid : FolderStatus::Empty;
+        g_dirSizeCache[path] = {totalBytes, count};
+    }
+
     // Set whenever the display list changes (push, delete, restore, clear).
     // Background validation only runs when this is true, preventing redundant
     // filesystem work on rapid Tab / Tab / Tab presses.
@@ -446,6 +475,16 @@ namespace UI {
             return true;
         }
 
+        if (vk == VK_F5 && !ctrl && !shift && !alt) {
+            // Full refresh: scan every history entry (not just visible rows).
+            // Updates missing/empty/valid status AND size/count for each folder.
+            // Consumes F5 so it doesn't propagate to the main app.
+            for (const auto &path : historyFoldersManager.folderHistory)
+                ScanDirForHistory(path);
+            InvalidateRect(m_hWnd, nullptr, FALSE);
+            return true;
+        }
+
         int navMax = static_cast<int>(g_displayList.size());
         switch (vk) {
             case Shortcuts::SC_PANEL_HISTORY_TOGGLE:
@@ -606,12 +645,18 @@ namespace UI {
     // Window procedure
     // ---------------------------------------------------------------------------
     LRESULT HistoryListWnd::HandlePanelMessage(UINT message, WPARAM wParam, LPARAM lParam) {
+        if (message == WM_ERASEBKGND) return 1;
         switch (message) {
             case WM_PAINT: {
                 PAINTSTRUCT ps;
-                HDC hdc = BeginPaint(m_hWnd, &ps);
+                HDC screenDC = BeginPaint(m_hWnd, &ps);
                 RECT rc;
                 GetClientRect(m_hWnd, &rc);
+
+                // Double-buffer: draw into memory DC, blit atomically to avoid flicker
+                HDC hdc = CreateCompatibleDC(screenDC);
+                HBITMAP hBmp = CreateCompatibleBitmap(screenDC, rc.right, rc.bottom);
+                HBITMAP hOldBmp = static_cast<HBITMAP>(SelectObject(hdc, hBmp));
 
                 UINT dpi = static_cast<UINT>(app.dpiScale * 96.0f);
                 int padding = MulDiv(Constants::History::HISTORY_PADDING, dpi, 96);
@@ -702,7 +747,7 @@ namespace UI {
                 int hintBot = hintTop + MulDiv(fontSize + 2, dpi, 96);
                 {
                     constexpr wchar_t SHORTCUTS[] =
-                            L"Del = delete entry     Ctrl+Z = restore"
+                            L"F5 = refresh dirs     Del = delete entry     Ctrl+Z = restore"
                             L"     Ctrl+Tab = full list"
                             L"     Ctrl+Shift+Del = clear history"
                             L"     Ctrl+Alt+Shift+Del = clear favorites";
@@ -881,6 +926,14 @@ namespace UI {
 
                         // Size/count column — drawn on the far right, only when a SpawnedDirWnd is open for this folder
                         auto [sizeStr, imgCount] = uiManager.GetSpawnedDirWndSizeInfo(fp);
+                        // Fall back to the scanned cache (populated by F5) when no DirWnd is open for this folder
+                        if (sizeStr.empty()) {
+                            auto cit = g_dirSizeCache.find(fp);
+                            if (cit != g_dirSizeCache.end()) {
+                                sizeStr  = ThumbnailPanelWnd::FormatDirSize(cit->second.bytes);
+                                imgCount = cit->second.count;
+                            }
+                        }
                         const bool hasSizeInfo = !sizeStr.empty();
                         int sizeColW = hasSizeInfo ? MulDiv(100, dpi, 96) : 0;
 
@@ -994,18 +1047,33 @@ namespace UI {
                     LONG rightEdge = rc.right - padding;
                     const int gap   = MulDiv(8, dpi, 96);
 
-                    // RIGHT: file size (rightmost) then summary just left of it — measure both first
+                    // RIGHT: summary just left of file size, then file size rightmost
                     const std::wstring &sizeValue = m_cachedSizeStr;
                     SIZE szFileSize = {};
                     GetTextExtentPoint32W(hdc, sizeValue.c_str(),
                                           static_cast<int>(sizeValue.size()), &szFileSize);
                     LONG fileSizeLeft = rightEdge - szFileSize.cx;
 
-                    auto [totalSizeStr, totalCount] = uiManager.GetAllOpenDirWndsSummary();
+                    // Summary total: scanned cache (F5) when available, else live open-DirWnd sum
                     std::wstring summaryStr;
-                    LONG summaryLeft = fileSizeLeft; // default: no summary
-                    if (!totalSizeStr.empty()) {
-                        summaryStr = totalSizeStr + L"/" + std::to_wstring(totalCount);
+                    {
+                        int64_t totalBytes = 0;
+                        int     totalCount = 0;
+                        if (!g_dirSizeCache.empty()) {
+                            for (const auto &[p, info] : g_dirSizeCache) {
+                                totalBytes += info.bytes;
+                                totalCount += info.count;
+                            }
+                            summaryStr = ThumbnailPanelWnd::FormatDirSize(totalBytes)
+                                         + L"/" + std::to_wstring(totalCount);
+                        } else {
+                            auto [liveStr, liveCount] = uiManager.GetAllOpenDirWndsSummary();
+                            if (!liveStr.empty())
+                                summaryStr = liveStr + L"/" + std::to_wstring(liveCount);
+                        }
+                    }
+                    LONG summaryLeft = fileSizeLeft;
+                    if (!summaryStr.empty()) {
                         SIZE szSummary = {};
                         GetTextExtentPoint32W(hdc, summaryStr.c_str(),
                                               static_cast<int>(summaryStr.size()), &szSummary);
@@ -1121,6 +1189,10 @@ namespace UI {
                 }
 
                 SelectObject(hdc, GetStockObject(SYSTEM_FONT));
+                BitBlt(screenDC, 0, 0, rc.right, rc.bottom, hdc, 0, 0, SRCCOPY);
+                SelectObject(hdc, hOldBmp);
+                DeleteObject(hBmp);
+                DeleteDC(hdc);
                 EndPaint(m_hWnd, &ps);
                 return 0;
             }
