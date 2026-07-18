@@ -24,6 +24,7 @@ set(SOURCES
         src/AppMain.cpp
         src/DropTarget.cpp
         src/Input/MouseHandler.cpp
+        src/Input/TrayHandler.cpp
         src/WicDecoder.cpp
         src/SvgDecoder.cpp
         src/SimpleFormats.cpp
