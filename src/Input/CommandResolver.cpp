@@ -142,6 +142,7 @@ Command InputManager::ResolveKeyboardKeys(UINT key, LPARAM lParam) {
             return shift ? Command::GoToLastImageInCurrentFolder : Command::ToggleFirstLastImageInCurrentFolder;
 
         case Shortcuts::SC_NAV_NEXT_SPACE:
+            if (ctrl && !alt && !shift) return Command::AutosizeToWorkArea;
             return shift ? Command::PrevImage : Command::NextImage;
 
         case Shortcuts::SC_NAV_SHOW_IN_EXPLORER: // 'L'

@@ -1004,6 +1004,46 @@ void InputManager::ExecuteKeyboardShortcutCommand(HWND hWnd, Command cmd) {
             break;
         }
 
+        // -----------------------------------------------------------------------
+        // Autosize viewer to fill available screen space  (Ctrl+Space)
+        // Starts from the work area (excludes taskbar), then subtracts the rect
+        // of every visible thumbnail panel (F3 CacheWnd, F6 DirWnd, spawned
+        // DirWnds) that is docked at a screen edge.
+        // -----------------------------------------------------------------------
+        case Command::AutosizeToWorkArea: {
+            HMONITOR hMon = MonitorFromWindow(hWnd, MONITOR_DEFAULTTONEAREST);
+            MONITORINFO mi = {sizeof(mi)};
+            if (!GetMonitorInfo(hMon, &mi)) break;
+
+            RECT r = mi.rcWork;
+
+            const UI::PanelLayout &layout = uiManager.GetLayout();
+            // positions: 1=top, 2=right, 3=bottom, 4=left
+            for (int8_t pos = 1; pos <= 4; ++pos) {
+                const UI::SlotInfo *slot = layout.getSlot(pos);
+                if (!slot || slot->isEmpty() || !slot->panel) continue;
+                HWND ph = slot->panel->GetHwnd();
+                if (!ph || !IsWindowVisible(ph)) continue;
+                RECT pr;
+                if (!GetWindowRect(ph, &pr)) continue;
+                switch (pos) {
+                    case 1: r.top    = std::max(r.top,    pr.bottom); break;
+                    case 2: r.right  = std::min(r.right,  pr.left);   break;
+                    case 3: r.bottom = std::min(r.bottom, pr.top);    break;
+                    case 4: r.left   = std::max(r.left,   pr.right);  break;
+                }
+            }
+
+            if (r.right > r.left && r.bottom > r.top) {
+                SetWindowPos(hWnd, nullptr, r.left, r.top,
+                             r.right - r.left, r.bottom - r.top,
+                             SWP_NOZORDER | SWP_NOACTIVATE | SWP_FRAMECHANGED);
+                InvalidateRect(hWnd, nullptr, FALSE);
+            }
+            g_overlayManager.PostCenterMessage(hWnd, Constants::Messages::AUTOSIZE_TO_WORK_AREA);
+            break;
+        }
+
         default:
             break;
     }
