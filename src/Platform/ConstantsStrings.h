@@ -98,6 +98,9 @@ namespace Constants::Messages {
     constexpr const wchar_t *SNAP_BOTTOM_LEFT = L"Snap: Bottom-Left Quarter";
     constexpr const wchar_t *SNAP_BOTTOM_RIGHT = L"Snap: Bottom-Right Quarter";
 
+    // Ctrl+Space — fill available screen space (work area minus visible panels)
+    constexpr const wchar_t *AUTOSIZE_TO_WORK_AREA = L"Fit to Screen";
+
     // Sort order  (Ctrl+Alt+Shift+0/6/7/8/9)  — press once: ascending, press again: descending
     constexpr const wchar_t *SORT_BY_NAME = L"Sort: Name (A→Z)";
     constexpr const wchar_t *SORT_BY_NAME_REV = L"Sort: Name (Z→A)";

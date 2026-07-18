@@ -241,6 +241,10 @@ namespace UI {
             K(FX::SC_COLOR_GAMMA_DOWN),
             L"Grow / shrink the window by " + NumI(Constants::KEYBOARD_WINDOW_RESIZE_STEP) +
             L" px per side while keeping it centered.", sWin);
+        Add(L"Ctrl+Space",
+            L"Fit to screen — resize and reposition the viewer to fill the entire work area "
+            L"(monitor minus taskbar), then shrink it further to avoid any visible panel "
+            L"(F3 cache strip, F6 directory strip, spawned directory panels).", sWin);
         Add(L"Drag near screen edge",
             L"Releasing a window drag within " + NumI(Constants::WINDOW_SNAP_DISTANCE) +
             L" px of a screen edge snaps the window to that edge.", sWin);

@@ -166,6 +166,9 @@ enum class Command {
     ResizeWindowLarger,
     ResizeWindowSmaller,
 
+    // --- Autosize viewer to fill available space (Ctrl+Space) ---
+    AutosizeToWorkArea,
+
     // --- Image info / EXIF panel (M) ---
     ShowInfo,
 
