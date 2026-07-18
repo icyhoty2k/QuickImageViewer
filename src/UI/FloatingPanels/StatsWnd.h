@@ -16,6 +16,7 @@ namespace UI {
             if (m_hFontBold) DeleteObject(m_hFontBold);
             if (m_hFontSec)  DeleteObject(m_hFontSec);
             if (m_hFontLink) DeleteObject(m_hFontLink);
+            DestroyBackBuffer();
         }
 
     protected:
@@ -109,5 +110,13 @@ namespace UI {
         static std::wstring FormatBytes(UINT64 bytes);
         static std::wstring FormatCount(INT64 n);
         static INT64        EstimateCount(const std::wstring& name, UINT64 fileBytes);
+
+        void EnsureBackBuffer(HDC refDC, int w, int h);
+        void DestroyBackBuffer();
+        HDC     m_bbDC     = nullptr;
+        HBITMAP m_bbBmp    = nullptr;
+        HBITMAP m_bbBmpOld = nullptr;
+        int     m_bbW      = 0;
+        int     m_bbH      = 0;
     };
 } // namespace UI

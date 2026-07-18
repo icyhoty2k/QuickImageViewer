@@ -263,6 +263,8 @@ void InputManager::ExecuteKeyboardShortcutCommand(HWND hWnd, Command cmd) {
 
         case Command::ToggleThumbnailEffects:
             app.thumbnailEffectsEnabled = !app.thumbnailEffectsEnabled;
+            Persistence::Registry::SaveSetting(Constants::Registry::THUMBNAIL_EFFECTS,
+                                               static_cast<DWORD>(app.thumbnailEffectsEnabled));
             g_overlayManager.PostCenterMessage(hWnd,
                                                app.thumbnailEffectsEnabled
                                                    ? Constants::Messages::THUMB_EFFECTS_ON
@@ -382,6 +384,8 @@ void InputManager::ExecuteKeyboardShortcutCommand(HWND hWnd, Command cmd) {
         // ── Master overlay toggle (N / I / Ctrl+0) ───────────────────────────
         case Command::ToggleOverlay: {
             app.showOverlayInfoText = !app.showOverlayInfoText;
+            Persistence::Registry::SaveSetting(Constants::Registry::OVERLAY_VISIBLE,
+                                               static_cast<DWORD>(app.showOverlayInfoText));
             g_overlayManager.SetAllVisible(app.showOverlayInfoText);
             // Always post the state change to center-center — it survives the hide
             // because MID_CENTER is independently controlled by PostCenterMessage.

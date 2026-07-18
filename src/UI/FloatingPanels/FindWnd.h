@@ -13,6 +13,7 @@ namespace UI {
         ~FindWnd() {
             if (m_hFontNorm) DeleteObject(m_hFontNorm);
             if (m_hFontBold) DeleteObject(m_hFontBold);
+            DestroyBackBuffer();
         }
 
     protected:
@@ -46,5 +47,13 @@ namespace UI {
         HFONT m_hFontNorm    = nullptr;
         HFONT m_hFontBold    = nullptr;
         int   m_cachedFontDpi = 0;
+
+        void EnsureBackBuffer(HDC refDC, int w, int h);
+        void DestroyBackBuffer();
+        HDC     m_bbDC     = nullptr;
+        HBITMAP m_bbBmp    = nullptr;
+        HBITMAP m_bbBmpOld = nullptr;
+        int     m_bbW      = 0;
+        int     m_bbH      = 0;
     };
 } // namespace UI

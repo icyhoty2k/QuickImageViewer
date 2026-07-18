@@ -74,13 +74,40 @@ namespace UI {
         return false;
     }
 
+    void JumpToWnd::EnsureBackBuffer(HDC refDC, int w, int h) {
+        if (m_bbDC && w == m_bbW && h == m_bbH) return;
+        DestroyBackBuffer();
+        m_bbDC = CreateCompatibleDC(refDC);
+        m_bbBmp = CreateCompatibleBitmap(refDC, w, h);
+        m_bbBmpOld = static_cast<HBITMAP>(SelectObject(m_bbDC, m_bbBmp));
+        m_bbW = w;
+        m_bbH = h;
+    }
+
+    void JumpToWnd::DestroyBackBuffer() {
+        if (m_bbDC) {
+            if (m_bbBmpOld) SelectObject(m_bbDC, m_bbBmpOld);
+            DeleteDC(m_bbDC);
+            m_bbDC = nullptr;
+        }
+        if (m_bbBmp) {
+            DeleteObject(m_bbBmp);
+            m_bbBmp = nullptr;
+        }
+        m_bbBmpOld = nullptr;
+        m_bbW = m_bbH = 0;
+    }
+
     LRESULT JumpToWnd::HandlePanelMessage(UINT message, WPARAM wParam, LPARAM lParam) {
+        if (message == WM_ERASEBKGND) return 1;
         switch (message) {
             case WM_PAINT: {
                 PAINTSTRUCT ps;
-                HDC hdc = BeginPaint(m_hWnd, &ps);
+                HDC screenDC = BeginPaint(m_hWnd, &ps);
                 RECT rc;
                 GetClientRect(m_hWnd, &rc);
+                EnsureBackBuffer(screenDC, rc.right, rc.bottom);
+                HDC hdc = m_bbDC;
 
                 HBRUSH bgBrush = CreateSolidBrush(GetBgColor());
                 FillRect(hdc, &rc, bgBrush);
@@ -184,6 +211,7 @@ namespace UI {
                 DrawTextW(hdc, hint, -1, &hintRect, DT_CENTER | DT_VCENTER | DT_SINGLELINE);
 
                 SelectObject(hdc, hOldFont);
+                BitBlt(screenDC, 0, 0, rc.right, rc.bottom, hdc, 0, 0, SRCCOPY);
                 EndPaint(m_hWnd, &ps);
                 return 0;
             }

@@ -11,6 +11,7 @@ namespace UI {
         ~JumpToWnd() {
             if (m_hFont)      DeleteObject(m_hFont);
             if (m_hFontInput) DeleteObject(m_hFontInput);
+            DestroyBackBuffer();
         }
 
     protected:
@@ -28,5 +29,13 @@ namespace UI {
         HFONT m_hFont        = nullptr;
         HFONT m_hFontInput   = nullptr;
         int   m_cachedFontDpi = 0;
+
+        void EnsureBackBuffer(HDC refDC, int w, int h);
+        void DestroyBackBuffer();
+        HDC     m_bbDC     = nullptr;
+        HBITMAP m_bbBmp    = nullptr;
+        HBITMAP m_bbBmpOld = nullptr;
+        int     m_bbW      = 0;
+        int     m_bbH      = 0;
     };
 } // namespace UI
