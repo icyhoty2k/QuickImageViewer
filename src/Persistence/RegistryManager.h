@@ -2,9 +2,9 @@
 #include <intsafe.h>
 #include <string>
 #include <windows.h>
-#include "Constants.h"
+#include "../Platform/Constants.h"
 
-namespace System {
+namespace Persistence::Registry {
     // Infrastructure
     void RegisterAppForOpenWith();
 

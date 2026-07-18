@@ -1,7 +1,7 @@
 #include "StatsWnd.h"
 #include "../../AppState.h"
 #include "../../Platform/Constants.h"
-#include "../../Platform/RegistrySetup.h"
+#include "../../Persistence/RegistryManager.h"
 #include "../../WorkerThread.h"
 #include "../../Renderer/IRenderer.h"
 #include "../../ImageLoadStats.h"
@@ -183,7 +183,7 @@ namespace UI {
         }
 
         // ── Exe path ──────────────────────────────────────────────────────────────
-        m_exePath = System::GetExePathW();
+        m_exePath = Persistence::Registry::GetExePathW();
 
         // ── Renderer name ─────────────────────────────────────────────────────────
         m_rendererName = (app.renderer) ? app.renderer->GetName() : L"None";

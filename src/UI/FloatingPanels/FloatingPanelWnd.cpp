@@ -35,7 +35,8 @@ namespace UI {
         DWORD corner = app.cornerPreference;
         DwmSetWindowAttribute(m_hWnd, Constants::DWMWA_WINDOW_CORNER_PREFERENCES, &corner, sizeof(corner));
 
-        COLORREF capColor = Constants::Theme::Gray(Constants::Theme::Panel::BACKGROUND_INACTIVE);
+        COLORREF capColor = Constants::Theme::ThemedGray(
+            Constants::Theme::Panel::BACKGROUND_INACTIVE, app.themeFactor);
         DwmSetWindowAttribute(m_hWnd, Constants::DWMWA_CAPTION_COLOR_ATTR, &capColor, sizeof(capColor));
 
         SetWindowPos(m_hWnd, nullptr, 0, 0, 0, 0,

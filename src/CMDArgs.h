@@ -27,9 +27,10 @@ struct CmdArgs {
     bool         transitionShuffle    = false; // -slideshowTransitionShuffle   : random transition each slide
 
     // --- Behavior ---
-    bool         hideMouse  = false; // -hideMouse  : hide cursor at startup
-    bool         lock       = false; // -lock       : KIOSK — no keyboard or mouse input accepted
-    bool         dedicated  = false; // -dedicated  : no registry writes, separate history file, unique mutex
+    bool         hideMouse     = false; // -hideMouse     : hide cursor at startup
+    bool         lock          = false; // -lock          : KIOSK — no keyboard or mouse input accepted
+    bool         dedicated     = false; // -dedicated     : separate registry/history/favorites, unique mutex
+    bool         runOnStartup  = false; // -runOnStartup  : write/refresh the startup registry entry (handles exe relocation)
 };
 
 // Parse argc/argv into a CmdArgs struct.  Call immediately after CommandLineToArgvW.

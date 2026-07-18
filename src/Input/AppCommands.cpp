@@ -12,6 +12,7 @@
 #include "../Platform/ConstantsStrings.h"
 #include "../Overlays/OverlayManager.h"
 #include "../WicDecoder.h"
+#include "../UI/UIManager.h"
 #include <shlobj_core.h>
 
 extern AppState app;
@@ -39,9 +40,11 @@ void AppCommands::SaveImageToDisk(HWND hWnd) {
     // Build the filter string from Constants::Save::FORMATS.
     // OPENFILENAMEW requires pairs of "Description\0*.ext\0" with a final \0.
     std::wstring filterStr;
-    for (const auto &fmt : Constants::Save::FORMATS) {
-        filterStr += fmt.description; filterStr += L'\0';
-        filterStr += fmt.pattern;     filterStr += L'\0';
+    for (const auto &fmt: Constants::Save::FORMATS) {
+        filterStr += fmt.description;
+        filterStr += L'\0';
+        filterStr += fmt.pattern;
+        filterStr += L'\0';
     }
     filterStr += L'\0';
 
@@ -136,9 +139,11 @@ void AppCommands::AddTrayIcon(HWND hWnd) {
     const bool useDedicatedIcon = app.isDedicated || app.slideshow.running;
     UINT iconId = useDedicatedIcon ? IDI_APP_ICON_DEDICATED : IDI_APP_ICON;
     nid.hIcon = LoadIcon(GetModuleHandle(nullptr), MAKEINTRESOURCE(iconId));
-    const wchar_t *tip = app.slideshow.running  ? L"QuickImageViewer [Slideshow]"
-                       : app.isDedicated        ? L"QuickImageViewer [Dedicated]"
-                                               : L"QuickImageViewer";
+    const wchar_t *tip = app.slideshow.running
+                             ? L"QuickImageViewer [Slideshow]"
+                             : app.isDedicated
+                                   ? L"QuickImageViewer [Dedicated]"
+                                   : L"QuickImageViewer";
     wcscpy_s(nid.szTip, tip);
 
 
@@ -153,7 +158,7 @@ void AppCommands::AddTrayIcon(HWND hWnd) {
     HICON hSmall = reinterpret_cast<HICON>(
         LoadImageW(GetModuleHandle(nullptr), MAKEINTRESOURCEW(iconId),
                    IMAGE_ICON, GetSystemMetrics(SM_CXSMICON), GetSystemMetrics(SM_CYSMICON), 0));
-    SendMessageW(hWnd, WM_SETICON, ICON_BIG,   reinterpret_cast<LPARAM>(nid.hIcon));
+    SendMessageW(hWnd, WM_SETICON, ICON_BIG, reinterpret_cast<LPARAM>(nid.hIcon));
     SendMessageW(hWnd, WM_SETICON, ICON_SMALL, reinterpret_cast<LPARAM>(hSmall ? hSmall : nid.hIcon));
 }
 
@@ -171,17 +176,20 @@ void AppCommands::CopyFilesToClipboard(HWND hWnd, const std::vector<std::wstring
 
     // Build a double-null-terminated multi-path string for CF_HDROP.
     size_t totalChars = 1; // final terminating null
-    for (const auto &p : paths) totalChars += p.size() + 1;
+    for (const auto &p: paths) totalChars += p.size() + 1;
     const size_t dropSize = sizeof(DROPFILES) + totalChars * sizeof(wchar_t);
     HGLOBAL hDrop = GlobalAlloc(GHND, dropSize);
     if (!hDrop) return;
 
     auto *df = static_cast<DROPFILES *>(GlobalLock(hDrop));
-    if (!df) { GlobalFree(hDrop); return; }
+    if (!df) {
+        GlobalFree(hDrop);
+        return;
+    }
     df->pFiles = sizeof(DROPFILES);
-    df->fWide  = TRUE;
+    df->fWide = TRUE;
     wchar_t *dst = reinterpret_cast<wchar_t *>(df + 1);
-    for (const auto &p : paths) {
+    for (const auto &p: paths) {
         wmemcpy(dst, p.c_str(), p.size() + 1);
         dst += p.size() + 1;
     }
@@ -226,11 +234,14 @@ void AppCommands::DeleteFilesToRecycleBin(const std::vector<std::wstring> &paths
     if (paths.empty()) return;
     // Build a double-null-terminated multi-path string.
     std::wstring from;
-    for (const auto &p : paths) { from += p; from += L'\0'; }
+    for (const auto &p: paths) {
+        from += p;
+        from += L'\0';
+    }
     from += L'\0';
     SHFILEOPSTRUCTW op = {};
-    op.wFunc  = FO_DELETE;
-    op.pFrom  = from.c_str();
+    op.wFunc = FO_DELETE;
+    op.pFrom = from.c_str();
     op.fFlags = FOF_ALLOWUNDO | FOF_NOCONFIRMATION | FOF_SILENT;
     SHFileOperationW(&op);
 }
@@ -262,10 +273,16 @@ void AppCommands::PasteFilesFromClipboard(HWND hWnd, const std::wstring &targetD
     }
 
     HGLOBAL hDrop = GetClipboardData(CF_HDROP);
-    if (!hDrop) { CloseClipboard(); return; }
+    if (!hDrop) {
+        CloseClipboard();
+        return;
+    }
 
     HDROP hd = static_cast<HDROP>(GlobalLock(hDrop));
-    if (!hd) { CloseClipboard(); return; }
+    if (!hd) {
+        CloseClipboard();
+        return;
+    }
 
     UINT count = DragQueryFileW(hd, 0xFFFFFFFF, nullptr, 0);
     std::wstring from;
@@ -287,10 +304,10 @@ void AppCommands::PasteFilesFromClipboard(HWND hWnd, const std::wstring &targetD
     std::wstring to = targetDir + L'\0' + L'\0';
 
     SHFILEOPSTRUCTW op = {};
-    op.hwnd   = hWnd;
-    op.wFunc  = isCut ? FO_MOVE : FO_COPY;
-    op.pFrom  = from.c_str();
-    op.pTo    = to.c_str();
+    op.hwnd = hWnd;
+    op.wFunc = isCut ? FO_MOVE : FO_COPY;
+    op.pFrom = from.c_str();
+    op.pTo = to.c_str();
     op.fFlags = FOF_ALLOWUNDO;
     SHFileOperationW(&op);
 }
@@ -352,12 +369,14 @@ void AppCommands::changeAppThemeFactor(HWND hWnd, float newFactor) {
     if (app.renderer)
         app.renderer->SetThemeFactor(app.themeFactor);
 
-    // Repaint main window + all child panels
-    InvalidateRect(hWnd, nullptr, FALSE);
-    EnumChildWindows(hWnd, [](HWND hwnd, LPARAM) -> BOOL {
-        InvalidateRect(hwnd, nullptr, FALSE);
-        return TRUE;
-    }, 0);
+    // Repaint main window (WS_CHILD panels are covered by RDW_ALLCHILDREN)
+    if (hWnd)
+        RedrawWindow(hWnd, nullptr, nullptr,
+                     RDW_INVALIDATE | RDW_ERASE | RDW_UPDATENOW | RDW_ALLCHILDREN);
+
+    // Floating panels are WS_POPUP — not reached by RDW_ALLCHILDREN.
+    // Update their DWM title-bar attrs and repaint their client areas.
+    uiManager.NotifyThemeChanged();
 }
 
 void AppCommands::changeAppBackdropType(HWND hWnd, DWORD newType) {
@@ -380,7 +399,7 @@ void AppCommands::stopSlideshow(HWND hWnd) {
     InvalidateRect(hWnd, nullptr, FALSE);
 
     app.slideshow.running = false;
-    app.slideshow.paused  = false;
+    app.slideshow.paused = false;
     app.slideshow.shuffleOrder.clear();
     app.slideshow.shufflePos = 0;
     AddTrayIcon(hWnd);
@@ -406,7 +425,7 @@ void AppCommands::toggleSlideshow(HWND hWnd) {
         if (app.slideshow.cursorHideMs > 0)
             SetTimer(hWnd, Constants::Slideshow::CURSOR_TIMER_ID, app.slideshow.cursorHideMs, nullptr);
         app.slideshow.running = true;
-        app.slideshow.paused  = false;
+        app.slideshow.paused = false;
         AddTrayIcon(hWnd);
     } else {
         // --- Stop (whether playing or paused) ---
@@ -416,7 +435,7 @@ void AppCommands::toggleSlideshow(HWND hWnd) {
 
 void AppCommands::CopyImageToClipboard(HWND hWnd) {
     if (app.playlist.empty() || app.currentIndex < 0 || !app.wicFactory) return;
-    const std::wstring& path = app.playlist[app.currentIndex];
+    const std::wstring &path = app.playlist[app.currentIndex];
 
     DecodedImage img;
     if (FAILED(WicDecoder::DecodeImage(path, img)) || !img.bitmap) return;
@@ -424,7 +443,8 @@ void AppCommands::CopyImageToClipboard(HWND hWnd) {
     Microsoft::WRL::ComPtr<IWICFormatConverter> conv;
     if (FAILED(app.wicFactory->CreateFormatConverter(&conv))) return;
     if (FAILED(conv->Initialize(img.bitmap.Get(), GUID_WICPixelFormat32bppBGR,
-        WICBitmapDitherTypeNone, nullptr, 0.0, WICBitmapPaletteTypeCustom))) return;
+        WICBitmapDitherTypeNone, nullptr, 0.0, WICBitmapPaletteTypeCustom)))
+        return;
 
     UINT w = img.width, h = img.height;
     UINT stride = w * 4;
@@ -434,14 +454,14 @@ void AppCommands::CopyImageToClipboard(HWND hWnd) {
     // CF_DIBV5 automatically — paste targets receive a standard bottom-up DIB
     // regardless of whether they request CF_BITMAP or CF_DIB.
     BITMAPINFO bi = {};
-    bi.bmiHeader.biSize        = sizeof(BITMAPINFOHEADER);
-    bi.bmiHeader.biWidth       = static_cast<LONG>(w);
-    bi.bmiHeader.biHeight      = -static_cast<LONG>(h); // top-down matches WIC pixel order
-    bi.bmiHeader.biPlanes      = 1;
-    bi.bmiHeader.biBitCount    = 32;
+    bi.bmiHeader.biSize = sizeof(BITMAPINFOHEADER);
+    bi.bmiHeader.biWidth = static_cast<LONG>(w);
+    bi.bmiHeader.biHeight = -static_cast<LONG>(h); // top-down matches WIC pixel order
+    bi.bmiHeader.biPlanes = 1;
+    bi.bmiHeader.biBitCount = 32;
     bi.bmiHeader.biCompression = BI_RGB;
 
-    void* bits = nullptr;
+    void *bits = nullptr;
     HDC hdc = GetDC(nullptr);
     HBITMAP hBmp = CreateDIBSection(hdc, &bi, DIB_RGB_COLORS, &bits, nullptr, 0);
     ReleaseDC(nullptr, hdc);
@@ -453,15 +473,22 @@ void AppCommands::CopyImageToClipboard(HWND hWnd) {
     }
 
     // Build CF_HDROP so Ctrl+V in Explorer pastes the file itself.
-    const std::wstring& filePath = path;
+    const std::wstring &filePath = path;
     SIZE_T pathBytes = (filePath.size() + 2) * sizeof(wchar_t); // path + \0 + list \0
     HGLOBAL hDrop = GlobalAlloc(GMEM_MOVEABLE | GMEM_ZEROINIT, sizeof(DROPFILES) + pathBytes);
-    if (!hDrop) { DeleteObject(hBmp); return; }
-    auto* df = static_cast<DROPFILES*>(GlobalLock(hDrop));
-    if (!df) { GlobalFree(hDrop); DeleteObject(hBmp); return; }
+    if (!hDrop) {
+        DeleteObject(hBmp);
+        return;
+    }
+    auto *df = static_cast<DROPFILES *>(GlobalLock(hDrop));
+    if (!df) {
+        GlobalFree(hDrop);
+        DeleteObject(hBmp);
+        return;
+    }
     df->pFiles = sizeof(DROPFILES);
-    df->fWide  = TRUE;
-    memcpy(reinterpret_cast<BYTE*>(df) + sizeof(DROPFILES),
+    df->fWide = TRUE;
+    memcpy(reinterpret_cast<BYTE *>(df) + sizeof(DROPFILES),
            filePath.c_str(), filePath.size() * sizeof(wchar_t));
     // remaining bytes are already zero (GMEM_ZEROINIT) → double-null terminator
     GlobalUnlock(hDrop);
