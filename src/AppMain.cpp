@@ -111,7 +111,7 @@ LRESULT CALLBACK MainAppWndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM l
                 // Post asynchronously — returning quickly unblocks the sending process.
                 // WM_QIV_OPEN_FILE handler owns the pointer and deletes it.
                 PostMessageW(hWnd, Constants::WM_QIV_OPEN_FILE, 0,
-                             reinterpret_cast<LPARAM>(new std::wstring((LPCWSTR)cds->lpData)));
+                             reinterpret_cast<LPARAM>(new std::wstring((LPCWSTR) cds->lpData)));
                 ShowWindow(hWnd, SW_RESTORE);
                 SetForegroundWindow(hWnd);
             } else if (cds->dwData == 2) {
@@ -247,13 +247,13 @@ LRESULT CALLBACK MainAppWndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM l
             return 0;
         }
         case WM_KEYDOWN:
-            InputManager::handleKeyboard(hWnd, wParam);
+            InputManager::handleKeyboard(hWnd, wParam, lParam);
             return 0;
 
         case WM_SYSKEYDOWN:
             // Alt+key combinations arrive here (not WM_KEYDOWN).
             // Pass to our handler first, then DefWindowProc so Alt+F4 still works.
-            InputManager::handleKeyboard(hWnd, wParam);
+            InputManager::handleKeyboard(hWnd, wParam, lParam);
             return DefWindowProcW(hWnd, message, wParam, lParam);
 
         case WM_NCACTIVATE:
@@ -525,19 +525,19 @@ static bool HasAVX2Support() {
     __cpuid(cpu, 1);
     if ((cpu[2] & (1 << 27)) == 0) return false; // no OSXSAVE — OS didn't enable XSAVE
     if ((cpu[2] & (1 << 28)) == 0) return false; // no AVX
-    if ((_xgetbv(0) & 0x6) != 0x6)  return false; // OS hasn't enabled YMM state saving
+    if ((_xgetbv(0) & 0x6) != 0x6) return false; // OS hasn't enabled YMM state saving
     __cpuidex(cpu, 7, 0);
-    return (cpu[1] & (1 << 5)) != 0;             // EBX bit 5 = AVX2
+    return (cpu[1] & (1 << 5)) != 0; // EBX bit 5 = AVX2
 }
 
 int WINAPI wWinMain(HINSTANCE hInstance, [[maybe_unused]] HINSTANCE hPrevInstance, [[maybe_unused]] PWSTR pCmdLine, int nCmdShow) {
     if (!HasAVX2Support()) {
         MessageBoxW(nullptr,
-            L"Your CPU does not support AVX2 instructions.\n\n"
-            L"QIV requires a processor with AVX2 support\n"
-            L"(Intel Core 4th gen / AMD Ryzen or newer).",
-            L"QuickImageViewer — CPU not supported",
-            MB_ICONERROR | MB_OK);
+                    L"Your CPU does not support AVX2 instructions.\n\n"
+                    L"QIV requires a processor with AVX2 support\n"
+                    L"(Intel Core 4th gen / AMD Ryzen or newer).",
+                    L"QuickImageViewer — CPU not supported",
+                    MB_ICONERROR | MB_OK);
         return 1;
     }
 
@@ -563,7 +563,9 @@ int WINAPI wWinMain(HINSTANCE hInstance, [[maybe_unused]] HINSTANCE hPrevInstanc
 
     // Warm up GeoNames data in the background so the first ExifWnd GPS lookup
     // doesn't stall the IO worker with a 100-500 ms decompress+parse.
-    g_decoderWorker.PushTask([](IWICImagingFactory2*) { GeoNames::WarmUp(); });
+    g_decoderWorker.PushTask([](IWICImagingFactory2 *) {
+        GeoNames::WarmUp();
+    });
 #ifdef _DEBUG
     // Use the public getter instead of accessing private member m_threads
     std::wstring debugMsg = L"DecoderThreadPool: Initialized with " +

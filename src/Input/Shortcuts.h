@@ -53,6 +53,7 @@ namespace Shortcuts {
     constexpr UINT SC_PANEL_CACHE_MOVE = VK_F4;
     constexpr UINT SC_APP_RELOAD_CURRENT_DIR = VK_F5; //refresh / reload current dir !
     constexpr UINT SC_PANEL_DIR_TOGGLE = VK_F6;
+    constexpr BYTE SC_RIGHT_SHIFT_SCANCODE = 0x36; // This is the scanCode of rightShift
     constexpr UINT SC_PANEL_DIR_MOVE = VK_F7;
     constexpr UINT SC_PANEL_HISTORY_TOGGLE = VK_TAB;
     constexpr UINT SC_PANEL_FULLSCREEN = VK_F11;

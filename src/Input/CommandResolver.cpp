@@ -13,10 +13,18 @@ extern AppState app;
 //   - Order: modifier-sensitive cases first so plain keys fall through cleanly.
 // =============================================================================
 
-Command InputManager::ResolveKeyboardKeys(UINT key) {
+Command InputManager::ResolveKeyboardKeys(UINT key, LPARAM lParam) {
+    // Extract scan code from bits 16-23
+    BYTE scanCode = (lParam >> 16) & 0xFF;
+
+    // Check for Right Shift specifically as a shortcut
+
     bool ctrl = (GetKeyState(VK_CONTROL) & 0x8000) != 0;
     bool shift = (GetKeyState(VK_SHIFT) & 0x8000) != 0;
     bool alt = (GetKeyState(VK_MENU) & 0x8000) != 0;
+    if (key == VK_SHIFT && scanCode == Shortcuts::SC_RIGHT_SHIFT_SCANCODE) {
+        return Command::ToggleDir;
+    }
 
     // -------------------------------------------------------------------------
     // Sort order  Ctrl+Alt+Shift+0/6/7/8/9
