@@ -1,0 +1,88 @@
+BasedOnStyle: LLVM
+Language: Cpp
+
+# Indentation
+IndentWidth: 4
+TabWidth: 4
+UseTab: Never
+ContinuationIndentWidth: 4
+
+# Braces — K&R (opening brace on same line)
+BreakBeforeBraces: Attach
+
+# Namespaces
+NamespaceIndentation: None
+CompactNamespaces: false
+
+# Pointers / references — space before *, attached to name
+PointerAlignment: Right
+ReferenceAlignment: Right
+
+# Line length
+ColumnLimit: 100
+
+# Includes
+SortIncludes: false
+IncludeBlocks: Preserve
+
+# Switch / case — case not indented relative to switch
+IndentCaseLabels: false
+IndentCaseBlocks: false
+
+# Spaces
+SpaceBeforeParens: ControlStatements
+SpaceAfterCStyleCast: false
+SpacesInCStyleCastParentheses: false
+SpaceInEmptyParentheses: false
+SpaceBeforeAssignmentOperators: true
+SpaceBeforeRangeBasedForLoopColon: true
+SpacesInAngles: Never
+SpacesInSquareBrackets: false
+SpacesInParentheses: false
+SpaceAfterTemplateKeyword: false
+
+# Alignment
+AlignConsecutiveAssignments:
+  Enabled: true
+  AcrossEmptyLines: false
+  AcrossComments: false
+  AlignCompound: true
+  PadOperators: true
+AlignConsecutiveDeclarations:
+  Enabled: false
+AlignConsecutiveMacros:
+  Enabled: true
+  AcrossEmptyLines: false
+  AcrossComments: false
+
+# Short constructs — allow on one line
+AllowShortIfStatementsOnASingleLine: Never
+AllowShortLoopsOnASingleLine: false
+AllowShortFunctionsOnASingleLine: Inline
+AllowShortCaseLabelsOnASingleLine: false
+AllowShortBlocksOnASingleLine: Empty
+
+# Breaking
+BreakConstructorInitializers: BeforeColon
+BreakInheritanceList: BeforeColon
+ConstructorInitializerIndentWidth: 4
+PackConstructorInitializers: CurrentLine
+
+# Templates
+AlwaysBreakTemplateDeclarations: Yes
+
+# Access modifiers (public/private/protected)
+AccessModifierOffset: -4
+
+# Trailing commas / comments
+TrailingCommaInInitializerList: false
+
+# Empty lines
+MaxEmptyLinesToKeep: 2
+KeepEmptyLinesAtTheStartOfBlocks: false
+
+# Bin-packed parameters
+BinPackParameters: false
+BinPackArguments: false
+AllowAllParametersOfDeclarationOnNextLine: true
+AllowAllArgumentsOnNextLine: true
