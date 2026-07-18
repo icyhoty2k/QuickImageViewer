@@ -58,6 +58,7 @@ namespace UI {
             if (!ec) total += static_cast<int64_t>(sz);
             ec.clear();
         }
+        m_dirSizeBytes = total;
         m_dirSizeStr = FormatDirSize(total);
         m_dirLabelLayout.Reset(); // force label rebuild with new size
     }
@@ -548,6 +549,9 @@ namespace UI {
             m_anchorPath.clear();
             NotifySelectionOverlay();
             m_emptyDirActive = true;
+            m_dirSizeBytes = 0;
+            m_dirSizeStr = FormatDirSize(0); // 0.00 B — folder exists but has no images
+            m_dirLabelLayout.Reset();        // force label rebuild on next paint
             InvalidateRect(m_hWnd, nullptr, TRUE);
             return;
         }

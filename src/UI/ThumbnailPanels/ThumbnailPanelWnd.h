@@ -142,6 +142,10 @@ namespace UI {
             virtual std::wstring GetPanelFolder() const { return {}; }
 
             HWND GetOwnerHwnd() const { return m_hOwner; }
+            const std::wstring &GetDirSizeStr() const { return m_dirSizeStr; }
+            int64_t             GetDirSizeBytes() const { return m_dirSizeBytes; }
+
+            static std::wstring FormatDirSize(int64_t bytes);
 
         protected:
 
@@ -163,7 +167,8 @@ namespace UI {
             std::wstring m_dirLabelTextCache;
             float        m_dirLabelDimCache = 0.0f;
             float        m_dirLabelBarCache = 0.0f;
-            std::wstring m_dirSizeStr; // e.g. "3.56 MB" — set by ComputeDirSize()
+            std::wstring m_dirSizeStr;   // e.g. "3.56 MB" — set by ComputeDirSize()
+            int64_t      m_dirSizeBytes = 0; // raw bytes — set alongside m_dirSizeStr
 
             // ------------------------------------------------------------------
             // Per-panel D3D/D2D resources — owned here, not in RendererD2D
@@ -203,7 +208,6 @@ namespace UI {
             virtual std::pair<std::wstring, UINT32> BuildScrollbarLabel() const;
 
             // Utility used by subclass overrides of BuildScrollbarLabel().
-            static std::wstring FormatDirSize(int64_t bytes);
 
         private:
             void ScrollToSelected();

@@ -255,7 +255,7 @@ namespace Constants {
     constexpr UINT WM_QIV_SWITCH_TO_FIND = WM_USER + 5; // FindWnd  ← PANEL_SWITCH_TO_FIND_CHAR typed in JumpToWnd
     constexpr UINT WM_QIV_SWITCH_TO_JUMP = WM_USER + 6; // JumpToWnd ← PANEL_SWITCH_TO_JUMP_CHAR typed in FindWnd
     constexpr UINT WM_QIV_SCAN_COMPLETE = WM_USER + 7; // Background dir scan done; LPARAM = new ScanResult*
-    constexpr UINT WM_QIV_HISTORY_VALIDATED = WM_USER + 8; // Background history validation done; LPARAM = new StatusMap*
+    constexpr UINT WM_QIV_HISTORY_VALIDATED = WM_USER + 8; // reserved — no longer used
     constexpr UINT WM_QIV_DIR_CHANGED = WM_USER + 9; // Posted by DirWatcher thread when a file-system change is detected
 
     // ---------------------------------------------------------------------------
@@ -263,7 +263,8 @@ namespace Constants {
     // ---------------------------------------------------------------------------
     constexpr bool WATCH_DIR_FOR_CHANGES = true; // master on/off switch
     constexpr UINT DIR_WATCHER_DEBOUNCE_MS = 400; // quiet period before auto-refresh fires
-    constexpr UINT_PTR DIR_WATCHER_TIMER_ID = 1008; // WM_TIMER wParam used for the debounce tick
+    constexpr UINT_PTR DIR_WATCHER_TIMER_ID = 1008;       // main-window dir-change debounce tick
+    constexpr UINT_PTR PANEL_DIR_WATCHER_TIMER_ID = 1009; // per-panel dir-change debounce tick
 
     // First-character panel-switch triggers
     constexpr wchar_t PANEL_SWITCH_TO_JUMP_CHAR = L'#'; // type this in FindWnd  to open JumpToWnd
@@ -406,10 +407,6 @@ namespace Constants {
         constexpr int HISTORY_MAX_W = BASE_WIDTH - 120; // maximum panel width
         constexpr int HISTORY_MIN_H = 620; // minimum panel height
         constexpr int HISTORY_MAX_H = BASE_HEIGHT - 60; // maximum panel height (also capped to 80% of monitor)
-        // How long the user must stay in the history panel before background
-        // folder validation starts. Prevents thrashing on rapid Tab presses.
-        constexpr UINT VALIDATION_DELAY_MS = 3000;
-        constexpr UINT_PTR VALIDATION_TIMER_ID = 1007;
     }
 
     // =========================================================================

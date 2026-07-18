@@ -2,8 +2,91 @@
 #include "../../AppState.h"
 #include "../../Input/Shortcuts.h"
 #include "../../Renderer/RendererD2D.h"
+#include "../FloatingPanels/HistoryListWnd.h"
 
 namespace UI {
+    // -------------------------------------------------------------------------
+    // DirWatcher
+    // -------------------------------------------------------------------------
+    void DirWatcher::Start(HWND hWnd, const std::wstring &dir) {
+        if (!Constants::WATCH_DIR_FOR_CHANGES) return;
+        Stop(); // stop any previous watch before starting a new one
+
+        HANDLE hNotify = FindFirstChangeNotificationW(
+            dir.c_str(), FALSE,
+            FILE_NOTIFY_CHANGE_FILE_NAME | // file added / deleted / renamed
+            FILE_NOTIFY_CHANGE_SIZE      | // file grew or shrank
+            FILE_NOTIFY_CHANGE_LAST_WRITE); // file modified in-place
+        if (hNotify == INVALID_HANDLE_VALUE) return;
+
+        HANDLE hStop = CreateEventW(nullptr, /*manualReset=*/TRUE, FALSE, nullptr);
+        if (!hStop) {
+            FindCloseChangeNotification(hNotify);
+            return;
+        }
+
+        m_hNotify = hNotify;
+        m_hStop   = hStop;
+
+        m_thread = std::thread([hNotify, hStop, hWnd]() {
+            HANDLE handles[2] = {hNotify, hStop};
+            for (;;) {
+                DWORD r = WaitForMultipleObjects(2, handles, FALSE, INFINITE);
+                if (r != WAIT_OBJECT_0) break; // stop event or error
+                PostMessageW(hWnd, Constants::WM_QIV_DIR_CHANGED, 0, 0);
+                if (!FindNextChangeNotification(hNotify)) break;
+            }
+        });
+    }
+
+    void DirWatcher::Stop() {
+        if (m_hStop) SetEvent(m_hStop);
+        if (m_thread.joinable()) m_thread.join();
+        if (m_hNotify != INVALID_HANDLE_VALUE) {
+            FindCloseChangeNotification(m_hNotify);
+            m_hNotify = INVALID_HANDLE_VALUE;
+        }
+        if (m_hStop) {
+            CloseHandle(m_hStop);
+            m_hStop = nullptr;
+        }
+    }
+
+    // -------------------------------------------------------------------------
+    // DirWnd::Hide — stop watcher before hiding so no dangling thread runs
+    // -------------------------------------------------------------------------
+    void DirWnd::Hide() {
+        m_watcher.Stop();
+        ThumbnailPanelWnd::Hide();
+    }
+
+    // -------------------------------------------------------------------------
+    // DirWnd::HandleMessage — intercept per-panel dir-change notifications.
+    // Only SpawnedDirWnd instances ever receive WM_QIV_DIR_CHANGED on their
+    // own HWND (their watcher targets m_hWnd). The main DirWnd's watcher
+    // targets m_hOwner so the main window's debounce chain handles it.
+    // -------------------------------------------------------------------------
+    LRESULT DirWnd::HandleMessage(UINT message, WPARAM wParam, LPARAM lParam) {
+        if (message == Constants::WM_QIV_DIR_CHANGED) {
+            // Debounce: collapse rapid filesystem events into one reload.
+            KillTimer(m_hWnd, Constants::PANEL_DIR_WATCHER_TIMER_ID);
+            SetTimer(m_hWnd, Constants::PANEL_DIR_WATCHER_TIMER_ID,
+                     Constants::DIR_WATCHER_DEBOUNCE_MS, nullptr);
+            return 0;
+        }
+        if (message == WM_TIMER && wParam == Constants::PANEL_DIR_WATCHER_TIMER_ID) {
+            KillTimer(m_hWnd, Constants::PANEL_DIR_WATCHER_TIMER_ID);
+            const std::wstring folder = GetPanelFolder();
+            if (!folder.empty()) {
+                RefreshFromDisk(folder);
+                UI::NotifyFolderContentsChanged(folder);
+            }
+            return 0;
+        }
+        return ThumbnailPanelWnd::HandleMessage(message, wParam, lParam);
+    }
+
+
     // -------------------------------------------------------------------------
     // Shortcuts
     // -------------------------------------------------------------------------

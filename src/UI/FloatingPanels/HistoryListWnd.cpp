@@ -84,7 +84,6 @@ namespace UI {
     // Set whenever the display list changes (push, delete, restore, clear).
     // Background validation only runs when this is true, preventing redundant
     // filesystem work on rapid Tab / Tab / Tab presses.
-    static bool g_validationDirty = true;
 
     static FolderStatus GetFolderStatus(const std::wstring &path) {
         auto it = g_statusCache.find(path);
@@ -223,7 +222,6 @@ namespace UI {
                 hasUnknown = true;
             }
         }
-        if (hasUnknown) g_validationDirty = true;
     }
 
     // ---------------------------------------------------------------------------
@@ -236,6 +234,14 @@ namespace UI {
 
     void InvalidateHistoryFolderStatus(const std::wstring &path) {
         g_statusCache[path] = FolderStatus::Missing;
+        HistoryListWnd &hw = uiManager.getHistoryListWindow();
+        HWND hwnd = hw.GetHwnd();
+        if (hwnd) InvalidateRect(hwnd, nullptr, FALSE);
+    }
+
+    void NotifyFolderContentsChanged(const std::wstring &path) {
+        g_statusCache.erase(path); // force fresh check — stale cached status must not persist
+        GetFolderStatus(path);     // re-validate now so paint sees Valid/Empty/Missing, not Unknown
         HistoryListWnd &hw = uiManager.getHistoryListWindow();
         HWND hwnd = hw.GetHwnd();
         if (hwnd) InvalidateRect(hwnd, nullptr, FALSE);
@@ -485,14 +491,14 @@ namespace UI {
                     std::wstring folder = g_displayList[g_hoverRow].path;
                     {
                         FolderStatus fs = GetFolderStatus(folder);
-                        if (fs != FolderStatus::Valid) {
-                            const wchar_t *deadMsg = (fs == FolderStatus::Missing)
-                                                         ? Constants::Messages::FOLDER_DEAD_MISSING
-                                                         : Constants::Messages::FOLDER_DEAD_EMPTY;
+                        if (fs == FolderStatus::Missing) {
                             if (g_hHistOwner)
-                                g_overlayManager.PostCenterMessage(g_hHistOwner, deadMsg);
+                                g_overlayManager.PostCenterMessage(g_hHistOwner,
+                                    Constants::Messages::FOLDER_DEAD_MISSING);
                             return true;
                         }
+                        // Empty folders fall through — both OpenDirectory and
+                        // SpawnDirWndForFolder handle them so the user can paste into them.
                     }
                     bool shiftHeld = (GetKeyState(VK_SHIFT) & 0x8000) != 0;
                     if (shiftHeld) {
@@ -872,8 +878,14 @@ namespace UI {
                         std::wstring posLabel = uiManager.GetSpawnedDirWndPositionLabel(fp);
                         segFolder += posLabel;
 
+
+                        // Size/count column — drawn on the far right, only when a SpawnedDirWnd is open for this folder
+                        auto [sizeStr, imgCount] = uiManager.GetSpawnedDirWndSizeInfo(fp);
+                        const bool hasSizeInfo = !sizeStr.empty();
+                        int sizeColW = hasSizeInfo ? MulDiv(100, dpi, 96) : 0;
+
                         LONG rowLeft = rc.left + padding + indexW + starW + MulDiv(10, dpi, 96);
-                        LONG rowRight = rc.right - padding - (needsScrollbar ? SB_W + 2 : 0);
+                        LONG rowRight = rc.right - padding - (needsScrollbar ? SB_W + 2 : 0) - sizeColW;
                         LONG curX = rowLeft;
 
                         // 1. Drive letter
@@ -914,6 +926,19 @@ namespace UI {
                             RECT fr = {curX, rowTop, rowRight, rowBottom};
                             DrawTextW(hdc, segFolder.c_str(), -1, &fr,
                                       DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
+                        }
+
+                        // 4. Size/count column — right-aligned after the path, only when a SpawnedDirWnd is open
+                        if (hasSizeInfo) {
+                            std::wstring sizeCountStr = sizeStr + L"/" + std::to_wstring(imgCount);
+                            LONG colLeft  = rowRight;
+                            LONG colRight = rc.right - padding - (needsScrollbar ? SB_W + 2 : 0);
+                            SetTextColor(hdc, isDead
+                                                  ? Constants::Theme::HistoryPanel::PATH_DEAD_MIDDLE
+                                                  : RGB(140, 200, 140));
+                            RECT scr = {colLeft, rowTop, colRight, rowBottom};
+                            DrawTextW(hdc, sizeCountStr.c_str(), -1, &scr,
+                                      DT_RIGHT | DT_VCENTER | DT_SINGLELINE);
                         }
                     }
                 }
@@ -956,7 +981,7 @@ namespace UI {
                     DeleteObject(hFooterPen);
                 }
 
-                // FOOTER — Panel status (left) and file size (right)
+                // FOOTER — QIV link | [Fkey] Cache | [Fkey] Dir  ···  summary  history-size
                 {
                     int footerTop = rc.bottom - MulDiv(fontSize + 2 + 4, dpi, 96);
                     int footerBot = rc.bottom;
@@ -964,24 +989,67 @@ namespace UI {
                     SelectObject(hdc, m_hFontBody);
                     SetTextColor(hdc, RGB(150, 150, 150));
 
-                    // LEFT: Panel status
+                    const UI::PanelLayout &layout = uiManager.GetLayout();
+                    const UI::SlotInfo *slots[] = {&layout.center, &layout.top, &layout.right, &layout.bottom, &layout.left};
+                    LONG rightEdge = rc.right - padding;
+                    const int gap   = MulDiv(8, dpi, 96);
+
+                    // RIGHT: file size (rightmost) then summary just left of it — measure both first
+                    const std::wstring &sizeValue = m_cachedSizeStr;
+                    SIZE szFileSize = {};
+                    GetTextExtentPoint32W(hdc, sizeValue.c_str(),
+                                          static_cast<int>(sizeValue.size()), &szFileSize);
+                    LONG fileSizeLeft = rightEdge - szFileSize.cx;
+
+                    auto [totalSizeStr, totalCount] = uiManager.GetAllOpenDirWndsSummary();
+                    std::wstring summaryStr;
+                    LONG summaryLeft = fileSizeLeft; // default: no summary
+                    if (!totalSizeStr.empty()) {
+                        summaryStr = totalSizeStr + L"/" + std::to_wstring(totalCount);
+                        SIZE szSummary = {};
+                        GetTextExtentPoint32W(hdc, summaryStr.c_str(),
+                                              static_cast<int>(summaryStr.size()), &szSummary);
+                        summaryLeft = fileSizeLeft - gap - szSummary.cx;
+                        SetTextColor(hdc, RGB(140, 200, 140));
+                        RECT summaryRect = {summaryLeft, footerTop, summaryLeft + szSummary.cx, footerBot};
+                        DrawTextW(hdc, summaryStr.c_str(), -1, &summaryRect,
+                                  DT_LEFT | DT_VCENTER | DT_SINGLELINE);
+                    }
+                    SetTextColor(hdc, Constants::Theme::HistoryPanel::SIZE_HIGHLIGHT);
+                    RECT sizeRect = {fileSizeLeft, footerTop, rightEdge, footerBot};
+                    DrawTextW(hdc, sizeValue.c_str(), -1, &sizeRect, DT_LEFT | DT_VCENTER | DT_SINGLELINE);
+
+                    // LEFT: QIV link first, then [Fkey] Cache, then [Fkey] Dir
                     {
-                        LONG curX = rc.left + padding;
-                        LONG midBound = rc.left + (rc.right - rc.left) / 2;
+                        LONG curX     = rc.left + padding;
+                        LONG leftBound = summaryLeft - gap;
 
-                        const UI::PanelLayout &layout = uiManager.GetLayout();
-                        const UI::SlotInfo *slots[] = {&layout.center, &layout.top, &layout.right, &layout.bottom, &layout.left};
+                        // QIV→dir link — first item, clickable
+                        {
+                            std::wstring linkText = L"QIV.exe/path="
+                                                    + std::filesystem::path(Persistence::Registry::GetExePathW()).parent_path().wstring() + L"\\";
+                            SIZE szLink = {};
+                            SelectObject(hdc, m_hFontLink);
+                            GetTextExtentPoint32W(hdc, linkText.c_str(),
+                                                  static_cast<int>(linkText.size()), &szLink);
+                            SetTextColor(hdc, RGB(100, 180, 255));
+                            g_exeLinkRect = {curX, footerTop, curX + szLink.cx, footerBot};
+                            DrawTextW(hdc, linkText.c_str(), -1, &g_exeLinkRect,
+                                      DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
+                            curX += szLink.cx + gap;
+                            SelectObject(hdc, m_hFontBody);
+                        }
 
-                        // Cache toggle key label (derived from Shortcuts constant)
+                        // Cache toggle key
                         std::wstring cacheKeyLabel = L"[" + FKeyLabel(Shortcuts::SC_PANEL_CACHE_TOGGLE) + L"]";
                         SetTextColor(hdc, RGB(100, 180, 255));
                         SelectObject(hdc, m_hFontLink);
-                        RECT cacheToggleRect = {curX, footerTop, midBound, footerBot};
-                        DrawTextW(hdc, cacheKeyLabel.c_str(), -1, &cacheToggleRect, DT_LEFT | DT_VCENTER | DT_SINGLELINE);
                         SIZE szToggle = {};
                         GetTextExtentPoint32W(hdc, cacheKeyLabel.c_str(),
                                               static_cast<int>(cacheKeyLabel.size()), &szToggle);
                         g_cacheIndexRect = {curX, footerTop, curX + szToggle.cx, footerBot};
+                        DrawTextW(hdc, cacheKeyLabel.c_str(), -1, &g_cacheIndexRect,
+                                  DT_LEFT | DT_VCENTER | DT_SINGLELINE);
                         curX += szToggle.cx;
 
                         // Cache status
@@ -996,24 +1064,27 @@ namespace UI {
                                 break;
                             }
                         }
-                        std::wstring cacheRest = cacheFound ? (L"Cache -> " + cachePosName) : L"Cache -> Hidden";
-                        RECT cacheRestRect = {curX, footerTop, midBound, footerBot};
+                        std::wstring cacheRest = cacheFound ? (L"Cache->" + cachePosName) : L"Cache->Hidden";
+                        SIZE szCacheRest = {};
+                        GetTextExtentPoint32W(hdc, cacheRest.c_str(),
+                                              static_cast<int>(cacheRest.size()), &szCacheRest);
+                        RECT cacheRestRect = {curX, footerTop, curX + szCacheRest.cx, footerBot};
                         DrawTextW(hdc, cacheRest.c_str(), -1, &cacheRestRect, DT_LEFT | DT_VCENTER | DT_SINGLELINE);
+                        curX += szCacheRest.cx + gap;
 
-                        // Dir-panel toggle key label (derived from Shortcuts constant)
+                        // Dir-panel toggle key
                         std::wstring dirKeyLabel = L"[" + FKeyLabel(Shortcuts::SC_PANEL_DIR_TOGGLE) + L"]";
-                        curX = rc.left + padding + MulDiv(100, dpi, 96);
                         SetTextColor(hdc, RGB(100, 180, 255));
                         SelectObject(hdc, m_hFontLink);
-                        RECT f5ToggleRect = {curX, footerTop, midBound, footerBot};
-                        DrawTextW(hdc, dirKeyLabel.c_str(), -1, &f5ToggleRect, DT_LEFT | DT_VCENTER | DT_SINGLELINE);
                         SIZE szF5 = {};
                         GetTextExtentPoint32W(hdc, dirKeyLabel.c_str(),
                                               static_cast<int>(dirKeyLabel.size()), &szF5);
                         g_f5IndexRect = {curX, footerTop, curX + szF5.cx, footerBot};
+                        DrawTextW(hdc, dirKeyLabel.c_str(), -1, &g_f5IndexRect,
+                                  DT_LEFT | DT_VCENTER | DT_SINGLELINE);
                         curX += szF5.cx;
 
-                        // F5 status
+                        // Dir status
                         SelectObject(hdc, m_hFontBody);
                         SetTextColor(hdc, RGB(150, 150, 150));
                         bool f5Found = false;
@@ -1037,49 +1108,15 @@ namespace UI {
                                 break;
                             }
                         }
-                        if (f5Found) {
-                            std::wstring f5Rest = (f5HistoryIndex > 0) ? (L" #" + std::to_wstring(f5HistoryIndex) + L" " + f5PosName) : (L" #? " + f5PosName);
-                            RECT f5RestRect = {curX, footerTop, midBound, footerBot};
-                            DrawTextW(hdc, f5Rest.c_str(), -1, &f5RestRect, DT_LEFT | DT_VCENTER | DT_SINGLELINE);
-                        } else {
-                            RECT f5HiddenRect = {curX, footerTop, midBound, footerBot};
-                            DrawTextW(hdc, L" Hidden", -1, &f5HiddenRect, DT_LEFT | DT_VCENTER | DT_SINGLELINE);
-                        }
-                    }
-
-                    // RIGHT: QIV→dir link + file size
-                    {
-                        LONG rightHalfLeft = rc.left + (rc.right - rc.left) / 2;
-                        LONG rightEdge = rc.right - padding;
-
-                        // File size — pre-computed in Show() to avoid I/O in WM_PAINT
-                        const std::wstring &sizeValue = m_cachedSizeStr;
-                        SelectObject(hdc, m_hFontBody);
-                        SIZE szSize = {};
-                        GetTextExtentPoint32W(hdc, sizeValue.c_str(),
-                                              static_cast<int>(sizeValue.size()), &szSize);
-                        LONG sizeLeft = rightEdge - szSize.cx;
-
-                        // QIV→dir link — blue underlined, clickable, left of file size
-                        {
-                            std::wstring linkText = L"QIV.exe/path="
-                                                    + std::filesystem::path(Persistence::Registry::GetExePathW()).parent_path().wstring() + L"\\";
-
-                            SelectObject(hdc, m_hFontLink);
-                            SetTextColor(hdc, RGB(100, 180, 255));
-
-                            LONG linkAreaRight = std::max(rightHalfLeft, sizeLeft - MulDiv(8, dpi, 96));
-                            g_exeLinkRect = {rightHalfLeft, footerTop, linkAreaRight, footerBot};
-                            DrawTextW(hdc, linkText.c_str(), -1, &g_exeLinkRect,
-                                      DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
-                            SelectObject(hdc, m_hFontBody);
-                        }
-
-                        // File size — right-aligned
-                        SetTextColor(hdc, Constants::Theme::HistoryPanel::SIZE_HIGHLIGHT);
-                        RECT sizeRect = {sizeLeft, footerTop, rightEdge, footerBot};
-                        DrawTextW(hdc, sizeValue.c_str(), -1, &sizeRect,
-                                  DT_LEFT | DT_VCENTER | DT_SINGLELINE);
+                        std::wstring f5Rest = f5Found
+                            ? ((f5HistoryIndex > 0) ? (L"Dir->#" + std::to_wstring(f5HistoryIndex) + L" " + f5PosName) : (L"Dir->? " + f5PosName))
+                            : L"Dir->Hidden";
+                        SIZE szF5Rest = {};
+                        GetTextExtentPoint32W(hdc, f5Rest.c_str(),
+                                              static_cast<int>(f5Rest.size()), &szF5Rest);
+                        RECT f5RestRect = {curX, footerTop, std::min(curX + szF5Rest.cx, leftBound), footerBot};
+                        DrawTextW(hdc, f5Rest.c_str(), -1, &f5RestRect,
+                                  DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
                     }
                 }
 
@@ -1339,14 +1376,13 @@ namespace UI {
                     if (mx >= r.left && mx < r.right && my >= r.top && my < r.bottom) {
                         std::wstring folder = g_displayList[i].path;
                         FolderStatus fs = GetFolderStatus(folder);
-                        if (fs != FolderStatus::Valid) {
-                            const wchar_t *deadMsg = (fs == FolderStatus::Missing)
-                                                         ? Constants::Messages::FOLDER_DEAD_MISSING
-                                                         : Constants::Messages::FOLDER_DEAD_EMPTY;
+                        if (fs == FolderStatus::Missing) {
                             if (g_hHistOwner)
-                                g_overlayManager.PostCenterMessage(g_hHistOwner, deadMsg);
+                                g_overlayManager.PostCenterMessage(g_hHistOwner,
+                                    Constants::Messages::FOLDER_DEAD_MISSING);
                             return 0;
                         }
+                        // Empty folders fall through — OpenDirectory handles them.
                         ShowWindow(m_hWnd, SW_HIDE);
                         OpenDirectory(g_hHistOwner, folder);
                         return 0;
@@ -1361,87 +1397,10 @@ namespace UI {
                 return 0;
             }
 
-            case WM_SHOWWINDOW:
-                if (!wParam) // being hidden
-                    KillTimer(m_hWnd, Constants::History::VALIDATION_TIMER_ID);
-                break;
-
             case WM_CLOSE:
-                KillTimer(m_hWnd, Constants::History::VALIDATION_TIMER_ID);
                 ShowWindow(m_hWnd, SW_HIDE);
                 return 0;
 
-            case WM_TIMER:
-                if (wParam == Constants::History::VALIDATION_TIMER_ID) {
-                    KillTimer(m_hWnd, Constants::History::VALIDATION_TIMER_ID);
-                    if (!g_validationDirty) return 0;
-                    g_validationDirty = false;
-
-                    // Snapshot paths to check (avoids holding shared state on bg thread)
-                    std::vector<std::wstring> paths;
-                    paths.reserve(g_displayList.size());
-                    for (const auto &e: g_displayList) paths.push_back(e.path);
-
-                    HWND hWnd = m_hWnd;
-                    std::thread([paths = std::move(paths), hWnd]() {
-                        namespace fs = std::filesystem;
-                        using Map = std::unordered_map<std::wstring, FolderStatus>;
-                        auto *result = new Map();
-                        try {
-                            result->reserve(paths.size());
-
-                            for (const auto &path: paths) {
-                                std::error_code ec;
-                                if (!fs::is_directory(path, ec) || ec) {
-                                    (*result)[path] = FolderStatus::Missing;
-                                    continue;
-                                }
-                                FolderStatus st = FolderStatus::Empty;
-                                for (auto it = fs::directory_iterator(
-                                             path, fs::directory_options::skip_permission_denied, ec);
-                                     it != fs::directory_iterator(); it.increment(ec)) {
-                                    if (ec) {
-                                        ec.clear();
-                                        continue;
-                                    }
-                                    if (!it->is_regular_file(ec)) continue;
-                                    std::wstring ext = it->path().extension().wstring();
-                                    for (auto &c: ext) c = static_cast<wchar_t>(::towlower(c));
-                                    bool found = false;
-                                    for (size_t i = 0; i < Constants::Registry::SUPPORTED_EXTENSIONS_COUNT; ++i) {
-                                        if (ext == Constants::Registry::SUPPORTED_EXTENSIONS[i]) {
-                                            found = true;
-                                            break;
-                                        }
-                                    }
-                                    if (found) {
-                                        st = FolderStatus::Valid;
-                                        break;
-                                    }
-                                }
-                                (*result)[path] = st;
-                            }
-                        } catch (...) {
-                            delete result;
-                            return;
-                        }
-
-                        PostMessageW(hWnd, Constants::WM_QIV_HISTORY_VALIDATED,
-                                     0, reinterpret_cast<LPARAM>(result));
-                    }).detach();
-                    return 0;
-                }
-                break;
-
-            case Constants::WM_QIV_HISTORY_VALIDATED: {
-                using Map = std::unordered_map<std::wstring, FolderStatus>;
-                auto *result = reinterpret_cast<Map *>(lParam);
-                for (auto &[path, status]: *result)
-                    g_statusCache[path] = status;
-                delete result;
-                InvalidateRect(m_hWnd, nullptr, FALSE);
-                return 0;
-            }
         }
 
         return DefWindowProcW(m_hWnd, message, wParam, lParam);
@@ -1517,9 +1476,6 @@ namespace UI {
         ShowWindow(m_hWnd, SW_SHOW);
         SetForegroundWindow(m_hWnd);
         InvalidateRect(m_hWnd, nullptr, TRUE);
-        // Start lazy validation — fires after VALIDATION_DELAY_MS if user stays
-        SetTimer(m_hWnd, Constants::History::VALIDATION_TIMER_ID,
-                 Constants::History::VALIDATION_DELAY_MS, nullptr);
     }
 
     void HistoryListWnd::Toggle() {

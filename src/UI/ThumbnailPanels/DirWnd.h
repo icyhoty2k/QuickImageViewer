@@ -5,11 +5,31 @@
 #include <string>
 #include <filesystem>
 #include <algorithm>
+#include <thread>
 #include "ThumbnailPanelWnd.h"
 #include "Thumbnail.h"
 #include "../../Platform/FileHandler.h"
+#include "../../Platform/Constants.h"
 
 namespace UI {
+    // =========================================================================
+    // DirWatcher — watches one directory for filesystem changes and posts
+    // WM_QIV_DIR_CHANGED to a given HWND. One instance per DirWnd/SpawnedDirWnd.
+    // Main DirWnd targets m_hOwner (main HWND → existing debounce+reload chain).
+    // SpawnedDirWnd targets m_hWnd (handled locally in DirWnd::HandleMessage).
+    // =========================================================================
+    struct DirWatcher {
+        ~DirWatcher() { Stop(); }
+
+        void Start(HWND hWnd, const std::wstring &dir);
+        void Stop();
+
+    private:
+        HANDLE m_hNotify = INVALID_HANDLE_VALUE;
+        HANDLE m_hStop   = nullptr;
+        std::thread m_thread;
+    };
+
     class DirWnd : public ThumbnailPanelWnd {
         public:
             void DoClearDirThumbnailCache() override;
@@ -31,7 +51,7 @@ namespace UI {
             }
 
             void HideDirWindow() {
-                ThumbnailPanelWnd::Hide();
+                Hide(); // virtual dispatch → DirWnd::Hide() → stop watcher, then base
             }
 
         public:
@@ -56,7 +76,12 @@ namespace UI {
                 }
             }
 
+        public:
+            void Hide() override;
+
         protected:
+            LRESULT HandleMessage(UINT message, WPARAM wParam, LPARAM lParam) override;
+
             const wchar_t *ClassName() const override {
                 return L"QIV_DirWindow";
             }
@@ -111,6 +136,11 @@ namespace UI {
                     if (!match) return;
                 }
 
+                // Watch this folder for changes; posts to m_hOwner so the main
+                // window's debounce → ReloadCurrentDirectory chain handles reload.
+                // Watch even when empty so adding the first image is detected.
+                m_watcher.Start(m_hOwner, dir);
+
                 if (playlist.empty()) {
                     std::error_code ec;
                     m_emptyDirMissing = !std::filesystem::is_directory(std::filesystem::path(dir), ec) || ec;
@@ -127,6 +157,9 @@ namespace UI {
                     SetPlaylistCopy(playlist);
                 }
             }
+
+        protected:
+            DirWatcher m_watcher;
 
         private:
             std::wstring m_currentFolder; // Track current folder for history marking
@@ -177,6 +210,10 @@ namespace UI {
                     m_localPlaylist.push_back(canon.wstring());
                 }
                 std::sort(m_localPlaylist.begin(), m_localPlaylist.end());
+
+                // Watch for changes; posts to m_hWnd so this panel's
+                // HandleMessage handles reload locally without touching app.playlist.
+                m_watcher.Start(m_hWnd, folderPath);
             }
 
             std::wstring GetFolderPath() const {

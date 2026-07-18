@@ -93,6 +93,11 @@ namespace UI {
     // panel if visible. Called by HandleScanComplete when F5 finds the dir gone.
     void InvalidateHistoryFolderStatus(const std::wstring &path);
 
+    // Reset the cached status for 'path' to Unknown and repaint.
+    // Call whenever the folder's contents may have changed so the panel
+    // re-evaluates it on the next validation pass.
+    void NotifyFolderContentsChanged(const std::wstring &path);
+
     // Open the history panel showing the full (uncapped) list.
     // Equivalent to Tab then Ctrl+Tab — used from the main app via Ctrl+Tab.
     void ToggleHistoryFull();
