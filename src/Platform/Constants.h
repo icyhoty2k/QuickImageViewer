@@ -6,8 +6,8 @@
 // *** Update ONLY the four numbers below to bump the version everywhere ***
 // =========================================================================
 #define VER_MAJOR 2
-#define VER_MINOR 7
-#define VER_PATCH 3
+#define VER_MINOR 8
+#define VER_PATCH 0
 #define VER_BUILD 0
 
 // Comma form  — FILEVERSION / PRODUCTVERSION in .rc  (e.g. 2,3,0,0)
@@ -313,16 +313,16 @@ namespace Constants {
         constexpr const wchar_t *THEME_FACTOR = L"qivThemeFactor";
         constexpr const wchar_t *KEEP_IN_BACKGROUND = L"qivKeepInBackground";
         constexpr const wchar_t *RUN_ON_STARTUP = L"qivRunOnStartup";
-        constexpr const wchar_t *THUMBNAIL_EFFECTS  = L"qivThumbnailEffects";
-        constexpr const wchar_t *HISTORY_FULL_MODE  = L"qivHistoryFullMode";
-        constexpr const wchar_t *OVERLAY_VISIBLE      = L"qivOverlayVisible";
+        constexpr const wchar_t *THUMBNAIL_EFFECTS = L"qivThumbnailEffects";
+        constexpr const wchar_t *HISTORY_FULL_MODE = L"qivHistoryFullMode";
+        constexpr const wchar_t *OVERLAY_VISIBLE = L"qivOverlayVisible";
         constexpr const wchar_t *OPEN_DIRWND_ON_START = L"qivOpenDirWndOnStart";
     }
 
     namespace SettingsFile {
-        constexpr const wchar_t *EXPORT_PREFIX    = L"QIVSettings_";
+        constexpr const wchar_t *EXPORT_PREFIX = L"QIVSettings_";
         constexpr const wchar_t *EXPORT_EXTENSION = L".ini";
-        constexpr const wchar_t *EXPORT_FILTER    = L"INI Settings (*.ini)\0*.ini\0All Files (*.*)\0*.*\0";
+        constexpr const wchar_t *EXPORT_FILTER = L"INI Settings (*.ini)\0*.ini\0All Files (*.*)\0*.*\0";
     }
 
     namespace ViewModes {
