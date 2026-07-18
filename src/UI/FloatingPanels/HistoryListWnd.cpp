@@ -1505,6 +1505,39 @@ namespace UI {
                 return 0;
             }
 
+            case WM_MBUTTONUP: {
+                int mx = GET_X_LPARAM(lParam);
+                int my = GET_Y_LPARAM(lParam);
+                for (int i = 0; i < static_cast<int>(g_rowRects.size()); ++i) {
+                    const RECT &r = g_rowRects[i];
+                    if (mx >= r.left && mx < r.right && my >= r.top && my < r.bottom) {
+                        if (i >= static_cast<int>(g_displayList.size())) break;
+                        std::wstring folder = g_displayList[i].path;
+                        FolderStatus fs = GetFolderStatus(folder);
+                        if (fs == FolderStatus::Missing) {
+                            if (g_hHistOwner)
+                                g_overlayManager.PostCenterMessage(g_hHistOwner,
+                                    Constants::Messages::FOLDER_DEAD_MISSING);
+                            return 0;
+                        }
+                        const int savedRow = g_hoverRow;
+                        std::wstring posLabel = uiManager.GetSpawnedDirWndPositionLabel(folder);
+                        if (!posLabel.empty()) {
+                            std::wstring posName = posLabel.substr(2, posLabel.length() - 3);
+                            SlotInfo *slot = uiManager.GetLayout().getSlotByName(posName);
+                            if (slot && slot->panel)
+                                slot->panel->Hide();
+                        } else {
+                            uiManager.SpawnDirWndForFolder(folder, m_hWnd);
+                        }
+                        g_hoverRow = savedRow;
+                        InvalidateRect(m_hWnd, nullptr, FALSE);
+                        return 0;
+                    }
+                }
+                return 0;
+            }
+
             case WM_MOUSELEAVE: {
                 g_hoverRow = -1;
                 InvalidateRect(m_hWnd, nullptr, FALSE);

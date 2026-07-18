@@ -434,6 +434,15 @@ void HandleScanComplete(HWND hWnd, ScanResult *result) {
     const bool updatePrimaryDir = result->updatePrimaryDirWnd;
     delete result;
 
+    // Load the target image BEFORE refreshing panels. NotifyFolderRefreshed
+    // triggers UpdateView in every matching panel, and UpdateView highlights the
+    // thumbnail matching app.currentIndex — which at this point is still stale
+    // (0 from the interim single-file playlist OpenSpecificImage installed).
+    // Refreshing first painted the selection on thumbnail 0 for one frame before
+    // LoadImageIndex corrected it — a visible flicker + selection jump when
+    // clicking from one DirWnd into another.
+    LoadImageIndex(hWnd, targetIdx);
+
     // Refresh every visible panel that cares about this folder — DirWnd,
     // SpawnedDirWnd instances watching the same dir, and CacheWnd.
     // Pass updatePrimaryDir = false when the scan was triggered by a SpawnedDirWnd
@@ -452,7 +461,11 @@ void HandleScanComplete(HWND hWnd, ScanResult *result) {
     app.folderOverlayPath.clear();
     UI::NotifyFolderContentsChanged(scannedDir);
 
-    LoadImageIndex(hWnd, targetIdx);
+    // The refresh may have re-sorted the panel's items (scan applies the user's
+    // sort order; the panel's local list was built with a plain name sort), so
+    // the current thumbnail can occupy a different slot now — snap the selection
+    // rectangle and scroll to it.
+    uiManager.getActiveDirWnd().SyncDirSelectionRectangle();
     InvalidateRect(hWnd, nullptr, FALSE);
 }
 

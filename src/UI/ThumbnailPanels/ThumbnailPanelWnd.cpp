@@ -696,10 +696,23 @@ namespace UI {
             }
         }
 
+        // Re-derive the highlight while rebuilding rects. For panels that own
+        // their playlist (F6, spawned) the cached playlistIndex values go stale
+        // whenever app.playlist changes under them — e.g. the interim 1-file
+        // playlist OpenSpecificImage installs while its background scan runs
+        // (currentIndex == 0 then briefly matched a stale playlistIndex 0 and
+        // flashed the selection on thumbnail 0 when switching between two
+        // DirWnds). Match by file path for those panels — always authoritative.
         m_selectedIdx = -1;
+        std::wstring curPath;
+        if (app.currentIndex >= 0 && app.currentIndex < static_cast<int>(app.playlist.size()))
+            curPath = app.playlist[app.currentIndex];
+        const bool matchByPath = HasOwnPlaylist();
         for (size_t i = 0; i < m_thumbnails.size(); ++i) {
             m_thumbnails[i].rect = D2D1::RectF(x, y, x + thumbW, y + thumbH);
-            if (m_thumbnails[i].playlistIndex == app.currentIndex)
+            if (matchByPath
+                    ? (!curPath.empty() && m_thumbnails[i].filePath == curPath)
+                    : (app.currentIndex >= 0 && m_thumbnails[i].playlistIndex == app.currentIndex))
                 m_selectedIdx = static_cast<int>(i);
             if (vertical) y += thumbH + spacing;
             else x += thumbW + spacing;
