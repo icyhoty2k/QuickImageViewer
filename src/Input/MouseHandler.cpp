@@ -26,7 +26,7 @@ namespace {
             return false;
         const D2D1_RECT_F &r = app.folderOverlayPathRect;
         return static_cast<float>(pt.x) >= r.left && static_cast<float>(pt.x) <= r.right &&
-               static_cast<float>(pt.y) >= r.top  && static_cast<float>(pt.y) <= r.bottom;
+               static_cast<float>(pt.y) >= r.top && static_cast<float>(pt.y) <= r.bottom;
     }
 
     // Open the overlay path in Explorer. If the directory itself is gone
@@ -45,7 +45,14 @@ namespace {
     }
 }
 
-void MouseHandler::HandleButtonDown(HWND hWnd, UINT message, LPARAM lParam) {
+void MouseHandler::HandleButtonDown(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) {
+    // New logic: Capture XButton 1
+    if (message == WM_XBUTTONDOWN) {
+        if (GET_XBUTTON_WPARAM(wParam) == XBUTTON1) {
+            uiManager.Toggle(uiManager.getHistoryListWindow());
+            return;
+        }
+    }
     // Clickable path in the Missing/Empty overlay — opens Explorer.
     if (message == WM_LBUTTONDOWN) {
         POINT pt = {GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam)};
@@ -180,7 +187,14 @@ void MouseHandler::HandleButtonDown(HWND hWnd, UINT message, LPARAM lParam) {
     }
 }
 
-void MouseHandler::HandleButtonUp(HWND hWnd, UINT message, LPARAM /*lParam*/) {
+void MouseHandler::HandleButtonUp(HWND hWnd, UINT message, WPARAM, LPARAM) {
+    //not user for now butt keep for future implementations
+    // if (message == WM_XBUTTONUP) {
+    //     if (GET_XBUTTON_WPARAM(wParam) == XBUTTON1) {
+    //         // Action for button release if required
+    //         return;
+    //     }
+    // }
     if (message == WM_RBUTTONUP) {
         app.isRmbDown = false;
         SetCursor(LoadCursor(nullptr, MAKEINTRESOURCEW(Constants::Cursors::DEFAULT)));
@@ -232,26 +246,37 @@ void MouseHandler::HandleButtonUp(HWND hWnd, UINT message, LPARAM /*lParam*/) {
             POINT cursor;
             GetCursorPos(&cursor);
             HMONITOR hMon = MonitorFromPoint(cursor, MONITOR_DEFAULTTONEAREST);
-            MONITORINFO mi = { sizeof(mi) };
+            MONITORINFO mi = {sizeof(mi)};
             if (GetMonitorInfo(hMon, &mi)) {
-                const RECT &wa  = mi.rcWork;
-                const int snap  = Constants::WINDOW_SNAP_DISTANCE;
-                bool nearLeft   = cursor.x <= wa.left  + snap;
-                bool nearRight  = cursor.x >= wa.right  - snap;
-                bool nearTop    = cursor.y <= wa.top    + snap;
-                int halfW = (wa.right  - wa.left) / 2;
-                int halfH = (wa.bottom - wa.top)  / 2;
+                const RECT &wa = mi.rcWork;
+                const int snap = Constants::WINDOW_SNAP_DISTANCE;
+                bool nearLeft = cursor.x <= wa.left + snap;
+                bool nearRight = cursor.x >= wa.right - snap;
+                bool nearTop = cursor.y <= wa.top + snap;
+                int halfW = (wa.right - wa.left) / 2;
+                int halfH = (wa.bottom - wa.top) / 2;
                 RECT target = {};
                 bool doSnap = false;
-                if      (nearLeft  && nearTop) { target = { wa.left,        wa.top, wa.left + halfW, wa.top + halfH }; doSnap = true; }
-                else if (nearRight && nearTop) { target = { wa.left + halfW, wa.top, wa.right,        wa.top + halfH }; doSnap = true; }
-                else if (nearLeft)             { target = { wa.left,        wa.top, wa.left + halfW, wa.bottom       }; doSnap = true; }
-                else if (nearRight)            { target = { wa.left + halfW, wa.top, wa.right,        wa.bottom       }; doSnap = true; }
-                else if (nearTop)              { target = wa;                                                            doSnap = true; }
+                if (nearLeft && nearTop) {
+                    target = {wa.left, wa.top, wa.left + halfW, wa.top + halfH};
+                    doSnap = true;
+                } else if (nearRight && nearTop) {
+                    target = {wa.left + halfW, wa.top, wa.right, wa.top + halfH};
+                    doSnap = true;
+                } else if (nearLeft) {
+                    target = {wa.left, wa.top, wa.left + halfW, wa.bottom};
+                    doSnap = true;
+                } else if (nearRight) {
+                    target = {wa.left + halfW, wa.top, wa.right, wa.bottom};
+                    doSnap = true;
+                } else if (nearTop) {
+                    target = wa;
+                    doSnap = true;
+                }
                 if (doSnap) {
                     SetWindowPos(hWnd, nullptr,
                                  target.left, target.top,
-                                 target.right  - target.left,
+                                 target.right - target.left,
                                  target.bottom - target.top,
                                  SWP_NOZORDER | SWP_NOACTIVATE | SWP_FRAMECHANGED);
                     InvalidateRect(hWnd, nullptr, FALSE);
@@ -398,8 +423,8 @@ void MouseHandler::HandleMouseWheel(HWND hWnd, WPARAM wParam, LPARAM /*lParam*/)
     if ((GetKeyState(VK_SHIFT) & 0x8000) != 0) {
         app.opacity = static_cast<BYTE>(
             delta > 0
-                ? std::min(255, (int)app.opacity + Constants::OPACITY_STEP)
-                : std::max(10,  (int)app.opacity - Constants::OPACITY_STEP));
+                ? std::min(255, (int) app.opacity + Constants::OPACITY_STEP)
+                : std::max(10, (int) app.opacity - Constants::OPACITY_STEP));
         SetLayeredWindowAttributes(hWnd, 0, app.opacity, LWA_ALPHA);
         return;
     }
@@ -438,7 +463,7 @@ void MouseHandler::HandleMouseHWheel(HWND hWnd, WPARAM wParam, LPARAM /*lParam*/
         int newH = static_cast<int>(std::round(
                 currentH + resizeStep * (static_cast<float>(currentH) / currentW)));
         int newX = rc.left - (resizeStep / 2);
-        int newY = rc.top  - (resizeStep / 2);
+        int newY = rc.top - (resizeStep / 2);
 
         SetWindowPos(hWnd, nullptr, newX, newY, newW, newH,
                      SWP_NOZORDER | SWP_NOACTIVATE | SWP_NOCOPYBITS);
@@ -470,9 +495,9 @@ void MouseHandler::HandleMouseHWheel(HWND hWnd, WPARAM wParam, LPARAM /*lParam*/
     const int threshold = WHEEL_DELTA * Constants::MOUSE_HSCROLL_FOLDER_TICKS;
     if (std::abs(s_accumulator) < threshold) return;
 
-    const int total = (int)snap.size();
+    const int total = (int) snap.size();
     if (s_accumulator > 0) s_histIdx = (s_histIdx + 1) % total;
-    else                    s_histIdx = (s_histIdx - 1 + total) % total;
+    else s_histIdx = (s_histIdx - 1 + total) % total;
     s_accumulator = 0;
 
     const std::wstring folder = snap[s_histIdx]; // copy — snap must not be used after OpenDirectory
@@ -486,16 +511,16 @@ void MouseHandler::HandleMouseHWheel(HWND hWnd, WPARAM wParam, LPARAM /*lParam*/
         if (histWnd.IsVisible())
             InvalidateRect(histWnd.GetHwnd(), nullptr, FALSE);
         g_overlayManager.PostCenterMessage(hWnd,
-            std::wstring(L"⚠ ") +
-            std::to_wstring(s_histIdx + 1) + L"/" + std::to_wstring(total) + L" " + displayName);
+                                           std::wstring(L"⚠ ") +
+                                           std::to_wstring(s_histIdx + 1) + L"/" + std::to_wstring(total) + L" " + displayName);
         return;
     }
 
     OpenDirectory(hWnd, folder);
 
     g_overlayManager.PostCenterMessage(hWnd,
-        Constants::Messages::HISTORY_NAV_FOLDER +
-        std::to_wstring(s_histIdx + 1) + L"/" + std::to_wstring(total) + L" " + displayName);
+                                       Constants::Messages::HISTORY_NAV_FOLDER +
+                                       std::to_wstring(s_histIdx + 1) + L"/" + std::to_wstring(total) + L" " + displayName);
 }
 
 void MouseHandler::HandleDoubleClick(HWND hWnd) {

@@ -15,9 +15,10 @@ namespace MouseHandler {
     }
 
     //Mouse Handlers
-    void HandleButtonDown(HWND hWnd, UINT message, LPARAM lParam);
 
-    void HandleButtonUp(HWND hWnd, UINT message, LPARAM lParam);
+    void HandleButtonDown(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam);
+
+    void HandleButtonUp(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam);
 
     void HandleMouseMove(HWND hWnd, LPARAM lParam);
 
