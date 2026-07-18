@@ -111,8 +111,8 @@ static void ClampViewportOffset(HWND hWnd) {
 // =============================================================================
 // handleKeyboard — public entry point called from WM_KEYDOWN
 // =============================================================================
-void InputManager::handleKeyboard(HWND hWnd, WPARAM wParam) {
-    Command cmd = ResolveKeyboardKeys(static_cast<UINT>(wParam));
+void InputManager::handleKeyboard(HWND hWnd, WPARAM wParam, LPARAM lParam) {
+    Command cmd = ResolveKeyboardKeys(static_cast<UINT>(wParam), lParam);
     if (cmd != Command::None) {
         ExecuteKeyboardShortcutCommand(hWnd, cmd);
     }
@@ -325,8 +325,8 @@ void InputManager::ExecuteKeyboardShortcutCommand(HWND hWnd, Command cmd) {
             }
             uiManager.Toggle(cacheWnd);
             g_overlayManager.PostCenterMessage(hWnd, cacheWasVisible
-                ? Constants::Messages::CACHE_WINDOW_HIDDEN_MSG
-                : Constants::Messages::CACHE_WINDOW_VISIBLE_MSG);
+                                                         ? Constants::Messages::CACHE_WINDOW_HIDDEN_MSG
+                                                         : Constants::Messages::CACHE_WINDOW_VISIBLE_MSG);
             break;
         }
 
@@ -346,8 +346,8 @@ void InputManager::ExecuteKeyboardShortcutCommand(HWND hWnd, Command cmd) {
             }
             uiManager.Toggle(dirWnd);
             g_overlayManager.PostCenterMessage(hWnd, dirWasVisible
-                ? Constants::Messages::DIR_WINDOW_HIDDEN_MSG
-                : Constants::Messages::DIR_WINDOW_VISIBLE_MSG);
+                                                         ? Constants::Messages::DIR_WINDOW_HIDDEN_MSG
+                                                         : Constants::Messages::DIR_WINDOW_VISIBLE_MSG);
             break;
         }
 

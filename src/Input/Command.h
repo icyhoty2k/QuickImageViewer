@@ -36,8 +36,8 @@ enum class Command {
     RotateCCW,
     FlipH,
     FlipV,
-    ToggleThumbnailWrapAround,  // B — toggle thumbnail strip wheel wrap-around
-    ToggleThumbnailEffects,     // U — toggle thumbnail strip visual effects (rounded corners, glow, hover scale)
+    ToggleThumbnailWrapAround, // B — toggle thumbnail strip wheel wrap-around
+    ToggleThumbnailEffects, // U — toggle thumbnail strip visual effects (rounded corners, glow, hover scale)
 
     // --- Fullscreen ---
     ToggleFullscreen,
@@ -184,10 +184,10 @@ enum class Command {
 
 class InputManager {
     public:
-        static void handleKeyboard(HWND hWnd, WPARAM wParam);
+        static void handleKeyboard(HWND hWnd, WPARAM wParam, LPARAM lParam);
 
     private:
-        static Command ResolveKeyboardKeys(UINT key);
+        static Command ResolveKeyboardKeys(UINT key, LPARAM lParam);
 
         static void ExecuteKeyboardShortcutCommand(HWND hWnd, Command cmd);
 };
