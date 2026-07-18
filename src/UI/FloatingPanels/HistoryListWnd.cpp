@@ -846,27 +846,31 @@ namespace UI {
                         const FolderStatus rowStatus = (_sit != g_statusCache.end())
                                                            ? _sit->second
                                                            : FolderStatus::Unknown;
-                        const bool isDead = (rowStatus == FolderStatus::Missing ||
-                                             rowStatus == FolderStatus::Empty);
+                        const bool isMissing = (rowStatus == FolderStatus::Missing);
+                        const bool isEmpty   = (rowStatus == FolderStatus::Empty);
 
                         // Hover background
                         if (i == g_hoverRow) {
                             HBRUSH hHover = CreateSolidBrush(
-                                    isDead
+                                    isMissing
                                         ? RGB(60, 20, 20)
-                                        : entry.isFavorite
-                                              ? RGB(50, 50, 10)
-                                              : RGB(40, 60, 80));
+                                        : isEmpty
+                                              ? RGB(50, 35, 10)
+                                              : entry.isFavorite
+                                                    ? RGB(50, 50, 10)
+                                                    : RGB(40, 60, 80));
                             FillRect(hdc, &rowRect, hHover);
                             DeleteObject(hHover);
                         }
 
-                        // Row index number — red for dead, green for current, blue otherwise
-                        SetTextColor(hdc, isDead
+                        // Row index number — red for missing, orange for empty, green for current, blue otherwise
+                        SetTextColor(hdc, isMissing
                                               ? Constants::Theme::HistoryPanel::PATH_DEAD_DRIVE
-                                              : (isCurrent
-                                                     ? Constants::Theme::HistoryPanel::PATH_DRIVE_CURRENT
-                                                     : RGB(100, 180, 255)));
+                                              : isEmpty
+                                                    ? Constants::Theme::HistoryPanel::PATH_EMPTY_DRIVE
+                                                    : (isCurrent
+                                                           ? Constants::Theme::HistoryPanel::PATH_DRIVE_CURRENT
+                                                           : RGB(100, 180, 255)));
                         SelectObject(hdc, m_hFontIndexLink);
                         std::wstring idxStr = std::to_wstring(i + 1);
                         RECT idxRect = {
@@ -885,9 +889,13 @@ namespace UI {
                                 rc.left + padding + indexW + MulDiv(4, dpi, 96), rowTop,
                                 rc.left + padding + indexW + MulDiv(4, dpi, 96) + starW, rowBottom
                             };
-                            if (isDead) {
+                            if (isMissing) {
                                 SetTextColor(hdc, Constants::Theme::HistoryPanel::PATH_DEAD_DRIVE);
                                 DrawTextW(hdc, L"⚠", -1, &slotRect,
+                                          DT_CENTER | DT_VCENTER | DT_SINGLELINE);
+                            } else if (isEmpty) {
+                                SetTextColor(hdc, Constants::Theme::HistoryPanel::PATH_EMPTY_DRIVE);
+                                DrawTextW(hdc, L"∅", -1, &slotRect,
                                           DT_CENTER | DT_VCENTER | DT_SINGLELINE);
                             } else if (entry.isFavorite) {
                                 SetTextColor(hdc, RGB(255, 220, 0));
@@ -900,33 +908,44 @@ namespace UI {
                         const bool isHov = (i == g_hoverRow);
                         const bool isFav = entry.isFavorite;
 
-                        COLORREF driveColor = isDead
+                        // Normal-row colors scale with theme factor so they stay readable in light mode
+                        const COLORREF clrNormDrive  = Constants::Theme::ThemedColor(0.392f, 0.725f, 0.804f, app.themeFactor);
+                        const COLORREF clrNormMiddle = Constants::Theme::ThemedGray(0.784f, app.themeFactor);
+                        const COLORREF clrNormFolder = Constants::Theme::ThemedColor(0.910f, 0.843f, 0.667f, app.themeFactor);
+
+                        COLORREF driveColor = isMissing
                                                   ? Constants::Theme::HistoryPanel::PATH_DEAD_DRIVE
-                                                  : (isCurrent
-                                                         ? Constants::Theme::HistoryPanel::PATH_DRIVE_CURRENT
-                                                         : (isFav
-                                                                ? (isHov ? Constants::Theme::HistoryPanel::PATH_DRIVE_FAV_HOVER : Constants::Theme::HistoryPanel::PATH_DRIVE_FAV)
-                                                                : (isHov
-                                                                       ? Constants::Theme::HistoryPanel::PATH_DRIVE_HOVER
-                                                                       : Constants::Theme::HistoryPanel::PATH_DRIVE)));
-                        COLORREF middleColor = isDead
+                                                  : isEmpty
+                                                        ? Constants::Theme::HistoryPanel::PATH_EMPTY_DRIVE
+                                                        : (isCurrent
+                                                               ? Constants::Theme::HistoryPanel::PATH_DRIVE_CURRENT
+                                                               : (isFav
+                                                                      ? (isHov ? Constants::Theme::HistoryPanel::PATH_DRIVE_FAV_HOVER : Constants::Theme::HistoryPanel::PATH_DRIVE_FAV)
+                                                                      : (isHov
+                                                                             ? Constants::Theme::HistoryPanel::PATH_DRIVE_HOVER
+                                                                             : clrNormDrive)));
+                        COLORREF middleColor = isMissing
                                                    ? Constants::Theme::HistoryPanel::PATH_DEAD_MIDDLE
-                                                   : (isCurrent
-                                                          ? Constants::Theme::HistoryPanel::PATH_MIDDLE_CURRENT
-                                                          : (isFav
-                                                                 ? (isHov ? RGB(255, 255, 160) : RGB(255, 240, 120))
-                                                                 : (isHov
-                                                                        ? RGB(255, 255, 255)
-                                                                        : RGB(200, 200, 200))));
-                        COLORREF folderColor = isDead
+                                                   : isEmpty
+                                                         ? Constants::Theme::HistoryPanel::PATH_EMPTY_MIDDLE
+                                                         : (isCurrent
+                                                                ? Constants::Theme::HistoryPanel::PATH_MIDDLE_CURRENT
+                                                                : (isFav
+                                                                       ? (isHov ? RGB(255, 255, 160) : RGB(255, 240, 120))
+                                                                       : (isHov
+                                                                              ? RGB(255, 255, 255)
+                                                                              : clrNormMiddle)));
+                        COLORREF folderColor = isMissing
                                                    ? Constants::Theme::HistoryPanel::PATH_DEAD_FOLDER
-                                                   : (isCurrent
-                                                          ? Constants::Theme::HistoryPanel::PATH_FOLDER_CURRENT
-                                                          : (isFav
-                                                                 ? (isHov ? Constants::Theme::HistoryPanel::PATH_FOLDER_FAV_HOVER : Constants::Theme::HistoryPanel::PATH_FOLDER_FAV)
-                                                                 : (isHov
-                                                                        ? Constants::Theme::HistoryPanel::PATH_FOLDER_HOVER
-                                                                        : Constants::Theme::HistoryPanel::PATH_FOLDER)));
+                                                   : isEmpty
+                                                         ? Constants::Theme::HistoryPanel::PATH_EMPTY_FOLDER
+                                                         : (isCurrent
+                                                                ? Constants::Theme::HistoryPanel::PATH_FOLDER_CURRENT
+                                                                : (isFav
+                                                                       ? (isHov ? Constants::Theme::HistoryPanel::PATH_FOLDER_FAV_HOVER : Constants::Theme::HistoryPanel::PATH_FOLDER_FAV)
+                                                                       : (isHov
+                                                                              ? Constants::Theme::HistoryPanel::PATH_FOLDER_HOVER
+                                                                              : clrNormFolder)));
 
                         // Split path into (drive, middle, folder)
                         const std::wstring &fp = entry.path;
@@ -1011,9 +1030,11 @@ namespace UI {
                             std::wstring sizeCountStr = sizeStr + L"/" + std::to_wstring(imgCount);
                             LONG colLeft  = rowRight;
                             LONG colRight = rc.right - padding - (needsScrollbar ? SB_W + 2 : 0);
-                            SetTextColor(hdc, isDead
+                            SetTextColor(hdc, isMissing
                                                   ? Constants::Theme::HistoryPanel::PATH_DEAD_MIDDLE
-                                                  : RGB(140, 200, 140));
+                                                  : isEmpty
+                                                        ? Constants::Theme::HistoryPanel::PATH_EMPTY_MIDDLE
+                                                        : RGB(140, 200, 140));
                             RECT scr = {colLeft, rowTop, colRight, rowBottom};
                             DrawTextW(hdc, sizeCountStr.c_str(), -1, &scr,
                                       DT_RIGHT | DT_VCENTER | DT_SINGLELINE);

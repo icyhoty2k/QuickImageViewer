@@ -108,10 +108,14 @@ namespace Constants {
             constexpr COLORREF PATH_DRIVE_CURRENT = RGB(80, 195, 115); // mid-green for drive letter
             constexpr COLORREF PATH_MIDDLE_CURRENT = RGB(100, 160, 120); // muted green for middle path
             constexpr COLORREF PATH_FOLDER_CURRENT = RGB(160, 230, 165); // bright pale-green for folder name
-            // Dead folder row text colors — folder missing or contains no images:
+            // Missing folder row text colors — folder does not exist on disk:
             constexpr COLORREF PATH_DEAD_DRIVE = RGB(210, 70, 70); // red for drive / index / warning glyph
             constexpr COLORREF PATH_DEAD_MIDDLE = RGB(160, 60, 60); // darker red for middle path
             constexpr COLORREF PATH_DEAD_FOLDER = RGB(230, 100, 100); // lighter red for folder name
+            // Empty folder row text colors — folder exists but contains no supported images:
+            constexpr COLORREF PATH_EMPTY_DRIVE = RGB(200, 130, 50); // orange for drive / index / empty glyph
+            constexpr COLORREF PATH_EMPTY_MIDDLE = RGB(150, 100, 40); // darker orange for middle path
+            constexpr COLORREF PATH_EMPTY_FOLDER = RGB(220, 165, 85); // lighter orange for folder name
         }
 
         // =====================================================================
