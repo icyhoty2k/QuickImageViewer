@@ -6,7 +6,7 @@
 // *** Update ONLY the four numbers below to bump the version everywhere ***
 // =========================================================================
 #define VER_MAJOR 2
-#define VER_MINOR 6
+#define VER_MINOR 7
 #define VER_PATCH 0
 #define VER_BUILD 0
 
@@ -263,7 +263,7 @@ namespace Constants {
     // ---------------------------------------------------------------------------
     constexpr bool WATCH_DIR_FOR_CHANGES = true; // master on/off switch
     constexpr UINT DIR_WATCHER_DEBOUNCE_MS = 400; // quiet period before auto-refresh fires
-    constexpr UINT_PTR DIR_WATCHER_TIMER_ID = 1008;       // main-window dir-change debounce tick
+    constexpr UINT_PTR DIR_WATCHER_TIMER_ID = 1008; // main-window dir-change debounce tick
     constexpr UINT_PTR PANEL_DIR_WATCHER_TIMER_ID = 1009; // per-panel dir-change debounce tick
 
     // First-character panel-switch triggers
