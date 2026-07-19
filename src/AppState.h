@@ -127,6 +127,9 @@ struct AppState {
     bool isFullscreen = false;
     RECT savedWindowRect = {0, 0, 0, 0};
 
+    // Autosize toggle (Ctrl+Space)
+    bool isAutosized = false;
+
     bool isDialogVisible = false;
     bool isLocked = false; // -lock:      KIOSK mode — blocks all keyboard and mouse input
     bool isDedicated = false; // -dedicated: no registry writes, separate history file
