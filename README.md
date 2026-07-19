@@ -284,6 +284,7 @@ QuickImageViewer.exe [image_path] [options]
 | `-hideMouse` | Hide the mouse cursor at startup |
 | `-lock` | KIOSK mode — all keyboard and mouse input is ignored |
 | `-dedicated` | Isolated instance: separate history, tray icon and mutex |
+| `-RestoreDefaults` | Wipe all saved settings from the registry, show a confirmation dialog, and exit — recovery fallback if the app misbehaves after a config change |
 
 **Kiosk example:**
 ```
