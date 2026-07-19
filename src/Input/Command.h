@@ -6,7 +6,7 @@
 //
 // Flow: WM_KEYDOWN → InputManager::handleKeyboard()
 //           Stage 1: ResolveKeyboardKeys()          → Command
-//           Stage 2: ExecuteKeyboardShortcutCommand() → side effects
+//           Stage 2: ExecuteCommand()                 → side effects
 // =============================================================================
 
 enum class Command {
@@ -188,9 +188,8 @@ enum class Command {
 class InputManager {
     public:
         static void handleKeyboard(HWND hWnd, WPARAM wParam, LPARAM lParam);
+        static void ExecuteCommand(HWND hWnd, Command cmd);
 
     private:
         static Command ResolveKeyboardKeys(UINT key, LPARAM lParam);
-
-        static void ExecuteKeyboardShortcutCommand(HWND hWnd, Command cmd);
 };

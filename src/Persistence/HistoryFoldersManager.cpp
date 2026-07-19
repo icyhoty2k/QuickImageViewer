@@ -135,9 +135,7 @@ void HistoryFoldersManager::LoadHistoryFromDisk() {
             while (std::getline(fav, line)) {
                 if (!line.empty() && line.back() == L'\r') line.pop_back();
                 if (line.empty()) continue;
-                if (static_cast<int>(favorites.size()) >= app.historyMaxFavs)
-                    break;
-                favorites.insert(line);
+                favorites.insert(line); // no cap — all favorites must always be loadable
             }
         }
     }
@@ -182,6 +180,91 @@ void HistoryFoldersManager::LoadHistoryFromDisk() {
 
     // File is oldest-first; reverse so index 0 = most recently visited
     std::reverse(folderHistory.begin(), folderHistory.end());
+}
+
+// ---------------------------------------------------------------------------
+// MergeHistoryFromDisk
+//   Merges disk state into the current in-memory MRU list without destroying
+//   the in-memory order.  Both history and favorites are merged two-way,
+//   duplicate-free:
+//     Memory → disk : appends entries present in RAM but absent from the file.
+//     Disk → memory : adds entries present in the file but absent from RAM.
+//
+//   Missing files are treated as empty (no crash, no data loss).
+//   History uses append-only writes.  Favorites use a full rewrite only when
+//   RAM has entries the file does not (the file is small, ≤ historyMaxFavs).
+// ---------------------------------------------------------------------------
+void HistoryFoldersManager::MergeHistoryFromDisk() {
+    // ---- HISTORY --------------------------------------------------------
+    std::vector<std::wstring> diskList;
+    std::unordered_set<std::wstring> diskSet;
+    {
+        std::wifstream file(GetFilePath());
+        if (file.is_open()) {
+            std::wstring line;
+            while (std::getline(file, line)) {
+                if (!line.empty() && line.back() == L'\r') line.pop_back();
+                if (line.empty()) continue;
+                // Legacy '*' prefix — treat path as history entry
+                if (line.front() == static_cast<wchar_t>(Constants::History::HISTORY_FAVORITES_MARK))
+                    line = line.substr(1);
+                if (line.empty() || diskSet.count(line)) continue;
+                diskList.push_back(line);
+                diskSet.insert(line);
+            }
+        }
+        // Missing file → diskList empty; memory entries will recreate it via appends below.
+    }
+    // Disk file is oldest-first; reverse so newest entries are appended to memory last
+    // (they belong at lower priority than anything already in the MRU list).
+    std::reverse(diskList.begin(), diskList.end());
+
+    // Memory → disk: entries in RAM that are not on disk
+    for (const auto &path : folderHistory) {
+        if (!diskSet.count(path))
+            AppendNewFolderToDisk(path);
+    }
+
+    // Disk → memory: entries on disk that are not in RAM
+    {
+        std::unordered_set<std::wstring> memSet(folderHistory.begin(), folderHistory.end());
+        for (const auto &path : diskList) {
+            if (!memSet.count(path) &&
+                static_cast<int>(folderHistory.size()) < app.historyMaxDirsSave) {
+                folderHistory.push_back(path);
+                memSet.insert(path);
+            }
+        }
+    }
+
+    // ---- FAVORITES ------------------------------------------------------
+    std::unordered_set<std::wstring> diskFavSet;
+    {
+        std::wifstream fav(GetFavoritesFilePath());
+        if (fav.is_open()) {
+            std::wstring line;
+            while (std::getline(fav, line)) {
+                if (!line.empty() && line.back() == L'\r') line.pop_back();
+                if (!line.empty())
+                    diskFavSet.insert(line);
+            }
+        }
+        // Missing file → diskFavSet empty; memory favorites will be rewritten below if any.
+    }
+
+    // Disk → memory: disk favorites not in RAM (no cap — all favorites must be visible)
+    for (const auto &path : diskFavSet) {
+        if (!favorites.count(path))
+            favorites.insert(path);
+    }
+
+    // Memory → disk: if RAM has favorites the file does not, rewrite (file is small)
+    bool memHasNewFavs = false;
+    for (const auto &path : favorites) {
+        if (!diskFavSet.count(path)) { memHasNewFavs = true; break; }
+    }
+    if (memHasNewFavs)
+        RewriteFavoritesToDisk();
 }
 
 // ---------------------------------------------------------------------------

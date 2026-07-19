@@ -263,12 +263,16 @@ namespace UI {
                     *pdwEffect = DROPEFFECT_NONE;
                     return S_OK;
                 }
-                *pdwEffect = calcEffect(keyState);
+                const DWORD eff = calcEffect(keyState);
+                const bool allowed = (eff == DROPEFFECT_COPY) ? app.thumbCopyEnabled : app.thumbMoveEnabled;
+                *pdwEffect = allowed ? eff : DROPEFFECT_NONE;
                 return S_OK;
             }
 
             HRESULT __stdcall DragOver(DWORD keyState, POINTL, DWORD *pdwEffect) override {
-                *pdwEffect = calcEffect(keyState);
+                const DWORD eff = calcEffect(keyState);
+                const bool allowed = (eff == DROPEFFECT_COPY) ? app.thumbCopyEnabled : app.thumbMoveEnabled;
+                *pdwEffect = allowed ? eff : DROPEFFECT_NONE;
                 return S_OK;
             }
 
@@ -278,6 +282,10 @@ namespace UI {
 
             HRESULT __stdcall Drop(IDataObject *pDataObj, DWORD keyState, POINTL, DWORD *pdwEffect) override {
                 const bool isCopy = (keyState & MK_CONTROL) != 0;
+                if (isCopy ? !app.thumbCopyEnabled : !app.thumbMoveEnabled) {
+                    *pdwEffect = DROPEFFECT_NONE;
+                    return S_OK;
+                }
                 *pdwEffect = isCopy ? DROPEFFECT_COPY : DROPEFFECT_MOVE;
 
                 FORMATETC fe = {CF_HDROP, nullptr, DVASPECT_CONTENT, -1, TYMED_HGLOBAL};
@@ -1019,34 +1027,40 @@ namespace UI {
                     };
 
                     if (ctrl && key == 'C') {
-                        const auto paths = buildOpPaths();
-                        if (!paths.empty()) {
-                            s_cutPaths.clear();
-                            AppCommands::CopyFilesToClipboard(m_hOwner, paths);
-                            uiManager.RepaintAllPanels();
+                        if (app.thumbCopyEnabled) {
+                            const auto paths = buildOpPaths();
+                            if (!paths.empty()) {
+                                s_cutPaths.clear();
+                                AppCommands::CopyFilesToClipboard(m_hOwner, paths);
+                                uiManager.RepaintAllPanels();
+                            }
                         }
                         return 0;
                     }
                     if (ctrl && key == 'X') {
-                        const auto paths = buildOpPaths();
-                        if (!paths.empty()) {
-                            AppCommands::CopyFilesToClipboard(m_hOwner, paths, true);
-                            s_cutPaths.clear();
-                            for (const auto &p: paths) s_cutPaths.insert(p);
-                            uiManager.RepaintAllPanels();
+                        if (app.thumbMoveEnabled) {
+                            const auto paths = buildOpPaths();
+                            if (!paths.empty()) {
+                                AppCommands::CopyFilesToClipboard(m_hOwner, paths, true);
+                                s_cutPaths.clear();
+                                for (const auto &p: paths) s_cutPaths.insert(p);
+                                uiManager.RepaintAllPanels();
+                            }
                         }
                         return 0;
                     }
                     if (ctrl && key == 'V') {
-                        std::wstring pasteDir = GetPanelFolder();
-                        if (!pasteDir.empty() && AppCommands::ClipboardHasFiles()) {
-                            std::wstring srcDir;
-                            if (!s_cutPaths.empty())
-                                srcDir = fs::path(*s_cutPaths.begin()).parent_path().wstring();
-                            AppCommands::PasteFilesFromClipboard(m_hOwner, pasteDir);
-                            s_cutPaths.clear();
-                            uiManager.RefreshPanelDirs(srcDir, pasteDir);
-                            uiManager.RepaintAllPanels();
+                        if (app.thumbPasteEnabled) {
+                            std::wstring pasteDir = GetPanelFolder();
+                            if (!pasteDir.empty() && AppCommands::ClipboardHasFiles()) {
+                                std::wstring srcDir;
+                                if (!s_cutPaths.empty())
+                                    srcDir = fs::path(*s_cutPaths.begin()).parent_path().wstring();
+                                AppCommands::PasteFilesFromClipboard(m_hOwner, pasteDir);
+                                s_cutPaths.clear();
+                                uiManager.RefreshPanelDirs(srcDir, pasteDir);
+                                uiManager.RepaintAllPanels();
+                            }
                         }
                         return 0;
                     }
@@ -1063,13 +1077,15 @@ namespace UI {
                         return 0;
                     }
                     if (key == VK_DELETE) {
-                        const auto paths = buildOpPaths();
-                        if (!paths.empty()) {
-                            for (const auto &p: paths) s_cutPaths.erase(p);
-                            OnContextMenuDelete(paths);
-                            m_selectedPaths.clear();
-                            m_anchorPath.clear();
-                            NotifySelectionOverlay();
+                        if (app.thumbDeleteEnabled) {
+                            const auto paths = buildOpPaths();
+                            if (!paths.empty()) {
+                                for (const auto &p: paths) s_cutPaths.erase(p);
+                                OnContextMenuDelete(paths);
+                                m_selectedPaths.clear();
+                                m_anchorPath.clear();
+                                NotifySelectionOverlay();
+                            }
                         }
                         return 0;
                     }
@@ -1503,7 +1519,7 @@ namespace UI {
                 constexpr UINT ID_CTX_SELECT_INVERSE = 9;
 
                 const bool hasFiles = !opPaths.empty();
-                const bool canPaste = !pasteDir.empty() && AppCommands::ClipboardHasFiles();
+                const bool canPaste = !pasteDir.empty() && AppCommands::ClipboardHasFiles() && app.thumbPasteEnabled;
                 const bool showPaste = ShowContextMenuPaste();
                 const wchar_t *delLabel = ContextMenuDeleteLabel();
                 const wchar_t *extraLabel = ContextMenuExtraLabel();
@@ -1523,9 +1539,9 @@ namespace UI {
 
                 HMENU hMenu = CreatePopupMenu();
                 if (!hMenu) return 0;
-                AppendMenuW(hMenu, hasFiles ? MF_STRING : (MF_STRING | MF_GRAYED), ID_CTX_COPY, copyLabel.c_str());
-                AppendMenuW(hMenu, hasFiles ? MF_STRING : (MF_STRING | MF_GRAYED), ID_CTX_CUT, cutLabel.c_str());
-                AppendMenuW(hMenu, hasFiles ? MF_STRING : (MF_STRING | MF_GRAYED), ID_CTX_DELETE, deleteLabel.c_str());
+                AppendMenuW(hMenu, (hasFiles && app.thumbCopyEnabled)   ? MF_STRING : (MF_STRING | MF_GRAYED), ID_CTX_COPY,   copyLabel.c_str());
+                AppendMenuW(hMenu, (hasFiles && app.thumbMoveEnabled)   ? MF_STRING : (MF_STRING | MF_GRAYED), ID_CTX_CUT,    cutLabel.c_str());
+                AppendMenuW(hMenu, (hasFiles && app.thumbDeleteEnabled) ? MF_STRING : (MF_STRING | MF_GRAYED), ID_CTX_DELETE, deleteLabel.c_str());
                 if (showPaste) {
                     AppendMenuW(hMenu, MF_SEPARATOR, 0, nullptr);
                     AppendMenuW(hMenu, canPaste ? MF_STRING : (MF_STRING | MF_GRAYED), ID_CTX_PASTE, L"Paste");

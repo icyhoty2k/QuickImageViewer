@@ -114,14 +114,16 @@ static void ClampViewportOffset(HWND hWnd) {
 void InputManager::handleKeyboard(HWND hWnd, WPARAM wParam, LPARAM lParam) {
     Command cmd = ResolveKeyboardKeys(static_cast<UINT>(wParam), lParam);
     if (cmd != Command::None) {
-        ExecuteKeyboardShortcutCommand(hWnd, cmd);
+        ExecuteCommand(hWnd, cmd);
     }
 }
 
 // =============================================================================
-// ExecuteKeyboardShortcutCommand — Stage 2: Command → side effects
+// ExecuteCommand — runs a fully-resolved Command and applies all side effects.
+// Call from any input path (keyboard, mouse click, tray) to guarantee identical
+// behavior regardless of how the action was triggered.
 // =============================================================================
-void InputManager::ExecuteKeyboardShortcutCommand(HWND hWnd, Command cmd) {
+void InputManager::ExecuteCommand(HWND hWnd, Command cmd) {
     switch (cmd) {
         // -----------------------------------------------------------------------
         // Navigation
