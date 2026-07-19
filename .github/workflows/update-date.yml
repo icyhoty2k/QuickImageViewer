@@ -25,3 +25,17 @@ jobs:
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git diff --quiet docs/index.html || git commit -am "chore: update dateModified to $(date -u +%Y-%m-%d) [skip ci]"
           git push
+
+      - name: Notify IndexNow
+        run: |
+          curl -s -o /dev/null -w "%{http_code}" -X POST "https://api.indexnow.org/IndexNow" \
+            -H "Content-Type: application/json; charset=utf-8" \
+            -d '{
+              "host": "icyhoty2k.github.io",
+              "key": "f2bb14e6011a4b8cb9243d4feb59f985",
+              "keyLocation": "https://icyhoty2k.github.io/QuickImageViewer/f2bb14e6011a4b8cb9243d4feb59f985.txt",
+              "urlList": [
+                "https://icyhoty2k.github.io/QuickImageViewer/",
+                "https://icyhoty2k.github.io/QuickImageViewer/index.html"
+              ]
+            }'
