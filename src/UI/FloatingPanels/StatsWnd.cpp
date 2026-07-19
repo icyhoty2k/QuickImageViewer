@@ -1,6 +1,7 @@
 #include "StatsWnd.h"
 #include "../../AppState.h"
 #include "../../Platform/Constants.h"
+#include "../../Platform/WriteQueue.h"
 #include "../../Persistence/RegistryManager.h"
 #include "../../WorkerThread.h"
 #include "../../Renderer/IRenderer.h"
@@ -149,12 +150,13 @@ namespace UI {
         m_instanceCount = app.GetInstanceCount();
 
         // ── Thread counts & queue depths ──────────────────────────────────────────
-        m_ioThreads = g_ioWorker.getThreadCount();
-        m_wicThreads = g_decoderWorker.getThreadCount();
-        m_dirThumbThreads = g_dirThumbWorker.getThreadCount();
-        m_ioPending = static_cast<int>(g_ioWorker.PendingTaskCount());
-        m_wicPending = static_cast<int>(g_decoderWorker.PendingTaskCount());
-        m_dirThumbPending = static_cast<int>(g_dirThumbWorker.PendingTaskCount());
+        m_ioThreads         = g_ioWorker.getThreadCount();
+        m_wicThreads        = g_decoderWorker.getThreadCount();
+        m_dirThumbThreads   = g_dirThumbWorker.getThreadCount();
+        m_writeQueueThreads = g_writeQueue.ThreadCount();
+        m_ioPending         = static_cast<int>(g_ioWorker.PendingTaskCount());
+        m_wicPending        = static_cast<int>(g_decoderWorker.PendingTaskCount());
+        m_dirThumbPending   = static_cast<int>(g_dirThumbWorker.PendingTaskCount());
 
         // ── VRAM cache stats ──────────────────────────────────────────────────────
         m_imgCacheCount = 0;
@@ -673,7 +675,7 @@ namespace UI {
                 section(L"  THREADS & MEMORY", clrPurple);
 
                 {
-                    int totalThreads = 1 + m_ioThreads + m_wicThreads + m_dirThumbThreads;
+                    int totalThreads = 1 + m_ioThreads + m_wicThreads + m_dirThumbThreads + m_writeQueueThreads;
                     wchar_t buf[32];
                     swprintf_s(buf, L"%d", totalThreads);
                     row2(L"Total app threads", buf, clrValue, true);
@@ -713,6 +715,11 @@ namespace UI {
                         swprintf_s(q, L"%d pending", m_dirThumbPending);
                         row2(L"    queue", q, clrOrange);
                     }
+                }
+                {
+                    wchar_t buf[64];
+                    swprintf_s(buf, L"%d  (async registry / file drain)", m_writeQueueThreads);
+                    row2(L"  Write queue", buf, clrCyan);
                 }
                 {
                     wchar_t buf[32];

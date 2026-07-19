@@ -3,6 +3,7 @@
 #include "../Overlays/OverlayManager.h"
 #include "../Platform/ConstantsStrings.h"
 #include "../Platform/ConstantsTheme.h"
+#include "../Input/Shortcuts.h"
 #include <filesystem>
 #include <dwmapi.h>
 
@@ -296,13 +297,30 @@ namespace UI {
                         std::filesystem::path(folderPath),
                         std::filesystem::path(currentFolder))) {
                     const SlotInfo *slot = m_layout.getSlot(dirWnd.GetPosition());
-                    if (slot && !slot->name.empty())
-                        allLabels += L" [F5 -> " + slot->name + L"]";
+                    if (slot && !slot->name.empty()) {
+                        const int fNum = static_cast<int>(Shortcuts::SC_PANEL_DIR_TOGGLE) - VK_F1 + 1;
+                        allLabels += L" [F" + std::to_wstring(fNum) + L" -> " + slot->name + L"]";
+                    }
                 }
             } catch (...) {}
         }
 
         return allLabels;
+    }
+
+    SpawnedDirWnd *UIManager::FindSpawnedDirWnd(const std::wstring &folderPath) const {
+        for (auto *p : m_spawnedPool) {
+            if (!p->IsPanelVisible()) continue;
+            const std::wstring panelFolder = p->GetFolderPath();
+            if (panelFolder.empty()) continue;
+            try {
+                if (std::filesystem::equivalent(
+                        std::filesystem::path(folderPath),
+                        std::filesystem::path(panelFolder)))
+                    return p;
+            } catch (...) {}
+        }
+        return nullptr;
     }
 
     std::pair<std::wstring, int> UIManager::GetSpawnedDirWndSizeInfo(const std::wstring &folderPath) const {

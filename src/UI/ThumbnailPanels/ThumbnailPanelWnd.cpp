@@ -899,6 +899,10 @@ namespace UI {
             }
             return 0;
         }
+        if (message == WM_MBUTTONUP) {
+            Hide();
+            return 0;
+        }
 
         switch (message) {
             // -----------------------------------------------------------------

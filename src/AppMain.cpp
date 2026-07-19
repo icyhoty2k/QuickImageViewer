@@ -334,7 +334,7 @@ LRESULT CALLBACK MainAppWndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM l
             return 0;
 
         case WM_MBUTTONUP:
-            MouseHandler::HandleButtonDown(hWnd, message, wParam, lParam);
+            MouseHandler::HandleButtonUp(hWnd, message, wParam, lParam);
             return 0;
 
         case WM_MOUSEMOVE:
