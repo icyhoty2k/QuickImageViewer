@@ -120,6 +120,11 @@ namespace Constants {
     constexpr int IS_BASE_HEIGHT = 800;
 
     constexpr bool IS_SWAP_MOUSE_BUTTONS = true;
+    constexpr bool IS_CTRL_C_ENABLED       = true;
+    constexpr bool IS_THUMB_COPY_ENABLED   = true;
+    constexpr bool IS_THUMB_MOVE_ENABLED   = true;
+    constexpr bool IS_THUMB_DELETE_ENABLED = true;
+    constexpr bool IS_THUMB_PASTE_ENABLED  = true;
     // =========================================================================
     // EXIF WINDOW EMBEDDED THUMBNAIL PREVIEW
     // =========================================================================
@@ -338,6 +343,11 @@ namespace Constants {
         constexpr const wchar_t *SLIDESHOW_TRANSITION    = L"qivSlideshowTransition";
         constexpr const wchar_t *SORT_ORDER              = L"qivSortOrder";
         constexpr const wchar_t *SORT_REVERSE            = L"qivSortReverse";
+        constexpr const wchar_t *CTRL_C_ENABLED          = L"qivCtrlCEnabled";
+        constexpr const wchar_t *THUMB_COPY_ENABLED      = L"qivThumbCopy";
+        constexpr const wchar_t *THUMB_MOVE_ENABLED      = L"qivThumbMove";
+        constexpr const wchar_t *THUMB_DELETE_ENABLED    = L"qivThumbDelete";
+        constexpr const wchar_t *THUMB_PASTE_ENABLED     = L"qivThumbPaste";
     }
 
     namespace SettingsFile {

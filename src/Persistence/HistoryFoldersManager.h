@@ -45,6 +45,12 @@ struct HistoryFoldersManager {
     // Call once at startup before any push.
     void LoadHistoryFromDisk();
 
+    // Merges disk into the current in-memory list without destroying MRU order:
+    //   - Appends to disk any memory entries absent from the file (no duplicates).
+    //   - Appends to memory any disk entries absent from RAM (picked up from external edits).
+    // Favorites are fully reloaded (no ordering concern there).
+    void MergeHistoryFromDisk();
+
     // Appends 'folderPath' to qivHistory.txt only (genuinely new entries only).
     // Does NOT rewrite the whole file.
     void AppendNewFolderToDisk(const std::wstring &folderPath) const;

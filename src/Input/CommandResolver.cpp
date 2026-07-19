@@ -287,7 +287,7 @@ Command InputManager::ResolveKeyboardKeys(UINT key, LPARAM lParam) {
             break;
 
         case 'C':
-            if (ctrl && !alt && !shift) return Command::CopyToClipboard;
+            if (ctrl && !alt && !shift && app.ctrlCEnabled) return Command::CopyToClipboard;
             if (!ctrl && alt && !shift) return Command::SnapBottomRight;
             break;
 
