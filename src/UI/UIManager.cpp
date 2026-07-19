@@ -12,7 +12,6 @@ namespace UI {
     void UIManager::Init(HINSTANCE hInstance, HWND hMainWnd) {
         m_hInstance = hInstance;
         m_hMainWnd = hMainWnd;
-        LoadFolderHistoryFromDisk();
     }
 
     // -------------------------------------------------------------------------

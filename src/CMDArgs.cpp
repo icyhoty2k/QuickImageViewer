@@ -28,6 +28,7 @@ extern AppState app;
 //   -slideshowInterval N     Seconds between slides (integer)
 //   -hideMouse               Hide mouse cursor at startup
 //   -lock                    KIOSK mode: no keyboard or mouse input
+//   -RestoreDefaults         Wipe all registry settings, confirm, and exit (recovery fallback)
 //   <path>                   Positional: open this image file
 // =============================================================================
 CmdArgs ParseCmdArgs(int argc, LPWSTR *argv) {
@@ -88,6 +89,10 @@ CmdArgs ParseCmdArgs(int argc, LPWSTR *argv) {
             // -slideshowTransitionShuffle
         else if (_wcsicmp(arg.c_str(), L"-slideshowTransitionShuffle") == 0)
             args.transitionShuffle = true;
+
+            // Positional: first non-flag token is the image file
+        else if (_wcsicmp(arg.c_str(), L"-RestoreDefaults") == 0)
+            args.restoreDefaults = true;
 
             // Positional: first non-flag token is the image file
         else if (!arg.empty() && arg[0] != L'-' && args.imageFile.empty())
