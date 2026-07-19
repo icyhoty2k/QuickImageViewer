@@ -1,8 +1,10 @@
 #include "RegistryManager.h"
 #include <windows.h>
 #include <string>
+#include <algorithm>
 #include <shlobj.h>
 #include "../Platform/Constants.h"
+#include "../Platform/WriteQueue.h"
 #include "../AppState.h"
 
 extern AppState app;
@@ -147,9 +149,7 @@ namespace Persistence::Registry {
     }
 
     void SaveSetting(const wchar_t *valueName, DWORD value) {
-        const std::wstring key = PrefixedName(valueName);
-        RegSetKeyValueW(Constants::Registry::ROOT_HIVE, Constants::Registry::ROOT_KEY,
-                        key.c_str(), REG_DWORD, &value, sizeof(DWORD));
+        g_writeQueue.PushDword(PrefixedName(valueName), value);
     }
 
     DWORD LoadSetting(const wchar_t *valueName, DWORD defaultValue) {
@@ -162,9 +162,7 @@ namespace Persistence::Registry {
     }
 
     void SaveStringSetting(const wchar_t *valueName, const std::wstring &value) {
-        const std::wstring key = PrefixedName(valueName);
-        RegSetKeyValueW(Constants::Registry::ROOT_HIVE, Constants::Registry::ROOT_KEY, key.c_str(),
-                        REG_SZ, value.c_str(), static_cast<DWORD>((value.length() + 1) * sizeof(wchar_t)));
+        g_writeQueue.PushString(PrefixedName(valueName), value);
     }
 
     void LoadStringSetting(const wchar_t *valueName, wchar_t *buffer, DWORD bufferSize) {
@@ -188,5 +186,119 @@ namespace Persistence::Registry {
         while (!result.empty() && result.back() == L'\0')
             result.pop_back();
         return result;
+    }
+
+    void LoadAllSettings(AppState &a) {
+        // Open the key once. RegQueryValueExW then reads each value from the already-open
+        // handle — no per-setting open/close round-trips through the registry driver.
+        const std::wstring prefix = app.isDedicated
+            ? std::wstring(Constants::DedicatedMode::DEDICATED_MODE_GLOBAL_PREFIX)
+            : std::wstring{};
+
+        HKEY hKey = nullptr;
+        RegOpenKeyExW(Constants::Registry::ROOT_HIVE, Constants::Registry::ROOT_KEY,
+                      0, KEY_READ, &hKey);
+        // hKey is null on first launch (key doesn't exist yet); readDword returns defaults.
+
+        const auto readDword = [&](const wchar_t *name, DWORD def) -> DWORD {
+            if (!hKey) return def;
+            const std::wstring fullName = prefix + name;
+            DWORD val = def, size = sizeof(DWORD), type = 0;
+            if (RegQueryValueExW(hKey, fullName.c_str(), nullptr, &type,
+                                 reinterpret_cast<LPBYTE>(&val), &size) != ERROR_SUCCESS
+                || type != REG_DWORD)
+                return def;
+            return val;
+        };
+
+        a.isEnableRunOnStartup = readDword(
+            Constants::Registry::RUN_ON_STARTUP,
+            static_cast<DWORD>(Constants::IS_ENABLE_RUN_ON_STARTUP)) != 0;
+        a.isKeepInBackground = readDword(
+            Constants::Registry::KEEP_IN_BACKGROUND,
+            static_cast<DWORD>(Constants::IS_KEEP_IN_BACKGROUND)) != 0;
+        a.thumbnailEffectsEnabled = readDword(
+            Constants::Registry::THUMBNAIL_EFFECTS,
+            static_cast<DWORD>(Constants::ThumbnailPanel::ThumbnailEffects::EFFECTS_MASTER_ENABLED)) != 0;
+        a.historyFullModeEnabled = readDword(
+            Constants::Registry::HISTORY_FULL_MODE,
+            static_cast<DWORD>(Constants::History::HISTORY_SHOW_FULL_HISTORY)) != 0;
+        a.showOverlayInfoText = readDword(
+            Constants::Registry::OVERLAY_VISIBLE,
+            static_cast<DWORD>(Constants::Overlay::DEFAULT_SHOW_OVERLAY)) != 0;
+        a.openDirWndOnStart = readDword(
+            Constants::Registry::OPEN_DIRWND_ON_START,
+            static_cast<DWORD>(Constants::IS_OPEN_DIRWND_ON_START)) != 0;
+        a.overlayShowBackground = readDword(
+            Constants::Registry::OVERLAY_SHOW_BG,
+            static_cast<DWORD>(Constants::Overlay::IS_OVERLAY_SHOW_BACKGROUND)) != 0;
+        a.swapMouseButtons = readDword(
+            Constants::Registry::SWAP_MOUSE_BUTTONS,
+            static_cast<DWORD>(Constants::IS_SWAP_MOUSE_BUTTONS)) != 0;
+        a.invertWheelDirection = readDword(
+            Constants::Registry::WHEEL_INVERT,
+            static_cast<DWORD>(Constants::IS_MOUSE_VERTICAL_REVERSE_SCROLL_DIRECTION)) != 0;
+        a.invertWheelDirectionH = readDword(
+            Constants::Registry::WHEEL_INVERT_H,
+            static_cast<DWORD>(Constants::IS_MOUSE_HORIZONTAL_REVERSE_SCROLL_DIRECTION)) != 0;
+        a.vramCacheCount = std::max(0, std::min(999, static_cast<int>(
+            readDword(Constants::Registry::VRAM_CACHE_COUNT,
+                static_cast<DWORD>(Constants::IS_VRAM_CACHE_IMAGES_COUNT)))));
+        {
+            int m = std::max(1, std::min(5, static_cast<int>(
+                readDword(Constants::Registry::VIEW_MODE,
+                    static_cast<DWORD>(Constants::ViewModes::defaultViewMode)))));
+            a.viewMode = static_cast<Constants::ViewModes::ViewMode>(m);
+        }
+        a.baseWidth = std::max(240, std::min(16000, static_cast<int>(
+            readDword(Constants::Registry::BASE_WIDTH_KEY,
+                static_cast<DWORD>(Constants::IS_BASE_WIDTH)))));
+        a.baseHeight = std::max(240, std::min(16000, static_cast<int>(
+            readDword(Constants::Registry::BASE_HEIGHT_KEY,
+                static_cast<DWORD>(Constants::IS_BASE_HEIGHT)))));
+        a.startInFullscreen = readDword(Constants::Registry::START_FULLSCREEN, 0u) != 0;
+        a.historyMaxDirs = std::max(0, std::min(999, static_cast<int>(
+            readDword(Constants::Registry::HISTORY_MAX_DIRS,
+                static_cast<DWORD>(Constants::History::IS_HISTORY_MAX_DIRS_TO_SHOW)))));
+        a.historyMaxFavs = std::max(0, std::min(999, static_cast<int>(
+            readDword(Constants::Registry::HISTORY_MAX_FAVS,
+                static_cast<DWORD>(Constants::History::IS_HISTORY_MAX_FAVORITES_TO_SHOW)))));
+        a.dirThumbCacheMB = std::max(100, std::min(64000, static_cast<int>(
+            readDword(Constants::Registry::DIR_THUMB_CACHE_MB,
+                static_cast<DWORD>(Constants::IS_DIR_THUMB_CACHE_BUDGET_MB)))));
+        a.preloadLookaside = std::max(1, std::min(99, static_cast<int>(
+            readDword(Constants::Registry::PRELOAD_LOOKASIDE,
+                static_cast<DWORD>(Constants::IS_PRELOAD_LOOKASIDE_COUNT)))));
+        a.msgCenterDisplayMs = std::max(250, std::min(10000, static_cast<int>(
+            readDword(Constants::Registry::MSG_CENTER_MS,
+                static_cast<DWORD>(Constants::Overlay::IS_MSG_CENTER_DISPLAY_MS)))));
+        a.historyMaxDirsSave = std::max(1, std::min(99999, static_cast<int>(
+            readDword(Constants::Registry::HISTORY_MAX_DIRS_SAVE,
+                static_cast<DWORD>(Constants::History::IS_HISTORY_MAX_DIRS_TO_SAVE)))));
+        a.slideshow.intervalMs = std::max(100, std::min(60000, static_cast<int>(
+            readDword(Constants::Registry::SLIDESHOW_INTERVAL_MS,
+                static_cast<DWORD>(Constants::Slideshow::IS_INTERVAL_MS)))));
+        a.slideshow.loop = readDword(
+            Constants::Registry::SLIDESHOW_LOOP,
+            static_cast<DWORD>(Constants::Slideshow::IS_LOOP)) != 0;
+        a.slideshow.shuffle = readDword(
+            Constants::Registry::SLIDESHOW_SHUFFLE,
+            static_cast<DWORD>(Constants::Slideshow::IS_SHUFFLE)) != 0;
+        {
+            int t = std::max(0, std::min(5, static_cast<int>(
+                readDword(Constants::Registry::SLIDESHOW_TRANSITION,
+                    static_cast<DWORD>(TransitionType::Cut)))));
+            a.slideshow.transition.type = static_cast<TransitionType>(t);
+        }
+        a.fileHandlerDefaultSortOrder = std::max(0, std::min(4, static_cast<int>(
+            readDword(Constants::Registry::SORT_ORDER,
+                static_cast<DWORD>(Constants::FileHandler::FILE_HANDLER_DEFAULT_SORT_ORDER)))));
+        a.fileHandlerIsReverseSortOrder = readDword(
+            Constants::Registry::SORT_REVERSE,
+            static_cast<DWORD>(Constants::FileHandler::FILE_HANDLER_SORT_TYPE_IS_REVERSE)) != 0;
+        a.themeFactor = static_cast<float>(readDword(Constants::Registry::THEME_FACTOR,
+            static_cast<DWORD>(Constants::Theme::DEFAULT_THEME_FACTOR))) / 100.0f;
+
+        if (hKey) RegCloseKey(hKey);
     }
 }

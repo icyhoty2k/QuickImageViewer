@@ -434,14 +434,18 @@ void HandleScanComplete(HWND hWnd, ScanResult *result) {
     const bool updatePrimaryDir = result->updatePrimaryDirWnd;
     delete result;
 
-    // Load the target image BEFORE refreshing panels. NotifyFolderRefreshed
-    // triggers UpdateView in every matching panel, and UpdateView highlights the
-    // thumbnail matching app.currentIndex — which at this point is still stale
-    // (0 from the interim single-file playlist OpenSpecificImage installed).
-    // Refreshing first painted the selection on thumbnail 0 for one frame before
-    // LoadImageIndex corrected it — a visible flicker + selection jump when
-    // clicking from one DirWnd into another.
-    LoadImageIndex(hWnd, targetIdx);
+    // Pre-stage the final index so panels rebuild their highlight at the correct
+    // slot right away (refreshing with the stale interim index painted the
+    // selection on thumbnail 0 for one frame — visible flicker + jump). The real
+    // image load happens AFTER the refresh below: LoadImageIndex runs a
+    // synchronous selection sync against the panel's thumbnails, and calling it
+    // before the refresh made that sync run against the OLD folder's items —
+    // path match failed and one frame painted with no/wrong selection.
+    // currentIndex is restored first so LoadImageIndex's `currentIndex != index`
+    // guard (viewport reset + previousImageIndex tracking) behaves unchanged;
+    // nothing paints between here and the load, so the swap is invisible.
+    const int preRefreshIndex = app.currentIndex;
+    app.currentIndex = targetIdx;
 
     // Refresh every visible panel that cares about this folder — DirWnd,
     // SpawnedDirWnd instances watching the same dir, and CacheWnd.
@@ -461,11 +465,11 @@ void HandleScanComplete(HWND hWnd, ScanResult *result) {
     app.folderOverlayPath.clear();
     UI::NotifyFolderContentsChanged(scannedDir);
 
-    // The refresh may have re-sorted the panel's items (scan applies the user's
-    // sort order; the panel's local list was built with a plain name sort), so
-    // the current thumbnail can occupy a different slot now — snap the selection
-    // rectangle and scroll to it.
-    uiManager.getActiveDirWnd().SyncDirSelectionRectangle();
+    // Load the target image now that panels hold the new folder's thumbnails —
+    // LoadImageIndex's internal SyncDirSelectionRectangle snaps the selection
+    // rectangle and scroll to the correct (possibly re-sorted) slot.
+    app.currentIndex = preRefreshIndex;
+    LoadImageIndex(hWnd, targetIdx);
     InvalidateRect(hWnd, nullptr, FALSE);
 }
 
@@ -804,6 +808,23 @@ void OpenDirectory(HWND hWnd, const std::wstring &dirPathStr) {
         fs::path curParent = fs::canonical(fs::path(app.playlist[0]).parent_path(), ec);
         if (!ec && dirPath == curParent) {
             UI::PushFolderHistory(dirPath.wstring());
+            // The active panel may be a spawned DirWnd still showing a different
+            // folder — retarget it so history navigation always lands in the
+            // panel the user selected, even when the main viewer is already here.
+            UI::ThumbnailPanelWnd &activePanel = uiManager.getActiveDirWnd();
+            if (&activePanel != &uiManager.getDirWindow()) {
+                bool samefolder = false;
+                const std::wstring panelFolder = activePanel.GetPanelFolder();
+                if (!panelFolder.empty()) {
+                    std::error_code fec;
+                    samefolder = fs::equivalent(fs::path(panelFolder), dirPath, fec) && !fec;
+                }
+                if (!samefolder) {
+                    activePanel.ClearDirThumbnailCache();
+                    static_cast<UI::SpawnedDirWnd &>(activePanel).LoadFolder(dirPath.wstring());
+                    activePanel.UpdateDirView();
+                }
+            }
             LoadImageIndex(hWnd, 0);
             InvalidateRect(hWnd, nullptr, TRUE);
             UpdateWindow(hWnd);
@@ -840,8 +861,15 @@ void OpenDirectory(HWND hWnd, const std::wstring &dirPathStr) {
         // shows the empty-dir placeholder, and F5 can recover when images appear.
         UI::PushFolderHistory(dirPath.wstring());
         UpdateIoWorkerForPath(dirPath.wstring());
-        uiManager.getActiveDirWnd().ClearDirThumbnailCache();
-        const bool activeIsPrimary = (&uiManager.getActiveDirWnd() == &uiManager.getDirWindow());
+        UI::ThumbnailPanelWnd &activePanel = uiManager.getActiveDirWnd();
+        const bool activeIsPrimary = (&activePanel == &uiManager.getDirWindow());
+        activePanel.ClearDirThumbnailCache();
+        if (!activeIsPrimary) {
+            // Retarget the active spawned panel to the new (empty) folder so the
+            // empty-scan notify matches it and shows the placeholder there.
+            static_cast<UI::SpawnedDirWnd &>(activePanel).LoadFolder(dirPath.wstring());
+            activePanel.UpdateDirView();
+        }
         uint64_t emptyGen = ++g_scanGeneration;
         LaunchBackgroundScan(hWnd, dirPath.wstring(), L"", emptyGen,
                              app.fileHandlerDefaultSortOrder, app.fileHandlerIsReverseSortOrder,
@@ -860,15 +888,28 @@ void OpenDirectory(HWND hWnd, const std::wstring &dirPathStr) {
 
     UpdateIoWorkerForPath(dirPath.wstring());
     UI::PushFolderHistory(dirPath.wstring());
-    uiManager.getActiveDirWnd().ClearDirThumbnailCache();
-    const bool activeIsPrimary = (&uiManager.getActiveDirWnd() == &uiManager.getDirWindow());
-    if (activeIsPrimary)
+    UI::ThumbnailPanelWnd &activePanel = uiManager.getActiveDirWnd();
+    const bool activeIsPrimary = (&activePanel == &uiManager.getDirWindow());
+    activePanel.ClearDirThumbnailCache();
+    if (activeIsPrimary) {
         uiManager.getDirWindow().SetPlaylistCopy(app.playlist);
+    } else {
+        // The active panel is a spawned DirWnd — the user navigates history INTO
+        // that panel. Retarget it to the new folder now: LoadFolder installs the
+        // folder's files (name-sorted) immediately, and — critically — updates
+        // m_folderPath so the panel's OnFolderRefreshed accepts the sorted scan
+        // result when it arrives. Without this the panel still points at its old
+        // folder, rejects the result, and nothing updates anywhere.
+        static_cast<UI::SpawnedDirWnd &>(activePanel).LoadFolder(dirPath.wstring());
+        activePanel.UpdateDirView();
+    }
 
     LoadImageIndex(hWnd, 0);
     app.previousImageIndex = -1;
 
     // Background: full scan + sort. targetPath empty → navigate to index 0 after sort.
+    // When a spawned panel is active it adopts the result via LoadFolder above;
+    // the primary DirWnd keeps its own folder (activeIsPrimary = false skips it).
     LaunchBackgroundScan(hWnd, dirPath.wstring(), L"", gen,
                          app.fileHandlerDefaultSortOrder, app.fileHandlerIsReverseSortOrder,
                          activeIsPrimary);

@@ -4,6 +4,8 @@
 #include <windows.h>
 #include "../Platform/Constants.h"
 
+struct AppState;
+
 namespace Persistence::Registry {
     // Infrastructure
     void RegisterAppForOpenWith();
@@ -23,6 +25,10 @@ namespace Persistence::Registry {
     // Returns the registry string value as std::wstring; empty on missing/error.
     // Handles paths of any length (no MAX_PATH limit).
     std::wstring LoadStringSetting(const wchar_t *valueName);
+
+    // Load all persisted user settings from the registry into app.
+    // Mirrors the startup load block in wWinMain — call this instead of duplicating it.
+    void LoadAllSettings(AppState &app);
 
     // Returns the full path of this exe as std::wstring.
     // Handles paths of any length — never truncates.

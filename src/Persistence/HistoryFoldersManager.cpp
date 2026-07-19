@@ -3,8 +3,10 @@
 #include <windows.h>
 #include <filesystem>
 #include <fstream>
+#include <vector>
 #include "../AppState.h"
 #include "RegistryManager.h"
+#include "../Platform/WriteQueue.h"
 
 namespace fs = std::filesystem;
 
@@ -188,10 +190,12 @@ void HistoryFoldersManager::LoadHistoryFromDisk() {
 //   The caller guarantees this path is genuinely new (not already in folderHistory).
 // ---------------------------------------------------------------------------
 void HistoryFoldersManager::AppendNewFolderToDisk(const std::wstring &folderPath) const {
-    std::wofstream file(GetFilePath(), std::ios::out | std::ios::app);
-    if (!file.is_open())
-        return;
-    file << folderPath << L"\n";
+    std::wstring path = GetFilePath();
+    std::wstring entry = folderPath;
+    g_writeQueue.PushTask([path = std::move(path), entry = std::move(entry)]() {
+        std::wofstream f(path, std::ios::out | std::ios::app);
+        if (f.is_open()) f << entry << L"\n";
+    });
 }
 
 // ---------------------------------------------------------------------------
@@ -201,13 +205,15 @@ void HistoryFoldersManager::AppendNewFolderToDisk(const std::wstring &folderPath
 //   Used by ClearHistoryKeepFavorites.
 // ---------------------------------------------------------------------------
 void HistoryFoldersManager::RewriteHistoryToDisk() const {
-    std::wofstream file(GetFilePath(), std::ios::out | std::ios::trunc);
-    if (!file.is_open())
-        return;
-
-    // Write oldest-first (reverse of MRU order) so that new appends stay at bottom
-    for (int i = static_cast<int>(folderHistory.size()) - 1; i >= 0; --i)
-        file << folderHistory[i] << L"\n";
+    std::wstring path = GetFilePath();
+    // Snapshot oldest-first (reverse of MRU) at push time so the drain thread
+    // writes a consistent view even if folderHistory changes before it wakes.
+    std::vector<std::wstring> snap(folderHistory.rbegin(), folderHistory.rend());
+    g_writeQueue.PushTask([path = std::move(path), snap = std::move(snap)]() {
+        std::wofstream f(path, std::ios::out | std::ios::trunc);
+        if (!f.is_open()) return;
+        for (const auto &e : snap) f << e << L"\n";
+    });
 }
 
 // ---------------------------------------------------------------------------
@@ -217,16 +223,19 @@ void HistoryFoldersManager::RewriteHistoryToDisk() const {
 //   Used by ToggleFavorite and ClearFavoritesKeepHistory.
 // ---------------------------------------------------------------------------
 void HistoryFoldersManager::RewriteFavoritesToDisk() const {
-    std::wofstream file(GetFavoritesFilePath(), std::ios::out | std::ios::trunc);
-    if (!file.is_open())
-        return;
-
-    int written = 0;
-    for (const auto &path: favorites) {
-        if (written >= app.historyMaxFavs) break;
-        file << path << L"\n";
-        ++written;
-    }
+    std::wstring path = GetFavoritesFilePath();
+    std::vector<std::wstring> snap(favorites.begin(), favorites.end());
+    const int maxFavs = app.historyMaxFavs;
+    g_writeQueue.PushTask([path = std::move(path), snap = std::move(snap), maxFavs]() {
+        std::wofstream f(path, std::ios::out | std::ios::trunc);
+        if (!f.is_open()) return;
+        int written = 0;
+        for (const auto &e : snap) {
+            if (written >= maxFavs) break;
+            f << e << L"\n";
+            ++written;
+        }
+    });
 }
 
 // ---------------------------------------------------------------------------
@@ -236,19 +245,19 @@ void HistoryFoldersManager::RewriteFavoritesToDisk() const {
 //   Format:  first line = header, then paths oldest-first (same as the live file).
 // ---------------------------------------------------------------------------
 void HistoryFoldersManager::BackupHistoryToDisk() const {
+    // Capture time and data snapshot now so the backup reflects the exact moment
+    // the user triggered it, not whenever the drain thread eventually runs.
     SYSTEMTIME st;
     GetLocalTime(&st);
-
-    fs::path backupPath = MakeBackupPath(GetBackupDir(), PrefixedFileName(historyFileName), st);
-    std::wofstream f(backupPath, std::ios::out | std::ios::trunc);
-    if (!f.is_open())
-        return;
-
-    WriteBackupHeader(f, st);
-
-    // Oldest-first — same order as the live qivHistory.txt
-    for (int i = static_cast<int>(folderHistory.size()) - 1; i >= 0; --i)
-        f << folderHistory[i] << L"\n";
+    std::wstring fileName = PrefixedFileName(historyFileName);
+    std::vector<std::wstring> snap(folderHistory.rbegin(), folderHistory.rend());
+    g_writeQueue.PushTask([st, fileName = std::move(fileName), snap = std::move(snap)]() {
+        fs::path backupPath = MakeBackupPath(GetBackupDir(), fileName, st);
+        std::wofstream f(backupPath, std::ios::out | std::ios::trunc);
+        if (!f.is_open()) return;
+        WriteBackupHeader(f, st);
+        for (const auto &e : snap) f << e << L"\n";
+    });
 }
 
 // ---------------------------------------------------------------------------
@@ -260,18 +269,19 @@ void HistoryFoldersManager::BackupHistoryToDisk() const {
 void HistoryFoldersManager::BackupFavoritesToDisk() const {
     SYSTEMTIME st;
     GetLocalTime(&st);
-
-    fs::path backupPath = MakeBackupPath(GetBackupDir(), PrefixedFileName(favoritesFileName), st);
-    std::wofstream f(backupPath, std::ios::out | std::ios::trunc);
-    if (!f.is_open())
-        return;
-
-    WriteBackupHeader(f, st);
-
-    int written = 0;
-    for (const auto &path: favorites) {
-        if (written >= app.historyMaxFavs) break;
-        f << path << L"\n";
-        ++written;
-    }
+    std::wstring fileName = PrefixedFileName(favoritesFileName);
+    std::vector<std::wstring> snap(favorites.begin(), favorites.end());
+    const int maxFavs = app.historyMaxFavs;
+    g_writeQueue.PushTask([st, fileName = std::move(fileName), snap = std::move(snap), maxFavs]() {
+        fs::path backupPath = MakeBackupPath(GetBackupDir(), fileName, st);
+        std::wofstream f(backupPath, std::ios::out | std::ios::trunc);
+        if (!f.is_open()) return;
+        WriteBackupHeader(f, st);
+        int written = 0;
+        for (const auto &e : snap) {
+            if (written >= maxFavs) break;
+            f << e << L"\n";
+            ++written;
+        }
+    });
 }
