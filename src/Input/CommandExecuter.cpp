@@ -1019,6 +1019,25 @@ void InputManager::ExecuteKeyboardShortcutCommand(HWND hWnd, Command cmd) {
         // DirWnds) that is docked at a screen edge.
         // -----------------------------------------------------------------------
         case Command::AutosizeToWorkArea: {
+            if (app.isAutosized) {
+                HMONITOR hMon2 = MonitorFromWindow(hWnd, MONITOR_DEFAULTTONEAREST);
+                MONITORINFO mi2 = {sizeof(mi2)};
+                if (!GetMonitorInfo(hMon2, &mi2)) break;
+                int tw = (int)(app.baseWidth  * app.dpiScale);
+                int th = (int)(app.baseHeight * app.dpiScale);
+                int mw = mi2.rcMonitor.right  - mi2.rcMonitor.left;
+                int mh = mi2.rcMonitor.bottom - mi2.rcMonitor.top;
+                SetWindowPos(hWnd, nullptr,
+                             mi2.rcMonitor.left + (mw - tw) / 2,
+                             mi2.rcMonitor.top  + (mh - th) / 2,
+                             tw, th,
+                             SWP_NOZORDER | SWP_NOACTIVATE | SWP_FRAMECHANGED);
+                InvalidateRect(hWnd, nullptr, FALSE);
+                app.isAutosized = false;
+                g_overlayManager.PostCenterMessage(hWnd, Constants::Messages::AUTOSIZE_RESTORE);
+                break;
+            }
+
             HMONITOR hMon = MonitorFromWindow(hWnd, MONITOR_DEFAULTTONEAREST);
             MONITORINFO mi = {sizeof(mi)};
             if (!GetMonitorInfo(hMon, &mi)) break;
@@ -1047,6 +1066,7 @@ void InputManager::ExecuteKeyboardShortcutCommand(HWND hWnd, Command cmd) {
                              r.right - r.left, r.bottom - r.top,
                              SWP_NOZORDER | SWP_NOACTIVATE | SWP_FRAMECHANGED);
                 InvalidateRect(hWnd, nullptr, FALSE);
+                app.isAutosized = true;
             }
             g_overlayManager.PostCenterMessage(hWnd, Constants::Messages::AUTOSIZE_TO_WORK_AREA);
             break;
