@@ -36,7 +36,7 @@ jobs:
       - name: Configure CMake
         env:
           SCCACHE_GHA_ENABLED: "true"
-        run: cmake -B build -DCMAKE_BUILD_TYPE=${{ env.BUILD_TYPE }} -DQIV_STATIC_RUNTIME=ON
+        run: cmake -B build -DCMAKE_BUILD_TYPE=${{ env.BUILD_TYPE }}
 
       - name: Build
         env:
