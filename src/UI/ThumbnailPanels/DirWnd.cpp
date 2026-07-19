@@ -8,6 +8,8 @@ namespace UI {
     // -------------------------------------------------------------------------
     // DirWatcher
     // -------------------------------------------------------------------------
+    std::atomic<int> DirWatcher::s_activeCount{0};
+
     void DirWatcher::Start(HWND hWnd, const std::wstring &dir) {
         if (!Constants::WATCH_DIR_FOR_CHANGES) return;
         Stop(); // stop any previous watch before starting a new one
@@ -28,6 +30,7 @@ namespace UI {
         m_hNotify = hNotify;
         m_hStop   = hStop;
 
+        s_activeCount.fetch_add(1, std::memory_order_relaxed);
         m_thread = std::thread([hNotify, hStop, hWnd]() {
             HANDLE handles[2] = {hNotify, hStop};
             for (;;) {
@@ -41,7 +44,10 @@ namespace UI {
 
     void DirWatcher::Stop() {
         if (m_hStop) SetEvent(m_hStop);
-        if (m_thread.joinable()) m_thread.join();
+        if (m_thread.joinable()) {
+            m_thread.join();
+            s_activeCount.fetch_sub(1, std::memory_order_relaxed);
+        }
         if (m_hNotify != INVALID_HANDLE_VALUE) {
             FindCloseChangeNotification(m_hNotify);
             m_hNotify = INVALID_HANDLE_VALUE;
