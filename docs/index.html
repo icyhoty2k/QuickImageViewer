@@ -6,7 +6,8 @@
     <title>QuickImageViewer (qIV) — Fast, Free, Portable Image Viewer for Windows 10/11</title>
 
     <!-- SEO Meta Tags -->
-    <meta name="description" content="QuickImageViewer (qIV) is a free, blazing fast, GPU-accelerated image viewer for Windows 10 and 11. Opens JPEG, PNG, WebP, HEIC, AVIF, JPEG XL, SVG, EXR, HDR and more. Single portable 7 MB EXE — no installer, no ads, no telemetry.">
+    <meta name="description" content="QuickImageViewer (qIV) — free portable image viewer for Windows 10 &amp; 11. Opens HEIC, AVIF, JPEG XL, WebP, SVG, OpenEXR and 17+ formats instantly with Direct2D GPU rendering. 7 MB single EXE, no installer, no ads, no telemetry.">
+    <meta name="keywords" content="image viewer windows 11, image viewer windows 10, free image viewer windows, heic viewer windows, avif viewer windows, jpeg xl viewer, webp viewer windows, svg viewer windows, openexr viewer, portable image viewer, open source image viewer, gpu accelerated image viewer, fast photo viewer windows, best image viewer windows, quickimageviewer, qiv">
     <meta name="author" content="Ivan Hristov Yanev (IcyHoty2k)">
     <meta name="robots" content="index, follow, max-image-preview:large">
     <link rel="canonical" href="https://icyhoty2k.github.io/QuickImageViewer/">
@@ -35,23 +36,36 @@
       "operatingSystem": "Windows 10, Windows 11",
       "applicationCategory": "MultimediaApplication",
       "applicationSubCategory": "Image Viewer",
-      "description": "A free, GPU-accelerated, portable image viewer for Windows. Opens JPEG, PNG, WebP, HEIC, AVIF, JPEG XL, SVG, OpenEXR, Radiance HDR and more with zero-flicker Direct2D rendering. Single 7 MB executable with no installer and no telemetry.",
+      "description": "A free, GPU-accelerated, portable image viewer for Windows 10 and 11. Opens JPEG, PNG, WebP, HEIC, AVIF, JPEG XL, SVG, OpenEXR, Radiance HDR and 17+ formats with zero-flicker Direct2D rendering. Single 7 MB executable — no installer, no ads, no telemetry.",
+      "featureList": "GPU VRAM bitmap cache, neighbor image preloading, HEIC/AVIF/JPEG XL/WebP/SVG/OpenEXR support, offline GPS reverse geocoding, slideshow with 6 transitions, non-destructive GPU color effects, floating thumbnail panels, per-monitor DPI awareness V2, system tray resident mode, kiosk mode, file management with drag-and-drop",
       "offers": {
         "@type": "Offer",
         "price": "0",
         "priceCurrency": "USD"
       },
       "downloadUrl": "https://github.com/icyhoty2k/QuickImageViewer/releases/latest",
+      "installUrl": "https://github.com/icyhoty2k/QuickImageViewer/releases/latest",
       "softwareRequirements": "Windows 10 or newer",
+      "processorRequirements": "x64",
+      "memoryRequirements": "512 MB RAM",
+      "storageRequirements": "7 MB",
       "fileSize": "7MB",
       "license": "https://www.gnu.org/licenses/agpl-3.0.html",
-      "screenshot": "https://raw.githubusercontent.com/icyhoty2k/QuickImageViewer/main/resources/screenshots/2026-07-15_045800.png",
+      "releaseNotes": "https://github.com/icyhoty2k/QuickImageViewer/releases",
+      "screenshot": [
+        "https://raw.githubusercontent.com/icyhoty2k/QuickImageViewer/main/resources/screenshots/2026-07-15_045800.png",
+        "https://raw.githubusercontent.com/icyhoty2k/QuickImageViewer/main/resources/screenshots/2026-07-15_045053.png",
+        "https://raw.githubusercontent.com/icyhoty2k/QuickImageViewer/main/resources/screenshots/2026-07-15_045219.png"
+      ],
       "author": {
         "@type": "Person",
-        "name": "Ivan Hristov Yanev"
+        "name": "Ivan Hristov Yanev",
+        "url": "https://github.com/icyhoty2k"
       },
       "url": "https://icyhoty2k.github.io/QuickImageViewer/",
-      "sameAs": "https://github.com/icyhoty2k/QuickImageViewer"
+      "sameAs": [
+        "https://github.com/icyhoty2k/QuickImageViewer"
+      ]
     }
     </script>
 
@@ -100,15 +114,64 @@
             "@type": "Answer",
             "text": "Yes. Directory thumbnail strips support drag & drop between folders (move, or Ctrl+drag to copy), plus right-click Copy, Cut, Paste and Delete that integrate with the Windows clipboard and Recycle Bin."
           }
+        },
+        {
+          "@type": "Question",
+          "name": "What image formats does QuickImageViewer support?",
+          "acceptedAnswer": {
+            "@type": "Answer",
+            "text": "QuickImageViewer supports 17+ formats: JPEG, PNG, BMP, TIFF, GIF, WebP, HEIF/HEIC, AVIF, JPEG XL, JPEG 2000, SVG, OpenEXR, Radiance HDR, PNM (PPM/PGM/PBM), QOI and ICO/CUR. HEIC requires the free Microsoft HEIF Extensions; AVIF works natively on Windows 11; JPEG XL on Windows 11 24H2+."
+          }
+        },
+        {
+          "@type": "Question",
+          "name": "How does QuickImageViewer compare to Windows Photos or IrfanView?",
+          "acceptedAnswer": {
+            "@type": "Answer",
+            "text": "Unlike Windows Photos (a UWP app), QuickImageViewer is a native Win32/Direct2D application with a GPU VRAM bitmap cache — image switching is truly instant with no loading delay. Compared to IrfanView, qIV offers GPU-accelerated rendering, per-monitor DPI awareness, multiple floating thumbnail panels, offline GPS geocoding from EXIF data, and non-destructive real-time color effects. All images are decoded on background threads so the UI never freezes."
+          }
+        },
+        {
+          "@type": "Question",
+          "name": "Can QuickImageViewer open RAW camera files?",
+          "acceptedAnswer": {
+            "@type": "Answer",
+            "text": "QuickImageViewer uses the Windows Imaging Component (WIC) for decoding. If you install the appropriate Windows Camera Codec Pack or a manufacturer codec (Canon, Nikon, Sony, etc.), WIC will decode those RAW files and qIV will open them automatically — no extra configuration needed."
+          }
+        },
+        {
+          "@type": "Question",
+          "name": "How do I set QuickImageViewer as my default image viewer on Windows?",
+          "acceptedAnswer": {
+            "@type": "Answer",
+            "text": "Right-click any image file in Windows Explorer, choose Open with → Choose another app, browse to QuickImageViewer.exe and tick Always use this app. You can also set defaults per file type in Windows Settings → Apps → Default apps."
+          }
+        },
+        {
+          "@type": "Question",
+          "name": "Does QuickImageViewer use a lot of memory or CPU?",
+          "acceptedAnswer": {
+            "@type": "Answer",
+            "text": "No. Working set is typically under 100 MB when browsing standard JPEG folders. Decoded images are cached in VRAM (GPU memory) rather than system RAM. Background decode threads run at below-normal CPU priority so they never compete with foreground work."
+          }
+        },
+        {
+          "@type": "Question",
+          "name": "Is QuickImageViewer available for Mac or Linux?",
+          "acceptedAnswer": {
+            "@type": "Answer",
+            "text": "No. QuickImageViewer is a native Windows application built on Direct2D, D3D11, Win32 APIs and the Windows Imaging Component — technologies specific to Windows 10 and 11. There are no plans for a Mac or Linux port."
+          }
         }
       ]
     }
     </script>
 
-    <!-- Google Fonts -->
+    <!-- Google Fonts — display=swap avoids render-blocking (Core Web Vitals) -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Fira+Code:wght@400;500&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Fira+Code:wght@400;500&display=swap" rel="stylesheet" media="print" onload="this.media='all'">
+    <noscript><link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Fira+Code:wght@400;500&display=swap" rel="stylesheet"></noscript>
 
     <!-- Styling -->
     <style>
@@ -789,6 +852,7 @@
                     <tr><td><code>Alt+X</code></td><td>Reset window size, position and all effects</td></tr>
                     <tr><td><code>Shift+Num +/−</code> or <code>Shift+=/−</code></td><td>Grow / shrink window by 20 px per side</td></tr>
                     <tr><td>Drag near screen edge</td><td>Snap to that edge (within 24 px)</td></tr>
+                    <tr><td><code>Ctrl+Space</code></td><td>Toggle: fit viewer to work area (avoiding visible panels) ↔ restore default size centered on monitor</td></tr>
                     <tr><td><code>Ctrl+Alt+Num +/−</code></td><td>Step all panel colors lighter / darker at runtime</td></tr>
                     <tr><td><code>Ctrl+Alt+Num 0</code></td><td>Reset theme brightness to compiled default</td></tr>
                     <tr><td><code>Ctrl+Shift+Num *</code></td><td>Toggle window corners: rounded ↔ square</td></tr>
@@ -859,6 +923,36 @@
             <p style="margin-top: 10px; color: var(--text-muted); font-size: 0.9rem;">Runs an isolated instance, loops a shuffled slideshow every 8 seconds, and ignores all user mouse/keyboard input — ideal for unattended public displays.</p>
         </section>
 
+        <section id="compare">
+            <h2>How qIV Compares to Other Windows Image Viewers</h2>
+            <p>Searching for the <strong>best free image viewer for Windows 10 or 11</strong>? Here is how QuickImageViewer stacks up against the most common alternatives.</p>
+            <table>
+                <thead>
+                    <tr>
+                        <th>Feature</th>
+                        <th>qIV</th>
+                        <th>Windows Photos</th>
+                        <th>IrfanView</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr><td>GPU VRAM bitmap cache</td><td>✅ Direct2D</td><td>❌</td><td>❌</td></tr>
+                    <tr><td>Instant image switching</td><td>✅ pre-decoded neighbours</td><td>⚠️ visible load delay</td><td>⚠️ visible load delay</td></tr>
+                    <tr><td>HEIC / AVIF / JPEG XL</td><td>✅ native + codec</td><td>✅</td><td>⚠️ plugin required</td></tr>
+                    <tr><td>SVG / OpenEXR / HDR</td><td>✅ built-in</td><td>❌</td><td>⚠️ plugin required</td></tr>
+                    <tr><td>Offline GPS geocoding</td><td>✅ embedded, zero network</td><td>❌</td><td>❌</td></tr>
+                    <tr><td>Floating thumbnail panels</td><td>✅ up to 6 simultaneous</td><td>❌</td><td>❌</td></tr>
+                    <tr><td>Per-monitor DPI V2</td><td>✅</td><td>✅</td><td>⚠️ partial</td></tr>
+                    <tr><td>Portable — no installer</td><td>✅ 7 MB single EXE</td><td>❌ UWP / Store</td><td>✅</td></tr>
+                    <tr><td>No telemetry / tracking</td><td>✅ zero</td><td>❌ Microsoft telemetry</td><td>✅</td></tr>
+                    <tr><td>No ads</td><td>✅</td><td>❌ promoted content</td><td>✅</td></tr>
+                    <tr><td>No background services</td><td>✅ process exits cleanly</td><td>❌ always-on UWP runtime</td><td>✅</td></tr>
+                    <tr><td>Open source</td><td>✅ AGPLv3</td><td>❌</td><td>❌</td></tr>
+                    <tr><td>Kiosk / locked display mode</td><td>✅ CLI flag</td><td>❌</td><td>⚠️ limited</td></tr>
+                </tbody>
+            </table>
+        </section>
+
         <section id="faq">
             <h2>Frequently Asked Questions</h2>
 
@@ -868,7 +962,7 @@
             </details>
             <details>
                 <summary>Can it open HEIC, AVIF and JPEG XL files on Windows?</summary>
-                <p>Yes. AVIF works natively on Windows 11, JPEG XL on Windows 11 24H2+, and HEIC/HEIF via the Microsoft HEIF Extensions. WebP, SVG, OpenEXR, Radiance HDR, JPEG 2000, QOI and all classic formats are supported too.</p>
+                <p>Yes. AVIF works natively on Windows 11, JPEG XL on Windows 11 24H2+, and HEIC/HEIF via the free Microsoft HEIF Extensions from the Microsoft Store. WebP, SVG, OpenEXR, Radiance HDR, JPEG 2000, QOI and all classic formats are supported too — 17 formats in total.</p>
             </details>
             <details>
                 <summary>Does it need to be installed?</summary>
@@ -881,6 +975,22 @@
             <details>
                 <summary>Can it manage files — copy, move or delete images?</summary>
                 <p>Yes. Directory thumbnail strips support drag &amp; drop between folders (move, or Ctrl+drag to copy) plus right-click Copy, Cut, Paste and Delete with full Windows clipboard and Recycle Bin integration.</p>
+            </details>
+            <details>
+                <summary>Can QuickImageViewer open RAW camera files?</summary>
+                <p>QuickImageViewer uses the Windows Imaging Component (WIC) for decoding. If you install the appropriate Windows Camera Codec Pack or a manufacturer codec (Canon, Nikon, Sony, etc.), WIC will decode those RAW files and qIV will open them automatically — no extra configuration needed.</p>
+            </details>
+            <details>
+                <summary>How do I set QuickImageViewer as my default image viewer?</summary>
+                <p>Right-click any image file in Windows Explorer, choose <strong>Open with → Choose another app</strong>, browse to QuickImageViewer.exe and tick <strong>Always use this app</strong>. You can also set defaults per file type in Windows Settings → Apps → Default apps.</p>
+            </details>
+            <details>
+                <summary>Does QuickImageViewer use a lot of memory or CPU?</summary>
+                <p>No. Working set is typically under 100 MB when browsing standard JPEG folders. Decoded images are cached in VRAM (GPU memory) rather than system RAM. Background decode threads run at below-normal CPU priority so they never compete with foreground work.</p>
+            </details>
+            <details>
+                <summary>Is QuickImageViewer available for Mac or Linux?</summary>
+                <p>No. qIV is a native Windows application built on Direct2D, D3D11, Win32 APIs and the Windows Imaging Component — technologies specific to Windows 10 and 11. There are no plans for a Mac or Linux port.</p>
             </details>
         </section>
 
