@@ -7,20 +7,13 @@ Built on Direct2D, WIC, and native Win32 APIs. Single EXE, no installer(portable
 
 ## Preview
 
-| Main Interface | Shortcuts Reference |
-|:---|:---|
-| ![App](resources/screenshots/2026-07-15_045800.png) | ![Shortcuts](resources/screenshots/2026-07-15_045053.png) |
-
-| Folder History Panel | EXIF Image info |
-|:---|:---|
-| ![App](resources/screenshots/2026-07-15_045155.png) | ![Shortcuts](resources/screenshots/2026-07-15_045342.png) |
- ![](resources/screenshots/2026-07-15_045440.png)
- ![](resources/screenshots/2026-07-15_045130.png)
- ![](resources/screenshots/2026-07-15_045413.png)
- ![](resources/screenshots/2026-07-15_045219.png)
- ![](resources/screenshots/2026-07-15_045413.png)
- ![](resources/screenshots/2026-07-15_045311.png)
- ![](resources/screenshots/2026-07-15_045359.png)
+| | |
+|:---:|:---:|
+| ![Main interface with thumbnail strips and info overlays](resources/screenshots/2026-07-15_045800.png)<br>**Main interface** — thumbnail strips and info overlays | ![Built-in help window — full shortcut reference](resources/screenshots/2026-07-15_045053.png)<br>**Help window** (F1) — full shortcut reference |
+| ![Folder History panel with favorites](resources/screenshots/2026-07-15_045155.png)<br>**Folder History** panel with favorites | ![EXIF / Image Info panel with offline GPS geocoding](resources/screenshots/2026-07-15_045342.png)<br>**EXIF / Image Info** panel — offline GPS geocoding |
+| ![Dual thumbnail strips — VRAM cache and current directory](resources/screenshots/2026-07-15_045130.png)<br>**Dual thumbnail strips** — VRAM cache (top) and current directory (bottom) | ![Four floating directory strips around the viewer](resources/screenshots/2026-07-15_045219.png)<br>**Four floating directory strips** around the viewer + History panel |
+| ![Browsing a 4K wallpaper folder with the directory strip](resources/screenshots/2026-07-15_045311.png)<br>**Directory strip** — browsing a 4K wallpaper folder | ![Statistics panel — codec, cache and playlist info](resources/screenshots/2026-07-15_045440.png)<br>**Statistics panel** — codec, cache and playlist info |
+| ![Jump-to-image dialog](resources/screenshots/2026-07-15_045359.png)<br>**Jump-to** dialog — go straight to any image number | ![Find dialog — filename search with wildcards](resources/screenshots/2026-07-15_045413.png)<br>**Find** dialog — filename search with `*` and `?` wildcards |
 ---
 
 ## Download
@@ -52,6 +45,26 @@ Built on Direct2D, WIC, and native Win32 APIs. Single EXE, no installer(portable
 
 **WIC** = Windows Imaging Component (OS native, zero dependency)  
 **Inline** = implemented directly with no third-party library
+
+---
+
+## How qIV Compares
+
+| Feature | qIV | Windows Photos | IrfanView |
+|:---|:---:|:---:|:---:|
+| GPU VRAM bitmap cache | ✅ Direct2D | ❌ | ❌ |
+| Instant image switching | ✅ pre-decoded neighbours | ⚠️ visible load delay | ⚠️ visible load delay |
+| HEIC / AVIF / JPEG XL | ✅ native + codec | ✅ | ⚠️ plugin required |
+| SVG / OpenEXR / HDR | ✅ built-in | ❌ | ⚠️ plugin required |
+| Offline GPS geocoding | ✅ embedded, zero network | ❌ | ❌ |
+| Floating thumbnail panels | ✅ up to 6 simultaneous | ❌ | ❌ |
+| Per-monitor DPI V2 | ✅ | ✅ | ⚠️ partial |
+| Portable — no installer | ✅ 7 MB single EXE | ❌ UWP / Store | ✅ |
+| No telemetry / tracking | ✅ zero | ❌ Microsoft telemetry | ✅ |
+| No ads | ✅ | ❌ promoted content | ✅ |
+| No background services | ✅ process exits cleanly | ❌ always-on UWP runtime | ✅ |
+| Open source | ✅ AGPLv3 | ❌ | ❌ |
+| Kiosk / locked display mode | ✅ CLI flag | ❌ | ⚠️ limited |
 
 ---
 
@@ -219,6 +232,7 @@ All effects are non-destructive and GPU-accelerated via the Direct2D effect grap
 | `Alt+X` | Reset window size, position and all effects |
 | `Shift+Num+/-` / `Shift+=/−` | Grow / shrink window by 20 px per side |
 | Drag near screen edge | Snap to that edge (within 24 px) |
+| `Ctrl+Space` | Toggle: fit viewer to work area (avoiding visible panels) ↔ restore default size centered on monitor |
 | `Ctrl+Alt+Num+/-` | Step all panel colors lighter / darker at runtime |
 | `Ctrl+Alt+Num 0` | Reset theme brightness to compiled default |
 | `Ctrl+Shift+Num *` | Toggle window corners: rounded ↔ square |
