@@ -97,7 +97,7 @@ Built on Direct2D, WIC, and native Win32 APIs. Single EXE, no installer(portable
 | Help | `F1` | Full shortcut & CLI reference — 2-column, double-buffered, DPI-aware. `Ctrl+E` exports to Desktop as UTF-8 text. |
 | EXIF / Info | `M` | Full metadata: camera, exposure, GPS with offline geocoding, embedded preview thumbnail |
 | Statistics | `K` | Decode time, codec, file details and cache info for the current image |
-| Directory | `F5` / `F6` | All images in current folder; syncs selection with viewer / moves panel to next screen edge |
+| Directory | `F6` / `F7` | All images in current folder; syncs selection with viewer / moves panel to next screen edge |
 | Cache | `F3` / `F4` | Live GPU cache occupancy, thumbnails of preloaded images / moves panel |
 | History | `Tab` | Recent folders with favorites — `Shift+Enter` spawns a DirWnd without leaving current folder |
 
@@ -132,7 +132,9 @@ All thumbnail panels (Cache, Directory, and spawned DirWnds) share the same beha
 - **Open** — left-click any thumbnail to open it in the main viewer
 - **Drag** — click and drag the strip to scroll freely
 - **Scrollbar** — thin bar on the inner edge; click-drag for quick scrubbing
-- **Spawn DirWnd** — from the History panel, `Shift+Enter` on an entry opens a floating directory strip for that folder without leaving the current one (up to 4 simultaneous strips, pre-allocated and reused for instant spawning)
+- **Spawn DirWnd** — from the History panel, `Shift+Enter` or **MMB click** on an entry opens a floating directory strip for that folder without leaving the current one (up to 4 simultaneous strips, pre-allocated and reused for instant spawning). If a strip is already open for that folder, the same gesture hides it instead (toggle)
+- **Active strip** — clicking any directory strip makes it the *active* panel; all subsequent folder navigation (History `Enter`, folder changes) targets that strip. The primary `F6` strip is the fallback when no spawned panel has been clicked
+- **Close with MMB** — middle-mouse-button click on any directory strip or floating panel (Help, EXIF, Stats, Jump-to, Find) closes it immediately
 
 ### File Management on Thumbnail Strips
 Directory strips double as a lightweight file manager:
@@ -150,7 +152,8 @@ Directory strips double as a lightweight file manager:
 | `Tab` | Toggle History panel |
 | `Ctrl+Tab` | Toggle full (uncapped) view and refresh the folder snapshot |
 | `Enter` | Open hovered folder in main viewer |
-| `Shift+Enter` | Spawn a floating DirWnd for the hovered folder |
+| `Shift+Enter` | Spawn / hide a floating DirWnd for the hovered folder (toggle) |
+| `MMB click` on a row | Spawn / hide a floating DirWnd for the hovered folder (panel stays open) |
 | `Space` | Toggle favorite on hovered entry |
 | `Delete` | Delete hovered entry (`Ctrl+Z` restores last deleted) |
 | `Ctrl+Shift+Delete` | Clear all history, keep favorites |
@@ -279,10 +282,10 @@ QuickImageViewer.exe -dedicated -lock -fullscreen -slideshow -shuffle -slideshow
 
 - **Renderer** — Direct2D + D3D11 with GPU bitmap cache. GDI software fallback. Full ID2D1Effect graph for color operations.
 - **Decoding** — WIC pipeline for OS-native formats. Custom decoders (SimpleFormats.cpp) for EXR, HDR, PNM, QOI. SVG via resvg on a background IO thread.
-- **Threading** — Worker thread pool for background decode and preload. Atomic `wantedIndex` prevents stale frames. `WM_QIV_REPAINT` / `WM_QIV_SVG_READY` messages synchronize back to the UI thread.
+- **Threading** — Worker thread pool for background decode and preload. Atomic `wantedIndex` prevents stale frames. `WM_QIV_REPAINT` / `WM_QIV_SVG_READY` messages synchronize back to the UI thread. A dedicated async write queue (`WriteQueue`) coalesces registry writes (last value per key wins — rapid slider changes cost one write) and serializes file I/O tasks on a single sleeping drain thread.
 - **Caching** — GPU bitmap cache with configurable size. Preloads adjacent images in both directions. Live cache inspector panel.
 - **DPI** — Per-monitor DPI aware V2. All layout scales via `MulDiv(GetDpiForWindow(...))`.
-- **Persistence** — Registry-backed settings. Folder history manager. Favorites system.
+- **Persistence** — Registry-backed settings with batched read at startup (one `RegOpenKeyEx` + N `RegQueryValueEx` + `RegCloseKey`). Folder history manager. Favorites system. All writes are async via `WriteQueue` and flushed before process exit.
 
 ### Third-Party Libraries
 

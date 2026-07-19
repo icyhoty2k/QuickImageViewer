@@ -278,6 +278,9 @@ namespace UI {
             L"Clear the VRAM cache. Images are re-decoded on demand afterwards.", sPanels);
         Add(K(SC::IPANNEL_WINDOW_LOCAL_HIDE) + L"  /  " + Ctrl(SC::SC_APP_HIDE_ALT),
             L"Close the focused panel — works in every panel window.", sPanels);
+        Add(L"MMB click",
+            L"Middle-mouse-button click on any floating panel (Help, EXIF, Stats, Jump-to, Find) "
+            L"or on any directory / cache strip closes that panel immediately.", sPanels);
 
         // ---------------------------------------------------------------
         const int sThumbs = Sec(L"🖼️", L"THUMBNAIL STRIPS",
@@ -312,6 +315,15 @@ namespace UI {
             L"there. Hold Ctrl while dropping to COPY instead — the mouse cursor shows "
             L"which operation is active. Both strips refresh automatically and files can "
             L"be restored from the Recycle Bin.", sThumbs);
+        Add(L"MMB click",
+            L"Close the strip. Works on the " + K(SC::SC_PANEL_DIR_TOGGLE) +
+            L" directory strip and every spawned directory panel.", sThumbs);
+        Add(L"Click to make active",
+            L"Clicking any directory strip makes it the active panel. All subsequent "
+            L"folder navigation — including History Enter and folder changes — targets "
+            L"the last-clicked strip. Only one strip is active at a time; the "
+            L"primary " + K(SC::SC_PANEL_DIR_TOGGLE) + L" strip is the fallback when "
+            L"no spawned panel has been clicked.", sThumbs);
         Add(L"Right Click",
             L"Context menu on any thumbnail: Copy, Cut, Delete and Paste. Copy / Cut use "
             L"the Windows clipboard, so files can also be pasted in Explorer. A cut file "
@@ -334,7 +346,11 @@ namespace UI {
         Add(Shift(SC::HISTORY_OPEN_IN_DIR_WND),
             L"Spawn a floating directory strip for the hovered folder without leaving the "
             L"current one — up to " + NumI(Constants::DIR_WND_MAX_INSTANCES) +
-            L" strips (top, left, right, bottom). Great for comparing folders.", sHist);
+            L" strips (top, left, right, bottom). If a strip is already open for that "
+            L"folder, this hides it instead (toggle). Great for comparing folders.", sHist);
+        Add(L"MMB click on a row",
+            L"Toggle a floating directory strip for the hovered folder: spawns one if none "
+            L"is open, or hides the existing one. The History panel itself stays open.", sHist);
         Add(K(SC::HISTORY_FAVORITES_TOGGLE_KEY),
             L"Toggle favorite on the hovered entry. Favorites survive history clears.", sHist);
         Add(K(VK_DELETE),
