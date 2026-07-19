@@ -53,10 +53,19 @@ namespace UI {
         if (GetPanelFolder().empty()) return;
         int64_t total = 0;
         std::error_code ec;
+        // Primary DirWnd / CacheWnd items live in app.playlist, so their sizes
+        // were already captured during the background scan into playlistFileSizes.
+        // Prefer that (zero syscalls) and only hit the filesystem for items that
+        // aren't in it (e.g. a SpawnedDirWnd showing a different folder).
         for (const auto &t: m_thumbnails) {
-            const auto sz = std::filesystem::file_size(t.filePath, ec);
-            if (!ec) total += static_cast<int64_t>(sz);
-            ec.clear();
+            auto it = app.playlistFileSizes.find(t.filePath);
+            if (it != app.playlistFileSizes.end()) {
+                total += it->second;
+            } else {
+                const auto sz = std::filesystem::file_size(t.filePath, ec);
+                if (!ec) total += static_cast<int64_t>(sz);
+                ec.clear();
+            }
         }
         m_dirSizeBytes = total;
         m_dirSizeStr = FormatDirSize(total);

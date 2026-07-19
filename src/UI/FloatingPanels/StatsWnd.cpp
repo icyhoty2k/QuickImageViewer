@@ -7,6 +7,7 @@
 #include "../../Renderer/IRenderer.h"
 #include "../../ImageLoadStats.h"
 #include "HistoryListWnd.h"
+#include "../ThumbnailPanels/DirWnd.h"
 #include <algorithm>
 #include <shellapi.h>
 #include <windowsx.h>
@@ -154,6 +155,7 @@ namespace UI {
         m_wicThreads        = g_decoderWorker.getThreadCount();
         m_dirThumbThreads   = g_dirThumbWorker.getThreadCount();
         m_writeQueueThreads = g_writeQueue.ThreadCount();
+        m_dirWatcherThreads = UI::DirWatcher::ActiveCount();
         m_ioPending         = static_cast<int>(g_ioWorker.PendingTaskCount());
         m_wicPending        = static_cast<int>(g_decoderWorker.PendingTaskCount());
         m_dirThumbPending   = static_cast<int>(g_dirThumbWorker.PendingTaskCount());
@@ -675,7 +677,7 @@ namespace UI {
                 section(L"  THREADS & MEMORY", clrPurple);
 
                 {
-                    int totalThreads = 1 + m_ioThreads + m_wicThreads + m_dirThumbThreads + m_writeQueueThreads;
+                    int totalThreads = 1 + m_ioThreads + m_wicThreads + m_dirThumbThreads + m_writeQueueThreads + m_dirWatcherThreads;
                     wchar_t buf[32];
                     swprintf_s(buf, L"%d", totalThreads);
                     row2(L"Total app threads", buf, clrValue, true);
@@ -720,6 +722,11 @@ namespace UI {
                     wchar_t buf[64];
                     swprintf_s(buf, L"%d  (async registry / file drain)", m_writeQueueThreads);
                     row2(L"  Write queue", buf, clrCyan);
+                }
+                if (m_dirWatcherThreads > 0) {
+                    wchar_t buf[32];
+                    swprintf_s(buf, L"%d  (dir change watch)", m_dirWatcherThreads);
+                    row2(L"  Dir watcher", buf, clrCyan);
                 }
                 {
                     wchar_t buf[32];
