@@ -38,6 +38,7 @@ namespace UI {
             void OnSetFocus() override;
             void OnKillFocus() override;
             bool    OnKeyDown(WPARAM vk, bool ctrl, bool shift, bool alt) override;
+            bool    OnMButtonUp(int x, int y) override;
             LRESULT HandlePanelMessage(UINT message, WPARAM wParam, LPARAM lParam) override;
 
         public:

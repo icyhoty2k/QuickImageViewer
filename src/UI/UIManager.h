@@ -199,6 +199,10 @@ namespace UI {
             // Get position label for a spawned DirWnd folder (e.g., " (Left)", " (Right)", or empty)
             std::wstring GetSpawnedDirWndPositionLabel(const std::wstring &folderPath) const;
 
+            // Returns the visible spawned panel whose folder matches folderPath, or nullptr.
+            // Only checks the spawned pool — never returns the primary F6 DirWnd.
+            SpawnedDirWnd *FindSpawnedDirWnd(const std::wstring &folderPath) const;
+
             // Get {sizeStr, imageCount} from the open SpawnedDirWnd showing folderPath.
             // Returns {"", 0} when no SpawnedDirWnd is open for that path.
             std::pair<std::wstring, int> GetSpawnedDirWndSizeInfo(const std::wstring &folderPath) const;

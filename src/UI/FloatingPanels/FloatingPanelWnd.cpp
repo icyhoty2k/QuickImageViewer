@@ -2,6 +2,7 @@
 #include "../../Platform/Constants.h"
 #include "../../AppState.h"
 #include <dwmapi.h>
+#include <windowsx.h>
 
 namespace UI {
     void FloatingPanelWnd::InitFloating(HINSTANCE hInstance, HWND hParent,
@@ -74,6 +75,11 @@ namespace UI {
             bool alt = (GetKeyState(VK_MENU) & 0x8000) != 0;
             if (!OnKeyDown(wParam, ctrl, shift, alt))
                 PostMessageW(m_hParent, WM_KEYDOWN, wParam, lParam);
+            return 0;
+        }
+        if (message == WM_MBUTTONUP) {
+            if (!OnMButtonUp(GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam)))
+                Hide();
             return 0;
         }
         return HandlePanelMessage(message, wParam, lParam);

@@ -20,6 +20,11 @@ namespace UI {
             return false;
         }
 
+        // Called on WM_MBUTTONUP before the base hides the panel.
+        // Return true  → event consumed by the panel; base does NOT hide.
+        // Return false → base hides the panel after this returns (default).
+        virtual bool OnMButtonUp(int /*x*/, int /*y*/) { return false; }
+
         // Creates the floating window and applies all common DWM / layered attrs.
         // pixelW / pixelH must already be DPI-scaled by the caller.
         void InitFloating(HINSTANCE hInstance, HWND hParent,
