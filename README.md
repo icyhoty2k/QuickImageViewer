@@ -110,8 +110,9 @@ Built on Direct2D, WIC, and native Win32 APIs. Single EXE, no installer(portable
 | Help | `F1` | Full shortcut & CLI reference — 2-column, double-buffered, DPI-aware. `Ctrl+E` exports to Desktop as UTF-8 text. |
 | EXIF / Info | `M` | Full metadata: camera, exposure, GPS with offline geocoding, embedded preview thumbnail |
 | Statistics | `K` | Decode time, codec, file details and cache info for the current image |
-| Directory | `F6` / `F7` | All images in current folder; syncs selection with viewer / moves panel to next screen edge |
+| Directory | `F6` / `F7`  *(or Right Shift)* | All images in current folder; syncs selection with viewer / moves panel to next screen edge |
 | Cache | `F3` / `F4` | Live GPU cache occupancy, thumbnails of preloaded images / moves panel |
+| Reload | `F5` | Refresh / reload the current directory from disk |
 | History | `Tab` | Recent folders with favorites — `Shift+Enter` spawns a DirWnd without leaving current folder |
 
 ### Offline Reverse Geocoding
@@ -260,6 +261,83 @@ All effects are non-destructive and GPU-accelerated via the Direct2D effect grap
 
 ---
 
+## System Tray
+
+When QIV is hidden or running in the background, its icon appears in the system tray. All persistent settings are accessible from the right-click context menu — no config files to edit.
+
+**Tray icon actions:**
+
+| Action | Result |
+|:---|:---|
+| Double-click | Restore the main window to the foreground |
+| Right-click | Open the context menu |
+
+**Context menu top-level items:**
+
+| Item | Action |
+|:---|:---|
+| Restore QuickImageViewer | Show and focus the main window |
+| Help / Shortcuts | Open the in-app help window |
+| Exit Completely | Remove the tray icon and fully quit the process |
+
+### Settings submenu
+
+All toggles save immediately and are reflected live.
+
+**Boolean toggles (checkmarks):**
+
+| Setting | Effect |
+|:---|:---|
+| Keep in Background | Esc / Ctrl+W hides to tray instead of exiting; process stays resident for instant re-open |
+| Run on Startup | Write / remove a Windows startup registry entry (`HKCU\…\Run`). Dedicated instances use a separate entry |
+| Thumbnail Effects | Master switch for glow borders, rounded corners and hover-scale on thumbnail strips |
+| History: Open Full List | Tab opens the full uncapped history view when enabled |
+| Info Overlays | Show / hide all nine overlay text slots |
+| Open Thumbnail Strip on Start | Auto-open the directory strip on every launch |
+| Overlay Background | Semi-transparent background panel behind overlay text |
+| Swap Mouse Buttons | Exchange left/right button roles: hold-to-zoom ↔ drag-to-move-window |
+| Invert Scroll Direction | Reverse vertical wheel for image navigation |
+| Invert Horizontal Scroll | Reverse horizontal wheel for folder history navigation |
+| Start in Fullscreen | Open fullscreen on every launch |
+
+**Numeric settings** (click any label to open an input dialog; current value is shown in the label):
+
+| Setting | Range | Effect |
+|:---|:---|:---|
+| VRAM Cache Size | 0 – 999 | Images to keep decoded in GPU memory |
+| Window Width / Height | 240 – 16000 px | Default dimensions used by Ctrl+Space and window reset |
+| History Max Dirs / Favs | 0 – 999 | Items shown in the History panel |
+| Dir Thumb Cache | 100 – 64000 MB | Memory budget for directory thumbnail bitmaps |
+| Preload Lookaside | 1 – 99 | Images to pre-decode ahead and behind the current one |
+| Overlay Message Duration | 250 – 10000 ms | How long center overlay messages stay visible |
+| History Save Limit | 1 – 99999 | Folders persisted to disk between sessions |
+
+**Settings file operations:**
+
+| Item | Effect |
+|:---|:---|
+| Export Settings | Save all settings to a UTF-8 `.ini` file (default filename includes today's date) |
+| Import Settings | Load a previously exported `.ini` file — confirmation required; all settings applied immediately |
+| Restore Defaults | Reset every setting to its compiled-in default — confirmation required; history and favorites are not affected |
+
+### View Mode submenu
+Pick the default fit mode (radio buttons): **1** Fit to view (aspect) · **2** Fit to width · **3** Fit to height · **4** Stretch to window · **5** Original size.
+
+### Slideshow submenu
+Set default interval (100 – 60000 ms), toggle Loop and Shuffle, and choose the default transition type (Cut / Fade / Dissolve / Ripple / Push / Zoom). All changes persist.
+
+### Sort submenu
+Choose sort order: **Name** / **Date Modified** / **Size** / **Type** / **Disk Order**, plus a **Reverse Order** toggle. Takes effect immediately on the current folder.
+
+### Backup submenu
+
+| Item | Effect |
+|:---|:---|
+| Backup History & Favorites | Export history and favorites to a `.zip` archive (file-save dialog) |
+| Restore History & Favorites | Restore from a previously created backup — confirmation required |
+
+---
+
 ## Command-Line Arguments
 
 ```
@@ -285,6 +363,7 @@ QuickImageViewer.exe [image_path] [options]
 | `-lock` | KIOSK mode — all keyboard and mouse input is ignored |
 | `-dedicated` | Isolated instance: separate history, tray icon and mutex |
 | `-RestoreDefaults` | Wipe all saved settings from the registry, show a confirmation dialog, and exit — recovery fallback if the app misbehaves after a config change |
+| `-runOnStartup` | Write / refresh the Windows startup registry entry so QIV launches automatically with Windows. Equivalent to "Run on startup" in the tray menu. Dedicated instances write their own separate entry |
 
 **Kiosk example:**
 ```

@@ -273,8 +273,12 @@ namespace UI {
         Add(K(SC::SC_PANEL_CACHE_TOGGLE) + L" / " + K(SC::SC_PANEL_CACHE_MOVE),
             L"Toggle the VRAM cache strip / move it to the next free screen edge. It shows "
             L"every image currently decoded in GPU memory and updates live as you browse.", sPanels);
-        Add(K(SC::SC_PANEL_DIR_TOGGLE) + L" / " + K(SC::SC_PANEL_DIR_MOVE),
-            L"Toggle the current-directory strip / move it to the next free screen edge.", sPanels);
+        Add(K(SC::SC_PANEL_DIR_TOGGLE) + L" / " + K(SC::SC_PANEL_DIR_MOVE) + L"  •  Right Shift",
+            L"Toggle the current-directory strip / move it to the next free screen edge. "
+            L"Right Shift is an alternative toggle key for " + K(SC::SC_PANEL_DIR_TOGGLE) + L".", sPanels);
+        Add(K(SC::SC_APP_RELOAD_CURRENT_DIR),
+            L"Reload the current directory from disk — picks up newly added, deleted or "
+            L"renamed files without leaving the folder.", sPanels);
         Add(K(SC::SC_PANEL_CACHE_CLEAR),
             L"Clear the VRAM cache. Images are re-decoded on demand afterwards.", sPanels);
         Add(K(SC::IPANNEL_WINDOW_LOCAL_HIDE) + L"  /  " + Ctrl(SC::SC_APP_HIDE_ALT),
@@ -474,6 +478,94 @@ namespace UI {
             L"Cycle the window backdrop material: None → Mica → Acrylic → MicaAlt.", sApp);
 
         // ---------------------------------------------------------------
+        const int sTray = Sec(L"🔔", L"SYSTEM TRAY",
+                              L"Right-click the tray icon to access all persistent settings");
+
+        Add(L"Double-click tray icon",
+            L"Restore the main window to the foreground.", sTray);
+        Add(L"Restore QuickImageViewer",
+            L"Show and bring the main window to the front.", sTray);
+        Add(L"Help / Shortcuts",
+            L"Open this help window directly from the tray.", sTray);
+        Add(L"Exit Completely",
+            L"Remove the tray icon, destroy the window and fully exit the process.", sTray);
+        Add(L"Settings › Keep in Background",
+            L"When enabled, closing the window (Esc / Ctrl+W) hides QIV to the tray "
+            L"instead of exiting — the process stays resident for an instant re-open. "
+            L"When disabled (or if more than one instance is running), Esc / Ctrl+W "
+            L"closes the window entirely.", sTray);
+        Add(L"Settings › Run on Startup",
+            L"Write / remove the Windows startup registry entry (HKCU\\…\\Run) so QIV "
+            L"launches automatically with Windows. Dedicated instances write their own "
+            L"separate entry and do not conflict with the normal instance.", sTray);
+        Add(L"Settings › Thumbnail Effects",
+            L"Master switch for thumbnail strip visual effects: glow border on the "
+            L"selected thumbnail, rounded-corner overdraw, and hover-scale enlarge.", sTray);
+        Add(L"Settings › History: Open Full List",
+            L"When enabled, Tab opens the full (uncapped) history view. When disabled, "
+            L"the list is capped at the History Max Dirs value.", sTray);
+        Add(L"Settings › Info Overlays",
+            L"Show / hide all nine overlay text slots at once.", sTray);
+        Add(L"Settings › Open Thumbnail Strip on Start",
+            L"Automatically open the directory thumbnail strip on every launch.", sTray);
+        Add(L"Settings › Overlay Background",
+            L"Toggle the semi-transparent background panel behind overlay text.", sTray);
+        Add(L"Settings › Swap Mouse Buttons",
+            L"Exchange left and right button roles: hold-to-zoom ↔ drag-to-move-window.", sTray);
+        Add(L"Settings › Invert Scroll Direction",
+            L"Reverse vertical mouse wheel for image navigation.", sTray);
+        Add(L"Settings › Invert Horizontal Scroll",
+            L"Reverse horizontal wheel direction used for folder history navigation.", sTray);
+        Add(L"Settings › Start in Fullscreen",
+            L"Open in fullscreen mode on every launch.", sTray);
+        Add(L"Settings › VRAM Cache Size",
+            L"How many images to keep decoded in GPU memory (0 – 999). "
+            L"Click to open a numeric input dialog; current value is shown in the label.", sTray);
+        Add(L"Settings › Window Width / Height",
+            L"Default window dimensions in pixels (240 – 16000). Used by Ctrl+Space "
+            L"restore and window-reset commands.", sTray);
+        Add(L"Settings › History Max Dirs / Favs",
+            L"Maximum folders / favorites to show in the History panel (0 – 999 each).", sTray);
+        Add(L"Settings › Dir Thumb Cache",
+            L"Memory budget in MB for the directory thumbnail bitmap store "
+            L"(100 – 64000 MB).", sTray);
+        Add(L"Settings › Preload Lookaside",
+            L"How many images ahead and behind the current one to pre-decode into GPU "
+            L"memory in the background (1 – 99).", sTray);
+        Add(L"Settings › Overlay Message Duration",
+            L"How long center overlay messages remain visible in milliseconds "
+            L"(250 – 10000 ms).", sTray);
+        Add(L"Settings › History Save Limit",
+            L"Maximum number of folders to persist to disk between sessions "
+            L"(1 – 99999).", sTray);
+        Add(L"Settings › Export / Import Settings",
+            L"Save all settings to a UTF-8 INI file, or load a previously exported one. "
+            L"Import requires a confirmation dialog and applies all values immediately, "
+            L"including theme, overlays and sort order.", sTray);
+        Add(L"Settings › Restore Defaults",
+            L"Reset every setting to its compiled-in default value after a confirmation "
+            L"dialog. History and favorites are not affected.", sTray);
+        Add(L"View Mode submenu",
+            L"Pick the default fit mode applied to newly loaded images: "
+            L"1 Fit to view (keeps aspect)  •  2 Fit to width  •  3 Fit to height  •  "
+            L"4 Stretch to window  •  5 Original size, 1:1 pixels. "
+            L"The current mode is shown with a radio-button check.", sTray);
+        Add(L"Slideshow submenu",
+            L"Configure slideshow defaults: interval (100 – 60000 ms), loop, shuffle, "
+            L"and transition type (Cut / Fade / Dissolve / Ripple / Push / Zoom). "
+            L"All changes persist immediately.", sTray);
+        Add(L"Sort submenu",
+            L"Choose the playlist sort order (Name / Date Modified / Size / Type / "
+            L"Disk Order) and toggle Reverse Order. Takes effect immediately on the "
+            L"current folder.", sTray);
+        Add(L"Backup › Backup History && Favorites",
+            L"Export the history and favorites files into a ZIP archive (file-save "
+            L"dialog). The default filename includes today's date.", sTray);
+        Add(L"Backup › Restore History && Favorites",
+            L"Restore from a previously created ZIP backup after a confirmation dialog. "
+            L"Overwrites current history and favorites in memory and on disk.", sTray);
+
+        // ---------------------------------------------------------------
         const int sCli = Sec(L"⌨️", L"COMMAND-LINE ARGUMENTS",
                              L"Options for QuickImageViewer.exe at launch");
 
@@ -510,6 +602,11 @@ namespace UI {
         Add(L"-dedicated",
             L"Isolated instance: no registry writes, a separate history file, its own tray "
             L"icon and mutex — safe to run alongside a normal QIV instance.", sCli);
+        Add(L"-runOnStartup",
+            L"Write or refresh the Windows startup registry entry (HKCU\\…\\Run) so QIV "
+            L"launches automatically with Windows — equivalent to enabling \"Run on startup\" "
+            L"from the tray icon. Useful after moving the exe or for scripted first-run setup. "
+            L"Dedicated instances write their own separate entry.", sCli);
         Add(L"Example",
             L"QuickImageViewer.exe -dedicated -lock -fullscreen -slideshow -shuffle "
             L"-slideshowInterval 8 -startFolder \"D:\\Ads\"", sCli);

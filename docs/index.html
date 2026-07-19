@@ -893,6 +893,61 @@
             </table>
         </section>
 
+        <section id="tray">
+            <h2>System Tray</h2>
+            <p>When qIV is hidden or running in the background, its icon lives in the system tray. <strong>Right-click</strong> it for the full settings menu — no config files to edit. <strong>Double-click</strong> to restore the window.</p>
+            <h3>Settings submenu — toggles</h3>
+            <table>
+                <thead><tr><th>Setting</th><th>Effect</th></tr></thead>
+                <tbody>
+                    <tr><td>Keep in Background</td><td>Esc / Ctrl+W hides to tray instead of exiting; process stays resident for instant re-open</td></tr>
+                    <tr><td>Run on Startup</td><td>Write / remove a Windows startup registry entry so qIV launches with Windows. Dedicated instances use a separate entry</td></tr>
+                    <tr><td>Thumbnail Effects</td><td>Master switch for glow borders, rounded corners and hover-scale on thumbnail strips</td></tr>
+                    <tr><td>History: Open Full List</td><td>Tab opens the full uncapped history view when enabled</td></tr>
+                    <tr><td>Info Overlays</td><td>Show / hide all nine overlay text slots</td></tr>
+                    <tr><td>Open Thumbnail Strip on Start</td><td>Auto-open the directory strip on every launch</td></tr>
+                    <tr><td>Overlay Background</td><td>Semi-transparent background panel behind overlay text</td></tr>
+                    <tr><td>Swap Mouse Buttons</td><td>Exchange left/right roles: hold-to-zoom ↔ drag-to-move-window</td></tr>
+                    <tr><td>Invert Scroll Direction</td><td>Reverse vertical wheel for image navigation</td></tr>
+                    <tr><td>Invert Horizontal Scroll</td><td>Reverse horizontal wheel for folder history navigation</td></tr>
+                    <tr><td>Start in Fullscreen</td><td>Open fullscreen on every launch</td></tr>
+                </tbody>
+            </table>
+            <h3>Settings submenu — numeric values</h3>
+            <p>Click any numeric label to open an input dialog. Current value is shown in the menu item itself.</p>
+            <table>
+                <thead><tr><th>Setting</th><th>Range</th><th>Effect</th></tr></thead>
+                <tbody>
+                    <tr><td>VRAM Cache Size</td><td>0 – 999</td><td>Images to keep decoded in GPU memory</td></tr>
+                    <tr><td>Window Width / Height</td><td>240 – 16000 px</td><td>Default dimensions used by Ctrl+Space and window reset</td></tr>
+                    <tr><td>History Max Dirs / Favs</td><td>0 – 999</td><td>Items shown in the History panel</td></tr>
+                    <tr><td>Dir Thumb Cache</td><td>100 – 64000 MB</td><td>Memory budget for directory thumbnail bitmaps</td></tr>
+                    <tr><td>Preload Lookaside</td><td>1 – 99</td><td>Images to pre-decode ahead and behind the current one</td></tr>
+                    <tr><td>Overlay Message Duration</td><td>250 – 10000 ms</td><td>How long center overlay messages stay visible</td></tr>
+                    <tr><td>History Save Limit</td><td>1 – 99999</td><td>Folders persisted to disk between sessions</td></tr>
+                </tbody>
+            </table>
+            <h3>Settings file operations</h3>
+            <table>
+                <thead><tr><th>Item</th><th>Effect</th></tr></thead>
+                <tbody>
+                    <tr><td>Export Settings</td><td>Save all settings to a UTF-8 <code>.ini</code> file (filename includes today's date)</td></tr>
+                    <tr><td>Import Settings</td><td>Load a previously exported <code>.ini</code> — confirmation required; all settings applied immediately</td></tr>
+                    <tr><td>Restore Defaults</td><td>Reset every setting to its compiled-in default — confirmation required; history and favorites are not affected</td></tr>
+                </tbody>
+            </table>
+            <h3>Other submenus</h3>
+            <table>
+                <thead><tr><th>Submenu</th><th>What you can change</th></tr></thead>
+                <tbody>
+                    <tr><td>View Mode</td><td>Default fit mode: Fit to view · Fit to width · Fit to height · Stretch · Original size</td></tr>
+                    <tr><td>Slideshow</td><td>Interval (100 – 60000 ms), Loop, Shuffle, transition type (Cut / Fade / Dissolve / Ripple / Push / Zoom)</td></tr>
+                    <tr><td>Sort</td><td>Sort order (Name / Date / Size / Type / Disk) and Reverse Order toggle — takes effect immediately</td></tr>
+                    <tr><td>Backup</td><td>Backup history &amp; favorites to a <code>.zip</code> archive, or restore from a previous backup</td></tr>
+                </tbody>
+            </table>
+        </section>
+
         <section id="kiosk-cli">
             <h2>Command-Line &amp; Kiosk Mode</h2>
             <p>qIV supports extensive CLI arguments for automation, digital signage, slideshows and locked-down kiosk environments.</p>
@@ -917,6 +972,7 @@
                     <tr><td><code>-lock</code></td><td>KIOSK mode — all keyboard and mouse input is ignored</td></tr>
                     <tr><td><code>-dedicated</code></td><td>Isolated instance: separate history, tray icon and mutex</td></tr>
                     <tr><td><code>-RestoreDefaults</code></td><td>Wipe all saved settings from the registry, show a confirmation dialog, and exit — recovery fallback if the app misbehaves after a config change</td></tr>
+                    <tr><td><code>-runOnStartup</code></td><td>Write / refresh the Windows startup registry entry so QIV launches automatically with Windows — equivalent to "Run on startup" in the tray menu. Dedicated instances write their own separate entry</td></tr>
                 </tbody>
             </table>
             <p><strong>Kiosk example:</strong></p>
