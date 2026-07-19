@@ -1,0 +1,67 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<XML_DIZ_INFO>
+  <MASTER_PAD_VERSION_INFO>
+    <MASTER_PAD_VERSION>3.1</MASTER_PAD_VERSION>
+    <MASTER_PAD_EDITOR>Manual</MASTER_PAD_EDITOR>
+    <MASTER_PAD_INFO>Portable Application Description</MASTER_PAD_INFO>
+  </MASTER_PAD_VERSION_INFO>
+
+  <Company_Info>
+    <Company_Name></Company_Name>
+    <Company_WebSite_URL>https://icyhoty2k.github.io/QuickImageViewer/</Company_WebSite_URL>
+    <Contact_Info>
+      <Author_First_Name></Author_First_Name>
+      <Author_Last_Name>icyhoty2k</Author_Last_Name>
+      <Author_Email>icyhoty2k@gmail.com</Author_Email>
+    </Contact_Info>
+  </Company_Info>
+
+  <Program_Info>
+    <Program_Name>QuickImageViewer</Program_Name>
+    <Program_Version>2.9.0.0</Program_Version>
+    <Program_Release_Month>06</Program_Release_Month>
+    <Program_Release_Day>16</Program_Release_Day>
+    <Program_Release_Year>2026</Program_Release_Year>
+    <Program_Cost_Dollars>0</Program_Cost_Dollars>
+    <Program_Type>Freeware</Program_Type>
+    <Program_License>Open Source</Program_License>
+    <Program_OS_Support>Win10,Win11</Program_OS_Support>
+    <Program_Language>English</Program_Language>
+    <Program_Change_Info>See GitHub releases page for full changelog.</Program_Change_Info>
+    <Program_Specific_Category>Graphic Viewers</Program_Specific_Category>
+    <Program_Category_Class>Multimedia::Graphic Viewers</Program_Category_Class>
+    <Program_System_Requirements>Windows 10 or later, 64-bit</Program_System_Requirements>
+    <File_Info>
+      <File_Size_Bytes></File_Size_Bytes>
+      <File_Size_K></File_Size_K>
+      <File_Size_MB></File_Size_MB>
+    </File_Info>
+    <Expire_Info>
+      <Has_Expire_Info>N</Has_Expire_Info>
+    </Expire_Info>
+  </Program_Info>
+
+  <Program_Descriptions>
+    <English>
+      <Keywords>image viewer, photo viewer, windows, fast, lightweight, raw, webp, avif, heic, svg, direct2d</Keywords>
+      <Char_Desc_45>Fast native Win32 image viewer, 40+ formats</Char_Desc_45>
+      <Char_Desc_80>Fast lightweight native Win32 image viewer supporting 40+ formats</Char_Desc_80>
+      <Char_Desc_250>QuickImageViewer is a fast, lightweight native Win32 image viewer supporting 40+ formats including RAW, WebP, AVIF, HEIC, SVG, JPEG 2000, and EXR. GPU-accelerated Direct2D rendering, slideshow, EXIF panel, and full system tray settings. No install needed.</Char_Desc_250>
+      <Char_Desc_450>QuickImageViewer is a fast, lightweight native Win32 image viewer supporting 40+ formats including RAW (CR2, NEF, ARW, DNG), WebP, AVIF, HEIC, SVG, JPEG 2000, and EXR. Features GPU-accelerated Direct2D rendering, smooth zoom and pan, slideshow with transitions, folder navigation, EXIF metadata panel, history, duplicate detection, batch backup, and full persistent settings via system tray. Portable executable, no installer required.</Char_Desc_450>
+      <Char_Desc_2000>QuickImageViewer is a fast, lightweight native Win32 image viewer with no runtime dependencies. It supports over 40 image formats including JPEG, PNG, GIF, BMP, TIFF, RAW (CR2, NEF, ARW, DNG and more), WebP, AVIF, HEIC, SVG, JPEG 2000, EXR, PSD, TGA, and more. Rendering uses Direct2D with GPU acceleration for smooth zoom, pan, and slideshow transitions. The viewer launches in under 100ms and navigates large folders efficiently using a background preloader. Features include: full EXIF metadata panel, folder history, jump-to dialog, stats panel, thumbnail cache panel, duplicate detection, batch backup, slideshow with multiple transitions, configurable sort order, view modes, and a comprehensive system tray menu for all persistent settings. Portable single executable, no installer needed, no registry clutter beyond a small preferences key.</Char_Desc_2000>
+    </English>
+  </Program_Descriptions>
+
+  <Web_Info>
+    <Application_URLs>
+      <Application_Info_URL>https://icyhoty2k.github.io/QuickImageViewer/</Application_Info_URL>
+      <Application_Order_URL></Application_Order_URL>
+      <Application_Screenshot_URL>https://icyhoty2k.github.io/QuickImageViewer/screenshots/2026-07-15_045053.png</Application_Screenshot_URL>
+      <Application_Icon_URL>https://icyhoty2k.github.io/QuickImageViewer/favicon.png</Application_Icon_URL>
+      <Application_XML_File_URL>https://icyhoty2k.github.io/QuickImageViewer/pad.xml</Application_XML_File_URL>
+    </Application_URLs>
+    <Download_URLs>
+      <Primary_Download_URL>https://github.com/icyhoty2k/QuickImageViewer/releases/latest/download/QuickImageViewer.exe</Primary_Download_URL>
+    </Download_URLs>
+  </Web_Info>
+</XML_DIZ_INFO>
