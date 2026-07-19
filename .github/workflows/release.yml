@@ -36,3 +36,33 @@ jobs:
         with:
           files: build/Release/QuickImageViewer.exe
           generate_release_notes: true
+
+  update-pad:
+    runs-on: ubuntu-latest
+    needs: release
+
+    steps:
+      - name: Checkout main
+        uses: actions/checkout@v4
+        with:
+          ref: main
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Update PAD version and date
+        run: |
+          VERSION="${{ github.ref_name }}"
+          VERSION="${VERSION#v}"
+          YEAR=$(date -u +%Y)
+          MONTH=$(date -u +%m)
+          DAY=$(date -u +%d)
+          sed -i "s|<Program_Version>.*</Program_Version>|<Program_Version>$VERSION</Program_Version>|" docs/pad.xml
+          sed -i "s|<Program_Release_Month>.*</Program_Release_Month>|<Program_Release_Month>$MONTH</Program_Release_Month>|" docs/pad.xml
+          sed -i "s|<Program_Release_Day>.*</Program_Release_Day>|<Program_Release_Day>$DAY</Program_Release_Day>|" docs/pad.xml
+          sed -i "s|<Program_Release_Year>.*</Program_Release_Year>|<Program_Release_Year>$YEAR</Program_Release_Year>|" docs/pad.xml
+
+      - name: Commit if changed
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git diff --quiet docs/pad.xml || git commit -am "chore: update PAD to ${{ github.ref_name }} [skip ci]"
+          git push
