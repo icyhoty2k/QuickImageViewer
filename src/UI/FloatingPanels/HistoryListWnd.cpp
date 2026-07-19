@@ -545,13 +545,9 @@ namespace UI {
                         // firing OnKillFocus which resets g_hoverRow. Save and
                         // restore so the selection stays on the row after the call.
                         const int savedRow = g_hoverRow;
-                        std::wstring posLabel = uiManager.GetSpawnedDirWndPositionLabel(folder);
-                        if (!posLabel.empty()) {
-                            std::wstring posName = posLabel.substr(2, posLabel.length() - 3);
-                            SlotInfo *slot = uiManager.GetLayout().getSlotByName(posName);
-                            if (slot && slot->panel) {
-                                slot->panel->Hide();
-                            }
+                        SpawnedDirWnd *existing = uiManager.FindSpawnedDirWnd(folder);
+                        if (existing) {
+                            existing->Hide();
                         } else {
                             uiManager.SpawnDirWndForFolder(folder, m_hWnd);
                         }
@@ -666,6 +662,32 @@ namespace UI {
         }
         m_bbBmpOld = nullptr;
         m_bbW = m_bbH = 0;
+    }
+
+    // ---------------------------------------------------------------------------
+    // OnMButtonUp — side-effects before the base class hides the panel
+    // ---------------------------------------------------------------------------
+    bool HistoryListWnd::OnMButtonUp(int mx, int my) {
+        for (int i = 0; i < static_cast<int>(g_rowRects.size()); ++i) {
+            const RECT &r = g_rowRects[i];
+            if (mx >= r.left && mx < r.right && my >= r.top && my < r.bottom) {
+                if (i >= static_cast<int>(g_displayList.size())) break;
+                const std::wstring &folder = g_displayList[i].path;
+                if (GetFolderStatus(folder) == FolderStatus::Missing) {
+                    if (g_hHistOwner)
+                        g_overlayManager.PostCenterMessage(g_hHistOwner,
+                            Constants::Messages::FOLDER_DEAD_MISSING);
+                    return true;
+                }
+                SpawnedDirWnd *existing = uiManager.FindSpawnedDirWnd(folder);
+                if (existing)
+                    existing->Hide();
+                else
+                    uiManager.SpawnDirWndForFolder(folder, m_hWnd);
+                return true;
+            }
+        }
+        return true;
     }
 
     // ---------------------------------------------------------------------------
@@ -1499,39 +1521,6 @@ namespace UI {
                         // Empty folders fall through — OpenDirectory handles them.
                         ShowWindow(m_hWnd, SW_HIDE);
                         OpenDirectory(g_hHistOwner, folder);
-                        return 0;
-                    }
-                }
-                return 0;
-            }
-
-            case WM_MBUTTONUP: {
-                int mx = GET_X_LPARAM(lParam);
-                int my = GET_Y_LPARAM(lParam);
-                for (int i = 0; i < static_cast<int>(g_rowRects.size()); ++i) {
-                    const RECT &r = g_rowRects[i];
-                    if (mx >= r.left && mx < r.right && my >= r.top && my < r.bottom) {
-                        if (i >= static_cast<int>(g_displayList.size())) break;
-                        std::wstring folder = g_displayList[i].path;
-                        FolderStatus fs = GetFolderStatus(folder);
-                        if (fs == FolderStatus::Missing) {
-                            if (g_hHistOwner)
-                                g_overlayManager.PostCenterMessage(g_hHistOwner,
-                                    Constants::Messages::FOLDER_DEAD_MISSING);
-                            return 0;
-                        }
-                        const int savedRow = g_hoverRow;
-                        std::wstring posLabel = uiManager.GetSpawnedDirWndPositionLabel(folder);
-                        if (!posLabel.empty()) {
-                            std::wstring posName = posLabel.substr(2, posLabel.length() - 3);
-                            SlotInfo *slot = uiManager.GetLayout().getSlotByName(posName);
-                            if (slot && slot->panel)
-                                slot->panel->Hide();
-                        } else {
-                            uiManager.SpawnDirWndForFolder(folder, m_hWnd);
-                        }
-                        g_hoverRow = savedRow;
-                        InvalidateRect(m_hWnd, nullptr, FALSE);
                         return 0;
                     }
                 }

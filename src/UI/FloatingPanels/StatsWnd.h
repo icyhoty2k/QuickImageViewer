@@ -71,12 +71,13 @@ namespace UI {
         UINT64 m_decodedBytes  = 0;
 
         // ── Threads ──────────────────────────────────────────────
-        int m_ioThreads       = 0;
-        int m_wicThreads      = 0;
-        int m_dirThumbThreads = 0;
-        int m_ioPending       = 0;
-        int m_wicPending      = 0;
-        int m_dirThumbPending = 0;
+        int m_ioThreads          = 0;
+        int m_wicThreads         = 0;
+        int m_dirThumbThreads    = 0;
+        int m_writeQueueThreads  = 0;
+        int m_ioPending          = 0;
+        int m_wicPending         = 0;
+        int m_dirThumbPending    = 0;
 
         // ── VRAM cache ───────────────────────────────────────────
         int    m_imgCacheCount      = 0;

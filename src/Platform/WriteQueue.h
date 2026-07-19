@@ -31,6 +31,9 @@ public:
     // Block until all pending work is written (call before process exit).
     void Flush();
 
+    // Returns 1 while the drain thread is live, 0 after destruction.
+    int ThreadCount() const noexcept { return m_thread.joinable() ? 1 : 0; }
+
 private:
     std::mutex                                     m_mutex;
     std::condition_variable                        m_cv;
