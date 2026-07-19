@@ -6,6 +6,7 @@
 #include "../../Overlays/OverlayManager.h"
 #include "../../AppState.h"
 #include "../../Input/Shortcuts.h"
+#include "../../Input/Command.h"
 #include "../../Persistence/HistoryFoldersManager.h"
 #include "../UIManager.h"
 #include <algorithm>
@@ -161,6 +162,33 @@ namespace UI {
                + footerH;
     }
 
+    static void BuildDisplayList();
+    static void GetHistoryWindowBounds(HWND hRef, int &x, int &y, int &w, int &h);
+    void CaptureNavigationSnapshot();
+
+    static void ToggleFullHistory(HWND hWnd) {
+        g_showFullHistory = !g_showFullHistory;
+        g_scrollOffsetY = 0;
+        BuildDisplayList();
+        CaptureNavigationSnapshot();
+        g_hoverRow = 0;
+        int x, y, w, h;
+        GetHistoryWindowBounds(g_hHistOwner ? g_hHistOwner : hWnd, x, y, w, h);
+        SetWindowPos(hWnd, HWND_TOPMOST, x, y, w, h, SWP_FRAMECHANGED);
+        InvalidateRect(hWnd, nullptr, TRUE);
+    }
+
+    static void RefreshHistory(HWND hWnd) {
+        historyFoldersManager.MergeHistoryFromDisk();
+        BuildDisplayList();
+        int x, y, w, h;
+        GetHistoryWindowBounds(g_hHistOwner ? g_hHistOwner : hWnd, x, y, w, h);
+        SetWindowPos(hWnd, HWND_TOPMOST, x, y, w, h, SWP_FRAMECHANGED);
+        for (const auto &path : historyFoldersManager.folderHistory)
+            ScanDirForHistory(path);
+        InvalidateRect(hWnd, nullptr, TRUE);
+    }
+
     // Convert a VK_Fx code to its display label ("F3", "F5", …).
     static std::wstring FKeyLabel(UINT vk) {
         if (vk >= VK_F1 && vk <= VK_F24)
@@ -173,9 +201,11 @@ namespace UI {
 
     static std::vector<RECT> g_rowRects;
     static std::vector<RECT> g_indexRects; // clickable rects for directory indexes (parallel to g_displayList)
-    static RECT g_exeLinkRect = {}; // clickable rect for the "QIV" exe-dir link
-    static RECT g_f5IndexRect = {}; // clickable rect for F5 directory index
-    static RECT g_cacheIndexRect = {}; // clickable rect for Cache index
+    static RECT g_exeLinkRect = {};        // clickable rect for the "QIV" exe-dir link
+    static RECT g_f5IndexRect = {};        // clickable rect for [Fkey] Dir toggle in footer
+    static RECT g_cacheIndexRect = {};     // clickable rect for [Fkey] Cache toggle in footer
+    static RECT g_shortcutF5Rect = {};     // clickable "F5" in the shortcuts hint line
+    static RECT g_shortcutCtrlTabRect = {};// clickable "Ctrl+Tab" in the shortcuts hint line
 
     // Display list: what the panel actually renders.
     // Each entry is (path, isFavorite).
@@ -199,9 +229,10 @@ namespace UI {
         const auto &history = historyFoldersManager.folderHistory;
         const auto &favSet = historyFoldersManager.favorites;
         const int favPos = Constants::History::HISTORY_FAVORITES_POSITION;
-        // Use unlimited caps when showing full history, otherwise use the constants
+        // Favorites are always shown in full — historyMaxFavs only caps adding, not display.
+        // Normal rows are capped by historyMaxDirs unless full-history mode is active.
         const int maxNormal = g_showFullHistory ? INT_MAX : app.historyMaxDirs;
-        const int maxFavs = g_showFullHistory ? INT_MAX : app.historyMaxFavs;
+        const int maxFavs = INT_MAX;
 
         if (favPos == 2) {
             // In-place: iterate MRU order, count normals and favs separately
@@ -316,9 +347,12 @@ namespace UI {
         if (favSet.count(path) > 0) {
             favSet.erase(path);
         } else {
-            // Enforce max favorites cap — silently ignore if already full
-            if (static_cast<int>(favSet.size()) >= app.historyMaxFavs)
+            if (static_cast<int>(favSet.size()) >= app.historyMaxFavs) {
+                g_overlayManager.PostCenterMessage(
+                    g_hHistOwner,
+                    L"Favorites full (" + std::to_wstring(app.historyMaxFavs) + L" max)");
                 return;
+            }
             favSet.insert(path);
         }
 
@@ -446,12 +480,7 @@ namespace UI {
     // ---------------------------------------------------------------------------
     bool HistoryListWnd::OnKeyDown(WPARAM vk, bool ctrl, bool shift, bool alt) {
         if (vk == VK_TAB && ctrl) {
-            g_showFullHistory = !g_showFullHistory;
-            g_scrollOffsetY = 0;
-            BuildDisplayList();
-            CaptureNavigationSnapshot();
-            g_hoverRow = 0;
-            InvalidateRect(m_hWnd, nullptr, TRUE);
+            ToggleFullHistory(m_hWnd);
             return true;
         }
 
@@ -461,8 +490,15 @@ namespace UI {
             hist.insert(hist.begin() + insertAt, g_lastDeletedPath);
             historyFoldersManager.RewriteHistoryToDisk();
             if (g_lastDeletedWasFavorite) {
-                historyFoldersManager.favorites.insert(g_lastDeletedPath);
-                historyFoldersManager.RewriteFavoritesToDisk();
+                auto &favSet = historyFoldersManager.favorites;
+                if (static_cast<int>(favSet.size()) < app.historyMaxFavs) {
+                    favSet.insert(g_lastDeletedPath);
+                    historyFoldersManager.RewriteFavoritesToDisk();
+                } else {
+                    g_overlayManager.PostCenterMessage(
+                        g_hHistOwner,
+                        L"Favorites full (" + std::to_wstring(app.historyMaxFavs) + L" max) — not restored");
+                }
             }
             g_lastDeletedIndex = -1;
             BuildDisplayList();
@@ -476,12 +512,7 @@ namespace UI {
         }
 
         if (vk == VK_F5 && !ctrl && !shift && !alt) {
-            // Full refresh: scan every history entry (not just visible rows).
-            // Updates missing/empty/valid status AND size/count for each folder.
-            // Consumes F5 so it doesn't propagate to the main app.
-            for (const auto &path : historyFoldersManager.folderHistory)
-                ScanDirForHistory(path);
-            InvalidateRect(m_hWnd, nullptr, FALSE);
+            RefreshHistory(m_hWnd);
             return true;
         }
 
@@ -794,7 +825,7 @@ namespace UI {
                 int hintBot = hintTop + MulDiv(fontSize + 2, dpi, 96);
                 {
                     constexpr wchar_t SHORTCUTS[] =
-                            L"F5 = refresh dirs     Del = delete entry     Ctrl+Z = restore"
+                            L"F5 = refresh     Del = delete entry     Ctrl+Z = restore"
                             L"     Ctrl+Tab = full list"
                             L"     Ctrl+Shift+Del = clear history"
                             L"     Ctrl+Alt+Shift+Del = clear favorites";
@@ -805,6 +836,41 @@ namespace UI {
                 }
 
                 g_exeLinkRect = {};
+                g_shortcutF5Rect = {};
+                g_shortcutCtrlTabRect = {};
+
+                // Shortcuts line — "F5" and "Ctrl+Tab" are drawn as clickable links
+                {
+                    LONG curX    = rc.left + padding;
+                    LONG rightBound = rc.right - padding;
+
+                    auto drawShortcutPlain = [&](const wchar_t *text) {
+                        if (!text || !*text || curX >= rightBound) return;
+                        SelectObject(hdc, m_hFontBody);
+                        SetTextColor(hdc, RGB(150, 150, 150));
+                        SIZE sz = {};
+                        GetTextExtentPoint32W(hdc, text, static_cast<int>(wcslen(text)), &sz);
+                        RECT r = {curX, hintTop, std::min(curX + sz.cx, rightBound), hintBot};
+                        DrawTextW(hdc, text, -1, &r, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
+                        curX += sz.cx;
+                    };
+                    auto drawShortcutLink = [&](const wchar_t *text, RECT &outRect) {
+                        if (!text || !*text || curX >= rightBound) return;
+                        SelectObject(hdc, m_hFontLink);
+                        SetTextColor(hdc, RGB(100, 180, 255));
+                        SIZE sz = {};
+                        GetTextExtentPoint32W(hdc, text, static_cast<int>(wcslen(text)), &sz);
+                        outRect = {curX, hintTop, curX + sz.cx, hintBot};
+                        DrawTextW(hdc, text, -1, &outRect, DT_LEFT | DT_VCENTER | DT_SINGLELINE);
+                        curX += sz.cx;
+                    };
+
+                    drawShortcutLink(L"F5", g_shortcutF5Rect);
+                    drawShortcutPlain(L" = refresh     Del = delete entry     Ctrl+Z = restore     ");
+                    drawShortcutLink(L"Ctrl+Tab", g_shortcutCtrlTabRect);
+                    drawShortcutPlain(L" = full list     Ctrl+Shift+Del = clear history     Ctrl+Alt+Shift+Del = clear favorites");
+                }
+
                 SelectObject(hdc, m_hFontTitle);
 
                 // Separator (fixed) — placed after shortcuts line
@@ -1305,6 +1371,13 @@ namespace UI {
                 int headerBottom = padding2 + titleSz2 + 4 + MulDiv(2, dpi2, 96) + fontSize2 + 2 + MulDiv(4, dpi2, 96);
 
                 // Check if clicking in header area — track screen coords to avoid drift
+                // Skip drag-start when the click lands on a shortcut link (handled in WM_LBUTTONUP).
+                {
+                    POINT ptLink = {mx, my};
+                    if ((g_shortcutF5Rect.right     > g_shortcutF5Rect.left     && PtInRect(&g_shortcutF5Rect,     ptLink)) ||
+                        (g_shortcutCtrlTabRect.right > g_shortcutCtrlTabRect.left && PtInRect(&g_shortcutCtrlTabRect, ptLink)))
+                        return 0;
+                }
                 if (my < headerBottom) {
                     g_headerDragging = true;
                     POINT ptScreen = {mx, my};
@@ -1416,16 +1489,25 @@ namespace UI {
                     }
                 }
                 // Hand cursor over clickable links/indexes
-                if (g_exeLinkRect.right > g_exeLinkRect.left) {
+                {
                     POINT pt = {mx, my};
-                    if (PtInRect(&g_exeLinkRect, pt)) {
+                    if (g_shortcutF5Rect.right > g_shortcutF5Rect.left && PtInRect(&g_shortcutF5Rect, pt)) {
                         SetCursor(LoadCursor(nullptr, IDC_HAND));
                         return 0;
                     }
-                }
-                if (g_f5IndexRect.right > g_f5IndexRect.left) {
-                    POINT pt = {mx, my};
-                    if (PtInRect(&g_f5IndexRect, pt)) {
+                    if (g_shortcutCtrlTabRect.right > g_shortcutCtrlTabRect.left && PtInRect(&g_shortcutCtrlTabRect, pt)) {
+                        SetCursor(LoadCursor(nullptr, IDC_HAND));
+                        return 0;
+                    }
+                    if (g_exeLinkRect.right > g_exeLinkRect.left && PtInRect(&g_exeLinkRect, pt)) {
+                        SetCursor(LoadCursor(nullptr, IDC_HAND));
+                        return 0;
+                    }
+                    if (g_cacheIndexRect.right > g_cacheIndexRect.left && PtInRect(&g_cacheIndexRect, pt)) {
+                        SetCursor(LoadCursor(nullptr, IDC_HAND));
+                        return 0;
+                    }
+                    if (g_f5IndexRect.right > g_f5IndexRect.left && PtInRect(&g_f5IndexRect, pt)) {
                         SetCursor(LoadCursor(nullptr, IDC_HAND));
                         return 0;
                     }
@@ -1463,6 +1545,24 @@ namespace UI {
                 int mx = GET_X_LPARAM(lParam);
                 int my = GET_Y_LPARAM(lParam);
 
+                // "F5" shortcut click — reload history from disk, rebuild, then scan statuses
+                if (g_shortcutF5Rect.right > g_shortcutF5Rect.left) {
+                    POINT pt = {mx, my};
+                    if (PtInRect(&g_shortcutF5Rect, pt)) {
+                        RefreshHistory(m_hWnd);
+                        return 0;
+                    }
+                }
+
+                // "Ctrl+Tab" shortcut click — toggle full history view
+                if (g_shortcutCtrlTabRect.right > g_shortcutCtrlTabRect.left) {
+                    POINT pt = {mx, my};
+                    if (PtInRect(&g_shortcutCtrlTabRect, pt)) {
+                        ToggleFullHistory(m_hWnd);
+                        return 0;
+                    }
+                }
+
                 // Exe-dir link click
                 if (g_exeLinkRect.right > g_exeLinkRect.left) {
                     POINT pt = {mx, my};
@@ -1473,20 +1573,20 @@ namespace UI {
                     }
                 }
 
-                // [F5] label click — toggle F5
+                // [F6] Dir label click
                 if (g_f5IndexRect.right > g_f5IndexRect.left) {
                     POINT pt = {mx, my};
                     if (PtInRect(&g_f5IndexRect, pt)) {
-                        uiManager.Toggle(uiManager.getDirWindow());
+                        InputManager::ExecuteCommand(g_hHistOwner, Command::ToggleDir);
                         return 0;
                     }
                 }
 
-                // [F3] (Cache) label click — toggle Cache
+                // [F3] Cache label click
                 if (g_cacheIndexRect.right > g_cacheIndexRect.left) {
                     POINT pt = {mx, my};
                     if (PtInRect(&g_cacheIndexRect, pt)) {
-                        uiManager.Toggle(uiManager.getCacheWindow());
+                        InputManager::ExecuteCommand(g_hHistOwner, Command::ToggleCache);
                         return 0;
                     }
                 }

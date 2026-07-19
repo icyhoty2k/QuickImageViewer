@@ -296,6 +296,21 @@ namespace Persistence::Registry {
         a.fileHandlerIsReverseSortOrder = readDword(
             Constants::Registry::SORT_REVERSE,
             static_cast<DWORD>(Constants::FileHandler::FILE_HANDLER_SORT_TYPE_IS_REVERSE)) != 0;
+        a.ctrlCEnabled = readDword(
+            Constants::Registry::CTRL_C_ENABLED,
+            static_cast<DWORD>(Constants::IS_CTRL_C_ENABLED)) != 0;
+        a.thumbCopyEnabled = readDword(
+            Constants::Registry::THUMB_COPY_ENABLED,
+            static_cast<DWORD>(Constants::IS_THUMB_COPY_ENABLED)) != 0;
+        a.thumbMoveEnabled = readDword(
+            Constants::Registry::THUMB_MOVE_ENABLED,
+            static_cast<DWORD>(Constants::IS_THUMB_MOVE_ENABLED)) != 0;
+        a.thumbDeleteEnabled = readDword(
+            Constants::Registry::THUMB_DELETE_ENABLED,
+            static_cast<DWORD>(Constants::IS_THUMB_DELETE_ENABLED)) != 0;
+        a.thumbPasteEnabled = readDword(
+            Constants::Registry::THUMB_PASTE_ENABLED,
+            static_cast<DWORD>(Constants::IS_THUMB_PASTE_ENABLED)) != 0;
         a.themeFactor = static_cast<float>(readDword(Constants::Registry::THEME_FACTOR,
             static_cast<DWORD>(Constants::Theme::DEFAULT_THEME_FACTOR))) / 100.0f;
 

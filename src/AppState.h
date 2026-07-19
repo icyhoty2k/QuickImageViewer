@@ -71,6 +71,11 @@ struct AppState {
     bool openDirWndOnStart       = Constants::IS_OPEN_DIRWND_ON_START;
     bool overlayShowBackground   = Constants::Overlay::IS_OVERLAY_SHOW_BACKGROUND;
     bool swapMouseButtons        = Constants::IS_SWAP_MOUSE_BUTTONS;
+    bool ctrlCEnabled            = Constants::IS_CTRL_C_ENABLED;
+    bool thumbCopyEnabled        = Constants::IS_THUMB_COPY_ENABLED;
+    bool thumbMoveEnabled        = Constants::IS_THUMB_MOVE_ENABLED;
+    bool thumbDeleteEnabled      = Constants::IS_THUMB_DELETE_ENABLED;
+    bool thumbPasteEnabled       = Constants::IS_THUMB_PASTE_ENABLED;
     bool invertWheelDirection    = Constants::IS_MOUSE_VERTICAL_REVERSE_SCROLL_DIRECTION;
     bool invertWheelDirectionH   = Constants::IS_MOUSE_HORIZONTAL_REVERSE_SCROLL_DIRECTION;
     int  vramCacheCount          = Constants::IS_VRAM_CACHE_IMAGES_COUNT;

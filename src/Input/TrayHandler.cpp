@@ -107,6 +107,21 @@ void TrayHandler::ShowContextMenu(HWND hWnd, int x, int y) {
     AppendMenuW(hSubMenu,
         MF_STRING | (app.startInFullscreen ? MF_CHECKED : MF_UNCHECKED),
         25, L"Start in Fullscreen");
+    AppendMenuW(hSubMenu,
+        MF_STRING | (app.ctrlCEnabled ? MF_CHECKED : MF_UNCHECKED),
+        49, L"Ctrl+C Copy to Clipboard");
+    {
+        HMENU hThumbOps = CreatePopupMenu();
+        AppendMenuW(hThumbOps,
+            MF_STRING | (app.thumbCopyEnabled   ? MF_CHECKED : MF_UNCHECKED), 50, L"Copy (Ctrl+C)");
+        AppendMenuW(hThumbOps,
+            MF_STRING | (app.thumbMoveEnabled   ? MF_CHECKED : MF_UNCHECKED), 51, L"Cut / Move (Ctrl+X)");
+        AppendMenuW(hThumbOps,
+            MF_STRING | (app.thumbDeleteEnabled ? MF_CHECKED : MF_UNCHECKED), 52, L"Delete (Del)");
+        AppendMenuW(hThumbOps,
+            MF_STRING | (app.thumbPasteEnabled  ? MF_CHECKED : MF_UNCHECKED), 53, L"Paste (Ctrl+V)");
+        AppendMenuW(hSubMenu, MF_POPUP, reinterpret_cast<UINT_PTR>(hThumbOps), L"Thumbnail Operations");
+    }
     AppendMenuW(hSubMenu, MF_SEPARATOR, 0, nullptr);
     {
         wchar_t vramLabel[64];
@@ -333,6 +348,36 @@ void TrayHandler::DispatchCommand(HWND hWnd, int cmd) {
         app.startInFullscreen = !app.startInFullscreen;
         Persistence::Registry::SaveSetting(Constants::Registry::START_FULLSCREEN,
             static_cast<DWORD>(app.startInFullscreen));
+        break;
+
+    case 49:
+        app.ctrlCEnabled = !app.ctrlCEnabled;
+        Persistence::Registry::SaveSetting(Constants::Registry::CTRL_C_ENABLED,
+            static_cast<DWORD>(app.ctrlCEnabled));
+        break;
+
+    case 50:
+        app.thumbCopyEnabled = !app.thumbCopyEnabled;
+        Persistence::Registry::SaveSetting(Constants::Registry::THUMB_COPY_ENABLED,
+            static_cast<DWORD>(app.thumbCopyEnabled));
+        break;
+
+    case 51:
+        app.thumbMoveEnabled = !app.thumbMoveEnabled;
+        Persistence::Registry::SaveSetting(Constants::Registry::THUMB_MOVE_ENABLED,
+            static_cast<DWORD>(app.thumbMoveEnabled));
+        break;
+
+    case 52:
+        app.thumbDeleteEnabled = !app.thumbDeleteEnabled;
+        Persistence::Registry::SaveSetting(Constants::Registry::THUMB_DELETE_ENABLED,
+            static_cast<DWORD>(app.thumbDeleteEnabled));
+        break;
+
+    case 53:
+        app.thumbPasteEnabled = !app.thumbPasteEnabled;
+        Persistence::Registry::SaveSetting(Constants::Registry::THUMB_PASTE_ENABLED,
+            static_cast<DWORD>(app.thumbPasteEnabled));
         break;
 
     // ── Integer input values ──────────────────────────────────────────────────
@@ -565,6 +610,11 @@ void TrayHandler::DispatchCommand(HWND hWnd, int cmd) {
                 fwprintf(f, L"%s=%d\n", Constants::Registry::SLIDESHOW_TRANSITION,   static_cast<int>(app.slideshow.transition.type));
                 fwprintf(f, L"%s=%d\n", Constants::Registry::SORT_ORDER,             app.fileHandlerDefaultSortOrder);
                 fwprintf(f, L"%s=%d\n", Constants::Registry::SORT_REVERSE,           (int)app.fileHandlerIsReverseSortOrder);
+                fwprintf(f, L"%s=%d\n", Constants::Registry::CTRL_C_ENABLED,         (int)app.ctrlCEnabled);
+                fwprintf(f, L"%s=%d\n", Constants::Registry::THUMB_COPY_ENABLED,     (int)app.thumbCopyEnabled);
+                fwprintf(f, L"%s=%d\n", Constants::Registry::THUMB_MOVE_ENABLED,     (int)app.thumbMoveEnabled);
+                fwprintf(f, L"%s=%d\n", Constants::Registry::THUMB_DELETE_ENABLED,   (int)app.thumbDeleteEnabled);
+                fwprintf(f, L"%s=%d\n", Constants::Registry::THUMB_PASTE_ENABLED,    (int)app.thumbPasteEnabled);
                 fwprintf(f, L"%s=%d\n", Constants::Registry::THEME_FACTOR,           (int)(app.themeFactor * 100.0f));
                 fclose(f);
                 UI::ThemedDialog::Message(hWnd, L"Settings exported successfully.", L"Export Settings");
@@ -645,6 +695,11 @@ void TrayHandler::DispatchCommand(HWND hWnd, int cmd) {
             applyBool(Constants::Registry::WHEEL_INVERT,         app.invertWheelDirection);
             applyBool(Constants::Registry::WHEEL_INVERT_H,       app.invertWheelDirectionH);
             applyBool(Constants::Registry::START_FULLSCREEN,     app.startInFullscreen);
+            applyBool(Constants::Registry::CTRL_C_ENABLED,       app.ctrlCEnabled);
+            applyBool(Constants::Registry::THUMB_COPY_ENABLED,   app.thumbCopyEnabled);
+            applyBool(Constants::Registry::THUMB_MOVE_ENABLED,   app.thumbMoveEnabled);
+            applyBool(Constants::Registry::THUMB_DELETE_ENABLED, app.thumbDeleteEnabled);
+            applyBool(Constants::Registry::THUMB_PASTE_ENABLED,  app.thumbPasteEnabled);
             applyBool(Constants::Registry::SLIDESHOW_LOOP,       app.slideshow.loop);
             applyBool(Constants::Registry::SLIDESHOW_SHUFFLE,    app.slideshow.shuffle);
 
@@ -779,6 +834,11 @@ void TrayHandler::DispatchCommand(HWND hWnd, int cmd) {
         app.slideshow.transition.type           = TransitionType::Cut;
         app.fileHandlerDefaultSortOrder         = Constants::FileHandler::FILE_HANDLER_DEFAULT_SORT_ORDER;
         app.fileHandlerIsReverseSortOrder       = Constants::FileHandler::FILE_HANDLER_SORT_TYPE_IS_REVERSE;
+        app.ctrlCEnabled                        = Constants::IS_CTRL_C_ENABLED;
+        app.thumbCopyEnabled                    = Constants::IS_THUMB_COPY_ENABLED;
+        app.thumbMoveEnabled                    = Constants::IS_THUMB_MOVE_ENABLED;
+        app.thumbDeleteEnabled                  = Constants::IS_THUMB_DELETE_ENABLED;
+        app.thumbPasteEnabled                   = Constants::IS_THUMB_PASTE_ENABLED;
 
         Persistence::Registry::SaveSetting(Constants::Registry::KEEP_IN_BACKGROUND,   static_cast<DWORD>(app.isKeepInBackground));
         Persistence::Registry::SaveSetting(Constants::Registry::RUN_ON_STARTUP,        static_cast<DWORD>(app.isEnableRunOnStartup));
@@ -805,8 +865,13 @@ void TrayHandler::DispatchCommand(HWND hWnd, int cmd) {
         Persistence::Registry::SaveSetting(Constants::Registry::SLIDESHOW_LOOP,         static_cast<DWORD>(app.slideshow.loop));
         Persistence::Registry::SaveSetting(Constants::Registry::SLIDESHOW_SHUFFLE,      static_cast<DWORD>(app.slideshow.shuffle));
         Persistence::Registry::SaveSetting(Constants::Registry::SLIDESHOW_TRANSITION,   0u);
-        Persistence::Registry::SaveSetting(Constants::Registry::SORT_ORDER,   static_cast<DWORD>(app.fileHandlerDefaultSortOrder));
-        Persistence::Registry::SaveSetting(Constants::Registry::SORT_REVERSE, static_cast<DWORD>(app.fileHandlerIsReverseSortOrder));
+        Persistence::Registry::SaveSetting(Constants::Registry::SORT_ORDER,      static_cast<DWORD>(app.fileHandlerDefaultSortOrder));
+        Persistence::Registry::SaveSetting(Constants::Registry::SORT_REVERSE,    static_cast<DWORD>(app.fileHandlerIsReverseSortOrder));
+        Persistence::Registry::SaveSetting(Constants::Registry::CTRL_C_ENABLED,      static_cast<DWORD>(app.ctrlCEnabled));
+        Persistence::Registry::SaveSetting(Constants::Registry::THUMB_COPY_ENABLED,   static_cast<DWORD>(app.thumbCopyEnabled));
+        Persistence::Registry::SaveSetting(Constants::Registry::THUMB_MOVE_ENABLED,   static_cast<DWORD>(app.thumbMoveEnabled));
+        Persistence::Registry::SaveSetting(Constants::Registry::THUMB_DELETE_ENABLED, static_cast<DWORD>(app.thumbDeleteEnabled));
+        Persistence::Registry::SaveSetting(Constants::Registry::THUMB_PASTE_ENABLED,  static_cast<DWORD>(app.thumbPasteEnabled));
 
         Persistence::Registry::EnableRunOnStartup(app.isEnableRunOnStartup);
         m_overlayManager.SetAllVisible(app.showOverlayInfoText);
