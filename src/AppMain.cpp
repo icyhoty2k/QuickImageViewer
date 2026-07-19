@@ -1,9 +1,9 @@
 #include <algorithm>
 #include <random>
-#include <fstream>
+
 using std::min;
 using std::max;
-#include <cstdio>
+
 #include <intrin.h>
 #include "CMDArgs.h"
 #include "SlideshowTransitions.h"
@@ -18,7 +18,7 @@ extern void UpdateOverlaysForCurrentImage(HWND hWnd);
 #ifndef NOMINMAX
 #define NOMINMAX
 #endif
-#include <dwmapi.h>
+
 #include <intsafe.h>
 #include "UI/ThumbnailPanels/CacheWnd.h"
 #include "AppState.h"
@@ -30,7 +30,10 @@ extern void UpdateOverlaysForCurrentImage(HWND hWnd);
 #include "GeoNames.h"
 #include "UI/ThumbnailPanels/DirWnd.h"
 #include "UI/ThemedDialog.h"
-#include "Persistence/HistoryFoldersManager.h"
+#include "UI/FloatingPanels/HistoryListWnd.h"
+#include "Platform/WriteQueue.h"
+#include <thread>
+
 #include <miniz.h>
 #include "MouseHandler.h"
 #include "Input/Command.h"
@@ -40,7 +43,7 @@ extern void UpdateOverlaysForCurrentImage(HWND hWnd);
 #define MF_RADIOCHECK 0x00000200L
 #endif
 #include <windowsx.h>
-#include <commdlg.h>
+
 #include <shobjidl.h>
 #include <commctrl.h>
 #include <shellapi.h> // Parsing command line arguments
@@ -537,7 +540,6 @@ int WINAPI wWinMain(HINSTANCE hInstance, [[maybe_unused]] HINSTANCE hPrevInstanc
 #endif
 
     CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED | COINIT_DISABLE_OLE1DDE);
-    if (FAILED(CoCreateInstance(CLSID_WICImagingFactory, nullptr, CLSCTX_INPROC_SERVER, IID_PPV_ARGS(&app.wicFactory)))) return 0;
 
     // --- COMMAND LINE PARSING (before registry — args are highest priority) ---
     int argc;
@@ -551,104 +553,51 @@ int WINAPI wWinMain(HINSTANCE hInstance, [[maybe_unused]] HINSTANCE hPrevInstanc
     // Dedicated mode must be known before any registry call so PrefixedName() works.
     if (earlyArgs.dedicated) app.isDedicated = true;
 
+    // -RestoreDefaults: delete all persisted settings, confirm, exit.
+    // Run before any registry reads so a corrupted value can never block this path.
+    if (earlyArgs.restoreDefaults) {
+        RegDeleteTreeW(HKEY_CURRENT_USER, Constants::Registry::ROOT_KEY);
+        MessageBoxW(nullptr,
+            L"All settings have been restored to defaults.\n\nThe application will now exit.",
+            L"qIV — Restore Defaults", MB_OK | MB_ICONINFORMATION);
+        return 0;
+    }
+
     // Registry is the source of truth for user preferences in all modes.
-    app.isEnableRunOnStartup = Persistence::Registry::LoadSetting(
-        Constants::Registry::RUN_ON_STARTUP,
-        static_cast<DWORD>(Constants::IS_ENABLE_RUN_ON_STARTUP)) != 0;
-    app.isKeepInBackground = Persistence::Registry::LoadSetting(
-        Constants::Registry::KEEP_IN_BACKGROUND,
-        static_cast<DWORD>(Constants::IS_KEEP_IN_BACKGROUND)) != 0;
-    app.thumbnailEffectsEnabled = Persistence::Registry::LoadSetting(
-        Constants::Registry::THUMBNAIL_EFFECTS,
-        static_cast<DWORD>(Constants::ThumbnailPanel::ThumbnailEffects::EFFECTS_MASTER_ENABLED)) != 0;
-    app.historyFullModeEnabled = Persistence::Registry::LoadSetting(
-        Constants::Registry::HISTORY_FULL_MODE,
-        static_cast<DWORD>(Constants::History::HISTORY_SHOW_FULL_HISTORY)) != 0;
-    app.showOverlayInfoText = Persistence::Registry::LoadSetting(
-        Constants::Registry::OVERLAY_VISIBLE,
-        static_cast<DWORD>(Constants::Overlay::DEFAULT_SHOW_OVERLAY)) != 0;
-    app.openDirWndOnStart = Persistence::Registry::LoadSetting(
-        Constants::Registry::OPEN_DIRWND_ON_START,
-        static_cast<DWORD>(Constants::IS_OPEN_DIRWND_ON_START)) != 0;
-    app.overlayShowBackground = Persistence::Registry::LoadSetting(
-        Constants::Registry::OVERLAY_SHOW_BG,
-        static_cast<DWORD>(Constants::Overlay::IS_OVERLAY_SHOW_BACKGROUND)) != 0;
-    app.swapMouseButtons = Persistence::Registry::LoadSetting(
-        Constants::Registry::SWAP_MOUSE_BUTTONS,
-        static_cast<DWORD>(Constants::IS_SWAP_MOUSE_BUTTONS)) != 0;
-    app.invertWheelDirection = Persistence::Registry::LoadSetting(
-        Constants::Registry::WHEEL_INVERT,
-        static_cast<DWORD>(Constants::IS_MOUSE_VERTICAL_REVERSE_SCROLL_DIRECTION)) != 0;
-    app.invertWheelDirectionH = Persistence::Registry::LoadSetting(
-        Constants::Registry::WHEEL_INVERT_H,
-        static_cast<DWORD>(Constants::IS_MOUSE_HORIZONTAL_REVERSE_SCROLL_DIRECTION)) != 0;
-    app.vramCacheCount = max(0, min(999, static_cast<int>(
-        Persistence::Registry::LoadSetting(Constants::Registry::VRAM_CACHE_COUNT,
-            static_cast<DWORD>(Constants::IS_VRAM_CACHE_IMAGES_COUNT)))));
-    {
-        int m = max(1, min(5, static_cast<int>(
-            Persistence::Registry::LoadSetting(Constants::Registry::VIEW_MODE,
-                static_cast<DWORD>(Constants::ViewModes::defaultViewMode)))));
-        app.viewMode = static_cast<Constants::ViewModes::ViewMode>(m);
-    }
-    app.baseWidth = max(240, min(16000, static_cast<int>(
-        Persistence::Registry::LoadSetting(Constants::Registry::BASE_WIDTH_KEY,
-            static_cast<DWORD>(Constants::IS_BASE_WIDTH)))));
-    app.baseHeight = max(240, min(16000, static_cast<int>(
-        Persistence::Registry::LoadSetting(Constants::Registry::BASE_HEIGHT_KEY,
-            static_cast<DWORD>(Constants::IS_BASE_HEIGHT)))));
-    app.startInFullscreen = Persistence::Registry::LoadSetting(
-        Constants::Registry::START_FULLSCREEN, 0u) != 0;
-    app.historyMaxDirs = max(0, min(999, static_cast<int>(
-        Persistence::Registry::LoadSetting(Constants::Registry::HISTORY_MAX_DIRS,
-            static_cast<DWORD>(Constants::History::IS_HISTORY_MAX_DIRS_TO_SHOW)))));
-    app.historyMaxFavs = max(0, min(999, static_cast<int>(
-        Persistence::Registry::LoadSetting(Constants::Registry::HISTORY_MAX_FAVS,
-            static_cast<DWORD>(Constants::History::IS_HISTORY_MAX_FAVORITES_TO_SHOW)))));
-    app.dirThumbCacheMB = max(100, min(64000, static_cast<int>(
-        Persistence::Registry::LoadSetting(Constants::Registry::DIR_THUMB_CACHE_MB,
-            static_cast<DWORD>(Constants::IS_DIR_THUMB_CACHE_BUDGET_MB)))));
-    app.preloadLookaside = max(1, min(99, static_cast<int>(
-        Persistence::Registry::LoadSetting(Constants::Registry::PRELOAD_LOOKASIDE,
-            static_cast<DWORD>(Constants::IS_PRELOAD_LOOKASIDE_COUNT)))));
-    app.msgCenterDisplayMs = max(250, min(10000, static_cast<int>(
-        Persistence::Registry::LoadSetting(Constants::Registry::MSG_CENTER_MS,
-            static_cast<DWORD>(Constants::Overlay::IS_MSG_CENTER_DISPLAY_MS)))));
-    app.historyMaxDirsSave = max(1, min(99999, static_cast<int>(
-        Persistence::Registry::LoadSetting(Constants::Registry::HISTORY_MAX_DIRS_SAVE,
-            static_cast<DWORD>(Constants::History::IS_HISTORY_MAX_DIRS_TO_SAVE)))));
-    app.slideshow.intervalMs = max(100, min(60000, static_cast<int>(
-        Persistence::Registry::LoadSetting(Constants::Registry::SLIDESHOW_INTERVAL_MS,
-            static_cast<DWORD>(Constants::Slideshow::IS_INTERVAL_MS)))));
-    app.slideshow.loop = Persistence::Registry::LoadSetting(
-        Constants::Registry::SLIDESHOW_LOOP,
-        static_cast<DWORD>(Constants::Slideshow::IS_LOOP)) != 0;
-    app.slideshow.shuffle = Persistence::Registry::LoadSetting(
-        Constants::Registry::SLIDESHOW_SHUFFLE,
-        static_cast<DWORD>(Constants::Slideshow::IS_SHUFFLE)) != 0;
-    {
-        int t = max(0, min(5, static_cast<int>(
-            Persistence::Registry::LoadSetting(Constants::Registry::SLIDESHOW_TRANSITION,
-                static_cast<DWORD>(TransitionType::Cut)))));
-        app.slideshow.transition.type = static_cast<TransitionType>(t);
-    }
-    app.fileHandlerDefaultSortOrder = max(0, min(4, static_cast<int>(
-        Persistence::Registry::LoadSetting(Constants::Registry::SORT_ORDER,
-            static_cast<DWORD>(Constants::FileHandler::FILE_HANDLER_DEFAULT_SORT_ORDER)))));
-    app.fileHandlerIsReverseSortOrder = Persistence::Registry::LoadSetting(
-        Constants::Registry::SORT_REVERSE,
-        static_cast<DWORD>(Constants::FileHandler::FILE_HANDLER_SORT_TYPE_IS_REVERSE)) != 0;
+    Persistence::Registry::LoadAllSettings(app);
 
     // Command-line overrides: args beat registry values.
     if (earlyArgs.runOnStartup) app.isEnableRunOnStartup = true;
 
-    // Shell integration (open-with) only for normal instances.
-    if (!app.isDedicated)
-        Persistence::Registry::RegisterAppForOpenWith();
+    // Capture by value — background threads must not read app fields that could change.
+    const bool bgDedicated          = app.isDedicated;
+    const bool bgEnableRunOnStartup = app.isEnableRunOnStartup;
 
-    // Startup entry: always apply so exe relocation is picked up automatically.
-    // EnableRunOnStartup is mode-aware — dedicated writes to its own Run key entry.
-    Persistence::Registry::EnableRunOnStartup(app.isEnableRunOnStartup);
+    // --- Parallel startup work — runs while window creation + renderer init proceed ---
+
+    // Registry maintenance: open-with registration + startup entry (every launch, ~2-4 ms).
+    std::thread registryThread([bgDedicated, bgEnableRunOnStartup]() {
+        if (!bgDedicated)
+            Persistence::Registry::RegisterAppForOpenWith();
+        Persistence::Registry::EnableRunOnStartup(bgEnableRunOnStartup);
+    });
+
+    // WIC imaging factory: loads windowscodecs.dll cold (5-15 ms), warm ~0 ms.
+    // IWICImagingFactory2 implements the free-threaded marshaler — safe to create
+    // in an MTA thread and use on the main STA thread after join().
+    std::atomic<bool> wicOk{false};
+    std::thread wicThread([&wicOk]() {
+        CoInitializeEx(nullptr, COINIT_MULTITHREADED);
+        wicOk = SUCCEEDED(CoCreateInstance(CLSID_WICImagingFactory, nullptr,
+                                           CLSCTX_INPROC_SERVER,
+                                           IID_PPV_ARGS(&app.wicFactory)));
+        CoUninitialize();
+    });
+
+    // History + favorites from disk: cold HDD 1-10 ms, warm NVMe ~0 ms.
+    std::thread historyThread([]() {
+        UI::LoadFolderHistoryFromDisk();
+    });
 
     // --- SINGLE INSTANCE & RAM RESIDENT LOGIC ---
     bool bypassMutex = (GetAsyncKeyState(VK_SHIFT) & 0x8000) != 0;
@@ -681,6 +630,9 @@ int WINAPI wWinMain(HINSTANCE hInstance, [[maybe_unused]] HINSTANCE hPrevInstanc
             }
             SendMessageW(hExistingWnd, WM_COPYDATA, 0, (LPARAM) &cds);
         }
+        registryThread.detach();
+        wicThread.detach();
+        historyThread.detach();
         ReleaseMutex(hMutex);
         CloseHandle(hMutex);
         return 0;
@@ -730,11 +682,14 @@ int WINAPI wWinMain(HINSTANCE hInstance, [[maybe_unused]] HINSTANCE hPrevInstanc
     RegisterDragDrop(hWnd, (g_pDropTarget = new DropTarget(hWnd)));
 
     AppCommands::changeAppCornerPreference(hWnd, app.cornerPreference);
-    // 1. Load your saved persistent settings FIRST
-    // This establishes the user's baseline state.
-    DWORD savedFactor = Persistence::Registry::LoadSetting(Constants::Registry::THEME_FACTOR, static_cast<DWORD>(Constants::Theme::DEFAULT_THEME_FACTOR));
-    app.themeFactor = static_cast<float>(savedFactor) / 100.0f;
     AppCommands::changeAppThemeFactor(hWnd, app.themeFactor);
+
+    // Join background threads — all must finish before ApplyCmdArgs decodes the first image.
+    registryThread.join();
+    wicThread.join();
+    historyThread.join();
+    if (!wicOk) return 0; // WIC unavailable — cannot decode images
+
     // 2. Apply command-line arguments SECOND (already parsed above; args beat registry)
     ApplyCmdArgs(hWnd, earlyArgs, nCmdShow);
 
@@ -752,6 +707,7 @@ int WINAPI wWinMain(HINSTANCE hInstance, [[maybe_unused]] HINSTANCE hPrevInstanc
     }
 
     // --- CRITICAL CLEANUP ---
+    g_writeQueue.Flush(); // drain all pending registry + file writes before teardown
     app.renderer.reset();
 
     if (app.wicFactory) {
