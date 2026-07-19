@@ -30,6 +30,7 @@ namespace UI {
                                                Constants::Messages::SPAWN_DIR_CLOSED);
             m_layout.clearPanel(panel);
             RefreshVerticalPanels();
+            RefreshStatsWindowIfVisible();
             return; // pool panel — never deleted
         }
         m_layout.clearPanel(panel);
@@ -56,6 +57,7 @@ namespace UI {
 
     void UIManager::Toggle(IPanelWindow &panel) {
         panel.Toggle();
+        RefreshStatsWindowIfVisible();
     }
 
     void UIManager::HideAllPanelWindows() {
@@ -229,6 +231,8 @@ namespace UI {
             case 4: msg = Constants::Messages::SPAWN_DIR_LEFT;   break;
         }
         if (msg) g_overlayManager.PostCenterMessage(m_hMainWnd, msg);
+
+        RefreshStatsWindowIfVisible();
 
         if (hHistoryWnd) {
             SetForegroundWindow(hHistoryWnd);

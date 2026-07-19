@@ -243,9 +243,10 @@ namespace UI {
             L"Grow / shrink the window by " + NumI(Constants::KEYBOARD_WINDOW_RESIZE_STEP) +
             L" px per side while keeping it centered.", sWin);
         Add(L"Ctrl+Space",
-            L"Fit to screen — resize and reposition the viewer to fill the entire work area "
-            L"(monitor minus taskbar), then shrink it further to avoid any visible panel "
-            L"(F3 cache strip, F6 directory strip, spawned directory panels).", sWin);
+            L"Toggle: first press fits the viewer to the work area (monitor minus taskbar), "
+            L"shrinking further to avoid any visible panel (F3 cache strip, F6 directory strip, "
+            L"spawned directory panels). Second press restores the default window size "
+            L"(baseWidth × baseHeight from Constants.h), centered on the current monitor.", sWin);
         Add(L"Drag near screen edge",
             L"Releasing a window drag within " + NumI(Constants::WINDOW_SNAP_DISTANCE) +
             L" px of a screen edge snaps the window to that edge.", sWin);
