@@ -1,0 +1,42 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+jobs:
+  release:
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout source
+        uses: actions/checkout@v4
+
+      - name: Setup sccache
+        uses: mozilla/sccache-action@v0.0.5
+        env:
+          SCCACHE_GHA_ENABLED: "true"
+
+      - name: Setup MSVC
+        uses: ilammy/msvc-dev-cmd@v1
+
+      - name: Configure CMake
+        env:
+          SCCACHE_GHA_ENABLED: "true"
+        run: cmake -B build -DCMAKE_BUILD_TYPE=Release -DQIV_STATIC_RUNTIME=ON
+
+      - name: Build
+        env:
+          SCCACHE_GHA_ENABLED: "true"
+        run: cmake --build build --config Release
+
+      - name: Rename executable
+        shell: pwsh
+        run: Move-Item "build/Release/QuickImageViewer.exe" "QuickImageViewer-${{ github.ref_name }}.exe"
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: QuickImageViewer-${{ github.ref_name }}.exe
+          generate_release_notes: true
