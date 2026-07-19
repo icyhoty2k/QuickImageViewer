@@ -6,6 +6,7 @@
 #include <filesystem>
 #include <algorithm>
 #include <thread>
+#include <atomic>
 #include "ThumbnailPanelWnd.h"
 #include "Thumbnail.h"
 #include "../../Platform/FileHandler.h"
@@ -24,10 +25,14 @@ namespace UI {
         void Start(HWND hWnd, const std::wstring &dir);
         void Stop();
 
+        static int ActiveCount() { return s_activeCount.load(std::memory_order_relaxed); }
+
     private:
         HANDLE m_hNotify = INVALID_HANDLE_VALUE;
         HANDLE m_hStop   = nullptr;
         std::thread m_thread;
+
+        static std::atomic<int> s_activeCount;
     };
 
     class DirWnd : public ThumbnailPanelWnd {

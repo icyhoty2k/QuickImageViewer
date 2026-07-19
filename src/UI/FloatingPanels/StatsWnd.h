@@ -75,6 +75,7 @@ namespace UI {
         int m_wicThreads         = 0;
         int m_dirThumbThreads    = 0;
         int m_writeQueueThreads  = 0;
+        int m_dirWatcherThreads  = 0;
         int m_ioPending          = 0;
         int m_wicPending         = 0;
         int m_dirThumbPending    = 0;
