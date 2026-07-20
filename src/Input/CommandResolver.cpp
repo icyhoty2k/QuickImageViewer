@@ -200,9 +200,10 @@ Command InputManager::ResolveKeyboardKeys(UINT key, LPARAM lParam) {
             return Command::ToggleHistory;
         case Shortcuts::SC_PANEL_CACHE_CLEAR: return Command::ClearCache;
 
-        // --- Overlays ---
-        case Shortcuts::SC_PANEL_OVERLAY_TOGGLE: // N — Ctrl+N only
+        // --- 'N' — Ctrl+N new window, plain = toggle all panels (close ↔ restore) ---
+        case Shortcuts::SC_PANEL_OVERLAY_TOGGLE: // 'N' (== SC_TOGGLE_ALL_PANELS)
             if (ctrl && !alt && !shift) return Command::NewWindow;
+            if (!ctrl && !alt && !shift) return Command::ToggleAllPanels;
             break;
 
         case Shortcuts::SC_PANEL_OVERLAY_MASTER: // I

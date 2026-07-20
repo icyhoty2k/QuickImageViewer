@@ -1,6 +1,7 @@
 #include "MouseHandler.h"
 #include "AppState.h"
 #include "AppCommands.h"
+#include "ContextMenuHandler.h"
 #include "../Platform/Constants.h"
 #include "../Platform/ConstantsStrings.h"
 #include "../Platform/FileHandler.h"
@@ -65,11 +66,18 @@ void MouseHandler::HandleButtonDown(HWND hWnd, UINT message, WPARAM wParam, LPAR
     // Track RMB state
     if (message == WM_RBUTTONDOWN) {
         app.isRmbDown = true;
+        // Arm the context-menu click detector: remember the down point (screen
+        // space) and assume a pure click until a drag/combo proves otherwise.
+        app.rmbConsumed = false;
+        POINT dp = {GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam)};
+        ClientToScreen(hWnd, &dp);
+        app.rmbDownPt = dp;
         SetCursor(LoadCursor(nullptr, MAKEINTRESOURCEW(Constants::Cursors::RMB_DOWN)));
     }
 
     // New logic: If RMB is down and we receive a Left Click
     if (message == WM_LBUTTONDOWN && app.isRmbDown) {
+        app.rmbConsumed = true; // RMB+LMB combo — not a plain right-click
         if (!app.playlist.empty() && app.currentIndex >= 0) {
             const std::wstring &path = app.playlist[app.currentIndex];
             PIDLIST_ABSOLUTE pidl = ILCreateFromPathW(path.c_str());
@@ -198,6 +206,30 @@ void MouseHandler::HandleButtonUp(HWND hWnd, UINT message, WPARAM, LPARAM) {
     if (message == WM_RBUTTONUP) {
         app.isRmbDown = false;
         SetCursor(LoadCursor(nullptr, MAKEINTRESOURCEW(Constants::Cursors::DEFAULT)));
+
+        // Pure right-click (no window drag, no RMB+wheel/LMB combo) → context menu.
+        if (app.contextMenuEnabled && !app.rmbConsumed) {
+            // Tear down whatever RBUTTONDOWN armed, then show the menu at the
+            // cursor and stop — skip the drag/edge-snap path below.
+            //   swap=true : RMB is the window-drag button.
+            //   swap=false: RMB is the view-control button (click-zoom/pan), so
+            //               undo any click-zoom exactly like the view-control up path.
+            app.isWindowDragging = false;
+            if (app.lmbDidZoom) {
+                app.viewport.zoom    = app.savedZoom;
+                app.viewport.offsetX = app.savedOffsetX;
+                app.viewport.offsetY = app.savedOffsetY;
+            }
+            app.lmbDidZoom = false;
+            app.viewport.isDragging = false;
+            ReleaseCapture();
+            SetCursor(LoadCursor(nullptr, MAKEINTRESOURCEW(Constants::Cursors::DEFAULT)));
+            InvalidateRect(hWnd, nullptr, FALSE);
+            POINT scr;
+            GetCursorPos(&scr);
+            Input::ContextMenuHandler::Show(hWnd, scr.x, scr.y);
+            return;
+        }
     }
     if (message == WM_MBUTTONUP) {
         if (!app.hasMidMoved) {
@@ -302,6 +334,17 @@ void MouseHandler::HandleButtonUp(HWND hWnd, UINT message, WPARAM, LPARAM) {
 }
 
 void MouseHandler::HandleMouseMove(HWND hWnd, LPARAM lParam) {
+    // Context-menu gating: once the cursor travels past the tolerance while RMB
+    // is held, the gesture is a drag (window move / pan) — not a click — so the
+    // right-click menu must not fire on release.
+    if (app.isRmbDown && !app.rmbConsumed) {
+        POINT cur = {GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam)};
+        ClientToScreen(hWnd, &cur);
+        if (std::abs(cur.x - app.rmbDownPt.x) > Constants::CONTEXT_MENU_DRAG_TOLERANCE ||
+            std::abs(cur.y - app.rmbDownPt.y) > Constants::CONTEXT_MENU_DRAG_TOLERANCE)
+            app.rmbConsumed = true;
+    }
+
     // Hand cursor over the clickable path in the Missing/Empty overlay.
     if (!app.isMidDragging && !app.viewport.isDragging && !app.isWindowDragging) {
         POINT pt = {GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam)};
@@ -434,6 +477,7 @@ void MouseHandler::HandleMouseWheel(HWND hWnd, WPARAM wParam, LPARAM /*lParam*/)
     bool isRmbDown = (GetKeyState(VK_RBUTTON) & 0x8000) != 0;
 
     if (isRmbDown) {
+        app.rmbConsumed = true; // RMB+wheel zoom — suppress the context menu on RMB up
         app.viewport.zoom *= (delta > 0) ? Constants::ZOOM_STEP : (1.0f / Constants::ZOOM_STEP);
         InvalidateRect(hWnd, nullptr, FALSE);
     } else if (GET_KEYSTATE_WPARAM(wParam) & MK_CONTROL) {
@@ -453,6 +497,7 @@ void MouseHandler::HandleMouseHWheel(HWND hWnd, WPARAM wParam, LPARAM /*lParam*/
     const int hDelta = app.invertWheelDirectionH ? -rawDelta : rawDelta;
 
     if (isRmbDown) {
+        app.rmbConsumed = true; // RMB+horizontal-wheel resize — suppress context menu on RMB up
         RECT rc;
         GetWindowRect(hWnd, &rc);
         int currentW = rc.right - rc.left;

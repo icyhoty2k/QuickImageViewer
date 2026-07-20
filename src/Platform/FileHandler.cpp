@@ -23,6 +23,7 @@
 namespace fs = std::filesystem;
 
 void sortCurrentPlaylistInOrder();
+void UpdateOverlaysForCurrentImage(HWND hWnd); // defined below; used by HandleScanComplete
 void UpdateOverlaysForCurrentImage(HWND hWnd);
 // ---------------------------------------------------------------------------
 // UpdateIoWorkerForPath

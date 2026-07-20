@@ -519,6 +519,9 @@ namespace UI {
         Add(Ctrl(SC::SC_APP_HARD_QUIT),
             L"Hard quit — fully removes the process from memory.", sApp);
         Add(Ctrl(SC::SC_APP_NEW_WINDOW), L"Open a new independent QIV window.", sApp);
+        Add(K(SC::SC_TOGGLE_ALL_PANELS),
+            L"Toggle all panels: closes every floating panel and directory strip if any is "
+            L"open, otherwise restores exactly the set the last close hid. Main viewer stays.", sApp);
         Add(Shift(SC::SC_APP_RESET_DEFAULTS),
             L"Reset everything — window layout and all effects return to defaults.", sApp);
         Add(L"Ctrl+Alt+" + K(SC::SC_THEME_FACTOR_UP) + L" / " + K(SC::SC_THEME_FACTOR_DOWN),
