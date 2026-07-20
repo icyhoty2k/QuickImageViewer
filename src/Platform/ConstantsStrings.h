@@ -3,7 +3,10 @@
 // ConstantsStrings.h
 // Central repository for all user-visible text used in QIV overlays.
 // Keep strings here so they have one place to change for localization.
-
+#define THUMBNAIL_STRIP L"Thumbnail strip"
+#define CACHE_WINDOW L"vRam stip"
+#define ON L": ON"
+#define OFF L": OFF"
 namespace Constants::Messages {
     // ── MID_CENTER: state-change notifications ──────────────────────────────
     // These are posted via PostCenterMessage and auto-hide after the timer.
@@ -11,11 +14,11 @@ namespace Constants::Messages {
     constexpr const wchar_t *TOGGLE_FIRST_IMAGE_IN_FOLDER = L"First image: ";
     constexpr const wchar_t *TOGGLE_LAST_IMAGE_IN_FOLDER = L"Last image: ";
     constexpr const wchar_t *GO_TO_LAST_IMAGE_BEFORE_TOGGLE = L"Previous image: ";
-    constexpr const wchar_t *CACHE_WINDOW_VISIBLE_MSG = L"Cache Window ON ";
-    constexpr const wchar_t *CACHE_WINDOW_HIDDEN_MSG = L"Cache Window OFF ";
+    constexpr const wchar_t *CACHE_WINDOW_VISIBLE_MSG = CACHE_WINDOW ON;
+    constexpr const wchar_t *CACHE_WINDOW_HIDDEN_MSG = CACHE_WINDOW OFF;
     constexpr const wchar_t *CACHE_WINDOW_CLEAR_CACHE_MSG = L"Cache cleared ! ";
-    constexpr const wchar_t *DIR_WINDOW_VISIBLE_MSG = L"Dir Window ON ";
-    constexpr const wchar_t *DIR_WINDOW_HIDDEN_MSG = L"Dir Window OFF ";
+    constexpr const wchar_t *DIR_WINDOW_VISIBLE_MSG = THUMBNAIL_STRIP ON;
+    constexpr const wchar_t *DIR_WINDOW_HIDDEN_MSG = THUMBNAIL_STRIP OFF;
 
 
     // Overlay master toggle (N / I / Ctrl+0)
@@ -114,12 +117,15 @@ namespace Constants::Messages {
     constexpr const wchar_t *SORT_BY_DISK = L"Sort: Disk Order";
 
     // Spawned DirWnd messages
-    constexpr const wchar_t *SPAWN_DIR_TOP = L"DirWnd Spawned: Top";
-    constexpr const wchar_t *SPAWN_DIR_LEFT = L"DirWnd Spawned: Left";
-    constexpr const wchar_t *SPAWN_DIR_RIGHT = L"DirWnd Spawned: Right";
-    constexpr const wchar_t *SPAWN_DIR_BOTTOM = L"DirWnd Spawned: Bottom";
-    constexpr const wchar_t *SPAWN_DIR_CLOSED = L"DirWnd Closed";
-    constexpr const wchar_t *SPAWN_DIR_NO_SPACE = L"No free positions for DirWnd";
+
+
+
+    constexpr const wchar_t *SPAWN_DIR_TOP =  THUMBNAIL_STRIP L": Top";
+    constexpr const wchar_t *SPAWN_DIR_LEFT = THUMBNAIL_STRIP L": Left";
+    constexpr const wchar_t *SPAWN_DIR_RIGHT = THUMBNAIL_STRIP  L": Right";
+    constexpr const wchar_t *SPAWN_DIR_BOTTOM = THUMBNAIL_STRIP L": Bottom";
+    constexpr const wchar_t *SPAWN_DIR_CLOSED = THUMBNAIL_STRIP L": Closed";
+    constexpr const wchar_t *SPAWN_DIR_NO_SPACE = L"No free positions for " THUMBNAIL_STRIP;
     constexpr const wchar_t *COPIED_TO_CLIPBOARD = L"Copied to Clipboard";
     constexpr const wchar_t *HISTORY_NAV_FOLDER = L"↔ "; // prefix — append folder name
     constexpr const wchar_t *FOLDER_DEAD_MISSING = L"⚠ Folder not found";
@@ -129,8 +135,8 @@ namespace Constants::Messages {
     // Thumbnail strip wrap-around
     constexpr const wchar_t *THUMB_STRIP_WRAP_TO_START = L"↩ Start";
     constexpr const wchar_t *THUMB_STRIP_WRAP_TO_END = L"↪ End";
-    constexpr const wchar_t *THUMB_STRIP_WRAP_ON = L"Thumbnail Strip Wrap: ON";
-    constexpr const wchar_t *THUMB_STRIP_WRAP_OFF = L"Thumbnail Strip Wrap: OFF";
+    constexpr const wchar_t *THUMB_STRIP_WRAP_ON = THUMBNAIL_STRIP L" Wrap: ON";
+    constexpr const wchar_t *THUMB_STRIP_WRAP_OFF = THUMBNAIL_STRIP L" Wrap: OFF";
 
     // Thumbnail strip visual effects
     constexpr const wchar_t *THUMB_EFFECTS_ON  = L"Thumbnail Effects: ON";
