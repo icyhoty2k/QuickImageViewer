@@ -23,7 +23,7 @@
 namespace fs = std::filesystem;
 
 void sortCurrentPlaylistInOrder();
-
+void UpdateOverlaysForCurrentImage(HWND hWnd);
 // ---------------------------------------------------------------------------
 // UpdateIoWorkerForPath
 // ---------------------------------------------------------------------------
@@ -249,6 +249,22 @@ static std::atomic<uint64_t> g_scanGeneration{0};
 // True while a background directory scan is running. Read on UI thread to show wait cursor.
 std::atomic<bool> g_scanInProgress{false};
 
+// Adaptive scan-size estimate — the last scan's image count, used to pre-size
+// the next scan's containers. Atomic: written by worker/UI scan threads, read
+// at the next scan start. Relaxed is fine — it is a sizing hint, not a guard.
+static std::atomic<size_t> g_lastDirScanCount{Constants::FileHandler::DIR_SCAN_RESERVE_FLOOR};
+
+size_t DirScanReserveHint() {
+    size_t n = g_lastDirScanCount.load(std::memory_order_relaxed);
+    if (n < Constants::FileHandler::DIR_SCAN_RESERVE_FLOOR) n = Constants::FileHandler::DIR_SCAN_RESERVE_FLOOR;
+    if (n > Constants::FileHandler::DIR_SCAN_RESERVE_CAP)   n = Constants::FileHandler::DIR_SCAN_RESERVE_CAP;
+    return n;
+}
+
+void RecordDirScanCount(size_t n) {
+    g_lastDirScanCount.store(n, std::memory_order_relaxed);
+}
+
 // Sort a ScanResult's playlist using its own size/time maps (runs on background thread).
 static void SortStandalonePlaylist(ScanResult &sr, int sortOrder, bool reverse) {
     switch (sortOrder) {
@@ -295,6 +311,14 @@ static void LaunchBackgroundScan(HWND hWnd, std::wstring dir,
                 result->scannedDir = dir;
                 result->updatePrimaryDirWnd = updatePrimaryDirWnd;
 
+                // Calculated speculation: pre-size all three lockstep containers
+                // to the previous scan's image count (one allocation covers the
+                // common folder; they still grow for larger ones).
+                const size_t reserveHint = DirScanReserveHint();
+                result->playlist.reserve(reserveHint);
+                result->fileSizes.reserve(reserveHint);
+                result->fileTimes.reserve(reserveHint);
+
                 std::error_code ec;
                 for (const auto &entry: fs::directory_iterator(dir, ec)) {
                     if (g_scanGeneration.load(std::memory_order_relaxed) != gen) {
@@ -308,6 +332,9 @@ static void LaunchBackgroundScan(HWND hWnd, std::wstring dir,
                     result->fileTimes[p] = entry.last_write_time(ec);
                     result->playlist.push_back(std::move(p));
                 }
+
+                // Feed the actual count back into the adaptive estimate.
+                RecordDirScanCount(result->playlist.size());
 
                 if (g_scanGeneration.load(std::memory_order_relaxed) != gen) {
                     g_scanInProgress.store(false, std::memory_order_relaxed);
@@ -338,6 +365,14 @@ void HandleScanComplete(HWND hWnd, ScanResult *result) {
         delete result;
         return;
     }
+
+    // Path currently displayed (before the playlist swap below). If the scan's
+    // target is this same image, we take a flicker-free light path at the end —
+    // updating index/overlay/panels without resetting the viewport or re-rendering
+    // the image that is already on screen.
+    std::wstring prevPath;
+    if (app.currentIndex >= 0 && app.currentIndex < static_cast<int>(app.playlist.size()))
+        prevPath = app.playlist[app.currentIndex];
 
     // Empty scan: folder has no images (or the directory itself was deleted).
     // Notify all visible panels so they can show the appropriate placeholder,
@@ -467,12 +502,32 @@ void HandleScanComplete(HWND hWnd, ScanResult *result) {
     app.folderOverlayPath.clear();
     UI::NotifyFolderContentsChanged(scannedDir);
 
-    // Load the target image now that panels hold the new folder's thumbnails —
-    // LoadImageIndex's internal SyncDirSelectionRectangle snaps the selection
-    // rectangle and scroll to the correct (possibly re-sorted) slot.
-    app.currentIndex = preRefreshIndex;
-    LoadImageIndex(hWnd, targetIdx);
-    InvalidateRect(hWnd, nullptr, FALSE);
+    // If the scan's target is the image already on screen (the common F2/click/
+    // drag-drop case: the 1-file playlist decoded and displayed it, now the full
+    // folder just arrived), take a FLICKER-FREE light path — adopt the final index
+    // and refresh the overlay count (1/1 → N/M) + panel selection, WITHOUT resetting
+    // the viewport or re-rendering the already-displayed bitmap. A full LoadImageIndex
+    // here would reset the viewport and redraw the same image (redundant + flickery).
+    const bool sameImage = (!prevPath.empty() &&
+                            targetIdx >= 0 && targetIdx < static_cast<int>(app.playlist.size()) &&
+                            app.playlist[targetIdx] == prevPath);
+
+    if (sameImage) {
+        app.currentIndex = targetIdx;
+        app.wantedIndex.store(targetIdx, std::memory_order_release);
+        // wantedPathHash is unchanged (same file → same hash), so an in-flight
+        // decode (if the scan won the race) still completes and displays.
+        UpdateOverlaysForCurrentImage(hWnd);
+        uiManager.getActiveDirWnd().SyncDirSelectionRectangle();
+        InvalidateRect(hWnd, nullptr, FALSE);
+    } else {
+        // Different target — do a normal load (decode/display the new image).
+        // LoadImageIndex's internal SyncDirSelectionRectangle snaps the selection
+        // rectangle and scroll to the correct (possibly re-sorted) slot.
+        app.currentIndex = preRefreshIndex;
+        LoadImageIndex(hWnd, targetIdx);
+        InvalidateRect(hWnd, nullptr, FALSE);
+    }
 }
 
 void OpenInitialImage(HWND hWnd) {
@@ -708,21 +763,19 @@ void LoadImageIndex(HWND hWnd, int index) {
     KillTimer(hWnd, Constants::Slideshow::GIF_TIMER_ID);
 
     const std::wstring &currentPath = app.playlist[index];
+    // Path-identity guard for the main decode — same file keeps the same hash
+    // across a folder re-sort, so its in-flight decode is not cancelled when the
+    // index changes (fixes the blank-on-startup race after an F2 open).
+    app.wantedPathHash.store(std::hash<std::wstring>{}(currentPath), std::memory_order_release);
     SetWindowTextW(hWnd, (currentPath.substr(currentPath.find_last_of(L"\\/") + 1) + L" - QuickImageViewer").c_str());
 
     // =========================================================================
-    // IMMEDIATE: Update overlay text INSTANTLY (filename, count, zoom, dims)
-    // UpdateWindow forces a synchronous render so text is never blocked by
-    // WM_PAINT being starved behind a flood of WM_MOUSEWHEEL messages.
-    // The main renderer uses Present(0,0) so this costs only ~1-2ms.
+    // START THE DECODE FIRST. Queue the async read/decode BELOW, then do the
+    // synchronous overlay + panel paints — so the decoder worker reads and
+    // decodes in parallel with that UI work, shaving it off click-to-screen.
+    // All three open paths (F2 dialog, drag-drop, shell/CLI) funnel through here.
     // =========================================================================
-    UpdateOverlaysForCurrentImage(hWnd);
-    InvalidateRect(hWnd, nullptr, FALSE);
-    UpdateWindow(hWnd);
-
-    // Scroll the dir panel to track the selection (synchronous via UpdateWindow
-    // inside SyncSelectionRectangle; dirWnd also uses Present(0,0) so it's fast).
-    uiManager.getActiveDirWnd().SyncDirSelectionRectangle();
+    bool cacheHit = false;
 
     // -------------------------------------------------------------------------
     // SVG path: load bytes on IO thread, then WM_QIV_SVG_READY hands them to
@@ -732,7 +785,9 @@ void LoadImageIndex(HWND hWnd, int index) {
         if (app.renderer) app.renderer->ClearActiveImage();
 
         g_ioWorker.PushTask([currentPath, index, hWnd]() {
-            if (app.wantedIndex.load(std::memory_order_acquire) != index) return;
+            // Path-identity guard (survives the post-open folder re-sort), same as raster.
+            if (app.wantedPathHash.load(std::memory_order_acquire) != std::hash<std::wstring>{}(currentPath))
+                return;
 
             std::vector<BYTE> svgBytes;
             if (FAILED(SvgDecoder::LoadFile(currentPath, svgBytes))) return;
@@ -748,46 +803,46 @@ void LoadImageIndex(HWND hWnd, int index) {
                          static_cast<WPARAM>(index),
                          reinterpret_cast<LPARAM>(payload));
         });
-
-        SetTimer(hWnd, 1001, Constants::PRELOAD_TIMER_COUNTDOWN, nullptr);
-        return;
-    }
-
-    // -------------------------------------------------------------------------
-    // Raster path (now fully async)
-    // -------------------------------------------------------------------------
-    if (app.renderer) {
-        // Start timing before cache check — measures wall-clock time the user waits
-        // regardless of whether the image comes from VRAM cache or needs a full decode.
+    } else if (app.renderer) {
+        // -------------------------------------------------------------------------
+        // Raster path (fully async). A VRAM cache hit finalizes inline so the paint
+        // below shows the new bitmap directly (no flash of the old image); a miss
+        // queues the decode now, and WM_QIV_REPAINT swaps the image in when it lands.
+        // -------------------------------------------------------------------------
         ImageLoadStats::g_loadStartUs.store(ImageLoadStats::NowUs(), std::memory_order_relaxed);
 
         if (SUCCEEDED(app.renderer->LoadBitmap(nullptr, 0, 0, currentPath))) {
-            // Cache hit — record immediately; typically < 1 ms.
+            cacheHit = true;
             ImageLoadStats::g_lastLoadUs.store(
                     ImageLoadStats::NowUs() -
                     ImageLoadStats::g_loadStartUs.load(std::memory_order_relaxed),
                     std::memory_order_relaxed);
-            // Orientation was read during the original decode and stored in the
-            // cache entry — apply it now that the viewport has been reset.
+            // Orientation stored in the cache entry, applied after the viewport reset.
             ApplyOrientationToViewport(app.renderer->GetCachedOrientation(currentPath));
-            // Rewire the effect graph to the new bitmap so the display node
-            // is not left pointing at the previous image's effect output.
+            // Rewire the effect graph to the new bitmap before it paints below.
             app.UpdateRendererColorEffects(hWnd);
-            // Paint the new image — the UpdateWindow earlier drew the old bitmap.
-            InvalidateRect(hWnd, nullptr, FALSE);
-            uiManager.RefreshInfoWindowIfVisible();
-            uiManager.RefreshStatsWindowIfVisible();
-            // Sync the dir panel selection only on actual image load, not on every
-            // keypress — async loads are handled by WM_QIV_REPAINT + the callback.
-            uiManager.getActiveDirWnd().SyncDirSelectionRectangle();
-            // Arm GIF timer if this cached image is animated.
             if (app.renderer->IsAnimatedGif())
                 SetTimer(hWnd, Constants::Slideshow::GIF_TIMER_ID,
                          app.renderer->GetCurrentGifDelay(), nullptr);
         } else {
-            // Cache miss — decoder lambda records the time when decode completes.
             (void) app.renderer->PreloadBitmap(currentPath, index);
         }
+    }
+
+    // =========================================================================
+    // UI-thread work, overlapping the worker decode queued above. Overlay text
+    // (filename/index) shows instantly; UpdateWindow forces a synchronous render
+    // (Present(0,0) ~1-2ms). On a cache hit this paints the new bitmap directly;
+    // on a miss it paints the blank/old frame and WM_QIV_REPAINT swaps in the
+    // image the moment the decode completes.
+    // =========================================================================
+    UpdateOverlaysForCurrentImage(hWnd);
+    InvalidateRect(hWnd, nullptr, FALSE);
+    UpdateWindow(hWnd);
+    uiManager.getActiveDirWnd().SyncDirSelectionRectangle();
+    if (cacheHit) {
+        uiManager.RefreshInfoWindowIfVisible();
+        uiManager.RefreshStatsWindowIfVisible();
     }
 
     SetTimer(hWnd, 1001, Constants::PRELOAD_TIMER_COUNTDOWN, nullptr);

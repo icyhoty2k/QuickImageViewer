@@ -58,6 +58,11 @@ struct AppState {
     int fileHandlerDefaultSortOrder = Constants::FileHandler::FILE_HANDLER_DEFAULT_SORT_ORDER;
     bool fileHandlerIsReverseSortOrder = Constants::FileHandler::FILE_HANDLER_SORT_TYPE_IS_REVERSE;
     std::atomic<int> wantedIndex{-1};
+    // Hash of the currently-wanted main image's path. The MAIN decode is guarded
+    // by this (path identity) instead of wantedIndex, so it survives the folder
+    // re-sort that runs after the initial 1-file load (F2 open) — the same file
+    // gets a new index there, which would otherwise cancel its in-flight decode.
+    std::atomic<size_t> wantedPathHash{0};
     Microsoft::WRL::ComPtr<IWICImagingFactory> wicFactory;
     std::unique_ptr<IImageRenderer> renderer;
     HBITMAP hDIB = nullptr;
@@ -70,6 +75,8 @@ struct AppState {
     bool historyFullModeEnabled  = Constants::History::HISTORY_SHOW_FULL_HISTORY;
     bool openDirWndOnStart       = Constants::IS_OPEN_DIRWND_ON_START;
     bool overlayShowBackground   = Constants::Overlay::IS_OVERLAY_SHOW_BACKGROUND;
+    int  caretStyle              = Constants::InputBox::CARET_STYLE; // 0 = bar, 1 = underscore
+    float zoomClickMultiplier    = Constants::ZOOM_CLICK; // left-click zoom (1 = off .. 10)
     bool swapMouseButtons        = Constants::IS_SWAP_MOUSE_BUTTONS;
     bool ctrlCEnabled            = Constants::IS_CTRL_C_ENABLED;
     bool thumbCopyEnabled        = Constants::IS_THUMB_COPY_ENABLED;

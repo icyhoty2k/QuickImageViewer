@@ -232,6 +232,12 @@ namespace Persistence::Registry {
         a.overlayShowBackground = readDword(
             Constants::Registry::OVERLAY_SHOW_BG,
             static_cast<DWORD>(Constants::Overlay::IS_OVERLAY_SHOW_BACKGROUND)) != 0;
+        a.caretStyle = std::max(0, std::min(1, static_cast<int>(
+            readDword(Constants::Registry::INPUTBOX_CARET_STYLE,
+                static_cast<DWORD>(Constants::InputBox::CARET_STYLE)))));
+        a.zoomClickMultiplier = static_cast<float>(std::max(1, std::min(10, static_cast<int>(
+            readDword(Constants::Registry::ZOOM_CLICK_MULT,
+                static_cast<DWORD>(Constants::ZOOM_CLICK))))));
         a.swapMouseButtons = readDword(
             Constants::Registry::SWAP_MOUSE_BUTTONS,
             static_cast<DWORD>(Constants::IS_SWAP_MOUSE_BUTTONS)) != 0;

@@ -270,17 +270,22 @@ LRESULT FindWnd::HandlePanelMessage(UINT message, WPARAM wParam, LPARAM lParam) 
     }
 
     case WM_LBUTTONDOWN:
-        if (m_inputBox.RouteMouse(WM_LBUTTONDOWN, wParam, lParam) == InputResult::ConsumedRepaint)
+        if (m_inputBox.RouteMouse(WM_LBUTTONDOWN, wParam, lParam, m_hWnd) == InputResult::ConsumedRepaint)
+            InvalidateRect(m_hWnd, nullptr, FALSE);
+        return 0;
+
+    case WM_RBUTTONUP:
+        if (m_inputBox.RouteMouse(WM_RBUTTONUP, wParam, lParam, m_hWnd) == InputResult::ConsumedRepaint)
             InvalidateRect(m_hWnd, nullptr, FALSE);
         return 0;
 
     case WM_MOUSEMOVE:
-        if (m_inputBox.RouteMouse(WM_MOUSEMOVE, wParam, lParam) == InputResult::ConsumedRepaint)
+        if (m_inputBox.RouteMouse(WM_MOUSEMOVE, wParam, lParam, m_hWnd) == InputResult::ConsumedRepaint)
             InvalidateRect(m_hWnd, nullptr, FALSE);
         return 0;
 
     case WM_MOUSELEAVE:
-        if (m_inputBox.RouteMouse(WM_MOUSELEAVE, wParam, lParam) == InputResult::ConsumedRepaint)
+        if (m_inputBox.RouteMouse(WM_MOUSELEAVE, wParam, lParam, m_hWnd) == InputResult::ConsumedRepaint)
             InvalidateRect(m_hWnd, nullptr, FALSE);
         return 0;
 

@@ -4,6 +4,7 @@
 #include <vector>
 #include "FloatingPanelWnd.h"
 #include "CustomControls/InputBox.h"
+#include "Common/FuzzyMatch.h"
 
 namespace UI {
     // =========================================================================
@@ -44,14 +45,25 @@ namespace UI {
                 int sectionId;
             };
 
-            // Live filter (reuses the shared InputBox control). Empty query shows
-            // everything; otherwise only entries whose shortcut or description
-            // contains the (case-insensitive) query, and only sections that still
-            // have a matching entry.
+            // Live filter (reuses the shared InputBox control). Fuzzy/wildcard
+            // match on shortcut + description (same matcher as Find/History); only
+            // sections with a matching entry are shown. Matched characters in the
+            // single-line shortcut chord are highlighted via Common::DrawMatchText
+            // (descriptions word-wrap, so they filter but are not per-char colored).
             InputBox     m_filter;
-            std::wstring m_query;                // lowercased filter text
+            std::wstring m_query;                // lowercased filter text ("" = no filter)
             int          m_visibleContentHeight = 0; // filtered content height (scroll math)
-            bool EntryMatches(const HelpEntry& e) const;
+
+            // Per-entry match state, parallel to m_entries, recomputed on query change.
+            struct EntryMatch {
+                bool visible = true;
+                int  scCount = 0;                                   // # shortcut match positions
+                int  scPos[Common::FUZZY_MAX_QUERY] = {};           // positions into the shortcut
+            };
+            std::vector<EntryMatch> m_entryMatch;
+
+            void RebuildFilter();                    // recompute m_entryMatch from m_query
+            bool EntryVisible(size_t i) const;
             bool SectionHasVisible(int sectionId) const;
 
             struct HelpSection {
