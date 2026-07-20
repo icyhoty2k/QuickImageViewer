@@ -8,7 +8,8 @@ on:
 jobs:
   release:
     runs-on: windows-latest
-
+    outputs:
+      filesize: ${{ steps.get_size.outputs.size }} # Pass this to the next job
     steps:
       - name: Checkout source
         uses: actions/checkout@v4
@@ -31,6 +32,15 @@ jobs:
           SCCACHE_GHA_ENABLED: "true"
         run: cmake --build build --config Release
 
+      - name: Calculate File Size
+        id: get_size
+        shell: powershell
+        run: |
+          $file = Get-Item "build/Release/QuickImageViewer.exe"
+          # This formats as thousands with 2 decimal places and appends KB
+          $size = "{0:N2} KB" -f ($file.Length / 1KB)
+          echo "size=$size" >> $env:GITHUB_OUTPUT
+
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
@@ -50,14 +60,15 @@ jobs:
           ref: main
           token: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Update PAD version and date
+      - name: Update PAD version, date, and size
         run: |
           VERSION="${{ github.ref_name }}"
           VERSION="${VERSION#v}"
           YEAR=$(date -u +%Y)
           MONTH=$(date -u +%m)
           DAY=$(date -u +%d)
-          DATE_ISO=$(date -u +%Y-%m-%d) # Defined this variable
+          DATE_ISO=$(date -u +%Y-%m-%d)
+          SIZE="${{ needs.release.outputs.filesize }}" # Get size from release job
 
           # Update PAD XML
           sed -i "s|<Program_Version>.*</Program_Version>|<Program_Version>$VERSION</Program_Version>|" docs/pad.xml
@@ -68,11 +79,12 @@ jobs:
           # Update Website JSON-LD (index.html)
           sed -i "s/\"softwareVersion\": \".*\"/\"softwareVersion\": \"$VERSION\"/" docs/index.html
           sed -i "s/\"datePublished\": \".*\"/\"datePublished\": \"$DATE_ISO\"/" docs/index.html
+          # New command for File Size
+          sed -i "s/\"fileSize\": \".*\"/\"fileSize\": \"$SIZE\"/" docs/index.html
 
       - name: Commit if changed
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          # Check both files for changes before committing
-          git diff --quiet docs/pad.xml docs/index.html || git commit -am "chore: update PAD and index version to ${{ github.ref_name }} [skip ci]"
+          git diff --quiet docs/pad.xml docs/index.html || git commit -am "chore: update metadata to ${{ github.ref_name }} [skip ci]"
           git push
