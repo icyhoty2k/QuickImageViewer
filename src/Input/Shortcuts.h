@@ -31,6 +31,11 @@ namespace Shortcuts {
     // Ctrl+N  —  Spawn a new blank QIV window
     constexpr UINT SC_APP_NEW_WINDOW = 'N'; // requires ctrl
 
+    // N  —  Toggle all panels: close every floating panel + spawned DirWnd if any
+    //       is visible, otherwise restore the set the last close hid (main window
+    //       stays). Shares the 'N' key with Ctrl+N (new window), split by modifier.
+    constexpr UINT SC_TOGGLE_ALL_PANELS = 'N'; // plain
+
     // Shift+Delete  — Restore default application state
     constexpr UINT SC_APP_RESET_DEFAULTS = VK_DELETE;
     // -------------------------------------------------------------------------
@@ -64,7 +69,7 @@ namespace Shortcuts {
     constexpr UINT SC_PANEL_CACHE_CLEAR = VK_F12;
 
     // N (no modifier)  —  Master overlay toggle (all slots on/off)
-    constexpr UINT SC_PANEL_OVERLAY_TOGGLE = 'N';
+    constexpr UINT SC_PANEL_OVERLAY_TOGGLE = 'N'; // not used
 
     // I (no modifier)  —  Master overlay toggle — same effect as N and Ctrl+0
     constexpr UINT SC_PANEL_OVERLAY_MASTER = 'I';

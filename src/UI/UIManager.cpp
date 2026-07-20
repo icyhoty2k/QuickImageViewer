@@ -61,6 +61,21 @@ namespace UI {
     }
 
     void UIManager::HideAllPanelWindows() {
+        // Snapshot what is visible so RestoreAllPanels() can replay it. Fixed
+        // panels first, then the spawned DirWnd pool. Keep the previous snapshot
+        // if nothing is currently visible (nothing new to remember).
+        IPanelWindow *const fixed[] = {
+            &helpWnd, &cacheWnd, &dirWnd, &historyListWnd,
+            &exifWnd, &jumpToWnd, &statsWnd
+        };
+        std::vector<IPanelWindow *> visibleNow;
+        for (IPanelWindow *p : fixed)
+            if (p->IsVisible()) visibleNow.push_back(p);
+        for (auto *p : m_spawnedPool)
+            if (p->IsPanelVisible()) visibleNow.push_back(p);
+        if (!visibleNow.empty())
+            m_restoreList = std::move(visibleNow);
+
         helpWnd.Hide();
         cacheWnd.Hide();
         dirWnd.Hide();
@@ -69,6 +84,25 @@ namespace UI {
         jumpToWnd.Hide();
         statsWnd.Hide();
         HideAllSpawnedDirWnds();
+    }
+
+    void UIManager::RestoreAllPanels() {
+        for (IPanelWindow *p : m_restoreList)
+            if (!p->IsVisible()) p->Show();
+        RefreshVerticalPanels();
+        RefreshStatsWindowIfVisible();
+    }
+
+    bool UIManager::AnyPanelVisible() const {
+        const IPanelWindow *const fixed[] = {
+            &helpWnd, &cacheWnd, &dirWnd, &historyListWnd,
+            &exifWnd, &jumpToWnd, &statsWnd
+        };
+        for (const IPanelWindow *p : fixed)
+            if (p->IsVisible()) return true;
+        for (const auto *p : m_spawnedPool)
+            if (p->IsPanelVisible()) return true;
+        return false;
     }
 
     // -------------------------------------------------------------------------

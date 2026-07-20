@@ -99,6 +99,9 @@ void TrayHandler::ShowContextMenu(HWND hWnd, int x, int y) {
         MF_STRING | (app.swapMouseButtons ? MF_CHECKED : MF_UNCHECKED),
         14, L"Swap Mouse Buttons");
     AppendMenuW(hSubMenu,
+        MF_STRING | (app.contextMenuEnabled ? MF_CHECKED : MF_UNCHECKED),
+        63, L"Right-Click Context Menu");
+    AppendMenuW(hSubMenu,
         MF_STRING | (app.invertWheelDirection ? MF_CHECKED : MF_UNCHECKED),
         15, L"Invert Scroll Direction");
     AppendMenuW(hSubMenu,
@@ -372,6 +375,14 @@ void TrayHandler::DispatchCommand(HWND hWnd, int cmd) {
             static_cast<DWORD>(app.ctrlCEnabled));
         break;
 
+    case 63:
+        app.contextMenuEnabled = !app.contextMenuEnabled;
+        Persistence::Registry::SaveSetting(Constants::Registry::CONTEXT_MENU_ENABLED,
+            static_cast<DWORD>(app.contextMenuEnabled));
+        m_overlayManager.PostCenterMessage(hWnd,
+            app.contextMenuEnabled ? L"Right-Click Menu: On" : L"Right-Click Menu: Off");
+        break;
+
     case 60:
     case 61: {
         const int newStyle = (cmd == 60) ? 0 : 1;
@@ -635,6 +646,7 @@ void TrayHandler::DispatchCommand(HWND hWnd, int cmd) {
                 fwprintf(f, L"%s=%d\n", Constants::Registry::INPUTBOX_CARET_STYLE,  app.caretStyle);
                 fwprintf(f, L"%s=%d\n", Constants::Registry::ZOOM_CLICK_MULT,       (int)app.zoomClickMultiplier);
                 fwprintf(f, L"%s=%d\n", Constants::Registry::SWAP_MOUSE_BUTTONS,    (int)app.swapMouseButtons);
+                fwprintf(f, L"%s=%d\n", Constants::Registry::CONTEXT_MENU_ENABLED,  (int)app.contextMenuEnabled);
                 fwprintf(f, L"%s=%d\n", Constants::Registry::WHEEL_INVERT,          (int)app.invertWheelDirection);
                 fwprintf(f, L"%s=%d\n", Constants::Registry::WHEEL_INVERT_H,        (int)app.invertWheelDirectionH);
                 fwprintf(f, L"%s=%d\n", Constants::Registry::VRAM_CACHE_COUNT,      app.vramCacheCount);
@@ -736,6 +748,7 @@ void TrayHandler::DispatchCommand(HWND hWnd, int cmd) {
             applyBool(Constants::Registry::OPEN_DIRWND_ON_START, app.openDirWndOnStart);
             applyBool(Constants::Registry::OVERLAY_SHOW_BG,      app.overlayShowBackground);
             applyBool(Constants::Registry::SWAP_MOUSE_BUTTONS,   app.swapMouseButtons);
+            applyBool(Constants::Registry::CONTEXT_MENU_ENABLED, app.contextMenuEnabled);
             applyBool(Constants::Registry::WHEEL_INVERT,         app.invertWheelDirection);
             applyBool(Constants::Registry::WHEEL_INVERT_H,       app.invertWheelDirectionH);
             applyBool(Constants::Registry::START_FULLSCREEN,     app.startInFullscreen);
@@ -861,6 +874,7 @@ void TrayHandler::DispatchCommand(HWND hWnd, int cmd) {
         app.caretStyle              = Constants::InputBox::CARET_STYLE;
         app.zoomClickMultiplier     = Constants::ZOOM_CLICK;
         app.swapMouseButtons        = Constants::IS_SWAP_MOUSE_BUTTONS;
+        app.contextMenuEnabled      = Constants::IS_CONTEXT_MENU_ENABLED;
         app.invertWheelDirection    = Constants::IS_MOUSE_VERTICAL_REVERSE_SCROLL_DIRECTION;
         app.invertWheelDirectionH   = Constants::IS_MOUSE_HORIZONTAL_REVERSE_SCROLL_DIRECTION;
         app.vramCacheCount          = Constants::IS_VRAM_CACHE_IMAGES_COUNT;
@@ -896,6 +910,7 @@ void TrayHandler::DispatchCommand(HWND hWnd, int cmd) {
         Persistence::Registry::SaveSetting(Constants::Registry::INPUTBOX_CARET_STYLE,  static_cast<DWORD>(app.caretStyle));
         Persistence::Registry::SaveSetting(Constants::Registry::ZOOM_CLICK_MULT,       static_cast<DWORD>(app.zoomClickMultiplier));
         Persistence::Registry::SaveSetting(Constants::Registry::SWAP_MOUSE_BUTTONS,    static_cast<DWORD>(app.swapMouseButtons));
+        Persistence::Registry::SaveSetting(Constants::Registry::CONTEXT_MENU_ENABLED,  static_cast<DWORD>(app.contextMenuEnabled));
         Persistence::Registry::SaveSetting(Constants::Registry::WHEEL_INVERT,          static_cast<DWORD>(app.invertWheelDirection));
         Persistence::Registry::SaveSetting(Constants::Registry::WHEEL_INVERT_H,        static_cast<DWORD>(app.invertWheelDirectionH));
         Persistence::Registry::SaveSetting(Constants::Registry::VRAM_CACHE_COUNT,      static_cast<DWORD>(app.vramCacheCount));

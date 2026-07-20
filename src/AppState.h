@@ -78,6 +78,7 @@ struct AppState {
     int  caretStyle              = Constants::InputBox::CARET_STYLE; // 0 = bar, 1 = underscore
     float zoomClickMultiplier    = Constants::ZOOM_CLICK; // left-click zoom (1 = off .. 10)
     bool swapMouseButtons        = Constants::IS_SWAP_MOUSE_BUTTONS;
+    bool contextMenuEnabled      = Constants::IS_CONTEXT_MENU_ENABLED; // main-window right-click context menu
     bool ctrlCEnabled            = Constants::IS_CTRL_C_ENABLED;
     bool thumbCopyEnabled        = Constants::IS_THUMB_COPY_ENABLED;
     bool thumbMoveEnabled        = Constants::IS_THUMB_MOVE_ENABLED;
@@ -123,6 +124,13 @@ struct AppState {
     // Window dragging (RMB)
     bool isWindowDragging = false;
     POINT lastWindowMouse = {0, 0};
+
+    // Right-click context menu gating: rmbDownPt is the screen point of the last
+    // WM_RBUTTONDOWN; rmbConsumed goes true the moment the RMB gesture becomes a
+    // drag or a combo (RMB+wheel / RMB+LMB). On WM_RBUTTONUP a still-false
+    // rmbConsumed means it was a pure click → raise the context menu.
+    POINT rmbDownPt = {0, 0};
+    bool  rmbConsumed = false;
 
     // Middle mouse panning
     bool isMidDragging = false;
