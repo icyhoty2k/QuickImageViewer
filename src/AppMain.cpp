@@ -413,18 +413,14 @@ LRESULT CALLBACK MainAppWndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM l
 
             int arrivedIndex = static_cast<int>(wParam);
 
-            // Discard if user navigated away while bytes were in flight
+            // Discard if user navigated away while bytes were in flight.
+            // On a match, hand the bytes to the decoder worker for async
+            // rasterization; WM_QIV_REPAINT finalizes display when it lands,
+            // exactly like the raster cache-miss path.
             if (arrivedIndex == app.wantedIndex.load(std::memory_order_acquire) &&
                 app.renderer) {
-                if (SUCCEEDED(app.renderer->LoadSvgFromBytes(payload->bytes, payload->path))) {
-                    UpdateOverlaysForCurrentImage(hWnd);
-                    uiManager.RefreshInfoWindowIfVisible();
-                    uiManager.RefreshStatsWindowIfVisible();
-                    InvalidateRect(hWnd, nullptr, FALSE);
-                    uiManager.getCacheWindow().UpdateCacheView();
-                    uiManager.getActiveDirWnd().UpdateDirView();
-                    uiManager.getActiveDirWnd().SyncDirSelectionRectangle();
-                }
+                (void) app.renderer->PreloadSvgFromBytes(std::move(payload->bytes),
+                                                         payload->path, arrivedIndex);
             }
 
             delete payload;

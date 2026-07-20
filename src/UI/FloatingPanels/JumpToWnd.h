@@ -17,6 +17,7 @@ namespace UI {
 
     protected:
         bool    OnKeyDown(WPARAM vk, bool ctrl, bool shift, bool alt) override;
+        bool    OnLocalHide() override;
         LRESULT HandlePanelMessage(UINT message, WPARAM wParam, LPARAM lParam) override;
 
     private:

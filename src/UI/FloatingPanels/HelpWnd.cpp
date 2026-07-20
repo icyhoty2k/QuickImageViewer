@@ -111,6 +111,33 @@ namespace UI {
         InitFloating(hInstance, hParent, L"QIV_HelpWindow", Constants::APP_TASKBAR_NAME,
                      MulDiv(680, dpi, 96), MulDiv(840, dpi, 96));
         BuildHelpContent();
+
+        m_filter.SetPlaceholder(L"type to filter shortcuts…");
+        m_filter.OnChanged = [this](const std::wstring& text) {
+            m_query = text;
+            for (auto& c : m_query) c = static_cast<wchar_t>(towlower(c));
+            m_scrollOffsetY = 0; // filtered content restarts at the top
+            InvalidateRect(m_hWnd, nullptr, FALSE);
+        };
+    }
+
+    // Empty query → true. Otherwise case-insensitive substring match on the
+    // shortcut chord or the description.
+    bool HelpWnd::EntryMatches(const HelpEntry& e) const {
+        if (m_query.empty()) return true;
+        auto lower = [](std::wstring s) {
+            for (auto& c : s) c = static_cast<wchar_t>(towlower(c));
+            return s;
+        };
+        return lower(e.shortcut).find(m_query) != std::wstring::npos ||
+               lower(e.description).find(m_query) != std::wstring::npos;
+    }
+
+    bool HelpWnd::SectionHasVisible(int sectionId) const {
+        if (m_query.empty()) return true;
+        for (const auto& e : m_entries)
+            if (e.sectionId == sectionId && EntryMatches(e)) return true;
+        return false;
     }
 
     // =========================================================================
@@ -622,6 +649,7 @@ namespace UI {
         wcscat_s(path, MAX_PATH, L"\\QIV_Help.txt");
 
         std::wstring out;
+        out.reserve(m_sections.size() * 128 + m_entries.size() * 96 + 256);
         out += m_fullTitle + L" — Shortcuts & Command-Line Reference\n";
         out += std::wstring(60, L'=') + L"\n";
 
@@ -779,6 +807,9 @@ namespace UI {
     // Show
     // =========================================================================
     void HelpWnd::Show() {
+        m_filter.Reset(); // fresh open starts unfiltered
+        m_query.clear();
+        m_scrollOffsetY = 0;
         if (m_hWnd) {
             if (m_hParent) {
                 RECT rcParent, rcHelp;
@@ -797,7 +828,13 @@ namespace UI {
     // =========================================================================
     // Keyboard
     // =========================================================================
+    // Esc: clear the filter if typed (same as the ✕ button), else hide the panel.
+    bool HelpWnd::OnLocalHide() {
+        return m_filter.RouteKey(VK_ESCAPE, m_hWnd) == InputResult::RequestClear;
+    }
+
     bool HelpWnd::OnKeyDown(WPARAM vk, bool ctrl, bool /*shift*/, bool /*alt*/) {
+        // Host-specific keys first: help toggle, export, and list scrolling.
         if (vk == Shortcuts::SC_PANEL_HELP_TOGGLE) {
             Hide();
             return true;
@@ -818,11 +855,20 @@ namespace UI {
             return true;
         }
         if (vk == VK_END) {
-            m_scrollOffsetY = std::max(0, m_totalContentHeight - m_viewHeight);
+            m_scrollOffsetY = std::max(0, m_visibleContentHeight - m_viewHeight);
             InvalidateRect(m_hWnd, nullptr, FALSE);
             return true;
         }
-        return false;
+
+        // Everything else → the filter box (typing, editing, forward policy).
+        switch (m_filter.RouteKey(vk, m_hWnd)) {
+            case InputResult::Ignored:         return false; // forward to app pipeline
+            case InputResult::RequestClose:    return false; // (Esc arrives via OnLocalHide)
+            case InputResult::RequestClear:    InvalidateRect(m_hWnd, nullptr, FALSE); return true;
+            case InputResult::ConsumedRepaint: InvalidateRect(m_hWnd, nullptr, FALSE); return true;
+            case InputResult::Consumed:        return true;
+        }
+        return true;
     }
 
     // =========================================================================
@@ -925,8 +971,18 @@ namespace UI {
                 DrawTextW(hdc, subtitle.c_str(), -1, &subtitleRect,
                           DT_CENTER | DT_TOP | DT_SINGLELINE | DT_NOPREFIX);
 
+                // ---- filter box (reuses the shared InputBox) ----------------
+                // Drawn above the content clip region; typing filters the list.
+                const int filterH = MulDiv(26, dpiI, 96);
+                RECT filterRect = {
+                    contentLeft, subtitleRect.bottom + MulDiv(12, dpiI, 96),
+                    contentRight, subtitleRect.bottom + MulDiv(12, dpiI, 96) + filterH
+                };
+                m_filter.Draw(hdc, m_hFontDesc, filterRect, MulDiv(8, dpiI, 96),
+                              GetFocus() == m_hWnd);
+
                 // ---- content geometry ---------------------------------------
-                const int contentTop = subtitleRect.bottom + MulDiv(20, dpiI, 96);
+                const int contentTop = filterRect.bottom + MulDiv(14, dpiI, 96);
                 const int footerH = MulDiv(44, dpiI, 96);
                 const int contentBottom = rc.bottom - footerH;
                 const int contentHeight = std::max(contentBottom - contentTop, 1);
@@ -936,7 +992,18 @@ namespace UI {
 
                 MeasureContent(hdc, keyColW, descColW, dpi);
 
-                const int maxScroll = std::max(0, m_totalContentHeight - contentHeight);
+                // Filtered content height drives all scroll math (scrollbar, drag,
+                // End key). Sum only visible sections + matching rows.
+                m_visibleContentHeight = 0;
+                for (size_t s = 0; s < m_sections.size(); ++s) {
+                    if (!SectionHasVisible(static_cast<int>(s))) continue;
+                    m_visibleContentHeight += m_headerHeights[s];
+                    for (size_t i = 0; i < m_entries.size(); ++i)
+                        if (m_entries[i].sectionId == static_cast<int>(s) && EntryMatches(m_entries[i]))
+                            m_visibleContentHeight += m_rowHeights[i];
+                }
+
+                const int maxScroll = std::max(0, m_visibleContentHeight - contentHeight);
                 m_scrollOffsetY = std::clamp(m_scrollOffsetY, 0, maxScroll);
 
                 // ---- clip + draw sections -----------------------------------
@@ -946,13 +1013,16 @@ namespace UI {
                 int y = contentTop - m_scrollOffsetY;
 
                 for (size_t s = 0; s < m_sections.size(); ++s) {
+                    // Filter: skip sections with no matching entry.
+                    if (!SectionHasVisible(static_cast<int>(s))) continue;
+
                     const COLORREF secColor = sectionColors[s % 4];
                     const int headH = m_headerHeights[s];
 
                     // Skip whole section if entirely above/below the viewport
                     int sectionH = headH;
                     for (size_t i = 0; i < m_entries.size(); ++i)
-                        if (m_entries[i].sectionId == static_cast<int>(s))
+                        if (m_entries[i].sectionId == static_cast<int>(s) && EntryMatches(m_entries[i]))
                             sectionH += m_rowHeights[i];
 
                     if (y + sectionH < contentTop || y > contentBottom) {
@@ -996,6 +1066,7 @@ namespace UI {
                     // -- rows: key column | description column ----------------
                     for (size_t i = 0; i < m_entries.size(); ++i) {
                         if (m_entries[i].sectionId != static_cast<int>(s)) continue;
+                        if (!EntryMatches(m_entries[i])) continue; // filtered out
                         const int rowH = m_rowHeights[i];
 
                         if (y + rowH >= contentTop && y <= contentBottom) {
@@ -1038,7 +1109,7 @@ namespace UI {
                     const int trackH = trackBottom - trackTop;
 
                     const int thumbH = std::max(MulDiv(30, dpiI, 96),
-                                                trackH * contentHeight / m_totalContentHeight);
+                                                trackH * contentHeight / m_visibleContentHeight);
                     const int thumbY = trackTop + (trackH - thumbH) * m_scrollOffsetY / maxScroll;
 
                     HBRUSH hTrack = CreateSolidBrush(Constants::Theme::ThemedColor(
@@ -1087,6 +1158,13 @@ namespace UI {
                 return 0;
             }
 
+            case WM_CHAR: {
+                wchar_t ch = static_cast<wchar_t>(wParam);
+                if (m_filter.RouteChar(ch, m_hWnd) == InputResult::ConsumedRepaint)
+                    InvalidateRect(m_hWnd, nullptr, FALSE);
+                return 0;
+            }
+
             case WM_MOUSEWHEEL: {
                 int delta = GET_WHEEL_DELTA_WPARAM(wParam);
                 m_scrollOffsetY -= (delta / WHEEL_DELTA) * static_cast<int>(60 * app.dpiScale);
@@ -1096,6 +1174,12 @@ namespace UI {
 
             case WM_LBUTTONDOWN: {
                 POINT pt = {GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam)};
+
+                // Filter box (✕ button or click-to-caret) — before other targets.
+                if (m_filter.RouteMouse(WM_LBUTTONDOWN, wParam, lParam) == InputResult::ConsumedRepaint) {
+                    InvalidateRect(m_hWnd, nullptr, FALSE);
+                    return 0;
+                }
 
                 if (pt.x >= m_footerLinkRect.left && pt.x <= m_footerLinkRect.right &&
                     pt.y >= m_footerLinkRect.top && pt.y <= m_footerLinkRect.bottom) {
@@ -1122,6 +1206,10 @@ namespace UI {
             case WM_MOUSEMOVE: {
                 POINT pt = {GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam)};
 
+                // Filter ✕ hover state.
+                if (m_filter.RouteMouse(WM_MOUSEMOVE, wParam, lParam) == InputResult::ConsumedRepaint)
+                    InvalidateRect(m_hWnd, nullptr, FALSE);
+
                 if (pt.x >= m_footerLinkRect.left && pt.x <= m_footerLinkRect.right &&
                     pt.y >= m_footerLinkRect.top && pt.y <= m_footerLinkRect.bottom) {
                     SetCursor(LoadCursor(nullptr, IDC_HAND));
@@ -1130,7 +1218,7 @@ namespace UI {
                 }
 
                 if (m_sbDragging) {
-                    const int maxScroll = std::max(0, m_totalContentHeight - m_viewHeight);
+                    const int maxScroll = std::max(0, m_visibleContentHeight - m_viewHeight);
                     const int delta = pt.y - m_sbDragStartY;
                     if (m_viewHeight > 0)
                         m_scrollOffsetY = m_sbDragStartOffset + delta * maxScroll / m_viewHeight;

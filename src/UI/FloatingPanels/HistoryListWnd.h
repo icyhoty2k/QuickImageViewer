@@ -22,7 +22,7 @@ namespace UI {
         //   Ctrl+Alt+Shift+Del — Clear all favorites except history (HISTORY_CLEAR_ALL_FAVORITES_BUT_NOT_HISTORY)
         //   Up/Down    — Move selection
         //   Enter      — Open selected folder
-        //   Esc        — Hide panel
+        //   Esc        — Clear filter if typed, else hide panel
         // -----------------------------------------------------------------------
         public:
             void Init(HINSTANCE hInstance, HWND hParent) override;
@@ -38,6 +38,7 @@ namespace UI {
             void OnSetFocus() override;
             void OnKillFocus() override;
             bool    OnKeyDown(WPARAM vk, bool ctrl, bool shift, bool alt) override;
+            bool    OnLocalHide() override;
             bool    OnMButtonUp(int x, int y) override;
             LRESULT HandlePanelMessage(UINT message, WPARAM wParam, LPARAM lParam) override;
 

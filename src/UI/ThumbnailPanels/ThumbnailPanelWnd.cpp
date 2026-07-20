@@ -580,7 +580,9 @@ namespace UI {
         // is stable across the MRU reordering; only genuinely evicted/deleted
         // entries are dropped.
         if (!m_selectedPaths.empty() || !m_anchorPath.empty()) {
-            const std::unordered_set<std::wstring> live(items.begin(), items.end());
+            std::unordered_set<std::wstring> live;
+            live.reserve(items.size());
+            live.insert(items.begin(), items.end());
             std::erase_if(m_selectedPaths,
                           [&](const std::wstring &p) {
                               return !live.count(p);
@@ -637,7 +639,7 @@ namespace UI {
 
             m_thumbnails.push_back({
                 D2D1::RectF(x, y, x + thumbW, y + thumbH),
-                items[i],
+                std::move(items[i]),
                 idx
             });
 
@@ -1043,6 +1045,7 @@ namespace UI {
                             if (!paths.empty()) {
                                 AppCommands::CopyFilesToClipboard(m_hOwner, paths, true);
                                 s_cutPaths.clear();
+                                s_cutPaths.reserve(paths.size());
                                 for (const auto &p: paths) s_cutPaths.insert(p);
                                 uiManager.RepaintAllPanels();
                             }
@@ -1067,8 +1070,10 @@ namespace UI {
                     if (ctrl && key == 'A') {
                         if (m_selectedPaths.size() == m_thumbnails.size())
                             m_selectedPaths.clear();
-                        else
+                        else {
+                            m_selectedPaths.reserve(m_thumbnails.size());
                             for (const auto &t: m_thumbnails) m_selectedPaths.insert(t.filePath);
+                        }
                         m_anchorPath = (!m_selectedPaths.empty() && !m_thumbnails.empty())
                                            ? m_thumbnails[0].filePath
                                            : L"";
@@ -1598,6 +1603,7 @@ namespace UI {
                         OnContextMenuExtra();
                         break;
                     case ID_CTX_SELECT_ALL:
+                        m_selectedPaths.reserve(m_thumbnails.size());
                         for (const auto &t: m_thumbnails) m_selectedPaths.insert(t.filePath);
                         if (!m_thumbnails.empty()) m_anchorPath = m_thumbnails[0].filePath;
                         NotifySelectionOverlay();
@@ -1606,6 +1612,7 @@ namespace UI {
                     case ID_CTX_SELECT_INVERSE: {
                         // Selected → unselected, unselected → selected.
                         std::unordered_set<std::wstring> inverted;
+                        inverted.reserve(m_thumbnails.size());
                         for (const auto &t: m_thumbnails)
                             if (!m_selectedPaths.count(t.filePath))
                                 inverted.insert(t.filePath);
@@ -1995,6 +2002,8 @@ namespace UI {
 
         std::vector<size_t> visIdx;
         std::vector<Thumbnail> visThumbs;
+        visIdx.reserve(m_thumbnails.size());
+        visThumbs.reserve(m_thumbnails.size());
         for (size_t i = 0; i < m_thumbnails.size(); ++i) {
             const D2D1_RECT_F &rc = m_thumbnails[i].rect;
             if (rc.right > 0.0f && rc.left < visW && rc.bottom > 0.0f && rc.top < visH) {
