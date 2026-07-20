@@ -44,7 +44,9 @@ class RendererD2D final : public IImageRenderer {
         void ClearActiveImage() override;
 
         // SVG support
-        [[nodiscard]] HRESULT LoadSvgFromBytes(const std::vector<BYTE> &svgBytes, const std::wstring &filePath) override;
+        [[nodiscard]] HRESULT PreloadSvgFromBytes(std::vector<BYTE> svgBytes,
+                                                  const std::wstring &filePath,
+                                                  int requestIndex) override;
 
         bool HasActiveSvg() const override {
             return m_pActiveSvg != nullptr;
@@ -193,6 +195,14 @@ class RendererD2D final : public IImageRenderer {
         Microsoft::WRL::ComPtr<ID2D1SvgDocument> m_pActiveSvg;
         float m_svgNativeW = 0.0f;
         float m_svgNativeH = 0.0f;
+
+        // Worker-safe SVG rasterization: parse + render + GPU upload only.
+        // Writes no shared state; the caller inserts outBmp into m_bitmapCache.
+        // Uses the injected per-thread WIC factory (wicFac) — never app.wicFactory.
+        [[nodiscard]] HRESULT DecodeSvgToBitmap(const std::vector<BYTE> &svgBytes,
+                                                IWICImagingFactory2 *wicFac,
+                                                Microsoft::WRL::ComPtr<ID2D1Bitmap1> &outBmp,
+                                                UINT &outW, UINT &outH);
 
         // Window state
         HWND m_hwnd = nullptr;

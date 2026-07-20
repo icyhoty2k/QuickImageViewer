@@ -84,10 +84,15 @@ class IImageRenderer {
         // SVG support
         // -------------------------------------------------------------------
 
-        /// Load an SVG from raw bytes into the renderer's SVG cache.
-        /// Returns S_OK on success, E_NOTIMPL if the renderer has no SVG support.
+        /// Rasterize an SVG from raw bytes on a worker thread, insert the result
+        /// into the shared bitmap cache, then post WM_QIV_REPAINT so the UI thread
+        /// displays it through the same cache-hit path as raster images.
+        /// Non-blocking: returns S_OK once the work is queued (or on cache hit),
+        /// E_NOTIMPL if the renderer has no SVG support.
         [[nodiscard]]
-        virtual HRESULT LoadSvgFromBytes(const std::vector<BYTE> & /*svgBytes*/, const std::wstring &/*filePath*/) {
+        virtual HRESULT PreloadSvgFromBytes(std::vector<BYTE> /*svgBytes*/,
+                                            const std::wstring & /*filePath*/,
+                                            int /*requestIndex*/) {
             return E_NOTIMPL;
         }
 

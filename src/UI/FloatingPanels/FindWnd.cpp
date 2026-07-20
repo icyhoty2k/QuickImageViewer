@@ -67,11 +67,14 @@ void FindWnd::RebuildMatches() {
     // Done fresh on every RebuildMatches so it reflects the live cache.
     std::vector<std::wstring> extraPaths;
     if (app.renderer) {
+        extraPaths.reserve(app.renderer->GetCachedBitmaps().size());
         for (auto &item : app.renderer->GetCachedBitmaps()) {
             if (app.playlistIndexMap.find(item.filePath) == app.playlistIndexMap.end())
                 extraPaths.push_back(item.filePath);
         }
     }
+
+    m_results.reserve(app.playlist.size() + extraPaths.size());
 
     // Empty query — show every item in playlist order, then VRAM-only extras.
     if (m_queryLen == 0) {
@@ -173,65 +176,49 @@ void FindWnd::CommitOpen() {
 //  Input
 // =============================================================================
 
-bool FindWnd::OnKeyDown(WPARAM vk, bool ctrl, bool shift, bool alt) {
-    (void)shift; // shift state is read via GetKeyState inside HandleMessage
-
-    // Text-editing ctrl combos (Ctrl+A/C/X/V) go to the inputbox first.
-    if (ctrl && !alt) {
-        if (m_inputBox.HandleMessage(WM_KEYDOWN, vk, 0)) {
+// Esc: if the query box has text, clear it (same as the ✕ button) and keep the
+// panel open. Empty box → return false so the base hides the panel.
+bool FindWnd::OnLocalHide() {
+    switch (m_inputBox.RouteKey(VK_ESCAPE, m_hWnd)) {
+        case InputResult::RequestClear:
             InvalidateRect(m_hWnd, nullptr, FALSE);
             return true;
-        }
+        default:
+            return false; // RequestClose (empty) → base hides the panel
     }
-    // All other Ctrl/Alt combos pass to the parent (app shortcuts, e.g. Ctrl+F).
-    if (ctrl || alt) return false;
+}
 
+bool FindWnd::OnKeyDown(WPARAM vk, bool ctrl, bool shift, bool alt) {
+    (void)ctrl; (void)shift; (void)alt; // modifiers read via GetKeyState inside RouteKey
+
+    // Host-specific keys first: result-list navigation + commit.
     switch (vk) {
         case VK_RETURN:
             CommitOpen();
             return true;
-
         case VK_UP:
-            if (!m_results.empty()) {
-                --m_selIdx;
-                AdjustScroll();
-                InvalidateRect(m_hWnd, nullptr, FALSE);
-            }
+            if (!m_results.empty()) { --m_selIdx; AdjustScroll(); InvalidateRect(m_hWnd, nullptr, FALSE); }
             return true;
-
         case VK_DOWN:
-            if (!m_results.empty()) {
-                ++m_selIdx;
-                AdjustScroll();
-                InvalidateRect(m_hWnd, nullptr, FALSE);
-            }
+            if (!m_results.empty()) { ++m_selIdx; AdjustScroll(); InvalidateRect(m_hWnd, nullptr, FALSE); }
             return true;
-
         case VK_PRIOR:
-            if (!m_results.empty()) {
-                m_selIdx -= VISIBLE_ROWS;
-                AdjustScroll();
-                InvalidateRect(m_hWnd, nullptr, FALSE);
-            }
+            if (!m_results.empty()) { m_selIdx -= VISIBLE_ROWS; AdjustScroll(); InvalidateRect(m_hWnd, nullptr, FALSE); }
             return true;
-
         case VK_NEXT:
-            if (!m_results.empty()) {
-                m_selIdx += VISIBLE_ROWS;
-                AdjustScroll();
-                InvalidateRect(m_hWnd, nullptr, FALSE);
-            }
+            if (!m_results.empty()) { m_selIdx += VISIBLE_ROWS; AdjustScroll(); InvalidateRect(m_hWnd, nullptr, FALSE); }
             return true;
-
-        default:
-            if (m_inputBox.HandleMessage(WM_KEYDOWN, vk, 0)) {
-                InvalidateRect(m_hWnd, nullptr, FALSE);
-                return true;
-            }
-            // VK_ESCAPE returned false = inputbox had no text → let parent close the panel.
-            // All other unhandled keys are consumed to prevent app hotkeys misfiring.
-            return vk != VK_ESCAPE;
     }
+
+    // Everything else → the text box (editing, Ctrl+A/C/X/V, forward policy).
+    switch (m_inputBox.RouteKey(vk, m_hWnd)) {
+        case InputResult::Ignored:         return false; // forward to app pipeline
+        case InputResult::RequestClose:    return false; // (Esc arrives via OnLocalHide, not here)
+        case InputResult::RequestClear:    InvalidateRect(m_hWnd, nullptr, FALSE); return true;
+        case InputResult::ConsumedRepaint: InvalidateRect(m_hWnd, nullptr, FALSE); return true;
+        case InputResult::Consumed:        return true;
+    }
+    return true;
 }
 
 // =============================================================================
@@ -277,21 +264,23 @@ LRESULT FindWnd::HandlePanelMessage(UINT message, WPARAM wParam, LPARAM lParam) 
             PostMessageW(m_hParent, Constants::WM_QIV_SWITCH_TO_JUMP, 0, 0);
             return 0;
         }
-        m_inputBox.HandleMessage(WM_CHAR, wParam, lParam);
+        if (m_inputBox.RouteChar(ch, m_hWnd) == InputResult::ConsumedRepaint)
+            InvalidateRect(m_hWnd, nullptr, FALSE);
         return 0;
     }
 
     case WM_LBUTTONDOWN:
-        m_inputBox.HandleMessage(WM_LBUTTONDOWN, wParam, lParam);
+        if (m_inputBox.RouteMouse(WM_LBUTTONDOWN, wParam, lParam) == InputResult::ConsumedRepaint)
+            InvalidateRect(m_hWnd, nullptr, FALSE);
         return 0;
 
     case WM_MOUSEMOVE:
-        if (m_inputBox.HandleMessage(WM_MOUSEMOVE, wParam, lParam))
+        if (m_inputBox.RouteMouse(WM_MOUSEMOVE, wParam, lParam) == InputResult::ConsumedRepaint)
             InvalidateRect(m_hWnd, nullptr, FALSE);
         return 0;
 
     case WM_MOUSELEAVE:
-        if (m_inputBox.HandleMessage(WM_MOUSELEAVE, wParam, lParam))
+        if (m_inputBox.RouteMouse(WM_MOUSELEAVE, wParam, lParam) == InputResult::ConsumedRepaint)
             InvalidateRect(m_hWnd, nullptr, FALSE);
         return 0;
 

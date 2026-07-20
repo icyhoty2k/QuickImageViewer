@@ -930,8 +930,7 @@ namespace UI {
                             const int hi = std::max(m_anchorRow, hit);
                             for (int i = lo; i <= hi; ++i) m_selectedRows.insert(i);
                         } else if (ctrl) {
-                            if (m_selectedRows.count(hit)) m_selectedRows.erase(hit);
-                            else m_selectedRows.insert(hit);
+                            if (m_selectedRows.erase(hit) == 0) m_selectedRows.insert(hit);
                             m_anchorRow = hit;
                         } else {
                             m_selectedRows.clear();

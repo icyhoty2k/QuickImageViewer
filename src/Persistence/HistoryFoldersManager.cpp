@@ -227,7 +227,9 @@ void HistoryFoldersManager::MergeHistoryFromDisk() {
 
     // Disk → memory: entries on disk that are not in RAM
     {
-        std::unordered_set<std::wstring> memSet(folderHistory.begin(), folderHistory.end());
+        std::unordered_set<std::wstring> memSet;
+        memSet.reserve(folderHistory.size() + diskList.size());
+        memSet.insert(folderHistory.begin(), folderHistory.end());
         for (const auto &path : diskList) {
             if (!memSet.count(path) &&
                 static_cast<int>(folderHistory.size()) < app.historyMaxDirsSave) {

@@ -60,6 +60,12 @@ namespace UI {
             // Derived classes will put their switch(message) logic here
             virtual LRESULT HandleMessage(UINT message, WPARAM wParam, LPARAM lParam) = 0;
 
+            // Called when the local-hide key (Esc) is pressed, BEFORE the base
+            // hides the panel. Return true to consume it (panel stays open — e.g.
+            // a filter input cleared its text, the same action as its ✕ button);
+            // return false to let the base hide the panel. Default: do not consume.
+            virtual bool OnLocalHide() { return false; }
+
             // The bridge between Win32 and C++
             static LRESULT CALLBACK WindowRouter(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) {
                 IPanelWindow *pThis = nullptr;
@@ -83,9 +89,16 @@ namespace UI {
                     if (message == WM_KEYDOWN) {
                         bool isCtrlDown = (GetKeyState(VK_CONTROL) & 0x8000) != 0;
 
-                        // If you include Shortcuts.h, use wParam == Shortcuts::SC_LOCAL_HIDE instead of VK_ESCAPE
-                        if ((isCtrlDown && wParam == Shortcuts::SC_APP_HIDE_ALT) || wParam == Shortcuts::IPANNEL_WINDOW_LOCAL_HIDE) {
+                        // Ctrl+W always hides the panel outright.
+                        if (isCtrlDown && wParam == Shortcuts::SC_APP_HIDE_ALT) {
                             pThis->Hide();
+                            return 0; // Message handled, do not pass to child
+                        }
+                        // Plain Esc first offers the panel a chance to consume it
+                        // (e.g. clear a filter input — same action as the ✕ button).
+                        // Hide only if the panel declines.
+                        if (wParam == Shortcuts::IPANNEL_WINDOW_LOCAL_HIDE) {
+                            if (!pThis->OnLocalHide()) pThis->Hide();
                             return 0; // Message handled, do not pass to child
                         }
                     }
