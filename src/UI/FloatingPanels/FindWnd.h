@@ -3,6 +3,7 @@
 #include <string>
 #include <vector>
 #include "FloatingPanelWnd.h"
+#include "CustomControls/InputBox.h"
 
 namespace UI {
     class FindWnd : public FloatingPanelWnd {
@@ -34,6 +35,7 @@ namespace UI {
 
         int m_cachedExtraCount = 0; // entries from VRAM cache not in playlist
 
+        InputBox                 m_inputBox;
         wchar_t                  m_query[MAX_QUERY + 2] = {};
         int                      m_queryLen  = 0;
         std::vector<MatchResult> m_results;

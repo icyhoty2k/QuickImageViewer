@@ -117,12 +117,13 @@ set(STATIC_LIBS_DIR "${CMAKE_CURRENT_SOURCE_DIR}/libs/lib/static")
 # Include Directories
 target_include_directories(QuickImageViewer PRIVATE
         ${CMAKE_CURRENT_SOURCE_DIR}/src
+        ${CMAKE_CURRENT_SOURCE_DIR}/src/Common
+        ${CMAKE_CURRENT_SOURCE_DIR}/src/Input
+        ${CMAKE_CURRENT_SOURCE_DIR}/src/Overlays
+        ${CMAKE_CURRENT_SOURCE_DIR}/src/Persistence
         ${CMAKE_CURRENT_SOURCE_DIR}/src/Platform
         ${CMAKE_CURRENT_SOURCE_DIR}/src/Renderer
         ${CMAKE_CURRENT_SOURCE_DIR}/src/UI
-        ${CMAKE_CURRENT_SOURCE_DIR}/src/Input
-        ${CMAKE_CURRENT_SOURCE_DIR}/src/Persistence
-        ${CMAKE_CURRENT_SOURCE_DIR}/src/Overlays
         ${CMAKE_CURRENT_SOURCE_DIR}/libs/lib/resvg/include
         ${CMAKE_CURRENT_SOURCE_DIR}/libs/lib/openjpeg/include
         ${CMAKE_CURRENT_SOURCE_DIR}/libs/lib/tinyexr/include

@@ -2,6 +2,7 @@
 #include "../../AppState.h"
 #include "../../Platform/Constants.h"
 #include "../../Platform/FileHandler.h"
+#include "CustomControls/InputBox.h"
 
 extern AppState app;
 
@@ -10,6 +11,16 @@ namespace UI {
         const int w = static_cast<int>(340.0f * app.dpiScale);
         const int h = static_cast<int>(140.0f * app.dpiScale);
         InitFloating(hInstance, hParent, L"QivJumpToWndClass", L"Jump to Image", w, h);
+
+        m_inputBox.SetMaxLength(6);
+        m_inputBox.OnChanged = [this](const std::wstring& t) {
+            int len = static_cast<int>(t.size());
+            wcsncpy_s(m_input, t.c_str(), len);
+            m_input[len] = L'\0';
+            m_inputLen   = len;
+            m_outOfRange = false;
+            InvalidateRect(m_hWnd, nullptr, FALSE);
+        };
     }
 
     void JumpToWnd::Init(HINSTANCE hInstance, HWND hParent, int8_t /*position*/) {
@@ -18,8 +29,9 @@ namespace UI {
 
     void JumpToWnd::Show() {
         if (!m_hWnd) return;
-        m_inputLen = 0;
-        m_input[0] = L'\0';
+        m_inputBox.Reset();
+        m_input[0]   = L'\0';
+        m_inputLen   = 0;
         m_outOfRange = false;
         m_total = static_cast<int>(app.playlist.size());
 
@@ -54,24 +66,27 @@ namespace UI {
         InvalidateRect(m_hParent, nullptr, FALSE);
     }
 
-    bool JumpToWnd::OnKeyDown(WPARAM vk, bool /*ctrl*/, bool /*shift*/, bool /*alt*/) {
-        if (vk == VK_BACK) {
-            if (m_inputLen > 0) {
-                m_input[--m_inputLen] = L'\0';
-                m_outOfRange = false;
+    bool JumpToWnd::OnKeyDown(WPARAM vk, bool ctrl, bool /*shift*/, bool alt) {
+        // Text-editing ctrl combos (Ctrl+A/C/X/V) go to the inputbox first.
+        if (ctrl && !alt) {
+            if (m_inputBox.HandleMessage(WM_KEYDOWN, vk, 0)) {
                 InvalidateRect(m_hWnd, nullptr, FALSE);
+                return true;
             }
-            return true;
         }
+        if (ctrl || alt) return false; // let Ctrl+F / Ctrl+G etc. reach the parent
+
         if (vk == VK_RETURN) {
             CommitJump();
             return true;
         }
-        // Digits are handled by WM_CHAR — consume here so they are not
-        // forwarded to the main app's view-mode shortcuts (1–5).
-        if (vk >= '0' && vk <= '9')
+
+        if (m_inputBox.HandleMessage(WM_KEYDOWN, vk, 0)) {
+            InvalidateRect(m_hWnd, nullptr, FALSE);
             return true;
-        return false;
+        }
+        // VK_ESCAPE returned false = no text → let parent close the panel.
+        return vk != VK_ESCAPE;
     }
 
     void JumpToWnd::EnsureBackBuffer(HDC refDC, int w, int h) {
@@ -157,46 +172,8 @@ namespace UI {
                 const int boxH = static_cast<int>(34.0f * app.dpiScale);
                 RECT boxRect = {pad, boxTop, rc.right - pad, boxTop + boxH};
 
-                COLORREF boxBg = m_outOfRange
-                                     ? Constants::Theme::ThemedColor(0.35f, 0.06f, 0.06f, app.themeFactor)
-                                     : Constants::Theme::ThemedGray(0.14f, app.themeFactor);
-                HBRUSH boxBrush = CreateSolidBrush(boxBg);
-                FillRect(hdc, &boxRect, boxBrush);
-                DeleteObject(boxBrush);
-
-                COLORREF borderColor = m_outOfRange
-                                           ? Constants::Theme::ThemedColor(0.80f, 0.25f, 0.25f, app.themeFactor)
-                                           : Constants::Theme::ThemedGray(0.35f, app.themeFactor);
-                HPEN hPen = CreatePen(PS_SOLID, 1, borderColor);
-                HPEN hOldPen = static_cast<HPEN>(SelectObject(hdc, hPen));
-                HBRUSH hNullBr = static_cast<HBRUSH>(GetStockObject(NULL_BRUSH));
-                HBRUSH hOldBr = static_cast<HBRUSH>(SelectObject(hdc, hNullBr));
-                Rectangle(hdc, boxRect.left, boxRect.top, boxRect.right, boxRect.bottom);
-                SelectObject(hdc, hOldPen);
-                SelectObject(hdc, hOldBr);
-                DeleteObject(hPen);
-
-                // Input text + blinking cursor
-                wchar_t display[16];
-                if (m_inputLen > 0) {
-                    wcsncpy_s(display, m_input, m_inputLen);
-                    display[m_inputLen] = L'_';
-                    display[m_inputLen + 1] = L'\0';
-                } else {
-                    wcscpy_s(display, L"_");
-                }
-
-                COLORREF inputColor = m_outOfRange
-                                          ? Constants::Theme::ThemedColor(1.0f, 0.4f, 0.4f, app.themeFactor)
-                                          : Constants::Theme::ThemedColor(0.39f, 0.78f, 1.0f, app.themeFactor);
-                SetTextColor(hdc, inputColor);
-
-                SelectObject(hdc, m_hFontInput);
-                RECT inputRect = {
-                    boxRect.left + pad / 2, boxRect.top,
-                    boxRect.right - pad / 2, boxRect.bottom
-                };
-                DrawTextW(hdc, display, -1, &inputRect, DT_CENTER | DT_VCENTER | DT_SINGLELINE);
+                m_inputBox.Draw(hdc, m_hFontInput, boxRect, pad / 2,
+                                GetFocus() == m_hWnd, m_outOfRange);
                 SelectObject(hdc, m_hFont);
 
                 // Hint line
@@ -218,20 +195,30 @@ namespace UI {
 
             case WM_CHAR: {
                 wchar_t ch = static_cast<wchar_t>(wParam);
-                // Switch to Find dialog when the trigger char is the first input
-                if (ch == Constants::PANEL_SWITCH_TO_FIND_CHAR && m_inputLen == 0) {
+                if (ch == Constants::PANEL_SWITCH_TO_FIND_CHAR && m_inputBox.IsEmpty()) {
                     Hide();
                     PostMessageW(m_hParent, Constants::WM_QIV_SWITCH_TO_FIND, 0, 0);
                     return 0;
                 }
-                if (ch >= L'0' && ch <= L'9' && m_inputLen < 6) {
-                    m_input[m_inputLen++] = ch;
-                    m_input[m_inputLen] = L'\0';
-                    m_outOfRange = false;
-                    InvalidateRect(m_hWnd, nullptr, FALSE);
-                }
+                // Allow digits and backspace; InputBox enforces the max-length of 6.
+                if (ch >= L'0' && ch <= L'9' || ch == L'\b')
+                    m_inputBox.HandleMessage(WM_CHAR, wParam, lParam);
                 return 0;
             }
+
+            case WM_LBUTTONDOWN:
+                m_inputBox.HandleMessage(WM_LBUTTONDOWN, wParam, lParam);
+                return 0;
+
+            case WM_MOUSEMOVE:
+                if (m_inputBox.HandleMessage(WM_MOUSEMOVE, wParam, lParam))
+                    InvalidateRect(m_hWnd, nullptr, FALSE);
+                return 0;
+
+            case WM_MOUSELEAVE:
+                if (m_inputBox.HandleMessage(WM_MOUSELEAVE, wParam, lParam))
+                    InvalidateRect(m_hWnd, nullptr, FALSE);
+                return 0;
 
             default:
                 break;

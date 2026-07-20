@@ -3,25 +3,13 @@
 #include "../../Platform/Constants.h"
 #include "../../Platform/FileHandler.h"
 #include "../../Renderer/IRenderer.h"
+#include "Common/FuzzyMatch.h"
+#include "CustomControls/InputBox.h"
 #include <algorithm>
-#include <cwctype>
 
 extern AppState app;
 
 namespace UI {
-
-// Case-insensitive wildcard match (* = any sequence, ? = any single char).
-static bool WildcardMatch(const wchar_t *pat, const wchar_t *text) {
-    const wchar_t *star = nullptr, *s = text;
-    while (*text) {
-        if (*pat == *text || *pat == L'?') { ++pat; ++text; }
-        else if (*pat == L'*')             { star = pat++; s = text; }
-        else if (star)                     { pat = star + 1; text = ++s; }
-        else return false;
-    }
-    while (*pat == L'*') ++pat;
-    return !*pat;
-}
 
 // =============================================================================
 //  Init / Show
@@ -31,6 +19,17 @@ void FindWnd::Init(HINSTANCE hInstance, HWND hParent) {
     const int w = static_cast<int>(460.0f * app.dpiScale);
     const int h = static_cast<int>(330.0f * app.dpiScale);
     InitFloating(hInstance, hParent, L"QivFindWndClass", L"Find Image", w, h);
+
+    m_inputBox.SetPlaceholder(L"filename or *.ext…");
+    m_inputBox.SetMaxLength(MAX_QUERY);
+    m_inputBox.OnChanged = [this](const std::wstring& t) {
+        int len = static_cast<int>(t.size());
+        wcsncpy_s(m_query, t.c_str(), len);
+        m_query[len] = L'\0';
+        m_queryLen   = len;
+        RebuildMatches();
+        InvalidateRect(m_hWnd, nullptr, FALSE);
+    };
 }
 
 void FindWnd::Init(HINSTANCE hInstance, HWND hParent, int8_t /*position*/) {
@@ -40,11 +39,7 @@ void FindWnd::Init(HINSTANCE hInstance, HWND hParent, int8_t /*position*/) {
 void FindWnd::Show() {
     if (!m_hWnd) return;
 
-    m_queryLen  = 0;
-    m_query[0]  = L'\0';
-    m_selIdx    = 0;
-    m_rowScroll = 0;
-    m_results.clear();
+    m_inputBox.Clear(); // OnChanged → RebuildMatches (all items) + resets internal state
 
     RECT pr; GetWindowRect(m_hParent, &pr);
     RECT wr; GetWindowRect(m_hWnd,    &wr);
@@ -68,19 +63,6 @@ void FindWnd::RebuildMatches() {
     m_rowScroll       = 0;
     m_cachedExtraCount = 0;
 
-    if (m_queryLen == 0) return;
-
-    // Lowercase copy of query
-    wchar_t lq[MAX_QUERY + 2];
-    wcsncpy_s(lq, m_query, m_queryLen);
-    lq[m_queryLen] = L'\0';
-    for (int i = 0; lq[i]; ++i) lq[i] = static_cast<wchar_t>(towlower(lq[i]));
-
-    // Wildcard mode: query contains '*' or '?'
-    bool hasWildcard = false;
-    for (int i = 0; i < m_queryLen; ++i)
-        if (lq[i] == L'*' || lq[i] == L'?') { hasWildcard = true; break; }
-
     // Snapshot VRAM cache paths not already in the current playlist.
     // Done fresh on every RebuildMatches so it reflects the live cache.
     std::vector<std::wstring> extraPaths;
@@ -91,6 +73,37 @@ void FindWnd::RebuildMatches() {
         }
     }
 
+    // Empty query — show every item in playlist order, then VRAM-only extras.
+    if (m_queryLen == 0) {
+        for (int i = 0; i < static_cast<int>(app.playlist.size()); ++i) {
+            MatchResult r;
+            r.playlistIdx = i;
+            r.path        = app.playlist[i];
+            r.score       = 0;
+            r.posCount    = 0;
+            m_results.push_back(std::move(r));
+        }
+        int extraStart = static_cast<int>(m_results.size());
+        for (auto &p : extraPaths) {
+            MatchResult r;
+            r.playlistIdx = -1;
+            r.path        = p;
+            r.score       = 0;
+            r.posCount    = 0;
+            m_results.push_back(std::move(r));
+        }
+        m_cachedExtraCount = static_cast<int>(m_results.size()) - extraStart;
+        return;
+    }
+
+    // Lowercase copy of query
+    wchar_t lq[MAX_QUERY + 2];
+    Common::LowerCopy(m_query, m_queryLen, lq);
+
+    // Wildcard mode: query contains '*' or '?'
+    bool hasWildcard = false;
+    hasWildcard = Common::IsWildcardQuery(lq, m_queryLen);
+
     // Helper: match one path and push result if it matches.
     auto tryMatch = [&](const std::wstring &path, int playlistIdx) {
         const wchar_t *name = path.c_str();
@@ -98,12 +111,8 @@ void FindWnd::RebuildMatches() {
         if (sl != std::wstring::npos) name += sl + 1;
 
         wchar_t lname[512];
-        int nameLen = 0;
-        while (name[nameLen] && nameLen < 511) {
-            lname[nameLen] = static_cast<wchar_t>(towlower(name[nameLen]));
-            ++nameLen;
-        }
-        lname[nameLen] = L'\0';
+        int nameLen = static_cast<int>(wcsnlen(name, 511));
+        Common::LowerCopy(name, nameLen, lname);
 
         MatchResult r;
         r.playlistIdx = playlistIdx;
@@ -112,31 +121,16 @@ void FindWnd::RebuildMatches() {
         r.posCount    = 0;
 
         if (hasWildcard) {
-            if (!WildcardMatch(lq, lname)) return;
+            if (!Common::WildcardMatch(lq, lname)) return;
             m_results.push_back(std::move(r));
             return;
         }
 
-        int ni = 0, qi = 0, pi = 0;
-        while (ni < nameLen && qi < m_queryLen) {
-            if (lname[ni] == lq[qi]) { r.positions[pi++] = ni; ++qi; }
-            ++ni;
-        }
-        if (qi < m_queryLen) return;
-
-        int score = 0;
-        if (r.positions[0] == 0) score += 8;
-        for (int k = 0; k < pi; ++k) {
-            if (k > 0 && r.positions[k] == r.positions[k - 1] + 1) score += 10;
-            if (r.positions[k] > 0) {
-                wchar_t prev = lname[r.positions[k] - 1];
-                if (prev == L'_' || prev == L'-' || prev == L'.' || prev == L' ')
-                    score += 4;
-            }
-        }
-        score -= (r.positions[pi - 1] - r.positions[0]);
-        r.score    = score;
-        r.posCount = pi;
+        Common::FuzzyMatchResult fm;
+        if (!Common::FuzzyMatch(lq, m_queryLen, lname, nameLen, fm)) return;
+        r.score    = fm.score;
+        r.posCount = fm.posCount;
+        for (int i = 0; i < fm.posCount; ++i) r.positions[i] = fm.positions[i];
         m_results.push_back(std::move(r));
     };
 
@@ -180,21 +174,19 @@ void FindWnd::CommitOpen() {
 // =============================================================================
 
 bool FindWnd::OnKeyDown(WPARAM vk, bool ctrl, bool shift, bool alt) {
-    // Let Ctrl/Alt combos through to the parent so app shortcuts (e.g. Ctrl+F
-    // to close this window) still work while the find box has focus.
+    (void)shift; // shift state is read via GetKeyState inside HandleMessage
+
+    // Text-editing ctrl combos (Ctrl+A/C/X/V) go to the inputbox first.
+    if (ctrl && !alt) {
+        if (m_inputBox.HandleMessage(WM_KEYDOWN, vk, 0)) {
+            InvalidateRect(m_hWnd, nullptr, FALSE);
+            return true;
+        }
+    }
+    // All other Ctrl/Alt combos pass to the parent (app shortcuts, e.g. Ctrl+F).
     if (ctrl || alt) return false;
 
-    (void)shift; // shift is passed through WM_CHAR with the translated character
-
     switch (vk) {
-        case VK_BACK:
-            if (m_queryLen > 0) {
-                m_query[--m_queryLen] = L'\0';
-                RebuildMatches();
-                InvalidateRect(m_hWnd, nullptr, FALSE);
-            }
-            return true;
-
         case VK_RETURN:
             CommitOpen();
             return true;
@@ -232,9 +224,13 @@ bool FindWnd::OnKeyDown(WPARAM vk, bool ctrl, bool shift, bool alt) {
             return true;
 
         default:
-            // Consume every other plain key so it never reaches the parent's
-            // shortcut handler. The character arrives via WM_CHAR instead.
-            return true;
+            if (m_inputBox.HandleMessage(WM_KEYDOWN, vk, 0)) {
+                InvalidateRect(m_hWnd, nullptr, FALSE);
+                return true;
+            }
+            // VK_ESCAPE returned false = inputbox had no text → let parent close the panel.
+            // All other unhandled keys are consumed to prevent app hotkeys misfiring.
+            return vk != VK_ESCAPE;
     }
 }
 
@@ -276,20 +272,28 @@ LRESULT FindWnd::HandlePanelMessage(UINT message, WPARAM wParam, LPARAM lParam) 
 
     case WM_CHAR: {
         wchar_t ch = static_cast<wchar_t>(wParam);
-        // Switch to Jump-to dialog when the trigger char is the first input
-        if (ch == Constants::PANEL_SWITCH_TO_JUMP_CHAR && m_queryLen == 0) {
+        if (ch == Constants::PANEL_SWITCH_TO_JUMP_CHAR && m_inputBox.IsEmpty()) {
             Hide();
             PostMessageW(m_hParent, Constants::WM_QIV_SWITCH_TO_JUMP, 0, 0);
             return 0;
         }
-        if (ch >= L' ' && m_queryLen < MAX_QUERY) {
-            m_query[m_queryLen++] = ch;
-            m_query[m_queryLen]   = L'\0';
-            RebuildMatches();
-            InvalidateRect(m_hWnd, nullptr, FALSE);
-        }
+        m_inputBox.HandleMessage(WM_CHAR, wParam, lParam);
         return 0;
     }
+
+    case WM_LBUTTONDOWN:
+        m_inputBox.HandleMessage(WM_LBUTTONDOWN, wParam, lParam);
+        return 0;
+
+    case WM_MOUSEMOVE:
+        if (m_inputBox.HandleMessage(WM_MOUSEMOVE, wParam, lParam))
+            InvalidateRect(m_hWnd, nullptr, FALSE);
+        return 0;
+
+    case WM_MOUSELEAVE:
+        if (m_inputBox.HandleMessage(WM_MOUSELEAVE, wParam, lParam))
+            InvalidateRect(m_hWnd, nullptr, FALSE);
+        return 0;
 
     case WM_PAINT: {
         PAINTSTRUCT ps;
@@ -330,7 +334,6 @@ LRESULT FindWnd::HandlePanelMessage(UINT message, WPARAM wParam, LPARAM lParam) 
 
         const COLORREF clrLabel   = Constants::Theme::ThemedGray(0.90f, app.themeFactor);
         const COLORREF clrDim     = Constants::Theme::ThemedGray(0.45f, app.themeFactor);
-        const COLORREF clrInput   = Constants::Theme::ThemedColor(0.39f, 0.78f, 1.0f, app.themeFactor);
         const COLORREF clrSelBg   = Constants::Theme::ThemedColor(0.15f, 0.35f, 0.60f, app.themeFactor);
         const COLORREF clrSelText = Constants::Theme::ThemedGray(1.00f, app.themeFactor);
         const COLORREF clrRowText = Constants::Theme::ThemedGray(0.85f, app.themeFactor);
@@ -364,36 +367,7 @@ LRESULT FindWnd::HandlePanelMessage(UINT message, WPARAM wParam, LPARAM lParam) 
         const int boxH   = static_cast<int>(34.0f * dpi);
         RECT boxRect = { pad, y, rc.right - pad, y + boxH };
 
-        COLORREF boxBg = Constants::Theme::ThemedGray(0.14f, app.themeFactor);
-        HBRUSH boxBrush = CreateSolidBrush(boxBg);
-        FillRect(hdc, &boxRect, boxBrush);
-        DeleteObject(boxBrush);
-
-        HPEN hPen   = CreatePen(PS_SOLID, 1, Constants::Theme::ThemedGray(0.35f, app.themeFactor));
-        HPEN hOldPen = static_cast<HPEN>(SelectObject(hdc, hPen));
-        HBRUSH hNullBr = static_cast<HBRUSH>(GetStockObject(NULL_BRUSH));
-        HBRUSH hOldBr  = static_cast<HBRUSH>(SelectObject(hdc, hNullBr));
-        Rectangle(hdc, boxRect.left, boxRect.top, boxRect.right, boxRect.bottom);
-        SelectObject(hdc, hOldPen);
-        SelectObject(hdc, hOldBr);
-        DeleteObject(hPen);
-
-        // Query text + cursor
-        SelectObject(hdc, m_hFontBold);
-        SetTextColor(hdc, m_queryLen > 0 ? clrInput : clrDim);
-
-        wchar_t display[MAX_QUERY + 4];
-        if (m_queryLen > 0) {
-            wcsncpy_s(display, m_query, m_queryLen);
-            display[m_queryLen]     = L'_';
-            display[m_queryLen + 1] = L'\0';
-        } else {
-            wcscpy_s(display, L"filename or *.ext…");
-        }
-
-        RECT inRect = { boxRect.left + pad / 2, boxRect.top,
-                        boxRect.right - pad / 2, boxRect.bottom };
-        DrawTextW(hdc, display, -1, &inRect, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
+        m_inputBox.Draw(hdc, m_hFontBold, boxRect, pad / 2, GetFocus() == m_hWnd);
         SelectObject(hdc, m_hFontNorm);
 
         y += boxH + gap;
@@ -412,15 +386,12 @@ LRESULT FindWnd::HandlePanelMessage(UINT message, WPARAM wParam, LPARAM lParam) 
         // ── Match list ────────────────────────────────────────────────────────
         const int listTop = y;
 
-        if (m_queryLen == 0) {
-            SetTextColor(hdc, clrDim);
+        if (m_results.empty()) {
+            const bool hasQuery = m_queryLen > 0;
+            SetTextColor(hdc, hasQuery ? clrOrange : clrDim);
             RECT r = { pad, y, rc.right - pad, y + rowH * VISIBLE_ROWS };
-            DrawTextW(hdc, L"Start typing to filter by filename", -1, &r,
-                      DT_CENTER | DT_VCENTER | DT_SINGLELINE);
-        } else if (m_results.empty()) {
-            SetTextColor(hdc, clrOrange);
-            RECT r = { pad, y, rc.right - pad, y + rowH };
-            DrawTextW(hdc, L"No matches", -1, &r, DT_CENTER | DT_VCENTER | DT_SINGLELINE);
+            DrawTextW(hdc, hasQuery ? L"No matches" : L"No images in playlist",
+                      -1, &r, DT_CENTER | DT_VCENTER | DT_SINGLELINE);
         } else {
             TEXTMETRIC tm;
             GetTextMetrics(hdc, &tm);
@@ -452,25 +423,9 @@ LRESULT FindWnd::HandlePanelMessage(UINT message, WPARAM wParam, LPARAM lParam) 
                 int textX = pad + (selected ? pad / 2 : 0);
                 int textY = y + (rowH - tm.tmHeight) / 2;
                 RECT clip = { textX, y, rc.right - pad, y + rowH };
-                const COLORREF clrBase = selected ? clrSelText : clrRowText;
 
-                // Draw segments: batch consecutive chars of the same color
-                int segStart = 0;
-                bool segHL = (fnameLen > 0) && isHL[0];
-                for (int ci = 1; ci <= fnameLen; ++ci) {
-                    bool curHL = (ci < fnameLen) && isHL[ci];
-                    if (curHL != segHL || ci == fnameLen) {
-                        int segLen = ci - segStart;
-                        SetTextColor(hdc, segHL ? clrYellow : clrBase);
-                        ExtTextOutW(hdc, textX, textY, ETO_CLIPPED, &clip,
-                                    fname + segStart, segLen, nullptr);
-                        SIZE sz;
-                        GetTextExtentPoint32W(hdc, fname + segStart, segLen, &sz);
-                        textX += sz.cx;
-                        segStart = ci;
-                        segHL = curHL;
-                    }
-                }
+                Common::DrawMatchText(hdc, fname, fnameLen, isHL, textX, textY, clip,
+                                      selected ? clrSelText : clrRowText, clrYellow);
 
                 y += rowH;
             }
@@ -495,10 +450,8 @@ LRESULT FindWnd::HandlePanelMessage(UINT message, WPARAM wParam, LPARAM lParam) 
             if (!m_results.empty()) {
                 swprintf_s(hint, L"%d / %d    ↑↓ select  •  Enter open  •  Esc cancel",
                            m_selIdx + 1, static_cast<int>(m_results.size()));
-            } else if (m_queryLen > 0) {
-                wcscpy_s(hint, L"No matches  •  Esc cancel");
             } else {
-                wcscpy_s(hint, L"Ctrl+F  •  Enter open  •  Esc cancel");
+                wcscpy_s(hint, L"Esc cancel");
             }
             SetTextColor(hdc, clrDim);
             RECT r = { pad, y, rc.right - pad, y + fs + 4 };
