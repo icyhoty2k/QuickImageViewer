@@ -111,6 +111,15 @@ void TrayHandler::ShowContextMenu(HWND hWnd, int x, int y) {
         MF_STRING | (app.ctrlCEnabled ? MF_CHECKED : MF_UNCHECKED),
         49, L"Ctrl+C Copy to Clipboard");
     {
+        HMENU hCaret = CreatePopupMenu();
+        auto caretFlag = [](int s) {
+            return MF_STRING | MF_RADIOCHECK | (app.caretStyle == s ? MF_CHECKED : MF_UNCHECKED);
+        };
+        AppendMenuW(hCaret, caretFlag(0), 60, L"Bar (|)");
+        AppendMenuW(hCaret, caretFlag(1), 61, L"Underscore (_)");
+        AppendMenuW(hSubMenu, MF_POPUP, reinterpret_cast<UINT_PTR>(hCaret), L"Input Caret Style");
+    }
+    {
         HMENU hThumbOps = CreatePopupMenu();
         AppendMenuW(hThumbOps,
             MF_STRING | (app.thumbCopyEnabled   ? MF_CHECKED : MF_UNCHECKED), 50, L"Copy (Ctrl+C)");
@@ -127,6 +136,13 @@ void TrayHandler::ShowContextMenu(HWND hWnd, int x, int y) {
         wchar_t vramLabel[64];
         swprintf_s(vramLabel, L"VRAM Cache Size: %d", app.vramCacheCount);
         AppendMenuW(hSubMenu, MF_STRING, 17, vramLabel);
+    }
+    {
+        wchar_t zcLabel[64];
+        const int zc = static_cast<int>(app.zoomClickMultiplier + 0.5f);
+        if (zc <= 1) swprintf_s(zcLabel, L"Left-Click Zoom: Off");
+        else         swprintf_s(zcLabel, L"Left-Click Zoom: %dx", zc);
+        AppendMenuW(hSubMenu, MF_STRING, 62, zcLabel);
     }
     {
         wchar_t wLabel[64], hLabel[64];
@@ -356,6 +372,20 @@ void TrayHandler::DispatchCommand(HWND hWnd, int cmd) {
             static_cast<DWORD>(app.ctrlCEnabled));
         break;
 
+    case 60:
+    case 61: {
+        const int newStyle = (cmd == 60) ? 0 : 1;
+        if (app.caretStyle != newStyle) {
+            app.caretStyle = newStyle;
+            Persistence::Registry::SaveSetting(Constants::Registry::INPUTBOX_CARET_STYLE,
+                static_cast<DWORD>(app.caretStyle));
+            m_overlayManager.PostCenterMessage(hWnd,
+                newStyle == 0 ? L"Input Caret: Bar" : L"Input Caret: Underscore");
+            InvalidateRect(hWnd, nullptr, FALSE);
+        }
+        break;
+    }
+
     case 50:
         app.thumbCopyEnabled = !app.thumbCopyEnabled;
         Persistence::Registry::SaveSetting(Constants::Registry::THUMB_COPY_ENABLED,
@@ -381,6 +411,18 @@ void TrayHandler::DispatchCommand(HWND hWnd, int cmd) {
         break;
 
     // ── Integer input values ──────────────────────────────────────────────────
+    case 62: {
+        int v = UI::ThemedDialog::PromptInt(hWnd, L"Left-Click Zoom",
+            L"Left-click zoom multiplier (1 = off .. 10):",
+            static_cast<int>(app.zoomClickMultiplier + 0.5f), 1, 10,
+            static_cast<int>(Constants::ZOOM_CLICK));
+        if (v >= 0) {
+            app.zoomClickMultiplier = static_cast<float>(v);
+            Persistence::Registry::SaveSetting(Constants::Registry::ZOOM_CLICK_MULT,
+                static_cast<DWORD>(v));
+        }
+        break;
+    }
     case 17: {
         int v = UI::ThemedDialog::PromptInt(hWnd, L"VRAM Image Cache",
             L"Number of images to cache in VRAM (0 – 999):",
@@ -590,6 +632,8 @@ void TrayHandler::DispatchCommand(HWND hWnd, int cmd) {
                 fwprintf(f, L"%s=%d\n", Constants::Registry::OVERLAY_VISIBLE,       (int)app.showOverlayInfoText);
                 fwprintf(f, L"%s=%d\n", Constants::Registry::OPEN_DIRWND_ON_START,  (int)app.openDirWndOnStart);
                 fwprintf(f, L"%s=%d\n", Constants::Registry::OVERLAY_SHOW_BG,       (int)app.overlayShowBackground);
+                fwprintf(f, L"%s=%d\n", Constants::Registry::INPUTBOX_CARET_STYLE,  app.caretStyle);
+                fwprintf(f, L"%s=%d\n", Constants::Registry::ZOOM_CLICK_MULT,       (int)app.zoomClickMultiplier);
                 fwprintf(f, L"%s=%d\n", Constants::Registry::SWAP_MOUSE_BUTTONS,    (int)app.swapMouseButtons);
                 fwprintf(f, L"%s=%d\n", Constants::Registry::WHEEL_INVERT,          (int)app.invertWheelDirection);
                 fwprintf(f, L"%s=%d\n", Constants::Registry::WHEEL_INVERT_H,        (int)app.invertWheelDirectionH);
@@ -814,6 +858,8 @@ void TrayHandler::DispatchCommand(HWND hWnd, int cmd) {
         app.showOverlayInfoText     = Constants::Overlay::DEFAULT_SHOW_OVERLAY;
         app.openDirWndOnStart       = Constants::IS_OPEN_DIRWND_ON_START;
         app.overlayShowBackground   = Constants::Overlay::IS_OVERLAY_SHOW_BACKGROUND;
+        app.caretStyle              = Constants::InputBox::CARET_STYLE;
+        app.zoomClickMultiplier     = Constants::ZOOM_CLICK;
         app.swapMouseButtons        = Constants::IS_SWAP_MOUSE_BUTTONS;
         app.invertWheelDirection    = Constants::IS_MOUSE_VERTICAL_REVERSE_SCROLL_DIRECTION;
         app.invertWheelDirectionH   = Constants::IS_MOUSE_HORIZONTAL_REVERSE_SCROLL_DIRECTION;
@@ -847,6 +893,8 @@ void TrayHandler::DispatchCommand(HWND hWnd, int cmd) {
         Persistence::Registry::SaveSetting(Constants::Registry::OVERLAY_VISIBLE,       static_cast<DWORD>(app.showOverlayInfoText));
         Persistence::Registry::SaveSetting(Constants::Registry::OPEN_DIRWND_ON_START,  static_cast<DWORD>(app.openDirWndOnStart));
         Persistence::Registry::SaveSetting(Constants::Registry::OVERLAY_SHOW_BG,       static_cast<DWORD>(app.overlayShowBackground));
+        Persistence::Registry::SaveSetting(Constants::Registry::INPUTBOX_CARET_STYLE,  static_cast<DWORD>(app.caretStyle));
+        Persistence::Registry::SaveSetting(Constants::Registry::ZOOM_CLICK_MULT,       static_cast<DWORD>(app.zoomClickMultiplier));
         Persistence::Registry::SaveSetting(Constants::Registry::SWAP_MOUSE_BUTTONS,    static_cast<DWORD>(app.swapMouseButtons));
         Persistence::Registry::SaveSetting(Constants::Registry::WHEEL_INVERT,          static_cast<DWORD>(app.invertWheelDirection));
         Persistence::Registry::SaveSetting(Constants::Registry::WHEEL_INVERT_H,        static_cast<DWORD>(app.invertWheelDirectionH));

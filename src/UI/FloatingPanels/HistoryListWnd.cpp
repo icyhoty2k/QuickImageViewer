@@ -1605,7 +1605,7 @@ namespace UI {
 
                 // Filter input (✕ button or click-to-position-caret) — handle
                 // before anything else. Ignored → falls through to header/rows.
-                if (g_filter.RouteMouse(WM_LBUTTONDOWN, wParam, lParam) == InputResult::ConsumedRepaint) {
+                if (g_filter.RouteMouse(WM_LBUTTONDOWN, wParam, lParam, m_hWnd) == InputResult::ConsumedRepaint) {
                     InvalidateRect(m_hWnd, nullptr, FALSE);
                     return 0;
                 }
@@ -1677,7 +1677,7 @@ namespace UI {
                 s_lastHoverPos = {mx, my};
 
                 // ✕ hover color — repaint only when state changes
-                if (g_filter.RouteMouse(WM_MOUSEMOVE, wParam, lParam) == InputResult::ConsumedRepaint)
+                if (g_filter.RouteMouse(WM_MOUSEMOVE, wParam, lParam, m_hWnd) == InputResult::ConsumedRepaint)
                     InvalidateRect(m_hWnd, nullptr, FALSE);
 
                 // Handle header dragging to move window
@@ -1880,8 +1880,15 @@ namespace UI {
                 return 0;
             }
 
+            case WM_RBUTTONUP: {
+                // Right-click inside the filter → Cut/Copy/Paste menu.
+                if (g_filter.RouteMouse(WM_RBUTTONUP, wParam, lParam, m_hWnd) == InputResult::ConsumedRepaint)
+                    InvalidateRect(m_hWnd, nullptr, FALSE);
+                return 0;
+            }
+
             case WM_MOUSELEAVE: {
-                g_filter.RouteMouse(WM_MOUSELEAVE, wParam, lParam);
+                g_filter.RouteMouse(WM_MOUSELEAVE, wParam, lParam, m_hWnd);
                 g_hoverRow = -1;
                 InvalidateRect(m_hWnd, nullptr, FALSE);
                 return 0;

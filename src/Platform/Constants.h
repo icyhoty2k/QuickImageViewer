@@ -344,6 +344,8 @@ namespace Constants {
         constexpr const wchar_t *SORT_ORDER              = L"qivSortOrder";
         constexpr const wchar_t *SORT_REVERSE            = L"qivSortReverse";
         constexpr const wchar_t *CTRL_C_ENABLED          = L"qivCtrlCEnabled";
+        constexpr const wchar_t *INPUTBOX_CARET_STYLE    = L"qivCaretStyle";
+        constexpr const wchar_t *ZOOM_CLICK_MULT         = L"qivZoomClick";
         constexpr const wchar_t *THUMB_COPY_ENABLED      = L"qivThumbCopy";
         constexpr const wchar_t *THUMB_MOVE_ENABLED      = L"qivThumbMove";
         constexpr const wchar_t *THUMB_DELETE_ENABLED    = L"qivThumbDelete";
@@ -456,6 +458,21 @@ namespace Constants {
     }
 
     // =========================================================================
+    // InputBox — shared single-line text control (Find / JumpTo / History / Help)
+    // =========================================================================
+    namespace InputBox {
+        // Text-caret geometry (px at 96 DPI, DPI-scaled at draw time).
+        //   CARET_STYLE 0 = vertical bar (|) sized to the text height.
+        //   CARET_STYLE 1 = underscore (_) along the text baseline.
+        constexpr int   CARET_STYLE          = 1;    // 0 = vertical bar, 1 = underscore
+        constexpr int   CARET_PADDING_HEIGHT = 0;    // bar: top/bottom inset from text height
+                                                     // underscore: lift off the baseline
+        constexpr float CARET_THICKNESS      = 1.0f; // bar: width / underscore: height (float:
+                                                     // e.g. 1.5 reads as in-between on high-DPI)
+        constexpr int   CARET_GAP            = 0;    // horizontal space between caret and text
+    }
+
+    // =========================================================================
     // Cursors — LMB mode indicators
     // =========================================================================
     // Change these IDC_ values to swap the cursor for each mode.
@@ -472,6 +489,17 @@ namespace Constants {
     namespace FileHandler {
         constexpr const int FILE_HANDLER_DEFAULT_SORT_ORDER = 0; // 0 name, 1 date, 2 size,3 extension(type), 4 performance mode - SortPlaylistByDiskOrder
         constexpr const bool FILE_HANDLER_SORT_TYPE_IS_REVERSE = false;
+
+        // Adaptive directory-scan reserve hint (DirScanReserveHint). The hint is
+        // the previous scan's image count, clamped to this range, used to pre-size
+        // the playlist + size/time maps in one allocation.
+        //   FLOOR — cover small folders without realloc churn.
+        //   CAP   — bound the worst-case over-reserve after a one-off huge folder.
+        //           Folders larger than CAP still load fine; the vector just grows
+        //           past the reserve (a few extra reallocs). Raise CAP to match the
+        //           largest folder you regularly open.
+        constexpr size_t DIR_SCAN_RESERVE_FLOOR = 256;
+        constexpr size_t DIR_SCAN_RESERVE_CAP   = 16384;
     }
 
     // =========================================================================
