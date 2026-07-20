@@ -569,6 +569,13 @@ HRESULT RendererD2D::PreloadBitmap(const std::wstring &filePath, int requestInde
     // For the main-image load (default -1), fall back to requestIndex (same behavior).
     const int guardIndex = (expectedCurrentIndex >= 0) ? expectedCurrentIndex : requestIndex;
 
+    // Main image loads (expectedCurrentIndex < 0) are guarded by path IDENTITY, so
+    // they survive an index change from the folder re-sort that runs after the
+    // initial 1-file F2 open. Neighbor preloads keep the index guard so they cancel
+    // when the user navigates away from the anchor image.
+    const bool   isMain   = (expectedCurrentIndex < 0);
+    const size_t pathHash = std::hash<std::wstring>{}(filePath);
+
     {
         std::lock_guard<std::mutex> lock(m_cacheMutex);
         if (m_bitmapCache.find(filePath) != m_bitmapCache.end()) return S_OK;
@@ -579,8 +586,11 @@ HRESULT RendererD2D::PreloadBitmap(const std::wstring &filePath, int requestInde
     // Capture device context as a pointer for the task (D2D device contexts are thread-safe)
     Microsoft::WRL::ComPtr<ID2D1Device6> d2dDevice = m_pD2DDevice;
 
-    g_ioWorker.PushTask([filePath, requestIndex, guardIndex, d2dDevice, this]() {
-        if (app.wantedIndex.load(std::memory_order_acquire) != guardIndex) {
+    g_ioWorker.PushTask([filePath, requestIndex, guardIndex, isMain, pathHash, d2dDevice, this]() {
+        const bool stale = isMain
+            ? (app.wantedPathHash.load(std::memory_order_acquire) != pathHash)
+            : (app.wantedIndex.load(std::memory_order_acquire)    != guardIndex);
+        if (stale) {
             std::lock_guard<std::mutex> lock(m_cacheMutex);
             m_bitmapInFlight.erase(filePath);
             return;
@@ -612,12 +622,15 @@ HRESULT RendererD2D::PreloadBitmap(const std::wstring &filePath, int requestInde
         CloseHandle(hFile);
 
         // Pass the factory as a parameter to the lambda (injected by the thread pool)
-        g_decoderWorker.PushTask([compressedBytes = std::move(compressedBytes), filePath, requestIndex, guardIndex, d2dDevice, this](IWICImagingFactory2 *wicFac) mutable {
+        g_decoderWorker.PushTask([compressedBytes = std::move(compressedBytes), filePath, requestIndex, guardIndex, isMain, pathHash, d2dDevice, this](IWICImagingFactory2 *wicFac) mutable {
             // Release inFlight immediately so a new PreloadBitmap call can be queued
             // while decode is still in progress (e.g. neighbour preload races).
             { std::lock_guard<std::mutex> lock(m_cacheMutex); m_bitmapInFlight.erase(filePath); }
 
-            if (app.wantedIndex.load(std::memory_order_acquire) != guardIndex) return;
+            const bool stale = isMain
+                ? (app.wantedPathHash.load(std::memory_order_acquire) != pathHash)
+                : (app.wantedIndex.load(std::memory_order_acquire)    != guardIndex);
+            if (stale) return;
 
             Microsoft::WRL::ComPtr<ID2D1DeviceContext> taskCtx;
             if (FAILED(d2dDevice->CreateDeviceContext(D2D1_DEVICE_CONTEXT_OPTIONS_NONE, taskCtx.GetAddressOf()))) return;
@@ -683,7 +696,8 @@ HRESULT RendererD2D::PreloadBitmap(const std::wstring &filePath, int requestInde
                         D2D1::PixelFormat(DXGI_FORMAT_B8G8R8A8_UNORM, D2D1_ALPHA_MODE_PREMULTIPLIED));
 
                     for (UINT fi = 0; fi < frameCount; ++fi) {
-                        if (app.wantedIndex.load(std::memory_order_acquire) != guardIndex) return;
+                        if (isMain ? (app.wantedPathHash.load(std::memory_order_acquire) != pathHash)
+                                   : (app.wantedIndex.load(std::memory_order_acquire) != guardIndex)) return;
 
                         prevCanvas = canvas;
 
@@ -774,7 +788,10 @@ HRESULT RendererD2D::PreloadBitmap(const std::wstring &filePath, int requestInde
                         entry.gifDelays   = std::move(gifDelays);
                     }
 
-                    if (app.wantedIndex.load(std::memory_order_acquire) == requestIndex) {
+                    const bool gifIsCurrent = isMain
+                        ? (app.wantedPathHash.load(std::memory_order_acquire) == pathHash)
+                        : (app.wantedIndex.load(std::memory_order_acquire)    == requestIndex);
+                    if (gifIsCurrent) {
                         long long start = ImageLoadStats::g_loadStartUs.load(std::memory_order_relaxed);
                         if (start > 0) ImageLoadStats::g_lastLoadUs.store(ImageLoadStats::NowUs() - start, std::memory_order_relaxed);
                         PostMessageW(m_hwnd, Constants::WM_QIV_REPAINT, 0, 0);
@@ -840,7 +857,10 @@ HRESULT RendererD2D::PreloadBitmap(const std::wstring &filePath, int requestInde
                 m_bitmapCache[filePath] = {newBitmap, m_lruList.begin(), width, height, orientation};
             }
 
-            if (app.wantedIndex.load(std::memory_order_acquire) == requestIndex) {
+            const bool isCurrent = isMain
+                ? (app.wantedPathHash.load(std::memory_order_acquire) == pathHash)
+                : (app.wantedIndex.load(std::memory_order_acquire)    == requestIndex);
+            if (isCurrent) {
                 long long start = ImageLoadStats::g_loadStartUs.load(std::memory_order_relaxed);
                 if (start > 0) {
                     ImageLoadStats::g_lastLoadUs.store(
@@ -1256,15 +1276,20 @@ HRESULT RendererD2D::PreloadSvgFromBytes(std::vector<BYTE> svgBytes,
         m_bitmapInFlight.insert(filePath);
     }
 
+    // SVGs are always the current main image here — guard by path identity so the
+    // post-open folder re-sort (which renumbers indices) can't cancel this decode.
+    (void) requestIndex;
+    const size_t pathHash = std::hash<std::wstring>{}(filePath);
+
     g_decoderWorker.PushTask(
-        [this, svgBytes = std::move(svgBytes), filePath, requestIndex]
+        [this, svgBytes = std::move(svgBytes), filePath, pathHash]
         (IWICImagingFactory2 *wicFac) mutable {
             // Release the in-flight marker up front (mirrors PreloadBitmap) so a
             // later request for the same path can be queued while this one runs.
             { std::lock_guard<std::mutex> lock(m_cacheMutex); m_bitmapInFlight.erase(filePath); }
 
             // User navigated away while the task was queued — drop the work.
-            if (app.wantedIndex.load(std::memory_order_acquire) != requestIndex)
+            if (app.wantedPathHash.load(std::memory_order_acquire) != pathHash)
                 return;
 
             Microsoft::WRL::ComPtr<ID2D1Bitmap1> d2dBmp;
@@ -1289,7 +1314,7 @@ HRESULT RendererD2D::PreloadSvgFromBytes(std::vector<BYTE> svgBytes,
             }
 
             // Finalize on the UI thread only if the user is still on this image.
-            if (app.wantedIndex.load(std::memory_order_acquire) == requestIndex)
+            if (app.wantedPathHash.load(std::memory_order_acquire) == pathHash)
                 PostMessageW(m_hwnd, Constants::WM_QIV_REPAINT, 0, 0);
         });
 

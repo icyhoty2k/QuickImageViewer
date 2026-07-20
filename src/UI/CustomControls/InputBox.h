@@ -48,7 +48,9 @@ enum class InputResult { Ignored, Consumed, ConsumedRepaint, RequestClear, Reque
 //       case InputResult::Consumed:        return true;
 //   }
 //   // WM_CHAR:          if (m_box.RouteChar(ch,m_hWnd)==InputResult::ConsumedRepaint) InvalidateRect(...);
-//   // WM_LBUTTONDOWN/…: if (m_box.RouteMouse(msg,wParam,lParam)==InputResult::ConsumedRepaint) InvalidateRect(...);
+//   // WM_LBUTTONDOWN / RBUTTONUP / MOUSEMOVE / MOUSELEAVE:
+//   //   if (m_box.RouteMouse(msg,wParam,lParam,m_hWnd)==InputResult::ConsumedRepaint) InvalidateRect(...);
+//   //   (RBUTTONUP shows the Cut/Copy/Paste menu; MOUSEMOVE also drives drag-select.)
 //   // OnLocalHide (Esc): RouteKey(VK_ESCAPE,…) → RequestClear (stay, repaint) or RequestClose (hide).
 class InputBox {
 public:
@@ -85,7 +87,7 @@ public:
     // -----------------------------------------------------------------------
     InputResult RouteKey(WPARAM vk, HWND host);
     InputResult RouteChar(wchar_t ch, HWND host);
-    InputResult RouteMouse(UINT msg, WPARAM wParam, LPARAM lParam);
+    InputResult RouteMouse(UINT msg, WPARAM wParam, LPARAM lParam, HWND host);
 
     // Keys that are never text input and must always reach the host's parent,
     // even while the box has focus: function keys (F1–F24) and bare modifier
@@ -110,6 +112,7 @@ private:
     int          m_selAnchor    = -1;    // selection anchor; -1 = no selection
     int          m_scrollX      = 0;     // horizontal scroll offset in pixels
     bool         m_clearHovered = false;
+    bool         m_dragging     = false; // left button held after a text-area press
 
     void notify() { if (OnChanged) OnChanged(m_text); }
 
@@ -122,6 +125,67 @@ private:
         m_text.erase(lo, hi - lo);
         m_caretPos  = lo;
         m_selAnchor = -1;
+    }
+
+    // Shared edit primitives — used by both the Ctrl+A/C/X/V keys and the
+    // right-click context menu, so the two paths never diverge. Each returns
+    // whether the text changed (→ caller repaints + the change is notified).
+    void doSelectAll() { m_selAnchor = 0; m_caretPos = (int)m_text.size(); }
+    void doCopy() const { if (HasSelection()) CopyToClipboard(m_text.substr(SelMin(), SelMax() - SelMin())); }
+    bool doCut() {
+        if (!HasSelection()) return false;
+        CopyToClipboard(m_text.substr(SelMin(), SelMax() - SelMin()));
+        DeleteSelection();
+        notify();
+        return true;
+    }
+    bool doPaste() {
+        std::wstring clip = GetClipboardText();
+        if (clip.empty()) return false;
+        if (HasSelection()) DeleteSelection();
+        for (wchar_t c : clip) {
+            if (c >= L' ' && (m_maxLen <= 0 || (int)m_text.size() < m_maxLen)) {
+                m_text.insert(m_caretPos, 1, c);
+                ++m_caretPos;
+            }
+        }
+        notify();
+        return true;
+    }
+
+    // Right-click Cut/Copy/Paste/Delete/Select-All popup. host owns the menu;
+    // TPM_RETURNCMD keeps it synchronous so the box handles the choice inline.
+    InputResult ShowContextMenu(HWND host, POINT clientPt) {
+        HMENU menu = CreatePopupMenu();
+        if (!menu) return InputResult::Consumed;
+
+        const bool hasSel   = HasSelection();
+        const bool canPaste = IsClipboardFormatAvailable(CF_UNICODETEXT) != 0;
+        const bool hasText  = !m_text.empty();
+        AppendMenuW(menu, MF_STRING | (hasSel   ? 0u : MF_GRAYED), 1, L"Cut");
+        AppendMenuW(menu, MF_STRING | (hasSel   ? 0u : MF_GRAYED), 2, L"Copy");
+        AppendMenuW(menu, MF_STRING | (canPaste ? 0u : MF_GRAYED), 3, L"Paste");
+        AppendMenuW(menu, MF_STRING | (hasSel   ? 0u : MF_GRAYED), 4, L"Delete");
+        AppendMenuW(menu, MF_SEPARATOR, 0, nullptr);
+        AppendMenuW(menu, MF_STRING | (hasText  ? 0u : MF_GRAYED), 5, L"Select All");
+
+        POINT screen = clientPt;
+        ClientToScreen(host, &screen);
+        SetForegroundWindow(host); // so the menu dismisses cleanly on click-away
+        const int cmd = TrackPopupMenu(menu,
+                                       TPM_RETURNCMD | TPM_NONOTIFY | TPM_LEFTALIGN | TPM_TOPALIGN,
+                                       screen.x, screen.y, 0, host, nullptr);
+        DestroyMenu(menu);
+
+        switch (cmd) {
+            case 1: doCut();   break;
+            case 2: doCopy();  return InputResult::Consumed; // clipboard only, no visual change
+            case 3: doPaste(); break;
+            case 4: if (hasSel) { DeleteSelection(); notify(); } break;
+            case 5: doSelectAll(); break;
+            default: return InputResult::Consumed; // dismissed — nothing changed
+        }
+        return InputResult::ConsumedRepaint;
     }
 
     // Pixel width of m_text[0..count) using hdc's currently-selected font.
@@ -239,6 +303,32 @@ inline void InputBox::Draw(HDC hdc, HFONT hFont, const RECT& boxRect, int padX,
     const int ty = textRect.top + (textRect.bottom - textRect.top - tm.tmHeight) / 2;
     const int visW = std::max(0, (int)(textRect.right - textRect.left));
 
+    // Caret — CARET_STYLE 0 = vertical bar sized to the text height; 1 = underscore
+    // along the baseline. Thickness/padding/gap from Constants (DPI-scaled).
+    auto drawCaret = [&](int cx) {
+        const int thick = std::max(1, (int)(Constants::InputBox::CARET_THICKNESS      * app.dpiScale + 0.5f)); // round
+        const int pad   = std::max(-10, (int)(Constants::InputBox::CARET_PADDING_HEIGHT * app.dpiScale));
+        const int gap   = std::max(0, (int)(Constants::InputBox::CARET_GAP            * app.dpiScale + 0.5f));
+        const int x = cx + gap;
+        RECT caret;
+        if (app.caretStyle == 1) {
+            // Underscore: horizontal bar (thick high), one average-char wide,
+            // lifted off the baseline by CARET_PADDING_HEIGHT.
+            const int w   = std::max(thick, (int)tm.tmAveCharWidth);
+            const int bot = ty + tm.tmHeight - pad;
+            caret = { x, bot - thick, x + w, bot };
+        } else {
+            // Vertical bar sized to the text height, inset by pad top/bottom.
+            int top = ty + pad;
+            int bot = ty + tm.tmHeight - pad;
+            if (bot <= top) bot = top + 1; // never collapse to nothing
+            caret = { x, top, x + thick, bot };
+        }
+        HBRUSH hCaret = CreateSolidBrush(colorActive);
+        FillRect(hdc, &caret, hCaret);
+        DeleteObject(hCaret);
+    };
+
     if (hasText) {
         // --- Horizontal scroll: keep the caret inside the visible text area ---
         const int caretPx = PrefixWidth(hdc, m_text, m_caretPos);
@@ -280,24 +370,16 @@ inline void InputBox::Draw(HDC hdc, HFONT hFont, const RECT& boxRect, int padX,
                         m_text.c_str() + lo, hi - lo, nullptr);
         }
 
-        // Caret — a thin vertical bar, only while focused.
+        // Caret — only while focused, clamped to the visible text area.
         if (hasFocus) {
             const int cx = baseX + caretPx;
-            if (cx >= textRect.left && cx <= textRect.right) {
-                RECT caret = { cx, textRect.top + 2, cx + 1, textRect.bottom - 2 };
-                HBRUSH hCaret = CreateSolidBrush(colorActive);
-                FillRect(hdc, &caret, hCaret);
-                DeleteObject(hCaret);
-            }
+            if (cx >= textRect.left && cx <= textRect.right)
+                drawCaret(cx);
         }
     } else {
         m_scrollX = 0;
         if (hasFocus) {
-            // Empty + focused: draw the caret at the start.
-            RECT caret = { textRect.left, textRect.top + 2, textRect.left + 1, textRect.bottom - 2 };
-            HBRUSH hCaret = CreateSolidBrush(colorActive);
-            FillRect(hdc, &caret, hCaret);
-            DeleteObject(hCaret);
+            drawCaret(textRect.left); // empty + focused: caret at the start
         } else if (!m_placeholder.empty()) {
             SetTextColor(hdc, colorInactive);
             DrawTextW(hdc, m_placeholder.c_str(), -1, &textRect, dtFlags);
@@ -379,37 +461,16 @@ inline InputResult InputBox::RouteKey(WPARAM vk, HWND /*host*/)
         return InputResult::RequestClose; // empty — host hides
 
     case 'A':
-        if (ctrl) { m_selAnchor = 0; m_caretPos = (int)m_text.size(); return InputResult::ConsumedRepaint; }
+        if (ctrl) { doSelectAll(); return InputResult::ConsumedRepaint; }
         break;
     case 'C':
-        if (ctrl && HasSelection()) {
-            CopyToClipboard(m_text.substr(SelMin(), SelMax() - SelMin()));
-            return InputResult::Consumed;
-        }
+        if (ctrl && HasSelection()) { doCopy(); return InputResult::Consumed; }
         break;
     case 'X':
-        if (ctrl && HasSelection()) {
-            CopyToClipboard(m_text.substr(SelMin(), SelMax() - SelMin()));
-            DeleteSelection();
-            notify();
-            return InputResult::ConsumedRepaint;
-        }
+        if (ctrl && HasSelection()) { doCut(); return InputResult::ConsumedRepaint; }
         break;
     case 'V':
-        if (ctrl) {
-            std::wstring clip = GetClipboardText();
-            if (!clip.empty()) {
-                if (HasSelection()) DeleteSelection();
-                for (wchar_t c : clip) {
-                    if (c >= L' ' && (m_maxLen <= 0 || (int)m_text.size() < m_maxLen)) {
-                        m_text.insert(m_caretPos, 1, c);
-                        ++m_caretPos;
-                    }
-                }
-                notify();
-            }
-            return InputResult::ConsumedRepaint;
-        }
+        if (ctrl) { doPaste(); return InputResult::ConsumedRepaint; }
         break;
     }
 
@@ -423,9 +484,17 @@ inline InputResult InputBox::RouteKey(WPARAM vk, HWND /*host*/)
 }
 
 // ---------------------------------------------------------------------------
-inline InputResult InputBox::RouteMouse(UINT msg, WPARAM /*wParam*/, LPARAM lParam)
+inline InputResult InputBox::RouteMouse(UINT msg, WPARAM wParam, LPARAM lParam, HWND host)
 {
     switch (msg) {
+    case WM_RBUTTONUP: {
+        POINT pt = { GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam) };
+        // Right-click inside the box → Cut/Copy/Paste menu. Outside → not ours.
+        const bool inClear = m_clearRect.right > m_clearRect.left && PtInRect(&m_clearRect, pt);
+        if (!PtInRect(&m_textRect, pt) && !inClear) return InputResult::Ignored;
+        return ShowContextMenu(host, pt);
+    }
+
     case WM_LBUTTONDOWN: {
         POINT pt = { GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam) };
         // ✕ clear button
@@ -433,18 +502,37 @@ inline InputResult InputBox::RouteMouse(UINT msg, WPARAM /*wParam*/, LPARAM lPar
             Clear();
             return InputResult::ConsumedRepaint;
         }
-        // Click inside the text area → position the caret.
+        // Press inside the text area → position the caret and start a drag-select.
+        // The anchor is placed at the caret; the selection stays empty until the
+        // drag actually moves (mirrors Shift+Arrow, which anchors then extends).
         if (PtInRect(&m_textRect, pt)) {
             m_caretPos  = CaretFromX(pt.x);
-            m_selAnchor = -1;
+            m_selAnchor = m_caretPos;
+            m_dragging  = true;
             return InputResult::ConsumedRepaint;
         }
         return InputResult::Ignored;
     }
 
     case WM_MOUSEMOVE: {
+        POINT pt = { GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam) };
+
+        // Drag-select: while the left button is held, extend the selection by
+        // moving the caret; the anchor stays put. No mouse capture needed — if
+        // the button was released outside the box, the MK_LBUTTON bit is clear
+        // and the drag self-terminates on the next move.
+        if (m_dragging) {
+            if (!(wParam & MK_LBUTTON)) {
+                m_dragging = false;
+            } else {
+                const int c = CaretFromX(pt.x);
+                if (c != m_caretPos) { m_caretPos = c; return InputResult::ConsumedRepaint; }
+                return InputResult::Consumed;
+            }
+        }
+
+        // ✕ hover state
         if (m_clearRect.right > m_clearRect.left) {
-            POINT pt = { GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam) };
             bool hovered = PtInRect(&m_clearRect, pt) != 0;
             if (hovered != m_clearHovered) {
                 m_clearHovered = hovered;
@@ -456,6 +544,10 @@ inline InputResult InputBox::RouteMouse(UINT msg, WPARAM /*wParam*/, LPARAM lPar
         }
         return InputResult::Ignored;
     }
+
+    case WM_LBUTTONUP:
+        if (m_dragging) { m_dragging = false; return InputResult::Consumed; }
+        return InputResult::Ignored;
 
     case WM_MOUSELEAVE:
         if (m_clearHovered) {

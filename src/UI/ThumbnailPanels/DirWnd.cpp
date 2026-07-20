@@ -125,11 +125,14 @@ namespace UI {
         std::filesystem::path dir(folderPath);
         if (!std::filesystem::exists(dir) || !std::filesystem::is_directory(dir))
             return;
+        // Calculated speculation: pre-size to the previous scan's image count.
+        m_dirPlaylist.reserve(DirScanReserveHint());
         for (const auto &entry: std::filesystem::directory_iterator(dir)) {
             if (!entry.is_regular_file()) continue;
             if (!is_image_ext(entry.path().extension().wstring())) continue;
             m_dirPlaylist.push_back(std::filesystem::canonical(entry.path()).wstring());
         }
+        RecordDirScanCount(m_dirPlaylist.size());
     }
 
     // -------------------------------------------------------------------------

@@ -413,12 +413,13 @@ LRESULT CALLBACK MainAppWndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM l
 
             int arrivedIndex = static_cast<int>(wParam);
 
-            // Discard if user navigated away while bytes were in flight.
-            // On a match, hand the bytes to the decoder worker for async
-            // rasterization; WM_QIV_REPAINT finalizes display when it lands,
-            // exactly like the raster cache-miss path.
-            if (arrivedIndex == app.wantedIndex.load(std::memory_order_acquire) &&
-                app.renderer) {
+            // Discard if user navigated away while bytes were in flight. Guard by
+            // path identity (survives the post-open folder re-sort that renumbers
+            // indices) — same fix as the raster path. On a match, hand the bytes to
+            // the decoder worker; WM_QIV_REPAINT finalizes display when it lands.
+            if (app.renderer &&
+                std::hash<std::wstring>{}(payload->path) ==
+                    app.wantedPathHash.load(std::memory_order_acquire)) {
                 (void) app.renderer->PreloadSvgFromBytes(std::move(payload->bytes),
                                                          payload->path, arrivedIndex);
             }

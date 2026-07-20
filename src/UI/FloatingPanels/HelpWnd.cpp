@@ -116,27 +116,53 @@ namespace UI {
         m_filter.OnChanged = [this](const std::wstring& text) {
             m_query = text;
             for (auto& c : m_query) c = static_cast<wchar_t>(towlower(c));
+            RebuildFilter();
             m_scrollOffsetY = 0; // filtered content restarts at the top
             InvalidateRect(m_hWnd, nullptr, FALSE);
         };
     }
 
-    // Empty query → true. Otherwise case-insensitive substring match on the
-    // shortcut chord or the description.
-    bool HelpWnd::EntryMatches(const HelpEntry& e) const {
-        if (m_query.empty()) return true;
-        auto lower = [](std::wstring s) {
-            for (auto& c : s) c = static_cast<wchar_t>(towlower(c));
-            return s;
+    // Recompute per-entry visibility + shortcut highlight positions from m_query.
+    // Same matcher as Find/History: wildcard when the query has * or ?, else fuzzy
+    // subsequence. An entry is visible if EITHER the shortcut or the description
+    // matches; only the shortcut's match positions are stored (single-line).
+    void HelpWnd::RebuildFilter() {
+        m_entryMatch.assign(m_entries.size(), EntryMatch{});
+        if (m_query.empty()) return; // all visible, no highlight
+
+        const int  qLen = static_cast<int>(std::min(m_query.size(),
+                                                    static_cast<size_t>(Common::FUZZY_MAX_QUERY)));
+        const bool wild = Common::IsWildcardQuery(m_query.c_str(), qLen);
+
+        auto matchField = [&](const std::wstring& s, Common::FuzzyMatchResult& out) -> bool {
+            const int len = static_cast<int>(std::min(s.size(), static_cast<size_t>(1023)));
+            wchar_t low[1024];
+            Common::LowerCopy(s.c_str(), len, low);
+            return wild ? Common::WildcardMatch(m_query.c_str(), low, &out)
+                        : Common::FuzzyMatch(m_query.c_str(), qLen, low, len, out);
         };
-        return lower(e.shortcut).find(m_query) != std::wstring::npos ||
-               lower(e.description).find(m_query) != std::wstring::npos;
+
+        for (size_t i = 0; i < m_entries.size(); ++i) {
+            Common::FuzzyMatchResult scM, deM;
+            const bool sc = matchField(m_entries[i].shortcut,    scM);
+            const bool de = matchField(m_entries[i].description, deM);
+            EntryMatch& m = m_entryMatch[i];
+            m.visible = sc || de;
+            if (sc) {
+                m.scCount = scM.posCount;
+                for (int k = 0; k < scM.posCount; ++k) m.scPos[k] = scM.positions[k];
+            }
+        }
+    }
+
+    bool HelpWnd::EntryVisible(size_t i) const {
+        return m_query.empty() || (i < m_entryMatch.size() && m_entryMatch[i].visible);
     }
 
     bool HelpWnd::SectionHasVisible(int sectionId) const {
         if (m_query.empty()) return true;
-        for (const auto& e : m_entries)
-            if (e.sectionId == sectionId && EntryMatches(e)) return true;
+        for (size_t i = 0; i < m_entries.size(); ++i)
+            if (m_entries[i].sectionId == sectionId && EntryVisible(i)) return true;
         return false;
     }
 
@@ -232,7 +258,7 @@ namespace UI {
             L"The roles below assume SWAP_MOUSE_BUTTONS = true in Constants.h (the shipped "
             L"default). Set it to false to exchange the left and right button functions.", sMouse);
         Add(L"LMB hold / drag",
-            L"Quick " + NumF(Constants::ZOOM_CLICK) + L"× zoom centered on the cursor; "
+            L"Quick " + NumF(app.zoomClickMultiplier) + L"× zoom centered on the cursor; "
             L"dragging pans while zoomed. Zoom and pan revert the moment the button is released.", sMouse);
         Add(L"LMB double-click", L"Toggle fullscreen.", sMouse);
         Add(L"RMB drag", L"Move the window.", sMouse);
@@ -809,6 +835,7 @@ namespace UI {
     void HelpWnd::Show() {
         m_filter.Reset(); // fresh open starts unfiltered
         m_query.clear();
+        m_entryMatch.clear();
         m_scrollOffsetY = 0;
         if (m_hWnd) {
             if (m_hParent) {
@@ -999,7 +1026,7 @@ namespace UI {
                     if (!SectionHasVisible(static_cast<int>(s))) continue;
                     m_visibleContentHeight += m_headerHeights[s];
                     for (size_t i = 0; i < m_entries.size(); ++i)
-                        if (m_entries[i].sectionId == static_cast<int>(s) && EntryMatches(m_entries[i]))
+                        if (m_entries[i].sectionId == static_cast<int>(s) && EntryVisible(i))
                             m_visibleContentHeight += m_rowHeights[i];
                 }
 
@@ -1022,7 +1049,7 @@ namespace UI {
                     // Skip whole section if entirely above/below the viewport
                     int sectionH = headH;
                     for (size_t i = 0; i < m_entries.size(); ++i)
-                        if (m_entries[i].sectionId == static_cast<int>(s) && EntryMatches(m_entries[i]))
+                        if (m_entries[i].sectionId == static_cast<int>(s) && EntryVisible(i))
                             sectionH += m_rowHeights[i];
 
                     if (y + sectionH < contentTop || y > contentBottom) {
@@ -1066,7 +1093,7 @@ namespace UI {
                     // -- rows: key column | description column ----------------
                     for (size_t i = 0; i < m_entries.size(); ++i) {
                         if (m_entries[i].sectionId != static_cast<int>(s)) continue;
-                        if (!EntryMatches(m_entries[i])) continue; // filtered out
+                        if (!EntryVisible(i)) continue; // filtered out
                         const int rowH = m_rowHeights[i];
 
                         if (y + rowH >= contentTop && y <= contentBottom) {
@@ -1076,8 +1103,28 @@ namespace UI {
                                 contentLeft + rowIndent, y + rowPadY,
                                 contentLeft + rowIndent + keyColW, y + rowH - rowPadY
                             };
-                            DrawTextW(hdc, m_entries[i].shortcut.c_str(), -1, &keyRect,
-                                      DT_LEFT | DT_TOP | DT_WORDBREAK | DT_NOPREFIX);
+                            // Highlight the matched characters in the shortcut chord
+                            // (single-line — Common::DrawMatchText). Falls back to a
+                            // plain wrapped draw when not filtering / no match here.
+                            const bool hlShortcut = !m_query.empty() &&
+                                                    i < m_entryMatch.size() &&
+                                                    m_entryMatch[i].scCount > 0;
+                            if (hlShortcut) {
+                                const EntryMatch& em = m_entryMatch[i];
+                                const std::wstring& sc = m_entries[i].shortcut;
+                                const int scLen = static_cast<int>(std::min(sc.size(), static_cast<size_t>(255)));
+                                bool isHL[256] = {};
+                                for (int k = 0; k < em.scCount; ++k) {
+                                    const int pos = em.scPos[k];
+                                    if (pos >= 0 && pos < scLen) isHL[pos] = true;
+                                }
+                                const COLORREF hlColor = Constants::Theme::ThemedColor(1.0f, 1.0f, 1.0f, app.themeFactor);
+                                Common::DrawMatchText(hdc, sc.c_str(), scLen, isHL,
+                                                      keyRect.left, keyRect.top, keyRect, keyColor, hlColor);
+                            } else {
+                                DrawTextW(hdc, m_entries[i].shortcut.c_str(), -1, &keyRect,
+                                          DT_LEFT | DT_TOP | DT_WORDBREAK | DT_NOPREFIX);
+                            }
 
                             SelectObject(hdc, m_hFontDesc);
                             SetTextColor(hdc, descColor);
@@ -1172,11 +1219,17 @@ namespace UI {
                 return 0;
             }
 
+            case WM_RBUTTONUP:
+                // Right-click inside the filter → Cut/Copy/Paste menu.
+                if (m_filter.RouteMouse(WM_RBUTTONUP, wParam, lParam, m_hWnd) == InputResult::ConsumedRepaint)
+                    InvalidateRect(m_hWnd, nullptr, FALSE);
+                return 0;
+
             case WM_LBUTTONDOWN: {
                 POINT pt = {GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam)};
 
                 // Filter box (✕ button or click-to-caret) — before other targets.
-                if (m_filter.RouteMouse(WM_LBUTTONDOWN, wParam, lParam) == InputResult::ConsumedRepaint) {
+                if (m_filter.RouteMouse(WM_LBUTTONDOWN, wParam, lParam, m_hWnd) == InputResult::ConsumedRepaint) {
                     InvalidateRect(m_hWnd, nullptr, FALSE);
                     return 0;
                 }
@@ -1206,8 +1259,8 @@ namespace UI {
             case WM_MOUSEMOVE: {
                 POINT pt = {GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam)};
 
-                // Filter ✕ hover state.
-                if (m_filter.RouteMouse(WM_MOUSEMOVE, wParam, lParam) == InputResult::ConsumedRepaint)
+                // Filter ✕ hover state / drag-select.
+                if (m_filter.RouteMouse(WM_MOUSEMOVE, wParam, lParam, m_hWnd) == InputResult::ConsumedRepaint)
                     InvalidateRect(m_hWnd, nullptr, FALSE);
 
                 if (pt.x >= m_footerLinkRect.left && pt.x <= m_footerLinkRect.right &&

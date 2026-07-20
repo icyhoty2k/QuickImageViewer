@@ -158,21 +158,21 @@ void MouseHandler::HandleButtonDown(HWND hWnd, UINT message, WPARAM wParam, LPAR
         app.savedOffsetY = app.viewport.offsetY;
         app.lmbDidZoom = false;
 
-        if (!imageOverflows) {
-            // Image fits inside the viewport — apply the 3x click-zoom.
+        if (!imageOverflows && app.zoomClickMultiplier > 1.0f) {
+            // Image fits inside the viewport — apply the click-zoom (1 = off).
             float centerX = winW / 2.0f;
             float centerY = winH / 2.0f;
             float dx = (float) pt.x - centerX;
             float dy = (float) pt.y - centerY;
 
-            app.viewport.zoom *= Constants::ZOOM_CLICK;
+            app.viewport.zoom *= app.zoomClickMultiplier;
 
             // Keep the clicked pixel under the cursor.
             // Derivation: renderer puts image center at (winW/2 + offsetX).
             // Pixel at dx from window center is (dx - oldOffsetX) from image center.
             // After zoom*Z it moves to Z*(dx - oldOffsetX). To keep it at dx:
             //   newOffsetX = dx*(1 - Z) + Z*oldOffsetX
-            const float Z = Constants::ZOOM_CLICK;
+            const float Z = app.zoomClickMultiplier;
             app.viewport.offsetX = dx * (1.0f - Z) + Z * app.savedOffsetX;
             app.viewport.offsetY = dy * (1.0f - Z) + Z * app.savedOffsetY;
 

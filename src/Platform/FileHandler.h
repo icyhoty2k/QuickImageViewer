@@ -53,3 +53,12 @@ void HandleScanComplete(HWND hWnd, ScanResult *result);
 // Read on the UI thread to show/hide the wait cursor.
 extern std::atomic<bool> g_scanInProgress;
 
+// Adaptive reserve hint for directory scans. Seeded by the previous scan's
+// image count so per-folder containers (playlist + size/time maps, DirWnd's
+// playlist) pre-size to the user's typical folder in a single allocation —
+// folders in one collection tend to be similar sizes, so last-count is a strong
+// predictor. Clamped to [256, 16384] so the first scan and pathological folders
+// both stay bounded. Thread-safe (read on worker + UI threads).
+size_t DirScanReserveHint();
+void   RecordDirScanCount(size_t n);
+
