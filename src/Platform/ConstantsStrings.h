@@ -3,10 +3,15 @@
 // ConstantsStrings.h
 // Central repository for all user-visible text used in QIV overlays.
 // Keep strings here so they have one place to change for localization.
-#define THUMBNAIL_STRIP L"Thumbnail strip"
-#define CACHE_WINDOW L"vRam stip"
-#define ON L": ON"
-#define OFF L": OFF"
+
+// Internal compile-time string fragments
+// Do not use directly outside this header.
+#define STR_THUMBNAIL_STRIP L"Thumbnail strip"
+#define STR_CACHE_WINDOW L"VRAM strip"
+#define STR_SEPARATOR L": "
+#define STR_STATE_ON  STR_SEPARATOR L"ON"
+#define STR_STATE_OFF STR_SEPARATOR L"OFF"
+
 namespace Constants::Messages {
     // ── MID_CENTER: state-change notifications ──────────────────────────────
     // These are posted via PostCenterMessage and auto-hide after the timer.
@@ -14,20 +19,20 @@ namespace Constants::Messages {
     constexpr const wchar_t *TOGGLE_FIRST_IMAGE_IN_FOLDER = L"First image: ";
     constexpr const wchar_t *TOGGLE_LAST_IMAGE_IN_FOLDER = L"Last image: ";
     constexpr const wchar_t *GO_TO_LAST_IMAGE_BEFORE_TOGGLE = L"Previous image: ";
-    constexpr const wchar_t *CACHE_WINDOW_VISIBLE_MSG = CACHE_WINDOW ON;
-    constexpr const wchar_t *CACHE_WINDOW_HIDDEN_MSG = CACHE_WINDOW OFF;
-    constexpr const wchar_t *CACHE_WINDOW_CLEAR_CACHE_MSG = L"Cache cleared ! ";
-    constexpr const wchar_t *DIR_WINDOW_VISIBLE_MSG = THUMBNAIL_STRIP ON;
-    constexpr const wchar_t *DIR_WINDOW_HIDDEN_MSG = THUMBNAIL_STRIP OFF;
+    constexpr const wchar_t *CACHE_WINDOW_VISIBLE_MSG = STR_CACHE_WINDOW  STR_STATE_ON;
+    constexpr const wchar_t *CACHE_WINDOW_HIDDEN_MSG = STR_CACHE_WINDOW  STR_STATE_OFF;
+    constexpr const wchar_t *CACHE_WINDOW_CLEAR_CACHE_MSG = L"Cache cleared!";
+    constexpr const wchar_t *DIR_WINDOW_VISIBLE_MSG = STR_THUMBNAIL_STRIP  STR_STATE_ON;
+    constexpr const wchar_t *DIR_WINDOW_HIDDEN_MSG = STR_THUMBNAIL_STRIP  STR_STATE_OFF;
 
 
     // Overlay master toggle (N / I / Ctrl+0)
-    constexpr const wchar_t *INFO_PANELS_ON = L"Info Panels: ON";
-    constexpr const wchar_t *INFO_PANELS_OFF = L"Info Panels: OFF";
+    constexpr const wchar_t *INFO_PANELS_ON = L"Info Panels" STR_STATE_ON;
+    constexpr const wchar_t *INFO_PANELS_OFF = L"Info Panels" STR_STATE_OFF;
 
     // Overlay background toggle (P)
-    constexpr const wchar_t *OVERLAY_BG_ON = L"Overlay BG: ON";
-    constexpr const wchar_t *OVERLAY_BG_OFF = L"Overlay BG: OFF";
+    constexpr const wchar_t *OVERLAY_BG_ON = L"Overlay BG" STR_STATE_ON;
+    constexpr const wchar_t *OVERLAY_BG_OFF = L"Overlay BG" STR_STATE_OFF;
 
     // Overlay layout cycle (O)
     constexpr const wchar_t *LAYOUT_GRID = L"Layout: Grid";
@@ -74,10 +79,10 @@ namespace Constants::Messages {
     constexpr const wchar_t *SLIDESHOW_PLAYING = L"▶ Slideshow"; // prefix; interval/loop/shuffle appended dynamically
     constexpr const wchar_t *SLIDESHOW_PAUSED = L"⏸ Slideshow Paused";
     constexpr const wchar_t *SLIDESHOW_STOPPED = L"■ Slideshow Stopped";
-    constexpr const wchar_t *SLIDESHOW_LOOP_ON = L"Loop: ON";
-    constexpr const wchar_t *SLIDESHOW_LOOP_OFF = L"Loop: OFF";
-    constexpr const wchar_t *SLIDESHOW_SHUFFLE_ON = L"Shuffle: ON";
-    constexpr const wchar_t *SLIDESHOW_SHUFFLE_OFF = L"Shuffle: OFF";
+    constexpr const wchar_t *SLIDESHOW_LOOP_ON = L"Loop" STR_STATE_ON;
+    constexpr const wchar_t *SLIDESHOW_LOOP_OFF = L"Loop" STR_STATE_OFF;
+    constexpr const wchar_t *SLIDESHOW_SHUFFLE_ON = L"Shuffle" STR_STATE_ON;
+    constexpr const wchar_t *SLIDESHOW_SHUFFLE_OFF = L"Shuffle" STR_STATE_OFF;
     constexpr const wchar_t *TRANSITION_CUT = L"Transition: Cut";
     constexpr const wchar_t *TRANSITION_FADE = L"Transition: Fade";
     constexpr const wchar_t *TRANSITION_DISSOLVE = L"Transition: Dissolve";
@@ -86,8 +91,8 @@ namespace Constants::Messages {
     constexpr const wchar_t *TRANSITION_ZOOM = L"Transition: Zoom";
 
     // Ctrl+T — always on top
-    constexpr const wchar_t *ALWAYS_ON_TOP_ON = L"Always on Top: ON";
-    constexpr const wchar_t *ALWAYS_ON_TOP_OFF = L"Always on Top: OFF";
+    constexpr const wchar_t *ALWAYS_ON_TOP_ON = L"Always on Top" STR_STATE_ON;
+    constexpr const wchar_t *ALWAYS_ON_TOP_OFF = L"Always on Top" STR_STATE_OFF;
 
     // Alt+W/A/S/D — keyboard snap to screen half
     constexpr const wchar_t *SNAP_LEFT = L"Snap: Left Half";
@@ -120,12 +125,12 @@ namespace Constants::Messages {
 
 
 
-    constexpr const wchar_t *SPAWN_DIR_TOP =  THUMBNAIL_STRIP L": Top";
-    constexpr const wchar_t *SPAWN_DIR_LEFT = THUMBNAIL_STRIP L": Left";
-    constexpr const wchar_t *SPAWN_DIR_RIGHT = THUMBNAIL_STRIP  L": Right";
-    constexpr const wchar_t *SPAWN_DIR_BOTTOM = THUMBNAIL_STRIP L": Bottom";
-    constexpr const wchar_t *SPAWN_DIR_CLOSED = THUMBNAIL_STRIP L": Closed";
-    constexpr const wchar_t *SPAWN_DIR_NO_SPACE = L"No free positions for " THUMBNAIL_STRIP;
+    constexpr const wchar_t *SPAWN_DIR_TOP =  STR_THUMBNAIL_STRIP STR_SEPARATOR L"Top";
+    constexpr const wchar_t *SPAWN_DIR_LEFT = STR_THUMBNAIL_STRIP STR_SEPARATOR L"Left";
+    constexpr const wchar_t *SPAWN_DIR_RIGHT = STR_THUMBNAIL_STRIP STR_SEPARATOR L"Right";
+    constexpr const wchar_t *SPAWN_DIR_BOTTOM = STR_THUMBNAIL_STRIP STR_SEPARATOR L"Bottom";
+    constexpr const wchar_t *SPAWN_DIR_CLOSED = STR_THUMBNAIL_STRIP STR_SEPARATOR L"Closed";
+    constexpr const wchar_t *SPAWN_DIR_NO_SPACE = L"No free positions for " STR_THUMBNAIL_STRIP;
     constexpr const wchar_t *COPIED_TO_CLIPBOARD = L"Copied to Clipboard";
     constexpr const wchar_t *HISTORY_NAV_FOLDER = L"↔ "; // prefix — append folder name
     constexpr const wchar_t *FOLDER_DEAD_MISSING = L"⚠ Folder not found";
@@ -135,12 +140,12 @@ namespace Constants::Messages {
     // Thumbnail strip wrap-around
     constexpr const wchar_t *THUMB_STRIP_WRAP_TO_START = L"↩ Start";
     constexpr const wchar_t *THUMB_STRIP_WRAP_TO_END = L"↪ End";
-    constexpr const wchar_t *THUMB_STRIP_WRAP_ON = THUMBNAIL_STRIP L" Wrap: ON";
-    constexpr const wchar_t *THUMB_STRIP_WRAP_OFF = THUMBNAIL_STRIP L" Wrap: OFF";
+    constexpr const wchar_t *THUMB_STRIP_WRAP_ON = STR_THUMBNAIL_STRIP L" Wrap" STR_STATE_ON;
+    constexpr const wchar_t *THUMB_STRIP_WRAP_OFF = STR_THUMBNAIL_STRIP L" Wrap" STR_STATE_OFF;
 
     // Thumbnail strip visual effects
-    constexpr const wchar_t *THUMB_EFFECTS_ON  = L"Thumbnail Effects: ON";
-    constexpr const wchar_t *THUMB_EFFECTS_OFF = L"Thumbnail Effects: OFF";
+    constexpr const wchar_t *THUMB_EFFECTS_ON  = L"Thumbnail Effects" STR_STATE_ON;
+    constexpr const wchar_t *THUMB_EFFECTS_OFF = L"Thumbnail Effects" STR_STATE_OFF;
 }
 
 namespace Constants::Strings {
@@ -164,3 +169,9 @@ namespace Constants::Strings {
     // Brightness sign prefix (positive values)
     constexpr const wchar_t *SIGN_POSITIVE = L"+";
 }
+// Prevent helper macros leaking outside this header
+#undef STR_STATE_OFF
+#undef STR_STATE_ON
+#undef STR_SEPARATOR
+#undef STR_CACHE_WINDOW
+#undef STR_THUMBNAIL_STRIP
