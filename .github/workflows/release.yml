@@ -57,14 +57,22 @@ jobs:
           YEAR=$(date -u +%Y)
           MONTH=$(date -u +%m)
           DAY=$(date -u +%d)
+          DATE_ISO=$(date -u +%Y-%m-%d) # Defined this variable
+
+          # Update PAD XML
           sed -i "s|<Program_Version>.*</Program_Version>|<Program_Version>$VERSION</Program_Version>|" docs/pad.xml
           sed -i "s|<Program_Release_Month>.*</Program_Release_Month>|<Program_Release_Month>$MONTH</Program_Release_Month>|" docs/pad.xml
           sed -i "s|<Program_Release_Day>.*</Program_Release_Day>|<Program_Release_Day>$DAY</Program_Release_Day>|" docs/pad.xml
           sed -i "s|<Program_Release_Year>.*</Program_Release_Year>|<Program_Release_Year>$YEAR</Program_Release_Year>|" docs/pad.xml
+          
+          # Update Website JSON-LD (index.html)
+          sed -i "s/\"softwareVersion\": \".*\"/\"softwareVersion\": \"$VERSION\"/" docs/index.html
+          sed -i "s/\"datePublished\": \".*\"/\"datePublished\": \"$DATE_ISO\"/" docs/index.html
 
       - name: Commit if changed
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          git diff --quiet docs/pad.xml || git commit -am "chore: update PAD to ${{ github.ref_name }} [skip ci]"
+          # Check both files for changes before committing
+          git diff --quiet docs/pad.xml docs/index.html || git commit -am "chore: update PAD and index version to ${{ github.ref_name }} [skip ci]"
           git push
