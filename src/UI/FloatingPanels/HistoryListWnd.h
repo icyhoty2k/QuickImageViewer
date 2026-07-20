@@ -70,6 +70,7 @@ namespace UI {
             int   m_cachedFontDpi  = 0;
 
             std::wstring m_cachedSizeStr;
+
     };
 
     // -----------------------------------------------------------------------

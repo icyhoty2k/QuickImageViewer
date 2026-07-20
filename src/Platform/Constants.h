@@ -442,6 +442,7 @@ namespace Constants {
         constexpr int HISTORY_PADDING = 16; // px at 96 DPI inner padding
         constexpr int HISTORY_FONT_SIZE = 14; // pt at 96 DPI — header / hint lines
         constexpr int HISTORY_LIST_FONT_SIZE = 16; // pt at 96 DPI — list item text (tune independently)
+        constexpr int HISTORY_FILTER_ROW_H = 24; // px at 96 DPI — filter input row below the footer
         // Scrollbar (right-edge GDI strip) - geometry only
         constexpr int SCROLLBAR_THICKNESS = 6; // px width
         constexpr int SCROLLBAR_MIN_THUMB = 16; // minimum thumb height in px
