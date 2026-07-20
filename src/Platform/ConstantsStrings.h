@@ -6,11 +6,12 @@
 
 // Internal compile-time string fragments
 // Do not use directly outside this header.
-#define STR_THUMBNAIL_STRIP L"Thumbnail strip"
-#define STR_CACHE_WINDOW L"VRAM strip"
-#define STR_SEPARATOR L": "
-#define STR_STATE_ON  STR_SEPARATOR L"ON"
+#define STR_THUMBNAIL_STRIP         L"Thumbnail strip"
+#define STR_CACHE_WINDOW            L"VRAM strip"
+#define STR_SEPARATOR               L": "
+#define STR_STATE_ON STR_SEPARATOR  L"ON"
 #define STR_STATE_OFF STR_SEPARATOR L"OFF"
+
 
 namespace Constants::Messages {
     // ── MID_CENTER: state-change notifications ──────────────────────────────
