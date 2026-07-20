@@ -9,6 +9,8 @@
 #include "../../Input/Command.h"
 #include "../../Persistence/HistoryFoldersManager.h"
 #include "../UIManager.h"
+#include "Common/FuzzyMatch.h"
+#include "CustomControls/InputBox.h"
 #include <algorithm>
 #include <cwctype>
 #include <thread>
@@ -152,14 +154,17 @@ namespace UI {
     // Includes header area + rows + footer so window sizing and scroll are consistent.
     // ---------------------------------------------------------------------------
     static int CalcTotalContentH(int nEntries, UINT dpi) {
-        int padding = MulDiv(Constants::History::HISTORY_PADDING, dpi, 96);
-        int rowH = MulDiv(Constants::History::HISTORY_ROW_HEIGHT, dpi, 96);
-        int footerH = MulDiv(Constants::History::HISTORY_FONT_SIZE + 2 + 8, dpi, 96);
+        int padding    = MulDiv(Constants::History::HISTORY_PADDING,     dpi, 96);
+        int rowH       = MulDiv(Constants::History::HISTORY_ROW_HEIGHT,  dpi, 96);
+        int footerH    = MulDiv(Constants::History::HISTORY_FONT_SIZE + 2 + 8, dpi, 96);
+        int filterRowH = MulDiv(Constants::History::HISTORY_FILTER_ROW_H, dpi, 96);
         return padding * 2
                + MulDiv(2 * Constants::History::HISTORY_FONT_SIZE + 16, dpi, 96)
                + MulDiv(8, dpi, 96)
                + nEntries * rowH
-               + footerH;
+               + footerH
+               + 1           // separator between footer row and filter row
+               + filterRowH;
     }
 
     static void BuildDisplayList();
@@ -206,12 +211,15 @@ namespace UI {
     static RECT g_cacheIndexRect = {};     // clickable rect for [Fkey] Cache toggle in footer
     static RECT g_shortcutF5Rect = {};     // clickable "F5" in the shortcuts hint line
     static RECT g_shortcutCtrlTabRect = {};// clickable "Ctrl+Tab" in the shortcuts hint line
+    static UI::InputBox g_filter;          // filter input — owns text, ✕ button, keyboard/mouse
 
     // Display list: what the panel actually renders.
     // Each entry is (path, isFavorite).
     struct DisplayEntry {
         std::wstring path;
         bool isFavorite;
+        int  matchPositions[Common::FUZZY_MAX_QUERY] = {};
+        int  matchPosCount  = 0;
     };
 
     static std::vector<DisplayEntry> g_displayList;
@@ -281,6 +289,43 @@ namespace UI {
                 g_statusCache[e.path] = FolderStatus::Unknown;
                 hasUnknown = true;
             }
+        }
+
+        // Apply live filter — wildcard or fuzzy match on full path, MRU order preserved.
+        if (!g_filter.IsEmpty()) {
+            int qLen = static_cast<int>(
+                std::min(g_filter.GetText().size(),
+                         static_cast<size_t>(Common::FUZZY_MAX_QUERY)));
+            wchar_t lq[Common::FUZZY_MAX_QUERY + 1];
+            Common::LowerCopy(g_filter.GetText().c_str(), qLen, lq);
+
+            const bool hasWildcard = Common::IsWildcardQuery(lq, qLen);
+
+            g_displayList.erase(
+                std::remove_if(g_displayList.begin(), g_displayList.end(),
+                    [&](DisplayEntry &e) {
+                        int pLen = static_cast<int>(
+                            std::min(e.path.size(), static_cast<size_t>(1023)));
+                        wchar_t lpath[1024];
+                        Common::LowerCopy(e.path.c_str(), pLen, lpath);
+                        if (hasWildcard) {
+                            Common::FuzzyMatchResult wm;
+                            if (!Common::WildcardMatch(lq, lpath, &wm))
+                                return true;
+                            e.matchPosCount = wm.posCount;
+                            for (int i = 0; i < wm.posCount; ++i)
+                                e.matchPositions[i] = wm.positions[i];
+                            return false;
+                        }
+                        Common::FuzzyMatchResult fm;
+                        if (!Common::FuzzyMatch(lq, qLen, lpath, pLen, fm))
+                            return true;
+                        e.matchPosCount = fm.posCount;
+                        for (int i = 0; i < fm.posCount; ++i)
+                            e.matchPositions[i] = fm.positions[i];
+                        return false;
+                    }),
+                g_displayList.end());
         }
     }
 
@@ -626,6 +671,12 @@ namespace UI {
                     }
                     InvalidateRect(m_hWnd, nullptr, TRUE);
                 } else if (!ctrl && !shift && !alt) {
+                    // If the filter has text, Delete = forward-delete in the input.
+                    if (!g_filter.IsEmpty()) {
+                        if (g_filter.HandleMessage(WM_KEYDOWN, VK_DELETE, 0))
+                            InvalidateRect(m_hWnd, nullptr, FALSE);
+                        return true;
+                    }
                     if (g_hoverRow >= 0 && g_hoverRow < navMax) {
                         const std::wstring &path = g_displayList[g_hoverRow].path;
                         bool wasFav = g_displayList[g_hoverRow].isFavorite;
@@ -664,7 +715,15 @@ namespace UI {
                 return true;
 
             default:
-                return false; // forward unhandled keys to main app
+                // Try the filter first — handles editing keys and Ctrl+A/C/X/V.
+                // Alt combos are reserved for system shortcuts; skip the filter for those.
+                if (!alt && g_filter.HandleMessage(WM_KEYDOWN, vk, 0)) {
+                    InvalidateRect(m_hWnd, nullptr, FALSE);
+                    return true;
+                }
+                // Ctrl/Alt combos not consumed by the filter pass to the parent.
+                if (ctrl || alt) return false;
+                return true;
         }
     }
 
@@ -882,7 +941,8 @@ namespace UI {
                 SelectObject(hdc, hOldPen);
                 DeleteObject(hPen);
 
-                int footerSepY = rc.bottom - MulDiv(fontSize + 2 + 8, dpi, 96);
+                int filterRowPx = MulDiv(Constants::History::HISTORY_FILTER_ROW_H, dpi, 96);
+                int footerSepY = rc.bottom - filterRowPx - 1 - MulDiv(fontSize + 2 + 8, dpi, 96);
 
                 // Rows (scrolled) — clipped to the body area between separator and footer
                 SelectObject(hdc, m_hFontList);
@@ -1038,22 +1098,43 @@ namespace UI {
                         // Split path into (drive, middle, folder)
                         const std::wstring &fp = entry.path;
                         std::wstring segDrive, segMiddle, segFolder;
+                        int folderStartIdx = 0; // index in fp where segFolder begins (before posLabel)
                         if (fp.size() >= 2 && fp[1] == L':') {
                             segDrive = fp.substr(0, 2);
                             size_t lastSep = fp.find_last_of(L"\\/");
                             if (lastSep != std::wstring::npos && lastSep >= 2) {
                                 segMiddle = fp.substr(2, lastSep - 1); // "\rest\of\path\"
+                                folderStartIdx = static_cast<int>(lastSep + 1);
                                 segFolder = fp.substr(lastSep + 1); // "FolderName"
                             } else {
+                                folderStartIdx = 2;
                                 segFolder = fp.substr(2);
                             }
                         } else {
                             segMiddle = fp;
                         }
+                        const int folderRawLen = static_cast<int>(segFolder.size());
 
                         // Append spawned DirWnd position label if this folder has one open
                         std::wstring posLabel = uiManager.GetSpawnedDirWndPositionLabel(fp);
                         segFolder += posLabel;
+
+                        // Build isHL array from stored match positions
+                        const int fpLen = static_cast<int>(fp.size());
+                        bool isHL[1024] = {};
+                        if (!g_filter.IsEmpty() && entry.matchPosCount > 0) {
+                            for (int k = 0; k < entry.matchPosCount; ++k) {
+                                int pos = entry.matchPositions[k];
+                                if (pos >= 0 && pos < fpLen && pos < 1024)
+                                    isHL[pos] = true;
+                            }
+                        }
+                        const bool hasHL = !g_filter.IsEmpty() && entry.matchPosCount > 0;
+
+                        // Baseline y for DrawMatchText (vertically centers text in the row)
+                        TEXTMETRIC tm;
+                        GetTextMetrics(hdc, &tm);
+                        const int textBaseY = rowTop + (rowH - tm.tmHeight) / 2;
 
 
                         // Size/count column — drawn on the far right, only when a SpawnedDirWnd is open for this folder
@@ -1075,13 +1156,20 @@ namespace UI {
 
                         // 1. Drive letter
                         if (!segDrive.empty() && curX < rowRight) {
-                            SetTextColor(hdc, driveColor);
                             SIZE sz = {};
                             GetTextExtentPoint32W(hdc, segDrive.c_str(),
                                                   static_cast<int>(segDrive.size()), &sz);
                             RECT dr = {curX, rowTop, curX + sz.cx, rowBottom};
-                            DrawTextW(hdc, segDrive.c_str(), -1, &dr,
-                                      DT_LEFT | DT_VCENTER | DT_SINGLELINE);
+                            if (hasHL) {
+                                const COLORREF clrHL = Constants::Theme::ThemedColor(1.0f, 0.87f, 0.0f, app.themeFactor);
+                                Common::DrawMatchText(hdc, segDrive.c_str(),
+                                    static_cast<int>(segDrive.size()),
+                                    isHL, curX, textBaseY, dr, driveColor, clrHL);
+                            } else {
+                                SetTextColor(hdc, driveColor);
+                                DrawTextW(hdc, segDrive.c_str(), -1, &dr,
+                                          DT_LEFT | DT_VCENTER | DT_SINGLELINE);
+                            }
                             curX += sz.cx;
                         }
 
@@ -1095,22 +1183,51 @@ namespace UI {
                                 folderReserve = std::min(szF.cx, (rowRight - curX) * 2 / 5);
                             }
                             LONG midRight = rowRight - folderReserve;
-                            SetTextColor(hdc, middleColor);
                             SIZE szM = {};
                             GetTextExtentPoint32W(hdc, segMiddle.c_str(),
                                                   static_cast<int>(segMiddle.size()), &szM);
                             RECT mr = {curX, rowTop, midRight, rowBottom};
-                            DrawTextW(hdc, segMiddle.c_str(), -1, &mr,
-                                      DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
+                            if (hasHL) {
+                                const COLORREF clrHL = Constants::Theme::ThemedColor(1.0f, 0.87f, 0.0f, app.themeFactor);
+                                // Middle chars start at index driveLen (2) in the full path
+                                Common::DrawMatchText(hdc, segMiddle.c_str(),
+                                    static_cast<int>(segMiddle.size()),
+                                    isHL + static_cast<int>(segDrive.size()),
+                                    curX, textBaseY, mr, middleColor, clrHL);
+                            } else {
+                                SetTextColor(hdc, middleColor);
+                                DrawTextW(hdc, segMiddle.c_str(), -1, &mr,
+                                          DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
+                            }
                             curX = (szM.cx < midRight - curX) ? curX + szM.cx : midRight;
                         }
 
                         // 3. Folder name
                         if (!segFolder.empty() && curX < rowRight) {
-                            SetTextColor(hdc, folderColor);
                             RECT fr = {curX, rowTop, rowRight, rowBottom};
-                            DrawTextW(hdc, segFolder.c_str(), -1, &fr,
-                                      DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
+                            if (hasHL && folderRawLen > 0) {
+                                const COLORREF clrHL = Constants::Theme::ThemedColor(1.0f, 0.87f, 0.0f, app.themeFactor);
+                                // Highlight only the raw folder chars (not posLabel suffix)
+                                Common::DrawMatchText(hdc, segFolder.c_str(), folderRawLen,
+                                    isHL + folderStartIdx, curX, textBaseY, fr,
+                                    folderColor, clrHL);
+                                // Draw posLabel suffix without highlight
+                                if (!posLabel.empty()) {
+                                    SIZE szRaw = {};
+                                    GetTextExtentPoint32W(hdc, segFolder.c_str(), folderRawLen, &szRaw);
+                                    LONG labelX = curX + szRaw.cx;
+                                    if (labelX < rowRight) {
+                                        RECT lr = {labelX, rowTop, rowRight, rowBottom};
+                                        SetTextColor(hdc, folderColor);
+                                        DrawTextW(hdc, posLabel.c_str(), -1, &lr,
+                                                  DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
+                                    }
+                                }
+                            } else {
+                                SetTextColor(hdc, folderColor);
+                                DrawTextW(hdc, segFolder.c_str(), -1, &fr,
+                                          DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
+                            }
                         }
 
                         // 4. Size/count column — right-aligned after the path, only when a SpawnedDirWnd is open
@@ -1170,8 +1287,8 @@ namespace UI {
 
                 // FOOTER — QIV link | [Fkey] Cache | [Fkey] Dir  ···  summary  history-size
                 {
-                    int footerTop = rc.bottom - MulDiv(fontSize + 2 + 4, dpi, 96);
-                    int footerBot = rc.bottom;
+                    int footerTop = footerSepY + MulDiv(4, dpi, 96);
+                    int footerBot = footerSepY + MulDiv(fontSize + 2 + 4, dpi, 96);
 
                     SelectObject(hdc, m_hFontBody);
                     SetTextColor(hdc, RGB(150, 150, 150));
@@ -1322,8 +1439,38 @@ namespace UI {
                     }
                 }
 
+                // Filter row — input box with built-in ✕ (consistent with Find / JumpTo)
+                {
+                    int filterH    = MulDiv(Constants::History::HISTORY_FILTER_ROW_H, dpi, 96);
+                    int filterSepY = rc.bottom - filterH;
+                    int gap        = MulDiv(4,  dpi, 96);
+                    int inset      = MulDiv(3,  dpi, 96);
+
+                    // Separator above filter row
+                    HPEN hFiltPen = CreatePen(PS_SOLID, 1,
+                        Constants::Theme::ThemedGray(0.22f, app.themeFactor));
+                    HPEN hOldFP = (HPEN)SelectObject(hdc, hFiltPen);
+                    MoveToEx(hdc, rc.left + padding, filterSepY, nullptr);
+                    LineTo(hdc, rc.right - padding, filterSepY);
+                    SelectObject(hdc, hOldFP);
+                    DeleteObject(hFiltPen);
+
+                    SelectObject(hdc, m_hFontBody);
+                    RECT boxRect = { rc.left + padding, filterSepY + inset,
+                                     rc.right - padding, rc.bottom - inset };
+                    g_filter.Draw(hdc, m_hFontBody, boxRect, gap, GetFocus() == m_hWnd);
+                }
+
                 BitBlt(screenDC, 0, 0, rc.right, rc.bottom, hdc, 0, 0, SRCCOPY);
                 EndPaint(m_hWnd, &ps);
+                return 0;
+            }
+
+            case WM_CHAR: {
+                wchar_t ch = static_cast<wchar_t>(wParam);
+                // Space with empty filter → let OnKeyDown's favorite-toggle handle it
+                if (ch == L' ' && g_filter.IsEmpty()) return 0;
+                g_filter.HandleMessage(WM_CHAR, wParam, lParam); // OnChanged handles the rest
                 return 0;
             }
 
@@ -1364,6 +1511,10 @@ namespace UI {
                 GetClientRect(m_hWnd, &rc2);
                 UINT dpi2 = static_cast<UINT>(app.dpiScale * 96.0f);
 
+                // ✕ clear button inside the filter input — handle before anything else.
+                if (g_filter.HandleMessage(WM_LBUTTONDOWN, wParam, lParam))
+                    return 0;
+
                 // Calculate header area
                 int padding2 = MulDiv(Constants::History::HISTORY_PADDING, dpi2, 96);
                 int titleSz2 = MulDiv(Constants::History::HISTORY_FONT_SIZE + 2, dpi2, 96);
@@ -1371,7 +1522,7 @@ namespace UI {
                 int headerBottom = padding2 + titleSz2 + 4 + MulDiv(2, dpi2, 96) + fontSize2 + 2 + MulDiv(4, dpi2, 96);
 
                 // Check if clicking in header area — track screen coords to avoid drift
-                // Skip drag-start when the click lands on a shortcut link (handled in WM_LBUTTONUP).
+                // Skip drag-start when the click lands on a shortcut link.
                 {
                     POINT ptLink = {mx, my};
                     if ((g_shortcutF5Rect.right     > g_shortcutF5Rect.left     && PtInRect(&g_shortcutF5Rect,     ptLink)) ||
@@ -1430,6 +1581,10 @@ namespace UI {
                     return 0;
                 s_lastHoverPos = {mx, my};
 
+                // ✕ hover color — repaint only when state changes
+                if (g_filter.HandleMessage(WM_MOUSEMOVE, wParam, lParam))
+                    InvalidateRect(m_hWnd, nullptr, FALSE);
+
                 // Handle header dragging to move window
                 if (g_headerDragging) {
                     POINT ptScreen = {mx, my};
@@ -1453,7 +1608,10 @@ namespace UI {
                     int maxScrSb = std::max(0, totalHSb - winHSb);
                     SetCursor(LoadCursor(nullptr, (maxScrSb > 0) ? IDC_HAND : IDC_ARROW));
                 } else {
-                    SetCursor(LoadCursor(nullptr, IDC_ARROW));
+                    POINT ptMov = {mx, my};
+                    const RECT& cr = g_filter.GetClearRect();
+                    bool onClearIcon = (cr.right > cr.left) && PtInRect(&cr, ptMov);
+                    SetCursor(LoadCursor(nullptr, onClearIcon ? IDC_HAND : IDC_ARROW));
                 }
 
                 if (g_sbDragging) {
@@ -1628,6 +1786,7 @@ namespace UI {
             }
 
             case WM_MOUSELEAVE: {
+                g_filter.HandleMessage(WM_MOUSELEAVE, wParam, lParam);
                 g_hoverRow = -1;
                 InvalidateRect(m_hWnd, nullptr, FALSE);
                 return 0;
@@ -1651,12 +1810,23 @@ namespace UI {
 
     void HistoryListWnd::Init(HINSTANCE hInstance, HWND hParent) {
         g_hHistOwner = hParent;
+        g_filter.SetPlaceholder(L"type to filter…");
+        g_filter.SetMaxLength(Common::FUZZY_MAX_QUERY);
         BuildDisplayList();
         int x, y, w, h;
         GetHistoryWindowBounds(hParent, x, y, w, h);
         InitFloating(hInstance, hParent, L"QIV_HistoryWindow", L"Folder History",
                      w, h, CS_DBLCLKS);
         if (!m_hWnd) return;
+
+        g_filter.OnChanged = [this](const std::wstring&) {
+            BuildDisplayList();
+            int fx, fy, fw, fh;
+            GetHistoryWindowBounds(g_hHistOwner ? g_hHistOwner : m_hWnd, fx, fy, fw, fh);
+            SetWindowPos(m_hWnd, HWND_TOPMOST, fx, fy, fw, fh, SWP_FRAMECHANGED);
+            InvalidateRect(m_hWnd, nullptr, TRUE);
+        };
+
         SetWindowPos(m_hWnd, nullptr, x, y, 0, 0, SWP_NOZORDER | SWP_NOSIZE);
         ShowWindow(m_hWnd, SW_HIDE);
     }
@@ -1681,6 +1851,7 @@ namespace UI {
 
     void HistoryListWnd::Show() {
         if (!m_hWnd) return;
+        g_filter.Reset(); // silent — Show() drives layout directly
         g_showFullHistory = app.historyFullModeEnabled;
         BuildDisplayList();
         CaptureNavigationSnapshot();

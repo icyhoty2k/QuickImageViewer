@@ -1,6 +1,7 @@
 #pragma once
 #include <windows.h>
 #include "FloatingPanelWnd.h"
+#include "CustomControls/InputBox.h"
 
 namespace UI {
     class JumpToWnd : public FloatingPanelWnd {
@@ -19,8 +20,9 @@ namespace UI {
         LRESULT HandlePanelMessage(UINT message, WPARAM wParam, LPARAM lParam) override;
 
     private:
-        wchar_t m_input[8]  = {};
-        int     m_inputLen  = 0;
+        InputBox m_inputBox;
+        wchar_t  m_input[8] = {};
+        int      m_inputLen = 0;
         int     m_total     = 0;
         bool    m_outOfRange = false;
 
