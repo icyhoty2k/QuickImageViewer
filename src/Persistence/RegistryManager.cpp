@@ -241,6 +241,9 @@ namespace Persistence::Registry {
         a.swapMouseButtons = readDword(
             Constants::Registry::SWAP_MOUSE_BUTTONS,
             static_cast<DWORD>(Constants::IS_SWAP_MOUSE_BUTTONS)) != 0;
+        a.contextMenuEnabled = readDword(
+            Constants::Registry::CONTEXT_MENU_ENABLED,
+            static_cast<DWORD>(Constants::IS_CONTEXT_MENU_ENABLED)) != 0;
         a.invertWheelDirection = readDword(
             Constants::Registry::WHEEL_INVERT,
             static_cast<DWORD>(Constants::IS_MOUSE_VERTICAL_REVERSE_SCROLL_DIRECTION)) != 0;

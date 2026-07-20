@@ -84,6 +84,9 @@ enum class Command {
     // --- App control ---
     HideToTray,
     NewWindow,
+    CloseAllPanels, // hide every floating panel + spawned DirWnd (main window stays)
+    RestoreAllPanels, // re-open exactly the panels the last CloseAllPanels hid
+    ToggleAllPanels, // N — close all if any visible, else restore the last-hidden set
     HardQuit,
     ResetAll,
 

@@ -154,6 +154,11 @@ namespace UI {
             void Show(IPanelWindow &panel);
             void Hide(IPanelWindow &panel);
             void HideAllPanelWindows();
+            // Re-opens exactly the panels that HideAllPanelWindows last hid — the
+            // inverse of "Close All Panels". No-op if the snapshot is empty.
+            void RestoreAllPanels();
+            // True if any floating panel or spawned DirWnd is currently visible.
+            bool AnyPanelVisible() const;
 
             HelpWnd         &getHelpWindow();
             CacheWnd        &getCacheWindow();
@@ -254,6 +259,11 @@ namespace UI {
             // Whichever DirWnd the user last clicked — receives navigation updates.
             // nullptr = use primary dirWnd.
             ThumbnailPanelWnd *m_activeDirWnd = nullptr;
+
+            // Snapshot of panels visible at the last HideAllPanelWindows() call,
+            // replayed by RestoreAllPanels(). Only overwritten when non-empty so a
+            // second "Close All Panels" doesn't wipe a still-restorable set.
+            std::vector<IPanelWindow *> m_restoreList;
 
             bool isInit(IPanelWindow &panel);
     };

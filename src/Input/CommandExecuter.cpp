@@ -508,6 +508,24 @@ void InputManager::ExecuteCommand(HWND hWnd, Command cmd) {
             break;
         }
 
+        case Command::CloseAllPanels:
+            uiManager.HideAllPanelWindows();
+            InvalidateRect(hWnd, nullptr, FALSE);
+            break;
+
+        case Command::RestoreAllPanels:
+            uiManager.RestoreAllPanels();
+            InvalidateRect(hWnd, nullptr, FALSE);
+            break;
+
+        case Command::ToggleAllPanels:
+            if (uiManager.AnyPanelVisible())
+                uiManager.HideAllPanelWindows();
+            else
+                uiManager.RestoreAllPanels();
+            InvalidateRect(hWnd, nullptr, FALSE);
+            break;
+
         case Command::HardQuit:
             AppCommands::RemoveTrayIcon(hWnd);
             DestroyWindow(hWnd);

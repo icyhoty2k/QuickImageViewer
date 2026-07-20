@@ -110,6 +110,7 @@ namespace Constants {
     static constexpr int KEYBOARD_WINDOW_MOVE_STEP = 20; // Shift+W/A/S/D window move step (DPI-scaled in executor)
     static constexpr int KEYBOARD_WINDOW_RESIZE_STEP = 20; // Shift+Numpad+/- / Shift++/- resize per side, DPI-scaled
     static constexpr int WINDOW_SNAP_DISTANCE = 24; // px from screen edge to trigger drag-end snap
+    static constexpr int CONTEXT_MENU_DRAG_TOLERANCE = 4; // px the cursor may move while RMB is down and still count as a "click" (raises the right-click context menu)
 
 
     // Custom window messages
@@ -120,6 +121,7 @@ namespace Constants {
     constexpr int IS_BASE_HEIGHT = 800;
 
     constexpr bool IS_SWAP_MOUSE_BUTTONS = true;
+    constexpr bool IS_CONTEXT_MENU_ENABLED = true; // main-window right-click context menu on/off
     constexpr bool IS_CTRL_C_ENABLED       = true;
     constexpr bool IS_THUMB_COPY_ENABLED   = true;
     constexpr bool IS_THUMB_MOVE_ENABLED   = true;
@@ -346,6 +348,7 @@ namespace Constants {
         constexpr const wchar_t *CTRL_C_ENABLED          = L"qivCtrlCEnabled";
         constexpr const wchar_t *INPUTBOX_CARET_STYLE    = L"qivCaretStyle";
         constexpr const wchar_t *ZOOM_CLICK_MULT         = L"qivZoomClick";
+        constexpr const wchar_t *CONTEXT_MENU_ENABLED    = L"qivContextMenu";
         constexpr const wchar_t *THUMB_COPY_ENABLED      = L"qivThumbCopy";
         constexpr const wchar_t *THUMB_MOVE_ENABLED      = L"qivThumbMove";
         constexpr const wchar_t *THUMB_DELETE_ENABLED    = L"qivThumbDelete";

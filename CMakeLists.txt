@@ -46,6 +46,7 @@ set(SOURCES
         src/Input/CommandExecuter.cpp
         src/Input/CommandResolver.cpp
         src/Input/AppCommands.cpp
+        src/Input/ContextMenuHandler.cpp
         src/UI/UIManager.cpp
         src/Overlays/OverlayManager.cpp
         src/UI/ThumbnailPanels/ThumbnailPanelWnd.cpp
