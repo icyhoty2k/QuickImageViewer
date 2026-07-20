@@ -1155,30 +1155,19 @@ void RendererD2D::ClearActiveImage() {
 }
 
 // =============================================================================
-//  LoadSvgFromBytes  — rasterized via resvg (fixes centering + text bugs)
+//  DecodeSvgToBitmap  — worker-safe: parse + rasterize (resvg) + GPU upload.
+//  Writes no shared state. Runs on a decoder worker thread using the injected
+//  per-thread WIC factory; the caller inserts outBmp into m_bitmapCache.
 // =============================================================================
-HRESULT RendererD2D::LoadSvgFromBytes(const std::vector<BYTE> &svgBytes,
-                                      const std::wstring &filePath) {
+HRESULT RendererD2D::DecodeSvgToBitmap(const std::vector<BYTE> &svgBytes,
+                                       IWICImagingFactory2 *wicFac,
+                                       Microsoft::WRL::ComPtr<ID2D1Bitmap1> &outBmp,
+                                       UINT &outW, UINT &outH) {
     if (svgBytes.empty()) return E_INVALIDARG;
-    if (!m_pD2DDevice) return E_UNEXPECTED;
-
-    // SVGs are now stored in the regular bitmap cache after rasterization.
-    {
-        std::lock_guard<std::mutex> lock(m_cacheMutex);
-        auto it = m_bitmapCache.find(filePath);
-        if (it != m_bitmapCache.end()) {
-            m_lruList.splice(m_lruList.begin(), m_lruList, it->second.lruIt);
-            m_pBitmap = it->second.bitmap;
-            m_pActiveSvg.Reset();
-            m_pActiveDisplayNode = nullptr;
-            app.imgWidth  = static_cast<int>(it->second.width);
-            app.imgHeight = static_cast<int>(it->second.height);
-            if (onImageChangedCallback) onImageChangedCallback(app.currentIndex);
-            return S_OK;
-        }
-    }
+    if (!m_pD2DDevice || !wicFac) return E_UNEXPECTED;
 
     // --- resvg options: initialized once (system font scan is IO-heavy) ---
+    // call_once is thread-safe; the first SVG on any worker pays the cost once.
     static resvg_options* s_opts = nullptr;
     static std::once_flag  s_once;
     std::call_once(s_once, []() {
@@ -1221,7 +1210,7 @@ HRESULT RendererD2D::LoadSvgFromBytes(const std::vector<BYTE> &svgBytes,
 
     // Create WIC bitmap wrapper around the pixel buffer
     Microsoft::WRL::ComPtr<IWICBitmap> wicBmp;
-    HRESULT hr = app.wicFactory->CreateBitmapFromMemory(
+    HRESULT hr = wicFac->CreateBitmapFromMemory(
         w, h,
         GUID_WICPixelFormat32bppPBGRA,
         w * 4, static_cast<UINT>(bufBytes),
@@ -1235,33 +1224,75 @@ HRESULT RendererD2D::LoadSvgFromBytes(const std::vector<BYTE> &svgBytes,
                                            uploadCtx.GetAddressOf());
     if (FAILED(hr)) return hr;
 
-    Microsoft::WRL::ComPtr<ID2D1Bitmap1> d2dBmp;
-    hr = uploadCtx->CreateBitmapFromWicBitmap(wicBmp.Get(), nullptr, &d2dBmp);
+    hr = uploadCtx->CreateBitmapFromWicBitmap(wicBmp.Get(), nullptr, &outBmp);
     if (FAILED(hr)) return hr;
 
-    // Insert into bitmap cache (same LRU as regular images)
+    outW = w;
+    outH = h;
+    return S_OK;
+}
+
+// =============================================================================
+//  PreloadSvgFromBytes  — async SVG entry point.
+//  Rasterizes + uploads on the decoder worker, inserts into the shared bitmap
+//  cache, then posts WM_QIV_REPAINT so the UI thread displays it through the
+//  same cache-hit path as raster images. Never blocks the UI thread.
+// =============================================================================
+HRESULT RendererD2D::PreloadSvgFromBytes(std::vector<BYTE> svgBytes,
+                                         const std::wstring &filePath,
+                                         int requestIndex) {
+    if (svgBytes.empty()) return E_INVALIDARG;
+    if (!m_pD2DDevice) return E_UNEXPECTED;
+
     {
         std::lock_guard<std::mutex> lock(m_cacheMutex);
-        auto it = m_bitmapCache.find(filePath);
-        if (it != m_bitmapCache.end()) {
-            m_lruList.erase(it->second.lruIt);
-            m_bitmapCache.erase(it);
+        // Already rasterized on a previous visit — display via the cache-hit path.
+        if (m_bitmapCache.find(filePath) != m_bitmapCache.end()) {
+            PostMessageW(m_hwnd, Constants::WM_QIV_REPAINT, 0, 0);
+            return S_OK;
         }
-        if (m_lruList.size() >= static_cast<size_t>(app.vramCacheCount)) {
-            m_bitmapCache.erase(m_lruList.back());
-            m_lruList.pop_back();
-        }
-        m_lruList.push_front(filePath);
-        m_bitmapCache[filePath] = {d2dBmp, m_lruList.begin(), w, h};
+        // A rasterization for this path is already queued — dedupe.
+        if (m_bitmapInFlight.count(filePath)) return S_OK;
+        m_bitmapInFlight.insert(filePath);
     }
 
-    m_pBitmap = d2dBmp;
-    m_pActiveSvg.Reset();
-    m_pActiveDisplayNode = nullptr;
-    app.imgWidth  = static_cast<int>(w);
-    app.imgHeight = static_cast<int>(h);
+    g_decoderWorker.PushTask(
+        [this, svgBytes = std::move(svgBytes), filePath, requestIndex]
+        (IWICImagingFactory2 *wicFac) mutable {
+            // Release the in-flight marker up front (mirrors PreloadBitmap) so a
+            // later request for the same path can be queued while this one runs.
+            { std::lock_guard<std::mutex> lock(m_cacheMutex); m_bitmapInFlight.erase(filePath); }
 
-    if (onImageChangedCallback) onImageChangedCallback(app.currentIndex);
+            // User navigated away while the task was queued — drop the work.
+            if (app.wantedIndex.load(std::memory_order_acquire) != requestIndex)
+                return;
+
+            Microsoft::WRL::ComPtr<ID2D1Bitmap1> d2dBmp;
+            UINT w = 0, h = 0;
+            if (FAILED(DecodeSvgToBitmap(svgBytes, wicFac, d2dBmp, w, h)))
+                return;
+
+            // Insert into bitmap cache (same LRU as regular images).
+            {
+                std::lock_guard<std::mutex> lock(m_cacheMutex);
+                auto it = m_bitmapCache.find(filePath);
+                if (it != m_bitmapCache.end()) {
+                    m_lruList.erase(it->second.lruIt);
+                    m_bitmapCache.erase(it);
+                }
+                if (m_lruList.size() >= static_cast<size_t>(app.vramCacheCount)) {
+                    m_bitmapCache.erase(m_lruList.back());
+                    m_lruList.pop_back();
+                }
+                m_lruList.push_front(filePath);
+                m_bitmapCache[filePath] = {d2dBmp, m_lruList.begin(), w, h};
+            }
+
+            // Finalize on the UI thread only if the user is still on this image.
+            if (app.wantedIndex.load(std::memory_order_acquire) == requestIndex)
+                PostMessageW(m_hwnd, Constants::WM_QIV_REPAINT, 0, 0);
+        });
+
     return S_OK;
 }
 
@@ -1659,8 +1690,7 @@ void RendererD2D::RequestDirThumbnail(const std::wstring &filePath, HWND hPanel)
             std::lock_guard<std::mutex> lk(m_dirThumbMutex);
             auto &entry = m_panelThumbCaches[hDir];
             entry.inFlight.erase(filePath);
-            if (!entry.bitmaps.count(filePath))
-                entry.bitmaps[filePath] = thumbBitmap;
+            entry.bitmaps.try_emplace(filePath, thumbBitmap);
         }
         PostMessageW(hDir, Constants::WM_QIV_REPAINT, 0, 0);
     });

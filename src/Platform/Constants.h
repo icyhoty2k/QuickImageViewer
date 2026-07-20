@@ -261,7 +261,7 @@ namespace Constants {
     constexpr UINT WM_QIV_SWITCH_TO_FIND = WM_USER + 5; // FindWnd  ← PANEL_SWITCH_TO_FIND_CHAR typed in JumpToWnd
     constexpr UINT WM_QIV_SWITCH_TO_JUMP = WM_USER + 6; // JumpToWnd ← PANEL_SWITCH_TO_JUMP_CHAR typed in FindWnd
     constexpr UINT WM_QIV_SCAN_COMPLETE = WM_USER + 7; // Background dir scan done; LPARAM = new ScanResult*
-    constexpr UINT WM_QIV_HISTORY_VALIDATED = WM_USER + 8; // reserved — no longer used
+    constexpr UINT WM_QIV_HISTORY_VALIDATED = WM_USER + 8; // Background history folder scan done; WPARAM = generation, LPARAM = new std::vector<DirScanResult>*
     constexpr UINT WM_QIV_DIR_CHANGED = WM_USER + 9; // Posted by DirWatcher thread when a file-system change is detected
 
     // ---------------------------------------------------------------------------

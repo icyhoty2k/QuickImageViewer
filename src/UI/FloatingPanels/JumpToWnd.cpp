@@ -66,27 +66,36 @@ namespace UI {
         InvalidateRect(m_hParent, nullptr, FALSE);
     }
 
-    bool JumpToWnd::OnKeyDown(WPARAM vk, bool ctrl, bool /*shift*/, bool alt) {
-        // Text-editing ctrl combos (Ctrl+A/C/X/V) go to the inputbox first.
-        if (ctrl && !alt) {
-            if (m_inputBox.HandleMessage(WM_KEYDOWN, vk, 0)) {
+    // Esc: if the number box has text, clear it (same as the ✕ button) and keep
+    // the panel open. Empty box → return false so the base hides the panel.
+    bool JumpToWnd::OnLocalHide() {
+        switch (m_inputBox.RouteKey(VK_ESCAPE, m_hWnd)) {
+            case InputResult::RequestClear:
                 InvalidateRect(m_hWnd, nullptr, FALSE);
                 return true;
-            }
+            default:
+                return false; // RequestClose (empty) → base hides the panel
         }
-        if (ctrl || alt) return false; // let Ctrl+F / Ctrl+G etc. reach the parent
+    }
 
+    bool JumpToWnd::OnKeyDown(WPARAM vk, bool ctrl, bool /*shift*/, bool alt) {
+        (void)ctrl; (void)alt; // modifiers read via GetKeyState inside RouteKey
+
+        // Host-specific key first: Enter commits the jump.
         if (vk == VK_RETURN) {
             CommitJump();
             return true;
         }
 
-        if (m_inputBox.HandleMessage(WM_KEYDOWN, vk, 0)) {
-            InvalidateRect(m_hWnd, nullptr, FALSE);
-            return true;
+        // Everything else → the text box (editing, Ctrl+A/C/X/V, forward policy).
+        switch (m_inputBox.RouteKey(vk, m_hWnd)) {
+            case InputResult::Ignored:         return false; // forward to app pipeline
+            case InputResult::RequestClose:    return false; // (Esc arrives via OnLocalHide)
+            case InputResult::RequestClear:    InvalidateRect(m_hWnd, nullptr, FALSE); return true;
+            case InputResult::ConsumedRepaint: InvalidateRect(m_hWnd, nullptr, FALSE); return true;
+            case InputResult::Consumed:        return true;
         }
-        // VK_ESCAPE returned false = no text → let parent close the panel.
-        return vk != VK_ESCAPE;
+        return true;
     }
 
     void JumpToWnd::EnsureBackBuffer(HDC refDC, int w, int h) {
@@ -201,22 +210,25 @@ namespace UI {
                     return 0;
                 }
                 // Allow digits and backspace; InputBox enforces the max-length of 6.
-                if (ch >= L'0' && ch <= L'9' || ch == L'\b')
-                    m_inputBox.HandleMessage(WM_CHAR, wParam, lParam);
+                if ((ch >= L'0' && ch <= L'9') || ch == L'\b') {
+                    if (m_inputBox.RouteChar(ch, m_hWnd) == InputResult::ConsumedRepaint)
+                        InvalidateRect(m_hWnd, nullptr, FALSE);
+                }
                 return 0;
             }
 
             case WM_LBUTTONDOWN:
-                m_inputBox.HandleMessage(WM_LBUTTONDOWN, wParam, lParam);
+                if (m_inputBox.RouteMouse(WM_LBUTTONDOWN, wParam, lParam) == InputResult::ConsumedRepaint)
+                    InvalidateRect(m_hWnd, nullptr, FALSE);
                 return 0;
 
             case WM_MOUSEMOVE:
-                if (m_inputBox.HandleMessage(WM_MOUSEMOVE, wParam, lParam))
+                if (m_inputBox.RouteMouse(WM_MOUSEMOVE, wParam, lParam) == InputResult::ConsumedRepaint)
                     InvalidateRect(m_hWnd, nullptr, FALSE);
                 return 0;
 
             case WM_MOUSELEAVE:
-                if (m_inputBox.HandleMessage(WM_MOUSELEAVE, wParam, lParam))
+                if (m_inputBox.RouteMouse(WM_MOUSELEAVE, wParam, lParam) == InputResult::ConsumedRepaint)
                     InvalidateRect(m_hWnd, nullptr, FALSE);
                 return 0;
 

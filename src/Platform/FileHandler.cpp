@@ -404,7 +404,9 @@ void HandleScanComplete(HWND hWnd, ScanResult *result) {
     // Files that exist on disk but aren't in the new playlist (different folder,
     // rename, etc.) are kept so CacheWnd shows a true cross-folder history.
     if (result->playlist != app.playlist && app.renderer) {
-        std::unordered_set<std::wstring> newSet(result->playlist.begin(), result->playlist.end());
+        std::unordered_set<std::wstring> newSet;
+        newSet.reserve(result->playlist.size());
+        newSet.insert(result->playlist.begin(), result->playlist.end());
         for (const auto &path: app.playlist) {
             if (newSet.find(path) == newSet.end()) {
                 std::error_code ec;
@@ -723,7 +725,8 @@ void LoadImageIndex(HWND hWnd, int index) {
     uiManager.getActiveDirWnd().SyncDirSelectionRectangle();
 
     // -------------------------------------------------------------------------
-    // SVG path: load bytes on IO thread, call LoadSvgFromBytes on UI thread
+    // SVG path: load bytes on IO thread, then WM_QIV_SVG_READY hands them to
+    // PreloadSvgFromBytes which rasterizes + uploads on the decoder worker.
     // -------------------------------------------------------------------------
     if (SvgDecoder::IsSvgPath(currentPath)) {
         if (app.renderer) app.renderer->ClearActiveImage();

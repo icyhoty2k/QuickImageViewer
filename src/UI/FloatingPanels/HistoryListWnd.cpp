@@ -12,6 +12,7 @@
 #include "Common/FuzzyMatch.h"
 #include "CustomControls/InputBox.h"
 #include <algorithm>
+#include <atomic>
 #include <cwctype>
 #include <thread>
 #include <unordered_map>
@@ -87,15 +88,28 @@ namespace UI {
     struct DirSizeInfo { int64_t bytes = 0; int count = 0; };
     static std::unordered_map<std::wstring, DirSizeInfo> g_dirSizeCache;
 
-    // Scan a folder synchronously: count image files and sum their sizes.
-    // Updates g_statusCache and g_dirSizeCache for the given path.
-    static void ScanDirForHistory(const std::wstring &path) {
+    // One folder's scan outcome — computed off the UI thread, applied on it.
+    struct DirScanResult {
+        std::wstring path;
+        FolderStatus status = FolderStatus::Unknown;
+        int64_t      bytes  = 0;
+        int          count  = 0;
+    };
+
+    // Generation guard: bumped on each RefreshHistory so stale background results
+    // (folder list changed, or a newer refresh already queued) are discarded.
+    static std::atomic<uint64_t> g_histScanGen{0};
+
+    // Pure filesystem scan: count image files and sum their sizes.
+    // Writes no global state — safe to call on a worker thread.
+    static DirScanResult ComputeDirScan(const std::wstring &path) {
         namespace fs = std::filesystem;
+        DirScanResult r;
+        r.path = path;
         std::error_code ec;
         if (!fs::is_directory(fs::path(path), ec) || ec) {
-            g_statusCache[path] = FolderStatus::Missing;
-            g_dirSizeCache.erase(path);
-            return;
+            r.status = FolderStatus::Missing;
+            return r;
         }
         int64_t totalBytes = 0;
         int count = 0;
@@ -104,13 +118,34 @@ namespace UI {
              !ec && it != fs::directory_iterator(); it.increment(ec)) {
             if (!it->is_regular_file(ec)) { ec.clear(); continue; }
             if (!is_image_ext(it->path().extension().wstring())) continue;
-            auto sz = fs::file_size(it->path(), ec);
+            // directory_entry::file_size() reuses the WIN32_FIND_DATA captured by
+            // the iterator on Windows — no extra per-file GetFileAttributesEx call
+            // (fs::file_size(path) would re-stat each entry).
+            auto sz = it->file_size(ec);
             if (!ec) totalBytes += static_cast<int64_t>(sz);
             ec.clear();
             ++count;
         }
-        g_statusCache[path] = (count > 0) ? FolderStatus::Valid : FolderStatus::Empty;
-        g_dirSizeCache[path] = {totalBytes, count};
+        r.status = (count > 0) ? FolderStatus::Valid : FolderStatus::Empty;
+        r.bytes  = totalBytes;
+        r.count  = count;
+        return r;
+    }
+
+    // Apply a scan result to the UI-thread-owned status/size caches. UI thread only.
+    static void ApplyDirScan(const DirScanResult &r) {
+        if (r.status == FolderStatus::Missing) {
+            g_statusCache[r.path] = FolderStatus::Missing;
+            g_dirSizeCache.erase(r.path);
+            return;
+        }
+        g_statusCache[r.path]  = r.status;
+        g_dirSizeCache[r.path] = {r.bytes, r.count};
+    }
+
+    // Scan a folder synchronously and apply the result (UI thread convenience).
+    static void ScanDirForHistory(const std::wstring &path) {
+        ApplyDirScan(ComputeDirScan(path));
     }
 
     // Set whenever the display list changes (push, delete, restore, clear).
@@ -189,8 +224,38 @@ namespace UI {
         int x, y, w, h;
         GetHistoryWindowBounds(g_hHistOwner ? g_hHistOwner : hWnd, x, y, w, h);
         SetWindowPos(hWnd, HWND_TOPMOST, x, y, w, h, SWP_FRAMECHANGED);
-        for (const auto &path : historyFoldersManager.folderHistory)
-            ScanDirForHistory(path);
+
+        // Scan every history folder OFF the UI thread — a folder with thousands of
+        // images needs a full directory_iterator to count, which would otherwise
+        // freeze the panel on F5 / disk-heavy histories. The worker only reads the
+        // filesystem into a local vector; the status/size caches are mutated solely
+        // on the UI thread in the WM_QIV_HISTORY_VALIDATED handler. A generation
+        // guard discards results from a superseded refresh.
+        std::vector<std::wstring> folders(historyFoldersManager.folderHistory.begin(),
+                                          historyFoldersManager.folderHistory.end());
+        const uint64_t gen = g_histScanGen.fetch_add(1, std::memory_order_relaxed) + 1;
+        std::thread([folders = std::move(folders), gen, hWnd]() mutable {
+            auto *results = new std::vector<DirScanResult>();
+            results->reserve(folders.size());
+            for (const auto &p : folders) {
+                if (g_histScanGen.load(std::memory_order_relaxed) != gen) {
+                    delete results;
+                    return;
+                }
+                results->push_back(ComputeDirScan(p));
+            }
+            if (g_histScanGen.load(std::memory_order_relaxed) != gen) {
+                delete results;
+                return;
+            }
+            // On success the UI-thread handler owns and frees results. If the post
+            // fails (window already destroyed), free here so nothing leaks.
+            if (!PostMessageW(hWnd, Constants::WM_QIV_HISTORY_VALIDATED,
+                              static_cast<WPARAM>(gen),
+                              reinterpret_cast<LPARAM>(results)))
+                delete results;
+        }).detach();
+
         InvalidateRect(hWnd, nullptr, TRUE);
     }
 
@@ -235,6 +300,7 @@ namespace UI {
         g_displayList.clear();
 
         const auto &history = historyFoldersManager.folderHistory;
+        g_displayList.reserve(history.size());
         const auto &favSet = historyFoldersManager.favorites;
         const int favPos = Constants::History::HISTORY_FAVORITES_POSITION;
         // Favorites are always shown in full — historyMaxFavs only caps adding, not display.
@@ -263,6 +329,8 @@ namespace UI {
             // Separate favorites and normals, then combine
             std::vector<DisplayEntry> favRows;
             std::vector<DisplayEntry> normalRows;
+            favRows.reserve(history.size());
+            normalRows.reserve(history.size());
 
             for (const auto &path: history) {
                 bool isFav = (favSet.count(path) > 0);
@@ -274,21 +342,19 @@ namespace UI {
 
             if (favPos == 0) {
                 // Favorites on top
-                for (auto &e: favRows) g_displayList.push_back(e);
-                for (auto &e: normalRows) g_displayList.push_back(e);
+                for (auto &e: favRows) g_displayList.push_back(std::move(e));
+                for (auto &e: normalRows) g_displayList.push_back(std::move(e));
             } else {
                 // Favorites on bottom
-                for (auto &e: normalRows) g_displayList.push_back(e);
-                for (auto &e: favRows) g_displayList.push_back(e);
+                for (auto &e: normalRows) g_displayList.push_back(std::move(e));
+                for (auto &e: favRows) g_displayList.push_back(std::move(e));
             }
         }
         // Mark unchecked entries as Unknown so WM_PAINT shows them in neutral colour.
         bool hasUnknown = false;
         for (const auto &e: g_displayList) {
-            if (g_statusCache.find(e.path) == g_statusCache.end()) {
-                g_statusCache[e.path] = FolderStatus::Unknown;
-                hasUnknown = true;
-            }
+            auto [it, inserted] = g_statusCache.try_emplace(e.path, FolderStatus::Unknown);
+            if (inserted) hasUnknown = true;
         }
 
         // Apply live filter — wildcard or fuzzy match on full path, MRU order preserved.
@@ -523,6 +589,13 @@ namespace UI {
     // ---------------------------------------------------------------------------
     // Keyboard handling
     // ---------------------------------------------------------------------------
+    // Esc: if the filter box has text, clear it (same as the ✕ button) and keep
+    // the panel open. Empty filter → return false so the base hides the panel.
+    // Clear() fires g_filter.OnChanged, which rebuilds the list + repaints.
+    bool HistoryListWnd::OnLocalHide() {
+        return g_filter.RouteKey(VK_ESCAPE, m_hWnd) == InputResult::RequestClear;
+    }
+
     bool HistoryListWnd::OnKeyDown(WPARAM vk, bool ctrl, bool shift, bool alt) {
         if (vk == VK_TAB && ctrl) {
             ToggleFullHistory(m_hWnd);
@@ -673,7 +746,7 @@ namespace UI {
                 } else if (!ctrl && !shift && !alt) {
                     // If the filter has text, Delete = forward-delete in the input.
                     if (!g_filter.IsEmpty()) {
-                        if (g_filter.HandleMessage(WM_KEYDOWN, VK_DELETE, 0))
+                        if (g_filter.RouteKey(VK_DELETE, m_hWnd) == InputResult::ConsumedRepaint)
                             InvalidateRect(m_hWnd, nullptr, FALSE);
                         return true;
                     }
@@ -715,14 +788,16 @@ namespace UI {
                 return true;
 
             default:
-                // Try the filter first — handles editing keys and Ctrl+A/C/X/V.
-                // Alt combos are reserved for system shortcuts; skip the filter for those.
-                if (!alt && g_filter.HandleMessage(WM_KEYDOWN, vk, 0)) {
-                    InvalidateRect(m_hWnd, nullptr, FALSE);
-                    return true;
+                // The filter box decides: editing keys, Ctrl+A/C/X/V, forward
+                // policy (F-keys/modifiers → Ignored), and printable-swallow are
+                // all folded into RouteKey.
+                switch (g_filter.RouteKey(vk, m_hWnd)) {
+                    case InputResult::Ignored:         return false; // forward to app pipeline
+                    case InputResult::RequestClose:    return false; // (Esc arrives via OnLocalHide)
+                    case InputResult::RequestClear:    InvalidateRect(m_hWnd, nullptr, FALSE); return true;
+                    case InputResult::ConsumedRepaint: InvalidateRect(m_hWnd, nullptr, FALSE); return true;
+                    case InputResult::Consumed:        return true;
                 }
-                // Ctrl/Alt combos not consumed by the filter pass to the parent.
-                if (ctrl || alt) return false;
                 return true;
         }
     }
@@ -786,6 +861,20 @@ namespace UI {
     LRESULT HistoryListWnd::HandlePanelMessage(UINT message, WPARAM wParam, LPARAM lParam) {
         if (message == WM_ERASEBKGND) return 1;
         switch (message) {
+            case Constants::WM_QIV_HISTORY_VALIDATED: {
+                // Background folder scan finished — apply results on the UI thread
+                // (the only thread that touches g_statusCache / g_dirSizeCache).
+                auto *results = reinterpret_cast<std::vector<DirScanResult> *>(lParam);
+                if (!results) return 0;
+                // Discard results from a refresh that has since been superseded.
+                if (static_cast<uint64_t>(wParam) ==
+                    g_histScanGen.load(std::memory_order_relaxed)) {
+                    for (const auto &r : *results) ApplyDirScan(r);
+                    InvalidateRect(m_hWnd, nullptr, TRUE);
+                }
+                delete results;
+                return 0;
+            }
             case WM_PAINT: {
                 PAINTSTRUCT ps;
                 HDC screenDC = BeginPaint(m_hWnd, &ps);
@@ -947,7 +1036,9 @@ namespace UI {
                 // Rows (scrolled) — clipped to the body area between separator and footer
                 SelectObject(hdc, m_hFontList);
                 g_rowRects.clear();
+                g_rowRects.reserve(g_displayList.size());
                 g_indexRects.clear();
+                g_indexRects.reserve(g_displayList.size());
                 int rowsTop = sepY + MulDiv(6, dpi, 96);
                 int bodyBottom = footerSepY;
                 g_bodyTop = rowsTop;
@@ -1470,7 +1561,8 @@ namespace UI {
                 wchar_t ch = static_cast<wchar_t>(wParam);
                 // Space with empty filter → let OnKeyDown's favorite-toggle handle it
                 if (ch == L' ' && g_filter.IsEmpty()) return 0;
-                g_filter.HandleMessage(WM_CHAR, wParam, lParam); // OnChanged handles the rest
+                if (g_filter.RouteChar(ch, m_hWnd) == InputResult::ConsumedRepaint)
+                    InvalidateRect(m_hWnd, nullptr, FALSE); // OnChanged also repaints
                 return 0;
             }
 
@@ -1511,9 +1603,12 @@ namespace UI {
                 GetClientRect(m_hWnd, &rc2);
                 UINT dpi2 = static_cast<UINT>(app.dpiScale * 96.0f);
 
-                // ✕ clear button inside the filter input — handle before anything else.
-                if (g_filter.HandleMessage(WM_LBUTTONDOWN, wParam, lParam))
+                // Filter input (✕ button or click-to-position-caret) — handle
+                // before anything else. Ignored → falls through to header/rows.
+                if (g_filter.RouteMouse(WM_LBUTTONDOWN, wParam, lParam) == InputResult::ConsumedRepaint) {
+                    InvalidateRect(m_hWnd, nullptr, FALSE);
                     return 0;
+                }
 
                 // Calculate header area
                 int padding2 = MulDiv(Constants::History::HISTORY_PADDING, dpi2, 96);
@@ -1582,7 +1677,7 @@ namespace UI {
                 s_lastHoverPos = {mx, my};
 
                 // ✕ hover color — repaint only when state changes
-                if (g_filter.HandleMessage(WM_MOUSEMOVE, wParam, lParam))
+                if (g_filter.RouteMouse(WM_MOUSEMOVE, wParam, lParam) == InputResult::ConsumedRepaint)
                     InvalidateRect(m_hWnd, nullptr, FALSE);
 
                 // Handle header dragging to move window
@@ -1786,7 +1881,7 @@ namespace UI {
             }
 
             case WM_MOUSELEAVE: {
-                g_filter.HandleMessage(WM_MOUSELEAVE, wParam, lParam);
+                g_filter.RouteMouse(WM_MOUSELEAVE, wParam, lParam);
                 g_hoverRow = -1;
                 InvalidateRect(m_hWnd, nullptr, FALSE);
                 return 0;

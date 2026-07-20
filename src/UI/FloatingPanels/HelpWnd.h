@@ -3,6 +3,7 @@
 #include <string>
 #include <vector>
 #include "FloatingPanelWnd.h"
+#include "CustomControls/InputBox.h"
 
 namespace UI {
     // =========================================================================
@@ -33,6 +34,7 @@ namespace UI {
 
         protected:
             bool    OnKeyDown(WPARAM vk, bool ctrl, bool shift, bool alt) override;
+            bool    OnLocalHide() override;
             LRESULT HandlePanelMessage(UINT message, WPARAM wParam, LPARAM lParam) override;
 
         private:
@@ -41,6 +43,16 @@ namespace UI {
                 std::wstring description; // right column (white, wraps)
                 int sectionId;
             };
+
+            // Live filter (reuses the shared InputBox control). Empty query shows
+            // everything; otherwise only entries whose shortcut or description
+            // contains the (case-insensitive) query, and only sections that still
+            // have a matching entry.
+            InputBox     m_filter;
+            std::wstring m_query;                // lowercased filter text
+            int          m_visibleContentHeight = 0; // filtered content height (scroll math)
+            bool EntryMatches(const HelpEntry& e) const;
+            bool SectionHasVisible(int sectionId) const;
 
             struct HelpSection {
                 std::wstring icon;

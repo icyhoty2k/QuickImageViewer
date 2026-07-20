@@ -1,4 +1,4 @@
-#include "OverlayManager.h"
+﻿#include "OverlayManager.h"
 #include "../AppState.h"
 #include "../Platform/Constants.h"
 #include "../Platform/ConstantsStrings.h"
@@ -357,16 +357,16 @@ void OverlayManager::RecomputeRects() {
 // ─────────────────────────────────────────────────────────────────────────────
 
 void OverlayManager::RebuildTopLeft() {
-    std::wstring text;
+    wchar_t buf[32];
     if (m_slots[TOP_LEFT].compact) {
         // 1-line: "42 / 100  image1.jpg"
-        text = std::to_wstring(m_infoIndex + 1) + L" / " +
-               std::to_wstring(m_infoTotal) + L"  " + m_infoFilename;
+        swprintf_s(buf, L"%d / %d  ", m_infoIndex + 1, m_infoTotal);
     } else {
         // 2-line: "42 / 100\nimage1.jpg"
-        text = std::to_wstring(m_infoIndex + 1) + L" / " +
-               std::to_wstring(m_infoTotal) + L"\n" + m_infoFilename;
+        swprintf_s(buf, L"%d / %d\n", m_infoIndex + 1, m_infoTotal);
     }
+    std::wstring text = buf;
+    text += m_infoFilename;
     slotTopLeft.UpdateText(std::move(text));
 }
 
@@ -376,7 +376,9 @@ void OverlayManager::RebuildSummaryLine2() {
     swprintf_s(zoomBuf, L"%.0f%%", m_zoom * 100.0f);
     std::wstring text = zoomBuf;
     text += L"  ";
-    text += std::to_wstring(m_imgW) + L"\u00D7" + std::to_wstring(m_imgH);
+    wchar_t dimBuf[32];
+    swprintf_s(dimBuf, L"%d\u00D7%d", m_imgW, m_imgH);
+    text += dimBuf;
     text += L" / ";
     text += FormatFileSize(m_fileSizeBytes);
     slotTopCenter.UpdateText(std::move(text));
@@ -455,15 +457,17 @@ void OverlayManager::UpdateDims(int imgW, int imgH, int64_t fileSizeBytes) {
     if (Constants::Overlay::OVERLAY_LAYOUT_MODE == 2) {
         RebuildSummaryLine2();
     }
-    std::wstring text;
+    wchar_t dimBuf2[32];
+    swprintf_s(dimBuf2, L"%d×%d", imgW, imgH);
+    std::wstring text = dimBuf2;
     if (m_slots[BOT_RIGHT].compact) {
         // 1-line: "1920×1080 / 4.3 MB"
-        text = std::to_wstring(imgW) + L"\u00D7" + std::to_wstring(imgH) +
-               L" / " + FormatFileSize(fileSizeBytes);
+        text += L" / ";
+        text += FormatFileSize(fileSizeBytes);
     } else {
         // 2-line: "1920×1080\n4.3 MB"
-        text = std::to_wstring(imgW) + L"\u00D7" + std::to_wstring(imgH) +
-               L"\n" + FormatFileSize(fileSizeBytes);
+        text += L'\n';
+        text += FormatFileSize(fileSizeBytes);
     }
     slotBotRight.UpdateText(std::move(text));
 }
@@ -524,7 +528,9 @@ void OverlayManager::UpdatePanelSelectionOverlay(int8_t position, int selected, 
         return;
     }
     const bool compact = m_slots[slotIdx].compact;
-    std::wstring text = std::to_wstring(selected) + L" / " + std::to_wstring(total);
+    wchar_t buf[32];
+    swprintf_s(buf, L"%d / %d", selected, total);
+    std::wstring text = buf;
     text += compact ? L" sel" : L"\nselected";
     ov->UpdateText(std::move(text));
 }
