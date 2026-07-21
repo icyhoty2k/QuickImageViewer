@@ -2,17 +2,24 @@
 #include <windows.h>
 
 // =============================================================================
-// ContextMenuHandler.h  —  Single source of truth for the MAIN-WINDOW
-// right-click context menu.
+// ContextMenuHandler.h  —  THE menu.
 //
-// Every menu item funnels through InputManager::ExecuteCommand(), so a menu
-// pick does *exactly* what the matching keyboard shortcut does — no duplicated
-// side-effect logic lives here. To add / change an item, edit ONLY the table
-// inside ContextMenuHandler.cpp (label + Command).
+// One definition, two entry points: the main-window right-click (MouseHandler)
+// and the tray-icon right-click (TrayHandler) both call Show(), so the two can
+// never drift apart.
 //
-// Gating (who decides WHEN to show it) lives in MouseHandler: the menu is
-// raised on a *pure* right-button click (no window drag, no RMB+wheel/LMB
-// combo) and only when app.contextMenuEnabled is set (tray toggle).
+// Ids live in two disjoint ranges (see the ID SPACE note in the .cpp):
+//   • viewer actions  → mapped to a Command and run through
+//                       InputManager::ExecuteCommand, so a menu pick behaves
+//                       exactly like the matching keyboard shortcut.
+//   • settings / app  → forwarded to TrayHandler::DispatchCommand, which owns
+//                       the prompts, export/import, restore and backup logic.
+//
+// To add a viewer item: add an id to the MenuId enum, a row in CommandForId,
+// and one AppendMenuW line in BuildMenu. Nothing else.
+//
+// Gating (WHEN the viewer shows it) lives in MouseHandler: only on a *pure*
+// right-button click, and only when app.contextMenuEnabled is set.
 // =============================================================================
 
 namespace Input {
@@ -20,5 +27,10 @@ namespace Input {
     public:
         // x / y are SCREEN coordinates (TrackPopupMenu space).
         static void Show(HWND hWnd, int x, int y);
+
+        // Exposed for reuse/testing: build the shared menu, or route one id to
+        // its owner. Show() is just these two around a TrackPopupMenu call.
+        static HMENU BuildMenu(HWND hWnd);
+        static void  Dispatch(HWND hWnd, int id);
     };
 }
