@@ -73,4 +73,8 @@ AppendResult AppendFolder(const std::wstring &listPath, const std::wstring &fold
 // different instance than this process.
 std::vector<std::wstring> LoadListAt(const std::wstring &listPath);
 
+// Creates an empty list file if it is not there yet. Returns true if the file
+// exists afterwards.
+bool EnsureListAt(const std::wstring &listPath, const wchar_t *what);
+
 } // namespace Dedicated

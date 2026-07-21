@@ -36,6 +36,11 @@ struct InstanceConfig {
     //   images (0,0)=off  (5,0)=every 5th image   (5,15)=random every 5-15
     //   time   (0,0)=off  (60,0)=every 60s        (30,90)=random every 30-90s
     // Setting both runs them independently; either coming due shows a promotion.
+    // How long a promotion stays on screen. Independent of the slide interval:
+    // a promotion is a message, not a picture, and usually wants its own dwell
+    // time. 0 = use the slide interval.
+    int promoShowSeconds = 0;
+
     int promoOrder      = Constants::Dedicated::PromoOrder::WEIGHTED;
     int promoImagesFrom = Constants::Dedicated::PROMO_IMAGES_EVERY_DEFAULT;
     int promoImagesTo   = Constants::Dedicated::PROMO_IMAGES_UPTO_DEFAULT;

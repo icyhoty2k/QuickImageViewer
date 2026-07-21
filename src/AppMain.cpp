@@ -185,13 +185,24 @@ LRESULT CALLBACK MainAppWndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM l
                     {
                         auto &ded = Dedicated::State();
                         if (ded.showingPromotion) {
-                            // A promotion is on screen; this tick returns to the
-                            // images. Its slot already counted, so fall through
-                            // to the normal advance below.
+                            // Promotion's dwell has elapsed. Restore the normal
+                            // slide interval and fall through to the advance —
+                            // the promotion occupied this slot, so the images
+                            // resume exactly where they were.
                             ded.showingPromotion = false;
+                            SetTimer(hWnd, Constants::Slideshow::TIMER_ID,
+                                     app.slideshow.intervalMs, nullptr);
                         } else if (ded.active && ded.promotions.ShouldShowNow()) {
-                            if (Dedicated::ShowNextPromotion(hWnd))
+                            if (Dedicated::ShowNextPromotion(hWnd)) {
+                                // A promotion holds the screen for its OWN time,
+                                // not the slide interval — it is a message, not
+                                // a picture. 0 means "same as a slide".
+                                const int secs = ded.config.promoShowSeconds;
+                                const int ms = (secs > 0) ? secs * 1000
+                                                          : app.slideshow.intervalMs;
+                                SetTimer(hWnd, Constants::Slideshow::TIMER_ID, ms, nullptr);
                                 return 0; // promotion shown — do not advance
+                            }
                         }
                     }
 
@@ -390,6 +401,16 @@ LRESULT CALLBACK MainAppWndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM l
                 uiManager.getCacheWindow().UpdateCacheView();
                 return 0;
             }
+            // A promotion is on screen and is NOT a playlist entry. Activating
+            // the current playlist image here would rip it away the moment any
+            // decode lands — which is exactly what made promotions flash and
+            // vanish. Leave the screen alone; the slideshow timer restores the
+            // images when the promotion's time is up.
+            if (Dedicated::State().showingPromotion) {
+                uiManager.getCacheWindow().UpdateCacheView();
+                return 0;
+            }
+
             // The background thread has finished decoding and caching the bitmap.
             // Now, on the UI thread, we probe the cache to make it the active bitmap.
             if (app.renderer && !app.playlist.empty()) {
