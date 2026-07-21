@@ -38,6 +38,9 @@ extern void UpdateOverlaysForCurrentImage(HWND hWnd);
 #include "MouseHandler.h"
 #include "Input/Command.h"
 #include "Input/TrayHandler.h"
+#include "Dedicated/DedicatedInstance.h" // AppIconId — dedicated icon everywhere
+#include "Dedicated/DedicatedSettings.h" // DetectStartupMode — ini vs registry
+#include "Dedicated/DedicatedLists.h"    // image / promotion folder lists
 #include <windows.h>
 #ifndef MF_RADIOCHECK
 #define MF_RADIOCHECK 0x00000200L
@@ -173,6 +176,25 @@ LRESULT CALLBACK MainAppWndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM l
 
             if (wParam == Constants::Slideshow::TIMER_ID) {
                 if (app.slideshow.running && !app.slideshow.paused && !app.playlist.empty()) {
+                    // ── Dedicated promotions ────────────────────────────────
+                    // The ONLY seam the promotions system has in established
+                    // code. A promotion replaces one slide: it is drawn from a
+                    // separate playlist straight through the renderer's cache,
+                    // so app.playlist and app.currentIndex never move and the
+                    // image sequence resumes exactly where it left off.
+                    {
+                        auto &ded = Dedicated::State();
+                        if (ded.showingPromotion) {
+                            // A promotion is on screen; this tick returns to the
+                            // images. Its slot already counted, so fall through
+                            // to the normal advance below.
+                            ded.showingPromotion = false;
+                        } else if (ded.active && ded.promotions.ShouldShowNow()) {
+                            if (Dedicated::ShowNextPromotion(hWnd))
+                                return 0; // promotion shown — do not advance
+                        }
+                    }
+
                     int size = static_cast<int>(app.playlist.size());
                     if (app.slideshow.shuffle && !app.slideshow.shuffleOrder.empty()) {
                         int next = app.slideshow.shufflePos + 1;
@@ -553,17 +575,44 @@ int WINAPI wWinMain(HINSTANCE hInstance, [[maybe_unused]] HINSTANCE hPrevInstanc
     // Dedicated mode must be known before any registry call so PrefixedName() works.
     if (earlyArgs.dedicated) app.isDedicated = true;
 
+    // Decide where settings live BEFORE the first read. Driven by the
+    // filesystem, not by a flag:
+    //   an .ini beside the exe        → File      (registry never touched)
+    //   exe NAMED *dedicated*, no ini → NeedsSetup(registry never touched;
+    //                                              the F8 panel opens to create it)
+    //   otherwise                     → Registry  (unchanged behaviour)
+    // Deriving the .ini from the exe's own path is what makes collisions
+    // impossible — one folder cannot hold two exes with the same name.
+    // -config points at an explicit .ini. Must land before the first resolve.
+    if (!earlyArgs.configPath.empty())
+        Dedicated::SetSettingsFileOverride(earlyArgs.configPath);
+
+    const Dedicated::StartupMode startupMode = Dedicated::DetectStartupMode();
+    if (Dedicated::IsDedicatedFlag()) {
+        app.isDedicated = true;
+        // Resolve (and create, if missing) the two folder lists this instance
+        // runs from, recording their names in the .ini. Replaces history and
+        // favorites, which a dedicated instance does not keep at all.
+        Dedicated::EnsureListFiles();
+    }
+
     // -RestoreDefaults: delete all persisted settings, confirm, exit.
-    // Run before any registry reads so a corrupted value can never block this path.
+    // Run before any reads so a corrupted value can never block this path.
     if (earlyArgs.restoreDefaults) {
-        RegDeleteTreeW(HKEY_CURRENT_USER, Constants::Registry::ROOT_KEY);
+        // A file-backed instance owns an .ini, not a registry tree — wiping the
+        // shared tree from here would destroy the MAIN app's settings.
+        if (startupMode == Dedicated::StartupMode::Registry)
+            RegDeleteTreeW(HKEY_CURRENT_USER, Constants::Registry::ROOT_KEY);
+        else
+            DeleteFileW(Dedicated::SettingsFilePath().c_str());
         MessageBoxW(nullptr,
             L"All settings have been restored to defaults.\n\nThe application will now exit.",
             L"qIV — Restore Defaults", MB_OK | MB_ICONINFORMATION);
         return 0;
     }
 
-    // Registry is the source of truth for user preferences in all modes.
+    // Source of truth for user preferences: the .ini for a dedicated instance,
+    // the registry otherwise. LoadAllSettings routes itself.
     Persistence::Registry::LoadAllSettings(app);
 
     // Command-line overrides: args beat registry values.
@@ -603,13 +652,17 @@ int WINAPI wWinMain(HINSTANCE hInstance, [[maybe_unused]] HINSTANCE hPrevInstanc
     bool bypassMutex = (GetAsyncKeyState(VK_SHIFT) & 0x8000) != 0;
     if (GetEnvironmentVariableW(L"QIV_NEW_INSTANCE", nullptr, 0) > 0) bypassMutex = true;
 
-    std::wstring mutexName = L"QuickImageViewer_SingleInstanceMutex";
-    if (app.isDedicated) mutexName += L"_dedicated";
+    // Identity comes from the .ini's [Instance]Mutex when set, otherwise from
+    // the exe's file name — so renaming a copy gives it its own slot and any
+    // number of instances can run side by side.
+    std::wstring mutexName = Dedicated::ResolveMutexName();
     mutexName += (bypassMutex ? std::to_wstring(GetTickCount()) : L"");
     HANDLE hMutex = CreateMutexW(NULL, TRUE, mutexName.c_str());
 
     if (GetLastError() == ERROR_ALREADY_EXISTS) {
-        HWND hExistingWnd = FindWindowW(Constants::WINDOW_CLASS_NAME, nullptr);
+        // Search OUR OWN class, so a relaunch wakes the copy it belongs to and
+        // can never hand the file to a different instance.
+        HWND hExistingWnd = FindWindowW(Dedicated::ResolveWindowClassName().c_str(), nullptr);
         if (hExistingWnd) {
             // Allow the background instance to steal focus from this closing instance
             DWORD existingProcId;
@@ -639,13 +692,21 @@ int WINAPI wWinMain(HINSTANCE hInstance, [[maybe_unused]] HINSTANCE hPrevInstanc
     }
 
     // --- Window Creation ---
+    // A dedicated copy registers its OWN class. Cached in AppState because
+    // GetInstanceCount() counts windows of this class — scoping it per instance
+    // is what stops one copy from counting another as a duplicate of itself.
+    app.windowClassName = Dedicated::ResolveWindowClassName();
+
     WNDCLASSW wc{0};
     wc.lpfnWndProc = MainAppWndProc;
     wc.hInstance = hInstance;
-    wc.lpszClassName = Constants::WINDOW_CLASS_NAME;
+    wc.lpszClassName = app.windowClassName.c_str();
     wc.style = CS_DBLCLKS;
     wc.hCursor = LoadCursor(nullptr, IDC_ARROW);
-    wc.hIcon = LoadIcon(hInstance, MAKEINTRESOURCE(app.isDedicated ? IDI_APP_ICON_DEDICATED : IDI_APP_ICON));
+    // One source of truth for the icon — a dedicated instance must look distinct
+    // everywhere (window, taskbar, alt-tab, tray, panels). The small/taskbar
+    // icons are set separately by AddTrayIcon via WM_SETICON.
+    wc.hIcon = LoadIcon(hInstance, MAKEINTRESOURCEW(Dedicated::AppIconId()));
     RegisterClassW(&wc);
 
     HWND hWnd = CreateViewerWindow(hInstance, wc.lpszClassName);
@@ -691,7 +752,51 @@ int WINAPI wWinMain(HINSTANCE hInstance, [[maybe_unused]] HINSTANCE hPrevInstanc
     if (!wicOk) return 0; // WIC unavailable — cannot decode images
 
     // 2. Apply command-line arguments SECOND (already parsed above; args beat registry)
-    ApplyCmdArgs(hWnd, earlyArgs, nCmdShow);
+    //
+    // A dedicated instance folds its .ini config into the SAME CmdArgs struct
+    // rather than applying anything itself — one apply path, so a configured
+    // instance and a command line behave identically. An explicit switch always
+    // wins: the .ini only fills what the command line left unset.
+    CmdArgs runArgs = earlyArgs;
+    if (Dedicated::IsDedicatedFlag()) {
+        Dedicated::LoadConfig(Dedicated::State().config);
+        const Dedicated::InstanceConfig &cfg = Dedicated::State().config;
+
+        // Content folder, in priority order: an explicit -startFolder, then the
+        // configured images folder, then the first entry of imageLists_*.txt.
+        // Something must resolve here or the instance would have nothing to
+        // show — and it must never fall through to the file chooser.
+        if (runArgs.startFolder.empty() && !cfg.imageFolder.empty())
+            runArgs.startFolder = cfg.imageFolder;
+        if (runArgs.startFolder.empty()) {
+            for (const std::wstring &folder : Dedicated::LoadImageFolders()) {
+                // First entry that actually exists — a stale line in the list
+                // should not blank the screen.
+                const DWORD attr = GetFileAttributesW(folder.c_str());
+                if (attr != INVALID_FILE_ATTRIBUTES && (attr & FILE_ATTRIBUTE_DIRECTORY)) {
+                    runArgs.startFolder = folder;
+                    break;
+                }
+            }
+        }
+        if (runArgs.monitorNum < 1 && cfg.monitorNum >= 1)
+            runArgs.monitorNum = cfg.monitorNum;
+        if (runArgs.slideshowIntervalMs <= 0 && cfg.intervalSeconds > 0)
+            runArgs.slideshowIntervalMs = cfg.intervalSeconds * 1000;
+
+        runArgs.fullscreen = runArgs.fullscreen || cfg.fullscreen;
+        runArgs.slideshow  = runArgs.slideshow  || cfg.slideshow;
+        runArgs.repeat     = runArgs.repeat     || cfg.loop;
+        runArgs.hideMouse  = runArgs.hideMouse  || cfg.hideMouse;
+
+        // Build the second playlist before the slideshow can tick.
+        Dedicated::InitPromotions();
+    }
+    ApplyCmdArgs(hWnd, runArgs, nCmdShow);
+
+    // One promotion kept warm, so the first one due appears without a stall.
+    if (Dedicated::IsDedicatedFlag())
+        Dedicated::PreloadUpcomingPromotion(hWnd);
 
     // 3. Registry-based start-in-fullscreen (only if not already in fullscreen via cmd-line)
     if (app.startInFullscreen && !app.isFullscreen)
@@ -700,6 +805,12 @@ int WINAPI wWinMain(HINSTANCE hInstance, [[maybe_unused]] HINSTANCE hPrevInstanc
     if (app.openDirWndOnStart)
         uiManager.getDirWindow().Show();
 
+    // A copy named *dedicated* that has no .ini yet is prepared but unconfigured.
+    // Open the setup panel so the user creates one, rather than leaving a screen
+    // silently running on defaults with nowhere to save its settings.
+    if (startupMode == Dedicated::StartupMode::NeedsSetup)
+        uiManager.getDedicatedWindow().Show();
+
     MSG msg{};
     while (GetMessage(&msg, nullptr, 0, 0)) {
         TranslateMessage(&msg);
@@ -707,6 +818,15 @@ int WINAPI wWinMain(HINSTANCE hInstance, [[maybe_unused]] HINSTANCE hPrevInstanc
     }
 
     // --- CRITICAL CLEANUP ---
+    // Remember the image on screen so the next launch resumes here instead of
+    // prompting. Written BEFORE the flush below so it makes it to disk.
+    // Skipped for a dedicated instance: it always starts from its configured
+    // folder, so a resume position would only be noise in its .ini.
+    if (!Dedicated::IsDedicatedFlag() && app.currentIndex >= 0 &&
+        app.currentIndex < static_cast<int>(app.playlist.size()))
+        Persistence::Registry::SaveStringSetting(Constants::Registry::LAST_IMAGE,
+                                                 app.playlist[app.currentIndex]);
+
     g_writeQueue.Flush(); // drain all pending registry + file writes before teardown
     app.renderer.reset();
 
@@ -720,7 +840,7 @@ int WINAPI wWinMain(HINSTANCE hInstance, [[maybe_unused]] HINSTANCE hPrevInstanc
         g_pDropTarget = nullptr;
     }
 
-    UnregisterClassW(Constants::WINDOW_CLASS_NAME, hInstance);
+    UnregisterClassW(app.windowClassName.c_str(), hInstance);
 
     CoUninitialize();
     OleUninitialize();

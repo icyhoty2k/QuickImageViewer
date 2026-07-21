@@ -1,4 +1,5 @@
 #include "FloatingPanelWnd.h"
+#include "Dedicated/DedicatedInstance.h" // AppIconId — one icon source for the process
 #include "../../Platform/Constants.h"
 #include "../../AppState.h"
 #include <dwmapi.h>
@@ -16,6 +17,9 @@ namespace UI {
         wc.lpfnWndProc = IPanelWindow::WindowRouter;
         wc.hInstance = hInstance;
         wc.hCursor = LoadCursor(nullptr, IDC_ARROW);
+        // Panels carry the same icon as the app, so a dedicated instance stays
+        // visually distinct all the way down to its floating windows.
+        wc.hIcon = LoadIcon(hInstance, MAKEINTRESOURCEW(Dedicated::AppIconId()));
         wc.lpszClassName = className;
         RegisterClassW(&wc); // silently fails if already registered — that is fine
 

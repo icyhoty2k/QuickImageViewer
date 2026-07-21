@@ -15,6 +15,7 @@
 #include "../Overlays/OverlayManager.h"
 #include "../WicDecoder.h"
 #include "../UI/UIManager.h"
+#include "../Dedicated/DedicatedInstance.h" // AppIconId / IsDedicatedProcess
 #include <shlobj_core.h>
 #include <shobjidl.h> // IDesktopWallpaper / CLSID_DesktopWallpaper
 
@@ -237,15 +238,22 @@ void AppCommands::AddTrayIcon(HWND hWnd) {
     nid.uFlags = NIF_ICON | NIF_MESSAGE | NIF_TIP;
     nid.uCallbackMessage = WM_TRAYICON;
 
-    const bool useDedicatedIcon = app.isDedicated || app.slideshow.running;
-    UINT iconId = useDedicatedIcon ? IDI_APP_ICON_DEDICATED : IDI_APP_ICON;
+    // A dedicated instance always shows the dedicated icon; the main app borrows
+    // it while a slideshow runs so a presenting window is recognisable too.
+    const UINT iconId = (Dedicated::IsDedicatedProcess() || app.slideshow.running)
+                            ? IDI_APP_ICON_DEDICATED
+                            : IDI_APP_ICON;
     nid.hIcon = LoadIcon(GetModuleHandle(nullptr), MAKEINTRESOURCE(iconId));
-    const wchar_t *tip = app.slideshow.running
-                             ? L"QuickImageViewer [Slideshow]"
-                             : app.isDedicated
-                                   ? L"QuickImageViewer [Dedicated]"
-                                   : L"QuickImageViewer";
-    wcscpy_s(nid.szTip, tip);
+
+    // Name the instance in the tooltip — with several dedicated copies in the
+    // tray, identical icons are otherwise impossible to tell apart.
+    std::wstring tip = L"QuickImageViewer";
+    if (Dedicated::IsDedicatedProcess()) {
+        const std::wstring &n = Dedicated::State().config.name;
+        tip += n.empty() ? L" [Dedicated]" : (L" [" + n + L"]");
+    }
+    if (app.slideshow.running) tip += L" [Slideshow]";
+    wcsncpy_s(nid.szTip, tip.c_str(), _TRUNCATE);
 
 
     if (!Shell_NotifyIconW(NIM_MODIFY, &nid)) {
@@ -493,6 +501,13 @@ void AppCommands::stopSlideshow(HWND hWnd) {
     if (app.slideshow.cursorHidden) {
         ShowCursor(TRUE);
         app.slideshow.cursorHidden = false;
+    }
+    // Also undo a startup -hideMouse. Stopping the slideshow is the moment
+    // someone has walked up to reconfigure the screen, so the pointer must come
+    // back — otherwise a dedicated instance is unusable without a restart.
+    if (app.cursorHiddenAtStartup) {
+        ShowCursor(TRUE);
+        app.cursorHiddenAtStartup = false;
     }
     // Restore overlay panels to their pre-slideshow state
     app.showOverlayInfoText = app.slideshow.savedOverlayVisible;

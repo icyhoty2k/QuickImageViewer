@@ -126,6 +126,96 @@ namespace Constants {
     // Desktop wallpaper fit styles — the 6 native Windows options. These indices
     // map 1:1 onto DESKTOP_WALLPAPER_POSITION inside AppCommands.cpp, and index
     // Constants::Messages::WALLPAPER_NAMES for the labels.
+    // =========================================================================
+    // DEDICATED INSTANCES  (src/Dedicated/*)
+    // A dedicated instance is a named, isolated copy of the app — its own mutex,
+    // window class, registry namespace and history file — typically parked
+    // fullscreen on one monitor running a slideshow. It may additionally pull
+    // from a SECOND playlist of "promotions" that is never merged into the
+    // normal image playlist.
+    // =========================================================================
+    namespace Dedicated {
+        // Promotion weighting. A promo's weight is its relative chance of being
+        // drawn; 65535 is ~65535× more likely than 1.
+        constexpr int PROMO_WEIGHT_MIN     = 1;
+        constexpr int PROMO_WEIGHT_MAX     = 65535;
+        constexpr int PROMO_WEIGHT_DEFAULT = 1;
+
+        // Weight is read from a "#<n>" suffix on the file stem, e.g.
+        // "summer-sale#500.jpg". Mirrors the existing -monitorNum#N convention.
+        constexpr wchar_t PROMO_WEIGHT_MARKER = L'#';
+
+        // WHEN a promotion appears. TWO triggers exist — an image counter and a
+        // wall-clock timer — each configured as a (from, to) pair:
+        //
+        //   (0, *)    OFF. A missing/zero `from` always disables the trigger,
+        //             whatever `to` says. This is deliberate: a half-filled pair
+        //             like (0, 90) is a config mistake, and collapsing it to OFF
+        //             is safer than inventing a 0..90 range that fires nonstop.
+        //   (5, 0)    STRICT — exactly every 5. A zero `to` means "no upper
+        //             bound given", so the cadence is fixed at `from`.
+        //   (5, 15)   RANDOM — re-rolled between 5 and 15 after every promotion.
+        //   (15, 5)   tolerated: `to` below `from` falls back to STRICT `from`.
+        //
+        // The two triggers run INDEPENDENTLY: each keeps its own countdown, and
+        // whichever comes due fires a promotion and re-arms ONLY itself. Both
+        // off = promotions disabled, so there is no separate on/off flag.
+        // IDENTITY COMES FROM THE EXE FILE, which is what makes collisions
+        // impossible: the settings file is the exe's own path with the extension
+        // swapped for .ini —
+        //     D:\Screens\qIV_dedicated_Lobby.exe
+        //     D:\Screens\qIV_dedicated_Lobby.ini
+        // Two copies cannot share one name in one folder, so two instances can
+        // never resolve to the same settings file, mutex or window class.
+        constexpr const wchar_t *SETTINGS_FILE_EXT = L".ini";
+
+        // A dedicated instance has NO history and NO favorites — it is an
+        // appliance showing fixed content, not a browser. Instead it keeps two
+        // plain folder lists beside the exe, named after it:
+        //     imageLists_<exeName>.txt      folders holding the images
+        //     promotionList_<exeName>.txt   folders holding the promotions
+        // The actual names are recorded in the .ini so they can be renamed or
+        // shared between instances; missing files are generated on startup.
+        constexpr const wchar_t *IMAGE_LIST_PREFIX = L"imageLists_";
+        constexpr const wchar_t *PROMO_LIST_PREFIX = L"promotionList_";
+        constexpr const wchar_t *LIST_FILE_EXT     = L".txt";
+
+        // An exe whose FILE NAME contains this substring triggers dedicated
+        // mode: with no .ini beside it, a default one is generated rather than
+        // falling back to the registry.
+        //
+        // MUST BE LOWER CASE — the comparison lower-cases the exe name and then
+        // searches for this verbatim, so matching is case-insensitive:
+        //   qIV_Dedicated_Lobby.exe   ✓
+        //   MyDEDICATEDscreen.exe     ✓
+        constexpr const wchar_t *EXE_DEDICATED_MARKER = L"dedicated";
+
+        constexpr int PROMO_DISABLED = 0;
+
+        constexpr int PROMO_IMAGES_MAX  = 65535;
+        constexpr int PROMO_SECONDS_MAX = 86400; // one day
+
+        // Default: paced by images (every 3-10), timer off.
+        constexpr int PROMO_IMAGES_EVERY_DEFAULT   = 3;
+        constexpr int PROMO_IMAGES_UPTO_DEFAULT    = 10;
+        constexpr int PROMO_SECONDS_EVERY_DEFAULT  = PROMO_DISABLED;
+        constexpr int PROMO_SECONDS_UPTO_DEFAULT   = PROMO_DISABLED;
+
+        // How the next promotion is chosen from the promo playlist.
+        namespace PromoOrder {
+            constexpr int SEQUENTIAL = 0; // folder order, one after another
+            constexpr int WEIGHTED   = 1; // weighted random by priority
+            constexpr int COUNT      = 2;
+        }
+    }
+
+    // Command-line-arguments file + generated shortcut (context menu › CmdArgs).
+    namespace CmdArgsFile {
+        constexpr const wchar_t *EXPORT_NAME   = L"qIVcmdArgs.txt";
+        constexpr const wchar_t *SHORTCUT_NAME = L"QuickImageViewer.lnk";
+        constexpr const wchar_t *FILE_HEADER   = L"# QuickImageViewer command-line arguments";
+    }
+
     namespace Wallpaper {
         constexpr int FILL    = 0;
         constexpr int FIT     = 1;
@@ -365,6 +455,10 @@ namespace Constants {
         constexpr const wchar_t *INPUTBOX_CARET_STYLE    = L"qivCaretStyle";
         constexpr const wchar_t *ZOOM_CLICK_MULT         = L"qivZoomClick";
         constexpr const wchar_t *CONTEXT_MENU_ENABLED    = L"qivContextMenu";
+        // Last image on screen at exit — reopened on the next launch so the app
+        // resumes where it was left instead of prompting. Routes to the registry
+        // or, when the app is .ini-backed, into that file like every other value.
+        constexpr const wchar_t *LAST_IMAGE              = L"qivLastImage";
         constexpr const wchar_t *THUMB_COPY_ENABLED      = L"qivThumbCopy";
         constexpr const wchar_t *THUMB_MOVE_ENABLED      = L"qivThumbMove";
         constexpr const wchar_t *THUMB_DELETE_ENABLED    = L"qivThumbDelete";

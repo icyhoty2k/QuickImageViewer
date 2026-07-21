@@ -30,6 +30,14 @@ void OpenDirectory(HWND hWnd, const std::wstring &dirPathStr);
 
 void OpenSpecificImage(HWND hWnd, const std::wstring &filePath);
 
+// Resolves what to show when the app is launched with no file or folder.
+// Tries, in order:
+//   1. the image that was on screen at the last exit
+//   2. the first folder in history that still exists
+//   3. the file chooser, as a last resort
+// So the chooser only ever appears on a genuinely fresh or broken install.
+void OpenStartupTarget(HWND hWnd);
+
 bool is_image_ext(const std::wstring &ext);
 
 // Loads the image at the given playlist index, resets viewport if index changed,

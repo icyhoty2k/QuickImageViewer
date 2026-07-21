@@ -3,6 +3,7 @@
 #include "AppState.h"
 #include "SlideshowTransitions.h"
 #include "Input/AppCommands.h"
+#include "Dedicated/DedicatedSettings.h" // IsDedicatedFlag — never prompt on a screen
 #include "Platform/Constants.h"
 #include "Platform/FileHandler.h"
 #include <numeric>
@@ -16,7 +17,7 @@ extern AppState app;
 // =============================================================================
 
 // "none" | "all" | "list"  →  Constants::Slideshow::TransitionSource, or -1.
-static int ParseTransitionSource(const std::wstring &s) {
+int ParseTransitionSource(const std::wstring &s) {
     namespace TS = Constants::Slideshow::TransitionSource;
     if (_wcsicmp(s.c_str(), L"none") == 0) return TS::NONE;
     if (_wcsicmp(s.c_str(), L"all")  == 0) return TS::ALL;
@@ -25,7 +26,7 @@ static int ParseTransitionSource(const std::wstring &s) {
 }
 
 // "sequential"|"seq" | "random"|"rand"  →  TransitionOrder, or -1.
-static int ParseTransitionOrder(const std::wstring &s) {
+int ParseTransitionOrder(const std::wstring &s) {
     namespace TO = Constants::Slideshow::TransitionOrder;
     if (_wcsicmp(s.c_str(), L"sequential") == 0 || _wcsicmp(s.c_str(), L"seq")  == 0)
         return TO::SEQUENTIAL;
@@ -39,7 +40,7 @@ static int ParseTransitionOrder(const std::wstring &s) {
 // shown beside it in the menu (1-based, alphabetical) so the switch can mirror
 // exactly what the menu displays. Unrecognised tokens are skipped rather than
 // silently collapsing to Cut, which is what ParseTransitionType alone would do.
-static uint32_t ParseTransitionList(const std::wstring &spec) {
+uint32_t ParseTransitionList(const std::wstring &spec) {
     uint32_t mask = 0;
     const int *order = TransitionDisplayOrder();
     size_t pos = 0;
@@ -150,6 +151,12 @@ CmdArgs ParseCmdArgs(int argc, LPWSTR *argv) {
             // -dedicated (separate registry/history/favorites namespace, unique mutex)
         else if (arg == L"-dedicated") args.dedicated = true;
         else if (arg == L"-runOnStartup") args.runOnStartup = true;
+
+            // -config <path>  or  -config=<path>
+        else if (_wcsicmp(arg.c_str(), L"-config") == 0 && i + 1 < argc)
+            args.configPath = argv[++i];
+        else if (_wcsnicmp(arg.c_str(), L"-config=", 8) == 0)
+            args.configPath = arg.substr(8);
 
             // -slideshowTransitions=<a,b,c>  — custom list. Must be tested BEFORE
             // -slideshowTransition= or the shorter prefix would swallow it.
@@ -282,8 +289,12 @@ void ApplyCmdArgs(HWND hWnd, const CmdArgs &args, int nCmdShow) {
         OpenDirectory(hWnd, args.startFolder);
     else if (!args.imageFile.empty())
         OpenSpecificImage(hWnd, args.imageFile);
-    else
-        OpenInitialImage(hWnd);
+    else if (!Dedicated::IsDedicatedFlag())
+        OpenStartupTarget(hWnd); // last image → history → chooser, in that order
+    // A dedicated instance NEVER opens the file chooser. It is an unattended
+    // screen — nobody is there to answer a dialog, and a modal window would sit
+    // on the display forever. With no folder resolved it simply shows its
+    // empty-folder overlay, which is at least diagnosable from across a room.
 
     // 8. Fullscreen (after show + content so renderer has correct dimensions)
     if (args.fullscreen)
@@ -293,7 +304,11 @@ void ApplyCmdArgs(HWND hWnd, const CmdArgs &args, int nCmdShow) {
     if (args.slideshow)
         AppCommands::toggleSlideshow(hWnd);
 
-    // 10. Hide mouse cursor
-    if (args.hideMouse)
+    // 10. Hide mouse cursor. Recorded so stopping the slideshow can undo it —
+    // ShowCursor is a counter, and an unhidden cursor is the only way to
+    // reconfigure a screen that was started with -hideMouse.
+    if (args.hideMouse) {
         ShowCursor(FALSE);
+        app.cursorHiddenAtStartup = true;
+    }
 }

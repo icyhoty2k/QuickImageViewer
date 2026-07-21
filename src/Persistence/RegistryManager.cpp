@@ -6,10 +6,13 @@
 #include "../Platform/Constants.h"
 #include "../Platform/WriteQueue.h"
 #include "../AppState.h"
+#include "../Dedicated/DedicatedSettings.h"
 
 extern AppState app;
 
 namespace Persistence::Registry {
+    // Routes every persisted value to a per-instance INI when this process is a
+    // dedicated instance. See src/Dedicated/DedicatedSettings.h for the why.
     // Returns the value name to use in the registry, prepending the dedicated-mode
     // prefix when this instance was launched with -dedicated.
     static std::wstring PrefixedName(const wchar_t *valueName) {
@@ -53,6 +56,13 @@ namespace Persistence::Registry {
     }
 
     void RegisterAppForOpenWith() {
+        // Keyed on the DEDICATED flag, not on being file-backed. A file-backed
+        // MAIN app is simply portable: its settings live in the .ini, but it is
+        // still the machine's image viewer, so it must own the association —
+        // and that is inherently a registry write, with the CURRENT exe path.
+        // Only an appliance stays out of the registry entirely.
+        if (Dedicated::IsDedicatedFlag()) return;
+
         // Allocate the 32k character buffer cleanly on the heap
         std::wstring exePathStr(32768, L'\0');
         DWORD len = GetModuleFileNameW(nullptr, exePathStr.data(), static_cast<DWORD>(exePathStr.size()));
@@ -98,6 +108,15 @@ namespace Persistence::Registry {
     }
 
     void EnableRunOnStartup(bool isEnabledRunOnStartup) {
+        // Same split as RegisterAppForOpenWith: a file-backed MAIN app still
+        // registers auto-start in the Run key — the flag is read from its .ini,
+        // and the command written below always uses the current exe path, so
+        // moving a portable copy re-points the entry on the next launch.
+        //
+        // A DEDICATED instance never does: it auto-starts from a shortcut in
+        // shell:startup instead (the Generate button in the F8 panel).
+        if (Dedicated::IsDedicatedFlag()) return;
+
         // Dedicated and normal instances each get their own Run key entry so they
         // can coexist without clobbering each other. The dedicated entry name is
         // built from the same prefix that governs all other dedicated-mode names.
@@ -148,11 +167,27 @@ namespace Persistence::Registry {
         RegCloseKey(hKey);
     }
 
+    // =========================================================================
+    // DEDICATED INSTANCES BYPASS THE REGISTRY ENTIRELY.
+    //
+    // Each of the four accessors below checks Dedicated::SettingsUseFile() and
+    // routes to <exe folder>\qivDedicated<Name>.ini instead. Intercepting here —
+    // rather than at the call sites — means every existing SaveSetting/
+    // LoadSetting caller keeps working untouched, and no future one can
+    // accidentally write to the registry from a dedicated copy.
+    // =========================================================================
     void SaveSetting(const wchar_t *valueName, DWORD value) {
+        if (Dedicated::SettingsUseFile()) {
+            Dedicated::WriteDword(valueName, value);
+            return;
+        }
         g_writeQueue.PushDword(PrefixedName(valueName), value);
     }
 
     DWORD LoadSetting(const wchar_t *valueName, DWORD defaultValue) {
+        if (Dedicated::SettingsUseFile())
+            return Dedicated::ReadDword(valueName, defaultValue);
+
         const std::wstring key = PrefixedName(valueName);
         DWORD value = defaultValue;
         DWORD size = sizeof(DWORD);
@@ -162,10 +197,21 @@ namespace Persistence::Registry {
     }
 
     void SaveStringSetting(const wchar_t *valueName, const std::wstring &value) {
+        if (Dedicated::SettingsUseFile()) {
+            Dedicated::WriteString(valueName, value);
+            return;
+        }
         g_writeQueue.PushString(PrefixedName(valueName), value);
     }
 
     void LoadStringSetting(const wchar_t *valueName, wchar_t *buffer, DWORD bufferSize) {
+        if (Dedicated::SettingsUseFile()) {
+            const std::wstring v = Dedicated::ReadString(valueName);
+            if (buffer && bufferSize) {
+                wcsncpy_s(buffer, bufferSize, v.c_str(), _TRUNCATE);
+            }
+            return;
+        }
         const std::wstring key = PrefixedName(valueName);
         DWORD size = bufferSize * sizeof(wchar_t);
         RegGetValueW(Constants::Registry::ROOT_HIVE, Constants::Registry::ROOT_KEY, key.c_str(),
@@ -173,6 +219,9 @@ namespace Persistence::Registry {
     }
 
     std::wstring LoadStringSetting(const wchar_t *valueName) {
+        if (Dedicated::SettingsUseFile())
+            return Dedicated::ReadString(valueName);
+
         const std::wstring key = PrefixedName(valueName);
         DWORD size = 0;
         if (RegGetValueW(Constants::Registry::ROOT_HIVE, Constants::Registry::ROOT_KEY, key.c_str(),
@@ -200,7 +249,11 @@ namespace Persistence::Registry {
                       0, KEY_READ, &hKey);
         // hKey is null on first launch (key doesn't exist yet); readDword returns defaults.
 
+        // Dedicated instances read from their INI instead — see SaveSetting.
+        const bool useFile = Dedicated::SettingsUseFile();
+
         const auto readDword = [&](const wchar_t *name, DWORD def) -> DWORD {
+            if (useFile) return Dedicated::ReadDword(name, def);
             if (!hKey) return def;
             const std::wstring fullName = prefix + name;
             DWORD val = def, size = sizeof(DWORD), type = 0;

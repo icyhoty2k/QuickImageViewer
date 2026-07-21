@@ -195,6 +195,7 @@ Command InputManager::ResolveKeyboardKeys(UINT key, LPARAM lParam) {
         case Shortcuts::SC_APP_RELOAD_CURRENT_DIR: return Command::ReloadCurrentDir;
         case Shortcuts::SC_PANEL_CACHE_TOGGLE: return Command::ToggleCache;
         case Shortcuts::SC_PANEL_DIR_TOGGLE: return Command::ToggleDir;
+        case Shortcuts::SC_PANEL_DEDICATED_TOGGLE: return Command::ToggleDedicatedPanel;
         case Shortcuts::SC_PANEL_HISTORY_TOGGLE:
             if (ctrl) return Command::ToggleHistoryFull;
             return Command::ToggleHistory;

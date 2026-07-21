@@ -11,6 +11,7 @@
 #include "../UI/FloatingPanels/HelpWnd.h"
 #include "../UI/FloatingPanels/StatsWnd.h"
 #include "../UI/ThemedDialog.h"
+#include "../CMDArgs.h"
 #include <algorithm>
 #include <filesystem>
 #include <numeric>
@@ -685,6 +686,38 @@ void InputManager::ExecuteCommand(HWND hWnd, Command cmd) {
 
         case Command::CopyToClipboard:
             AppCommands::CopyImageToClipboard(hWnd);
+            break;
+
+        // ── Dedicated instances ──────────────────────────────────────────────
+        case Command::ToggleDedicatedPanel:
+            uiManager.Toggle(uiManager.getDedicatedWindow());
+            break;
+
+        case Command::ToggleDedicated:
+            // Runtime flag only — it selects the registry/history namespace, so
+            // flipping it mid-session affects subsequent reads/writes and any
+            // cmdArgs generated from here. Existing instances are untouched.
+            app.isDedicated = !app.isDedicated;
+            g_overlayManager.PostCenterMessage(hWnd,
+                std::wstring(L"Dedicated") +
+                (app.isDedicated ? Constants::Messages::STATE_ON_SUFFIX
+                                 : Constants::Messages::STATE_OFF_SUFFIX));
+            break;
+
+        case Command::CmdArgsExport:
+            ExportCmdArgsFile(hWnd);
+            break;
+
+        case Command::CmdArgsImport:
+            ImportCmdArgsFile(hWnd);
+            break;
+
+        case Command::CmdArgsGenerateShortcut:
+            CreateCmdArgsShortcut(hWnd);
+            break;
+
+        case Command::CmdArgsTest:
+            TestCmdArgsFile(hWnd);
             break;
 
         // Wallpaper styles — the enum order mirrors Constants::Wallpaper::FILL..SPAN,
