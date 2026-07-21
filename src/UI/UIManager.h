@@ -13,6 +13,7 @@
 #include "FloatingPanels/JumpToWnd.h"
 #include "FloatingPanels/FindWnd.h"
 #include "FloatingPanels/StatsWnd.h"
+#include "Dedicated/DedicatedWnd.h"
 #include "../Platform/Constants.h"
 
 namespace UI {
@@ -179,6 +180,7 @@ namespace UI {
             void             ToggleJumpToWindow();   // hides FindWnd if visible, then toggles JumpToWnd
             void             ToggleFindWindow();     // hides JumpToWnd if visible, then toggles FindWnd
             StatsWnd        &getStatsWindow();
+            DedicatedWnd    &getDedicatedWindow();
             void             ApplyAlwaysOnTop(bool onTop);
 
             void SpawnDirWndForFolder(const std::wstring &folderPath, HWND hHistoryWnd);
@@ -239,6 +241,7 @@ namespace UI {
             JumpToWnd      jumpToWnd;
             FindWnd        findWnd;
             StatsWnd       statsWnd;
+            DedicatedWnd   dedicatedWnd;
 
             // Fixed pool of 4 pre-allocated SpawnedDirWnd instances — one per layout slot
             // (top, left, right, bottom). Reused across spawns; never deleted at runtime.

@@ -3,6 +3,7 @@
 #include "../../Platform/Constants.h"
 #include "../../Platform/WriteQueue.h"
 #include "../../Persistence/RegistryManager.h"
+#include "../../Dedicated/DedicatedSettings.h" // IsDedicatedFlag — no registry writes
 #include "../../WorkerThread.h"
 #include "../../Renderer/IRenderer.h"
 #include "../../ImageLoadStats.h"
@@ -221,14 +222,23 @@ namespace UI {
     // ─────────────────────────────────────────────────────────────────────────────
 
     void StatsWnd::OpenRegedit(const std::wstring &fullKeyPath) {
-        HKEY hk = nullptr;
-        if (RegCreateKeyExW(HKEY_CURRENT_USER,
-                            L"Software\\Microsoft\\Windows\\CurrentVersion\\Applets\\Regedit",
-                            0, nullptr, 0, KEY_SET_VALUE, nullptr, &hk, nullptr) == ERROR_SUCCESS) {
-            RegSetValueExW(hk, L"LastKey", 0, REG_SZ,
-                           reinterpret_cast<const BYTE *>(fullKeyPath.c_str()),
-                           static_cast<DWORD>((fullKeyPath.size() + 1) * sizeof(wchar_t)));
-            RegCloseKey(hk);
+        // Regedit has no command line for "open at this key" — the only way is
+        // to write its LastKey value and let it restore there on launch.
+        //
+        // A DEDICATED instance must not: it writes nothing to the registry, and
+        // it has no registry settings to inspect anyway (they live in its .ini),
+        // so the jump target would be meaningless. Regedit still opens, just
+        // wherever it was left.
+        if (!Dedicated::IsDedicatedFlag()) {
+            HKEY hk = nullptr;
+            if (RegCreateKeyExW(HKEY_CURRENT_USER,
+                                L"Software\\Microsoft\\Windows\\CurrentVersion\\Applets\\Regedit",
+                                0, nullptr, 0, KEY_SET_VALUE, nullptr, &hk, nullptr) == ERROR_SUCCESS) {
+                RegSetValueExW(hk, L"LastKey", 0, REG_SZ,
+                               reinterpret_cast<const BYTE *>(fullKeyPath.c_str()),
+                               static_cast<DWORD>((fullKeyPath.size() + 1) * sizeof(wchar_t)));
+                RegCloseKey(hk);
+            }
         }
         ShellExecuteW(nullptr, L"open", L"regedit.exe", nullptr, nullptr, SW_SHOW);
     }

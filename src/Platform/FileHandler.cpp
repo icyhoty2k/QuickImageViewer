@@ -1007,6 +1007,39 @@ void ReloadCurrentDirectory(HWND hWnd) {
 }
 
 
+// =============================================================================
+// OpenStartupTarget — what to show when launched with no file or folder.
+//
+// The file chooser used to be the unconditional answer, which meant a modal
+// dialog on every plain launch. It is now the LAST resort: the app resumes
+// where it was left, and only asks when it genuinely has nowhere to go.
+// =============================================================================
+void OpenStartupTarget(HWND hWnd) {
+    std::error_code ec;
+
+    // 1. The image on screen at the last exit.
+    const std::wstring last =
+        Persistence::Registry::LoadStringSetting(Constants::Registry::LAST_IMAGE);
+    if (!last.empty() && fs::is_regular_file(last, ec) && !ec) {
+        OpenSpecificImage(hWnd, last);
+        return;
+    }
+
+    // 2. History, most-recent first. Skips folders that have since been removed
+    //    or unmounted, rather than giving up on the first dead entry.
+    //    Favorites need no separate pass: a favorite is a folder that is also in
+    //    history, so it is already covered here.
+    for (const std::wstring &folder : UI::GetFolderHistory()) {
+        ec.clear();
+        if (folder.empty() || !fs::is_directory(folder, ec) || ec) continue;
+        OpenDirectory(hWnd, folder);
+        return;
+    }
+
+    // 3. Nothing usable — a fresh install, or history is gone/corrupt.
+    OpenInitialImage(hWnd);
+}
+
 void OpenSpecificImage(HWND hWnd, const std::wstring &filePathStr) {
     fs::path filePath(filePathStr);
     if (!fs::exists(filePath) || !fs::is_regular_file(filePath)) return;

@@ -524,6 +524,11 @@ namespace UI {
         Add(Ctrl(SC::SC_APP_HARD_QUIT),
             L"Hard quit — fully removes the process from memory.", sApp);
         Add(Ctrl(SC::SC_APP_NEW_WINDOW), L"Open a new independent QIV window.", sApp);
+        Add(K(SC::SC_PANEL_DEDICATED_TOGGLE),
+            L"Open the Dedicated panel: configure a named instance — its own images and "
+            L"promotions folders, promotion pacing, monitor and slideshow options — then "
+            L"generate a shortcut for it. Drop that shortcut in shell:startup and the "
+            L"screen starts itself.", sApp);
         Add(K(SC::SC_TOGGLE_ALL_PANELS),
             L"Toggle all panels: closes every floating panel and directory strip if any is "
             L"open, otherwise restores exactly the set the last close hid. Main viewer stays.", sApp);

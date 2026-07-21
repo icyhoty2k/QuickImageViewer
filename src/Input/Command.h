@@ -187,6 +187,14 @@ enum class Command {
     // --- Clipboard ---
     CopyToClipboard, // Ctrl+C
 
+    // --- Dedicated instances (src/Dedicated) ---
+    ToggleDedicatedPanel,   // F8 — the Dedicated configuration panel
+    ToggleDedicated,        // -dedicated: separate registry/history namespace
+    CmdArgsExport,          // current settings → a cmdArgs .txt
+    CmdArgsImport,          // read a cmdArgs .txt and apply it
+    CmdArgsGenerateShortcut,// desktop .lnk carrying those switches
+    CmdArgsTest,            // validate a cmdArgs .txt, report in a dialog
+
     // --- Desktop wallpaper (context menu submenu) ---
     // Order must match Constants::Wallpaper::FILL..SPAN.
     SetWallpaperFill,
