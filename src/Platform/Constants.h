@@ -135,6 +135,35 @@ namespace Constants {
     // normal image playlist.
     // =========================================================================
     namespace Dedicated {
+        // ── F8 panel appearance — single place to restyle the whole window ──
+        // Opacity of the Dedicated panel, 0 = invisible .. 255 = opaque.
+        constexpr BYTE PANEL_OPACITY = 244;
+
+        // Value colours, chosen so a setting's STATE is readable at a glance
+        // without reading the text: green/red for on/off, amber for numbers,
+        // blue for paths, violet for multi-choice.
+        namespace PanelColors {
+            constexpr COLORREF ON       = RGB(126, 211, 133); // toggle enabled
+            constexpr COLORREF OFF      = RGB(214, 122, 122); // toggle disabled
+            constexpr COLORREF NUMBER   = RGB(232, 190, 110); // numeric value
+            constexpr COLORREF PATH     = RGB(120, 186, 244); // folder / file path
+            constexpr COLORREF CHOICE   = RGB(196, 160, 240); // one of several options
+            constexpr COLORREF TEXT     = RGB(230, 230, 230); // free text value
+            constexpr COLORREF HEADER   = RGB(120, 190, 250); // section heading
+            constexpr COLORREF STRIPE   = RGB(70, 120, 180);  // heading accent bar
+            constexpr COLORREF BTN_MAIN = RGB(58, 104, 158);  // build actions
+            constexpr COLORREF BTN_ALT  = RGB(70, 92, 74);    // deploy actions
+            constexpr COLORREF WARN     = RGB(222, 148, 96);  // unset / needs attention
+
+            constexpr COLORREF SCROLL_TRACK     = RGB(48, 48, 52);
+            constexpr COLORREF SCROLL_THUMB     = RGB(96, 104, 118);
+            constexpr COLORREF SCROLL_THUMB_HOT = RGB(132, 156, 196);
+        }
+
+        // Scrollbar geometry for the F8 panel (DPI-scaled at draw time).
+        constexpr int PANEL_SCROLLBAR_W  = 12;
+        constexpr int PANEL_SCROLL_MIN_H = 28; // shortest the thumb may get
+
         // Promotion weighting. A promo's weight is its relative chance of being
         // drawn; 65535 is ~65535× more likely than 1.
         constexpr int PROMO_WEIGHT_MIN     = 1;

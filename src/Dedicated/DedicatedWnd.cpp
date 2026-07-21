@@ -1,6 +1,6 @@
 #include "DedicatedWnd.h"
 #include "DedicatedSettings.h"
-#include "DedicatedLists.h"
+#include "DedicatedLists.h" // list paths + AppendFolder
 #include "AppState.h"
 #include "Persistence/RegistryManager.h" // GetExePathW
 #include "Platform/Constants.h"
@@ -17,16 +17,19 @@ namespace UI {
 
 namespace {
     constexpr int PANEL_W  = 720;
-    constexpr int PANEL_H  = 640;
+    constexpr int PANEL_H  = 720; // taller: rows now carry a description line
     constexpr int PAD      = 14;
-    constexpr int ROW_H    = 28;
-    constexpr int HDR_H    = 30;
+    constexpr int ROW_H    = 44; // label + value on line 1, description on line 2
+    constexpr int HDR_H    = 32;
     constexpr int BTN_H    = 34;
     constexpr int BTN_GAP  = 8;
     constexpr int TITLE_H  = 44;
     constexpr int FOOTER_H = 24;
 
-    enum ButtonId { BTN_GENERATE = 1, BTN_ADD_STARTUP, BTN_REMOVE_STARTUP, BTN_TEST };
+    enum ButtonId {
+        BTN_GENERATE_APP = 1, BTN_GENERATE_CONFIG, BTN_ADD_IMAGES, BTN_ADD_PROMOS,
+        BTN_ADD_STARTUP, BTN_REMOVE_STARTUP, BTN_TEST
+    };
 
     // Row ids — the edit dispatch switches on these.
     enum RowId {
@@ -54,6 +57,13 @@ namespace {
         R_CONTEXT_MENU,
         // Misc
         R_KEEP_BG, R_THUMB_FX, R_OPEN_DIR_ON_START, R_THEME,
+        // History (ignored by a dedicated screen, but a portable main-app
+        // config uses the same file)
+        R_RUN_STARTUP, R_HIST_FULL, R_HIST_DIRS, R_HIST_FAVS, R_HIST_SAVE,
+        // Thumbnail strip file operations
+        R_THUMB_COPY, R_THUMB_MOVE, R_THUMB_DELETE, R_THUMB_PASTE,
+        // Custom transition set
+        R_TRANS_LIST,
     };
 
     bool BgIsDark(COLORREF bg) {
@@ -97,6 +107,13 @@ void DedicatedWnd::Init(HINSTANCE hInstance, HWND hParent) {
     const float s = app.dpiScale;
     InitFloating(hInstance, hParent, L"qIVDedicatedWnd", L"Dedicated",
                  static_cast<int>(PANEL_W * s), static_cast<int>(PANEL_H * s));
+    // Panel transparency — tune via Constants::Dedicated::PANEL_OPACITY.
+    if (GetHwnd()) {
+        SetWindowLongPtrW(GetHwnd(), GWL_EXSTYLE,
+                          GetWindowLongPtrW(GetHwnd(), GWL_EXSTYLE) | WS_EX_LAYERED);
+        SetLayeredWindowAttributes(GetHwnd(), 0,
+                                   Constants::Dedicated::PANEL_OPACITY, LWA_ALPHA);
+    }
     m_edit.SetMaxLength(160);
     BuildRows();
 }
@@ -197,10 +214,10 @@ std::wstring DedicatedWnd::StartupLinkPath() const {
 // =============================================================================
 // Actions
 // =============================================================================
-void DedicatedWnd::DoGenerate() {
+void DedicatedWnd::DoGenerateApp() {
     if (m_cfg.name.empty()) {
-        DialogMessage(L"Give the instance a name first — the copy, its .ini and its "
-                      L"shortcut are all named after it.", L"Dedicated");
+        DialogMessage(L"Give the instance a name first — the copy, its config and its "
+                      L"shortcut are all named after it.", L"Generate App");
         return;
     }
     if (m_targetFolder.empty() &&
@@ -209,33 +226,117 @@ void DedicatedWnd::DoGenerate() {
 
     const std::wstring srcExe = Persistence::Registry::GetExePathW();
     const std::wstring dstExe = TargetExePath();
-    const std::wstring dstIni = TargetIniPath();
     if (srcExe.empty() || dstExe.empty()) {
-        DialogMessage(L"Could not resolve the target paths.", L"Generate");
+        DialogMessage(L"Could not resolve the target paths.", L"Generate App");
         return;
     }
 
+    // Refuse to overwrite the exe we are currently running from — Windows locks
+    // it anyway, and the failure would be confusing.
+    if (_wcsicmp(srcExe.c_str(), dstExe.c_str()) == 0) {
+        DialogMessage(L"That is this running copy. Choose a different folder or name.",
+                      L"Generate App");
+        return;
+    }
     if (FileExists(dstExe) &&
-        !DialogConfirm(L"A copy already exists there:\n\n" + dstExe +
-                       L"\n\nOverwrite it?", L"Generate"))
+        !DialogConfirm(L"A copy already exists:\n\n" + dstExe + L"\n\nOverwrite it?",
+                       L"Generate App"))
         return;
 
     if (!CopyFileW(srcExe.c_str(), dstExe.c_str(), FALSE)) {
         DialogMessage(L"Could not copy the executable to:\n\n" + dstExe +
-                      L"\n\nCheck the folder is writable.", L"Generate");
+                      L"\n\nCheck the folder is writable and the copy is not running.",
+                      L"Generate App");
         return;
     }
 
-    // Write the .ini beside the copy. SaveConfig targets THIS process's file, so
-    // the config is written directly to the new location instead.
-    Dedicated::WriteConfigTo(dstIni, m_cfg);
-
-    DialogMessage(L"Dedicated copy created:\n\n" + dstExe + L"\n\nConfig:\n" + dstIni +
-                  L"\n\nUse \"Add Startup\" to have it launch with Windows.",
-                  L"Generate");
+    DialogMessage(L"Dedicated copy created:\n\n" + dstExe +
+                  L"\n\nNext: \"Generate Config\" to write its settings.",
+                  L"Generate App");
     BuildRows();
     Repaint();
 }
+
+void DedicatedWnd::DoGenerateConfig() {
+    if (m_cfg.name.empty()) {
+        DialogMessage(L"Give the instance a name first — the config is named after it.",
+                      L"Generate Config");
+        return;
+    }
+    if (m_targetFolder.empty() &&
+        !PickFolder(m_targetFolder, L"Where does the dedicated copy live?"))
+        return;
+
+    const std::wstring dstIni = TargetIniPath();
+    if (dstIni.empty()) {
+        DialogMessage(L"Could not resolve the config path.", L"Generate Config");
+        return;
+    }
+    if (FileExists(dstIni) &&
+        !DialogConfirm(L"A config already exists:\n\n" + dstIni +
+                       L"\n\nOverwrite it with the settings shown here?",
+                       L"Generate Config"))
+        return;
+
+    Dedicated::WriteConfigTo(dstIni, m_cfg);
+
+    // The lists belong beside the copy, not beside this process.
+    const std::wstring exe = TargetExePath();
+    const std::wstring imgList = Dedicated::ImageListPathFor(exe);
+    const std::wstring proList = Dedicated::PromotionListPathFor(exe);
+
+    DialogMessage(L"Config written:\n\n" + dstIni +
+                  L"\n\nFolder lists:\n" + imgList + L"\n" + proList +
+                  L"\n\nUse \"Add Images\" / \"Add Promotions\" to fill them.",
+                  L"Generate Config");
+    BuildRows();
+    Repaint();
+}
+
+// =============================================================================
+// Folder lists
+// =============================================================================
+void DedicatedWnd::AppendFolderToList(bool promotions) {
+    // Target the copy being authored when there is one; otherwise this instance's
+    // own lists, so the button is useful on a running screen too.
+    std::wstring exe = TargetExePath();
+    if (exe.empty() || !FileExists(exe)) exe = Persistence::Registry::GetExePathW();
+
+    const std::wstring listPath = promotions ? Dedicated::PromotionListPathFor(exe)
+                                             : Dedicated::ImageListPathFor(exe);
+    if (listPath.empty()) {
+        DialogMessage(L"Could not resolve the list file path.", L"Add folder");
+        return;
+    }
+
+    const wchar_t *what = promotions ? L"promotions" : L"images";
+    std::wstring folder;
+    if (!PickFolder(folder, promotions ? L"Add a promotions folder"
+                                       : L"Add an images folder"))
+        return;
+
+    switch (Dedicated::AppendFolder(listPath, folder)) {
+        case Dedicated::AppendResult::Added:
+            DialogMessage(std::wstring(L"Added to the ") + what + L" list:\n\n" + folder +
+                          L"\n\nList file:\n" + listPath, L"Add folder");
+            break;
+        case Dedicated::AppendResult::Duplicate:
+            // Reported rather than skipped silently, so a click always has a
+            // visible result.
+            DialogMessage(L"That folder is already in the " + std::wstring(what) +
+                          L" list — skipped:\n\n" + folder, L"Add folder");
+            break;
+        case Dedicated::AppendResult::Failed:
+            DialogMessage(L"Could not write the list file:\n\n" + listPath,
+                          L"Add folder");
+            break;
+    }
+    BuildRows();
+    Repaint();
+}
+
+void DedicatedWnd::DoAddImages()     { AppendFolderToList(false); }
+void DedicatedWnd::DoAddPromotions() { AppendFolderToList(true); }
 
 void DedicatedWnd::DoAddStartup() {
     const std::wstring exe = TargetExePath();
@@ -358,88 +459,163 @@ void DedicatedWnd::BuildRows() {
     m_rows.clear();
 
     auto hdr = [&](const wchar_t *t) {
-        m_rows.push_back({Kind::Header, t, L"", R_NONE, {}});
+        m_rows.push_back({Kind::Header, t, L"", L"", R_NONE, {}});
     };
-    auto row = [&](Kind k, const wchar_t *label, std::wstring value, int id) {
-        m_rows.push_back({k, label, std::move(value), id, {}});
+    auto row = [&](Kind k, const wchar_t *label, std::wstring value,
+                   const wchar_t *desc, int id) {
+        m_rows.push_back({k, label, std::move(value), desc, id, {}});
     };
 
     hdr(L"INSTANCE");
-    row(Kind::Text,   L"Name",              m_cfg.name.empty() ? L"(required)" : m_cfg.name, R_NAME);
-    row(Kind::Text,   L"Description",       m_cfg.description.empty() ? L"(optional)" : m_cfg.description, R_DESC);
-    row(Kind::Folder, L"Create copy in",    Tail(m_targetFolder), R_DEDICATED_DIR);
+    row(Kind::Text,   L"Name", m_cfg.name.empty() ? L"(required)" : m_cfg.name,
+        L"Identifies this screen. The copy, its config, its lists and its startup shortcut are all named after it.", R_NAME);
+    row(Kind::Text,   L"Description", m_cfg.description.empty() ? L"(optional)" : m_cfg.description,
+        L"Free text shown on the generated shortcut. Useful when several screens look alike.", R_DESC);
+    row(Kind::Folder, L"Create copy in", Tail(m_targetFolder),
+        L"Where Generate App places the copy. Each screen lives in its own folder with its own config.", R_DEDICATED_DIR);
 
     hdr(L"CONTENT");
-    row(Kind::Folder, L"Images folder",     Tail(m_cfg.imageFolder), R_IMAGE_FOLDER);
-    row(Kind::Folder, L"Promotions folder", Tail(m_cfg.promotionFolder), R_PROMO_FOLDER);
+    row(Kind::Folder, L"Images folder", Tail(m_cfg.imageFolder),
+        L"The pictures this screen shows. Used when the image list is empty.", R_IMAGE_FOLDER);
+    row(Kind::Folder, L"Promotions folder", Tail(m_cfg.promotionFolder),
+        L"A SECOND, separate collection shown between the images. Leave empty to disable promotions.", R_PROMO_FOLDER);
 
     hdr(L"PROMOTIONS");
-    row(Kind::Choice, L"Pick",              m_cfg.promoOrder == D::PromoOrder::SEQUENTIAL
-                                                ? L"Sequential" : L"Weighted by priority", R_PROMO_ORDER);
-    row(Kind::Number, L"Every N images",    RangeText(m_cfg.promoImagesFrom, m_cfg.promoImagesTo, L"images"), R_PROMO_IMAGES);
-    row(Kind::Number, L"Every N seconds",   RangeText(m_cfg.promoTimeFrom, m_cfg.promoTimeTo, L"sec"), R_PROMO_SECONDS);
+    row(Kind::Choice, L"Pick", m_cfg.promoOrder == D::PromoOrder::SEQUENTIAL
+                                   ? L"Sequential" : L"Weighted by priority",
+        L"Sequential plays them in folder order. Weighted favours files whose name ends in #N — higher N appears more often.", R_PROMO_ORDER);
+    row(Kind::Number, L"Every N images", RangeText(m_cfg.promoImagesFrom, m_cfg.promoImagesTo, L"images"),
+        L"Gap counted in pictures. 0 = off. A single value is exact; a range is re-rolled each time so it never looks mechanical.", R_PROMO_IMAGES);
+    row(Kind::Number, L"Every N seconds", RangeText(m_cfg.promoTimeFrom, m_cfg.promoTimeTo, L"sec"),
+        L"Gap counted in time. 0 = off. Runs independently of the image counter — either one coming due shows a promotion.", R_PROMO_SECONDS);
 
     hdr(L"PRESENTATION");
-    row(Kind::Number, L"Monitor",           m_cfg.monitorNum >= 1 ? std::to_wstring(m_cfg.monitorNum) : std::wstring(L"Any"), R_MONITOR);
-    row(Kind::Toggle, L"Fullscreen",        OnOff(m_cfg.fullscreen), R_FULLSCREEN);
-    row(Kind::Toggle, L"Start slideshow",   OnOff(m_cfg.slideshow), R_SLIDESHOW);
-    row(Kind::Toggle, L"Loop",              OnOff(m_cfg.loop), R_LOOP);
-    row(Kind::Toggle, L"Shuffle images",    OnOff(app.slideshow.shuffle), R_SHUFFLE);
-    row(Kind::Toggle, L"Hide mouse",        OnOff(m_cfg.hideMouse), R_HIDEMOUSE);
-    row(Kind::Number, L"Slide interval",    m_cfg.intervalSeconds > 0
-                                                ? std::to_wstring(m_cfg.intervalSeconds) + L" sec"
-                                                : std::wstring(L"Use saved"), R_INTERVAL);
+    row(Kind::Number, L"Monitor", m_cfg.monitorNum >= 1 ? std::to_wstring(m_cfg.monitorNum) : std::wstring(L"Any"),
+        L"Which display to open on, counted from 1. Any = wherever Windows puts it.", R_MONITOR);
+    row(Kind::Toggle, L"Fullscreen", OnOff(m_cfg.fullscreen),
+        L"Fill the chosen monitor with no window frame.", R_FULLSCREEN);
+    row(Kind::Toggle, L"Start slideshow", OnOff(m_cfg.slideshow),
+        L"Begin playing as soon as the screen launches, with no interaction.", R_SLIDESHOW);
+    row(Kind::Toggle, L"Loop", OnOff(m_cfg.loop),
+        L"Return to the first picture after the last, so playback never ends.", R_LOOP);
+    row(Kind::Toggle, L"Shuffle images", OnOff(m_cfg.shuffle),
+        L"Play pictures in random order instead of sorted order.", R_SHUFFLE);
+    row(Kind::Toggle, L"Hide mouse", OnOff(m_cfg.hideMouse),
+        L"Hide the pointer at launch. It returns when playback is stopped, so the screen stays configurable.", R_HIDEMOUSE);
+    row(Kind::Number, L"Slide interval", m_cfg.intervalSeconds > 0
+                                             ? std::to_wstring(m_cfg.intervalSeconds) + L" sec"
+                                             : std::wstring(L"Use saved"),
+        L"Seconds each picture stays on screen. 0 keeps whatever the app already had.", R_INTERVAL);
 
     hdr(L"TRANSITIONS");
-    row(Kind::Choice, L"Transition",        Constants::Messages::TRANSITION_NAMES[
-                                                static_cast<int>(app.slideshow.transition.type)], R_TRANS_TYPE);
-    row(Kind::Choice, L"Source",            Constants::Messages::TRANSITION_SOURCE_NAMES[
-                                                app.slideshow.transition.source], R_TRANS_SOURCE);
-    row(Kind::Choice, L"Order",             Constants::Messages::TRANSITION_ORDER_NAMES[
-                                                app.slideshow.transition.order], R_TRANS_ORDER);
+    row(Kind::Choice, L"Transition", Constants::Messages::TRANSITION_NAMES[m_cfg.transitionType],
+        L"The effect between pictures when the source below is None.", R_TRANS_TYPE);
+    row(Kind::Choice, L"Source", Constants::Messages::TRANSITION_SOURCE_NAMES[m_cfg.transitionSource],
+        L"Which effects are in play: only the one chosen, all of them, or the custom ticked list.", R_TRANS_SOURCE);
+    row(Kind::Choice, L"Order", Constants::Messages::TRANSITION_ORDER_NAMES[m_cfg.transitionOrder],
+        L"How the next effect is drawn from that set — in listed order, or at random.", R_TRANS_ORDER);
+    {
+        int picked = 0;
+        for (int i = 0; i < SS::TRANSITION_COUNT; ++i)
+            if (m_cfg.transitionList & (1u << i)) ++picked;
+        row(Kind::Number, L"Custom set", std::to_wstring(picked) + L" of " +
+                                         std::to_wstring(SS::TRANSITION_COUNT),
+            L"Which effects the custom list holds. Only used when Source is List. Stored as a bit per effect.", R_TRANS_LIST);
+    }
 
     hdr(L"VIEW & WINDOW");
-    row(Kind::Number, L"View mode",         std::to_wstring(static_cast<int>(app.viewMode)), R_VIEWMODE);
-    row(Kind::Number, L"Window width",      std::to_wstring(app.baseWidth), R_BASE_W);
-    row(Kind::Number, L"Window height",     std::to_wstring(app.baseHeight), R_BASE_H);
-    row(Kind::Toggle, L"Start fullscreen",  OnOff(app.startInFullscreen), R_START_FULLSCREEN);
-    row(Kind::Toggle, L"Always on top",     OnOff(app.isAlwaysOnTop), R_ALWAYS_TOP);
+    row(Kind::Number, L"View mode", std::to_wstring(m_cfg.viewMode),
+        L"How a picture is fitted: 1 fit, 2 width, 3 height, 4 stretch, 5 original size.", R_VIEWMODE);
+    row(Kind::Number, L"Window width", std::to_wstring(m_cfg.baseWidth),
+        L"Default window width in pixels, used when not fullscreen.", R_BASE_W);
+    row(Kind::Number, L"Window height", std::to_wstring(m_cfg.baseHeight),
+        L"Default window height in pixels, used when not fullscreen.", R_BASE_H);
+    row(Kind::Toggle, L"Start fullscreen", OnOff(m_cfg.startFullscreen),
+        L"Open fullscreen every launch, independent of the presentation setting above.", R_START_FULLSCREEN);
+    row(Kind::Toggle, L"Always on top", OnOff(m_cfg.alwaysOnTop),
+        L"Keep the window above all others so nothing can cover the display.", R_ALWAYS_TOP);
 
     hdr(L"OVERLAYS");
-    row(Kind::Toggle, L"Info overlays",     OnOff(app.showOverlayInfoText), R_OVERLAY_VISIBLE);
-    row(Kind::Toggle, L"Overlay background", OnOff(app.overlayShowBackground), R_OVERLAY_BG);
-    row(Kind::Number, L"Message duration",  std::to_wstring(app.msgCenterDisplayMs) + L" ms", R_MSG_MS);
+    row(Kind::Toggle, L"Info overlays", OnOff(m_cfg.overlaysVisible),
+        L"Show the corner information panels over the picture.", R_OVERLAY_VISIBLE);
+    row(Kind::Toggle, L"Overlay background", OnOff(m_cfg.overlayBackground),
+        L"Draw a backing behind overlay text so it stays readable on bright pictures.", R_OVERLAY_BG);
+    row(Kind::Number, L"Message duration", std::to_wstring(m_cfg.msgDurationMs) + L" ms",
+        L"How long centre messages stay on screen before fading.", R_MSG_MS);
 
     hdr(L"SORTING");
-    row(Kind::Number, L"Sort order",        std::to_wstring(app.fileHandlerDefaultSortOrder), R_SORT_ORDER);
-    row(Kind::Toggle, L"Reverse order",     OnOff(app.fileHandlerIsReverseSortOrder), R_SORT_REVERSE);
+    row(Kind::Number, L"Sort order", std::to_wstring(m_cfg.sortOrder),
+        L"Playback order: 0 name, 1 date, 2 size, 3 type, 4 physical disk order.", R_SORT_ORDER);
+    row(Kind::Toggle, L"Reverse order", OnOff(m_cfg.sortReverse),
+        L"Play the sort order backwards.", R_SORT_REVERSE);
 
     hdr(L"PERFORMANCE");
-    row(Kind::Number, L"VRAM cache",        std::to_wstring(app.vramCacheCount), R_VRAM);
-    row(Kind::Number, L"Preload lookaside", std::to_wstring(app.preloadLookaside), R_LOOKASIDE);
-    row(Kind::Number, L"Thumb cache MB",    std::to_wstring(app.dirThumbCacheMB), R_THUMB_CACHE);
+    row(Kind::Number, L"VRAM cache", std::to_wstring(m_cfg.vramCache),
+        L"Decoded pictures kept in graphics memory. Higher is smoother but uses more VRAM.", R_VRAM);
+    row(Kind::Number, L"Preload lookaside", std::to_wstring(m_cfg.preloadLookaside),
+        L"How many pictures ahead and behind are decoded in advance.", R_LOOKASIDE);
+    row(Kind::Number, L"Thumb cache MB", std::to_wstring(m_cfg.thumbCacheMB),
+        L"Disk budget for thumbnails, in megabytes.", R_THUMB_CACHE);
 
     hdr(L"INPUT");
-    row(Kind::Toggle, L"Swap mouse buttons", OnOff(app.swapMouseButtons), R_SWAP_MOUSE);
-    row(Kind::Toggle, L"Invert wheel",       OnOff(app.invertWheelDirection), R_WHEEL_INV);
-    row(Kind::Toggle, L"Invert h-wheel",     OnOff(app.invertWheelDirectionH), R_WHEEL_INV_H);
-    row(Kind::Number, L"Left-click zoom",    std::to_wstring(static_cast<int>(app.zoomClickMultiplier + 0.5f)) + L"x", R_ZOOM_CLICK);
-    row(Kind::Choice, L"Caret style",        app.caretStyle == 0 ? L"Bar" : L"Underscore", R_CARET);
-    row(Kind::Toggle, L"Ctrl+C copy",        OnOff(app.ctrlCEnabled), R_CTRL_C);
-    row(Kind::Toggle, L"Right-click menu",   OnOff(app.contextMenuEnabled), R_CONTEXT_MENU);
+    row(Kind::Toggle, L"Swap mouse buttons", OnOff(m_cfg.swapMouse),
+        L"Exchange what the left and right buttons do.", R_SWAP_MOUSE);
+    row(Kind::Toggle, L"Invert wheel", OnOff(m_cfg.invertWheel),
+        L"Reverse the direction the wheel moves through pictures.", R_WHEEL_INV);
+    row(Kind::Toggle, L"Invert h-wheel", OnOff(m_cfg.invertWheelH),
+        L"Reverse the direction of horizontal wheel tilting.", R_WHEEL_INV_H);
+    row(Kind::Number, L"Left-click zoom", std::to_wstring(m_cfg.zoomClick) + L"x",
+        L"Magnification while the left button is held. 1 disables click-zoom.", R_ZOOM_CLICK);
+    row(Kind::Choice, L"Caret style", m_cfg.caretStyle == 0 ? L"Bar" : L"Underscore",
+        L"Shape of the text cursor in search and filter boxes.", R_CARET);
+    row(Kind::Toggle, L"Ctrl+C copy", OnOff(m_cfg.ctrlCEnabled),
+        L"Allow copying the current picture to the clipboard.", R_CTRL_C);
+    row(Kind::Toggle, L"Right-click menu", OnOff(m_cfg.contextMenu),
+        L"Show the context menu on a right-click in the main window.", R_CONTEXT_MENU);
 
     hdr(L"MISC");
-    row(Kind::Toggle, L"Keep in background", OnOff(app.isKeepInBackground), R_KEEP_BG);
-    row(Kind::Toggle, L"Thumbnail effects",  OnOff(app.thumbnailEffectsEnabled), R_THUMB_FX);
-    row(Kind::Toggle, L"Open strip on start", OnOff(app.openDirWndOnStart), R_OPEN_DIR_ON_START);
-    row(Kind::Number, L"Theme brightness",   std::to_wstring(static_cast<int>(app.themeFactor * 100)) + L"%", R_THEME);
+    row(Kind::Toggle, L"Keep in background", OnOff(m_cfg.keepInBackground),
+        L"Closing hides to the tray instead of quitting, so the next open is instant.", R_KEEP_BG);
+    row(Kind::Toggle, L"Thumbnail effects", OnOff(m_cfg.thumbnailEffects),
+        L"Rounded corners, glow and hover scaling in the thumbnail strips.", R_THUMB_FX);
+    row(Kind::Toggle, L"Open strip on start", OnOff(m_cfg.openDirOnStart),
+        L"Show the folder thumbnail strip automatically at launch.", R_OPEN_DIR_ON_START);
+    row(Kind::Number, L"Theme brightness", std::to_wstring(m_cfg.themePercent) + L"%",
+        L"Overall panel brightness, 0 darkest to 100 lightest.", R_THEME);
+    row(Kind::Toggle, L"Run on startup", OnOff(m_cfg.runOnStartup),
+        L"Register the app to launch with Windows. A dedicated screen ignores this and uses its startup shortcut instead.", R_RUN_STARTUP);
 
-    // Buttons — Remove Startup only lights up when there is one to remove.
+    hdr(L"THUMBNAIL OPERATIONS");
+    row(Kind::Toggle, L"Copy", OnOff(m_cfg.thumbCopy),
+        L"Allow copying files from the thumbnail strip.", R_THUMB_COPY);
+    row(Kind::Toggle, L"Cut / Move", OnOff(m_cfg.thumbMove),
+        L"Allow moving files out of the thumbnail strip.", R_THUMB_MOVE);
+    row(Kind::Toggle, L"Delete", OnOff(m_cfg.thumbDelete),
+        L"Allow sending files to the Recycle Bin from the strip.", R_THUMB_DELETE);
+    row(Kind::Toggle, L"Paste", OnOff(m_cfg.thumbPaste),
+        L"Allow pasting files into the strip's folder.", R_THUMB_PASTE);
+
+    hdr(L"HISTORY");
+    row(Kind::Toggle, L"Open full list", OnOff(m_cfg.historyFull),
+        L"Tab opens the complete history instead of the capped view. A dedicated screen keeps no history at all.", R_HIST_FULL);
+    row(Kind::Number, L"Max folders shown", std::to_wstring(m_cfg.historyMaxDirs),
+        L"How many recent folders the history panel lists.", R_HIST_DIRS);
+    row(Kind::Number, L"Max favourites shown", std::to_wstring(m_cfg.historyMaxFavs),
+        L"How many favourites the history panel lists.", R_HIST_FAVS);
+    row(Kind::Number, L"Folders remembered", std::to_wstring(m_cfg.historyMaxSave),
+        L"How many folders are kept on disk between sessions.", R_HIST_SAVE);
+
+    // Buttons, two rows: building the instance on top, deploying it below.
+    // Remove Startup only lights up when there is a shortcut to remove.
     m_buttons.clear();
-    m_buttons.push_back({L"Generate",       BTN_GENERATE, {}, true});
-    m_buttons.push_back({L"Add Startup",    BTN_ADD_STARTUP, {}, true});
-    m_buttons.push_back({L"Remove Startup", BTN_REMOVE_STARTUP, {}, FileExists(StartupLinkPath())});
-    m_buttons.push_back({L"Test",           BTN_TEST, {}, true});
+    m_buttons.push_back({L"Generate App",    BTN_GENERATE_APP,    {}, true, 0});
+    m_buttons.push_back({L"Generate Config", BTN_GENERATE_CONFIG, {}, true, 0});
+    m_buttons.push_back({L"Add Images",      BTN_ADD_IMAGES,      {}, true, 0});
+    m_buttons.push_back({L"Add Promotions",  BTN_ADD_PROMOS,      {}, true, 0});
+    m_buttons.push_back({L"Add Startup",     BTN_ADD_STARTUP,     {}, true, 1});
+    m_buttons.push_back({L"Remove Startup",  BTN_REMOVE_STARTUP,  {},
+                         FileExists(StartupLinkPath()), 1});
+    m_buttons.push_back({L"Test Config",     BTN_TEST,            {}, true, 1});
 
     if (m_selected < 0) m_selected = 0;
     if (m_selected >= static_cast<int>(m_rows.size()))
@@ -592,111 +768,142 @@ void DedicatedWnd::EditRow(int rowIndex) {
             break;
         }
 
-        // --- Live app settings: edited here, persisted by the normal path -----
-        case R_SHUFFLE: app.slideshow.shuffle = !app.slideshow.shuffle;
-            Persistence::Registry::SaveSetting(Constants::Registry::SLIDESHOW_SHUFFLE, app.slideshow.shuffle); break;
-        case R_TRANS_TYPE: {
-            const int n = cycle(static_cast<int>(app.slideshow.transition.type), SS::TRANSITION_COUNT);
-            app.slideshow.transition.type = static_cast<TransitionType>(n);
-            Persistence::Registry::SaveSetting(Constants::Registry::SLIDESHOW_TRANSITION, n); break;
+        // --- Mirrored app settings ------------------------------------------
+        // These edit the CONFIG ONLY. Nothing here touches the running app or
+        // the registry: the panel authors a file for another instance, and
+        // changing this machine's own settings as a side effect of describing
+        // a screen would be wrong.
+        case R_SHUFFLE:          m_cfg.shuffle          = !m_cfg.shuffle;          break;
+        case R_START_FULLSCREEN: m_cfg.startFullscreen  = !m_cfg.startFullscreen;  break;
+        case R_ALWAYS_TOP:       m_cfg.alwaysOnTop      = !m_cfg.alwaysOnTop;      break;
+        case R_OVERLAY_VISIBLE:  m_cfg.overlaysVisible  = !m_cfg.overlaysVisible;  break;
+        case R_OVERLAY_BG:       m_cfg.overlayBackground = !m_cfg.overlayBackground; break;
+        case R_SORT_REVERSE:     m_cfg.sortReverse      = !m_cfg.sortReverse;      break;
+        case R_SWAP_MOUSE:       m_cfg.swapMouse        = !m_cfg.swapMouse;        break;
+        case R_WHEEL_INV:        m_cfg.invertWheel      = !m_cfg.invertWheel;      break;
+        case R_WHEEL_INV_H:      m_cfg.invertWheelH     = !m_cfg.invertWheelH;     break;
+        case R_CTRL_C:           m_cfg.ctrlCEnabled     = !m_cfg.ctrlCEnabled;     break;
+        case R_CONTEXT_MENU:     m_cfg.contextMenu      = !m_cfg.contextMenu;      break;
+        case R_KEEP_BG:          m_cfg.keepInBackground = !m_cfg.keepInBackground; break;
+        case R_THUMB_FX:         m_cfg.thumbnailEffects = !m_cfg.thumbnailEffects; break;
+        case R_OPEN_DIR_ON_START: m_cfg.openDirOnStart  = !m_cfg.openDirOnStart;   break;
+        case R_RUN_STARTUP:  m_cfg.runOnStartup = !m_cfg.runOnStartup; break;
+        case R_HIST_FULL:    m_cfg.historyFull  = !m_cfg.historyFull;  break;
+        case R_THUMB_COPY:   m_cfg.thumbCopy    = !m_cfg.thumbCopy;    break;
+        case R_THUMB_MOVE:   m_cfg.thumbMove    = !m_cfg.thumbMove;    break;
+        case R_THUMB_DELETE: m_cfg.thumbDelete  = !m_cfg.thumbDelete;  break;
+        case R_THUMB_PASTE:  m_cfg.thumbPaste   = !m_cfg.thumbPaste;   break;
+
+        case R_HIST_DIRS: {
+            const int v = DialogPromptInt(L"Max folders shown",
+                L"Recent folders listed in the history panel (0-999).",
+                m_cfg.historyMaxDirs, 0, 999,
+                Constants::History::IS_HISTORY_MAX_DIRS_TO_SHOW);
+            if (v >= 0) m_cfg.historyMaxDirs = v;
+            break;
         }
-        case R_TRANS_SOURCE: {
-            const int n = cycle(app.slideshow.transition.source, SS::TransitionSource::COUNT);
-            app.slideshow.transition.source = n;
-            Persistence::Registry::SaveSetting(Constants::Registry::SLIDESHOW_TRANS_SOURCE, n); break;
+        case R_HIST_FAVS: {
+            const int v = DialogPromptInt(L"Max favourites shown",
+                L"Favourites listed in the history panel (0-999).",
+                m_cfg.historyMaxFavs, 0, 999,
+                Constants::History::IS_HISTORY_MAX_FAVORITES_TO_SHOW);
+            if (v >= 0) m_cfg.historyMaxFavs = v;
+            break;
         }
-        case R_TRANS_ORDER: {
-            const int n = cycle(app.slideshow.transition.order, SS::TransitionOrder::COUNT);
-            app.slideshow.transition.order = n;
-            Persistence::Registry::SaveSetting(Constants::Registry::SLIDESHOW_TRANS_ORDER, n); break;
+        case R_HIST_SAVE: {
+            const int v = DialogPromptInt(L"Folders remembered",
+                L"Folders kept on disk between sessions (1-99999).",
+                m_cfg.historyMaxSave, 1, 99999,
+                Constants::History::IS_HISTORY_MAX_DIRS_TO_SAVE);
+            if (v >= 0) m_cfg.historyMaxSave = v;
+            break;
         }
+        case R_TRANS_LIST: {
+            // A bit per effect. Editing every bit through a dialog would be
+            // unusable, so this cycles the useful presets; the per-effect
+            // checkboxes live in the slideshow menu.
+            const uint32_t all = (Constants::Slideshow::TRANSITION_COUNT >= 32)
+                                     ? 0xFFFFFFFFu
+                                     : ((1u << Constants::Slideshow::TRANSITION_COUNT) - 1u);
+            const uint32_t animated = all & ~1u; // everything except Cut
+            m_cfg.transitionList = (m_cfg.transitionList == animated) ? all
+                                 : (m_cfg.transitionList == all)      ? 1u
+                                                                      : animated;
+            break;
+        }
+
+        case R_CARET:      m_cfg.caretStyle = m_cfg.caretStyle == 0 ? 1 : 0; break;
+        case R_TRANS_TYPE: m_cfg.transitionType   = cycle(m_cfg.transitionType, SS::TRANSITION_COUNT); break;
+        case R_TRANS_SOURCE: m_cfg.transitionSource = cycle(m_cfg.transitionSource, SS::TransitionSource::COUNT); break;
+        case R_TRANS_ORDER:  m_cfg.transitionOrder  = cycle(m_cfg.transitionOrder, SS::TransitionOrder::COUNT); break;
+
         case R_VIEWMODE: {
-            const int v = DialogPromptInt(L"View mode", L"1 Fit  2 Width  3 Height  4 Stretch  5 Original",
-                                          static_cast<int>(app.viewMode), 1, 5, 1);
-            if (v >= 1) { app.viewMode = static_cast<Constants::ViewModes::ViewMode>(v);
-                          Persistence::Registry::SaveSetting(Constants::Registry::VIEW_MODE, v); }
+            const int v = DialogPromptInt(L"View mode",
+                L"1 Fit  2 Width  3 Height  4 Stretch  5 Original",
+                m_cfg.viewMode, 1, 5, 1);
+            if (v >= 1) m_cfg.viewMode = v;
             break;
         }
         case R_BASE_W: {
-            const int v = DialogPromptInt(L"Window width", L"Default width in pixels.", app.baseWidth, 240, 16000, Constants::IS_BASE_WIDTH);
-            if (v >= 0) { app.baseWidth = v; Persistence::Registry::SaveSetting(Constants::Registry::BASE_WIDTH_KEY, v); }
+            const int v = DialogPromptInt(L"Window width", L"Default width in pixels.",
+                m_cfg.baseWidth, 240, 16000, Constants::IS_BASE_WIDTH);
+            if (v >= 0) m_cfg.baseWidth = v;
             break;
         }
         case R_BASE_H: {
-            const int v = DialogPromptInt(L"Window height", L"Default height in pixels.", app.baseHeight, 240, 16000, Constants::IS_BASE_HEIGHT);
-            if (v >= 0) { app.baseHeight = v; Persistence::Registry::SaveSetting(Constants::Registry::BASE_HEIGHT_KEY, v); }
+            const int v = DialogPromptInt(L"Window height", L"Default height in pixels.",
+                m_cfg.baseHeight, 240, 16000, Constants::IS_BASE_HEIGHT);
+            if (v >= 0) m_cfg.baseHeight = v;
             break;
         }
-        case R_START_FULLSCREEN: app.startInFullscreen = !app.startInFullscreen;
-            Persistence::Registry::SaveSetting(Constants::Registry::START_FULLSCREEN, app.startInFullscreen); break;
-        case R_ALWAYS_TOP: app.isAlwaysOnTop = !app.isAlwaysOnTop; break;
-
-        case R_OVERLAY_VISIBLE: app.showOverlayInfoText = !app.showOverlayInfoText;
-            Persistence::Registry::SaveSetting(Constants::Registry::OVERLAY_VISIBLE, app.showOverlayInfoText); break;
-        case R_OVERLAY_BG: app.overlayShowBackground = !app.overlayShowBackground;
-            Persistence::Registry::SaveSetting(Constants::Registry::OVERLAY_SHOW_BG, app.overlayShowBackground); break;
         case R_MSG_MS: {
-            const int v = DialogPromptInt(L"Message duration", L"Center message duration in ms.", app.msgCenterDisplayMs, 250, 10000, 2000);
-            if (v >= 0) { app.msgCenterDisplayMs = v; Persistence::Registry::SaveSetting(Constants::Registry::MSG_CENTER_MS, v); }
+            const int v = DialogPromptInt(L"Message duration",
+                L"Centre message duration in milliseconds.",
+                m_cfg.msgDurationMs, 250, 10000, 2000);
+            if (v >= 0) m_cfg.msgDurationMs = v;
             break;
         }
-
         case R_SORT_ORDER: {
-            const int v = DialogPromptInt(L"Sort order", L"0 Name  1 Date  2 Size  3 Type  4 Disk",
-                                          app.fileHandlerDefaultSortOrder, 0, 4, 0);
-            if (v >= 0) { app.fileHandlerDefaultSortOrder = v; Persistence::Registry::SaveSetting(Constants::Registry::SORT_ORDER, v); }
+            const int v = DialogPromptInt(L"Sort order",
+                L"0 Name  1 Date  2 Size  3 Type  4 Disk order",
+                m_cfg.sortOrder, 0, 4, 0);
+            if (v >= 0) m_cfg.sortOrder = v;
             break;
         }
-        case R_SORT_REVERSE: app.fileHandlerIsReverseSortOrder = !app.fileHandlerIsReverseSortOrder;
-            Persistence::Registry::SaveSetting(Constants::Registry::SORT_REVERSE, app.fileHandlerIsReverseSortOrder); break;
-
         case R_VRAM: {
-            const int v = DialogPromptInt(L"VRAM cache", L"Images kept in VRAM (0-999).", app.vramCacheCount, 0, 999, 20);
-            if (v >= 0) { app.vramCacheCount = v; Persistence::Registry::SaveSetting(Constants::Registry::VRAM_CACHE_COUNT, v); }
+            const int v = DialogPromptInt(L"VRAM cache",
+                L"Pictures kept in graphics memory (0-999).",
+                m_cfg.vramCache, 0, 999, Constants::IS_VRAM_CACHE_IMAGES_COUNT);
+            if (v >= 0) m_cfg.vramCache = v;
             break;
         }
         case R_LOOKASIDE: {
-            const int v = DialogPromptInt(L"Preload lookaside", L"Images preloaded each way (1-99).", app.preloadLookaside, 1, 99, 2);
-            if (v >= 0) { app.preloadLookaside = v; Persistence::Registry::SaveSetting(Constants::Registry::PRELOAD_LOOKASIDE, v); }
+            const int v = DialogPromptInt(L"Preload lookaside",
+                L"Pictures preloaded each way (1-99).",
+                m_cfg.preloadLookaside, 1, 99, Constants::IS_PRELOAD_LOOKASIDE_COUNT);
+            if (v >= 0) m_cfg.preloadLookaside = v;
             break;
         }
         case R_THUMB_CACHE: {
-            const int v = DialogPromptInt(L"Thumb cache", L"Thumbnail cache budget in MB.", app.dirThumbCacheMB, 100, 64000, 2000);
-            if (v >= 0) { app.dirThumbCacheMB = v; Persistence::Registry::SaveSetting(Constants::Registry::DIR_THUMB_CACHE_MB, v); }
+            const int v = DialogPromptInt(L"Thumb cache",
+                L"Thumbnail cache budget in megabytes.",
+                m_cfg.thumbCacheMB, 100, 64000, Constants::IS_DIR_THUMB_CACHE_BUDGET_MB);
+            if (v >= 0) m_cfg.thumbCacheMB = v;
             break;
         }
-
-        case R_SWAP_MOUSE: app.swapMouseButtons = !app.swapMouseButtons;
-            Persistence::Registry::SaveSetting(Constants::Registry::SWAP_MOUSE_BUTTONS, app.swapMouseButtons); break;
-        case R_WHEEL_INV: app.invertWheelDirection = !app.invertWheelDirection;
-            Persistence::Registry::SaveSetting(Constants::Registry::WHEEL_INVERT, app.invertWheelDirection); break;
-        case R_WHEEL_INV_H: app.invertWheelDirectionH = !app.invertWheelDirectionH;
-            Persistence::Registry::SaveSetting(Constants::Registry::WHEEL_INVERT_H, app.invertWheelDirectionH); break;
         case R_ZOOM_CLICK: {
-            const int v = DialogPromptInt(L"Left-click zoom", L"Multiplier (1 = off .. 10).",
-                                          static_cast<int>(app.zoomClickMultiplier + 0.5f), 1, 10, 3);
-            if (v >= 0) { app.zoomClickMultiplier = static_cast<float>(v);
-                          Persistence::Registry::SaveSetting(Constants::Registry::ZOOM_CLICK_MULT, v); }
+            const int v = DialogPromptInt(L"Left-click zoom",
+                L"Magnification while the left button is held (1 = off).",
+                m_cfg.zoomClick, 1, 10, static_cast<int>(Constants::ZOOM_CLICK));
+            if (v >= 0) m_cfg.zoomClick = v;
             break;
         }
-        case R_CARET: app.caretStyle = app.caretStyle == 0 ? 1 : 0;
-            Persistence::Registry::SaveSetting(Constants::Registry::INPUTBOX_CARET_STYLE, app.caretStyle); break;
-        case R_CTRL_C: app.ctrlCEnabled = !app.ctrlCEnabled;
-            Persistence::Registry::SaveSetting(Constants::Registry::CTRL_C_ENABLED, app.ctrlCEnabled); break;
-        case R_CONTEXT_MENU: app.contextMenuEnabled = !app.contextMenuEnabled;
-            Persistence::Registry::SaveSetting(Constants::Registry::CONTEXT_MENU_ENABLED, app.contextMenuEnabled); break;
-
-        case R_KEEP_BG: app.isKeepInBackground = !app.isKeepInBackground;
-            Persistence::Registry::SaveSetting(Constants::Registry::KEEP_IN_BACKGROUND, app.isKeepInBackground); break;
-        case R_THUMB_FX: app.thumbnailEffectsEnabled = !app.thumbnailEffectsEnabled;
-            Persistence::Registry::SaveSetting(Constants::Registry::THUMBNAIL_EFFECTS, app.thumbnailEffectsEnabled); break;
-        case R_OPEN_DIR_ON_START: app.openDirWndOnStart = !app.openDirWndOnStart;
-            Persistence::Registry::SaveSetting(Constants::Registry::OPEN_DIRWND_ON_START, app.openDirWndOnStart); break;
         case R_THEME: {
-            const int v = DialogPromptInt(L"Theme brightness", L"0 = dark .. 100 = light.",
-                                          static_cast<int>(app.themeFactor * 100), 0, 100, 12);
-            if (v >= 0) { app.themeFactor = v / 100.0f;
-                          Persistence::Registry::SaveSetting(Constants::Registry::THEME_FACTOR, v); }
+            const int v = DialogPromptInt(L"Theme brightness",
+                L"0 darkest .. 100 lightest.",
+                m_cfg.themePercent, 0, 100,
+                static_cast<int>(Constants::Theme::DEFAULT_THEME_FACTOR * 100.0f));
+            if (v >= 0) m_cfg.themePercent = v;
             break;
         }
         default: break;
@@ -814,6 +1021,12 @@ LRESULT DedicatedWnd::HandlePanelMessage(UINT message, WPARAM wParam, LPARAM lPa
             if (LOWORD(lParam) != HTCLIENT) break;
             POINT pt; GetCursorPos(&pt);
             ScreenToClient(GetHwnd(), &pt);
+            // The scrollbar keeps the arrow — a hand there would suggest the
+            // track is a button.
+            if (PtInRect(&m_trackRect, pt)) {
+                SetCursor(LoadCursorW(nullptr, IDC_ARROW));
+                return TRUE;
+            }
             if (HitTestButton(pt) >= 0 || HitTestRow(pt) >= 0) {
                 SetCursor(LoadCursorW(nullptr, IDC_HAND));
                 return TRUE;
@@ -839,9 +1052,7 @@ LRESULT DedicatedWnd::HandlePanelMessage(UINT message, WPARAM wParam, LPARAM lPa
             const COLORREF selBg  = dark ? RGB(58,86,132)   : RGB(203,222,250);
             const COLORREF hotBg  = dark ? RGB(48,48,52)    : RGB(232,232,236);
             const COLORREF line   = dark ? RGB(64,64,64)    : RGB(220,220,220);
-            const COLORREF btnBg  = dark ? RGB(56,56,60)    : RGB(238,238,242);
-            const COLORREF btnHot = dark ? RGB(72,96,140)   : RGB(210,226,250);
-            const COLORREF hdrCol = dark ? RGB(120,170,230) : RGB(40,90,160);
+            namespace PC = Constants::Dedicated::PanelColors;
 
             HBRUSH b = CreateSolidBrush(bg); FillRect(bb, &rc, b); DeleteObject(b);
             SetBkMode(bb, TRANSPARENT);
@@ -873,19 +1084,35 @@ LRESULT DedicatedWnd::HandlePanelMessage(UINT message, WPARAM wParam, LPARAM lPa
 
             // ── Buttons ──────────────────────────────────────────────────────
             {
-                const int n = static_cast<int>(m_buttons.size());
                 const int gap = static_cast<int>(BTN_GAP * s);
-                const int total = W - pad * 2 - gap * (n - 1);
-                const int bw = total / std::max(1, n);
-                int x = pad;
-                const int y = static_cast<int>(TITLE_H * s);
-
                 SelectObject(bb, m_hFontBody);
-                for (int i = 0; i < n; ++i) {
-                    Button &btn = m_buttons[i];
+
+                // Each row is laid out independently so both stretch the full
+                // width regardless of how many buttons they hold.
+                for (int rowIdx = 0; rowIdx <= 1; ++rowIdx) {
+                    int count = 0;
+                    for (const Button &b2 : m_buttons) if (b2.row == rowIdx) ++count;
+                    if (count == 0) continue;
+
+                    const int total = W - pad * 2 - gap * (count - 1);
+                    const int bw = total / count;
+                    int x = pad;
+                    const int y = static_cast<int>(TITLE_H * s) + rowIdx * (btnH + gap);
+
+                for (Button &btn : m_buttons) {
+                    if (btn.row != rowIdx) continue;
                     btn.rect = {x, y, x + bw, y + btnH};
-                    HBRUSH bb2 = CreateSolidBrush(
-                        !btn.enabled ? bg : (i == m_hotButton ? btnHot : btnBg));
+                    // Row 0 = building the instance, row 1 = deploying it —
+                    // tinted differently so the two groups read as distinct.
+                    const int myIndex = static_cast<int>(&btn - m_buttons.data());
+                    COLORREF base = (btn.row == 0) ? PC::BTN_MAIN : PC::BTN_ALT;
+                    if (!btn.enabled) base = bg;
+                    else if (myIndex == m_hotButton) {
+                        base = RGB(std::min(255, GetRValue(base) + 40),
+                                   std::min(255, GetGValue(base) + 40),
+                                   std::min(255, GetBValue(base) + 40));
+                    }
+                    HBRUSH bb2 = CreateSolidBrush(base);
                     FillRect(bb, &btn.rect, bb2);
                     DeleteObject(bb2);
 
@@ -895,33 +1122,52 @@ LRESULT DedicatedWnd::HandlePanelMessage(UINT message, WPARAM wParam, LPARAM lPa
                     Rectangle(bb, btn.rect.left, btn.rect.top, btn.rect.right, btn.rect.bottom);
                     SelectObject(bb, oldBr); SelectObject(bb, oldPen); DeleteObject(pen);
 
-                    SetTextColor(bb, btn.enabled ? fg : dim);
+                    // Buttons are saturated, so white always reads — using the
+                    // theme foreground would vanish on the light theme.
+                    SetTextColor(bb, btn.enabled ? RGB(245, 245, 245) : dim);
                     RECT lr = btn.rect;
                     DrawTextW(bb, btn.label.c_str(), -1, &lr,
                               DT_CENTER | DT_VCENTER | DT_SINGLELINE);
                     x += bw + gap;
                 }
+                }
             }
 
             // ── Rows (scrolled) ──────────────────────────────────────────────
-            const int listTop = static_cast<int>(TITLE_H * s) + btnH + static_cast<int>(10 * s);
+            // Two button rows sit above the list.
+            const int listTop = static_cast<int>(TITLE_H * s) +
+                                btnH * 2 + static_cast<int>(BTN_GAP * s) +
+                                static_cast<int>(10 * s);
             const int listBot = H - static_cast<int>(FOOTER_H * s);
             m_viewportH = listBot - listTop;
 
             HRGN clip = CreateRectRgn(0, listTop, W, listBot);
             SelectClipRgn(bb, clip);
 
+            // Leave room for the scrollbar so text never runs under it.
+            const int sbW = static_cast<int>(Constants::Dedicated::PANEL_SCROLLBAR_W * s);
+            const int listRight = W - pad - sbW;
+
             int y = listTop - m_scrollY;
             for (size_t i = 0; i < m_rows.size(); ++i) {
                 Row &row = m_rows[i];
                 const int h = (row.kind == Kind::Header) ? hdrH : rowH;
-                row.rect = {pad, y, W - pad, y + h};
+                row.rect = {pad, y, listRight, y + h};
 
                 if (y + h >= listTop && y <= listBot) {
                     if (row.kind == Kind::Header) {
+                        // Accent bar makes sections scannable in a long list.
+                        RECT bar{row.rect.left, row.rect.top + static_cast<int>(10 * s),
+                                 row.rect.left + static_cast<int>(3 * s),
+                                 row.rect.bottom - static_cast<int>(2 * s)};
+                        HBRUSH sbr = CreateSolidBrush(PC::STRIPE);
+                        FillRect(bb, &bar, sbr);
+                        DeleteObject(sbr);
+
                         SelectObject(bb, m_hFontBold);
-                        SetTextColor(bb, hdrCol);
-                        RECT lr{row.rect.left, row.rect.top + static_cast<int>(8 * s),
+                        SetTextColor(bb, PC::HEADER);
+                        RECT lr{row.rect.left + static_cast<int>(10 * s),
+                                row.rect.top + static_cast<int>(8 * s),
                                 row.rect.right, row.rect.bottom};
                         DrawTextW(bb, row.label.c_str(), -1, &lr, DT_LEFT | DT_SINGLELINE);
                     } else {
@@ -933,25 +1179,52 @@ LRESULT DedicatedWnd::HandlePanelMessage(UINT message, WPARAM wParam, LPARAM lPa
                             FillRect(bb, &row.rect, hb); DeleteObject(hb);
                         }
 
+                        // Line 1: label + value
+                        const int line1H = static_cast<int>(22 * s);
                         SelectObject(bb, m_hFontBody);
                         SetTextColor(bb, fg);
                         RECT lr{row.rect.left + static_cast<int>(10 * s), row.rect.top,
-                                row.rect.left + labelW, row.rect.bottom};
+                                row.rect.left + labelW, row.rect.top + line1H};
                         DrawTextW(bb, row.label.c_str(), -1, &lr,
                                   DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
 
                         RECT vr{row.rect.left + labelW, row.rect.top,
-                                row.rect.right - static_cast<int>(10 * s), row.rect.bottom};
+                                row.rect.right - static_cast<int>(10 * s),
+                                row.rect.top + line1H};
                         if (static_cast<int>(i) == m_editingRow) {
                             m_edit.Draw(bb, m_hFontBody, vr, static_cast<int>(6 * s),
                                         GetFocus() == GetHwnd());
                         } else {
+                            // Colour by MEANING, so a setting's state reads at a
+                            // glance without parsing the words.
                             const bool ph = row.value == L"(not set)" ||
                                             row.value == L"(optional)" ||
                                             row.value == L"(required)";
-                            SetTextColor(bb, ph ? dim : fg);
+                            COLORREF vc = PC::TEXT;
+                            if (ph)                              vc = PC::WARN;
+                            else if (row.value == L"On")         vc = PC::ON;
+                            else if (row.value == L"Off")        vc = PC::OFF;
+                            else switch (row.kind) {
+                                case Kind::Folder: vc = PC::PATH;   break;
+                                case Kind::Number: vc = PC::NUMBER; break;
+                                case Kind::Choice: vc = PC::CHOICE; break;
+                                default:           vc = PC::TEXT;   break;
+                            }
+                            SetTextColor(bb, vc);
                             DrawTextW(bb, row.value.c_str(), -1, &vr,
                                       DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
+                        }
+
+                        // Line 2: what the setting actually does.
+                        if (row.desc && row.desc[0]) {
+                            SelectObject(bb, m_hFontSmall);
+                            SetTextColor(bb, dim);
+                            RECT dr{row.rect.left + static_cast<int>(10 * s),
+                                    row.rect.top + line1H,
+                                    row.rect.right - static_cast<int>(10 * s),
+                                    row.rect.bottom - static_cast<int>(2 * s)};
+                            DrawTextW(bb, row.desc, -1, &dr,
+                                      DT_LEFT | DT_SINGLELINE | DT_END_ELLIPSIS);
                         }
 
                         HPEN pen = CreatePen(PS_SOLID, 1, line);
@@ -967,6 +1240,32 @@ LRESULT DedicatedWnd::HandlePanelMessage(UINT message, WPARAM wParam, LPARAM lPa
 
             SelectClipRgn(bb, nullptr);
             DeleteObject(clip);
+
+            // ── Scrollbar ────────────────────────────────────────────────────
+            // Drawn only when there is something to scroll — a permanent empty
+            // track on a short list is just noise.
+            m_trackRect = {listRight, listTop, listRight + sbW, listBot};
+            m_thumbRect = {};
+            const int maxScroll = std::max(0, m_contentH - m_viewportH);
+            if (maxScroll > 0 && m_viewportH > 0) {
+                HBRUSH tb = CreateSolidBrush(PC::SCROLL_TRACK);
+                FillRect(bb, &m_trackRect, tb);
+                DeleteObject(tb);
+
+                const int minH = static_cast<int>(Constants::Dedicated::PANEL_SCROLL_MIN_H * s);
+                int thumbH = MulDiv(m_viewportH, m_viewportH, m_contentH);
+                thumbH = std::clamp(thumbH, minH, m_viewportH);
+
+                const int travel = m_viewportH - thumbH;
+                const int thumbY = listTop + (travel > 0 ? MulDiv(m_scrollY, travel, maxScroll) : 0);
+
+                m_thumbRect = {listRight + static_cast<int>(2 * s), thumbY,
+                               listRight + sbW - static_cast<int>(2 * s), thumbY + thumbH};
+                HBRUSH hb = CreateSolidBrush(
+                    (m_thumbHot || m_draggingThumb) ? PC::SCROLL_THUMB_HOT : PC::SCROLL_THUMB);
+                FillRect(bb, &m_thumbRect, hb);
+                DeleteObject(hb);
+            }
 
             // ── Footer ───────────────────────────────────────────────────────
             SelectObject(bb, m_hFontSmall);
@@ -992,9 +1291,26 @@ LRESULT DedicatedWnd::HandlePanelMessage(UINT message, WPARAM wParam, LPARAM lPa
 
         case WM_MOUSEMOVE: {
             const POINT pt{GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam)};
+
+            // Dragging the thumb maps cursor travel onto scroll range, keeping
+            // the grab point under the cursor so the thumb does not jump.
+            if (m_draggingThumb) {
+                const int thumbH = m_thumbRect.bottom - m_thumbRect.top;
+                const int travel = m_viewportH - thumbH;
+                const int maxScroll = std::max(0, m_contentH - m_viewportH);
+                if (travel > 0 && maxScroll > 0) {
+                    const int wantTop = pt.y - m_dragGrabDY - m_trackRect.top;
+                    m_scrollY = MulDiv(std::clamp(wantTop, 0, travel), maxScroll, travel);
+                    ClampScroll();
+                    Repaint();
+                }
+                return 0;
+            }
+
+            const bool overThumb = PtInRect(&m_thumbRect, pt) != FALSE;
             const int hr = HitTestRow(pt), hb = HitTestButton(pt);
-            if (hr != m_hotRow || hb != m_hotButton) {
-                m_hotRow = hr; m_hotButton = hb;
+            if (hr != m_hotRow || hb != m_hotButton || overThumb != m_thumbHot) {
+                m_hotRow = hr; m_hotButton = hb; m_thumbHot = overThumb;
                 Repaint();
             }
             if (m_editingRow >= 0) m_edit.RouteMouse(message, wParam, lParam, GetHwnd());
@@ -1003,6 +1319,23 @@ LRESULT DedicatedWnd::HandlePanelMessage(UINT message, WPARAM wParam, LPARAM lPa
 
         case WM_LBUTTONDOWN: {
             const POINT pt{GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam)};
+
+            // Scrollbar first — it overlays the row band on the right.
+            if (PtInRect(&m_thumbRect, pt)) {
+                m_draggingThumb = true;
+                m_dragGrabDY = pt.y - m_thumbRect.top;
+                m_dragStartScroll = m_scrollY;
+                SetCapture(GetHwnd());
+                Repaint();
+                return 0;
+            }
+            if (PtInRect(&m_trackRect, pt)) {
+                // Clicking the empty track pages toward the cursor.
+                m_scrollY += (pt.y < m_thumbRect.top) ? -m_viewportH : m_viewportH;
+                ClampScroll();
+                Repaint();
+                return 0;
+            }
 
             if (m_editingRow >= 0 && PtInRect(&m_rows[m_editingRow].rect, pt)) {
                 m_edit.RouteMouse(message, wParam, lParam, GetHwnd());
@@ -1014,10 +1347,13 @@ LRESULT DedicatedWnd::HandlePanelMessage(UINT message, WPARAM wParam, LPARAM lPa
             const int bi = HitTestButton(pt);
             if (bi >= 0) {
                 switch (m_buttons[bi].id) {
-                    case BTN_GENERATE:       DoGenerate();      break;
-                    case BTN_ADD_STARTUP:    DoAddStartup();    break;
-                    case BTN_REMOVE_STARTUP: DoRemoveStartup(); break;
-                    case BTN_TEST:           DoTest();          break;
+                    case BTN_GENERATE_APP:    DoGenerateApp();    break;
+                    case BTN_GENERATE_CONFIG: DoGenerateConfig(); break;
+                    case BTN_ADD_IMAGES:      DoAddImages();      break;
+                    case BTN_ADD_PROMOS:      DoAddPromotions();  break;
+                    case BTN_ADD_STARTUP:     DoAddStartup();     break;
+                    case BTN_REMOVE_STARTUP:  DoRemoveStartup();  break;
+                    case BTN_TEST:            DoTest();           break;
                     default: break;
                 }
                 return 0;
@@ -1029,6 +1365,13 @@ LRESULT DedicatedWnd::HandlePanelMessage(UINT message, WPARAM wParam, LPARAM lPa
         }
 
         case WM_LBUTTONUP:
+            if (m_draggingThumb) {
+                m_draggingThumb = false;
+                ReleaseCapture();
+                Repaint();
+                return 0;
+            }
+            [[fallthrough]];
         case WM_RBUTTONUP:
             if (m_editingRow >= 0 &&
                 m_edit.RouteMouse(message, wParam, lParam, GetHwnd()) ==
