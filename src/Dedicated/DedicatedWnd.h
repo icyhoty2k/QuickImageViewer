@@ -51,13 +51,15 @@ class DedicatedWnd : public FloatingPanelWnd {
     private:
         enum class Kind { Header, Text, Folder, Number, Toggle, Choice };
 
-        // A configuration line. `get` renders the value, `edit` changes it.
+        // A configuration line. `desc` is the HelpWnd-style explanation drawn
+        // under the value — settings are useless if their effect is a guess.
         struct Row {
-            Kind         kind;
-            std::wstring label;
-            std::wstring value;
-            int          id   = 0;   // index into the edit dispatch
-            RECT         rect{};
+            Kind           kind;
+            std::wstring   label;
+            std::wstring   value;
+            const wchar_t *desc = L"";
+            int            id   = 0; // index into the edit dispatch
+            RECT           rect{};
         };
 
         struct Button {
@@ -65,13 +67,23 @@ class DedicatedWnd : public FloatingPanelWnd {
             int          id = 0;
             RECT         rect{};
             bool         enabled = true;
+            int          row = 0; // 0 = first button row, 1 = second
         };
 
         // --- Actions ---------------------------------------------------------
-        void DoGenerate();      // copy exe + write .ini
-        void DoAddStartup();    // shortcut → shell:startup
-        void DoRemoveStartup(); // delete that shortcut
-        void DoTest();          // validate an .ini, offer to rebuild
+        // Generating the copy and generating its config are separate on purpose:
+        // a config is edited far more often than the executable is replaced, and
+        // re-copying the exe every time risks overwriting a running screen.
+        void DoGenerateApp();    // copy this exe under the instance name
+        void DoGenerateConfig(); // write the .ini for that copy
+        void DoAddImages();      // append a folder to the image list
+        void DoAddPromotions();  // append a folder to the promotion list
+        void DoAddStartup();     // shortcut → shell:startup
+        void DoRemoveStartup();  // delete that shortcut
+        void DoTest();           // validate an .ini, offer to rebuild
+
+        // Shared by the two Add buttons — same flow, different list file.
+        void AppendFolderToList(bool promotions);
 
         // --- Model -----------------------------------------------------------
         void BuildRows();
@@ -108,6 +120,15 @@ class DedicatedWnd : public FloatingPanelWnd {
         int  HitTestRow(POINT pt) const;
         int  HitTestButton(POINT pt) const;
         void ClampScroll();
+
+        // Scrollbar geometry, recomputed each paint. Kept as members so the
+        // mouse handlers hit-test exactly what was drawn.
+        RECT m_trackRect{};
+        RECT m_thumbRect{};
+        bool m_thumbHot     = false;
+        bool m_draggingThumb = false;
+        int  m_dragGrabDY   = 0; // cursor offset inside the thumb when grabbed
+        int  m_dragStartScroll = 0;
 
         Dedicated::InstanceConfig m_cfg;
         std::wstring              m_targetFolder; // where the copy was generated

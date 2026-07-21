@@ -3,6 +3,8 @@
 #include "Persistence/RegistryManager.h" // GetExePathW
 #include "Platform/Constants.h"
 #include <windows.h>
+#include <algorithm>
+#include <cwctype>
 
 namespace Dedicated {
 
@@ -122,6 +124,63 @@ namespace {
         fclose(f);
         return true;
     }
+}
+
+// =============================================================================
+// Authoring another instance's lists
+// =============================================================================
+namespace {
+    // <exe folder>\<prefix><exe stem>.txt
+    std::wstring ListPathFor(const std::wstring &exePath, const wchar_t *prefix) {
+        if (exePath.empty()) return {};
+        const size_t slash = exePath.find_last_of(L"\\/");
+        if (slash == std::wstring::npos) return {};
+
+        std::wstring folder = exePath.substr(0, slash + 1);
+        std::wstring stem   = exePath.substr(slash + 1);
+        const size_t dot = stem.find_last_of(L'.');
+        if (dot != std::wstring::npos) stem.resize(dot);
+
+        return folder + prefix + stem + Constants::Dedicated::LIST_FILE_EXT;
+    }
+
+    // Case-insensitive, trailing-slash-insensitive comparison key.
+    std::wstring FolderKey(std::wstring p) {
+        while (!p.empty() && (p.back() == L'\\' || p.back() == L'/')) p.pop_back();
+        std::transform(p.begin(), p.end(), p.begin(), ::towlower);
+        return p;
+    }
+}
+
+std::wstring ImageListPathFor(const std::wstring &exePath) {
+    return ListPathFor(exePath, Constants::Dedicated::IMAGE_LIST_PREFIX);
+}
+
+std::wstring PromotionListPathFor(const std::wstring &exePath) {
+    return ListPathFor(exePath, Constants::Dedicated::PROMO_LIST_PREFIX);
+}
+
+AppendResult AppendFolder(const std::wstring &listPath, const std::wstring &folder) {
+    if (listPath.empty() || folder.empty()) return AppendResult::Failed;
+
+    if (!FileExists(listPath))
+        CreateEmptyList(listPath, L"folder list");
+    if (!FileExists(listPath)) return AppendResult::Failed;
+
+    // Duplicate check against what is already listed. Skipping silently would
+    // leave the user unsure whether the click registered, so the caller reports
+    // it — this only decides.
+    const std::wstring key = FolderKey(folder);
+    for (const std::wstring &existing : LoadList(listPath))
+        if (FolderKey(existing) == key) return AppendResult::Duplicate;
+
+    // Append rather than rewrite: hand-written comments and ordering survive.
+    FILE *f = nullptr;
+    if (_wfopen_s(&f, listPath.c_str(), L"a, ccs=UTF-8") != 0 || !f)
+        return AppendResult::Failed;
+    fwprintf(f, L"%s\n", folder.c_str());
+    fclose(f);
+    return AppendResult::Added;
 }
 
 void EnsureListFiles() { Resolve(); }

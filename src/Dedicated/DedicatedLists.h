@@ -51,4 +51,22 @@ std::vector<std::wstring> LoadPromotionFolders();
 bool SaveImageFolders(const std::vector<std::wstring> &folders);
 bool SavePromotionFolders(const std::vector<std::wstring> &folders);
 
+// --- Authoring another instance's lists -------------------------------------
+// The functions above act on THIS process's lists. When the panel is preparing
+// a copy that does not exist yet, the lists belong next to THAT exe, so these
+// derive the paths from an arbitrary executable path.
+std::wstring ImageListPathFor(const std::wstring &exePath);
+std::wstring PromotionListPathFor(const std::wstring &exePath);
+
+enum class AppendResult {
+    Added,      // appended
+    Duplicate,  // already listed — skipped, nothing written
+    Failed,     // the file could not be created or written
+};
+
+// Appends one folder to a list file, creating the file if absent.
+// Comparison is case-insensitive and ignores a trailing slash, so the same
+// folder typed two ways is still recognised as a duplicate.
+AppendResult AppendFolder(const std::wstring &listPath, const std::wstring &folder);
+
 } // namespace Dedicated
