@@ -669,6 +669,20 @@ namespace UI {
             L"an exact cadence, a range is re-rolled each time so it never looks mechanical. "
             L"Count them in images, in seconds, or both — whichever comes due first shows a "
             L"promotion. Promotions can hold the screen for their own dwell time.", sDed);
+        Add(L"Kiosk lock",
+            L"Tick \"Kiosk lock\" in the panel and the screen ignores every key and every "
+            L"click, so a passer-by cannot pause the slideshow or reach the panels. The tray "
+            L"icon keeps working — its menu runs its own message loop, so it is unaffected — "
+            L"and Settings > Kiosk Lock there is the only way back in. Available to the main "
+            L"app too, from the same tray item or -lock.", sDed);
+        Add(L"Always on top",
+            L"Keeps the screen above every other window, so nothing that pops up can cover "
+            L"it. Ctrl+T toggles it live; the panel sets it for a generated screen.", sDed);
+        Add(L"Keep display awake",
+            L"Blocks the screensaver and display sleep while the window is on screen. Leave "
+            L"it off and Windows eventually blanks the display with nobody there to wake it "
+            L"— and with the kiosk lock on, nobody could. Released automatically when the "
+            L"window hides to the tray.", sDed);
         Add(L"Isolation",
             L"A dedicated screen writes NOTHING to the registry: settings live in its .ini, "
             L"and it keeps no history or favorites. Its own mutex and window class mean a "
@@ -723,7 +737,11 @@ namespace UI {
         Add(L"-hideMouse", L"Hide the mouse cursor at startup.", sCli);
         Add(L"-lock",
             L"KIOSK mode — all keyboard and mouse input is ignored. Combine with "
-            L"-fullscreen -slideshow for unattended public displays.", sCli);
+            L"-fullscreen -slideshow for unattended public displays. The tray icon "
+            L"stays live and is the only way to unlock. The switch only forces the "
+            L"lock on for one launch; the stored setting is left alone.", sCli);
+        Add(L"-keepDisplayAwake",
+            L"Block the screensaver and display sleep while the window is on screen.", sCli);
         Add(L"-dedicated",
             L"Run as a dedicated screen: no registry writes at all, no history or favorites, "
             L"its own icon, mutex and window class — safe alongside any number of other "

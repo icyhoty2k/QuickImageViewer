@@ -122,6 +122,42 @@ void TrayHandler::DispatchCommand(HWND hWnd, int cmd) {
             static_cast<DWORD>(app.historyFullModeEnabled));
         break;
 
+    // KIOSK lock. Reached from the tray while the main window is deaf, which is
+    // the only way back out — see Constants::IS_KIOSK_LOCK_ENABLED.
+    case 64:
+        app.isLocked = !app.isLocked;
+        Persistence::Registry::SaveSetting(Constants::Registry::KIOSK_LOCK,
+            static_cast<DWORD>(app.isLocked));
+        m_overlayManager.PostCenterMessage(hWnd,
+            app.isLocked ? Constants::Messages::KIOSK_LOCK_ON
+                         : Constants::Messages::KIOSK_LOCK_OFF);
+        break;
+
+    // Mirrors Command::ToggleAlwaysOnTop (Ctrl+T) so both routes behave the same.
+    case 65:
+        app.isAlwaysOnTop = !app.isAlwaysOnTop;
+        SetWindowPos(hWnd, app.isAlwaysOnTop ? HWND_TOPMOST : HWND_NOTOPMOST,
+                     0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE);
+        m_uiManager.ApplyAlwaysOnTop(app.isAlwaysOnTop);
+        Persistence::Registry::SaveSetting(Constants::Registry::ALWAYS_ON_TOP,
+            static_cast<DWORD>(app.isAlwaysOnTop));
+        m_overlayManager.PostCenterMessage(hWnd,
+            app.isAlwaysOnTop ? Constants::Messages::ALWAYS_ON_TOP_ON
+                              : Constants::Messages::ALWAYS_ON_TOP_OFF);
+        break;
+
+    // Screensaver / display-sleep hold. ApplyDisplayAwake owns the actual
+    // SetThreadExecutionState call — see AppCommands.h.
+    case 66:
+        app.keepDisplayAwake = !app.keepDisplayAwake;
+        Persistence::Registry::SaveSetting(Constants::Registry::KEEP_DISPLAY_AWAKE,
+            static_cast<DWORD>(app.keepDisplayAwake));
+        AppCommands::ApplyDisplayAwake(hWnd);
+        m_overlayManager.PostCenterMessage(hWnd,
+            app.keepDisplayAwake ? Constants::Messages::KEEP_DISPLAY_AWAKE_ON
+                                 : Constants::Messages::KEEP_DISPLAY_AWAKE_OFF);
+        break;
+
     case 8:
         app.showOverlayInfoText = !app.showOverlayInfoText;
         Persistence::Registry::SaveSetting(Constants::Registry::OVERLAY_VISIBLE,
@@ -421,6 +457,9 @@ void TrayHandler::DispatchCommand(HWND hWnd, int cmd) {
                 fwprintf(f, L"%s=%d\n", Constants::Registry::ZOOM_CLICK_MULT,       (int)app.zoomClickMultiplier);
                 fwprintf(f, L"%s=%d\n", Constants::Registry::SWAP_MOUSE_BUTTONS,    (int)app.swapMouseButtons);
                 fwprintf(f, L"%s=%d\n", Constants::Registry::CONTEXT_MENU_ENABLED,  (int)app.contextMenuEnabled);
+                fwprintf(f, L"%s=%d\n", Constants::Registry::KIOSK_LOCK,            (int)app.isLocked);
+                fwprintf(f, L"%s=%d\n", Constants::Registry::ALWAYS_ON_TOP,         (int)app.isAlwaysOnTop);
+                fwprintf(f, L"%s=%d\n", Constants::Registry::KEEP_DISPLAY_AWAKE,    (int)app.keepDisplayAwake);
                 fwprintf(f, L"%s=%d\n", Constants::Registry::WHEEL_INVERT,          (int)app.invertWheelDirection);
                 fwprintf(f, L"%s=%d\n", Constants::Registry::WHEEL_INVERT_H,        (int)app.invertWheelDirectionH);
                 fwprintf(f, L"%s=%d\n", Constants::Registry::VRAM_CACHE_COUNT,      app.vramCacheCount);
@@ -526,6 +565,9 @@ void TrayHandler::DispatchCommand(HWND hWnd, int cmd) {
             applyBool(Constants::Registry::OVERLAY_SHOW_BG,      app.overlayShowBackground);
             applyBool(Constants::Registry::SWAP_MOUSE_BUTTONS,   app.swapMouseButtons);
             applyBool(Constants::Registry::CONTEXT_MENU_ENABLED, app.contextMenuEnabled);
+            applyBool(Constants::Registry::KIOSK_LOCK,           app.isLocked);
+            applyBool(Constants::Registry::ALWAYS_ON_TOP,        app.isAlwaysOnTop);
+            applyBool(Constants::Registry::KEEP_DISPLAY_AWAKE,   app.keepDisplayAwake);
             applyBool(Constants::Registry::WHEEL_INVERT,         app.invertWheelDirection);
             applyBool(Constants::Registry::WHEEL_INVERT_H,       app.invertWheelDirectionH);
             applyBool(Constants::Registry::START_FULLSCREEN,     app.startInFullscreen);
@@ -640,6 +682,12 @@ void TrayHandler::DispatchCommand(HWND hWnd, int cmd) {
             // Apply side effects
             Persistence::Registry::EnableRunOnStartup(app.isEnableRunOnStartup);
             m_overlayManager.SetAllVisible(app.showOverlayInfoText);
+            // Both of these are STATE the window must be pushed into — loading
+            // the value alone changes nothing on screen.
+            SetWindowPos(hWnd, app.isAlwaysOnTop ? HWND_TOPMOST : HWND_NOTOPMOST,
+                         0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE);
+            m_uiManager.ApplyAlwaysOnTop(app.isAlwaysOnTop);
+            AppCommands::ApplyDisplayAwake(hWnd);
             AppCommands::changeAppThemeFactor(hWnd, app.themeFactor);
             ReSortPlaylistAndRebuildMap(hWnd);
             m_uiManager.RepaintAllPanels();
@@ -669,6 +717,9 @@ void TrayHandler::DispatchCommand(HWND hWnd, int cmd) {
         app.zoomClickMultiplier     = Constants::ZOOM_CLICK;
         app.swapMouseButtons        = Constants::IS_SWAP_MOUSE_BUTTONS;
         app.contextMenuEnabled      = Constants::IS_CONTEXT_MENU_ENABLED;
+        app.isLocked                = Constants::IS_KIOSK_LOCK_ENABLED;
+        app.isAlwaysOnTop           = Constants::IS_ALWAYS_ON_TOP;
+        app.keepDisplayAwake        = Constants::IS_KEEP_DISPLAY_AWAKE;
         app.invertWheelDirection    = Constants::IS_MOUSE_VERTICAL_REVERSE_SCROLL_DIRECTION;
         app.invertWheelDirectionH   = Constants::IS_MOUSE_HORIZONTAL_REVERSE_SCROLL_DIRECTION;
         app.vramCacheCount          = Constants::IS_VRAM_CACHE_IMAGES_COUNT;
@@ -709,6 +760,9 @@ void TrayHandler::DispatchCommand(HWND hWnd, int cmd) {
         Persistence::Registry::SaveSetting(Constants::Registry::ZOOM_CLICK_MULT,       static_cast<DWORD>(app.zoomClickMultiplier));
         Persistence::Registry::SaveSetting(Constants::Registry::SWAP_MOUSE_BUTTONS,    static_cast<DWORD>(app.swapMouseButtons));
         Persistence::Registry::SaveSetting(Constants::Registry::CONTEXT_MENU_ENABLED,  static_cast<DWORD>(app.contextMenuEnabled));
+        Persistence::Registry::SaveSetting(Constants::Registry::KIOSK_LOCK,            static_cast<DWORD>(app.isLocked));
+        Persistence::Registry::SaveSetting(Constants::Registry::ALWAYS_ON_TOP,         static_cast<DWORD>(app.isAlwaysOnTop));
+        Persistence::Registry::SaveSetting(Constants::Registry::KEEP_DISPLAY_AWAKE,    static_cast<DWORD>(app.keepDisplayAwake));
         Persistence::Registry::SaveSetting(Constants::Registry::WHEEL_INVERT,          static_cast<DWORD>(app.invertWheelDirection));
         Persistence::Registry::SaveSetting(Constants::Registry::WHEEL_INVERT_H,        static_cast<DWORD>(app.invertWheelDirectionH));
         Persistence::Registry::SaveSetting(Constants::Registry::VRAM_CACHE_COUNT,      static_cast<DWORD>(app.vramCacheCount));
@@ -739,6 +793,10 @@ void TrayHandler::DispatchCommand(HWND hWnd, int cmd) {
 
         Persistence::Registry::EnableRunOnStartup(app.isEnableRunOnStartup);
         m_overlayManager.SetAllVisible(app.showOverlayInfoText);
+        SetWindowPos(hWnd, app.isAlwaysOnTop ? HWND_TOPMOST : HWND_NOTOPMOST,
+                     0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE);
+        m_uiManager.ApplyAlwaysOnTop(app.isAlwaysOnTop);
+        AppCommands::ApplyDisplayAwake(hWnd);
         m_uiManager.RepaintAllPanels();
         InvalidateRect(hWnd, nullptr, FALSE);
         UI::ThemedDialog::Message(hWnd,

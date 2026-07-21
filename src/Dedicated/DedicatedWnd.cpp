@@ -50,6 +50,7 @@ namespace {
         R_PROMO_ORDER, R_PROMO_IMAGES, R_PROMO_SECONDS, R_PROMO_SHOW,
         // Presentation
         R_MONITOR, R_FULLSCREEN, R_SLIDESHOW, R_LOOP, R_SHUFFLE, R_HIDEMOUSE, R_INTERVAL,
+        R_LOCK, R_KEEP_AWAKE,
         // Slideshow detail
         R_TRANS_TYPE, R_TRANS_SOURCE, R_TRANS_ORDER,
         // View / window
@@ -699,6 +700,10 @@ void DedicatedWnd::BuildRows() {
                                              ? std::to_wstring(m_cfg.intervalSeconds) + L" sec"
                                              : std::wstring(L"Use saved"),
         L"Seconds each picture stays on screen. 0 keeps whatever the app already had.", R_INTERVAL);
+    row(Kind::Toggle, L"Kiosk lock", OnOff(m_cfg.lock),
+        L"Ignore all keyboard and mouse input, so nobody can touch the screen. The tray icon still works — it is the only way to unlock it again.", R_LOCK);
+    row(Kind::Toggle, L"Keep display awake", OnOff(m_cfg.keepDisplayAwake),
+        L"Block the screensaver and display sleep while the screen is showing. Leave this off and Windows blanks the display, with no one there to wake it.", R_KEEP_AWAKE);
 
     hdr(L"TRANSITIONS");
     row(Kind::Choice, L"Transition", Constants::Messages::TRANSITION_NAMES[m_cfg.transitionType],
@@ -1023,6 +1028,8 @@ void DedicatedWnd::EditRow(int rowIndex) {
         case R_SLIDESHOW:  m_cfg.slideshow  = !m_cfg.slideshow;  break;
         case R_LOOP:       m_cfg.loop       = !m_cfg.loop;       break;
         case R_HIDEMOUSE:  m_cfg.hideMouse  = !m_cfg.hideMouse;  break;
+        case R_LOCK:       m_cfg.lock       = !m_cfg.lock;       break;
+        case R_KEEP_AWAKE: m_cfg.keepDisplayAwake = !m_cfg.keepDisplayAwake; break;
         case R_INTERVAL: {
             const int v = DialogPromptInt(L"Slide interval",
                                           L"Seconds between slides.\n0 = use the saved value.",

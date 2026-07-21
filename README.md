@@ -375,6 +375,12 @@ The panel edits the **config only** — it never changes the app you are using, 
 
 `Test Images` / `Test Promos` count the images actually found per folder and flag folders that are missing or empty. A folder that exists but holds nothing decodable looks identical to a working one until the screen goes blank.
 
+**Kiosk lock.** Tick **Kiosk lock** in the panel and the screen ignores every key and every click — nobody walking past can pause the slideshow or open a panel. The tray icon keeps working (its menu runs its own message loop, so the locked window never sees those messages), and **Settings › Kiosk Lock** there is the only way back in. The main app has the same toggle in its tray menu, and `-lock` forces it on for a single launch without changing the stored setting.
+
+**Always on top.** Keeps the screen above every other window so nothing that pops up can cover it. `Ctrl+T` toggles it live and the setting persists; the panel sets it for a generated screen.
+
+**Keep display awake.** Blocks the screensaver and display sleep while the window is on screen. Leave it off and Windows eventually blanks the display with nobody there to wake it — and with the kiosk lock on, nobody could. The hold is released automatically when the window hides to the tray, so a viewer sitting in the tray never keeps a machine up.
+
 **Isolation.** A dedicated screen writes *nothing* to the registry, keeps no history or favorites, and has its own mutex and window class — so a file opened from Explorer can never land on a slideshow instead of the main window. It auto-starts from a shortcut rather than the `Run` key.
 
 ### Promotions
@@ -422,7 +428,8 @@ QuickImageViewer.exe [image_path] [options]
 | `-slideshowTransitionOrder=<sequential\|random>` | How the next one is drawn from that set |
 | `-slideshowTransitionShuffle` | Legacy shorthand for `source=all order=random` |
 | `-hideMouse` | Hide the mouse cursor at startup |
-| `-lock` | KIOSK mode — all keyboard and mouse input is ignored |
+| `-lock` | KIOSK mode — all keyboard and mouse input is ignored; unlock from the tray |
+| `-keepDisplayAwake` | Block the screensaver and display sleep while the window is on screen |
 | `-dedicated` | Run as a dedicated screen — no registry writes, no history, own icon, mutex and window class |
 | `-config <path>` | Use this `.ini` instead of the one named after the exe |
 | `-instance=<name>` | Name this instance — settings, lists, mutex and window class derive from it |

@@ -4186,6 +4186,24 @@ D:\Screens\promotionList_qIV_dedicated_Lobby.qpr    promotion folders</code></pr
             flag folders that are missing or empty. A folder that exists but holds nothing decodable looks
             identical to a working one until the screen goes blank.</p>
 
+        <h3>Kiosk lock</h3>
+        <p>Tick <strong>Kiosk lock</strong> in the panel and the screen ignores every key and every click
+            &mdash; nobody walking past can pause the slideshow or open a panel. The tray icon keeps working
+            (its menu runs its own message loop, so the locked window never sees those messages), and
+            <strong>Settings &rsaquo; Kiosk Lock</strong> there is the only way back in. The main app has the
+            same toggle in its tray menu, and <code>-lock</code> forces it on for a single launch without
+            changing the stored setting.</p>
+
+        <h3>Always on top</h3>
+        <p>Keeps the screen above every other window so nothing that pops up can cover it. <kbd>Ctrl</kbd>+<kbd>T</kbd>
+            toggles it live and the setting persists; the panel sets it for a generated screen.</p>
+
+        <h3>Keep display awake</h3>
+        <p>Blocks the screensaver and display sleep while the window is on screen. Leave it off and Windows
+            eventually blanks the display with nobody there to wake it &mdash; and with the kiosk lock on,
+            nobody could. The hold is released automatically when the window hides to the tray, so a viewer
+            sitting in the tray never keeps a machine up.</p>
+
         <h3>Isolation</h3>
         <p>A dedicated screen writes <em>nothing</em> to the registry, keeps no history or favorites, and has
             its own mutex and window class &mdash; so a file opened from Explorer can never land on a slideshow
@@ -4453,8 +4471,16 @@ D:\Screens\promotionList_qIV_dedicated_Lobby.qpr    promotion folders</code></pr
                     mouse
                     input
                     is
-                    ignored
+                    ignored;
+                    unlock
+                    from
+                    the
+                    tray
                 </td>
+            </tr>
+            <tr>
+                <td><code>-keepDisplayAwake</code></td>
+                <td>Block the screensaver and display sleep while the window is on screen</td>
             </tr>
             <tr>
                 <td><code>-dedicated</code></td>

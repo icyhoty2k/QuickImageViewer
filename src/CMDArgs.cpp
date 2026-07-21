@@ -99,6 +99,7 @@ uint32_t ParseTransitionList(const std::wstring &spec) {
 //   -slideshowTransitionShuffle          Legacy: same as source=all order=random
 //   -hideMouse               Hide mouse cursor at startup
 //   -lock                    KIOSK mode: no keyboard or mouse input
+//   -keepDisplayAwake        Block the screensaver and display sleep
 //   -RestoreDefaults         Wipe all registry settings, confirm, and exit (recovery fallback)
 //   <path>                   Positional: open this image file
 // =============================================================================
@@ -147,6 +148,7 @@ CmdArgs ParseCmdArgs(int argc, LPWSTR *argv) {
         // --- Behavior ---
         else if (arg == L"-hideMouse") args.hideMouse = true;
         else if (arg == L"-lock") args.lock = true;
+        else if (arg == L"-keepDisplayAwake") args.keepAwake = true;
 
             // -dedicated (separate registry/history/favorites namespace, unique mutex)
         else if (arg == L"-dedicated") args.dedicated = true;
@@ -233,8 +235,14 @@ void ApplyCmdArgs(HWND hWnd, const CmdArgs &args, int nCmdShow) {
     // 1a. Dedicated mode (affects history file and registry — must be set before any of that)
     if (args.dedicated) app.isDedicated = true;
 
-    // 2. KIOSK lock
+    // 2. KIOSK lock. app.isLocked already carries the STORED value at this point
+    // (RegistryManager loaded it, or the .ini did for a dedicated screen), so the
+    // switch can only force it on for this launch — it never clears a configured
+    // lock, and never writes one back.
     if (args.lock) app.isLocked = true;
+    // Same one-way rule. The request itself is armed further down, once it is
+    // known whether the window is being shown at all.
+    if (args.keepAwake) app.keepDisplayAwake = true;
 
     // 3. Position on a specific monitor before the window is shown
     if (args.monitorNum >= 1) {
@@ -265,8 +273,13 @@ void ApplyCmdArgs(HWND hWnd, const CmdArgs &args, int nCmdShow) {
         }
     }
 
-    // 4. Always on top (set before show so it takes effect immediately)
-    if (args.alwaysOnTop)
+    // 4. Always on top (set before show so it takes effect immediately).
+    // Same rule as the lock: the stored value is already in app.isAlwaysOnTop and
+    // the switch only forces it on. Setting the FLAG as well as the z-order
+    // matters — Ctrl+T reads it to decide which way to toggle, so without this a
+    // window started with -awaysOnTop would need two presses to come back down.
+    if (args.alwaysOnTop) app.isAlwaysOnTop = true;
+    if (app.isAlwaysOnTop)
         SetWindowPos(hWnd, HWND_TOPMOST, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE);
 
     // 5. Background / service mode — hide window, add tray icon, done
@@ -279,6 +292,11 @@ void ApplyCmdArgs(HWND hWnd, const CmdArgs &args, int nCmdShow) {
     // 6. Show window normally
     ShowWindow(hWnd, nCmdShow);
     UpdateWindow(hWnd);
+
+    // WM_SHOWWINDOW normally arms this, but ShowWindow does not send it when the
+    // window is already in the requested state — so arm it once explicitly here
+    // rather than depend on that. The call is idempotent.
+    AppCommands::ApplyDisplayAwake(hWnd);
 
     // Tray icon is always present — dedicated mode requires it for kiosk control,
     // and normal mode uses it as the "hide to tray on close" target.

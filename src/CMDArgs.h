@@ -63,6 +63,7 @@ struct CmdArgs {
     // --- Behavior ---
     bool         hideMouse     = false; // -hideMouse     : hide cursor at startup
     bool         lock          = false; // -lock          : KIOSK — no keyboard or mouse input accepted
+    bool         keepAwake     = false; // -keepDisplayAwake : block screensaver / display sleep
     bool         dedicated       = false; // -dedicated       : separate registry/history/favorites, unique mutex
     bool         runOnStartup    = false; // -runOnStartup    : write/refresh the startup registry entry (handles exe relocation)
     bool         restoreDefaults = false; // -RestoreDefaults : delete all registry settings, show confirmation, and exit
