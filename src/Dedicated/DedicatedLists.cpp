@@ -66,11 +66,11 @@ namespace {
         std::wstring promoName = ReadInstanceString(KEY_PROMO_LISTS);
 
         if (imageName.empty()) {
-            imageName = std::wstring(D::IMAGE_LIST_PREFIX) + stem + D::LIST_FILE_EXT;
+            imageName = std::wstring(D::IMAGE_LIST_PREFIX) + stem + D::IMAGE_LIST_EXT;
             WriteInstanceString(KEY_IMAGE_LISTS, imageName);
         }
         if (promoName.empty()) {
-            promoName = std::wstring(D::PROMO_LIST_PREFIX) + stem + D::LIST_FILE_EXT;
+            promoName = std::wstring(D::PROMO_LIST_PREFIX) + stem + D::PROMO_LIST_EXT;
             WriteInstanceString(KEY_PROMO_LISTS, promoName);
         }
 
@@ -130,8 +130,9 @@ namespace {
 // Authoring another instance's lists
 // =============================================================================
 namespace {
-    // <exe folder>\<prefix><exe stem>.txt
-    std::wstring ListPathFor(const std::wstring &exePath, const wchar_t *prefix) {
+    // <exe folder>\<prefix><exe stem><ext>
+    std::wstring ListPathFor(const std::wstring &exePath, const wchar_t *prefix,
+                             const wchar_t *ext) {
         if (exePath.empty()) return {};
         const size_t slash = exePath.find_last_of(L"\\/");
         if (slash == std::wstring::npos) return {};
@@ -141,7 +142,7 @@ namespace {
         const size_t dot = stem.find_last_of(L'.');
         if (dot != std::wstring::npos) stem.resize(dot);
 
-        return folder + prefix + stem + Constants::Dedicated::LIST_FILE_EXT;
+        return folder + prefix + stem + ext;
     }
 
     // Case-insensitive, trailing-slash-insensitive comparison key.
@@ -153,11 +154,13 @@ namespace {
 }
 
 std::wstring ImageListPathFor(const std::wstring &exePath) {
-    return ListPathFor(exePath, Constants::Dedicated::IMAGE_LIST_PREFIX);
+    return ListPathFor(exePath, Constants::Dedicated::IMAGE_LIST_PREFIX,
+                       Constants::Dedicated::IMAGE_LIST_EXT);
 }
 
 std::wstring PromotionListPathFor(const std::wstring &exePath) {
-    return ListPathFor(exePath, Constants::Dedicated::PROMO_LIST_PREFIX);
+    return ListPathFor(exePath, Constants::Dedicated::PROMO_LIST_PREFIX,
+                       Constants::Dedicated::PROMO_LIST_EXT);
 }
 
 AppendResult AppendFolder(const std::wstring &listPath, const std::wstring &folder) {

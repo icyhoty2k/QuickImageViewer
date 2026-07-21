@@ -201,13 +201,18 @@ namespace Constants {
         // A dedicated instance has NO history and NO favorites — it is an
         // appliance showing fixed content, not a browser. Instead it keeps two
         // plain folder lists beside the exe, named after it:
-        //     imageLists_<exeName>.txt      folders holding the images
-        //     promotionList_<exeName>.txt   folders holding the promotions
+        //     imageLists_<exeName>.qim      folders holding the images
+        //     promotionList_<exeName>.qpr   folders holding the promotions
         // The actual names are recorded in the .ini so they can be renamed or
         // shared between instances; missing files are generated on startup.
         constexpr const wchar_t *IMAGE_LIST_PREFIX = L"imageLists_";
         constexpr const wchar_t *PROMO_LIST_PREFIX = L"promotionList_";
-        constexpr const wchar_t *LIST_FILE_EXT     = L".txt";
+
+        // Distinct extensions, not a shared .txt: the file dialogs then filter
+        // to exactly one kind, so an image list can never be picked where a
+        // promotion list is meant. Both are plain UTF-16 text inside.
+        constexpr const wchar_t *IMAGE_LIST_EXT = L".qim"; // qIV image list
+        constexpr const wchar_t *PROMO_LIST_EXT = L".qpr"; // qIV promotion list
 
         // An exe whose FILE NAME contains this substring triggers dedicated
         // mode: with no .ini beside it, a default one is generated rather than

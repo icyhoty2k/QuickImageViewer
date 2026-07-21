@@ -633,6 +633,53 @@ namespace UI {
             L"Overwrites current history and favorites in memory and on disk.", sTray);
 
         // ---------------------------------------------------------------
+        const int sDed = Sec(L"🖥️", L"DEDICATED SCREENS",
+                             L"Isolated copies for unattended displays (F8)");
+
+        Add(K(SC::SC_PANEL_DEDICATED_TOGGLE),
+            L"Open the Dedicated panel. A dedicated screen is a separate copy of qIV with "
+            L"its own settings file beside it — normally parked fullscreen on one monitor "
+            L"running a slideshow. Any number can run at once alongside the main app "
+            L"without sharing anything.", sDed);
+        Add(L"Dedicated › Generate App",
+            L"Copy this executable to a chosen folder as qIV_dedicated_<name>.exe. The "
+            L"name is what keeps screens apart: its settings, folder lists, single-instance "
+            L"identity and shortcut are all derived from it.", sDed);
+        Add(L"Dedicated › Generate Config",
+            L"Write that copy's .ini next to it, holding every setting shown in the panel. "
+            L"The panel edits the CONFIG only — it never changes the app you are using.", sDed);
+        Add(L"Dedicated › Add Images / Add Promotions",
+            L"Append a folder to the screen's image list (.qim) or promotion list (.qpr). "
+            L"Duplicates are reported and skipped. Missing list files are created.", sDed);
+        Add(L"Dedicated › Add Startup / Remove Startup",
+            L"Create or delete a shortcut in shell:startup pointing at the copy with "
+            L"-dedicated -config \"<its .ini>\", so the screen starts itself after a reboot.", sDed);
+        Add(L"Dedicated › Test Config / Test Images / Test Promos",
+            L"Check one thing at a time: the .ini, the image list, or the promotion list. "
+            L"The list tests count the images actually found per folder and flag folders "
+            L"that are missing or empty — a folder that exists but holds nothing decodable "
+            L"looks fine until the screen goes blank.", sDed);
+        Add(L"Promotions",
+            L"A SECOND playlist, never merged into the images. Shown occasionally between "
+            L"them and invisible to the image counter and arrow keys. Weighted order "
+            L"favours files whose name ends in #N — \"sale#500.jpg\" is 500x likelier than "
+            L"a file with no suffix (1 to 65535).", sDed);
+        Add(L"Promotion pacing",
+            L"Two independent triggers, each a (from, to) pair: 0 = off, a single value is "
+            L"an exact cadence, a range is re-rolled each time so it never looks mechanical. "
+            L"Count them in images, in seconds, or both — whichever comes due first shows a "
+            L"promotion. Promotions can hold the screen for their own dwell time.", sDed);
+        Add(L"Isolation",
+            L"A dedicated screen writes NOTHING to the registry: settings live in its .ini, "
+            L"and it keeps no history or favorites. Its own mutex and window class mean a "
+            L"file opened from Explorer can never land on a slideshow instead of the main "
+            L"window.", sDed);
+        Add(L"Turning any copy portable",
+            L"Put an .ini beside any copy and it reads settings from that file instead of "
+            L"the registry. With Dedicated=0 inside, it stays an ordinary viewer — history, "
+            L"favorites and all — just portable.", sDed);
+
+        // ---------------------------------------------------------------
         const int sCli = Sec(L"⌨️", L"COMMAND-LINE ARGUMENTS",
                              L"Options for QuickImageViewer.exe at launch");
 
@@ -678,8 +725,26 @@ namespace UI {
             L"KIOSK mode — all keyboard and mouse input is ignored. Combine with "
             L"-fullscreen -slideshow for unattended public displays.", sCli);
         Add(L"-dedicated",
-            L"Isolated instance: no registry writes, a separate history file, its own tray "
-            L"icon and mutex — safe to run alongside a normal QIV instance.", sCli);
+            L"Run as a dedicated screen: no registry writes at all, no history or favorites, "
+            L"its own icon, mutex and window class — safe alongside any number of other "
+            L"instances. Settings come from the .ini beside the exe.", sCli);
+        Add(L"-config <path>",
+            L"Use this .ini instead of the one named after the exe. Generated startup "
+            L"shortcuts pass it, so one executable can serve several configured screens.", sCli);
+        Add(L"-instance=<name>",
+            L"Name this instance. Everything that keeps screens apart derives from it: "
+            L"settings file, folder lists, mutex and window class.", sCli);
+        Add(L"-instanceDesc=<text>",
+            L"Free-text description, shown on the generated shortcut.", sCli);
+        Add(L"-promoOrder=<sequential|weighted>",
+            L"How the next promotion is chosen. Weighted favours files whose name ends "
+            L"in #N.", sCli);
+        Add(L"-promoEveryImages=<from>-<to>",
+            L"Show a promotion every N images. 0 = off; \"5-0\" is exactly every 5th; "
+            L"\"5-15\" is re-rolled between 5 and 15.", sCli);
+        Add(L"-promoEverySeconds=<from>-<to>",
+            L"Same, counted in seconds. Runs independently of the image counter — "
+            L"whichever comes due first shows a promotion.", sCli);
         Add(L"-runOnStartup",
             L"Write or refresh the Windows startup registry entry (HKCU\\…\\Run) so QIV "
             L"launches automatically with Windows — equivalent to enabling \"Run on startup\" "
@@ -688,6 +753,10 @@ namespace UI {
         Add(L"Example",
             L"QuickImageViewer.exe -dedicated -lock -fullscreen -slideshow -shuffle "
             L"-slideshowInterval 8 -startFolder \"D:\\Ads\"", sCli);
+        Add(L"Example — dedicated screen",
+            L"qIV_dedicated_Lobby.exe -dedicated -config \"D:\\Screens\\qIV_dedicated_Lobby.ini\" "
+            L"— the form the Dedicated panel writes into a startup shortcut. Folders and "
+            L"every setting come from the .ini and its .qim / .qpr lists.", sCli);
     }
 
     // =========================================================================

@@ -80,7 +80,8 @@ class DedicatedWnd : public FloatingPanelWnd {
         void DoAddPromotions();  // append a folder to the promotion list
         void DoAddStartup();     // shortcut → shell:startup
         void DoRemoveStartup();  // delete that shortcut
-        void DoTest();           // validate an .ini, offer to rebuild
+        void DoTest();               // validate an .ini, offer to rebuild
+        void DoTestList(bool promotions); // validate one folder list + its content
 
         // Shared by the two Add buttons — same flow, different list file.
         void AppendFolderToList(bool promotions);
@@ -103,6 +104,9 @@ class DedicatedWnd : public FloatingPanelWnd {
                            const wchar_t *caption, const wchar_t *unit);
         bool PickFolder(std::wstring &inOut, const wchar_t *title);
         std::wstring PickIniFile(bool save);
+        // Picks a folder list, filtered to that kind's own extension so an image
+        // list can never be chosen where a promotion list is meant.
+        std::wstring PickListFile(bool promotions);
 
         // Paths of the copy this panel last generated / is managing.
         std::wstring TargetExePath() const;

@@ -41,7 +41,7 @@ class PromotionPlaylist {
         bool Scan(const std::wstring &folder);
 
         // Scans SEVERAL folders into one pool. This is the form a dedicated
-        // instance uses: its promotions come from promotionList_*.txt, which
+        // instance uses: its promotions come from promotionList_*.qpr, which
         // holds any number of folders. Missing folders are skipped, not fatal.
         bool Scan(const std::vector<std::wstring> &folders);
 

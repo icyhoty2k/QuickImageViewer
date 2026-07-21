@@ -523,7 +523,7 @@ void InitPromotions() {
     st.promotions.SetOrder(cfg.promoOrder);
     st.promotions.SetImageTrigger(cfg.promoImagesFrom, cfg.promoImagesTo);
     st.promotions.SetTimeTrigger(cfg.promoTimeFrom, cfg.promoTimeTo);
-    // Pool every folder named in promotionList_*.txt. Scan re-arms the triggers
+    // Pool every folder named in promotionList_*.qpr. Scan re-arms the triggers
     // and decides the first pick.
     st.promotions.Scan(LoadPromotionFolders());
 }
