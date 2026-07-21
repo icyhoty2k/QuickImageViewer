@@ -84,12 +84,31 @@ namespace Constants::Messages {
     constexpr const wchar_t *SLIDESHOW_LOOP_OFF = L"Loop" STR_STATE_OFF;
     constexpr const wchar_t *SLIDESHOW_SHUFFLE_ON = L"Shuffle" STR_STATE_ON;
     constexpr const wchar_t *SLIDESHOW_SHUFFLE_OFF = L"Shuffle" STR_STATE_OFF;
-    constexpr const wchar_t *TRANSITION_CUT = L"Transition: Cut";
-    constexpr const wchar_t *TRANSITION_FADE = L"Transition: Fade";
-    constexpr const wchar_t *TRANSITION_DISSOLVE = L"Transition: Dissolve";
-    constexpr const wchar_t *TRANSITION_RIPPLE = L"Transition: Ripple";
-    constexpr const wchar_t *TRANSITION_PUSH = L"Transition: Push";
-    constexpr const wchar_t *TRANSITION_ZOOM = L"Transition: Zoom";
+    // Indexed by TransitionType — single source for the tray submenu, the context
+    // menu submenu and the overlay message. Order MUST match the enum in
+    // SlideshowTransitions.h; size MUST match Constants::Slideshow::TRANSITION_COUNT.
+    constexpr const wchar_t *TRANSITION_NAMES[] = {
+        L"Cut", L"Fade", L"Dissolve", L"Ripple",
+        L"Slide Left", L"Zoom Out", L"Slide Up", L"Zoom In",
+        L"Slide Right", L"Slide Down", L"Soft Zoom", L"Spin",
+        L"Spin Zoom", L"Drift Left", L"Drift Up", L"Flicker",
+        L"Bounce", L"Swing", L"Slam", L"Iris", L"Slide Diagonal"
+    };
+    constexpr const wchar_t *TRANSITION_PREFIX = L"Transition: "; // append a NAMES entry
+    // Indexed by Constants::Slideshow::TransitionSource::NONE..LIST.
+    constexpr const wchar_t *TRANSITION_SOURCE_NAMES[] = {
+        L"None (use selected)", L"All", L"List (ticked only)"
+    };
+    // Indexed by Constants::Slideshow::TransitionOrder::SEQUENTIAL..RANDOM.
+    constexpr const wchar_t *TRANSITION_ORDER_NAMES[] = { L"Sequential", L"Random" };
+    constexpr const wchar_t *TRANSITION_SOURCE_PREFIX = L"Transitions: ";
+    constexpr const wchar_t *TRANSITION_ORDER_PREFIX  = L"Transition Order: ";
+    constexpr const wchar_t *TRANSITION_LIST_EMPTY    = L"⚠ Transition list is empty";
+    // Runtime-appendable forms of the STR_STATE_* macros, for messages whose
+    // subject is only known at run time.
+    constexpr const wchar_t *STATE_ON_SUFFIX  = STR_STATE_ON;
+    constexpr const wchar_t *STATE_OFF_SUFFIX = STR_STATE_OFF;
+    constexpr const wchar_t *SLIDESHOW_INTERVAL_PREFIX = L"Interval: "; // append "<n> ms"
 
     // Ctrl+T — always on top
     constexpr const wchar_t *ALWAYS_ON_TOP_ON = L"Always on Top" STR_STATE_ON;
@@ -133,6 +152,14 @@ namespace Constants::Messages {
     constexpr const wchar_t *SPAWN_DIR_CLOSED = STR_THUMBNAIL_STRIP STR_SEPARATOR L"Closed";
     constexpr const wchar_t *SPAWN_DIR_NO_SPACE = L"No free positions for " STR_THUMBNAIL_STRIP;
     constexpr const wchar_t *COPIED_TO_CLIPBOARD = L"Copied to Clipboard";
+
+    // Desktop wallpaper — NAMES is indexed by Constants::Wallpaper::FILL..SPAN and
+    // is the single source for both the submenu labels and the overlay message.
+    constexpr const wchar_t *WALLPAPER_NAMES[] = {
+        L"Fill", L"Fit", L"Stretch", L"Tile", L"Center", L"Span"
+    };
+    constexpr const wchar_t *WALLPAPER_SET = L"Wallpaper: "; // prefix — append the style name
+    constexpr const wchar_t *WALLPAPER_FAILED = L"⚠ Wallpaper could not be applied";
     constexpr const wchar_t *HISTORY_NAV_FOLDER = L"↔ "; // prefix — append folder name
     constexpr const wchar_t *FOLDER_DEAD_MISSING = L"⚠ Folder not found";
     constexpr const wchar_t *FOLDER_DEAD_EMPTY = L"⚠ No images in folder";

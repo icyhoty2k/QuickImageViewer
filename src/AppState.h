@@ -132,6 +132,10 @@ struct AppState {
     POINT rmbDownPt = {0, 0};
     bool  rmbConsumed = false;
 
+    // True while a TrackPopupMenu is up (context or tray menu). The slideshow
+    // cursor-hide timer honours this so the pointer never vanishes mid-menu.
+    bool isContextMenuOpen = false;
+
     // Middle mouse panning
     bool isMidDragging = false;
     bool hasMidMoved = false;

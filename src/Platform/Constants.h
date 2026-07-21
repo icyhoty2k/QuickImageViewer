@@ -6,8 +6,8 @@
 // *** Update ONLY the four numbers below to bump the version everywhere ***
 // =========================================================================
 #define VER_MAJOR 2
-#define VER_MINOR 12
-#define VER_PATCH 2
+#define VER_MINOR 15
+#define VER_PATCH 0
 #define VER_BUILD 0
 
 // Comma form  — FILEVERSION / PRODUCTVERSION in .rc  (e.g. 2,3,0,0)
@@ -122,6 +122,19 @@ namespace Constants {
 
     constexpr bool IS_SWAP_MOUSE_BUTTONS = true;
     constexpr bool IS_CONTEXT_MENU_ENABLED = true; // main-window right-click context menu on/off
+
+    // Desktop wallpaper fit styles — the 6 native Windows options. These indices
+    // map 1:1 onto DESKTOP_WALLPAPER_POSITION inside AppCommands.cpp, and index
+    // Constants::Messages::WALLPAPER_NAMES for the labels.
+    namespace Wallpaper {
+        constexpr int FILL    = 0;
+        constexpr int FIT     = 1;
+        constexpr int STRETCH = 2;
+        constexpr int TILE    = 3;
+        constexpr int CENTER  = 4;
+        constexpr int SPAN    = 5;
+        constexpr int COUNT   = 6;
+    }
     constexpr bool IS_CTRL_C_ENABLED       = true;
     constexpr bool IS_THUMB_COPY_ENABLED   = true;
     constexpr bool IS_THUMB_MOVE_ENABLED   = true;
@@ -343,6 +356,9 @@ namespace Constants {
         constexpr const wchar_t *SLIDESHOW_LOOP          = L"qivSlideshowLoop";
         constexpr const wchar_t *SLIDESHOW_SHUFFLE       = L"qivSlideshowShuffle";
         constexpr const wchar_t *SLIDESHOW_TRANSITION    = L"qivSlideshowTransition";
+        constexpr const wchar_t *SLIDESHOW_TRANS_SOURCE  = L"qivSlideshowTransSource";
+        constexpr const wchar_t *SLIDESHOW_TRANS_ORDER   = L"qivSlideshowTransOrder";
+        constexpr const wchar_t *SLIDESHOW_TRANS_LIST    = L"qivSlideshowTransList"; // bitmask
         constexpr const wchar_t *SORT_ORDER              = L"qivSortOrder";
         constexpr const wchar_t *SORT_REVERSE            = L"qivSortReverse";
         constexpr const wchar_t *CTRL_C_ENABLED          = L"qivCtrlCEnabled";
@@ -523,6 +539,52 @@ namespace Constants {
         constexpr int CURSOR_HIDE_MS = 3000; // ms of inactivity before hiding cursor (0 = never)
         constexpr int TRANSITION_TICK_MS = 16; // animation tick interval ~60 fps
         constexpr int TRANSITION_DURATION_MS = 800; // default transition length ms
+
+        // Number of TransitionType members — keep in sync with the enum in
+        // SlideshowTransitions.h (a static_assert-free contract used for menu
+        // building, cycling and registry clamping).
+        constexpr int TRANSITION_COUNT = 21;
+
+        // Transition selection is two independent axes:
+        //   SOURCE — which transitions are in play
+        //   ORDER  — how the next one is drawn from that pool (ignored for NONE)
+        // Both index the matching *_NAMES arrays in ConstantsStrings.h.
+        namespace TransitionSource {
+            constexpr int NONE  = 0; // always the single transition the user picked
+            constexpr int ALL   = 1; // every entry in the menu
+            constexpr int LIST  = 2; // only the entries ticked in the menu
+            constexpr int COUNT = 3;
+        }
+        namespace TransitionOrder {
+            constexpr int SEQUENTIAL = 0; // menu order, one per slide, then repeat
+            constexpr int RANDOM     = 1; // random pick from the pool every slide
+            constexpr int COUNT      = 2;
+        }
+
+        // Dissolve — alpha ramp is quantised into this many discrete steps so it
+        // reads as a grainy staircase instead of a smooth Fade.
+        constexpr int DISSOLVE_STEPS = 14;
+
+        // Ripple — damped zoom oscillation around 1.0.
+        constexpr float RIPPLE_AMPLITUDE = 0.12f; // peak zoom deviation at progress 0
+        constexpr float RIPPLE_WAVES     = 3.0f;  // full oscillations across the transition
+
+        // ZoomIn — starting zoom that grows to 1.0 (ZoomOut is the 2× → 1× inverse).
+        constexpr float ZOOM_IN_START = 0.4f;
+
+        // ── Tunables for the extended transition set ─────────────────────────
+        constexpr float SOFT_ZOOM_START  = 1.5f; // SoftZoom starting zoom
+        constexpr int   SPIN_DEGREES     = 360;  // Spin full turn
+        constexpr int   SPIN_ZOOM_DEGREES = 180; // SpinZoom half turn
+        constexpr float SPIN_ZOOM_START  = 0.3f; // SpinZoom starting zoom
+        constexpr float DRIFT_FRACTION   = 0.12f;// Drift* travel as a fraction of the window
+        constexpr float FLICKER_CYCLES   = 6.0f; // Flicker strobes across the transition
+        constexpr float BOUNCE_START     = 0.6f; // Bounce starting zoom
+        constexpr float BOUNCE_OVERSHOOT = 0.18f;// Bounce peak above 1.0
+        constexpr int   SWING_DEGREES    = 14;   // Swing peak tilt
+        constexpr float SWING_WAVES      = 2.5f; // Swing oscillations
+        constexpr float SLAM_START       = 3.0f; // Slam starting zoom
+        constexpr float IRIS_START       = 0.02f;// Iris starting zoom (near a point)
     }
 
     // =========================================================================

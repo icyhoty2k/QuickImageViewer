@@ -1006,6 +1006,21 @@ HRESULT RendererD2D::Render() {
                                                  ? D2D1_INTERPOLATION_MODE_NEAREST_NEIGHBOR
                                                  : D2D1_INTERPOLATION_MODE_HIGH_QUALITY_CUBIC;
 
+        // Slideshow fade transitions dim the IMAGE, not the window. A layer is
+        // used (rather than DrawBitmap's opacity arg) because it also covers the
+        // DrawImage effect path, and it leaves the cleared background and the
+        // overlays — drawn after PopLayer — fully opaque.
+        const float transitionAlpha =
+                std::clamp(app.slideshow.transition.alpha, 0.0f, 1.0f);
+        const bool useAlphaLayer = (transitionAlpha < 0.999f);
+        if (useAlphaLayer) {
+            m_pDeviceContext->PushLayer(
+                    D2D1::LayerParameters1(D2D1::InfiniteRect(), nullptr,
+                                           D2D1_ANTIALIAS_MODE_PER_PRIMITIVE,
+                                           D2D1::IdentityMatrix(), transitionAlpha),
+                    nullptr);
+        }
+
         if (app.effectPreviewEnabled && app.hasActiveEffects &&
             m_pActiveDisplayNode && m_pActiveDisplayNode.Get() != m_pBitmap.Get() &&
             m_pScaleEffect) {
@@ -1034,6 +1049,8 @@ HRESULT RendererD2D::Render() {
                     1.0f,
                     interpMode);
         }
+
+        if (useAlphaLayer) m_pDeviceContext->PopLayer();
 
         m_pDeviceContext->SetTransform(D2D1::Matrix3x2F::Identity());
         g_overlayManager.UpdateZoom(app.viewport.zoom, m_hwnd);

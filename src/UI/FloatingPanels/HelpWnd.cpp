@@ -430,7 +430,12 @@ namespace UI {
         Add(K(SC::SC_SLIDESHOW_SHUFFLE_TOGGLE) + L"  (while running)",
             L"Toggle shuffle — show the playlist in random order.", sSlide);
         Add(K(SC::SC_SLIDESHOW_TRANSITION_CYCLE) + L"  (while running)",
-            L"Cycle the slide transition: Cut → Fade → Dissolve → Ripple → Push → Zoom.", sSlide);
+            L"Step to the next slide transition (" + NumI(Constants::Slideshow::TRANSITION_COUNT) +
+            L" in total, wraps around). Slideshow › Transition in the tray or right-click "
+            L"menu controls this in two parts: which transitions are in play — None "
+            L"(just the one you tick), All, or List (only the ones you tick) — and the "
+            L"order they play in, Sequential (the menu's numbered order) or Random. "
+            L"In List mode the numbered rows become checkboxes.", sSlide);
 
         // ---------------------------------------------------------------
         const int sOverlay = Sec(L"ℹ️", L"INFO OVERLAYS",
@@ -608,7 +613,8 @@ namespace UI {
             L"The current mode is shown with a radio-button check.", sTray);
         Add(L"Slideshow submenu",
             L"Configure slideshow defaults: interval (100 – 60000 ms), loop, shuffle, "
-            L"and transition type (Cut / Fade / Dissolve / Ripple / Push / Zoom). "
+            L"and transition type (" + NumI(Constants::Slideshow::TRANSITION_COUNT) +
+            L" styles, plus Random). "
             L"All changes persist immediately.", sTray);
         Add(L"Sort submenu",
             L"Choose the playlist sort order (Name / Date Modified / Size / Type / "
@@ -647,10 +653,21 @@ namespace UI {
         Add(L"-repeat", L"Loop the slideshow when it reaches the end.", sCli);
         Add(L"-shuffle", L"Play the slideshow in random order.", sCli);
         Add(L"-slideshowTransition=<type>",
-            L"Slide transition: Cut, Fade, Dissolve, Ripple, Push or Zoom. "
+            L"Slide transition by name: Cut, Fade, Dissolve, Ripple, Flicker, "
+            L"SlideLeft, SlideRight, SlideUp, SlideDown, SlideDiagonal, DriftLeft, DriftUp, "
+            L"ZoomIn, ZoomOut, SoftZoom, Spin, SpinZoom, Swing, Bounce, Slam or Iris. "
             L"Example: -slideshowTransition=Fade.", sCli);
+        Add(L"-slideshowTransitions=<list>",
+            L"Use a custom set of transitions, mirroring List mode in the menu. Accepts "
+            L"names or the numbers shown beside them — \"Fade,Iris,Spin\" or \"6,8,17\". "
+            L"Unknown entries are ignored.", sCli);
+        Add(L"-slideshowTransitionSource=<none|all|list>",
+            L"Which transitions are in play: the single one picked, all of them, or "
+            L"only the custom list.", sCli);
+        Add(L"-slideshowTransitionOrder=<sequential|random>",
+            L"How the next transition is drawn from that set.", sCli);
         Add(L"-slideshowTransitionShuffle",
-            L"Pick a random transition for every slide.", sCli);
+            L"Legacy shorthand for source=all order=random.", sCli);
         Add(L"-hideMouse", L"Hide the mouse cursor at startup.", sCli);
         Add(L"-lock",
             L"KIOSK mode — all keyboard and mouse input is ignored. Combine with "

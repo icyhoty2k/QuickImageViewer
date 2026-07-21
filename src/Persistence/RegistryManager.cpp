@@ -294,11 +294,21 @@ namespace Persistence::Registry {
             Constants::Registry::SLIDESHOW_SHUFFLE,
             static_cast<DWORD>(Constants::Slideshow::IS_SHUFFLE)) != 0;
         {
-            int t = std::max(0, std::min(5, static_cast<int>(
+            int t = std::max(0, std::min(Constants::Slideshow::TRANSITION_COUNT - 1, static_cast<int>(
                 readDword(Constants::Registry::SLIDESHOW_TRANSITION,
                     static_cast<DWORD>(TransitionType::Cut)))));
             a.slideshow.transition.type = static_cast<TransitionType>(t);
         }
+        a.slideshow.transition.source = std::max(0,
+            std::min(Constants::Slideshow::TransitionSource::COUNT - 1, static_cast<int>(
+                readDword(Constants::Registry::SLIDESHOW_TRANS_SOURCE,
+                    static_cast<DWORD>(Constants::Slideshow::TransitionSource::NONE)))));
+        a.slideshow.transition.order = std::max(0,
+            std::min(Constants::Slideshow::TransitionOrder::COUNT - 1, static_cast<int>(
+                readDword(Constants::Registry::SLIDESHOW_TRANS_ORDER,
+                    static_cast<DWORD>(Constants::Slideshow::TransitionOrder::SEQUENTIAL)))));
+        a.slideshow.transition.listMask = static_cast<uint32_t>(
+            readDword(Constants::Registry::SLIDESHOW_TRANS_LIST, 0xFFFFFFFEu));
         a.fileHandlerDefaultSortOrder = std::max(0, std::min(4, static_cast<int>(
             readDword(Constants::Registry::SORT_ORDER,
                 static_cast<DWORD>(Constants::FileHandler::FILE_HANDLER_DEFAULT_SORT_ORDER)))));
