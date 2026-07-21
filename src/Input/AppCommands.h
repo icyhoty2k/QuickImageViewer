@@ -14,6 +14,15 @@ class AppCommands {
 
         static void AddTrayIcon(HWND hWnd);
 
+        // Re-arms or releases the "keep the display on" request from
+        // app.keepDisplayAwake. THE single place SetThreadExecutionState is
+        // called: the flag is per-thread and cumulative, so scattering the call
+        // would leave requests armed that nothing can clear. Call it after the
+        // setting changes and whenever the main window's visibility changes;
+        // it is idempotent, so calling it too often costs nothing.
+        // UI thread only.
+        static void ApplyDisplayAwake(HWND hWnd);
+
         static void changeAppThemeToDarkMode(HWND hWnd, bool isDarkThemed);
         static void changeAppCornerPreference(HWND hWnd, DWORD cornerStyle);
         static void changeAppThemeFactor(HWND hWnd, float newFactor);

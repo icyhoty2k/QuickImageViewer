@@ -160,13 +160,23 @@ struct AppState {
     bool cursorHiddenAtStartup = false;
 
     bool isDialogVisible = false;
-    bool isLocked = false; // -lock:      KIOSK mode — blocks all keyboard and mouse input
+    // KIOSK mode — MainAppWndProc swallows every keyboard and mouse message.
+    // Persisted (Registry::KIOSK_LOCK), so a dedicated screen can start locked
+    // straight from its .ini. Escape hatch is the tray menu, which runs its own
+    // message loop and is therefore unaffected.
+    bool isLocked = Constants::IS_KIOSK_LOCK_ENABLED; // -lock
     bool isDedicated = false; // -dedicated: no registry writes, separate history file
     // The window class THIS process registered. A dedicated instance uses its
     // own, so instance counting and window lookups never cross instances.
     // Set once at startup from Dedicated::ResolveWindowClassName().
     std::wstring windowClassName = Constants::WINDOW_CLASS_NAME;
-    bool isAlwaysOnTop = false; // Ctrl+T:    window stays above all others
+    bool isAlwaysOnTop = Constants::IS_ALWAYS_ON_TOP; // Ctrl+T / -awaysOnTop
+
+    // Blocks the screensaver and display sleep while the main window is visible.
+    // Acted on by AppCommands::ApplyDisplayAwake — never by touching
+    // SetThreadExecutionState directly, because that call is per-THREAD and
+    // arming it from anywhere but the UI thread silently does nothing.
+    bool keepDisplayAwake = Constants::IS_KEEP_DISPLAY_AWAKE;
 
     // Slideshow
     SlideshowState slideshow;

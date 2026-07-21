@@ -816,6 +816,8 @@ void InputManager::ExecuteCommand(HWND hWnd, Command cmd) {
                          app.isAlwaysOnTop ? HWND_TOPMOST : HWND_NOTOPMOST,
                          0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE);
             uiManager.ApplyAlwaysOnTop(app.isAlwaysOnTop);
+            Persistence::Registry::SaveSetting(Constants::Registry::ALWAYS_ON_TOP,
+                static_cast<DWORD>(app.isAlwaysOnTop));
             g_overlayManager.PostCenterMessage(hWnd,
                                                app.isAlwaysOnTop
                                                    ? Constants::Messages::ALWAYS_ON_TOP_ON

@@ -297,6 +297,18 @@ namespace Persistence::Registry {
         a.contextMenuEnabled = readDword(
             Constants::Registry::CONTEXT_MENU_ENABLED,
             static_cast<DWORD>(Constants::IS_CONTEXT_MENU_ENABLED)) != 0;
+        // KIOSK lock and always-on-top. Both are applied to the window in
+        // ApplyCmdArgs, AFTER the command line — so -lock / -awaysOnTop can still
+        // force them on for one launch without rewriting the stored value.
+        a.isLocked = readDword(
+            Constants::Registry::KIOSK_LOCK,
+            static_cast<DWORD>(Constants::IS_KIOSK_LOCK_ENABLED)) != 0;
+        a.isAlwaysOnTop = readDword(
+            Constants::Registry::ALWAYS_ON_TOP,
+            static_cast<DWORD>(Constants::IS_ALWAYS_ON_TOP)) != 0;
+        a.keepDisplayAwake = readDword(
+            Constants::Registry::KEEP_DISPLAY_AWAKE,
+            static_cast<DWORD>(Constants::IS_KEEP_DISPLAY_AWAKE)) != 0;
         a.invertWheelDirection = readDword(
             Constants::Registry::WHEEL_INVERT,
             static_cast<DWORD>(Constants::IS_MOUSE_VERTICAL_REVERSE_SCROLL_DIRECTION)) != 0;

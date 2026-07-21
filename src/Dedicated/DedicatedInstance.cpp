@@ -155,8 +155,11 @@ std::wstring BuildCommandLine(const InstanceConfig &cfg) {
     if (cfg.monitorNum >= 1)
         AppendValue(s, L"-monitorNum", std::to_wstring(cfg.monitorNum), L"#");
 
-    AppendFlag(s, cfg.fullscreen, L"-fullscreen");
-    AppendFlag(s, cfg.hideMouse,  L"-hideMouse");
+    AppendFlag(s, cfg.fullscreen,  L"-fullscreen");
+    AppendFlag(s, cfg.hideMouse,   L"-hideMouse");
+    AppendFlag(s, cfg.alwaysOnTop, L"-awaysOnTop");
+    AppendFlag(s, cfg.lock,        L"-lock");
+    AppendFlag(s, cfg.keepDisplayAwake, L"-keepDisplayAwake");
 
 
     AppendFlag(s, cfg.slideshow, L"-slideshow");
@@ -202,6 +205,12 @@ namespace {
     constexpr const wchar_t *K_HIDEMOUSE  = L"qivDedHideMouse";
     constexpr const wchar_t *K_INTERVAL   = L"qivDedIntervalSec";
 }
+
+// The kiosk lock and always-on-top are NOT stored under a qivDed* key: they are
+// ordinary app settings with registry names of their own, and a dedicated .ini
+// mirrors those names so the generated screen picks them up through its normal
+// LoadAllSettings path. Writing a second, dedicated-only copy would give the same
+// value two homes that could disagree.
 
 void SaveConfig(const InstanceConfig &cfg) {
     EnsureSettingsFile(cfg.name, cfg.description);
@@ -306,6 +315,9 @@ void WriteConfigTo(const std::wstring &ini, const InstanceConfig &cfg) {
     PutInt(ini, SEC_SETTINGS, R::BASE_WIDTH_KEY,   cfg.baseWidth);
     PutInt(ini, SEC_SETTINGS, R::BASE_HEIGHT_KEY,  cfg.baseHeight);
     PutInt(ini, SEC_SETTINGS, R::START_FULLSCREEN, cfg.startFullscreen ? 1 : 0);
+    PutInt(ini, SEC_SETTINGS, R::ALWAYS_ON_TOP,    cfg.alwaysOnTop ? 1 : 0);
+    PutInt(ini, SEC_SETTINGS, R::KIOSK_LOCK,       cfg.lock ? 1 : 0);
+    PutInt(ini, SEC_SETTINGS, R::KEEP_DISPLAY_AWAKE, cfg.keepDisplayAwake ? 1 : 0);
 
     PutInt(ini, SEC_SETTINGS, R::OVERLAY_VISIBLE,  cfg.overlaysVisible ? 1 : 0);
     PutInt(ini, SEC_SETTINGS, R::OVERLAY_SHOW_BG,  cfg.overlayBackground ? 1 : 0);
@@ -380,6 +392,10 @@ bool ReadConfigFrom(const std::wstring &ini, InstanceConfig &cfg) {
     cfg.baseWidth       = GetInt(ini, SEC_SETTINGS, R::BASE_WIDTH_KEY,   d.baseWidth);
     cfg.baseHeight      = GetInt(ini, SEC_SETTINGS, R::BASE_HEIGHT_KEY,  d.baseHeight);
     cfg.startFullscreen = GetInt(ini, SEC_SETTINGS, R::START_FULLSCREEN, d.startFullscreen) != 0;
+    cfg.alwaysOnTop     = GetInt(ini, SEC_SETTINGS, R::ALWAYS_ON_TOP,    d.alwaysOnTop) != 0;
+    cfg.lock            = GetInt(ini, SEC_SETTINGS, R::KIOSK_LOCK,       d.lock) != 0;
+    cfg.keepDisplayAwake =
+        GetInt(ini, SEC_SETTINGS, R::KEEP_DISPLAY_AWAKE, d.keepDisplayAwake) != 0;
 
     cfg.overlaysVisible   = GetInt(ini, SEC_SETTINGS, R::OVERLAY_VISIBLE, d.overlaysVisible) != 0;
     cfg.overlayBackground = GetInt(ini, SEC_SETTINGS, R::OVERLAY_SHOW_BG, d.overlayBackground) != 0;
@@ -421,6 +437,15 @@ bool ReadConfigFrom(const std::wstring &ini, InstanceConfig &cfg) {
 
 void LoadConfig(InstanceConfig &cfg) {
     namespace D = Constants::Dedicated;
+
+    // Mirrored settings first, straight out of this process's own .ini. Without
+    // this the panel would show the compiled default for every mirrored value —
+    // view mode, always-on-top, the kiosk lock — instead of what the running
+    // screen is actually configured with, and saving would then write those
+    // defaults back over the real values. The qivDed* reads below overwrite the
+    // instance-only fields afterwards, so nothing here can shadow them.
+    if (SettingsUseFile())
+        ReadConfigFrom(SettingsFilePath(), cfg);
 
     cfg.name        = ReadInstanceName();
     cfg.description = ReadInstanceDescription();
