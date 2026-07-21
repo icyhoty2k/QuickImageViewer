@@ -40,7 +40,7 @@ namespace {
         // Content
         R_IMAGE_FOLDER, R_PROMO_FOLDER,
         // Promotions
-        R_PROMO_ORDER, R_PROMO_IMAGES, R_PROMO_SECONDS,
+        R_PROMO_ORDER, R_PROMO_IMAGES, R_PROMO_SECONDS, R_PROMO_SHOW,
         // Presentation
         R_MONITOR, R_FULLSCREEN, R_SLIDESHOW, R_LOOP, R_SHUFFLE, R_HIDEMOUSE, R_INTERVAL,
         // Slideshow detail
@@ -300,12 +300,59 @@ void DedicatedWnd::DoGenerateConfig() {
 // =============================================================================
 // Folder lists
 // =============================================================================
-void DedicatedWnd::AppendFolderToList(bool promotions) {
-    // Target the copy being authored when there is one; otherwise this instance's
-    // own lists, so the button is useful on a running screen too.
+std::wstring DedicatedWnd::ListOwnerExe() const {
+    // The copy being authored when it exists; otherwise this instance, so the
+    // lists are useful on a running screen too.
     std::wstring exe = TargetExePath();
     if (exe.empty() || !FileExists(exe)) exe = Persistence::Registry::GetExePathW();
+    return exe;
+}
 
+void DedicatedWnd::ShowFolderList(bool promotions) {
+    const std::wstring exe = ListOwnerExe();
+    const std::wstring listPath = promotions ? Dedicated::PromotionListPathFor(exe)
+                                             : Dedicated::ImageListPathFor(exe);
+    const wchar_t *what = promotions ? L"promotion folders" : L"image folders";
+    if (listPath.empty()) {
+        DialogMessage(L"Could not resolve the list file path.", L"Folders");
+        return;
+    }
+
+    // Create on first look, so the file is there to hand-edit even before any
+    // folder has been added through the buttons.
+    const bool existed = FileExists(listPath);
+    Dedicated::EnsureListAt(listPath, what);
+
+    const std::vector<std::wstring> folders = Dedicated::LoadListAt(listPath);
+
+    std::wstring msg = listPath;
+    if (!existed) msg += L"\n\n(created just now)";
+    msg += L"\n\n";
+
+    if (folders.empty()) {
+        msg += L"No folders listed yet.\nUse the ";
+        msg += promotions ? L"\"Add Promotions\"" : L"\"Add Images\"";
+        msg += L" button to add one.";
+    } else {
+        // Flag folders that have gone away — a silently dead entry is the most
+        // likely reason a screen shows nothing.
+        for (const std::wstring &f : folders) {
+            const DWORD a = GetFileAttributesW(f.c_str());
+            const bool ok = (a != INVALID_FILE_ATTRIBUTES) && (a & FILE_ATTRIBUTE_DIRECTORY);
+            msg += (ok ? L"   " : L"  ⚠ ");
+            msg += f;
+            if (!ok) msg += L"   (missing)";
+            msg += L"\n";
+        }
+        msg += L"\n";
+        msg += std::to_wstring(folders.size());
+        msg += (folders.size() == 1) ? L" folder listed." : L" folders listed.";
+    }
+    DialogMessage(msg, promotions ? L"Promotion folders" : L"Image folders");
+}
+
+void DedicatedWnd::AppendFolderToList(bool promotions) {
+    const std::wstring exe = ListOwnerExe();
     const std::wstring listPath = promotions ? Dedicated::PromotionListPathFor(exe)
                                              : Dedicated::ImageListPathFor(exe);
     if (listPath.empty()) {
@@ -530,6 +577,10 @@ void DedicatedWnd::BuildRows() {
         L"Gap counted in pictures. 0 = off. A single value is exact; a range is re-rolled each time so it never looks mechanical.", R_PROMO_IMAGES);
     row(Kind::Number, L"Every N seconds", RangeText(m_cfg.promoTimeFrom, m_cfg.promoTimeTo, L"sec"),
         L"Gap counted in time. 0 = off. Runs independently of the image counter — either one coming due shows a promotion.", R_PROMO_SECONDS);
+    row(Kind::Number, L"Promotion shown for", m_cfg.promoShowSeconds > 0
+                                                  ? std::to_wstring(m_cfg.promoShowSeconds) + L" sec"
+                                                  : std::wstring(L"Same as a slide"),
+        L"How long a promotion stays on screen. Independent of the slide interval — a message usually needs longer than a picture.", R_PROMO_SHOW);
 
     hdr(L"PRESENTATION");
     row(Kind::Number, L"Monitor", m_cfg.monitorNum >= 1 ? std::to_wstring(m_cfg.monitorNum) : std::wstring(L"Any"),
@@ -799,10 +850,11 @@ void DedicatedWnd::EditRow(int rowIndex) {
         case R_DESC: BeginTextEdit(rowIndex); return;
 
         case R_DEDICATED_DIR: PickFolder(m_targetFolder, L"Where to create the copy"); break;
-        // Clicking these rows adds a folder, same as the buttons — the row is
-        // where a user looks when they want to change what it reports.
-        case R_IMAGE_FOLDER: AppendFolderToList(false); return;
-        case R_PROMO_FOLDER: AppendFolderToList(true);  return;
+        // Clicking a Content row SHOWS what the list holds. Adding is the job of
+        // the buttons above — a row that silently opened a folder picker made
+        // "what is in here?" impossible to answer without changing it.
+        case R_IMAGE_FOLDER: ShowFolderList(false); return;
+        case R_PROMO_FOLDER: ShowFolderList(true);  return;
 
         case R_PROMO_ORDER:
             m_cfg.promoOrder = (m_cfg.promoOrder == D::PromoOrder::SEQUENTIAL)
@@ -817,6 +869,13 @@ void DedicatedWnd::EditRow(int rowIndex) {
                           D::PROMO_SECONDS_MAX, L"Promotion every N seconds", L"seconds");
             break;
 
+        case R_PROMO_SHOW: {
+            const int v = DialogPromptInt(L"Promotion display time",
+                L"Seconds a promotion stays on screen.\n0 = same as a normal slide.",
+                m_cfg.promoShowSeconds, 0, 3600, 0);
+            if (v >= 0) m_cfg.promoShowSeconds = v;
+            break;
+        }
         case R_MONITOR: {
             const int v = DialogPromptInt(L"Monitor", L"1-based monitor number.\n0 = any.",
                                           m_cfg.monitorNum, 0, 16, 0);

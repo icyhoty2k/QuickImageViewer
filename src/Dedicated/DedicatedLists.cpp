@@ -187,6 +187,12 @@ std::vector<std::wstring> LoadListAt(const std::wstring &listPath) {
     return LoadList(listPath);
 }
 
+bool EnsureListAt(const std::wstring &listPath, const wchar_t *what) {
+    if (listPath.empty()) return false;
+    if (!FileExists(listPath)) CreateEmptyList(listPath, what);
+    return FileExists(listPath);
+}
+
 void EnsureListFiles() { Resolve(); }
 
 const std::wstring &ImageListPath()     { Resolve(); return g_imagePath; }
