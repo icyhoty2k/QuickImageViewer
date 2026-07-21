@@ -7,16 +7,32 @@
 #include "../AppState.h"
 #include "RegistryManager.h"
 #include "../Platform/WriteQueue.h"
+#include "../Dedicated/DedicatedSettings.h" // SettingsUseFile — history is off for dedicated
 
 namespace fs = std::filesystem;
 
 extern AppState app;
 
-// Returns the filename to use on disk, prepending the dedicated-mode prefix when needed.
-// Both history and favorites go through this so neither instance ever touches the other's files.
+// A dedicated instance keeps NO history and NO favorites.
+//
+// History exists so a person can get back to somewhere they browsed; an
+// appliance bolted to a wall never browses. Keeping it would also mean every
+// dedicated copy writing one shared file and clobbering the others — the exact
+// collision this mode is meant to eliminate. A dedicated instance runs from its
+// two folder lists instead (see src/Dedicated/DedicatedLists.h).
+//
+// Every disk-touching method below returns early on this. The in-memory lists
+// simply stay empty, so the History panel shows nothing and every caller keeps
+// working without a special case.
+// Keyed on the DEDICATED flag, not merely on being file-backed: a portable copy
+// that keeps its settings in an .ini but is not an appliance should still have
+// its history.
+static bool HistoryDisabled() {
+    return Dedicated::IsDedicatedFlag();
+}
+
+// Returns the filename to use on disk. Dedicated instances never reach here.
 static std::wstring PrefixedFileName(const std::wstring &baseName) {
-    if (app.isDedicated)
-        return std::wstring(Constants::DedicatedMode::DEDICATED_MODE_GLOBAL_PREFIX) + baseName;
     return baseName;
 }
 
@@ -124,6 +140,7 @@ std::wstring HistoryFoldersManager::GetFavoritesFilePath() const {
 //   old-format favorites and migrated to the favorites set automatically.
 // ---------------------------------------------------------------------------
 void HistoryFoldersManager::LoadHistoryFromDisk() {
+    if (HistoryDisabled()) return; // dedicated instance: no history, no favorites
     folderHistory.clear();
     favorites.clear();
 
@@ -195,6 +212,7 @@ void HistoryFoldersManager::LoadHistoryFromDisk() {
 //   RAM has entries the file does not (the file is small, ≤ historyMaxFavs).
 // ---------------------------------------------------------------------------
 void HistoryFoldersManager::MergeHistoryFromDisk() {
+    if (HistoryDisabled()) return; // dedicated instance: no history, no favorites
     // ---- HISTORY --------------------------------------------------------
     std::vector<std::wstring> diskList;
     std::unordered_set<std::wstring> diskSet;
@@ -275,6 +293,7 @@ void HistoryFoldersManager::MergeHistoryFromDisk() {
 //   The caller guarantees this path is genuinely new (not already in folderHistory).
 // ---------------------------------------------------------------------------
 void HistoryFoldersManager::AppendNewFolderToDisk(const std::wstring &folderPath) const {
+    if (HistoryDisabled()) return; // dedicated instance: no history, no favorites
     std::wstring path = GetFilePath();
     std::wstring entry = folderPath;
     g_writeQueue.PushTask([path = std::move(path), entry = std::move(entry)]() {
@@ -290,6 +309,7 @@ void HistoryFoldersManager::AppendNewFolderToDisk(const std::wstring &folderPath
 //   Used by ClearHistoryKeepFavorites.
 // ---------------------------------------------------------------------------
 void HistoryFoldersManager::RewriteHistoryToDisk() const {
+    if (HistoryDisabled()) return; // dedicated instance: no history, no favorites
     std::wstring path = GetFilePath();
     // Snapshot oldest-first (reverse of MRU) at push time so the drain thread
     // writes a consistent view even if folderHistory changes before it wakes.
@@ -308,6 +328,7 @@ void HistoryFoldersManager::RewriteHistoryToDisk() const {
 //   Used by ToggleFavorite and ClearFavoritesKeepHistory.
 // ---------------------------------------------------------------------------
 void HistoryFoldersManager::RewriteFavoritesToDisk() const {
+    if (HistoryDisabled()) return; // dedicated instance: no history, no favorites
     std::wstring path = GetFavoritesFilePath();
     std::vector<std::wstring> snap(favorites.begin(), favorites.end());
     const int maxFavs = app.historyMaxFavs;
@@ -330,6 +351,7 @@ void HistoryFoldersManager::RewriteFavoritesToDisk() const {
 //   Format:  first line = header, then paths oldest-first (same as the live file).
 // ---------------------------------------------------------------------------
 void HistoryFoldersManager::BackupHistoryToDisk() const {
+    if (HistoryDisabled()) return; // dedicated instance: no history, no favorites
     // Capture time and data snapshot now so the backup reflects the exact moment
     // the user triggered it, not whenever the drain thread eventually runs.
     SYSTEMTIME st;
@@ -352,6 +374,7 @@ void HistoryFoldersManager::BackupHistoryToDisk() const {
 //   Format:  first line = header, then favorite paths.
 // ---------------------------------------------------------------------------
 void HistoryFoldersManager::BackupFavoritesToDisk() const {
+    if (HistoryDisabled()) return; // dedicated instance: no history, no favorites
     SYSTEMTIME st;
     GetLocalTime(&st);
     std::wstring fileName = PrefixedFileName(favoritesFileName);

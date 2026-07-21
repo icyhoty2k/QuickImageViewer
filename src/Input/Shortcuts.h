@@ -60,6 +60,10 @@ namespace Shortcuts {
     constexpr UINT SC_PANEL_DIR_TOGGLE = VK_F6;
     constexpr BYTE SC_RIGHT_SHIFT_SCANCODE = 0x36; // This is the scanCode of rightShift
     constexpr UINT SC_PANEL_DIR_MOVE = VK_F7;
+    // F8 — Dedicated panel: configure and generate named dedicated instances
+    // (see src/Dedicated). Deliberately its own window rather than a menu, since
+    // it is a form with folders, ranges and toggles.
+    constexpr UINT SC_PANEL_DEDICATED_TOGGLE = VK_F8;
     constexpr UINT SC_PANEL_HISTORY_TOGGLE = VK_TAB;
     constexpr UINT SC_PANEL_FULLSCREEN = VK_F11;
     constexpr UINT SC_PANEL_FULLSCREEN_F = 'F';

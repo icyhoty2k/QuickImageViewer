@@ -54,6 +54,7 @@ namespace {
         ID_SS_INTERVAL,          // prompt for slide duration
         ID_SS_LOOP,              // loop toggle                     (R)
         ID_SS_SHUFFLE,           // playlist shuffle toggle         (S)
+        ID_DEDICATED_PANEL,      // open the Dedicated panel        (F8)
 
         // Wallpaper submenu — contiguous, ordered like Constants::Wallpaper.
         ID_WALLPAPER_FIRST = VIEWER_BASE + 100,
@@ -112,6 +113,7 @@ namespace {
             case ID_SS_INTERVAL:    return Command::SlideshowSetInterval;
             case ID_SS_LOOP:        return Command::SlideshowToggleLoop;
             case ID_SS_SHUFFLE:     return Command::SlideshowToggleShuffle;
+            case ID_DEDICATED_PANEL: return Command::ToggleDedicatedPanel;
             default:                return Command::None;
         }
     }
@@ -330,8 +332,9 @@ HMENU ContextMenuHandler::BuildMenu(HWND hWnd) {
     AppendMenuW(m, MF_STRING, ID_PREV_FOLDER, L"Previous Folder\tQ");
     AppendMenuW(m, MF_STRING, ID_PREV_IMAGE,  L"Previous Image\tE");
     AppendMenuW(m, MF_SEPARATOR, 0, nullptr);
-    AppendMenuW(m, MF_STRING, ID_STATS,       L"Statistics\tK");
-    AppendMenuW(m, MF_STRING, ID_METADATA,    L"Metadata\tM");
+    AppendMenuW(m, MF_STRING, ID_STATS,          L"Statistics\tK");
+    AppendMenuW(m, MF_STRING, ID_METADATA,       L"Metadata\tM");
+    AppendMenuW(m, MF_STRING, ID_DEDICATED_PANEL, L"Dedicated\tF8");
     AppendMenuW(m, MF_SEPARATOR, 0, nullptr);
     AppendMenuW(m, MF_STRING, ID_COPY,        L"Copy\tCtrl+C");
     AppendMenuW(m, MF_STRING, ID_SAVE_AS,     L"Save As…\tCtrl+S");

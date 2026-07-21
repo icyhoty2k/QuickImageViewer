@@ -154,9 +154,18 @@ struct AppState {
     // Autosize toggle (Ctrl+Space)
     bool isAutosized = false;
 
+    // True when -hideMouse hid the cursor at startup. ShowCursor is a COUNTER,
+    // so that call must be matched exactly once — stopping the slideshow undoes
+    // it, which is how an unattended screen becomes operable again.
+    bool cursorHiddenAtStartup = false;
+
     bool isDialogVisible = false;
     bool isLocked = false; // -lock:      KIOSK mode — blocks all keyboard and mouse input
     bool isDedicated = false; // -dedicated: no registry writes, separate history file
+    // The window class THIS process registered. A dedicated instance uses its
+    // own, so instance counting and window lookups never cross instances.
+    // Set once at startup from Dedicated::ResolveWindowClassName().
+    std::wstring windowClassName = Constants::WINDOW_CLASS_NAME;
     bool isAlwaysOnTop = false; // Ctrl+T:    window stays above all others
 
     // Slideshow
@@ -173,19 +182,26 @@ struct AppState {
     // click-to-open-in-Explorer. Zero rect = nothing clickable.
     D2D1_RECT_F folderOverlayPathRect = {};
 
-    // Helper to count active instances of this specific class
+    // Counts windows of OUR OWN class — not the global one. A dedicated copy
+    // registers its own class, so it must not count the main app or another
+    // instance as a duplicate of itself (HideToTray destroys rather than hides
+    // when the count is > 1).
+    // The class name travels through the enum context rather than the global
+    // `app`, which is not declared until after this struct.
     int GetInstanceCount() const {
-        int count = 0;
+        struct Ctx {
+            const wchar_t *cls;
+            int            count;
+        } ctx{windowClassName.c_str(), 0};
+
         EnumWindows([](HWND hwnd, LPARAM lParam) -> BOOL {
+            auto *c = reinterpret_cast<Ctx *>(lParam);
             wchar_t className[256];
-            if (GetClassNameW(hwnd, className, 256)) {
-                if (wcscmp(className, Constants::WINDOW_CLASS_NAME) == 0) {
-                    (*(int *) lParam)++;
-                }
-            }
+            if (GetClassNameW(hwnd, className, 256) && wcscmp(className, c->cls) == 0)
+                ++c->count;
             return TRUE;
-        }, (LPARAM) &count);
-        return count;
+        }, reinterpret_cast<LPARAM>(&ctx));
+        return ctx.count;
     }
 
     void ResetEffects() {

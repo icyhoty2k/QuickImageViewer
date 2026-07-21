@@ -121,6 +121,12 @@ namespace UI {
         return cacheWnd;
     }
 
+    DedicatedWnd &UIManager::getDedicatedWindow() {
+        if (isInit(dedicatedWnd)) return dedicatedWnd;
+        dedicatedWnd.Init(m_hInstance, m_hMainWnd);
+        return dedicatedWnd;
+    }
+
     DirWnd &UIManager::getDirWindow() {
         if (isInit(dirWnd)) return dirWnd;
         dirWnd.Init(m_hInstance, m_hMainWnd, Constants::CURRENT_DIR_WINDOW_POSITION);

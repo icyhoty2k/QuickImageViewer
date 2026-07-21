@@ -47,6 +47,12 @@ set(SOURCES
         src/Input/CommandResolver.cpp
         src/Input/AppCommands.cpp
         src/Input/ContextMenuHandler.cpp
+        src/CmdArgsIO.cpp
+        src/Dedicated/DedicatedInstance.cpp
+        src/Dedicated/DedicatedWnd.cpp
+        src/Dedicated/DedicatedSettings.cpp
+        src/Dedicated/DedicatedLists.cpp
+        src/Dedicated/PromotionPlaylist.cpp
         src/UI/UIManager.cpp
         src/Overlays/OverlayManager.cpp
         src/UI/ThumbnailPanels/ThumbnailPanelWnd.cpp
@@ -119,6 +125,7 @@ set(STATIC_LIBS_DIR "${CMAKE_CURRENT_SOURCE_DIR}/libs/lib/static")
 target_include_directories(QuickImageViewer PRIVATE
         ${CMAKE_CURRENT_SOURCE_DIR}/src
         ${CMAKE_CURRENT_SOURCE_DIR}/src/Common
+        ${CMAKE_CURRENT_SOURCE_DIR}/src/Dedicated
         ${CMAKE_CURRENT_SOURCE_DIR}/src/Input
         ${CMAKE_CURRENT_SOURCE_DIR}/src/Overlays
         ${CMAKE_CURRENT_SOURCE_DIR}/src/Persistence
