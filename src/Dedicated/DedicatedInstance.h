@@ -25,8 +25,10 @@ struct InstanceConfig {
     std::wstring description; // free text, shown in the menu and the shortcut
 
     // --- Content ---
-    std::wstring imageFolder;     // the normal playlist's folder
-    std::wstring promotionFolder; // the SECOND playlist; empty = promotions off
+    // Folders live in the two list files beside the exe, NOT here — see
+    // DedicatedLists.h. A single folder field used to sit alongside them, which
+    // meant two competing sources for the same thing; the lists won because
+    // they hold any number of folders.
 
     // --- Promotions ---
     // promoOrder = WHICH promotion is picked (sequential / weighted by priority).
@@ -109,9 +111,10 @@ struct InstanceConfig {
     int  themePercent     =
         static_cast<int>(Constants::Theme::DEFAULT_THEME_FACTOR * 100.0f);
 
-    // A folder alone is not enough — at least one trigger must be armed.
+    // Folders alone are not enough — at least one trigger must be armed.
+    // Whether any promotion folder actually exists is decided at scan time.
     bool HasPromotions() const {
-        return !promotionFolder.empty() && (promoImagesFrom > 0 || promoTimeFrom > 0);
+        return promoImagesFrom > 0 || promoTimeFrom > 0;
     }
     bool IsValid()       const { return !name.empty(); }
 };

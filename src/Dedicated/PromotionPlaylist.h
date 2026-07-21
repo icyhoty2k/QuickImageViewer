@@ -40,10 +40,17 @@ class PromotionPlaylist {
         // Safe to call again to refresh; always replaces the previous contents.
         bool Scan(const std::wstring &folder);
 
+        // Scans SEVERAL folders into one pool. This is the form a dedicated
+        // instance uses: its promotions come from promotionList_*.txt, which
+        // holds any number of folders. Missing folders are skipped, not fatal.
+        bool Scan(const std::vector<std::wstring> &folders);
+
         void Clear();
 
         bool                 IsEmpty()     const { return m_entries.empty(); }
         size_t               Count()       const { return m_entries.size(); }
+        // First scanned folder, for display. With several folders this is only
+        // a label — Count() is the meaningful figure.
         const std::wstring  &Folder()      const { return m_folder; }
         uint64_t             TotalWeight() const { return m_totalWeight; }
         const std::vector<PromotionEntry> &Entries() const { return m_entries; }

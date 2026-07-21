@@ -183,6 +183,10 @@ AppendResult AppendFolder(const std::wstring &listPath, const std::wstring &fold
     return AppendResult::Added;
 }
 
+std::vector<std::wstring> LoadListAt(const std::wstring &listPath) {
+    return LoadList(listPath);
+}
+
 void EnsureListFiles() { Resolve(); }
 
 const std::wstring &ImageListPath()     { Resolve(); return g_imagePath; }

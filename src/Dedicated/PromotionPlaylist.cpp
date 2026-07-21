@@ -93,6 +93,54 @@ bool PromotionPlaylist::Scan(const std::wstring &folder) {
     return true;
 }
 
+bool PromotionPlaylist::Scan(const std::vector<std::wstring> &folders) {
+    Clear();
+    if (folders.empty()) return false;
+
+    std::error_code ec;
+    for (const std::wstring &folder : folders) {
+        if (folder.empty()) continue;
+        ec.clear();
+        // A missing folder is skipped, not fatal: one unplugged drive must not
+        // blank a screen whose other folders are fine.
+        if (!fs::is_directory(folder, ec) || ec) continue;
+
+        for (const auto &entry : fs::directory_iterator(folder, ec)) {
+            if (ec) break;
+            if (!entry.is_regular_file(ec) || ec) continue;
+
+            const fs::path &p = entry.path();
+            std::wstring ext = p.extension().wstring();
+            std::transform(ext.begin(), ext.end(), ext.begin(), ::towlower);
+            if (!is_image_ext(ext)) continue;
+
+            PromotionEntry pe;
+            pe.path   = p.wstring();
+            pe.weight = ParsePromotionWeight(p.stem().wstring());
+            m_totalWeight += pe.weight;
+            m_entries.push_back(std::move(pe));
+        }
+        if (m_folder.empty()) m_folder = folder; // first that yielded anything
+    }
+
+    if (m_entries.empty()) {
+        m_totalWeight = 0;
+        m_folder.clear();
+        return false;
+    }
+
+    // Sorted across ALL folders so SEQUENTIAL is deterministic regardless of
+    // the order the list file happens to name them in.
+    std::sort(m_entries.begin(), m_entries.end(),
+              [](const PromotionEntry &a, const PromotionEntry &b) {
+                  return _wcsicmp(a.path.c_str(), b.path.c_str()) < 0;
+              });
+
+    RefreshPeek();
+    Rearm();
+    return true;
+}
+
 // =============================================================================
 // Selection
 //
