@@ -294,6 +294,58 @@ void WriteConfigTo(const std::wstring &ini, const InstanceConfig &cfg) {
     PutInt(ini, SEC_SETTINGS, K_LOOP,       cfg.loop       ? 1 : 0);
     PutInt(ini, SEC_SETTINGS, K_HIDEMOUSE,  cfg.hideMouse  ? 1 : 0);
     PutInt(ini, SEC_SETTINGS, K_INTERVAL,   cfg.intervalSeconds);
+
+    // Mirrored app settings, written under the SAME key names the registry
+    // uses. The generated instance therefore picks them up through its ordinary
+    // LoadAllSettings path — no special-case reader, nothing to keep in sync.
+    namespace R = Constants::Registry;
+    PutInt(ini, SEC_SETTINGS, R::SLIDESHOW_SHUFFLE,      cfg.shuffle ? 1 : 0);
+    PutInt(ini, SEC_SETTINGS, R::SLIDESHOW_LOOP,         cfg.loop ? 1 : 0);
+    PutInt(ini, SEC_SETTINGS, R::SLIDESHOW_TRANSITION,   cfg.transitionType);
+    PutInt(ini, SEC_SETTINGS, R::SLIDESHOW_TRANS_SOURCE, cfg.transitionSource);
+    PutInt(ini, SEC_SETTINGS, R::SLIDESHOW_TRANS_ORDER,  cfg.transitionOrder);
+    if (cfg.intervalSeconds > 0)
+        PutInt(ini, SEC_SETTINGS, R::SLIDESHOW_INTERVAL_MS, cfg.intervalSeconds * 1000);
+
+    PutInt(ini, SEC_SETTINGS, R::VIEW_MODE,        cfg.viewMode);
+    PutInt(ini, SEC_SETTINGS, R::BASE_WIDTH_KEY,   cfg.baseWidth);
+    PutInt(ini, SEC_SETTINGS, R::BASE_HEIGHT_KEY,  cfg.baseHeight);
+    PutInt(ini, SEC_SETTINGS, R::START_FULLSCREEN, cfg.startFullscreen ? 1 : 0);
+
+    PutInt(ini, SEC_SETTINGS, R::OVERLAY_VISIBLE,  cfg.overlaysVisible ? 1 : 0);
+    PutInt(ini, SEC_SETTINGS, R::OVERLAY_SHOW_BG,  cfg.overlayBackground ? 1 : 0);
+    PutInt(ini, SEC_SETTINGS, R::MSG_CENTER_MS,    cfg.msgDurationMs);
+
+    PutInt(ini, SEC_SETTINGS, R::SORT_ORDER,       cfg.sortOrder);
+    PutInt(ini, SEC_SETTINGS, R::SORT_REVERSE,     cfg.sortReverse ? 1 : 0);
+
+    PutInt(ini, SEC_SETTINGS, R::VRAM_CACHE_COUNT,   cfg.vramCache);
+    PutInt(ini, SEC_SETTINGS, R::PRELOAD_LOOKASIDE,  cfg.preloadLookaside);
+    PutInt(ini, SEC_SETTINGS, R::DIR_THUMB_CACHE_MB, cfg.thumbCacheMB);
+
+    PutInt(ini, SEC_SETTINGS, R::SWAP_MOUSE_BUTTONS,   cfg.swapMouse ? 1 : 0);
+    PutInt(ini, SEC_SETTINGS, R::WHEEL_INVERT,         cfg.invertWheel ? 1 : 0);
+    PutInt(ini, SEC_SETTINGS, R::WHEEL_INVERT_H,       cfg.invertWheelH ? 1 : 0);
+    PutInt(ini, SEC_SETTINGS, R::ZOOM_CLICK_MULT,      cfg.zoomClick);
+    PutInt(ini, SEC_SETTINGS, R::INPUTBOX_CARET_STYLE, cfg.caretStyle);
+    PutInt(ini, SEC_SETTINGS, R::CTRL_C_ENABLED,       cfg.ctrlCEnabled ? 1 : 0);
+    PutInt(ini, SEC_SETTINGS, R::CONTEXT_MENU_ENABLED, cfg.contextMenu ? 1 : 0);
+
+    PutInt(ini, SEC_SETTINGS, R::SLIDESHOW_TRANS_LIST, static_cast<int>(cfg.transitionList));
+    PutInt(ini, SEC_SETTINGS, R::RUN_ON_STARTUP,       cfg.runOnStartup ? 1 : 0);
+    PutInt(ini, SEC_SETTINGS, R::HISTORY_FULL_MODE,    cfg.historyFull ? 1 : 0);
+    PutInt(ini, SEC_SETTINGS, R::HISTORY_MAX_DIRS,     cfg.historyMaxDirs);
+    PutInt(ini, SEC_SETTINGS, R::HISTORY_MAX_FAVS,     cfg.historyMaxFavs);
+    PutInt(ini, SEC_SETTINGS, R::HISTORY_MAX_DIRS_SAVE, cfg.historyMaxSave);
+    PutInt(ini, SEC_SETTINGS, R::THUMB_COPY_ENABLED,   cfg.thumbCopy ? 1 : 0);
+    PutInt(ini, SEC_SETTINGS, R::THUMB_MOVE_ENABLED,   cfg.thumbMove ? 1 : 0);
+    PutInt(ini, SEC_SETTINGS, R::THUMB_DELETE_ENABLED, cfg.thumbDelete ? 1 : 0);
+    PutInt(ini, SEC_SETTINGS, R::THUMB_PASTE_ENABLED,  cfg.thumbPaste ? 1 : 0);
+
+    PutInt(ini, SEC_SETTINGS, R::KEEP_IN_BACKGROUND,  cfg.keepInBackground ? 1 : 0);
+    PutInt(ini, SEC_SETTINGS, R::THUMBNAIL_EFFECTS,   cfg.thumbnailEffects ? 1 : 0);
+    PutInt(ini, SEC_SETTINGS, R::OPEN_DIRWND_ON_START, cfg.openDirOnStart ? 1 : 0);
+    PutInt(ini, SEC_SETTINGS, R::THEME_FACTOR,        cfg.themePercent);
 }
 
 bool ReadConfigFrom(const std::wstring &ini, InstanceConfig &cfg) {
@@ -318,6 +370,58 @@ bool ReadConfigFrom(const std::wstring &ini, InstanceConfig &cfg) {
     cfg.loop            = GetInt(ini, SEC_SETTINGS, K_LOOP,       1) != 0;
     cfg.hideMouse       = GetInt(ini, SEC_SETTINGS, K_HIDEMOUSE,  1) != 0;
     cfg.intervalSeconds = GetInt(ini, SEC_SETTINGS, K_INTERVAL,   0);
+
+    // Mirrored settings. Defaults come from the freshly-constructed cfg, so a
+    // key absent from an older .ini falls back to the Constants default rather
+    // than to whatever this process happens to be running.
+    namespace R = Constants::Registry;
+    const InstanceConfig d{}; // defaults straight from Constants
+
+    cfg.shuffle          = GetInt(ini, SEC_SETTINGS, R::SLIDESHOW_SHUFFLE,      d.shuffle) != 0;
+    cfg.transitionType   = GetInt(ini, SEC_SETTINGS, R::SLIDESHOW_TRANSITION,   d.transitionType);
+    cfg.transitionSource = GetInt(ini, SEC_SETTINGS, R::SLIDESHOW_TRANS_SOURCE, d.transitionSource);
+    cfg.transitionOrder  = GetInt(ini, SEC_SETTINGS, R::SLIDESHOW_TRANS_ORDER,  d.transitionOrder);
+
+    cfg.viewMode        = GetInt(ini, SEC_SETTINGS, R::VIEW_MODE,        d.viewMode);
+    cfg.baseWidth       = GetInt(ini, SEC_SETTINGS, R::BASE_WIDTH_KEY,   d.baseWidth);
+    cfg.baseHeight      = GetInt(ini, SEC_SETTINGS, R::BASE_HEIGHT_KEY,  d.baseHeight);
+    cfg.startFullscreen = GetInt(ini, SEC_SETTINGS, R::START_FULLSCREEN, d.startFullscreen) != 0;
+
+    cfg.overlaysVisible   = GetInt(ini, SEC_SETTINGS, R::OVERLAY_VISIBLE, d.overlaysVisible) != 0;
+    cfg.overlayBackground = GetInt(ini, SEC_SETTINGS, R::OVERLAY_SHOW_BG, d.overlayBackground) != 0;
+    cfg.msgDurationMs     = GetInt(ini, SEC_SETTINGS, R::MSG_CENTER_MS,   d.msgDurationMs);
+
+    cfg.sortOrder   = GetInt(ini, SEC_SETTINGS, R::SORT_ORDER,   d.sortOrder);
+    cfg.sortReverse = GetInt(ini, SEC_SETTINGS, R::SORT_REVERSE, d.sortReverse) != 0;
+
+    cfg.vramCache        = GetInt(ini, SEC_SETTINGS, R::VRAM_CACHE_COUNT,   d.vramCache);
+    cfg.preloadLookaside = GetInt(ini, SEC_SETTINGS, R::PRELOAD_LOOKASIDE,  d.preloadLookaside);
+    cfg.thumbCacheMB     = GetInt(ini, SEC_SETTINGS, R::DIR_THUMB_CACHE_MB, d.thumbCacheMB);
+
+    cfg.swapMouse    = GetInt(ini, SEC_SETTINGS, R::SWAP_MOUSE_BUTTONS,   d.swapMouse) != 0;
+    cfg.invertWheel  = GetInt(ini, SEC_SETTINGS, R::WHEEL_INVERT,         d.invertWheel) != 0;
+    cfg.invertWheelH = GetInt(ini, SEC_SETTINGS, R::WHEEL_INVERT_H,       d.invertWheelH) != 0;
+    cfg.zoomClick    = GetInt(ini, SEC_SETTINGS, R::ZOOM_CLICK_MULT,      d.zoomClick);
+    cfg.caretStyle   = GetInt(ini, SEC_SETTINGS, R::INPUTBOX_CARET_STYLE, d.caretStyle);
+    cfg.ctrlCEnabled = GetInt(ini, SEC_SETTINGS, R::CTRL_C_ENABLED,       d.ctrlCEnabled) != 0;
+    cfg.contextMenu  = GetInt(ini, SEC_SETTINGS, R::CONTEXT_MENU_ENABLED, d.contextMenu) != 0;
+
+    cfg.transitionList = static_cast<uint32_t>(
+        GetInt(ini, SEC_SETTINGS, R::SLIDESHOW_TRANS_LIST, static_cast<int>(d.transitionList)));
+    cfg.runOnStartup   = GetInt(ini, SEC_SETTINGS, R::RUN_ON_STARTUP,        d.runOnStartup) != 0;
+    cfg.historyFull    = GetInt(ini, SEC_SETTINGS, R::HISTORY_FULL_MODE,     d.historyFull) != 0;
+    cfg.historyMaxDirs = GetInt(ini, SEC_SETTINGS, R::HISTORY_MAX_DIRS,      d.historyMaxDirs);
+    cfg.historyMaxFavs = GetInt(ini, SEC_SETTINGS, R::HISTORY_MAX_FAVS,      d.historyMaxFavs);
+    cfg.historyMaxSave = GetInt(ini, SEC_SETTINGS, R::HISTORY_MAX_DIRS_SAVE, d.historyMaxSave);
+    cfg.thumbCopy      = GetInt(ini, SEC_SETTINGS, R::THUMB_COPY_ENABLED,    d.thumbCopy) != 0;
+    cfg.thumbMove      = GetInt(ini, SEC_SETTINGS, R::THUMB_MOVE_ENABLED,    d.thumbMove) != 0;
+    cfg.thumbDelete    = GetInt(ini, SEC_SETTINGS, R::THUMB_DELETE_ENABLED,  d.thumbDelete) != 0;
+    cfg.thumbPaste     = GetInt(ini, SEC_SETTINGS, R::THUMB_PASTE_ENABLED,   d.thumbPaste) != 0;
+
+    cfg.keepInBackground = GetInt(ini, SEC_SETTINGS, R::KEEP_IN_BACKGROUND,   d.keepInBackground) != 0;
+    cfg.thumbnailEffects = GetInt(ini, SEC_SETTINGS, R::THUMBNAIL_EFFECTS,    d.thumbnailEffects) != 0;
+    cfg.openDirOnStart   = GetInt(ini, SEC_SETTINGS, R::OPEN_DIRWND_ON_START, d.openDirOnStart) != 0;
+    cfg.themePercent     = GetInt(ini, SEC_SETTINGS, R::THEME_FACTOR,         d.themePercent);
     return true;
 }
 

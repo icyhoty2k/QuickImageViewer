@@ -48,6 +48,67 @@ struct InstanceConfig {
     bool hideMouse       = true;
     int  intervalSeconds = 0;    // 0 = leave the saved interval alone
 
+    // --- Mirrored app settings -----------------------------------------------
+    // Every persisted app setting, so a config is COMPLETE and SELF-CONTAINED:
+    // it fully describes the target instance without inheriting anything from
+    // whichever copy happened to author it.
+    //
+    // Seeded from Constants — never from the running app. Reading live state
+    // would silently bake the author machine's preferences into every screen it
+    // generates, and editing here would change the running app instead of the
+    // config being written.
+    bool shuffle          = Constants::Slideshow::IS_SHUFFLE;
+    int  transitionType   = 0; // TransitionType::Cut
+    int  transitionSource = Constants::Slideshow::TransitionSource::NONE;
+    int  transitionOrder  = Constants::Slideshow::TransitionOrder::SEQUENTIAL;
+
+    int  viewMode          = static_cast<int>(Constants::ViewModes::defaultViewMode);
+    int  baseWidth         = Constants::IS_BASE_WIDTH;
+    int  baseHeight        = Constants::IS_BASE_HEIGHT;
+    bool startFullscreen   = false;
+    bool alwaysOnTop       = false;
+
+    bool overlaysVisible   = Constants::Overlay::DEFAULT_SHOW_OVERLAY;
+    bool overlayBackground = Constants::Overlay::IS_OVERLAY_SHOW_BACKGROUND;
+    int  msgDurationMs     = static_cast<int>(Constants::Overlay::IS_MSG_CENTER_DISPLAY_MS);
+
+    int  sortOrder   = Constants::FileHandler::FILE_HANDLER_DEFAULT_SORT_ORDER;
+    bool sortReverse = Constants::FileHandler::FILE_HANDLER_SORT_TYPE_IS_REVERSE;
+
+    int  vramCache        = Constants::IS_VRAM_CACHE_IMAGES_COUNT;
+    int  preloadLookaside = Constants::IS_PRELOAD_LOOKASIDE_COUNT;
+    int  thumbCacheMB     = Constants::IS_DIR_THUMB_CACHE_BUDGET_MB;
+
+    bool swapMouse    = Constants::IS_SWAP_MOUSE_BUTTONS;
+    bool invertWheel  = Constants::IS_MOUSE_VERTICAL_REVERSE_SCROLL_DIRECTION;
+    bool invertWheelH = Constants::IS_MOUSE_HORIZONTAL_REVERSE_SCROLL_DIRECTION;
+    int  zoomClick    = static_cast<int>(Constants::ZOOM_CLICK);
+    int  caretStyle   = Constants::InputBox::CARET_STYLE;
+    bool ctrlCEnabled = Constants::IS_CTRL_C_ENABLED;
+    bool contextMenu  = Constants::IS_CONTEXT_MENU_ENABLED;
+
+    // Which transitions are in the custom set, one bit per TransitionType.
+    // Only consulted when transitionSource is LIST.
+    uint32_t transitionList = 0xFFFFFFFEu; // every animated type, Cut excluded
+
+    bool runOnStartup   = Constants::IS_ENABLE_RUN_ON_STARTUP;
+    bool historyFull    = Constants::History::HISTORY_SHOW_FULL_HISTORY;
+    int  historyMaxDirs = Constants::History::IS_HISTORY_MAX_DIRS_TO_SHOW;
+    int  historyMaxFavs = Constants::History::IS_HISTORY_MAX_FAVORITES_TO_SHOW;
+    int  historyMaxSave = Constants::History::IS_HISTORY_MAX_DIRS_TO_SAVE;
+
+    bool thumbCopy   = Constants::IS_THUMB_COPY_ENABLED;
+    bool thumbMove   = Constants::IS_THUMB_MOVE_ENABLED;
+    bool thumbDelete = Constants::IS_THUMB_DELETE_ENABLED;
+    bool thumbPaste  = Constants::IS_THUMB_PASTE_ENABLED;
+
+    bool keepInBackground = Constants::IS_KEEP_IN_BACKGROUND;
+    bool thumbnailEffects =
+        Constants::ThumbnailPanel::ThumbnailEffects::EFFECTS_MASTER_ENABLED;
+    bool openDirOnStart   = Constants::IS_OPEN_DIRWND_ON_START;
+    int  themePercent     =
+        static_cast<int>(Constants::Theme::DEFAULT_THEME_FACTOR * 100.0f);
+
     // A folder alone is not enough — at least one trigger must be armed.
     bool HasPromotions() const {
         return !promotionFolder.empty() && (promoImagesFrom > 0 || promoTimeFrom > 0);
