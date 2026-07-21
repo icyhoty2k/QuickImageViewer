@@ -228,6 +228,30 @@ void AppCommands::ResetWindowLayoutAndEffects(HWND hWnd) {
     app.UpdateRendererColorEffects(hWnd);
 }
 
+void AppCommands::ApplyDisplayAwake(HWND hWnd) {
+    // The request we currently hold. SetThreadExecutionState has no "query"
+    // form, so the only way to keep it balanced is to remember what was asked
+    // for and never re-issue the same thing.
+    static bool s_armed = false;
+
+    // Hidden to the tray means nothing is on screen to keep lit — holding the
+    // display awake then would just be a machine that never sleeps.
+    const bool want = app.keepDisplayAwake && IsWindowVisible(hWnd);
+    if (want == s_armed) return;
+
+    // ES_CONTINUOUS alone CLEARS the standing request; OR'd with
+    // ES_DISPLAY_REQUIRED it sets one that lasts until cleared. No
+    // ES_SYSTEM_REQUIRED: keeping the screen lit is the point, and a display
+    // that is on already prevents sleep.
+    if (SetThreadExecutionState(want ? (ES_CONTINUOUS | ES_DISPLAY_REQUIRED)
+                                     : ES_CONTINUOUS) == 0) {
+        // Documented failure return is 0. Leave s_armed alone so the next call
+        // retries rather than believing a request it does not hold.
+        return;
+    }
+    s_armed = want;
+}
+
 void AppCommands::AddTrayIcon(HWND hWnd) {
     NOTIFYICONDATAW nid = {sizeof(nid)};
     nid.hWnd = hWnd;

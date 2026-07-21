@@ -104,6 +104,17 @@ LRESULT CALLBACK MainAppWndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM l
     }
 
     switch (message) {
+        // Every hide-to-tray and restore passes through here, so one hook keeps
+        // the display-awake request in step with whether anything is on screen.
+        // DefWindowProc runs FIRST: WM_SHOWWINDOW arrives while the window is
+        // still in its old state, so asking IsWindowVisible before it would read
+        // the state we are leaving rather than the one we are entering.
+        case WM_SHOWWINDOW: {
+            const LRESULT r = DefWindowProcW(hWnd, message, wParam, lParam);
+            AppCommands::ApplyDisplayAwake(hWnd);
+            return r;
+        }
+
         case WM_DPICHANGED: {
             // 1. Update your global scale
             app.dpiScale = static_cast<float>(HIWORD(wParam)) / 96.0f;

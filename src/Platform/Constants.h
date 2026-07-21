@@ -6,9 +6,9 @@
 // *** Update ONLY the four numbers below to bump the version everywhere ***
 // =========================================================================
 #define VER_MAJOR 2
-#define VER_MINOR 40
+#define VER_MINOR 50
 #define VER_PATCH 0
-#define VER_BUILD 9
+#define VER_BUILD 0
 
 // Comma form  — FILEVERSION / PRODUCTVERSION in .rc  (e.g. 2,3,0,0)
 #define VER_NUMERIC   VER_MAJOR,VER_MINOR,VER_PATCH,VER_BUILD
@@ -122,6 +122,25 @@ namespace Constants {
 
     constexpr bool IS_SWAP_MOUSE_BUTTONS = true;
     constexpr bool IS_CONTEXT_MENU_ENABLED = true; // main-window right-click context menu on/off
+
+    // KIOSK lock — every keyboard and mouse message to the main window is
+    // swallowed, so a screen on a wall cannot be driven by a passer-by. Persisted
+    // like any other toggle, which is what lets a dedicated screen ship locked
+    // from its .ini. The ONLY way back out is the tray icon: TrackPopupMenu runs
+    // its own message loop, so the tray menu still works while the window is
+    // deaf. Never default this on — a locked app with no tray icon is a brick.
+    constexpr bool IS_KIOSK_LOCK_ENABLED = false;
+
+    // Window stays above all others. Ctrl+T toggles it; a dedicated screen sets
+    // it in its config so nothing can cover the display.
+    constexpr bool IS_ALWAYS_ON_TOP = false;
+
+    // Hold off the screensaver and display sleep while the main window is
+    // visible. An unattended screen is useless once Windows blanks it, and no
+    // input ever arrives to wake it — least of all with the kiosk lock on.
+    // Off by default: the main app has no business overriding a laptop's power
+    // plan unless asked.
+    constexpr bool IS_KEEP_DISPLAY_AWAKE = false;
 
     // Desktop wallpaper fit styles — the 6 native Windows options. These indices
     // map 1:1 onto DESKTOP_WALLPAPER_POSITION inside AppCommands.cpp, and index
@@ -489,6 +508,9 @@ namespace Constants {
         constexpr const wchar_t *INPUTBOX_CARET_STYLE    = L"qivCaretStyle";
         constexpr const wchar_t *ZOOM_CLICK_MULT         = L"qivZoomClick";
         constexpr const wchar_t *CONTEXT_MENU_ENABLED    = L"qivContextMenu";
+        constexpr const wchar_t *KIOSK_LOCK               = L"qivKioskLock";
+        constexpr const wchar_t *ALWAYS_ON_TOP            = L"qivAlwaysOnTop";
+        constexpr const wchar_t *KEEP_DISPLAY_AWAKE       = L"qivKeepDisplayAwake";
         // Last image on screen at exit — reopened on the next launch so the app
         // resumes where it was left instead of prompting. Routes to the registry
         // or, when the app is .ini-backed, into that file like every other value.

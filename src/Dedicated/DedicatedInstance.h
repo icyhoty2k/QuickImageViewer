@@ -55,6 +55,18 @@ struct InstanceConfig {
     bool hideMouse       = true;
     int  intervalSeconds = 0;    // 0 = leave the saved interval alone
 
+    // KIOSK lock — the screen stops accepting keyboard and mouse entirely, so a
+    // passer-by cannot pause the slideshow or reach the panels. The tray icon
+    // still works (it runs its own message loop), which is the only way to get
+    // back in without editing the .ini. Off by default: a screen that ships
+    // locked with no one told about the tray is unrecoverable in the field.
+    bool lock            = Constants::IS_KIOSK_LOCK_ENABLED;
+
+    // Hold off the screensaver and display sleep. Practically mandatory on an
+    // unattended screen: no input ever arrives to wake it, and with the kiosk
+    // lock on none could anyway.
+    bool keepDisplayAwake = Constants::IS_KEEP_DISPLAY_AWAKE;
+
     // --- Mirrored app settings -----------------------------------------------
     // Every persisted app setting, so a config is COMPLETE and SELF-CONTAINED:
     // it fully describes the target instance without inheriting anything from
@@ -73,7 +85,7 @@ struct InstanceConfig {
     int  baseWidth         = Constants::IS_BASE_WIDTH;
     int  baseHeight        = Constants::IS_BASE_HEIGHT;
     bool startFullscreen   = false;
-    bool alwaysOnTop       = false;
+    bool alwaysOnTop       = Constants::IS_ALWAYS_ON_TOP;
 
     bool overlaysVisible   = Constants::Overlay::DEFAULT_SHOW_OVERLAY;
     bool overlayBackground = Constants::Overlay::IS_OVERLAY_SHOW_BACKGROUND;

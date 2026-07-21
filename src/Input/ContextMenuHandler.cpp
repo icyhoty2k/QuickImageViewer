@@ -160,6 +160,12 @@ namespace {
         AppendMenuW(m, MF_STRING | CheckFlag(app.invertWheelDirection),    15, L"Invert Scroll Direction");
         AppendMenuW(m, MF_STRING | CheckFlag(app.invertWheelDirectionH),   16, L"Invert Horizontal Scroll");
         AppendMenuW(m, MF_STRING | CheckFlag(app.startInFullscreen),       25, L"Start in Fullscreen");
+        AppendMenuW(m, MF_STRING | CheckFlag(app.isAlwaysOnTop),           65, L"Always on Top\tCtrl+T");
+        AppendMenuW(m, MF_STRING | CheckFlag(app.keepDisplayAwake),        66, L"Keep Display Awake");
+        // The lock's only escape hatch. TrackPopupMenu runs its own message loop,
+        // so this item still works when the main window is swallowing input —
+        // which is precisely why the lock is safe to persist.
+        AppendMenuW(m, MF_STRING | CheckFlag(app.isLocked),                64, L"Kiosk Lock (blocks all input)");
         AppendMenuW(m, MF_STRING | CheckFlag(app.ctrlCEnabled),            49, L"Ctrl+C Copy to Clipboard");
         {
             HMENU caret = CreatePopupMenu();

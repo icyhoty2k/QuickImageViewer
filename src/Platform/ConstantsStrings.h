@@ -113,6 +113,12 @@ namespace Constants::Messages {
     // Ctrl+T — always on top
     constexpr const wchar_t *ALWAYS_ON_TOP_ON = L"Always on Top" STR_STATE_ON;
     constexpr const wchar_t *ALWAYS_ON_TOP_OFF = L"Always on Top" STR_STATE_OFF;
+    // Shown when the lock is turned ON so the operator knows the window went
+    // deaf on purpose, and that the tray is the way back.
+    constexpr const wchar_t *KIOSK_LOCK_ON  = L"Kiosk Lock" STR_STATE_ON L" — unlock from the tray icon";
+    constexpr const wchar_t *KIOSK_LOCK_OFF = L"Kiosk Lock" STR_STATE_OFF;
+    constexpr const wchar_t *KEEP_DISPLAY_AWAKE_ON  = L"Keep Display Awake" STR_STATE_ON;
+    constexpr const wchar_t *KEEP_DISPLAY_AWAKE_OFF = L"Keep Display Awake" STR_STATE_OFF;
 
     // Alt+W/A/S/D — keyboard snap to screen half
     constexpr const wchar_t *SNAP_LEFT = L"Snap: Left Half";

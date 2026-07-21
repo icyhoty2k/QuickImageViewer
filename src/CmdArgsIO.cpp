@@ -219,6 +219,7 @@ std::wstring BuildCmdArgsFromState() {
     AddFlag(s, app.isAlwaysOnTop,        L"-awaysOnTop");
     AddFlag(s, app.isKeepInBackground,   L"-background");
     AddFlag(s, app.isLocked,             L"-lock");
+    AddFlag(s, app.keepDisplayAwake,     L"-keepDisplayAwake");
 
     // Current folder, so a generated shortcut reopens where you are now.
     if (!app.playlist.empty() && app.currentIndex >= 0 &&
