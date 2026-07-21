@@ -2,6 +2,9 @@
 #include "DedicatedSettings.h"
 #include "DedicatedLists.h"        // list paths + AppendFolder
 #include "SlideshowTransitions.h"  // TransitionDisplayOrder — same order as the menu
+#include "Platform/FileHandler.h"  // is_image_ext — one definition of "an image"
+#include <filesystem>
+#include <cwctype>
 #include "AppState.h"
 #include "Persistence/RegistryManager.h" // GetExePathW
 #include "Platform/Constants.h"
@@ -29,7 +32,11 @@ namespace {
 
     enum ButtonId {
         BTN_GENERATE_APP = 1, BTN_GENERATE_CONFIG, BTN_ADD_IMAGES, BTN_ADD_PROMOS,
-        BTN_ADD_STARTUP, BTN_REMOVE_STARTUP, BTN_TEST
+        BTN_ADD_STARTUP, BTN_REMOVE_STARTUP,
+        // Three separate tests: a broken config, a bad image list and a bad
+        // promo list are different faults with different fixes, so lumping them
+        // into one report made it hard to tell which thing to go and repair.
+        BTN_TEST_CONFIG, BTN_TEST_IMAGES, BTN_TEST_PROMOS
     };
 
     // Row ids — the edit dispatch switches on these.
@@ -298,6 +305,99 @@ void DedicatedWnd::DoGenerateConfig() {
 }
 
 // =============================================================================
+// DoTestList — validate ONE folder list and what it actually contains.
+//
+// Counting the images matters as much as checking the folders exist: a folder
+// that is present but holds nothing this app can decode looks identical to a
+// working one until the screen goes blank in front of people.
+// =============================================================================
+void DedicatedWnd::DoTestList(bool promotions) {
+    const wchar_t *caption = promotions ? L"Test Promos" : L"Test Images";
+
+    // Use this instance's own list when there is one; otherwise let any list be
+    // chosen. Same rule as Test Config — every test works standalone, so a list
+    // copied off another machine can be checked here.
+    std::wstring listPath;
+    const std::wstring exe = ListOwnerExe();
+    if (!exe.empty())
+        listPath = promotions ? Dedicated::PromotionListPathFor(exe)
+                              : Dedicated::ImageListPathFor(exe);
+
+    // Whether this list belongs to the config shown in the panel. A picked list
+    // from elsewhere does not, so the trigger cross-checks below must be skipped
+    // — they would report the wrong instance's settings.
+    const bool ownList = !listPath.empty() && FileExists(listPath);
+    if (!ownList) listPath = PickListFile(promotions);
+    if (listPath.empty()) return; // cancelled
+
+    const std::vector<std::wstring> folders = Dedicated::LoadListAt(listPath);
+    if (folders.empty()) {
+        DialogMessage(L"The list is empty:\n\n" + listPath +
+                      (promotions ? L"\n\nNo promotions will be shown."
+                                  : L"\n\nThe screen would have nothing to show."),
+                      caption);
+        return;
+    }
+
+    std::wstring report = listPath;
+    report += L"\n\n";
+    int okFolders = 0, deadFolders = 0, emptyFolders = 0;
+    long long total = 0;
+
+    for (const std::wstring &f : folders) {
+        std::error_code ec;
+        if (!std::filesystem::is_directory(f, ec) || ec) {
+            ++deadFolders;
+            report += L"  ⚠ " + f + L"   (folder missing)\n";
+            continue;
+        }
+
+        long long count = 0;
+        long long weighted = 0;
+        for (const auto &e : std::filesystem::directory_iterator(f, ec)) {
+            if (ec) break;
+            if (!e.is_regular_file(ec) || ec) continue;
+            std::wstring ext = e.path().extension().wstring();
+            std::transform(ext.begin(), ext.end(), ext.begin(), ::towlower);
+            if (!is_image_ext(ext)) continue;
+            ++count;
+            if (promotions)
+                weighted += Dedicated::ParsePromotionWeight(e.path().stem().wstring());
+        }
+        total += count;
+
+        if (count == 0) {
+            ++emptyFolders;
+            report += L"  ⚠ " + f + L"   (no images)\n";
+        } else {
+            ++okFolders;
+            report += L"   " + f + L"   " + std::to_wstring(count) + L" images";
+            // Weight only means something for promotions, where it drives the
+            // draw. Showing it here is the only place a mis-typed #N shows up.
+            if (promotions && weighted != count)
+                report += L", weight " + std::to_wstring(weighted);
+            report += L"\n";
+        }
+    }
+
+    report += L"\n" + std::to_wstring(total) + L" images across " +
+              std::to_wstring(okFolders) + L" usable folder" +
+              (okFolders == 1 ? L"" : L"s") + L".";
+    if (deadFolders)  report += L"\n" + std::to_wstring(deadFolders) + L" missing.";
+    if (emptyFolders) report += L"\n" + std::to_wstring(emptyFolders) + L" empty.";
+
+    if (promotions && ownList) {
+        if (total > 0 && m_cfg.promoImagesFrom <= 0 && m_cfg.promoTimeFrom <= 0)
+            report += L"\n\n⚠ Both promotion triggers are off — none of these will show.";
+        if (total == 0 && (m_cfg.promoImagesFrom > 0 || m_cfg.promoTimeFrom > 0))
+            report += L"\n\n⚠ Triggers are set but there are no promotions to draw from.";
+    }
+
+    const bool clean = (deadFolders == 0 && emptyFolders == 0 && total > 0);
+    DialogMessage((clean ? L"✔ " : L"⚠ ") + report, caption);
+}
+
+// =============================================================================
 // Folder lists
 // =============================================================================
 std::wstring DedicatedWnd::ListOwnerExe() const {
@@ -309,7 +409,7 @@ std::wstring DedicatedWnd::ListOwnerExe() const {
     if (Dedicated::SettingsUseFile()) return Persistence::Registry::GetExePathW();
 
     // 3. Nothing owns them yet. Returning this exe here would scatter
-    //    imageLists_QuickImageViewer.txt next to the MAIN app — files it never
+    //    imageLists_QuickImageViewer.qim next to the MAIN app — files it never
     //    reads and the user never asked for.
     return {};
 }
@@ -502,34 +602,10 @@ void DedicatedWnd::DoTest() {
     if (!FileExists(exe))
         problems += L"\n  • no executable beside this config: " + exe;
 
-    auto checkList = [&](const std::wstring &listPath, const wchar_t *what,
-                         bool required) {
-        if (!FileExists(listPath)) {
-            if (required)
-                problems += L"\n  • missing " + std::wstring(what) + L" list: " + listPath;
-            return 0;
-        }
-        int alive = 0, dead = 0;
-        for (const std::wstring &f : Dedicated::LoadListAt(listPath)) {
-            const DWORD a = GetFileAttributesW(f.c_str());
-            if (a != INVALID_FILE_ATTRIBUTES && (a & FILE_ATTRIBUTE_DIRECTORY)) ++alive;
-            else { ++dead; problems += L"\n  • " + std::wstring(what) +
-                                       L" folder missing: " + f; }
-        }
-        if (required && alive == 0 && dead == 0)
-            problems += L"\n  • " + std::wstring(what) + L" list is empty — "
-                        L"nothing would be shown";
-        return alive;
-    };
-
-    checkList(Dedicated::ImageListPathFor(exe), L"image", true);
-    const int promoAlive = checkList(Dedicated::PromotionListPathFor(exe), L"promotion", false);
-
-    if (promoAlive > 0 && cfg.promoImagesFrom <= 0 && cfg.promoTimeFrom <= 0)
-        problems += L"\n  • promotion folders are listed but both triggers are off — "
-                    L"no promotion will ever show";
-    if (promoAlive == 0 && (cfg.promoImagesFrom > 0 || cfg.promoTimeFrom > 0))
-        problems += L"\n  • promotion triggers are set but no promotion folder exists";
+    // Only the list FILES are checked here — their contents belong to
+    // "Test Images" / "Test Promos", so each report has one subject.
+    if (!FileExists(Dedicated::ImageListPathFor(exe)))
+        problems += L"\n  • no image list beside the copy (run Test Images)";
 
     if (cfg.promoImagesTo > 0 && cfg.promoImagesTo < cfg.promoImagesFrom)
         problems += L"\n  • promotion image range is reversed";
@@ -587,10 +663,10 @@ void DedicatedWnd::BuildRows() {
         };
         row(Kind::Folder, L"Image folders",
             describe(owner.empty() ? L"" : Dedicated::ImageListPathFor(owner)),
-            L"Folders of pictures to show, held in imageLists_<name>.txt. Click to view, Add Images to add.", R_IMAGE_FOLDER);
+            L"Folders of pictures to show, held in imageLists_<name>.qim. Click to view, Add Images to add.", R_IMAGE_FOLDER);
         row(Kind::Folder, L"Promotion folders",
             describe(owner.empty() ? L"" : Dedicated::PromotionListPathFor(owner)),
-            L"Folders of promotions, held in promotionList_<name>.txt. Click to view, Add Promotions to add.", R_PROMO_FOLDER);
+            L"Folders of promotions, held in promotionList_<name>.qpr. Click to view, Add Promotions to add.", R_PROMO_FOLDER);
     }
 
     hdr(L"PROMOTIONS");
@@ -746,7 +822,9 @@ void DedicatedWnd::BuildRows() {
     m_buttons.push_back({L"Add Startup",     BTN_ADD_STARTUP,     {}, true, 1});
     m_buttons.push_back({L"Remove Startup",  BTN_REMOVE_STARTUP,  {},
                          FileExists(StartupLinkPath()), 1});
-    m_buttons.push_back({L"Test Config",     BTN_TEST,            {}, true, 1});
+    m_buttons.push_back({L"Test Config",     BTN_TEST_CONFIG,     {}, true, 1});
+    m_buttons.push_back({L"Test Images",     BTN_TEST_IMAGES,     {}, true, 1});
+    m_buttons.push_back({L"Test Promos",     BTN_TEST_PROMOS,     {}, true, 1});
 
     if (m_selected < 0) m_selected = 0;
     if (m_selected >= static_cast<int>(m_rows.size()))
@@ -841,6 +919,41 @@ std::wstring DedicatedWnd::PickIniFile(bool save) {
                 PWSTR p = nullptr;
                 if (SUCCEEDED(psi->GetDisplayName(SIGDN_FILESYSPATH, &p))) {
                     result = p; CoTaskMemFree(p);
+                }
+                psi->Release();
+            }
+        }
+        pfd->Release();
+    }
+    PopTopmost();
+    return result;
+}
+
+std::wstring DedicatedWnd::PickListFile(bool promotions) {
+    PushTopmostOff();
+    std::wstring result;
+    IFileOpenDialog *pfd = nullptr;
+    if (SUCCEEDED(CoCreateInstance(CLSID_FileOpenDialog, nullptr, CLSCTX_INPROC_SERVER,
+                                   IID_PPV_ARGS(&pfd))) && pfd) {
+        // One kind only — the whole point of separate extensions.
+        const wchar_t *spec  = promotions ? L"*.qpr" : L"*.qim";
+        const wchar_t *label = promotions ? L"Promotion list (*.qpr)"
+                                          : L"Image list (*.qim)";
+        COMDLG_FILTERSPEC f[] = {{label, spec}};
+        pfd->SetFileTypes(ARRAYSIZE(f), f);
+        pfd->SetDefaultExtension(promotions ? L"qpr" : L"qim");
+        pfd->SetTitle(promotions ? L"Choose a promotion list to test"
+                                 : L"Choose an image list to test");
+        DWORD o = 0;
+        pfd->GetOptions(&o);
+        pfd->SetOptions(o | FOS_FILEMUSTEXIST);
+        if (SUCCEEDED(pfd->Show(GetHwnd()))) {
+            IShellItem *psi = nullptr;
+            if (SUCCEEDED(pfd->GetResult(&psi))) {
+                PWSTR p = nullptr;
+                if (SUCCEEDED(psi->GetDisplayName(SIGDN_FILESYSPATH, &p))) {
+                    result = p;
+                    CoTaskMemFree(p);
                 }
                 psi->Release();
             }
@@ -1500,7 +1613,9 @@ LRESULT DedicatedWnd::HandlePanelMessage(UINT message, WPARAM wParam, LPARAM lPa
                     case BTN_ADD_PROMOS:      DoAddPromotions();  break;
                     case BTN_ADD_STARTUP:     DoAddStartup();     break;
                     case BTN_REMOVE_STARTUP:  DoRemoveStartup();  break;
-                    case BTN_TEST:            DoTest();           break;
+                    case BTN_TEST_CONFIG:     DoTest();           break;
+                    case BTN_TEST_IMAGES:     DoTestList(false);  break;
+                    case BTN_TEST_PROMOS:     DoTestList(true);   break;
                     default: break;
                 }
                 return 0;
