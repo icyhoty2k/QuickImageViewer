@@ -301,15 +301,27 @@ void DedicatedWnd::DoGenerateConfig() {
 // Folder lists
 // =============================================================================
 std::wstring DedicatedWnd::ListOwnerExe() const {
-    // The copy being authored when it exists; otherwise this instance, so the
-    // lists are useful on a running screen too.
-    std::wstring exe = TargetExePath();
-    if (exe.empty() || !FileExists(exe)) exe = Persistence::Registry::GetExePathW();
-    return exe;
+    // 1. A generated copy owns its lists — that is what is being authored.
+    const std::wstring target = TargetExePath();
+    if (!target.empty() && FileExists(target)) return target;
+
+    // 2. Failing that, only a dedicated instance owns lists, and only its own.
+    if (Dedicated::SettingsUseFile()) return Persistence::Registry::GetExePathW();
+
+    // 3. Nothing owns them yet. Returning this exe here would scatter
+    //    imageLists_QuickImageViewer.txt next to the MAIN app — files it never
+    //    reads and the user never asked for.
+    return {};
 }
 
 void DedicatedWnd::ShowFolderList(bool promotions) {
     const std::wstring exe = ListOwnerExe();
+    if (exe.empty()) {
+        DialogMessage(L"No dedicated copy exists yet.\n\nThe folder lists live beside "
+                      L"the copy, so name the instance and press \"Generate App\" "
+                      L"first.", L"Folders");
+        return;
+    }
     const std::wstring listPath = promotions ? Dedicated::PromotionListPathFor(exe)
                                              : Dedicated::ImageListPathFor(exe);
     const wchar_t *what = promotions ? L"promotion folders" : L"image folders";
@@ -353,6 +365,12 @@ void DedicatedWnd::ShowFolderList(bool promotions) {
 
 void DedicatedWnd::AppendFolderToList(bool promotions) {
     const std::wstring exe = ListOwnerExe();
+    if (exe.empty()) {
+        DialogMessage(L"No dedicated copy exists yet.\n\nThe folder lists live beside "
+                      L"the copy, so name the instance and press \"Generate App\" "
+                      L"first.", L"Add folder");
+        return;
+    }
     const std::wstring listPath = promotions ? Dedicated::PromotionListPathFor(exe)
                                              : Dedicated::ImageListPathFor(exe);
     if (listPath.empty()) {
@@ -557,16 +575,22 @@ void DedicatedWnd::BuildRows() {
 
     hdr(L"CONTENT");
     {
-        // Folders live in the two list files, so show what they hold rather
-        // than a single path. Add them with the buttons above.
-        const size_t imgN = Dedicated::LoadImageFolders().size();
-        const size_t proN = Dedicated::LoadPromotionFolders().size();
+        // Counts come from the lists of the copy being AUTHORED, not this
+        // process — otherwise the panel would report the wrong screen's content.
+        // Reading by path also avoids creating anything as a side effect of
+        // drawing: LoadListAt on a missing file simply yields nothing.
+        const std::wstring owner = ListOwnerExe();
+        auto describe = [&](const std::wstring &path) -> std::wstring {
+            if (owner.empty()) return L"(no copy yet)";
+            const size_t n = Dedicated::LoadListAt(path).size();
+            return n ? std::to_wstring(n) + L" listed" : std::wstring(L"(none)");
+        };
         row(Kind::Folder, L"Image folders",
-            imgN ? std::to_wstring(imgN) + L" listed" : std::wstring(L"(none)"),
-            L"Folders of pictures to show, held in imageLists_<name>.txt. Use Add Images above.", R_IMAGE_FOLDER);
+            describe(owner.empty() ? L"" : Dedicated::ImageListPathFor(owner)),
+            L"Folders of pictures to show, held in imageLists_<name>.txt. Click to view, Add Images to add.", R_IMAGE_FOLDER);
         row(Kind::Folder, L"Promotion folders",
-            proN ? std::to_wstring(proN) + L" listed" : std::wstring(L"(none)"),
-            L"Folders of promotions, held in promotionList_<name>.txt. Use Add Promotions above.", R_PROMO_FOLDER);
+            describe(owner.empty() ? L"" : Dedicated::PromotionListPathFor(owner)),
+            L"Folders of promotions, held in promotionList_<name>.txt. Click to view, Add Promotions to add.", R_PROMO_FOLDER);
     }
 
     hdr(L"PROMOTIONS");
