@@ -784,7 +784,7 @@ int WINAPI wWinMain(HINSTANCE hInstance, [[maybe_unused]] HINSTANCE hPrevInstanc
         const Dedicated::InstanceConfig &cfg = Dedicated::State().config;
 
         // Content folder: an explicit -startFolder, else the first entry of
-        // imageLists_*.txt that still exists. Something must resolve here or the
+        // imageLists_*.qim that still exists. Something must resolve here or the
         // instance has nothing to show — and it must never fall through to the
         // file chooser.
         if (runArgs.startFolder.empty()) {

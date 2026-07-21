@@ -12,13 +12,13 @@
 //
 // In their place sit two plain text files beside the exe, one folder per line:
 //
-//     imageLists_<exeName>.txt      folders holding the images to show
-//     promotionList_<exeName>.txt   folders holding the promotions
+//     imageLists_<exeName>.qim      folders holding the images to show
+//     promotionList_<exeName>.qpr   folders holding the promotions
 //
 // Their real names live in the .ini under [Instance]:
 //
-//     ImageLists=imageLists_LobbyScreen.txt
-//     PromotionLists=promotionList_LobbyScreen.txt
+//     ImageLists=imageLists_LobbyScreen.qim
+//     PromotionLists=promotionList_LobbyScreen.qpr
 //
 // so they can be renamed, or deliberately SHARED between instances (point two
 // screens at one promotions list and both pick up the same campaign). When a

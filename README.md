@@ -181,7 +181,7 @@ Directory strips double as a lightweight file manager:
 | `Space` *(while running)* | Pause / resume |
 | `R` *(while running)* | Toggle loop |
 | `S` *(while running)* | Toggle shuffle |
-| `T` *(while running)* | Cycle transition: Cut → Fade → Dissolve → Ripple → Push → Zoom |
+| `T` *(while running)* | Step to the next transition (21 available, wraps) |
 
 ### Color Effects
 All effects are non-destructive and GPU-accelerated via the Direct2D effect graph. `Ctrl+S` saves the result to disk.
@@ -336,6 +336,65 @@ Choose sort order: **Name** / **Date Modified** / **Size** / **Type** / **Disk O
 | Backup History & Favorites | Export history and favorites to a `.zip` archive (file-save dialog) |
 | Restore History & Favorites | Restore from a previously created backup — confirmation required |
 
+### Dedicated Screens
+
+Press `F8` for the Dedicated panel. A **dedicated screen** is a separate copy of qIV with its own settings file beside it — normally parked fullscreen on one monitor running a slideshow. Any number can run at once, alongside the main app, sharing nothing.
+
+**How a copy is identified.** Everything derives from the executable's own path:
+
+```
+D:\Screens\qIV_dedicated_Lobby.exe        the copy
+D:\Screens\qIV_dedicated_Lobby.ini        its settings
+D:\Screens\imageLists_qIV_dedicated_Lobby.qim     image folders
+D:\Screens\promotionList_qIV_dedicated_Lobby.qpr  promotion folders
+```
+
+Two files cannot share a name in one folder, so two screens can never resolve to the same settings, mutex or window class.
+
+**Startup decision**, made from the filesystem before any setting is read:
+
+| Condition | Result |
+|:---|:---|
+| An `.ini` sits beside the exe | Settings come from it; the registry is never touched |
+| Exe name contains `dedicated`, no `.ini` | A default `.ini` is generated and the F8 panel opens |
+| Neither | Normal registry-backed launch |
+
+Inside the `.ini`, `[Instance]Dedicated` decides behaviour — `1`/`true`/`on`/`yes` or any non-zero number. Set it to `0` and you get a **portable** ordinary viewer: settings in a file, history and favorites intact, nothing in the registry.
+
+**Panel buttons**
+
+| Button | Action |
+|:---|:---|
+| Generate App | Copy this executable to a chosen folder as `qIV_dedicated_<name>.exe` |
+| Generate Config | Write that copy's `.ini`, holding every setting shown in the panel |
+| Add Images / Add Promotions | Append a folder to the `.qim` / `.qpr` list — duplicates reported and skipped |
+| Add Startup / Remove Startup | Create or delete a `shell:startup` shortcut pointing at the copy |
+| Test Config / Test Images / Test Promos | Check one thing at a time |
+
+The panel edits the **config only** — it never changes the app you are using, and every value starts from the compiled defaults rather than your current settings, so a screen never inherits the authoring machine's preferences.
+
+`Test Images` / `Test Promos` count the images actually found per folder and flag folders that are missing or empty. A folder that exists but holds nothing decodable looks identical to a working one until the screen goes blank.
+
+**Isolation.** A dedicated screen writes *nothing* to the registry, keeps no history or favorites, and has its own mutex and window class — so a file opened from Explorer can never land on a slideshow instead of the main window. It auto-starts from a shortcut rather than the `Run` key.
+
+### Promotions
+
+A dedicated screen can interleave a **second playlist** with its images — never merged into them, and invisible to the image counter and arrow keys.
+
+| Setting | Meaning |
+|:---|:---|
+| Pick | `Sequential` (folder order) or `Weighted by priority` |
+| Priority | From a `#N` suffix on the filename — `sale#500.jpg` is 500× likelier than a file with no suffix. Range 1–65535 |
+| Every N images | Gap counted in pictures |
+| Every N seconds | Gap counted in wall-clock time |
+| Shown for | Promotion dwell time, independent of the slide interval |
+
+Both triggers are `(from, to)` pairs and run **independently** — set either, or both, and whichever comes due first shows a promotion:
+
+- `(0, 0)` — off
+- `(5, 0)` — exactly every 5
+- `(5, 15)` — re-rolled between 5 and 15 each time, so it never looks mechanical
+
 ---
 
 ## Command-Line Arguments
@@ -357,17 +416,31 @@ QuickImageViewer.exe [image_path] [options]
 | `-slideshowInterval N` | Seconds between slides (e.g. `-slideshowInterval 8`) |
 | `-repeat` | Loop the slideshow when it reaches the end |
 | `-shuffle` | Play slideshow in random order |
-| `-slideshowTransition=<type>` | Transition: `Cut`, `Fade`, `Dissolve`, `Ripple`, `Push`, `Zoom` |
-| `-slideshowTransitionShuffle` | Pick a random transition per slide |
+| `-slideshowTransition=<type>` | Transition by name — 21 available (`Fade`, `Iris`, `SlideLeft`, `ZoomIn`, `Spin`, …) |
+| `-slideshowTransitions=<list>` | Custom set, by name or by the numbers shown in the menu (`Fade,Iris,Spin` or `6,8,17`) |
+| `-slideshowTransitionSource=<none\|all\|list>` | Which transitions are in play |
+| `-slideshowTransitionOrder=<sequential\|random>` | How the next one is drawn from that set |
+| `-slideshowTransitionShuffle` | Legacy shorthand for `source=all order=random` |
 | `-hideMouse` | Hide the mouse cursor at startup |
 | `-lock` | KIOSK mode — all keyboard and mouse input is ignored |
-| `-dedicated` | Isolated instance: separate history, tray icon and mutex |
+| `-dedicated` | Run as a dedicated screen — no registry writes, no history, own icon, mutex and window class |
+| `-config <path>` | Use this `.ini` instead of the one named after the exe |
+| `-instance=<name>` | Name this instance — settings, lists, mutex and window class derive from it |
+| `-instanceDesc=<text>` | Free-text description, shown on the generated shortcut |
+| `-promoOrder=<sequential\|weighted>` | How the next promotion is chosen |
+| `-promoEveryImages=<from>-<to>` | Promotion every N images — `0` off, `5-0` exact, `5-15` random |
+| `-promoEverySeconds=<from>-<to>` | Same, counted in seconds — independent of the image counter |
 | `-RestoreDefaults` | Wipe all saved settings from the registry, show a confirmation dialog, and exit — recovery fallback if the app misbehaves after a config change |
 | `-runOnStartup` | Write / refresh the Windows startup registry entry so QIV launches automatically with Windows. Equivalent to "Run on startup" in the tray menu. Dedicated instances write their own separate entry |
 
 **Kiosk example:**
 ```
 QuickImageViewer.exe -dedicated -lock -fullscreen -slideshow -shuffle -slideshowInterval 8 -startFolder "D:\Ads"
+```
+
+**Dedicated screen** — the form the F8 panel writes into a startup shortcut. Folders and every setting come from the `.ini` and its `.qim` / `.qpr` lists:
+```
+qIV_dedicated_Lobby.exe -dedicated -config "D:\Screens\qIV_dedicated_Lobby.ini"
 ```
 
 ---
