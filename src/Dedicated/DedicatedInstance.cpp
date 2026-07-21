@@ -190,6 +190,7 @@ std::wstring BuildCommandLine(const InstanceConfig &cfg) {
 // =============================================================================
 namespace {
     constexpr const wchar_t *K_PROMO_ORDER  = L"qivDedPromoOrder";
+    constexpr const wchar_t *K_PROMO_SHOW   = L"qivDedPromoShowSec";
     constexpr const wchar_t *K_PROMO_IMG_FROM = L"qivDedPromoImagesFrom";
     constexpr const wchar_t *K_PROMO_IMG_TO   = L"qivDedPromoImagesTo";
     constexpr const wchar_t *K_PROMO_SEC_FROM = L"qivDedPromoTimeFrom";
@@ -209,6 +210,7 @@ void SaveConfig(const InstanceConfig &cfg) {
     WriteInstanceMutex(DefaultMutexName());
 
     WriteDword(K_PROMO_ORDER,    static_cast<DWORD>(cfg.promoOrder));
+    WriteDword(K_PROMO_SHOW,     static_cast<DWORD>(cfg.promoShowSeconds));
     WriteDword(K_PROMO_IMG_FROM, static_cast<DWORD>(cfg.promoImagesFrom));
     WriteDword(K_PROMO_IMG_TO,   static_cast<DWORD>(cfg.promoImagesTo));
     WriteDword(K_PROMO_SEC_FROM, static_cast<DWORD>(cfg.promoTimeFrom));
@@ -276,6 +278,7 @@ void WriteConfigTo(const std::wstring &ini, const InstanceConfig &cfg) {
            MutexNameFor(SanitizeInstanceName(cfg.name)));
 
     PutInt(ini, SEC_SETTINGS, K_PROMO_ORDER,    cfg.promoOrder);
+    PutInt(ini, SEC_SETTINGS, K_PROMO_SHOW,     cfg.promoShowSeconds);
     PutInt(ini, SEC_SETTINGS, K_PROMO_IMG_FROM, cfg.promoImagesFrom);
     PutInt(ini, SEC_SETTINGS, K_PROMO_IMG_TO,   cfg.promoImagesTo);
     PutInt(ini, SEC_SETTINGS, K_PROMO_SEC_FROM, cfg.promoTimeFrom);
@@ -349,7 +352,8 @@ bool ReadConfigFrom(const std::wstring &ini, InstanceConfig &cfg) {
     cfg.name        = GetStr(ini, SEC_INSTANCE, L"Name");
     cfg.description = GetStr(ini, SEC_INSTANCE, L"Description");
 
-    cfg.promoOrder      = GetInt(ini, SEC_SETTINGS, K_PROMO_ORDER, D::PromoOrder::WEIGHTED);
+    cfg.promoOrder       = GetInt(ini, SEC_SETTINGS, K_PROMO_ORDER, D::PromoOrder::WEIGHTED);
+    cfg.promoShowSeconds = GetInt(ini, SEC_SETTINGS, K_PROMO_SHOW, 0);
     cfg.promoImagesFrom = GetInt(ini, SEC_SETTINGS, K_PROMO_IMG_FROM, D::PROMO_IMAGES_EVERY_DEFAULT);
     cfg.promoImagesTo   = GetInt(ini, SEC_SETTINGS, K_PROMO_IMG_TO,   D::PROMO_IMAGES_UPTO_DEFAULT);
     cfg.promoTimeFrom   = GetInt(ini, SEC_SETTINGS, K_PROMO_SEC_FROM, 0);
@@ -424,6 +428,7 @@ void LoadConfig(InstanceConfig &cfg) {
 
     cfg.promoOrder = static_cast<int>(ReadDword(K_PROMO_ORDER,
                                                 static_cast<DWORD>(D::PromoOrder::WEIGHTED)));
+    cfg.promoShowSeconds = static_cast<int>(ReadDword(K_PROMO_SHOW, 0));
     cfg.promoImagesFrom = static_cast<int>(ReadDword(K_PROMO_IMG_FROM, D::PROMO_IMAGES_EVERY_DEFAULT));
     cfg.promoImagesTo   = static_cast<int>(ReadDword(K_PROMO_IMG_TO,   D::PROMO_IMAGES_UPTO_DEFAULT));
     cfg.promoTimeFrom   = static_cast<int>(ReadDword(K_PROMO_SEC_FROM, D::PROMO_SECONDS_EVERY_DEFAULT));

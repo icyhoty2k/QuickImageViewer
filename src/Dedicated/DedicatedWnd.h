@@ -85,6 +85,13 @@ class DedicatedWnd : public FloatingPanelWnd {
         // Shared by the two Add buttons — same flow, different list file.
         void AppendFolderToList(bool promotions);
 
+        // Read-only view of a list's contents, creating the file if absent.
+        void ShowFolderList(bool promotions);
+
+        // The exe whose lists are being edited: the copy being authored when it
+        // exists, otherwise this running instance.
+        std::wstring ListOwnerExe() const;
+
         // --- Model -----------------------------------------------------------
         void BuildRows();
         void EditRow(int rowIndex);
