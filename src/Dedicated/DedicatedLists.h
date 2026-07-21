@@ -69,4 +69,8 @@ enum class AppendResult {
 // folder typed two ways is still recognised as a duplicate.
 AppendResult AppendFolder(const std::wstring &listPath, const std::wstring &folder);
 
+// Reads any list file by path. Used when validating a config that belongs to a
+// different instance than this process.
+std::vector<std::wstring> LoadListAt(const std::wstring &listPath);
+
 } // namespace Dedicated

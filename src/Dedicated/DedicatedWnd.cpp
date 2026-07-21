@@ -1,6 +1,7 @@
 #include "DedicatedWnd.h"
 #include "DedicatedSettings.h"
-#include "DedicatedLists.h" // list paths + AppendFolder
+#include "DedicatedLists.h"        // list paths + AppendFolder
+#include "SlideshowTransitions.h"  // TransitionDisplayOrder — same order as the menu
 #include "AppState.h"
 #include "Persistence/RegistryManager.h" // GetExePathW
 #include "Platform/Constants.h"
@@ -64,6 +65,9 @@ namespace {
         R_THUMB_COPY, R_THUMB_MOVE, R_THUMB_DELETE, R_THUMB_PASTE,
         // Custom transition set
         R_TRANS_LIST,
+        // One id per TransitionType: R_TRANS_PICK_FIRST + <type value>.
+        // Kept last so the block can grow with the enum.
+        R_TRANS_PICK_FIRST = 1000,
     };
 
     bool BgIsDark(COLORREF bg) {
@@ -419,18 +423,48 @@ void DedicatedWnd::DoTest() {
 
     if (cfg.name.empty())
         problems += L"\n  • [Instance]Name is empty — identity comes from it";
-    if (cfg.imageFolder.empty())
-        problems += L"\n  • no images folder set";
-    else if (GetFileAttributesW(cfg.imageFolder.c_str()) == INVALID_FILE_ATTRIBUTES)
-        problems += L"\n  • images folder does not exist: " + cfg.imageFolder;
 
-    if (!cfg.promotionFolder.empty() &&
-        GetFileAttributesW(cfg.promotionFolder.c_str()) == INVALID_FILE_ATTRIBUTES)
-        problems += L"\n  • promotions folder does not exist: " + cfg.promotionFolder;
+    // Content lives in the list files beside the exe the config belongs to, so
+    // validate those rather than any path inside the .ini.
+    std::wstring exe = ini;
+    {
+        const size_t dot = exe.find_last_of(L'.');
+        const size_t slash = exe.find_last_of(L"\\/");
+        if (dot != std::wstring::npos && (slash == std::wstring::npos || dot > slash))
+            exe.resize(dot);
+        exe += L".exe";
+    }
+    if (!FileExists(exe))
+        problems += L"\n  • no executable beside this config: " + exe;
 
-    if (!cfg.promotionFolder.empty() && cfg.promoImagesFrom <= 0 && cfg.promoTimeFrom <= 0)
-        problems += L"\n  • a promotions folder is set but both triggers are off — "
+    auto checkList = [&](const std::wstring &listPath, const wchar_t *what,
+                         bool required) {
+        if (!FileExists(listPath)) {
+            if (required)
+                problems += L"\n  • missing " + std::wstring(what) + L" list: " + listPath;
+            return 0;
+        }
+        int alive = 0, dead = 0;
+        for (const std::wstring &f : Dedicated::LoadListAt(listPath)) {
+            const DWORD a = GetFileAttributesW(f.c_str());
+            if (a != INVALID_FILE_ATTRIBUTES && (a & FILE_ATTRIBUTE_DIRECTORY)) ++alive;
+            else { ++dead; problems += L"\n  • " + std::wstring(what) +
+                                       L" folder missing: " + f; }
+        }
+        if (required && alive == 0 && dead == 0)
+            problems += L"\n  • " + std::wstring(what) + L" list is empty — "
+                        L"nothing would be shown";
+        return alive;
+    };
+
+    checkList(Dedicated::ImageListPathFor(exe), L"image", true);
+    const int promoAlive = checkList(Dedicated::PromotionListPathFor(exe), L"promotion", false);
+
+    if (promoAlive > 0 && cfg.promoImagesFrom <= 0 && cfg.promoTimeFrom <= 0)
+        problems += L"\n  • promotion folders are listed but both triggers are off — "
                     L"no promotion will ever show";
+    if (promoAlive == 0 && (cfg.promoImagesFrom > 0 || cfg.promoTimeFrom > 0))
+        problems += L"\n  • promotion triggers are set but no promotion folder exists";
 
     if (cfg.promoImagesTo > 0 && cfg.promoImagesTo < cfg.promoImagesFrom)
         problems += L"\n  • promotion image range is reversed";
@@ -475,10 +509,18 @@ void DedicatedWnd::BuildRows() {
         L"Where Generate App places the copy. Each screen lives in its own folder with its own config.", R_DEDICATED_DIR);
 
     hdr(L"CONTENT");
-    row(Kind::Folder, L"Images folder", Tail(m_cfg.imageFolder),
-        L"The pictures this screen shows. Used when the image list is empty.", R_IMAGE_FOLDER);
-    row(Kind::Folder, L"Promotions folder", Tail(m_cfg.promotionFolder),
-        L"A SECOND, separate collection shown between the images. Leave empty to disable promotions.", R_PROMO_FOLDER);
+    {
+        // Folders live in the two list files, so show what they hold rather
+        // than a single path. Add them with the buttons above.
+        const size_t imgN = Dedicated::LoadImageFolders().size();
+        const size_t proN = Dedicated::LoadPromotionFolders().size();
+        row(Kind::Folder, L"Image folders",
+            imgN ? std::to_wstring(imgN) + L" listed" : std::wstring(L"(none)"),
+            L"Folders of pictures to show, held in imageLists_<name>.txt. Use Add Images above.", R_IMAGE_FOLDER);
+        row(Kind::Folder, L"Promotion folders",
+            proN ? std::to_wstring(proN) + L" listed" : std::wstring(L"(none)"),
+            L"Folders of promotions, held in promotionList_<name>.txt. Use Add Promotions above.", R_PROMO_FOLDER);
+    }
 
     hdr(L"PROMOTIONS");
     row(Kind::Choice, L"Pick", m_cfg.promoOrder == D::PromoOrder::SEQUENTIAL
@@ -514,13 +556,27 @@ void DedicatedWnd::BuildRows() {
         L"Which effects are in play: only the one chosen, all of them, or the custom ticked list.", R_TRANS_SOURCE);
     row(Kind::Choice, L"Order", Constants::Messages::TRANSITION_ORDER_NAMES[m_cfg.transitionOrder],
         L"How the next effect is drawn from that set — in listed order, or at random.", R_TRANS_ORDER);
-    {
+    // Per-effect picker, shown only when Source is List — 21 extra rows are
+    // noise when the list is not being used. Ids are R_TRANS_PICK_FIRST + the
+    // TransitionType value, so one case handles all of them.
+    if (m_cfg.transitionSource == SS::TransitionSource::LIST) {
         int picked = 0;
         for (int i = 0; i < SS::TRANSITION_COUNT; ++i)
             if (m_cfg.transitionList & (1u << i)) ++picked;
+
         row(Kind::Number, L"Custom set", std::to_wstring(picked) + L" of " +
                                          std::to_wstring(SS::TRANSITION_COUNT),
-            L"Which effects the custom list holds. Only used when Source is List. Stored as a bit per effect.", R_TRANS_LIST);
+            L"Click a effect below to add or remove it. Clicking here selects all animated effects.", R_TRANS_LIST);
+
+        const int *order = TransitionDisplayOrder();
+        for (int n = 0; n < SS::TRANSITION_COUNT; ++n) {
+            const int t = order[n];
+            row(Kind::Toggle,
+                Constants::Messages::TRANSITION_NAMES[t],
+                OnOff((m_cfg.transitionList & (1u << t)) != 0),
+                L"Include this effect in the custom set.",
+                R_TRANS_PICK_FIRST + t);
+        }
     }
 
     hdr(L"VIEW & WINDOW");
@@ -729,13 +785,24 @@ void DedicatedWnd::EditRow(int rowIndex) {
 
     auto cycle = [](int v, int count) { return (v + 1) % count; };
 
+    // One case for all 21 per-effect toggles.
+    if (r.id >= R_TRANS_PICK_FIRST &&
+        r.id < R_TRANS_PICK_FIRST + SS::TRANSITION_COUNT) {
+        m_cfg.transitionList ^= (1u << (r.id - R_TRANS_PICK_FIRST));
+        BuildRows();
+        Repaint();
+        return;
+    }
+
     switch (r.id) {
         case R_NAME:
         case R_DESC: BeginTextEdit(rowIndex); return;
 
         case R_DEDICATED_DIR: PickFolder(m_targetFolder, L"Where to create the copy"); break;
-        case R_IMAGE_FOLDER:  PickFolder(m_cfg.imageFolder, L"Images folder"); break;
-        case R_PROMO_FOLDER:  PickFolder(m_cfg.promotionFolder, L"Promotions folder"); break;
+        // Clicking these rows adds a folder, same as the buttons — the row is
+        // where a user looks when they want to change what it reports.
+        case R_IMAGE_FOLDER: AppendFolderToList(false); return;
+        case R_PROMO_FOLDER: AppendFolderToList(true);  return;
 
         case R_PROMO_ORDER:
             m_cfg.promoOrder = (m_cfg.promoOrder == D::PromoOrder::SEQUENTIAL)
@@ -819,16 +886,13 @@ void DedicatedWnd::EditRow(int rowIndex) {
             break;
         }
         case R_TRANS_LIST: {
-            // A bit per effect. Editing every bit through a dialog would be
-            // unusable, so this cycles the useful presets; the per-effect
-            // checkboxes live in the slideshow menu.
-            const uint32_t all = (Constants::Slideshow::TRANSITION_COUNT >= 32)
+            // Header row: select all animated effects, or clear back to none if
+            // they are already all on.
+            const uint32_t all = (SS::TRANSITION_COUNT >= 32)
                                      ? 0xFFFFFFFFu
-                                     : ((1u << Constants::Slideshow::TRANSITION_COUNT) - 1u);
+                                     : ((1u << SS::TRANSITION_COUNT) - 1u);
             const uint32_t animated = all & ~1u; // everything except Cut
-            m_cfg.transitionList = (m_cfg.transitionList == animated) ? all
-                                 : (m_cfg.transitionList == all)      ? 1u
-                                                                      : animated;
+            m_cfg.transitionList = (m_cfg.transitionList == animated) ? 0u : animated;
             break;
         }
 

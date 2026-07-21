@@ -1,5 +1,6 @@
 #include "DedicatedInstance.h"
 #include "DedicatedSettings.h"           // the .ini this instance persists into
+#include "DedicatedLists.h"              // promotion folders come from the list file
 #include "AppState.h"                    // app.isDedicated (legacy identity route)
 #include "Persistence/RegistryManager.h" // GetExePathW
 #include "Platform/Constants.h"
@@ -157,8 +158,6 @@ std::wstring BuildCommandLine(const InstanceConfig &cfg) {
     AppendFlag(s, cfg.fullscreen, L"-fullscreen");
     AppendFlag(s, cfg.hideMouse,  L"-hideMouse");
 
-    if (!cfg.imageFolder.empty())
-        AppendValue(s, L"-startFolder", Quote(cfg.imageFolder), L" ");
 
     AppendFlag(s, cfg.slideshow, L"-slideshow");
     AppendFlag(s, cfg.loop,      L"-repeat");
@@ -166,7 +165,6 @@ std::wstring BuildCommandLine(const InstanceConfig &cfg) {
         AppendValue(s, L"-slideshowInterval", std::to_wstring(cfg.intervalSeconds), L" ");
 
     if (cfg.HasPromotions()) {
-        AppendValue(s, L"-promoFolder", Quote(cfg.promotionFolder), L" ");
         AppendValue(s, L"-promoOrder",
                     cfg.promoOrder == D::PromoOrder::SEQUENTIAL ? L"sequential" : L"weighted");
         // Each trigger is emitted only when armed. "5-0" is a strict cadence,
@@ -191,8 +189,6 @@ std::wstring BuildCommandLine(const InstanceConfig &cfg) {
 // settings use.
 // =============================================================================
 namespace {
-    constexpr const wchar_t *K_IMAGE_FOLDER = L"qivDedImageFolder";
-    constexpr const wchar_t *K_PROMO_FOLDER = L"qivDedPromoFolder";
     constexpr const wchar_t *K_PROMO_ORDER  = L"qivDedPromoOrder";
     constexpr const wchar_t *K_PROMO_IMG_FROM = L"qivDedPromoImagesFrom";
     constexpr const wchar_t *K_PROMO_IMG_TO   = L"qivDedPromoImagesTo";
@@ -212,8 +208,6 @@ void SaveConfig(const InstanceConfig &cfg) {
     // even if the exe is later renamed.
     WriteInstanceMutex(DefaultMutexName());
 
-    WriteString(K_IMAGE_FOLDER, cfg.imageFolder);
-    WriteString(K_PROMO_FOLDER, cfg.promotionFolder);
     WriteDword(K_PROMO_ORDER,    static_cast<DWORD>(cfg.promoOrder));
     WriteDword(K_PROMO_IMG_FROM, static_cast<DWORD>(cfg.promoImagesFrom));
     WriteDword(K_PROMO_IMG_TO,   static_cast<DWORD>(cfg.promoImagesTo));
@@ -281,8 +275,6 @@ void WriteConfigTo(const std::wstring &ini, const InstanceConfig &cfg) {
     PutStr(ini, SEC_INSTANCE, L"Mutex",
            MutexNameFor(SanitizeInstanceName(cfg.name)));
 
-    PutStr(ini, SEC_SETTINGS, K_IMAGE_FOLDER, cfg.imageFolder);
-    PutStr(ini, SEC_SETTINGS, K_PROMO_FOLDER, cfg.promotionFolder);
     PutInt(ini, SEC_SETTINGS, K_PROMO_ORDER,    cfg.promoOrder);
     PutInt(ini, SEC_SETTINGS, K_PROMO_IMG_FROM, cfg.promoImagesFrom);
     PutInt(ini, SEC_SETTINGS, K_PROMO_IMG_TO,   cfg.promoImagesTo);
@@ -357,8 +349,6 @@ bool ReadConfigFrom(const std::wstring &ini, InstanceConfig &cfg) {
     cfg.name        = GetStr(ini, SEC_INSTANCE, L"Name");
     cfg.description = GetStr(ini, SEC_INSTANCE, L"Description");
 
-    cfg.imageFolder     = GetStr(ini, SEC_SETTINGS, K_IMAGE_FOLDER);
-    cfg.promotionFolder = GetStr(ini, SEC_SETTINGS, K_PROMO_FOLDER);
     cfg.promoOrder      = GetInt(ini, SEC_SETTINGS, K_PROMO_ORDER, D::PromoOrder::WEIGHTED);
     cfg.promoImagesFrom = GetInt(ini, SEC_SETTINGS, K_PROMO_IMG_FROM, D::PROMO_IMAGES_EVERY_DEFAULT);
     cfg.promoImagesTo   = GetInt(ini, SEC_SETTINGS, K_PROMO_IMG_TO,   D::PROMO_IMAGES_UPTO_DEFAULT);
@@ -431,8 +421,6 @@ void LoadConfig(InstanceConfig &cfg) {
     cfg.name        = ReadInstanceName();
     cfg.description = ReadInstanceDescription();
 
-    cfg.imageFolder     = ReadString(K_IMAGE_FOLDER);
-    cfg.promotionFolder = ReadString(K_PROMO_FOLDER);
 
     cfg.promoOrder = static_cast<int>(ReadDword(K_PROMO_ORDER,
                                                 static_cast<DWORD>(D::PromoOrder::WEIGHTED)));
@@ -522,7 +510,7 @@ void InitPromotions() {
     if (!st.active) return;
 
     const InstanceConfig &cfg = st.config;
-    if (cfg.promotionFolder.empty()) {
+    if (!cfg.HasPromotions()) {
         st.promotions.Clear();
         return;
     }
@@ -530,7 +518,9 @@ void InitPromotions() {
     st.promotions.SetOrder(cfg.promoOrder);
     st.promotions.SetImageTrigger(cfg.promoImagesFrom, cfg.promoImagesTo);
     st.promotions.SetTimeTrigger(cfg.promoTimeFrom, cfg.promoTimeTo);
-    st.promotions.Scan(cfg.promotionFolder); // Scan re-arms and decides the first pick
+    // Pool every folder named in promotionList_*.txt. Scan re-arms the triggers
+    // and decides the first pick.
+    st.promotions.Scan(LoadPromotionFolders());
 }
 
 void PreloadUpcomingPromotion(HWND /*hWnd*/) {
