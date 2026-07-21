@@ -206,7 +206,10 @@ LRESULT CALLBACK MainAppWndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM l
 
             if (wParam == Constants::Slideshow::CURSOR_TIMER_ID) {
                 KillTimer(hWnd, Constants::Slideshow::CURSOR_TIMER_ID);
-                if (app.slideshow.running && !app.slideshow.paused && !app.slideshow.cursorHidden) {
+                // Never hide the pointer while a context menu is up — the user
+                // needs it to pick an item.
+                if (app.slideshow.running && !app.slideshow.paused &&
+                    !app.slideshow.cursorHidden && !app.isContextMenuOpen) {
                     ShowCursor(FALSE);
                     app.slideshow.cursorHidden = true;
                 }

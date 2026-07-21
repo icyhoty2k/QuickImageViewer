@@ -1,10 +1,12 @@
 #include "TrayHandler.h"
 #include "AppCommands.h"
+#include "ContextMenuHandler.h"
 #include "../AppState.h"
 #include "../Overlays/OverlayManager.h"
 #include "../Persistence/HistoryFoldersManager.h"
 #include "../Persistence/RegistryManager.h"
 #include "../Platform/Constants.h"
+#include "../Platform/ConstantsStrings.h" // Constants::Messages::TRANSITION_NAMES
 #include "../Platform/FileHandler.h"
 #include "../SlideshowTransitions.h"
 #include "../UI/FloatingPanels/HistoryListWnd.h"
@@ -36,9 +38,9 @@ LRESULT TrayHandler::Handle(HWND hWnd, WPARAM wParam, LPARAM lParam) {
     if (LOWORD(lParam) == WM_LBUTTONDBLCLK) {
         RestoreWindow(hWnd);
     } else if (LOWORD(lParam) == WM_RBUTTONUP) {
-        int x = GET_X_LPARAM(wParam);
-        int y = GET_Y_LPARAM(wParam);
-        ShowContextMenu(hWnd, x, y);
+        // Same menu the main-window right-click shows — ContextMenuHandler is
+        // the single definition; this handler only supplies the anchor point.
+        ContextMenuHandler::Show(hWnd, GET_X_LPARAM(wParam), GET_Y_LPARAM(wParam));
     }
     return 0;
 }
@@ -65,210 +67,6 @@ void TrayHandler::RestoreWindow(HWND hWnd) {
     } else {
         SetForegroundWindow(hWnd);
     }
-}
-
-// =============================================================================
-//  Context menu — build, track, dispatch
-// =============================================================================
-
-void TrayHandler::ShowContextMenu(HWND hWnd, int x, int y) {
-    // ── Settings submenu ─────────────────────────────────────────────────────
-    HMENU hSubMenu = CreatePopupMenu();
-    AppendMenuW(hSubMenu,
-        MF_STRING | (app.isKeepInBackground ? MF_CHECKED : MF_UNCHECKED),
-        4, L"Keep in Background");
-    AppendMenuW(hSubMenu,
-        MF_STRING | (app.isEnableRunOnStartup ? MF_CHECKED : MF_UNCHECKED),
-        5, L"Run on Startup");
-    AppendMenuW(hSubMenu,
-        MF_STRING | (app.thumbnailEffectsEnabled ? MF_CHECKED : MF_UNCHECKED),
-        6, L"Thumbnail Effects");
-    AppendMenuW(hSubMenu,
-        MF_STRING | (app.historyFullModeEnabled ? MF_CHECKED : MF_UNCHECKED),
-        7, L"History: Open Full List");
-    AppendMenuW(hSubMenu,
-        MF_STRING | (app.showOverlayInfoText ? MF_CHECKED : MF_UNCHECKED),
-        8, L"Info Overlays");
-    AppendMenuW(hSubMenu,
-        MF_STRING | (app.openDirWndOnStart ? MF_CHECKED : MF_UNCHECKED),
-        9, L"Open Thumbnail Strip on Start");
-    AppendMenuW(hSubMenu,
-        MF_STRING | (app.overlayShowBackground ? MF_CHECKED : MF_UNCHECKED),
-        13, L"Overlay Background");
-    AppendMenuW(hSubMenu,
-        MF_STRING | (app.swapMouseButtons ? MF_CHECKED : MF_UNCHECKED),
-        14, L"Swap Mouse Buttons");
-    AppendMenuW(hSubMenu,
-        MF_STRING | (app.contextMenuEnabled ? MF_CHECKED : MF_UNCHECKED),
-        63, L"Right-Click Context Menu");
-    AppendMenuW(hSubMenu,
-        MF_STRING | (app.invertWheelDirection ? MF_CHECKED : MF_UNCHECKED),
-        15, L"Invert Scroll Direction");
-    AppendMenuW(hSubMenu,
-        MF_STRING | (app.invertWheelDirectionH ? MF_CHECKED : MF_UNCHECKED),
-        16, L"Invert Horizontal Scroll");
-    AppendMenuW(hSubMenu,
-        MF_STRING | (app.startInFullscreen ? MF_CHECKED : MF_UNCHECKED),
-        25, L"Start in Fullscreen");
-    AppendMenuW(hSubMenu,
-        MF_STRING | (app.ctrlCEnabled ? MF_CHECKED : MF_UNCHECKED),
-        49, L"Ctrl+C Copy to Clipboard");
-    {
-        HMENU hCaret = CreatePopupMenu();
-        auto caretFlag = [](int s) {
-            return MF_STRING | MF_RADIOCHECK | (app.caretStyle == s ? MF_CHECKED : MF_UNCHECKED);
-        };
-        AppendMenuW(hCaret, caretFlag(0), 60, L"Bar (|)");
-        AppendMenuW(hCaret, caretFlag(1), 61, L"Underscore (_)");
-        AppendMenuW(hSubMenu, MF_POPUP, reinterpret_cast<UINT_PTR>(hCaret), L"Input Caret Style");
-    }
-    {
-        HMENU hThumbOps = CreatePopupMenu();
-        AppendMenuW(hThumbOps,
-            MF_STRING | (app.thumbCopyEnabled   ? MF_CHECKED : MF_UNCHECKED), 50, L"Copy (Ctrl+C)");
-        AppendMenuW(hThumbOps,
-            MF_STRING | (app.thumbMoveEnabled   ? MF_CHECKED : MF_UNCHECKED), 51, L"Cut / Move (Ctrl+X)");
-        AppendMenuW(hThumbOps,
-            MF_STRING | (app.thumbDeleteEnabled ? MF_CHECKED : MF_UNCHECKED), 52, L"Delete (Del)");
-        AppendMenuW(hThumbOps,
-            MF_STRING | (app.thumbPasteEnabled  ? MF_CHECKED : MF_UNCHECKED), 53, L"Paste (Ctrl+V)");
-        AppendMenuW(hSubMenu, MF_POPUP, reinterpret_cast<UINT_PTR>(hThumbOps), L"Thumbnail Operations");
-    }
-    AppendMenuW(hSubMenu, MF_SEPARATOR, 0, nullptr);
-    {
-        wchar_t vramLabel[64];
-        swprintf_s(vramLabel, L"VRAM Cache Size: %d", app.vramCacheCount);
-        AppendMenuW(hSubMenu, MF_STRING, 17, vramLabel);
-    }
-    {
-        wchar_t zcLabel[64];
-        const int zc = static_cast<int>(app.zoomClickMultiplier + 0.5f);
-        if (zc <= 1) swprintf_s(zcLabel, L"Left-Click Zoom: Off");
-        else         swprintf_s(zcLabel, L"Left-Click Zoom: %dx", zc);
-        AppendMenuW(hSubMenu, MF_STRING, 62, zcLabel);
-    }
-    {
-        wchar_t wLabel[64], hLabel[64];
-        swprintf_s(wLabel, L"Window Width: %d",  app.baseWidth);
-        swprintf_s(hLabel, L"Window Height: %d", app.baseHeight);
-        AppendMenuW(hSubMenu, MF_STRING, 23, wLabel);
-        AppendMenuW(hSubMenu, MF_STRING, 24, hLabel);
-    }
-    {
-        wchar_t dLabel[64], fLabel[64];
-        swprintf_s(dLabel, L"History Max Dirs: %d",  app.historyMaxDirs);
-        swprintf_s(fLabel, L"History Max Favs: %d",  app.historyMaxFavs);
-        AppendMenuW(hSubMenu, MF_STRING, 26, dLabel);
-        AppendMenuW(hSubMenu, MF_STRING, 27, fLabel);
-    }
-    {
-        wchar_t cLabel[64], pLabel[64];
-        swprintf_s(cLabel, L"Dir Thumb Cache: %d MB", app.dirThumbCacheMB);
-        swprintf_s(pLabel, L"Preload Lookaside: %d",  app.preloadLookaside);
-        AppendMenuW(hSubMenu, MF_STRING, 28, cLabel);
-        AppendMenuW(hSubMenu, MF_STRING, 29, pLabel);
-    }
-    {
-        wchar_t msLabel[64], dsLabel[64];
-        swprintf_s(msLabel, L"Overlay Message Duration: %d ms", app.msgCenterDisplayMs);
-        swprintf_s(dsLabel, L"History Save Limit: %d",           app.historyMaxDirsSave);
-        AppendMenuW(hSubMenu, MF_STRING, 30, msLabel);
-        AppendMenuW(hSubMenu, MF_STRING, 31, dsLabel);
-    }
-    AppendMenuW(hSubMenu, MF_SEPARATOR, 0, nullptr);
-    AppendMenuW(hSubMenu, MF_STRING, 10, L"Export Settings");
-    AppendMenuW(hSubMenu, MF_STRING, 11, L"Import Settings");
-    AppendMenuW(hSubMenu, MF_SEPARATOR, 0, nullptr);
-    AppendMenuW(hSubMenu, MF_STRING, 12, L"Restore Defaults");
-
-    // ── View Mode submenu ─────────────────────────────────────────────────────
-    HMENU hViewMenu = CreatePopupMenu();
-    {
-        const int vm = static_cast<int>(app.viewMode);
-        auto vmFlag  = [&](int n) -> UINT {
-            return MF_STRING | MF_RADIOCHECK | (vm == n ? MF_CHECKED : MF_UNCHECKED);
-        };
-        AppendMenuW(hViewMenu, vmFlag(1), 18, L"1 — Fit to View (preserve aspect)");
-        AppendMenuW(hViewMenu, vmFlag(2), 19, L"2 — Fit to Width");
-        AppendMenuW(hViewMenu, vmFlag(3), 20, L"3 — Fit to Height");
-        AppendMenuW(hViewMenu, vmFlag(4), 21, L"4 — Stretch to Window");
-        AppendMenuW(hViewMenu, vmFlag(5), 22, L"5 — Original Size");
-    }
-
-    // ── Slideshow submenu ─────────────────────────────────────────────────────
-    HMENU hSlideshowMenu = CreatePopupMenu();
-    {
-        wchar_t ivLabel[64];
-        swprintf_s(ivLabel, L"Interval: %d ms", app.slideshow.intervalMs);
-        AppendMenuW(hSlideshowMenu, MF_STRING, 32, ivLabel);
-        AppendMenuW(hSlideshowMenu,
-            MF_STRING | (app.slideshow.loop    ? MF_CHECKED : MF_UNCHECKED), 33, L"Loop");
-        AppendMenuW(hSlideshowMenu,
-            MF_STRING | (app.slideshow.shuffle ? MF_CHECKED : MF_UNCHECKED), 34, L"Shuffle");
-
-        HMENU hTransMenu = CreatePopupMenu();
-        {
-            const int tt = static_cast<int>(app.slideshow.transition.type);
-            auto ttFlag  = [&](int n) -> UINT {
-                return MF_STRING | MF_RADIOCHECK | (tt == n ? MF_CHECKED : MF_UNCHECKED);
-            };
-            AppendMenuW(hTransMenu, ttFlag(0), 35, L"Cut (instant)");
-            AppendMenuW(hTransMenu, ttFlag(1), 36, L"Fade");
-            AppendMenuW(hTransMenu, ttFlag(2), 37, L"Dissolve");
-            AppendMenuW(hTransMenu, ttFlag(3), 38, L"Ripple");
-            AppendMenuW(hTransMenu, ttFlag(4), 39, L"Push");
-            AppendMenuW(hTransMenu, ttFlag(5), 40, L"Zoom");
-        }
-        AppendMenuW(hSlideshowMenu, MF_POPUP,
-            reinterpret_cast<UINT_PTR>(hTransMenu), L"Transition");
-    }
-
-    // ── Sort submenu ──────────────────────────────────────────────────────────
-    HMENU hSortMenu  = CreatePopupMenu();
-    HMENU hSortOrder = CreatePopupMenu();
-    {
-        const int so = app.fileHandlerDefaultSortOrder;
-        auto soFlag  = [&](int n) -> UINT {
-            return MF_STRING | MF_RADIOCHECK | (so == n ? MF_CHECKED : MF_UNCHECKED);
-        };
-        AppendMenuW(hSortOrder, soFlag(0), 43, L"Name");
-        AppendMenuW(hSortOrder, soFlag(1), 44, L"Date Modified");
-        AppendMenuW(hSortOrder, soFlag(2), 45, L"Size");
-        AppendMenuW(hSortOrder, soFlag(3), 46, L"Type");
-        AppendMenuW(hSortOrder, soFlag(4), 47, L"Disk Order");
-        AppendMenuW(hSortMenu, MF_POPUP,
-            reinterpret_cast<UINT_PTR>(hSortOrder), L"Sort Order");
-        AppendMenuW(hSortMenu, MF_SEPARATOR, 0, nullptr);
-        AppendMenuW(hSortMenu,
-            MF_STRING | (app.fileHandlerIsReverseSortOrder ? MF_CHECKED : MF_UNCHECKED),
-            48, L"Reverse Order");
-    }
-
-    // ── Backup submenu ────────────────────────────────────────────────────────
-    HMENU hBackupMenu = CreatePopupMenu();
-    AppendMenuW(hBackupMenu, MF_STRING, 41, L"Backup History && Favorites");
-    AppendMenuW(hBackupMenu, MF_STRING, 42, L"Restore History && Favorites");
-
-    // ── Main tray menu ────────────────────────────────────────────────────────
-    HMENU hMenu = CreatePopupMenu();
-    AppendMenuW(hMenu, MF_STRING,  1, L"Restore QuickImageViewer");
-    AppendMenuW(hMenu, MF_STRING,  2, L"Help / Shortcuts");
-    AppendMenuW(hMenu, MF_SEPARATOR, 0, nullptr);
-    AppendMenuW(hMenu, MF_POPUP, reinterpret_cast<UINT_PTR>(hSubMenu),       L"Settings");
-    AppendMenuW(hMenu, MF_POPUP, reinterpret_cast<UINT_PTR>(hViewMenu),      L"View Mode");
-    AppendMenuW(hMenu, MF_POPUP, reinterpret_cast<UINT_PTR>(hSlideshowMenu), L"Slideshow");
-    AppendMenuW(hMenu, MF_POPUP, reinterpret_cast<UINT_PTR>(hSortMenu),      L"Sort");
-    AppendMenuW(hMenu, MF_POPUP, reinterpret_cast<UINT_PTR>(hBackupMenu),    L"Backup");
-    AppendMenuW(hMenu, MF_SEPARATOR, 0, nullptr);
-    AppendMenuW(hMenu, MF_STRING,  3, L"Exit Completely");
-
-    SetForegroundWindow(hWnd);
-    int cmd = TrackPopupMenu(hMenu, TPM_RETURNCMD | TPM_NONOTIFY, x, y, 0, hWnd, nullptr);
-    PostMessage(hWnd, WM_NULL, 0, 0);
-    DestroyMenu(hMenu);
-
-    if (cmd > 0)
-        DispatchCommand(hWnd, cmd);
 }
 
 // =============================================================================
@@ -550,34 +348,10 @@ void TrayHandler::DispatchCommand(HWND hWnd, int cmd) {
             InvalidateRect(hWnd, nullptr, FALSE);
         }
 
-        // ── Slideshow ─────────────────────────────────────────────────────────
-        else if (cmd == 32) {
-            int v = UI::ThemedDialog::PromptInt(hWnd, L"Slideshow Interval",
-                L"Time between slides in ms (100 – 60000):",
-                app.slideshow.intervalMs, 100, 60000,
-                Constants::Slideshow::IS_INTERVAL_MS);
-            if (v >= 0) {
-                app.slideshow.intervalMs = v;
-                Persistence::Registry::SaveSetting(Constants::Registry::SLIDESHOW_INTERVAL_MS,
-                    static_cast<DWORD>(app.slideshow.intervalMs));
-            }
-        }
-        else if (cmd == 33) {
-            app.slideshow.loop = !app.slideshow.loop;
-            Persistence::Registry::SaveSetting(Constants::Registry::SLIDESHOW_LOOP,
-                static_cast<DWORD>(app.slideshow.loop));
-        }
-        else if (cmd == 34) {
-            app.slideshow.shuffle = !app.slideshow.shuffle;
-            Persistence::Registry::SaveSetting(Constants::Registry::SLIDESHOW_SHUFFLE,
-                static_cast<DWORD>(app.slideshow.shuffle));
-        }
-        else if (cmd >= 35 && cmd <= 40) {
-            int typeNum = cmd - 35;
-            app.slideshow.transition.type = static_cast<TransitionType>(typeNum);
-            Persistence::Registry::SaveSetting(Constants::Registry::SLIDESHOW_TRANSITION,
-                static_cast<DWORD>(typeNum));
-        }
+        // NOTE: every slideshow control (start/stop, interval, loop, shuffle,
+        // transition type and transition mode) now lives in the viewer id space
+        // and runs through InputManager::ExecuteCommand — see ContextMenuHandler.
+        // Nothing slideshow-related is dispatched here any more.
 
         // ── Sort ──────────────────────────────────────────────────────────────
         else if (cmd >= 43 && cmd <= 47) {
@@ -664,6 +438,9 @@ void TrayHandler::DispatchCommand(HWND hWnd, int cmd) {
                 fwprintf(f, L"%s=%d\n", Constants::Registry::SLIDESHOW_LOOP,         (int)app.slideshow.loop);
                 fwprintf(f, L"%s=%d\n", Constants::Registry::SLIDESHOW_SHUFFLE,      (int)app.slideshow.shuffle);
                 fwprintf(f, L"%s=%d\n", Constants::Registry::SLIDESHOW_TRANSITION,   static_cast<int>(app.slideshow.transition.type));
+                fwprintf(f, L"%s=%d\n", Constants::Registry::SLIDESHOW_TRANS_SOURCE, app.slideshow.transition.source);
+                fwprintf(f, L"%s=%d\n", Constants::Registry::SLIDESHOW_TRANS_ORDER,  app.slideshow.transition.order);
+                fwprintf(f, L"%s=%u\n", Constants::Registry::SLIDESHOW_TRANS_LIST,   app.slideshow.transition.listMask);
                 fwprintf(f, L"%s=%d\n", Constants::Registry::SORT_ORDER,             app.fileHandlerDefaultSortOrder);
                 fwprintf(f, L"%s=%d\n", Constants::Registry::SORT_REVERSE,           (int)app.fileHandlerIsReverseSortOrder);
                 fwprintf(f, L"%s=%d\n", Constants::Registry::CTRL_C_ENABLED,         (int)app.ctrlCEnabled);
@@ -817,10 +594,27 @@ void TrayHandler::DispatchCommand(HWND hWnd, int cmd) {
                     static_cast<DWORD>(app.slideshow.intervalMs));
             }
             if (wcscmp(key, Constants::Registry::SLIDESHOW_TRANSITION) == 0) {
-                int t = std::max(0, std::min(5, val));
+                int t = std::max(0, std::min(Constants::Slideshow::TRANSITION_COUNT - 1, val));
                 app.slideshow.transition.type = static_cast<TransitionType>(t);
                 Persistence::Registry::SaveSetting(Constants::Registry::SLIDESHOW_TRANSITION,
                     static_cast<DWORD>(t));
+            }
+            if (wcscmp(key, Constants::Registry::SLIDESHOW_TRANS_SOURCE) == 0) {
+                int s = std::max(0, std::min(Constants::Slideshow::TransitionSource::COUNT - 1, val));
+                app.slideshow.transition.source = s;
+                Persistence::Registry::SaveSetting(Constants::Registry::SLIDESHOW_TRANS_SOURCE,
+                    static_cast<DWORD>(s));
+            }
+            if (wcscmp(key, Constants::Registry::SLIDESHOW_TRANS_ORDER) == 0) {
+                int o = std::max(0, std::min(Constants::Slideshow::TransitionOrder::COUNT - 1, val));
+                app.slideshow.transition.order = o;
+                Persistence::Registry::SaveSetting(Constants::Registry::SLIDESHOW_TRANS_ORDER,
+                    static_cast<DWORD>(o));
+            }
+            if (wcscmp(key, Constants::Registry::SLIDESHOW_TRANS_LIST) == 0) {
+                app.slideshow.transition.listMask = static_cast<uint32_t>(val);
+                Persistence::Registry::SaveSetting(Constants::Registry::SLIDESHOW_TRANS_LIST,
+                    static_cast<DWORD>(app.slideshow.transition.listMask));
             }
             if (wcscmp(key, Constants::Registry::SORT_ORDER) == 0) {
                 app.fileHandlerDefaultSortOrder = std::max(0, std::min(4, val));
@@ -892,6 +686,10 @@ void TrayHandler::DispatchCommand(HWND hWnd, int cmd) {
         app.slideshow.loop          = Constants::Slideshow::IS_LOOP;
         app.slideshow.shuffle       = Constants::Slideshow::IS_SHUFFLE;
         app.slideshow.transition.type           = TransitionType::Cut;
+        app.slideshow.transition.source         = Constants::Slideshow::TransitionSource::NONE;
+        app.slideshow.transition.order          = Constants::Slideshow::TransitionOrder::SEQUENTIAL;
+        app.slideshow.transition.listMask       = 0xFFFFFFFEu; // every animated type
+        app.slideshow.transition.seqIndex       = 0;
         app.fileHandlerDefaultSortOrder         = Constants::FileHandler::FILE_HANDLER_DEFAULT_SORT_ORDER;
         app.fileHandlerIsReverseSortOrder       = Constants::FileHandler::FILE_HANDLER_SORT_TYPE_IS_REVERSE;
         app.ctrlCEnabled                        = Constants::IS_CTRL_C_ENABLED;
@@ -928,6 +726,9 @@ void TrayHandler::DispatchCommand(HWND hWnd, int cmd) {
         Persistence::Registry::SaveSetting(Constants::Registry::SLIDESHOW_LOOP,         static_cast<DWORD>(app.slideshow.loop));
         Persistence::Registry::SaveSetting(Constants::Registry::SLIDESHOW_SHUFFLE,      static_cast<DWORD>(app.slideshow.shuffle));
         Persistence::Registry::SaveSetting(Constants::Registry::SLIDESHOW_TRANSITION,   0u);
+        Persistence::Registry::SaveSetting(Constants::Registry::SLIDESHOW_TRANS_SOURCE, 0u);
+        Persistence::Registry::SaveSetting(Constants::Registry::SLIDESHOW_TRANS_ORDER,  0u);
+        Persistence::Registry::SaveSetting(Constants::Registry::SLIDESHOW_TRANS_LIST,   0xFFFFFFFEu);
         Persistence::Registry::SaveSetting(Constants::Registry::SORT_ORDER,      static_cast<DWORD>(app.fileHandlerDefaultSortOrder));
         Persistence::Registry::SaveSetting(Constants::Registry::SORT_REVERSE,    static_cast<DWORD>(app.fileHandlerIsReverseSortOrder));
         Persistence::Registry::SaveSetting(Constants::Registry::CTRL_C_ENABLED,      static_cast<DWORD>(app.ctrlCEnabled));

@@ -10,6 +10,7 @@
 #include "../UI/FloatingPanels/HistoryListWnd.h"
 #include "../UI/FloatingPanels/HelpWnd.h"
 #include "../UI/FloatingPanels/StatsWnd.h"
+#include "../UI/ThemedDialog.h"
 #include <algorithm>
 #include <filesystem>
 #include <numeric>
@@ -124,6 +125,45 @@ void InputManager::handleKeyboard(HWND hWnd, WPARAM wParam, LPARAM lParam) {
 // behavior regardless of how the action was triggered.
 // =============================================================================
 void InputManager::ExecuteCommand(HWND hWnd, Command cmd) {
+    // Direct transition pick — handled ahead of the switch because it is a
+    // contiguous RANGE of commands (one per TransitionType), not discrete cases.
+    static_assert(static_cast<int>(Command::SetTransitionLast) -
+                  static_cast<int>(Command::SetTransitionFirst) + 1 ==
+                  Constants::Slideshow::TRANSITION_COUNT,
+                  "SetTransition command range must cover every TransitionType");
+    if (cmd >= Command::SetTransitionFirst && cmd <= Command::SetTransitionLast) {
+        const int t = static_cast<int>(cmd) - static_cast<int>(Command::SetTransitionFirst);
+        auto &tr = app.slideshow.transition;
+
+        // The same menu row does two jobs, decided by the current source:
+        //   LIST → tick / untick membership of the custom pool
+        //   else → pick THE transition, which implies source NONE
+        if (tr.source == Constants::Slideshow::TransitionSource::LIST) {
+            tr.listMask ^= (1u << t);
+            Persistence::Registry::SaveSetting(Constants::Registry::SLIDESHOW_TRANS_LIST,
+                                               static_cast<DWORD>(tr.listMask));
+            const bool on = (tr.listMask & (1u << t)) != 0u;
+            g_overlayManager.PostCenterMessage(hWnd,
+                std::wstring(Constants::Messages::TRANSITION_NAMES[t]) +
+                (on ? Constants::Messages::STATE_ON_SUFFIX
+                    : Constants::Messages::STATE_OFF_SUFFIX));
+            if (tr.listMask == 0u)
+                g_overlayManager.PostCenterMessage(hWnd, Constants::Messages::TRANSITION_LIST_EMPTY);
+            return;
+        }
+
+        tr.type = static_cast<TransitionType>(t);
+        tr.source = Constants::Slideshow::TransitionSource::NONE;
+        Persistence::Registry::SaveSetting(Constants::Registry::SLIDESHOW_TRANSITION,
+                                           static_cast<DWORD>(t));
+        Persistence::Registry::SaveSetting(Constants::Registry::SLIDESHOW_TRANS_SOURCE,
+                                           static_cast<DWORD>(Constants::Slideshow::TransitionSource::NONE));
+        g_overlayManager.PostCenterMessage(hWnd,
+            std::wstring(Constants::Messages::TRANSITION_PREFIX) +
+            Constants::Messages::TRANSITION_NAMES[t]);
+        return;
+    }
+
     switch (cmd) {
         // -----------------------------------------------------------------------
         // Navigation
@@ -646,6 +686,18 @@ void InputManager::ExecuteCommand(HWND hWnd, Command cmd) {
         case Command::CopyToClipboard:
             AppCommands::CopyImageToClipboard(hWnd);
             break;
+
+        // Wallpaper styles — the enum order mirrors Constants::Wallpaper::FILL..SPAN,
+        // so the offset is the position index. Same trick as ViewMode1..5 above.
+        case Command::SetWallpaperFill:
+        case Command::SetWallpaperFit:
+        case Command::SetWallpaperStretch:
+        case Command::SetWallpaperTile:
+        case Command::SetWallpaperCenter:
+        case Command::SetWallpaperSpan:
+            AppCommands::SetDesktopWallpaper(hWnd,
+                static_cast<int>(cmd) - static_cast<int>(Command::SetWallpaperFill));
+            break;
         case Command::ToggleFirstLastImageInCurrentFolder: {
             if (app.playlist.empty()) return;
 
@@ -844,14 +896,67 @@ void InputManager::ExecuteCommand(HWND hWnd, Command cmd) {
 
         case Command::SlideshowToggleLoop:
             app.slideshow.loop = !app.slideshow.loop;
+            Persistence::Registry::SaveSetting(Constants::Registry::SLIDESHOW_LOOP,
+                                               static_cast<DWORD>(app.slideshow.loop));
             g_overlayManager.PostCenterMessage(hWnd,
                                                app.slideshow.loop
                                                    ? Constants::Messages::SLIDESHOW_LOOP_ON
                                                    : Constants::Messages::SLIDESHOW_LOOP_OFF);
             break;
 
+        case Command::SlideshowSetInterval: {
+            int v = UI::ThemedDialog::PromptInt(hWnd, L"Slideshow Interval",
+                                                L"Time between slides in ms (100 – 60000):",
+                                                app.slideshow.intervalMs, 100, 60000,
+                                                Constants::Slideshow::IS_INTERVAL_MS);
+            if (v >= 0) {
+                app.slideshow.intervalMs = v;
+                Persistence::Registry::SaveSetting(Constants::Registry::SLIDESHOW_INTERVAL_MS,
+                                                   static_cast<DWORD>(v));
+                g_overlayManager.PostCenterMessage(hWnd,
+                    std::wstring(Constants::Messages::SLIDESHOW_INTERVAL_PREFIX) +
+                    std::to_wstring(v) + L" ms");
+            }
+            break;
+        }
+
+        case Command::SetTransitionSourceNone:
+        case Command::SetTransitionSourceAll:
+        case Command::SetTransitionSourceList: {
+            const int src = static_cast<int>(cmd) -
+                            static_cast<int>(Command::SetTransitionSourceFirst);
+            app.slideshow.transition.source = src;
+            app.slideshow.transition.seqIndex = 0; // restart the walk
+            Persistence::Registry::SaveSetting(Constants::Registry::SLIDESHOW_TRANS_SOURCE,
+                                               static_cast<DWORD>(src));
+            g_overlayManager.PostCenterMessage(hWnd,
+                std::wstring(Constants::Messages::TRANSITION_SOURCE_PREFIX) +
+                Constants::Messages::TRANSITION_SOURCE_NAMES[src]);
+            if (src == Constants::Slideshow::TransitionSource::LIST &&
+                app.slideshow.transition.listMask == 0u)
+                g_overlayManager.PostCenterMessage(hWnd, Constants::Messages::TRANSITION_LIST_EMPTY);
+            break;
+        }
+
+        case Command::SetTransitionOrderSequential:
+        case Command::SetTransitionOrderRandom: {
+            const int ord = static_cast<int>(cmd) -
+                            static_cast<int>(Command::SetTransitionOrderFirst);
+            app.slideshow.transition.order = ord;
+            app.slideshow.transition.seqIndex = 0;
+            Persistence::Registry::SaveSetting(Constants::Registry::SLIDESHOW_TRANS_ORDER,
+                                               static_cast<DWORD>(ord));
+            g_overlayManager.PostCenterMessage(hWnd,
+                std::wstring(Constants::Messages::TRANSITION_ORDER_PREFIX) +
+                Constants::Messages::TRANSITION_ORDER_NAMES[ord]);
+            break;
+        }
+
+
         case Command::SlideshowToggleShuffle: {
             app.slideshow.shuffle = !app.slideshow.shuffle;
+            Persistence::Registry::SaveSetting(Constants::Registry::SLIDESHOW_SHUFFLE,
+                                               static_cast<DWORD>(app.slideshow.shuffle));
             if (app.slideshow.shuffle && !app.playlist.empty()) {
                 int n = static_cast<int>(app.playlist.size());
                 app.slideshow.shuffleOrder.resize(n);
@@ -870,30 +975,15 @@ void InputManager::ExecuteCommand(HWND hWnd, Command cmd) {
         }
 
         case Command::SlideshowCycleTransition: {
-            // Cycle through implemented types only (Dissolve/Ripple are stubs)
-            auto &t = app.slideshow.transition.type;
-            const wchar_t *msg = Constants::Messages::TRANSITION_CUT;
-            switch (t) {
-                case TransitionType::Cut: t = TransitionType::Fade;
-                    msg = Constants::Messages::TRANSITION_FADE;
-                    break;
-                case TransitionType::Fade: t = TransitionType::Push;
-                    msg = Constants::Messages::TRANSITION_PUSH;
-                    break;
-                case TransitionType::Push: t = TransitionType::Zoom;
-                    msg = Constants::Messages::TRANSITION_ZOOM;
-                    break;
-                case TransitionType::Zoom: t = TransitionType::Cut;
-                    msg = Constants::Messages::TRANSITION_CUT;
-                    break;
-                case TransitionType::Dissolve: t = TransitionType::Cut;
-                    msg = Constants::Messages::TRANSITION_CUT;
-                    break;
-                case TransitionType::Ripple: t = TransitionType::Cut;
-                    msg = Constants::Messages::TRANSITION_CUT;
-                    break;
-            }
-            g_overlayManager.PostCenterMessage(hWnd, msg);
+            // Every type is implemented now, so this is a plain wrap-around cycle.
+            const int next = (static_cast<int>(app.slideshow.transition.type) + 1) %
+                             Constants::Slideshow::TRANSITION_COUNT;
+            app.slideshow.transition.type = static_cast<TransitionType>(next);
+            Persistence::Registry::SaveSetting(Constants::Registry::SLIDESHOW_TRANSITION,
+                                               static_cast<DWORD>(next));
+            g_overlayManager.PostCenterMessage(hWnd,
+                std::wstring(Constants::Messages::TRANSITION_PREFIX) +
+                Constants::Messages::TRANSITION_NAMES[next]);
             break;
         }
 

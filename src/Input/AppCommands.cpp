@@ -16,8 +16,100 @@
 #include "../WicDecoder.h"
 #include "../UI/UIManager.h"
 #include <shlobj_core.h>
+#include <shobjidl.h> // IDesktopWallpaper / CLSID_DesktopWallpaper
 
 extern AppState app;
+
+// Applies the current file as the desktop wallpaper via IDesktopWallpaper
+// (Win8+). Monitor id nullptr = every monitor. The file is handed to the shell
+// as-is, so formats Windows cannot decode itself (SVG, QOI, EXR, …) will fail —
+// that is reported instead of silently doing nothing.
+void AppCommands::SetDesktopWallpaper(HWND hWnd, int position) {
+    if (app.playlist.empty() || app.currentIndex < 0 ||
+        app.currentIndex >= static_cast<int>(app.playlist.size()))
+        return;
+
+    // Index-aligned with Constants::Wallpaper::FILL..SPAN.
+    static constexpr DESKTOP_WALLPAPER_POSITION kPositions[] = {
+        DWPOS_FILL, DWPOS_FIT, DWPOS_STRETCH, DWPOS_TILE, DWPOS_CENTER, DWPOS_SPAN
+    };
+    static_assert(std::size(kPositions) == Constants::Wallpaper::COUNT,
+                  "wallpaper position table out of sync with Constants::Wallpaper");
+    if (position < 0 || position >= Constants::Wallpaper::COUNT) return;
+
+    const std::wstring &path = app.playlist[app.currentIndex];
+
+    // Reports which COM call failed and its HRESULT — a bare "failed" tells us
+    // nothing when the shell refuses a file.
+    auto fail = [&](const wchar_t *stage, HRESULT hr) {
+        wchar_t buf[64];
+        swprintf_s(buf, L"  [%s 0x%08X]", stage, static_cast<unsigned>(hr));
+        g_overlayManager.PostCenterMessage(hWnd,
+            std::wstring(Constants::Messages::WALLPAPER_FAILED) + buf);
+    };
+
+    IDesktopWallpaper *pdw = nullptr;
+    // CLSCTX_ALL — the shell hosts this object out-of-proc on some systems, so
+    // INPROC_SERVER alone can fail with REGDB_E_CLASSNOTREG.
+    HRESULT hr = CoCreateInstance(CLSID_DesktopWallpaper, nullptr,
+                                  CLSCTX_ALL, IID_PPV_ARGS(&pdw));
+    if (FAILED(hr) || !pdw) {
+        fail(L"create", hr);
+        return;
+    }
+
+    // Position is cosmetic — if it is rejected, still try to set the image.
+    pdw->SetPosition(kPositions[position]);
+
+    hr = pdw->SetWallpaper(nullptr, path.c_str()); // nullptr = all monitors
+    pdw->Release();
+
+    if (SUCCEEDED(hr)) {
+        g_overlayManager.PostCenterMessage(hWnd,
+            std::wstring(Constants::Messages::WALLPAPER_SET) +
+            Constants::Messages::WALLPAPER_NAMES[position]);
+        return;
+    }
+
+    // ── Fallback: the classic SPI_SETDESKWALLPAPER path ──────────────────────
+    // Style lives in HKCU\Control Panel\Desktop and must be written BEFORE the
+    // SystemParametersInfo call, which is what makes the change take effect.
+    //   WallpaperStyle: 0=center/tile 2=stretch 6=fit 10=fill 22=span
+    //   TileWallpaper : "1" only for Tile
+    {
+        static constexpr const wchar_t *kStyle[] = {
+            L"10", L"6", L"2", L"0", L"0", L"22" // Fill Fit Stretch Tile Center Span
+        };
+        static_assert(std::size(kStyle) == Constants::Wallpaper::COUNT,
+                      "wallpaper style table out of sync with Constants::Wallpaper");
+        const wchar_t *tile = (position == Constants::Wallpaper::TILE) ? L"1" : L"0";
+
+        HKEY hKey = nullptr;
+        if (RegOpenKeyExW(HKEY_CURRENT_USER, L"Control Panel\\Desktop", 0,
+                          KEY_SET_VALUE, &hKey) == ERROR_SUCCESS) {
+            const wchar_t *style = kStyle[position];
+            RegSetValueExW(hKey, L"WallpaperStyle", 0, REG_SZ,
+                           reinterpret_cast<const BYTE *>(style),
+                           static_cast<DWORD>((wcslen(style) + 1) * sizeof(wchar_t)));
+            RegSetValueExW(hKey, L"TileWallpaper", 0, REG_SZ,
+                           reinterpret_cast<const BYTE *>(tile),
+                           static_cast<DWORD>((wcslen(tile) + 1) * sizeof(wchar_t)));
+            RegCloseKey(hKey);
+        }
+
+        // Non-const buffer: SPI_SETDESKWALLPAPER takes PVOID.
+        std::wstring mutablePath = path;
+        if (SystemParametersInfoW(SPI_SETDESKWALLPAPER, 0, mutablePath.data(),
+                                  SPIF_UPDATEINIFILE | SPIF_SENDCHANGE)) {
+            g_overlayManager.PostCenterMessage(hWnd,
+                std::wstring(Constants::Messages::WALLPAPER_SET) +
+                Constants::Messages::WALLPAPER_NAMES[position]);
+            return;
+        }
+    }
+
+    fail(L"set", hr);
+}
 
 void AppCommands::SaveImageToDisk(HWND hWnd) {
     if (!app.renderer || app.playlist.empty() || app.currentIndex < 0) return;

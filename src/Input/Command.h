@@ -186,6 +186,37 @@ enum class Command {
 
     // --- Clipboard ---
     CopyToClipboard, // Ctrl+C
+
+    // --- Desktop wallpaper (context menu submenu) ---
+    // Order must match Constants::Wallpaper::FILL..SPAN.
+    SetWallpaperFill,
+    SetWallpaperFit,
+    SetWallpaperStretch,
+    SetWallpaperTile,
+    SetWallpaperCenter,
+    SetWallpaperSpan,
+
+    // --- Slideshow (context / tray menus) ---
+    SlideshowSetInterval, // prompt for the ms between slides
+    // Which transitions are in play. Contiguous — offset from
+    // SetTransitionSourceFirst is a Constants::Slideshow::TransitionSource value.
+    SetTransitionSourceFirst,
+    SetTransitionSourceNone = SetTransitionSourceFirst, // the single picked one
+    SetTransitionSourceAll,                             // every transition
+    SetTransitionSourceList,                            // only the ticked ones
+
+    // How the next one is drawn from that pool. Contiguous — offset from
+    // SetTransitionOrderFirst is a Constants::Slideshow::TransitionOrder value.
+    SetTransitionOrderFirst,
+    SetTransitionOrderSequential = SetTransitionOrderFirst,
+    SetTransitionOrderRandom,
+
+    // Direct transition selection — one command per TransitionType, resolved by
+    // offset from SetTransitionFirst. This is a RANGE rather than 21 spelled-out
+    // enumerators; the span is checked against Constants::Slideshow::TRANSITION_COUNT
+    // by a static_assert in CommandExecuter.cpp. Keep it last in this enum.
+    SetTransitionFirst,
+    SetTransitionLast = SetTransitionFirst + 20,
 };
 
 class InputManager {

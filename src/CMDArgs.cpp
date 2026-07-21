@@ -12,6 +12,70 @@
 extern AppState app;
 
 // =============================================================================
+// Transition switch helpers
+// =============================================================================
+
+// "none" | "all" | "list"  →  Constants::Slideshow::TransitionSource, or -1.
+static int ParseTransitionSource(const std::wstring &s) {
+    namespace TS = Constants::Slideshow::TransitionSource;
+    if (_wcsicmp(s.c_str(), L"none") == 0) return TS::NONE;
+    if (_wcsicmp(s.c_str(), L"all")  == 0) return TS::ALL;
+    if (_wcsicmp(s.c_str(), L"list") == 0) return TS::LIST;
+    return -1; // unrecognised → leave the saved setting alone
+}
+
+// "sequential"|"seq" | "random"|"rand"  →  TransitionOrder, or -1.
+static int ParseTransitionOrder(const std::wstring &s) {
+    namespace TO = Constants::Slideshow::TransitionOrder;
+    if (_wcsicmp(s.c_str(), L"sequential") == 0 || _wcsicmp(s.c_str(), L"seq")  == 0)
+        return TO::SEQUENTIAL;
+    if (_wcsicmp(s.c_str(), L"random")     == 0 || _wcsicmp(s.c_str(), L"rand") == 0)
+        return TO::RANDOM;
+    return -1;
+}
+
+// Comma/semicolon-separated transition list → membership bitmask.
+// Each token is either a NAME ("Fade", "Slide Left", "SlideLeft") or the NUMBER
+// shown beside it in the menu (1-based, alphabetical) so the switch can mirror
+// exactly what the menu displays. Unrecognised tokens are skipped rather than
+// silently collapsing to Cut, which is what ParseTransitionType alone would do.
+static uint32_t ParseTransitionList(const std::wstring &spec) {
+    uint32_t mask = 0;
+    const int *order = TransitionDisplayOrder();
+    size_t pos = 0;
+
+    while (pos <= spec.size()) {
+        size_t end = spec.find_first_of(L",;", pos);
+        if (end == std::wstring::npos) end = spec.size();
+
+        std::wstring tok = spec.substr(pos, end - pos);
+        pos = end + 1;
+
+        // Trim surrounding blanks so "a, b" works as well as "a,b".
+        const size_t b = tok.find_first_not_of(L" \t");
+        const size_t e = tok.find_last_not_of(L" \t");
+        if (b == std::wstring::npos) continue;
+        tok = tok.substr(b, e - b + 1);
+
+        const bool numeric = std::all_of(tok.begin(), tok.end(),
+                                         [](wchar_t c) { return c >= L'0' && c <= L'9'; });
+        if (numeric) {
+            const int n = _wtoi(tok.c_str()); // 1-based menu position
+            if (n >= 1 && n <= Constants::Slideshow::TRANSITION_COUNT)
+                mask |= (1u << order[n - 1]);
+            continue;
+        }
+
+        // Names: only accept a Cut match when the token really says "Cut",
+        // otherwise a typo would quietly enable Cut.
+        const TransitionType t = ParseTransitionType(tok);
+        if (t != TransitionType::Cut || _wcsicmp(tok.c_str(), L"Cut") == 0)
+            mask |= (1u << static_cast<int>(t));
+    }
+    return mask;
+}
+
+// =============================================================================
 // ParseCmdArgs
 // =============================================================================
 // Argument reference:
@@ -26,6 +90,12 @@ extern AppState app;
 //   -repeat                  Enable slideshow loop
 //   -shuffle                 Enable slideshow shuffle
 //   -slideshowInterval N     Seconds between slides (integer)
+//   -slideshowTransition=<name>          Use exactly this transition
+//   -slideshowTransitions=<a,b,c>        Custom list; names or the menu's numbers
+//                                        (e.g. "Fade,Iris,Spin" or "6,8,17")
+//   -slideshowTransitionSource=none|all|list
+//   -slideshowTransitionOrder=sequential|random
+//   -slideshowTransitionShuffle          Legacy: same as source=all order=random
 //   -hideMouse               Hide mouse cursor at startup
 //   -lock                    KIOSK mode: no keyboard or mouse input
 //   -RestoreDefaults         Wipe all registry settings, confirm, and exit (recovery fallback)
@@ -81,14 +151,30 @@ CmdArgs ParseCmdArgs(int argc, LPWSTR *argv) {
         else if (arg == L"-dedicated") args.dedicated = true;
         else if (arg == L"-runOnStartup") args.runOnStartup = true;
 
-            // -slideshowTransition=<type>  (Cut/Fade/Dissolve/Ripple/Push/Zoom)
-        else if (arg.size() > 20 &&
-                 _wcsnicmp(arg.c_str(), L"-slideshowTransition=", 21) == 0)
-            args.slideshowTransition = ParseTransitionType(arg.substr(21));
+            // -slideshowTransitions=<a,b,c>  — custom list. Must be tested BEFORE
+            // -slideshowTransition= or the shorter prefix would swallow it.
+        else if (_wcsnicmp(arg.c_str(), L"-slideshowTransitions=", 22) == 0) {
+            args.transitionList = ParseTransitionList(arg.substr(22));
+            args.transitionListGiven = true;
+        }
+
+            // -slideshowTransitionSource=none|all|list
+        else if (_wcsnicmp(arg.c_str(), L"-slideshowTransitionSource=", 27) == 0)
+            args.transitionSource = ParseTransitionSource(arg.substr(27));
+
+            // -slideshowTransitionOrder=sequential|random
+        else if (_wcsnicmp(arg.c_str(), L"-slideshowTransitionOrder=", 26) == 0)
+            args.transitionOrder = ParseTransitionOrder(arg.substr(26));
 
             // -slideshowTransitionShuffle
         else if (_wcsicmp(arg.c_str(), L"-slideshowTransitionShuffle") == 0)
             args.transitionShuffle = true;
+
+            // -slideshowTransition=<name>  — single transition
+        else if (_wcsnicmp(arg.c_str(), L"-slideshowTransition=", 21) == 0) {
+            args.slideshowTransition = ParseTransitionType(arg.substr(21));
+            args.transitionSpecified = true;
+        }
 
             // Positional: first non-flag token is the image file
         else if (_wcsicmp(arg.c_str(), L"-RestoreDefaults") == 0)
@@ -110,8 +196,32 @@ void ApplyCmdArgs(HWND hWnd, const CmdArgs &args, int nCmdShow) {
     if (args.repeat) app.slideshow.loop = true;
     if (args.shuffle) app.slideshow.shuffle = true;
     if (args.slideshowIntervalMs > 0) app.slideshow.intervalMs = args.slideshowIntervalMs;
-    app.slideshow.transition.type = args.slideshowTransition;
-    app.slideshow.transition.shuffle = args.transitionShuffle;
+    // Transition switches — each one only touches state it was actually given,
+    // so an absent switch leaves the SAVED setting intact. (Assigning the type
+    // unconditionally here used to reset every launch to Cut, because that is
+    // the struct's default when no -slideshowTransition= was passed.)
+    {
+        namespace TS = Constants::Slideshow::TransitionSource;
+        namespace TO = Constants::Slideshow::TransitionOrder;
+        auto &tr = app.slideshow.transition;
+
+        if (args.transitionSpecified) {
+            tr.type   = args.slideshowTransition;
+            tr.source = TS::NONE; // "use exactly this one"
+        }
+        if (args.transitionShuffle) { // legacy switch
+            tr.source = TS::ALL;
+            tr.order  = TO::RANDOM;
+        }
+        if (args.transitionListGiven) {
+            tr.listMask = args.transitionList;
+            tr.source   = TS::LIST;
+        }
+        // Explicit source/order come last so they win over the implications above.
+        if (args.transitionSource >= 0) tr.source = args.transitionSource;
+        if (args.transitionOrder  >= 0) tr.order  = args.transitionOrder;
+        tr.seqIndex = 0;
+    }
 
     // 1a. Dedicated mode (affects history file and registry — must be set before any of that)
     if (args.dedicated) app.isDedicated = true;

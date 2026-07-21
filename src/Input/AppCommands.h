@@ -39,6 +39,12 @@ class AppCommands {
         static void SaveImageToDisk(HWND hWnd);
         static void CopyImageToClipboard(HWND hWnd);
 
+        // Sets the currently displayed file as the desktop wallpaper.
+        // position: Constants::Wallpaper::FILL .. SPAN — mapped onto the native
+        // DESKTOP_WALLPAPER_POSITION enum inside the .cpp so this header stays
+        // free of <shobjidl.h>.
+        static void SetDesktopWallpaper(HWND hWnd, int position);
+
 
         // Only the InputManager class can call the method above
         friend class InputManager;

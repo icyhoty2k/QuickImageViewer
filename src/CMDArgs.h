@@ -3,6 +3,7 @@
 // Call ParseCmdArgs() early in wWinMain, then ApplyCmdArgs() after the window is ready.
 #pragma once
 #include <windows.h>
+#include <cstdint>
 #include <string>
 #include "SlideshowTransitions.h"
 
@@ -23,8 +24,22 @@ struct CmdArgs {
     bool         repeat               = false; // -repeat                       : loop slideshow
     bool         shuffle              = false; // -shuffle                      : random order
     int          slideshowIntervalMs  = -1;    // -slideshowInterval N          : N seconds between slides
-    TransitionType slideshowTransition = TransitionType::Cut; // -slideshowTransition=<type>
-    bool         transitionShuffle    = false; // -slideshowTransitionShuffle   : random transition each slide
+    // Transition control — mirrors Slideshow › Transition in the menus.
+    //   -slideshowTransition=<name>              pick one (implies source none)
+    //   -slideshowTransitions=<a,b,c|1,5,9>      custom list (implies source list);
+    //                                            accepts names OR the menu's numbers
+    //   -slideshowTransitionSource=none|all|list which transitions are in play
+    //   -slideshowTransitionOrder=sequential|random  how the next is drawn
+    //   -slideshowTransitionShuffle              legacy: source all + order random
+    // The *Specified/*Given flags exist so an absent switch leaves the SAVED
+    // setting alone instead of silently resetting it.
+    TransitionType slideshowTransition  = TransitionType::Cut; // -slideshowTransition=<type>
+    bool           transitionSpecified  = false;
+    uint32_t       transitionList       = 0;     // bitmask of TransitionType values
+    bool           transitionListGiven  = false;
+    int            transitionSource     = -1;    // -1 = not supplied
+    int            transitionOrder      = -1;    // -1 = not supplied
+    bool           transitionShuffle    = false; // -slideshowTransitionShuffle
 
     // --- Behavior ---
     bool         hideMouse     = false; // -hideMouse     : hide cursor at startup
