@@ -1,20 +1,21 @@
-cmake_minimum_required(VERSION 3.20)
+cmake_minimum_required(VERSION 4.3)
 
 project(QuickImageViewer LANGUAGES C CXX)
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 set(CMAKE_CXX_STANDARD 23)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
+set(CMAKE_C_STANDARD 17)
+set(CMAKE_C_STANDARD_REQUIRED ON)
 set(CMAKE_VERBOSE_MAKEFILE ON)
-set(CMAKE_CXX_EXTENSIONS OFF) # Strictly enforce standard C++23 without compiler-specific deviations
+set(CMAKE_CXX_EXTENSIONS OFF)
+set(CMAKE_CXX_SCAN_FOR_MODULES OFF)
 
 # --- Custom Option for Static MSVC Runtime ---
 option(QIV_STATIC_RUNTIME "Statically link the MSVC C/C++ runtime (/MT instead of /MD)" OFF)
 
 if (QIV_STATIC_RUNTIME)
-    # Statically link the runtime (/MT for Release, /MTd for Debug)
     set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>")
 else ()
-    # Dynamically link the runtime (/MD for Release, /MDd for Debug)
     set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>DLL")
 endif ()
 # ---------------------------------------------
@@ -66,62 +67,72 @@ set(SOURCES
 )
 
 set_source_files_properties(libs/lib/tinyexr/include/miniz.c PROPERTIES COMPILE_FLAGS "/wd4132")
+
 find_program(SCCACHE_PROGRAM sccache)
 if (SCCACHE_PROGRAM)
+    set(CMAKE_C_COMPILER_LAUNCHER ${SCCACHE_PROGRAM})
     set(CMAKE_CXX_COMPILER_LAUNCHER ${SCCACHE_PROGRAM})
 endif ()
 
+# WIN32 implicitly handles /SUBSYSTEM:WINDOWS
 add_executable(QuickImageViewer WIN32 ${SOURCES})
+
+# --- Enable Link Time Optimization (LTCG) the CMake Way ---
+include(CheckIPOSupported)
+check_ipo_supported(RESULT ipo_supported)
+if (ipo_supported)
+    set_target_properties(QuickImageViewer PROPERTIES INTERPROCEDURAL_OPTIMIZATION TRUE)
+endif ()
+# ----------------------------------------------------------
 
 # 1. Compile Definitions
 target_compile_definitions(QuickImageViewer PRIVATE
         NOMINMAX
         UNICODE
         _UNICODE
-        $<$<CONFIG:Release>:NDEBUG> # Standard macro to strip assert() overhead in Release
-        OPJ_STATIC                  # Tell OpenJPEG headers we link the static lib, not a DLL
+        $<$<CONFIG:Release>:NDEBUG>
+        OPJ_STATIC
 )
 
-# 2. Compile Options (Warnings, MP, and Release Optimization)
+# 2. Compile Options
 target_compile_options(QuickImageViewer PRIVATE
         /W4
-        #        /analyze
         /permissive-
         /EHsc
-        /MP
         /utf-8
         /Zc:__cplusplus
         /Zc:preprocessor
+
+        # Disable /MP if sccache is active to prevent caching failures
+        $<$<NOT:$<BOOL:${SCCACHE_PROGRAM}>>:/MP>
+
         # --- Explicit Release Performance Overrides ---
-        $<$<CONFIG:Release>:/O2>         # Maximize speed
+        $<$<CONFIG:Release>:/O2>         # Maximize speed (implies /Ot)
         $<$<CONFIG:Release>:/Oi>         # Enable intrinsic functions
-        $<$<CONFIG:Release>:/Ot>         # Favor fast code over small size
-        $<$<CONFIG:Release>:/fp:fast>    # Fast floating-point math for UI/viewport transforms
-        $<$<CONFIG:Release>:/arch:AVX2>  # Hardware acceleration for modern CPUs
-        $<$<CONFIG:Release>:/GL>         # Whole Program Optimization (LTCG part 1)
+        $<$<CONFIG:Release>:/fp:fast>    # Fast floating-point math
+        $<$<CONFIG:Release>:/arch:AVX2>  # Hardware acceleration
         $<$<CONFIG:Release>:/Gw>         # Optimize global data
-        $<$<CONFIG:Release>:/Gy>         # Function-level linking.
-        $<$<CONFIG:Release>:/GF>         # Pool identical string literals. Small binary improvement. No downside.
-        $<$<CONFIG:Release>:/Zc:inline>         # Optimize global data
-        $<$<CONFIG:Release>:/favor:blend>
-        $<$<CONFIG:Release>:/GS->               # Disable buffer-overrun checks — safe for a local desktop app
+        $<$<CONFIG:Release>:/Gy>         # Function-level linking
+        $<$<CONFIG:Release>:/GF>         # Pool identical string literals
+        $<$<CONFIG:Release>:/Zc:inline>  # Remove unreferenced internal functions
+        $<$<CONFIG:Release>:/Zc:externConstexpr>
+        $<$<CONFIG:Release>:/favor:blend># Blend AMD and Intel
+        $<$<CONFIG:Release>:/GS>         # Enable buffer-overrun checks
 )
 
-# 3. Explicit Linker Flags (Safe & Industry Standard)
+# 3. Explicit Linker Flags
 target_link_options(QuickImageViewer PRIVATE
-        /SUBSYSTEM:WINDOWS                     # Explicitly target Win32 subsystem to prevent console windows
-        /MANIFEST:NO                           # Prevent default manifest generation i provide my own in resources/app.manifest
-        $<$<CONFIG:Release>:/LTCG>             # Link Time Code Generation
-        $<$<CONFIG:Release>:/INCREMENTAL:NO>   # Clean, non-fragmented binary
-        $<$<CONFIG:Release>:/OPT:REF>          # Eliminate unreferenced functions/data
-        $<$<CONFIG:Release>:/OPT:ICF>          # Fold identical functions to reduce executable size
-        $<$<CONFIG:Release>:/CGTHREADS:16>             # Multi-thread the LTCG code generation phase
+        $<$<CONFIG:Release>:/Brepro>         # Reproducible builds
+        /MANIFEST:NO                         # Prevent default manifest generation
+        $<$<CONFIG:Release>:/INCREMENTAL:NO> # Clean, non-fragmented binary
+        $<$<CONFIG:Release>:/OPT:REF>        # Eliminate unreferenced functions/data
+        $<$<CONFIG:Release>:/OPT:ICF>        # Fold identical functions
+        $<$<CONFIG:Release>:/DEBUG:NONE>     #DO NOT Generate PDB for crash dumps (exe size remains small)
 )
 
 # 4. External Libraries (Static Linking: resvg only)
 set(STATIC_LIBS_DIR "${CMAKE_CURRENT_SOURCE_DIR}/libs/lib/static")
 
-# Include Directories
 target_include_directories(QuickImageViewer PRIVATE
         ${CMAKE_CURRENT_SOURCE_DIR}/src
         ${CMAKE_CURRENT_SOURCE_DIR}/src/Common
@@ -137,46 +148,24 @@ target_include_directories(QuickImageViewer PRIVATE
         ${CMAKE_CURRENT_SOURCE_DIR}/libs/lib/tinyexr/include
 )
 
-# Link Directories (Static Libraries)
 target_link_directories(QuickImageViewer PRIVATE
         ${STATIC_LIBS_DIR}
 )
 
-# 5. External Codec Libraries (Static)
+# 5. External Codec Libraries
 target_link_libraries(QuickImageViewer PRIVATE
-        # resvg (SVG rasterizer — fixes D2D native SVG centering and text bugs)
         resvg.lib
-        # OpenJPEG (JPEG 2000)
         openjp2.lib
 )
 
 # 6. Windows Libraries
 target_link_libraries(QuickImageViewer PRIVATE
-        d3d11
-        dxgi
-        d2d1
-        dwrite
-        user32
-        comdlg32
-        windowscodecs
-        gdi32
-        dwmapi
-        uxtheme
-        advapi32
-        shell32
-        ole32
-        oleaut32
-        uuid
-        shlwapi
-        shcore
-        # Required by resvg (Rust std pulls in Winsock, NT native API, and user profile)
-        ws2_32
-        ntdll
-        userenv
+        d3d11 dxgi d2d1 dwrite user32 comdlg32 windowscodecs gdi32 dwmapi
+        uxtheme advapi32 shell32 ole32 oleaut32 uuid shlwapi shcore
+        ws2_32 ntdll userenv # Required by resvg
 )
 
 # 7. Track Manifest Changes
-# This tells CMake that if app.manifest changes, resource.rc needs to be recompiled.
 set_property(SOURCE resources/resource.rc PROPERTY OBJECT_DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/resources/app.manifest")
 
 # 8. Build Completion Notification
