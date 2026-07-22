@@ -8,7 +8,7 @@
 #define VER_MAJOR 2
 #define VER_MINOR 50
 #define VER_PATCH 0
-#define VER_BUILD 0
+#define VER_BUILD 1
 
 // Comma form  — FILEVERSION / PRODUCTVERSION in .rc  (e.g. 2,3,0,0)
 #define VER_NUMERIC   VER_MAJOR,VER_MINOR,VER_PATCH,VER_BUILD

@@ -386,8 +386,8 @@ void MouseHandler::HandleMouseMove(HWND hWnd, LPARAM lParam) {
 
         POINT curMouse = {GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam)};
 
-        float dx = (float) (app.viewport.lastMouse.x - curMouse.x);
-        float dy = (float) (app.viewport.lastMouse.y - curMouse.y);
+        float dx = (float) (curMouse.x - app.viewport.lastMouse.x);
+        float dy = (float) (curMouse.y - app.viewport.lastMouse.y);
 
         // Update Position using addition
         app.viewport.offsetX += dx;
