@@ -330,28 +330,32 @@ HMENU ContextMenuHandler::BuildMenu(HWND hWnd) {
     HMENU m = CreatePopupMenu();
     if (!m) return nullptr;
 
-    AppendMenuW(m, MF_STRING, ID_BROWSE,      L"Browse…\tF2");
-    AppendMenuW(m, MF_SEPARATOR, 0, nullptr);
     AppendMenuW(m, MF_STRING, ID_HISTORY,     L"History\tTab");
-    AppendMenuW(m, MF_STRING, ID_THUMB_STRIP, L"Thumbnail Strip\tF6");
+    AppendMenuW(m, MF_STRING, ID_BROWSE,      L"Browse…\tF2");
     AppendMenuW(m, MF_SEPARATOR, 0, nullptr);
     AppendMenuW(m, MF_STRING, ID_PREV_FOLDER, L"Previous Folder\tQ");
     AppendMenuW(m, MF_STRING, ID_PREV_IMAGE,  L"Previous Image\tE");
     AppendMenuW(m, MF_SEPARATOR, 0, nullptr);
+    AppendMenuW(m, MF_STRING, ID_THUMB_STRIP, L"Thumbnail Strip\tF6");
+    // AppendMenuW(m, MF_SEPARATOR, 0, nullptr);
     AppendMenuW(m, MF_STRING, ID_STATS,          L"Statistics\tK");
     AppendMenuW(m, MF_STRING, ID_METADATA,       L"Metadata\tM");
     AppendMenuW(m, MF_STRING, ID_DEDICATED_PANEL, L"Dedicated\tF8");
+    // Help
+    const std::wstring help = std::wstring(L"Help v") + Constants::APP_VERSION + L"\tF1";
+    AppendMenuW(m, MF_STRING, ID_HELP, help.c_str());
+
     AppendMenuW(m, MF_SEPARATOR, 0, nullptr);
     AppendMenuW(m, MF_STRING, ID_COPY,        L"Copy\tCtrl+C");
     AppendMenuW(m, MF_STRING, ID_SAVE_AS,     L"Save As…\tCtrl+S");
     AppendMenuW(m, MF_STRING, ID_EXPLORER,    L"Open File in Explorer\tL");
-    AppendMenuW(m, MF_POPUP, reinterpret_cast<UINT_PTR>(BuildWallpaperMenu()),
-                L"Set as Desktop Wallpaper");
+    AppendMenuW(m, MF_POPUP, reinterpret_cast<UINT_PTR>(BuildWallpaperMenu()),L"Set as Desktop Wallpaper");
+    //Group
     AppendMenuW(m, MF_SEPARATOR, 0, nullptr);
-    AppendMenuW(m, MF_POPUP, reinterpret_cast<UINT_PTR>(BuildSettingsMenu()),  L"Settings");
+    AppendMenuW(m, MF_POPUP, reinterpret_cast<UINT_PTR>(BuildSortMenu()),      L"Sort");
     AppendMenuW(m, MF_POPUP, reinterpret_cast<UINT_PTR>(BuildViewModeMenu()),  L"View Mode");
     AppendMenuW(m, MF_POPUP, reinterpret_cast<UINT_PTR>(BuildSlideshowMenu()), L"Slideshow");
-    AppendMenuW(m, MF_POPUP, reinterpret_cast<UINT_PTR>(BuildSortMenu()),      L"Sort");
+    AppendMenuW(m, MF_POPUP, reinterpret_cast<UINT_PTR>(BuildSettingsMenu()),  L"Settings");
     AppendMenuW(m, MF_POPUP, reinterpret_cast<UINT_PTR>(BuildBackupMenu()),    L"Backup");
     AppendMenuW(m, MF_SEPARATOR, 0, nullptr);
     // Only meaningful from the tray, when the window is not on screen.
@@ -360,12 +364,10 @@ HMENU ContextMenuHandler::BuildMenu(HWND hWnd) {
     AppendMenuW(m, MF_STRING, ID_CLOSE_APP,      L"Close App\tEsc");
     AppendMenuW(m, MF_STRING, ID_CLOSE_PANELS,   L"Close All Panels\tN");
     AppendMenuW(m, MF_STRING, ID_RESTORE_PANELS, L"Restore All Panels\tN");
+    AppendMenuW(m, MF_SEPARATOR, 0, nullptr);
     AppendMenuW(m, MF_STRING, ID_HARD_QUIT,      L"Hard Quit\tCtrl+Q");
 
-    // Help is last and carries the version — it replaces the old footer caption.
-    AppendMenuW(m, MF_SEPARATOR, 0, nullptr);
-    const std::wstring help = std::wstring(L"Help v") + Constants::APP_VERSION + L"\tF1";
-    AppendMenuW(m, MF_STRING, ID_HELP, help.c_str());
+
     return m;
 }
 

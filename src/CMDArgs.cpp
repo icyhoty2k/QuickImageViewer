@@ -329,4 +329,8 @@ void ApplyCmdArgs(HWND hWnd, const CmdArgs &args, int nCmdShow) {
         ShowCursor(FALSE);
         app.cursorHiddenAtStartup = true;
     }
+    // Ensure window has keyboard focus — ShowWindow + WM_NCACTIVATE
+    // interaction doesn't always set it reliably with WS_POPUP.
+    SetForegroundWindow(hWnd);
+    SetFocus(hWnd);
 }
