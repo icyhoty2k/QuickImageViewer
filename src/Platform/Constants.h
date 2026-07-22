@@ -245,7 +245,7 @@ namespace Constants {
 
         constexpr int PROMO_DISABLED = 0;
 
-        constexpr int PROMO_IMAGES_MAX  = 65535;
+        constexpr int PROMO_IMAGES_MAX  = 65535; // fits a 16-bit counter; plenty for "every N images"
         constexpr int PROMO_SECONDS_MAX = 86400; // one day
 
         // Default: paced by images (every 3-10), timer off.
