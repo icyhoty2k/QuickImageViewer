@@ -3,13 +3,20 @@
 #include "resource.h" // Project-specific resource IDs
 #include "Constants.h" // Include your constants for versioning
 
-// The icon is in the same folder as this .rc file
-IDI_APP_ICON           ICON     "QIV.ico"
-IDI_APP_ICON_DEDICATED ICON     "QIV_DEDICATED.ico"
+// The icons for .rc file
+IDI_APP_ICON           ICON     "icons/QIV.ico"
+IDI_APP_ICON_DEDICATED ICON     "icons/QIV_DEDICATED.ico"
+
+//GeoData
 IDR_CITIES_DATA        RCDATA   "geoData/cities.bin"
 IDR_ADMIN1_DATA        RCDATA   "geoData/admin1.bin"
 IDR_ADMIN2_DATA        RCDATA   "geoData/admin2.bin"
 IDR_COUNTRY_DATA       RCDATA   "geoData/country.bin"
+
+//Cursors
+IDC_ZOOM_CURSOR        CURSOR   "cursors/qivZoom.cur"
+IDC_GRAB_CURSOR        CURSOR   "cursors/qivGrab.cur"
+
 
 // Embed the application manifest for high DPI support and common controls
 1 24 "app.manifest"

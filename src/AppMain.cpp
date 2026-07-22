@@ -321,6 +321,7 @@ LRESULT CALLBACK MainAppWndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM l
             return DefWindowProcW(hWnd, message, wParam, lParam);
 
         case WM_NCACTIVATE:
+        if (wParam == FALSE) break;
             return TRUE;
 
         case WM_NCHITTEST: {
