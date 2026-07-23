@@ -16,7 +16,7 @@ namespace UI {
         wc.style = classStyle;
         wc.lpfnWndProc = IPanelWindow::WindowRouter;
         wc.hInstance = hInstance;
-        wc.hCursor = LoadCursor(nullptr, IDC_ARROW);
+        wc.hCursor = Constants::Cursors::CURR_DEFAULT;
         // Panels carry the same icon as the app, so a dedicated instance stays
         // visually distinct all the way down to its floating windows.
         wc.hIcon = LoadIcon(hInstance, MAKEINTRESOURCEW(Dedicated::AppIconId()));

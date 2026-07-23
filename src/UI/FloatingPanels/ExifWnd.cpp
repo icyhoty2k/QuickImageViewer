@@ -196,17 +196,7 @@ namespace UI {
         m_selectedRows.clear();
         m_anchorRow = -1;
 
-        if (m_hParent) {
-            RECT rp, rw;
-            GetWindowRect(m_hParent, &rp);
-            GetWindowRect(m_hWnd, &rw);
-            int x = rp.left + ((rp.right - rp.left) - (rw.right - rw.left)) / 2;
-            int y = rp.top + ((rp.bottom - rp.top) - (rw.bottom - rw.top)) / 2;
-            SetWindowPos(m_hWnd, HWND_TOPMOST, x, y, 0, 0, SWP_NOSIZE | SWP_SHOWWINDOW);
-        } else {
-            ShowWindow(m_hWnd, SW_SHOW);
-        }
-        SetForegroundWindow(m_hWnd);
+        ShowCenterOverParent();
         InvalidateRect(m_hWnd, nullptr, FALSE);
 
         // Kick off async EXIF + thumbnail fetch (window is now visible so Refresh() proceeds).
@@ -871,7 +861,7 @@ namespace UI {
                         y += h;
                     }
                 }
-                SetCursor(LoadCursor(nullptr, hand ? IDC_HAND : IDC_ARROW));
+                SetCursor(hand ? Constants::Cursors::CURR_CLICK : Constants::Cursors::CURR_DEFAULT);
                 return TRUE;
             }
 
