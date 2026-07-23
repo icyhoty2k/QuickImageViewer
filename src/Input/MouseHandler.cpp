@@ -151,7 +151,8 @@ void MouseHandler::HandleButtonDown(HWND hWnd, UINT message, WPARAM wParam, LPAR
             app.viewport.offsetY = dy * (1.0f - Z) + Z * app.savedOffsetY;
 
             app.lmbDidZoom = true;
-            ShowCursor(TRUE);
+            //USED FOR TESTING = false to see if clipping works
+            ShowCursor(FALSE);
             RECT clipRc;
             GetClientRect(hWnd, &clipRc);
             MapWindowPoints(hWnd, nullptr, (POINT*)&clipRc, 2);
