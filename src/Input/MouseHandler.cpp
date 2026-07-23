@@ -72,7 +72,7 @@ void MouseHandler::HandleButtonDown(HWND hWnd, UINT message, WPARAM wParam, LPAR
         POINT dp = {GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam)};
         ClientToScreen(hWnd, &dp);
         app.rmbDownPt = dp;
-        SetCursor(Constants::Cursors::CURR_DEFAULT);
+
     }
 
     // New logic: If RMB is down and we receive a Left Click
@@ -115,48 +115,15 @@ void MouseHandler::HandleButtonDown(HWND hWnd, UINT message, WPARAM wParam, LPAR
         float winW = (float) (rc.right - rc.left);
         float winH = (float) (rc.bottom - rc.top);
 
-        // Compute the rendered image size exactly as the renderer does.
-        float renderW = winW, renderH = winH; // fallback
+        // Mirror the renderer's renderW/renderH exactly.
+        float renderW = winW, renderH = winH;
         if (app.imgWidth > 0 && app.imgHeight > 0) {
-            float imgW = (float) app.imgWidth;
-            float imgH = (float) app.imgHeight;
-            float ratioX = winW / imgW;
-            float ratioY = winH / imgH;
-            switch (app.viewMode) {
-                case Constants::ViewModes::ViewMode::FitToView_PreserveAspectRatio:
-                default:
-                    renderW = imgW * std::min(ratioX, ratioY);
-                    renderH = imgH * std::min(ratioX, ratioY);
-                    break;
-                case Constants::ViewModes::ViewMode::FitToWidth_DoNotPreserveAspectRatio:
-                    renderW = winW;
-                    renderH = imgH;
-                    if (renderH > winH) renderH = winH;
-                    break;
-                case Constants::ViewModes::ViewMode::FitToHeight_DoNotPreserveAspectRatio:
-                    renderH = winH;
-                    renderW = imgW;
-                    if (renderW > winW) renderW = winW;
-                    break;
-                case Constants::ViewModes::ViewMode::FitToWindow_DoNotPreserveAspectRatio:
-                    renderW = winW;
-                    renderH = winH;
-                    break;
-                case Constants::ViewModes::ViewMode::OriginalImageSize_PreserveAspectRatio:
-                    renderW = imgW;
-                    renderH = imgH;
-                    break;
-            }
+            GetRenderSize(winW, winH, (float)app.imgWidth, (float)app.imgHeight,
+                          app.viewMode, app.viewport.zoom, renderW, renderH);
         }
-        const float z = (app.viewport.zoom <= 0.0f) ? 1.0f : app.viewport.zoom;
-        renderW *= z;
-        renderH *= z;
 
-        // If the image already overflows the viewport in either axis, skip the
-        // click-zoom and go straight to pan mode.
         bool imageOverflows = (renderW > winW + 0.5f) || (renderH > winH + 0.5f);
 
-        // Show the appropriate cursor so the user knows what LMB will do.
         SetCursor(imageOverflows ? Constants::Cursors::CURR_GRAB : Constants::Cursors::CURR_ZOOM);
 
         // Save state so ButtonUp can restore if we zoomed.
@@ -184,6 +151,10 @@ void MouseHandler::HandleButtonDown(HWND hWnd, UINT message, WPARAM wParam, LPAR
             app.viewport.offsetY = dy * (1.0f - Z) + Z * app.savedOffsetY;
 
             app.lmbDidZoom = true;
+            if (!app.cursorHiddenByZoom) {
+                ShowCursor(FALSE);
+                app.cursorHiddenByZoom = true;
+            }
             InvalidateRect(hWnd, nullptr, FALSE);
         }
 
@@ -204,7 +175,6 @@ void MouseHandler::HandleButtonUp(HWND hWnd, UINT message, WPARAM, LPARAM) {
     // }
     if (message == WM_RBUTTONUP) {
         app.isRmbDown = false;
-        SetCursor(Constants::Cursors::CURR_DEFAULT);
 
         // Pure right-click (no window drag, no RMB+wheel/LMB combo) → context menu.
         if (app.contextMenuEnabled && !app.rmbConsumed) {
@@ -219,16 +189,31 @@ void MouseHandler::HandleButtonUp(HWND hWnd, UINT message, WPARAM, LPARAM) {
                 app.viewport.offsetX = app.savedOffsetX;
                 app.viewport.offsetY = app.savedOffsetY;
             }
+            if (app.cursorHiddenByZoom) {
+                ShowCursor(TRUE);
+                app.cursorHiddenByZoom = false;
+            }
             app.lmbDidZoom = false;
             app.viewport.isDragging = false;
             ReleaseCapture();
-            SetCursor(Constants::Cursors::CURR_DEFAULT);
+            UpdateHoverCursor(hWnd);
             InvalidateRect(hWnd, nullptr, FALSE);
             POINT scr;
             GetCursorPos(&scr);
             Input::ContextMenuHandler::Show(hWnd, scr.x, scr.y);
             return;
         }
+
+        // RMB was held for pan/drag (not a context-menu click): update cursor for
+        // the new non-dragging state.
+        app.viewport.isDragging = false;
+        ReleaseCapture();
+        if (app.cursorHiddenByZoom) {
+            ShowCursor(TRUE);
+            app.cursorHiddenByZoom = false;
+        }
+        UpdateHoverCursor(hWnd);
+        InvalidateRect(hWnd, nullptr, FALSE);
     }
     if (message == WM_MBUTTONUP) {
         if (!app.hasMidMoved) {
@@ -310,7 +295,11 @@ void MouseHandler::HandleButtonUp(HWND hWnd, UINT message, WPARAM, LPARAM) {
                                  target.right - target.left,
                                  target.bottom - target.top,
                                  SWP_NOZORDER | SWP_NOACTIVATE | SWP_FRAMECHANGED);
-                    InvalidateRect(hWnd, nullptr, FALSE);
+            InvalidateRect(hWnd, nullptr, FALSE);
+            if (app.cursorHiddenByZoom) {
+                ShowCursor(TRUE);
+                app.cursorHiddenByZoom = false;
+            }
                 }
             }
         }
@@ -328,8 +317,43 @@ void MouseHandler::HandleButtonUp(HWND hWnd, UINT message, WPARAM, LPARAM) {
         app.lmbDidZoom = false;
         app.viewport.isDragging = false;
         ReleaseCapture();
+        if (app.cursorHiddenByZoom) {
+            ShowCursor(TRUE);
+            app.cursorHiddenByZoom = false;
+        }
         InvalidateRect(hWnd, nullptr, FALSE);
     }
+}
+
+bool MouseHandler::UpdateHoverCursor(HWND hWnd) {
+    if (app.slideshow.running && app.slideshow.cursorHidden) return false;
+    if (app.isMidDragging || app.viewport.isDragging || app.isWindowDragging) return false;
+
+    POINT pt;
+    GetCursorPos(&pt);
+    ScreenToClient(hWnd, &pt);
+
+    if (HitTestOverlayPath(pt)) {
+        SetCursor(Constants::Cursors::CURR_GRAB);
+        return true;
+    }
+
+    if (app.imgWidth > 0 && app.imgHeight > 0) {
+        RECT rc;
+        GetClientRect(hWnd, &rc);
+        float winW = (float)(rc.right - rc.left);
+        float winH = (float)(rc.bottom - rc.top);
+        float renderW, renderH;
+        GetRenderSize(winW, winH, (float)app.imgWidth, (float)app.imgHeight,
+                      app.viewMode, app.viewport.zoom, renderW, renderH);
+        if ((renderW > winW + 0.5f) || (renderH > winH + 0.5f)) {
+            SetCursor(Constants::Cursors::CURR_CLICK);
+            return true;
+        }
+    }
+
+    SetCursor(Constants::Cursors::CURR_ZOOM);
+    return true;
 }
 
 void MouseHandler::HandleMouseMove(HWND hWnd, LPARAM lParam) {
@@ -344,12 +368,7 @@ void MouseHandler::HandleMouseMove(HWND hWnd, LPARAM lParam) {
             app.rmbConsumed = true;
     }
 
-    // Hand cursor over the clickable path in the Missing/Empty overlay.
-    if (!app.isMidDragging && !app.viewport.isDragging && !app.isWindowDragging) {
-        POINT pt = {GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam)};
-        if (HitTestOverlayPath(pt))
-            SetCursor(Constants::Cursors::CURR_GRAB);
-    }
+    UpdateHoverCursor(hWnd);
 
     if (app.slideshow.running) {
         if (app.slideshow.cursorHidden) {
@@ -387,9 +406,14 @@ void MouseHandler::HandleMouseMove(HWND hWnd, LPARAM lParam) {
         float dx = (float) (curMouse.x - app.viewport.lastMouse.x);
         float dy = (float) (curMouse.y - app.viewport.lastMouse.y);
 
-        // Update Position using addition
-        app.viewport.offsetX += dx;
-        app.viewport.offsetY += dy;
+        // Update Position — inverse during click-zoom (mouse direction mirrors image movement)
+        if (app.lmbDidZoom) {
+            app.viewport.offsetX -= dx;
+            app.viewport.offsetY -= dy;
+        } else {
+            app.viewport.offsetX += dx;
+            app.viewport.offsetY += dy;
+        }
         app.viewport.lastMouse = curMouse;
 
         // Constraint — must mirror the renderer's renderW/renderH exactly so the
@@ -400,42 +424,9 @@ void MouseHandler::HandleMouseMove(HWND hWnd, LPARAM lParam) {
             float winW = (float) (rc.right - rc.left);
             float winH = (float) (rc.bottom - rc.top);
 
-            float imgW = (float) app.imgWidth;
-            float imgH = (float) app.imgHeight;
-            float ratioX = winW / imgW;
-            float ratioY = winH / imgH;
-
-            // Match renderer viewMode logic
             float renderW, renderH;
-            switch (app.viewMode) {
-                case Constants::ViewModes::ViewMode::FitToView_PreserveAspectRatio:
-                default:
-                    renderW = imgW * std::min(ratioX, ratioY);
-                    renderH = imgH * std::min(ratioX, ratioY);
-                    break;
-                case Constants::ViewModes::ViewMode::FitToWidth_DoNotPreserveAspectRatio:
-                    renderW = winW;
-                    renderH = imgH;
-                    if (renderH > winH) renderH = winH;
-                    break;
-                case Constants::ViewModes::ViewMode::FitToHeight_DoNotPreserveAspectRatio:
-                    renderH = winH;
-                    renderW = imgW;
-                    if (renderW > winW) renderW = winW;
-                    break;
-                case Constants::ViewModes::ViewMode::FitToWindow_DoNotPreserveAspectRatio:
-                    renderW = winW;
-                    renderH = winH;
-                    break;
-                case Constants::ViewModes::ViewMode::OriginalImageSize_PreserveAspectRatio:
-                    renderW = imgW;
-                    renderH = imgH;
-                    break;
-            }
-
-            const float z = (app.viewport.zoom <= 0.0f) ? 1.0f : app.viewport.zoom;
-            renderW *= z;
-            renderH *= z;
+            GetRenderSize(winW, winH, (float)app.imgWidth, (float)app.imgHeight,
+                          app.viewMode, app.viewport.zoom, renderW, renderH);
 
             float maxOffX = std::max(0.0f, (renderW - winW) / 2.0f);
             float maxOffY = std::max(0.0f, (renderH - winH) / 2.0f);
@@ -478,6 +469,19 @@ void MouseHandler::HandleMouseWheel(HWND hWnd, WPARAM wParam, LPARAM /*lParam*/)
         app.rmbConsumed = true; // RMB+wheel zoom — suppress the context menu on RMB up
         app.viewport.zoom *= (delta > 0) ? Constants::ZOOM_STEP : (1.0f / Constants::ZOOM_STEP);
         InvalidateRect(hWnd, nullptr, FALSE);
+        // Update cursor for overflow state — UpdateHoverCursor bails on isDragging.
+        if (app.imgWidth > 0 && app.imgHeight > 0) {
+            RECT rc;
+            GetClientRect(hWnd, &rc);
+            float winW = (float)(rc.right - rc.left);
+            float winH = (float)(rc.bottom - rc.top);
+            float renderW, renderH;
+            GetRenderSize(winW, winH, (float)app.imgWidth, (float)app.imgHeight,
+                          app.viewMode, app.viewport.zoom, renderW, renderH);
+            SetCursor((renderW > winW + 0.5f) || (renderH > winH + 0.5f)
+                          ? Constants::Cursors::CURR_CLICK
+                          : Constants::Cursors::CURR_ZOOM);
+        }
     } else if (GET_KEYSTATE_WPARAM(wParam) & MK_CONTROL) {
         app.viewport.zoom *= (delta > 0) ? Constants::ZOOM_STEP : (1.0f / Constants::ZOOM_STEP);
         InvalidateRect(hWnd, nullptr, FALSE);

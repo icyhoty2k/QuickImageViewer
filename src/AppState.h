@@ -144,6 +144,7 @@ struct AppState {
 
     // Left click temp zoom + saved state
     bool lmbDidZoom = false; // true when LMB press actually applied the 3x zoom
+    bool cursorHiddenByZoom = false;
     float savedZoom = 1.0f;
     float savedOffsetX = 0.0f;
     float savedOffsetY = 0.0f;
@@ -339,6 +340,42 @@ struct AppState {
     }
 };
 
+// Mirrors the renderer's renderW/renderH calculation. Every call site (renderer,
+// mouse handler) must use this so all sizes match exactly.
+inline void GetRenderSize(float winW, float winH, float imgW, float imgH,
+                          Constants::ViewModes::ViewMode viewMode, float zoom,
+                          float &renderW, float &renderH) {
+    renderW = imgW;
+    renderH = imgH;
+    switch (viewMode) {
+        case Constants::ViewModes::ViewMode::FitToView_PreserveAspectRatio:
+        default: {
+            const float scale = std::min(winW / imgW, winH / imgH);
+            renderW = imgW * scale;
+            renderH = imgH * scale;
+            break;
+        }
+        case Constants::ViewModes::ViewMode::FitToWidth_DoNotPreserveAspectRatio:
+            renderW = winW;
+            renderH = imgH;
+            if (renderH > winH) renderH = winH;
+            break;
+        case Constants::ViewModes::ViewMode::FitToHeight_DoNotPreserveAspectRatio:
+            renderH = winH;
+            renderW = imgW;
+            if (renderW > winW) renderW = winW;
+            break;
+        case Constants::ViewModes::ViewMode::FitToWindow_DoNotPreserveAspectRatio:
+            renderW = winW;
+            renderH = winH;
+            break;
+        case Constants::ViewModes::ViewMode::OriginalImageSize_PreserveAspectRatio:
+            break;
+    }
+    const float z = (zoom <= 0.0f) ? 1.0f : zoom;
+    renderW *= z;
+    renderH *= z;
+}
 
 // Global state shared across files
 extern AppState app;
