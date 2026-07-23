@@ -1,6 +1,7 @@
 #pragma once
 #include <windows.h>
 #include <string>
+#include "Common/Converters.h"
 #include "PromotionPlaylist.h"
 #include "Platform/ConstantsTheme.h"
 
@@ -102,7 +103,7 @@ struct InstanceConfig {
     bool swapMouse    = Constants::IS_SWAP_MOUSE_BUTTONS;
     bool invertWheel  = Constants::IS_MOUSE_VERTICAL_REVERSE_SCROLL_DIRECTION;
     bool invertWheelH = Constants::IS_MOUSE_HORIZONTAL_REVERSE_SCROLL_DIRECTION;
-    int  zoomClick    = static_cast<int>(Constants::ZOOM_CLICK);
+    int  zoomClick    = Converters::toZoomInt(Constants::ZOOM_CLICK);
     int  caretStyle   = Constants::InputBox::CARET_STYLE;
     bool ctrlCEnabled = Constants::IS_CTRL_C_ENABLED;
     bool contextMenu  = Constants::IS_CONTEXT_MENU_ENABLED;

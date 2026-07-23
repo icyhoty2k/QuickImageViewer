@@ -2,6 +2,7 @@
 #include "DedicatedSettings.h"
 #include "DedicatedLists.h"        // list paths + AppendFolder
 #include "SlideshowTransitions.h"  // TransitionDisplayOrder — same order as the menu
+#include "Common/Converters.h"
 #include "Platform/FileHandler.h"  // is_image_ext — one definition of "an image"
 #include <filesystem>
 #include <cwctype>
@@ -193,6 +194,14 @@ int DedicatedWnd::DialogPromptInt(const wchar_t *caption, const wchar_t *label,
                                   int cur, int lo, int hi, int def) {
     PushTopmostOff();
     const int v = ThemedDialog::PromptInt(GetHwnd(), caption, label, cur, lo, hi, def);
+    PopTopmost();
+    return v;
+}
+
+int DedicatedWnd::DialogPromptFloat(const wchar_t *caption, const wchar_t *label,
+                                    float cur, float lo, float hi, float def) {
+    PushTopmostOff();
+    const int v = ThemedDialog::PromptFloat(GetHwnd(), caption, label, cur, lo, hi, def);
     PopTopmost();
     return v;
 }
@@ -776,8 +785,10 @@ void DedicatedWnd::BuildRows() {
         L"Reverse the direction the wheel moves through pictures.", R_WHEEL_INV);
     row(Kind::Toggle, L"Invert h-wheel", OnOff(m_cfg.invertWheelH),
         L"Reverse the direction of horizontal wheel tilting.", R_WHEEL_INV_H);
-    row(Kind::Number, L"Left-click zoom", std::to_wstring(m_cfg.zoomClick) + L"x",
-        L"Magnification while the left button is held. 1 disables click-zoom.", R_ZOOM_CLICK);
+    wchar_t zoomBuf[16];
+    swprintf_s(zoomBuf, L"%.2fx", Converters::toZoomFloat(m_cfg.zoomClick));
+    row(Kind::Number, L"Left-click zoom", zoomBuf,
+        L"Magnification while the left button is held.", R_ZOOM_CLICK);
     row(Kind::Choice, L"Caret style", m_cfg.caretStyle == 0 ? L"Bar" : L"Underscore",
         L"Shape of the text cursor in search and filter boxes.", R_CARET);
     row(Kind::Toggle, L"Ctrl+C copy", OnOff(m_cfg.ctrlCEnabled),
@@ -1159,9 +1170,12 @@ void DedicatedWnd::EditRow(int rowIndex) {
             break;
         }
         case R_ZOOM_CLICK: {
-            const int v = DialogPromptInt(L"Left-click zoom",
-                L"Magnification while the left button is held (1 = off).",
-                m_cfg.zoomClick, 1, 10, static_cast<int>(Constants::ZOOM_CLICK));
+            wchar_t label[128];
+            swprintf_s(label, L"Magnification while the left button is held (%.2f = off .. %.2f).",
+                       Constants::ZOOM_CLICK_MIN, Constants::ZOOM_CLICK_MAX);
+            const int v = DialogPromptFloat(L"Left-click zoom",
+                label,
+                Converters::toZoomFloat(m_cfg.zoomClick), Constants::ZOOM_CLICK_MIN, Constants::ZOOM_CLICK_MAX, Constants::ZOOM_CLICK);
             if (v >= 0) m_cfg.zoomClick = v;
             break;
         }
