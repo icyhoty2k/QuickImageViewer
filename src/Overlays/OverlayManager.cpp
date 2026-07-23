@@ -436,9 +436,13 @@ void OverlayManager::UpdateZoom(float /*zoom*/, HWND /*hWnd*/) {
     // GetClientRect syscall on every frame (was called via app.GetRealZoom).
     float newZoom = 1.0f;
     if (app.imgWidth > 0 && app.imgHeight > 0 && m_rtW > 0.0f && m_rtH > 0.0f) {
-        const float fitScale = std::min(m_rtW / static_cast<float>(app.imgWidth),
-                                        m_rtH / static_cast<float>(app.imgHeight));
-        newZoom = fitScale * app.viewport.zoom;
+        if (app.viewMode == Constants::ViewModes::ViewMode::OriginalImageSize_PreserveAspectRatio) {
+            newZoom = app.viewport.zoom;
+        } else {
+            const float fitScale = std::min(m_rtW / static_cast<float>(app.imgWidth),
+                                            m_rtH / static_cast<float>(app.imgHeight));
+            newZoom = fitScale * app.viewport.zoom;
+        }
     }
     if (newZoom == m_zoom && !slotTopRight.text.empty())
         return;
