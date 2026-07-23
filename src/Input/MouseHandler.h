@@ -23,6 +23,10 @@ namespace MouseHandler {
 
     void HandleMouseMove(HWND hWnd, LPARAM lParam);
 
+    // Call from WM_SETCURSOR and WM_MOUSEMOVE to update cursor based on
+    // whether the rendered image overflows the viewport or hits an overlay path.
+    bool UpdateHoverCursor(HWND hWnd);
+
     void HandleMouseWheel(HWND hWnd, WPARAM wParam, LPARAM lParam);
 
     void HandleMouseHWheel(HWND hWnd, WPARAM wParam, LPARAM lParam);

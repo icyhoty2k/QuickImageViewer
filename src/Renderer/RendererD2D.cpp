@@ -15,6 +15,7 @@
 #include <shobjidl.h>  // IShellItemImageFactory, SHCreateItemFromParsingName
 
 #include "../UI/ThumbnailPanels/DirWnd.h"
+#include "../Input/MouseHandler.h"
 
 // resvg C API (static lib)
 #include <resvg.h>
@@ -889,39 +890,9 @@ HRESULT RendererD2D::Render() {
         const float imgW = (m_svgNativeW > 1.0f) ? m_svgNativeW : rtSize.width;
         const float imgH = (m_svgNativeH > 1.0f) ? m_svgNativeH : rtSize.height;
 
-        float renderW = imgW;
-        float renderH = imgH;
-        const float ratioX = rtSize.width / imgW;
-        const float ratioY = rtSize.height / imgH;
-
-        switch (app.viewMode) {
-            case Constants::ViewModes::ViewMode::FitToView_PreserveAspectRatio:
-                renderW = imgW * std::min(ratioX, ratioY);
-                renderH = imgH * std::min(ratioX, ratioY);
-                break;
-            case Constants::ViewModes::ViewMode::FitToWidth_DoNotPreserveAspectRatio:
-                renderW = rtSize.width;
-                renderH = imgH;
-                if (renderH > rtSize.height) renderH = rtSize.height;
-                break;
-            case Constants::ViewModes::ViewMode::FitToHeight_DoNotPreserveAspectRatio:
-                renderH = rtSize.height;
-                renderW = imgW;
-                if (renderW > rtSize.width) renderW = rtSize.width;
-                break;
-            case Constants::ViewModes::ViewMode::FitToWindow_DoNotPreserveAspectRatio:
-                renderW = rtSize.width;
-                renderH = rtSize.height;
-                break;
-            case Constants::ViewModes::ViewMode::OriginalImageSize_PreserveAspectRatio:
-                renderW = imgW;
-                renderH = imgH;
-                break;
-        }
-
-        const float z = (app.viewport.zoom <= 0.0f) ? 1.0f : app.viewport.zoom;
-        renderW *= z;
-        renderH *= z;
+        float renderW, renderH;
+        GetRenderSize(rtSize.width, rtSize.height, imgW, imgH,
+                      app.viewMode, app.viewport.zoom, renderW, renderH);
 
         const float left = (rtSize.width - renderW) / 2.0f + app.viewport.offsetX;
         const float top = (rtSize.height - renderH) / 2.0f + app.viewport.offsetY;
@@ -949,44 +920,16 @@ HRESULT RendererD2D::Render() {
         m_pDeviceContext->SetTransform(D2D1::Matrix3x2F::Identity());
         g_overlayManager.UpdateZoom(app.viewport.zoom, m_hwnd);
         g_overlayManager.RenderAll(m_pDeviceContext.Get());
+
+        //BITMAP DRAW BEGIN
     } else if (m_pBitmap) {
         const D2D1_SIZE_F imgSize = m_pBitmap->GetSize();
         const D2D1_SIZE_F rtSize = m_pDeviceContext->GetSize();
         const D2D1_POINT_2F center = D2D1::Point2F(rtSize.width / 2.0f, rtSize.height / 2.0f);
 
-        float ratioX = rtSize.width / imgSize.width;
-        float ratioY = rtSize.height / imgSize.height;
-        float renderW = imgSize.width;
-        float renderH = imgSize.height;
-
-        switch (app.viewMode) {
-            case Constants::ViewModes::ViewMode::FitToView_PreserveAspectRatio:
-                renderW = imgSize.width * std::min(ratioX, ratioY);
-                renderH = imgSize.height * std::min(ratioX, ratioY);
-                break;
-            case Constants::ViewModes::ViewMode::FitToWidth_DoNotPreserveAspectRatio:
-                renderW = rtSize.width;
-                renderH = imgSize.height;
-                if (renderH > rtSize.height) renderH = rtSize.height;
-                break;
-            case Constants::ViewModes::ViewMode::FitToHeight_DoNotPreserveAspectRatio:
-                renderH = rtSize.height;
-                renderW = imgSize.width;
-                if (renderW > rtSize.width) renderW = rtSize.width;
-                break;
-            case Constants::ViewModes::ViewMode::FitToWindow_DoNotPreserveAspectRatio:
-                renderW = rtSize.width;
-                renderH = rtSize.height;
-                break;
-            case Constants::ViewModes::ViewMode::OriginalImageSize_PreserveAspectRatio:
-                renderW = imgSize.width;
-                renderH = imgSize.height;
-                break;
-        }
-
-        const float z = (app.viewport.zoom <= 0.0f) ? 1.0f : app.viewport.zoom;
-        renderW *= z;
-        renderH *= z;
+        float renderW, renderH;
+        GetRenderSize(rtSize.width, rtSize.height, imgSize.width, imgSize.height,
+                      app.viewMode, app.viewport.zoom, renderW, renderH);
 
         const float left = (rtSize.width - renderW) / 2.0f + app.viewport.offsetX;
         const float top = (rtSize.height - renderH) / 2.0f + app.viewport.offsetY;
@@ -1055,7 +998,7 @@ HRESULT RendererD2D::Render() {
         m_pDeviceContext->SetTransform(D2D1::Matrix3x2F::Identity());
         g_overlayManager.UpdateZoom(app.viewport.zoom, m_hwnd);
         g_overlayManager.RenderAll(m_pDeviceContext.Get());
-    }
+    }//! BITMAP DRAW END
 
     // Persistent overlay: "Directory Missing" (red) or "No Images" (normal).
     // Shown on a black viewport; stays until the user opens a new folder.
@@ -1159,8 +1102,8 @@ HRESULT RendererD2D::Render() {
             g_overlayManager.OnResize(static_cast<float>(rc.right - rc.left),
                                       static_cast<float>(rc.bottom - rc.top));
         }
-        return hr;
-    }
+    return hr;
+}
 
     if (FAILED(hr)) return hr;
 
@@ -1178,6 +1121,7 @@ HRESULT RendererD2D::Render() {
         }
     }
 
+    MouseHandler::UpdateHoverCursor(m_hwnd);
     return hr;
 }
 

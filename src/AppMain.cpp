@@ -523,6 +523,12 @@ LRESULT CALLBACK MainAppWndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM l
                 SetCursor(Constants::Cursors::CURR_APPSTARTING);
                 return TRUE;
             }
+            if (app.viewport.isDragging) {
+                SetCursor(Constants::Cursors::CURR_GRAB);
+                return TRUE;
+            }
+            if (MouseHandler::UpdateHoverCursor(hWnd))
+                return TRUE;
             break;
 
         case WM_DESTROY:
