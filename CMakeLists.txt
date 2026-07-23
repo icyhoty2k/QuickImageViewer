@@ -64,6 +64,7 @@ set(SOURCES
         src/GeoNames.cpp
         src/UI/ThemedDialog.cpp
         libs/lib/tinyexr/include/miniz.c
+        src/Common/Converters.cpp
 )
 
 set_source_files_properties(libs/lib/tinyexr/include/miniz.c PROPERTIES COMPILE_FLAGS "/wd4132")

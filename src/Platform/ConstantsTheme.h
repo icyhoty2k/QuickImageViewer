@@ -207,6 +207,18 @@ namespace Constants {
         }
 
         // =====================================================================
+        // MARKER COLORS  —  single source of truth for status/indicator colors
+        // =====================================================================
+        namespace Markers {
+            constexpr COLORREF OK        = RGB(80,  200, 80);
+            constexpr COLORREF INFO      = RGB(60,  140, 230);
+            constexpr COLORREF WARNING   = RGB(240, 180, 60);
+            constexpr COLORREF ERR       = RGB(255, 80,  80);
+            constexpr COLORREF CRITICAL  = RGB(60,  15,  15);
+            constexpr COLORREF FAVORITES = RGB(255, 200, 50);
+        }
+
+        // =====================================================================
         // RENDERER COLORS
         // =====================================================================
         namespace Renderer {
@@ -263,5 +275,5 @@ namespace Constants {
         inline COLORREF ThemedColor(float r, float g, float b, float factor) {
             return RGB(ToByte(Apply(r, factor)), ToByte(Apply(g, factor)), ToByte(Apply(b, factor)));
         }
-    } // namespace Theme
-} // namespace Constants
+    }
+} 

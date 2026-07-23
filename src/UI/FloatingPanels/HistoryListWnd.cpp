@@ -1,5 +1,6 @@
 #include "HistoryListWnd.h"
 #include "../../Platform/Constants.h"
+#include "../../Platform/ConstantsTheme.h"
 #include "../../Platform/ConstantsStrings.h"
 #include "../../Platform/FileHandler.h"
 #include "../../Persistence/RegistryManager.h"
@@ -1005,7 +1006,7 @@ namespace UI {
                     auto drawShortcutLink = [&](const wchar_t *text, RECT &outRect) {
                         if (!text || !*text || curX >= rightBound) return;
                         SelectObject(hdc, m_hFontLink);
-                        SetTextColor(hdc, RGB(100, 180, 255));
+                        SetTextColor(hdc, Constants::Theme::Markers::INFO);
                         SIZE sz = {};
                         GetTextExtentPoint32W(hdc, text, static_cast<int>(wcslen(text)), &sz);
                         outRect = {curX, hintTop, curX + sz.cx, hintBot};
@@ -1092,7 +1093,7 @@ namespace UI {
                         if (i == g_hoverRow) {
                             HBRUSH hHover = CreateSolidBrush(
                                     isMissing
-                                        ? RGB(60, 20, 20)
+                                        ? Constants::Theme::Markers::CRITICAL
                                         : isEmpty
                                               ? RGB(50, 35, 10)
                                               : entry.isFavorite
@@ -1109,7 +1110,7 @@ namespace UI {
                                                     ? Constants::Theme::HistoryPanel::PATH_EMPTY_DRIVE
                                                     : (isCurrent
                                                            ? Constants::Theme::HistoryPanel::PATH_DRIVE_CURRENT
-                                                           : RGB(100, 180, 255)));
+                                                           : Constants::Theme::Markers::INFO));
                         SelectObject(hdc, m_hFontIndexLink);
                         std::wstring idxStr = std::to_wstring(i + 1);
                         RECT idxRect = {
@@ -1137,7 +1138,7 @@ namespace UI {
                                 DrawTextW(hdc, L"∅", -1, &slotRect,
                                           DT_CENTER | DT_VCENTER | DT_SINGLELINE);
                             } else if (entry.isFavorite) {
-                                SetTextColor(hdc, RGB(255, 220, 0));
+                                SetTextColor(hdc, Constants::Theme::Markers::FAVORITES);
                                 DrawTextW(hdc, L"\x2605", -1, &slotRect,
                                           DT_CENTER | DT_VCENTER | DT_SINGLELINE);
                             }
@@ -1170,7 +1171,7 @@ namespace UI {
                                                          : (isCurrent
                                                                 ? Constants::Theme::HistoryPanel::PATH_MIDDLE_CURRENT
                                                                 : (isFav
-                                                                       ? (isHov ? RGB(255, 255, 160) : RGB(255, 240, 120))
+                                                                       ? Constants::Theme::Markers::FAVORITES
                                                                        : (isHov
                                                                               ? RGB(255, 255, 255)
                                                                               : clrNormMiddle)));
@@ -1330,7 +1331,7 @@ namespace UI {
                                                   ? Constants::Theme::HistoryPanel::PATH_DEAD_MIDDLE
                                                   : isEmpty
                                                         ? Constants::Theme::HistoryPanel::PATH_EMPTY_MIDDLE
-                                                        : RGB(140, 200, 140));
+                                                        : Constants::Theme::Markers::OK);
                             RECT scr = {colLeft, rowTop, colRight, rowBottom};
                             DrawTextW(hdc, sizeCountStr.c_str(), -1, &scr,
                                       DT_RIGHT | DT_VCENTER | DT_SINGLELINE);
@@ -1420,7 +1421,7 @@ namespace UI {
                         GetTextExtentPoint32W(hdc, summaryStr.c_str(),
                                               static_cast<int>(summaryStr.size()), &szSummary);
                         summaryLeft = fileSizeLeft - gap - szSummary.cx;
-                        SetTextColor(hdc, RGB(140, 200, 140));
+                        SetTextColor(hdc, Constants::Theme::Markers::OK);
                         RECT summaryRect = {summaryLeft, footerTop, summaryLeft + szSummary.cx, footerBot};
                         DrawTextW(hdc, summaryStr.c_str(), -1, &summaryRect,
                                   DT_LEFT | DT_VCENTER | DT_SINGLELINE);
@@ -1442,7 +1443,7 @@ namespace UI {
                             SelectObject(hdc, m_hFontLink);
                             GetTextExtentPoint32W(hdc, linkText.c_str(),
                                                   static_cast<int>(linkText.size()), &szLink);
-                            SetTextColor(hdc, RGB(100, 180, 255));
+                            SetTextColor(hdc, Constants::Theme::Markers::INFO);
                             g_exeLinkRect = {curX, footerTop, curX + szLink.cx, footerBot};
                             DrawTextW(hdc, linkText.c_str(), -1, &g_exeLinkRect,
                                       DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
@@ -1452,7 +1453,7 @@ namespace UI {
 
                         // Cache toggle key
                         std::wstring cacheKeyLabel = L"[" + FKeyLabel(Shortcuts::SC_PANEL_CACHE_TOGGLE) + L"]";
-                        SetTextColor(hdc, RGB(100, 180, 255));
+                        SetTextColor(hdc, Constants::Theme::Markers::INFO);
                         SelectObject(hdc, m_hFontLink);
                         SIZE szToggle = {};
                         GetTextExtentPoint32W(hdc, cacheKeyLabel.c_str(),
@@ -1484,7 +1485,7 @@ namespace UI {
 
                         // Dir-panel toggle key
                         std::wstring dirKeyLabel = L"[" + FKeyLabel(Shortcuts::SC_PANEL_DIR_TOGGLE) + L"]";
-                        SetTextColor(hdc, RGB(100, 180, 255));
+                        SetTextColor(hdc, Constants::Theme::Markers::INFO);
                         SelectObject(hdc, m_hFontLink);
                         SIZE szF5 = {};
                         GetTextExtentPoint32W(hdc, dirKeyLabel.c_str(),

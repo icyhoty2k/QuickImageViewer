@@ -3,6 +3,7 @@
 #include <string>
 #include <algorithm>
 #include <shlobj.h>
+#include "../Common/Converters.h"
 #include "../Platform/Constants.h"
 #include "../Platform/WriteQueue.h"
 #include "../AppState.h"
@@ -288,9 +289,12 @@ namespace Persistence::Registry {
         a.caretStyle = std::max(0, std::min(1, static_cast<int>(
             readDword(Constants::Registry::INPUTBOX_CARET_STYLE,
                 static_cast<DWORD>(Constants::InputBox::CARET_STYLE)))));
-        a.zoomClickMultiplier = static_cast<float>(std::max(1, std::min(10, static_cast<int>(
+        int raw = static_cast<int>(
             readDword(Constants::Registry::ZOOM_CLICK_MULT,
-                static_cast<DWORD>(Constants::ZOOM_CLICK))))));
+                static_cast<DWORD>(Converters::toZoomInt(Constants::ZOOM_CLICK))));
+        raw = std::max(Converters::toZoomInt(Constants::ZOOM_CLICK_MIN),
+                       std::min(Converters::toZoomInt(Constants::ZOOM_CLICK_MAX), raw));
+        a.zoomClickMultiplier = Converters::toZoomFloat(raw);
         a.swapMouseButtons = readDword(
             Constants::Registry::SWAP_MOUSE_BUTTONS,
             static_cast<DWORD>(Constants::IS_SWAP_MOUSE_BUTTONS)) != 0;

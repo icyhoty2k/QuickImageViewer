@@ -1,6 +1,7 @@
 #include "TrayHandler.h"
 #include "AppCommands.h"
 #include "ContextMenuHandler.h"
+#include "../Common/Converters.h"
 #include "../AppState.h"
 #include "../Overlays/OverlayManager.h"
 #include "../Persistence/HistoryFoldersManager.h"
@@ -255,14 +256,17 @@ void TrayHandler::DispatchCommand(HWND hWnd, int cmd) {
             static_cast<DWORD>(app.thumbPasteEnabled));
         break;
 
-    // ── Integer input values ──────────────────────────────────────────────────
+    // ── Float input values ────────────────────────────────────────────────────
     case 62: {
-        int v = UI::ThemedDialog::PromptInt(hWnd, L"Left-Click Zoom",
-            L"Left-click zoom multiplier (1 = off .. 10):",
-            static_cast<int>(app.zoomClickMultiplier + 0.5f), 1, 10,
-            static_cast<int>(Constants::ZOOM_CLICK));
+        wchar_t prompt[128];
+        swprintf_s(prompt, L"Left-click zoom multiplier (%.2f = off .. %.2f):",
+                   Constants::ZOOM_CLICK_MIN, Constants::ZOOM_CLICK_MAX);
+        int v = UI::ThemedDialog::PromptFloat(hWnd, L"Left-Click Zoom",
+            prompt,
+            app.zoomClickMultiplier, Constants::ZOOM_CLICK_MIN, Constants::ZOOM_CLICK_MAX,
+            Constants::ZOOM_CLICK);
         if (v >= 0) {
-            app.zoomClickMultiplier = static_cast<float>(v);
+            app.zoomClickMultiplier = Converters::toZoomFloat(v);
             Persistence::Registry::SaveSetting(Constants::Registry::ZOOM_CLICK_MULT,
                 static_cast<DWORD>(v));
         }
@@ -454,7 +458,7 @@ void TrayHandler::DispatchCommand(HWND hWnd, int cmd) {
                 fwprintf(f, L"%s=%d\n", Constants::Registry::OPEN_DIRWND_ON_START,  (int)app.openDirWndOnStart);
                 fwprintf(f, L"%s=%d\n", Constants::Registry::OVERLAY_SHOW_BG,       (int)app.overlayShowBackground);
                 fwprintf(f, L"%s=%d\n", Constants::Registry::INPUTBOX_CARET_STYLE,  app.caretStyle);
-                fwprintf(f, L"%s=%d\n", Constants::Registry::ZOOM_CLICK_MULT,       (int)app.zoomClickMultiplier);
+                fwprintf(f, L"%s=%d\n", Constants::Registry::ZOOM_CLICK_MULT,       Converters::toZoomInt(app.zoomClickMultiplier));
                 fwprintf(f, L"%s=%d\n", Constants::Registry::SWAP_MOUSE_BUTTONS,    (int)app.swapMouseButtons);
                 fwprintf(f, L"%s=%d\n", Constants::Registry::CONTEXT_MENU_ENABLED,  (int)app.contextMenuEnabled);
                 fwprintf(f, L"%s=%d\n", Constants::Registry::KIOSK_LOCK,            (int)app.isLocked);
@@ -757,7 +761,7 @@ void TrayHandler::DispatchCommand(HWND hWnd, int cmd) {
         Persistence::Registry::SaveSetting(Constants::Registry::OPEN_DIRWND_ON_START,  static_cast<DWORD>(app.openDirWndOnStart));
         Persistence::Registry::SaveSetting(Constants::Registry::OVERLAY_SHOW_BG,       static_cast<DWORD>(app.overlayShowBackground));
         Persistence::Registry::SaveSetting(Constants::Registry::INPUTBOX_CARET_STYLE,  static_cast<DWORD>(app.caretStyle));
-        Persistence::Registry::SaveSetting(Constants::Registry::ZOOM_CLICK_MULT,       static_cast<DWORD>(app.zoomClickMultiplier));
+        Persistence::Registry::SaveSetting(Constants::Registry::ZOOM_CLICK_MULT,       static_cast<DWORD>(Converters::toZoomInt(app.zoomClickMultiplier)));
         Persistence::Registry::SaveSetting(Constants::Registry::SWAP_MOUSE_BUTTONS,    static_cast<DWORD>(app.swapMouseButtons));
         Persistence::Registry::SaveSetting(Constants::Registry::CONTEXT_MENU_ENABLED,  static_cast<DWORD>(app.contextMenuEnabled));
         Persistence::Registry::SaveSetting(Constants::Registry::KIOSK_LOCK,            static_cast<DWORD>(app.isLocked));

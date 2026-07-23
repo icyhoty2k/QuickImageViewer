@@ -1,4 +1,5 @@
 #pragma once
+#include <string>
 #include <windows.h>
 
 namespace UI {
@@ -13,6 +14,8 @@ namespace UI {
         static bool Confirm(HWND hOwner, const wchar_t *text, const wchar_t *caption);
         static int  PromptInt(HWND hOwner, const wchar_t *caption, const wchar_t *label,
                               int currentValue, int minVal, int maxVal, int defaultValue);
+        static int  PromptFloat(HWND hOwner, const wchar_t *caption, const wchar_t *label,
+                                float currentValue, float minVal, float maxVal, float defaultValue);
 
         static void ApplyTheme(); // called externally on theme change
 
@@ -27,9 +30,19 @@ namespace UI {
         static HFONT  s_font;
         static HBRUSH s_bgBrush;
         static HBRUSH s_editBrush;
+        static HBRUSH s_errorBrush;
         static int    s_intMin;
         static int    s_intMax;
         static int    s_defaultValue;
+
+        static float  s_floatMin;
+        static float  s_floatMax;
+        static float  s_floatDefault;
+        static bool   s_isFloat;
+        static bool   s_isFloatError;
+        static bool   s_isIntError;
+        static std::wstring s_floatLabel;
+        static std::wstring s_intLabel;
 
         // ── Window 1: Message  [OK] ─────────────────────────────────────────────
         static HWND s_hwndMsg;
