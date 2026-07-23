@@ -519,6 +519,10 @@ LRESULT CALLBACK MainAppWndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM l
         }
 
         case WM_SETCURSOR:
+            if (app.isContextMenuOpen) {
+                SetCursor(LoadCursor(nullptr, IDC_ARROW));
+                return TRUE;
+            }
             if (g_scanInProgress.load(std::memory_order_relaxed)) {
                 SetCursor(Constants::Cursors::CURR_APPSTARTING);
                 return TRUE;

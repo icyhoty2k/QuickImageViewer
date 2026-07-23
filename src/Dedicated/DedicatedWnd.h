@@ -120,6 +120,8 @@ class DedicatedWnd : public FloatingPanelWnd {
         bool  DialogConfirm(const std::wstring &text, const wchar_t *caption);
         int   DialogPromptInt(const wchar_t *caption, const wchar_t *label,
                               int cur, int lo, int hi, int def);
+        int   DialogPromptFloat(const wchar_t *caption, const wchar_t *label,
+                                float cur, float lo, float hi, float def);
         void  PushTopmostOff();
         void  PopTopmost();
 

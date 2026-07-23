@@ -144,7 +144,6 @@ struct AppState {
 
     // Left click temp zoom + saved state
     bool lmbDidZoom = false; // true when LMB press actually applied the 3x zoom
-    bool cursorHiddenByZoom = false;
     float savedZoom = 1.0f;
     float savedOffsetX = 0.0f;
     float savedOffsetY = 0.0f;

@@ -185,9 +185,8 @@ namespace {
         wchar_t buf[80];
         swprintf_s(buf, L"VRAM Cache Size: %d", app.vramCacheCount);
         AppendMenuW(m, MF_STRING, 17, buf);
-        const int zc = static_cast<int>(app.zoomClickMultiplier + 0.5f);
-        if (zc <= 1) swprintf_s(buf, L"Left-Click Zoom: Off");
-        else         swprintf_s(buf, L"Left-Click Zoom: %dx", zc);
+        if (app.zoomClickMultiplier <= Constants::ZOOM_CLICK_MIN) swprintf_s(buf, L"Left-Click Zoom: Off");
+        else         swprintf_s(buf, L"Left-Click Zoom: %.2fx", app.zoomClickMultiplier);
         AppendMenuW(m, MF_STRING, 62, buf);
         swprintf_s(buf, L"Window Width: %d",  app.baseWidth);   AppendMenuW(m, MF_STRING, 23, buf);
         swprintf_s(buf, L"Window Height: %d", app.baseHeight);  AppendMenuW(m, MF_STRING, 24, buf);
@@ -398,6 +397,9 @@ void ContextMenuHandler::Show(HWND hWnd, int x, int y) {
     }
     KillTimer(hWnd, Constants::Slideshow::CURSOR_TIMER_ID);
 
+    // Force arrow — TrackPopupMenu inherits the current cursor for its popup window
+    SetCursor(LoadCursor(nullptr, IDC_ARROW));
+
     // TPM_RETURNCMD makes TrackPopupMenu return the chosen id instead of posting
     // WM_COMMAND, so everything dispatches inline.
     int cmd = TrackMenuAt(BuildMenu(hWnd), hWnd, x, y);
@@ -413,6 +415,10 @@ void ContextMenuHandler::Show(HWND hWnd, int x, int y) {
         cmd = TrackMenuAt(BuildTransitionMenu(), hWnd, x, y);
         Dispatch(hWnd, cmd);
     }
+
+    // Eat the click that dismissed the menu so it doesn't trigger zoom
+    MSG peek;
+    while (PeekMessageW(&peek, hWnd, WM_LBUTTONDOWN, WM_LBUTTONUP, PM_REMOVE));
 
     app.isContextMenuOpen = false;
     // Restart the inactivity countdown only if a slideshow is actually running.

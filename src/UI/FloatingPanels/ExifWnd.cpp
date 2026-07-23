@@ -1,6 +1,7 @@
 #include "ExifWnd.h"
 #include "../../GeoNames.h"
 #include "../../Platform/Constants.h"
+#include "../../Platform/ConstantsTheme.h"
 #include "../../AppState.h"
 #include "../../WorkerThread.h"
 #include "../../Input/MouseHandler.h"
@@ -789,7 +790,7 @@ namespace UI {
                         RECT lr = {pad, y, pad + labelW, y + rowH};
                         DrawTextW(hdc, row.label.c_str(), -1, &lr, DT_LEFT | DT_VCENTER | DT_SINGLELINE);
 
-                        const COLORREF valColor = row.action.empty() ? clrVal : RGB(100, 180, 255);
+                        const COLORREF valColor = row.action.empty() ? clrVal : Constants::Theme::Markers::INFO;
                         SetTextColor(hdc, valColor);
                         const int valCR = (inFileSection && thumbColW > 0) ? textCR : cR;
                         RECT vr = {pad + labelW + valGap, y, valCR, y + rowH};

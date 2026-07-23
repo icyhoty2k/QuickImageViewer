@@ -132,7 +132,7 @@ void MouseHandler::HandleButtonDown(HWND hWnd, UINT message, WPARAM wParam, LPAR
         app.savedOffsetY = app.viewport.offsetY;
         app.lmbDidZoom = false;
 
-        if (!imageOverflows && app.zoomClickMultiplier > 1.0f) {
+        if (!imageOverflows && app.zoomClickMultiplier > Constants::ZOOM_CLICK_MIN) {
             // Image fits inside the viewport — apply the click-zoom (1 = off).
             float centerX = winW / 2.0f;
             float centerY = winH / 2.0f;
@@ -151,10 +151,11 @@ void MouseHandler::HandleButtonDown(HWND hWnd, UINT message, WPARAM wParam, LPAR
             app.viewport.offsetY = dy * (1.0f - Z) + Z * app.savedOffsetY;
 
             app.lmbDidZoom = true;
-            if (!app.cursorHiddenByZoom) {
-                ShowCursor(FALSE);
-                app.cursorHiddenByZoom = true;
-            }
+            ShowCursor(TRUE);
+            RECT clipRc;
+            GetClientRect(hWnd, &clipRc);
+            MapWindowPoints(hWnd, nullptr, (POINT*)&clipRc, 2);
+            ClipCursor(&clipRc);
             InvalidateRect(hWnd, nullptr, FALSE);
         }
 
@@ -189,11 +190,8 @@ void MouseHandler::HandleButtonUp(HWND hWnd, UINT message, WPARAM, LPARAM) {
                 app.viewport.offsetX = app.savedOffsetX;
                 app.viewport.offsetY = app.savedOffsetY;
             }
-            if (app.cursorHiddenByZoom) {
-                ShowCursor(TRUE);
-                app.cursorHiddenByZoom = false;
-            }
-            app.lmbDidZoom = false;
+            ShowCursor(TRUE);
+            ClipCursor(nullptr);            app.lmbDidZoom = false;
             app.viewport.isDragging = false;
             ReleaseCapture();
             UpdateHoverCursor(hWnd);
@@ -208,10 +206,8 @@ void MouseHandler::HandleButtonUp(HWND hWnd, UINT message, WPARAM, LPARAM) {
         // the new non-dragging state.
         app.viewport.isDragging = false;
         ReleaseCapture();
-        if (app.cursorHiddenByZoom) {
-            ShowCursor(TRUE);
-            app.cursorHiddenByZoom = false;
-        }
+        ShowCursor(TRUE);
+        ClipCursor(nullptr);
         UpdateHoverCursor(hWnd);
         InvalidateRect(hWnd, nullptr, FALSE);
     }
@@ -245,6 +241,8 @@ void MouseHandler::HandleButtonUp(HWND hWnd, UINT message, WPARAM, LPARAM) {
             }
 
             InvalidateRect(hWnd, nullptr, FALSE);
+            ShowCursor(TRUE);
+            ClipCursor(nullptr);
         }
         app.isMidDragging = false;
         app.hasMidMoved = false;
@@ -295,11 +293,7 @@ void MouseHandler::HandleButtonUp(HWND hWnd, UINT message, WPARAM, LPARAM) {
                                  target.right - target.left,
                                  target.bottom - target.top,
                                  SWP_NOZORDER | SWP_NOACTIVATE | SWP_FRAMECHANGED);
-            InvalidateRect(hWnd, nullptr, FALSE);
-            if (app.cursorHiddenByZoom) {
-                ShowCursor(TRUE);
-                app.cursorHiddenByZoom = false;
-            }
+                    InvalidateRect(hWnd, nullptr, FALSE);
                 }
             }
         }
@@ -317,15 +311,14 @@ void MouseHandler::HandleButtonUp(HWND hWnd, UINT message, WPARAM, LPARAM) {
         app.lmbDidZoom = false;
         app.viewport.isDragging = false;
         ReleaseCapture();
-        if (app.cursorHiddenByZoom) {
-            ShowCursor(TRUE);
-            app.cursorHiddenByZoom = false;
-        }
+        ShowCursor(TRUE);
+        ClipCursor(nullptr);
         InvalidateRect(hWnd, nullptr, FALSE);
     }
 }
 
 bool MouseHandler::UpdateHoverCursor(HWND hWnd) {
+    if (app.isContextMenuOpen) return false;
     if (app.slideshow.running && app.slideshow.cursorHidden) return false;
     if (app.isMidDragging || app.viewport.isDragging || app.isWindowDragging) return false;
 
@@ -357,6 +350,8 @@ bool MouseHandler::UpdateHoverCursor(HWND hWnd) {
 }
 
 void MouseHandler::HandleMouseMove(HWND hWnd, LPARAM lParam) {
+    if (app.isContextMenuOpen) return;
+
     // Context-menu gating: once the cursor travels past the tolerance while RMB
     // is held, the gesture is a drag (window move / pan) — not a click — so the
     // right-click menu must not fire on release.
@@ -408,8 +403,8 @@ void MouseHandler::HandleMouseMove(HWND hWnd, LPARAM lParam) {
 
         // Update Position — inverse during click-zoom (mouse direction mirrors image movement)
         if (app.lmbDidZoom) {
-            app.viewport.offsetX -= dx;
-            app.viewport.offsetY -= dy;
+            app.viewport.offsetX -= dx*(app.zoomClickMultiplier-1.0f);
+            app.viewport.offsetY -= dy*(app.zoomClickMultiplier-1.0f);;
         } else {
             app.viewport.offsetX += dx;
             app.viewport.offsetY += dy;
