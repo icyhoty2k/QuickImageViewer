@@ -949,19 +949,7 @@ namespace UI {
         m_query.clear();
         m_entryMatch.clear();
         m_scrollOffsetY = 0;
-        if (m_hWnd) {
-            if (m_hParent) {
-                RECT rcParent, rcHelp;
-                GetWindowRect(m_hParent, &rcParent);
-                GetWindowRect(m_hWnd, &rcHelp);
-                int x = rcParent.left + ((rcParent.right - rcParent.left) - (rcHelp.right - rcHelp.left)) / 2;
-                int y = rcParent.top + ((rcParent.bottom - rcParent.top) - (rcHelp.bottom - rcHelp.top)) / 2;
-                SetWindowPos(m_hWnd, HWND_TOPMOST, x, y, 0, 0, SWP_NOSIZE | SWP_SHOWWINDOW);
-            } else {
-                ShowWindow(m_hWnd, SW_SHOW);
-            }
-            SetForegroundWindow(m_hWnd);
-        }
+        ShowCenterOverParent();
     }
 
     // =========================================================================
@@ -1377,9 +1365,9 @@ namespace UI {
 
                 if (pt.x >= m_footerLinkRect.left && pt.x <= m_footerLinkRect.right &&
                     pt.y >= m_footerLinkRect.top && pt.y <= m_footerLinkRect.bottom) {
-                    SetCursor(LoadCursor(nullptr, IDC_HAND));
+                    SetCursor(Constants::Cursors::CURR_CLICK);
                 } else {
-                    SetCursor(LoadCursor(nullptr, IDC_ARROW));
+                    SetCursor(Constants::Cursors::CURR_DEFAULT);
                 }
 
                 if (m_sbDragging) {

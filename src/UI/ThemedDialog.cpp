@@ -5,6 +5,7 @@
 #include "Shortcuts.h"
 #include "../AppState.h"
 #include "../Platform/ConstantsTheme.h"
+#include "../Platform/Constants.h"
 
 namespace UI {
 
@@ -139,7 +140,7 @@ namespace UI {
         wc.cbSize        = sizeof(wc);
         wc.lpfnWndProc   = WndProc;
         wc.hInstance     = hInst;
-        wc.hCursor       = LoadCursor(nullptr, IDC_ARROW);
+        wc.hCursor       = Constants::Cursors::CURR_DEFAULT;
         wc.hbrBackground = nullptr;
         wc.lpszClassName = kClass;
         RegisterClassExW(&wc);

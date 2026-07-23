@@ -248,15 +248,17 @@ void ApplyCmdArgs(HWND hWnd, const CmdArgs &args, int nCmdShow) {
     if (args.monitorNum >= 1) {
         struct MonitorInfo {
             int target, current;
-            RECT rc;
+            RECT rcWork;
             bool found;
         };
         MonitorInfo mi{args.monitorNum, 0, {}, false};
         EnumDisplayMonitors(nullptr, nullptr,
-                            [](HMONITOR, HDC, RECT *pRc, LPARAM lp) -> BOOL {
+                            [](HMONITOR hMon, HDC, RECT *, LPARAM lp) -> BOOL {
                                 auto *m = reinterpret_cast<MonitorInfo *>(lp);
                                 if (++m->current == m->target) {
-                                    m->rc = *pRc;
+                                    MONITORINFO miMon = {sizeof(miMon)};
+                                    GetMonitorInfoW(hMon, &miMon);
+                                    m->rcWork = miMon.rcWork;
                                     m->found = true;
                                     return FALSE;
                                 }
@@ -267,8 +269,8 @@ void ApplyCmdArgs(HWND hWnd, const CmdArgs &args, int nCmdShow) {
         if (mi.found) {
             int w = static_cast<int>(app.baseWidth  * app.dpiScale);
             int h = static_cast<int>(app.baseHeight * app.dpiScale);
-            int x = mi.rc.left + (mi.rc.right - mi.rc.left - w) / 2;
-            int y = mi.rc.top + (mi.rc.bottom - mi.rc.top - h) / 2;
+            int x = mi.rcWork.left + (mi.rcWork.right - mi.rcWork.left - w) / 2;
+            int y = mi.rcWork.top  + (mi.rcWork.bottom - mi.rcWork.top  - h) / 2;
             SetWindowPos(hWnd, nullptr, x, y, w, h, SWP_NOZORDER | SWP_NOACTIVATE);
         }
     }

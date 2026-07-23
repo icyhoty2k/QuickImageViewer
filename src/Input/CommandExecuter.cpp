@@ -1170,11 +1170,11 @@ void InputManager::ExecuteCommand(HWND hWnd, Command cmd) {
                 if (!GetMonitorInfo(hMon2, &mi2)) break;
                 int tw = (int)(app.baseWidth  * app.dpiScale);
                 int th = (int)(app.baseHeight * app.dpiScale);
-                int mw = mi2.rcMonitor.right  - mi2.rcMonitor.left;
-                int mh = mi2.rcMonitor.bottom - mi2.rcMonitor.top;
+                int mw = mi2.rcWork.right - mi2.rcWork.left;
+                int mh = mi2.rcWork.bottom - mi2.rcWork.top;
                 SetWindowPos(hWnd, nullptr,
-                             mi2.rcMonitor.left + (mw - tw) / 2,
-                             mi2.rcMonitor.top  + (mh - th) / 2,
+                             mi2.rcWork.left  + (mw - tw) / 2,
+                             mi2.rcWork.top   + (mh - th) / 2,
                              tw, th,
                              SWP_NOZORDER | SWP_NOACTIVATE | SWP_FRAMECHANGED);
                 InvalidateRect(hWnd, nullptr, FALSE);

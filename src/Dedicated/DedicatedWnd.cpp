@@ -156,8 +156,8 @@ void DedicatedWnd::Show() {
     CancelTextEdit();
     m_scrollY = 0;
     BuildRows();
-    IPanelWindow::Show();
-    Repaint();
+    ShowCenterOverParent();
+
 }
 
 // =============================================================================
@@ -1291,14 +1291,14 @@ LRESULT DedicatedWnd::HandlePanelMessage(UINT message, WPARAM wParam, LPARAM lPa
             // The scrollbar keeps the arrow — a hand there would suggest the
             // track is a button.
             if (PtInRect(&m_trackRect, pt)) {
-                SetCursor(LoadCursorW(nullptr, IDC_ARROW));
+                SetCursor(Constants::Cursors::CURR_DEFAULT);
                 return TRUE;
             }
             if (HitTestButton(pt) >= 0 || HitTestRow(pt) >= 0) {
-                SetCursor(LoadCursorW(nullptr, IDC_HAND));
+                SetCursor(Constants::Cursors::CURR_CLICK);
                 return TRUE;
             }
-            SetCursor(LoadCursorW(nullptr, IDC_ARROW));
+            SetCursor(Constants::Cursors::CURR_DEFAULT);
             return TRUE;
         }
 

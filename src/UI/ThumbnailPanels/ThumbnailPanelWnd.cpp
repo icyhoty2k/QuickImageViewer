@@ -362,7 +362,7 @@ namespace UI {
         wc.style = CS_DBLCLKS;
         wc.lpfnWndProc = IPanelWindow::WindowRouter;
         wc.hInstance = hInstance;
-        wc.hCursor = LoadCursor(nullptr, IDC_ARROW);
+        wc.hCursor = Constants::Cursors::CURR_DEFAULT;
         wc.lpszClassName = ClassName();
         RegisterClassW(&wc);
 
@@ -1267,12 +1267,12 @@ namespace UI {
                     const float visible3 = (vert3 ? sh3 : sw3) - 2.0f * mg3;
 
                     if (content3 > visible3) {
-                        SetCursor(LoadCursor(nullptr, IDC_HAND));
+                        SetCursor(Constants::Cursors::CURR_CLICK);
                     } else {
-                        SetCursor(LoadCursor(nullptr, IDC_ARROW));
+                        SetCursor(Constants::Cursors::CURR_DEFAULT);
                     }
                 } else {
-                    SetCursor(LoadCursor(nullptr, IDC_ARROW));
+                    SetCursor(Constants::Cursors::CURR_DEFAULT);
                 }
 
                 int newHover = -1;

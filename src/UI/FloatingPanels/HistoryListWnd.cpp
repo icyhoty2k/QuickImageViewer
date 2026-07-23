@@ -1701,12 +1701,12 @@ namespace UI {
                     int totalHSb = CalcTotalContentH(static_cast<int>(g_displayList.size()), dpiSb);
                     int winHSb = rcSb.bottom - rcSb.top;
                     int maxScrSb = std::max(0, totalHSb - winHSb);
-                    SetCursor(LoadCursor(nullptr, (maxScrSb > 0) ? IDC_HAND : IDC_ARROW));
+                    SetCursor((maxScrSb > 0) ? Constants::Cursors::CURR_CLICK : Constants::Cursors::CURR_DEFAULT);
                 } else {
                     POINT ptMov = {mx, my};
                     const RECT& cr = g_filter.GetClearRect();
                     bool onClearIcon = (cr.right > cr.left) && PtInRect(&cr, ptMov);
-                    SetCursor(LoadCursor(nullptr, onClearIcon ? IDC_HAND : IDC_ARROW));
+                    SetCursor(onClearIcon ? Constants::Cursors::CURR_CLICK : Constants::Cursors::CURR_DEFAULT);
                 }
 
                 if (g_sbDragging) {
@@ -1745,23 +1745,23 @@ namespace UI {
                 {
                     POINT pt = {mx, my};
                     if (g_shortcutF5Rect.right > g_shortcutF5Rect.left && PtInRect(&g_shortcutF5Rect, pt)) {
-                        SetCursor(LoadCursor(nullptr, IDC_HAND));
+                        SetCursor(Constants::Cursors::CURR_CLICK);
                         return 0;
                     }
                     if (g_shortcutCtrlTabRect.right > g_shortcutCtrlTabRect.left && PtInRect(&g_shortcutCtrlTabRect, pt)) {
-                        SetCursor(LoadCursor(nullptr, IDC_HAND));
+                        SetCursor(Constants::Cursors::CURR_CLICK);
                         return 0;
                     }
                     if (g_exeLinkRect.right > g_exeLinkRect.left && PtInRect(&g_exeLinkRect, pt)) {
-                        SetCursor(LoadCursor(nullptr, IDC_HAND));
+                        SetCursor(Constants::Cursors::CURR_CLICK);
                         return 0;
                     }
                     if (g_cacheIndexRect.right > g_cacheIndexRect.left && PtInRect(&g_cacheIndexRect, pt)) {
-                        SetCursor(LoadCursor(nullptr, IDC_HAND));
+                        SetCursor(Constants::Cursors::CURR_CLICK);
                         return 0;
                     }
                     if (g_f5IndexRect.right > g_f5IndexRect.left && PtInRect(&g_f5IndexRect, pt)) {
-                        SetCursor(LoadCursor(nullptr, IDC_HAND));
+                        SetCursor(Constants::Cursors::CURR_CLICK);
                         return 0;
                     }
                 }
@@ -1770,15 +1770,15 @@ namespace UI {
                     if (idxRect.right > idxRect.left) {
                         POINT pt = {mx, my};
                         if (PtInRect(&idxRect, pt)) {
-                            SetCursor(LoadCursor(nullptr, IDC_HAND));
-                            return 0;
+                        SetCursor(Constants::Cursors::CURR_CLICK);
+                        return 0;
                         }
                     }
                 }
 
                 if (newHover != g_hoverRow) {
                     g_hoverRow = newHover;
-                    SetCursor(LoadCursor(nullptr, (g_hoverRow >= 0) ? IDC_HAND : IDC_ARROW));
+                    SetCursor((g_hoverRow >= 0) ? Constants::Cursors::CURR_CLICK : Constants::Cursors::CURR_DEFAULT);
                     InvalidateRect(m_hWnd, nullptr, FALSE);
                 }
                 return 0;

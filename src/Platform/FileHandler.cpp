@@ -360,7 +360,7 @@ static void LaunchBackgroundScan(HWND hWnd, std::wstring dir,
 
 // Called on the UI thread from the WM_QIV_SCAN_COMPLETE handler.
 void HandleScanComplete(HWND hWnd, ScanResult *result) {
-    SetCursor(LoadCursorW(nullptr, IDC_ARROW));
+    SetCursor(Constants::Cursors::CURR_DEFAULT);
 
     if (result->generation != g_scanGeneration.load(std::memory_order_relaxed)) {
         delete result;
@@ -743,6 +743,7 @@ void ApplyOrientationToViewport(USHORT orient) {
             app.viewport.flippedH = true;
             break;
         case 8: app.viewport.rotation = 270;
+
             break;
         default: break; // 1 = normal
     }

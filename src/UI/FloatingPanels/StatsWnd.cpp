@@ -253,16 +253,7 @@ namespace UI {
         m_links.clear();
         GatherStats();
 
-        RECT pr;
-        GetWindowRect(m_hParent, &pr);
-        RECT wr;
-        GetWindowRect(m_hWnd, &wr);
-        int ww = wr.right - wr.left, wh = wr.bottom - wr.top;
-        int px = pr.left + (pr.right - pr.left - ww) / 2;
-        int py = pr.top + (pr.bottom - pr.top - wh) / 2;
-        SetWindowPos(m_hWnd, HWND_TOPMOST, px, py, 0, 0, SWP_NOSIZE | SWP_FRAMECHANGED);
-        ShowWindow(m_hWnd, SW_SHOW);
-        SetForegroundWindow(m_hWnd);
+        ShowCenterOverParent();
         InvalidateRect(m_hWnd, nullptr, FALSE);
     }
 
@@ -338,7 +329,7 @@ namespace UI {
                 ScreenToClient(m_hWnd, &pt);
                 for (auto &lnk: m_links) {
                     if (PtInRect(&lnk.rect, pt)) {
-                        SetCursor(LoadCursor(nullptr, IDC_HAND));
+                        SetCursor(Constants::Cursors::CURR_CLICK);
                         return TRUE;
                     }
                 }

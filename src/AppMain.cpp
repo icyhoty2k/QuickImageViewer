@@ -520,7 +520,7 @@ LRESULT CALLBACK MainAppWndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM l
 
         case WM_SETCURSOR:
             if (g_scanInProgress.load(std::memory_order_relaxed)) {
-                SetCursor(LoadCursorW(nullptr, IDC_APPSTARTING));
+                SetCursor(Constants::Cursors::CURR_APPSTARTING);
                 return TRUE;
             }
             break;
@@ -735,7 +735,7 @@ int WINAPI wWinMain(HINSTANCE hInstance, [[maybe_unused]] HINSTANCE hPrevInstanc
     wc.hInstance = hInstance;
     wc.lpszClassName = app.windowClassName.c_str();
     wc.style = CS_DBLCLKS;
-    wc.hCursor = LoadCursor(nullptr, IDC_ARROW);
+    wc.hCursor = Constants::Cursors::CURR_DEFAULT;
     // One source of truth for the icon — a dedicated instance must look distinct
     // everywhere (window, taskbar, alt-tab, tray, panels). The small/taskbar
     // icons are set separately by AddTrayIcon via WM_SETICON.

@@ -35,18 +35,7 @@ namespace UI {
         m_outOfRange = false;
         m_total = static_cast<int>(app.playlist.size());
 
-        RECT pr;
-        GetWindowRect(m_hParent, &pr);
-        RECT wr;
-        GetWindowRect(m_hWnd, &wr);
-        int ww = wr.right - wr.left;
-        int wh = wr.bottom - wr.top;
-        int px = pr.left + (pr.right - pr.left - ww) / 2;
-        int py = pr.top + (pr.bottom - pr.top - wh) / 2;
-        SetWindowPos(m_hWnd, HWND_TOPMOST, px, py, 0, 0, SWP_NOSIZE | SWP_FRAMECHANGED);
-
-        ShowWindow(m_hWnd, SW_SHOW);
-        SetForegroundWindow(m_hWnd);
+        ShowCenterOverParent();
         InvalidateRect(m_hWnd, nullptr, FALSE);
     }
 
