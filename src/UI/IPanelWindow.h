@@ -66,6 +66,17 @@ namespace UI {
             // return false to let the base hide the panel. Default: do not consume.
             virtual bool OnLocalHide() { return false; }
 
+            void ShowCenterOverParent() {
+                if (!m_hParent || !m_hWnd) return;
+                RECT pr, wr;
+                GetWindowRect(m_hParent, &pr);
+                GetWindowRect(m_hWnd, &wr);
+                int px = pr.left + ((pr.right - pr.left) - (wr.right - wr.left)) / 2;
+                int py = pr.top + ((pr.bottom - pr.top) - (wr.bottom - wr.top)) / 2;
+                SetWindowPos(m_hWnd, nullptr, px, py, 0, 0, SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE);
+                IPanelWindow::Show();
+            }
+
             // The bridge between Win32 and C++
             static LRESULT CALLBACK WindowRouter(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) {
                 IPanelWindow *pThis = nullptr;

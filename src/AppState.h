@@ -12,6 +12,7 @@
 namespace fs = std::filesystem;
 
 #include "Constants.h"
+#include "ConstantsTheme.h"
 #include "SlideshowTransitions.h"
 
 struct SlideshowState {
@@ -251,13 +252,13 @@ struct AppState {
 
         HMONITOR hMonitor = MonitorFromWindow(hWnd, MONITOR_DEFAULTTONEAREST);
         MONITORINFO mi = {sizeof(mi)};
-        if (GetMonitorInfo(hMonitor, &mi)) {
-            int monitorW = mi.rcMonitor.right - mi.rcMonitor.left;
-            int monitorH = mi.rcMonitor.bottom - mi.rcMonitor.top;
+        if (GetMonitorInfoW(hMonitor, &mi)) {
+            int workW = mi.rcWork.right - mi.rcWork.left;
+            int workH = mi.rcWork.bottom - mi.rcWork.top;
 
             SetWindowPos(hWnd, NULL,
-                         mi.rcMonitor.left + (monitorW - targetW) / 2,
-                         mi.rcMonitor.top + (monitorH - targetH) / 2,
+                         mi.rcWork.left + (workW - targetW) / 2,
+                         mi.rcWork.top  + (workH - targetH) / 2,
                          targetW, targetH,
                          SWP_NOZORDER | SWP_NOACTIVATE | SWP_FRAMECHANGED);
         }

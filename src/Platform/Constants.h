@@ -28,9 +28,7 @@
 // =========================================================================
 
 #include <iterator>
-#include <d2d1.h>
-
-#include "ConstantsTheme.h"  // All application colors with theme support
+#include "../resources/resource.h"
 
 namespace Constants {
     constexpr const wchar_t *BASE_NAME = L"QuickImageViewer";
@@ -641,18 +639,12 @@ namespace Constants {
         constexpr int   CARET_GAP            = 0;    // horizontal space between caret and text
     }
 
-    // =========================================================================
-    // Cursors — LMB mode indicators
-    // =========================================================================
-    // Change these IDC_ values to swap the cursor for each mode.
-    // Values are the raw resource IDs (WORD) behind the IDC_ macros.
-    // Use as: LoadCursor(nullptr, MAKEINTRESOURCEW(Constants::Cursors::LMB_ZOOM))
-    // Change these to any other OCR_* value to swap the cursor for each mode.
     namespace Cursors {
-        constexpr WORD LMB_ZOOM = 32515; // IDC_CROSS  — LMB will 3x zoom
-        constexpr WORD LMB_PAN = 32649; // IDC_HAND   — LMB will pan
-        constexpr WORD RMB_DOWN = 32512; // IDC_ARROW  — RMB is held
-        constexpr WORD DEFAULT = 32512; // IDC_ARROW  — restored after action
+          inline const HCURSOR CURR_ZOOM =  LoadCursorW(GetModuleHandleW(nullptr), MAKEINTRESOURCEW(IDC_ZOOM_CURSOR));
+          inline const HCURSOR CURR_GRAB =  LoadCursorW(GetModuleHandleW(nullptr),  MAKEINTRESOURCEW(IDC_GRAB_CURSOR));
+          inline const HCURSOR CURR_DEFAULT =  LoadCursorW(nullptr, IDC_ARROW);
+          inline const HCURSOR CURR_CLICK =  LoadCursorW(nullptr, IDC_HAND);
+          inline const HCURSOR CURR_APPSTARTING =  LoadCursorW(nullptr, IDC_APPSTARTING);
     }
 
     namespace FileHandler {

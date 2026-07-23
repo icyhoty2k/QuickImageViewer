@@ -2,6 +2,7 @@
 #include <windows.h>
 #include <string>
 #include "PromotionPlaylist.h"
+#include "Platform/ConstantsTheme.h"
 
 // =============================================================================
 // DedicatedInstance — identity and configuration of one named dedicated copy.
