@@ -657,7 +657,13 @@ HRESULT RendererD2D::PreloadBitmap(const std::wstring &filePath, int requestInde
                 UINT frameCount = 1;
                 decoder->GetFrameCount(&frameCount);
 
-                if (frameCount > 1) {
+                // Only treat multi-frame as animated GIF — ICO/CUR/TIFF
+                // use multi-frame for resolutions/pages, not animation.
+                GUID containerFormat;
+                bool isGif = SUCCEEDED(decoder->GetContainerFormat(&containerFormat)) &&
+                             containerFormat == GUID_ContainerFormatGif;
+
+                if (frameCount > 1 && isGif) {
                     // ── Animated GIF path ──────────────────────────────────────────
                     // Read logical screen size from the GIF container metadata.
                     UINT screenW = 0, screenH = 0;
@@ -803,8 +809,21 @@ HRESULT RendererD2D::PreloadBitmap(const std::wstring &filePath, int requestInde
                 }
 
                 // ── Single-frame WIC path (non-GIF or static GIF) ─────────────
+                // For ICO/CUR with multiple resolutions, pick the largest frame.
+                UINT pickFrame = 0;
+                if (frameCount > 1) {
+                    UINT bestArea = 0;
+                    for (UINT fi = 0; fi < frameCount; ++fi) {
+                        Microsoft::WRL::ComPtr<IWICBitmapFrameDecode> fiFrame;
+                        if (FAILED(decoder->GetFrame(fi, &fiFrame))) continue;
+                        UINT fw = 0, fh = 0;
+                        fiFrame->GetSize(&fw, &fh);
+                        UINT area = fw * fh;
+                        if (area > bestArea) { bestArea = area; pickFrame = fi; }
+                    }
+                }
                 Microsoft::WRL::ComPtr<IWICBitmapFrameDecode> frame;
-                if (FAILED(decoder->GetFrame(0, &frame))) return;
+                if (FAILED(decoder->GetFrame(pickFrame, &frame))) return;
 
                 frame->GetSize(&width, &height);
 
