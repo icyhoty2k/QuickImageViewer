@@ -143,6 +143,7 @@ namespace Shortcuts {
     // -------------------------------------------------------------------------
 
     constexpr UINT SC_ZOOM_IN_NUMPAD = VK_ADD;
+    constexpr UINT SC_ZOOM_TO = '0';
     constexpr UINT SC_ZOOM_OUT_NUMPAD = VK_SUBTRACT;
     constexpr UINT SC_ZOOM_RESET = VK_MULTIPLY;
 

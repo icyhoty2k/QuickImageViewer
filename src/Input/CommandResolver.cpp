@@ -161,6 +161,9 @@ Command InputManager::ResolveKeyboardKeys(UINT key, LPARAM lParam) {
             if (shift) return Command::ResizeWindowSmaller;
             return Command::ZoomOut;
         case Shortcuts::SC_ZOOM_RESET: return Command::ZoomReset;
+        case Shortcuts::SC_ZOOM_TO: // '0' plain
+            if (!ctrl && !alt && !shift) return Command::ZoomTo;
+            break;
 
         // --- Transform ---
         case Shortcuts::SC_TRANSFORM_ROTATE:

@@ -180,6 +180,20 @@ namespace Constants::Messages {
     // Thumbnail strip visual effects
     constexpr const wchar_t *THUMB_EFFECTS_ON  = L"Thumbnail Effects" STR_STATE_ON;
     constexpr const wchar_t *THUMB_EFFECTS_OFF = L"Thumbnail Effects" STR_STATE_OFF;
+
+    // View modes (keys 1-5)
+    constexpr const wchar_t *VIEW_MODE_PREFIX = L"View: ";
+    constexpr const wchar_t *VIEW_MODE_NAMES[] = {
+        L"Fit to View",
+        L"Fit to Width",
+        L"Fit to Height",
+        L"Fit to Window",
+        L"Original Size"
+    };
+
+    // Zoom popup
+    constexpr const wchar_t *ZOOM_TO_PREFIX = L"Zoom: ";
+    constexpr const wchar_t *ZOOM_TO_INPUT_HINT = L"Enter zoom multiplier ( 0.001 – 99999 )";
 }
 
 namespace Constants::Strings {
