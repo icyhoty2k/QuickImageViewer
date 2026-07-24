@@ -257,12 +257,12 @@ void InputManager::ExecuteCommand(HWND hWnd, Command cmd) {
         // Zoom
         // -----------------------------------------------------------------------
         case Command::ZoomIn:
-            app.viewport.zoom *= Constants::ZOOM_STEP;
+            app.viewport.zoom = std::clamp(app.viewport.zoom * Constants::ZOOM_STEP, Constants::ZOOM_MIN, Constants::ZOOM_MAX);
             InvalidateRect(hWnd, nullptr, FALSE);
             break;
 
         case Command::ZoomOut:
-            app.viewport.zoom /= Constants::ZOOM_STEP;
+            app.viewport.zoom = std::clamp(app.viewport.zoom / Constants::ZOOM_STEP, Constants::ZOOM_MIN, Constants::ZOOM_MAX);
             InvalidateRect(hWnd, nullptr, FALSE);
             break;
 
@@ -272,6 +272,11 @@ void InputManager::ExecuteCommand(HWND hWnd, Command cmd) {
             app.viewport.offsetY = 0.0f;
             InvalidateRect(hWnd, nullptr, FALSE);
             break;
+
+        case Command::ZoomTo: {
+            uiManager.getZoomWindow().Show();
+            break;
+        }
 
         // -----------------------------------------------------------------------
         // Transform

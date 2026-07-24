@@ -40,6 +40,7 @@ set(SOURCES
         src/UI/FloatingPanels/HelpWnd.cpp
         src/UI/FloatingPanels/ExifWnd.cpp
         src/UI/FloatingPanels/JumpToWnd.cpp
+        src/UI/FloatingPanels/ZoomWnd.cpp
         src/UI/FloatingPanels/StatsWnd.cpp
         src/UI/ThumbnailPanels/CacheWnd.cpp
         src/UI/ThumbnailPanels/DirWnd.cpp

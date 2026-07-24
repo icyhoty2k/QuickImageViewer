@@ -64,9 +64,9 @@ namespace UI {
         // Snapshot what is visible so RestoreAllPanels() can replay it. Fixed
         // panels first, then the spawned DirWnd pool. Keep the previous snapshot
         // if nothing is currently visible (nothing new to remember).
-        IPanelWindow *const fixed[] = {
+IPanelWindow *const fixed[] = {
             &helpWnd, &cacheWnd, &dirWnd, &historyListWnd,
-            &exifWnd, &jumpToWnd, &statsWnd
+            &exifWnd, &jumpToWnd, &zoomWnd, &statsWnd
         };
         std::vector<IPanelWindow *> visibleNow;
         for (IPanelWindow *p : fixed)
@@ -82,6 +82,7 @@ namespace UI {
         historyListWnd.Hide();
         exifWnd.Hide();
         jumpToWnd.Hide();
+        zoomWnd.Hide();
         statsWnd.Hide();
         HideAllSpawnedDirWnds();
     }
@@ -96,7 +97,7 @@ namespace UI {
     bool UIManager::AnyPanelVisible() const {
         const IPanelWindow *const fixed[] = {
             &helpWnd, &cacheWnd, &dirWnd, &historyListWnd,
-            &exifWnd, &jumpToWnd, &statsWnd
+            &exifWnd, &jumpToWnd, &zoomWnd, &statsWnd
         };
         for (const IPanelWindow *p : fixed)
             if (p->IsVisible()) return true;
@@ -161,6 +162,16 @@ namespace UI {
         return jumpToWnd;
     }
 
+    ZoomWnd &UIManager::getZoomWindow() {
+        if (isInit(zoomWnd)) return zoomWnd;
+        zoomWnd.Init(m_hInstance, m_hMainWnd);
+        return zoomWnd;
+    }
+
+    void UIManager::ToggleZoomWindow() {
+        Toggle(getZoomWindow());
+    }
+
     FindWnd &UIManager::getFindWindow() {
         if (isInit(findWnd)) return findWnd;
         findWnd.Init(m_hInstance, m_hMainWnd);
@@ -205,8 +216,9 @@ namespace UI {
         applyIfVisible(cacheWnd);
         applyIfVisible(dirWnd);
         applyIfVisible(historyListWnd);
-        applyIfVisible(exifWnd);
+applyIfVisible(exifWnd);
         applyIfVisible(jumpToWnd);
+        applyIfVisible(zoomWnd);
         applyIfVisible(findWnd);
         applyIfVisible(statsWnd);
 
@@ -457,8 +469,9 @@ namespace UI {
 
         applyAndRepaint(helpWnd);
         applyAndRepaint(historyListWnd);
-        applyAndRepaint(exifWnd);
+applyAndRepaint(exifWnd);
         applyAndRepaint(jumpToWnd);
+        applyAndRepaint(zoomWnd);
         applyAndRepaint(findWnd);
         applyAndRepaint(statsWnd);
     }

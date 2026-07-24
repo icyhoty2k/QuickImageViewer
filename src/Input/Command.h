@@ -30,6 +30,7 @@ enum class Command {
     ZoomIn,
     ZoomOut,
     ZoomReset,
+    ZoomTo,
 
     // --- Transform ---
     RotateCW,
