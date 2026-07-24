@@ -642,8 +642,8 @@ namespace Constants {
     }
 
     namespace Cursors {
-          inline const HCURSOR CURR_ZOOM =  LoadCursorW(GetModuleHandleW(nullptr), MAKEINTRESOURCEW(IDC_ZOOM_CURSOR));
-          inline const HCURSOR CURR_GRAB =  LoadCursorW(GetModuleHandleW(nullptr),  MAKEINTRESOURCEW(IDC_GRAB_CURSOR));
+          inline const HCURSOR CURR_ZOOM =  LoadCursorW(GetModuleHandleW(nullptr), MAKEINTRESOURCEW(IDC_ZOOM_CURSOR_L));
+          inline const HCURSOR CURR_GRAB =  LoadCursorW(GetModuleHandleW(nullptr),  MAKEINTRESOURCEW(IDC_GRAB_CURSOR_L));
           inline const HCURSOR CURR_DEFAULT =  LoadCursorW(nullptr, IDC_ARROW);
           inline const HCURSOR CURR_CLICK =  LoadCursorW(nullptr, IDC_HAND);
           inline const HCURSOR CURR_APPSTARTING =  LoadCursorW(nullptr, IDC_APPSTARTING);

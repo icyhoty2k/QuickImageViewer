@@ -401,7 +401,7 @@ void MouseHandler::HandleMouseMove(HWND hWnd, LPARAM lParam) {
 
         float dx = (float) (curMouse.x - app.viewport.lastMouse.x);
         float dy = (float) (curMouse.y - app.viewport.lastMouse.y);
-
+            //pan viewport
         // Update Position — inverse during click-zoom (mouse direction mirrors image movement)
         if (app.lmbDidZoom) {
             app.viewport.offsetX -= dx*(app.zoomClickMultiplier-1.0f);

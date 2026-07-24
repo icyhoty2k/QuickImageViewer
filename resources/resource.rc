@@ -14,8 +14,12 @@ IDR_ADMIN2_DATA        RCDATA   "geoData/admin2.bin"
 IDR_COUNTRY_DATA       RCDATA   "geoData/country.bin"
 
 //Cursors
-IDC_ZOOM_CURSOR        CURSOR   "cursors/qivZoom.cur"
-IDC_GRAB_CURSOR        CURSOR   "cursors/qivGrab.cur"
+IDC_ZOOM_CURSOR        CURSOR   "cursors/qiv_zoom.cur"
+IDC_ZOOM_CURSOR        CURSOR   "cursors/qiv_zoom_l.cur"
+IDC_ZOOM_CURSOR        CURSOR   "cursors/qiv_zoom_xl.cur"
+IDC_GRAB_CURSOR        CURSOR   "cursors/qiv_grab.cur"
+IDC_GRAB_CURSOR        CURSOR   "cursors/qiv_grab_l.cur"
+IDC_GRAB_CURSOR        CURSOR   "cursors/qiv_grab_xl.cur"
 
 
 // Embed the application manifest for high DPI support and common controls
