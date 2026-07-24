@@ -11,8 +11,10 @@
 #include "FloatingPanels/HistoryListWnd.h"
 #include "FloatingPanels/ExifWnd.h"
 #include "FloatingPanels/JumpToWnd.h"
+#include "FloatingPanels/ZoomWnd.h"
 #include "FloatingPanels/FindWnd.h"
 #include "FloatingPanels/StatsWnd.h"
+#include "FloatingPanels/ZoomWnd.h"
 #include "Dedicated/DedicatedWnd.h"
 #include "../Platform/Constants.h"
 
@@ -170,15 +172,17 @@ namespace UI {
 
             // Returns whichever DirWnd the user last clicked in.
             // Defaults to the primary F5 DirWnd.
-            ThumbnailPanelWnd &getActiveDirWnd();
+ThumbnailPanelWnd &getActiveDirWnd();
 
             // Called by ThumbnailPanelWnd on LButtonUp to make it the active panel.
             void SetActiveDirWnd(ThumbnailPanelWnd *panel);
             HistoryListWnd  &getHistoryListWindow();
             JumpToWnd       &getJumpToWindow();
+            ZoomWnd         &getZoomWindow();
             FindWnd         &getFindWindow();
             void             ToggleJumpToWindow();   // hides FindWnd if visible, then toggles JumpToWnd
             void             ToggleFindWindow();     // hides JumpToWnd if visible, then toggles FindWnd
+            void             ToggleZoomWindow();     // toggles ZoomWnd
             StatsWnd        &getStatsWindow();
             DedicatedWnd    &getDedicatedWindow();
             void             ApplyAlwaysOnTop(bool onTop);
@@ -239,6 +243,7 @@ namespace UI {
             HistoryListWnd historyListWnd;
             ExifWnd        exifWnd;
             JumpToWnd      jumpToWnd;
+            ZoomWnd        zoomWnd;
             FindWnd        findWnd;
             StatsWnd       statsWnd;
             DedicatedWnd   dedicatedWnd;

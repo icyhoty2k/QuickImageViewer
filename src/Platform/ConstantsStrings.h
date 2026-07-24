@@ -190,6 +190,10 @@ namespace Constants::Messages {
         L"Fit to Window",
         L"Original Size"
     };
+
+    // Zoom popup
+    constexpr const wchar_t *ZOOM_TO_PREFIX = L"Zoom: ";
+    constexpr const wchar_t *ZOOM_TO_INPUT_HINT = L"Enter zoom multiplier ( 0.001 – 99999 )";
 }
 
 namespace Constants::Strings {

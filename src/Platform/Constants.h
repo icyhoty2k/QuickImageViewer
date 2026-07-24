@@ -80,6 +80,8 @@ namespace Constants {
 
 
     static constexpr float ZOOM_STEP = 1.1f; // +/- keys and ctrl+wheel
+    static constexpr float ZOOM_MIN  = 0.001f;   // 0.1%
+    static constexpr float ZOOM_MAX  = 99999.0f; // 9,999,900%
 
     constexpr float COLOR_ADJUST_STEP = 0.1f; // step for brightness contrast and saturation
     constexpr float DEFAULT_SATURATION = 1.0f; // the default i dont want change when not using it i want original picture
