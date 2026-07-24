@@ -247,6 +247,9 @@ void InputManager::ExecuteCommand(HWND hWnd, Command cmd) {
             Persistence::Registry::SaveSetting(Constants::Registry::VIEW_MODE,
                                                static_cast<DWORD>(modeNum));
             InvalidateRect(hWnd, nullptr, FALSE);
+            g_overlayManager.PostCenterMessage(hWnd,
+                std::wstring(Constants::Messages::VIEW_MODE_PREFIX) +
+                Constants::Messages::VIEW_MODE_NAMES[modeNum - 1]);
             break;
         }
 
