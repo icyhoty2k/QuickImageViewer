@@ -1796,6 +1796,14 @@ namespace UI {
                     ReleaseCapture();
                     return 0;
                 }
+                // A drag-select started in the filter box owns this release — end
+                // it here (otherwise the box only drops m_dragging on the next
+                // WM_MOUSEMOVE) and return, so a drag that happens to end over a
+                // history row cannot also open that folder.
+                if (g_filter.RouteMouse(WM_LBUTTONUP, wParam, lParam, m_hWnd) != InputResult::Ignored) {
+                    InvalidateRect(m_hWnd, nullptr, FALSE);
+                    return 0;
+                }
                 int mx = GET_X_LPARAM(lParam);
                 int my = GET_Y_LPARAM(lParam);
 

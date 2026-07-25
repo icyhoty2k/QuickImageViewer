@@ -193,7 +193,14 @@ namespace Constants::Messages {
 
     // Zoom popup
     constexpr const wchar_t *ZOOM_TO_PREFIX = L"Zoom: ";
-    constexpr const wchar_t *ZOOM_TO_INPUT_HINT = L"Enter zoom multiplier ( 0.001 – 99999 )";
+    constexpr const wchar_t *ZOOM_TO_INPUT_HINT_FMT = L"Enter zoom in percent (%.1f%% – %.0f%%, 0 = reset)";
+
+    // ZoomWnd — hint line below the input box
+    // The out-of-range / invalid messages are built at draw time from
+    // Constants::ZoomPanel::ZOOM_MIN * 100 and ZOOM_MAX (both in percent).
+    constexpr const wchar_t *ZOOM_ENTER_HINT = L"Enter = apply zoom  •  Esc = cancel";
+    constexpr const wchar_t *ZOOM_OUT_OF_RANGE_FMT = L"Out of range — type a value between %.1f%% and %.0f%%";
+    constexpr const wchar_t *ZOOM_RESET_MESSAGE = L"Zoom restored to default";
 }
 
 namespace Constants::Strings {

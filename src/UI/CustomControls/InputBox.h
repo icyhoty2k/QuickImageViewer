@@ -120,6 +120,12 @@ private:
     int  SelMin()      const  { return m_selAnchor < m_caretPos ? m_selAnchor : m_caretPos; }
     int  SelMax()      const  { return m_selAnchor > m_caretPos ? m_selAnchor : m_caretPos; }
 
+    // Drop the selection anchor. MUST be called after any edit that moves the
+    // caret without going through DeleteSelection() — a click leaves the anchor
+    // parked at the caret (empty selection), and the next insert/erase would
+    // turn that stale anchor into a phantom highlighted run.
+    void ClearAnchor() { m_selAnchor = -1; }
+
     void DeleteSelection() {
         const int lo = SelMin(), hi = SelMax();
         m_text.erase(lo, hi - lo);
@@ -149,6 +155,7 @@ private:
                 ++m_caretPos;
             }
         }
+        ClearAnchor(); // paste leaves the caret after the inserted run, unselected
         notify();
         return true;
     }
@@ -392,7 +399,8 @@ inline InputResult InputBox::RouteChar(wchar_t ch, HWND /*host*/)
 {
     if (ch == L'\b') { // backspace
         if (HasSelection()) { DeleteSelection(); notify(); return InputResult::ConsumedRepaint; }
-        if (m_caretPos > 0) { m_text.erase(m_caretPos - 1, 1); --m_caretPos; notify(); return InputResult::ConsumedRepaint; }
+        if (m_caretPos > 0) { m_text.erase(m_caretPos - 1, 1); --m_caretPos; ClearAnchor(); notify(); return InputResult::ConsumedRepaint; }
+        ClearAnchor();
         return InputResult::Consumed;
     }
     if (ch >= L' ') {
@@ -400,6 +408,7 @@ inline InputResult InputBox::RouteChar(wchar_t ch, HWND /*host*/)
         if (m_maxLen <= 0 || (int)m_text.size() < m_maxLen) {
             m_text.insert(m_caretPos, 1, ch);
             ++m_caretPos;
+            ClearAnchor(); // typing never leaves a selection behind
             notify();
             return InputResult::ConsumedRepaint;
         }
@@ -421,6 +430,7 @@ inline InputResult InputBox::RouteKey(WPARAM vk, HWND /*host*/)
     switch ((UINT)vk) {
     case VK_DELETE:
         if (HasSelection()) { DeleteSelection(); notify(); return InputResult::ConsumedRepaint; }
+        ClearAnchor();
         if (m_caretPos < (int)m_text.size()) { m_text.erase(m_caretPos, 1); notify(); return InputResult::ConsumedRepaint; }
         return InputResult::Consumed;
 
@@ -546,7 +556,13 @@ inline InputResult InputBox::RouteMouse(UINT msg, WPARAM wParam, LPARAM lParam, 
     }
 
     case WM_LBUTTONUP:
-        if (m_dragging) { m_dragging = false; return InputResult::Consumed; }
+        if (m_dragging) {
+            m_dragging = false;
+            // A click that never dragged leaves anchor == caret. Drop it here too,
+            // so the anchor can't survive into a later edit as a phantom selection.
+            if (!HasSelection()) ClearAnchor();
+            return InputResult::Consumed;
+        }
         return InputResult::Ignored;
 
     case WM_MOUSELEAVE:
