@@ -167,6 +167,13 @@ namespace Constants::Messages {
     constexpr const wchar_t *WALLPAPER_SET = L"Wallpaper: "; // prefix — append the style name
     constexpr const wchar_t *WALLPAPER_FAILED = L"⚠ Wallpaper could not be applied";
     constexpr const wchar_t *HISTORY_NAV_FOLDER = L"↔ "; // prefix — append folder name
+    // PageUp/PageDown (history) and Insert/Delete (favorites) folder walking.
+    // Format is "<n>. <folder>", where <n> is the row number the History panel
+    // shows for that folder, so the overlay and the panel always agree.
+    constexpr const wchar_t *WALK_HISTORY_FOLDER = L"📁 ";
+    constexpr const wchar_t *WALK_FAVORITE_FOLDER = L"★ ";
+    constexpr const wchar_t *WALK_NO_HISTORY_FOLDERS = L"No other history folders";
+    constexpr const wchar_t *WALK_NO_FAVORITE_FOLDERS = L"No favorite folders";
     constexpr const wchar_t *FOLDER_DEAD_MISSING = L"⚠ Folder not found";
     constexpr const wchar_t *FOLDER_DEAD_EMPTY = L"⚠ No images in folder";
     constexpr const wchar_t *FOLDER_DELETED_NOTIFY = L"⚠ Folder deleted";
@@ -193,22 +200,39 @@ namespace Constants::Messages {
 
     // Zoom popup
     constexpr const wchar_t *ZOOM_TO_PREFIX = L"Zoom: ";
-    constexpr const wchar_t *ZOOM_TO_INPUT_HINT_FMT = L"Enter zoom in percent (%.1f%% – %.0f%%, 0 = reset)";
+    // %s pairs — the bounds arrive pre-formatted from
+    // Converters::FormatPercentCompact so their precision follows the value.
+    // A fixed "%.1f" here printed ZOOM_MIN = 0.01 as "0.0".
+    constexpr const wchar_t *ZOOM_TO_INPUT_HINT_FMT = L"Enter zoom in percent (%s%% – %s%%, 0 = reset)";
 
     // ZoomWnd — hint line below the input box
-    // The out-of-range / invalid messages are built at draw time from
-    // Constants::ZoomPanel::ZOOM_MIN * 100 and ZOOM_MAX (both in percent).
+    // The out-of-range / invalid messages are built at draw time straight from
+    // Constants::ZoomPanel::ZOOM_MIN and ZOOM_MAX — both are already percents.
     constexpr const wchar_t *ZOOM_ENTER_HINT = L"Enter = apply zoom  •  Esc = cancel";
-    constexpr const wchar_t *ZOOM_OUT_OF_RANGE_FMT = L"Out of range — type a value between %.1f%% and %.0f%%";
+    constexpr const wchar_t *ZOOM_OUT_OF_RANGE_FMT = L"Out of range — type a value between %s%% and %s%%";
     constexpr const wchar_t *ZOOM_RESET_MESSAGE = L"Zoom restored to default";
+    // Shown centre-screen when a zoom keypress/wheel tick is capped by
+    // ZoomPanel::ZOOM_MIN / ZOOM_MAX — otherwise the input looks ignored.
+    constexpr const wchar_t *ZOOM_MIN_REACHED = L"Minimum zoom reached";
+    constexpr const wchar_t *ZOOM_MAX_REACHED = L"Maximum zoom reached";
 }
 
 namespace Constants::Strings {
     // ── BOT_LEFT slot: active color-effect labels ───────────────────────────
     // Used in OverlayManager::UpdateEffects() via appendLine()
 
-    // Named colour effects (also fed to ToggleEffectChronological)
-    constexpr const wchar_t *EFFECT_GRAYSCALE = L"Grayscale";
+    // Named colour effects. These strings are also the KEYS in
+    // app.activeEffectsList, so the renderer matches on them — changing a value
+    // changes what RendererD2D::ChainEffectByName() compares against.
+    //
+    // Shown as "Desaturate", not "Grayscale", deliberately: effects stack, so a
+    // later Sepia tints this one's output and the picture ends up brown while
+    // the label is still listed. "Grayscale" reads as a promise that the final
+    // image IS gray and looks broken the moment anything follows it;
+    // "Desaturate" names the operation being performed, which is what the entry
+    // actually is. The identifier stays EFFECT_GRAYSCALE to match
+    // app.effectGrayscale and Command::ToggleGrayscale.
+    constexpr const wchar_t *EFFECT_GRAYSCALE = L"Desaturate";
     constexpr const wchar_t *EFFECT_INVERT = L"Invert";
     constexpr const wchar_t *EFFECT_SEPIA = L"Sepia";
     constexpr const wchar_t *EFFECT_SOLARIZE = L"Solarize";

@@ -205,20 +205,6 @@ namespace Persistence::Registry {
         g_writeQueue.PushString(PrefixedName(valueName), value);
     }
 
-    void LoadStringSetting(const wchar_t *valueName, wchar_t *buffer, DWORD bufferSize) {
-        if (Dedicated::SettingsUseFile()) {
-            const std::wstring v = Dedicated::ReadString(valueName);
-            if (buffer && bufferSize) {
-                wcsncpy_s(buffer, bufferSize, v.c_str(), _TRUNCATE);
-            }
-            return;
-        }
-        const std::wstring key = PrefixedName(valueName);
-        DWORD size = bufferSize * sizeof(wchar_t);
-        RegGetValueW(Constants::Registry::ROOT_HIVE, Constants::Registry::ROOT_KEY, key.c_str(),
-                     RRF_RT_REG_SZ, nullptr, buffer, &size);
-    }
-
     std::wstring LoadStringSetting(const wchar_t *valueName) {
         if (Dedicated::SettingsUseFile())
             return Dedicated::ReadString(valueName);
@@ -334,7 +320,9 @@ namespace Persistence::Registry {
         a.baseHeight = std::max(240, std::min(16000, static_cast<int>(
             readDword(Constants::Registry::BASE_HEIGHT_KEY,
                 static_cast<DWORD>(Constants::IS_BASE_HEIGHT)))));
-        a.startInFullscreen = readDword(Constants::Registry::START_FULLSCREEN, 0u) != 0;
+        a.startInFullscreen = readDword(
+            Constants::Registry::START_FULLSCREEN,
+            static_cast<DWORD>(Constants::IS_START_FULLSCREEN)) != 0;
         a.historyMaxDirs = std::max(0, std::min(999, static_cast<int>(
             readDword(Constants::Registry::HISTORY_MAX_DIRS,
                 static_cast<DWORD>(Constants::History::IS_HISTORY_MAX_DIRS_TO_SHOW)))));
@@ -377,7 +365,8 @@ namespace Persistence::Registry {
                 readDword(Constants::Registry::SLIDESHOW_TRANS_ORDER,
                     static_cast<DWORD>(Constants::Slideshow::TransitionOrder::SEQUENTIAL)))));
         a.slideshow.transition.listMask = static_cast<uint32_t>(
-            readDword(Constants::Registry::SLIDESHOW_TRANS_LIST, 0xFFFFFFFEu));
+            readDword(Constants::Registry::SLIDESHOW_TRANS_LIST,
+                Constants::Slideshow::TRANSITION_LIST_DEFAULT_MASK));
         a.fileHandlerDefaultSortOrder = std::max(0, std::min(4, static_cast<int>(
             readDword(Constants::Registry::SORT_ORDER,
                 static_cast<DWORD>(Constants::FileHandler::FILE_HANDLER_DEFAULT_SORT_ORDER)))));
@@ -399,8 +388,19 @@ namespace Persistence::Registry {
         a.thumbPasteEnabled = readDword(
             Constants::Registry::THUMB_PASTE_ENABLED,
             static_cast<DWORD>(Constants::IS_THUMB_PASTE_ENABLED)) != 0;
-        a.themeFactor = static_cast<float>(readDword(Constants::Registry::THEME_FACTOR,
-            static_cast<DWORD>(Constants::Theme::DEFAULT_THEME_FACTOR))) / 100.0f;
+        // The factor is a 0..1 ratio stored as a whole percent, so the DEFAULT
+        // must be scaled UP before it is handed to readDword — casting the raw
+        // ratio to DWORD truncates every value below 1.0 to 0. Clamped on the way
+        // out like every other setting here: changeAppThemeFactor() clamps the
+        // runtime setter, but startup assigns this field directly and would
+        // otherwise push a corrupt value straight into the renderer.
+        a.themeFactor = std::clamp(
+            static_cast<float>(readDword(Constants::Registry::THEME_FACTOR,
+                static_cast<DWORD>(Constants::Theme::DEFAULT_THEME_FACTOR *
+                                   Constants::Theme::THEME_FACTOR_STORE_SCALE)))
+            / Constants::Theme::THEME_FACTOR_STORE_SCALE,
+            Constants::Theme::THEME_FACTOR_MIN,
+            Constants::Theme::THEME_FACTOR_MAX);
 
         if (hKey) RegCloseKey(hKey);
     }

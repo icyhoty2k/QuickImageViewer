@@ -139,14 +139,21 @@ void MouseHandler::HandleButtonDown(HWND hWnd, UINT message, WPARAM wParam, LPAR
             float dx = (float) pt.x - centerX;
             float dy = (float) pt.y - centerY;
 
-            app.viewport.zoom = std::clamp(app.viewport.zoom * app.zoomClickMultiplier, Constants::ZoomPanel::ZOOM_MIN, Constants::ZoomPanel::ZOOM_MAX);
+            app.viewport.zoom *= app.zoomClickMultiplier;
+            ClampZoomToLimits(hWnd); // bounds the EFFECTIVE zoom, not the multiplier
 
             // Keep the clicked pixel under the cursor.
             // Derivation: renderer puts image center at (winW/2 + offsetX).
             // Pixel at dx from window center is (dx - oldOffsetX) from image center.
             // After zoom*Z it moves to Z*(dx - oldOffsetX). To keep it at dx:
             //   newOffsetX = dx*(1 - Z) + Z*oldOffsetX
-            const float Z = app.zoomClickMultiplier;
+            //
+            // Z must be the factor ACTUALLY applied, not the requested multiplier
+            // — if the clamp above capped the zoom, anchoring with the requested
+            // value would slide the clicked pixel out from under the cursor.
+            const float Z = (app.savedZoom > 0.0f)
+                                ? (app.viewport.zoom / app.savedZoom)
+                                : app.zoomClickMultiplier;
             app.viewport.offsetX = dx * (1.0f - Z) + Z * app.savedOffsetX;
             app.viewport.offsetY = dy * (1.0f - Z) + Z * app.savedOffsetY;
 
@@ -464,7 +471,7 @@ void MouseHandler::HandleMouseWheel(HWND hWnd, WPARAM wParam, LPARAM /*lParam*/)
     if (isRmbDown) {
         app.rmbConsumed = true; // RMB+wheel zoom — suppress the context menu on RMB up
         app.viewport.zoom *= (delta > 0) ? Constants::ZoomPanel::ZOOM_STEP : (1.0f / Constants::ZoomPanel::ZOOM_STEP);
-        app.viewport.zoom = std::clamp(app.viewport.zoom, Constants::ZoomPanel::ZOOM_MIN, Constants::ZoomPanel::ZOOM_MAX);
+        AnnounceZoomClamp(hWnd, ClampZoomToLimits(hWnd));
         ClampViewportOffset(hWnd); // zoom changed the legal pan range
         InvalidateRect(hWnd, nullptr, FALSE);
         // Update cursor for overflow state — UpdateHoverCursor bails on isDragging.
@@ -482,7 +489,7 @@ void MouseHandler::HandleMouseWheel(HWND hWnd, WPARAM wParam, LPARAM /*lParam*/)
         }
     } else if (GET_KEYSTATE_WPARAM(wParam) & MK_CONTROL) {
         app.viewport.zoom *= (delta > 0) ? Constants::ZoomPanel::ZOOM_STEP : (1.0f / Constants::ZoomPanel::ZOOM_STEP);
-        app.viewport.zoom = std::clamp(app.viewport.zoom, Constants::ZoomPanel::ZOOM_MIN, Constants::ZoomPanel::ZOOM_MAX);
+        AnnounceZoomClamp(hWnd, ClampZoomToLimits(hWnd));
         ClampViewportOffset(hWnd); // zoom changed the legal pan range
         InvalidateRect(hWnd, nullptr, FALSE);
     } else {
