@@ -64,51 +64,8 @@ static void SnapWindowToZone(HWND hWnd, int zone) {
     InvalidateRect(hWnd, nullptr, FALSE);
 }
 
-// Clamps viewport offsets to the maximum range the renderer allows for the
-// current view mode and zoom — mirrors the identical logic in MouseHandler.
-static void ClampViewportOffset(HWND hWnd) {
-    if (app.imgWidth <= 0 || app.imgHeight <= 0) return;
-    RECT rc;
-    GetClientRect(hWnd, &rc);
-    float winW = static_cast<float>(rc.right - rc.left);
-    float winH = static_cast<float>(rc.bottom - rc.top);
-    float imgW = static_cast<float>(app.imgWidth);
-    float imgH = static_cast<float>(app.imgHeight);
-    float ratioX = winW / imgW, ratioY = winH / imgH;
-    float renderW, renderH;
-    switch (app.viewMode) {
-        case Constants::ViewModes::ViewMode::FitToWidth_DoNotPreserveAspectRatio:
-            renderW = winW;
-            renderH = imgH;
-            if (renderH > winH) renderH = winH;
-            break;
-        case Constants::ViewModes::ViewMode::FitToHeight_DoNotPreserveAspectRatio:
-            renderH = winH;
-            renderW = imgW;
-            if (renderW > winW) renderW = winW;
-            break;
-        case Constants::ViewModes::ViewMode::FitToWindow_DoNotPreserveAspectRatio:
-            renderW = winW;
-            renderH = winH;
-            break;
-        case Constants::ViewModes::ViewMode::OriginalImageSize_PreserveAspectRatio:
-            renderW = imgW;
-            renderH = imgH;
-            break;
-        case Constants::ViewModes::ViewMode::FitToView_PreserveAspectRatio:
-        default:
-            renderW = imgW * std::min(ratioX, ratioY);
-            renderH = imgH * std::min(ratioX, ratioY);
-            break;
-    }
-    const float z = (app.viewport.zoom <= 0.0f) ? 1.0f : app.viewport.zoom;
-    renderW *= z;
-    renderH *= z;
-    float maxOffX = std::max(0.0f, (renderW - winW) / 2.0f);
-    float maxOffY = std::max(0.0f, (renderH - winH) / 2.0f);
-    app.viewport.offsetX = std::clamp(app.viewport.offsetX, -maxOffX, maxOffX);
-    app.viewport.offsetY = std::clamp(app.viewport.offsetY, -maxOffY, maxOffY);
-}
+// ClampViewportOffset now lives in AppState.h (next to GetRenderSize) so every
+// zoom/pan call site — keyboard, mouse wheel, zoom panel — shares one copy.
 
 // =============================================================================
 // handleKeyboard — public entry point called from WM_KEYDOWN
@@ -257,12 +214,14 @@ void InputManager::ExecuteCommand(HWND hWnd, Command cmd) {
         // Zoom
         // -----------------------------------------------------------------------
         case Command::ZoomIn:
-            app.viewport.zoom = std::clamp(app.viewport.zoom * Constants::ZOOM_STEP, Constants::ZOOM_MIN, Constants::ZOOM_MAX);
+            app.viewport.zoom = std::clamp(app.viewport.zoom * Constants::ZoomPanel::ZOOM_STEP, Constants::ZoomPanel::ZOOM_MIN, Constants::ZoomPanel::ZOOM_MAX);
+            ClampViewportOffset(hWnd); // zoom changed the legal pan range
             InvalidateRect(hWnd, nullptr, FALSE);
             break;
 
         case Command::ZoomOut:
-            app.viewport.zoom = std::clamp(app.viewport.zoom / Constants::ZOOM_STEP, Constants::ZOOM_MIN, Constants::ZOOM_MAX);
+            app.viewport.zoom = std::clamp(app.viewport.zoom / Constants::ZoomPanel::ZOOM_STEP, Constants::ZoomPanel::ZOOM_MIN, Constants::ZoomPanel::ZOOM_MAX);
+            ClampViewportOffset(hWnd); // zooming out shrinks it — stale offset would leave a black gap
             InvalidateRect(hWnd, nullptr, FALSE);
             break;
 

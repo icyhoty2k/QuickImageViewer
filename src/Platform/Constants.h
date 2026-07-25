@@ -79,9 +79,7 @@ namespace Constants {
     constexpr int MOUSE_HSCROLL_FOLDER_TICKS = 3;
 
 
-    static constexpr float ZOOM_STEP = 1.1f; // +/- keys and ctrl+wheel
-    static constexpr float ZOOM_MIN  = 0.001f;   // 0.1%
-    static constexpr float ZOOM_MAX  = 99999.0f; // 9,999,900%
+
 
     constexpr float COLOR_ADJUST_STEP = 0.1f; // step for brightness contrast and saturation
     constexpr float DEFAULT_SATURATION = 1.0f; // the default i dont want change when not using it i want original picture
@@ -626,6 +624,29 @@ namespace Constants {
         constexpr int HISTORY_MAX_W = IS_BASE_WIDTH  - 120; // maximum panel width
         constexpr int HISTORY_MIN_H = 620; // minimum panel height
         constexpr int HISTORY_MAX_H = IS_BASE_HEIGHT - 60; // maximum panel height (also capped to 80% of monitor)
+    }
+
+    // =========================================================================
+    // Zoom Panel (F2 zoom-to dialog) — geometry constants
+    // =========================================================================
+    namespace ZoomPanel {
+        constexpr float WINDOW_WIDTH = 340.0f;
+        constexpr float WINDOW_HEIGHT = 140.0f;
+        constexpr float PADDING = 14.0f;
+        constexpr float GAP = 8.0f;
+        constexpr float FONT_SIZE = 13.0f;
+        constexpr float FONT_SIZE_INPUT = 16.0f;
+        constexpr float INPUT_BOX_HEIGHT = 34.0f;
+        constexpr int LABEL_EXTRA_HEIGHT = 6;     // extra px below label text
+        constexpr int HINT_EXTRA_HEIGHT = 4;      // extra px below hint text
+        // Base gray values passed to Constants::Theme::ThemedGray at draw time
+        constexpr float LABEL_TEXT_GRAY = 0.9020f; // label: "Enter zoom multiplier..."
+        constexpr float HINT_TEXT_GRAY = 0.50f;    // hint: "Enter = apply zoom..."
+        // Lower bound is derived from MIN * 100.0f at the call site.
+        constexpr float ZOOM_STEP = 1.1f;    // +/- keys and ctrl+wheel
+        constexpr float ZOOM_MIN  = 0.001f;  // ratio — 0.1%
+        constexpr float ZOOM_MAX  = 99999.0f;// ratio (also used as the panel's percent ceiling)
+        constexpr int   INPUT_MAX_CHARS = 10; // must be < ZoomWnd::m_input capacity
     }
 
     // =========================================================================

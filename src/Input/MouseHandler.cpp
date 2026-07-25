@@ -139,7 +139,7 @@ void MouseHandler::HandleButtonDown(HWND hWnd, UINT message, WPARAM wParam, LPAR
             float dx = (float) pt.x - centerX;
             float dy = (float) pt.y - centerY;
 
-            app.viewport.zoom = std::clamp(app.viewport.zoom * app.zoomClickMultiplier, Constants::ZOOM_MIN, Constants::ZOOM_MAX);
+            app.viewport.zoom = std::clamp(app.viewport.zoom * app.zoomClickMultiplier, Constants::ZoomPanel::ZOOM_MIN, Constants::ZoomPanel::ZOOM_MAX);
 
             // Keep the clicked pixel under the cursor.
             // Derivation: renderer puts image center at (winW/2 + offsetX).
@@ -463,8 +463,9 @@ void MouseHandler::HandleMouseWheel(HWND hWnd, WPARAM wParam, LPARAM /*lParam*/)
 
     if (isRmbDown) {
         app.rmbConsumed = true; // RMB+wheel zoom — suppress the context menu on RMB up
-        app.viewport.zoom *= (delta > 0) ? Constants::ZOOM_STEP : (1.0f / Constants::ZOOM_STEP);
-        app.viewport.zoom = std::clamp(app.viewport.zoom, Constants::ZOOM_MIN, Constants::ZOOM_MAX);
+        app.viewport.zoom *= (delta > 0) ? Constants::ZoomPanel::ZOOM_STEP : (1.0f / Constants::ZoomPanel::ZOOM_STEP);
+        app.viewport.zoom = std::clamp(app.viewport.zoom, Constants::ZoomPanel::ZOOM_MIN, Constants::ZoomPanel::ZOOM_MAX);
+        ClampViewportOffset(hWnd); // zoom changed the legal pan range
         InvalidateRect(hWnd, nullptr, FALSE);
         // Update cursor for overflow state — UpdateHoverCursor bails on isDragging.
         if (app.imgWidth > 0 && app.imgHeight > 0) {
@@ -480,8 +481,9 @@ void MouseHandler::HandleMouseWheel(HWND hWnd, WPARAM wParam, LPARAM /*lParam*/)
                           : Constants::Cursors::CURR_ZOOM);
         }
     } else if (GET_KEYSTATE_WPARAM(wParam) & MK_CONTROL) {
-        app.viewport.zoom *= (delta > 0) ? Constants::ZOOM_STEP : (1.0f / Constants::ZOOM_STEP);
-        app.viewport.zoom = std::clamp(app.viewport.zoom, Constants::ZOOM_MIN, Constants::ZOOM_MAX);
+        app.viewport.zoom *= (delta > 0) ? Constants::ZoomPanel::ZOOM_STEP : (1.0f / Constants::ZoomPanel::ZOOM_STEP);
+        app.viewport.zoom = std::clamp(app.viewport.zoom, Constants::ZoomPanel::ZOOM_MIN, Constants::ZoomPanel::ZOOM_MAX);
+        ClampViewportOffset(hWnd); // zoom changed the legal pan range
         InvalidateRect(hWnd, nullptr, FALSE);
     } else {
         int step = (delta < 0) ? 1 : -1;

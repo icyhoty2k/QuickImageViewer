@@ -6,6 +6,7 @@
 #include <string>
 #include <unordered_map>
 #include <filesystem>
+#include <algorithm>
 #include "Renderer/IRenderer.h"
 #include <memory>
 
@@ -43,6 +44,43 @@ struct ViewportState {
     bool isDragging = false;
     POINT lastMouse = {0, 0};
 };
+
+// Mirrors the renderer's renderW/renderH calculation. Every call site (renderer,
+// mouse handler, AppState::GetRealZoom) must use this so all sizes match exactly.
+inline void GetRenderSize(float winW, float winH, float imgW, float imgH,
+                          Constants::ViewModes::ViewMode viewMode, float zoom,
+                          float &renderW, float &renderH) {
+    renderW = imgW;
+    renderH = imgH;
+    switch (viewMode) {
+        case Constants::ViewModes::ViewMode::FitToView_PreserveAspectRatio:
+        default: {
+            const float scale = std::min(winW / imgW, winH / imgH);
+            renderW = imgW * scale;
+            renderH = imgH * scale;
+            break;
+        }
+        case Constants::ViewModes::ViewMode::FitToWidth_DoNotPreserveAspectRatio:
+            renderW = winW;
+            renderH = imgH;
+            if (renderH > winH) renderH = winH;
+            break;
+        case Constants::ViewModes::ViewMode::FitToHeight_DoNotPreserveAspectRatio:
+            renderH = winH;
+            renderW = imgW;
+            if (renderW > winW) renderW = winW;
+            break;
+        case Constants::ViewModes::ViewMode::FitToWindow_DoNotPreserveAspectRatio:
+            renderW = winW;
+            renderH = winH;
+            break;
+        case Constants::ViewModes::ViewMode::OriginalImageSize_PreserveAspectRatio:
+            break;
+    }
+    const float z = (zoom <= 0.0f) ? 1.0f : zoom;
+    renderW *= z;
+    renderH *= z;
+}
 
 struct AppState {
     bool isKeepInBackground = Constants::IS_KEEP_IN_BACKGROUND;
@@ -320,61 +358,52 @@ struct AppState {
         }
     }
 
+    // Effective on-screen zoom = (rendered width) / (native image width).
+    // Uses the SAME GetRenderSize() the renderer uses, so it stays correct for
+    // every view mode (the old version hardcoded the FitToView fit-scale and so
+    // reported a bogus value in OriginalImageSize / FitToWidth / FitToHeight /
+    // FitToWindow — which made "Zoom to N%" resize the image by the wrong factor).
     float GetRealZoom(HWND hWnd) const {
         if (imgWidth <= 0 || imgHeight <= 0) return 1.0f;
 
         RECT rc;
         GetClientRect(hWnd, &rc);
-        float winW = (float) (rc.right - rc.left);
-        float winH = (float) (rc.bottom - rc.top);
+        const float winW = (float) (rc.right - rc.left);
+        const float winH = (float) (rc.bottom - rc.top);
+        if (winW <= 0.0f || winH <= 0.0f) return 1.0f;
 
-        // 1. Calculate the "Fit" scale (the scale at which zoom 1.0 fits the window)
-        float fitScale = std::min(winW / (float) imgWidth, winH / (float) imgHeight);
-
-        // 2. The "Real" zoom is the current zoom (which is a multiplier of fitScale)
-        // divided by the fitScale to normalize it to the image's pixel size.
-        // Or, more simply: (Current Rendered Size) / (Native Image Size)
-        float renderW = (float) imgWidth * fitScale * viewport.zoom;
+        float renderW = 0.0f, renderH = 0.0f;
+        GetRenderSize(winW, winH, (float) imgWidth, (float) imgHeight,
+                      viewMode, viewport.zoom, renderW, renderH);
         return renderW / (float) imgWidth;
     }
 };
 
-// Mirrors the renderer's renderW/renderH calculation. Every call site (renderer,
-// mouse handler) must use this so all sizes match exactly.
-inline void GetRenderSize(float winW, float winH, float imgW, float imgH,
-                          Constants::ViewModes::ViewMode viewMode, float zoom,
-                          float &renderW, float &renderH) {
-    renderW = imgW;
-    renderH = imgH;
-    switch (viewMode) {
-        case Constants::ViewModes::ViewMode::FitToView_PreserveAspectRatio:
-        default: {
-            const float scale = std::min(winW / imgW, winH / imgH);
-            renderW = imgW * scale;
-            renderH = imgH * scale;
-            break;
-        }
-        case Constants::ViewModes::ViewMode::FitToWidth_DoNotPreserveAspectRatio:
-            renderW = winW;
-            renderH = imgH;
-            if (renderH > winH) renderH = winH;
-            break;
-        case Constants::ViewModes::ViewMode::FitToHeight_DoNotPreserveAspectRatio:
-            renderH = winH;
-            renderW = imgW;
-            if (renderW > winW) renderW = winW;
-            break;
-        case Constants::ViewModes::ViewMode::FitToWindow_DoNotPreserveAspectRatio:
-            renderW = winW;
-            renderH = winH;
-            break;
-        case Constants::ViewModes::ViewMode::OriginalImageSize_PreserveAspectRatio:
-            break;
-    }
-    const float z = (zoom <= 0.0f) ? 1.0f : zoom;
-    renderW *= z;
-    renderH *= z;
-}
-
 // Global state shared across files
 extern AppState app;
+
+// Clamps the pan offsets to the range the CURRENT view mode + zoom allow.
+// Must be called after EVERY zoom mutation: shrinking the rendered image
+// shrinks the legal offset range, so a stale offset left over from an earlier
+// pan would park the image off-centre with a black gap on one side.
+// Uses the same GetRenderSize() as the renderer, so it is correct in all five
+// view modes.
+inline void ClampViewportOffset(HWND hWnd) {
+    if (app.imgWidth <= 0 || app.imgHeight <= 0) return;
+
+    RECT rc;
+    if (!GetClientRect(hWnd, &rc)) return;
+    const float winW = static_cast<float>(rc.right - rc.left);
+    const float winH = static_cast<float>(rc.bottom - rc.top);
+    if (winW <= 0.0f || winH <= 0.0f) return;
+
+    float renderW = 0.0f, renderH = 0.0f;
+    GetRenderSize(winW, winH,
+                  static_cast<float>(app.imgWidth), static_cast<float>(app.imgHeight),
+                  app.viewMode, app.viewport.zoom, renderW, renderH);
+
+    const float maxOffX = std::max(0.0f, (renderW - winW) / 2.0f);
+    const float maxOffY = std::max(0.0f, (renderH - winH) / 2.0f);
+    app.viewport.offsetX = std::clamp(app.viewport.offsetX, -maxOffX, maxOffX);
+    app.viewport.offsetY = std::clamp(app.viewport.offsetY, -maxOffY, maxOffY);
+}

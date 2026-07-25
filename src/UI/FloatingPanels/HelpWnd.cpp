@@ -234,7 +234,7 @@ namespace UI {
                               L"How the image fits and moves inside the window");
 
         Add(L"Up / Down",
-            L"Zoom in / out by ×" + NumF(Constants::ZOOM_STEP) + L" per step.", sZoom);
+            L"Zoom in / out by ×" + NumF(Constants::ZoomPanel::ZOOM_STEP) + L" per step.", sZoom);
         Add(K(SC::SC_ZOOM_IN_NUMPAD) + L" / " + K(SC::SC_ZOOM_OUT_NUMPAD),
             L"Zoom in / out — same steps as Up / Down.", sZoom);
         Add(K(SC::SC_ZOOM_RESET),
@@ -1384,7 +1384,13 @@ namespace UI {
                 if (m_sbDragging) {
                     m_sbDragging = false;
                     ReleaseCapture();
+                    return 0; // scrollbar drag owned the button — not the filter's
                 }
+                // Ends a filter-box drag-select. Without it the box only drops
+                // m_dragging on the next WM_MOUSEMOVE, so moving after release
+                // keeps extending the selection.
+                if (m_filter.RouteMouse(WM_LBUTTONUP, wParam, lParam, m_hWnd) == InputResult::ConsumedRepaint)
+                    InvalidateRect(m_hWnd, nullptr, FALSE);
                 return 0;
             }
 
