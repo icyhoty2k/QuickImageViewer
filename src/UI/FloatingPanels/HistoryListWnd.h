@@ -114,6 +114,21 @@ namespace UI {
     // Equivalent to Tab then Ctrl+Tab — used from the main app via Ctrl+Tab.
     void ToggleHistoryFull();
 
+    // Steps to the next / previous folder in the History panel's own list and
+    // opens it in the main viewer. The list order is NOT modified — this only
+    // reads it, exactly as rendered, so the row numbers in the centre overlay
+    // match the numbers the panel shows.
+    //
+    //   direction     +1 = down the list (next), -1 = up the list (previous)
+    //   favoritesOnly true  = visit only starred rows   (Insert / Delete)
+    //                 false = visit only non-starred rows (PageDown / PageUp)
+    //
+    // The two categories are walked independently, so the history keys never
+    // land on a favorite and the favorite keys never land on a plain entry.
+    // Wraps around at both ends. Known-missing folders are skipped. Returns
+    // false (and posts a centre message) when there is nothing to walk to.
+    bool WalkHistoryFolder(HWND hOwner, int direction, bool favoritesOnly);
+
     // Horizontal-scroll navigation snapshot — taken from the raw backing array,
     // not the capped display list. Call CaptureNavigationSnapshot() to refresh;
     // version increments on each capture so callers can detect a change.

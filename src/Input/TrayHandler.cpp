@@ -673,9 +673,17 @@ void TrayHandler::DispatchCommand(HWND hWnd, int cmd) {
                     static_cast<DWORD>(app.fileHandlerIsReverseSortOrder));
             }
             if (wcscmp(key, Constants::Registry::THEME_FACTOR) == 0) {
-                app.themeFactor = static_cast<float>(val) / 100.0f;
+                // Clamp like every other imported numeric key. _wtoi accepts a
+                // negative, and the unclamped cast to DWORD stored 4294967295.
+                const int pct = std::max(
+                    static_cast<int>(Constants::Theme::THEME_FACTOR_MIN *
+                                     Constants::Theme::THEME_FACTOR_STORE_SCALE),
+                    std::min(static_cast<int>(Constants::Theme::THEME_FACTOR_MAX *
+                                              Constants::Theme::THEME_FACTOR_STORE_SCALE), val));
+                app.themeFactor = static_cast<float>(pct) /
+                                  Constants::Theme::THEME_FACTOR_STORE_SCALE;
                 Persistence::Registry::SaveSetting(Constants::Registry::THEME_FACTOR,
-                    static_cast<DWORD>(val));
+                    static_cast<DWORD>(pct));
             }
         }
         fclose(f);
@@ -730,7 +738,8 @@ void TrayHandler::DispatchCommand(HWND hWnd, int cmd) {
         app.viewMode                = Constants::ViewModes::defaultViewMode;
         app.baseWidth               = Constants::IS_BASE_WIDTH;
         app.baseHeight              = Constants::IS_BASE_HEIGHT;
-        app.startInFullscreen       = false;
+        app.startInFullscreen       = Constants::IS_START_FULLSCREEN;
+        app.themeFactor             = Constants::Theme::DEFAULT_THEME_FACTOR;
         app.historyMaxDirs          = Constants::History::IS_HISTORY_MAX_DIRS_TO_SHOW;
         app.historyMaxFavs          = Constants::History::IS_HISTORY_MAX_FAVORITES_TO_SHOW;
         app.dirThumbCacheMB         = Constants::IS_DIR_THUMB_CACHE_BUDGET_MB;
@@ -743,7 +752,7 @@ void TrayHandler::DispatchCommand(HWND hWnd, int cmd) {
         app.slideshow.transition.type           = TransitionType::Cut;
         app.slideshow.transition.source         = Constants::Slideshow::TransitionSource::NONE;
         app.slideshow.transition.order          = Constants::Slideshow::TransitionOrder::SEQUENTIAL;
-        app.slideshow.transition.listMask       = 0xFFFFFFFEu; // every animated type
+        app.slideshow.transition.listMask       = Constants::Slideshow::TRANSITION_LIST_DEFAULT_MASK;
         app.slideshow.transition.seqIndex       = 0;
         app.fileHandlerDefaultSortOrder         = Constants::FileHandler::FILE_HANDLER_DEFAULT_SORT_ORDER;
         app.fileHandlerIsReverseSortOrder       = Constants::FileHandler::FILE_HANDLER_SORT_TYPE_IS_REVERSE;
@@ -783,10 +792,16 @@ void TrayHandler::DispatchCommand(HWND hWnd, int cmd) {
         Persistence::Registry::SaveSetting(Constants::Registry::SLIDESHOW_INTERVAL_MS, static_cast<DWORD>(app.slideshow.intervalMs));
         Persistence::Registry::SaveSetting(Constants::Registry::SLIDESHOW_LOOP,         static_cast<DWORD>(app.slideshow.loop));
         Persistence::Registry::SaveSetting(Constants::Registry::SLIDESHOW_SHUFFLE,      static_cast<DWORD>(app.slideshow.shuffle));
-        Persistence::Registry::SaveSetting(Constants::Registry::SLIDESHOW_TRANSITION,   0u);
-        Persistence::Registry::SaveSetting(Constants::Registry::SLIDESHOW_TRANS_SOURCE, 0u);
-        Persistence::Registry::SaveSetting(Constants::Registry::SLIDESHOW_TRANS_ORDER,  0u);
-        Persistence::Registry::SaveSetting(Constants::Registry::SLIDESHOW_TRANS_LIST,   0xFFFFFFFEu);
+        // Write what was just assigned to app above, not a bare 0 — a literal
+        // here silently drifts the moment one of those defaults changes.
+        Persistence::Registry::SaveSetting(Constants::Registry::SLIDESHOW_TRANSITION,
+            static_cast<DWORD>(app.slideshow.transition.type));
+        Persistence::Registry::SaveSetting(Constants::Registry::SLIDESHOW_TRANS_SOURCE,
+            static_cast<DWORD>(app.slideshow.transition.source));
+        Persistence::Registry::SaveSetting(Constants::Registry::SLIDESHOW_TRANS_ORDER,
+            static_cast<DWORD>(app.slideshow.transition.order));
+        Persistence::Registry::SaveSetting(Constants::Registry::SLIDESHOW_TRANS_LIST,
+            static_cast<DWORD>(app.slideshow.transition.listMask));
         Persistence::Registry::SaveSetting(Constants::Registry::SORT_ORDER,      static_cast<DWORD>(app.fileHandlerDefaultSortOrder));
         Persistence::Registry::SaveSetting(Constants::Registry::SORT_REVERSE,    static_cast<DWORD>(app.fileHandlerIsReverseSortOrder));
         Persistence::Registry::SaveSetting(Constants::Registry::CTRL_C_ENABLED,      static_cast<DWORD>(app.ctrlCEnabled));
@@ -794,6 +809,8 @@ void TrayHandler::DispatchCommand(HWND hWnd, int cmd) {
         Persistence::Registry::SaveSetting(Constants::Registry::THUMB_MOVE_ENABLED,   static_cast<DWORD>(app.thumbMoveEnabled));
         Persistence::Registry::SaveSetting(Constants::Registry::THUMB_DELETE_ENABLED, static_cast<DWORD>(app.thumbDeleteEnabled));
         Persistence::Registry::SaveSetting(Constants::Registry::THUMB_PASTE_ENABLED,  static_cast<DWORD>(app.thumbPasteEnabled));
+        Persistence::Registry::SaveSetting(Constants::Registry::THEME_FACTOR,
+            static_cast<DWORD>(app.themeFactor * Constants::Theme::THEME_FACTOR_STORE_SCALE));
 
         Persistence::Registry::EnableRunOnStartup(app.isEnableRunOnStartup);
         m_overlayManager.SetAllVisible(app.showOverlayInfoText);
@@ -801,6 +818,9 @@ void TrayHandler::DispatchCommand(HWND hWnd, int cmd) {
                      0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE);
         m_uiManager.ApplyAlwaysOnTop(app.isAlwaysOnTop);
         AppCommands::ApplyDisplayAwake(hWnd);
+        // Theme is STATE the renderer and every panel must be pushed into —
+        // assigning app.themeFactor alone repaints nothing. Import does this too.
+        AppCommands::changeAppThemeFactor(hWnd, app.themeFactor);
         m_uiManager.RepaintAllPanels();
         InvalidateRect(hWnd, nullptr, FALSE);
         UI::ThemedDialog::Message(hWnd,

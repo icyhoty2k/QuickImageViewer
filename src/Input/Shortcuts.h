@@ -138,6 +138,20 @@ namespace Shortcuts {
     // toggle first / last image in folder , Shift+Backspace go to last image which is not first or last
     constexpr UINT SC_NAV_TOGGLE_FIRST_LAST_IMAGE_IN_CURR_FOLDER = VK_BACK;
 
+    // ── Navigation cluster (plain — no modifier) ─────────────────────────────
+    // These keys used to toggle colour effects. The effects moved to Ctrl+<same
+    // key> (see ImageEffects below), leaving the plain presses for navigation.
+    constexpr UINT SC_NAV_FIRST_IMAGE = VK_HOME; // Home — jump to first image in folder
+    constexpr UINT SC_NAV_LAST_IMAGE = VK_END; // End  — jump to last image in folder
+
+    // Walk the History panel's list in its existing order — never reorders it.
+    // The two pairs cover disjoint halves of that list, so the history keys
+    // never land on a favorite and vice versa.
+    constexpr UINT SC_NAV_PREV_HISTORY_FOLDER = VK_PRIOR; // PageUp   — previous non-favorite
+    constexpr UINT SC_NAV_NEXT_HISTORY_FOLDER = VK_NEXT; // PageDown — next non-favorite
+    constexpr UINT SC_NAV_NEXT_FAVORITE_FOLDER = VK_INSERT; // Insert   — next favorite
+    constexpr UINT SC_NAV_PREV_FAVORITE_FOLDER = VK_DELETE; // Delete   — previous favorite
+
     // -------------------------------------------------------------------------
     // Zoom
     // -------------------------------------------------------------------------
@@ -184,20 +198,29 @@ namespace Shortcuts {
     // -------------------------------------------------------------------------
     namespace ImageEffects {
         constexpr UINT SC_EFFECT_APPLY_TOGGLE = VK_OEM_3; // grave key `
-        constexpr UINT SC_COLOR_GRAYSCALE = VK_DELETE;
-        constexpr UINT SC_COLOR_INVERT = VK_INSERT;
-        constexpr UINT SC_COLOR_SEPIA = VK_HOME;
-        constexpr UINT SC_COLOR_SOLARIZE = VK_END;
-        constexpr UINT SC_COLOR_OUTLINE = VK_PRIOR;
-        constexpr UINT SC_COLOR_THRESHOLD = VK_NEXT;
-        constexpr UINT SC_COLOR_GAMMA_UP = VK_OEM_PLUS;
-        constexpr UINT SC_COLOR_GAMMA_DOWN = VK_OEM_MINUS;
-        constexpr UINT SC_COLOR_BRIGHTNESS_UP = VK_OEM_5; // backslash
-        constexpr UINT SC_COLOR_BRIGHTNESS_DOWN = VK_OEM_7; // apostrophe
-        constexpr UINT SC_COLOR_CONTRAST_UP = VK_OEM_2; // forward slash
-        constexpr UINT SC_COLOR_CONTRAST_DOWN = VK_OEM_PERIOD;
-        constexpr UINT SC_COLOR_SAT_DOWN = VK_OEM_4;
-        constexpr UINT SC_COLOR_SAT_UP = VK_OEM_6;
+
+        // ── The six named effects — ALL require ctrl (no alt, no shift) ───────
+        // They moved off the plain navigation-cluster keys so Home/End/PageUp/
+        // PageDown/Insert/Delete are free for image and folder navigation.
+        // The plain-key meanings live in the Navigation section above.
+        constexpr UINT SC_COLOR_GRAYSCALE = VK_DELETE; // Ctrl+Delete
+        constexpr UINT SC_COLOR_INVERT = VK_INSERT; // Ctrl+Insert
+        constexpr UINT SC_COLOR_SEPIA = VK_HOME; // Ctrl+Home
+        constexpr UINT SC_COLOR_SOLARIZE = VK_END; // Ctrl+End
+        constexpr UINT SC_COLOR_OUTLINE = VK_PRIOR; // Ctrl+PageUp
+        constexpr UINT SC_COLOR_THRESHOLD = VK_NEXT; // Ctrl+PageDown
+        // ── The four continuous adjustments — ALL require ctrl (no alt, no shift)
+        // Same rule as the six named effects above: every image-manipulation key
+        // in this namespace is Ctrl+<key>. Gamma's two keys keep their unrelated
+        // Shift= window-resize meaning, which is not an effect.
+        constexpr UINT SC_COLOR_GAMMA_UP = VK_OEM_PLUS; // Ctrl++   (Shift+ = window larger)
+        constexpr UINT SC_COLOR_GAMMA_DOWN = VK_OEM_MINUS; // Ctrl+-   (Shift+- = window smaller)
+        constexpr UINT SC_COLOR_BRIGHTNESS_UP = VK_OEM_5; // Ctrl+\  backslash
+        constexpr UINT SC_COLOR_BRIGHTNESS_DOWN = VK_OEM_7; // Ctrl+'  apostrophe
+        constexpr UINT SC_COLOR_CONTRAST_UP = VK_OEM_2; // Ctrl+/  forward slash
+        constexpr UINT SC_COLOR_CONTRAST_DOWN = VK_OEM_PERIOD; // Ctrl+.
+        constexpr UINT SC_COLOR_SAT_DOWN = VK_OEM_4; // Ctrl+[
+        constexpr UINT SC_COLOR_SAT_UP = VK_OEM_6; // Ctrl+]
         constexpr UINT SC_COLOR_RESET_ALL_EFFECTS = VK_NUMPAD0;
         constexpr UINT SC_COLOR_SAVE_TO_DISK = 'S'; // requires ctrl
     }

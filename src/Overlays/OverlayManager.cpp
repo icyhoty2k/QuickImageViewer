@@ -373,9 +373,7 @@ void OverlayManager::RebuildTopLeft() {
 
 void OverlayManager::RebuildSummaryLine2() {
     // "86%  1920×1080 / 4.3 MB"
-    wchar_t zoomBuf[16];
-    swprintf_s(zoomBuf, L"%d%%", Converters::toZoomInt(m_zoom));
-    std::wstring text = zoomBuf;
+    std::wstring text = Converters::FormatZoomPercent(m_zoom);
     text += L"  ";
     wchar_t dimBuf[32];
     swprintf_s(dimBuf, L"%d\u00D7%d", m_imgW, m_imgH);
@@ -419,9 +417,7 @@ void OverlayManager::OnLayoutModeChanged(HWND /*hWnd*/) {
             m_slots[i].overlay->active = m_masterVisible && m_slots[i].visible;
         }
         // Restore normal zoom text in TOP_RIGHT
-        wchar_t buf[32];
-        swprintf_s(buf, L"%d%%", Converters::toZoomInt(m_zoom));
-        slotTopRight.UpdateText(buf);
+        slotTopRight.UpdateText(Converters::FormatZoomPercent(m_zoom));
     }
 }
 
@@ -448,9 +444,7 @@ void OverlayManager::UpdateZoom(float /*zoom*/, HWND /*hWnd*/) {
     if (newZoom == m_zoom && !slotTopRight.text.empty())
         return;
     m_zoom = newZoom;
-    wchar_t buf[32];
-    swprintf_s(buf, L"%d%%", Converters::toZoomInt(m_zoom));
-    slotTopRight.UpdateText(buf);
+    slotTopRight.UpdateText(Converters::FormatZoomPercent(m_zoom));
     if (Constants::Overlay::OVERLAY_LAYOUT_MODE == 2)
         RebuildSummaryLine2();
 }
@@ -507,6 +501,8 @@ void OverlayManager::UpdateEffects() {
     if (std::abs(app.gamma - 1.0f) > EPS)
         appendLine(Constants::Strings::LABEL_GAMMA + fmtFloat(app.gamma));
 
+    // Listed in application order — top line runs first, bottom line runs last
+    // on the result of everything above it. Same vector the renderer chains.
     for (const auto &effectName: app.activeEffectsList)
         appendLine(effectName);
 

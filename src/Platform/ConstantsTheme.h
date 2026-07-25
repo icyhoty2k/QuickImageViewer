@@ -45,6 +45,18 @@ namespace Constants {
         // This is the INIT VALUE only — runtime state lives in app.themeFactor.
         constexpr float DEFAULT_THEME_FACTOR = 0.0f;
 
+        // Legal range for app.themeFactor. Enforced at BOTH ends of persistence:
+        // the runtime setter (AppCommands::changeAppThemeFactor) and the registry
+        // load, so a hand-edited or corrupt stored value cannot reach the renderer.
+        constexpr float THEME_FACTOR_MIN = 0.0f;
+        constexpr float THEME_FACTOR_MAX = 1.0f;
+
+        // The factor is a 0..1 ratio but is STORED as a whole percent (0..100),
+        // because the registry only holds DWORDs. Every conversion must go
+        // through this scale — casting the ratio straight to DWORD truncates it
+        // to 0 for every value below 1.0.
+        constexpr float THEME_FACTOR_STORE_SCALE = 100.0f;
+
         // Step size for runtime THEME_FACTOR adjustment (Ctrl+Alt+Shift+Numpad+/-).
         constexpr float THEME_FACTOR_STEP = 0.05f; // smallest step must be 0.01 dont go smaller than this because i seve in registry:static_cast<DWORD>(std::round(app.themeFactor * 100.0f)));
 

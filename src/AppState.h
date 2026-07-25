@@ -8,6 +8,7 @@
 #include <filesystem>
 #include <algorithm>
 #include "Renderer/IRenderer.h"
+#include "Common/Converters.h"   // PercentToRatio — ZOOM_MIN/MAX are percents
 #include <memory>
 
 namespace fs = std::filesystem;
@@ -343,18 +344,25 @@ struct AppState {
         InvalidateRect(hWnd, nullptr, FALSE);
     }
 
-    // Instead of multiple booleans, use a vector to track the active order
+    // The order the user switched effects on. This IS the render order: each
+    // effect operates on the result of the ones before it, so enabling Sepia
+    // while Desaturate is already on tints the desaturated image, not the
+    // original. Stays in lockstep with the effect* booleans above — every
+    // toggle goes through ToggleEffectChronological.
+    //
+    // Nothing here is destructive: the decoded bitmap is only ever the INPUT to
+    // the D2D graph, so switching an effect off drops its link and the chain
+    // recomputes from the untouched original.
     std::vector<std::wstring> activeEffectsList;
 
-    // Helper to toggle an effect chronologically
+    // Toggles one effect's membership, appending to the END when switching on
+    // so the newest effect always sees every earlier one's output.
     void ToggleEffectChronological(const std::wstring &effectName) {
         auto it = std::find(activeEffectsList.begin(), activeEffectsList.end(), effectName);
         if (it != activeEffectsList.end()) {
-            // It's already on, so remove it
-            activeEffectsList.erase(it);
+            activeEffectsList.erase(it); // switching off — pull its link out
         } else {
-            // It's off, add it to the bottom of the list
-            activeEffectsList.push_back(effectName);
+            activeEffectsList.push_back(effectName); // switching on — apply last
         }
     }
 
@@ -381,6 +389,60 @@ struct AppState {
 
 // Global state shared across files
 extern AppState app;
+
+// Clamps app.viewport.zoom so the EFFECTIVE on-screen zoom — the percentage the
+// overlay shows — lands inside [ZOOM_MIN, ZOOM_MAX].
+//
+// viewport.zoom is only a multiplier on top of the view mode's base scale, so
+// clamping it directly (the old `std::clamp(zoom, ZOOM_MIN, ZOOM_MAX)`) bounded
+// the wrong quantity: in FitToView a 20000px image in a small window already
+// starts near 0.05x, so the real zoom ran far outside the constants in one
+// direction and stopped far short in the other. Every zoom entry point —
+// keyboard, wheel, click-zoom, zoom panel — must go through here.
+// Returns which limit was hit, so the caller can tell the user the keypress was
+// capped rather than ignored. Only reports a clamp that actually CHANGED the
+// zoom — sitting at the limit and zooming the other way returns None.
+inline Constants::ZoomClampResult ClampZoomToLimits(HWND hWnd) {
+    using Constants::ZoomClampResult;
+
+    if (!(app.viewport.zoom > 0.0f)) app.viewport.zoom = 1.0f; // also catches NaN
+
+    // The limits are percents; viewport.zoom is a ratio. Convert once, here.
+    // With no image to scale against, baseScale is 1, so the effective-zoom
+    // bounds and the multiplier bounds are the same numbers.
+    float loBound = Converters::PercentToRatio(Constants::ZoomPanel::ZOOM_MIN);
+    float hiBound = Converters::PercentToRatio(Constants::ZoomPanel::ZOOM_MAX);
+
+    if (app.imgWidth > 0 && app.imgHeight > 0) {
+        RECT rc;
+        if (!GetClientRect(hWnd, &rc)) return ZoomClampResult::None;
+        const float winW = static_cast<float>(rc.right - rc.left);
+        const float winH = static_cast<float>(rc.bottom - rc.top);
+        if (winW <= 0.0f || winH <= 0.0f) return ZoomClampResult::None;
+
+        // Base scale = what the view mode renders at multiplier 1.0.
+        float baseW = 0.0f, baseH = 0.0f;
+        GetRenderSize(winW, winH,
+                      static_cast<float>(app.imgWidth), static_cast<float>(app.imgHeight),
+                      app.viewMode, 1.0f, baseW, baseH);
+        const float baseScale = baseW / static_cast<float>(app.imgWidth);
+        if (!(baseScale > 0.0f)) return ZoomClampResult::None;
+
+        // effective = baseScale * zoom, so zoom = effective / baseScale.
+        loBound /= baseScale;
+        hiBound /= baseScale;
+    }
+
+    if (app.viewport.zoom > hiBound) {
+        app.viewport.zoom = hiBound;
+        return ZoomClampResult::ClampedMax;
+    }
+    if (app.viewport.zoom < loBound) {
+        app.viewport.zoom = loBound;
+        return ZoomClampResult::ClampedMin;
+    }
+    return ZoomClampResult::None;
+}
 
 // Clamps the pan offsets to the range the CURRENT view mode + zoom allow.
 // Must be called after EVERY zoom mutation: shrinking the rendered image
