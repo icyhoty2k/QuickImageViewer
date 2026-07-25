@@ -80,11 +80,12 @@ namespace UI {
             return;
         }
 
-        // Range check in PERCENT space on both ends (ZOOM_MIN is a ratio, so it
-        // is scaled up; ZOOM_MAX is already the panel's percent ceiling). This
-        // matches the label and the out-of-range hint exactly.
-        const float mult = percent / 100.0f;
-        if (percent < Constants::ZoomPanel::ZOOM_MIN * 100.0f || percent > Constants::ZoomPanel::ZOOM_MAX) {
+        // The limits are already percents, and so is the typed value — compare
+        // them directly. This is the same range the keyboard/mouse clamp
+        // enforces, and the same pair the label and hint below print.
+        const float mult = Converters::PercentToRatio(percent);
+        if (percent < Constants::ZoomPanel::ZOOM_MIN ||
+            percent > Constants::ZoomPanel::ZOOM_MAX) {
             m_outOfRange = true;
             InvalidateRect(m_hWnd, nullptr, FALSE);
             return;
@@ -98,18 +99,17 @@ namespace UI {
         // The overlay only ever shows a ROUNDED percent (e.g. 150.34% prints as
         // "150%").  Typing back the number the overlay shows must be a no-op —
         // otherwise the image visibly shrinks/grows by the rounding remainder.
-        // Below 1% the rounded display is "0%" for every value, so the snap would
-        // swallow real changes — only apply it where the display is meaningful.
+        // Compare the FORMATTED strings, so the snap follows whatever precision
+        // the overlay actually displays at this magnitude (whole percents above
+        // 1%, two decimals below it) instead of assuming integer percents.
         const bool alreadyThere =
-            percent >= 1.0f &&
-            Converters::toZoomInt(currentEffective) == static_cast<int>(std::lround(percent));
+            Converters::FormatZoomPercent(currentEffective) ==
+            Converters::FormatZoomPercent(mult);
 
         if (!alreadyThere && currentEffective > 0.0f) {
             app.viewport.zoom *= mult / currentEffective;
-            // Clamp to the engine limits, matching keyboard/mouse zoom commands.
-            app.viewport.zoom = std::clamp(app.viewport.zoom,
-                                           Constants::ZoomPanel::ZOOM_MIN,
-                                           Constants::ZoomPanel::ZOOM_MAX);
+            // Same clamp the keyboard/mouse paths use — bounds the EFFECTIVE zoom.
+            ClampZoomToLimits(m_hParent);
             // Zooming to a smaller percent shrinks the legal pan range — drop any
             // stale offset so the image cannot end up parked against a black gap.
             ClampViewportOffset(m_hParent);
@@ -117,8 +117,7 @@ namespace UI {
         Hide();
         // Report the zoom that was ACTUALLY applied (post-clamp), not the raw
         // keystrokes — "0150" or a clamped 99999% would otherwise lie.
-        wchar_t applied[32];
-        swprintf_s(applied, 32, L"%d%%", Converters::toZoomInt(app.GetRealZoom(m_hParent)));
+        const std::wstring applied = Converters::FormatZoomPercent(app.GetRealZoom(m_hParent));
         g_overlayManager.PostCenterMessage(m_hParent,
             std::wstring(Constants::Messages::ZOOM_TO_PREFIX) + applied);
         InvalidateRect(m_hParent, nullptr, FALSE);
@@ -226,8 +225,8 @@ namespace UI {
                 {
                     wchar_t label[128];
                     swprintf_s(label, 128, Constants::Messages::ZOOM_TO_INPUT_HINT_FMT,
-                               static_cast<double>(Constants::ZoomPanel::ZOOM_MIN * 100.0f),
-                               static_cast<double>(Constants::ZoomPanel::ZOOM_MAX));
+                               Converters::FormatPercentCompact(Constants::ZoomPanel::ZOOM_MIN).c_str(),
+                               Converters::FormatPercentCompact(Constants::ZoomPanel::ZOOM_MAX).c_str());
                     DrawTextW(hdc, label, -1, &labelRect, DT_LEFT | DT_VCENTER | DT_SINGLELINE);
                 }
 
@@ -252,8 +251,8 @@ namespace UI {
                     ? [&]() {
                         wchar_t buf[128];
                         swprintf_s(buf, 128, Constants::Messages::ZOOM_OUT_OF_RANGE_FMT,
-                                   static_cast<double>(Constants::ZoomPanel::ZOOM_MIN * 100.0f),
-                                   static_cast<double>(Constants::ZoomPanel::ZOOM_MAX));
+                                   Converters::FormatPercentCompact(Constants::ZoomPanel::ZOOM_MIN).c_str(),
+                                   Converters::FormatPercentCompact(Constants::ZoomPanel::ZOOM_MAX).c_str());
                         return std::wstring(buf);
                       }()
                     : Constants::Messages::ZOOM_ENTER_HINT;

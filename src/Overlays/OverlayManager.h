@@ -6,6 +6,7 @@
 #include <wrl/client.h>
 
 #include "Constants.h"
+#include "ConstantsStrings.h"   // Constants::Messages — AnnounceZoomClamp below
 #include "RendererD2D.h"
 
 // =============================================================================
@@ -212,3 +213,13 @@ class OverlayManager {
 };
 
 extern OverlayManager g_overlayManager;
+
+// Posts the centre-screen "limit reached" notice for a ClampZoomToLimits()
+// result. No-op when nothing was capped, so every zoom call site can hand its
+// result straight here without a branch of its own.
+inline void AnnounceZoomClamp(HWND hWnd, Constants::ZoomClampResult result) {
+    if (result == Constants::ZoomClampResult::ClampedMax)
+        g_overlayManager.PostCenterMessage(hWnd, Constants::Messages::ZOOM_MAX_REACHED);
+    else if (result == Constants::ZoomClampResult::ClampedMin)
+        g_overlayManager.PostCenterMessage(hWnd, Constants::Messages::ZOOM_MIN_REACHED);
+}

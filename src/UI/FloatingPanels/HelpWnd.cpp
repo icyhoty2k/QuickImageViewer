@@ -200,6 +200,8 @@ namespace UI {
         Add(L"Mouse Wheel",
             L"Previous / next image when scrolled over the main window. Direction can be "
             L"reversed with MOUSE_VERTICAL_REVERSE_SCROLL_DIRECTION in Constants.h.", sNav);
+        Add(K(SC::SC_NAV_FIRST_IMAGE) + L"  /  " + K(SC::SC_NAV_LAST_IMAGE),
+            L"Jump to the first / last image of the folder.", sNav);
         Add(K(SC::SC_NAV_TOGGLE_FIRST_LAST_IMAGE_IN_CURR_FOLDER),
             L"Smart jump between the first and the last image of the folder — goes to "
             L"whichever end is further away from the current position.", sNav);
@@ -210,6 +212,13 @@ namespace UI {
             L"image-level Back button.", sNav);
         Add(K(SC::SC_TOGGLE_LAST_DIR),
             L"Toggle between the current folder and the previously opened folder.", sNav);
+        Add(K(SC::SC_NAV_PREV_HISTORY_FOLDER) + L"  /  " + K(SC::SC_NAV_NEXT_HISTORY_FOLDER),
+            L"Walk the History panel's list one folder up / down, visiting only the "
+            L"non-favorite entries. The list order is never changed — the centre overlay "
+            L"reports the same row number the panel shows.", sNav);
+        Add(K(SC::SC_NAV_PREV_FAVORITE_FOLDER) + L"  /  " + K(SC::SC_NAV_NEXT_FAVORITE_FOLDER),
+            L"Same walk restricted to the favorites, so the two pairs of keys never "
+            L"land on each other's entries.", sNav);
         Add(K(SC::SC_NAV_JUMP_TO_IMAGE) + L"  /  " + Ctrl(SC::SC_NAV_JUMP_TO_IMAGE_ALT),
             L"Open the Jump-to panel: type an image number and press Enter to go straight "
             L"to it. Typing @ inside the panel switches to Find mode.", sNav);
@@ -458,33 +467,37 @@ namespace UI {
 
         // ---------------------------------------------------------------
         const int sFx = Sec(L"🎨", L"EFFECTS & COLOR",
-                            L"Non-destructive adjustments — the file on disk is never touched");
+                            L"Effects stack in the order you switch them on — each one works on "
+                            L"the result of the previous. Non-destructive: the file on disk is "
+                            L"never touched.");
 
         Add(K(SC::SC_TRANSFORM_ROTATE) + L" / " + Shift(SC::SC_TRANSFORM_ROTATE),
             L"Rotate 90° clockwise / counter-clockwise.", sFx);
         Add(K(SC::SC_TRANSFORM_FLIP_H) + L" / " + K(SC::SC_TRANSFORM_FLIP_V),
             L"Flip horizontally / vertically.", sFx);
-        Add(K(FX::SC_COLOR_GRAYSCALE), L"Toggle grayscale.", sFx);
-        Add(K(FX::SC_COLOR_INVERT), L"Toggle color inversion (negative).", sFx);
-        Add(K(FX::SC_COLOR_SEPIA), L"Toggle sepia tone.", sFx);
-        Add(K(FX::SC_COLOR_SOLARIZE),
+        Add(Ctrl(FX::SC_COLOR_GRAYSCALE),
+            L"Toggle desaturate — drops all colour. Switch Sepia on afterwards to tint "
+            L"the result.", sFx);
+        Add(Ctrl(FX::SC_COLOR_INVERT), L"Toggle color inversion (negative).", sFx);
+        Add(Ctrl(FX::SC_COLOR_SEPIA), L"Toggle sepia tone.", sFx);
+        Add(Ctrl(FX::SC_COLOR_SOLARIZE),
             L"Toggle solarize — inverts only tones above " +
             NumF(Constants::SOLARIZE_THRESHOLD * 100.0f) + L"% brightness.", sFx);
-        Add(K(FX::SC_COLOR_OUTLINE), L"Toggle outline — GPU edge detection.", sFx);
-        Add(K(FX::SC_COLOR_THRESHOLD),
-            L"Toggle black & white threshold — pixels above " +
-            NumF(Constants::BW_THRESHOLD_LEVEL * 100.0f) + L"% brightness become white, the "
+        Add(Ctrl(FX::SC_COLOR_OUTLINE), L"Toggle outline — GPU edge detection.", sFx);
+        Add(Ctrl(FX::SC_COLOR_THRESHOLD),
+            L"Toggle black & white threshold — pixels brighter than " +
+            NumF(Constants::BW_THRESHOLD_LEVEL * 100.0f) + L"% become white, the "
             L"rest black.", sFx);
-        Add(K(FX::SC_COLOR_SAT_DOWN) + L" / " + K(FX::SC_COLOR_SAT_UP),
+        Add(Ctrl(FX::SC_COLOR_SAT_DOWN) + L" / " + Ctrl(FX::SC_COLOR_SAT_UP),
             L"Saturation − / + in " + NumF(Constants::COLOR_ADJUST_STEP) +
             L" steps  (0 = grayscale, maximum " + NumF(Constants::MIN_MAX_SATURATION) + L").", sFx);
-        Add(K(FX::SC_COLOR_BRIGHTNESS_UP) + L" / " + K(FX::SC_COLOR_BRIGHTNESS_DOWN),
+        Add(Ctrl(FX::SC_COLOR_BRIGHTNESS_UP) + L" / " + Ctrl(FX::SC_COLOR_BRIGHTNESS_DOWN),
             L"Brightness + / − in " + NumF(Constants::COLOR_ADJUST_STEP) +
             L" steps  (range ±" + NumF(Constants::MIN_MAX_BRIGHTNESS) + L").", sFx);
-        Add(K(FX::SC_COLOR_CONTRAST_UP) + L" / " + K(FX::SC_COLOR_CONTRAST_DOWN),
+        Add(Ctrl(FX::SC_COLOR_CONTRAST_UP) + L" / " + Ctrl(FX::SC_COLOR_CONTRAST_DOWN),
             L"Contrast + / − in " + NumF(Constants::COLOR_ADJUST_STEP) +
             L" steps  (maximum " + NumF(Constants::MIN_MAX_CONTRAST) + L").", sFx);
-        Add(K(FX::SC_COLOR_GAMMA_UP) + L" / " + K(FX::SC_COLOR_GAMMA_DOWN),
+        Add(Ctrl(FX::SC_COLOR_GAMMA_UP) + L" / " + Ctrl(FX::SC_COLOR_GAMMA_DOWN),
             L"Gamma + / − in " + NumF(Constants::GAMMA_STEP) + L" steps  (range " +
             NumF(Constants::MIN_GAMMA) + L" – " + NumF(Constants::MAX_GAMMA) + L").", sFx);
         Add(K(FX::SC_COLOR_RESET_ALL_EFFECTS),

@@ -28,6 +28,7 @@
 // =========================================================================
 
 #include <iterator>
+#include <cstdint>   // uint32_t — Slideshow::TRANSITION_LIST_DEFAULT_MASK
 #include "../resources/resource.h"
 
 namespace Constants {
@@ -278,6 +279,9 @@ namespace Constants {
         constexpr int SPAN    = 5;
         constexpr int COUNT   = 6;
     }
+    // Start maximized/borderless on launch. Was the only persisted setting with
+    // no named default — load and Restore Defaults each hardcoded their own.
+    constexpr bool IS_START_FULLSCREEN     = false;
     constexpr bool IS_CTRL_C_ENABLED       = true;
     constexpr bool IS_THUMB_COPY_ENABLED   = true;
     constexpr bool IS_THUMB_MOVE_ENABLED   = true;
@@ -642,12 +646,31 @@ namespace Constants {
         // Base gray values passed to Constants::Theme::ThemedGray at draw time
         constexpr float LABEL_TEXT_GRAY = 0.9020f; // label: "Enter zoom multiplier..."
         constexpr float HINT_TEXT_GRAY = 0.50f;    // hint: "Enter = apply zoom..."
-        // Lower bound is derived from MIN * 100.0f at the call site.
-        constexpr float ZOOM_STEP = 1.1f;    // +/- keys and ctrl+wheel
-        constexpr float ZOOM_MIN  = 0.001f;  // ratio — 0.1%
-        constexpr float ZOOM_MAX  = 99999.0f;// ratio (also used as the panel's percent ceiling)
+        // Zoom limits, in PERCENT — exactly the number the overlay displays and
+        // the zoom panel accepts. 0.1 means 0.1%, 99999 means 99999%.
+        //
+        // They bound the EFFECTIVE on-screen zoom, NOT the raw app.viewport.zoom
+        // multiplier. Effective zoom is (baseScale * viewport.zoom) and baseScale
+        // depends on the view mode, so clamping the multiplier alone lets the real
+        // zoom drift far past these bounds. Always clamp through
+        // ClampZoomToLimits() in AppState.h, never with a bare std::clamp on
+        // viewport.zoom.
+        //
+        // Unit changes go through Converters::PercentToRatio / RatioToPercent.
+        constexpr float ZOOM_STEP = 1.1f;     // ratio factor per +/- key or wheel tick
+        constexpr float ZOOM_MIN  = 0.01f;     // percent — smallest allowed zoom
+        constexpr float ZOOM_MAX  = 99'999.0f; // percent — largest allowed zoom single quote is number separator " ' " like in java "_"
         constexpr int   INPUT_MAX_CHARS = 10; // must be < ZoomWnd::m_input capacity
     }
+
+    // Outcome of ClampZoomToLimits() (AppState.h). Lives here rather than in
+    // AppState.h so OverlayManager.h can consume it without pulling in AppState.
+    // Callers use it to tell the user WHY a zoom keypress did nothing.
+    enum class ZoomClampResult {
+        None,       // zoom was already inside the limits — nothing was capped
+        ClampedMin, // hit ZOOM_MIN, cannot zoom out further
+        ClampedMax  // hit ZOOM_MAX, cannot zoom in further
+    };
 
     // =========================================================================
     // InputBox — shared single-line text control (Find / JumpTo / History / Help)
@@ -711,6 +734,12 @@ namespace Constants {
         // SlideshowTransitions.h (a static_assert-free contract used for menu
         // building, cycling and registry clamping).
         constexpr int TRANSITION_COUNT = 21;
+
+        // Default TRANS_LIST bitmask: every animated type ticked, bit 0 (Cut)
+        // cleared — a "transition list" containing Cut would mean "no transition".
+        // Used as the registry default AND by Restore Defaults; keep it here so
+        // the two cannot drift apart.
+        constexpr uint32_t TRANSITION_LIST_DEFAULT_MASK = 0xFFFFFFFEu;
 
         // Transition selection is two independent axes:
         //   SOURCE — which transitions are in play

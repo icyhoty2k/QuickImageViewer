@@ -530,6 +530,87 @@ namespace UI {
     }
 
     // ---------------------------------------------------------------------------
+    // WalkHistoryFolder  —  PageUp/PageDown (history) and Insert/Delete (favorites)
+    //
+    // Reads g_displayList exactly as the panel renders it and never reorders it,
+    // so the row number reported in the centre overlay is the same number the
+    // panel prints next to the folder. Favorites and non-favorites are walked as
+    // two independent sequences over that one list.
+    //
+    // The green "this is the folder you are in" highlight needs no work here —
+    // WM_PAINT derives it from app.playlist[app.currentIndex], so it follows the
+    // moment OpenDirectory() succeeds.
+    // ---------------------------------------------------------------------------
+    bool WalkHistoryFolder(HWND hOwner, int direction, bool favoritesOnly) {
+        if (direction == 0) return false;
+
+        // Rebuild so the walk sees the same rows the panel would draw right now
+        // (respects the favorites-position setting, the display caps and full mode).
+        BuildDisplayList();
+        const int total = static_cast<int>(g_displayList.size());
+        if (total == 0) {
+            g_overlayManager.PostCenterMessage(hOwner,
+                favoritesOnly ? Constants::Messages::WALK_NO_FAVORITE_FOLDERS
+                              : Constants::Messages::WALK_NO_HISTORY_FOLDERS);
+            return false;
+        }
+
+        // Where we are now, by folder rather than by row — the row index is not
+        // stable across a rebuild, the path is.
+        std::wstring currentFolder;
+        if (!app.playlist.empty() && app.currentIndex >= 0 &&
+            app.currentIndex < static_cast<int>(app.playlist.size())) {
+            const std::wstring &cur = app.playlist[app.currentIndex];
+            const size_t sep = cur.find_last_of(L"\\/");
+            if (sep != std::wstring::npos)
+                currentFolder = cur.substr(0, sep);
+        }
+
+        int startRow = -1;
+        if (!currentFolder.empty()) {
+            for (int i = 0; i < total; ++i) {
+                if (g_displayList[i].path == currentFolder) {
+                    startRow = i;
+                    break;
+                }
+            }
+        }
+
+        // Not in the list (or in the other category): begin just outside the end
+        // we are travelling from, so the first step lands on the first candidate.
+        if (startRow < 0)
+            startRow = (direction > 0) ? -1 : total;
+
+        // One full lap, wrapping, stopping at the first row of the right category
+        // that is not known to be missing.
+        for (int step = 1; step <= total; ++step) {
+            int row = startRow + direction * step;
+            row = ((row % total) + total) % total; // positive modulo — wrap both ways
+
+            const DisplayEntry &entry = g_displayList[row];
+            if (entry.isFavorite != favoritesOnly) continue;
+            if (entry.path == currentFolder) continue; // already here
+            if (GetFolderStatus(entry.path) == FolderStatus::Missing) continue;
+
+            const std::wstring folder = entry.path; // copy — OpenDirectory rebuilds the list
+            const int displayNumber = row + 1;      // matches the panel's row label
+
+            g_overlayManager.PostCenterMessage(hOwner,
+                (favoritesOnly ? std::wstring(Constants::Messages::WALK_FAVORITE_FOLDER)
+                               : std::wstring(Constants::Messages::WALK_HISTORY_FOLDER))
+                + std::to_wstring(displayNumber) + L". " + folder);
+
+            OpenDirectory(hOwner, folder);
+            return true;
+        }
+
+        g_overlayManager.PostCenterMessage(hOwner,
+            favoritesOnly ? Constants::Messages::WALK_NO_FAVORITE_FOLDERS
+                          : Constants::Messages::WALK_NO_HISTORY_FOLDERS);
+        return false;
+    }
+
+    // ---------------------------------------------------------------------------
     // GetHistoryWindowBounds  —  centered on the parent's monitor
     // ---------------------------------------------------------------------------
     static void GetHistoryWindowBounds(HWND hRef, int &x, int &y, int &w, int &h) {
