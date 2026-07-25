@@ -1,5 +1,6 @@
 ﻿#include "OverlayManager.h"
 #include "../AppState.h"
+#include "../Common/Converters.h"
 #include "../Platform/Constants.h"
 #include "../Platform/ConstantsStrings.h"
 #include <algorithm>
@@ -373,7 +374,7 @@ void OverlayManager::RebuildTopLeft() {
 void OverlayManager::RebuildSummaryLine2() {
     // "86%  1920×1080 / 4.3 MB"
     wchar_t zoomBuf[16];
-    swprintf_s(zoomBuf, L"%.0f%%", m_zoom * 100.0f);
+    swprintf_s(zoomBuf, L"%d%%", Converters::toZoomInt(m_zoom));
     std::wstring text = zoomBuf;
     text += L"  ";
     wchar_t dimBuf[32];
@@ -419,7 +420,7 @@ void OverlayManager::OnLayoutModeChanged(HWND /*hWnd*/) {
         }
         // Restore normal zoom text in TOP_RIGHT
         wchar_t buf[32];
-        swprintf_s(buf, L"%.0f%%", m_zoom * 100.0f);
+        swprintf_s(buf, L"%d%%", Converters::toZoomInt(m_zoom));
         slotTopRight.UpdateText(buf);
     }
 }
@@ -434,21 +435,21 @@ void OverlayManager::UpdateInfo(int index, int total, const std::wstring &filena
 void OverlayManager::UpdateZoom(float /*zoom*/, HWND /*hWnd*/) {
     // Compute effective zoom from cached render-target size — avoids a
     // GetClientRect syscall on every frame (was called via app.GetRealZoom).
+    // Same formula as AppState::GetRealZoom(), but fed from the cached render-target
+    // size so the displayed % always matches what "Zoom to N%" computes.
     float newZoom = 1.0f;
     if (app.imgWidth > 0 && app.imgHeight > 0 && m_rtW > 0.0f && m_rtH > 0.0f) {
-        if (app.viewMode == Constants::ViewModes::ViewMode::OriginalImageSize_PreserveAspectRatio) {
-            newZoom = app.viewport.zoom;
-        } else {
-            const float fitScale = std::min(m_rtW / static_cast<float>(app.imgWidth),
-                                            m_rtH / static_cast<float>(app.imgHeight));
-            newZoom = fitScale * app.viewport.zoom;
-        }
+        float renderW = 0.0f, renderH = 0.0f;
+        GetRenderSize(m_rtW, m_rtH,
+                      static_cast<float>(app.imgWidth), static_cast<float>(app.imgHeight),
+                      app.viewMode, app.viewport.zoom, renderW, renderH);
+        newZoom = renderW / static_cast<float>(app.imgWidth);
     }
     if (newZoom == m_zoom && !slotTopRight.text.empty())
         return;
     m_zoom = newZoom;
     wchar_t buf[32];
-    swprintf_s(buf, L"%.0f%%", m_zoom * 100.0f);
+    swprintf_s(buf, L"%d%%", Converters::toZoomInt(m_zoom));
     slotTopRight.UpdateText(buf);
     if (Constants::Overlay::OVERLAY_LAYOUT_MODE == 2)
         RebuildSummaryLine2();
