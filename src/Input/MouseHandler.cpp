@@ -525,56 +525,24 @@ void MouseHandler::HandleMouseHWheel(HWND hWnd, WPARAM wParam, LPARAM /*lParam*/
         return;
     }
 
-    // Plain horizontal scroll: cycle through the navigation snapshot.
-    // Snapshot is taken from the raw backing array (not display-capped).
-    // Refreshed explicitly when the user presses Ctrl+Tab in the history panel.
-    static int s_histIdx = 0;
+    // Plain horizontal scroll: step through the History panel's folder list.
+    // Only the notch accumulation lives here — the stepping itself goes through
+    // UI::WalkHistoryFolder, the same function the PageUp/PageDown and
+    // Insert/Delete keys use, so all three behave identically. It owns the
+    // frozen snapshot that keeps a walk stable while opening a folder reorders
+    // the MRU list underneath.
     static int s_accumulator = 0;
-    static int s_snapVersion = -1;
-
-    if (UI::GetNavigationSnapshot().empty())
-        UI::CaptureNavigationSnapshot();
-
-    const auto &snap = UI::GetNavigationSnapshot();
-    if (snap.empty()) return;
-
-    // Reset index whenever the snapshot was refreshed via Ctrl+Tab
-    const int currentVersion = UI::GetNavigationSnapshotVersion();
-    if (currentVersion != s_snapVersion) {
-        s_histIdx = 0;
-        s_snapVersion = currentVersion;
-    }
 
     s_accumulator += hDelta;
     const int threshold = WHEEL_DELTA * Constants::MOUSE_HSCROLL_FOLDER_TICKS;
     if (std::abs(s_accumulator) < threshold) return;
 
-    const int total = (int) snap.size();
-    if (s_accumulator > 0) s_histIdx = (s_histIdx + 1) % total;
-    else s_histIdx = (s_histIdx - 1 + total) % total;
+    const bool reverse = (s_accumulator < 0);
     s_accumulator = 0;
 
-    const std::wstring folder = snap[s_histIdx]; // copy — snap must not be used after OpenDirectory
-
-    std::wstring displayName = folder;
-    const size_t sep = folder.find_last_of(L"\\/");
-    if (sep != std::wstring::npos) displayName = folder.substr(sep + 1);
-
-    if (!UI::IsFolderValidForViewer(folder)) {
-        auto &histWnd = uiManager.getHistoryListWindow();
-        if (histWnd.IsVisible())
-            InvalidateRect(histWnd.GetHwnd(), nullptr, FALSE);
-        g_overlayManager.PostCenterMessage(hWnd,
-                                           std::wstring(L"⚠ ") +
-                                           std::to_wstring(s_histIdx + 1) + L"/" + std::to_wstring(total) + L" " + displayName);
-        return;
-    }
-
-    OpenDirectory(hWnd, folder);
-
-    g_overlayManager.PostCenterMessage(hWnd,
-                                       Constants::Messages::HISTORY_NAV_FOLDER +
-                                       std::to_wstring(s_histIdx + 1) + L"/" + std::to_wstring(total) + L" " + displayName);
+    // The wheel visits every row the panel shows, favorites included — the two
+    // key pairs are the ones that split the list into halves.
+    (void) UI::WalkHistoryFolder(hWnd, UI::WalkScope::All, reverse);
 }
 
 void MouseHandler::HandleDoubleClick(HWND hWnd) {

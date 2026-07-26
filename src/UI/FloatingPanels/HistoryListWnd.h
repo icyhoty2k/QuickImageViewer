@@ -18,11 +18,20 @@ namespace UI {
         // Shortcuts (active when panel is focused):
         //   Tab        — Toggle panel (SC_PANEL_HISTORY_TOGGLE)
         //   Space          — Toggle favorite on hovered row (HISTORY_FAVORITES_TOGGLE_KEY)
+        //   Ctrl+Del       — Delete the hovered row (Ctrl+Z restores it)
         //   Ctrl+Shift+Del — Clear all history except favorites (HISTORY_CLEAR_ALL_HISTORY_BUT_NOT_FAVORITES)
         //   Ctrl+Alt+Shift+Del — Clear all favorites except history (HISTORY_CLEAR_ALL_FAVORITES_BUT_NOT_HISTORY)
         //   Up/Down    — Move selection
         //   Enter      — Open selected folder
         //   Esc        — Clear filter if typed, else hide panel
+        //
+        // NOT handled here — forwarded to the main app so they behave the same
+        // with the panel open as without it:
+        //   Home / End / PageUp / PageDown / Insert / Delete
+        // These are the image- and folder-navigation cluster; walking the list
+        // while looking at it is the point. While the filter box holds text,
+        // Home / End / Delete revert to caret and forward-delete until Esc
+        // clears it. Row deletion moved to Ctrl+Del to free plain Delete.
         // -----------------------------------------------------------------------
         public:
             void Init(HINSTANCE hInstance, HWND hParent) override;
@@ -85,6 +94,19 @@ namespace UI {
     // Called by FileHandler after every successful folder load.
     void PushFolderHistory(const std::wstring &folderPath);
 
+    // Tells the panel which folder the MAIN VIEWER is now showing, and repaints
+    // it if visible. This is what drives the green "you are here" row.
+    //
+    // Needed because the panel cannot reliably work that out for itself: it used
+    // to derive the folder from app.playlist, but a missing or empty folder
+    // leaves the playlist cleared (or still describing the previous folder), so
+    // the marker stopped following as soon as a walk passed through one. The
+    // viewer knows; it just has to say so.
+    //
+    // Does NOT reorder the list or count as user navigation — purely "the green
+    // row is now here".
+    void NotifyCurrentFolder(const std::wstring &folderPath);
+
     // Toggle favorite status on the path at display index 'rowIndex'.
     void ToggleFavorite(int rowIndex);
 
@@ -114,26 +136,54 @@ namespace UI {
     // Equivalent to Tab then Ctrl+Tab — used from the main app via Ctrl+Tab.
     void ToggleHistoryFull();
 
-    // Steps to the next / previous folder in the History panel's own list and
-    // opens it in the main viewer. The list order is NOT modified — this only
-    // reads it, exactly as rendered, so the row numbers in the centre overlay
-    // match the numbers the panel shows.
-    //
-    //   direction     +1 = down the list (next), -1 = up the list (previous)
-    //   favoritesOnly true  = visit only starred rows   (Insert / Delete)
-    //                 false = visit only non-starred rows (PageDown / PageUp)
-    //
-    // The two categories are walked independently, so the history keys never
-    // land on a favorite and the favorite keys never land on a plain entry.
-    // Wraps around at both ends. Known-missing folders are skipped. Returns
-    // false (and posts a centre message) when there is nothing to walk to.
-    bool WalkHistoryFolder(HWND hOwner, int direction, bool favoritesOnly);
+    // Re-applies app.historyFullModeEnabled to an already-open panel: rebuilds
+    // the row set, refits the window, repaints. Call after changing that flag
+    // from OUTSIDE this file (the tray's "History: Open Full List" item), which
+    // would otherwise leave the panel showing the old row set until something
+    // else happened to invalidate it. No-op when the panel is not visible.
+    void RefreshHistoryFullMode();
 
-    // Horizontal-scroll navigation snapshot — taken from the raw backing array,
-    // not the capped display list. Call CaptureNavigationSnapshot() to refresh;
-    // version increments on each capture so callers can detect a change.
-    void CaptureNavigationSnapshot();
-    const std::vector<std::wstring> &GetNavigationSnapshot();
-    int GetNavigationSnapshotVersion();
+    // Which rows a walk is allowed to land on. The History panel's list is one
+    // list containing both kinds of row; these are three disjoint-or-total views
+    // of it, not three lists.
+    enum class WalkScope {
+        All,              // horizontal mouse wheel — every row the panel shows
+        NonFavoritesOnly, // PageUp / PageDown
+        FavoritesOnly,    // Insert / Delete
+    };
+
+    // THE one folder-walking function. Every caller — horizontal wheel, the
+    // history keys and the favorite keys — goes through here, so all three
+    // behave identically.
+    //
+    //   scope    which rows are eligible (see above)
+    //   reverse  false = down the list (next), true = up the list (previous)
+    //
+    // Walks a FROZEN snapshot of the panel's display list. That matters because
+    // opening a folder promotes it to the front of the MRU store, which would
+    // otherwise reshuffle the list mid-walk and make every step ping-pong
+    // between two folders. The snapshot is re-taken only when it goes stale:
+    // the current folder is no longer the one this walk opened (you navigated
+    // some other way), the panel's full/short mode changed, or the list itself
+    // was edited (favorite toggled, history cleared). A plain MRU promotion is
+    // deliberately NOT a staleness trigger — that is the reordering we ignore.
+    //
+    // Which rows exist comes from the panel's own live full/short state, so a
+    // walk never visits a folder the panel is not currently showing. There is
+    // no parameter for it — a caller-supplied flag could disagree with the panel.
+    //
+    // Wraps at both ends and never re-opens the folder already on screen.
+    // MISSING folders are stepped over (reported in the centre message); EMPTY
+    // folders are OPENED, matching what Enter on that row does — they exist, so
+    // navigating to one is real navigation and the panel, the green row and the
+    // MRU order all stay in agreement. Returns false (and posts a centre message)
+    // if nothing is eligible.
+    bool WalkHistoryFolder(HWND hOwner, WalkScope scope, bool reverse);
+
+    // Invalidates any in-progress walk snapshot. Call after an edit that changes
+    // WHICH rows exist or which category a row is in — toggling a favorite,
+    // clearing history, clearing favorites. A plain MRU reorder must NOT call
+    // this; ignoring reorders is the entire point of the snapshot.
+    void InvalidateWalkSnapshot();
 
 } // namespace UI

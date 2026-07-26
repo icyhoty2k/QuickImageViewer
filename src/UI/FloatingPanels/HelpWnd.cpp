@@ -420,8 +420,11 @@ namespace UI {
             L"is open, or hides the existing one. The History panel itself stays open.", sHist);
         Add(K(SC::HISTORY_FAVORITES_TOGGLE_KEY),
             L"Toggle favorite on the hovered entry. Favorites survive history clears.", sHist);
-        Add(K(VK_DELETE),
+        Add(Ctrl(VK_DELETE),
             L"Delete the hovered entry. " + Ctrl('Z') + L" restores the last deleted one.", sHist);
+        Add(L"Home / End / Page Up / Page Down / Insert / Delete",
+            L"Not captured by this panel — they reach the viewer as usual, so you can walk "
+            L"images and folders while watching the list highlight follow you.", sHist);
         Add(CtrlShift(SC::HISTORY_CLEAR_ALL_HISTORY_BUT_NOT_FAVORITES),
             L"Clear the entire history but keep all favorites.", sHist);
         Add(CtrlAltShift(SC::HISTORY_CLEAR_ALL_FAVORITES_BUT_NOT_HISTORY),
