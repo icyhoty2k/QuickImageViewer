@@ -184,20 +184,29 @@ namespace Shortcuts {
     // -------------------------------------------------------------------------
     namespace ImageEffects {
         constexpr UINT SC_EFFECT_APPLY_TOGGLE = VK_OEM_3; // grave key `
-        constexpr UINT SC_COLOR_GRAYSCALE = VK_DELETE;
-        constexpr UINT SC_COLOR_INVERT = VK_INSERT;
-        constexpr UINT SC_COLOR_SEPIA = VK_HOME;
-        constexpr UINT SC_COLOR_SOLARIZE = VK_END;
-        constexpr UINT SC_COLOR_OUTLINE = VK_PRIOR;
-        constexpr UINT SC_COLOR_THRESHOLD = VK_NEXT;
-        constexpr UINT SC_COLOR_GAMMA_UP = VK_OEM_PLUS;
-        constexpr UINT SC_COLOR_GAMMA_DOWN = VK_OEM_MINUS;
-        constexpr UINT SC_COLOR_BRIGHTNESS_UP = VK_OEM_5; // backslash
-        constexpr UINT SC_COLOR_BRIGHTNESS_DOWN = VK_OEM_7; // apostrophe
-        constexpr UINT SC_COLOR_CONTRAST_UP = VK_OEM_2; // forward slash
-        constexpr UINT SC_COLOR_CONTRAST_DOWN = VK_OEM_PERIOD;
-        constexpr UINT SC_COLOR_SAT_DOWN = VK_OEM_4;
-        constexpr UINT SC_COLOR_SAT_UP = VK_OEM_6;
+
+        // ── The six named effects — ALL require ctrl (no alt, no shift) ───────
+        // They moved off the plain navigation-cluster keys so Home/End/PageUp/
+        // PageDown/Insert/Delete are free for image and folder navigation.
+        // The plain-key meanings live in the Navigation section above.
+        constexpr UINT SC_COLOR_GRAYSCALE_OR_NAVIGATE_FAVS_NEXT = VK_DELETE; // Ctrl+Delete // Delete   — next favorite
+        constexpr UINT SC_COLOR_INVERT_OR_NAVIGATE_FAVS_PREV = VK_INSERT; // Ctrl+Insert , // Insert   — previous favorite
+        constexpr UINT SC_COLOR_SEPIA_OR_SC_NAV_FIRST_IMAGE = VK_HOME; // Ctrl+Home , // Home — jump to first image in folder
+        constexpr UINT SC_COLOR_SOLARIZE_OR_SC_NAV_LAST_IMAGE = VK_END; // Ctrl+End , // End  — jump to last image in folder
+        constexpr UINT SC_COLOR_OUTLINE_OR_NAV_PREV_HISTORY_FOLDER = VK_PRIOR; // Ctrl+PageUp , // PageUp   — previous non-favorite
+        constexpr UINT SC_COLOR_THRESHOLD_OR_NAV_NEXT_HISTORY_FOLDER = VK_NEXT; // Ctrl+PageDown , // PageDown — next non-favorite
+        // ── The four continuous adjustments — ALL require ctrl (no alt, no shift)
+        // Same rule as the six named effects above: every image-manipulation key
+        // in this namespace is Ctrl+<key>. Gamma's two keys keep their unrelated
+        // Shift= window-resize meaning, which is not an effect.
+        constexpr UINT SC_COLOR_GAMMA_UP = VK_OEM_PLUS; // Ctrl++   (Shift+ = window larger)
+        constexpr UINT SC_COLOR_GAMMA_DOWN = VK_OEM_MINUS; // Ctrl+-   (Shift+- = window smaller)
+        constexpr UINT SC_COLOR_BRIGHTNESS_UP = VK_OEM_5; // Ctrl+\  backslash
+        constexpr UINT SC_COLOR_BRIGHTNESS_DOWN = VK_OEM_7; // Ctrl+'  apostrophe
+        constexpr UINT SC_COLOR_CONTRAST_UP = VK_OEM_2; // Ctrl+/  forward slash
+        constexpr UINT SC_COLOR_CONTRAST_DOWN = VK_OEM_PERIOD; // Ctrl+.
+        constexpr UINT SC_COLOR_SAT_DOWN = VK_OEM_4; // Ctrl+[
+        constexpr UINT SC_COLOR_SAT_UP = VK_OEM_6; // Ctrl+]
         constexpr UINT SC_COLOR_RESET_ALL_EFFECTS = VK_NUMPAD0;
         constexpr UINT SC_COLOR_SAVE_TO_DISK = 'S'; // requires ctrl
     }
@@ -259,6 +268,10 @@ namespace Shortcuts {
     // HISTORY WINDOW
     // -------------------------------------------------------------------------
     constexpr UINT HISTORY_FAVORITES_TOGGLE_KEY = VK_SPACE;
+    // Ctrl+Delete — delete the hovered row. Moved off plain Delete so the
+    // navigation cluster (Home/End/PageUp/PageDown/Insert/Delete) passes
+    // straight through the panel to the main app.
+    constexpr UINT HISTORY_DELETE_HOVERED_ROW = VK_DELETE; // requires ctrl
     constexpr UINT HISTORY_CLEAR_ALL_HISTORY_BUT_NOT_FAVORITES = VK_DELETE; //ctrl+shilf+delete only when historyWnd is open
     constexpr UINT HISTORY_CLEAR_ALL_FAVORITES_BUT_NOT_HISTORY = VK_DELETE; //ctrl+alt+shift+delete only when historyWnd is open
     // Shift+Enter — spawn a DirWnd for the selected history folder (up to DIR_WND_MAX_INSTANCES)

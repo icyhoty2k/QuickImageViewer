@@ -1,0 +1,8 @@
+<component name="ProjectRunConfigurationManager">
+  <configuration default="false" name="QuickImageViewer" type="CMakeRunConfiguration" factoryName="Application" REDIRECT_INPUT="false" ELEVATE="false" USE_EXTERNAL_CONSOLE="false" EMULATE_TERMINAL="false" PASS_PARENT_ENVS_2="true" PROJECT_NAME="QuickImageViewer" TARGET_NAME="QuickImageViewer" CONFIG_NAME="Debug" RUN_TARGET_PROJECT_NAME="QuickImageViewer" RUN_TARGET_NAME="QuickImageViewer">
+    <method v="2">
+      <option name="ToolBeforeRunTask" enabled="true" actionId="Tool_External Tools_Skip build-number increment" />
+      <option name="com.jetbrains.cidr.execution.CidrBuildBeforeRunTaskProvider$BuildBeforeRunTask" enabled="true" />
+    </method>
+  </configuration>
+</component>

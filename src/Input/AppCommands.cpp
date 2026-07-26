@@ -491,7 +491,9 @@ void AppCommands::changeAppThemeToDarkMode(HWND hWnd, bool isDarkThemed) {
 }
 
 void AppCommands::changeAppThemeFactor(HWND hWnd, float newFactor) {
-    app.themeFactor = std::clamp(newFactor, 0.0f, 1.0f);
+    app.themeFactor = std::clamp(newFactor,
+                                 Constants::Theme::THEME_FACTOR_MIN,
+                                 Constants::Theme::THEME_FACTOR_MAX);
 
     // Auto-switch dark/light at the 0.5 midpoint
     bool shouldBeDark = app.themeFactor < 0.5f;

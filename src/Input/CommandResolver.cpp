@@ -237,31 +237,71 @@ Command InputManager::ResolveKeyboardKeys(UINT key, LPARAM lParam) {
             if (!ctrl && alt && !shift) return Command::SnapTopLeft;
             break;
 
-        case Shortcuts::SC_APP_RESET_DEFAULTS:
-            if (shift) return Command::ResetAll;
-            return Command::ToggleGrayscale; // plain Delete
-
         // --- Color effect toggles ---
+        // The six named effects all require ctrl (no alt, no shift). Their plain
+        // presses belong to the navigation cluster — see the cases below.
         case Shortcuts::ImageEffects::SC_EFFECT_APPLY_TOGGLE: return Command::ToggleEffectPreview;
-        case Shortcuts::ImageEffects::SC_COLOR_INVERT: return Command::ToggleInvert;
-        case Shortcuts::ImageEffects::SC_COLOR_SEPIA: return Command::ToggleSepia;
-        case Shortcuts::ImageEffects::SC_COLOR_SOLARIZE: return Command::ToggleSolarize;
-        case Shortcuts::ImageEffects::SC_COLOR_OUTLINE: return Command::ToggleOutline;
-        case Shortcuts::ImageEffects::SC_COLOR_THRESHOLD: return Command::ToggleThreshold;
+
+        case Shortcuts::SC_APP_RESET_DEFAULTS: // VK_DELETE  shift=reset-all  ctrl=desaturate  plain=prev favorite
+            if (shift && !ctrl && !alt) return Command::ResetAll;
+            if (ctrl && !alt && !shift) return Command::ToggleGrayscale;
+            if (!ctrl && !alt && !shift) return Command::NextFavoriteFolder;
+            break;
+
+        case Shortcuts::ImageEffects::SC_COLOR_INVERT_OR_NAVIGATE_FAVS_PREV: // VK_INSERT  ctrl=invert  plain=next favorite
+            if (ctrl && !alt && !shift) return Command::ToggleInvert;
+            if (!ctrl && !alt && !shift) return Command::PrevFavoriteFolder;
+            break;
+
+        case Shortcuts::ImageEffects::SC_COLOR_SEPIA_OR_SC_NAV_FIRST_IMAGE: // VK_HOME  ctrl=sepia  plain=first image
+            if (ctrl && !alt && !shift) return Command::ToggleSepia;
+            if (!ctrl && !alt && !shift) return Command::GoToFirstImage;
+            break;
+
+        case Shortcuts::ImageEffects::SC_COLOR_SOLARIZE_OR_SC_NAV_LAST_IMAGE: // VK_END  ctrl=solarize  plain=last image
+            if (ctrl && !alt && !shift) return Command::ToggleSolarize;
+            if (!ctrl && !alt && !shift) return Command::GoToLastImage;
+            break;
+
+        case Shortcuts::ImageEffects::SC_COLOR_OUTLINE_OR_NAV_PREV_HISTORY_FOLDER: // VK_PRIOR  ctrl=outline  plain=prev history folder
+            if (ctrl && !alt && !shift) return Command::ToggleOutline;
+            if (!ctrl && !alt && !shift) return Command::PrevHistoryFolder;
+            break;
+
+        case Shortcuts::ImageEffects::SC_COLOR_THRESHOLD_OR_NAV_NEXT_HISTORY_FOLDER: // VK_NEXT  ctrl=threshold  plain=next history folder
+            if (ctrl && !alt && !shift) return Command::ToggleThreshold;
+            if (!ctrl && !alt && !shift) return Command::NextHistoryFolder;
+            break;
 
         // --- Continuous adjustments ---
-        case Shortcuts::ImageEffects::SC_COLOR_GAMMA_UP: // VK_OEM_PLUS  plain=gamma-up  shift=resize-larger
-            if (shift) return Command::ResizeWindowLarger;
-            return Command::GammaUp;
-        case Shortcuts::ImageEffects::SC_COLOR_GAMMA_DOWN: // VK_OEM_MINUS  plain=gamma-down  shift=resize-smaller
-            if (shift) return Command::ResizeWindowSmaller;
-            return Command::GammaDown;
-        case Shortcuts::ImageEffects::SC_COLOR_BRIGHTNESS_UP: return Command::BrightnessUp;
-        case Shortcuts::ImageEffects::SC_COLOR_BRIGHTNESS_DOWN: return Command::BrightnessDown;
-        case Shortcuts::ImageEffects::SC_COLOR_CONTRAST_UP: return Command::ContrastUp;
-        case Shortcuts::ImageEffects::SC_COLOR_CONTRAST_DOWN: return Command::ContrastDown;
-        case Shortcuts::ImageEffects::SC_COLOR_SAT_UP: return Command::SaturationUp;
-        case Shortcuts::ImageEffects::SC_COLOR_SAT_DOWN: return Command::SaturationDown;
+        // Like the six named effects, all four adjustments require ctrl (no alt,
+        // no shift). Gamma keeps its Shift= window-resize meaning on the same keys.
+        case Shortcuts::ImageEffects::SC_COLOR_GAMMA_UP: // VK_OEM_PLUS  ctrl=gamma-up  shift=resize-larger
+            if (shift && !ctrl && !alt) return Command::ResizeWindowLarger;
+            if (ctrl && !alt && !shift) return Command::GammaUp;
+            break;
+        case Shortcuts::ImageEffects::SC_COLOR_GAMMA_DOWN: // VK_OEM_MINUS  ctrl=gamma-down  shift=resize-smaller
+            if (shift && !ctrl && !alt) return Command::ResizeWindowSmaller;
+            if (ctrl && !alt && !shift) return Command::GammaDown;
+            break;
+        case Shortcuts::ImageEffects::SC_COLOR_BRIGHTNESS_UP: // VK_OEM_5  backslash
+            if (ctrl && !alt && !shift) return Command::BrightnessUp;
+            break;
+        case Shortcuts::ImageEffects::SC_COLOR_BRIGHTNESS_DOWN: // VK_OEM_7  apostrophe
+            if (ctrl && !alt && !shift) return Command::BrightnessDown;
+            break;
+        case Shortcuts::ImageEffects::SC_COLOR_CONTRAST_UP: // VK_OEM_2  forward slash
+            if (ctrl && !alt && !shift) return Command::ContrastUp;
+            break;
+        case Shortcuts::ImageEffects::SC_COLOR_CONTRAST_DOWN: // VK_OEM_PERIOD
+            if (ctrl && !alt && !shift) return Command::ContrastDown;
+            break;
+        case Shortcuts::ImageEffects::SC_COLOR_SAT_UP: // VK_OEM_6  ]
+            if (ctrl && !alt && !shift) return Command::SaturationUp;
+            break;
+        case Shortcuts::ImageEffects::SC_COLOR_SAT_DOWN: // VK_OEM_4  [
+            if (ctrl && !alt && !shift) return Command::SaturationDown;
+            break;
 
 
         // --- Save / reset ---

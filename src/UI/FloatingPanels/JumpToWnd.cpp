@@ -211,6 +211,14 @@ namespace UI {
                     InvalidateRect(m_hWnd, nullptr, FALSE);
                 return 0;
 
+            case WM_LBUTTONUP:
+                // Ends a drag-select. Without it the box only drops m_dragging on
+                // the next WM_MOUSEMOVE, so moving after release keeps extending
+                // the selection.
+                if (m_inputBox.RouteMouse(WM_LBUTTONUP, wParam, lParam, m_hWnd) == InputResult::ConsumedRepaint)
+                    InvalidateRect(m_hWnd, nullptr, FALSE);
+                return 0;
+
             case WM_RBUTTONUP:
                 if (m_inputBox.RouteMouse(WM_RBUTTONUP, wParam, lParam, m_hWnd) == InputResult::ConsumedRepaint)
                     InvalidateRect(m_hWnd, nullptr, FALSE);
