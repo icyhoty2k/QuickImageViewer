@@ -64,6 +64,7 @@ set(SOURCES
         src/SlideshowTransitions.cpp
         src/GeoNames.cpp
         src/UI/ThemedDialog.cpp
+        src/UI/ThemedTooltip.cpp
         libs/lib/tinyexr/include/miniz.c
         src/Common/Converters.cpp
 )

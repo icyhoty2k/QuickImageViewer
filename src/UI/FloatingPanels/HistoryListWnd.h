@@ -91,6 +91,14 @@ namespace UI {
     // Loads the full history + favorites from disk into RAM.
     void LoadFolderHistoryFromDisk();
 
+    // Starts the folder sweep in the background, without opening the panel.
+    //
+    // Called at startup so the work happens while the user is browsing images.
+    // By the time they press Tab the list is usually already validated, instead
+    // of the panel opening and only then beginning to walk every folder.
+    // No-op if the panel window does not exist yet, or nothing needs scanning.
+    void StartBackgroundHistoryScan();
+
     // Called by FileHandler after every successful folder load.
     void PushFolderHistory(const std::wstring &folderPath);
 
@@ -118,6 +126,16 @@ namespace UI {
 
     // Returns the full MRU list (index 0 = most recent).
     const std::vector<std::wstring> &GetFolderHistory();
+
+    // True when two paths name the SAME directory on disk, following junctions,
+    // directory symlinks and subst drives. Uses the panel's cached link info, so
+    // a repeat comparison is a hash lookup rather than filesystem work.
+    //
+    // Exists because paths are no longer canonicalized on the way in: qIV keeps
+    // whichever spelling the user actually used (D:\... stays D:\...), which means
+    // "is this the folder I am already in?" can no longer be answered by comparing
+    // strings.
+    bool SameRealFolder(const std::wstring &a, const std::wstring &b);
 
     // Returns false if the folder does not exist or contains no supported images.
     // Result is cached per BuildDisplayList cycle — safe to call from paint or navigation.
