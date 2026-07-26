@@ -403,9 +403,9 @@ void TestCmdArgsFile(HWND hWnd) {
     const std::wstring tally = L"\n\nArguments checked: " + std::to_wstring(okCount) +
                                L" of " + std::to_wstring(tokens.size());
     if (problems.empty())
-        UI::ThemedDialog::Message(hWnd, (L"✔ All arguments are valid." + tally).c_str(),
+        UI::ThemedDialog::Message(hWnd, (std::wstring(Constants::ThemeIcons::ICON_CHECK) + L" All arguments are valid." + tally).c_str(),
                                   L"Test CmdArgs");
     else
-        UI::ThemedDialog::Message(hWnd, (L"⚠ Problems found:" + problems + tally).c_str(),
+        UI::ThemedDialog::Message(hWnd, (std::wstring(Constants::ThemeIcons::ICON_WARNING) + L" Problems found:" + problems + tally).c_str(),
                                   L"Test CmdArgs");
 }

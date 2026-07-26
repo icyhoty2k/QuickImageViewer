@@ -909,7 +909,7 @@ namespace UI {
                                             : Constants::Messages::WALK_HISTORY_FOLDER;
 
             // row + 1 is literally the number the panel paints next to that row.
-            std::wstring text = std::wstring(prefix) + std::to_wstring(row + 1) + L"/" +
+            std::wstring text = std::wstring(prefix) + L" " + std::to_wstring(row + 1) + L"/" +
                                 std::to_wstring(total) + L" " + name;
 
             // Landing on an empty folder is legitimate but worth saying out loud,
@@ -1438,7 +1438,7 @@ namespace UI {
                 {
                     std::wstring caption = L"Folder History  (showing "
                                            + std::to_wstring(totalShown) + L" of "
-                                           + std::to_wstring(totalSaved) + L" saved)   \x2605 = Space (toggle fav)   "
+                                           + std::to_wstring(totalSaved) + L" saved)   " + Constants::ThemeIcons::ICON_FAVORITES_MARK + L" = Space (toggle fav)   "
                                            + std::to_wstring(favCount) + L" / "
                                            + std::to_wstring(app.historyMaxFavs)
                                            + L" favorites";
@@ -1624,15 +1624,15 @@ namespace UI {
                             };
                             if (isMissing) {
                                 SetTextColor(hdc, Constants::Theme::HistoryPanel::PATH_DEAD_DRIVE);
-                                DrawTextW(hdc, L"⚠", -1, &slotRect,
+                                DrawTextW(hdc, Constants::ThemeIcons::ICON_WARNING, -1, &slotRect,
                                           DT_CENTER | DT_VCENTER | DT_SINGLELINE);
                             } else if (isEmpty) {
                                 SetTextColor(hdc, Constants::Theme::HistoryPanel::PATH_EMPTY_DRIVE);
-                                DrawTextW(hdc, L"∅", -1, &slotRect,
+                                DrawTextW(hdc, Constants::ThemeIcons::ICON_EMPTY, -1, &slotRect,
                                           DT_CENTER | DT_VCENTER | DT_SINGLELINE);
                             } else if (entry.isFavorite) {
                                 SetTextColor(hdc, Constants::Theme::Markers::FAVORITES);
-                                DrawTextW(hdc, L"\x2605", -1, &slotRect,
+                                DrawTextW(hdc, Constants::ThemeIcons::ICON_FAVORITES_MARK, -1, &slotRect,
                                           DT_CENTER | DT_VCENTER | DT_SINGLELINE);
                             }
                         }

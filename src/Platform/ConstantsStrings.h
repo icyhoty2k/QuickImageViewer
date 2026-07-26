@@ -1,5 +1,7 @@
 #pragma once
 
+#include "ConstantsTheme.h"
+
 // ConstantsStrings.h
 // Central repository for all user-visible text used in QIV overlays.
 // Keep strings here so they have one place to change for localization.
@@ -171,8 +173,8 @@ namespace Constants::Messages {
     // Format is "<prefix><n>/<total> <folder name>", where <n> is the row number
     // the History panel shows for that folder, so overlay and panel always agree.
     // The prefix is chosen from the row itself: starred rows get ★, the rest 📁.
-    constexpr const wchar_t *WALK_HISTORY_FOLDER = L"📁 ";
-    constexpr const wchar_t *WALK_FAVORITE_FOLDER = L"★ ";
+    constexpr const wchar_t *WALK_HISTORY_FOLDER = Constants::ThemeIcons::ICON_FOLDER;
+    constexpr const wchar_t *WALK_FAVORITE_FOLDER = Constants::ThemeIcons::ICON_FAVORITES_MARK;
     // Shown when a walk stepped over more than one dead / empty folder to reach
     // its destination — append the count. A single skip names the folder instead.
     constexpr const wchar_t *WALK_SKIPPED_PREFIX = L"⚠ skipped ";
