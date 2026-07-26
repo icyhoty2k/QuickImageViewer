@@ -121,6 +121,10 @@ void TrayHandler::DispatchCommand(HWND hWnd, int cmd) {
         app.historyFullModeEnabled = !app.historyFullModeEnabled;
         Persistence::Registry::SaveSetting(Constants::Registry::HISTORY_FULL_MODE,
             static_cast<DWORD>(app.historyFullModeEnabled));
+        // The History panel reads this flag directly, so an open panel must be
+        // rebuilt and refitted now — otherwise it keeps showing the old row set
+        // until something unrelated invalidates it.
+        UI::RefreshHistoryFullMode();
         break;
 
     // KIOSK lock. Reached from the tray while the main window is deaf, which is

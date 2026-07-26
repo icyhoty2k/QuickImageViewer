@@ -166,12 +166,16 @@ namespace Constants::Messages {
     };
     constexpr const wchar_t *WALLPAPER_SET = L"Wallpaper: "; // prefix — append the style name
     constexpr const wchar_t *WALLPAPER_FAILED = L"⚠ Wallpaper could not be applied";
-    constexpr const wchar_t *HISTORY_NAV_FOLDER = L"↔ "; // prefix — append folder name
-    // PageUp/PageDown (history) and Insert/Delete (favorites) folder walking.
-    // Format is "<n>. <folder>", where <n> is the row number the History panel
-    // shows for that folder, so the overlay and the panel always agree.
+    // Folder walking — used by ALL three walkers (horizontal wheel, PageUp/Down,
+    // Insert/Delete) so the centre message never depends on how you moved.
+    // Format is "<prefix><n>/<total> <folder name>", where <n> is the row number
+    // the History panel shows for that folder, so overlay and panel always agree.
+    // The prefix is chosen from the row itself: starred rows get ★, the rest 📁.
     constexpr const wchar_t *WALK_HISTORY_FOLDER = L"📁 ";
     constexpr const wchar_t *WALK_FAVORITE_FOLDER = L"★ ";
+    // Shown when a walk stepped over more than one dead / empty folder to reach
+    // its destination — append the count. A single skip names the folder instead.
+    constexpr const wchar_t *WALK_SKIPPED_PREFIX = L"⚠ skipped ";
     constexpr const wchar_t *WALK_NO_HISTORY_FOLDERS = L"No other history folders";
     constexpr const wchar_t *WALK_NO_FAVORITE_FOLDERS = L"No favorite folders";
     constexpr const wchar_t *FOLDER_DEAD_MISSING = L"⚠ Folder not found";

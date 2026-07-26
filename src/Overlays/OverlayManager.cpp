@@ -540,12 +540,14 @@ void OverlayManager::UpdatePanelSelectionOverlay(int8_t position, int selected, 
 //  Center-center message queue
 // ─────────────────────────────────────────────────────────────────────────────
 
-void OverlayManager::PostCenterMessage(HWND hWnd, const std::wstring &msg) {
+void OverlayManager::PostCenterMessage(HWND hWnd, const std::wstring &msg,
+                                       MsgSeverity severity) {
     // Only show if the slot is enabled
     if (!m_slots[MID_CENTER].visible) return;
 
     slotMidCenter.UpdateText(msg);
     slotMidCenter.active = true;
+    m_centerMsgSeverity = severity;
 
     // Reset (or start) the auto-hide timer on the main window
     KillTimer(hWnd, TIMER_CENTER_MSG);
@@ -701,12 +703,25 @@ void OverlayManager::RenderAll(ID2D1DeviceContext *ctx) const {
                 ctx->FillRectangle(bgRect, m_pCenterBrush.Get());
             }
 
-            // Draw text in center-center color
-            m_pCenterBrush->SetColor(D2D1::ColorF(
-                    Constants::Overlay::MSG_CENTER_COLOR_R,
-                    Constants::Overlay::MSG_CENTER_COLOR_G,
-                    Constants::Overlay::MSG_CENTER_COLOR_B,
-                    Constants::Overlay::MSG_CENTER_COLOR_A));
+            // Draw text in center-center color. Warning / Error messages take
+            // their colour from Constants::Theme::Markers, the same source the
+            // History panel uses for its empty / missing folder rows.
+            if (m_centerMsgSeverity == MsgSeverity::Normal) {
+                m_pCenterBrush->SetColor(D2D1::ColorF(
+                        Constants::Overlay::MSG_CENTER_COLOR_R,
+                        Constants::Overlay::MSG_CENTER_COLOR_G,
+                        Constants::Overlay::MSG_CENTER_COLOR_B,
+                        Constants::Overlay::MSG_CENTER_COLOR_A));
+            } else {
+                const COLORREF c = (m_centerMsgSeverity == MsgSeverity::Error)
+                                           ? Constants::Theme::Markers::ERR
+                                           : Constants::Theme::Markers::WARNING;
+                m_pCenterBrush->SetColor(D2D1::ColorF(
+                        GetRValue(c) / 255.0f,
+                        GetGValue(c) / 255.0f,
+                        GetBValue(c) / 255.0f,
+                        Constants::Overlay::MSG_CENTER_COLOR_A));
+            }
             ctx->DrawTextLayout(
                     D2D1::Point2F(slotRect.left, slotRect.top),
                     layout,

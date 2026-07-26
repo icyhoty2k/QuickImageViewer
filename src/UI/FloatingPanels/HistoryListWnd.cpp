@@ -34,7 +34,12 @@ namespace UI {
 // DATA MODEL
 //   historyFoldersManager.folderHistory — MRU vector, index 0 = most recent,
 //                                         up to HISTORY_MAX_DIRS_TO_SAVE entries.
-//   historyFoldersManager.favorites     — unordered_set for O(1) favorite lookup.
+//   historyFoldersManager.favorites     — FolderPathSet for O(1) favorite lookup.
+//
+//   Both hold NORMALIZED paths (HistoryPath::Normalize) and compare
+//   case-insensitively, because the two backing .txt files are hand-editable and
+//   Windows folder names are case-insensitive. Never compare two folder paths
+//   here with operator== — use HistoryPath::Equal or a FolderPathSet.
 //
 // DISPLAY MODEL
 //   BuildDisplayList() assembles g_displayList from the MRU vector each time
@@ -62,7 +67,39 @@ namespace UI {
     static bool g_sbDragging = false;
     static int g_sbDragStartY = 0;
     static int g_sbDragStartOff = 0;
-    static bool g_showFullHistory = false; // Ctrl+Tab toggles full history view
+    // Full vs short list lives in app.historyFullModeEnabled — AppState is the
+    // single source of truth for every persistent toggle. There is deliberately
+    // NO local copy: a panel-scoped bool would be reset from AppState on every
+    // Show(), silently discarding a Ctrl+Tab the user made while the panel was
+    // open. Toggling writes to AppState (and the registry) so the panel reopens
+    // in the mode the user last chose, and so the folder-walk keys — which read
+    // the same flag — always agree with what the panel is showing.
+    static void SetFullHistoryMode(bool full) {
+        if (app.historyFullModeEnabled == full) return;
+        app.historyFullModeEnabled = full;
+        Persistence::Registry::SaveSetting(Constants::Registry::HISTORY_FULL_MODE,
+                                           static_cast<DWORD>(full));
+    }
+
+    // One-shot "show the full list for THIS opening" flag.
+    //
+    // Ctrl+Tab from the main app means "open the history, uncapped" — it is a way
+    // of looking at everything, not a statement about which mode the panel should
+    // default to. So it must NOT touch app.historyFullModeEnabled: a later plain
+    // Tab has to reopen in whatever mode the user actually chose.
+    //
+    // Ctrl+Tab INSIDE an already-open panel is the opposite: that is a deliberate
+    // mode switch, so it writes the preference (and clears this override, since
+    // the preference then describes what is on screen).
+    //
+    // Cleared by Show(), so every ordinary open starts from the preference.
+    static bool g_fullModeOverride = false;
+
+    // What the panel is showing right now: the saved preference, unless this
+    // particular opening was forced full by Ctrl+Tab.
+    static bool EffectiveFullMode() {
+        return g_fullModeOverride || app.historyFullModeEnabled;
+    }
     static bool g_headerDragging = false;
     static int g_headerDragStartX = 0; // screen X at drag start
     static int g_headerDragStartY = 0; // screen Y at drag start
@@ -84,10 +121,15 @@ namespace UI {
     // ---------------------------------------------------------------------------
     enum class FolderStatus { Unknown, Valid, Missing, Empty };
 
-    static std::unordered_map<std::wstring, FolderStatus> g_statusCache;
+    // Keyed case-insensitively, like every other folder-path container here —
+    // otherwise "D:\Pics" and "d:\pics" get separate status entries and the same
+    // folder can be shown valid in one row and missing in another.
+    static std::unordered_map<std::wstring, FolderStatus,
+                              HistoryPath::HashCI, HistoryPath::EqualCI> g_statusCache;
 
     struct DirSizeInfo { int64_t bytes = 0; int count = 0; };
-    static std::unordered_map<std::wstring, DirSizeInfo> g_dirSizeCache;
+    static std::unordered_map<std::wstring, DirSizeInfo,
+                              HistoryPath::HashCI, HistoryPath::EqualCI> g_dirSizeCache;
 
     // One folder's scan outcome — computed off the UI thread, applied on it.
     struct DirScanResult {
@@ -205,18 +247,76 @@ namespace UI {
 
     static void BuildDisplayList();
     static void GetHistoryWindowBounds(HWND hRef, int &x, int &y, int &w, int &h);
-    void CaptureNavigationSnapshot();
+    void InvalidateWalkSnapshot();
+    static std::wstring CurrentOpenFolder();
 
-    static void ToggleFullHistory(HWND hWnd) {
-        g_showFullHistory = !g_showFullHistory;
+    // The folder the app was last told to open, recorded by PushFolderHistory —
+    // the single funnel every navigation passes through. Stored in the LIST's
+    // spelling, so it can be compared with list entries directly.
+    static std::wstring g_lastNavigatedFolder;
+
+    // Set by the walk around its own OpenDirectory() call, so PushFolderHistory
+    // can tell "the walk moved us" from "something else moved us".
+    //
+    // This deliberately does NOT compare paths. OpenDirectory() runs
+    // fs::canonical(), which resolves junctions, subst drives and symlinks — the
+    // path that comes back can be a completely different string from the one the
+    // history list holds for the same folder. Comparing them made the walk think
+    // the user had navigated away on every single press, which rebuilt the
+    // snapshot against a freshly reordered MRU list and left the cursor pointing
+    // into rows that had shifted underneath it.
+    static bool g_walkOwnsNavigation = false;
+
+    // Latched by PushFolderHistory when a navigation happened that the walk did
+    // not perform. Consumed (and cleared) by the next walk step.
+    static bool g_externalNavigation = false;
+
+    // THE answer to "which folder is the app in?" for everything in this file:
+    // the green current-folder row, the initial hover position, and the walk.
+    //
+    // Deriving it from app.playlist is wrong for empty folders — OpenDirectory
+    // returns early for those without touching the playlist, so the playlist goes
+    // on describing the folder you were in BEFORE. That is why navigating into an
+    // empty folder used to paint the previous row green.
+    static std::wstring AppCurrentFolder();
+
+    // Set when the hover row was moved programmatically rather than by the user.
+    // WM_PAINT consumes it and scrolls that row into view — the scroll maths needs
+    // g_rowH / g_bodyTop / g_bodyBottom, and those are only known once the panel
+    // has laid itself out, which has not happened yet at Show() time.
+    static bool g_scrollHoverIntoView = false;
+
+    // Lands the selection on the folder currently open in the viewer — the row
+    // painted green — instead of the top of the list. Opening the panel to look
+    // at where you are is the common case; starting at row 0 means scrolling back
+    // to your own position every time. Falls back to the first row when the
+    // current folder is not in the list (nothing open yet, or filtered out).
+    // Defined below g_displayList, which it reads.
+    static void HoverCurrentFolderRow();
+
+    // Rebuilds the rows for the current EffectiveFullMode() and refits the window.
+    // Split out from ToggleFullHistory so the tray item — which flips the same
+    // AppState flag from outside this file — can produce the same visible result
+    // instead of leaving a stale list on screen until the next repaint.
+    static void ApplyFullHistoryMode(HWND hWnd) {
         g_scrollOffsetY = 0;
         BuildDisplayList();
-        CaptureNavigationSnapshot();
-        g_hoverRow = 0;
+        HoverCurrentFolderRow();
         int x, y, w, h;
         GetHistoryWindowBounds(g_hHistOwner ? g_hHistOwner : hWnd, x, y, w, h);
         SetWindowPos(hWnd, HWND_TOPMOST, x, y, w, h, SWP_FRAMECHANGED);
         InvalidateRect(hWnd, nullptr, TRUE);
+    }
+
+    // Ctrl+Tab while the panel has focus — a deliberate mode switch, so it does
+    // write the preference. Toggling relative to what is ON SCREEN (not to the
+    // stored flag) keeps it correct when the panel was opened via the one-shot
+    // full-list override: the first press then switches to short and records it.
+    static void ToggleFullHistory(HWND hWnd) {
+        const bool nowFull = !EffectiveFullMode();
+        g_fullModeOverride = false; // an explicit choice supersedes the one-shot view
+        SetFullHistoryMode(nowFull);
+        ApplyFullHistoryMode(hWnd);
     }
 
     static void RefreshHistory(HWND hWnd) {
@@ -290,6 +390,21 @@ namespace UI {
 
     static std::vector<DisplayEntry> g_displayList;
 
+    // Declared above — see there for why the hover starts on the current folder.
+    static void HoverCurrentFolderRow() {
+        g_hoverRow = g_displayList.empty() ? -1 : 0;
+        const std::wstring current = AppCurrentFolder();
+        if (!current.empty()) {
+            for (int i = 0; i < static_cast<int>(g_displayList.size()); ++i) {
+                if (HistoryPath::Equal(g_displayList[i].path, current)) {
+                    g_hoverRow = i;
+                    break;
+                }
+            }
+        }
+        g_scrollHoverIntoView = true;
+    }
+
     // ---------------------------------------------------------------------------
     // BuildDisplayList
     //   Rebuilds g_displayList from the current MRU vector + favorites set.
@@ -303,10 +418,19 @@ namespace UI {
         const auto &history = historyFoldersManager.folderHistory;
         g_displayList.reserve(history.size());
         const auto &favSet = historyFoldersManager.favorites;
+        // Last line of defence against a duplicate row reaching the panel. The
+        // loader and PushFolderHistory both dedupe already, but this list is the
+        // one thing the user actually sees and the one the walk steps through —
+        // a repeated row there would make a walk appear to stall on one folder.
+        FolderPathSet emitted;
+        emitted.reserve(history.size());
+        auto alreadyEmitted = [&emitted](const std::wstring &p) {
+            return !emitted.insert(p).second;
+        };
         const int favPos = Constants::History::HISTORY_FAVORITES_POSITION;
         // Favorites are always shown in full — historyMaxFavs only caps adding, not display.
         // Normal rows are capped by historyMaxDirs unless full-history mode is active.
-        const int maxNormal = g_showFullHistory ? INT_MAX : app.historyMaxDirs;
+        const int maxNormal = EffectiveFullMode() ? INT_MAX : app.historyMaxDirs;
         const int maxFavs = INT_MAX;
 
         if (favPos == 2) {
@@ -314,6 +438,7 @@ namespace UI {
             int normalCount = 0;
             int favCount = 0;
             for (const auto &path: history) {
+                if (alreadyEmitted(path)) continue;
                 bool isFav = (favSet.count(path) > 0);
                 if (isFav) {
                     if (favCount >= maxFavs) continue;
@@ -334,6 +459,7 @@ namespace UI {
             normalRows.reserve(history.size());
 
             for (const auto &path: history) {
+                if (alreadyEmitted(path)) continue;
                 bool isFav = (favSet.count(path) > 0);
                 if (isFav && static_cast<int>(favRows.size()) < maxFavs)
                     favRows.push_back({path, true});
@@ -421,29 +547,78 @@ namespace UI {
 
     void LoadFolderHistoryFromDisk() {
         historyFoldersManager.LoadHistoryFromDisk();
+        // No full/short seeding needed — app.historyFullModeEnabled is already
+        // loaded from the registry by RegistryManager and is read directly.
     }
 
-    void PushFolderHistory(const std::wstring &folderPath) {
-        if (folderPath.empty())
+    void PushFolderHistory(const std::wstring &rawFolderPath) {
+        // Normalize on the way in, exactly as the disk loader does, so a path
+        // arriving from drag-drop, the command line or the shell cannot create a
+        // second row that differs only by case, a trailing backslash, quotes or
+        // stray whitespace.
+        std::wstring folderPath;
+        if (!HistoryPath::Normalize(rawFolderPath, folderPath))
             return;
 
         auto &history = historyFoldersManager.folderHistory;
-        auto it = std::find(history.begin(), history.end(), folderPath);
+        // Case-insensitive: Windows folders are, so operator== is the wrong test.
+        auto it = std::find_if(history.begin(), history.end(),
+                               [&](const std::wstring &p) {
+                                   return HistoryPath::Equal(p, folderPath);
+                               });
 
         if (it != history.end()) {
-            // Already exists: promote to front (MRU), no file write needed
+            // Already exists: promote to front (MRU), no file write needed.
+            // Keeps the stored spelling rather than the incoming one, so the row
+            // does not flicker between casings as the same folder is revisited.
             std::wstring tmp = *it;
             history.erase(it);
             history.insert(history.begin(), tmp);
+            // Record the STORED spelling, not the incoming one — this value is
+            // compared against list entries, and fs::canonical() upstream may
+            // have handed us a different name for the same folder.
+            g_lastNavigatedFolder = tmp;
         } else {
             // Genuinely new: prepend to RAM list
             history.insert(history.begin(), folderPath);
             if (static_cast<int>(history.size()) > app.historyMaxDirsSave)
                 history.resize(static_cast<size_t>(app.historyMaxDirsSave));
             historyFoldersManager.AppendNewFolderToDisk(folderPath);
+            g_lastNavigatedFolder = folderPath;
         }
 
-        // Invalidate history window so the current-folder green updates immediately.
+        // Where the app was last told to go. EVERY navigation funnels through
+        // here — the walk keys, the wheel, Enter in this panel, F2, drag-drop,
+        // the command line — which makes this the one dependable answer to
+        // "which folder is the app in?".
+        //
+        // app.playlist is NOT that answer: OpenDirectory's empty-directory branch
+        // returns without touching the playlist, so after navigating into an empty
+        // folder the playlist still describes the PREVIOUS one.
+        //
+        // If this navigation was not the walk's own doing, latch it so the walk
+        // knows to resync instead of trusting its cursor.
+        if (!g_walkOwnsNavigation)
+            g_externalNavigation = true;
+
+        // Repaint only — the row ORDER on screen is deliberately left alone while
+        // the panel is open, so the list does not reshuffle under the user on
+        // every step of a walk. Only the green "you are here" marker moves.
+        auto &histWnd = uiManager.getHistoryListWindow();
+        if (histWnd.IsVisible())
+            InvalidateRect(histWnd.GetHwnd(), nullptr, FALSE);
+    }
+
+    void NotifyCurrentFolder(const std::wstring &folderPath) {
+        std::wstring norm;
+        if (!HistoryPath::Normalize(folderPath, norm)) return;
+
+        // Deliberately does NOT touch g_externalNavigation: this reports where the
+        // viewer ended up, it does not mean the user chose to go somewhere. The
+        // walk's own landings arrive here too, and treating them as external
+        // would make it resync away from its own cursor.
+        g_lastNavigatedFolder = norm;
+
         auto &histWnd = uiManager.getHistoryListWindow();
         if (histWnd.IsVisible())
             InvalidateRect(histWnd.GetHwnd(), nullptr, FALSE);
@@ -470,6 +645,8 @@ namespace UI {
 
         // Only rewrite the small favorites file — history file is untouched
         historyFoldersManager.RewriteFavoritesToDisk();
+        // The row moved between categories, so any frozen walk is now wrong.
+        InvalidateWalkSnapshot();
     }
 
     void ClearHistoryKeepFavorites() {
@@ -491,6 +668,7 @@ namespace UI {
         // Rewrite history file only — favorites file is untouched
         historyFoldersManager.RewriteHistoryToDisk();
         g_hoverRow = -1;
+        InvalidateWalkSnapshot(); // rows disappeared
     }
 
     void ClearFavoritesKeepHistory() {
@@ -502,111 +680,286 @@ namespace UI {
         // Rewrite favorites file only — history file is untouched
         historyFoldersManager.RewriteFavoritesToDisk();
         g_hoverRow = -1;
+        InvalidateWalkSnapshot(); // every row changed category
     }
 
     const std::vector<std::wstring> &GetFolderHistory() {
         return historyFoldersManager.folderHistory;
     }
 
-    static std::vector<std::wstring> g_navSnap;
-    static int g_navSnapVersion = 0;
+    // ===========================================================================
+    //  FOLDER WALKING  —  one implementation, three callers
+    //
+    //  The horizontal mouse wheel, PageUp/PageDown and Insert/Delete all step
+    //  through the SAME list the History panel renders. They differ only in
+    //  which rows they may land on (WalkScope) and which way they travel.
+    //
+    //  Why a frozen snapshot:
+    //    OpenDirectory() -> PushFolderHistory() promotes the opened folder to
+    //    index 0 of the MRU store. Re-reading the live list on every step would
+    //    therefore find the folder you just landed on sitting at the top, and
+    //    the next step would go straight back where you came from — the walk
+    //    ping-pongs between two folders forever. Freezing the list for the
+    //    duration of a walk is what makes stepping mean anything.
+    //
+    //  The green "you are here" row needs no work — WM_PAINT derives it from
+    //  app.playlist[app.currentIndex], so it follows once OpenDirectory lands.
+    // ===========================================================================
 
-    void CaptureNavigationSnapshot() {
-        if (g_displayList.empty())
+    // Frozen copy of the display list for the walk in progress.
+    struct WalkRow {
+        std::wstring path;
+        bool isFavorite = false;
+    };
+    static std::vector<WalkRow> g_walkSnap;
+    // The folder THIS walk last TARGETED — set even when opening it then failed.
+    // If the app is somewhere else on the next press, the user navigated by some
+    // other means and the walk has to resync to wherever they went.
+    static std::wstring g_walkAnchor;
+    // Where the walk currently sits in g_walkSnap, -1 = not established.
+    //
+    // This is the authoritative position, NOT the app's current folder. Opening
+    // a folder can fail — it was deleted after its status was cached, or it lost
+    // its last image — and then the viewer never moves, so deriving the position
+    // from the viewer would rewind the walk to the start of the list on the next
+    // press. The cursor advances on every row the walk visits, successful or not,
+    // so a dead folder costs one step instead of resetting the whole walk.
+    static int g_walkCursor = -1;
+    // Panel full/short mode the snapshot was taken under.
+    static bool g_walkSnapFullMode = false;
+    // Bumped whenever the set of rows changes (favorite toggled, list cleared).
+    // A plain MRU promotion deliberately does NOT bump this.
+    static int g_historyListVersion = 0;
+    static int g_walkSnapVersion = -1;
+
+    void InvalidateWalkSnapshot() {
+        ++g_historyListVersion;
+    }
+
+    // Folder of the image currently on screen — derived exactly as WM_PAINT does.
+    static std::wstring CurrentOpenFolder() {
+        if (app.playlist.empty() || app.currentIndex < 0 ||
+            app.currentIndex >= static_cast<int>(app.playlist.size()))
+            return {};
+        const std::wstring &cur = app.playlist[app.currentIndex];
+        const size_t sep = cur.find_last_of(L"\\/");
+        return (sep == std::wstring::npos) ? std::wstring{} : cur.substr(0, sep);
+    }
+
+    static std::wstring AppCurrentFolder() {
+        // The recorded navigation wins; the playlist is only a fallback for the
+        // window before anything has been opened this session.
+        return !g_lastNavigatedFolder.empty() ? g_lastNavigatedFolder
+                                              : CurrentOpenFolder();
+    }
+
+    bool WalkHistoryFolder(HWND hOwner, WalkScope scope, bool reverse) {
+        const std::wstring currentFolder = AppCurrentFolder();
+
+        // Did something OTHER than this walk move the app? Read from the latch,
+        // never by comparing paths — see g_walkOwnsNavigation for why comparing
+        // is unreliable. Consumed here so a single external move triggers exactly
+        // one resync.
+        const bool movedExternally = g_externalNavigation;
+        g_externalNavigation = false;
+
+        // ---- Refresh the snapshot only when it can no longer be trusted -------
+        const bool stale =
+                g_walkSnap.empty() ||                        // nothing captured yet
+                g_walkSnapVersion != g_historyListVersion || // rows added/removed/recategorised
+                g_walkSnapFullMode != EffectiveFullMode() || // full <-> short
+                movedExternally;
+
+        if (stale) {
+            // BuildDisplayList reads EffectiveFullMode() and the display caps, so
+            // the snapshot holds exactly the rows the panel would draw — including
+            // while a Ctrl+Tab one-shot full view is on screen.
             BuildDisplayList();
-        g_navSnap.clear();
-        g_navSnap.reserve(g_displayList.size());
-        for (const auto &e: g_displayList)
-            g_navSnap.push_back(e.path);
-        ++g_navSnapVersion;
-    }
+            g_walkSnap.clear();
+            g_walkSnap.reserve(g_displayList.size());
+            for (const auto &e: g_displayList)
+                g_walkSnap.push_back({e.path, e.isFavorite});
+            g_walkSnapFullMode = EffectiveFullMode();
+            g_walkSnapVersion = g_historyListVersion;
 
-    const std::vector<std::wstring> &GetNavigationSnapshot() {
-        return g_navSnap;
-    }
+            // Row indices mean nothing across a rebuild — re-derive the cursor by
+            // path. Prefer where the user actually is; fall back to the last row
+            // this walk aimed at, so a rebuild triggered by something other than
+            // the user moving (a favorite toggled, say) keeps our place.
+            if (movedExternally)
+                g_walkAnchor = currentFolder; // adopt wherever the user went
 
-    int GetNavigationSnapshotVersion() {
-        return g_navSnapVersion;
-    }
-
-    // ---------------------------------------------------------------------------
-    // WalkHistoryFolder  —  PageUp/PageDown (history) and Insert/Delete (favorites)
-    //
-    // Reads g_displayList exactly as the panel renders it and never reorders it,
-    // so the row number reported in the centre overlay is the same number the
-    // panel prints next to the folder. Favorites and non-favorites are walked as
-    // two independent sequences over that one list.
-    //
-    // The green "this is the folder you are in" highlight needs no work here —
-    // WM_PAINT derives it from app.playlist[app.currentIndex], so it follows the
-    // moment OpenDirectory() succeeds.
-    // ---------------------------------------------------------------------------
-    bool WalkHistoryFolder(HWND hOwner, int direction, bool favoritesOnly) {
-        if (direction == 0) return false;
-
-        // Rebuild so the walk sees the same rows the panel would draw right now
-        // (respects the favorites-position setting, the display caps and full mode).
-        BuildDisplayList();
-        const int total = static_cast<int>(g_displayList.size());
-        if (total == 0) {
-            g_overlayManager.PostCenterMessage(hOwner,
-                favoritesOnly ? Constants::Messages::WALK_NO_FAVORITE_FOLDERS
-                              : Constants::Messages::WALK_NO_HISTORY_FOLDERS);
-            return false;
-        }
-
-        // Where we are now, by folder rather than by row — the row index is not
-        // stable across a rebuild, the path is.
-        std::wstring currentFolder;
-        if (!app.playlist.empty() && app.currentIndex >= 0 &&
-            app.currentIndex < static_cast<int>(app.playlist.size())) {
-            const std::wstring &cur = app.playlist[app.currentIndex];
-            const size_t sep = cur.find_last_of(L"\\/");
-            if (sep != std::wstring::npos)
-                currentFolder = cur.substr(0, sep);
-        }
-
-        int startRow = -1;
-        if (!currentFolder.empty()) {
-            for (int i = 0; i < total; ++i) {
-                if (g_displayList[i].path == currentFolder) {
-                    startRow = i;
-                    break;
+            const int previousCursor = g_walkCursor;
+            g_walkCursor = -1;
+            if (!g_walkAnchor.empty()) {
+                for (int i = 0; i < static_cast<int>(g_walkSnap.size()); ++i) {
+                    if (HistoryPath::Equal(g_walkSnap[i].path, g_walkAnchor)) {
+                        g_walkCursor = i;
+                        break;
+                    }
                 }
             }
+            // Anchor is not in the new list — renamed, deleted, capped out of
+            // short mode, hidden by the filter, or simply spelled differently.
+            // Hold the position we had instead of falling back to -1, which
+            // would send the next step to row 0 and restart the whole walk.
+            if (g_walkCursor < 0 && previousCursor >= 0 && !g_walkSnap.empty())
+                g_walkCursor = std::min(previousCursor,
+                                        static_cast<int>(g_walkSnap.size()) - 1);
         }
 
-        // Not in the list (or in the other category): begin just outside the end
-        // we are travelling from, so the first step lands on the first candidate.
-        if (startRow < 0)
-            startRow = (direction > 0) ? -1 : total;
+        const int total = static_cast<int>(g_walkSnap.size());
+        const bool favoritesOnly = (scope == WalkScope::FavoritesOnly);
+        const wchar_t *emptyMsg = favoritesOnly
+                                          ? Constants::Messages::WALK_NO_FAVORITE_FOLDERS
+                                          : Constants::Messages::WALK_NO_HISTORY_FOLDERS;
+        if (total == 0) {
+            g_walkCursor = -1;
+            g_overlayManager.PostCenterMessage(hOwner, emptyMsg,
+                                               OverlayManager::MsgSeverity::Error);
+            return false;
+        }
+        if (g_walkCursor >= total) g_walkCursor = -1; // list shrank under us
 
-        // One full lap, wrapping, stopping at the first row of the right category
-        // that is not known to be missing.
+        // ---- Where to step from ----------------------------------------------
+        const int direction = reverse ? -1 : +1;
+        // No cursor yet (first ever walk, or the anchor is not in the list):
+        // start just off the end we travel from, so the first step lands on the
+        // first eligible row.
+        const int startRow = (g_walkCursor >= 0) ? g_walkCursor : (reverse ? total : -1);
+
+        // Basename for the centre overlay — full paths are too long to read.
+        auto folderName = [](const std::wstring &full) {
+            const size_t sep = full.find_last_of(L"\\/");
+            return (sep != std::wstring::npos && sep + 1 < full.size())
+                           ? full.substr(sep + 1)
+                           : full;
+        };
+
+        // ---- One lap, wrapping, first USABLE row wins -------------------------
+        // Only MISSING folders are stepped over. An EMPTY folder is opened, the
+        // same as pressing Enter on it in this panel — see the status branch below.
+        //
+        // Skips are NOT posted as they happen: MID_CENTER holds one message, so
+        // the landing message would overwrite them a moment later and the user
+        // would never see them. They are collected and folded into the single
+        // message posted at the end.
+        int skipped = 0;
+        std::wstring lastSkipText;      // "<reason> <n>/<total> <name>" of the last skip
+        bool anyRowRepainted = false;
+
         for (int step = 1; step <= total; ++step) {
             int row = startRow + direction * step;
-            row = ((row % total) + total) % total; // positive modulo — wrap both ways
+            row = ((row % total) + total) % total; // positive modulo — wraps both ways
 
-            const DisplayEntry &entry = g_displayList[row];
-            if (entry.isFavorite != favoritesOnly) continue;
-            if (entry.path == currentFolder) continue; // already here
-            if (GetFolderStatus(entry.path) == FolderStatus::Missing) continue;
+            const WalkRow &entry = g_walkSnap[row];
+            // Wrong category for this scope — not a row this walk can occupy, so
+            // the cursor must NOT move onto it.
+            if (scope == WalkScope::FavoritesOnly && !entry.isFavorite) continue;
+            if (scope == WalkScope::NonFavoritesOnly && entry.isFavorite) continue;
+            // Never re-open what is already on screen. Compared against the
+            // VIEWER's folder rather than g_walkAnchor — the anchor can hold a
+            // different spelling of the same path (see fs::canonical above).
+            if (!currentFolder.empty() && HistoryPath::Equal(entry.path, currentFolder))
+                continue;
 
-            const std::wstring folder = entry.path; // copy — OpenDirectory rebuilds the list
-            const int displayNumber = row + 1;      // matches the panel's row label
+            // Eligible row: claim it as the new position before deciding whether
+            // it can actually be opened. A dead folder therefore consumes one step
+            // rather than leaving the cursor behind for the next keypress to redo.
+            g_walkCursor = row;
 
-            g_overlayManager.PostCenterMessage(hOwner,
-                (favoritesOnly ? std::wstring(Constants::Messages::WALK_FAVORITE_FOLDER)
-                               : std::wstring(Constants::Messages::WALK_HISTORY_FOLDER))
-                + std::to_wstring(displayNumber) + L". " + folder);
+            // Resolves Unknown by hitting the filesystem and caches the result,
+            // so the panel repaints this row in its dead / missing colour too.
+            const FolderStatus status = GetFolderStatus(entry.path);
 
+            // MISSING is the only status that is stepped over. The folder is not
+            // there, so there is nothing to navigate to.
+            if (status == FolderStatus::Missing) {
+                ++skipped;
+                lastSkipText = std::wstring(Constants::Messages::FOLDER_DEAD_MISSING)
+                               + L" " + std::to_wstring(row + 1) + L"/" +
+                               std::to_wstring(total) + L" " + folderName(entry.path);
+                anyRowRepainted = true;
+                // g_walkAnchor is deliberately NOT touched here: it means "the
+                // folder this walk put the viewer in", and a skipped folder was
+                // never opened. Setting it would guarantee a mismatch against the
+                // viewer on the next press, which reads as external navigation —
+                // which is how a walk ended up landing back on the folder it
+                // started from, promoting it to the top of the MRU list.
+                // g_walkCursor above already records that this row was consumed.
+                continue; // step over it and keep looking
+            }
+
+            // EMPTY is NOT skipped — the walk opens it, exactly as pressing Enter
+            // on that row in this panel does. The folder genuinely exists and you
+            // navigated to it, so it becomes the current folder, turns green, and
+            // shows the empty-folder placeholder; F5 recovers it once images
+            // appear. Skipping instead meant the walk moved somewhere the panel
+            // did not agree with, and every piece of state downstream — the green
+            // row, the MRU order, the walk anchor — drifted apart from there.
+            const std::wstring folder = entry.path; // copy — OpenDirectory rebuilds g_displayList
+            const std::wstring name = folderName(folder);
+
+            // Prefix comes from the ROW, not from the scope, so every caller —
+            // wheel included — produces the identical message for a given folder.
+            // For the two key pairs this is fixed anyway (their scope already
+            // pins the category); for the wheel it correctly marks starred rows.
+            const wchar_t *prefix = entry.isFavorite
+                                            ? Constants::Messages::WALK_FAVORITE_FOLDER
+                                            : Constants::Messages::WALK_HISTORY_FOLDER;
+
+            // row + 1 is literally the number the panel paints next to that row.
+            std::wstring text = std::wstring(prefix) + std::to_wstring(row + 1) + L"/" +
+                                std::to_wstring(total) + L" " + name;
+
+            // Landing on an empty folder is legitimate but worth saying out loud,
+            // since the viewer will show a placeholder rather than an image.
+            const bool landedEmpty = (status == FolderStatus::Empty);
+            if (landedEmpty)
+                text += std::wstring(L"  ") + Constants::Messages::FOLDER_DEAD_EMPTY;
+
+            // Something was stepped over on the way here — say so, and colour the
+            // whole message as a warning so it is visibly not an ordinary hop.
+            // MID_CENTER is single-line, hence a prefix rather than a second line.
+            if (skipped == 1)
+                text = lastSkipText + L"  →  " + text;
+            else if (skipped > 1)
+                text = std::wstring(Constants::Messages::WALK_SKIPPED_PREFIX) +
+                       std::to_wstring(skipped) + L"  →  " + text;
+
+            g_overlayManager.PostCenterMessage(hOwner, text,
+                (skipped > 0 || landedEmpty) ? OverlayManager::MsgSeverity::Warning
+                                             : OverlayManager::MsgSeverity::Normal);
+
+            if (anyRowRepainted) {
+                auto &histWnd = uiManager.getHistoryListWindow();
+                if (histWnd.IsVisible())
+                    InvalidateRect(histWnd.GetHwnd(), nullptr, FALSE);
+            }
+
+            // Remember where we put the user. g_walkCursor was already set to this
+            // row above. The latch tells PushFolderHistory — which OpenDirectory
+            // calls synchronously, on this thread — that the navigation about to
+            // happen is ours, so it must not be treated as the user moving away.
+            g_walkAnchor = folder;
+            g_walkOwnsNavigation = true;
             OpenDirectory(hOwner, folder);
+            g_walkOwnsNavigation = false; // cleared even if OpenDirectory bailed early
             return true;
         }
 
-        g_overlayManager.PostCenterMessage(hOwner,
-            favoritesOnly ? Constants::Messages::WALK_NO_FAVORITE_FOLDERS
-                          : Constants::Messages::WALK_NO_HISTORY_FOLDERS);
+        // Nothing usable anywhere in this scope. If the lap hit dead folders,
+        // report the last one in red rather than the vaguer "nothing here".
+        if (skipped > 0) {
+            g_overlayManager.PostCenterMessage(hOwner, lastSkipText,
+                                               OverlayManager::MsgSeverity::Error);
+            auto &histWnd = uiManager.getHistoryListWindow();
+            if (histWnd.IsVisible())
+                InvalidateRect(histWnd.GetHwnd(), nullptr, FALSE);
+        } else {
+            g_overlayManager.PostCenterMessage(hOwner, emptyMsg,
+                                               OverlayManager::MsgSeverity::Error);
+        }
         return false;
     }
 
@@ -639,29 +992,42 @@ namespace UI {
         y = monY + (monH - h) / 2;
     }
 
+    void RefreshHistoryFullMode() {
+        auto &histWnd = uiManager.getHistoryListWindow();
+        HWND h = histWnd.GetHwnd();
+        if (!h || !IsWindowVisible(h)) return; // closed panel picks it up on Show()
+        ApplyFullHistoryMode(h);
+    }
+
+    // Ctrl+Tab from the MAIN APP — "show me the whole history".
+    //
+    // This is a request to VIEW the full list, not to change the default mode,
+    // so it sets the one-shot override and deliberately leaves
+    // app.historyFullModeEnabled alone. Plain Tab afterwards reopens in whatever
+    // mode the user last actually chose.
     void ToggleHistoryFull() {
         auto &histWnd = uiManager.getHistoryListWindow();
         if (!histWnd.GetHwnd()) return;
         if (IsWindowVisible(histWnd.GetHwnd())) {
-            if (g_showFullHistory) {
+            if (EffectiveFullMode()) {
+                // Already showing everything — second press closes it.
+                g_fullModeOverride = false;
                 histWnd.Hide();
             } else {
-                g_showFullHistory = true;
+                g_fullModeOverride = true; // view-only: no preference write
                 g_scrollOffsetY = 0;
                 BuildDisplayList();
-                CaptureNavigationSnapshot();
-                g_hoverRow = 0;
+                HoverCurrentFolderRow();
                 InvalidateRect(histWnd.GetHwnd(), nullptr, TRUE);
             }
         } else {
-            g_showFullHistory = true;
+            g_fullModeOverride = true; // view-only: no preference write
             BuildDisplayList();
-            CaptureNavigationSnapshot();
-            int x, y, w, h;
+                int x, y, w, h;
             GetHistoryWindowBounds(g_hHistOwner ? g_hHistOwner : histWnd.GetHwnd(), x, y, w, h);
             SetWindowPos(histWnd.GetHwnd(), HWND_TOPMOST, x, y, w, h, SWP_FRAMECHANGED);
-            g_hoverRow = 0;
             g_scrollOffsetY = 0;
+            HoverCurrentFolderRow();
             ShowWindow(histWnd.GetHwnd(), SW_SHOW);
             SetForegroundWindow(histWnd.GetHwnd());
             InvalidateRect(histWnd.GetHwnd(), nullptr, TRUE);
@@ -701,6 +1067,7 @@ namespace UI {
                 }
             }
             g_lastDeletedIndex = -1;
+            InvalidateWalkSnapshot(); // a row came back
             BuildDisplayList();
             int newMax = static_cast<int>(g_displayList.size());
             if (g_hoverRow >= newMax) g_hoverRow = newMax - 1;
@@ -806,6 +1173,29 @@ namespace UI {
                 }
                 return true;
 
+            // ── The navigation cluster belongs to the MAIN APP ───────────────
+            // Home / End / PageUp / PageDown / Insert / Delete drive image and
+            // folder navigation, and must do the same thing whether or not this
+            // panel has focus — returning false forwards them to the app
+            // pipeline. Walking the list while looking at it is the whole point.
+            //
+            // Exception: while the filter box holds text, Home / End are caret
+            // keys and plain Delete is forward-delete. Text editing wins until
+            // the filter is cleared (Esc), then the keys navigate again.
+            case VK_HOME:
+            case VK_END:
+                if (!ctrl && !shift && !alt && !g_filter.IsEmpty()) {
+                    if (g_filter.RouteKey(vk, m_hWnd) == InputResult::ConsumedRepaint)
+                        InvalidateRect(m_hWnd, nullptr, FALSE);
+                    return true;
+                }
+                return false;
+
+            case VK_PRIOR:
+            case VK_NEXT:
+            case VK_INSERT:
+                return false;
+
             case VK_DELETE:
                 if (ctrl && shift && alt) {
                     ClearFavoritesKeepHistory();
@@ -826,12 +1216,17 @@ namespace UI {
                     }
                     InvalidateRect(m_hWnd, nullptr, TRUE);
                 } else if (!ctrl && !shift && !alt) {
-                    // If the filter has text, Delete = forward-delete in the input.
+                    // Filter has text → forward-delete in the input box.
                     if (!g_filter.IsEmpty()) {
                         if (g_filter.RouteKey(VK_DELETE, m_hWnd) == InputResult::ConsumedRepaint)
                             InvalidateRect(m_hWnd, nullptr, FALSE);
                         return true;
                     }
+                    // Otherwise plain Delete is a navigation key — hand it to the
+                    // app (previous favorite folder). Deleting the hovered row
+                    // moved to Ctrl+Delete, handled below.
+                    return false;
+                } else if (ctrl && !shift && !alt) {
                     if (g_hoverRow >= 0 && g_hoverRow < navMax) {
                         const std::wstring &path = g_displayList[g_hoverRow].path;
                         bool wasFav = g_displayList[g_hoverRow].isFavorite;
@@ -858,6 +1253,7 @@ namespace UI {
                             historyFoldersManager.RewriteFavoritesToDisk();
                         }
 
+                        InvalidateWalkSnapshot(); // a row disappeared
                         BuildDisplayList();
                         int newMax = static_cast<int>(g_displayList.size());
                         if (g_hoverRow >= newMax) g_hoverRow = newMax - 1;
@@ -1127,17 +1523,32 @@ namespace UI {
                 g_bodyBottom = bodyBottom;
                 g_rowH = rowH;
 
+                // A programmatic hover move (Show, mode switch) asked for its row
+                // to be brought into view. This is the first moment the maths is
+                // possible — rowH and the body extent only exist once the panel
+                // has laid itself out — and it happens before the rows are drawn,
+                // so the corrected offset applies to this very paint.
+                if (g_scrollHoverIntoView) {
+                    g_scrollHoverIntoView = false;
+                    const int rowCount = static_cast<int>(g_displayList.size());
+                    const int bodyH = bodyBottom - rowsTop;
+                    if (g_hoverRow >= 0 && rowH > 0 && bodyH > 0 && rowCount > 0) {
+                        // Centre the row when the list is long enough to scroll,
+                        // then clamp to the ends so we never scroll past the list.
+                        const int maxOffset = std::max(0, rowCount * rowH - bodyH);
+                        int desired = g_hoverRow * rowH - (bodyH - rowH) / 2;
+                        g_scrollOffsetY = std::clamp(desired, 0, maxOffset);
+                    }
+                }
+
                 SaveDC(hdc);
                 IntersectClipRect(hdc, rc.left, rowsTop, rc.right, bodyBottom);
 
-                // Derive the folder currently open in the main app
-                std::wstring currentFolder;
-                if (!app.playlist.empty() && app.currentIndex >= 0) {
-                    const std::wstring &cur = app.playlist[app.currentIndex];
-                    const size_t sep = cur.find_last_of(L"\\/");
-                    if (sep != std::wstring::npos)
-                        currentFolder = cur.substr(0, sep);
-                }
+                // The folder currently open in the main app — drives the green
+                // "you are here" row. Uses the recorded navigation rather than the
+                // playlist so an empty folder highlights ITSELF, not the folder
+                // that was open before it.
+                const std::wstring currentFolder = AppCurrentFolder();
 
                 if (g_displayList.empty()) {
                     int y = rowsTop - g_scrollOffsetY;
@@ -1162,7 +1573,8 @@ namespace UI {
 
                         RECT rowRect = {rc.left, rowTop, rc.right, rowBottom};
 
-                        const bool isCurrent = (!currentFolder.empty() && entry.path == currentFolder);
+                        const bool isCurrent = (!currentFolder.empty() &&
+                                                HistoryPath::Equal(entry.path, currentFolder));
                         auto _sit = g_statusCache.find(entry.path);
                         const FolderStatus rowStatus = (_sit != g_statusCache.end())
                                                            ? _sit->second
@@ -2044,15 +2456,20 @@ namespace UI {
     void HistoryListWnd::Show() {
         if (!m_hWnd) return;
         g_filter.Reset(); // silent — Show() drives layout directly
-        g_showFullHistory = app.historyFullModeEnabled;
+        // An ordinary open (plain Tab, tray, context menu) always starts from the
+        // saved preference, so drop any one-shot "show everything" override left
+        // by a previous Ctrl+Tab. The preference itself is NOT reset here — it is
+        // app.historyFullModeEnabled and already holds what the user last chose;
+        // overwriting it was what made a mode switch vanish on close/reopen.
+        // ToggleHistoryFull() bypasses Show(), so its override survives this.
+        g_fullModeOverride = false;
         BuildDisplayList();
-        CaptureNavigationSnapshot();
         int x, y, w, h;
         GetHistoryWindowBounds(g_hHistOwner ? g_hHistOwner : m_hWnd, x, y, w, h);
         SetWindowPos(m_hWnd, HWND_TOPMOST, x, y, w, h, SWP_FRAMECHANGED);
-        g_hoverRow = 0;
-        g_savedHoverRow = -1; // fresh open always starts at the top row
         g_scrollOffsetY = 0;
+        g_savedHoverRow = -1;   // nothing to restore on a fresh open
+        HoverCurrentFolderRow(); // land on the folder you are actually in
 
         // Cache history file size so WM_PAINT needs no I/O
         {
