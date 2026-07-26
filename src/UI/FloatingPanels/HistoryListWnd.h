@@ -72,6 +72,10 @@ namespace UI {
 
             void ToggleHistoryWindow();
 
+            // Re-reads qivHistory.txt's size into m_cachedSizeStr. Called on open
+            // and on F5 — the file changes as folders are visited and cleared.
+            void RefreshCachedFileSize();
+
             HFONT m_hFontTitle     = nullptr;
             HFONT m_hFontBody      = nullptr;
             HFONT m_hFontList      = nullptr;

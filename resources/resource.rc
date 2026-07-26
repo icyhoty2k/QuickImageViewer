@@ -1,7 +1,10 @@
 #include <windows.h> // Base Windows definitions
 #include <winver.h>  // Definitions for version constants (VS_FFI_FILEFLAGSMASK, etc.)
 #include "resource.h" // Project-specific resource IDs
-#include "Constants.h" // Include your constants for versioning
+// BuildNumber.h MUST come first — Version.h defines VER_STR / VER_NUMERIC in
+// terms of VER_BUILD without providing it. See the note in Version.h.
+#include "BuildNumber.h"   // generated, auto-incremented every build
+#include "Common/Version.h" // VER_NUMERIC / VER_STR / FILE_DESC / PROD_NAME / COPYRIGHT
 
 // The icons for .rc file
 IDI_APP_ICON           ICON     "icons/QIV.ico"

@@ -1,31 +1,8 @@
 #pragma once
 
-// =========================================================================
-// RC COMPATIBLE DEFINITIONS
-// Used by the Resource Compiler for version metadata
-// *** Update ONLY the four numbers below to bump the version everywhere ***
-// =========================================================================
-#define VER_MAJOR 2
-#define VER_MINOR 70
-#define VER_PATCH 0
-#define VER_BUILD 0
-
-// Comma form  — FILEVERSION / PRODUCTVERSION in .rc  (e.g. 2,3,0,0)
-#define VER_NUMERIC   VER_MAJOR,VER_MINOR,VER_PATCH,VER_BUILD
-
-// String form — derived via C preprocessor stringification.
-// rc.exe (Windows SDK 10) runs a full C-preprocessor pass, so # works here.
-// In C++: L"" VER_STR  →  L"2.3.0.0"
-// In RC:  VALUE "FileVersion", VER_STR  →  "2.3.0.0"
-#define _QIV_S(x)     #x
-#define _QIV_STR(x)   _QIV_S(x)
-#define VER_STR       _QIV_STR(VER_MAJOR) "." _QIV_STR(VER_MINOR) "." _QIV_STR(VER_PATCH) "." _QIV_STR(VER_BUILD)
-
-#define FILE_DESC     "qIV"
-#define ORIG_FILENAME "QuickImageViewer.exe"
-#define PROD_NAME     "Quick Image Viewer"
-#define COPYRIGHT     "Copyright \xA9 2026 All rights reserved, Ivan Hristov Yanev"
-// =========================================================================
+// Version and product identity — FILE_DESC, PROD_NAME, COPYRIGHT, and the
+// numbers you edit to bump a release — all live in Common/Version.h.
+#include "Common/Version.h"
 
 #include <iterator>
 #include <cstdint>   // uint32_t — Slideshow::TRANSITION_LIST_DEFAULT_MASK
@@ -37,7 +14,11 @@ namespace Constants {
 
     constexpr const wchar_t *APP_HELP_FOOTER = L"" COPYRIGHT;
     constexpr const wchar_t *APP_TASKBAR_NAME = L"" FILE_DESC;
-    constexpr const wchar_t *APP_VERSION = L"" VER_STR; // major.minor.patch.build  e.g. 2.3.0.0
+    // major.minor.patch.build — e.g. 2.80.0.123
+    // Defined in Version.cpp, the one TU that sees the generated build number.
+    // Deliberately not constexpr: making it so would drag BuildNumber.h in here
+    // and rebuild the world on every build. Every use is a runtime string.
+    extern const wchar_t *const APP_VERSION;
     constexpr const wchar_t *APP_NAME = BASE_NAME;
     constexpr const wchar_t *WINDOW_CLASS_NAME = BASE_NAME;
     constexpr bool IS_ENABLE_RUN_ON_STARTUP = true; // enable or disable run on startup reg value add/delete
