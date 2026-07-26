@@ -9,6 +9,7 @@
 #include "../../Input/Shortcuts.h"
 #include "../../Input/Command.h"
 #include "../../Persistence/HistoryFoldersManager.h"
+#include "../../Platform/WriteQueue.h" // g_writeQueue.Flush() — F5 reloads from disk
 #include "../UIManager.h"
 #include "Common/FuzzyMatch.h"
 #include "CustomControls/InputBox.h"
@@ -317,6 +318,18 @@ namespace UI {
     // Row the popup is currently describing, -1 = hidden. Kept so a mouse move
     // within the same slot does not re-show and flicker.
     static int g_linkTipRow = -1;
+
+    // Hover targets, filled during WM_PAINT. Declared here rather than down with
+    // the other footer rects so RefreshHistory — which sits above them — can clear
+    // them as part of the F5 rebuild.
+    //
+    // g_linkRects is index-parallel to g_displayList, holding an empty RECT for
+    // rows with no badge and for rows scrolled out of view.
+    static std::vector<RECT> g_linkRects;
+    // Footer total: its rect, and the popup text built alongside it during paint
+    // (that is where the byte / file / excluded numbers already exist).
+    static RECT         g_summaryRect = {};
+    static std::wstring g_summaryTipText;
 
     static void HideLinkTip() {
         if (g_linkTipRow >= 0) ThemedTooltip::Hide();
@@ -881,16 +894,27 @@ namespace UI {
         g_scanRunning = true;
         const uint64_t gen = g_histScanGen.fetch_add(1, std::memory_order_relaxed) + 1;
         std::thread([folders = std::move(folders), gen, hWnd, delayMs]() mutable {
-            // Do not compete with the app's own startup I/O. Background mode drops
-            // this thread's CPU *and* disk priority, so a thousand directory walks
-            // cannot out-queue the read of the image the user is actually waiting
-            // to see. The delay keeps it off the disk entirely until the first
-            // image is on screen.
-            if (delayMs) Sleep(delayMs);
-            SetThreadPriority(GetCurrentThread(), THREAD_MODE_BACKGROUND_BEGIN);
+            // A DELAYED sweep is the startup prefetch: nobody is waiting for it, so
+            // it must not compete with the app's own startup I/O. Background mode
+            // drops this thread's CPU *and* disk priority, so a thousand directory
+            // walks cannot out-queue the read of the image the user is watching
+            // for, and the delay keeps it off the disk entirely until that image
+            // is on screen.
+            //
+            // An IMMEDIATE sweep — opening the panel, or F5 — is user-initiated and
+            // the user is looking at it. Lowering its priority would be actively
+            // wrong: it would make the one scan they explicitly asked for the
+            // slowest one the app performs.
+            const bool prefetch = (delayMs > 0);
             struct BgGuard {
-                ~BgGuard() { SetThreadPriority(GetCurrentThread(), THREAD_MODE_BACKGROUND_END); }
-            } bgGuard;
+                bool on;
+                ~BgGuard() { if (on) SetThreadPriority(GetCurrentThread(), THREAD_MODE_BACKGROUND_END); }
+            } bgGuard{prefetch};
+
+            if (prefetch) {
+                Sleep(delayMs);
+                SetThreadPriority(GetCurrentThread(), THREAD_MODE_BACKGROUND_BEGIN);
+            }
 
             // Re-check after the delay: the user may have hit F5, or closed qIV.
             if (g_histScanGen.load(std::memory_order_relaxed) != gen) return;
@@ -967,21 +991,46 @@ namespace UI {
     }
 
     static void RefreshHistory(HWND hWnd) {
-        historyFoldersManager.MergeHistoryFromDisk();
+        // F5 means "re-read the world" — a FORCED rebuild that reuses nothing.
+        //
+        // A full RELOAD, not the two-way merge: merging only ever adds, so a line
+        // the user deleted by hand from qivHistory.txt would survive in RAM and
+        // reappear on the next save. Reloading makes the file authoritative, which
+        // is what "refresh" has to mean for a file the user can edit.
+        //
+        // Flush first: appends are queued on the write thread, so a folder visited
+        // moments ago may not have reached the file yet. Reloading without this
+        // would read a file that does not contain it and silently drop it.
+        g_writeQueue.Flush();
+        historyFoldersManager.LoadHistoryFromDisk();
 
-        // F5 means "re-read the world" — a FORCED, unconditional rebuild. Every
-        // cache is dropped, not just refreshed: a folder can be deleted, emptied,
-        // refilled, or turned into a junction while qIV is running, and entries
-        // for folders that have since left the list would otherwise linger and
-        // keep skewing the footer totals. Rows go unmarked for a moment and the
-        // batched sweep refills them.
+        // Every cache dropped, not merely refreshed: a folder can be deleted,
+        // emptied, refilled, or turned into a junction while qIV is running, and
+        // entries for folders that have since left the list would otherwise linger
+        // and keep skewing the footer totals. Rows go unmarked for a moment and
+        // the batched sweep refills them — image counts and sizes included, since
+        // ComputeDirScan re-walks every folder from scratch.
         g_statusCache.clear();
         g_dirSizeCache.clear();
         g_symlinkCache.clear();
         InvalidateTotals();
         InvalidateWalkSnapshot(); // the row set may have changed underneath a walk
 
+        // Derived UI state goes too. A popup on screen right now was built from
+        // the caches just discarded, so leaving it up would show pre-refresh
+        // numbers and paths until the cursor happened to move. The rects are
+        // rebuilt by the next paint, the texts by the next hover.
+        HideLinkTip();
+        g_summaryTipText.clear();
+        g_summaryRect = RECT{0, 0, 0, 0};
+        g_linkRects.clear();
+
         BuildDisplayList();
+
+        // Selection restarts too: row indices mean nothing across a rebuild, and
+        // a saved row could now be past the end of a shorter list.
+        g_savedHoverRow = -1;
+        HoverCurrentFolderRow(); // re-lands on the folder actually open, scrolls to it
         int x, y, w, h;
         GetHistoryWindowBounds(g_hHistOwner ? g_hHistOwner : hWnd, x, y, w, h);
         SetWindowPos(hWnd, HWND_TOPMOST, x, y, w, h, SWP_FRAMECHANGED);
@@ -1013,16 +1062,6 @@ namespace UI {
 
     static std::vector<RECT> g_rowRects;
     static std::vector<RECT> g_indexRects; // clickable rects for directory indexes (parallel to g_displayList)
-    // Hover rects for the symlink glyph, parallel to g_displayList. Empty RECT
-    // for rows that are not links or are scrolled out of view.
-    // (g_linkTipRow lives up with the tooltip helpers, which are defined before
-    // this point and need it.)
-    static std::vector<RECT> g_linkRects;
-    // Footer total: its rect, and the popup text built alongside it during paint
-    // (that is where the byte/file/excluded numbers already exist).
-    static RECT         g_summaryRect = {};
-    static std::wstring g_summaryTipText;
-
     static RECT g_exeLinkRect = {};        // clickable rect for the "QIV" exe-dir link
     static RECT g_f5IndexRect = {};        // clickable rect for [Fkey] Dir toggle in footer
     static RECT g_cacheIndexRect = {};     // clickable rect for [Fkey] Cache toggle in footer
@@ -1756,6 +1795,7 @@ namespace UI {
 
         if (vk == VK_F5 && !ctrl && !shift && !alt) {
             RefreshHistory(m_hWnd);
+            RefreshCachedFileSize(); // the .txt may have changed size since Show()
             return true;
         }
 
@@ -3301,6 +3341,26 @@ namespace UI {
         // InvalidateRect is already called by FloatingPanelWnd before this hook.
     }
 
+    // Caches the qivHistory.txt size for the footer so WM_PAINT needs no I/O.
+    // Re-run on F5 as well as on open: the file grows as folders are visited and
+    // is rewritten by clears, so a value captured once at Show() goes stale.
+    void HistoryListWnd::RefreshCachedFileSize() {
+        std::error_code ec;
+        auto bytes = std::filesystem::file_size(historyFoldersManager.GetFilePath(), ec);
+        if (ec) {
+            m_cachedSizeStr = L"History - n/a";
+            return;
+        }
+        wchar_t buf[64];
+        if (bytes >= 1024ULL * 1024)
+            swprintf_s(buf, L"History - %.3f MB", static_cast<double>(bytes) / (1024.0 * 1024.0));
+        else if (bytes >= 1024)
+            swprintf_s(buf, L"History - %.3f KB", static_cast<double>(bytes) / 1024.0);
+        else
+            swprintf_s(buf, L"History - %llu Bytes", static_cast<unsigned long long>(bytes));
+        m_cachedSizeStr = buf;
+    }
+
     void HistoryListWnd::Show() {
         if (!m_hWnd) return;
         g_filter.Reset(); // silent — Show() drives layout directly
@@ -3324,23 +3384,7 @@ namespace UI {
         // reopening the panel is free; F5 is the "check everything again" path.
         LaunchHistoryValidation(m_hWnd, /*rescanAll=*/false);
 
-        // Cache history file size so WM_PAINT needs no I/O
-        {
-            std::error_code ec;
-            auto bytes = std::filesystem::file_size(historyFoldersManager.GetFilePath(), ec);
-            if (!ec) {
-                wchar_t buf[64];
-                if (bytes >= 1024ULL * 1024)
-                    swprintf_s(buf, L"History - %.3f MB", static_cast<double>(bytes) / (1024.0 * 1024.0));
-                else if (bytes >= 1024)
-                    swprintf_s(buf, L"History - %.3f KB", static_cast<double>(bytes) / 1024.0);
-                else
-                    swprintf_s(buf, L"History - %llu Bytes", static_cast<unsigned long long>(bytes));
-                m_cachedSizeStr = buf;
-            } else {
-                m_cachedSizeStr = L"History - n/a";
-            }
-        }
+        RefreshCachedFileSize();
 
         ShowWindow(m_hWnd, SW_SHOW);
         SetForegroundWindow(m_hWnd);
