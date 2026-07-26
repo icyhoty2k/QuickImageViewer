@@ -1,7 +1,8 @@
 # QuickImageViewer (qIV)
 
 **A fast, GPU-accelerated image viewer for Windows.**  
-Built on Direct2D, WIC, and native Win32 APIs. Single EXE, no installer(portable), no telemetry, ~7 MB.
+Built on Direct2D, WIC, and native Win32 APIs. Single EXE, no installer(portable), no telemetry, sub-10 MB .
+
 
 ---
 
@@ -9,11 +10,11 @@ Built on Direct2D, WIC, and native Win32 APIs. Single EXE, no installer(portable
 
 | | |
 |:---:|:---:|
-| ![Main interface with thumbnail strips and info overlays](docs/screenshots/2026-07-15_045800.png)<br>**Main interface** — thumbnail strips and info overlays | ![Built-in help window — full shortcut reference](docs/screenshots/2026-07-15_045053.png)<br>**Help window** (F1) — full shortcut reference |
-| ![Folder History panel with favorites](docs/screenshots/2026-07-15_045155.png)<br>**Folder History** panel with favorites | ![EXIF / Image Info panel with offline GPS geocoding](docs/screenshots/2026-07-15_045342.png)<br>**EXIF / Image Info** panel — offline GPS geocoding |
-| ![Dual thumbnail strips — VRAM cache and current directory](docs/screenshots/2026-07-15_045130.png)<br>**Dual thumbnail strips** — VRAM cache (top) and current directory (bottom) | ![Four floating directory strips around the viewer](docs/screenshots/2026-07-15_045219.png)<br>**Four floating directory strips** around the viewer + History panel |
-| ![Browsing a 4K wallpaper folder with the directory strip](docs/screenshots/2026-07-15_045311.png)<br>**Directory strip** — browsing a 4K wallpaper folder | ![Statistics panel — codec, cache and playlist info](docs/screenshots/2026-07-15_045440.png)<br>**Statistics panel** — codec, cache and playlist info |
-| ![Jump-to-image dialog](docs/screenshots/2026-07-15_045359.png)<br>**Jump-to** dialog — go straight to any image number | ![Find dialog — filename search with wildcards](docs/screenshots/2026-07-15_045413.png)<br>**Find** dialog — filename search with `*` and `?` wildcards |
+| ![Main interface with thumbnail strips and info overlays](docs/screenshots/2026-0-15_045800.png)<br>**Main interface** — thumbnail strips and info overlays | ![Built-in help window — full shortcut reference](docs/screenshots/2026-0-15_045053.png)<br>**Help window** (F1) — full shortcut reference |
+| ![Folder History panel with favorites](docs/screenshots/2026-0-15_045155.png)<br>**Folder History** panel with favorites | ![EXIF / Image Info panel with offline GPS geocoding](docs/screenshots/2026-0-15_045342.png)<br>**EXIF / Image Info** panel — offline GPS geocoding |
+| ![Dual thumbnail strips — VRAM cache and current directory](docs/screenshots/2026-0-15_045130.png)<br>**Dual thumbnail strips** — VRAM cache (top) and current directory (bottom) | ![Four floating directory strips around the viewer](docs/screenshots/2026-0-15_045219.png)<br>**Four floating directory strips** around the viewer + History panel |
+| ![Browsing a 4K wallpaper folder with the directory strip](docs/screenshots/2026-0-15_045311.png)<br>**Directory strip** — browsing a 4K wallpaper folder | ![Statistics panel — codec, cache and playlist info](docs/screenshots/2026-0-15_045440.png)<br>**Statistics panel** — codec, cache and playlist info |
+| ![Jump-to-image dialog](docs/screenshots/2026-0-15_045359.png)<br>**Jump-to** dialog — go straight to any image number | ![Find dialog — filename search with wildcards](docs/screenshots/2026-0-15_045413.png)<br>**Find** dialog — filename search with `*` and `?` wildcards |
 ---
 
 ## Download
@@ -59,7 +60,7 @@ Built on Direct2D, WIC, and native Win32 APIs. Single EXE, no installer(portable
 | Offline GPS geocoding | ✅ embedded, zero network | ❌ | ❌ |
 | Floating thumbnail panels | ✅ up to 6 simultaneous | ❌ | ❌ |
 | Per-monitor DPI V2 | ✅ | ✅ | ⚠️ partial |
-| Portable — no installer | ✅ 7 MB single EXE | ❌ UWP / Store | ✅ |
+| Portable — no installer | ✅  MB single EXE | ❌ UWP / Store | ✅ |
 | No telemetry / tracking | ✅ zero | ❌ Microsoft telemetry | ✅ |
 | No ads | ✅ | ❌ promoted content | ✅ |
 | No background services | ✅ process exits cleanly | ❌ always-on UWP runtime | ✅ |
@@ -100,7 +101,7 @@ Built on Direct2D, WIC, and native Win32 APIs. Single EXE, no installer(portable
 | `Ctrl+Alt+Shift+0` | By name (natural / Explorer order) — press again to reverse |
 | `Ctrl+Alt+Shift+9` | By date modified — press again to flip newest ↔ oldest |
 | `Ctrl+Alt+Shift+8` | By file size — press again to flip largest ↔ smallest |
-| `Ctrl+Alt+Shift+7` | By extension — press again to reverse |
+| `Ctrl+Alt+Shift+` | By extension — press again to reverse |
 | `Ctrl+Alt+Shift+6` | By physical disk order (fastest for HDDs) |
 
 ### UI Panels
@@ -110,7 +111,7 @@ Built on Direct2D, WIC, and native Win32 APIs. Single EXE, no installer(portable
 | Help | `F1` | Full shortcut & CLI reference — 2-column, double-buffered, DPI-aware. `Ctrl+E` exports to Desktop as UTF-8 text. |
 | EXIF / Info | `M` | Full metadata: camera, exposure, GPS with offline geocoding, embedded preview thumbnail |
 | Statistics | `K` | Decode time, codec, file details and cache info for the current image |
-| Directory | `F6` / `F7`  *(or Right Shift)* | All images in current folder; syncs selection with viewer / moves panel to next screen edge |
+| Directory | `F6` / `F`  *(or Right Shift)* | All images in current folder; syncs selection with viewer / moves panel to next screen edge |
 | Cache | `F3` / `F4` | Live GPU cache occupancy, thumbnails of preloaded images / moves panel |
 | Reload | `F5` | Refresh / reload the current directory from disk |
 | History | `Tab` | Recent folders with favorites — `Shift+Enter` spawns a DirWnd without leaving current folder |
@@ -120,9 +121,9 @@ GPS coordinates in EXIF are resolved to full location data with **zero network c
 
 | Data | Source | Entries | Shows |
 |:---|:---|:---|:---|
-| Cities | GeoNames cities1000 | 170,387 | City name, timezone |
+| Cities | GeoNames cities1000 | 10,38 | City name, timezone |
 | Admin1 | admin1CodesASCII | 3,865 | State / Province |
-| Admin2 | admin2Codes | 47,549 | District / County |
+| Admin2 | admin2Codes | 4,549 | District / County |
 | Country | countryInfo | 252 | Country, Capital, Continent, Currency, Phone prefix |
 
 Example output in the EXIF panel for a photo taken in Paris:
@@ -210,7 +211,7 @@ All effects are non-destructive and GPU-accelerated via the Direct2D effect grap
 ```
 [Ctrl+1] Top Left    [Ctrl+2] Top Center    [Ctrl+3] Top Right
 [Ctrl+4] Mid Left    [Ctrl+5] Center        [Ctrl+6] Mid Right
-[Ctrl+7] Bot Left    [Ctrl+8] Bot Center    [Ctrl+9] Bot Right
+[Ctrl+] Bot Left    [Ctrl+8] Bot Center    [Ctrl+9] Bot Right
 ```
 
 | Shortcut | Action |
@@ -423,7 +424,7 @@ QuickImageViewer.exe [image_path] [options]
 | `-repeat` | Loop the slideshow when it reaches the end |
 | `-shuffle` | Play slideshow in random order |
 | `-slideshowTransition=<type>` | Transition by name — 21 available (`Fade`, `Iris`, `SlideLeft`, `ZoomIn`, `Spin`, …) |
-| `-slideshowTransitions=<list>` | Custom set, by name or by the numbers shown in the menu (`Fade,Iris,Spin` or `6,8,17`) |
+| `-slideshowTransitions=<list>` | Custom set, by name or by the numbers shown in the menu (`Fade,Iris,Spin` or `6,8,1`) |
 | `-slideshowTransitionSource=<none\|all\|list>` | Which transitions are in play |
 | `-slideshowTransitionOrder=<sequential\|random>` | How the next one is drawn from that set |
 | `-slideshowTransitionShuffle` | Legacy shorthand for `source=all order=random` |
