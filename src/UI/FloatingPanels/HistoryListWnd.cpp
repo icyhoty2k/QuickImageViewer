@@ -17,6 +17,7 @@
 #include <cwctype>
 #include <thread>
 #include <unordered_map>
+#include "../ThemedTooltip.h"
 #include <windowsx.h>
 #include <filesystem>
 #include <Constants.h>
@@ -131,17 +132,494 @@ namespace UI {
     static std::unordered_map<std::wstring, DirSizeInfo,
                               HistoryPath::HashCI, HistoryPath::EqualCI> g_dirSizeCache;
 
+    // ---------------------------------------------------------------------------
+    // SYMLINK / JUNCTION DETECTION
+    //
+    // Two Windows mechanisms alias a directory, and they are NOT the same thing:
+    //   mklink /J  → a junction        → IO_REPARSE_TAG_MOUNT_POINT
+    //   mklink /D  → a directory symlink → IO_REPARSE_TAG_SYMLINK
+    //
+    // std::filesystem::is_symlink() only recognises the second, so junctions —
+    // the usual way to hang one drive's folder off another — come back false.
+    //
+    // Testing FILE_ATTRIBUTE_REPARSE_POINT alone is wrong in the other direction:
+    // OneDrive placeholders, Dedup and WIM-boot files all carry that attribute
+    // without being links, and every one of them would be mislabelled. The tag
+    // itself is the only accurate test, and it also tells us WHICH kind it is,
+    // which the hover popup needs.
+    //
+    // NOT covered: `subst` drives and mapped network drives. Those are DOS device
+    // mappings rather than reparse points — nothing on the path carries a tag, so
+    // no per-folder check can see them.
+    // ---------------------------------------------------------------------------
+    enum class LinkKind {
+        None,
+        Junction, // mklink /J  — IO_REPARSE_TAG_MOUNT_POINT
+        Symlink,  // mklink /D  — IO_REPARSE_TAG_SYMLINK
+        Mapped,   // resolves elsewhere with no reparse point: subst / network drive
+    };
+
+    struct LinkInfo {
+        LinkKind kind = LinkKind::None;
+        std::wstring target; // fully resolved destination; empty if unresolvable
+    };
+
+    // Cached: each miss costs a directory open. Cleared by F5, since a link can be
+    // created or destroyed while qIV is running.
+    static std::unordered_map<std::wstring, LinkInfo,
+                              HistoryPath::HashCI, HistoryPath::EqualCI> g_symlinkCache;
+
+    // Where does this path REALLY end up? Follows the whole chain, not just one
+    // hop, which is what the user wants to see. FILE_FLAG_BACKUP_SEMANTICS is
+    // mandatory — without it CreateFileW refuses to open a directory at all.
+    static std::wstring ResolveFinalPath(const std::wstring &path) {
+        HANDLE h = CreateFileW(path.c_str(), 0,
+                               FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE,
+                               nullptr, OPEN_EXISTING,
+                               FILE_FLAG_BACKUP_SEMANTICS, nullptr);
+        if (h == INVALID_HANDLE_VALUE) return {};
+
+        std::wstring buf(MAX_PATH, L'\0');
+        DWORD n = GetFinalPathNameByHandleW(h, buf.data(),
+                                            static_cast<DWORD>(buf.size()),
+                                            FILE_NAME_NORMALIZED | VOLUME_NAME_DOS);
+        if (n >= buf.size()) { // needed more room — n is the required length
+            buf.resize(n + 1);
+            n = GetFinalPathNameByHandleW(h, buf.data(),
+                                          static_cast<DWORD>(buf.size()),
+                                          FILE_NAME_NORMALIZED | VOLUME_NAME_DOS);
+        }
+        CloseHandle(h);
+        if (n == 0 || n >= buf.size()) return {};
+
+        buf.resize(n);
+        // GetFinalPathNameByHandleW always returns the \\?\ long-path form; strip
+        // it so the popup shows the path the user would actually type.
+        if (buf.rfind(L"\\\\?\\", 0) == 0) buf.erase(0, 4);
+        return buf;
+    }
+
+    // Reparse kind of ONE path component, or None. FindFirstFileW is the only
+    // call that hands back the tag: when FILE_ATTRIBUTE_REPARSE_POINT is set,
+    // dwReserved0 holds it. Any other tag is a cloud placeholder / dedup stub,
+    // which is not a link.
+    static LinkKind ReparseKindOf(const std::wstring &p) {
+        if (p.size() <= 3) return LinkKind::None; // drive root has no dir entry
+        WIN32_FIND_DATAW fd{};
+        HANDLE hFind = FindFirstFileW(p.c_str(), &fd);
+        if (hFind == INVALID_HANDLE_VALUE) return LinkKind::None;
+        FindClose(hFind);
+        if (!(fd.dwFileAttributes & FILE_ATTRIBUTE_REPARSE_POINT)) return LinkKind::None;
+        if (fd.dwReserved0 == IO_REPARSE_TAG_MOUNT_POINT) return LinkKind::Junction;
+        if (fd.dwReserved0 == IO_REPARSE_TAG_SYMLINK) return LinkKind::Symlink;
+        return LinkKind::None;
+    }
+
+    // Is this drive letter a subst / mapped drive rather than a real volume?
+    // QueryDosDeviceW is a registry-ish lookup with no filesystem I/O, so it is
+    // safe to call for every row: a real volume answers "\Device\HarddiskVolumeN",
+    // a subst answers "\??\C:\some\path".
+    static bool IsMappedDrive(const std::wstring &path) {
+        if (path.size() < 2 || path[1] != L':') return false;
+        const wchar_t drive[3] = {path[0], L':', L'\0'};
+        wchar_t target[MAX_PATH] = {};
+        if (QueryDosDeviceW(drive, target, MAX_PATH) == 0) return false;
+        return wcsncmp(target, L"\\??\\", 4) == 0;
+    }
+
+    // Pure probe — writes no global state, so the background scan thread can call
+    // it. GetLinkInfo() is the caching wrapper around it for UI-thread callers.
+    static LinkInfo ProbeLink(const std::wstring &path) {
+        LinkInfo info;
+        if (HistoryPath::IsBroken(path))
+            return info;
+
+        // Testing only the last component is not enough: the link is usually
+        // higher up — D:\12_Wallpapers is the junction, and every row beneath it
+        // inherits the aliasing without being a reparse point itself. So walk UP
+        // the path looking for the nearest component that is one.
+        //
+        // This walk uses GetFileAttributesW, which is a metadata query. The
+        // obvious alternative — resolve every row with GetFinalPathNameByHandleW
+        // and compare — needs a CreateFileW per row, on the UI thread, inside
+        // BuildDisplayList; with a long history that is dozens of directory opens
+        // per rebuild and a hard stall on any disconnected network path. Resolve
+        // ONLY once something has already proven the row is an alias.
+        std::wstring linkComponent;
+        {
+            std::wstring probe = path;
+            while (probe.size() > 3) {
+                const DWORD attrs = GetFileAttributesW(probe.c_str());
+                if (attrs != INVALID_FILE_ATTRIBUTES &&
+                    (attrs & FILE_ATTRIBUTE_REPARSE_POINT)) {
+                    linkComponent = probe;
+                    break;
+                }
+                const size_t sep = probe.find_last_of(L'\\');
+                if (sep == std::wstring::npos || sep < 3) break;
+                probe.resize(sep);
+            }
+        }
+
+        if (!linkComponent.empty()) {
+            // Only now read the tag, and only for the one component that has one.
+            // Other tags (cloud placeholder, dedup stub) are not links.
+            info.kind = ReparseKindOf(linkComponent);
+        } else if (IsMappedDrive(path)) {
+            info.kind = LinkKind::Mapped;
+        }
+
+        if (info.kind != LinkKind::None)
+            info.target = ResolveFinalPath(path); // one open, links only
+        return info;
+    }
+
+    // Caching wrapper for UI-thread callers (hover popup, SameRealFolder).
+    // BuildDisplayList deliberately does NOT use this — see CachedIsSymlink.
+    static const LinkInfo &GetLinkInfo(const std::wstring &path) {
+        auto it = g_symlinkCache.find(path);
+        if (it != g_symlinkCache.end()) return it->second;
+        return g_symlinkCache[path] = ProbeLink(path);
+    }
+
+    // Cache-only lookup: never touches the filesystem. Rows whose link state has
+    // not been probed yet simply draw without the marker until the background
+    // scan fills it in — exactly how FolderStatus::Unknown behaves.
+    static bool CachedIsSymlink(const std::wstring &path) {
+        auto it = g_symlinkCache.find(path);
+        return it != g_symlinkCache.end() && it->second.kind != LinkKind::None;
+    }
+
+    // Real on-disk identity: the resolved target when the path is an alias,
+    // otherwise the path itself.
+    static std::wstring RealPathOf(const std::wstring &p) {
+        const LinkInfo &li = GetLinkInfo(p);
+        return (li.kind != LinkKind::None && !li.target.empty()) ? li.target : p;
+    }
+
+    bool SameRealFolder(const std::wstring &a, const std::wstring &b) {
+        if (HistoryPath::Equal(a, b)) return true; // identical spelling — no I/O
+        // Different spellings may still be one directory. GetLinkInfo caches, and
+        // returns None without touching the disk for ordinary paths, so this stays
+        // cheap for the overwhelmingly common "genuinely different folders" case.
+        return HistoryPath::Equal(RealPathOf(a), RealPathOf(b));
+    }
+
+    // ---------------------------------------------------------------------------
+    // Symlink hover popup
+    //   Line 1: what kind of link this is
+    //   Line 2: where it actually resolves to
+    // A tracking tooltip rather than a hit-test-rect one: the rows scroll, so the
+    // registered rectangle would have to be re-armed on every paint. Tracking mode
+    // lets WM_MOUSEMOVE decide, which the panel is already doing for hover anyway.
+    // ---------------------------------------------------------------------------
+
+    // Row the popup is currently describing, -1 = hidden. Kept so a mouse move
+    // within the same slot does not re-show and flicker.
+    static int g_linkTipRow = -1;
+
+    static void HideLinkTip() {
+        if (g_linkTipRow >= 0) ThemedTooltip::Hide();
+        g_linkTipRow = -1;
+    }
+
+    // `row` is only an identity token for the "already showing this" guard — a row
+    // index, or a negative sentinel for non-row targets such as the footer total.
+    // -1 is reserved for "hidden".
+    //
+    // anchorClient is the rect being explained, in CLIENT coords. ThemedTooltip
+    // polls the cursor against it and dismisses itself, so no caller has to get
+    // mouse-leave bookkeeping right.
+    static void ShowLinkTip(HWND hOwner, int row, const std::wstring &text,
+                            POINT ptClient, const RECT &anchorClient) {
+        if (text.empty()) { HideLinkTip(); return; }
+
+        // The popup may have dismissed itself since we last showed it, so the
+        // "same target" guard has to account for it no longer being on screen.
+        if (row == g_linkTipRow && ThemedTooltip::IsVisible()) return;
+
+        POINT ptScreen = ptClient;
+        ClientToScreen(hOwner, &ptScreen);
+        ptScreen.x += 16; // clear of the cursor
+        ptScreen.y += 18;
+
+        RECT anchor = anchorClient;
+        POINT tl{anchor.left, anchor.top};
+        POINT br{anchor.right, anchor.bottom};
+        ClientToScreen(hOwner, &tl);
+        ClientToScreen(hOwner, &br);
+        anchor = RECT{tl.x, tl.y, br.x, br.y};
+
+        ThemedTooltip::Show(hOwner, text, ptScreen, anchor);
+        g_linkTipRow = row;
+    }
+
+    // ---------------------------------------------------------------------------
+    // ROW BADGES
+    //
+    // A row can be several things at once — missing AND starred, or a junction
+    // that is also a favorite — but there is one glyph slot. Giving each fact its
+    // own column does not scale and wastes width on the common unmarked row, and
+    // the previous "status wins, else star" rule silently hid the star: pressing
+    // Space on a missing folder appeared to do nothing.
+    //
+    // So: collect every badge the row carries. One badge draws directly. Two or
+    // more draw a stack placeholder, and hovering it lists them all, one per line.
+    // Hovering a single badge explains that one, so the affordance is uniform.
+    // ---------------------------------------------------------------------------
+    struct RowBadge {
+        const wchar_t *icon;
+        COLORREF color;
+        std::wstring text; // one line in the hover popup
+    };
+
+    static std::vector<RowBadge> BuildRowBadges(const std::wstring &path, bool isFavorite) {
+        std::vector<RowBadge> badges;
+
+        auto sit = g_statusCache.find(path);
+        const FolderStatus status = (sit != g_statusCache.end()) ? sit->second
+                                                                 : FolderStatus::Unknown;
+        if (status == FolderStatus::Missing) {
+            badges.push_back({Constants::ThemeIcons::ICON_WARNING,
+                              Constants::Theme::HistoryPanel::PATH_DEAD_DRIVE,
+                              Constants::Messages::BADGE_MISSING});
+        } else if (status == FolderStatus::Empty) {
+            badges.push_back({Constants::ThemeIcons::ICON_EMPTY,
+                              Constants::Theme::HistoryPanel::PATH_EMPTY_DRIVE,
+                              Constants::Messages::BADGE_EMPTY});
+        }
+
+        if (isFavorite) {
+            badges.push_back({Constants::ThemeIcons::ICON_FAVORITES_MARK,
+                              Constants::Theme::Markers::FAVORITES,
+                              Constants::Messages::BADGE_FAVORITE});
+        }
+
+        auto lit = g_symlinkCache.find(path);
+        if (lit != g_symlinkCache.end() && lit->second.kind != LinkKind::None) {
+            const LinkInfo &li = lit->second;
+            std::wstring line =
+                    li.kind == LinkKind::Junction ? Constants::Messages::LINK_KIND_JUNCTION
+                    : li.kind == LinkKind::Symlink ? Constants::Messages::LINK_KIND_SYMLINK
+                                                   : Constants::Messages::LINK_KIND_MAPPED;
+            line += L"  ";
+            line += Constants::ThemeIcons::ICON_ARROW_RIGHT;
+            line += L"  ";
+            line += li.target.empty() ? Constants::Messages::LINK_TARGET_UNKNOWN : li.target;
+            badges.push_back({Constants::ThemeIcons::ICON_SYMLINK_MARK,
+                              Constants::Theme::Markers::SYMLINK, std::move(line)});
+        }
+
+        return badges;
+    }
+
+    // Cache-only identity: the resolved target for an alias, the path itself
+    // otherwise. Never probes the filesystem, so it is safe inside WM_PAINT.
+    static const std::wstring &CachedRealPathOf(const std::wstring &p) {
+        auto it = g_symlinkCache.find(p);
+        if (it != g_symlinkCache.end() && it->second.kind != LinkKind::None &&
+            !it->second.target.empty())
+            return it->second.target;
+        return p;
+    }
+
+    // Footer totals across the whole scanned cache, counting each REAL directory
+    // once.
+    //
+    // A junction and its target are two rows describing one set of files on disk.
+    // Adding both would report a library as twice its true size — the numbers have
+    // to answer "how much data is there", not "how many ways can I reach it".
+    //
+    // Two passes so the ORIGINAL wins: a real folder is counted first, and an
+    // alias only contributes when nothing else already accounted for its target.
+    // That way a junction whose target is not in the list still counts (its files
+    // are real and reachable), but never on top of the folder it points at.
+    // Three reasons a scanned folder contributes nothing, each reported
+    // separately so the popup can explain WHY rather than just how many.
+    struct HistoryTotals {
+        int64_t bytes = 0;
+        int     files = 0;
+        int     scanned = 0; // folders with a known status — counted PLUS excluded
+        std::vector<std::wstring> duplicates; // alias — its target is counted already
+        std::vector<std::wstring> missing;    // gone from disk
+        std::vector<std::wstring> empty;      // exists, holds no supported images
+
+        size_t excludedCount() const {
+            return duplicates.size() + missing.size() + empty.size();
+        }
+    };
+
+    // Totals are derived from the caches, so they only change when a scan result
+    // lands or the list is rebuilt. WM_PAINT fires far more often than that — on
+    // every hover change — and recomputing there walks the whole status cache,
+    // builds a set, sorts three vectors and rebuilds the popup string. At a
+    // thousand folders that is real work per mouse move. Compute once, reuse.
+    static bool          g_totalsDirty = true;
+    static HistoryTotals g_totalsCache;
+
+    static void InvalidateTotals() { g_totalsDirty = true; }
+
+    static HistoryTotals ComputeHistoryTotals() {
+        HistoryTotals t;
+
+        // Driven by the STATUS cache, not the size cache: a missing folder has no
+        // size entry at all (ApplyDirScan erases it), so it would be invisible to
+        // a size-only walk and could never be reported as excluded.
+        std::vector<std::wstring> valid;
+        for (const auto &[p, status]: g_statusCache) {
+            switch (status) {
+                case FolderStatus::Missing: t.missing.push_back(p); break;
+                case FolderStatus::Empty:   t.empty.push_back(p);   break;
+                case FolderStatus::Valid:   valid.push_back(p);     break;
+                default: break; // Unknown — not scanned yet, neither counted nor excluded
+            }
+        }
+
+        // Real folders first so the ORIGINAL always wins the slot, aliases second
+        // so one only counts when nothing already accounted for its target.
+        FolderPathSet counted;
+        counted.reserve(valid.size());
+        auto take = [&](const std::wstring &p) {
+            auto sit = g_dirSizeCache.find(p);
+            if (sit == g_dirSizeCache.end()) return;
+            t.bytes += sit->second.bytes;
+            t.files += sit->second.count;
+        };
+
+        for (const auto &p: valid) {
+            if (CachedIsSymlink(p)) continue; // pass 2
+            if (!counted.insert(CachedRealPathOf(p)).second) continue;
+            take(p);
+        }
+        for (const auto &p: valid) {
+            if (!CachedIsSymlink(p)) continue;
+            if (!counted.insert(CachedRealPathOf(p)).second) {
+                t.duplicates.push_back(p);
+                continue;
+            }
+            take(p);
+        }
+
+        // Everything with a known status: what was counted plus what was skipped.
+        // Deliberately excludes Unknown rows — nothing is known about them yet, so
+        // claiming them in a total would be a guess.
+        t.scanned = static_cast<int>(valid.size() + t.missing.size() + t.empty.size());
+
+        std::sort(t.duplicates.begin(), t.duplicates.end());
+        std::sort(t.missing.begin(), t.missing.end());
+        std::sort(t.empty.begin(), t.empty.end());
+        return t;
+    }
+
+    // Cached accessor — the only one paint should call.
+    static const HistoryTotals &HistoryTotalsCached() {
+        if (g_totalsDirty) {
+            g_totalsCache = ComputeHistoryTotals();
+            g_totalsDirty = false;
+        }
+        return g_totalsCache;
+    }
+
+    // One excluded group: heading, blank line, then "* <n>. <path>" per entry.
+    //
+    // `nextIndex` numbers CONTINUOUSLY across all groups — the count in the header
+    // says "5 dirs excluded", so the list under it has to run 1..5 rather than
+    // restarting per group and leaving the reader to add up.
+    //
+    // showTarget appends the resolved destination, which is the whole point for
+    // the duplicates group: it names the folder whose total already absorbed this
+    // one. Empty group means no heading at all, so only real reasons appear.
+    static void AppendExcludedGroup(std::wstring &out, const std::wstring &heading,
+                                    const std::vector<std::wstring> &paths,
+                                    int &nextIndex, bool showTarget) {
+        if (paths.empty()) return;
+        out += L"\n" + heading + L"\n";
+        for (const auto &p: paths) {
+            out += L"\n";
+            out += Constants::Messages::EXCLUDED_BULLET;
+            out += std::to_wstring(nextIndex++) + L". " + p;
+            if (showTarget) {
+                const std::wstring &target = CachedRealPathOf(p);
+                if (!HistoryPath::Equal(target, p)) {
+                    out += L" ";
+                    out += Constants::ThemeIcons::ICON_ARROW_RIGHT;
+                    out += L" " + target;
+                }
+            }
+        }
+    }
+
+    // Favorites, counted by REAL directory rather than by row.
+    //
+    // Same reasoning as ComputeHistoryTotals: starring D:\Wallpapers\[Set 8] and
+    // E:\Wallpapers\[Set 8] marks ONE folder, reached two ways. Counting rows
+    // would report "2 / 10 favorites" for a single folder and burn two slots of
+    // the cap, so the limit would bite at half its stated size on a machine that
+    // uses junctions.
+    //
+    // Falls back to the row's own path when the link state is not cached yet, so
+    // an unprobed alias simply counts as itself until the sweep lands.
+    static int UniqueFavoriteCount() {
+        const auto &favs = historyFoldersManager.favorites;
+        FolderPathSet real;
+        real.reserve(favs.size());
+        for (const auto &p: favs) real.insert(CachedRealPathOf(p));
+        return static_cast<int>(real.size());
+    }
+
+    // "<icon>  <explanation>" per line — what the hover popup shows.
+    static std::wstring BadgeTipText(const std::vector<RowBadge> &badges) {
+        std::wstring text;
+        for (const auto &b: badges) {
+            if (!text.empty()) text += L"\n";
+            text += b.icon;
+            text += L"  ";
+            text += b.text;
+        }
+        return text;
+    }
+
     // One folder's scan outcome — computed off the UI thread, applied on it.
+    // Carries the link state as well as the status, so "is it there / does it
+    // hold images / is it an alias" are answered by ONE pass at the same two
+    // moments: the background sweep after the list is built, and the folder open.
     struct DirScanResult {
         std::wstring path;
         FolderStatus status = FolderStatus::Unknown;
         int64_t      bytes  = 0;
         int          count  = 0;
+        LinkInfo     link;
     };
 
     // Generation guard: bumped on each RefreshHistory so stale background results
     // (folder list changed, or a newer refresh already queued) are discarded.
     static std::atomic<uint64_t> g_histScanGen{0};
+
+    // True while a background sweep is walking folders.
+    //
+    // Set on the UI thread when a sweep is launched, cleared when the worker's
+    // completion message arrives — not by the worker itself, so it can never be
+    // cleared before the last batch has been applied.
+    static bool g_scanRunning = false;
+
+    // How many folder scans the worker batches before posting to the UI thread.
+    // Small enough that rows light up steadily on a long history, large enough
+    // that the message traffic stays negligible.
+    static constexpr size_t SCAN_BATCH = 25;
+
+    // The volume a path lives on: "D:\" or "\\server\share".
+    // Used to probe reachability ONCE per volume instead of once per folder.
+    static std::wstring PathRoot(const std::wstring &p) {
+        if (p.size() >= 2 && p[0] == L'\\' && p[1] == L'\\') {
+            // UNC: keep \\server\share, which is the unit that goes offline.
+            size_t slash = p.find(L'\\', 2);              // end of \\server
+            if (slash == std::wstring::npos) return p;
+            slash = p.find(L'\\', slash + 1);             // end of \share
+            return (slash == std::wstring::npos) ? p : p.substr(0, slash);
+        }
+        if (p.size() >= 3 && p[1] == L':') return p.substr(0, 3); // "D:\"
+        return {};
+    }
 
     // Pure filesystem scan: count image files and sum their sizes.
     // Writes no global state — safe to call on a worker thread.
@@ -149,6 +627,15 @@ namespace UI {
         namespace fs = std::filesystem;
         DirScanResult r;
         r.path = path;
+        // Unparseable row kept for display — never hand it to the filesystem.
+        // IsBroken is a pure string check, safe to call from this worker thread.
+        if (HistoryPath::IsBroken(path)) {
+            r.status = FolderStatus::Missing;
+            return r;
+        }
+        // Probed here, on the worker, for the same reason the image count is:
+        // it is filesystem work and does not belong on the UI thread.
+        r.link = ProbeLink(path);
         std::error_code ec;
         if (!fs::is_directory(fs::path(path), ec) || ec) {
             r.status = FolderStatus::Missing;
@@ -177,6 +664,8 @@ namespace UI {
 
     // Apply a scan result to the UI-thread-owned status/size caches. UI thread only.
     static void ApplyDirScan(const DirScanResult &r) {
+        InvalidateTotals();              // any scan result changes the footer
+        g_symlinkCache[r.path] = r.link; // link state travels with the status
         if (r.status == FolderStatus::Missing) {
             g_statusCache[r.path] = FolderStatus::Missing;
             g_dirSizeCache.erase(r.path);
@@ -184,6 +673,38 @@ namespace UI {
         }
         g_statusCache[r.path]  = r.status;
         g_dirSizeCache[r.path] = {r.bytes, r.count};
+    }
+
+    // THE re-check. Everything qIV knows about one folder — does it exist, does it
+    // hold images, how big is it, is it an alias — recomputed and applied in one
+    // pass, so no caller has to remember which of the four caches to poke.
+    //
+    // Called when a folder is opened. The background sweep answers for the rows
+    // that were on screen when the list was built; this covers everything else,
+    // and it is the moment the answers matter most. Same two checkpoints for all
+    // four facts, which is the point.
+    //
+    // UI thread only — it writes the caches.
+    static void RevalidateFolder(const std::wstring &path) {
+        auto it = g_symlinkCache.find(path);
+        const bool hadLink = (it != g_symlinkCache.end());
+        const LinkKind linkBefore = hadLink ? it->second.kind : LinkKind::None;
+
+        InvalidateTotals();
+        g_statusCache.erase(path);  // erase first: GetFolderStatus and friends must
+        g_dirSizeCache.erase(path); // not serve a stale answer if this re-entered
+        g_symlinkCache.erase(path);
+
+        const DirScanResult r = ComputeDirScan(path);
+
+        // A junction almost always lives on a PARENT component (D:\12_Wallpapers,
+        // not D:\12_Wallpapers\[Set 8]). If THIS folder's link state flipped, every
+        // row beneath that parent was cached under an assumption that no longer
+        // holds — drop the lot and let the sweep and later opens refill it.
+        if (hadLink && r.link.kind != linkBefore)
+            g_symlinkCache.clear();
+
+        ApplyDirScan(r);
     }
 
     // Scan a folder synchronously and apply the result (UI thread convenience).
@@ -199,6 +720,18 @@ namespace UI {
         auto it = g_statusCache.find(path);
         if (it != g_statusCache.end() && it->second != FolderStatus::Unknown)
             return it->second;
+
+        // Falling through means this call is about to WRITE a status, which moves
+        // a folder between the counted and excluded groups.
+        InvalidateTotals();
+
+        // A line the loader could not parse is kept in the list so the user can
+        // see it, and reported as Missing: it paints in the dead-folder colour and
+        // navigation steps over it, which is exactly right for "this row does not
+        // name a folder". Checked before touching the filesystem — the string may
+        // contain characters no Win32 path call should ever be handed.
+        if (HistoryPath::IsBroken(path))
+            return g_statusCache[path] = FolderStatus::Missing;
 
         namespace fs = std::filesystem;
         std::error_code ec;
@@ -319,43 +852,151 @@ namespace UI {
         ApplyFullHistoryMode(hWnd);
     }
 
+    // Scan every history folder OFF the UI thread — status, size and link state in
+    // one pass. A folder with thousands of images needs a full directory_iterator
+    // to count, which would otherwise freeze the panel on a disk-heavy history.
+    // The worker only reads the filesystem into a local vector; the caches are
+    // mutated solely on the UI thread in the WM_QIV_HISTORY_VALIDATED handler.
+    // A generation guard discards results from a superseded run.
+    //
+    // Must run on EVERY open, not just F5: the row markers are read live from the
+    // caches now, so without this the first Tab shows a list with no missing /
+    // empty / link marks until something else happened to populate them.
+    static void LaunchHistoryValidation(HWND hWnd, bool rescanAll, DWORD delayMs = 0) {
+        // Only folders that need work. Opening the panel must not re-walk a
+        // thousand directories that were already scanned this session — that cost
+        // is paid once, or on F5 when the user explicitly asks for fresh answers.
+        std::vector<std::wstring> folders;
+        folders.reserve(historyFoldersManager.folderHistory.size());
+        for (const auto &p: historyFoldersManager.folderHistory) {
+            if (!rescanAll) {
+                auto it = g_statusCache.find(p);
+                if (it != g_statusCache.end() && it->second != FolderStatus::Unknown)
+                    continue; // already known
+            }
+            folders.push_back(p);
+        }
+        if (folders.empty()) return;
+
+        g_scanRunning = true;
+        const uint64_t gen = g_histScanGen.fetch_add(1, std::memory_order_relaxed) + 1;
+        std::thread([folders = std::move(folders), gen, hWnd, delayMs]() mutable {
+            // Do not compete with the app's own startup I/O. Background mode drops
+            // this thread's CPU *and* disk priority, so a thousand directory walks
+            // cannot out-queue the read of the image the user is actually waiting
+            // to see. The delay keeps it off the disk entirely until the first
+            // image is on screen.
+            if (delayMs) Sleep(delayMs);
+            SetThreadPriority(GetCurrentThread(), THREAD_MODE_BACKGROUND_BEGIN);
+            struct BgGuard {
+                ~BgGuard() { SetThreadPriority(GetCurrentThread(), THREAD_MODE_BACKGROUND_END); }
+            } bgGuard;
+
+            // Re-check after the delay: the user may have hit F5, or closed qIV.
+            if (g_histScanGen.load(std::memory_order_relaxed) != gen) return;
+            // Delivered in batches rather than one payload at the end. With a long
+            // history the old all-or-nothing post meant a single slow folder held
+            // back every other row's marker until the whole sweep finished; now the
+            // list fills in as the answers arrive.
+            auto *batch = new std::vector<DirScanResult>();
+            batch->reserve(SCAN_BATCH);
+
+            // Returns false when the sweep should stop. On every failure path the
+            // batch is freed and nulled here, so the caller never has to reason
+            // about who owns it — only the successful PostMessage hands ownership
+            // to the UI thread.
+            auto flush = [&]() -> bool {
+                if (!batch) return false;
+                if (batch->empty()) return true;
+                if (g_histScanGen.load(std::memory_order_relaxed) != gen ||
+                    !PostMessageW(hWnd, Constants::WM_QIV_HISTORY_VALIDATED,
+                                  static_cast<WPARAM>(gen),
+                                  reinterpret_cast<LPARAM>(batch))) {
+                    delete batch;
+                    batch = nullptr;
+                    return false;
+                }
+                batch = new std::vector<DirScanResult>();
+                batch->reserve(SCAN_BATCH);
+                return true;
+            };
+
+            // Reachability, decided ONCE per volume.
+            //
+            // An unreachable share makes every filesystem call against it block
+            // for the SMB timeout — tens of seconds each. With a folder-at-a-time
+            // sweep, twenty rows on one dead server used to mean twenty timeouts
+            // in series, and every folder queued behind them waited too. Probing
+            // the volume root once turns that into a single timeout, after which
+            // the rest of that volume is reported Missing immediately and the
+            // sweep moves on to volumes that answer.
+            std::unordered_map<std::wstring, bool,
+                               HistoryPath::HashCI, HistoryPath::EqualCI> rootReachable;
+
+            for (const auto &p: folders) {
+                if (g_histScanGen.load(std::memory_order_relaxed) != gen) break;
+
+                bool skip = false;
+                if (const std::wstring root = PathRoot(p); !root.empty()) {
+                    auto rit = rootReachable.find(root);
+                    if (rit == rootReachable.end()) {
+                        const DWORD a = GetFileAttributesW(root.c_str());
+                        rit = rootReachable.emplace(root, a != INVALID_FILE_ATTRIBUTES).first;
+                    }
+                    skip = !rit->second;
+                }
+
+                if (skip) {
+                    DirScanResult r;
+                    r.path = p;
+                    r.status = FolderStatus::Missing; // volume is not answering
+                    batch->push_back(std::move(r));
+                } else {
+                    batch->push_back(ComputeDirScan(p));
+                }
+                if (batch->size() >= SCAN_BATCH && !flush()) return;
+            }
+            flush();
+            delete batch; // trailing empty batch, or nullptr after a failed flush
+
+            // Completion signal: a null payload. Posted last, so the UI clears the
+            // "Loading" state only after every batch ahead of it has been applied.
+            PostMessageW(hWnd, Constants::WM_QIV_HISTORY_VALIDATED,
+                         static_cast<WPARAM>(gen), 0);
+        }).detach();
+    }
+
     static void RefreshHistory(HWND hWnd) {
         historyFoldersManager.MergeHistoryFromDisk();
+
+        // F5 means "re-read the world" — a FORCED, unconditional rebuild. Every
+        // cache is dropped, not just refreshed: a folder can be deleted, emptied,
+        // refilled, or turned into a junction while qIV is running, and entries
+        // for folders that have since left the list would otherwise linger and
+        // keep skewing the footer totals. Rows go unmarked for a moment and the
+        // batched sweep refills them.
+        g_statusCache.clear();
+        g_dirSizeCache.clear();
+        g_symlinkCache.clear();
+        InvalidateTotals();
+        InvalidateWalkSnapshot(); // the row set may have changed underneath a walk
+
         BuildDisplayList();
         int x, y, w, h;
         GetHistoryWindowBounds(g_hHistOwner ? g_hHistOwner : hWnd, x, y, w, h);
         SetWindowPos(hWnd, HWND_TOPMOST, x, y, w, h, SWP_FRAMECHANGED);
 
-        // Scan every history folder OFF the UI thread — a folder with thousands of
-        // images needs a full directory_iterator to count, which would otherwise
-        // freeze the panel on F5 / disk-heavy histories. The worker only reads the
-        // filesystem into a local vector; the status/size caches are mutated solely
-        // on the UI thread in the WM_QIV_HISTORY_VALIDATED handler. A generation
-        // guard discards results from a superseded refresh.
-        std::vector<std::wstring> folders(historyFoldersManager.folderHistory.begin(),
-                                          historyFoldersManager.folderHistory.end());
-        const uint64_t gen = g_histScanGen.fetch_add(1, std::memory_order_relaxed) + 1;
-        std::thread([folders = std::move(folders), gen, hWnd]() mutable {
-            auto *results = new std::vector<DirScanResult>();
-            results->reserve(folders.size());
-            for (const auto &p : folders) {
-                if (g_histScanGen.load(std::memory_order_relaxed) != gen) {
-                    delete results;
-                    return;
-                }
-                results->push_back(ComputeDirScan(p));
-            }
-            if (g_histScanGen.load(std::memory_order_relaxed) != gen) {
-                delete results;
-                return;
-            }
-            // On success the UI-thread handler owns and frees results. If the post
-            // fails (window already destroyed), free here so nothing leaks.
-            if (!PostMessageW(hWnd, Constants::WM_QIV_HISTORY_VALIDATED,
-                              static_cast<WPARAM>(gen),
-                              reinterpret_cast<LPARAM>(results)))
-                delete results;
-        }).detach();
+        LaunchHistoryValidation(hWnd, /*rescanAll=*/true); // F5 = re-read the world
+
+        // Confirm the keypress. The visible result — status / link markers, sizes,
+        // totals — arrives from the background scan a moment later, so without
+        // this F5 looks like it did nothing at all.
+        // Posted to the OWNER: the centre overlay belongs to the main viewer, not
+        // to this panel.
+        g_overlayManager.PostCenterMessage(
+                g_hHistOwner ? g_hHistOwner : hWnd,
+                std::wstring(Constants::Messages::HISTORY_REFRESHED_MSG) +
+                        std::to_wstring(historyFoldersManager.folderHistory.size()));
 
         InvalidateRect(hWnd, nullptr, TRUE);
     }
@@ -372,6 +1013,16 @@ namespace UI {
 
     static std::vector<RECT> g_rowRects;
     static std::vector<RECT> g_indexRects; // clickable rects for directory indexes (parallel to g_displayList)
+    // Hover rects for the symlink glyph, parallel to g_displayList. Empty RECT
+    // for rows that are not links or are scrolled out of view.
+    // (g_linkTipRow lives up with the tooltip helpers, which are defined before
+    // this point and need it.)
+    static std::vector<RECT> g_linkRects;
+    // Footer total: its rect, and the popup text built alongside it during paint
+    // (that is where the byte/file/excluded numbers already exist).
+    static RECT         g_summaryRect = {};
+    static std::wstring g_summaryTipText;
+
     static RECT g_exeLinkRect = {};        // clickable rect for the "QIV" exe-dir link
     static RECT g_f5IndexRect = {};        // clickable rect for [Fkey] Dir toggle in footer
     static RECT g_cacheIndexRect = {};     // clickable rect for [Fkey] Cache toggle in footer
@@ -380,7 +1031,12 @@ namespace UI {
     static UI::InputBox g_filter;          // filter input — owns text, ✕ button, keyboard/mouse
 
     // Display list: what the panel actually renders.
-    // Each entry is (path, isFavorite).
+    //
+    // Link state is deliberately NOT stored here. It is read live from
+    // g_symlinkCache at paint time, exactly like FolderStatus is: the background
+    // sweep fills those caches AFTER the list is built, and nothing rebuilds the
+    // list when its results arrive. A copy taken at build time would therefore be
+    // frozen at "not a link" — which is why the 🔗 markers vanished after F5.
     struct DisplayEntry {
         std::wstring path;
         bool isFavorite;
@@ -478,11 +1134,8 @@ namespace UI {
             }
         }
         // Mark unchecked entries as Unknown so WM_PAINT shows them in neutral colour.
-        bool hasUnknown = false;
-        for (const auto &e: g_displayList) {
-            auto [it, inserted] = g_statusCache.try_emplace(e.path, FolderStatus::Unknown);
-            if (inserted) hasUnknown = true;
-        }
+        for (const auto &e: g_displayList)
+            g_statusCache.try_emplace(e.path, FolderStatus::Unknown);
 
         // Apply live filter — wildcard or fuzzy match on full path, MRU order preserved.
         if (!g_filter.IsEmpty()) {
@@ -538,11 +1191,20 @@ namespace UI {
     }
 
     void NotifyFolderContentsChanged(const std::wstring &path) {
-        g_statusCache.erase(path); // force fresh check — stale cached status must not persist
-        GetFolderStatus(path);     // re-validate now so paint sees Valid/Empty/Missing, not Unknown
+        RevalidateFolder(path); // status + size + link, one pass
         HistoryListWnd &hw = uiManager.getHistoryListWindow();
         HWND hwnd = hw.GetHwnd();
         if (hwnd) InvalidateRect(hwnd, nullptr, FALSE);
+    }
+
+    void StartBackgroundHistoryScan() {
+        HWND h = uiManager.getHistoryListWindow().GetHwnd();
+        if (!h) return; // panel not created yet — Show() will kick it off instead
+        // Build the row set first: the sweep walks folderHistory, and BuildDisplayList
+        // is what seeds g_statusCache with Unknown entries for them.
+        BuildDisplayList();
+        LaunchHistoryValidation(h, /*rescanAll=*/false,
+                                Constants::History::HISTORY_SCAN_STARTUP_DELAY_MS);
     }
 
     void LoadFolderHistoryFromDisk() {
@@ -634,7 +1296,8 @@ namespace UI {
         if (favSet.count(path) > 0) {
             favSet.erase(path);
         } else {
-            if (static_cast<int>(favSet.size()) >= app.historyMaxFavs) {
+            // Cap on unique folders, not rows — see UniqueFavoriteCount.
+            if (UniqueFavoriteCount() >= app.historyMaxFavs) {
                 g_overlayManager.PostCenterMessage(
                     g_hHistOwner,
                     L"Favorites full (" + std::to_wstring(app.historyMaxFavs) + L" max)");
@@ -921,11 +1584,14 @@ namespace UI {
             // Something was stepped over on the way here — say so, and colour the
             // whole message as a warning so it is visibly not an ordinary hop.
             // MID_CENTER is single-line, hence a prefix rather than a second line.
+            const std::wstring arrow = std::wstring(L"  ") +
+                                       Constants::ThemeIcons::ICON_ARROW_RIGHT + L"  ";
             if (skipped == 1)
-                text = lastSkipText + L"  →  " + text;
+                text = lastSkipText + arrow + text;
             else if (skipped > 1)
-                text = std::wstring(Constants::Messages::WALK_SKIPPED_PREFIX) +
-                       std::to_wstring(skipped) + L"  →  " + text;
+                text = std::wstring(Constants::ThemeIcons::ICON_WARNING) +
+                       Constants::Messages::WALK_SKIPPED +
+                       std::to_wstring(skipped) + arrow + text;
 
             g_overlayManager.PostCenterMessage(hOwner, text,
                 (skipped > 0 || landedEmpty) ? OverlayManager::MsgSeverity::Warning
@@ -945,6 +1611,16 @@ namespace UI {
             g_walkOwnsNavigation = true;
             OpenDirectory(hOwner, folder);
             g_walkOwnsNavigation = false; // cleared even if OpenDirectory bailed early
+
+            // Re-assert OUR spelling of the folder, after OpenDirectory has had
+            // its say. OpenDirectory resolves junctions with fs::canonical(), so
+            // opening D:\Wallpapers\[Set 8] — a junction — records
+            // E:\Wallpapers\[Set 8] instead. Both rows exist in the list and both
+            // are legitimate, but the one the user walked to is THIS one: it is
+            // the row that must go green, and the row the cursor sits on. Without
+            // this the marker jumped to the resolved row while the walk carried on
+            // from the row you actually stepped to.
+            NotifyCurrentFolder(folder);
             return true;
         }
 
@@ -1057,7 +1733,7 @@ namespace UI {
             historyFoldersManager.RewriteHistoryToDisk();
             if (g_lastDeletedWasFavorite) {
                 auto &favSet = historyFoldersManager.favorites;
-                if (static_cast<int>(favSet.size()) < app.historyMaxFavs) {
+                if (UniqueFavoriteCount() < app.historyMaxFavs) {
                     favSet.insert(g_lastDeletedPath);
                     historyFoldersManager.RewriteFavoritesToDisk();
                 } else {
@@ -1154,6 +1830,11 @@ namespace UI {
                     } else {
                         ShowWindow(m_hWnd, SW_HIDE);
                         OpenDirectory(g_hHistOwner, folder);
+                        // Re-assert the row's own spelling: OpenDirectory resolves
+                        // junctions, so it records the TARGET path and the green
+                        // marker would land on the target's row instead of the one
+                        // just opened.
+                        NotifyCurrentFolder(folder);
                     }
                 }
                 return true;
@@ -1343,7 +2024,17 @@ namespace UI {
                 // Background folder scan finished — apply results on the UI thread
                 // (the only thread that touches g_statusCache / g_dirSizeCache).
                 auto *results = reinterpret_cast<std::vector<DirScanResult> *>(lParam);
-                if (!results) return 0;
+                if (!results) {
+                    // Null payload = that sweep finished. Ignore it if a newer
+                    // sweep has since started, or the indicator would vanish
+                    // while work is still running.
+                    if (static_cast<uint64_t>(wParam) ==
+                        g_histScanGen.load(std::memory_order_relaxed)) {
+                        g_scanRunning = false;
+                        InvalidateRect(m_hWnd, nullptr, TRUE);
+                    }
+                    return 0;
+                }
                 // Discard results from a refresh that has since been superseded.
                 if (static_cast<uint64_t>(wParam) ==
                     g_histScanGen.load(std::memory_order_relaxed)) {
@@ -1368,6 +2059,8 @@ namespace UI {
                 int fontSize = MulDiv(Constants::History::HISTORY_FONT_SIZE, dpi, 96);
                 int titleSz = MulDiv(Constants::History::HISTORY_FONT_SIZE + 2, dpi, 96);
                 int indexW = MulDiv(28, dpi, 96);
+                // Single badge column — see BuildRowBadges for why several marks
+                // share one slot instead of each getting a column.
                 int starW = MulDiv(18, dpi, 96);
 
                 // Scrollbar geometry — computed before any drawing.
@@ -1434,14 +2127,18 @@ namespace UI {
                 // Push counts into the real title bar
                 int totalSaved = static_cast<int>(historyFoldersManager.folderHistory.size());
                 int totalShown = static_cast<int>(g_displayList.size());
-                int favCount = static_cast<int>(historyFoldersManager.favorites.size());
+                // Unique folders, matching what the cap actually enforces —
+                // otherwise a junction and its target read as two favorites.
+                int favCount = UniqueFavoriteCount();
                 {
                     std::wstring caption = L"Folder History  (showing "
                                            + std::to_wstring(totalShown) + L" of "
                                            + std::to_wstring(totalSaved) + L" saved)   " + Constants::ThemeIcons::ICON_FAVORITES_MARK + L" = Space (toggle fav)   "
                                            + std::to_wstring(favCount) + L" / "
                                            + std::to_wstring(app.historyMaxFavs)
-                                           + L" favorites";
+                                           + L" favorites   "
+                                           + Constants::ThemeIcons::ICON_SYMLINK_MARK
+                                           + L" = symlink / junction";
                     SetWindowTextW(m_hWnd, caption.c_str());
                 }
 
@@ -1517,6 +2214,8 @@ namespace UI {
                 g_rowRects.reserve(g_displayList.size());
                 g_indexRects.clear();
                 g_indexRects.reserve(g_displayList.size());
+                g_linkRects.clear();
+                g_linkRects.reserve(g_displayList.size());
                 int rowsTop = sepY + MulDiv(6, dpi, 96);
                 int bodyBottom = footerSepY;
                 g_bodyTop = rowsTop;
@@ -1539,6 +2238,27 @@ namespace UI {
                         int desired = g_hoverRow * rowH - (bodyH - rowH) / 2;
                         g_scrollOffsetY = std::clamp(desired, 0, maxOffset);
                     }
+                }
+
+                // "Loading ..." while the sweep runs — drawn before the rows so the
+                // rows paint over it as their answers land, and centred in the body
+                // rather than replacing it: the list is fully usable meanwhile.
+                if (g_scanRunning) {
+                    HFONT hScan = CreateFontW(
+                            -MulDiv(Constants::History::HISTORY_FONT_SIZE +
+                                            Constants::Theme::HistoryPanel::SCANNING_FONT_BOOST,
+                                    dpi, 72),
+                            0, 0, 0, FW_SEMIBOLD, FALSE, FALSE, FALSE, DEFAULT_CHARSET,
+                            OUT_OUTLINE_PRECIS, CLIP_DEFAULT_PRECIS, CLEARTYPE_QUALITY,
+                            VARIABLE_PITCH, L"Segoe UI");
+                    HFONT hOldScan = static_cast<HFONT>(SelectObject(hdc, hScan));
+                    SetTextColor(hdc, Constants::Theme::HistoryPanel::SCANNING_TEXT);
+                    RECT scanRect = {rc.left, rowsTop, rc.right, bodyBottom};
+                    DrawTextW(hdc, Constants::Messages::HISTORY_SCANNING, -1, &scanRect,
+                              DT_CENTER | DT_VCENTER | DT_SINGLELINE);
+                    SelectObject(hdc, hOldScan);
+                    DeleteObject(hScan);
+                    SelectObject(hdc, m_hFontList); // restore the row font
                 }
 
                 SaveDC(hdc);
@@ -1568,6 +2288,7 @@ namespace UI {
                         // Skip drawing rows outside the visible area.
                         if (rowBottom <= rowsTop || rowTop >= rc.bottom) {
                             g_indexRects.push_back({0, 0, 0, 0}); // placeholder for off-screen row
+                            g_linkRects.push_back({0, 0, 0, 0});  // keep index-parallel
                             continue;
                         }
 
@@ -1581,6 +2302,9 @@ namespace UI {
                                                            : FolderStatus::Unknown;
                         const bool isMissing = (rowStatus == FolderStatus::Missing);
                         const bool isEmpty   = (rowStatus == FolderStatus::Empty);
+                        // Read live from the cache, same as rowStatus above — the
+                        // background sweep fills it after the list was built.
+                        const bool isLink    = CachedIsSymlink(entry.path);
 
                         // Hover background
                         if (i == g_hoverRow) {
@@ -1591,7 +2315,9 @@ namespace UI {
                                               ? RGB(50, 35, 10)
                                               : entry.isFavorite
                                                     ? RGB(50, 50, 10)
-                                                    : RGB(40, 60, 80));
+                                                    : isLink
+                                                          ? Constants::Theme::HistoryPanel::ROW_HOVER_SYMLINK
+                                                          : RGB(40, 60, 80));
                             FillRect(hdc, &rowRect, hHover);
                             DeleteObject(hHover);
                         }
@@ -1616,25 +2342,30 @@ namespace UI {
                         g_indexRects.push_back(idxRect);
                         SelectObject(hdc, m_hFontList);
 
-                        // Warning glyph for dead folders; star for favorites
+                        // Badge slot — ONE column for every mark this row carries.
+                        // One badge draws itself; two or more collapse to the stack
+                        // placeholder and are listed on hover. The rect is recorded
+                        // for every row (empty when there is nothing to show) so
+                        // g_linkRects stays index-parallel to g_displayList.
                         {
+                            const auto badges = BuildRowBadges(entry.path, entry.isFavorite);
                             RECT slotRect = {
                                 rc.left + padding + indexW + MulDiv(4, dpi, 96), rowTop,
                                 rc.left + padding + indexW + MulDiv(4, dpi, 96) + starW, rowBottom
                             };
-                            if (isMissing) {
-                                SetTextColor(hdc, Constants::Theme::HistoryPanel::PATH_DEAD_DRIVE);
-                                DrawTextW(hdc, Constants::ThemeIcons::ICON_WARNING, -1, &slotRect,
+                            if (badges.size() == 1) {
+                                SetTextColor(hdc, badges[0].color);
+                                DrawTextW(hdc, badges[0].icon, -1, &slotRect,
                                           DT_CENTER | DT_VCENTER | DT_SINGLELINE);
-                            } else if (isEmpty) {
-                                SetTextColor(hdc, Constants::Theme::HistoryPanel::PATH_EMPTY_DRIVE);
-                                DrawTextW(hdc, Constants::ThemeIcons::ICON_EMPTY, -1, &slotRect,
-                                          DT_CENTER | DT_VCENTER | DT_SINGLELINE);
-                            } else if (entry.isFavorite) {
-                                SetTextColor(hdc, Constants::Theme::Markers::FAVORITES);
-                                DrawTextW(hdc, Constants::ThemeIcons::ICON_FAVORITES_MARK, -1, &slotRect,
+                            } else if (badges.size() > 1) {
+                                // Its own neutral colour — the stack stands for
+                                // several states at once, so borrowing any one of
+                                // their colours would misreport the row at a glance.
+                                SetTextColor(hdc, Constants::Theme::Markers::BADGE_STACK);
+                                DrawTextW(hdc, Constants::ThemeIcons::ICON_BADGE_STACK, -1, &slotRect,
                                           DT_CENTER | DT_VCENTER | DT_SINGLELINE);
                             }
+                            g_linkRects.push_back(badges.empty() ? RECT{0, 0, 0, 0} : slotRect);
                         }
 
                         // Path text — three segments: drive, middle, folder
@@ -1646,6 +2377,16 @@ namespace UI {
                         const COLORREF clrNormMiddle = app.isDarkThemed ? Constants::Theme::HistoryPanel::PATH_MIDDLE : Constants::Theme::HistoryPanel::PATH_MIDDLE_LIGHT;
                         const COLORREF clrNormFolder = app.isDarkThemed ? Constants::Theme::HistoryPanel::PATH_FOLDER : Constants::Theme::HistoryPanel::PATH_FOLDER_LIGHT;
 
+                        // The drive letter is the segment that carries the "this is
+                        // an alias" tint — it is the part that actually differs
+                        // between a junction and its target (D: vs E:), so tinting
+                        // it is what makes the two rows tell their own story.
+                        // Status and "you are here" still win: those describe
+                        // whether the row is usable, which matters more than how it
+                        // is spelled. Favorite wins too — that is a user choice.
+                        const COLORREF clrLinkDrive = isHov
+                                                              ? Constants::Theme::HistoryPanel::PATH_SYMLINK_DRIVE_HOVER
+                                                              : Constants::Theme::HistoryPanel::PATH_SYMLINK_DRIVE;
                         COLORREF driveColor = isMissing
                                                   ? Constants::Theme::HistoryPanel::PATH_DEAD_DRIVE
                                                   : isEmpty
@@ -1654,9 +2395,11 @@ namespace UI {
                                                                ? Constants::Theme::HistoryPanel::PATH_DRIVE_CURRENT
                                                                : (isFav
                                                                       ? (isHov ? Constants::Theme::HistoryPanel::PATH_DRIVE_FAV_HOVER : Constants::Theme::HistoryPanel::PATH_DRIVE_FAV)
-                                                                      : (isHov
-                                                                             ? Constants::Theme::HistoryPanel::PATH_DRIVE_HOVER
-                                                                             : clrNormDrive)));
+                                                                      : (isLink
+                                                                             ? clrLinkDrive
+                                                                             : (isHov
+                                                                                    ? Constants::Theme::HistoryPanel::PATH_DRIVE_HOVER
+                                                                                    : clrNormDrive))));
                         COLORREF middleColor = isMissing
                                                    ? Constants::Theme::HistoryPanel::PATH_DEAD_MIDDLE
                                                    : isEmpty
@@ -1820,11 +2563,19 @@ namespace UI {
                             std::wstring sizeCountStr = sizeStr + L"/" + std::to_wstring(imgCount);
                             LONG colLeft  = rowRight;
                             LONG colRight = rc.right - padding - (needsScrollbar ? SB_W + 2 : 0);
+                            // An alias row shows its size in the link colour rather
+                            // than the usual green: the files are real, but they
+                            // were counted under the folder they actually live in,
+                            // so this figure is informational and is NOT part of
+                            // the footer total. The colour is the only thing that
+                            // says so — see ComputeHistoryTotals.
                             SetTextColor(hdc, isMissing
                                                   ? Constants::Theme::HistoryPanel::PATH_DEAD_MIDDLE
                                                   : isEmpty
                                                         ? Constants::Theme::HistoryPanel::PATH_EMPTY_MIDDLE
-                                                        : Constants::Theme::Markers::OK);
+                                                        : isLink
+                                                              ? Constants::Theme::Markers::SYMLINK
+                                                              : Constants::Theme::Markers::OK);
                             RECT scr = {colLeft, rowTop, colRight, rowBottom};
                             DrawTextW(hdc, sizeCountStr.c_str(), -1, &scr,
                                       DT_RIGHT | DT_VCENTER | DT_SINGLELINE);
@@ -1892,16 +2643,49 @@ namespace UI {
 
                     // Summary total: scanned cache (F5) when available, else live open-DirWnd sum
                     std::wstring summaryStr;
+                    g_summaryTipText.clear();
                     {
-                        int64_t totalBytes = 0;
-                        int     totalCount = 0;
                         if (!g_dirSizeCache.empty()) {
-                            for (const auto &[p, info] : g_dirSizeCache) {
-                                totalBytes += info.bytes;
-                                totalCount += info.count;
+                            // Aliases, missing and empty folders all drop out —
+                            // see ComputeHistoryTotals. Cached: recomputing this
+                            // per paint is O(rows) plus three sorts.
+                            const HistoryTotals &t = HistoryTotalsCached();
+                            summaryStr = ThumbnailPanelWnd::FormatDirSize(t.bytes)
+                                         + L"/" + std::to_wstring(t.files);
+                            // Third field only when something was actually left
+                            // out — an ordinary history should not grow a "/0".
+                            if (t.excludedCount() > 0)
+                                summaryStr += L"/" + std::to_wstring(t.excludedCount());
+
+                            // Hover text, built here where the numbers are known.
+                            const std::wstring dirs = Constants::Messages::WORD_DIRS;
+                            g_summaryTipText =
+                                    std::wstring(Constants::Messages::TOTAL_HEADER) + L"\n" +
+                                    Constants::Messages::TOTAL_SIZE_LABEL +
+                                    ThumbnailPanelWnd::FormatDirSize(t.bytes) + L"\n" +
+                                    Constants::Messages::TOTAL_FILES_LABEL +
+                                    std::to_wstring(t.files) + L"\n" +
+                                    Constants::Messages::TOTAL_DIRS_LABEL +
+                                    std::to_wstring(t.scanned);
+                            if (t.excludedCount() > 0) {
+                                g_summaryTipText += L"\n";
+                                g_summaryTipText += Constants::Messages::TOTAL_SEPARATOR;
+                                // Indented one space: a breakdown of the Dirs line
+                                // above, not a fourth headline figure.
+                                g_summaryTipText += L"\n " + std::to_wstring(t.excludedCount()) +
+                                                    L" " + dirs +
+                                                    Constants::Messages::TOTAL_EXCLUDED_SUFFIX;
+                                int n = 1; // continuous numbering across all groups
+                                AppendExcludedGroup(g_summaryTipText,
+                                                    Constants::Messages::EXCLUDED_DUPLICATES,
+                                                    t.duplicates, n, /*showTarget=*/true);
+                                AppendExcludedGroup(g_summaryTipText,
+                                                    Constants::Messages::EXCLUDED_MISSING + dirs + L":",
+                                                    t.missing, n, /*showTarget=*/false);
+                                AppendExcludedGroup(g_summaryTipText,
+                                                    Constants::Messages::EXCLUDED_EMPTY + dirs + L":",
+                                                    t.empty, n, /*showTarget=*/false);
                             }
-                            summaryStr = ThumbnailPanelWnd::FormatDirSize(totalBytes)
-                                         + L"/" + std::to_wstring(totalCount);
                         } else {
                             auto [liveStr, liveCount] = uiManager.GetAllOpenDirWndsSummary();
                             if (!liveStr.empty())
@@ -1909,6 +2693,7 @@ namespace UI {
                         }
                     }
                     LONG summaryLeft = fileSizeLeft;
+                    g_summaryRect = RECT{0, 0, 0, 0};
                     if (!summaryStr.empty()) {
                         SIZE szSummary = {};
                         GetTextExtentPoint32W(hdc, summaryStr.c_str(),
@@ -1918,6 +2703,7 @@ namespace UI {
                         RECT summaryRect = {summaryLeft, footerTop, summaryLeft + szSummary.cx, footerBot};
                         DrawTextW(hdc, summaryStr.c_str(), -1, &summaryRect,
                                   DT_LEFT | DT_VCENTER | DT_SINGLELINE);
+                        g_summaryRect = summaryRect; // hover target for the breakdown
                     }
                     SetTextColor(hdc, Constants::Theme::HistoryPanel::SIZE_HIGHLIGHT);
                     RECT sizeRect = {fileSizeLeft, footerTop, rightEdge, footerBot};
@@ -2152,6 +2938,9 @@ namespace UI {
                 int delta = GET_WHEEL_DELTA_WPARAM(wParam);
                 g_scrollOffsetY -= (delta / WHEEL_DELTA) * rowH;
                 g_scrollOffsetY = std::max(0, g_scrollOffsetY);
+                // Rows moved under the cursor — the popup now describes a row that
+                // is no longer there. Drop it; the next WM_MOUSEMOVE re-arms it.
+                HideLinkTip();
                 InvalidateRect(m_hWnd, nullptr, FALSE);
                 return 0;
             }
@@ -2170,9 +2959,53 @@ namespace UI {
                     return 0;
                 s_lastHoverPos = {mx, my};
 
+                // Ask for WM_MOUSELEAVE. Without this it never arrives, and the
+                // cursor can leave the panel — most easily straight down past the
+                // footer — with no further WM_MOUSEMOVE to dismiss a hover popup,
+                // stranding it on screen. Re-armed every move; Windows disarms the
+                // request as soon as it fires.
+                {
+                    TRACKMOUSEEVENT tme{sizeof(TRACKMOUSEEVENT)};
+                    tme.dwFlags = TME_LEAVE;
+                    tme.hwndTrack = m_hWnd;
+                    TrackMouseEvent(&tme);
+                }
+
                 // ✕ hover color — repaint only when state changes
                 if (g_filter.RouteMouse(WM_MOUSEMOVE, wParam, lParam, m_hWnd) == InputResult::ConsumedRepaint)
                     InvalidateRect(m_hWnd, nullptr, FALSE);
+
+                // Badge slot hover → popup listing every mark on that row, one per
+                // line. g_linkRects is index-parallel to g_displayList and holds an
+                // empty rect for unmarked and off-screen rows, so PtInRect alone is
+                // a sufficient test.
+                {
+                    const POINT ptLink = {mx, my};
+                    int linkRow = -1;
+                    const int nLink = std::min(static_cast<int>(g_linkRects.size()),
+                                               static_cast<int>(g_displayList.size()));
+                    for (int i = 0; i < nLink; ++i) {
+                        if (g_linkRects[i].right > g_linkRects[i].left &&
+                            PtInRect(&g_linkRects[i], ptLink)) {
+                            linkRow = i;
+                            break;
+                        }
+                    }
+                    if (linkRow >= 0) {
+                        ShowLinkTip(m_hWnd, linkRow,
+                                    BadgeTipText(BuildRowBadges(g_displayList[linkRow].path,
+                                                                g_displayList[linkRow].isFavorite)),
+                                    ptLink, g_linkRects[linkRow]);
+                    } else if (g_summaryRect.right > g_summaryRect.left &&
+                               PtInRect(&g_summaryRect, ptLink) && !g_summaryTipText.empty()) {
+                        // Footer total → size / file count / what was left out.
+                        // Row index -2 so it cannot collide with a real row and
+                        // the "same target, don't re-show" guard still works.
+                        ShowLinkTip(m_hWnd, -2, g_summaryTipText, ptLink, g_summaryRect);
+                    } else {
+                        HideLinkTip();
+                    }
+                }
 
                 // Handle header dragging to move window
                 if (g_headerDragging) {
@@ -2190,7 +3023,12 @@ namespace UI {
                 GetClientRect(m_hWnd, &rcSb);
                 UINT dpiSbHover = static_cast<UINT>(app.dpiScale * 96.0f);
                 int sbWHover = MulDiv(Constants::History::SCROLLBAR_THICKNESS, dpiSbHover, 96);
-                if (mx >= rcSb.right - sbWHover) {
+                if (g_scanRunning) {
+                    // Arrow-with-circle: work is happening in the background. The
+                    // panel is NOT blocked — the user can scroll, pick a folder, or
+                    // close it, and the sweep carries on either way.
+                    SetCursor(Constants::Cursors::CURR_APPSTARTING);
+                } else if (mx >= rcSb.right - sbWHover) {
                     UINT dpiSb = static_cast<UINT>(app.dpiScale * 96.0f);
                     int totalHSb = CalcTotalContentH(static_cast<int>(g_displayList.size()), dpiSb);
                     int winHSb = rcSb.bottom - rcSb.top;
@@ -2376,6 +3214,7 @@ namespace UI {
                         // Empty folders fall through — OpenDirectory handles them.
                         ShowWindow(m_hWnd, SW_HIDE);
                         OpenDirectory(g_hHistOwner, folder);
+                        NotifyCurrentFolder(folder); // keep green on the clicked row, not the link target
                         return 0;
                     }
                 }
@@ -2392,11 +3231,19 @@ namespace UI {
             case WM_MOUSELEAVE: {
                 g_filter.RouteMouse(WM_MOUSELEAVE, wParam, lParam, m_hWnd);
                 g_hoverRow = -1;
+                HideLinkTip(); // cursor left the panel — the popup must not linger
                 InvalidateRect(m_hWnd, nullptr, FALSE);
                 return 0;
             }
 
+            case WM_DESTROY:
+                // Hide, do NOT destroy: the popup is an app-wide singleton owned by
+                // the main window and reused by every panel.
+                HideLinkTip();
+                break; // let the base router run its own WM_DESTROY handling
+
             case WM_CLOSE:
+                HideLinkTip();
                 ShowWindow(m_hWnd, SW_HIDE);
                 return 0;
 
@@ -2450,6 +3297,7 @@ namespace UI {
     void HistoryListWnd::OnKillFocus() {
         if (g_hoverRow >= 0) g_savedHoverRow = g_hoverRow;
         g_hoverRow = -1;
+        HideLinkTip(); // a TTF_TRACK tip stays up until told otherwise
         // InvalidateRect is already called by FloatingPanelWnd before this hook.
     }
 
@@ -2470,6 +3318,11 @@ namespace UI {
         g_scrollOffsetY = 0;
         g_savedHoverRow = -1;   // nothing to restore on a fresh open
         HoverCurrentFolderRow(); // land on the folder you are actually in
+        // Every open validates, not just F5 — the missing / empty / link markers
+        // are read live from the caches, so a first Tab with nothing cached would
+        // otherwise paint an unmarked list. Only UNSCANNED folders are visited, so
+        // reopening the panel is free; F5 is the "check everything again" path.
+        LaunchHistoryValidation(m_hWnd, /*rescanAll=*/false);
 
         // Cache history file size so WM_PAINT needs no I/O
         {

@@ -47,7 +47,7 @@ namespace HistoryPath {
     // corrupt line, not a path — two concatenated entries, say.
     static constexpr size_t MAX_PATH_CHARS = 32767;
 
-    bool Normalize(const std::wstring &raw, std::wstring &out) {
+    std::wstring Clean(const std::wstring &raw) {
         std::wstring s = raw;
 
         // --- trim whitespace (covers \r, \n, tabs, the trailing spaces a hand
@@ -65,6 +65,11 @@ namespace HistoryPath {
             s = s.substr(1, s.size() - 2);
             trim(s);
         }
+        return s;
+    }
+
+    bool Normalize(const std::wstring &raw, std::wstring &out) {
+        std::wstring s = Clean(raw);
         if (s.empty() || s.size() > MAX_PATH_CHARS) return false;
 
         // --- reject characters that cannot appear in a Win32 path ---
@@ -109,6 +114,11 @@ namespace HistoryPath {
 
         out.swap(s);
         return true;
+    }
+
+    bool IsBroken(const std::wstring &entry) {
+        std::wstring ignored;
+        return !Normalize(entry, ignored);
     }
 
     bool Equal(const std::wstring &a, const std::wstring &b) {
@@ -275,9 +285,19 @@ void HistoryFoldersManager::LoadHistoryFromDisk() {
             }
 
             std::wstring path;
-            if (!HistoryPath::Normalize(line, path)) continue; // garbage line — drop it
+            const bool usable = HistoryPath::Normalize(line, path);
+            if (!usable) {
+                // KEEP the line. A hand-edited file must always be shown in full —
+                // a row that silently disappears reads as data loss and hides the
+                // very mistake the user needs to see. It is stored trimmed-only,
+                // and GetFolderStatus() reports it as dead, so the panel paints it
+                // in the missing-folder colour and navigation steps over it.
+                path = HistoryPath::Clean(line);
+                if (path.empty()) continue; // genuinely blank line — nothing to show
+            }
 
-            if (legacyFavorite && static_cast<int>(favorites.size()) < app.historyMaxFavs)
+            if (usable && legacyFavorite &&
+                static_cast<int>(favorites.size()) < app.historyMaxFavs)
                 favorites.insert(path);
 
             if (!seen.insert(path).second) continue; // already have this folder
@@ -331,8 +351,11 @@ void HistoryFoldersManager::MergeHistoryFromDisk() {
                     line = line.substr(b + 1);
 
                 std::wstring path;
-                if (!HistoryPath::Normalize(line, path)) continue; // hand-edited garbage
-                if (!diskSet.insert(path).second) continue;        // case-insensitive dupe
+                if (!HistoryPath::Normalize(line, path)) {
+                    path = HistoryPath::Clean(line); // keep it visible — see LoadHistoryFromDisk
+                    if (path.empty()) continue;
+                }
+                if (!diskSet.insert(path).second) continue; // case-insensitive dupe
                 diskList.push_back(path);
             }
         }
@@ -458,16 +481,15 @@ void HistoryFoldersManager::RewriteFavoritesToDisk() const {
     if (HistoryDisabled()) return; // dedicated instance: no history, no favorites
     std::wstring path = GetFavoritesFilePath();
     std::vector<std::wstring> snap(favorites.begin(), favorites.end());
-    const int maxFavs = app.historyMaxFavs;
-    g_writeQueue.PushTask([path = std::move(path), snap = std::move(snap), maxFavs]() {
+    g_writeQueue.PushTask([path = std::move(path), snap = std::move(snap)]() {
         std::wofstream f(path, std::ios::out | std::ios::trunc);
         if (!f.is_open()) return;
-        int written = 0;
-        for (const auto &e : snap) {
-            if (written >= maxFavs) break;
-            f << e << L"\n";
-            ++written;
-        }
+        // Everything in RAM is written — the cap belongs at the point a favorite
+        // is ADDED, not here. Truncating on save silently destroys favorites the
+        // user already has, and that is now reachable: the add-time limit counts
+        // unique folders, so a junction and its target are one favorite for the
+        // cap but two lines in this file.
+        for (const auto &e : snap) f << e << L"\n";
     });
 }
 
