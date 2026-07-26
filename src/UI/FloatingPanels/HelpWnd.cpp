@@ -188,7 +188,7 @@ namespace UI {
         };
 
         // ---------------------------------------------------------------
-        const int sNav = Sec(L"🧭", L"IMAGE NAVIGATION",
+        const int sNav = Sec(Constants::ThemeIcons::ICON_SECTION_COMPASS, L"IMAGE NAVIGATION",
                              L"Moving between images and folders");
 
         Add(K(SC::SC_NAV_PREV) + L" / " + K(SC::SC_NAV_NEXT),
@@ -239,7 +239,7 @@ namespace UI {
             L"Drop an image file or an entire folder onto the window to open it.", sNav);
 
         // ---------------------------------------------------------------
-        const int sZoom = Sec(L"🔍", L"ZOOM, PAN & VIEW MODES",
+        const int sZoom = Sec(Constants::ThemeIcons::ICON_SECTION_MAGNIFIER, L"ZOOM, PAN & VIEW MODES",
                               L"How the image fits and moves inside the window");
 
         Add(L"Up / Down",
@@ -260,7 +260,7 @@ namespace UI {
             L"4 Fill window (stretches)  •  5 Original size, 1:1 pixels (keeps aspect ratio).", sZoom);
 
         // ---------------------------------------------------------------
-        const int sMouse = Sec(L"🖱️", L"MOUSE CONTROLS",
+        const int sMouse = Sec(Constants::ThemeIcons::ICON_SECTION_MOUSE, L"MOUSE CONTROLS",
                                L"All pointer actions on the main window");
 
         Add(L"ℹ Button roles",
@@ -283,7 +283,7 @@ namespace UI {
             L"Adjust window opacity in " + NumI(Constants::OPACITY_STEP) + L"% steps.", sMouse);
 
         // ---------------------------------------------------------------
-        const int sWin = Sec(L"🪟", L"WINDOW MANAGEMENT",
+        const int sWin = Sec(Constants::ThemeIcons::ICON_SECTION_WINDOW, L"WINDOW MANAGEMENT",
                              L"Move, resize, snap, fullscreen and stacking");
 
         Add(L"Shift+" + K(SC::SC_APP_HIDE_ALT) + L" / " + K(SC::SC_PAN_LEFT) + L" / " +
@@ -320,7 +320,7 @@ namespace UI {
             L"all other windows.", sWin);
 
         // ---------------------------------------------------------------
-        const int sPanels = Sec(L"🧰", L"PANELS & TOOLS",
+        const int sPanels = Sec(Constants::ThemeIcons::ICON_SECTION_TOOLBOX, L"PANELS & TOOLS",
                                 L"Help, info, statistics and the thumbnail panels");
 
         Add(K(SC::SC_PANEL_HELP_TOGGLE),
@@ -350,7 +350,7 @@ namespace UI {
             L"or on any directory / cache strip closes that panel immediately.", sPanels);
 
         // ---------------------------------------------------------------
-        const int sThumbs = Sec(L"🖼️", L"THUMBNAIL STRIPS",
+        const int sThumbs = Sec(Constants::ThemeIcons::ICON_SECTION_PICTURE, L"THUMBNAIL STRIPS",
                                 L"Cache, directory and spawned directory panels");
 
         Add(L"Mouse Wheel",
@@ -399,7 +399,7 @@ namespace UI {
             L"Select Inverse (flips the current selection) and Select None.", sThumbs);
 
         // ---------------------------------------------------------------
-        const int sHist = Sec(L"📜", L"HISTORY PANEL",
+        const int sHist = Sec(Constants::ThemeIcons::ICON_SECTION_SCROLL, L"HISTORY PANEL",
                               L"Recently visited folders with favorites");
 
         Add(K(SC::SC_PANEL_HISTORY_TOGGLE),
@@ -431,7 +431,7 @@ namespace UI {
             L"Clear all favorites but keep the history.", sHist);
 
         // ---------------------------------------------------------------
-        const int sSlide = Sec(L"▶️", L"SLIDESHOW",
+        const int sSlide = Sec(Constants::ThemeIcons::ICON_SECTION_PLAY, L"SLIDESHOW",
                                L"Automatic playback with transitions");
 
         Add(Ctrl(SC::SC_SLIDESHOW_TOGGLE), L"Start / stop the slideshow.", sSlide);
@@ -450,7 +450,7 @@ namespace UI {
             L"In List mode the numbered rows become checkboxes.", sSlide);
 
         // ---------------------------------------------------------------
-        const int sOverlay = Sec(L"ℹ️", L"INFO OVERLAYS",
+        const int sOverlay = Sec(Constants::ThemeIcons::ICON_SECTION_INFO, L"INFO OVERLAYS",
                                  L"The 3×3 on-screen information grid");
 
         Add(K(SC::SC_PANEL_OVERLAY_MASTER) + L" / " + Ctrl(SC::SC_PANEL_OVERLAY_MASTER_CTRL0),
@@ -469,7 +469,7 @@ namespace UI {
             L"always stays visible.", sOverlay);
 
         // ---------------------------------------------------------------
-        const int sFx = Sec(L"🎨", L"EFFECTS & COLOR",
+        const int sFx = Sec(Constants::ThemeIcons::ICON_SECTION_PALETTE, L"EFFECTS & COLOR",
                             L"Effects stack in the order you switch them on — each one works on "
                             L"the result of the previous. Non-destructive: the file on disk is "
                             L"never touched.");
@@ -510,7 +510,7 @@ namespace UI {
             L"re-apply all active effects.", sFx);
 
         // ---------------------------------------------------------------
-        const int sFiles = Sec(L"💾", L"FILES, CLIPBOARD & SORTING",
+        const int sFiles = Sec(Constants::ThemeIcons::ICON_SECTION_FLOPPY, L"FILES, CLIPBOARD & SORTING",
                                L"Saving, copying and playlist ordering");
 
         Add(Ctrl(SC::SC_COPY_TO_CLIPBOARD),
@@ -531,7 +531,7 @@ namespace UI {
             L"option for mechanical hard drives.", sFiles);
 
         // ---------------------------------------------------------------
-        const int sApp = Sec(L"⚙️", L"APPLICATION & APPEARANCE",
+        const int sApp = Sec(Constants::ThemeIcons::ICON_SECTION_GEAR, L"APPLICATION & APPEARANCE",
                              L"Lifecycle, theme and window chrome");
 
         Add(K(SC::SC_APP_HIDE) + L"  /  " + Ctrl(SC::SC_APP_HIDE_ALT),
@@ -560,7 +560,7 @@ namespace UI {
             L"Cycle the window backdrop material: None → Mica → Acrylic → MicaAlt.", sApp);
 
         // ---------------------------------------------------------------
-        const int sTray = Sec(L"🔔", L"SYSTEM TRAY",
+        const int sTray = Sec(Constants::ThemeIcons::ICON_SECTION_BELL, L"SYSTEM TRAY",
                               L"Right-click the tray icon to access all persistent settings");
 
         Add(L"Double-click tray icon",
@@ -649,7 +649,7 @@ namespace UI {
             L"Overwrites current history and favorites in memory and on disk.", sTray);
 
         // ---------------------------------------------------------------
-        const int sDed = Sec(L"🖥️", L"DEDICATED SCREENS",
+        const int sDed = Sec(Constants::ThemeIcons::ICON_SECTION_DESKTOP, L"DEDICATED SCREENS",
                              L"Isolated copies for unattended displays (F8)");
 
         Add(K(SC::SC_PANEL_DEDICATED_TOGGLE),
@@ -710,7 +710,7 @@ namespace UI {
             L"favorites and all — just portable.", sDed);
 
         // ---------------------------------------------------------------
-        const int sCli = Sec(L"⌨️", L"COMMAND-LINE ARGUMENTS",
+        const int sCli = Sec(Constants::ThemeIcons::ICON_SECTION_KEYBOARD, L"COMMAND-LINE ARGUMENTS",
                              L"Options for QuickImageViewer.exe at launch");
 
         Add(L"\"path\\to\\image.jpg\"",
