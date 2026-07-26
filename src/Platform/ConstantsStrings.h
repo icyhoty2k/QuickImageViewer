@@ -1,5 +1,7 @@
 #pragma once
 
+#include "ConstantsTheme.h"
+
 // ConstantsStrings.h
 // Central repository for all user-visible text used in QIV overlays.
 // Keep strings here so they have one place to change for localization.
@@ -45,6 +47,10 @@ namespace Constants::Messages {
     constexpr const wchar_t *ALL_EFFECTS_RESET = L"All Effects Reset";
     // F5 Refresh/Reload current dir
     constexpr const wchar_t *RELOAD_CURRENT_DIR_MSG = L"Refreshed";
+    // F5 inside the History panel — re-reads both .txt files and re-scans every
+    // folder. Says how many, because the scan is asynchronous and the row markers
+    // land a moment later; without it the key looks like it did nothing.
+    constexpr const wchar_t *HISTORY_REFRESHED_MSG = L"History refreshed — rescanning ";
     // Empty-dir placeholder shown in DirWnd / SpawnedDirWnd when the folder has no images
     constexpr const wchar_t *EMPTY_DIR_NO_IMAGES = L"No Images:";
     // Placeholder shown when the directory itself has been deleted
@@ -166,7 +172,62 @@ namespace Constants::Messages {
     };
     constexpr const wchar_t *WALLPAPER_SET = L"Wallpaper: "; // prefix — append the style name
     constexpr const wchar_t *WALLPAPER_FAILED = L"⚠ Wallpaper could not be applied";
-    constexpr const wchar_t *HISTORY_NAV_FOLDER = L"↔ "; // prefix — append folder name
+    // Folder walking — used by ALL three walkers (horizontal wheel, PageUp/Down,
+    // Insert/Delete) so the centre message never depends on how you moved.
+    // Format is "<prefix><n>/<total> <folder name>", where <n> is the row number
+    // the History panel shows for that folder, so overlay and panel always agree.
+    // The prefix is chosen from the row itself: starred rows get ★, the rest 📁.
+    constexpr const wchar_t *WALK_HISTORY_FOLDER = Constants::ThemeIcons::ICON_FOLDER;
+    constexpr const wchar_t *WALK_FAVORITE_FOLDER = Constants::ThemeIcons::ICON_FAVORITES_MARK;
+    // Shown when a walk stepped over more than one dead folder to reach its
+    // destination — append the count. A single skip names the folder instead.
+    // Text only: ThemeIcons entries are constexpr pointers, not macros, so
+    // ICON_WARNING cannot be concatenated into the literal here — the caller
+    // prepends it at runtime.
+    constexpr const wchar_t *WALK_SKIPPED = L" skipped ";
+    // History panel footer total, and its hover popup.
+    // Footer reads "<size>/<files>" plus "/<n>" only when folders were excluded.
+    // The popup spells all three out, then names what was left out and why it
+    // could be: an alias whose target is already counted elsewhere in the list.
+    // Shown centred in the History panel while the background folder sweep is
+    // still running. The panel stays fully usable — the scan does not block it,
+    // and closing the panel does not stop the scan.
+    constexpr const wchar_t *HISTORY_SCANNING = L"Loading ...";
+
+    // The word for a folder, used everywhere in this popup so it can be changed
+    // in one place (dirs / folders / directories).
+    constexpr const wchar_t *WORD_DIRS = L"dirs";
+
+    constexpr const wchar_t *TOTAL_HEADER = L"TOTAL:";
+    constexpr const wchar_t *TOTAL_SIZE_LABEL = L"Size: ";
+    constexpr const wchar_t *TOTAL_FILES_LABEL = L"Files: ";
+    constexpr const wchar_t *TOTAL_DIRS_LABEL = L"Dirs: ";
+    constexpr const wchar_t *TOTAL_SEPARATOR = L"===========";
+    constexpr const wchar_t *TOTAL_EXCLUDED_SUFFIX = L" excluded:"; // "<n> dirs excluded:"
+    constexpr const wchar_t *EXCLUDED_BULLET = L"* ";               // before each number
+    // Group headings under the excluded count. Each names WHY those folders
+    // contribute nothing, then lists them numbered from 1.
+    constexpr const wchar_t *EXCLUDED_DUPLICATES = L"already counted (symlinks of a listed folder):";
+    constexpr const wchar_t *EXCLUDED_MISSING = L"missing ";  // + WORD_DIRS + ":"
+    constexpr const wchar_t *EXCLUDED_EMPTY = L"empty ";      // + WORD_DIRS + ":"
+
+    // History panel — row badge labels. One line each in the hover popup that
+    // appears when a row carries more than one badge and they have to share a slot.
+    constexpr const wchar_t *BADGE_MISSING = L"Folder not found";
+    constexpr const wchar_t *BADGE_EMPTY = L"No images in folder";
+    constexpr const wchar_t *BADGE_FAVORITE = L"Favorite";
+
+    // History panel — symlink glyph hover popup. Line 1 is the kind of link,
+    // line 2 is the resolved destination (filled in at runtime).
+    constexpr const wchar_t *LINK_KIND_JUNCTION = L"Directory junction  (mklink /J)";
+    constexpr const wchar_t *LINK_KIND_SYMLINK = L"Directory symlink  (mklink /D)";
+    // Path resolves elsewhere but no component is a reparse point — the drive
+    // letter itself is redirected (subst, or a mapped network drive).
+    constexpr const wchar_t *LINK_KIND_MAPPED = L"Mapped path  (subst / network drive)";
+    constexpr const wchar_t *LINK_TARGET_UNKNOWN = L"target could not be resolved";
+
+    constexpr const wchar_t *WALK_NO_HISTORY_FOLDERS = L"No other history folders";
+    constexpr const wchar_t *WALK_NO_FAVORITE_FOLDERS = L"No favorite folders";
     constexpr const wchar_t *FOLDER_DEAD_MISSING = L"⚠ Folder not found";
     constexpr const wchar_t *FOLDER_DEAD_EMPTY = L"⚠ No images in folder";
     constexpr const wchar_t *FOLDER_DELETED_NOTIFY = L"⚠ Folder deleted";
@@ -193,15 +254,39 @@ namespace Constants::Messages {
 
     // Zoom popup
     constexpr const wchar_t *ZOOM_TO_PREFIX = L"Zoom: ";
-    constexpr const wchar_t *ZOOM_TO_INPUT_HINT = L"Enter zoom multiplier ( 0.001 – 99999 )";
+    // %s pairs — the bounds arrive pre-formatted from
+    // Converters::FormatPercentCompact so their precision follows the value.
+    // A fixed "%.1f" here printed ZOOM_MIN = 0.01 as "0.0".
+    constexpr const wchar_t *ZOOM_TO_INPUT_HINT_FMT = L"Enter zoom in percent (%s%% – %s%%, 0 = reset)";
+
+    // ZoomWnd — hint line below the input box
+    // The out-of-range / invalid messages are built at draw time straight from
+    // Constants::ZoomPanel::ZOOM_MIN and ZOOM_MAX — both are already percents.
+    constexpr const wchar_t *ZOOM_ENTER_HINT = L"Enter = apply zoom  •  Esc = cancel";
+    constexpr const wchar_t *ZOOM_OUT_OF_RANGE_FMT = L"Out of range — type a value between %s%% and %s%%";
+    constexpr const wchar_t *ZOOM_RESET_MESSAGE = L"Zoom restored to default";
+    // Shown centre-screen when a zoom keypress/wheel tick is capped by
+    // ZoomPanel::ZOOM_MIN / ZOOM_MAX — otherwise the input looks ignored.
+    constexpr const wchar_t *ZOOM_MIN_REACHED = L"Minimum zoom reached";
+    constexpr const wchar_t *ZOOM_MAX_REACHED = L"Maximum zoom reached";
 }
 
 namespace Constants::Strings {
     // ── BOT_LEFT slot: active color-effect labels ───────────────────────────
     // Used in OverlayManager::UpdateEffects() via appendLine()
 
-    // Named colour effects (also fed to ToggleEffectChronological)
-    constexpr const wchar_t *EFFECT_GRAYSCALE = L"Grayscale";
+    // Named colour effects. These strings are also the KEYS in
+    // app.activeEffectsList, so the renderer matches on them — changing a value
+    // changes what RendererD2D::ChainEffectByName() compares against.
+    //
+    // Shown as "Desaturate", not "Grayscale", deliberately: effects stack, so a
+    // later Sepia tints this one's output and the picture ends up brown while
+    // the label is still listed. "Grayscale" reads as a promise that the final
+    // image IS gray and looks broken the moment anything follows it;
+    // "Desaturate" names the operation being performed, which is what the entry
+    // actually is. The identifier stays EFFECT_GRAYSCALE to match
+    // app.effectGrayscale and Command::ToggleGrayscale.
+    constexpr const wchar_t *EFFECT_GRAYSCALE = L"Desaturate";
     constexpr const wchar_t *EFFECT_INVERT = L"Invert";
     constexpr const wchar_t *EFFECT_SEPIA = L"Sepia";
     constexpr const wchar_t *EFFECT_SOLARIZE = L"Solarize";

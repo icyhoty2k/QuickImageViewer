@@ -17,6 +17,8 @@ enum class Command {
     PrevImage,
     ToggleFirstLastImageInCurrentFolder,
     GoToLastImageInCurrentFolder,
+    GoToFirstImage, // Home — unconditional jump to index 0
+    GoToLastImage,  // End  — unconditional jump to the final index
     ShowInExplorer,
 
     // --- View modes (1-5) ---
@@ -117,6 +119,14 @@ enum class Command {
     // --- Navigation ---
     ToggleLastDir, // Q — switch between current and previous folder
     ToggleLastImage, // E — switch between current and previously viewed image
+
+    // Walk the History panel's list without reordering it. The two pairs cover
+    // disjoint halves of that one list: History* visits only non-starred rows,
+    // Favorite* only starred rows.
+    PrevHistoryFolder, // PageUp
+    NextHistoryFolder, // PageDown
+    NextFavoriteFolder, // Insert
+    PrevFavoriteFolder, // Delete
 
     // --- Runtime theme ---
     ThemeFactorUp, // Ctrl+Alt+Shift+Numpad+

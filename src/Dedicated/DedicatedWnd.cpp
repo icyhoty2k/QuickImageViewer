@@ -358,7 +358,7 @@ void DedicatedWnd::DoTestList(bool promotions) {
         std::error_code ec;
         if (!std::filesystem::is_directory(f, ec) || ec) {
             ++deadFolders;
-            report += L"  ⚠ " + f + L"   (folder missing)\n";
+            report += std::wstring(L"  ") + Constants::ThemeIcons::ICON_WARNING + L" " + f + L"   (folder missing)\n";
             continue;
         }
 
@@ -378,7 +378,7 @@ void DedicatedWnd::DoTestList(bool promotions) {
 
         if (count == 0) {
             ++emptyFolders;
-            report += L"  ⚠ " + f + L"   (no images)\n";
+            report += std::wstring(L"  ") + Constants::ThemeIcons::ICON_WARNING + L" " + f + L"   (no images)\n";
         } else {
             ++okFolders;
             report += L"   " + f + L"   " + std::to_wstring(count) + L" images";
@@ -398,13 +398,13 @@ void DedicatedWnd::DoTestList(bool promotions) {
 
     if (promotions && ownList) {
         if (total > 0 && m_cfg.promoImagesFrom <= 0 && m_cfg.promoTimeFrom <= 0)
-            report += L"\n\n⚠ Both promotion triggers are off — none of these will show.";
+            report += std::wstring(L"\n\n") + Constants::ThemeIcons::ICON_WARNING + L" Both promotion triggers are off — none of these will show.";
         if (total == 0 && (m_cfg.promoImagesFrom > 0 || m_cfg.promoTimeFrom > 0))
-            report += L"\n\n⚠ Triggers are set but there are no promotions to draw from.";
+            report += std::wstring(L"\n\n") + Constants::ThemeIcons::ICON_WARNING + L" Triggers are set but there are no promotions to draw from.";
     }
 
     const bool clean = (deadFolders == 0 && emptyFolders == 0 && total > 0);
-    DialogMessage((clean ? L"✔ " : L"⚠ ") + report, caption);
+    DialogMessage((clean ? std::wstring(Constants::ThemeIcons::ICON_CHECK) + L" " : std::wstring(Constants::ThemeIcons::ICON_WARNING) + L" ") + report, caption);
 }
 
 // =============================================================================
@@ -461,7 +461,7 @@ void DedicatedWnd::ShowFolderList(bool promotions) {
         for (const std::wstring &f : folders) {
             const DWORD a = GetFileAttributesW(f.c_str());
             const bool ok = (a != INVALID_FILE_ATTRIBUTES) && (a & FILE_ATTRIBUTE_DIRECTORY);
-            msg += (ok ? L"   " : L"  ⚠ ");
+            msg += (ok ? L"   " : std::wstring(L"  ") + Constants::ThemeIcons::ICON_WARNING + L" ");
             msg += f;
             if (!ok) msg += L"   (missing)";
             msg += L"\n";
@@ -623,11 +623,11 @@ void DedicatedWnd::DoTest() {
         problems += L"\n  • promotion time range is reversed";
 
     if (problems.empty()) {
-        DialogMessage(L"✔ This config looks valid.\n\n" + ini, L"Test Config");
+        DialogMessage(std::wstring(Constants::ThemeIcons::ICON_CHECK) + L" This config looks valid.\n\n" + ini, L"Test Config");
         return;
     }
 
-    if (DialogConfirm(L"⚠ Problems found in:\n" + ini + L"\n" + problems +
+    if (DialogConfirm(std::wstring(Constants::ThemeIcons::ICON_WARNING) + L" Problems found in:\n" + ini + L"\n" + problems +
                       L"\n\nReplace it with a working config built from the settings "
                       L"currently shown in this panel?", L"Test Config")) {
         Dedicated::WriteConfigTo(ini, m_cfg);
@@ -1553,9 +1553,10 @@ LRESULT DedicatedWnd::HandlePanelMessage(UINT message, WPARAM wParam, LPARAM lPa
             SetTextColor(bb, dim);
             RECT fr{pad, listBot, W - pad, H};
             DrawTextW(bb,
-                m_editingRow >= 0
-                    ? L"Enter = save   Esc = cancel"
-                    : L"↑↓ select   Enter = edit   wheel = scroll   Esc = close",
+                (m_editingRow >= 0
+                    ? std::wstring(L"Enter = save   Esc = cancel")
+                    : std::wstring(Constants::ThemeIcons::ICON_ARROWS_UP_DOWN) + L" select   Enter = edit   wheel = scroll   Esc = close")
+                    .c_str(),
                 -1, &fr, DT_LEFT | DT_SINGLELINE | DT_END_ELLIPSIS);
 
             BitBlt(dc, 0, 0, W, H, bb, 0, 0, SRCCOPY);

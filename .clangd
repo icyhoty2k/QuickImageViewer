@@ -1,0 +1,4 @@
+CompileFlags:
+  CompilationDatabase: Z:/QIV/release
+  Add:
+    - --driver-mode=cl

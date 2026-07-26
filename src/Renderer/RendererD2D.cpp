@@ -75,46 +75,43 @@ HRESULT RendererD2D::Initialize(HWND hwnd) {
 }
 
 void RendererD2D::UpdateColorEffects() {
-    if (!m_pColorMatrixEffect) return;
-    // Non-linear effect nodes are created lazily here
-    (void) EnsureExtraEffects();
-    // 1. Check BOTH booleans. If effects are active AND the preview toggle is on...
-    if (app.hasActiveEffects && app.effectPreviewEnabled && m_pBitmap) {
-        // Always rebuild the chain unconditionally.
-        ApplyPreviousEffects();
-    } else {
-        // Safe bypass: no effects active OR preview toggled off.
-        m_pActiveDisplayNode = m_pBitmap; // FAST PATH
+    // ---- FAST PATH -----------------------------------------------------------
+    // Nothing to apply: point the display node straight at the source bitmap and
+    // leave. Render() then takes the plain DrawBitmap branch — no Scale effect,
+    // no intermediate surfaces. Bail BEFORE EnsureExtraEffects() so a session
+    // that never touches an effect never allocates a single D2D effect node.
+    if (!app.hasActiveEffects || !app.effectPreviewEnabled || !m_pBitmap) {
+        m_pActiveDisplayNode = m_pBitmap;
+        // Drop the graph's references to the previous source bitmap, otherwise
+        // the stale chain pins that VRAM surface alive for the whole session.
+        ReleaseEffectInputs();
+        return;
+    }
+
+    if (FAILED(EnsureExtraEffects()) || !m_pColorMatrixEffect) {
+        m_pActiveDisplayNode = m_pBitmap; // effect creation failed — draw raw
+        return;
     }
 
     constexpr float lumR = 0.2126f;
     constexpr float lumG = 0.7152f;
     constexpr float lumB = 0.0722f;
 
-    // ----- Base matrix: Sepia (fixed tone matrix) OR Saturation/Grayscale -----
+    // ----- Base matrix: Saturation only -----
+    // Grayscale / sepia / invert are NOT folded in here any more — they are
+    // their own nodes so the user's toggle order decides where they sit in the
+    // chain (see BuildEffectChain).
+    const float s = app.saturation;
     float base[3][3];
-    if (app.effectSepia) {
-        base[0][0] = 0.393f;
-        base[0][1] = 0.769f;
-        base[0][2] = 0.189f;
-        base[1][0] = 0.349f;
-        base[1][1] = 0.686f;
-        base[1][2] = 0.168f;
-        base[2][0] = 0.272f;
-        base[2][1] = 0.534f;
-        base[2][2] = 0.131f;
-    } else {
-        const float s = app.effectGrayscale ? 0.0f : app.saturation;
-        base[0][0] = lumR * (1.0f - s) + s;
-        base[0][1] = lumG * (1.0f - s);
-        base[0][2] = lumB * (1.0f - s);
-        base[1][0] = lumR * (1.0f - s);
-        base[1][1] = lumG * (1.0f - s) + s;
-        base[1][2] = lumB * (1.0f - s);
-        base[2][0] = lumR * (1.0f - s);
-        base[2][1] = lumG * (1.0f - s);
-        base[2][2] = lumB * (1.0f - s) + s;
-    }
+    base[0][0] = lumR * (1.0f - s) + s;
+    base[0][1] = lumG * (1.0f - s);
+    base[0][2] = lumB * (1.0f - s);
+    base[1][0] = lumR * (1.0f - s);
+    base[1][1] = lumG * (1.0f - s) + s;
+    base[1][2] = lumB * (1.0f - s);
+    base[2][0] = lumR * (1.0f - s);
+    base[2][1] = lumG * (1.0f - s);
+    base[2][2] = lumB * (1.0f - s) + s;
 
     // ----- Contrast -----
     const float c = app.contrast;
@@ -126,15 +123,7 @@ void RendererD2D::UpdateColorEffects() {
     // ----- Brightness -----
     const float b = std::clamp(app.brightness, -1.0f, 1.0f);
     const float contrastOffset = 0.5f * (1.0f - c);
-    float offset = contrastOffset + b;
-
-    // ----- Invert -----
-    if (app.effectInvert) {
-        for (int row = 0; row < 3; ++row)
-            for (int col = 0; col < 3; ++col)
-                m[row][col] = -m[row][col];
-        offset = 1.0f - offset;
-    }
+    const float offset = contrastOffset + b;
 
     D2D1_MATRIX_5X4_F matrix = D2D1::Matrix5x4F(
             m[0][0], m[1][0], m[2][0], 0.0f,
@@ -155,6 +144,10 @@ void RendererD2D::UpdateColorEffects() {
         m_pGammaEffect->SetValue(D2D1_GAMMATRANSFER_PROP_BLUE_EXPONENT, exponent);
     }
 
+    // Rebuild the graph LAST, so every node it wires already carries the
+    // property values computed above.
+    ApplyPreviousEffects();
+
 #ifdef _DEBUG
     {
         wchar_t buf[160];
@@ -173,6 +166,58 @@ void RendererD2D::UpdateColorEffects() {
 HRESULT RendererD2D::EnsureExtraEffects() {
     if (!m_pDeviceContext) return E_FAIL;
     HRESULT hr = S_OK;
+
+    // The base matrix and the Scale node are only ever needed on the effect
+    // path, so they are created here too — an image viewed with no effects
+    // costs zero effect objects.
+    if (!m_pColorMatrixEffect) {
+        hr = m_pDeviceContext->CreateEffect(CLSID_D2D1ColorMatrix, &m_pColorMatrixEffect);
+        if (FAILED(hr)) return hr;
+    }
+    if (!m_pScaleEffect) {
+        hr = m_pDeviceContext->CreateEffect(CLSID_D2D1Scale, &m_pScaleEffect);
+        if (FAILED(hr)) return hr;
+    }
+
+    // Creates one CLSID_D2D1ColorMatrix node holding a constant matrix.
+    // Rows are INPUT channels (R,G,B,A) and the 5th row is the offset, which is
+    // why the caller passes the transposed coefficients.
+    auto createFixedMatrix = [&](Microsoft::WRL::ComPtr<ID2D1Effect> &node,
+                                 const D2D1_MATRIX_5X4_F &mat) -> HRESULT {
+        if (node) return S_OK;
+        const HRESULT h = m_pDeviceContext->CreateEffect(CLSID_D2D1ColorMatrix, &node);
+        if (FAILED(h)) return h;
+        node->SetValue(D2D1_COLORMATRIX_PROP_COLOR_MATRIX, mat);
+        node->SetValue(D2D1_COLORMATRIX_PROP_CLAMP_OUTPUT, TRUE);
+        return S_OK;
+    };
+
+    // Grayscale: every output channel = luminance of the input.
+    hr = createFixedMatrix(m_pGrayscaleEffect, D2D1::Matrix5x4F(
+                                                       0.2126f, 0.2126f, 0.2126f, 0.0f,
+                                                       0.7152f, 0.7152f, 0.7152f, 0.0f,
+                                                       0.0722f, 0.0722f, 0.0722f, 0.0f,
+                                                       0.0f, 0.0f, 0.0f, 1.0f,
+                                                       0.0f, 0.0f, 0.0f, 0.0f));
+    if (FAILED(hr)) return hr;
+
+    // Invert: out = 1 - in, alpha untouched.
+    hr = createFixedMatrix(m_pInvertEffect, D2D1::Matrix5x4F(
+                                                    -1.0f, 0.0f, 0.0f, 0.0f,
+                                                    0.0f, -1.0f, 0.0f, 0.0f,
+                                                    0.0f, 0.0f, -1.0f, 0.0f,
+                                                    0.0f, 0.0f, 0.0f, 1.0f,
+                                                    1.0f, 1.0f, 1.0f, 0.0f));
+    if (FAILED(hr)) return hr;
+
+    // Sepia: classic fixed tone matrix (transposed for D2D's row = input layout).
+    hr = createFixedMatrix(m_pSepiaEffect, D2D1::Matrix5x4F(
+                                                   0.393f, 0.349f, 0.272f, 0.0f,
+                                                   0.769f, 0.686f, 0.534f, 0.0f,
+                                                   0.189f, 0.168f, 0.131f, 0.0f,
+                                                   0.0f, 0.0f, 0.0f, 1.0f,
+                                                   0.0f, 0.0f, 0.0f, 0.0f));
+    if (FAILED(hr)) return hr;
 
     if (!m_pGammaEffect) {
         hr = m_pDeviceContext->CreateEffect(CLSID_D2D1GammaTransfer, &m_pGammaEffect);
@@ -196,6 +241,16 @@ HRESULT RendererD2D::EnsureExtraEffects() {
         m_pSolarizeEffect->SetValue(D2D1_TABLETRANSFER_PROP_BLUE_TABLE, lutBytes, lutSize);
         m_pSolarizeEffect->SetValue(D2D1_TABLETRANSFER_PROP_ALPHA_DISABLE, TRUE);
     }
+
+    // Feeds m_pThresholdEffect: collapses to luminance so the 0/1 table below
+    // produces black & white rather than the eight corners of the RGB cube.
+    hr = createFixedMatrix(m_pThresholdLumaEffect, D2D1::Matrix5x4F(
+                                                           0.2126f, 0.2126f, 0.2126f, 0.0f,
+                                                           0.7152f, 0.7152f, 0.7152f, 0.0f,
+                                                           0.0722f, 0.0722f, 0.0722f, 0.0f,
+                                                           0.0f, 0.0f, 0.0f, 1.0f,
+                                                           0.0f, 0.0f, 0.0f, 0.0f));
+    if (FAILED(hr)) return hr;
 
     if (!m_pThresholdEffect) {
         hr = m_pDeviceContext->CreateEffect(CLSID_D2D1TableTransfer, &m_pThresholdEffect);
@@ -242,10 +297,66 @@ void RendererD2D::ApplyPreviousEffects() {
 // =============================================================================
 //  BuildEffectChain
 // =============================================================================
-ID2D1Effect *RendererD2D::BuildEffectChain(ID2D1Image *source) {
-    if (!m_pColorMatrixEffect) return nullptr;
-    (void) EnsureExtraEffects();
+// Unwires every effect node. Called when the chain is bypassed so no node keeps
+// an outstanding reference to the source bitmap (or to another node) — that
+// reference would otherwise hold a GPU surface alive for the rest of the
+// session even though nothing draws through the graph any more.
+void RendererD2D::ReleaseEffectInputs() {
+    ID2D1Effect *nodes[] = {
+            m_pScaleEffect.Get(), m_pColorMatrixEffect.Get(),
+            m_pGrayscaleEffect.Get(), m_pInvertEffect.Get(), m_pSepiaEffect.Get(),
+            m_pGammaEffect.Get(), m_pSolarizeEffect.Get(),
+            m_pThresholdLumaEffect.Get(), m_pThresholdEffect.Get(),
+            m_pOutlineEffect.Get()};
+    for (ID2D1Effect *node: nodes)
+        if (node) node->SetInput(0, nullptr);
+}
 
+// Appends the node(s) implementing one effect to the tail of the graph and
+// returns the new tail. Threshold needs two nodes (luminance, then the 0/1
+// table), which is why this returns a tail rather than a single node.
+ID2D1Effect *RendererD2D::ChainEffectByName(const std::wstring &name, ID2D1Effect *current) {
+    // Skips silently when a node failed to be created (e.g. EdgeDetection
+    // unavailable on the driver) — that effect just drops out of the chain.
+    auto link = [&current](const Microsoft::WRL::ComPtr<ID2D1Effect> &node) {
+        if (!node) return;
+        node->SetInputEffect(0, current);
+        current = node.Get();
+    };
+
+    if (name == Constants::Strings::EFFECT_GRAYSCALE) {
+        link(m_pGrayscaleEffect);
+    } else if (name == Constants::Strings::EFFECT_SEPIA) {
+        link(m_pSepiaEffect);
+    } else if (name == Constants::Strings::EFFECT_INVERT) {
+        link(m_pInvertEffect);
+    } else if (name == Constants::Strings::EFFECT_SOLARIZE) {
+        link(m_pSolarizeEffect);
+    } else if (name == Constants::Strings::EFFECT_THRESHOLD) {
+        // Threshold keys off LUMINANCE, not each channel independently.
+        // A per-channel table snaps R, G and B to 0/1 separately, which lands on
+        // the eight corners of the RGB cube — pure red, cyan, magenta — instead
+        // of black and white. Collapsing to luminance first makes the following
+        // table a true black & white cutover, and makes Threshold compose
+        // sanely with whatever the user stacked before it.
+        link(m_pThresholdLumaEffect);
+        link(m_pThresholdEffect);
+    } else if (name == Constants::Strings::EFFECT_OUTLINE) {
+        link(m_pOutlineEffect);
+    }
+
+    return current;
+}
+
+ID2D1Effect *RendererD2D::BuildEffectChain(ID2D1Image *source) {
+    // No effects at all: return nullptr so the caller draws the bitmap directly
+    // instead of pushing it through an identity color matrix.
+    if (!app.hasActiveEffects) return nullptr;
+    if (FAILED(EnsureExtraEffects()) || !m_pColorMatrixEffect) return nullptr;
+
+    // Continuous adjustments (saturation/contrast/brightness) always run first —
+    // they are a correction on the source pixels, not a stackable toggle. Gamma
+    // follows for the same reason.
     m_pColorMatrixEffect->SetInput(0, source);
     ID2D1Effect *current = m_pColorMatrixEffect.Get();
 
@@ -253,18 +364,25 @@ ID2D1Effect *RendererD2D::BuildEffectChain(ID2D1Image *source) {
         m_pGammaEffect->SetInputEffect(0, current);
         current = m_pGammaEffect.Get();
     }
-    if (app.effectSolarize && m_pSolarizeEffect) {
-        m_pSolarizeEffect->SetInputEffect(0, current);
-        current = m_pSolarizeEffect.Get();
-    }
-    if (app.effectThreshold && m_pThresholdEffect) {
-        m_pThresholdEffect->SetInputEffect(0, current);
-        current = m_pThresholdEffect.Get();
-    }
-    if (app.effectOutline && m_pOutlineEffect) {
-        m_pOutlineEffect->SetInputEffect(0, current);
-        current = m_pOutlineEffect.Get();
-    }
+
+    // ---- STACKING ORDER = THE ORDER THE USER ENABLED THEM --------------------
+    // Each effect sees the output of every effect enabled before it, so turning
+    // Sepia on while Desaturate is already active tints the desaturated image.
+    // Switching an effect off removes only its link; the rest of the chain is
+    // rebuilt from the untouched source bitmap, so nothing is destructive.
+    //
+    // Consequence worth knowing: some pairs are mathematically absorbing.
+    // Solarize is invariant under negation (solarize(1-v) == solarize(v)), so
+    // enabling Invert and THEN Solarize gives the same pixels as Solarize alone.
+    // That is correct — the inversion really is erased by the later curve — and
+    // it is visible in the overlay, which lists the chain in this same order.
+    // Enabling them the other way round (Solarize then Invert) inverts the
+    // solarized result, as expected.
+    //
+    // app.activeEffectsList is kept in lockstep with the effect* booleans by
+    // AppState::ToggleEffectChronological, so no bool re-check is needed here.
+    for (const std::wstring &name: app.activeEffectsList)
+        current = ChainEffectByName(name, current);
 
     return current;
 }
@@ -369,12 +487,10 @@ HRESULT RendererD2D::CreateDeviceResources() {
         &m_pLinkBrush);
     if (FAILED(hr)) return hr;
 
-    hr = m_pDeviceContext->CreateEffect(CLSID_D2D1ColorMatrix, &m_pColorMatrixEffect);
-    if (FAILED(hr)) return hr;
-
-    hr = m_pDeviceContext->CreateEffect(CLSID_D2D1Scale, &m_pScaleEffect);
-    if (FAILED(hr)) return hr;
-
+    // Effect nodes are NOT created here. EnsureExtraEffects() builds the whole
+    // set on first use, so the common "view an image, no effects" session never
+    // allocates any of them. UpdateColorEffects() just parks the display node
+    // on the raw bitmap.
     UpdateColorEffects();
 
     return S_OK;
@@ -424,6 +540,8 @@ void RendererD2D::DiscardDeviceResources() {
     m_bitmapCache.clear();
     m_lruList.clear();
     m_pActiveSvg.Reset();
+    // Holds the old graph's output image — must go with the device it came from.
+    m_pActiveDisplayNode.Reset();
     m_pDeviceContext.Reset();
     m_pDeviceContext5.Reset();
     m_pD2DDevice.Reset();
@@ -431,8 +549,12 @@ void RendererD2D::DiscardDeviceResources() {
     m_pD3DContext.Reset();
     m_pD3DDevice.Reset();
     m_pColorMatrixEffect.Reset();
+    m_pGrayscaleEffect.Reset();
+    m_pInvertEffect.Reset();
+    m_pSepiaEffect.Reset();
     m_pGammaEffect.Reset();
     m_pSolarizeEffect.Reset();
+    m_pThresholdLumaEffect.Reset();
     m_pThresholdEffect.Reset();
     m_pOutlineEffect.Reset();
     m_pScaleEffect.Reset();
@@ -486,7 +608,10 @@ HRESULT RendererD2D::LoadBitmap(IWICBitmapSource *bitmap, UINT width, UINT heigh
     }
 
     if (isCacheHit) {
-        m_pActiveDisplayNode = nullptr;
+        // Re-point the effect graph at the new source bitmap. Without this the
+        // display node stays stale and the active effects silently drop off as
+        // soon as the user navigates to another image.
+        UpdateColorEffects();
         if (onImageChangedCallback) {
             onImageChangedCallback(app.currentIndex);
         }
@@ -524,13 +649,16 @@ HRESULT RendererD2D::LoadBitmap(IWICBitmapSource *bitmap, UINT width, UINT heigh
         }
 
         m_pBitmap = newBitmap;
-        m_pActiveDisplayNode = nullptr;
         m_pActiveSvg.Reset();
         m_svgNativeW = 0.0f;
         m_svgNativeH = 0.0f;
 
         app.imgWidth = static_cast<int>(width);
         app.imgHeight = static_cast<int>(height);
+
+        // Same as the cache-hit path: rewire (or bypass) the graph for the
+        // bitmap that was just uploaded.
+        UpdateColorEffects();
 
         if (onImageChangedCallback) {
             onImageChangedCallback(app.currentIndex);
