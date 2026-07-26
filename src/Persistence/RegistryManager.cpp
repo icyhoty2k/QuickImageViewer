@@ -272,6 +272,36 @@ namespace Persistence::Registry {
         a.overlayShowBackground = readDword(
             Constants::Registry::OVERLAY_SHOW_BG,
             static_cast<DWORD>(Constants::Overlay::IS_OVERLAY_SHOW_BACKGROUND)) != 0;
+        a.overlayLayoutMode = std::max(0, std::min(Constants::Overlay::LAYOUT_MODE_COUNT - 1,
+            static_cast<int>(readDword(Constants::Registry::OVERLAY_LAYOUT_MODE,
+                static_cast<DWORD>(Constants::Overlay::DEFAULT_LAYOUT_MODE)))));
+        // Only the low 9 bits are meaningful — mask so a corrupt value cannot
+        // set bits for slots that do not exist.
+        a.overlaySlotVisibleMask = readDword(
+            Constants::Registry::OVERLAY_SLOT_VISIBLE,
+            static_cast<DWORD>(Constants::Overlay::DEFAULT_SLOT_VISIBLE_MASK))
+            & Constants::Overlay::SLOT_MASK_ALL;
+        a.overlaySlotCompactMask = readDword(
+            Constants::Registry::OVERLAY_SLOT_COMPACT,
+            static_cast<DWORD>(Constants::Overlay::DEFAULT_SLOT_COMPACT_MASK))
+            & Constants::Overlay::SLOT_MASK_ALL;
+        // Only the folder name is persisted; the effects-list toggle is
+        // deliberately session-only and resets to its Constants default.
+        a.overlayShowDirName = readDword(
+            Constants::Registry::OVERLAY_SHOW_DIR_NAME,
+            static_cast<DWORD>(Constants::Overlay::SHOW_DIR_NAME)) != 0;
+        a.overlayFontSize = std::max(Constants::Overlay::OVERLAY_FONT_SIZE_MIN,
+            std::min(Constants::Overlay::OVERLAY_FONT_SIZE_MAX,
+                static_cast<int>(readDword(Constants::Registry::OVERLAY_FONT_SIZE,
+                    static_cast<DWORD>(Constants::Overlay::OVERLAY_FONT_SIZE_DEFAULT)))));
+        a.overlayFontColor = static_cast<COLORREF>(readDword(
+            Constants::Registry::OVERLAY_FONT_COLOR,
+            static_cast<DWORD>(Constants::Overlay::OVERLAY_FONT_COLOR_DEFAULT)));
+        // Clamped: the saved index may point past the end if the family list
+        // ever shrinks, and an out-of-range read would be a hard crash.
+        a.overlayFontFamily = std::max(0, std::min(Constants::Overlay::OVERLAY_FONT_FAMILY_COUNT - 1,
+            static_cast<int>(readDword(Constants::Registry::OVERLAY_FONT_FAMILY,
+                static_cast<DWORD>(Constants::Overlay::OVERLAY_FONT_FAMILY_DEFAULT)))));
         a.caretStyle = std::max(0, std::min(1, static_cast<int>(
             readDword(Constants::Registry::INPUTBOX_CARET_STYLE,
                 static_cast<DWORD>(Constants::InputBox::CARET_STYLE)))));

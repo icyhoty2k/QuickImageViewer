@@ -19,20 +19,20 @@
 //
 // Current slot assignments:
 //   TOP_LEFT   [1] : "42 / 100\nimage1.jpg"    (index / total + filename)
-//   TOP_CENTER [2] : "86.0%"                    (current viewport zoom)
-//   TOP_RIGHT  [3] : unused
-//   MID_LEFT   [4] : unused
+//   TOP_CENTER [2] : panel selection           (top thumbnail strip)
+//   TOP_RIGHT  [3] : "86.0%"                    (current viewport zoom)
+//   MID_LEFT   [4] : panel selection           (left thumbnail strip)
 //   MID_CENTER [5] : general message queue      (transient — auto-hides)
-//   MID_RIGHT  [6] : unused
+//   MID_RIGHT  [6] : panel selection           (right thumbnail strip)
 //   BOT_LEFT   [7] : stacked effect list        (active effects, grows upward)
-//   BOT_CENTER [8] : unused
+//   BOT_CENTER [8] : panel selection           (bottom thumbnail strip)
 //   BOT_RIGHT  [9] : "1920×1080 / 4.3 MB"      (dimensions / file size)
 //
 // Shortcut scheme:
 //   Ctrl+1..9   — toggle individual slot ON/OFF
 //   Ctrl+0      — master toggle (all slots)
 //   I / N       — master toggle (same as Ctrl+0)
-//   Ctrl+Alt+1..9 — toggle compact (1-line) vs full (2-line) display per slot
+//   Ctrl+Shift+1..9 — toggle compact (1-line) vs full (2-line) display per slot
 //
 // Center-center [5] is special:
 //   • Has its own font size, color, and brush (independent from other slots).
@@ -92,8 +92,14 @@ class OverlayManager {
         // BOT_RIGHT  — pixel dimensions + file size in bytes
         void UpdateDims(int imgW, int imgH, int64_t fileSizeBytes);
 
-        // BOT_LEFT   — rebuild from current AppState effects
+        // BOT_LEFT — rebuild the effects list and the folder-name line. Both
+        // are governed by their own AppState toggle and neither affects the
+        // other; the folder name is always emitted last so it sits lowest.
         void UpdateEffects();
+
+        // The folder name lives in BOT_LEFT normally but on TOP_LEFT's first
+        // line under Summary, so flipping its toggle has to rebuild both.
+        void RefreshFolderNameLine();
 
         // Panel selection overlay — called by ThumbnailPanelWnd whenever m_selectedPaths
         // changes. Maps panel position to the nearest free overlay slot:
@@ -135,6 +141,23 @@ class OverlayManager {
 
         [[nodiscard]] bool IsCompact(Slot slot) const;
 
+        // Advance one slot through Compact → Full → Off, the same three states
+        // and order the Overlays submenu lists. Ctrl+1..9 uses this, which is
+        // why there is no separate compact shortcut.
+        void CycleSlotState(Slot slot);
+
+        // "Overlay Top Left: Compact" — the slot's current state, for the
+        // centre message. Shared by the keyboard and the menu so both report
+        // a state change identically.
+        [[nodiscard]] std::wstring SlotStateMessage(Slot slot) const;
+
+        // Re-seed every slot from app.overlaySlotVisibleMask / ...CompactMask
+        // and app.overlayLayoutMode, then recompute rects and content. Call
+        // after anything that replaces AppState wholesale — Import Settings and
+        // Restore Defaults. Does not write back: the caller owns persisting
+        // what it just assigned.
+        void ApplyPersistedState(HWND hWnd);
+
         // ── Render ────────────────────────────────────────────────────────────
         void RenderAll(ID2D1DeviceContext *ctx) const;
 
@@ -148,6 +171,10 @@ class OverlayManager {
 
         void UpdateTextFormat();
 
+        // Re-read app.overlayFontColor into the outer-slot brush. Cheap — no
+        // device context needed, so it is safe to call straight from a menu.
+        void ApplyTextColor();
+
     private:
         // ── Resources (not owned, except m_pCenterBrush / m_pBgBrush) ────────
         IDWriteFactory3 *m_pDWriteFactory = nullptr;
@@ -156,6 +183,18 @@ class OverlayManager {
 
         // Center-center owns its own brush and format (independent colour + size)
         Microsoft::WRL::ComPtr<ID2D1SolidColorBrush> m_pCenterBrush;
+        // Backing rect behind the centre message. Separate from m_pCenterBrush
+        // so drawing it costs no SetColor — the two differ in alpha.
+        Microsoft::WRL::ComPtr<ID2D1SolidColorBrush> m_pCenterBgBrush;
+        // Severity currently baked into m_pCenterBrush. Mutable because
+        // RenderAll is const and this is a cache of what the GPU brush holds,
+        // not part of the overlay's logical state.
+        mutable MsgSeverity m_centerBrushSeverity = MsgSeverity::Normal;
+        mutable bool m_centerBrushSet = false;
+        // The eight outer slots draw with this, NOT the brush handed in by
+        // RendererD2D — that one is shared with the folder-deleted overlay, so
+        // recolouring it would drag unrelated UI along with the user's choice.
+        Microsoft::WRL::ComPtr<ID2D1SolidColorBrush> m_pOuterBrush;
         // Dedicated semi-transparent background brush — avoids GetColor/SetColor per slot per frame
         Microsoft::WRL::ComPtr<ID2D1SolidColorBrush> m_pBgBrush;
         Microsoft::WRL::ComPtr<IDWriteTextFormat> m_fmtCenter5; // center-center format
@@ -175,6 +214,10 @@ class OverlayManager {
             TextOverlay *overlay = nullptr;
             bool visible = false;
             bool compact = Constants::Overlay::IS_COMPACT_OVERLAY_MODE; // true → 1-line, false → 2-line
+            // Opts a slot out of the shared overlay background rect, whatever
+            // app.overlayShowBackground says. BOT_LEFT uses this: its effect
+            // list is meant to read as bare text over the image.
+            bool drawBackground = true;
             IDWriteTextFormat *fmt = nullptr;
             DWRITE_TEXT_ALIGNMENT cachedAlignment = DWRITE_TEXT_ALIGNMENT_LEADING;
         };
@@ -191,9 +234,20 @@ class OverlayManager {
         MsgSeverity m_centerMsgSeverity = MsgSeverity::Normal; // colour of the live message
 
         // ── Helpers ──────────────────────────────────────────────────────────
+        // Rebuilds both slot bitmasks from m_slots into AppState and saves them.
+        // Every per-slot mutator funnels through here so no change escapes
+        // unpersisted.
+        void PersistSlotState();
+
+        // The apply half of OnLayoutModeChanged, without the registry write.
+        // Used when restoring a stored mode rather than setting a new one.
+        void ApplyLayoutMode(HWND hWnd);
+
         void BuildSlotFormats();
 
         void BuildCenterBrush(ID2D1DeviceContext *ctx);
+
+        void BuildOuterBrush(ID2D1DeviceContext *ctx);
 
         void RecomputeRects();
 
@@ -202,7 +256,29 @@ class OverlayManager {
         // "4521472 → 4.3 MB",  "890123 → 869 KB",  "512 → 512 B"
         static std::wstring FormatFileSize(int64_t bytes);
 
-        // Rebuild TOP_LEFT text honouring compact flag
+        // Name of the folder holding the current image; empty when none.
+        // Cached on the directory portion of the path — see the definition.
+        const std::wstring &CurrentFolderName();
+        // The composed "📁 <name>" display line, cached on the same event.
+        const std::wstring &CurrentFolderLine();
+        std::wstring m_folderSrc;  // directory the cached name was derived from
+        std::wstring m_folderName; // cached last path component of m_folderSrc
+        std::wstring m_folderLine; // cached icon + name, ready to display
+
+        // Last BOT_LEFT height handed to RecomputeRects, so UpdateEffects can
+        // skip the recompute when the folder-name toggle has not moved it.
+        float m_botLeftRowH = -1.0f;
+
+        // True when the active layout has folded this slot's content into
+        // another slot, so drawing it in place would duplicate the value.
+        [[nodiscard]] bool IsSlotSuppressed(int slot) const;
+
+        // Re-render the slots whose text shape depends on the compact flag.
+        void RebuildForCompactChange(Slot slot);
+
+        // Rebuild TOP_LEFT text honouring the compact flag. In layout mode 2 it
+        // also appends the zoom + dimensions/size summary as a second line, so
+        // that mode needs no other slot.
         void RebuildTopLeft();
 
         // Stores the raw data so compact toggle / layout change can re-render
@@ -216,8 +292,6 @@ class OverlayManager {
         int m_imgH = 0;
         int64_t m_fileSizeBytes = 0;
 
-        // Rebuild the combined zoom+dims line used in layout mode 2
-        void RebuildSummaryLine2();
 };
 
 extern OverlayManager g_overlayManager;

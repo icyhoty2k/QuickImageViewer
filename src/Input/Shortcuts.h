@@ -87,12 +87,15 @@ namespace Shortcuts {
     // Ctrl+0  —  Master overlay toggle (same as N / I)
     constexpr UINT SC_PANEL_OVERLAY_MASTER_CTRL0 = '0'; // requires ctrl
 
-    // ── Per-slot VISIBILITY toggles — Ctrl+1 .. Ctrl+9  ──────────────────────
+    // ── Per-slot STATE cycle — Ctrl+1 .. Ctrl+9  ─────────────────────────────
     // Grid layout:
     //   [1] TOP_LEFT    [2] TOP_CENTER    [3] TOP_RIGHT
     //   [4] MID_LEFT    [5] MID_CENTER    [6] MID_RIGHT
     //   [7] BOT_LEFT    [8] BOT_CENTER    [9] BOT_RIGHT
     //
+    // Each press walks that slot through Compact → Full → Off, matching the
+    // Overlays submenu. MID_CENTER has no compact form, so it cycles On → Off.
+    // Compact mode has no shortcut of its own — this cycle replaced it.
     // All require ctrl, no alt, no shift.
     constexpr UINT SC_OVERLAY_SLOT_1 = '1'; // Ctrl+1  →  TOP_LEFT
     constexpr UINT SC_OVERLAY_SLOT_2 = '2'; // Ctrl+2  →  TOP_CENTER
@@ -103,22 +106,6 @@ namespace Shortcuts {
     constexpr UINT SC_OVERLAY_SLOT_7 = '7'; // Ctrl+7  →  BOT_LEFT
     constexpr UINT SC_OVERLAY_SLOT_8 = '8'; // Ctrl+8  →  BOT_CENTER
     constexpr UINT SC_OVERLAY_SLOT_9 = '9'; // Ctrl+9  →  BOT_RIGHT
-
-    // ── Per-slot COMPACT-MODE toggles — Ctrl+Alt+1 .. Ctrl+Alt+9  ────────────
-    // Pressing Ctrl+Alt+N switches slot N between:
-    //   • 2-line  (full)    — number + label on separate lines  (default)
-    //   • 1-line  (compact) — number + label on one line
-    // The MID_CENTER slot ignores compact mode (it is always single-line).
-    // All require ctrl+alt, no shift.
-    constexpr UINT SC_OVERLAY_COMPACT_1 = '1'; // Ctrl+Alt+1  →  TOP_LEFT  compact toggle
-    constexpr UINT SC_OVERLAY_COMPACT_2 = '2'; // Ctrl+Alt+2  →  TOP_CENTER compact toggle
-    constexpr UINT SC_OVERLAY_COMPACT_3 = '3'; // Ctrl+Alt+3  →  TOP_RIGHT  compact toggle
-    constexpr UINT SC_OVERLAY_COMPACT_4 = '4'; // Ctrl+Alt+4  →  MID_LEFT   compact toggle
-    constexpr UINT SC_OVERLAY_COMPACT_5 = '5'; // Ctrl+Alt+5  →  (no-op — MID_CENTER is always single-line)
-    constexpr UINT SC_OVERLAY_COMPACT_6 = '6'; // Ctrl+Alt+6  →  MID_RIGHT  compact toggle
-    constexpr UINT SC_OVERLAY_COMPACT_7 = '7'; // Ctrl+Alt+7  →  BOT_LEFT   compact toggle
-    constexpr UINT SC_OVERLAY_COMPACT_8 = '8'; // Ctrl+Alt+8  →  BOT_CENTER compact toggle
-    constexpr UINT SC_OVERLAY_COMPACT_9 = '9'; // Ctrl+Alt+9  →  BOT_RIGHT  compact toggle
 
     // -------------------------------------------------------------------------
     // Navigation

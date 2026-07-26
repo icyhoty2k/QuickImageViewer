@@ -61,28 +61,19 @@ enum class Command {
     // Toggle overlay text background on/off  (P)
     ToggleOverlayBackground,
 
-    // Per-slot visibility toggles  (Ctrl+1 .. Ctrl+9)
+    // Per-slot state cycle  (Ctrl+1 .. Ctrl+9)
+    // Each press walks the slot through Compact → Full → Off, the same three
+    // states the Overlays submenu offers. Compact mode has no shortcut of its
+    // own — it is one position of this cycle.
     ToggleOverlaySlot1, // TOP_LEFT
     ToggleOverlaySlot2, // TOP_CENTER
     ToggleOverlaySlot3, // TOP_RIGHT
     ToggleOverlaySlot4, // MID_LEFT
-    ToggleOverlaySlot5, // MID_CENTER  (center-center message)
+    ToggleOverlaySlot5, // MID_CENTER  (center-center message — On / Off only)
     ToggleOverlaySlot6, // MID_RIGHT
     ToggleOverlaySlot7, // BOT_LEFT
     ToggleOverlaySlot8, // BOT_CENTER
     ToggleOverlaySlot9, // BOT_RIGHT
-
-    // Per-slot compact-mode toggle  (Ctrl+Alt+1 .. Ctrl+Alt+9)
-    // Switches between 1-line (compact) and 2-line (full) display for that slot
-    CompactOverlaySlot1,
-    CompactOverlaySlot2,
-    CompactOverlaySlot3,
-    CompactOverlaySlot4,
-    CompactOverlaySlot5,
-    CompactOverlaySlot6,
-    CompactOverlaySlot7,
-    CompactOverlaySlot8,
-    CompactOverlaySlot9,
 
     // --- App control ---
     HideToTray,

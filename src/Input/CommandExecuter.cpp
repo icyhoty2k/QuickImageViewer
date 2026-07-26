@@ -67,6 +67,15 @@ static void SnapWindowToZone(HWND hWnd, int zone) {
 // ClampViewportOffset now lives in AppState.h (next to GetRenderSize) so every
 // zoom/pan call site — keyboard, mouse wheel, zoom panel — shares one copy.
 
+// Ctrl+1..9 — advance one overlay slot through Compact → Full → Off and report
+// the new state centre-screen. The message text comes from OverlayManager so
+// the keyboard and the Overlays submenu word it identically.
+static void CycleOverlaySlot(HWND hWnd, OverlayManager::Slot slot) {
+    g_overlayManager.CycleSlotState(slot);
+    g_overlayManager.PostCenterMessage(hWnd, g_overlayManager.SlotStateMessage(slot));
+    InvalidateRect(hWnd, nullptr, FALSE);
+}
+
 // =============================================================================
 // handleKeyboard — public entry point called from WM_KEYDOWN
 // =============================================================================
@@ -203,6 +212,11 @@ void InputManager::ExecuteCommand(HWND hWnd, Command cmd) {
             app.viewMode = static_cast<Constants::ViewModes::ViewMode>(modeNum);
             Persistence::Registry::SaveSetting(Constants::Registry::VIEW_MODE,
                                                static_cast<DWORD>(modeNum));
+            // The view mode changed the legal pan range. Coming back from a
+            // panned Original Size to a fit mode the image now fits entirely,
+            // so maxOff is 0 and the carried-over offset must collapse to it —
+            // otherwise the picture stays parked off-centre.
+            ClampViewportOffset(hWnd);
             InvalidateRect(hWnd, nullptr, FALSE);
             g_overlayManager.PostCenterMessage(hWnd,
                 std::wstring(Constants::Messages::VIEW_MODE_PREFIX) +
@@ -369,8 +383,8 @@ void InputManager::ExecuteCommand(HWND hWnd, Command cmd) {
 
         // ── Cycle overlay layout mode (O) ────────────────────────────────────
         case Command::CycleOverlayLayout: {
-            int &mode = Constants::Overlay::OVERLAY_LAYOUT_MODE;
-            mode = (mode + 1) % 3;
+            int &mode = app.overlayLayoutMode;
+            mode = (mode + 1) % Constants::Overlay::LAYOUT_MODE_COUNT;
             g_overlayManager.OnLayoutModeChanged(hWnd);
             const wchar_t *labels[] = {Constants::Messages::LAYOUT_GRID, Constants::Messages::LAYOUT_STACKED, Constants::Messages::LAYOUT_SUMMARY};
             g_overlayManager.PostCenterMessage(hWnd, labels[mode]);
@@ -403,99 +417,20 @@ void InputManager::ExecuteCommand(HWND hWnd, Command cmd) {
             break;
         }
 
-        // ── Per-slot visibility toggles (Ctrl+1..9) ──────────────────────────
-        case Command::ToggleOverlaySlot1: {
-            bool now = !g_overlayManager.IsSlotVisible(OverlayManager::TOP_LEFT);
-            g_overlayManager.SetSlotVisible(OverlayManager::TOP_LEFT, now);
-            InvalidateRect(hWnd, nullptr, FALSE);
-            break;
-        }
-        case Command::ToggleOverlaySlot2: {
-            bool now = !g_overlayManager.IsSlotVisible(OverlayManager::TOP_CENTER);
-            g_overlayManager.SetSlotVisible(OverlayManager::TOP_CENTER, now);
-            InvalidateRect(hWnd, nullptr, FALSE);
-            break;
-        }
-        case Command::ToggleOverlaySlot3: {
-            bool now = !g_overlayManager.IsSlotVisible(OverlayManager::TOP_RIGHT);
-            g_overlayManager.SetSlotVisible(OverlayManager::TOP_RIGHT, now);
-            InvalidateRect(hWnd, nullptr, FALSE);
-            break;
-        }
-        case Command::ToggleOverlaySlot4: {
-            bool now = !g_overlayManager.IsSlotVisible(OverlayManager::MID_LEFT);
-            g_overlayManager.SetSlotVisible(OverlayManager::MID_LEFT, now);
-            InvalidateRect(hWnd, nullptr, FALSE);
-            break;
-        }
-        case Command::ToggleOverlaySlot5: {
-            // MID_CENTER — independent toggle; no center message for its own toggle
-            bool now = !g_overlayManager.IsSlotVisible(OverlayManager::MID_CENTER);
-            g_overlayManager.SetSlotVisible(OverlayManager::MID_CENTER, now);
-            InvalidateRect(hWnd, nullptr, FALSE);
-            break;
-        }
-        case Command::ToggleOverlaySlot6: {
-            bool now = !g_overlayManager.IsSlotVisible(OverlayManager::MID_RIGHT);
-            g_overlayManager.SetSlotVisible(OverlayManager::MID_RIGHT, now);
-            InvalidateRect(hWnd, nullptr, FALSE);
-            break;
-        }
-        case Command::ToggleOverlaySlot7: {
-            bool now = !g_overlayManager.IsSlotVisible(OverlayManager::BOT_LEFT);
-            g_overlayManager.SetSlotVisible(OverlayManager::BOT_LEFT, now);
-            InvalidateRect(hWnd, nullptr, FALSE);
-            break;
-        }
-        case Command::ToggleOverlaySlot8: {
-            bool now = !g_overlayManager.IsSlotVisible(OverlayManager::BOT_CENTER);
-            g_overlayManager.SetSlotVisible(OverlayManager::BOT_CENTER, now);
-            InvalidateRect(hWnd, nullptr, FALSE);
-            break;
-        }
-        case Command::ToggleOverlaySlot9: {
-            bool now = !g_overlayManager.IsSlotVisible(OverlayManager::BOT_RIGHT);
-            g_overlayManager.SetSlotVisible(OverlayManager::BOT_RIGHT, now);
-            InvalidateRect(hWnd, nullptr, FALSE);
-            break;
-        }
+        // ── Per-slot state cycle (Ctrl+1..9) ─────────────────────────────────
+        // One key per slot walks Compact → Full → Off, the same three states
+        // the Overlays submenu offers. There is deliberately no second shortcut
+        // for compact mode — this is it.
+        case Command::ToggleOverlaySlot1: CycleOverlaySlot(hWnd, OverlayManager::TOP_LEFT);   break;
+        case Command::ToggleOverlaySlot2: CycleOverlaySlot(hWnd, OverlayManager::TOP_CENTER); break;
+        case Command::ToggleOverlaySlot3: CycleOverlaySlot(hWnd, OverlayManager::TOP_RIGHT);  break;
+        case Command::ToggleOverlaySlot4: CycleOverlaySlot(hWnd, OverlayManager::MID_LEFT);   break;
+        case Command::ToggleOverlaySlot5: CycleOverlaySlot(hWnd, OverlayManager::MID_CENTER); break;
+        case Command::ToggleOverlaySlot6: CycleOverlaySlot(hWnd, OverlayManager::MID_RIGHT);  break;
+        case Command::ToggleOverlaySlot7: CycleOverlaySlot(hWnd, OverlayManager::BOT_LEFT);   break;
+        case Command::ToggleOverlaySlot8: CycleOverlaySlot(hWnd, OverlayManager::BOT_CENTER); break;
+        case Command::ToggleOverlaySlot9: CycleOverlaySlot(hWnd, OverlayManager::BOT_RIGHT);  break;
 
-        // ── Per-slot compact-mode toggles (Ctrl+Alt+1..9) ────────────────────
-        case Command::CompactOverlaySlot1:
-            g_overlayManager.ToggleCompactMode(OverlayManager::TOP_LEFT);
-            InvalidateRect(hWnd, nullptr, FALSE);
-            break;
-        case Command::CompactOverlaySlot2:
-            g_overlayManager.ToggleCompactMode(OverlayManager::TOP_CENTER);
-            InvalidateRect(hWnd, nullptr, FALSE);
-            break;
-        case Command::CompactOverlaySlot3:
-            g_overlayManager.ToggleCompactMode(OverlayManager::TOP_RIGHT);
-            InvalidateRect(hWnd, nullptr, FALSE);
-            break;
-        case Command::CompactOverlaySlot4:
-            g_overlayManager.ToggleCompactMode(OverlayManager::MID_LEFT);
-            InvalidateRect(hWnd, nullptr, FALSE);
-            break;
-        case Command::CompactOverlaySlot5:
-            // no-op: MID_CENTER is always single-line
-            break;
-        case Command::CompactOverlaySlot6:
-            g_overlayManager.ToggleCompactMode(OverlayManager::MID_RIGHT);
-            InvalidateRect(hWnd, nullptr, FALSE);
-            break;
-        case Command::CompactOverlaySlot7:
-            g_overlayManager.ToggleCompactMode(OverlayManager::BOT_LEFT);
-            InvalidateRect(hWnd, nullptr, FALSE);
-            break;
-        case Command::CompactOverlaySlot8:
-            g_overlayManager.ToggleCompactMode(OverlayManager::BOT_CENTER);
-            InvalidateRect(hWnd, nullptr, FALSE);
-            break;
-        case Command::CompactOverlaySlot9:
-            g_overlayManager.ToggleCompactMode(OverlayManager::BOT_RIGHT);
-            InvalidateRect(hWnd, nullptr, FALSE);
-            break;
         // -----------------------------------------------------------------------
         // App control
         // -----------------------------------------------------------------------
