@@ -20,7 +20,37 @@ else ()
 endif ()
 # ---------------------------------------------
 
+# --- Auto-incrementing build number ----------------------------------------
+# Bumped on EVERY build (pressing Build in the IDE), not on CMake reconfigure.
+#
+# The counter lives in the source tree and IS committed, so the number keeps
+# meaning across clones and machines. The generated header lives in the build
+# tree and is never committed. Only resource.rc and src/Common/Version.cpp
+# include that header — see src/Common/Version.h for why that matters.
+set(QIV_BUILD_COUNTER "${CMAKE_CURRENT_SOURCE_DIR}/BuildNumber.txt")
+set(QIV_GENERATED_DIR "${CMAKE_CURRENT_BINARY_DIR}/generated")
+set(QIV_BUILD_HEADER "${QIV_GENERATED_DIR}/BuildNumber.h")
+file(MAKE_DIRECTORY "${QIV_GENERATED_DIR}")
+
+# Seed it at configure time so the very first build has a header to include.
+if (NOT EXISTS "${QIV_BUILD_HEADER}")
+    file(WRITE "${QIV_BUILD_HEADER}" "#pragma once\n#define VER_BUILD 0\n")
+endif ()
+
+# ALL + no OUTPUT means this target is always considered out of date, which is
+# exactly what "increment on every build" requires.
+add_custom_target(QIV_IncreaseBuildNumber ALL
+        COMMAND ${CMAKE_COMMAND}
+        -DCOUNTER_FILE=${QIV_BUILD_COUNTER}
+        -DOUTPUT_HEADER=${QIV_BUILD_HEADER}
+        -P ${CMAKE_CURRENT_SOURCE_DIR}/IncreaseQIVBuildNumberOnBuild.cmake
+        BYPRODUCTS ${QIV_BUILD_HEADER}
+        COMMENT "Incrementing build number"
+        VERBATIM)
+# ---------------------------------------------------------------------------
+
 set(SOURCES
+        src/Common/Version.cpp
         resources/resource.rc
         src/AppMain.cpp
         src/DropTarget.cpp
@@ -80,6 +110,10 @@ endif ()
 # WIN32 implicitly handles /SUBSYSTEM:WINDOWS
 add_executable(QuickImageViewer WIN32 ${SOURCES})
 
+# Guarantees the counter is bumped and the header rewritten BEFORE anything that
+# includes it is compiled.
+add_dependencies(QuickImageViewer QIV_IncreaseBuildNumber)
+
 # --- Enable Link Time Optimization (LTCG) the CMake Way ---
 include(CheckIPOSupported)
 check_ipo_supported(RESULT ipo_supported)
@@ -137,6 +171,7 @@ target_link_options(QuickImageViewer PRIVATE
 set(STATIC_LIBS_DIR "${CMAKE_CURRENT_SOURCE_DIR}/libs/lib/static")
 
 target_include_directories(QuickImageViewer PRIVATE
+        ${QIV_GENERATED_DIR} # BuildNumber.h — regenerated every build
         ${CMAKE_CURRENT_SOURCE_DIR}/src
         ${CMAKE_CURRENT_SOURCE_DIR}/src/Common
         ${CMAKE_CURRENT_SOURCE_DIR}/src/Dedicated
@@ -177,7 +212,11 @@ add_custom_command(
         POST_BUILD
         COMMAND ${CMAKE_COMMAND} -E echo "--------------------------------------------------------"
         COMMAND ${CMAKE_COMMAND} -E echo "SUCCESS: Build complete."
-        COMMAND powershell -Command "$file = Get-Item '$<TARGET_FILE:QuickImageViewer>'; Write-Host ('Size: {0:N2} KB' -f ($file.Length / 1KB))"
+        # Size and version in ONE powershell call — spawning a second process just
+        # to print a line costs more than everything else in this block. The
+        # version is read back out of the linked exe's own resource, so it is the
+        # value that actually shipped, build number included.
+        COMMAND powershell -Command "$file = Get-Item '$<TARGET_FILE:QuickImageViewer>'; Write-Host ('Size: {0:N2} KB' -f ($file.Length / 1KB)); Write-Host ('Version: {0}' -f $file.VersionInfo.FileVersion)"
         COMMAND ${CMAKE_COMMAND} -E echo "Directory: $<TARGET_FILE_DIR:QuickImageViewer>"
         COMMAND ${CMAKE_COMMAND} -E echo "--------------------------------------------------------"
         VERBATIM
