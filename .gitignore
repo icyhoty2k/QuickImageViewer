@@ -21,3 +21,7 @@ build/
 *~
 *.orig
 *.bak
+
+# Marker dropped by the CLion Run configuration to suppress the build-number
+# increment for that build. Transient, machine-local.
+.qiv_skip_build_number

@@ -28,6 +28,9 @@ endif ()
 # tree and is never committed. Only resource.rc and src/Common/Version.cpp
 # include that header — see src/Common/Version.h for why that matters.
 set(QIV_BUILD_COUNTER "${CMAKE_CURRENT_SOURCE_DIR}/BuildNumber.txt")
+# Dropped by the Run configuration's "Before launch" step so that launching the
+# app does not consume a build number — see the notes in the script.
+set(QIV_SKIP_MARKER "${CMAKE_CURRENT_SOURCE_DIR}/.qiv_skip_build_number")
 set(QIV_GENERATED_DIR "${CMAKE_CURRENT_BINARY_DIR}/generated")
 set(QIV_BUILD_HEADER "${QIV_GENERATED_DIR}/BuildNumber.h")
 file(MAKE_DIRECTORY "${QIV_GENERATED_DIR}")
@@ -43,6 +46,7 @@ add_custom_target(QIV_IncreaseBuildNumber ALL
         COMMAND ${CMAKE_COMMAND}
         -DCOUNTER_FILE=${QIV_BUILD_COUNTER}
         -DOUTPUT_HEADER=${QIV_BUILD_HEADER}
+        -DSKIP_MARKER=${QIV_SKIP_MARKER}
         -P ${CMAKE_CURRENT_SOURCE_DIR}/IncreaseQIVBuildNumberOnBuild.cmake
         BYPRODUCTS ${QIV_BUILD_HEADER}
         COMMENT "Incrementing build number"
