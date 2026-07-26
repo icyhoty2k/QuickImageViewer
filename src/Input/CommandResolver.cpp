@@ -245,30 +245,30 @@ Command InputManager::ResolveKeyboardKeys(UINT key, LPARAM lParam) {
         case Shortcuts::SC_APP_RESET_DEFAULTS: // VK_DELETE  shift=reset-all  ctrl=desaturate  plain=prev favorite
             if (shift && !ctrl && !alt) return Command::ResetAll;
             if (ctrl && !alt && !shift) return Command::ToggleGrayscale;
-            if (!ctrl && !alt && !shift) return Command::PrevFavoriteFolder;
-            break;
-
-        case Shortcuts::ImageEffects::SC_COLOR_INVERT: // VK_INSERT  ctrl=invert  plain=next favorite
-            if (ctrl && !alt && !shift) return Command::ToggleInvert;
             if (!ctrl && !alt && !shift) return Command::NextFavoriteFolder;
             break;
 
-        case Shortcuts::SC_NAV_FIRST_IMAGE: // VK_HOME  ctrl=sepia  plain=first image
+        case Shortcuts::ImageEffects::SC_COLOR_INVERT_OR_NAVIGATE_FAVS_PREV: // VK_INSERT  ctrl=invert  plain=next favorite
+            if (ctrl && !alt && !shift) return Command::ToggleInvert;
+            if (!ctrl && !alt && !shift) return Command::PrevFavoriteFolder;
+            break;
+
+        case Shortcuts::ImageEffects::SC_COLOR_SEPIA_OR_SC_NAV_FIRST_IMAGE: // VK_HOME  ctrl=sepia  plain=first image
             if (ctrl && !alt && !shift) return Command::ToggleSepia;
             if (!ctrl && !alt && !shift) return Command::GoToFirstImage;
             break;
 
-        case Shortcuts::SC_NAV_LAST_IMAGE: // VK_END  ctrl=solarize  plain=last image
+        case Shortcuts::ImageEffects::SC_COLOR_SOLARIZE_OR_SC_NAV_LAST_IMAGE: // VK_END  ctrl=solarize  plain=last image
             if (ctrl && !alt && !shift) return Command::ToggleSolarize;
             if (!ctrl && !alt && !shift) return Command::GoToLastImage;
             break;
 
-        case Shortcuts::ImageEffects::SC_COLOR_OUTLINE: // VK_PRIOR  ctrl=outline  plain=prev history folder
+        case Shortcuts::ImageEffects::SC_COLOR_OUTLINE_OR_NAV_PREV_HISTORY_FOLDER: // VK_PRIOR  ctrl=outline  plain=prev history folder
             if (ctrl && !alt && !shift) return Command::ToggleOutline;
             if (!ctrl && !alt && !shift) return Command::PrevHistoryFolder;
             break;
 
-        case Shortcuts::ImageEffects::SC_COLOR_THRESHOLD: // VK_NEXT  ctrl=threshold  plain=next history folder
+        case Shortcuts::ImageEffects::SC_COLOR_THRESHOLD_OR_NAV_NEXT_HISTORY_FOLDER: // VK_NEXT  ctrl=threshold  plain=next history folder
             if (ctrl && !alt && !shift) return Command::ToggleThreshold;
             if (!ctrl && !alt && !shift) return Command::NextHistoryFolder;
             break;
