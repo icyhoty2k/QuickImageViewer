@@ -4,6 +4,8 @@
 #include <filesystem>
 #include <fstream>
 #include <vector>
+#include <cwctype>
+#include <cstring>
 #include "../AppState.h"
 #include "RegistryManager.h"
 #include "../Platform/WriteQueue.h"
@@ -35,6 +37,95 @@ static bool HistoryDisabled() {
 static std::wstring PrefixedFileName(const std::wstring &baseName) {
     return baseName;
 }
+
+// ---------------------------------------------------------------------------
+// PATH HYGIENE  —  see the header for why this exists
+// ---------------------------------------------------------------------------
+namespace HistoryPath {
+
+    // Longest path Win32 accepts with the \\?\ prefix. Anything past this is a
+    // corrupt line, not a path — two concatenated entries, say.
+    static constexpr size_t MAX_PATH_CHARS = 32767;
+
+    bool Normalize(const std::wstring &raw, std::wstring &out) {
+        std::wstring s = raw;
+
+        // --- trim whitespace (covers \r, \n, tabs, the trailing spaces a hand
+        //     edit leaves behind) ---
+        auto trim = [](std::wstring &t) {
+            size_t b = 0, e = t.size();
+            while (b < e && iswspace(t[b])) ++b;
+            while (e > b && iswspace(t[e - 1])) --e;
+            t = t.substr(b, e - b);
+        };
+        trim(s);
+
+        // --- unwrap one pair of quotes: Explorer's "Copy as path" produces them
+        if (s.size() >= 2 && s.front() == L'"' && s.back() == L'"') {
+            s = s.substr(1, s.size() - 2);
+            trim(s);
+        }
+        if (s.empty() || s.size() > MAX_PATH_CHARS) return false;
+
+        // --- reject characters that cannot appear in a Win32 path ---
+        // ':' is allowed only as the drive separator at index 1, checked below.
+        for (size_t i = 0; i < s.size(); ++i) {
+            const wchar_t c = s[i];
+            if (c < 0x20) return false; // control character
+            if (c == L'<' || c == L'>' || c == L'"' || c == L'|' ||
+                c == L'?' || c == L'*')
+                return false;
+            if (c == L':' && i != 1) return false;
+        }
+
+        // --- separators: '/' -> '\', then collapse runs ---
+        for (auto &c: s)
+            if (c == L'/') c = L'\\';
+
+        const bool isUnc = (s.size() >= 2 && s[0] == L'\\' && s[1] == L'\\');
+        std::wstring collapsed;
+        collapsed.reserve(s.size());
+        for (size_t i = 0; i < s.size(); ++i) {
+            if (s[i] == L'\\' && !collapsed.empty() && collapsed.back() == L'\\')
+                continue; // skip the repeat
+            collapsed += s[i];
+        }
+        if (isUnc) collapsed.insert(collapsed.begin(), L'\\'); // restore the UNC pair
+        s.swap(collapsed);
+
+        // --- must be absolute: "X:\..." or "\\server\share" ---
+        const bool isDrive = (s.size() >= 3 && iswalpha(s[0]) && s[1] == L':' && s[2] == L'\\');
+        if (!isDrive && !isUnc) return false;
+        if (isUnc && s.size() <= 2) return false; // bare "\\"
+
+        // --- drop a trailing separator, but keep the drive root "D:\" ---
+        while (s.size() > 3 && s.back() == L'\\')
+            s.pop_back();
+        if (isUnc && s.size() > 2 && s.back() == L'\\')
+            s.pop_back();
+
+        // A drive root alone ("D:\") is a legitimate folder; a bare "D:" is not.
+        if (s.size() < 3) return false;
+
+        out.swap(s);
+        return true;
+    }
+
+    bool Equal(const std::wstring &a, const std::wstring &b) {
+        return a.size() == b.size() && _wcsicmp(a.c_str(), b.c_str()) == 0;
+    }
+
+    size_t HashCI::operator()(const std::wstring &s) const {
+        // FNV-1a over the lowercased characters — must agree with Equal().
+        size_t h = 1469598103934665603ULL;
+        for (wchar_t c: s) {
+            h ^= static_cast<size_t>(towlower(c));
+            h *= 1099511628211ULL;
+        }
+        return h;
+    }
+
+} // namespace HistoryPath
 
 // ---------------------------------------------------------------------------
 // Backup helpers  (file-scope, not exposed in the header)
@@ -144,15 +235,19 @@ void HistoryFoldersManager::LoadHistoryFromDisk() {
     folderHistory.clear();
     favorites.clear();
 
+    // Both files are hand-editable, so every line is untrusted: it is normalized
+    // and validated before it is allowed into RAM, and duplicates are collapsed
+    // case-insensitively. A line that cannot be a folder path is dropped.
+
     // --- Load favorites first (small file, O(1) lookup during history load) ---
     {
         std::wifstream fav(GetFavoritesFilePath());
         if (fav.is_open()) {
-            std::wstring line;
+            std::wstring line, path;
             while (std::getline(fav, line)) {
-                if (!line.empty() && line.back() == L'\r') line.pop_back();
-                if (line.empty()) continue;
-                favorites.insert(line); // no cap — all favorites must always be loadable
+                if (!HistoryPath::Normalize(line, path)) continue;
+                // FolderPathSet dedupes case-insensitively on insert.
+                favorites.insert(path); // no cap — all favorites must always be loadable
             }
         }
     }
@@ -163,36 +258,42 @@ void HistoryFoldersManager::LoadHistoryFromDisk() {
         if (!file.is_open())
             return;
 
+        FolderPathSet seen; // case-insensitive duplicate guard
         std::wstring line;
         while (std::getline(file, line)) {
-            if (!line.empty() && line.back() == L'\r') line.pop_back();
-            if (line.empty()) continue;
-
-            // Legacy: old-format '*' prefix — migrate to favorites set
-            if (line.front() == static_cast<wchar_t>(Constants::History::HISTORY_FAVORITES_MARK)) {
-                line = line.substr(1);
-                if (!line.empty() &&
-                    static_cast<int>(favorites.size()) < app.historyMaxFavs)
-                    favorites.insert(line);
-            }
-
-            if (line.empty()) continue;
-
-            // Skip duplicates (hand-edited files)
-            bool alreadyKnown = false;
-            for (const auto &entry: folderHistory) {
-                if (entry == line) {
-                    alreadyKnown = true;
-                    break;
+            // Legacy: old-format '*' prefix — migrate to favorites set.
+            // Checked before normalization, which would reject the '*'.
+            bool legacyFavorite = false;
+            {
+                size_t b = 0;
+                while (b < line.size() && iswspace(line[b])) ++b;
+                if (b < line.size() &&
+                    line[b] == static_cast<wchar_t>(Constants::History::HISTORY_FAVORITES_MARK)) {
+                    line = line.substr(b + 1);
+                    legacyFavorite = true;
                 }
             }
-            if (alreadyKnown) continue;
 
-            if (static_cast<int>(folderHistory.size()) >= app.historyMaxDirsSave)
-                break;
+            std::wstring path;
+            if (!HistoryPath::Normalize(line, path)) continue; // garbage line — drop it
 
-            folderHistory.push_back(line);
+            if (legacyFavorite && static_cast<int>(favorites.size()) < app.historyMaxFavs)
+                favorites.insert(path);
+
+            if (!seen.insert(path).second) continue; // already have this folder
+
+            folderHistory.push_back(path);
         }
+    }
+
+    // Apply the save cap AFTER reading everything. The file is oldest-first, so
+    // the entries to keep are the ones at the END — truncating during the read
+    // (as this used to) kept the oldest N and threw away the most recent, which
+    // is precisely backwards for an MRU list.
+    if (app.historyMaxDirsSave > 0 &&
+        folderHistory.size() > static_cast<size_t>(app.historyMaxDirsSave)) {
+        folderHistory.erase(folderHistory.begin(),
+                            folderHistory.end() - app.historyMaxDirsSave);
     }
 
     // File is oldest-first; reverse so index 0 = most recently visited
@@ -215,20 +316,24 @@ void HistoryFoldersManager::MergeHistoryFromDisk() {
     if (HistoryDisabled()) return; // dedicated instance: no history, no favorites
     // ---- HISTORY --------------------------------------------------------
     std::vector<std::wstring> diskList;
-    std::unordered_set<std::wstring> diskSet;
+    FolderPathSet diskSet;
     {
         std::wifstream file(GetFilePath());
         if (file.is_open()) {
             std::wstring line;
             while (std::getline(file, line)) {
-                if (!line.empty() && line.back() == L'\r') line.pop_back();
-                if (line.empty()) continue;
-                // Legacy '*' prefix — treat path as history entry
-                if (line.front() == static_cast<wchar_t>(Constants::History::HISTORY_FAVORITES_MARK))
-                    line = line.substr(1);
-                if (line.empty() || diskSet.count(line)) continue;
-                diskList.push_back(line);
-                diskSet.insert(line);
+                // Legacy '*' prefix — treat path as history entry. Stripped
+                // before normalization, which would otherwise reject the mark.
+                size_t b = 0;
+                while (b < line.size() && iswspace(line[b])) ++b;
+                if (b < line.size() &&
+                    line[b] == static_cast<wchar_t>(Constants::History::HISTORY_FAVORITES_MARK))
+                    line = line.substr(b + 1);
+
+                std::wstring path;
+                if (!HistoryPath::Normalize(line, path)) continue; // hand-edited garbage
+                if (!diskSet.insert(path).second) continue;        // case-insensitive dupe
+                diskList.push_back(path);
             }
         }
         // Missing file → diskList empty; memory entries will recreate it via appends below.
@@ -245,7 +350,7 @@ void HistoryFoldersManager::MergeHistoryFromDisk() {
 
     // Disk → memory: entries on disk that are not in RAM
     {
-        std::unordered_set<std::wstring> memSet;
+        FolderPathSet memSet;
         memSet.reserve(folderHistory.size() + diskList.size());
         memSet.insert(folderHistory.begin(), folderHistory.end());
         for (const auto &path : diskList) {
@@ -258,15 +363,14 @@ void HistoryFoldersManager::MergeHistoryFromDisk() {
     }
 
     // ---- FAVORITES ------------------------------------------------------
-    std::unordered_set<std::wstring> diskFavSet;
+    FolderPathSet diskFavSet;
     {
         std::wifstream fav(GetFavoritesFilePath());
         if (fav.is_open()) {
-            std::wstring line;
+            std::wstring line, path;
             while (std::getline(fav, line)) {
-                if (!line.empty() && line.back() == L'\r') line.pop_back();
-                if (!line.empty())
-                    diskFavSet.insert(line);
+                if (HistoryPath::Normalize(line, path))
+                    diskFavSet.insert(path);
             }
         }
         // Missing file → diskFavSet empty; memory favorites will be rewritten below if any.
@@ -295,10 +399,33 @@ void HistoryFoldersManager::MergeHistoryFromDisk() {
 void HistoryFoldersManager::AppendNewFolderToDisk(const std::wstring &folderPath) const {
     if (HistoryDisabled()) return; // dedicated instance: no history, no favorites
     std::wstring path = GetFilePath();
-    std::wstring entry = folderPath;
+    std::wstring entry;
+    if (!HistoryPath::Normalize(folderPath, entry)) return; // never write junk
     g_writeQueue.PushTask([path = std::move(path), entry = std::move(entry)]() {
+        // The file may not end with a newline: a previous write can be cut short
+        // by the process exiting, and a person editing the file in Notepad often
+        // leaves the last line unterminated. Appending blindly then glues the new
+        // path onto the old one and destroys BOTH entries — e.g.
+        //   D:\Wallpapers\[Set 9]E:\Wallpapers\[Set 9]
+        // So: look at the last byte first and terminate the line if needed.
+        bool needsNewline = false;
+        {
+            std::ifstream probe(path, std::ios::in | std::ios::binary | std::ios::ate);
+            if (probe.is_open()) {
+                const std::streamoff size = probe.tellg();
+                if (size > 0) {
+                    probe.seekg(-1, std::ios::end);
+                    char last = 0;
+                    probe.read(&last, 1);
+                    needsNewline = (last != '\n');
+                }
+            }
+        }
+
         std::wofstream f(path, std::ios::out | std::ios::app);
-        if (f.is_open()) f << entry << L"\n";
+        if (!f.is_open()) return;
+        if (needsNewline) f << L"\n";
+        f << entry << L"\n";
     });
 }
 

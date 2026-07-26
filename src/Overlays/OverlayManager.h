@@ -102,10 +102,17 @@ class OverlayManager {
         // Clears the slot when selected == 0 (text made empty → not rendered).
         void UpdatePanelSelectionOverlay(int8_t position, int selected, int total);
 
+        // Colour of a centre-centre message. Normal uses the configured
+        // MSG_CENTER_COLOR_*; the other two pull from Constants::Theme::Markers
+        // so a problem reported here looks like the same problem reported in the
+        // History panel's rows.
+        enum class MsgSeverity { Normal, Warning, Error };
+
         // MID_CENTER — post a transient message; auto-hides after MSG_CENTER_DISPLAY_MS.
         // Pass hWnd so the timer can be set/reset on the main window.
         // Center-center must be enabled (slot visible) for the message to appear.
-        void PostCenterMessage(HWND hWnd, const std::wstring &msg);
+        void PostCenterMessage(HWND hWnd, const std::wstring &msg,
+                               MsgSeverity severity = MsgSeverity::Normal);
 
         // Called from WM_TIMER in AppMain — hides MID_CENTER after timeout.
         void OnCenterMessageTimer(HWND hWnd);
@@ -181,6 +188,7 @@ class OverlayManager {
         // Center-message timer state
         static constexpr UINT_PTR TIMER_CENTER_MSG = 1002;
         bool m_centerMsgActive = false; // true while the auto-hide timer is running
+        MsgSeverity m_centerMsgSeverity = MsgSeverity::Normal; // colour of the live message
 
         // ── Helpers ──────────────────────────────────────────────────────────
         void BuildSlotFormats();

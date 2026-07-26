@@ -726,16 +726,16 @@ void InputManager::ExecuteCommand(HWND hWnd, Command cmd) {
         // PageUp / PageDown walk the non-favorite rows of the History panel;
         // Insert / Delete walk the starred rows. Neither reorders the list.
         case Command::PrevHistoryFolder:
-            (void) UI::WalkHistoryFolder(hWnd, -1, false);
+            (void) UI::WalkHistoryFolder(hWnd, UI::WalkScope::NonFavoritesOnly, true);
             break;
         case Command::NextHistoryFolder:
-            (void) UI::WalkHistoryFolder(hWnd, +1, false);
+            (void) UI::WalkHistoryFolder(hWnd, UI::WalkScope::NonFavoritesOnly, false);
             break;
         case Command::NextFavoriteFolder:
-            (void) UI::WalkHistoryFolder(hWnd, +1, true);
+            (void) UI::WalkHistoryFolder(hWnd, UI::WalkScope::FavoritesOnly, false);
             break;
         case Command::PrevFavoriteFolder:
-            (void) UI::WalkHistoryFolder(hWnd, -1, true);
+            (void) UI::WalkHistoryFolder(hWnd, UI::WalkScope::FavoritesOnly, true);
             break;
 
         // Home / End — unconditional jump to either end of the playlist. Unlike

@@ -282,6 +282,10 @@ namespace Shortcuts {
     // HISTORY WINDOW
     // -------------------------------------------------------------------------
     constexpr UINT HISTORY_FAVORITES_TOGGLE_KEY = VK_SPACE;
+    // Ctrl+Delete — delete the hovered row. Moved off plain Delete so the
+    // navigation cluster (Home/End/PageUp/PageDown/Insert/Delete) passes
+    // straight through the panel to the main app.
+    constexpr UINT HISTORY_DELETE_HOVERED_ROW = VK_DELETE; // requires ctrl
     constexpr UINT HISTORY_CLEAR_ALL_HISTORY_BUT_NOT_FAVORITES = VK_DELETE; //ctrl+shilf+delete only when historyWnd is open
     constexpr UINT HISTORY_CLEAR_ALL_FAVORITES_BUT_NOT_HISTORY = VK_DELETE; //ctrl+alt+shift+delete only when historyWnd is open
     // Shift+Enter — spawn a DirWnd for the selected history folder (up to DIR_WND_MAX_INSTANCES)
