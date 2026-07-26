@@ -10,11 +10,11 @@ Built on Direct2D, WIC, and native Win32 APIs. Single EXE, no installer(portable
 
 | | |
 |:---:|:---:|
-| ![Main interface with thumbnail strips and info overlays](docs/screenshots/2026-0-15_045800.png)<br>**Main interface** — thumbnail strips and info overlays | ![Built-in help window — full shortcut reference](docs/screenshots/2026-0-15_045053.png)<br>**Help window** (F1) — full shortcut reference |
-| ![Folder History panel with favorites](docs/screenshots/2026-0-15_045155.png)<br>**Folder History** panel with favorites | ![EXIF / Image Info panel with offline GPS geocoding](docs/screenshots/2026-0-15_045342.png)<br>**EXIF / Image Info** panel — offline GPS geocoding |
-| ![Dual thumbnail strips — VRAM cache and current directory](docs/screenshots/2026-0-15_045130.png)<br>**Dual thumbnail strips** — VRAM cache (top) and current directory (bottom) | ![Four floating directory strips around the viewer](docs/screenshots/2026-0-15_045219.png)<br>**Four floating directory strips** around the viewer + History panel |
-| ![Browsing a 4K wallpaper folder with the directory strip](docs/screenshots/2026-0-15_045311.png)<br>**Directory strip** — browsing a 4K wallpaper folder | ![Statistics panel — codec, cache and playlist info](docs/screenshots/2026-0-15_045440.png)<br>**Statistics panel** — codec, cache and playlist info |
-| ![Jump-to-image dialog](docs/screenshots/2026-0-15_045359.png)<br>**Jump-to** dialog — go straight to any image number | ![Find dialog — filename search with wildcards](docs/screenshots/2026-0-15_045413.png)<br>**Find** dialog — filename search with `*` and `?` wildcards |
+| ![Main interface with thumbnail strips and info overlays](docs/screenshots/2026-07-15_045800.png)<br>**Main interface** — thumbnail strips and info overlays | ![Built-in help window — full shortcut reference](docs/screenshots/2026-07-15_045053.png)<br>**Help window** (F1) — full shortcut reference |
+| ![Folder History panel with favorites](docs/screenshots/2026-07-15_045155.png)<br>**Folder History** panel with favorites | ![EXIF / Image Info panel with offline GPS geocoding](docs/screenshots/2026-07-15_045342.png)<br>**EXIF / Image Info** panel — offline GPS geocoding |
+| ![Dual thumbnail strips — VRAM cache and current directory](docs/screenshots/2026-07-15_045130.png)<br>**Dual thumbnail strips** — VRAM cache (top) and current directory (bottom) | ![Four floating directory strips around the viewer](docs/screenshots/2026-07-15_045219.png)<br>**Four floating directory strips** around the viewer + History panel |
+| ![Browsing a 4K wallpaper folder with the directory strip](docs/screenshots/2026-07-15_045311.png)<br>**Directory strip** — browsing a 4K wallpaper folder | ![Statistics panel — codec, cache and playlist info](docs/screenshots/2026-07-15_045440.png)<br>**Statistics panel** — codec, cache and playlist info |
+| ![Jump-to-image dialog](docs/screenshots/2026-07-15_045359.png)<br>**Jump-to** dialog — go straight to any image number | ![Find dialog — filename search with wildcards](docs/screenshots/2026-07-15_045413.png)<br>**Find** dialog — filename search with `*` and `?` wildcards |
 ---
 
 ## Download
