@@ -200,7 +200,7 @@ namespace UI {
         Add(L"Mouse Wheel",
             L"Previous / next image when scrolled over the main window. Direction can be "
             L"reversed with MOUSE_VERTICAL_REVERSE_SCROLL_DIRECTION in Constants.h.", sNav);
-        Add(K(SC::SC_NAV_FIRST_IMAGE) + L"  /  " + K(SC::SC_NAV_LAST_IMAGE),
+        Add(K(FX::SC_COLOR_SEPIA_OR_SC_NAV_FIRST_IMAGE) + L"  /  " + K(FX::SC_COLOR_SOLARIZE_OR_SC_NAV_LAST_IMAGE),
             L"Jump to the first / last image of the folder.", sNav);
         Add(K(SC::SC_NAV_TOGGLE_FIRST_LAST_IMAGE_IN_CURR_FOLDER),
             L"Smart jump between the first and the last image of the folder — goes to "
@@ -212,11 +212,11 @@ namespace UI {
             L"image-level Back button.", sNav);
         Add(K(SC::SC_TOGGLE_LAST_DIR),
             L"Toggle between the current folder and the previously opened folder.", sNav);
-        Add(K(SC::SC_NAV_PREV_HISTORY_FOLDER) + L"  /  " + K(SC::SC_NAV_NEXT_HISTORY_FOLDER),
+        Add(K(FX::SC_COLOR_OUTLINE_OR_NAV_PREV_HISTORY_FOLDER) + L"  /  " + K(FX::SC_COLOR_THRESHOLD_OR_NAV_NEXT_HISTORY_FOLDER),
             L"Walk the History panel's list one folder up / down, visiting only the "
             L"non-favorite entries. The list order is never changed — the centre overlay "
             L"reports the same row number the panel shows.", sNav);
-        Add(K(SC::SC_NAV_PREV_FAVORITE_FOLDER) + L"  /  " + K(SC::SC_NAV_NEXT_FAVORITE_FOLDER),
+        Add(K(FX::SC_COLOR_INVERT_OR_NAVIGATE_FAVS_PREV) + L"  /  " + K(FX::SC_COLOR_GRAYSCALE_OR_NAVIGATE_FAVS_NEXT),
             L"Same walk restricted to the favorites, so the two pairs of keys never "
             L"land on each other's entries.", sNav);
         Add(K(SC::SC_NAV_JUMP_TO_IMAGE) + L"  /  " + Ctrl(SC::SC_NAV_JUMP_TO_IMAGE_ALT),
@@ -478,16 +478,16 @@ namespace UI {
             L"Rotate 90° clockwise / counter-clockwise.", sFx);
         Add(K(SC::SC_TRANSFORM_FLIP_H) + L" / " + K(SC::SC_TRANSFORM_FLIP_V),
             L"Flip horizontally / vertically.", sFx);
-        Add(Ctrl(FX::SC_COLOR_GRAYSCALE),
+        Add(Ctrl(FX::SC_COLOR_GRAYSCALE_OR_NAVIGATE_FAVS_NEXT),
             L"Toggle desaturate — drops all colour. Switch Sepia on afterwards to tint "
             L"the result.", sFx);
-        Add(Ctrl(FX::SC_COLOR_INVERT), L"Toggle color inversion (negative).", sFx);
-        Add(Ctrl(FX::SC_COLOR_SEPIA), L"Toggle sepia tone.", sFx);
-        Add(Ctrl(FX::SC_COLOR_SOLARIZE),
+        Add(Ctrl(FX::SC_COLOR_INVERT_OR_NAVIGATE_FAVS_PREV), L"Toggle color inversion (negative).", sFx);
+        Add(Ctrl(FX::SC_COLOR_SEPIA_OR_SC_NAV_FIRST_IMAGE), L"Toggle sepia tone.", sFx);
+        Add(Ctrl(FX::SC_COLOR_SOLARIZE_OR_SC_NAV_LAST_IMAGE),
             L"Toggle solarize — inverts only tones above " +
             NumF(Constants::SOLARIZE_THRESHOLD * 100.0f) + L"% brightness.", sFx);
-        Add(Ctrl(FX::SC_COLOR_OUTLINE), L"Toggle outline — GPU edge detection.", sFx);
-        Add(Ctrl(FX::SC_COLOR_THRESHOLD),
+        Add(Ctrl(FX::SC_COLOR_OUTLINE_OR_NAV_PREV_HISTORY_FOLDER), L"Toggle outline — GPU edge detection.", sFx);
+        Add(Ctrl(FX::SC_COLOR_THRESHOLD_OR_NAV_NEXT_HISTORY_FOLDER),
             L"Toggle black & white threshold — pixels brighter than " +
             NumF(Constants::BW_THRESHOLD_LEVEL * 100.0f) + L"% become white, the "
             L"rest black.", sFx);

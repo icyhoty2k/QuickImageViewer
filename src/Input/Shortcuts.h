@@ -138,20 +138,6 @@ namespace Shortcuts {
     // toggle first / last image in folder , Shift+Backspace go to last image which is not first or last
     constexpr UINT SC_NAV_TOGGLE_FIRST_LAST_IMAGE_IN_CURR_FOLDER = VK_BACK;
 
-    // ── Navigation cluster (plain — no modifier) ─────────────────────────────
-    // These keys used to toggle colour effects. The effects moved to Ctrl+<same
-    // key> (see ImageEffects below), leaving the plain presses for navigation.
-    constexpr UINT SC_NAV_FIRST_IMAGE = VK_HOME; // Home — jump to first image in folder
-    constexpr UINT SC_NAV_LAST_IMAGE = VK_END; // End  — jump to last image in folder
-
-    // Walk the History panel's list in its existing order — never reorders it.
-    // The two pairs cover disjoint halves of that list, so the history keys
-    // never land on a favorite and vice versa.
-    constexpr UINT SC_NAV_PREV_HISTORY_FOLDER = VK_PRIOR; // PageUp   — previous non-favorite
-    constexpr UINT SC_NAV_NEXT_HISTORY_FOLDER = VK_NEXT; // PageDown — next non-favorite
-    constexpr UINT SC_NAV_NEXT_FAVORITE_FOLDER = VK_INSERT; // Insert   — next favorite
-    constexpr UINT SC_NAV_PREV_FAVORITE_FOLDER = VK_DELETE; // Delete   — previous favorite
-
     // -------------------------------------------------------------------------
     // Zoom
     // -------------------------------------------------------------------------
@@ -203,12 +189,12 @@ namespace Shortcuts {
         // They moved off the plain navigation-cluster keys so Home/End/PageUp/
         // PageDown/Insert/Delete are free for image and folder navigation.
         // The plain-key meanings live in the Navigation section above.
-        constexpr UINT SC_COLOR_GRAYSCALE = VK_DELETE; // Ctrl+Delete
-        constexpr UINT SC_COLOR_INVERT = VK_INSERT; // Ctrl+Insert
-        constexpr UINT SC_COLOR_SEPIA = VK_HOME; // Ctrl+Home
-        constexpr UINT SC_COLOR_SOLARIZE = VK_END; // Ctrl+End
-        constexpr UINT SC_COLOR_OUTLINE = VK_PRIOR; // Ctrl+PageUp
-        constexpr UINT SC_COLOR_THRESHOLD = VK_NEXT; // Ctrl+PageDown
+        constexpr UINT SC_COLOR_GRAYSCALE_OR_NAVIGATE_FAVS_NEXT = VK_DELETE; // Ctrl+Delete // Delete   — next favorite
+        constexpr UINT SC_COLOR_INVERT_OR_NAVIGATE_FAVS_PREV = VK_INSERT; // Ctrl+Insert , // Insert   — previous favorite
+        constexpr UINT SC_COLOR_SEPIA_OR_SC_NAV_FIRST_IMAGE = VK_HOME; // Ctrl+Home , // Home — jump to first image in folder
+        constexpr UINT SC_COLOR_SOLARIZE_OR_SC_NAV_LAST_IMAGE = VK_END; // Ctrl+End , // End  — jump to last image in folder
+        constexpr UINT SC_COLOR_OUTLINE_OR_NAV_PREV_HISTORY_FOLDER = VK_PRIOR; // Ctrl+PageUp , // PageUp   — previous non-favorite
+        constexpr UINT SC_COLOR_THRESHOLD_OR_NAV_NEXT_HISTORY_FOLDER = VK_NEXT; // Ctrl+PageDown , // PageDown — next non-favorite
         // ── The four continuous adjustments — ALL require ctrl (no alt, no shift)
         // Same rule as the six named effects above: every image-manipulation key
         // in this namespace is Ctrl+<key>. Gamma's two keys keep their unrelated
