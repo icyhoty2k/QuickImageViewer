@@ -40,24 +40,9 @@ Command InputManager::ResolveKeyboardKeys(UINT key, LPARAM lParam) {
     }
 
     // -------------------------------------------------------------------------
-    // Per-slot compact-mode toggles  Ctrl+Alt+1..9  (no shift)
-    // -------------------------------------------------------------------------
-    if (ctrl && !alt && shift) {
-        switch (key) {
-            case Shortcuts::SC_OVERLAY_COMPACT_1: return Command::CompactOverlaySlot1;
-            case Shortcuts::SC_OVERLAY_COMPACT_2: return Command::CompactOverlaySlot2;
-            case Shortcuts::SC_OVERLAY_COMPACT_3: return Command::CompactOverlaySlot3;
-            case Shortcuts::SC_OVERLAY_COMPACT_4: return Command::CompactOverlaySlot4;
-            case Shortcuts::SC_OVERLAY_COMPACT_5: return Command::CompactOverlaySlot5;
-            case Shortcuts::SC_OVERLAY_COMPACT_6: return Command::CompactOverlaySlot6;
-            case Shortcuts::SC_OVERLAY_COMPACT_7: return Command::CompactOverlaySlot7;
-            case Shortcuts::SC_OVERLAY_COMPACT_8: return Command::CompactOverlaySlot8;
-            case Shortcuts::SC_OVERLAY_COMPACT_9: return Command::CompactOverlaySlot9;
-        }
-    }
-
-    // -------------------------------------------------------------------------
-    // Per-slot visibility toggles  Ctrl+1..9  and  Ctrl+0 (master)   (no alt, no shift)
+    // Per-slot state cycle  Ctrl+1..9  and  Ctrl+0 (master)   (no alt, no shift)
+    // Ctrl+N walks Compact → Full → Off for that slot. There is no separate
+    // compact shortcut — the two were merged into this one tri-state cycle.
     // -------------------------------------------------------------------------
     if (ctrl && !alt && !shift) {
         switch (key) {

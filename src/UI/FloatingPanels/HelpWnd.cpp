@@ -456,12 +456,11 @@ namespace UI {
         Add(K(SC::SC_PANEL_OVERLAY_MASTER) + L" / " + Ctrl(SC::SC_PANEL_OVERLAY_MASTER_CTRL0),
             L"Master toggle — show / hide all overlay slots at once.", sOverlay);
         Add(Ctrl(SC::SC_OVERLAY_SLOT_1) + L" – " + Ctrl(SC::SC_OVERLAY_SLOT_9),
-            L"Toggle an individual slot of the 3×3 grid. Assignments:  1 index + filename  •  "
-            L"2 zoom %  •  5 center message area  •  7 active effects list  •  "
-            L"9 dimensions + file size. Remaining slots are reserved.", sOverlay);
-        Add(CtrlShift(SC::SC_OVERLAY_COMPACT_1) + L" – " + CtrlShift(SC::SC_OVERLAY_COMPACT_9),
-            L"Toggle compact mode per slot — one line instead of two. Slot 5 (center "
-            L"message) is always single-line.", sOverlay);
+            L"Cycle a slot of the 3×3 grid: Compact (one line) → Full (two lines) → Off. "
+            L"Assignments:  1 index + filename  •  3 zoom %  •  5 center message area  •  "
+            L"7 active effects + folder name  •  9 dimensions + file size. "
+            L"Slots 2, 4, 6, 8 show the thumbnail-strip selection count for the panel on "
+            L"that edge. Slot 5 has no compact form, so it cycles On → Off.", sOverlay);
         Add(K(SC::SC_OVERLAY_LAYOUT_CYCLE),
             L"Cycle the overlay layout: Grid → Stacked → Summary.", sOverlay);
         Add(K(SC::SC_OVERLAY_BG_TOGGLE),

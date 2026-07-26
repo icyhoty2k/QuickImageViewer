@@ -115,6 +115,25 @@ struct AppState {
     bool historyFullModeEnabled  = Constants::History::HISTORY_SHOW_FULL_HISTORY;
     bool openDirWndOnStart       = Constants::IS_OPEN_DIRWND_ON_START;
     bool overlayShowBackground   = Constants::Overlay::IS_OVERLAY_SHOW_BACKGROUND;
+    // Overlay layout mode (0 grid / 1 stacked / 2 summary) and the per-slot
+    // visibility + compact bitmasks, one bit per OverlayManager::Slot.
+    // OverlayManager seeds itself from these in Init() and writes them back on
+    // every change, so these three stay the persisted truth.
+    int      overlayLayoutMode     = Constants::Overlay::DEFAULT_LAYOUT_MODE;
+    unsigned overlaySlotVisibleMask = Constants::Overlay::DEFAULT_SLOT_VISIBLE_MASK;
+    unsigned overlaySlotCompactMask = Constants::Overlay::DEFAULT_SLOT_COMPACT_MASK;
+    // The two BOT_LEFT readouts. Independent of each other and of the slot's
+    // own visible/compact bits. overlayShowEffectsList governs only the overlay
+    // text — effectPreviewEnabled still decides whether effects are rendered.
+    bool overlayShowDirName     = Constants::Overlay::SHOW_DIR_NAME;
+    bool overlayShowEffectsList = Constants::Overlay::SHOW_EFFECTS_LIST;
+    // Text style for the eight outer overlay slots. MID_CENTER keeps its own
+    // colour and size — it is a transient notice that must stay readable
+    // whatever the outer slots are set to. Family is an index into
+    // Constants::Overlay::OVERLAY_FONT_FAMILIES.
+    int      overlayFontSize   = Constants::Overlay::OVERLAY_FONT_SIZE_DEFAULT;
+    COLORREF overlayFontColor  = Constants::Overlay::OVERLAY_FONT_COLOR_DEFAULT;
+    int      overlayFontFamily = Constants::Overlay::OVERLAY_FONT_FAMILY_DEFAULT;
     int  caretStyle              = Constants::InputBox::CARET_STYLE; // 0 = bar, 1 = underscore
     float zoomClickMultiplier    = Constants::ZOOM_CLICK; // left-click zoom (1 = off .. 10)
     bool swapMouseButtons        = Constants::IS_SWAP_MOUSE_BUTTONS;

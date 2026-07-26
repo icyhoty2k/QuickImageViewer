@@ -5,6 +5,7 @@
 #include "Platform/ConstantsStrings.h"
 #include "AppState.h"
 #include "SlideshowTransitions.h" // TransitionDisplayOrder — shared menu/sequential order
+#include "../Overlays/OverlayManager.h"
 #include <string>
 
 #ifndef MF_RADIOCHECK
@@ -12,6 +13,7 @@
 #endif
 
 extern AppState app;
+extern OverlayManager g_overlayManager;
 // The one tray handler instance (created in AppMain.cpp). It owns the dispatch
 // for every SETTINGS id — see the id-space note below.
 extern Input::TrayHandler trayHandler;
@@ -73,11 +75,37 @@ namespace {
         ID_TRANS_ORD_FIRST = VIEWER_BASE + 400,
         ID_TRANS_ORD_LAST  = ID_TRANS_ORD_FIRST +
                              Constants::Slideshow::TransitionOrder::COUNT - 1,
+
+        // View mode block — contiguous, ordered like Command::ViewMode1..5.
+        // In the VIEWER space on purpose: picking a mode has side effects
+        // beyond assigning the field (it re-clamps the pan offset), and a
+        // second copy in the tray space had already drifted out of sync once.
+        ID_VIEW_MODE_FIRST = VIEWER_BASE + 500,
+        ID_VIEW_MODE_LAST  = ID_VIEW_MODE_FIRST + 4,
     };
 
     // Tray-owned ids this file references by name when building the shared menu.
     // Values must match the cases in TrayHandler::DispatchCommand.
     constexpr int TRAY_ID_RESTORE_WINDOW = 1;
+    // Overlay slot state ids — 3 contiguous bands of 9 (one per slot):
+    //   67-75 → Off,  76-84 → Full (visible, not compact),  85-93 → Compact
+    // Layout mode ids: 94 = Grid, 95 = Stacked, 96 = Summary
+    constexpr int TRAY_ID_OVERLAY_OFF_BASE     = 67;
+    constexpr int TRAY_ID_OVERLAY_FULL_BASE    = 76;
+    constexpr int TRAY_ID_OVERLAY_COMPACT_BASE = 85;
+    constexpr int TRAY_ID_LAYOUT_GRID    = 94;
+    constexpr int TRAY_ID_LAYOUT_STACKED = 95;
+    constexpr int TRAY_ID_LAYOUT_SUMMARY = 96;
+    // The two BOT_LEFT readouts, shown at the top of that slot's submenu.
+    // Independent of the slot's own state, so they sit outside the 67-96 band
+    // and dispatch as ordinary cases.
+    constexpr int TRAY_ID_OVERLAY_EFFECTS_LIST = 97;
+    constexpr int TRAY_ID_OVERLAY_DIR_NAME     = 98;
+    // Outer-slot text style. The family band is contiguous, one id per entry in
+    // Constants::Overlay::OVERLAY_FONT_FAMILIES.
+    constexpr int TRAY_ID_OVERLAY_FONT_SIZE    = 99;
+    constexpr int TRAY_ID_OVERLAY_FONT_COLOR   = 100;
+    constexpr int TRAY_ID_OVERLAY_FONT_FAMILY_BASE = 101;
 
     // Viewer menu id → Command. Contiguous blocks resolve by offset.
     Command CommandForId(int id) {
@@ -93,6 +121,9 @@ namespace {
         if (id >= ID_TRANS_ORD_FIRST && id <= ID_TRANS_ORD_LAST)
             return static_cast<Command>(static_cast<int>(Command::SetTransitionOrderFirst) +
                                         (id - ID_TRANS_ORD_FIRST));
+        if (id >= ID_VIEW_MODE_FIRST && id <= ID_VIEW_MODE_LAST)
+            return static_cast<Command>(static_cast<int>(Command::ViewMode1) +
+                                        (id - ID_VIEW_MODE_FIRST));
         switch (id) {
             case ID_BROWSE:         return Command::OpenFile;
             case ID_HISTORY:        return Command::ToggleHistory;
@@ -145,6 +176,89 @@ namespace {
         return cmd;
     }
 
+    // ── Per-slot overlay submenu (tray id space) ─────────────────────────────
+    HMENU BuildSlotSubmenu(OverlayManager::Slot s) {
+        const int   idx  = static_cast<int>(s);
+        const bool  vis  = g_overlayManager.IsSlotVisible(s);
+        const bool  cmp  = g_overlayManager.IsCompact(s);
+        const bool  isOff     = !vis;
+        const bool  isFull    = vis && !cmp;
+        const bool  isCompact = vis && cmp;
+        HMENU m = CreatePopupMenu();
+        // BOT_LEFT prints two independent readouts. Their toggles sit above the
+        // slot's own radio group because they decide whether there is anything
+        // to show at all, which the Compact/Full/Off choice then formats.
+        if (s == OverlayManager::BOT_LEFT) {
+            AppendMenuW(m, MF_STRING | CheckFlag(app.overlayShowEffectsList),
+                        TRAY_ID_OVERLAY_EFFECTS_LIST, L"Effects");
+            AppendMenuW(m, MF_STRING | CheckFlag(app.overlayShowDirName),
+                        TRAY_ID_OVERLAY_DIR_NAME,     L"Folder Name");
+            AppendMenuW(m, MF_SEPARATOR, 0, nullptr);
+        }
+        if (s == OverlayManager::MID_CENTER) {
+            // MID_CENTER is always single-line — compact toggle is a no-op,
+            // so only expose On / Off.
+            AppendMenuW(m, RadioFlag(!isOff), TRAY_ID_OVERLAY_FULL_BASE + idx, L"On");
+            AppendMenuW(m, RadioFlag(isOff),  TRAY_ID_OVERLAY_OFF_BASE  + idx, L"Off");
+        } else {
+            AppendMenuW(m, RadioFlag(isCompact), TRAY_ID_OVERLAY_COMPACT_BASE + idx, L"Compact");
+            AppendMenuW(m, RadioFlag(isFull),    TRAY_ID_OVERLAY_FULL_BASE    + idx, L"Full");
+            AppendMenuW(m, RadioFlag(isOff),     TRAY_ID_OVERLAY_OFF_BASE     + idx, L"Off");
+        }
+        return m;
+    }
+
+    // ── Overlays submenu (tray id space) ─────────────────────────────────────
+    HMENU BuildOverlaysMenu() {
+        HMENU m = CreatePopupMenu();
+        using S = OverlayManager::Slot;
+
+        // ── Global overlay settings ───────────────────────────────────────────
+        AppendMenuW(m, MF_STRING | CheckFlag(app.showOverlayInfoText),   8,  L"Info Overlays (Master)\tI");
+        AppendMenuW(m, MF_STRING | CheckFlag(app.overlayShowBackground), 13, L"Overlay Background\tP");
+        {
+            HMENU lay = CreatePopupMenu();
+            const int mode = app.overlayLayoutMode;
+            AppendMenuW(lay, RadioFlag(mode == 0), TRAY_ID_LAYOUT_GRID,    L"Grid\tO");
+            AppendMenuW(lay, RadioFlag(mode == 1), TRAY_ID_LAYOUT_STACKED, L"Stacked");
+            AppendMenuW(lay, RadioFlag(mode == 2), TRAY_ID_LAYOUT_SUMMARY, L"Summary");
+            AppendMenuW(m, MF_POPUP, reinterpret_cast<UINT_PTR>(lay), L"Layout");
+        }
+        wchar_t buf[64];
+        // ── Outer-slot text style ─────────────────────────────────────────────
+        // Applies to the eight slots around the edge. MID_CENTER keeps its own
+        // colour and size — it has to stay readable whatever these are set to.
+        {
+            HMENU fonts = CreatePopupMenu();
+            for (int i = 0; i < Constants::Overlay::OVERLAY_FONT_FAMILY_COUNT; ++i)
+                AppendMenuW(fonts, RadioFlag(app.overlayFontFamily == i),
+                            TRAY_ID_OVERLAY_FONT_FAMILY_BASE + i,
+                            Constants::Overlay::OVERLAY_FONT_FAMILIES[i]);
+            AppendMenuW(m, MF_POPUP, reinterpret_cast<UINT_PTR>(fonts), L"Font");
+        }
+        swprintf_s(buf, L"Font Size: %d", app.overlayFontSize);
+        AppendMenuW(m, MF_STRING, TRAY_ID_OVERLAY_FONT_SIZE, buf);
+        AppendMenuW(m, MF_STRING, TRAY_ID_OVERLAY_FONT_COLOR, L"Font Color…");
+
+        swprintf_s(buf, L"Message Duration: %d ms", app.msgCenterDisplayMs);
+        AppendMenuW(m, MF_STRING, 30, buf);
+
+        AppendMenuW(m, MF_SEPARATOR, 0, nullptr);
+
+        // ── Per-slot submenus ─────────────────────────────────────────────────
+        AppendMenuW(m, MF_POPUP, reinterpret_cast<UINT_PTR>(BuildSlotSubmenu(S::TOP_LEFT)),   L"Top Left  (Index / File)");
+        AppendMenuW(m, MF_POPUP, reinterpret_cast<UINT_PTR>(BuildSlotSubmenu(S::TOP_CENTER)), L"Top Center  (Panel Selection)");
+        AppendMenuW(m, MF_POPUP, reinterpret_cast<UINT_PTR>(BuildSlotSubmenu(S::TOP_RIGHT)),  L"Top Right  (Zoom)");
+        AppendMenuW(m, MF_POPUP, reinterpret_cast<UINT_PTR>(BuildSlotSubmenu(S::MID_LEFT)),   L"Mid Left  (Panel Selection)");
+        AppendMenuW(m, MF_POPUP, reinterpret_cast<UINT_PTR>(BuildSlotSubmenu(S::MID_CENTER)), L"Mid Center  (Messages)");
+        AppendMenuW(m, MF_POPUP, reinterpret_cast<UINT_PTR>(BuildSlotSubmenu(S::MID_RIGHT)),  L"Mid Right  (Panel Selection)");
+        AppendMenuW(m, MF_POPUP, reinterpret_cast<UINT_PTR>(BuildSlotSubmenu(S::BOT_LEFT)),   L"Bot Left  (Effects)");
+        AppendMenuW(m, MF_POPUP, reinterpret_cast<UINT_PTR>(BuildSlotSubmenu(S::BOT_CENTER)), L"Bot Center  (Panel Selection)");
+        AppendMenuW(m, MF_POPUP, reinterpret_cast<UINT_PTR>(BuildSlotSubmenu(S::BOT_RIGHT)),  L"Bot Right  (Dimensions)");
+
+        return m;
+    }
+
     // ── Settings submenu (tray id space) ─────────────────────────────────────
     HMENU BuildSettingsMenu() {
         HMENU m = CreatePopupMenu();
@@ -152,9 +266,7 @@ namespace {
         AppendMenuW(m, MF_STRING | CheckFlag(app.isEnableRunOnStartup),    5,  L"Run on Startup");
         AppendMenuW(m, MF_STRING | CheckFlag(app.thumbnailEffectsEnabled), 6,  L"Thumbnail Effects");
         AppendMenuW(m, MF_STRING | CheckFlag(app.historyFullModeEnabled),  7,  L"History: Open Full List");
-        AppendMenuW(m, MF_STRING | CheckFlag(app.showOverlayInfoText),     8,  L"Info Overlays");
         AppendMenuW(m, MF_STRING | CheckFlag(app.openDirWndOnStart),       9,  L"Open Thumbnail Strip on Start");
-        AppendMenuW(m, MF_STRING | CheckFlag(app.overlayShowBackground),   13, L"Overlay Background");
         AppendMenuW(m, MF_STRING | CheckFlag(app.swapMouseButtons),        14, L"Swap Mouse Buttons");
         AppendMenuW(m, MF_STRING | CheckFlag(app.contextMenuEnabled),      63, L"Right-Click Context Menu");
         AppendMenuW(m, MF_STRING | CheckFlag(app.invertWheelDirection),    15, L"Invert Scroll Direction");
@@ -194,7 +306,6 @@ namespace {
         swprintf_s(buf, L"History Max Favs: %d", app.historyMaxFavs); AppendMenuW(m, MF_STRING, 27, buf);
         swprintf_s(buf, L"Dir Thumb Cache: %d MB", app.dirThumbCacheMB); AppendMenuW(m, MF_STRING, 28, buf);
         swprintf_s(buf, L"Preload Lookaside: %d",  app.preloadLookaside); AppendMenuW(m, MF_STRING, 29, buf);
-        swprintf_s(buf, L"Overlay Message Duration: %d ms", app.msgCenterDisplayMs); AppendMenuW(m, MF_STRING, 30, buf);
         swprintf_s(buf, L"History Save Limit: %d", app.historyMaxDirsSave); AppendMenuW(m, MF_STRING, 31, buf);
         AppendMenuW(m, MF_SEPARATOR, 0, nullptr);
         AppendMenuW(m, MF_STRING, 10, L"Export Settings");
@@ -204,14 +315,16 @@ namespace {
         return m;
     }
 
+    // Viewer id space — a pick here runs Command::ViewMode1..5, the same code
+    // the 1..5 keys run, so both re-clamp the pan offset identically.
     HMENU BuildViewModeMenu() {
         HMENU m = CreatePopupMenu();
         const int vm = static_cast<int>(app.viewMode);
-        AppendMenuW(m, RadioFlag(vm == 1), 18, L"1 — Fit to View (preserve aspect)");
-        AppendMenuW(m, RadioFlag(vm == 2), 19, L"2 — Fit to Width");
-        AppendMenuW(m, RadioFlag(vm == 3), 20, L"3 — Fit to Height");
-        AppendMenuW(m, RadioFlag(vm == 4), 21, L"4 — Stretch to Window");
-        AppendMenuW(m, RadioFlag(vm == 5), 22, L"5 — Original Size");
+        AppendMenuW(m, RadioFlag(vm == 1), ID_VIEW_MODE_FIRST + 0, L"1 — Fit to View (preserve aspect)");
+        AppendMenuW(m, RadioFlag(vm == 2), ID_VIEW_MODE_FIRST + 1, L"2 — Fit to Width");
+        AppendMenuW(m, RadioFlag(vm == 3), ID_VIEW_MODE_FIRST + 2, L"3 — Fit to Height");
+        AppendMenuW(m, RadioFlag(vm == 4), ID_VIEW_MODE_FIRST + 3, L"4 — Stretch to Window");
+        AppendMenuW(m, RadioFlag(vm == 5), ID_VIEW_MODE_FIRST + 4, L"5 — Original Size");
         return m;
     }
 
@@ -355,6 +468,7 @@ HMENU ContextMenuHandler::BuildMenu(HWND hWnd) {
     AppendMenuW(m, MF_POPUP, reinterpret_cast<UINT_PTR>(BuildViewModeMenu()),  L"View Mode");
     AppendMenuW(m, MF_POPUP, reinterpret_cast<UINT_PTR>(BuildSlideshowMenu()), L"Slideshow");
     AppendMenuW(m, MF_POPUP, reinterpret_cast<UINT_PTR>(BuildSettingsMenu()),  L"Settings");
+    AppendMenuW(m, MF_POPUP, reinterpret_cast<UINT_PTR>(BuildOverlaysMenu()),  L"Overlays");
     AppendMenuW(m, MF_POPUP, reinterpret_cast<UINT_PTR>(BuildBackupMenu()),    L"Backup");
     AppendMenuW(m, MF_SEPARATOR, 0, nullptr);
     // Only meaningful from the tray, when the window is not on screen.
