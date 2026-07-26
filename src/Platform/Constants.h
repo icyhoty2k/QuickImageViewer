@@ -1,33 +1,11 @@
 #pragma once
 
-// =========================================================================
-// RC COMPATIBLE DEFINITIONS
-// Used by the Resource Compiler for version metadata
-// *** Update ONLY the four numbers below to bump the version everywhere ***
-// =========================================================================
-#define VER_MAJOR 2
-#define VER_MINOR 50
-#define VER_PATCH 1
-#define VER_BUILD 1
-
-// Comma form  — FILEVERSION / PRODUCTVERSION in .rc  (e.g. 2,3,0,0)
-#define VER_NUMERIC   VER_MAJOR,VER_MINOR,VER_PATCH,VER_BUILD
-
-// String form — derived via C preprocessor stringification.
-// rc.exe (Windows SDK 10) runs a full C-preprocessor pass, so # works here.
-// In C++: L"" VER_STR  →  L"2.3.0.0"
-// In RC:  VALUE "FileVersion", VER_STR  →  "2.3.0.0"
-#define _QIV_S(x)     #x
-#define _QIV_STR(x)   _QIV_S(x)
-#define VER_STR       _QIV_STR(VER_MAJOR) "." _QIV_STR(VER_MINOR) "." _QIV_STR(VER_PATCH) "." _QIV_STR(VER_BUILD)
-
-#define FILE_DESC     "qIV"
-#define ORIG_FILENAME "QuickImageViewer.exe"
-#define PROD_NAME     "Quick Image Viewer"
-#define COPYRIGHT     "Copyright \xA9 2026 All rights reserved, Ivan Hristov Yanev"
-// =========================================================================
+// Version and product identity — FILE_DESC, PROD_NAME, COPYRIGHT, and the
+// numbers you edit to bump a release — all live in Common/Version.h.
+#include "Common/Version.h"
 
 #include <iterator>
+#include <cstdint>   // uint32_t — Slideshow::TRANSITION_LIST_DEFAULT_MASK
 #include "../resources/resource.h"
 
 namespace Constants {
@@ -36,7 +14,11 @@ namespace Constants {
 
     constexpr const wchar_t *APP_HELP_FOOTER = L"" COPYRIGHT;
     constexpr const wchar_t *APP_TASKBAR_NAME = L"" FILE_DESC;
-    constexpr const wchar_t *APP_VERSION = L"" VER_STR; // major.minor.patch.build  e.g. 2.3.0.0
+    // major.minor.patch.build — e.g. 2.80.0.123
+    // Defined in Version.cpp, the one TU that sees the generated build number.
+    // Deliberately not constexpr: making it so would drag BuildNumber.h in here
+    // and rebuild the world on every build. Every use is a runtime string.
+    extern const wchar_t *const APP_VERSION;
     constexpr const wchar_t *APP_NAME = BASE_NAME;
     constexpr const wchar_t *WINDOW_CLASS_NAME = BASE_NAME;
     constexpr bool IS_ENABLE_RUN_ON_STARTUP = true; // enable or disable run on startup reg value add/delete
@@ -79,9 +61,7 @@ namespace Constants {
     constexpr int MOUSE_HSCROLL_FOLDER_TICKS = 3;
 
 
-    static constexpr float ZOOM_STEP = 1.1f; // +/- keys and ctrl+wheel
-    static constexpr float ZOOM_MIN  = 0.001f;   // 0.1%
-    static constexpr float ZOOM_MAX  = 99999.0f; // 9,999,900%
+
 
     constexpr float COLOR_ADJUST_STEP = 0.1f; // step for brightness contrast and saturation
     constexpr float DEFAULT_SATURATION = 1.0f; // the default i dont want change when not using it i want original picture
@@ -280,6 +260,9 @@ namespace Constants {
         constexpr int SPAN    = 5;
         constexpr int COUNT   = 6;
     }
+    // Start maximized/borderless on launch. Was the only persisted setting with
+    // no named default — load and Restore Defaults each hardcoded their own.
+    constexpr bool IS_START_FULLSCREEN     = false;
     constexpr bool IS_CTRL_C_ENABLED       = true;
     constexpr bool IS_THUMB_COPY_ENABLED   = true;
     constexpr bool IS_THUMB_MOVE_ENABLED   = true;
@@ -621,12 +604,61 @@ namespace Constants {
         constexpr int SCROLLBAR_MIN_THUMB = 16; // minimum thumb height in px
         // Note: Scrollbar colors moved to ConstantsTheme.h
 
+        // How long the startup folder sweep waits before touching the disk.
+        // It runs at background I/O priority anyway, but holding off entirely
+        // until the first image is decoded and on screen keeps app launch as fast
+        // as it was before the sweep existed. Only applies to the startup kick-off
+        // — opening the panel or pressing F5 scans immediately.
+        constexpr DWORD HISTORY_SCAN_STARTUP_DELAY_MS = 3000;
+
         // Window size limits (px at 96 DPI — DPI-scaled at runtime)
         constexpr int HISTORY_MIN_W = 690; // minimum panel width
         constexpr int HISTORY_MAX_W = IS_BASE_WIDTH  - 120; // maximum panel width
         constexpr int HISTORY_MIN_H = 620; // minimum panel height
         constexpr int HISTORY_MAX_H = IS_BASE_HEIGHT - 60; // maximum panel height (also capped to 80% of monitor)
     }
+
+    // =========================================================================
+    // Zoom Panel (F2 zoom-to dialog) — geometry constants
+    // =========================================================================
+    namespace ZoomPanel {
+        constexpr float WINDOW_WIDTH = 340.0f;
+        constexpr float WINDOW_HEIGHT = 140.0f;
+        constexpr float PADDING = 14.0f;
+        constexpr float GAP = 8.0f;
+        constexpr float FONT_SIZE = 13.0f;
+        constexpr float FONT_SIZE_INPUT = 16.0f;
+        constexpr float INPUT_BOX_HEIGHT = 34.0f;
+        constexpr int LABEL_EXTRA_HEIGHT = 6;     // extra px below label text
+        constexpr int HINT_EXTRA_HEIGHT = 4;      // extra px below hint text
+        // Base gray values passed to Constants::Theme::ThemedGray at draw time
+        constexpr float LABEL_TEXT_GRAY = 0.9020f; // label: "Enter zoom multiplier..."
+        constexpr float HINT_TEXT_GRAY = 0.50f;    // hint: "Enter = apply zoom..."
+        // Zoom limits, in PERCENT — exactly the number the overlay displays and
+        // the zoom panel accepts. 0.1 means 0.1%, 99999 means 99999%.
+        //
+        // They bound the EFFECTIVE on-screen zoom, NOT the raw app.viewport.zoom
+        // multiplier. Effective zoom is (baseScale * viewport.zoom) and baseScale
+        // depends on the view mode, so clamping the multiplier alone lets the real
+        // zoom drift far past these bounds. Always clamp through
+        // ClampZoomToLimits() in AppState.h, never with a bare std::clamp on
+        // viewport.zoom.
+        //
+        // Unit changes go through Converters::PercentToRatio / RatioToPercent.
+        constexpr float ZOOM_STEP = 1.1f;     // ratio factor per +/- key or wheel tick
+        constexpr float ZOOM_MIN  = 0.01f;     // percent — smallest allowed zoom
+        constexpr float ZOOM_MAX  = 99'999.0f; // percent — largest allowed zoom single quote is number separator " ' " like in java "_"
+        constexpr int   INPUT_MAX_CHARS = 10; // must be < ZoomWnd::m_input capacity
+    }
+
+    // Outcome of ClampZoomToLimits() (AppState.h). Lives here rather than in
+    // AppState.h so OverlayManager.h can consume it without pulling in AppState.
+    // Callers use it to tell the user WHY a zoom keypress did nothing.
+    enum class ZoomClampResult {
+        None,       // zoom was already inside the limits — nothing was capped
+        ClampedMin, // hit ZOOM_MIN, cannot zoom out further
+        ClampedMax  // hit ZOOM_MAX, cannot zoom in further
+    };
 
     // =========================================================================
     // InputBox — shared single-line text control (Find / JumpTo / History / Help)
@@ -690,6 +722,12 @@ namespace Constants {
         // SlideshowTransitions.h (a static_assert-free contract used for menu
         // building, cycling and registry clamping).
         constexpr int TRANSITION_COUNT = 21;
+
+        // Default TRANS_LIST bitmask: every animated type ticked, bit 0 (Cut)
+        // cleared — a "transition list" containing Cut would mean "no transition".
+        // Used as the registry default AND by Restore Defaults; keep it here so
+        // the two cannot drift apart.
+        constexpr uint32_t TRANSITION_LIST_DEFAULT_MASK = 0xFFFFFFFEu;
 
         // Transition selection is two independent axes:
         //   SOURCE — which transitions are in play

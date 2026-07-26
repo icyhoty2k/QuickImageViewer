@@ -1,5 +1,6 @@
 ﻿#include "OverlayManager.h"
 #include "../AppState.h"
+#include "../Common/Converters.h"
 #include "../Platform/Constants.h"
 #include "../Platform/ConstantsStrings.h"
 #include <algorithm>
@@ -372,9 +373,7 @@ void OverlayManager::RebuildTopLeft() {
 
 void OverlayManager::RebuildSummaryLine2() {
     // "86%  1920×1080 / 4.3 MB"
-    wchar_t zoomBuf[16];
-    swprintf_s(zoomBuf, L"%.0f%%", m_zoom * 100.0f);
-    std::wstring text = zoomBuf;
+    std::wstring text = Converters::FormatZoomPercent(m_zoom);
     text += L"  ";
     wchar_t dimBuf[32];
     swprintf_s(dimBuf, L"%d\u00D7%d", m_imgW, m_imgH);
@@ -418,9 +417,7 @@ void OverlayManager::OnLayoutModeChanged(HWND /*hWnd*/) {
             m_slots[i].overlay->active = m_masterVisible && m_slots[i].visible;
         }
         // Restore normal zoom text in TOP_RIGHT
-        wchar_t buf[32];
-        swprintf_s(buf, L"%.0f%%", m_zoom * 100.0f);
-        slotTopRight.UpdateText(buf);
+        slotTopRight.UpdateText(Converters::FormatZoomPercent(m_zoom));
     }
 }
 
@@ -434,22 +431,20 @@ void OverlayManager::UpdateInfo(int index, int total, const std::wstring &filena
 void OverlayManager::UpdateZoom(float /*zoom*/, HWND /*hWnd*/) {
     // Compute effective zoom from cached render-target size — avoids a
     // GetClientRect syscall on every frame (was called via app.GetRealZoom).
+    // Same formula as AppState::GetRealZoom(), but fed from the cached render-target
+    // size so the displayed % always matches what "Zoom to N%" computes.
     float newZoom = 1.0f;
     if (app.imgWidth > 0 && app.imgHeight > 0 && m_rtW > 0.0f && m_rtH > 0.0f) {
-        if (app.viewMode == Constants::ViewModes::ViewMode::OriginalImageSize_PreserveAspectRatio) {
-            newZoom = app.viewport.zoom;
-        } else {
-            const float fitScale = std::min(m_rtW / static_cast<float>(app.imgWidth),
-                                            m_rtH / static_cast<float>(app.imgHeight));
-            newZoom = fitScale * app.viewport.zoom;
-        }
+        float renderW = 0.0f, renderH = 0.0f;
+        GetRenderSize(m_rtW, m_rtH,
+                      static_cast<float>(app.imgWidth), static_cast<float>(app.imgHeight),
+                      app.viewMode, app.viewport.zoom, renderW, renderH);
+        newZoom = renderW / static_cast<float>(app.imgWidth);
     }
     if (newZoom == m_zoom && !slotTopRight.text.empty())
         return;
     m_zoom = newZoom;
-    wchar_t buf[32];
-    swprintf_s(buf, L"%.0f%%", m_zoom * 100.0f);
-    slotTopRight.UpdateText(buf);
+    slotTopRight.UpdateText(Converters::FormatZoomPercent(m_zoom));
     if (Constants::Overlay::OVERLAY_LAYOUT_MODE == 2)
         RebuildSummaryLine2();
 }
@@ -506,6 +501,8 @@ void OverlayManager::UpdateEffects() {
     if (std::abs(app.gamma - 1.0f) > EPS)
         appendLine(Constants::Strings::LABEL_GAMMA + fmtFloat(app.gamma));
 
+    // Listed in application order — top line runs first, bottom line runs last
+    // on the result of everything above it. Same vector the renderer chains.
     for (const auto &effectName: app.activeEffectsList)
         appendLine(effectName);
 
@@ -543,12 +540,14 @@ void OverlayManager::UpdatePanelSelectionOverlay(int8_t position, int selected, 
 //  Center-center message queue
 // ─────────────────────────────────────────────────────────────────────────────
 
-void OverlayManager::PostCenterMessage(HWND hWnd, const std::wstring &msg) {
+void OverlayManager::PostCenterMessage(HWND hWnd, const std::wstring &msg,
+                                       MsgSeverity severity) {
     // Only show if the slot is enabled
     if (!m_slots[MID_CENTER].visible) return;
 
     slotMidCenter.UpdateText(msg);
     slotMidCenter.active = true;
+    m_centerMsgSeverity = severity;
 
     // Reset (or start) the auto-hide timer on the main window
     KillTimer(hWnd, TIMER_CENTER_MSG);
@@ -704,12 +703,25 @@ void OverlayManager::RenderAll(ID2D1DeviceContext *ctx) const {
                 ctx->FillRectangle(bgRect, m_pCenterBrush.Get());
             }
 
-            // Draw text in center-center color
-            m_pCenterBrush->SetColor(D2D1::ColorF(
-                    Constants::Overlay::MSG_CENTER_COLOR_R,
-                    Constants::Overlay::MSG_CENTER_COLOR_G,
-                    Constants::Overlay::MSG_CENTER_COLOR_B,
-                    Constants::Overlay::MSG_CENTER_COLOR_A));
+            // Draw text in center-center color. Warning / Error messages take
+            // their colour from Constants::Theme::Markers, the same source the
+            // History panel uses for its empty / missing folder rows.
+            if (m_centerMsgSeverity == MsgSeverity::Normal) {
+                m_pCenterBrush->SetColor(D2D1::ColorF(
+                        Constants::Overlay::MSG_CENTER_COLOR_R,
+                        Constants::Overlay::MSG_CENTER_COLOR_G,
+                        Constants::Overlay::MSG_CENTER_COLOR_B,
+                        Constants::Overlay::MSG_CENTER_COLOR_A));
+            } else {
+                const COLORREF c = (m_centerMsgSeverity == MsgSeverity::Error)
+                                           ? Constants::Theme::Markers::ERR
+                                           : Constants::Theme::Markers::WARNING;
+                m_pCenterBrush->SetColor(D2D1::ColorF(
+                        GetRValue(c) / 255.0f,
+                        GetGValue(c) / 255.0f,
+                        GetBValue(c) / 255.0f,
+                        Constants::Overlay::MSG_CENTER_COLOR_A));
+            }
             ctx->DrawTextLayout(
                     D2D1::Point2F(slotRect.left, slotRect.top),
                     layout,

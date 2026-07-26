@@ -431,6 +431,12 @@ void HandleScanComplete(HWND hWnd, ScanResult *result) {
             app.folderOverlayPath = dir;
         }
 
+        // The viewer is now showing this folder even though the playlist is empty.
+        // Tell the History panel explicitly — it cannot infer it from the playlist,
+        // which was just cleared above, and without this its green "you are here"
+        // row stays stuck on whatever folder was open before.
+        UI::NotifyCurrentFolder(dir);
+
         InvalidateRect(hWnd, nullptr, FALSE);
         delete result;
         return;
@@ -502,6 +508,9 @@ void HandleScanComplete(HWND hWnd, ScanResult *result) {
     app.folderOverlay = AppState::FolderOverlayState::None;
     app.folderOverlayPath.clear();
     UI::NotifyFolderContentsChanged(scannedDir);
+    // Same binding as the empty-scan path above: the viewer has settled on this
+    // folder, so the History panel's green row must follow it.
+    UI::NotifyCurrentFolder(scannedDir);
 
     // If the scan's target is the image already on screen (the common F2/click/
     // drag-drop case: the 1-file playlist decoded and displayed it, now the full
@@ -661,9 +670,13 @@ void OpenInitialImage(HWND hWnd) {
         return;
     }
 
+    // absolute + lexically_normal, not canonical — a path picked through a
+    // junction must stay spelled the way the user reached it. Existence is
+    // checked by the is_directory / is_regular_file tests that follow.
     fs::path selectedPath;
     try {
-        selectedPath = fs::canonical(filePath);
+        selectedPath = fs::absolute(filePath).lexically_normal();
+        if (!fs::exists(selectedPath)) return;
     } catch (...) {
         return;
     }
@@ -851,11 +864,17 @@ void LoadImageIndex(HWND hWnd, int index) {
 }
 
 void OpenDirectory(HWND hWnd, const std::wstring &dirPathStr) {
-    // canonical(ec) resolves symlinks and fails if path doesn't exist — one call
-    // instead of exists + is_directory + canonical. Then one is_directory check.
+    // Deliberately NOT canonical(): that resolves junctions and directory
+    // symlinks, so opening D:\12_Wallpapers\... (a junction) recorded
+    // E:\12_Wallpapers\... instead. Everything downstream then disagreed with the
+    // row the user actually picked — history recorded the target, the History
+    // panel greened the target's row, and the folder-walk cursor sat on the row
+    // that had been chosen. Keep the caller's spelling; absolute + lexically_normal
+    // still cleans up relatives and any ".." without touching the link.
     std::error_code ec;
-    fs::path dirPath = fs::canonical(fs::path(dirPathStr), ec);
+    fs::path dirPath = fs::absolute(fs::path(dirPathStr), ec).lexically_normal();
     if (ec) return;
+    // canonical used to double as the existence check — now explicit.
     if (!fs::is_directory(dirPath, ec) || ec) return;
 
     // Valid directory confirmed — dismiss any Missing/Empty overlay immediately.
@@ -863,10 +882,14 @@ void OpenDirectory(HWND hWnd, const std::wstring &dirPathStr) {
     app.folderOverlayPath.clear();
 
     // If we are already in this directory, just jump to the first image.
-    // Compare canonical paths to handle junctions and drive-letter case.
+    // Paths are no longer resolved, so string comparison would miss "D:\x is the
+    // same folder as E:\x". SameRealFolder answers that from the History panel's
+    // cached link info — the same data that drives the 🔗 row marker — and does no
+    // filesystem work for ordinary non-aliased paths.
     if (!app.playlist.empty()) {
-        fs::path curParent = fs::canonical(fs::path(app.playlist[0]).parent_path(), ec);
-        if (!ec && dirPath == curParent) {
+        const std::wstring curParent =
+                fs::path(app.playlist[0]).parent_path().wstring();
+        if (UI::SameRealFolder(dirPath.wstring(), curParent)) {
             UI::PushFolderHistory(dirPath.wstring());
             // The active panel may be a spawned DirWnd still showing a different
             // folder — retarget it so history navigation always lands in the
@@ -1044,10 +1067,20 @@ void OpenStartupTarget(HWND hWnd) {
 void OpenSpecificImage(HWND hWnd, const std::wstring &filePathStr) {
     fs::path filePath(filePathStr);
     if (!fs::exists(filePath) || !fs::is_regular_file(filePath)) return;
-    filePath = fs::canonical(filePath);
+    // Same reason as OpenDirectory: canonical() would rewrite a path that arrived
+    // through a junction into the target's spelling, and the folder recorded in
+    // history would not be the one the user dropped or double-clicked.
+    // Scoped: the rest of this function declares its own `ec` per operation, and
+    // a long-lived one here would shadow them (C4456).
+    {
+        std::error_code ec;
+        filePath = fs::absolute(filePath, ec).lexically_normal();
+        if (ec) return;
+    }
 
     if (!app.playlist.empty()) {
-        if (filePath.parent_path() == fs::path(app.playlist[0]).parent_path()) {
+        if (UI::SameRealFolder(filePath.parent_path().wstring(),
+                               fs::path(app.playlist[0]).parent_path().wstring())) {
             auto mapIt = app.playlistIndexMap.find(filePath.wstring());
             if (mapIt != app.playlistIndexMap.end()) {
                 // Same folder — no need to rebuild playlist, but still record

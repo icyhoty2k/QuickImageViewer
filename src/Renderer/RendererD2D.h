@@ -125,17 +125,26 @@ class RendererD2D final : public IImageRenderer {
         // Reset in DiscardDeviceResources(), repopulated in CreateDeviceResources().
         Microsoft::WRL::ComPtr<ID2D1DeviceContext5> m_pDeviceContext5;
 
-        // Single combined effect: saturation + contrast + brightness + grayscale
-        // + invert + sepia folded into one 5x4 color matrix computed explicitly
-        // in UpdateColorEffects() (all of these are linear transforms, so they
-        // compose into a single matrix — no extra effect nodes needed).
+        // Continuous adjustments only: saturation + contrast + brightness folded
+        // into one 5x4 color matrix computed explicitly in UpdateColorEffects().
+        // This node is ALWAYS first in the chain (it is a per-image correction,
+        // not a stackable toggle).
         Microsoft::WRL::ComPtr<ID2D1Effect> m_pColorMatrixEffect;
-        // Non-linear / spatial effects that CANNOT be folded into the matrix
-        // above — each is its own D2D effect node, chained in a fixed order
-        // and bypassed (input wired straight through) when its toggle is off.
+        // Toggle effects. Each is its own node so BuildEffectChain() can place it
+        // anywhere in the chain — the position comes from app.activeEffectsList,
+        // i.e. the order the user switched them on.
+        // Grayscale/invert/sepia used to be folded into m_pColorMatrixEffect,
+        // which pinned them BEFORE every non-linear node — and since the
+        // solarize LUT is invariant under inversion (solarize(1-v) == solarize(v)),
+        // toggling Invert after Solarize was a visual no-op. Keep them separate.
+        Microsoft::WRL::ComPtr<ID2D1Effect> m_pGrayscaleEffect; // CLSID_D2D1ColorMatrix
+        Microsoft::WRL::ComPtr<ID2D1Effect> m_pInvertEffect; // CLSID_D2D1ColorMatrix
+        Microsoft::WRL::ComPtr<ID2D1Effect> m_pSepiaEffect; // CLSID_D2D1ColorMatrix
         Microsoft::WRL::ComPtr<ID2D1Effect> m_pGammaEffect; // CLSID_D2D1GammaTransfer
         Microsoft::WRL::ComPtr<ID2D1Effect> m_pSolarizeEffect; // CLSID_D2D1TableTransfer
-        Microsoft::WRL::ComPtr<ID2D1Effect> m_pThresholdEffect; // CLSID_D2D1Threshold
+        // Threshold is two nodes: luminance collapse, then the 0/1 table.
+        Microsoft::WRL::ComPtr<ID2D1Effect> m_pThresholdLumaEffect; // CLSID_D2D1ColorMatrix
+        Microsoft::WRL::ComPtr<ID2D1Effect> m_pThresholdEffect; // CLSID_D2D1TableTransfer
         Microsoft::WRL::ComPtr<ID2D1Effect> m_pOutlineEffect; // CLSID_D2D1EdgeDetection
         Microsoft::WRL::ComPtr<ID2D1Effect> m_pScaleEffect;
         Microsoft::WRL::ComPtr<ID2D1Bitmap1> m_pBackBufferBitmap;
@@ -223,15 +232,24 @@ class RendererD2D final : public IImageRenderer {
 
         HRESULT CreateBackBufferBitmap();
 
-        // Creates the non-linear effect nodes (gamma/solarize/threshold/outline)
-        // lazily on first use, since most images never touch them.
+        // Creates the toggle effect nodes (grayscale/invert/sepia/gamma/
+        // solarize/threshold/outline) lazily on first use, since most images
+        // never touch them.
         HRESULT EnsureExtraEffects();
 
-        // Wires g_app's saturation/contrast/brightness/grayscale/invert/sepia
-        // into m_pColorMatrixEffect, then chains whichever of gamma/solarize/
-        // threshold/outline are currently toggled on, in that fixed order.
+        // Wires app's saturation/contrast/brightness into m_pColorMatrixEffect
+        // (always first), then gamma, then chains every toggled-on effect in
+        // app.activeEffectsList order — the order the user switched them on, so
+        // each effect operates on the result of the ones before it.
         // Returns the final ID2D1Image* ready to be scaled/drawn or captured.
         ID2D1Effect *BuildEffectChain(ID2D1Image *source);
+
+        // Appends one effect's node(s) to `current` and returns the new tail.
+        ID2D1Effect *ChainEffectByName(const std::wstring &name, ID2D1Effect *current);
+
+        // Clears input 0 on every effect node so a bypassed graph holds no
+        // reference to the source bitmap.
+        void ReleaseEffectInputs();
 };
 
 // Declare the globals so all files see them

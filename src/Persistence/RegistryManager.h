@@ -20,7 +20,9 @@ namespace Persistence::Registry {
     // Text/Path persistence (String)
     void SaveStringSetting(const wchar_t *valueName, const std::wstring &value);
 
-    void LoadStringSetting(const wchar_t *valueName, wchar_t *buffer, DWORD bufferSize);
+    // NOTE: the old raw-buffer overload was removed — it had no callers and left
+    // the caller's buffer UNTOUCHED when the value was missing, so a stack buffer
+    // would have been read as garbage. Use the wstring version below.
 
     // Returns the registry string value as std::wstring; empty on missing/error.
     // Handles paths of any length (no MAX_PATH limit).

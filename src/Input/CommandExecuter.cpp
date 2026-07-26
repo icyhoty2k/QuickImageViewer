@@ -64,51 +64,8 @@ static void SnapWindowToZone(HWND hWnd, int zone) {
     InvalidateRect(hWnd, nullptr, FALSE);
 }
 
-// Clamps viewport offsets to the maximum range the renderer allows for the
-// current view mode and zoom — mirrors the identical logic in MouseHandler.
-static void ClampViewportOffset(HWND hWnd) {
-    if (app.imgWidth <= 0 || app.imgHeight <= 0) return;
-    RECT rc;
-    GetClientRect(hWnd, &rc);
-    float winW = static_cast<float>(rc.right - rc.left);
-    float winH = static_cast<float>(rc.bottom - rc.top);
-    float imgW = static_cast<float>(app.imgWidth);
-    float imgH = static_cast<float>(app.imgHeight);
-    float ratioX = winW / imgW, ratioY = winH / imgH;
-    float renderW, renderH;
-    switch (app.viewMode) {
-        case Constants::ViewModes::ViewMode::FitToWidth_DoNotPreserveAspectRatio:
-            renderW = winW;
-            renderH = imgH;
-            if (renderH > winH) renderH = winH;
-            break;
-        case Constants::ViewModes::ViewMode::FitToHeight_DoNotPreserveAspectRatio:
-            renderH = winH;
-            renderW = imgW;
-            if (renderW > winW) renderW = winW;
-            break;
-        case Constants::ViewModes::ViewMode::FitToWindow_DoNotPreserveAspectRatio:
-            renderW = winW;
-            renderH = winH;
-            break;
-        case Constants::ViewModes::ViewMode::OriginalImageSize_PreserveAspectRatio:
-            renderW = imgW;
-            renderH = imgH;
-            break;
-        case Constants::ViewModes::ViewMode::FitToView_PreserveAspectRatio:
-        default:
-            renderW = imgW * std::min(ratioX, ratioY);
-            renderH = imgH * std::min(ratioX, ratioY);
-            break;
-    }
-    const float z = (app.viewport.zoom <= 0.0f) ? 1.0f : app.viewport.zoom;
-    renderW *= z;
-    renderH *= z;
-    float maxOffX = std::max(0.0f, (renderW - winW) / 2.0f);
-    float maxOffY = std::max(0.0f, (renderH - winH) / 2.0f);
-    app.viewport.offsetX = std::clamp(app.viewport.offsetX, -maxOffX, maxOffX);
-    app.viewport.offsetY = std::clamp(app.viewport.offsetY, -maxOffY, maxOffY);
-}
+// ClampViewportOffset now lives in AppState.h (next to GetRenderSize) so every
+// zoom/pan call site — keyboard, mouse wheel, zoom panel — shares one copy.
 
 // =============================================================================
 // handleKeyboard — public entry point called from WM_KEYDOWN
@@ -257,12 +214,18 @@ void InputManager::ExecuteCommand(HWND hWnd, Command cmd) {
         // Zoom
         // -----------------------------------------------------------------------
         case Command::ZoomIn:
-            app.viewport.zoom = std::clamp(app.viewport.zoom * Constants::ZOOM_STEP, Constants::ZOOM_MIN, Constants::ZOOM_MAX);
+            app.viewport.zoom *= Constants::ZoomPanel::ZOOM_STEP;
+            // Bounds the EFFECTIVE zoom, not the multiplier; tell the user when
+            // the keypress was capped instead of leaving it looking ignored.
+            AnnounceZoomClamp(hWnd, ClampZoomToLimits(hWnd));
+            ClampViewportOffset(hWnd); // zoom changed the legal pan range
             InvalidateRect(hWnd, nullptr, FALSE);
             break;
 
         case Command::ZoomOut:
-            app.viewport.zoom = std::clamp(app.viewport.zoom / Constants::ZOOM_STEP, Constants::ZOOM_MIN, Constants::ZOOM_MAX);
+            app.viewport.zoom /= Constants::ZoomPanel::ZOOM_STEP;
+            AnnounceZoomClamp(hWnd, ClampZoomToLimits(hWnd));
+            ClampViewportOffset(hWnd); // zooming out shrinks it — stale offset would leave a black gap
             InvalidateRect(hWnd, nullptr, FALSE);
             break;
 
@@ -594,6 +557,9 @@ void InputManager::ExecuteCommand(HWND hWnd, Command cmd) {
             g_overlayManager.UpdateEffects();
             break;
 
+        // Each toggle records itself in app.activeEffectsList FIRST, so a newly
+        // enabled effect lands at the end of the chain and therefore operates on
+        // what is currently on screen.
         case Command::ToggleGrayscale:
             app.ToggleEffectChronological(Constants::Strings::EFFECT_GRAYSCALE);
             app.WakeUpAndApplyEffects(hWnd, app.effectGrayscale);
@@ -755,6 +721,40 @@ void InputManager::ExecuteCommand(HWND hWnd, Command cmd) {
                                                            ? Constants::Messages::TOGGLE_FIRST_IMAGE_IN_FOLDER + std::to_wstring(1)
                                                            : Constants::Messages::TOGGLE_LAST_IMAGE_IN_FOLDER + std::to_wstring(targetIndex + 1)));
             if (distToStart != 0 && distToStart != total) app.lastImageBeforeToggleFirstLastImageInCurrentFolder = distToStart;
+            break;
+        }
+        // PageUp / PageDown walk the non-favorite rows of the History panel;
+        // Insert / Delete walk the starred rows. Neither reorders the list.
+        case Command::PrevHistoryFolder:
+            (void) UI::WalkHistoryFolder(hWnd, UI::WalkScope::NonFavoritesOnly, true);
+            break;
+        case Command::NextHistoryFolder:
+            (void) UI::WalkHistoryFolder(hWnd, UI::WalkScope::NonFavoritesOnly, false);
+            break;
+        case Command::NextFavoriteFolder:
+            (void) UI::WalkHistoryFolder(hWnd, UI::WalkScope::FavoritesOnly, false);
+            break;
+        case Command::PrevFavoriteFolder:
+            (void) UI::WalkHistoryFolder(hWnd, UI::WalkScope::FavoritesOnly, true);
+            break;
+
+        // Home / End — unconditional jump to either end of the playlist. Unlike
+        // ToggleFirstLastImageInCurrentFolder (Backspace) these do not pick the
+        // further endpoint and do not remember where you were.
+        case Command::GoToFirstImage: {
+            if (app.playlist.empty() || app.currentIndex == 0) return;
+            LoadImageIndex(hWnd, 0);
+            g_overlayManager.PostCenterMessage(
+                    hWnd, Constants::Messages::TOGGLE_FIRST_IMAGE_IN_FOLDER + std::to_wstring(1));
+            break;
+        }
+        case Command::GoToLastImage: {
+            if (app.playlist.empty()) return;
+            const int lastIndex = static_cast<int>(app.playlist.size()) - 1;
+            if (app.currentIndex == lastIndex) return;
+            LoadImageIndex(hWnd, lastIndex);
+            g_overlayManager.PostCenterMessage(
+                    hWnd, Constants::Messages::TOGGLE_LAST_IMAGE_IN_FOLDER + std::to_wstring(lastIndex + 1));
             break;
         }
         case Command::GoToLastImageInCurrentFolder: {

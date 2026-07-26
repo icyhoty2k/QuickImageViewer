@@ -188,7 +188,7 @@ namespace UI {
         };
 
         // ---------------------------------------------------------------
-        const int sNav = Sec(L"🧭", L"IMAGE NAVIGATION",
+        const int sNav = Sec(Constants::ThemeIcons::ICON_SECTION_COMPASS, L"IMAGE NAVIGATION",
                              L"Moving between images and folders");
 
         Add(K(SC::SC_NAV_PREV) + L" / " + K(SC::SC_NAV_NEXT),
@@ -200,6 +200,8 @@ namespace UI {
         Add(L"Mouse Wheel",
             L"Previous / next image when scrolled over the main window. Direction can be "
             L"reversed with MOUSE_VERTICAL_REVERSE_SCROLL_DIRECTION in Constants.h.", sNav);
+        Add(K(FX::SC_COLOR_SEPIA_OR_SC_NAV_FIRST_IMAGE) + L"  /  " + K(FX::SC_COLOR_SOLARIZE_OR_SC_NAV_LAST_IMAGE),
+            L"Jump to the first / last image of the folder.", sNav);
         Add(K(SC::SC_NAV_TOGGLE_FIRST_LAST_IMAGE_IN_CURR_FOLDER),
             L"Smart jump between the first and the last image of the folder — goes to "
             L"whichever end is further away from the current position.", sNav);
@@ -210,6 +212,13 @@ namespace UI {
             L"image-level Back button.", sNav);
         Add(K(SC::SC_TOGGLE_LAST_DIR),
             L"Toggle between the current folder and the previously opened folder.", sNav);
+        Add(K(FX::SC_COLOR_OUTLINE_OR_NAV_PREV_HISTORY_FOLDER) + L"  /  " + K(FX::SC_COLOR_THRESHOLD_OR_NAV_NEXT_HISTORY_FOLDER),
+            L"Walk the History panel's list one folder up / down, visiting only the "
+            L"non-favorite entries. The list order is never changed — the centre overlay "
+            L"reports the same row number the panel shows.", sNav);
+        Add(K(FX::SC_COLOR_INVERT_OR_NAVIGATE_FAVS_PREV) + L"  /  " + K(FX::SC_COLOR_GRAYSCALE_OR_NAVIGATE_FAVS_NEXT),
+            L"Same walk restricted to the favorites, so the two pairs of keys never "
+            L"land on each other's entries.", sNav);
         Add(K(SC::SC_NAV_JUMP_TO_IMAGE) + L"  /  " + Ctrl(SC::SC_NAV_JUMP_TO_IMAGE_ALT),
             L"Open the Jump-to panel: type an image number and press Enter to go straight "
             L"to it. Typing @ inside the panel switches to Find mode.", sNav);
@@ -230,11 +239,11 @@ namespace UI {
             L"Drop an image file or an entire folder onto the window to open it.", sNav);
 
         // ---------------------------------------------------------------
-        const int sZoom = Sec(L"🔍", L"ZOOM, PAN & VIEW MODES",
+        const int sZoom = Sec(Constants::ThemeIcons::ICON_SECTION_MAGNIFIER, L"ZOOM, PAN & VIEW MODES",
                               L"How the image fits and moves inside the window");
 
         Add(L"Up / Down",
-            L"Zoom in / out by ×" + NumF(Constants::ZOOM_STEP) + L" per step.", sZoom);
+            L"Zoom in / out by ×" + NumF(Constants::ZoomPanel::ZOOM_STEP) + L" per step.", sZoom);
         Add(K(SC::SC_ZOOM_IN_NUMPAD) + L" / " + K(SC::SC_ZOOM_OUT_NUMPAD),
             L"Zoom in / out — same steps as Up / Down.", sZoom);
         Add(K(SC::SC_ZOOM_RESET),
@@ -251,7 +260,7 @@ namespace UI {
             L"4 Fill window (stretches)  •  5 Original size, 1:1 pixels (keeps aspect ratio).", sZoom);
 
         // ---------------------------------------------------------------
-        const int sMouse = Sec(L"🖱️", L"MOUSE CONTROLS",
+        const int sMouse = Sec(Constants::ThemeIcons::ICON_SECTION_MOUSE, L"MOUSE CONTROLS",
                                L"All pointer actions on the main window");
 
         Add(L"ℹ Button roles",
@@ -274,7 +283,7 @@ namespace UI {
             L"Adjust window opacity in " + NumI(Constants::OPACITY_STEP) + L"% steps.", sMouse);
 
         // ---------------------------------------------------------------
-        const int sWin = Sec(L"🪟", L"WINDOW MANAGEMENT",
+        const int sWin = Sec(Constants::ThemeIcons::ICON_SECTION_WINDOW, L"WINDOW MANAGEMENT",
                              L"Move, resize, snap, fullscreen and stacking");
 
         Add(L"Shift+" + K(SC::SC_APP_HIDE_ALT) + L" / " + K(SC::SC_PAN_LEFT) + L" / " +
@@ -311,7 +320,7 @@ namespace UI {
             L"all other windows.", sWin);
 
         // ---------------------------------------------------------------
-        const int sPanels = Sec(L"🧰", L"PANELS & TOOLS",
+        const int sPanels = Sec(Constants::ThemeIcons::ICON_SECTION_TOOLBOX, L"PANELS & TOOLS",
                                 L"Help, info, statistics and the thumbnail panels");
 
         Add(K(SC::SC_PANEL_HELP_TOGGLE),
@@ -341,7 +350,7 @@ namespace UI {
             L"or on any directory / cache strip closes that panel immediately.", sPanels);
 
         // ---------------------------------------------------------------
-        const int sThumbs = Sec(L"🖼️", L"THUMBNAIL STRIPS",
+        const int sThumbs = Sec(Constants::ThemeIcons::ICON_SECTION_PICTURE, L"THUMBNAIL STRIPS",
                                 L"Cache, directory and spawned directory panels");
 
         Add(L"Mouse Wheel",
@@ -390,7 +399,7 @@ namespace UI {
             L"Select Inverse (flips the current selection) and Select None.", sThumbs);
 
         // ---------------------------------------------------------------
-        const int sHist = Sec(L"📜", L"HISTORY PANEL",
+        const int sHist = Sec(Constants::ThemeIcons::ICON_SECTION_SCROLL, L"HISTORY PANEL",
                               L"Recently visited folders with favorites");
 
         Add(K(SC::SC_PANEL_HISTORY_TOGGLE),
@@ -411,15 +420,18 @@ namespace UI {
             L"is open, or hides the existing one. The History panel itself stays open.", sHist);
         Add(K(SC::HISTORY_FAVORITES_TOGGLE_KEY),
             L"Toggle favorite on the hovered entry. Favorites survive history clears.", sHist);
-        Add(K(VK_DELETE),
+        Add(Ctrl(VK_DELETE),
             L"Delete the hovered entry. " + Ctrl('Z') + L" restores the last deleted one.", sHist);
+        Add(L"Home / End / Page Up / Page Down / Insert / Delete",
+            L"Not captured by this panel — they reach the viewer as usual, so you can walk "
+            L"images and folders while watching the list highlight follow you.", sHist);
         Add(CtrlShift(SC::HISTORY_CLEAR_ALL_HISTORY_BUT_NOT_FAVORITES),
             L"Clear the entire history but keep all favorites.", sHist);
         Add(CtrlAltShift(SC::HISTORY_CLEAR_ALL_FAVORITES_BUT_NOT_HISTORY),
             L"Clear all favorites but keep the history.", sHist);
 
         // ---------------------------------------------------------------
-        const int sSlide = Sec(L"▶️", L"SLIDESHOW",
+        const int sSlide = Sec(Constants::ThemeIcons::ICON_SECTION_PLAY, L"SLIDESHOW",
                                L"Automatic playback with transitions");
 
         Add(Ctrl(SC::SC_SLIDESHOW_TOGGLE), L"Start / stop the slideshow.", sSlide);
@@ -438,7 +450,7 @@ namespace UI {
             L"In List mode the numbered rows become checkboxes.", sSlide);
 
         // ---------------------------------------------------------------
-        const int sOverlay = Sec(L"ℹ️", L"INFO OVERLAYS",
+        const int sOverlay = Sec(Constants::ThemeIcons::ICON_SECTION_INFO, L"INFO OVERLAYS",
                                  L"The 3×3 on-screen information grid");
 
         Add(K(SC::SC_PANEL_OVERLAY_MASTER) + L" / " + Ctrl(SC::SC_PANEL_OVERLAY_MASTER_CTRL0),
@@ -457,34 +469,38 @@ namespace UI {
             L"always stays visible.", sOverlay);
 
         // ---------------------------------------------------------------
-        const int sFx = Sec(L"🎨", L"EFFECTS & COLOR",
-                            L"Non-destructive adjustments — the file on disk is never touched");
+        const int sFx = Sec(Constants::ThemeIcons::ICON_SECTION_PALETTE, L"EFFECTS & COLOR",
+                            L"Effects stack in the order you switch them on — each one works on "
+                            L"the result of the previous. Non-destructive: the file on disk is "
+                            L"never touched.");
 
         Add(K(SC::SC_TRANSFORM_ROTATE) + L" / " + Shift(SC::SC_TRANSFORM_ROTATE),
             L"Rotate 90° clockwise / counter-clockwise.", sFx);
         Add(K(SC::SC_TRANSFORM_FLIP_H) + L" / " + K(SC::SC_TRANSFORM_FLIP_V),
             L"Flip horizontally / vertically.", sFx);
-        Add(K(FX::SC_COLOR_GRAYSCALE), L"Toggle grayscale.", sFx);
-        Add(K(FX::SC_COLOR_INVERT), L"Toggle color inversion (negative).", sFx);
-        Add(K(FX::SC_COLOR_SEPIA), L"Toggle sepia tone.", sFx);
-        Add(K(FX::SC_COLOR_SOLARIZE),
+        Add(Ctrl(FX::SC_COLOR_GRAYSCALE_OR_NAVIGATE_FAVS_NEXT),
+            L"Toggle desaturate — drops all colour. Switch Sepia on afterwards to tint "
+            L"the result.", sFx);
+        Add(Ctrl(FX::SC_COLOR_INVERT_OR_NAVIGATE_FAVS_PREV), L"Toggle color inversion (negative).", sFx);
+        Add(Ctrl(FX::SC_COLOR_SEPIA_OR_SC_NAV_FIRST_IMAGE), L"Toggle sepia tone.", sFx);
+        Add(Ctrl(FX::SC_COLOR_SOLARIZE_OR_SC_NAV_LAST_IMAGE),
             L"Toggle solarize — inverts only tones above " +
             NumF(Constants::SOLARIZE_THRESHOLD * 100.0f) + L"% brightness.", sFx);
-        Add(K(FX::SC_COLOR_OUTLINE), L"Toggle outline — GPU edge detection.", sFx);
-        Add(K(FX::SC_COLOR_THRESHOLD),
-            L"Toggle black & white threshold — pixels above " +
-            NumF(Constants::BW_THRESHOLD_LEVEL * 100.0f) + L"% brightness become white, the "
+        Add(Ctrl(FX::SC_COLOR_OUTLINE_OR_NAV_PREV_HISTORY_FOLDER), L"Toggle outline — GPU edge detection.", sFx);
+        Add(Ctrl(FX::SC_COLOR_THRESHOLD_OR_NAV_NEXT_HISTORY_FOLDER),
+            L"Toggle black & white threshold — pixels brighter than " +
+            NumF(Constants::BW_THRESHOLD_LEVEL * 100.0f) + L"% become white, the "
             L"rest black.", sFx);
-        Add(K(FX::SC_COLOR_SAT_DOWN) + L" / " + K(FX::SC_COLOR_SAT_UP),
+        Add(Ctrl(FX::SC_COLOR_SAT_DOWN) + L" / " + Ctrl(FX::SC_COLOR_SAT_UP),
             L"Saturation − / + in " + NumF(Constants::COLOR_ADJUST_STEP) +
             L" steps  (0 = grayscale, maximum " + NumF(Constants::MIN_MAX_SATURATION) + L").", sFx);
-        Add(K(FX::SC_COLOR_BRIGHTNESS_UP) + L" / " + K(FX::SC_COLOR_BRIGHTNESS_DOWN),
+        Add(Ctrl(FX::SC_COLOR_BRIGHTNESS_UP) + L" / " + Ctrl(FX::SC_COLOR_BRIGHTNESS_DOWN),
             L"Brightness + / − in " + NumF(Constants::COLOR_ADJUST_STEP) +
             L" steps  (range ±" + NumF(Constants::MIN_MAX_BRIGHTNESS) + L").", sFx);
-        Add(K(FX::SC_COLOR_CONTRAST_UP) + L" / " + K(FX::SC_COLOR_CONTRAST_DOWN),
+        Add(Ctrl(FX::SC_COLOR_CONTRAST_UP) + L" / " + Ctrl(FX::SC_COLOR_CONTRAST_DOWN),
             L"Contrast + / − in " + NumF(Constants::COLOR_ADJUST_STEP) +
             L" steps  (maximum " + NumF(Constants::MIN_MAX_CONTRAST) + L").", sFx);
-        Add(K(FX::SC_COLOR_GAMMA_UP) + L" / " + K(FX::SC_COLOR_GAMMA_DOWN),
+        Add(Ctrl(FX::SC_COLOR_GAMMA_UP) + L" / " + Ctrl(FX::SC_COLOR_GAMMA_DOWN),
             L"Gamma + / − in " + NumF(Constants::GAMMA_STEP) + L" steps  (range " +
             NumF(Constants::MIN_GAMMA) + L" – " + NumF(Constants::MAX_GAMMA) + L").", sFx);
         Add(K(FX::SC_COLOR_RESET_ALL_EFFECTS),
@@ -494,7 +510,7 @@ namespace UI {
             L"re-apply all active effects.", sFx);
 
         // ---------------------------------------------------------------
-        const int sFiles = Sec(L"💾", L"FILES, CLIPBOARD & SORTING",
+        const int sFiles = Sec(Constants::ThemeIcons::ICON_SECTION_FLOPPY, L"FILES, CLIPBOARD & SORTING",
                                L"Saving, copying and playlist ordering");
 
         Add(Ctrl(SC::SC_COPY_TO_CLIPBOARD),
@@ -515,7 +531,7 @@ namespace UI {
             L"option for mechanical hard drives.", sFiles);
 
         // ---------------------------------------------------------------
-        const int sApp = Sec(L"⚙️", L"APPLICATION & APPEARANCE",
+        const int sApp = Sec(Constants::ThemeIcons::ICON_SECTION_GEAR, L"APPLICATION & APPEARANCE",
                              L"Lifecycle, theme and window chrome");
 
         Add(K(SC::SC_APP_HIDE) + L"  /  " + Ctrl(SC::SC_APP_HIDE_ALT),
@@ -544,7 +560,7 @@ namespace UI {
             L"Cycle the window backdrop material: None → Mica → Acrylic → MicaAlt.", sApp);
 
         // ---------------------------------------------------------------
-        const int sTray = Sec(L"🔔", L"SYSTEM TRAY",
+        const int sTray = Sec(Constants::ThemeIcons::ICON_SECTION_BELL, L"SYSTEM TRAY",
                               L"Right-click the tray icon to access all persistent settings");
 
         Add(L"Double-click tray icon",
@@ -633,7 +649,7 @@ namespace UI {
             L"Overwrites current history and favorites in memory and on disk.", sTray);
 
         // ---------------------------------------------------------------
-        const int sDed = Sec(L"🖥️", L"DEDICATED SCREENS",
+        const int sDed = Sec(Constants::ThemeIcons::ICON_SECTION_DESKTOP, L"DEDICATED SCREENS",
                              L"Isolated copies for unattended displays (F8)");
 
         Add(K(SC::SC_PANEL_DEDICATED_TOGGLE),
@@ -694,7 +710,7 @@ namespace UI {
             L"favorites and all — just portable.", sDed);
 
         // ---------------------------------------------------------------
-        const int sCli = Sec(L"⌨️", L"COMMAND-LINE ARGUMENTS",
+        const int sCli = Sec(Constants::ThemeIcons::ICON_SECTION_KEYBOARD, L"COMMAND-LINE ARGUMENTS",
                              L"Options for QuickImageViewer.exe at launch");
 
         Add(L"\"path\\to\\image.jpg\"",
@@ -1384,7 +1400,13 @@ namespace UI {
                 if (m_sbDragging) {
                     m_sbDragging = false;
                     ReleaseCapture();
+                    return 0; // scrollbar drag owned the button — not the filter's
                 }
+                // Ends a filter-box drag-select. Without it the box only drops
+                // m_dragging on the next WM_MOUSEMOVE, so moving after release
+                // keeps extending the selection.
+                if (m_filter.RouteMouse(WM_LBUTTONUP, wParam, lParam, m_hWnd) == InputResult::ConsumedRepaint)
+                    InvalidateRect(m_hWnd, nullptr, FALSE);
                 return 0;
             }
 

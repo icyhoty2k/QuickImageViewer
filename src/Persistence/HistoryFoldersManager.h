@@ -24,13 +24,69 @@
 //   ClearHistory        → RewriteHistoryToDisk()    (history only, does NOT touch favorites)
 //   ClearFavorites      → RewriteFavoritesToDisk()  (favorites only, does NOT touch history)
 
+// ---------------------------------------------------------------------------
+// PATH HYGIENE
+//
+// qivHistory.txt and qivFavorites.txt are plain text sitting next to the exe —
+// a user can and will open them in Notepad. Everything read back is therefore
+// UNTRUSTED INPUT: blank lines, stray indentation, quoted paths pasted from
+// Explorer's "Copy as path", forward slashes, trailing backslashes, the same
+// folder listed twice in different case, outright garbage. None of it may reach
+// the panel, the walk, or the filesystem calls unchecked.
+//
+// Every path entering either list goes through NormalizeFolderPath() first, and
+// every comparison between two paths goes through the case-insensitive helpers
+// below — Windows folders are case-insensitive, so plain operator== on wstring
+// is the wrong test and silently produces duplicate rows.
+// ---------------------------------------------------------------------------
+namespace HistoryPath {
+
+    // Cleans one raw line (from disk) or one raw path (from the app) into the
+    // canonical form stored in the lists:
+    //   • trims surrounding whitespace and a wrapping pair of double quotes
+    //   • converts '/' to '\' and collapses repeated separators
+    //   • drops a trailing separator, except on a drive root ("D:\")
+    //   • rejects anything that cannot be an absolute folder path: empty, not
+    //     drive-qualified and not UNC, containing characters illegal in Win32
+    //     paths (< > " | ? *) or control characters, or absurdly long
+    // Returns false when the input is unusable; 'out' is then untouched.
+    bool Normalize(const std::wstring &raw, std::wstring &out);
+
+    // Whitespace + wrapping-quote trim ONLY — no validation, no rewriting.
+    // A line that Normalize() rejects is kept in the list in this form so the
+    // History panel can still show it (flagged as broken) instead of silently
+    // swallowing it. A file the user edited should always be visible in full;
+    // a vanished row looks like data loss and hides the actual mistake.
+    std::wstring Clean(const std::wstring &raw);
+
+    // True when a stored entry is not a usable folder path — i.e. it survived
+    // loading only so it could be displayed as broken.
+    bool IsBroken(const std::wstring &entry);
+
+    // Case-insensitive equality / hashing, so "D:\Pics" and "d:\pics" are one
+    // folder everywhere: dedupe, favorite lookups, status cache, walk anchors.
+    bool Equal(const std::wstring &a, const std::wstring &b);
+
+    struct HashCI {
+        size_t operator()(const std::wstring &s) const;
+    };
+    struct EqualCI {
+        bool operator()(const std::wstring &a, const std::wstring &b) const { return Equal(a, b); }
+    };
+
+} // namespace HistoryPath
+
+// A set of folder paths that treats case-different spellings as one entry while
+// preserving whatever casing was first stored, for display.
+using FolderPathSet = std::unordered_set<std::wstring, HistoryPath::HashCI, HistoryPath::EqualCI>;
+
 struct HistoryFoldersManager {
     // MRU-ordered list of all folder paths (index 0 = most recently visited).
-    // Holds up to HISTORY_MAX_DIRS_TO_SAVE entries.
+    // Holds up to HISTORY_MAX_DIRS_TO_SAVE entries. Normalized, duplicate-free.
     std::vector<std::wstring> folderHistory;
 
     // Set of paths that are marked as favorites (for O(1) lookup).
-    std::unordered_set<std::wstring> favorites;
+    FolderPathSet favorites;
 
     std::wstring historyFileName   = Constants::History::HISTORY_FILE_NAME;
     std::wstring favoritesFileName = Constants::History::FAVORITES_FILE_NAME;

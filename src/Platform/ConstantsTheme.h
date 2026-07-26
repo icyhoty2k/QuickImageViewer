@@ -45,6 +45,18 @@ namespace Constants {
         // This is the INIT VALUE only — runtime state lives in app.themeFactor.
         constexpr float DEFAULT_THEME_FACTOR = 0.0f;
 
+        // Legal range for app.themeFactor. Enforced at BOTH ends of persistence:
+        // the runtime setter (AppCommands::changeAppThemeFactor) and the registry
+        // load, so a hand-edited or corrupt stored value cannot reach the renderer.
+        constexpr float THEME_FACTOR_MIN = 0.0f;
+        constexpr float THEME_FACTOR_MAX = 1.0f;
+
+        // The factor is a 0..1 ratio but is STORED as a whole percent (0..100),
+        // because the registry only holds DWORDs. Every conversion must go
+        // through this scale — casting the ratio straight to DWORD truncates it
+        // to 0 for every value below 1.0.
+        constexpr float THEME_FACTOR_STORE_SCALE = 100.0f;
+
         // Step size for runtime THEME_FACTOR adjustment (Ctrl+Alt+Shift+Numpad+/-).
         constexpr float THEME_FACTOR_STEP = 0.05f; // smallest step must be 0.01 dont go smaller than this because i seve in registry:static_cast<DWORD>(std::round(app.themeFactor * 100.0f)));
 
@@ -121,6 +133,27 @@ namespace Constants {
             constexpr COLORREF PATH_EMPTY_DRIVE = RGB(200, 130, 50); // orange for drive / index / empty glyph
             constexpr COLORREF PATH_EMPTY_MIDDLE = RGB(150, 100, 40); // darker orange for middle path
             constexpr COLORREF PATH_EMPTY_FOLDER = RGB(220, 165, 85); // lighter orange for folder name
+
+            // "Loading ..." shown while the background folder sweep runs. Amber,
+            // and deliberately not a status colour: it describes the PANEL being
+            // busy, not anything about a folder.
+            constexpr COLORREF SCANNING_TEXT = RGB(235, 200, 120);
+            // Point size added to the normal row font for that message, so it
+            // reads as an overlay rather than another row.
+            constexpr int SCANNING_FONT_BOOST = 6;
+
+            // Symlink / junction rows — the path is a reparse point, so it is a
+            // second name for a directory that physically lives somewhere else.
+            // Violet: deliberately outside the teal/gold/green/red/orange already
+            // in use, so "this row is an alias" reads at a glance and never gets
+            // confused with a status. Only the drive segment and the glyph are
+            // tinted — the rest of the row keeps its normal / favorite / current
+            // colours, because being a link says nothing about whether the folder
+            // is starred, open, or alive.
+            constexpr COLORREF PATH_SYMLINK_DRIVE = RGB(175, 145, 235); // violet drive letter
+            constexpr COLORREF PATH_SYMLINK_DRIVE_HOVER = RGB(205, 180, 255);
+            // Hover row background for a link row (matches the tint above).
+            constexpr COLORREF ROW_HOVER_SYMLINK = RGB(45, 35, 70);
         }
 
         // =====================================================================
@@ -216,6 +249,12 @@ namespace Constants {
             constexpr COLORREF ERR       = RGB(255, 80,  80);
             constexpr COLORREF CRITICAL  = RGB(60,  15,  15);
             constexpr COLORREF FAVORITES = RGB(255, 200, 50);
+            constexpr COLORREF SYMLINK   = RGB(190, 160, 255); // reparse point / junction glyph
+            // Badge-stack glyph. Deliberately a NEUTRAL silver and not borrowed
+            // from any status colour: the stack is a container, not a state, so
+            // tinting it red/gold/violet would claim one of the badges underneath
+            // it is the important one. Grey says "look inside" and nothing more.
+            constexpr COLORREF BADGE_STACK = RGB(195, 200, 210);
         }
 
         // =====================================================================
@@ -275,5 +314,53 @@ namespace Constants {
         inline COLORREF ThemedColor(float r, float g, float b, float factor) {
             return RGB(ToByte(Apply(r, factor)), ToByte(Apply(g, factor)), ToByte(Apply(b, factor)));
         }
+    }
+namespace ThemeIcons {
+    // ── Status / indicators ──────────────────────────────────────────
+    constexpr const wchar_t* ICON_FAVORITES_MARK  = L"\x2605";        // ★
+    constexpr const wchar_t* ICON_SYMLINK_MARK     = L"\U0001F517";   // 🔗
+    constexpr const wchar_t* ICON_WARNING          = L"\x26A0";       // ⚠
+    constexpr const wchar_t* ICON_EMPTY            = L"\x2205";       // ∅
+    constexpr const wchar_t* ICON_CLOSE            = L"\x2715";       // ✕
+    constexpr const wchar_t* ICON_CHECK            = L"\x2714";       // ✔
+    constexpr const wchar_t* ICON_FOLDER_ARROW     = L"\x25B8";       // ▸
+    // Shown when a row has MORE than one badge and only one slot to show them in;
+    // hovering it lists them all. Two joined squares — the layered look says
+    // "several things stacked here" without borrowing any badge's own meaning.
+    constexpr const wchar_t* ICON_BADGE_STACK      = L"\x29C9";       // ⧉
+
+    // ── Directional arrows ───────────────────────────────────────────
+    constexpr const wchar_t* ICON_ARROW_RIGHT      = L"\x2192";       // →
+    constexpr const wchar_t* ICON_ARROW_DOWN       = L"\x2193";       // ↓
+    constexpr const wchar_t* ICON_ARROWS_UP_DOWN   = L"\x2191\x2193"; // ↑↓
+
+    // ── Media playback ───────────────────────────────────────────────
+    constexpr const wchar_t* ICON_PLAY             = L"\x25B6";       // ▶
+    constexpr const wchar_t* ICON_PAUSE            = L"\x23F8";       // ⏸
+    constexpr const wchar_t* ICON_STOP             = L"\x25A0";       // ■
+
+    // ── Wrap navigation ──────────────────────────────────────────────
+    constexpr const wchar_t* ICON_WRAP_START       = L"\x21A9";       // ↩
+    constexpr const wchar_t* ICON_WRAP_END         = L"\x21AA";       // ↪
+
+    // ── Objects / folders ────────────────────────────────────────────
+    constexpr const wchar_t* ICON_FOLDER           = L"\U0001F4C1";   // 📁
+
+    // ── HelpWnd section emoji ────────────────────────────────────────
+    constexpr const wchar_t* ICON_SECTION_COMPASS    = L"\U0001F9ED";     // 🧭
+    constexpr const wchar_t* ICON_SECTION_MAGNIFIER  = L"\U0001F50D";     // 🔍
+    constexpr const wchar_t* ICON_SECTION_MOUSE      = L"\U0001F5B1\xFE0F";// 🖱️
+    constexpr const wchar_t* ICON_SECTION_WINDOW     = L"\U0001FA9F";     // 🪟
+    constexpr const wchar_t* ICON_SECTION_TOOLBOX    = L"\U0001F9F0";     // 🧰
+    constexpr const wchar_t* ICON_SECTION_PICTURE    = L"\U0001F5BC\xFE0F";// 🖼️
+    constexpr const wchar_t* ICON_SECTION_SCROLL     = L"\U0001F4DC";     // 📜
+    constexpr const wchar_t* ICON_SECTION_PLAY       = L"\x25B6\xFE0F";   // ▶️
+    constexpr const wchar_t* ICON_SECTION_INFO       = L"\x2139\xFE0F";   // ℹ️
+    constexpr const wchar_t* ICON_SECTION_PALETTE    = L"\U0001F3A8";     // 🎨
+    constexpr const wchar_t* ICON_SECTION_FLOPPY     = L"\U0001F4BE";     // 💾
+    constexpr const wchar_t* ICON_SECTION_GEAR       = L"\x2699\xFE0F";   // ⚙️
+    constexpr const wchar_t* ICON_SECTION_BELL       = L"\U0001F514";     // 🔔
+    constexpr const wchar_t* ICON_SECTION_DESKTOP    = L"\U0001F5A5\xFE0F";// 🖥️
+    constexpr const wchar_t* ICON_SECTION_KEYBOARD   = L"\x2328\xFE0F";   // ⌨️
     }
 } 

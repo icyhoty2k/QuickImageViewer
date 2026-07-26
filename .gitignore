@@ -12,5 +12,16 @@ build/
 *.pdb
 /QIV_src.zip
 
-# Zip Archive of the src dir splits 10 files a part 
+# Zip Archive of the src dir splits 10 files a part
 /archive/
+
+# Editor backup files — stale duplicates of real sources; keep them out of
+# git AND out of ripgrep/Grep results (rg honours .gitignore), so searches
+# never return dead copies of a file alongside the live one.
+*~
+*.orig
+*.bak
+
+# Marker dropped by the CLion Run configuration to suppress the build-number
+# increment for that build. Transient, machine-local.
+.qiv_skip_build_number
