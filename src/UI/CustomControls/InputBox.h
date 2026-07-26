@@ -293,7 +293,7 @@ inline void InputBox::Draw(HDC hdc, HFONT hFont, const RECT& boxRect, int padX,
                         boxRect.right,          boxRect.bottom };
         RECT cr = m_clearRect;
         SetTextColor(hdc, m_clearHovered ? colorClearHover : colorClear);
-        DrawTextW(hdc, L"✕", -1, &cr, DT_CENTER | DT_VCENTER | DT_SINGLELINE);
+        DrawTextW(hdc, Constants::ThemeIcons::ICON_CLOSE, -1, &cr, DT_CENTER | DT_VCENTER | DT_SINGLELINE);
     } else {
         m_clearRect    = {};
         m_clearHovered = false;
