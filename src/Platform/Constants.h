@@ -465,6 +465,13 @@ namespace Constants {
         constexpr const wchar_t *HISTORY_FULL_MODE = L"qivHistoryFullMode";
         constexpr const wchar_t *OVERLAY_VISIBLE = L"qivOverlayVisible";
         constexpr const wchar_t *OVERLAY_SHOW_BG = L"qivOverlayShowBg";
+        constexpr const wchar_t *OVERLAY_LAYOUT_MODE  = L"qivOverlayLayoutMode";
+        constexpr const wchar_t *OVERLAY_SLOT_VISIBLE = L"qivOverlaySlotVisible"; // bitmask, bit N = slot N
+        constexpr const wchar_t *OVERLAY_SLOT_COMPACT = L"qivOverlaySlotCompact"; // bitmask, bit N = slot N
+        constexpr const wchar_t *OVERLAY_SHOW_DIR_NAME = L"qivOverlayShowDirName";
+        constexpr const wchar_t *OVERLAY_FONT_SIZE     = L"qivOverlayFontSize";
+        constexpr const wchar_t *OVERLAY_FONT_COLOR    = L"qivOverlayFontColor";
+        constexpr const wchar_t *OVERLAY_FONT_FAMILY   = L"qivOverlayFontFamily"; // index into OVERLAY_FONT_FAMILIES
         constexpr const wchar_t *OPEN_DIRWND_ON_START = L"qivOpenDirWndOnStart";
         constexpr const wchar_t *SWAP_MOUSE_BUTTONS = L"qivSwapMouseButtons";
         constexpr const wchar_t *WHEEL_INVERT   = L"qivWheelInvert";
@@ -534,13 +541,31 @@ namespace Constants {
         // P key — toggle semi-transparent background behind all overlay text.
         // Text is always drawn; only the background rect is suppressed when false.
         constexpr bool IS_OVERLAY_SHOW_BACKGROUND = true;
-        // Layout mode cycled with O key:
+        // Layout mode cycled with O key — live value is app.overlayLayoutMode:
         //   0 — default 3×3 grid
-        //   1 — all slots stacked vertically on top-left
-        //   2 — compact 2-line summary top-left:
+        //   1 — the four corners stacked vertically on top-left
+        //   2 — the four corners collapsed into a 2-line summary top-left:
         //         line 1: index / total + filename
-        //         line 2: zoom% + WxH / size  (TOP_CENTER + BOT_RIGHT combined)
-        inline int OVERLAY_LAYOUT_MODE = 0;
+        //         line 2: zoom% + WxH / size
+        // Modes 1 and 2 re-arrange only the corners; the five non-corner slots
+        // keep their grid positions in every mode.
+        constexpr int DEFAULT_LAYOUT_MODE = 0;
+        constexpr int LAYOUT_MODE_COUNT   = 3;
+
+        // BOT_LEFT carries two independent readouts, in this order:
+        //   the active-effects list, then the current folder name LAST.
+        // The slot is bottom-anchored and grows upward, so the folder name
+        // stays pinned to the bottom while effects stack above it. The two
+        // toggles are independent — hiding one never hides the other.
+        constexpr bool SHOW_DIR_NAME     = false; // persisted (qivOverlayShowDirName)
+        constexpr bool SHOW_EFFECTS_LIST = true;  // session-only, not persisted
+
+        // Per-slot visibility / compact state is persisted as one bit per slot,
+        // indexed by OverlayManager::Slot. Nine slots → the low 9 bits.
+        constexpr unsigned SLOT_MASK_ALL = 0x1FFu;
+        constexpr unsigned DEFAULT_SLOT_VISIBLE_MASK = SLOT_MASK_ALL;
+        constexpr unsigned DEFAULT_SLOT_COMPACT_MASK =
+                IS_COMPACT_OVERLAY_MODE ? SLOT_MASK_ALL : 0u;
 
         // =========================================================================
         // Overlay — Center-Center message queue (MID_CENTER slot)
@@ -558,6 +583,29 @@ namespace Constants {
         constexpr float MSG_ALL_BUT_CENTER_FONT_SIZE = MSG_BASE_FONT_SIZE * 1.4f;
         constexpr float MSG_CENTER_FONT_SIZE = MSG_BASE_FONT_SIZE * 1.6f;
         constexpr const wchar_t *MSG_ALL_BUT_CENTER_FONT_FAMILY_DEFAULT = L"Segoe UI";
+
+        // =========================================================================
+        // Overlay — user-chosen text style for the eight OUTER slots
+        // =========================================================================
+        // MID_CENTER is deliberately excluded: it is a transient notification with
+        // its own colour and size above, and it has to stay legible no matter what
+        // the outer slots are set to.
+        constexpr int OVERLAY_FONT_SIZE_MIN     = 1;
+        constexpr int OVERLAY_FONT_SIZE_MAX     = 92;
+        constexpr int OVERLAY_FONT_SIZE_DEFAULT = static_cast<int>(MSG_ALL_BUT_CENTER_FONT_SIZE);
+        // LightGreen — the colour RendererD2D has always created its text brush
+        // with, kept as the default so nothing changes until the user picks.
+        constexpr COLORREF OVERLAY_FONT_COLOR_DEFAULT = RGB(144, 238, 144);
+        // Offered in the Overlays ▸ Font submenu. Persisted as an INDEX into this
+        // array, so only ever append — inserting or reordering would silently
+        // repoint every saved setting.
+        constexpr const wchar_t *OVERLAY_FONT_FAMILIES[] = {
+            L"Segoe UI", L"Arial", L"Verdana", L"Tahoma", L"Calibri",
+            L"Georgia", L"Times New Roman", L"Courier New", L"Consolas",
+            L"Comic Sans MS", L"Impact", L"Trebuchet MS"
+        };
+        constexpr int OVERLAY_FONT_FAMILY_COUNT   = static_cast<int>(std::size(OVERLAY_FONT_FAMILIES));
+        constexpr int OVERLAY_FONT_FAMILY_DEFAULT = 0; // Segoe UI — matches the constant above
         constexpr const wchar_t *MSG_CENTER__FONT_FAMILY_DEFAULT = L"Segoe UI";
         constexpr const wchar_t *MSG_ALL_FONT_FAMILY_FALLBACK = L"Arial";
         constexpr const wchar_t *MSG_ALL_FONT_LOCALE = L"en-us";

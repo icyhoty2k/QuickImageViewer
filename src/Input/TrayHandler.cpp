@@ -1,5 +1,6 @@
 #include "TrayHandler.h"
 #include "AppCommands.h"
+#include <string>
 #include "ContextMenuHandler.h"
 #include "../Common/Converters.h"
 #include "../AppState.h"
@@ -14,6 +15,7 @@
 #include "../UI/ThemedDialog.h"
 #include "../UI/UIManager.h"
 #include <algorithm>
+#include <commdlg.h> // ChooseColorW — overlay font colour picker
 #include <fstream>
 #include <miniz.h>
 #include <shobjidl.h>
@@ -75,6 +77,58 @@ void TrayHandler::RestoreWindow(HWND hWnd) {
 // =============================================================================
 
 void TrayHandler::DispatchCommand(HWND hWnd, int cmd) {
+    // ── Overlay slot state changes (ids 67-96) ────────────────────────────────
+    // Handled before the switch so the three contiguous 9-wide bands can be
+    // resolved by arithmetic instead of 30 explicit cases.
+    if (cmd >= 67 && cmd <= 96) {
+        if (cmd <= 93) {
+            // The three state bands set a slot directly rather than cycling —
+            // a radio item names the state it wants. SlotStateMessage then
+            // reports whatever the slot actually ended up in, so the menu and
+            // Ctrl+1..9 word the result identically.
+            const int band = (cmd - 67) / 9;   // 0 = Off, 1 = Full, 2 = Compact
+            const auto s = static_cast<OverlayManager::Slot>((cmd - 67) % 9);
+            const bool wantVisible = band != 0;
+            const bool wantCompact = band == 2;
+
+            g_overlayManager.SetSlotVisible(s, wantVisible);
+            if (wantVisible && s != OverlayManager::MID_CENTER &&
+                g_overlayManager.IsCompact(s) != wantCompact)
+                g_overlayManager.ToggleCompactMode(s);
+
+            m_overlayManager.PostCenterMessage(hWnd, g_overlayManager.SlotStateMessage(s));
+        } else {
+            // Layout: 94 = Grid, 95 = Stacked, 96 = Summary
+            const int mode = cmd - 94;
+            app.overlayLayoutMode = mode;
+            g_overlayManager.OnLayoutModeChanged(hWnd);
+            static const wchar_t* const LAYOUT_MSGS[] = {
+                Constants::Messages::LAYOUT_GRID,
+                Constants::Messages::LAYOUT_STACKED,
+                Constants::Messages::LAYOUT_SUMMARY
+            };
+            m_overlayManager.PostCenterMessage(hWnd, LAYOUT_MSGS[mode]);
+        }
+        InvalidateRect(hWnd, nullptr, FALSE);
+        return;
+    }
+
+    // ── Overlay font family (ids 101 .. 101+N-1) ──────────────────────────────
+    // Contiguous band, one id per entry in OVERLAY_FONT_FAMILIES.
+    if (cmd >= 101 && cmd < 101 + Constants::Overlay::OVERLAY_FONT_FAMILY_COUNT) {
+        app.overlayFontFamily = cmd - 101;
+        Persistence::Registry::SaveSetting(Constants::Registry::OVERLAY_FONT_FAMILY,
+            static_cast<DWORD>(app.overlayFontFamily));
+        // Rebuilds the base format and every per-slot format derived from it.
+        g_overlayManager.UpdateTextFormat();
+        g_overlayManager.InvalidateLayouts();
+        m_overlayManager.PostCenterMessage(hWnd,
+            std::wstring(Constants::Messages::OVERLAY_FONT_PREFIX) +
+            Constants::Overlay::OVERLAY_FONT_FAMILIES[app.overlayFontFamily]);
+        InvalidateRect(hWnd, nullptr, FALSE);
+        return;
+    }
+
     switch (cmd) {
 
     // ── Restore / Help / Exit ─────────────────────────────────────────────────
@@ -101,6 +155,9 @@ void TrayHandler::DispatchCommand(HWND hWnd, int cmd) {
         app.isKeepInBackground = !app.isKeepInBackground;
         Persistence::Registry::SaveSetting(Constants::Registry::KEEP_IN_BACKGROUND,
             static_cast<DWORD>(app.isKeepInBackground));
+        m_overlayManager.PostCenterMessage(hWnd,
+            app.isKeepInBackground ? Constants::Messages::KEEP_IN_BG_ON
+                                   : Constants::Messages::KEEP_IN_BG_OFF);
         break;
 
     case 5:
@@ -108,12 +165,18 @@ void TrayHandler::DispatchCommand(HWND hWnd, int cmd) {
         Persistence::Registry::SaveSetting(Constants::Registry::RUN_ON_STARTUP,
             static_cast<DWORD>(app.isEnableRunOnStartup));
         Persistence::Registry::EnableRunOnStartup(app.isEnableRunOnStartup);
+        m_overlayManager.PostCenterMessage(hWnd,
+            app.isEnableRunOnStartup ? Constants::Messages::RUN_ON_STARTUP_ON
+                                     : Constants::Messages::RUN_ON_STARTUP_OFF);
         break;
 
     case 6:
         app.thumbnailEffectsEnabled = !app.thumbnailEffectsEnabled;
         Persistence::Registry::SaveSetting(Constants::Registry::THUMBNAIL_EFFECTS,
             static_cast<DWORD>(app.thumbnailEffectsEnabled));
+        m_overlayManager.PostCenterMessage(hWnd,
+            app.thumbnailEffectsEnabled ? Constants::Messages::THUMB_EFFECTS_ON
+                                        : Constants::Messages::THUMB_EFFECTS_OFF);
         m_uiManager.RepaintAllPanels();
         break;
 
@@ -125,6 +188,9 @@ void TrayHandler::DispatchCommand(HWND hWnd, int cmd) {
         // rebuilt and refitted now — otherwise it keeps showing the old row set
         // until something unrelated invalidates it.
         UI::RefreshHistoryFullMode();
+        m_overlayManager.PostCenterMessage(hWnd,
+            app.historyFullModeEnabled ? Constants::Messages::HISTORY_FULL_ON
+                                       : Constants::Messages::HISTORY_FULL_OFF);
         break;
 
     // KIOSK lock. Reached from the tray while the main window is deaf, which is
@@ -163,11 +229,78 @@ void TrayHandler::DispatchCommand(HWND hWnd, int cmd) {
                                  : Constants::Messages::KEEP_DISPLAY_AWAKE_OFF);
         break;
 
+    // ── BOT_LEFT readouts ─────────────────────────────────────────────────────
+    // Session-only by design — no SaveSetting here, unlike the folder name.
+    case 97:
+        app.overlayShowEffectsList = !app.overlayShowEffectsList;
+        g_overlayManager.UpdateEffects();
+        m_overlayManager.PostCenterMessage(hWnd,
+            app.overlayShowEffectsList ? Constants::Messages::OVERLAY_EFFECTS_LIST_ON
+                                       : Constants::Messages::OVERLAY_EFFECTS_LIST_OFF);
+        InvalidateRect(hWnd, nullptr, FALSE);
+        break;
+
+    case 98:
+        app.overlayShowDirName = !app.overlayShowDirName;
+        Persistence::Registry::SaveSetting(Constants::Registry::OVERLAY_SHOW_DIR_NAME,
+            static_cast<DWORD>(app.overlayShowDirName));
+        g_overlayManager.RefreshFolderNameLine();
+        m_overlayManager.PostCenterMessage(hWnd,
+            app.overlayShowDirName ? Constants::Messages::OVERLAY_DIR_NAME_ON
+                                   : Constants::Messages::OVERLAY_DIR_NAME_OFF);
+        InvalidateRect(hWnd, nullptr, FALSE);
+        break;
+
+    // ── Overlay font size / colour (outer slots only) ─────────────────────────
+    case 99: {
+        wchar_t prompt[128];
+        swprintf_s(prompt, L"Overlay text size in points (%d – %d):",
+                   Constants::Overlay::OVERLAY_FONT_SIZE_MIN,
+                   Constants::Overlay::OVERLAY_FONT_SIZE_MAX);
+        int v = UI::ThemedDialog::PromptInt(hWnd, L"Overlay Font Size", prompt,
+            app.overlayFontSize,
+            Constants::Overlay::OVERLAY_FONT_SIZE_MIN,
+            Constants::Overlay::OVERLAY_FONT_SIZE_MAX,
+            Constants::Overlay::OVERLAY_FONT_SIZE_DEFAULT);
+        if (v >= 0) {
+            app.overlayFontSize = v;
+            Persistence::Registry::SaveSetting(Constants::Registry::OVERLAY_FONT_SIZE,
+                static_cast<DWORD>(app.overlayFontSize));
+            g_overlayManager.UpdateTextFormat();
+            g_overlayManager.InvalidateLayouts();
+            InvalidateRect(hWnd, nullptr, FALSE);
+        }
+        break;
+    }
+
+    case 100: {
+        // Custom swatches persist for the lifetime of the process only —
+        // ChooseColor writes back into whatever array it is given.
+        static COLORREF customColors[16] = {};
+        CHOOSECOLORW cc{};
+        cc.lStructSize  = sizeof(cc);
+        cc.hwndOwner    = hWnd;
+        cc.rgbResult    = app.overlayFontColor;
+        cc.lpCustColors = customColors;
+        cc.Flags        = CC_FULLOPEN | CC_RGBINIT;
+        if (ChooseColorW(&cc)) {
+            app.overlayFontColor = cc.rgbResult;
+            Persistence::Registry::SaveSetting(Constants::Registry::OVERLAY_FONT_COLOR,
+                static_cast<DWORD>(app.overlayFontColor));
+            g_overlayManager.ApplyTextColor();
+            InvalidateRect(hWnd, nullptr, FALSE);
+        }
+        break;
+    }
+
     case 8:
         app.showOverlayInfoText = !app.showOverlayInfoText;
         Persistence::Registry::SaveSetting(Constants::Registry::OVERLAY_VISIBLE,
             static_cast<DWORD>(app.showOverlayInfoText));
         m_overlayManager.SetAllVisible(app.showOverlayInfoText);
+        m_overlayManager.PostCenterMessage(hWnd,
+            app.showOverlayInfoText ? Constants::Messages::INFO_PANELS_ON
+                                    : Constants::Messages::INFO_PANELS_OFF);
         InvalidateRect(hWnd, nullptr, FALSE);
         break;
 
@@ -175,12 +308,18 @@ void TrayHandler::DispatchCommand(HWND hWnd, int cmd) {
         app.openDirWndOnStart = !app.openDirWndOnStart;
         Persistence::Registry::SaveSetting(Constants::Registry::OPEN_DIRWND_ON_START,
             static_cast<DWORD>(app.openDirWndOnStart));
+        m_overlayManager.PostCenterMessage(hWnd,
+            app.openDirWndOnStart ? Constants::Messages::OPEN_THUMB_START_ON
+                                  : Constants::Messages::OPEN_THUMB_START_OFF);
         break;
 
     case 13:
         app.overlayShowBackground = !app.overlayShowBackground;
         Persistence::Registry::SaveSetting(Constants::Registry::OVERLAY_SHOW_BG,
             static_cast<DWORD>(app.overlayShowBackground));
+        m_overlayManager.PostCenterMessage(hWnd,
+            app.overlayShowBackground ? Constants::Messages::OVERLAY_BG_ON
+                                      : Constants::Messages::OVERLAY_BG_OFF);
         InvalidateRect(hWnd, nullptr, FALSE);
         break;
 
@@ -188,30 +327,45 @@ void TrayHandler::DispatchCommand(HWND hWnd, int cmd) {
         app.swapMouseButtons = !app.swapMouseButtons;
         Persistence::Registry::SaveSetting(Constants::Registry::SWAP_MOUSE_BUTTONS,
             static_cast<DWORD>(app.swapMouseButtons));
+        m_overlayManager.PostCenterMessage(hWnd,
+            app.swapMouseButtons ? Constants::Messages::SWAP_MOUSE_ON
+                                 : Constants::Messages::SWAP_MOUSE_OFF);
         break;
 
     case 15:
         app.invertWheelDirection = !app.invertWheelDirection;
         Persistence::Registry::SaveSetting(Constants::Registry::WHEEL_INVERT,
             static_cast<DWORD>(app.invertWheelDirection));
+        m_overlayManager.PostCenterMessage(hWnd,
+            app.invertWheelDirection ? Constants::Messages::WHEEL_INVERT_ON
+                                     : Constants::Messages::WHEEL_INVERT_OFF);
         break;
 
     case 16:
         app.invertWheelDirectionH = !app.invertWheelDirectionH;
         Persistence::Registry::SaveSetting(Constants::Registry::WHEEL_INVERT_H,
             static_cast<DWORD>(app.invertWheelDirectionH));
+        m_overlayManager.PostCenterMessage(hWnd,
+            app.invertWheelDirectionH ? Constants::Messages::WHEEL_INVERT_H_ON
+                                      : Constants::Messages::WHEEL_INVERT_H_OFF);
         break;
 
     case 25:
         app.startInFullscreen = !app.startInFullscreen;
         Persistence::Registry::SaveSetting(Constants::Registry::START_FULLSCREEN,
             static_cast<DWORD>(app.startInFullscreen));
+        m_overlayManager.PostCenterMessage(hWnd,
+            app.startInFullscreen ? Constants::Messages::START_FULLSCREEN_ON
+                                  : Constants::Messages::START_FULLSCREEN_OFF);
         break;
 
     case 49:
         app.ctrlCEnabled = !app.ctrlCEnabled;
         Persistence::Registry::SaveSetting(Constants::Registry::CTRL_C_ENABLED,
             static_cast<DWORD>(app.ctrlCEnabled));
+        m_overlayManager.PostCenterMessage(hWnd,
+            app.ctrlCEnabled ? Constants::Messages::CTRL_C_COPY_ON
+                             : Constants::Messages::CTRL_C_COPY_OFF);
         break;
 
     case 63:
@@ -240,24 +394,36 @@ void TrayHandler::DispatchCommand(HWND hWnd, int cmd) {
         app.thumbCopyEnabled = !app.thumbCopyEnabled;
         Persistence::Registry::SaveSetting(Constants::Registry::THUMB_COPY_ENABLED,
             static_cast<DWORD>(app.thumbCopyEnabled));
+        m_overlayManager.PostCenterMessage(hWnd,
+            app.thumbCopyEnabled ? Constants::Messages::THUMB_COPY_OP_ON
+                                 : Constants::Messages::THUMB_COPY_OP_OFF);
         break;
 
     case 51:
         app.thumbMoveEnabled = !app.thumbMoveEnabled;
         Persistence::Registry::SaveSetting(Constants::Registry::THUMB_MOVE_ENABLED,
             static_cast<DWORD>(app.thumbMoveEnabled));
+        m_overlayManager.PostCenterMessage(hWnd,
+            app.thumbMoveEnabled ? Constants::Messages::THUMB_MOVE_OP_ON
+                                 : Constants::Messages::THUMB_MOVE_OP_OFF);
         break;
 
     case 52:
         app.thumbDeleteEnabled = !app.thumbDeleteEnabled;
         Persistence::Registry::SaveSetting(Constants::Registry::THUMB_DELETE_ENABLED,
             static_cast<DWORD>(app.thumbDeleteEnabled));
+        m_overlayManager.PostCenterMessage(hWnd,
+            app.thumbDeleteEnabled ? Constants::Messages::THUMB_DELETE_OP_ON
+                                   : Constants::Messages::THUMB_DELETE_OP_OFF);
         break;
 
     case 53:
         app.thumbPasteEnabled = !app.thumbPasteEnabled;
         Persistence::Registry::SaveSetting(Constants::Registry::THUMB_PASTE_ENABLED,
             static_cast<DWORD>(app.thumbPasteEnabled));
+        m_overlayManager.PostCenterMessage(hWnd,
+            app.thumbPasteEnabled ? Constants::Messages::THUMB_PASTE_OP_ON
+                                  : Constants::Messages::THUMB_PASTE_OP_OFF);
         break;
 
     // ── Float input values ────────────────────────────────────────────────────
@@ -382,23 +548,19 @@ void TrayHandler::DispatchCommand(HWND hWnd, int cmd) {
         break;
     }
 
-    // ── View mode ─────────────────────────────────────────────────────────────
     default:
-        if (cmd >= 18 && cmd <= 22) {
-            int modeNum = cmd - 17;
-            app.viewMode = static_cast<Constants::ViewModes::ViewMode>(modeNum);
-            Persistence::Registry::SaveSetting(Constants::Registry::VIEW_MODE,
-                static_cast<DWORD>(modeNum));
-            InvalidateRect(hWnd, nullptr, FALSE);
-        }
-
-        // NOTE: every slideshow control (start/stop, interval, loop, shuffle,
-        // transition type and transition mode) now lives in the viewer id space
-        // and runs through InputManager::ExecuteCommand — see ContextMenuHandler.
-        // Nothing slideshow-related is dispatched here any more.
+        // NOTE: slideshow controls (start/stop, interval, loop, shuffle,
+        // transition type and transition mode) and the VIEW MODE picks now live
+        // in the viewer id space and run through InputManager::ExecuteCommand —
+        // see ContextMenuHandler. Neither is dispatched here any more.
+        //
+        // View mode moved because the tray copy only assigned app.viewMode and
+        // saved it, while the command also re-clamps the pan offset. Picking
+        // "Fit to View" from the menu after panning in Original Size therefore
+        // left the image off-centre, where the 1 key centred it.
 
         // ── Sort ──────────────────────────────────────────────────────────────
-        else if (cmd >= 43 && cmd <= 47) {
+        if (cmd >= 43 && cmd <= 47) {
             app.fileHandlerDefaultSortOrder   = cmd - 43;
             app.fileHandlerIsReverseSortOrder = false;
             Persistence::Registry::SaveSetting(Constants::Registry::SORT_ORDER,
@@ -461,6 +623,13 @@ void TrayHandler::DispatchCommand(HWND hWnd, int cmd) {
                 fwprintf(f, L"%s=%d\n", Constants::Registry::OVERLAY_VISIBLE,       (int)app.showOverlayInfoText);
                 fwprintf(f, L"%s=%d\n", Constants::Registry::OPEN_DIRWND_ON_START,  (int)app.openDirWndOnStart);
                 fwprintf(f, L"%s=%d\n", Constants::Registry::OVERLAY_SHOW_BG,       (int)app.overlayShowBackground);
+                fwprintf(f, L"%s=%d\n", Constants::Registry::OVERLAY_LAYOUT_MODE,   app.overlayLayoutMode);
+                fwprintf(f, L"%s=%u\n", Constants::Registry::OVERLAY_SLOT_VISIBLE,  app.overlaySlotVisibleMask);
+                fwprintf(f, L"%s=%u\n", Constants::Registry::OVERLAY_SLOT_COMPACT,  app.overlaySlotCompactMask);
+                fwprintf(f, L"%s=%d\n", Constants::Registry::OVERLAY_SHOW_DIR_NAME, (int)app.overlayShowDirName);
+                fwprintf(f, L"%s=%d\n", Constants::Registry::OVERLAY_FONT_SIZE,     app.overlayFontSize);
+                fwprintf(f, L"%s=%lu\n", Constants::Registry::OVERLAY_FONT_COLOR,   (unsigned long)app.overlayFontColor);
+                fwprintf(f, L"%s=%d\n", Constants::Registry::OVERLAY_FONT_FAMILY,   app.overlayFontFamily);
                 fwprintf(f, L"%s=%d\n", Constants::Registry::INPUTBOX_CARET_STYLE,  app.caretStyle);
                 fwprintf(f, L"%s=%d\n", Constants::Registry::ZOOM_CLICK_MULT,       Converters::toZoomInt(app.zoomClickMultiplier));
                 fwprintf(f, L"%s=%d\n", Constants::Registry::SWAP_MOUSE_BUTTONS,    (int)app.swapMouseButtons);
@@ -571,6 +740,7 @@ void TrayHandler::DispatchCommand(HWND hWnd, int cmd) {
             applyBool(Constants::Registry::OVERLAY_VISIBLE,      app.showOverlayInfoText);
             applyBool(Constants::Registry::OPEN_DIRWND_ON_START, app.openDirWndOnStart);
             applyBool(Constants::Registry::OVERLAY_SHOW_BG,      app.overlayShowBackground);
+            applyBool(Constants::Registry::OVERLAY_SHOW_DIR_NAME, app.overlayShowDirName);
             applyBool(Constants::Registry::SWAP_MOUSE_BUTTONS,   app.swapMouseButtons);
             applyBool(Constants::Registry::CONTEXT_MENU_ENABLED, app.contextMenuEnabled);
             applyBool(Constants::Registry::KIOSK_LOCK,           app.isLocked);
@@ -661,6 +831,47 @@ void TrayHandler::DispatchCommand(HWND hWnd, int cmd) {
                 Persistence::Registry::SaveSetting(Constants::Registry::SLIDESHOW_TRANS_ORDER,
                     static_cast<DWORD>(o));
             }
+            if (wcscmp(key, Constants::Registry::OVERLAY_FONT_SIZE) == 0) {
+                app.overlayFontSize = std::max(Constants::Overlay::OVERLAY_FONT_SIZE_MIN,
+                    std::min(Constants::Overlay::OVERLAY_FONT_SIZE_MAX, val));
+                Persistence::Registry::SaveSetting(Constants::Registry::OVERLAY_FONT_SIZE,
+                    static_cast<DWORD>(app.overlayFontSize));
+            }
+            // A COLORREF tops out at 0x00FFFFFF, so the int `val` already holds
+            // it; only the sign needs guarding against a hand-edited file.
+            if (wcscmp(key, Constants::Registry::OVERLAY_FONT_COLOR) == 0) {
+                app.overlayFontColor = static_cast<COLORREF>(std::max(0, val) & 0x00FFFFFF);
+                Persistence::Registry::SaveSetting(Constants::Registry::OVERLAY_FONT_COLOR,
+                    static_cast<DWORD>(app.overlayFontColor));
+            }
+            // Clamped — a file written by a build with more families listed
+            // would otherwise index past the end of the array.
+            if (wcscmp(key, Constants::Registry::OVERLAY_FONT_FAMILY) == 0) {
+                app.overlayFontFamily = std::max(0,
+                    std::min(Constants::Overlay::OVERLAY_FONT_FAMILY_COUNT - 1, val));
+                Persistence::Registry::SaveSetting(Constants::Registry::OVERLAY_FONT_FAMILY,
+                    static_cast<DWORD>(app.overlayFontFamily));
+            }
+            if (wcscmp(key, Constants::Registry::OVERLAY_LAYOUT_MODE) == 0) {
+                app.overlayLayoutMode = std::max(0, std::min(
+                    Constants::Overlay::LAYOUT_MODE_COUNT - 1, val));
+                Persistence::Registry::SaveSetting(Constants::Registry::OVERLAY_LAYOUT_MODE,
+                    static_cast<DWORD>(app.overlayLayoutMode));
+            }
+            // Masks carry one bit per slot; drop anything above the nine that
+            // exist so a hand-edited file cannot set phantom slots.
+            if (wcscmp(key, Constants::Registry::OVERLAY_SLOT_VISIBLE) == 0) {
+                app.overlaySlotVisibleMask =
+                    static_cast<unsigned>(val) & Constants::Overlay::SLOT_MASK_ALL;
+                Persistence::Registry::SaveSetting(Constants::Registry::OVERLAY_SLOT_VISIBLE,
+                    static_cast<DWORD>(app.overlaySlotVisibleMask));
+            }
+            if (wcscmp(key, Constants::Registry::OVERLAY_SLOT_COMPACT) == 0) {
+                app.overlaySlotCompactMask =
+                    static_cast<unsigned>(val) & Constants::Overlay::SLOT_MASK_ALL;
+                Persistence::Registry::SaveSetting(Constants::Registry::OVERLAY_SLOT_COMPACT,
+                    static_cast<DWORD>(app.overlaySlotCompactMask));
+            }
             if (wcscmp(key, Constants::Registry::SLIDESHOW_TRANS_LIST) == 0) {
                 app.slideshow.transition.listMask = static_cast<uint32_t>(val);
                 Persistence::Registry::SaveSetting(Constants::Registry::SLIDESHOW_TRANS_LIST,
@@ -698,6 +909,10 @@ void TrayHandler::DispatchCommand(HWND hWnd, int cmd) {
             // Apply side effects
             Persistence::Registry::EnableRunOnStartup(app.isEnableRunOnStartup);
             m_overlayManager.SetAllVisible(app.showOverlayInfoText);
+            // Per-slot state and layout mode live inside OverlayManager, so the
+            // reloaded AppState has to be pushed in — LoadAllSettings only fills
+            // the masks, it cannot reach the slots.
+            g_overlayManager.ApplyPersistedState(hWnd);
             // Both of these are STATE the window must be pushed into — loading
             // the value alone changes nothing on screen.
             SetWindowPos(hWnd, app.isAlwaysOnTop ? HWND_TOPMOST : HWND_NOTOPMOST,
@@ -729,6 +944,14 @@ void TrayHandler::DispatchCommand(HWND hWnd, int cmd) {
         app.showOverlayInfoText     = Constants::Overlay::DEFAULT_SHOW_OVERLAY;
         app.openDirWndOnStart       = Constants::IS_OPEN_DIRWND_ON_START;
         app.overlayShowBackground   = Constants::Overlay::IS_OVERLAY_SHOW_BACKGROUND;
+        app.overlayLayoutMode       = Constants::Overlay::DEFAULT_LAYOUT_MODE;
+        app.overlaySlotVisibleMask  = Constants::Overlay::DEFAULT_SLOT_VISIBLE_MASK;
+        app.overlaySlotCompactMask  = Constants::Overlay::DEFAULT_SLOT_COMPACT_MASK;
+        app.overlayShowDirName      = Constants::Overlay::SHOW_DIR_NAME;
+        app.overlayShowEffectsList  = Constants::Overlay::SHOW_EFFECTS_LIST;
+        app.overlayFontSize         = Constants::Overlay::OVERLAY_FONT_SIZE_DEFAULT;
+        app.overlayFontColor        = Constants::Overlay::OVERLAY_FONT_COLOR_DEFAULT;
+        app.overlayFontFamily       = Constants::Overlay::OVERLAY_FONT_FAMILY_DEFAULT;
         app.caretStyle              = Constants::InputBox::CARET_STYLE;
         app.zoomClickMultiplier     = Constants::ZOOM_CLICK;
         app.swapMouseButtons        = Constants::IS_SWAP_MOUSE_BUTTONS;
@@ -773,6 +996,13 @@ void TrayHandler::DispatchCommand(HWND hWnd, int cmd) {
         Persistence::Registry::SaveSetting(Constants::Registry::OVERLAY_VISIBLE,       static_cast<DWORD>(app.showOverlayInfoText));
         Persistence::Registry::SaveSetting(Constants::Registry::OPEN_DIRWND_ON_START,  static_cast<DWORD>(app.openDirWndOnStart));
         Persistence::Registry::SaveSetting(Constants::Registry::OVERLAY_SHOW_BG,       static_cast<DWORD>(app.overlayShowBackground));
+        Persistence::Registry::SaveSetting(Constants::Registry::OVERLAY_LAYOUT_MODE,   static_cast<DWORD>(app.overlayLayoutMode));
+        Persistence::Registry::SaveSetting(Constants::Registry::OVERLAY_SLOT_VISIBLE,  static_cast<DWORD>(app.overlaySlotVisibleMask));
+        Persistence::Registry::SaveSetting(Constants::Registry::OVERLAY_SLOT_COMPACT,  static_cast<DWORD>(app.overlaySlotCompactMask));
+        Persistence::Registry::SaveSetting(Constants::Registry::OVERLAY_SHOW_DIR_NAME, static_cast<DWORD>(app.overlayShowDirName));
+        Persistence::Registry::SaveSetting(Constants::Registry::OVERLAY_FONT_SIZE,     static_cast<DWORD>(app.overlayFontSize));
+        Persistence::Registry::SaveSetting(Constants::Registry::OVERLAY_FONT_COLOR,    static_cast<DWORD>(app.overlayFontColor));
+        Persistence::Registry::SaveSetting(Constants::Registry::OVERLAY_FONT_FAMILY,   static_cast<DWORD>(app.overlayFontFamily));
         Persistence::Registry::SaveSetting(Constants::Registry::INPUTBOX_CARET_STYLE,  static_cast<DWORD>(app.caretStyle));
         Persistence::Registry::SaveSetting(Constants::Registry::ZOOM_CLICK_MULT,       static_cast<DWORD>(Converters::toZoomInt(app.zoomClickMultiplier)));
         Persistence::Registry::SaveSetting(Constants::Registry::SWAP_MOUSE_BUTTONS,    static_cast<DWORD>(app.swapMouseButtons));
@@ -818,6 +1048,10 @@ void TrayHandler::DispatchCommand(HWND hWnd, int cmd) {
 
         Persistence::Registry::EnableRunOnStartup(app.isEnableRunOnStartup);
         m_overlayManager.SetAllVisible(app.showOverlayInfoText);
+
+        // Push the three overlay values assigned above into the live slots.
+        g_overlayManager.ApplyPersistedState(hWnd);
+
         SetWindowPos(hWnd, app.isAlwaysOnTop ? HWND_TOPMOST : HWND_NOTOPMOST,
                      0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE);
         m_uiManager.ApplyAlwaysOnTop(app.isAlwaysOnTop);

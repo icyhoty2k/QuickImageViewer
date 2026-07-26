@@ -242,6 +242,52 @@ namespace Constants::Messages {
     constexpr const wchar_t *THUMB_EFFECTS_ON  = L"Thumbnail Effects" STR_STATE_ON;
     constexpr const wchar_t *THUMB_EFFECTS_OFF = L"Thumbnail Effects" STR_STATE_OFF;
 
+    // Overlay slot names, indexed by OverlayManager::Slot. Single source for
+    // every centre message that names a slot, whatever triggered the change.
+    constexpr const wchar_t *OVERLAY_SLOT_NAMES[] = {
+        L"Top Left", L"Top Center", L"Top Right",
+        L"Mid Left", L"Mid Center", L"Mid Right",
+        L"Bot Left", L"Bot Center", L"Bot Right"
+    };
+    constexpr const wchar_t *OVERLAY_PREFIX        = L"Overlay ";
+    constexpr const wchar_t *OVERLAY_FONT_PREFIX   = L"Overlay Font: "; // append the family name
+    constexpr const wchar_t *OVERLAY_STATE_COMPACT = STR_SEPARATOR L"Compact";
+    constexpr const wchar_t *OVERLAY_STATE_FULL    = STR_SEPARATOR L"Full";
+
+    // BOT_LEFT readouts — independent toggles in the Overlays menu
+    constexpr const wchar_t *OVERLAY_EFFECTS_LIST_ON  = L"Effects Overlay" STR_STATE_ON;
+    constexpr const wchar_t *OVERLAY_EFFECTS_LIST_OFF = L"Effects Overlay" STR_STATE_OFF;
+    constexpr const wchar_t *OVERLAY_DIR_NAME_ON      = L"Folder Name" STR_STATE_ON;
+    constexpr const wchar_t *OVERLAY_DIR_NAME_OFF     = L"Folder Name" STR_STATE_OFF;
+
+    // Settings-menu-only toggles (no keyboard shortcut counterpart)
+    constexpr const wchar_t *KEEP_IN_BG_ON        = L"Keep in Background" STR_STATE_ON;
+    constexpr const wchar_t *KEEP_IN_BG_OFF       = L"Keep in Background" STR_STATE_OFF;
+    constexpr const wchar_t *RUN_ON_STARTUP_ON    = L"Run on Startup" STR_STATE_ON;
+    constexpr const wchar_t *RUN_ON_STARTUP_OFF   = L"Run on Startup" STR_STATE_OFF;
+    constexpr const wchar_t *HISTORY_FULL_ON      = L"History: Full List" STR_STATE_ON;
+    constexpr const wchar_t *HISTORY_FULL_OFF     = L"History: Full List" STR_STATE_OFF;
+    constexpr const wchar_t *OPEN_THUMB_START_ON  = L"Thumbnail Strip on Start" STR_STATE_ON;
+    constexpr const wchar_t *OPEN_THUMB_START_OFF = L"Thumbnail Strip on Start" STR_STATE_OFF;
+    constexpr const wchar_t *SWAP_MOUSE_ON        = L"Swap Mouse Buttons" STR_STATE_ON;
+    constexpr const wchar_t *SWAP_MOUSE_OFF       = L"Swap Mouse Buttons" STR_STATE_OFF;
+    constexpr const wchar_t *WHEEL_INVERT_ON      = L"Invert Scroll" STR_STATE_ON;
+    constexpr const wchar_t *WHEEL_INVERT_OFF     = L"Invert Scroll" STR_STATE_OFF;
+    constexpr const wchar_t *WHEEL_INVERT_H_ON    = L"Invert Horizontal Scroll" STR_STATE_ON;
+    constexpr const wchar_t *WHEEL_INVERT_H_OFF   = L"Invert Horizontal Scroll" STR_STATE_OFF;
+    constexpr const wchar_t *START_FULLSCREEN_ON  = L"Start in Fullscreen" STR_STATE_ON;
+    constexpr const wchar_t *START_FULLSCREEN_OFF = L"Start in Fullscreen" STR_STATE_OFF;
+    constexpr const wchar_t *CTRL_C_COPY_ON       = L"Ctrl+C Copy" STR_STATE_ON;
+    constexpr const wchar_t *CTRL_C_COPY_OFF      = L"Ctrl+C Copy" STR_STATE_OFF;
+    constexpr const wchar_t *THUMB_COPY_OP_ON     = L"Thumbnail Copy" STR_STATE_ON;
+    constexpr const wchar_t *THUMB_COPY_OP_OFF    = L"Thumbnail Copy" STR_STATE_OFF;
+    constexpr const wchar_t *THUMB_MOVE_OP_ON     = L"Thumbnail Move" STR_STATE_ON;
+    constexpr const wchar_t *THUMB_MOVE_OP_OFF    = L"Thumbnail Move" STR_STATE_OFF;
+    constexpr const wchar_t *THUMB_DELETE_OP_ON   = L"Thumbnail Delete" STR_STATE_ON;
+    constexpr const wchar_t *THUMB_DELETE_OP_OFF  = L"Thumbnail Delete" STR_STATE_OFF;
+    constexpr const wchar_t *THUMB_PASTE_OP_ON    = L"Thumbnail Paste" STR_STATE_ON;
+    constexpr const wchar_t *THUMB_PASTE_OP_OFF   = L"Thumbnail Paste" STR_STATE_OFF;
+
     // View modes (keys 1-5)
     constexpr const wchar_t *VIEW_MODE_PREFIX = L"View: ";
     constexpr const wchar_t *VIEW_MODE_NAMES[] = {
