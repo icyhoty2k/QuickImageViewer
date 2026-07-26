@@ -431,6 +431,12 @@ void HandleScanComplete(HWND hWnd, ScanResult *result) {
             app.folderOverlayPath = dir;
         }
 
+        // The viewer is now showing this folder even though the playlist is empty.
+        // Tell the History panel explicitly — it cannot infer it from the playlist,
+        // which was just cleared above, and without this its green "you are here"
+        // row stays stuck on whatever folder was open before.
+        UI::NotifyCurrentFolder(dir);
+
         InvalidateRect(hWnd, nullptr, FALSE);
         delete result;
         return;
@@ -502,6 +508,9 @@ void HandleScanComplete(HWND hWnd, ScanResult *result) {
     app.folderOverlay = AppState::FolderOverlayState::None;
     app.folderOverlayPath.clear();
     UI::NotifyFolderContentsChanged(scannedDir);
+    // Same binding as the empty-scan path above: the viewer has settled on this
+    // folder, so the History panel's green row must follow it.
+    UI::NotifyCurrentFolder(scannedDir);
 
     // If the scan's target is the image already on screen (the common F2/click/
     // drag-drop case: the 1-file playlist decoded and displayed it, now the full
