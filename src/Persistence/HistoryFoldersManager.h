@@ -52,6 +52,17 @@ namespace HistoryPath {
     // Returns false when the input is unusable; 'out' is then untouched.
     bool Normalize(const std::wstring &raw, std::wstring &out);
 
+    // Whitespace + wrapping-quote trim ONLY — no validation, no rewriting.
+    // A line that Normalize() rejects is kept in the list in this form so the
+    // History panel can still show it (flagged as broken) instead of silently
+    // swallowing it. A file the user edited should always be visible in full;
+    // a vanished row looks like data loss and hides the actual mistake.
+    std::wstring Clean(const std::wstring &raw);
+
+    // True when a stored entry is not a usable folder path — i.e. it survived
+    // loading only so it could be displayed as broken.
+    bool IsBroken(const std::wstring &entry);
+
     // Case-insensitive equality / hashing, so "D:\Pics" and "d:\pics" are one
     // folder everywhere: dedupe, favorite lookups, status cache, walk anchors.
     bool Equal(const std::wstring &a, const std::wstring &b);

@@ -623,6 +623,13 @@ namespace Constants {
         constexpr int SCROLLBAR_MIN_THUMB = 16; // minimum thumb height in px
         // Note: Scrollbar colors moved to ConstantsTheme.h
 
+        // How long the startup folder sweep waits before touching the disk.
+        // It runs at background I/O priority anyway, but holding off entirely
+        // until the first image is decoded and on screen keeps app launch as fast
+        // as it was before the sweep existed. Only applies to the startup kick-off
+        // — opening the panel or pressing F5 scans immediately.
+        constexpr DWORD HISTORY_SCAN_STARTUP_DELAY_MS = 3000;
+
         // Window size limits (px at 96 DPI — DPI-scaled at runtime)
         constexpr int HISTORY_MIN_W = 690; // minimum panel width
         constexpr int HISTORY_MAX_W = IS_BASE_WIDTH  - 120; // maximum panel width

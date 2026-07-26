@@ -761,6 +761,11 @@ int WINAPI wWinMain(HINSTANCE hInstance, [[maybe_unused]] HINSTANCE hPrevInstanc
     // Init UI Manager (The New Controller)
     uiManager.Init(hInstance, hWnd);
 
+    // Validate the folder history now, in the background, while the user is
+    // looking at images. Pressing Tab later then finds the list already scanned
+    // instead of opening a panel that only starts walking folders at that moment.
+    UI::StartBackgroundHistoryScan();
+
     // Renderer & Setup
     SetWindowLongW(hWnd, GWL_EXSTYLE, GetWindowLongW(hWnd, GWL_EXSTYLE) | WS_EX_LAYERED);
     SetLayeredWindowAttributes(hWnd, 0, app.opacity, LWA_ALPHA);
