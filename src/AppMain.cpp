@@ -41,6 +41,8 @@ extern void UpdateOverlaysForCurrentImage(HWND hWnd);
 #include "Dedicated/DedicatedInstance.h" // AppIconId — dedicated icon everywhere
 #include "Dedicated/DedicatedSettings.h" // DetectStartupMode — ini vs registry
 #include "Dedicated/DedicatedLists.h"    // image / promotion folder lists
+#include "Rem_TCP_IP/RemoteSettings.h"   // Remote::Config — is the listener enabled?
+#include "Rem_TCP_IP/RemoteServer.h"     // WM_QIV_REMOTE_COMMAND execution + shutdown
 #include <windows.h>
 #ifndef MF_RADIOCHECK
 #define MF_RADIOCHECK 0x00000200L
@@ -159,6 +161,31 @@ LRESULT CALLBACK MainAppWndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM l
             InvalidateRect(hWnd, nullptr, FALSE);
             return 0;
         }
+        // A remote client thread parsed a command and is blocked waiting for the
+        // answer. Execute it HERE, on the UI thread, because ExecuteCommand
+        // touches app state, GDI and the swapchain — none of which a socket
+        // thread may go near.
+        //
+        // LPARAM is a heap std::shared_ptr<Remote::RemoteCall> owned by this
+        // handler. The client thread holds its own shared_ptr, so signalling and
+        // deleting here is safe even if it already timed out and walked away.
+        case Constants::WM_QIV_REMOTE_COMMAND: {
+            auto *held = reinterpret_cast<std::shared_ptr<Remote::RemoteCall> *>(lParam);
+            if (!held) return 0;
+            if (std::shared_ptr<Remote::RemoteCall> call = *held) {
+                call->result = Remote::ExecuteOnUiThread(hWnd, call->req);
+                if (call->doneEvent) SetEvent(call->doneEvent);
+            }
+            delete held;
+            return 0;
+        }
+
+        // The listener stopped by itself (socket died, or Stop ran). Nothing to
+        // clean up here — Stop() owns the teardown; this only exists so the
+        // panel can drop to "stopped" without polling.
+        case Constants::WM_QIV_REMOTE_STOPPED:
+            return 0;
+
         case Constants::WM_QIV_SWITCH_TO_FIND:
             uiManager.ToggleFindWindow();
             return 0;
@@ -433,6 +460,9 @@ LRESULT CALLBACK MainAppWndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM l
                     // The viewport was already reset in LoadImageIndex; orientation
                     // could not be applied earlier because the file wasn't decoded yet.
                     ApplyOrientationToViewport(app.renderer->GetCachedOrientation(currentPath));
+                    // Dimensions are now the new image's — re-clamp a locked
+                    // viewport (Y) so a carried zoom/pan stays inside its limits.
+                    ReclampLockedViewport(hWnd);
                     // --- CALL THE EFFECT UPDATER HERE ---
                     // Now the bitmap is ready, we can safely wire the effect graph.
                     app.UpdateRendererColorEffects(hWnd);
@@ -536,6 +566,11 @@ LRESULT CALLBACK MainAppWndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM l
             break;
 
         case WM_DESTROY:
+            // Bring the listener down before the window goes, so no client
+            // thread can post WM_QIV_REMOTE_COMMAND to an HWND that is on its
+            // way out — that message would never be handled and the poster
+            // would block for the full reply timeout.
+            Remote::Stop();
             PostQuitMessage(0);
             return 0;
     }
@@ -839,6 +874,21 @@ int WINAPI wWinMain(HINSTANCE hInstance, [[maybe_unused]] HINSTANCE hPrevInstanc
         Dedicated::InitPromotions();
     }
     ApplyCmdArgs(hWnd, runArgs, nCmdShow);
+
+    // Remote control. ApplyCmdArgs has just merged the .ini with the -remote*
+    // switches, so this is the first moment the configuration is complete.
+    // Starting is conditional on Enable, which defaults false and can only be
+    // set by an .ini section or an explicit switch — a viewer nobody configured
+    // for remote control never opens a socket.
+    if (Remote::Config().enable) {
+        std::wstring remoteErr;
+        if (!Remote::Start(hWnd, remoteErr)) {
+            // Non-fatal by design: a wall screen whose port is taken must still
+            // come up and show pictures. The failure is reported, not thrown.
+            g_overlayManager.PostCenterMessage(
+                hWnd, std::wstring(Constants::Messages::REMOTE_START_FAILED_PREFIX) + remoteErr);
+        }
+    }
 
     // One promotion kept warm, so the first one due appears without a stall.
     if (Dedicated::IsDedicatedFlag())

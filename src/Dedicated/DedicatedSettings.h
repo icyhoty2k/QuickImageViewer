@@ -99,6 +99,25 @@ DWORD ReadDword(const wchar_t *valueName, DWORD defaultValue);
 void         WriteString(const wchar_t *valueName, const std::wstring &value);
 std::wstring ReadString(const wchar_t *valueName);
 
+// --- Arbitrary section access ----------------------------------------------
+// The four functions above are [Settings]-only, and the [Instance] block has its
+// own pair. A subsystem that owns a whole section of the file — [REMOTE_TCP_IP]
+// is the first — goes through these instead of growing yet another hardcoded
+// pair. Same file, same UTF-16LE+BOM guarantee, same per-key write semantics:
+// only the named key is touched, every other section survives untouched.
+std::wstring ReadSectionString(const wchar_t *section, const wchar_t *key);
+void         WriteSectionString(const wchar_t *section, const wchar_t *key,
+                                const std::wstring &value);
+DWORD        ReadSectionDword(const wchar_t *section, const wchar_t *key,
+                              DWORD defaultValue);
+void         WriteSectionDword(const wchar_t *section, const wchar_t *key, DWORD value);
+
+// The .ini's shared truthiness rule, exposed so every section parses flags the
+// same way: 1/true/on/yes (or any non-zero number) = true, 0/false/off/no =
+// false, anything else falls back to `def` so a typo never silently flips a
+// setting. Whitespace and case are ignored.
+bool ParseBoolValue(const std::wstring &raw, bool def);
+
 // --- [Instance] identity block ---------------------------------------------
 // Creates the file with its header if absent, then writes name/description and
 // stamps the current app version. Safe to call on every launch.

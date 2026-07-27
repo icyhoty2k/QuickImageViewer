@@ -32,6 +32,22 @@ namespace Persistence::Registry {
     // Mirrors the startup load block in wWinMain — call this instead of duplicating it.
     void LoadAllSettings(AppState &app);
 
+    // Walks every persistable setting as a (registry key name, current value)
+    // pair, in one place.
+    //
+    // WHY IT EXISTS: this list had been written out inline by the tray's Export
+    // Settings, and the remote panel's .ini seeding needs exactly the same set.
+    // Two copies would drift the first time somebody added a setting to one and
+    // not the other — and the failure would be silent, an .ini quietly missing a
+    // value that then reverts to its default. Both callers walk THIS.
+    //
+    // Every value fits a DWORD; the float ones are already stored scaled (theme
+    // factor ×100, click zoom via Converters::toZoomInt) exactly as the registry
+    // holds them, so a consumer writes what it is given without reinterpreting.
+    void ForEachSetting(const AppState &app,
+                        void (*fn)(const wchar_t *key, DWORD value, void *ctx),
+                        void *ctx);
+
     // Returns the full path of this exe as std::wstring.
     // Handles paths of any length — never truncates.
     inline std::wstring GetExePathW() {

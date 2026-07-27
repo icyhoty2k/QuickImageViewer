@@ -64,6 +64,10 @@ namespace Shortcuts {
     // (see src/Dedicated). Deliberately its own window rather than a menu, since
     // it is a form with folders, ranges and toggles.
     constexpr UINT SC_PANEL_DEDICATED_TOGGLE = VK_F8;
+    // F9 — Remote control panel (src/Rem_TCP_IP): start/stop the TCP listener,
+    // edit its configuration, and connect out to another instance. Its own
+    // window for the same reason F8 is: it is a form, not a menu.
+    constexpr UINT SC_PANEL_REMOTE_TOGGLE = VK_F9;
     constexpr UINT SC_PANEL_HISTORY_TOGGLE = VK_TAB;
     constexpr UINT SC_PANEL_FULLSCREEN = VK_F11;
     constexpr UINT SC_PANEL_FULLSCREEN_F = 'F';
@@ -150,6 +154,11 @@ namespace Shortcuts {
     constexpr UINT SC_TRANSFORM_FLIP_V = 'V';
     constexpr UINT SC_THUMBNAIL_WRAP_TOGGLE = 'B'; // toggle thumbnail strip wheel wrap-around
     constexpr UINT SC_THUMBNAIL_EFFECTS_TOGGLE = 'U'; // U — toggle thumbnail strip visual effects on/off
+
+    // Y (no modifier)  —  Viewport lock: carry zoom + pan across image changes.
+    // Rotation and flips are deliberately NOT locked, because EXIF
+    // auto-orientation rewrites them per image (ApplyOrientationToViewport).
+    constexpr UINT SC_VIEWPORT_LOCK = 'Y';
 
     // Q (no modifier)  —  Toggle between current and previous folder in history
     constexpr UINT SC_TOGGLE_LAST_DIR = 'Q';
