@@ -212,10 +212,11 @@ void InputManager::ExecuteCommand(HWND hWnd, Command cmd) {
             app.viewMode = static_cast<Constants::ViewModes::ViewMode>(modeNum);
             Persistence::Registry::SaveSetting(Constants::Registry::VIEW_MODE,
                                                static_cast<DWORD>(modeNum));
-            // The view mode changed the legal pan range. Coming back from a
-            // panned Original Size to a fit mode the image now fits entirely,
-            // so maxOff is 0 and the carried-over offset must collapse to it —
-            // otherwise the picture stays parked off-centre.
+            // Reset zoom multiplier so the new mode starts from its natural
+            // fit scale rather than carrying over wheel zoom from the old mode.
+            app.viewport.zoom = 1.0f;
+            app.viewport.offsetX = 0.0f;
+            app.viewport.offsetY = 0.0f;
             ClampViewportOffset(hWnd);
             InvalidateRect(hWnd, nullptr, FALSE);
             g_overlayManager.PostCenterMessage(hWnd,
@@ -279,6 +280,16 @@ void InputManager::ExecuteCommand(HWND hWnd, Command cmd) {
                                                app.thumbnailPanelWheelWrapAround
                                                    ? Constants::Messages::THUMB_STRIP_WRAP_ON
                                                    : Constants::Messages::THUMB_STRIP_WRAP_OFF);
+            break;
+
+        case Command::ToggleViewportLock:
+            app.lockViewport = !app.lockViewport;
+            Persistence::Registry::SaveSetting(Constants::Registry::LOCK_VIEWPORT,
+                                               static_cast<DWORD>(app.lockViewport));
+            g_overlayManager.PostCenterMessage(hWnd,
+                                               app.lockViewport
+                                                   ? Constants::Messages::VIEWPORT_LOCK_ON
+                                                   : Constants::Messages::VIEWPORT_LOCK_OFF);
             break;
 
         case Command::ToggleThumbnailEffects:
@@ -600,6 +611,11 @@ void InputManager::ExecuteCommand(HWND hWnd, Command cmd) {
         // ── Dedicated instances ──────────────────────────────────────────────
         case Command::ToggleDedicatedPanel:
             uiManager.Toggle(uiManager.getDedicatedWindow());
+            break;
+
+        // ── Remote control over TCP/IP (src/Rem_TCP_IP) ──────────────────────
+        case Command::ToggleRemotePanel:
+            uiManager.Toggle(uiManager.getRemoteWindow());
             break;
 
         case Command::ToggleDedicated:

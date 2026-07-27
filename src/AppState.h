@@ -112,6 +112,10 @@ struct AppState {
     bool showOverlayInfoText = Constants::Overlay::DEFAULT_SHOW_OVERLAY;
     bool thumbnailPanelWheelWrapAround = Constants::THUMBNAIL_PANEL_WHEEL_WRAP_AROUND;
     bool thumbnailEffectsEnabled = Constants::ThumbnailPanel::ThumbnailEffects::EFFECTS_MASTER_ENABLED;
+    // Y — carry viewport.zoom/offsetX/offsetY across an image change instead of
+    // resetting them in LoadImageIndex. Rotation and flips still reset, because
+    // EXIF auto-orientation owns those (see Constants::IS_LOCK_VIEWPORT).
+    bool lockViewport            = Constants::IS_LOCK_VIEWPORT;
     bool historyFullModeEnabled  = Constants::History::HISTORY_SHOW_FULL_HISTORY;
     bool openDirWndOnStart       = Constants::IS_OPEN_DIRWND_ON_START;
     bool overlayShowBackground   = Constants::Overlay::IS_OVERLAY_SHOW_BACKGROUND;

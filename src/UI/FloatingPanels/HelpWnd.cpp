@@ -258,6 +258,13 @@ namespace UI {
             L"Select the view mode:  1 Fit to view (keeps aspect ratio)  •  "
             L"2 Fit to width (stretches)  •  3 Fit to height (stretches)  •  "
             L"4 Fill window (stretches)  •  5 Original size, 1:1 pixels (keeps aspect ratio).", sZoom);
+        Add(K(SC::SC_VIEWPORT_LOCK),
+            std::wstring(L"Toggle viewport lock. When ON, zoom and pan carry over to the next image "
+                    L"instead of resetting — so flipping through same-framed shots keeps the same "
+                    L"detail on screen at the same magnification. Rotation and flips still reset, "
+                    L"because each file's EXIF orientation tag owns those. Startup default: ") +
+            (Constants::IS_LOCK_VIEWPORT ? L"ON" : L"OFF") +
+            L" (IS_LOCK_VIEWPORT in Constants.h).", sZoom);
 
         // ---------------------------------------------------------------
         const int sMouse = Sec(Constants::ThemeIcons::ICON_SECTION_MOUSE, L"MOUSE CONTROLS",
@@ -544,6 +551,12 @@ namespace UI {
             L"promotions folders, promotion pacing, monitor and slideshow options — then "
             L"generate a shortcut for it. Drop that shortcut in shell:startup and the "
             L"screen starts itself.", sApp);
+        Add(K(SC::SC_PANEL_REMOTE_TOGGLE),
+            L"Open the Remote Control panel. qIV can listen on a TCP port and be driven "
+            L"over the network — next, goto, zoom, open, slideshow — from a script, a "
+            L"phone, a home-automation system, or another qIV instance. The listener is "
+            L"OFF unless you switch it on here, in the instance's .ini, or with -remote on "
+            L"the command line. An empty AllowList denies every connection.", sApp);
         Add(K(SC::SC_TOGGLE_ALL_PANELS),
             L"Toggle all panels: closes every floating panel and directory strip if any is "
             L"open, otherwise restores exactly the set the last close hid. Main viewer stays.", sApp);

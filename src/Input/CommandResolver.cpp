@@ -164,6 +164,10 @@ Command InputManager::ResolveKeyboardKeys(UINT key, LPARAM lParam) {
             if (!ctrl && !alt && !shift) return Command::ToggleThumbnailEffects;
             break;
 
+        case Shortcuts::SC_VIEWPORT_LOCK: // 'Y'
+            if (!ctrl && !alt && !shift) return Command::ToggleViewportLock;
+            break;
+
         // --- Fullscreen ---
         case Shortcuts::SC_PANEL_FULLSCREEN: return Command::ToggleFullscreen;
         case Shortcuts::SC_PANEL_FULLSCREEN_F: // 'F' — same value as SC_NAV_FIND
@@ -184,6 +188,7 @@ Command InputManager::ResolveKeyboardKeys(UINT key, LPARAM lParam) {
         case Shortcuts::SC_PANEL_CACHE_TOGGLE: return Command::ToggleCache;
         case Shortcuts::SC_PANEL_DIR_TOGGLE: return Command::ToggleDir;
         case Shortcuts::SC_PANEL_DEDICATED_TOGGLE: return Command::ToggleDedicatedPanel;
+        case Shortcuts::SC_PANEL_REMOTE_TOGGLE: return Command::ToggleRemotePanel;
         case Shortcuts::SC_PANEL_HISTORY_TOGGLE:
             if (ctrl) return Command::ToggleHistoryFull;
             return Command::ToggleHistory;

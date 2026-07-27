@@ -265,6 +265,7 @@ namespace {
         AppendMenuW(m, MF_STRING | CheckFlag(app.isKeepInBackground),      4,  L"Keep in Background");
         AppendMenuW(m, MF_STRING | CheckFlag(app.isEnableRunOnStartup),    5,  L"Run on Startup");
         AppendMenuW(m, MF_STRING | CheckFlag(app.thumbnailEffectsEnabled), 6,  L"Thumbnail Effects");
+        AppendMenuW(m, MF_STRING | CheckFlag(app.lockViewport),            67, L"Lock Viewport (keep zoom/pan)\tY");
         AppendMenuW(m, MF_STRING | CheckFlag(app.historyFullModeEnabled),  7,  L"History: Open Full List");
         AppendMenuW(m, MF_STRING | CheckFlag(app.openDirWndOnStart),       9,  L"Open Thumbnail Strip on Start");
         AppendMenuW(m, MF_STRING | CheckFlag(app.swapMouseButtons),        14, L"Swap Mouse Buttons");

@@ -89,6 +89,13 @@ set(SOURCES
         src/Dedicated/DedicatedSettings.cpp
         src/Dedicated/DedicatedLists.cpp
         src/Dedicated/PromotionPlaylist.cpp
+        src/Rem_TCP_IP/RemoteSettings.cpp
+        src/Rem_TCP_IP/RemoteCrypto.cpp
+        src/Rem_TCP_IP/RemoteProtocol.cpp
+        src/Rem_TCP_IP/RemoteServer.cpp
+        src/Rem_TCP_IP/RemoteExec.cpp
+        src/Rem_TCP_IP/RemoteClient.cpp
+        src/Rem_TCP_IP/RemoteWnd.cpp
         src/UI/UIManager.cpp
         src/Overlays/OverlayManager.cpp
         src/UI/ThumbnailPanels/ThumbnailPanelWnd.cpp
@@ -183,6 +190,7 @@ target_include_directories(QuickImageViewer PRIVATE
         ${CMAKE_CURRENT_SOURCE_DIR}/src/Overlays
         ${CMAKE_CURRENT_SOURCE_DIR}/src/Persistence
         ${CMAKE_CURRENT_SOURCE_DIR}/src/Platform
+        ${CMAKE_CURRENT_SOURCE_DIR}/src/Rem_TCP_IP
         ${CMAKE_CURRENT_SOURCE_DIR}/src/Renderer
         ${CMAKE_CURRENT_SOURCE_DIR}/src/UI
         ${CMAKE_CURRENT_SOURCE_DIR}/libs/lib/resvg/include
@@ -204,7 +212,8 @@ target_link_libraries(QuickImageViewer PRIVATE
 target_link_libraries(QuickImageViewer PRIVATE
         d3d11 dxgi d2d1 dwrite user32 comdlg32 windowscodecs gdi32 dwmapi
         uxtheme advapi32 shell32 ole32 oleaut32 uuid shlwapi shcore
-        ws2_32 ntdll userenv # Required by resvg
+        ws2_32 ntdll userenv # ws2_32 also carries the Rem_TCP_IP sockets
+        bcrypt               # CNG — remote-control password hashing / HMAC
 )
 
 # 7. Track Manifest Changes

@@ -24,6 +24,15 @@ namespace Constants {
     constexpr bool IS_ENABLE_RUN_ON_STARTUP = true; // enable or disable run on startup reg value add/delete
     constexpr bool IS_KEEP_IN_BACKGROUND = true; // enable or disable run on startup reg value add/delete
     constexpr bool IS_OPEN_DIRWND_ON_START = false; // open F6 DirWnd automatically when the app starts
+
+    // Viewport lock (Y). When ON, zoom and pan survive an image change instead of
+    // being reset — so flipping through same-framed shots keeps the same detail
+    // on screen at the same magnification. Rotation and flips are NOT carried:
+    // ApplyOrientationToViewport rewrites them from each file's EXIF tag, and
+    // suppressing that would show portrait shots sideways in a mixed folder.
+    // Never default this ON — a locked viewport on a fresh install looks like the
+    // app failed to fit the image.
+    constexpr bool IS_LOCK_VIEWPORT = false;
     // Prefix applied to every registry value name and every data file name
     // when the app is running in dedicated (-dedicated) mode.
     // Guarantees that a dedicated instance and a normal instance never share
@@ -406,6 +415,14 @@ namespace Constants {
     constexpr UINT WM_QIV_SCAN_COMPLETE = WM_USER + 7; // Background dir scan done; LPARAM = new ScanResult*
     constexpr UINT WM_QIV_HISTORY_VALIDATED = WM_USER + 8; // Background history folder scan done; WPARAM = generation, LPARAM = new std::vector<DirScanResult>*
     constexpr UINT WM_QIV_DIR_CHANGED = WM_USER + 9; // Posted by DirWatcher thread when a file-system change is detected
+    // WM_USER+10 is WM_QIV_CENTER_MSG_HIDE, declared near the top of this file.
+    // Posted by a remote client thread; LPARAM = new std::shared_ptr<Remote::RemoteCall>*,
+    // which the UI thread deletes after executing. See src/Rem_TCP_IP/RemoteServer.h.
+    constexpr UINT WM_QIV_REMOTE_COMMAND = WM_USER + 11;
+    // Posted by the listener thread when it stops on its own (bind failed, socket
+    // died). Lets the panel drop back to "stopped" without polling. WPARAM = a
+    // Constants::RemoteTcpIp::ERR_* code, 0 for a clean stop.
+    constexpr UINT WM_QIV_REMOTE_STOPPED = WM_USER + 12;
 
     // ---------------------------------------------------------------------------
     // Directory watcher (ReadDirectoryChangesW / FindFirstChangeNotification)
@@ -420,6 +437,79 @@ namespace Constants {
     constexpr wchar_t PANEL_SWITCH_TO_FIND_CHAR = L'@'; // type this in JumpToWnd to open FindWnd
     // =============================================================================
 
+    // =========================================================================
+    // REMOTE CONTROL over TCP/IP  (src/Rem_TCP_IP)
+    //
+    // The listener is OFF unless explicitly switched on — either by command-line
+    // switches or by a [REMOTE_TCP_IP] section in the instance .ini. There is no
+    // third way in, and no default that opens a socket. A viewer that has never
+    // been configured for remote control never binds a port.
+    //
+    // Full design record: docs/REMOTE_TCP_IP_SPEC.md
+    // =========================================================================
+    namespace RemoteTcpIp {
+        // --- .ini section and key names ---
+        constexpr const wchar_t *INI_SECTION      = L"REMOTE_TCP_IP";
+        constexpr const wchar_t *KEY_ENABLE       = L"Enable";
+        constexpr const wchar_t *KEY_NAME         = L"Name";
+        constexpr const wchar_t *KEY_IP_ADDRESS   = L"IpAddress";
+        constexpr const wchar_t *KEY_PORT_NO      = L"PortNo";
+        constexpr const wchar_t *KEY_ALLOW_LIST   = L"AllowList";
+        constexpr const wchar_t *KEY_PASSWORD     = L"Password";
+        constexpr const wchar_t *KEY_BLACK_LIST   = L"BlackList";
+        constexpr const wchar_t *KEY_MAX_CONNS    = L"MaxConnections";
+
+        // --- Defaults ---
+        // Never default ENABLE on. A viewer that binds a port because nobody
+        // said otherwise is a viewer that surprises its owner.
+        constexpr bool ENABLE_DEFAULT = false;
+        // Loopback: reachable only from this machine, and Windows Firewall never
+        // prompts. A wall screen opts into 0.0.0.0 (every interface) knowingly.
+        constexpr const wchar_t *BIND_ADDRESS_DEFAULT = L"127.0.0.1";
+        constexpr const wchar_t *BIND_ADDRESS_ANY     = L"0.0.0.0";
+
+        // 0 means "not configured". There is no sensible default port to pick —
+        // guessing one would make an unconfigured instance bind something.
+        constexpr int PORT_UNSET = 0;
+        constexpr int PORT_MIN   = 1;
+        constexpr int PORT_MAX   = 65535;
+
+        // Simultaneous clients. Values outside the range fall back to DEFAULT
+        // rather than refusing to start.
+        constexpr int MAX_CONNECTIONS_MIN     = 1;
+        constexpr int MAX_CONNECTIONS_MAX     = 99;
+        constexpr int MAX_CONNECTIONS_DEFAULT = 1;
+
+        // Separators accepted inside AllowList / BlackList, so a hand-edited
+        // file tolerates either convention.
+        constexpr const wchar_t *LIST_SEPARATORS = L",;";
+
+        // --- Wire protocol -------------------------------------------------
+        // Newline-delimited UTF-8 text: "<command> [payload]\n". Deliberately
+        // plain, so netcat, curl, telnet and a five-line Python script are all
+        // first-class clients with nothing to marshal.
+        constexpr int PROTOCOL_VERSION = 1;
+
+        // Hard cap on one received line. A socket must never be allowed to grow
+        // a buffer without bound just by never sending a newline.
+        constexpr size_t MAX_LINE_LEN = 4096;
+
+        // Response prefixes. A client only ever needs to look at the first token.
+        constexpr const wchar_t *RESP_OK  = L"OK";
+        constexpr const wchar_t *RESP_ERR = L"ERR";
+
+        // Error codes carried after ERR. Stable numbers: scripts branch on these,
+        // so they may be appended to but never renumbered.
+        constexpr int ERR_UNKNOWN_COMMAND   = 1;
+        constexpr int ERR_PAYLOAD_REQUIRED  = 2;
+        constexpr int ERR_PAYLOAD_REJECTED  = 3;
+        constexpr int ERR_LINE_TOO_LONG     = 4;
+        constexpr int ERR_BAD_PAYLOAD       = 5;
+        constexpr int ERR_NOT_AUTHENTICATED = 6;
+        constexpr int ERR_AUTH_FAILED       = 7;
+        constexpr int ERR_TOO_MANY_CLIENTS  = 8;
+        constexpr int ERR_INTERNAL          = 9;
+    }
 
     namespace Registry {
         // Switch this between HKEY_CURRENT_USER and HKEY_LOCAL_MACHINE
@@ -473,6 +563,7 @@ namespace Constants {
         constexpr const wchar_t *OVERLAY_FONT_COLOR    = L"qivOverlayFontColor";
         constexpr const wchar_t *OVERLAY_FONT_FAMILY   = L"qivOverlayFontFamily"; // index into OVERLAY_FONT_FAMILIES
         constexpr const wchar_t *OPEN_DIRWND_ON_START = L"qivOpenDirWndOnStart";
+        constexpr const wchar_t *LOCK_VIEWPORT = L"qivLockViewport";
         constexpr const wchar_t *SWAP_MOUSE_BUTTONS = L"qivSwapMouseButtons";
         constexpr const wchar_t *WHEEL_INVERT   = L"qivWheelInvert";
         constexpr const wchar_t *WHEEL_INVERT_H = L"qivWheelInvertH";

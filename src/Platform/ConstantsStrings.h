@@ -238,6 +238,45 @@ namespace Constants::Messages {
     constexpr const wchar_t *THUMB_STRIP_WRAP_ON = STR_THUMBNAIL_STRIP L" Wrap" STR_STATE_ON;
     constexpr const wchar_t *THUMB_STRIP_WRAP_OFF = STR_THUMBNAIL_STRIP L" Wrap" STR_STATE_OFF;
 
+    // Remote control over TCP/IP (src/Rem_TCP_IP). Shown in the remote panel's
+    // status line. An enabled server with an empty AllowList refuses every
+    // connection — stating that is the difference between a configured refusal
+    // and something that merely looks broken.
+    constexpr const wchar_t *REMOTE_BLOCKED_DISABLED       = L"Remote control disabled";
+    constexpr const wchar_t *REMOTE_BLOCKED_NO_PORT        = L"No port configured";
+    constexpr const wchar_t *REMOTE_WARN_EMPTY_ALLOWLIST   = L"AllowList empty — all connections denied";
+
+    // Start-up failures. Each names the actual cause: "could not start" with no
+    // reason is the least useful thing a status line can say.
+    constexpr const wchar_t *REMOTE_ALREADY_RUNNING        = L"Server already running";
+    constexpr const wchar_t *REMOTE_WSA_FAILED             = L"Winsock initialisation failed";
+    constexpr const wchar_t *REMOTE_BAD_BIND_ADDRESS       = L"Bind address is not a valid IP literal";
+    constexpr const wchar_t *REMOTE_SOCKET_FAILED          = L"Could not create socket";
+    constexpr const wchar_t *REMOTE_PORT_IN_USE            = L"Port already in use";
+    constexpr const wchar_t *REMOTE_BIND_FAILED            = L"Could not bind to that address and port";
+    constexpr const wchar_t *REMOTE_LISTEN_FAILED          = L"Socket could not enter listening state";
+    // Shown in the center overlay when an enabled listener fails at startup.
+    // Deliberately non-fatal: a screen whose port is taken must still show
+    // pictures rather than refuse to launch.
+    constexpr const wchar_t *REMOTE_START_FAILED_PREFIX     = L"Remote control: ";
+
+    // Client side — connecting to another instance.
+    constexpr const wchar_t *REMOTE_CLIENT_NO_HOST           = L"No target address";
+    constexpr const wchar_t *REMOTE_CLIENT_BAD_PORT          = L"Target port out of range";
+    constexpr const wchar_t *REMOTE_CLIENT_RESOLVE_FAILED    = L"Could not resolve that host";
+    constexpr const wchar_t *REMOTE_CLIENT_CONNECT_FAILED    = L"Could not connect";
+    constexpr const wchar_t *REMOTE_CLIENT_NO_BANNER         = L"Peer did not identify itself";
+    constexpr const wchar_t *REMOTE_CLIENT_PROTOCOL_ERROR    = L"Unexpected reply from peer";
+    constexpr const wchar_t *REMOTE_CLIENT_PASSWORD_REQUIRED = L"Peer requires a password";
+    constexpr const wchar_t *REMOTE_CLIENT_AUTH_FAILED       = L"Password rejected by peer";
+    constexpr const wchar_t *REMOTE_CLIENT_NOT_CONNECTED     = L"Not connected";
+    constexpr const wchar_t *REMOTE_CLIENT_SEND_FAILED       = L"Connection lost while sending";
+    constexpr const wchar_t *REMOTE_CLIENT_NO_REPLY          = L"No reply from peer";
+
+    // Viewport lock (Y) — zoom + pan carried across image changes
+    constexpr const wchar_t *VIEWPORT_LOCK_ON  = L"Viewport Lock" STR_STATE_ON;
+    constexpr const wchar_t *VIEWPORT_LOCK_OFF = L"Viewport Lock" STR_STATE_OFF;
+
     // Thumbnail strip visual effects
     constexpr const wchar_t *THUMB_EFFECTS_ON  = L"Thumbnail Effects" STR_STATE_ON;
     constexpr const wchar_t *THUMB_EFFECTS_OFF = L"Thumbnail Effects" STR_STATE_OFF;

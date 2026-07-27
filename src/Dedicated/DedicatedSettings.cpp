@@ -318,4 +318,37 @@ std::wstring ReadString(const wchar_t *valueName) {
     return ReadStringFrom(SECTION, valueName);
 }
 
+// --- Arbitrary section access ----------------------------------------------
+// CreateWithHeaderIfMissing runs on every write so a subsystem that configures
+// itself before anything else has touched the file still gets a valid UTF-16LE
+// file with [Instance] at the top, rather than an ANSI one the profile API
+// would then narrow every later value into.
+
+std::wstring ReadSectionString(const wchar_t *section, const wchar_t *key) {
+    return ReadStringFrom(section, key);
+}
+
+void WriteSectionString(const wchar_t *section, const wchar_t *key,
+                        const std::wstring &value) {
+    const std::wstring &path = ResolvePath();
+    if (path.empty() || !section || !key) return;
+    CreateWithHeaderIfMissing(path);
+    WritePrivateProfileStringW(section, key, value.c_str(), path.c_str());
+}
+
+DWORD ReadSectionDword(const wchar_t *section, const wchar_t *key, DWORD defaultValue) {
+    const std::wstring &path = ResolvePath();
+    if (path.empty() || !section || !key) return defaultValue;
+    return static_cast<DWORD>(
+        GetPrivateProfileIntW(section, key, static_cast<INT>(defaultValue), path.c_str()));
+}
+
+void WriteSectionDword(const wchar_t *section, const wchar_t *key, DWORD value) {
+    WriteSectionString(section, key, std::to_wstring(value));
+}
+
+bool ParseBoolValue(const std::wstring &raw, bool def) {
+    return ParseFlag(raw, def);
+}
+
 } // namespace Dedicated

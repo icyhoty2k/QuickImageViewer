@@ -53,6 +53,12 @@ void ReSortPlaylistAndRebuildMap(HWND hWnd);
 // Call after app.viewport = ViewportState{} when the bitmap arrives in cache.
 void ApplyOrientationToViewport(USHORT orient);
 
+// Re-clamps a LOCKED viewport (app.lockViewport, the Y key) against the newly
+// loaded image's dimensions. No-op when the lock is off. Call at every site that
+// finishes bringing a bitmap in — i.e. right after ApplyOrientationToViewport,
+// once app.imgWidth/imgHeight belong to the new image.
+void ReclampLockedViewport(HWND hWnd);
+
 // Called on the UI thread when WM_QIV_SCAN_COMPLETE is received.
 // Takes ownership of result and deletes it.
 void HandleScanComplete(HWND hWnd, ScanResult *result);
