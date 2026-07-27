@@ -762,11 +762,41 @@ void ApplyOrientationToViewport(USHORT orient) {
     }
 }
 
+void ReclampLockedViewport(HWND hWnd) {
+    // A carried-over zoom/pan was legal for the PREVIOUS image, not this one:
+    // the effective-zoom limits depend on the fit scale (so on the image's
+    // dimensions), and the legal pan range shrinks with the rendered size.
+    // Runs only once the bitmap is in and app.imgWidth/imgHeight are current.
+    //
+    // Gated on the lock deliberately. Clamping an unlocked viewport would not be
+    // a no-op: a freshly reset zoom of 1.0 whose fit scale sits below ZOOM_MIN
+    // would get bumped off 1.0, changing how every oversized image opens.
+    if (!app.lockViewport) return;
+    ClampZoomToLimits(hWnd);
+    ClampViewportOffset(hWnd);
+}
+
 void LoadImageIndex(HWND hWnd, int index) {
     if (index < 0 || index >= static_cast<int>(app.playlist.size())) return;
 
     if (app.currentIndex != index) {
+        // Viewport lock (Y) carries zoom + pan to the next image so a flip
+        // through same-framed shots stays on the same detail. Rotation and the
+        // two flips are deliberately NOT carried: ApplyOrientationToViewport
+        // rewrites them from the new file's EXIF tag below, so holding them here
+        // would fight that and show portrait shots sideways in a mixed folder.
+        const float keepZoom = app.viewport.zoom;
+        const float keepOffX = app.viewport.offsetX;
+        const float keepOffY = app.viewport.offsetY;
+
         app.viewport = ViewportState{};
+
+        if (app.lockViewport) {
+            app.viewport.zoom    = keepZoom;
+            app.viewport.offsetX = keepOffX;
+            app.viewport.offsetY = keepOffY;
+        }
+
         if (app.currentIndex >= 0)
             app.previousImageIndex = app.currentIndex;
     }
@@ -834,6 +864,9 @@ void LoadImageIndex(HWND hWnd, int index) {
                     std::memory_order_relaxed);
             // Orientation stored in the cache entry, applied after the viewport reset.
             ApplyOrientationToViewport(app.renderer->GetCachedOrientation(currentPath));
+            // LoadBitmap has set imgWidth/imgHeight — safe to re-clamp a locked
+            // viewport against the new image's dimensions.
+            ReclampLockedViewport(hWnd);
             // Rewire the effect graph to the new bitmap before it paints below.
             app.UpdateRendererColorEffects(hWnd);
             if (app.renderer->IsAnimatedGif())

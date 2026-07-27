@@ -224,6 +224,71 @@ namespace Persistence::Registry {
         return result;
     }
 
+    // Single enumeration of everything the app persists. See the header for why
+    // this is not open-coded at its call sites any more.
+    //
+    // A plain function pointer plus a void* rather than std::function: this is
+    // called with a stack-local sink and there is no reason to allocate for it.
+    void ForEachSetting(const AppState &a,
+                        void (*fn)(const wchar_t *key, DWORD value, void *ctx),
+                        void *ctx) {
+        namespace R = Constants::Registry;
+        auto emit = [&](const wchar_t *k, DWORD v) { fn(k, v, ctx); };
+        auto emitB = [&](const wchar_t *k, bool v) { fn(k, static_cast<DWORD>(v ? 1 : 0), ctx); };
+        auto emitI = [&](const wchar_t *k, int v) { fn(k, static_cast<DWORD>(v), ctx); };
+
+        emitB(R::KEEP_IN_BACKGROUND,    a.isKeepInBackground);
+        emitB(R::RUN_ON_STARTUP,        a.isEnableRunOnStartup);
+        emitB(R::THUMBNAIL_EFFECTS,     a.thumbnailEffectsEnabled);
+        emitB(R::LOCK_VIEWPORT,         a.lockViewport);
+        emitB(R::HISTORY_FULL_MODE,     a.historyFullModeEnabled);
+        emitB(R::OVERLAY_VISIBLE,       a.showOverlayInfoText);
+        emitB(R::OPEN_DIRWND_ON_START,  a.openDirWndOnStart);
+        emitB(R::OVERLAY_SHOW_BG,       a.overlayShowBackground);
+        emitI(R::OVERLAY_LAYOUT_MODE,   a.overlayLayoutMode);
+        emit (R::OVERLAY_SLOT_VISIBLE,  a.overlaySlotVisibleMask);
+        emit (R::OVERLAY_SLOT_COMPACT,  a.overlaySlotCompactMask);
+        emitB(R::OVERLAY_SHOW_DIR_NAME, a.overlayShowDirName);
+        emitI(R::OVERLAY_FONT_SIZE,     a.overlayFontSize);
+        emit (R::OVERLAY_FONT_COLOR,    static_cast<DWORD>(a.overlayFontColor));
+        emitI(R::OVERLAY_FONT_FAMILY,   a.overlayFontFamily);
+        emitI(R::INPUTBOX_CARET_STYLE,  a.caretStyle);
+        emitI(R::ZOOM_CLICK_MULT,       Converters::toZoomInt(a.zoomClickMultiplier));
+        emitB(R::SWAP_MOUSE_BUTTONS,    a.swapMouseButtons);
+        emitB(R::CONTEXT_MENU_ENABLED,  a.contextMenuEnabled);
+        emitB(R::KIOSK_LOCK,            a.isLocked);
+        emitB(R::ALWAYS_ON_TOP,         a.isAlwaysOnTop);
+        emitB(R::KEEP_DISPLAY_AWAKE,    a.keepDisplayAwake);
+        emitB(R::WHEEL_INVERT,          a.invertWheelDirection);
+        emitB(R::WHEEL_INVERT_H,        a.invertWheelDirectionH);
+        emitI(R::VRAM_CACHE_COUNT,      a.vramCacheCount);
+        emitI(R::VIEW_MODE,             static_cast<int>(a.viewMode));
+        emitI(R::BASE_WIDTH_KEY,        a.baseWidth);
+        emitI(R::BASE_HEIGHT_KEY,       a.baseHeight);
+        emitB(R::START_FULLSCREEN,      a.startInFullscreen);
+        emitI(R::HISTORY_MAX_DIRS,      a.historyMaxDirs);
+        emitI(R::HISTORY_MAX_FAVS,      a.historyMaxFavs);
+        emitI(R::DIR_THUMB_CACHE_MB,    a.dirThumbCacheMB);
+        emitI(R::PRELOAD_LOOKASIDE,     a.preloadLookaside);
+        emitI(R::MSG_CENTER_MS,         a.msgCenterDisplayMs);
+        emitI(R::HISTORY_MAX_DIRS_SAVE, a.historyMaxDirsSave);
+        emitI(R::SLIDESHOW_INTERVAL_MS, a.slideshow.intervalMs);
+        emitB(R::SLIDESHOW_LOOP,        a.slideshow.loop);
+        emitB(R::SLIDESHOW_SHUFFLE,     a.slideshow.shuffle);
+        emitI(R::SLIDESHOW_TRANSITION,  static_cast<int>(a.slideshow.transition.type));
+        emitI(R::SLIDESHOW_TRANS_SOURCE,a.slideshow.transition.source);
+        emitI(R::SLIDESHOW_TRANS_ORDER, a.slideshow.transition.order);
+        emit (R::SLIDESHOW_TRANS_LIST,  a.slideshow.transition.listMask);
+        emitI(R::SORT_ORDER,            a.fileHandlerDefaultSortOrder);
+        emitB(R::SORT_REVERSE,          a.fileHandlerIsReverseSortOrder);
+        emitB(R::CTRL_C_ENABLED,        a.ctrlCEnabled);
+        emitB(R::THUMB_COPY_ENABLED,    a.thumbCopyEnabled);
+        emitB(R::THUMB_MOVE_ENABLED,    a.thumbMoveEnabled);
+        emitB(R::THUMB_DELETE_ENABLED,  a.thumbDeleteEnabled);
+        emitB(R::THUMB_PASTE_ENABLED,   a.thumbPasteEnabled);
+        emitI(R::THEME_FACTOR,          static_cast<int>(a.themeFactor * 100.0f));
+    }
+
     void LoadAllSettings(AppState &a) {
         // Open the key once. RegQueryValueExW then reads each value from the already-open
         // handle — no per-setting open/close round-trips through the registry driver.
@@ -260,6 +325,9 @@ namespace Persistence::Registry {
         a.thumbnailEffectsEnabled = readDword(
             Constants::Registry::THUMBNAIL_EFFECTS,
             static_cast<DWORD>(Constants::ThumbnailPanel::ThumbnailEffects::EFFECTS_MASTER_ENABLED)) != 0;
+        a.lockViewport = readDword(
+            Constants::Registry::LOCK_VIEWPORT,
+            static_cast<DWORD>(Constants::IS_LOCK_VIEWPORT)) != 0;
         a.historyFullModeEnabled = readDword(
             Constants::Registry::HISTORY_FULL_MODE,
             static_cast<DWORD>(Constants::History::HISTORY_SHOW_FULL_HISTORY)) != 0;

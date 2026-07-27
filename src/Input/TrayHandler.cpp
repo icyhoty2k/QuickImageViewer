@@ -229,6 +229,16 @@ void TrayHandler::DispatchCommand(HWND hWnd, int cmd) {
                                  : Constants::Messages::KEEP_DISPLAY_AWAKE_OFF);
         break;
 
+    // Viewport lock (Y) — carry zoom + pan across image changes.
+    case 67:
+        app.lockViewport = !app.lockViewport;
+        Persistence::Registry::SaveSetting(Constants::Registry::LOCK_VIEWPORT,
+            static_cast<DWORD>(app.lockViewport));
+        m_overlayManager.PostCenterMessage(hWnd,
+            app.lockViewport ? Constants::Messages::VIEWPORT_LOCK_ON
+                             : Constants::Messages::VIEWPORT_LOCK_OFF);
+        break;
+
     // ── BOT_LEFT readouts ─────────────────────────────────────────────────────
     // Session-only by design — no SaveSetting here, unlike the folder name.
     case 97:
@@ -616,55 +626,17 @@ void TrayHandler::DispatchCommand(HWND hWnd, int cmd) {
             FILE *f = nullptr;
             if (_wfopen_s(&f, exportPath.c_str(), L"w,ccs=UTF-8") == 0 && f) {
                 fwprintf(f, L"[QuickImageViewer]\n");
-                fwprintf(f, L"%s=%d\n", Constants::Registry::KEEP_IN_BACKGROUND,   (int)app.isKeepInBackground);
-                fwprintf(f, L"%s=%d\n", Constants::Registry::RUN_ON_STARTUP,        (int)app.isEnableRunOnStartup);
-                fwprintf(f, L"%s=%d\n", Constants::Registry::THUMBNAIL_EFFECTS,     (int)app.thumbnailEffectsEnabled);
-                fwprintf(f, L"%s=%d\n", Constants::Registry::HISTORY_FULL_MODE,     (int)app.historyFullModeEnabled);
-                fwprintf(f, L"%s=%d\n", Constants::Registry::OVERLAY_VISIBLE,       (int)app.showOverlayInfoText);
-                fwprintf(f, L"%s=%d\n", Constants::Registry::OPEN_DIRWND_ON_START,  (int)app.openDirWndOnStart);
-                fwprintf(f, L"%s=%d\n", Constants::Registry::OVERLAY_SHOW_BG,       (int)app.overlayShowBackground);
-                fwprintf(f, L"%s=%d\n", Constants::Registry::OVERLAY_LAYOUT_MODE,   app.overlayLayoutMode);
-                fwprintf(f, L"%s=%u\n", Constants::Registry::OVERLAY_SLOT_VISIBLE,  app.overlaySlotVisibleMask);
-                fwprintf(f, L"%s=%u\n", Constants::Registry::OVERLAY_SLOT_COMPACT,  app.overlaySlotCompactMask);
-                fwprintf(f, L"%s=%d\n", Constants::Registry::OVERLAY_SHOW_DIR_NAME, (int)app.overlayShowDirName);
-                fwprintf(f, L"%s=%d\n", Constants::Registry::OVERLAY_FONT_SIZE,     app.overlayFontSize);
-                fwprintf(f, L"%s=%lu\n", Constants::Registry::OVERLAY_FONT_COLOR,   (unsigned long)app.overlayFontColor);
-                fwprintf(f, L"%s=%d\n", Constants::Registry::OVERLAY_FONT_FAMILY,   app.overlayFontFamily);
-                fwprintf(f, L"%s=%d\n", Constants::Registry::INPUTBOX_CARET_STYLE,  app.caretStyle);
-                fwprintf(f, L"%s=%d\n", Constants::Registry::ZOOM_CLICK_MULT,       Converters::toZoomInt(app.zoomClickMultiplier));
-                fwprintf(f, L"%s=%d\n", Constants::Registry::SWAP_MOUSE_BUTTONS,    (int)app.swapMouseButtons);
-                fwprintf(f, L"%s=%d\n", Constants::Registry::CONTEXT_MENU_ENABLED,  (int)app.contextMenuEnabled);
-                fwprintf(f, L"%s=%d\n", Constants::Registry::KIOSK_LOCK,            (int)app.isLocked);
-                fwprintf(f, L"%s=%d\n", Constants::Registry::ALWAYS_ON_TOP,         (int)app.isAlwaysOnTop);
-                fwprintf(f, L"%s=%d\n", Constants::Registry::KEEP_DISPLAY_AWAKE,    (int)app.keepDisplayAwake);
-                fwprintf(f, L"%s=%d\n", Constants::Registry::WHEEL_INVERT,          (int)app.invertWheelDirection);
-                fwprintf(f, L"%s=%d\n", Constants::Registry::WHEEL_INVERT_H,        (int)app.invertWheelDirectionH);
-                fwprintf(f, L"%s=%d\n", Constants::Registry::VRAM_CACHE_COUNT,      app.vramCacheCount);
-                fwprintf(f, L"%s=%d\n", Constants::Registry::VIEW_MODE,             static_cast<int>(app.viewMode));
-                fwprintf(f, L"%s=%d\n", Constants::Registry::BASE_WIDTH_KEY,        app.baseWidth);
-                fwprintf(f, L"%s=%d\n", Constants::Registry::BASE_HEIGHT_KEY,       app.baseHeight);
-                fwprintf(f, L"%s=%d\n", Constants::Registry::START_FULLSCREEN,      (int)app.startInFullscreen);
-                fwprintf(f, L"%s=%d\n", Constants::Registry::HISTORY_MAX_DIRS,      app.historyMaxDirs);
-                fwprintf(f, L"%s=%d\n", Constants::Registry::HISTORY_MAX_FAVS,      app.historyMaxFavs);
-                fwprintf(f, L"%s=%d\n", Constants::Registry::DIR_THUMB_CACHE_MB,    app.dirThumbCacheMB);
-                fwprintf(f, L"%s=%d\n", Constants::Registry::PRELOAD_LOOKASIDE,     app.preloadLookaside);
-                fwprintf(f, L"%s=%d\n", Constants::Registry::MSG_CENTER_MS,         app.msgCenterDisplayMs);
-                fwprintf(f, L"%s=%d\n", Constants::Registry::HISTORY_MAX_DIRS_SAVE, app.historyMaxDirsSave);
-                fwprintf(f, L"%s=%d\n", Constants::Registry::SLIDESHOW_INTERVAL_MS, app.slideshow.intervalMs);
-                fwprintf(f, L"%s=%d\n", Constants::Registry::SLIDESHOW_LOOP,         (int)app.slideshow.loop);
-                fwprintf(f, L"%s=%d\n", Constants::Registry::SLIDESHOW_SHUFFLE,      (int)app.slideshow.shuffle);
-                fwprintf(f, L"%s=%d\n", Constants::Registry::SLIDESHOW_TRANSITION,   static_cast<int>(app.slideshow.transition.type));
-                fwprintf(f, L"%s=%d\n", Constants::Registry::SLIDESHOW_TRANS_SOURCE, app.slideshow.transition.source);
-                fwprintf(f, L"%s=%d\n", Constants::Registry::SLIDESHOW_TRANS_ORDER,  app.slideshow.transition.order);
-                fwprintf(f, L"%s=%u\n", Constants::Registry::SLIDESHOW_TRANS_LIST,   app.slideshow.transition.listMask);
-                fwprintf(f, L"%s=%d\n", Constants::Registry::SORT_ORDER,             app.fileHandlerDefaultSortOrder);
-                fwprintf(f, L"%s=%d\n", Constants::Registry::SORT_REVERSE,           (int)app.fileHandlerIsReverseSortOrder);
-                fwprintf(f, L"%s=%d\n", Constants::Registry::CTRL_C_ENABLED,         (int)app.ctrlCEnabled);
-                fwprintf(f, L"%s=%d\n", Constants::Registry::THUMB_COPY_ENABLED,     (int)app.thumbCopyEnabled);
-                fwprintf(f, L"%s=%d\n", Constants::Registry::THUMB_MOVE_ENABLED,     (int)app.thumbMoveEnabled);
-                fwprintf(f, L"%s=%d\n", Constants::Registry::THUMB_DELETE_ENABLED,   (int)app.thumbDeleteEnabled);
-                fwprintf(f, L"%s=%d\n", Constants::Registry::THUMB_PASTE_ENABLED,    (int)app.thumbPasteEnabled);
-                fwprintf(f, L"%s=%d\n", Constants::Registry::THEME_FACTOR,           (int)(app.themeFactor * 100.0f));
+                // The key list lives in Persistence::Registry::ForEachSetting, so
+                // this and the remote panel's .ini seeding cannot fall out of step.
+                // Everything persists as an unsigned DWORD, which is exactly how
+                // the registry holds it — no value is reinterpreted on the way out.
+                Persistence::Registry::ForEachSetting(
+                    app,
+                    [](const wchar_t *key, DWORD value, void *ctx) {
+                        fwprintf(static_cast<FILE *>(ctx), L"%s=%lu\n", key,
+                                 static_cast<unsigned long>(value));
+                    },
+                    f);
                 fclose(f);
                 UI::ThemedDialog::Message(hWnd, L"Settings exported successfully.", L"Export Settings");
             } else {
@@ -736,6 +708,7 @@ void TrayHandler::DispatchCommand(HWND hWnd, int cmd) {
             applyBool(Constants::Registry::KEEP_IN_BACKGROUND,  app.isKeepInBackground);
             applyBool(Constants::Registry::RUN_ON_STARTUP,       app.isEnableRunOnStartup);
             applyBool(Constants::Registry::THUMBNAIL_EFFECTS,    app.thumbnailEffectsEnabled);
+            applyBool(Constants::Registry::LOCK_VIEWPORT,        app.lockViewport);
             applyBool(Constants::Registry::HISTORY_FULL_MODE,    app.historyFullModeEnabled);
             applyBool(Constants::Registry::OVERLAY_VISIBLE,      app.showOverlayInfoText);
             applyBool(Constants::Registry::OPEN_DIRWND_ON_START, app.openDirWndOnStart);
@@ -940,6 +913,7 @@ void TrayHandler::DispatchCommand(HWND hWnd, int cmd) {
         app.isKeepInBackground      = Constants::IS_KEEP_IN_BACKGROUND;
         app.isEnableRunOnStartup    = Constants::IS_ENABLE_RUN_ON_STARTUP;
         app.thumbnailEffectsEnabled = Constants::ThumbnailPanel::ThumbnailEffects::EFFECTS_MASTER_ENABLED;
+        app.lockViewport            = Constants::IS_LOCK_VIEWPORT;
         app.historyFullModeEnabled  = Constants::History::HISTORY_SHOW_FULL_HISTORY;
         app.showOverlayInfoText     = Constants::Overlay::DEFAULT_SHOW_OVERLAY;
         app.openDirWndOnStart       = Constants::IS_OPEN_DIRWND_ON_START;
@@ -992,6 +966,7 @@ void TrayHandler::DispatchCommand(HWND hWnd, int cmd) {
         Persistence::Registry::SaveSetting(Constants::Registry::KEEP_IN_BACKGROUND,   static_cast<DWORD>(app.isKeepInBackground));
         Persistence::Registry::SaveSetting(Constants::Registry::RUN_ON_STARTUP,        static_cast<DWORD>(app.isEnableRunOnStartup));
         Persistence::Registry::SaveSetting(Constants::Registry::THUMBNAIL_EFFECTS,     static_cast<DWORD>(app.thumbnailEffectsEnabled));
+        Persistence::Registry::SaveSetting(Constants::Registry::LOCK_VIEWPORT,         static_cast<DWORD>(app.lockViewport));
         Persistence::Registry::SaveSetting(Constants::Registry::HISTORY_FULL_MODE,     static_cast<DWORD>(app.historyFullModeEnabled));
         Persistence::Registry::SaveSetting(Constants::Registry::OVERLAY_VISIBLE,       static_cast<DWORD>(app.showOverlayInfoText));
         Persistence::Registry::SaveSetting(Constants::Registry::OPEN_DIRWND_ON_START,  static_cast<DWORD>(app.openDirWndOnStart));

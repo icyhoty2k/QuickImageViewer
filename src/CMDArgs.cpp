@@ -4,6 +4,7 @@
 #include "SlideshowTransitions.h"
 #include "Input/AppCommands.h"
 #include "Dedicated/DedicatedSettings.h" // IsDedicatedFlag — never prompt on a screen
+#include "Rem_TCP_IP/RemoteSettings.h"   // -remote* switches layer onto the .ini
 #include "Platform/Constants.h"
 #include "Platform/FileHandler.h"
 #include <numeric>
@@ -185,6 +186,30 @@ CmdArgs ParseCmdArgs(int argc, LPWSTR *argv) {
             args.transitionSpecified = true;
         }
 
+            // --- Remote control over TCP/IP (src/Rem_TCP_IP) ---
+            // Longer prefixes are tested before "-remote" itself, or the bare
+            // switch would swallow every "-remoteX=" form.
+        else if (_wcsnicmp(arg.c_str(), L"-remoteName=", 12) == 0)
+            args.remoteName = arg.substr(12);
+        else if (_wcsnicmp(arg.c_str(), L"-remoteIp=", 10) == 0)
+            args.remoteIp = arg.substr(10);
+        else if (_wcsnicmp(arg.c_str(), L"-remotePort=", 12) == 0) {
+            try {
+                args.remotePort = std::stoi(arg.substr(12));
+            } catch (...) {}
+        } else if (_wcsnicmp(arg.c_str(), L"-remoteAllow=", 13) == 0)
+            args.remoteAllow = arg.substr(13);
+        else if (_wcsnicmp(arg.c_str(), L"-remoteBlock=", 13) == 0)
+            args.remoteBlock = arg.substr(13);
+        else if (_wcsnicmp(arg.c_str(), L"-remotePassword=", 16) == 0)
+            args.remotePassword = arg.substr(16);
+        else if (_wcsnicmp(arg.c_str(), L"-remoteMaxConn=", 15) == 0) {
+            try {
+                args.remoteMaxConn = std::stoi(arg.substr(15));
+            } catch (...) {}
+        } else if (_wcsicmp(arg.c_str(), L"-remote") == 0)
+            args.remoteEnable = true;
+
             // Positional: first non-flag token is the image file
         else if (_wcsicmp(arg.c_str(), L"-RestoreDefaults") == 0)
             args.restoreDefaults = true;
@@ -234,6 +259,29 @@ void ApplyCmdArgs(HWND hWnd, const CmdArgs &args, int nCmdShow) {
 
     // 1a. Dedicated mode (affects history file and registry — must be set before any of that)
     if (args.dedicated) app.isDedicated = true;
+
+    // 1b. Remote control (src/Rem_TCP_IP). Order matters: the .ini is read FIRST
+    // so a fully configured screen works from `-remote` alone, then the switches
+    // are layered on top. Nothing is written back — a command line describes one
+    // launch, not a permanent reconfiguration.
+    //
+    // Registry-backed installs have no .ini, so LoadFromIni is a no-op there and
+    // the switches are the only way in. That is by design: a network listener
+    // should not be reachable through a setting somebody flipped by accident.
+    {
+        Remote::LoadFromIni();
+
+        Remote::Overrides ro;
+        ro.enable         = args.remoteEnable;
+        ro.name           = args.remoteName;
+        ro.bindAddress    = args.remoteIp;
+        ro.allowList      = args.remoteAllow;
+        ro.blackList      = args.remoteBlock;
+        ro.plainPassword  = args.remotePassword;
+        ro.port           = args.remotePort;
+        ro.maxConnections = args.remoteMaxConn;
+        Remote::ApplyOverrides(ro);
+    }
 
     // 2. KIOSK lock. app.isLocked already carries the STORED value at this point
     // (RegistryManager loaded it, or the .ini did for a dedicated screen), so the

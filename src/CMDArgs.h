@@ -60,6 +60,28 @@ struct CmdArgs {
     int promoTimeFrom   = -1;    // -promoEverySeconds=<from>-<to>  (0 = off)
     int promoTimeTo     = -1;
 
+    // --- Remote control over TCP/IP (src/Rem_TCP_IP) ---
+    // One of the only two ways the listener can be switched on; the other is a
+    // [REMOTE_TCP_IP] section in the .ini. Absent switches leave the .ini's
+    // values alone, so a configured screen can be launched without repeating
+    // its whole configuration on the command line.
+    //   -remote                       enable the listener
+    //   -remoteName=<name>            how this instance identifies itself
+    //   -remoteIp=<addr>              BIND address (0.0.0.0 = every interface)
+    //   -remotePort=<n>               listen port
+    //   -remoteAllow=<a,b,c>          IPs permitted to connect (empty = deny all)
+    //   -remoteBlock=<a,b,c>          IPs always refused; beats the allow list
+    //   -remotePassword=<text>        hashed before storage, never kept plaintext
+    //   -remoteMaxConn=<n>            simultaneous clients
+    bool         remoteEnable   = false;
+    std::wstring remoteName;
+    std::wstring remoteIp;
+    std::wstring remoteAllow;
+    std::wstring remoteBlock;
+    std::wstring remotePassword;
+    int          remotePort     = -1;   // -1 = switch absent, keep the stored value
+    int          remoteMaxConn  = -1;   // -1 = switch absent, keep the stored value
+
     // --- Behavior ---
     bool         hideMouse     = false; // -hideMouse     : hide cursor at startup
     bool         lock          = false; // -lock          : KIOSK — no keyboard or mouse input accepted

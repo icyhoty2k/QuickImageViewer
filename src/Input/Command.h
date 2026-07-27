@@ -41,6 +41,7 @@ enum class Command {
     FlipV,
     ToggleThumbnailWrapAround, // B — toggle thumbnail strip wheel wrap-around
     ToggleThumbnailEffects, // U — toggle thumbnail strip visual effects (rounded corners, glow, hover scale)
+    ToggleViewportLock, // Y — keep zoom + pan across image changes (rotation/flips still auto-orient)
 
     // --- Fullscreen ---
     ToggleFullscreen,
@@ -191,6 +192,7 @@ enum class Command {
 
     // --- Dedicated instances (src/Dedicated) ---
     ToggleDedicatedPanel,   // F8 — the Dedicated configuration panel
+    ToggleRemotePanel,      // F9 — the Remote control (TCP/IP) panel
     ToggleDedicated,        // -dedicated: separate registry/history namespace
     CmdArgsExport,          // current settings → a cmdArgs .txt
     CmdArgsImport,          // read a cmdArgs .txt and apply it
