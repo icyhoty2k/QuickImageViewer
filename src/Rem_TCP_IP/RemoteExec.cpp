@@ -12,6 +12,7 @@
 #include "Common/Converters.h"
 
 #include <algorithm>
+#include <cstring>    // _wcsicmp — file names compared case-insensitively
 #include <filesystem>
 
 extern AppState app;
@@ -274,12 +275,15 @@ namespace {
     // still draw visibly different images. No amount of resending toggles
     // repairs an ordering; only replacing the list does.
     //
-    // Deliberately NOT carrying the playlist position. Applying a folder starts
-    // an asynchronous scan, so an index sent in the same breath would race it.
-    // The caller sends `sync`, then the index — which is also exactly what it
-    // does after a divergence is detected.
+    // THE POSITION TRAVELS AS A NAME, NEVER AS AN INDEX. Applying a folder
+    // starts an asynchronous scan, so an index sent in the same breath would
+    // race it — arrive against the one-file playlist that exists until the scan
+    // lands, and mean the wrong picture or none. A path does not race anything:
+    // OpenSpecificImage hands it to the scan as its target, so the folder is
+    // opened and the picture is landed on by the same pass. (An index still
+    // races, which is why the desync repair sends `sync` and THEN `goto`.)
     std::wstring DoSync(HWND hWnd, const std::wstring &payload) {
-        std::wstring folder;
+        std::wstring folder, image, fileName;
         int  sortOrder = -1, sortRev = -1;
         bool sawSort = false;
 
@@ -306,6 +310,8 @@ namespace {
             auto asFloat = [&] { return ParseFloatPercent(v, fv); };
 
             if      (k == L"folder")   folder = v;
+            else if (k == L"image")    image  = v;   // same-machine: full path
+            else if (k == L"name")     fileName = v; // elsewhere: bare file name
             else if (k == L"sort")    { if (asInt()) { sortOrder = iv; sawSort = true; } }
             else if (k == L"sortrev") { if (asInt()) { sortRev   = iv; sawSort = true; } }
             else if (k == L"view")    { if (asInt() && iv >= 1 && iv <= 5)
@@ -360,14 +366,47 @@ namespace {
             if (sortRev   >= 0) app.fileHandlerIsReverseSortOrder   = (sortRev != 0);
         }
 
-        // Folder last. It kicks off an asynchronous scan that re-sorts using the
-        // order just applied, so the two must land in this sequence.
-        if (!folder.empty()) {
-            std::error_code ec;
-            if (fs::is_directory(fs::path(folder), ec) && !ec)
-                OpenDirectory(hWnd, folder);
-        } else if (sawSort) {
-            ReSortPlaylistAndRebuildMap(hWnd);
+        // Where to land, last of all. Whichever form applies kicks off (or
+        // re-uses) a scan that sorts with the order set just above, so the two
+        // must happen in this sequence.
+        //
+        // A new sort is applied to the playlist BEFORE opening, not instead of
+        // it: OpenSpecificImage has a fast path for a file already in the
+        // current folder that reuses the playlist as it stands, and without this
+        // that path would land on the right picture in the old order.
+        if (sawSort && !app.playlist.empty()) ReSortPlaylistAndRebuildMap(hWnd);
+
+        // Resolved before the chain below so each branch tests a plain bool —
+        // one std::error_code reused across two filesystem calls has to be
+        // cleared between them, and a missed clear reads as a failure that
+        // never happened.
+        std::error_code ec;
+        const bool haveImage =
+            !image.empty() && fs::is_regular_file(fs::path(image), ec) && !ec;
+        ec.clear();
+        const bool haveFolder =
+            !folder.empty() && fs::is_directory(fs::path(folder), ec) && !ec;
+
+        if (haveImage) {
+            // Folder and picture in one. The sender only ever puts this key in
+            // for an instance that shares its filesystem, so the path resolves
+            // here to the same file it named there.
+            OpenSpecificImage(hWnd, image);
+        } else if (haveFolder) {
+            OpenDirectory(hWnd, folder);
+        } else if (!fileName.empty()) {
+            // Another machine's picture, by name. Its folder was never sent —
+            // this viewer keeps its own content and simply moves to the
+            // same-named file if it happens to hold one, which is the most that
+            // can be honestly done when the two ends own different files. A
+            // linear walk, not a map lookup: the map is keyed by full path, and
+            // this runs on a `sync`, not on the keystroke path.
+            for (size_t i = 0; i < app.playlist.size(); ++i) {
+                if (_wcsicmp(fs::path(app.playlist[i]).filename().wstring().c_str(),
+                             fileName.c_str()) != 0) continue;
+                LoadImageIndex(hWnd, static_cast<int>(i));
+                break;
+            }
         }
 
         app.UpdateRendererColorEffects(hWnd);
@@ -386,7 +425,34 @@ std::wstring BuildSyncPayload(bool includeFolder) {
         return std::wstring(b);
     };
 
-    std::wstring folder;
+    // WHERE the far end should land, in two spellings.
+    //
+    // `image` is the whole answer for an instance that shares this filesystem:
+    // the folder AND the picture in one key, applied by OpenSpecificImage, which
+    // opens the folder and lands on that file through the scan itself. That is
+    // what makes a position safe to put in a sync at all — the older reasoning
+    // (an index sent alongside a folder races the scan the folder starts) is
+    // still true of an INDEX, and is exactly why this is a path.
+    //
+    // `name` is the bare file name, and goes to instances on other machines,
+    // which are never sent a folder. Two boxes commonly hold the same collection
+    // at different paths, and there the name is enough to land on the same
+    // picture; where it is not, the far end has no such file and leaves itself
+    // alone. `folder` still goes out beside them — it is the whole answer for a
+    // viewer with nothing loaded, and the only one an older build understands.
+    std::wstring folder, image, fileName;
+    const bool haveCurrent = app.currentIndex >= 0 &&
+                             app.currentIndex < static_cast<int>(app.playlist.size());
+    if (haveCurrent) {
+        const fs::path cur(app.playlist[app.currentIndex]);
+        fileName = cur.filename().wstring();
+        if (includeFolder) image = cur.wstring();
+    }
+    // `folder` travels ALONGSIDE `image`, not instead of it, even though this
+    // build's DoSync would ignore it. An older instance does not know the newer
+    // key and skips it silently — without the folder it would stay where it was
+    // and the sync would look broken from the driving end. It costs one key on a
+    // line sent by hand.
     if (includeFolder && !app.playlist.empty())
         folder = fs::path(app.playlist[0]).parent_path().wstring();
 
@@ -404,7 +470,15 @@ std::wstring BuildSyncPayload(bool includeFolder) {
     // An empty folder= is omitted entirely rather than sent blank: DoSync treats
     // an absent key as "leave it alone", which is exactly right, whereas an
     // empty value would have to be special-cased at the far end.
+    //
+    // The path keys go FIRST, and everything after them is a number or a fixed
+    // word. A file name containing ';' — legal, if unusual — therefore truncates
+    // its own value and nothing else: the fragment left behind has no '=' and
+    // DoSync skips it, so the sync still applies in full apart from the landing
+    // place, which fails the exists() check and leaves that viewer where it was.
     return (folder.empty() ? std::wstring() : L"folder=" + folder + L";") +
+           (image.empty()  ? std::wstring() : L"image="  + image  + L";") +
+           (fileName.empty() ? std::wstring() : L"name=" + fileName + L";") +
            L"sort="       + num(app.fileHandlerDefaultSortOrder) +
            L";sortrev="  + num(app.fileHandlerIsReverseSortOrder ? 1 : 0) +
            L";view="     + num(static_cast<int>(app.viewMode)) +

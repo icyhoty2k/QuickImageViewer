@@ -88,7 +88,12 @@ namespace Shortcuts {
     // -------------------------------------------------------------------------
     // Mirroring to other instances  (src/Rem_TCP_IP)
     // -------------------------------------------------------------------------
-    // F11 — forward every mirrorable command to the connected targets.
+    // F11 — forward every mirrorable command to the connected targets. With two
+    //       or more of them joined, switching it on first asks WHICH — see
+    //       Rem_TCP_IP/MirrorPicker.h.
+    // Shift+F11 — the same picker on demand: change the selection while
+    //       mirroring is running (plain F11 would switch it off), and reach its
+    //       Sync now item with a single instance connected.
     // F12 — while mirroring, ALSO execute locally. With F11 on and F12 off this
     //       viewer is a pure remote control: it drives the other screens and its
     //       own display does not move.

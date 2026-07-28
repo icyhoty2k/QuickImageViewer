@@ -90,6 +90,10 @@ namespace Remote::Mirror {
         // says whether it currently is. A row can be listed and idle: recorded
         // for later, or for a screen that is switched off today.
         bool         connecting = false;
+        // Is this row in the current F11 selection? Distinct from both of the
+        // above: a target can be connected — pollable, startable, watchable from
+        // the console — while the mirrored keystrokes go elsewhere.
+        bool         mirroring = true;
         bool         connected = false;
         bool         observing = false;  // we asked it to echo its actions to us
         long long    lagUs     = -1;     // last round trip, µs; -1 = never measured
@@ -195,7 +199,32 @@ namespace Remote::Mirror {
     // folder it cannot open.
     void BroadcastSync(const std::wstring &full, const std::wstring &portable);
 
-    // Queues to ONE target. The console's per-row buttons use this.
+    // --- Which targets F11 drives (UI thread; session state) ----------------
+    //
+    // Everything connected is mirrored until somebody says otherwise. Narrowing
+    // is the exception — a wall of screens that should all follow along is the
+    // normal case, and a picker that started empty would make the common setup
+    // the one needing the most clicks.
+    //
+    // NOT persisted. See the Target::mirroring note in RemoteMirror.cpp: a
+    // selection saved from last week would quietly leave a screen dark today.
+    void SetMirroring(int id, bool on);
+    void SetMirroringAll(bool on);
+
+    // Connected AND selected — how many screens a keystroke would actually
+    // reach. What the F11 overlay reports, and what tells the picker whether
+    // there is anything to choose between.
+    int  MirroredLiveCount();
+
+    // What the F11 overlay says after the arrow: "3 targets" when everything
+    // connected is following along, "Monitor2 (1 of 3)" when the selection has
+    // been narrowed. A narrowed selection is invisible otherwise — this line is
+    // the only place it is stated.
+    std::wstring SelectionSummary();
+
+    // Queues to ONE target. The console's per-row buttons use this, and so does
+    // the desync repair — both name a target explicitly, so neither is filtered
+    // by the mirror selection.
     void SendTo(int id, const std::wstring &line);
 
     // `ping` every target and record the round trip in TargetView::lagUs.

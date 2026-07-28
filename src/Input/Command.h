@@ -245,6 +245,12 @@ enum class Command {
     // Two LOCAL switches, both off at every startup — a viewer that boots
     // forwarding its keystrokes to machines you forgot about would be a trap.
     MirrorToggle,      // F11 — forward my commands to my connected targets
+    // Shift+F11 — open the same picker F11 shows when several instances are
+    // joined, without toggling anything. The way to change the selection while
+    // mirroring is already running, to reach Sync now with a single instance
+    // connected (where F11 asks nothing because there is nothing to choose),
+    // and to look at what is currently selected at all.
+    MirrorPick,
     MirrorLocalToggle, // F12 — when mirroring, also execute here (not just forward)
     ToggleRemotesConsole,  // F10 — the slave management console
 

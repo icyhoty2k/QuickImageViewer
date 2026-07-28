@@ -584,7 +584,17 @@ namespace UI {
             L"instances listed in the Remotes console (F10) — navigation, zoom, effects, "
             L"view mode, sort order, slideshow. Panels, window geometry, quit and hide are "
             L"deliberately never forwarded: one keypress must not close or move every "
-            L"screen at once. Always OFF at startup.", sApp);
+            L"screen at once. Always OFF at startup.\r\n"
+            L"With TWO OR MORE instances connected, switching it on asks which of them to "
+            L"drive: a popup lists the connected instances, each one a tick you can turn on "
+            L"or off, with All, None and Done. Everything is ticked to begin with. Dismissing "
+            L"it keeps whatever is ticked; ticking nothing leaves mirroring off. The choice "
+            L"lasts for this session only and is shown in the Remotes console header. With a "
+            L"single instance connected there is nothing to choose and no popup appears.\r\n"
+            L"SHIFT+F11 opens that same popup at any time — while mirroring is already on, or "
+            L"with only one instance connected — without toggling anything. It also carries "
+            L"Sync now, which pushes this viewer's folder, current image and view state to the "
+            L"ticked instances, the same push as Sync all in the Remotes console.", sApp);
         Add(L"While connected",
             L"A connection — driving another instance, or being driven by one — puts the "
             L"viewer into a restricted mode, and leaves it when the last connection drops.\r\n"

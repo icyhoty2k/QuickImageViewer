@@ -405,6 +405,7 @@ bool IsMirrorable(Command cmd) {
         // point at each other, that is an infinite exchange. Observe/Sync are
         // remote-only verbs and are never something a local keypress fans out.
         case Command::MirrorToggle:
+        case Command::MirrorPick:
         case Command::MirrorLocalToggle:
         case Command::Observe:
         case Command::Sync:

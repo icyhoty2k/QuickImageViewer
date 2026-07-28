@@ -25,6 +25,7 @@
 #include "Rem_TCP_IP/RemoteExec.h"    // ExecutePayload — the shared payload body
 #include "Rem_TCP_IP/RemoteMirror.h"  // the mirror gate at the top of ExecuteCommand
 #include "Rem_TCP_IP/RemoteInbound.h" // …and the loop cut that makes it safe
+#include "Rem_TCP_IP/MirrorPicker.h"  // F11 with several instances joined: which ones?
 #include "Rem_TCP_IP/RemoteServer.h"  // EmitToObservers — the echo half
 
 // These two functions live in AppMain.cpp.
@@ -852,15 +853,57 @@ void InputManager::ExecuteCommand(HWND hWnd, Command cmd) {
             app.passCommandToRemote = !app.passCommandToRemote;
             if (!app.passCommandToRemote) {
                 g_overlayManager.PostCenterMessage(hWnd, Constants::Messages::MIRROR_OFF);
+            } else if (!Remote::Mirror::HasLiveTargets()) {
+                // Nothing is joined — either no rows at all, or rows whose
+                // screens are off. The flag deliberately STAYS on: the sender
+                // threads keep dialling and mirroring resumes by itself, which
+                // is the behaviour a wall of screens being switched on one at a
+                // time depends on. There is simply nobody to pick between yet.
+                g_overlayManager.PostCenterMessage(hWnd, Constants::Messages::MIRROR_NO_TARGETS);
             } else {
-                // Turning it on with nothing connected is a configuration
-                // mistake, not a state worth reporting as success.
-                const int n = Remote::Mirror::TargetCount();
-                g_overlayManager.PostCenterMessage(
-                    hWnd, n == 0 ? std::wstring(Constants::Messages::MIRROR_NO_TARGETS)
-                                 : Constants::Messages::MIRROR_ON_PREFIX + std::to_wstring(n));
+                // WHICH of them? With two or more instances connected the
+                // question is real and used to be answered "all of them" with no
+                // way to say otherwise. PickTargets shows the popup only when
+                // there is something to choose between; with a single target it
+                // just counts and returns.
+                const int n = Remote::Mirror::PickTargets(hWnd);
+
+                // Unticking everything is a decision, not an empty gesture:
+                // mirroring to nobody is mirroring off, so say so rather than
+                // leave the flag on and forward nothing.
+                if (n == 0) {
+                    app.passCommandToRemote = false;
+                    g_overlayManager.PostCenterMessage(
+                        hWnd, Constants::Messages::MIRROR_NONE_PICKED);
+                } else {
+                    g_overlayManager.PostCenterMessage(
+                        hWnd, Constants::Messages::MIRROR_ON_PREFIX +
+                                  Remote::Mirror::SelectionSummary());
+                }
             }
             break;
+
+        // Shift+F11 — manage the selection without toggling. Also the only route
+        // to Sync now with a single instance joined, which is why it opens the
+        // picker even then.
+        case Command::MirrorPick: {
+            if (!Remote::Mirror::HasLiveTargets()) {
+                g_overlayManager.PostCenterMessage(hWnd, Constants::Messages::MIRROR_NO_TARGETS);
+                break;
+            }
+            const int n = Remote::Mirror::PickTargets(hWnd, true);
+
+            // Picking targets is a statement that you want them driven, so this
+            // switches mirroring ON if it was off — the alternative was a picker
+            // that appeared to do nothing until F11 was pressed as well.
+            // Unticking everything says the opposite just as clearly.
+            app.passCommandToRemote = (n > 0);
+            g_overlayManager.PostCenterMessage(
+                hWnd, n == 0 ? std::wstring(Constants::Messages::MIRROR_NONE_PICKED)
+                             : Constants::Messages::MIRROR_ON_PREFIX +
+                                   Remote::Mirror::SelectionSummary());
+            break;
+        }
 
         case Command::MirrorLocalToggle:
             app.resendCommandToCaller = !app.resendCommandToCaller;
@@ -1602,7 +1645,8 @@ std::wstring InputManager::GetCommandValue(HWND hWnd, Command cmd) {
         case Command::RestoreAllPanels: return OnOff(uiManager.AnyPanelVisible());
 
         // --- Mirroring --------------------------------------------------------
-        case Command::MirrorToggle:      return OnOff(app.passCommandToRemote);
+        case Command::MirrorToggle:
+        case Command::MirrorPick:        return OnOff(app.passCommandToRemote);
         case Command::MirrorLocalToggle: return OnOff(app.resendCommandToCaller);
 
         // --- Actions with no lasting state; report that they ran --------------
