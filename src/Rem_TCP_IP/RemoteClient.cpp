@@ -273,7 +273,8 @@ bool Client::Connect(const std::wstring &host, int port,
 }
 
 bool Client::Send(const std::wstring &commandLine,
-                  std::wstring &replyOut, std::wstring &errorOut) {
+                  std::wstring &replyOut, std::wstring &errorOut,
+                  std::vector<std::wstring> *eventsOut) {
     if (!m_connected) {
         errorOut = Constants::Messages::REMOTE_CLIENT_NOT_CONNECTED;
         return false;
@@ -297,7 +298,14 @@ bool Client::Send(const std::wstring &commandLine,
     // line that actually starts with OK or ERR — that one is the reply.
     while (_wcsnicmp(line.c_str(), RT::RESP_OK, 2) != 0 &&
            _wcsnicmp(line.c_str(), RT::RESP_ERR, 3) != 0) {
-        replyOut += line + L"\r\n";
+        // An observed peer pushes EVENT lines when IT acts, which can land in
+        // the middle of our exchange. They are not part of the answer — folding
+        // one into replyOut here would corrupt the reply AND lose the event.
+        if (_wcsnicmp(line.c_str(), RT::RESP_EVENT, 5) == 0) {
+            if (eventsOut) eventsOut->push_back(line);
+        } else {
+            replyOut += line + L"\r\n";
+        }
         if (!RecvLine(s, m_accum, line)) {
             Disconnect();
             errorOut = Constants::Messages::REMOTE_CLIENT_NO_REPLY;
@@ -308,6 +316,42 @@ bool Client::Send(const std::wstring &commandLine,
     replyOut += line;
     errorOut.clear();
     return true;
+}
+
+bool Client::PollLine(std::wstring &lineOut, int timeoutMs) {
+    if (!m_connected) return false;
+    const SOCKET s = static_cast<SOCKET>(m_sock);
+
+    // A previous Send may have left a complete line buffered; return it without
+    // going near the socket, or a peer that talks in bursts would appear to
+    // stall for one timeout per line.
+    {
+        const size_t nl = m_accum.find('\n');
+        if (nl != std::string::npos) {
+            std::string raw = m_accum.substr(0, nl);
+            m_accum.erase(0, nl + 1);
+            if (!raw.empty() && raw.back() == '\r') raw.pop_back();
+            lineOut = FromUtf8(raw.data(), raw.size());
+            return true;
+        }
+    }
+
+    const DWORD shortTo = static_cast<DWORD>(timeoutMs);
+    setsockopt(s, SOL_SOCKET, SO_RCVTIMEO,
+               reinterpret_cast<const char *>(&shortTo), sizeof(shortTo));
+
+    const bool got = RecvLine(s, m_accum, lineOut);
+
+    // A timeout and a dead peer are indistinguishable at RecvLine (both return
+    // false), so the socket must NOT be torn down here: an idle connection is
+    // the normal case for a target nobody is driving. The caller learns about a
+    // real death from the next Send instead.
+    const DWORD restore = IO_TIMEOUT_MS;
+    if (m_connected)
+        setsockopt(s, SOL_SOCKET, SO_RCVTIMEO,
+                   reinterpret_cast<const char *>(&restore), sizeof(restore));
+
+    return got;
 }
 
 bool Probe(const std::wstring &host, int port, const std::wstring &password,

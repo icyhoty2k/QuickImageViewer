@@ -107,6 +107,81 @@ namespace Remote {
     // Name → Command, case-insensitive. Returns false when unreachable.
     bool LookupCommand(const std::wstring &name, const CommandEntry *&entryOut);
 
+    // Command → the name to put on the wire. The FIRST matching row wins, which
+    // is why the short alias is listed before the canonical enum name: a mirrored
+    // session sends "next", not "NextImage". Returns false for a Command that has
+    // no row, i.e. one that is not remotely reachable at all.
+    bool NameForCommand(Command cmd, std::wstring &nameOut);
+
+    // --- Mirroring ------------------------------------------------------------
+    // Whether a command should be forwarded to the connected targets when
+    // mirroring is on.
+    //
+    // THIS IS NOT THE SAME QUESTION AS "is it in the table above". The table is
+    // the SCRIPTING surface and is deliberately permissive: a screen-management
+    // script legitimately wants `quit`, `HideToTray`, `NewWindow` and the window
+    // geometry commands. Mirroring is a different contract — a keystroke fanned
+    // out to every connected screen at once — and the same commands are wrong
+    // there. One Ctrl+Q would kill every slave; one HideToTray would send them
+    // all to a tray nobody is sitting in front of; a Snap would knock a screen
+    // off the monitor it was placed on.
+    //
+    // Anything refused here stays reachable individually through the F9 panel's
+    // Send box. Refusing to fan it out is not refusing to allow it.
+    bool IsMirrorable(Command cmd);
+
+    // Narrower still, for a target on ANOTHER MACHINE. Drops everything that
+    // depends on the two ends holding the same files: an index means nothing
+    // against a different playlist, and a path means nothing against a different
+    // drive. What remains — navigation, zoom, effects, view mode, slideshow —
+    // each instance applies to its own content, which is the useful behaviour
+    // when the folders differ anyway.
+    bool IsMirrorableRemote(Command cmd);
+
+    // =========================================================================
+    // TWO KINDS OF "NO", and they are not the same kind.
+    //
+    // IsNeverRemote — a structural rule. These alter files, so they must not be
+    //   reachable over a socket under ANY configuration: no password, no
+    //   allow-list entry, no future protocol row makes them available. Enforced
+    //   twice over — a static_assert proves they have no row in the command
+    //   table (adding one fails the build), and the wire path refuses them again
+    //   at run time in case the table is ever bypassed.
+    //
+    //   This matters more than it looks. Authentication here happens ONCE, at
+    //   connection time; the lines after it carry no per-message signature. On
+    //   loopback that is irrelevant. Reachable from a network it means anyone
+    //   who can inject into an established session speaks as the authenticated
+    //   caller — and the answer to that is not stronger authentication, it is
+    //   that destructive operations were never on the menu.
+    //
+    // IsBlockedInSession — a policy. These are perfectly fine on an instance
+    //   that is on its own, and unsafe only while it is connected to another:
+    //   they either change the file set both ends are counting on, or they mean
+    //   something different on each end. Refused with a reason while any
+    //   connection is live, allowed again when the last one drops.
+    // =========================================================================
+
+    bool IsNeverRemote(Command cmd);
+
+    // `reasonOut` receives a short human-readable why, for the overlay message.
+    // A dropped command must always say what happened — silence reads as a bug.
+    bool IsBlockedInSession(Command cmd, const wchar_t *&reasonOut);
+
+    // IsBlockedInSession AND a session is actually live. The form every caller
+    // wants, and the reason it exists rather than each site writing the two
+    // halves itself: with two conditions spelled out in six places, one of them
+    // eventually gets only half the test.
+    //
+    // TWO callers by design. ExecuteCommand covers every command path — which
+    // is most of the application. The thumbnail panel's file operations are the
+    // exception: they act on the hovered item or the selection, carry cut/paste
+    // state between calls, and are reachable by drag-and-drop as well as by
+    // menu, so they are not commands and cannot be made into them without moving
+    // that state out of the panel that owns it. They ask this instead, at the
+    // gates they already have. One table, one question, two places that ask it.
+    bool BlockedNow(Command cmd, const wchar_t *&reasonOut);
+
     // --- Response construction ---------------------------------------------
     std::wstring MakeOk();
     std::wstring MakeOk(const std::wstring &text);

@@ -134,6 +134,12 @@ IPanelWindow *const fixed[] = {
         return remoteWnd;
     }
 
+    RemotesWnd &UIManager::getRemotesConsoleWindow() {
+        if (isInit(remotesWnd)) return remotesWnd;
+        remotesWnd.Init(m_hInstance, m_hMainWnd);
+        return remotesWnd;
+    }
+
     DirWnd &UIManager::getDirWindow() {
         if (isInit(dirWnd)) return dirWnd;
         dirWnd.Init(m_hInstance, m_hMainWnd, Constants::CURRENT_DIR_WINDOW_POSITION);

@@ -168,8 +168,11 @@ Command InputManager::ResolveKeyboardKeys(UINT key, LPARAM lParam) {
             if (!ctrl && !alt && !shift) return Command::ToggleViewportLock;
             break;
 
+        // --- Mirroring (F11 / F12) ---
+        case Shortcuts::SC_MIRROR_TOGGLE:       return Command::MirrorToggle;
+        case Shortcuts::SC_MIRROR_LOCAL_TOGGLE: return Command::MirrorLocalToggle;
+
         // --- Fullscreen ---
-        case Shortcuts::SC_PANEL_FULLSCREEN: return Command::ToggleFullscreen;
         case Shortcuts::SC_PANEL_FULLSCREEN_F: // 'F' — same value as SC_NAV_FIND
             if (ctrl && !alt && !shift) return Command::FindImage; // Ctrl+F → find
             if (!ctrl && !alt && !shift) return Command::ToggleFullscreen; // F → fullscreen
@@ -185,14 +188,18 @@ Command InputManager::ResolveKeyboardKeys(UINT key, LPARAM lParam) {
         case Shortcuts::SC_PANEL_HELP_TOGGLE: return Command::ToggleHelp;
         case Shortcuts::SC_PANEL_OPEN_FILE: return Command::OpenFile;
         case Shortcuts::SC_APP_RELOAD_CURRENT_DIR: return Command::ReloadCurrentDir;
-        case Shortcuts::SC_PANEL_CACHE_TOGGLE: return Command::ToggleCache;
+        // F3 plain — toggle the cache panel;  Ctrl+F3 — clear the cache.
+        case Shortcuts::SC_PANEL_CACHE_TOGGLE: // == SC_PANEL_CACHE_CLEAR
+            if (ctrl && !alt && !shift) return Command::ClearCache;
+            if (!ctrl && !alt && !shift) return Command::ToggleCache;
+            break;
         case Shortcuts::SC_PANEL_DIR_TOGGLE: return Command::ToggleDir;
         case Shortcuts::SC_PANEL_DEDICATED_TOGGLE: return Command::ToggleDedicatedPanel;
         case Shortcuts::SC_PANEL_REMOTE_TOGGLE: return Command::ToggleRemotePanel;
+        case Shortcuts::SC_PANEL_REMOTES_CONSOLE: return Command::ToggleRemotesConsole;
         case Shortcuts::SC_PANEL_HISTORY_TOGGLE:
             if (ctrl) return Command::ToggleHistoryFull;
             return Command::ToggleHistory;
-        case Shortcuts::SC_PANEL_CACHE_CLEAR: return Command::ClearCache;
 
         // --- 'N' — Ctrl+N new window, plain = toggle all panels (close ↔ restore) ---
         case Shortcuts::SC_PANEL_OVERLAY_TOGGLE: // 'N' (== SC_TOGGLE_ALL_PANELS)

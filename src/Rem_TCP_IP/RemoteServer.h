@@ -4,6 +4,7 @@
 #include <memory>
 #include <string>
 #include "RemoteProtocol.h"
+#include "RemoteInbound.h"
 
 // =============================================================================
 // RemoteServer — the TCP listener and its client threads.
@@ -49,6 +50,10 @@ namespace Remote {
         RemoteRequest req;
         std::wstring  result;                 // written by the UI thread
         HANDLE        doneEvent = nullptr;    // manual-reset; signalled by the UI thread
+        // Which connection sent it. Needed for two things: `observe` has to know
+        // who is asking to be added, and the echo has to know who NOT to send
+        // back to.
+        ConnId        conn = CONN_NONE;
 
         RemoteCall();
         ~RemoteCall();
@@ -80,6 +85,45 @@ namespace Remote {
     // Executes a parsed request on the UI thread and returns the reply line.
     // Called ONLY from the WM_QIV_REMOTE_COMMAND handler — never from a socket
     // thread, because it reaches straight into InputManager::ExecuteCommand.
-    std::wstring ExecuteOnUiThread(HWND hWnd, const RemoteRequest &req);
+    std::wstring ExecuteOnUiThread(HWND hWnd, const RemoteRequest &req,
+                                   ConnId from = CONN_NONE);
+
+    // =========================================================================
+    // OBSERVERS — connections that asked to be told what this instance does.
+    //
+    // An observer is a connected client that sent `observe 1`. That is the whole
+    // definition: the list IS the state, so there is no "am I being observed"
+    // flag anywhere that could disagree with it. An entry cannot outlive its
+    // connection, so nothing is persisted and nothing needs cleaning up after a
+    // crash — a dropped socket removes itself.
+    //
+    // A client can only ever nominate ITSELF. There is deliberately no way to
+    // say "send your events to that other machine": an observer is always the
+    // connection that asked, which keeps this from becoming a way to make one
+    // screen shout at a third party.
+    // =========================================================================
+
+    void AddObserver(ConnId conn);
+    void RemoveObserver(ConnId conn);
+    bool HasObservers();
+
+    // Push one line to every observer except `except` (the connection the
+    // command came from, which must not be told what it just told us).
+    //
+    // UI THREAD ONLY — it is called from ExecuteCommand and LoadImageIndex.
+    // The sockets belong to client threads that are parked in recv() and cannot
+    // be handed work, so this writes to them directly.
+    //
+    // THE WRITE IS NON-BLOCKING AND THE LINE IS DROPPED IF IT WOULD BLOCK. An
+    // observer whose receive window has filled must never be able to freeze the
+    // viewer it is watching: an observer is a convenience, a stalled UI thread
+    // is a defect. Same reasoning as the bounded REPLY_TIMEOUT_MS on the other
+    // side of this file.
+    // `positional` marks a line that names a playlist INDEX (`goto 47`). Those
+    // reach same-machine observers only: an index is meaningful against the same
+    // set of files and nowhere else. Actions — zoom, rotate, effects, view mode,
+    // slideshow — carry no such assumption and go to every observer.
+    void EmitToObservers(const std::wstring &line, ConnId except,
+                         bool positional = false);
 
 } // namespace Remote

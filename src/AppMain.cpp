@@ -43,6 +43,11 @@ extern void UpdateOverlaysForCurrentImage(HWND hWnd);
 #include "Dedicated/DedicatedLists.h"    // image / promotion folder lists
 #include "Rem_TCP_IP/RemoteSettings.h"   // Remote::Config — is the listener enabled?
 #include "Rem_TCP_IP/RemoteServer.h"     // WM_QIV_REMOTE_COMMAND execution + shutdown
+#include "Rem_TCP_IP/RemoteMirror.h"     // the driving half — targets + sender threads
+#include "Rem_TCP_IP/RemoteInbound.h"    // InboundGuard — the loop cut
+#include "Rem_TCP_IP/RemoteExec.h"       // BuildSyncPayload for the desync repair
+#include "Rem_TCP_IP/RemotesFile.h"      // qivRemotes.ini — the saved target list
+#include "Rem_TCP_IP/RemotesWnd.h"       // F10 console + startup AutoConnectAll
 #include <windows.h>
 #ifndef MF_RADIOCHECK
 #define MF_RADIOCHECK 0x00000200L
@@ -173,10 +178,58 @@ LRESULT CALLBACK MainAppWndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM l
             auto *held = reinterpret_cast<std::shared_ptr<Remote::RemoteCall> *>(lParam);
             if (!held) return 0;
             if (std::shared_ptr<Remote::RemoteCall> call = *held) {
-                call->result = Remote::ExecuteOnUiThread(hWnd, call->req);
+                call->result = Remote::ExecuteOnUiThread(hWnd, call->req, call->conn);
                 if (call->doneEvent) SetEvent(call->doneEvent);
             }
             delete held;
+            return 0;
+        }
+
+        // An OBSERVED instance told us what it just did. We are watching it, so
+        // we do the same thing and end up showing the same picture.
+        //
+        // Executed under the inbound guard, which is what stops this from
+        // looping: without it, a master mirroring to a slave that is also
+        // observing the master would bounce one keystroke between the two
+        // forever, at socket speed.
+        case Constants::WM_QIV_REMOTE_EVENT: {
+            auto *line = reinterpret_cast<std::wstring *>(lParam);
+            if (!line) return 0;
+
+            // "EVENT <command> [payload]" — drop the prefix, then parse exactly
+            // as the listener parses an incoming request, so an observer accepts
+            // precisely what a driven instance accepts and no more.
+            std::wstring body = *line;
+            delete line;
+            if (_wcsnicmp(body.c_str(), Constants::RemoteTcpIp::RESP_EVENT, 5) == 0)
+                body = body.substr(5);
+
+            const Remote::RemoteRequest req = Remote::ParseLine(body);
+            if (req.status == Remote::ParseStatus::Ok) {
+                Remote::InboundGuard guard(Remote::CONN_NONE);
+                std::wstring unused;
+                if (!Remote::ExecutePayloadCommand(hWnd, req, unused))
+                    InputManager::ExecuteCommand(hWnd, req.cmd);
+            }
+            return 0;
+        }
+
+        // A driven target replied naming a DIFFERENT file than the one we landed
+        // on: same sort order, different file set, so the index we sent meant
+        // another picture there. Push our whole view state (which carries the
+        // folder and the sort order), then resend the position.
+        //
+        // Handled here because only the UI thread may read app.playlist — the
+        // sender thread that noticed the mismatch cannot build the repair itself.
+        case Constants::WM_QIV_REMOTE_DESYNC: {
+            // Only same-machine targets are ever sent a position, so only they
+            // can report one back that disagrees — which is why the folder is
+            // included here without asking.
+            const int targetId = static_cast<int>(wParam);
+            Remote::Mirror::SendTo(targetId, L"sync " + Remote::BuildSyncPayload(true));
+            if (app.currentIndex >= 0)
+                Remote::Mirror::SendTo(targetId,
+                                       L"goto " + std::to_wstring(app.currentIndex + 1));
             return 0;
         }
 
@@ -571,6 +624,9 @@ LRESULT CALLBACK MainAppWndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM l
             // way out — that message would never be handled and the poster
             // would block for the full reply timeout.
             Remote::Stop();
+            // Same reasoning for the driving half: every sender thread must be
+            // joined before the HWND it posts results to stops existing.
+            Remote::Mirror::Shutdown();
             PostQuitMessage(0);
             return 0;
     }
@@ -889,6 +945,17 @@ int WINAPI wWinMain(HINSTANCE hInstance, [[maybe_unused]] HINSTANCE hPrevInstanc
                 hWnd, std::wstring(Constants::Messages::REMOTE_START_FAILED_PREFIX) + remoteErr);
         }
     }
+
+    // The DRIVING half. Reads qivRemotes.ini and opens a connection to every
+    // row marked AutoConnect, each on its own thread — so a screen that is
+    // switched off costs this startup nothing.
+    //
+    // Unconditional, unlike the listener above: connecting OUT opens no port and
+    // accepts nothing, so there is no surface to gate. A copy with no
+    // qivRemotes.ini simply has no targets. Note that mirroring itself is still
+    // off (F11 and F12 always start false) — the connections exist, but nothing
+    // travels down them until asked.
+    UI::RemotesWnd::AutoConnectAll(hWnd);
 
     // One promotion kept warm, so the first one due appears without a stall.
     if (Dedicated::IsDedicatedFlag())

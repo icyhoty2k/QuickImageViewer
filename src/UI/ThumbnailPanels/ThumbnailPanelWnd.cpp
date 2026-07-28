@@ -19,10 +19,45 @@
 #include "../../Overlays/OverlayManager.h"
 #include "../../Platform/ConstantsStrings.h"
 #include "../ThemedDialog.h"
+#include "../../Input/Command.h"
+#include "../../Rem_TCP_IP/RemoteProtocol.h" // BlockedNow — see FileOpBlocked below
 
 namespace UI {
     std::unordered_set<std::wstring> ThumbnailPanelWnd::s_cutPaths;
     std::wstring ThumbnailPanelWnd::s_dragSourcePath;
+
+    namespace {
+        // =====================================================================
+        // Is this file operation refused right now?
+        //
+        // Copy, cut, paste, delete and drag-drop all CHANGE WHAT IS IN THE
+        // FOLDER, and two connected instances are counting on their playlists
+        // holding the same files in the same order — a file added or removed
+        // here shifts every index after it, and from that moment the other
+        // screen is showing something different from the one you are addressing.
+        //
+        // The list of what that covers lives in ONE table (SESSION_BLOCKED, in
+        // RemoteProtocol.cpp) beside the other two command-policy tables, so it
+        // is added to and removed from in one place. This is simply where the
+        // panel asks it.
+        //
+        // These operations are the one part of the application that does not
+        // pass through InputManager::ExecuteCommand: they act on the hovered
+        // thumbnail or the selection, they carry cut state between calls, and
+        // they arrive by drag-and-drop as well as by menu and keyboard. So they
+        // ask the table directly rather than being routed through a gate that
+        // has no access to any of that.
+        // =====================================================================
+        bool FileOpBlocked(Command cmd) {
+            const wchar_t *unused = nullptr;
+            return Remote::BlockedNow(cmd, unused);
+        }
+
+        // Convenience for the drop target: an incoming drop WRITES into this
+        // folder whether it is a copy or a move, so both forms are the paste
+        // case as far as index stability is concerned.
+        bool DropBlocked() { return FileOpBlocked(Command::FilePasteIntoFolder); }
+    }
 
     std::wstring ThumbnailPanelWnd::FormatDirSize(int64_t bytes) {
         wchar_t buf[32];
@@ -264,14 +299,18 @@ namespace UI {
                     return S_OK;
                 }
                 const DWORD eff = calcEffect(keyState);
-                const bool allowed = (eff == DROPEFFECT_COPY) ? app.thumbCopyEnabled : app.thumbMoveEnabled;
+                const bool allowed =
+                    ((eff == DROPEFFECT_COPY) ? app.thumbCopyEnabled : app.thumbMoveEnabled) &&
+                    !DropBlocked();
                 *pdwEffect = allowed ? eff : DROPEFFECT_NONE;
                 return S_OK;
             }
 
             HRESULT __stdcall DragOver(DWORD keyState, POINTL, DWORD *pdwEffect) override {
                 const DWORD eff = calcEffect(keyState);
-                const bool allowed = (eff == DROPEFFECT_COPY) ? app.thumbCopyEnabled : app.thumbMoveEnabled;
+                const bool allowed =
+                    ((eff == DROPEFFECT_COPY) ? app.thumbCopyEnabled : app.thumbMoveEnabled) &&
+                    !DropBlocked();
                 *pdwEffect = allowed ? eff : DROPEFFECT_NONE;
                 return S_OK;
             }
@@ -282,7 +321,8 @@ namespace UI {
 
             HRESULT __stdcall Drop(IDataObject *pDataObj, DWORD keyState, POINTL, DWORD *pdwEffect) override {
                 const bool isCopy = (keyState & MK_CONTROL) != 0;
-                if (isCopy ? !app.thumbCopyEnabled : !app.thumbMoveEnabled) {
+                if ((isCopy ? !app.thumbCopyEnabled : !app.thumbMoveEnabled) ||
+                    DropBlocked()) {
                     *pdwEffect = DROPEFFECT_NONE;
                     return S_OK;
                 }
@@ -1029,7 +1069,8 @@ namespace UI {
                     };
 
                     if (ctrl && key == 'C') {
-                        if (app.thumbCopyEnabled) {
+                        if (app.thumbCopyEnabled &&
+                            !FileOpBlocked(Command::FileCopySelection)) {
                             const auto paths = buildOpPaths();
                             if (!paths.empty()) {
                                 s_cutPaths.clear();
@@ -1040,7 +1081,8 @@ namespace UI {
                         return 0;
                     }
                     if (ctrl && key == 'X') {
-                        if (app.thumbMoveEnabled) {
+                        if (app.thumbMoveEnabled &&
+                            !FileOpBlocked(Command::FileMoveSelection)) {
                             const auto paths = buildOpPaths();
                             if (!paths.empty()) {
                                 AppCommands::CopyFilesToClipboard(m_hOwner, paths, true);
@@ -1053,7 +1095,8 @@ namespace UI {
                         return 0;
                     }
                     if (ctrl && key == 'V') {
-                        if (app.thumbPasteEnabled) {
+                        if (app.thumbPasteEnabled &&
+                            !FileOpBlocked(Command::FilePasteIntoFolder)) {
                             std::wstring pasteDir = GetPanelFolder();
                             if (!pasteDir.empty() && AppCommands::ClipboardHasFiles()) {
                                 std::wstring srcDir;
@@ -1082,7 +1125,8 @@ namespace UI {
                         return 0;
                     }
                     if (key == VK_DELETE) {
-                        if (app.thumbDeleteEnabled) {
+                        if (app.thumbDeleteEnabled &&
+                            !FileOpBlocked(Command::FileDeleteSelection)) {
                             const auto paths = buildOpPaths();
                             if (!paths.empty()) {
                                 for (const auto &p: paths) s_cutPaths.erase(p);
@@ -1524,7 +1568,9 @@ namespace UI {
                 constexpr UINT ID_CTX_SELECT_INVERSE = 9;
 
                 const bool hasFiles = !opPaths.empty();
-                const bool canPaste = !pasteDir.empty() && AppCommands::ClipboardHasFiles() && app.thumbPasteEnabled;
+                const bool canPaste = !pasteDir.empty() && AppCommands::ClipboardHasFiles() &&
+                                      app.thumbPasteEnabled &&
+                                      !FileOpBlocked(Command::FilePasteIntoFolder);
                 const bool showPaste = ShowContextMenuPaste();
                 const wchar_t *delLabel = ContextMenuDeleteLabel();
                 const wchar_t *extraLabel = ContextMenuExtraLabel();
@@ -1544,9 +1590,20 @@ namespace UI {
 
                 HMENU hMenu = CreatePopupMenu();
                 if (!hMenu) return 0;
-                AppendMenuW(hMenu, (hasFiles && app.thumbCopyEnabled)   ? MF_STRING : (MF_STRING | MF_GRAYED), ID_CTX_COPY,   copyLabel.c_str());
-                AppendMenuW(hMenu, (hasFiles && app.thumbMoveEnabled)   ? MF_STRING : (MF_STRING | MF_GRAYED), ID_CTX_CUT,    cutLabel.c_str());
-                AppendMenuW(hMenu, (hasFiles && app.thumbDeleteEnabled) ? MF_STRING : (MF_STRING | MF_GRAYED), ID_CTX_DELETE, deleteLabel.c_str());
+                // Greyed rather than hidden while a session is live: an item that
+                // vanishes looks like a different build, one that is greyed looks
+                // like a state — and the state is temporary, ending when the last
+                // connection drops.
+                const bool canCopy = hasFiles && app.thumbCopyEnabled &&
+                                     !FileOpBlocked(Command::FileCopySelection);
+                const bool canCut  = hasFiles && app.thumbMoveEnabled &&
+                                     !FileOpBlocked(Command::FileMoveSelection);
+                const bool canDel  = hasFiles && app.thumbDeleteEnabled &&
+                                     !FileOpBlocked(Command::FileDeleteSelection);
+
+                AppendMenuW(hMenu, canCopy ? MF_STRING : (MF_STRING | MF_GRAYED), ID_CTX_COPY,   copyLabel.c_str());
+                AppendMenuW(hMenu, canCut  ? MF_STRING : (MF_STRING | MF_GRAYED), ID_CTX_CUT,    cutLabel.c_str());
+                AppendMenuW(hMenu, canDel  ? MF_STRING : (MF_STRING | MF_GRAYED), ID_CTX_DELETE, deleteLabel.c_str());
                 if (showPaste) {
                     AppendMenuW(hMenu, MF_SEPARATOR, 0, nullptr);
                     AppendMenuW(hMenu, canPaste ? MF_STRING : (MF_STRING | MF_GRAYED), ID_CTX_PASTE, L"Paste");

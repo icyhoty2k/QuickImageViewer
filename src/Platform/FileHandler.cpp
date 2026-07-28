@@ -19,6 +19,11 @@
 #include "DriveInfo.h"
 #include "../SvgDecoder.h"
 #include "../UI/FloatingPanels/HistoryListWnd.h"
+// LoadImageIndex is the ONE place every picture change passes through — see the
+// mirror/observe block inside it.
+#include "Rem_TCP_IP/RemoteInbound.h" // InboundActive / ForwardInFlight
+#include "Rem_TCP_IP/RemoteMirror.h"  // forward the new position to driven targets
+#include "Rem_TCP_IP/RemoteServer.h"  // …and echo it to observers
 
 namespace fs = std::filesystem;
 
@@ -808,6 +813,53 @@ void LoadImageIndex(HWND hWnd, int index) {
     KillTimer(hWnd, Constants::Slideshow::GIF_TIMER_ID);
 
     const std::wstring &currentPath = app.playlist[index];
+
+    // =========================================================================
+    // MIRROR / OBSERVE — the one place that catches EVERY change of picture.
+    //
+    // Here rather than in ExecuteCommand because most image changes are not
+    // commands at all: a thumbnail click, a Find hit, a JumpTo, a drag-drop, and
+    // above all the slideshow timer, which advances by calling this function
+    // directly. An observer bound to a slave running a slideshow would otherwise
+    // sit frozen on whichever frame was up when it bound.
+    //
+    // Sent as a 1-BASED INDEX, matching `goto`. Not a path: producing one would
+    // mean a filesystem round trip on the UI thread for every thumbnail click,
+    // and an index stays meaningful because sort order is itself mirrored, so
+    // both ends order their playlists the same way. The file NAME travels in the
+    // reply instead, where it costs nothing and lets the sender detect the case
+    // sort parity cannot cover — the two ends holding different FILE SETS.
+    //
+    // Skipped entirely for an inbound command: the far end changing picture
+    // because we told it to must not tell us to change picture.
+    // =========================================================================
+    // EVERY TEST BEFORE ANY WORK. This function runs on every image change —
+    // each wheel notch, each slideshow tick — so in a viewer that is driving
+    // nothing and watched by nobody (which is the normal case) the whole block
+    // must cost three loads and no allocation. Building the `goto` line first
+    // and asking afterwards would put two heap allocations on that path forever.
+    //
+    // Driving: suppressed while a navigation COMMAND is being forwarded — the
+    // gate in ExecuteCommand already sent `next`, and each target applies that
+    // to its own playlist; sending our index on top would override the result
+    // with a position from a different list.
+    const bool tellTargets = app.passCommandToRemote && Remote::Mirror::HasLiveTargets() &&
+                             !Remote::InboundActive() && !Remote::ForwardInFlight();
+    const bool tellObservers = Remote::HasObservers() && !Remote::InboundActive();
+
+    if (tellTargets || tellObservers) {
+        const std::wstring line = L"goto " + std::to_wstring(index + 1);
+
+        // Same-machine targets only — BroadcastPosition drops the rest, because
+        // an index means nothing against a playlist of different files.
+        if (tellTargets) {
+            Remote::Mirror::BroadcastPosition(
+                line, currentPath.substr(currentPath.find_last_of(L"\\/") + 1));
+        }
+        // positional: a `goto` reaches same-machine observers only.
+        if (tellObservers)
+            Remote::EmitToObservers(line, Remote::CONN_NONE, /*positional=*/true);
+    }
     // Path-identity guard for the main decode — same file keeps the same hash
     // across a folder re-sort, so its in-flight decode is not cancelled when the
     // index changes (fixes the blank-on-startup race after an F2 open).

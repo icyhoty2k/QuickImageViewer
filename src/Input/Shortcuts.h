@@ -68,13 +68,34 @@ namespace Shortcuts {
     // edit its configuration, and connect out to another instance. Its own
     // window for the same reason F8 is: it is a form, not a menu.
     constexpr UINT SC_PANEL_REMOTE_TOGGLE = VK_F9;
+    // F10 — Remotes console (src/Rem_TCP_IP): the list of slave instances with
+    // their live status, and the buttons to start/stop, observe and sync each.
+    // F9 configures ONE connection; this manages them all.
+    constexpr UINT SC_PANEL_REMOTES_CONSOLE = VK_F10;
     constexpr UINT SC_PANEL_HISTORY_TOGGLE = VK_TAB;
-    constexpr UINT SC_PANEL_FULLSCREEN = VK_F11;
+    // NOTE: F11 no longer toggles fullscreen — it is SC_MIRROR_TOGGLE below.
+    // Fullscreen keeps three bindings (F, Enter, Ctrl+Shift+T), so nothing was
+    // lost by freeing it.
     constexpr UINT SC_PANEL_FULLSCREEN_F = 'F';
     constexpr UINT SC_PANEL_FULLSCREEN_ENTER = VK_RETURN;
     constexpr UINT SC_PANEL_FULLSCREEN_T = 'T'; // requires ctrl+shift
     constexpr UINT SC_ALWAYS_ON_TOP = 'T'; // Ctrl+T (no shift) — toggle always-on-top
-    constexpr UINT SC_PANEL_CACHE_CLEAR = VK_F12;
+    // Ctrl+F3 — clear the thumbnail cache. Moved off F12 (which is now
+    // SC_MIRROR_LOCAL_TOGGLE) onto the modifier form of F3, the key that already
+    // toggles the cache panel, so the two cache actions sit on one key.
+    constexpr UINT SC_PANEL_CACHE_CLEAR = VK_F3; // requires ctrl
+
+    // -------------------------------------------------------------------------
+    // Mirroring to other instances  (src/Rem_TCP_IP)
+    // -------------------------------------------------------------------------
+    // F11 — forward every mirrorable command to the connected targets.
+    // F12 — while mirroring, ALSO execute locally. With F11 on and F12 off this
+    //       viewer is a pure remote control: it drives the other screens and its
+    //       own display does not move.
+    // Both are session-only and start OFF at every launch. Persisting them would
+    // mean a viewer that boots silently driving machines you had forgotten about.
+    constexpr UINT SC_MIRROR_TOGGLE = VK_F11;
+    constexpr UINT SC_MIRROR_LOCAL_TOGGLE = VK_F12;
 
     // N (no modifier)  —  Master overlay toggle (all slots on/off)
     constexpr UINT SC_PANEL_OVERLAY_TOGGLE = 'N'; // not used

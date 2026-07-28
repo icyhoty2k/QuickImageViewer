@@ -1,4 +1,5 @@
 #include "RemoteProtocol.h"
+#include "RemoteMirror.h" // SessionActive — the switch BlockedNow hangs off
 #include "Platform/Constants.h"
 
 #include <algorithm>
@@ -187,11 +188,113 @@ namespace {
         { L"HideToTray",            Command::HideToTray,                      PayloadRule::None },
         { L"NewWindow",             Command::NewWindow,                       PayloadRule::None },
         { L"ResetAll",              Command::ResetAll,                        PayloadRule::None },
+        { L"ResetWindowLayout",     Command::ResetWindowLayout,               PayloadRule::None },
         { L"quit",                  Command::HardQuit,                        PayloadRule::None },
         { L"HardQuit",              Command::HardQuit,                        PayloadRule::None },
+
+        // --- Window opacity ---
+        { L"OpacityUp",             Command::OpacityUp,                       PayloadRule::None },
+        { L"OpacityDown",           Command::OpacityDown,                     PayloadRule::None },
+
+        // --- History walk, all rows (the horizontal-wheel scope) ---
+        { L"PrevHistoryFolderAll",  Command::PrevHistoryFolderAll,            PayloadRule::None },
+        { L"NextHistoryFolderAll",  Command::NextHistoryFolderAll,            PayloadRule::None },
+
+        // --- Mirroring / observing ---
+        // `observe` is how a CALLER asks to be fed this instance's actions: it
+        // adds the calling connection to the observer list, and `observe 0`
+        // removes it. There is no way to nominate a THIRD party — an observer can
+        // only ever be the connection that asked, which is what stops this from
+        // being a way to make one screen shout at another.
+        { L"observe",               Command::Observe,                         PayloadRule::Required },
+        { L"Observe",               Command::Observe,                         PayloadRule::Required },
+        // `sync` pushes the sender's whole view/effect state. Exists because
+        // mirroring forwards TOGGLES: a toggle applied to a different starting
+        // state diverges, and the effect CHAIN ORDER cannot be repaired by
+        // resending toggles at all.
+        { L"sync",                  Command::Sync,                            PayloadRule::Required },
+        { L"Sync",                  Command::Sync,                            PayloadRule::Required },
     };
 
     constexpr size_t TABLE_COUNT = sizeof(TABLE) / sizeof(TABLE[0]);
+
+    // =========================================================================
+    // NEVER_REMOTE — commands that alter files.
+    //
+    // Not "not currently exposed". Not "we remembered to leave them out". These
+    // must be impossible to drive over a socket, and the static_assert below
+    // turns that from a convention into a build error: give any of them a row in
+    // TABLE and the project stops compiling.
+    //
+    // Why the strength: authentication happens once, when the connection opens
+    // (RemoteServer::Authenticate). Every line after that is trusted with no
+    // per-message signature, so on a routable network an attacker who can inject
+    // into an established session issues commands as the authenticated caller.
+    // Better authentication would narrow that; keeping `delete` off the menu
+    // entirely removes it.
+    // =========================================================================
+    constexpr Command NEVER_REMOTE[] = {
+        Command::FileDeleteSelection,
+        Command::FileMoveSelection,
+        Command::FilePasteIntoFolder,
+        Command::FileCopySelection,
+        Command::SaveImage,
+    };
+
+    consteval bool NeverRemoteHasNoTableRow() {
+        for (const Command c : NEVER_REMOTE)
+            for (const CommandEntry &e : TABLE)
+                if (e.cmd == c) return false;
+        return true;
+    }
+    static_assert(NeverRemoteHasNoTableRow(),
+                  "A file-altering command was given a row in the remote command "
+                  "table. Remove it: these must never be reachable over a socket, "
+                  "whatever the authentication state.");
+
+    // =========================================================================
+    // SESSION_BLOCKED — fine alone, unsafe while connected.
+    //
+    // Two failure modes, both silent without this: a command that changes the
+    // FILE SET (every index after the change then points at a different
+    // picture), and a command that means something different on each end.
+    //
+    // The reason travels with the entry because a keypress that quietly does
+    // nothing is indistinguishable from a bug.
+    // =========================================================================
+    struct BlockedEntry {
+        Command        cmd;
+        const wchar_t *reason;
+    };
+
+    constexpr BlockedEntry SESSION_BLOCKED[] = {
+        // Physical disk order is a property of the drive, so two instances both
+        // "sorting by disk" genuinely produce different orders — and every index
+        // exchanged after that lands on the wrong file.
+        { Command::SortByDisk,
+          L"physical disk order differs per drive" },
+
+        // Searches this playlist only, so it lands somewhere the other end is
+        // not. Navigation covers the same ground while connected.
+        { Command::FindImage,
+          L"searches this playlist only" },
+
+        // The four that change what is in the folder. A file added or removed
+        // shifts every index after it, which is exactly what the two ends are
+        // relying on to stay aligned.
+        { Command::FileDeleteSelection,
+          L"changing the folder shifts every index after it" },
+        { Command::FileMoveSelection,
+          L"changing the folder shifts every index after it" },
+        { Command::FilePasteIntoFolder,
+          L"changing the folder shifts every index after it" },
+        { Command::SaveImage,
+          L"writing a file shifts every index after it" },
+
+        // NOTE: FileCopySelection is deliberately absent. Copying to the
+        // clipboard reads the file and writes nothing, so it changes no index
+        // and there is no reason to take it away.
+    };
 
     std::wstring TrimWs(const std::wstring &s) {
         size_t b = 0, e = s.size();
@@ -210,6 +313,151 @@ bool LookupCommand(const std::wstring &name, const CommandEntry *&entryOut) {
     for (size_t i = 0; i < TABLE_COUNT; ++i) {
         if (_wcsicmp(TABLE[i].name, name.c_str()) == 0) {
             entryOut = &TABLE[i];
+            return true;
+        }
+    }
+    return false;
+}
+
+bool NameForCommand(Command cmd, std::wstring &nameOut) {
+    // First row wins. The table lists the short alias before the canonical enum
+    // name for exactly this reason — a mirrored session that a human may be
+    // watching with netcat should read "next", not "NextImage".
+    for (size_t i = 0; i < TABLE_COUNT; ++i) {
+        if (TABLE[i].cmd == cmd) {
+            nameOut = TABLE[i].name;
+            return true;
+        }
+    }
+    return false;
+}
+
+bool IsMirrorable(Command cmd) {
+    switch (cmd) {
+        // ── Never fanned out ────────────────────────────────────────────────
+        // Each of these is reachable on purpose as a single deliberate act (the
+        // F9 Send box, a script) and wrong as a broadcast.
+
+        // Would end or hide every connected screen at once.
+        case Command::HardQuit:
+        case Command::HideToTray:
+        case Command::NewWindow:
+            return false;
+
+        // Opens Explorer on a machine nobody is sitting at.
+        case Command::ShowInExplorer:
+            return false;
+
+        // Writes files / raises a save dialog.
+        case Command::SaveImage:
+            return false;
+
+        // Clipboard is per-machine; copying on a wall screen achieves nothing.
+        case Command::CopyToClipboard:
+            return false;
+
+        // Panels raise a window on the far screen that then has to be closed
+        // from here. The driving instance wants its OWN panels, not theirs.
+        case Command::ToggleHelp:
+        case Command::ToggleHistory:
+        case Command::ToggleHistoryFull:
+        case Command::ToggleCache:
+        case Command::ToggleDir:
+        case Command::ShowInfo:
+        case Command::ToggleStats:
+        case Command::FindImage:
+        case Command::JumpToImage:
+        case Command::ZoomTo:
+        case Command::CloseAllPanels:
+        case Command::RestoreAllPanels:
+        case Command::ToggleAllPanels:
+        case Command::ToggleDedicatedPanel:
+        case Command::ToggleRemotePanel:
+        case Command::ToggleRemotesConsole:
+            return false;
+
+        // Geometry. Slaves are placed on fixed monitors, usually fullscreen;
+        // forwarding a snap or a move knocks one off the screen it was put on.
+        case Command::SnapLeft:      case Command::SnapRight:
+        case Command::SnapTop:       case Command::SnapBottom:
+        case Command::SnapTopLeft:   case Command::SnapTopRight:
+        case Command::SnapBottomLeft:case Command::SnapBottomRight:
+        case Command::MoveWindowLeft:case Command::MoveWindowRight:
+        case Command::MoveWindowUp:  case Command::MoveWindowDown:
+        case Command::ResizeWindowLarger:
+        case Command::ResizeWindowSmaller:
+        case Command::AutosizeToWorkArea:
+        case Command::ResetWindowLayout:
+        case Command::ResetAll:
+            return false;
+
+        // Configuration and identity — a dedicated instance's whole point is
+        // that these are ITS OWN and nobody else writes them.
+        case Command::ToggleDedicated:
+        case Command::CmdArgsExport:
+        case Command::CmdArgsImport:
+        case Command::CmdArgsGenerateShortcut:
+        case Command::CmdArgsTest:
+            return false;
+
+        // The mirroring controls themselves. Forwarding MirrorToggle would have
+        // every slave start mirroring to ITS targets — and where two of them
+        // point at each other, that is an infinite exchange. Observe/Sync are
+        // remote-only verbs and are never something a local keypress fans out.
+        case Command::MirrorToggle:
+        case Command::MirrorLocalToggle:
+        case Command::Observe:
+        case Command::Sync:
+            return false;
+
+        default:
+            break;
+    }
+
+    // Everything else mirrors — but only if it is on the wire at all. A command
+    // with no table row has no name to send, so reachability is still the outer
+    // bound: this function narrows that set, it never widens it.
+    std::wstring unused;
+    return NameForCommand(cmd, unused);
+}
+
+bool IsMirrorableRemote(Command cmd) {
+    if (!IsMirrorable(cmd)) return false;
+
+    switch (cmd) {
+        // Disk order is a property of the drive. Both ends "sort by disk" and
+        // arrive at different orders, which then quietly poisons every index.
+        // Also refused locally while connected — this is the belt to that brace.
+        case Command::SortByDisk:
+            return false;
+
+        // Nothing else needs excluding HERE, because the two things that do not
+        // survive the trip are not commands: the `goto <n>` that LoadImageIndex
+        // emits, and the `folder=` field inside a `sync`. Both are filtered
+        // where they are produced, since a bare Command carries neither.
+        default:
+            return true;
+    }
+}
+
+bool IsNeverRemote(Command cmd) {
+    for (const Command c : NEVER_REMOTE)
+        if (c == cmd) return true;
+    return false;
+}
+
+bool BlockedNow(Command cmd, const wchar_t *&reasonOut) {
+    if (!Mirror::SessionActive()) return false;
+    return IsBlockedInSession(cmd, reasonOut);
+}
+
+bool IsBlockedInSession(Command cmd, const wchar_t *&reasonOut) {
+    // Linear scan, deliberately. The table is a handful of entries that fit in
+    // a cache line; hashing one Command costs more than comparing all of them,
+    // and this runs once per keypress.
+    for (const BlockedEntry &e : SESSION_BLOCKED) {
+        if (e.cmd == cmd) {
+            reasonOut = e.reason;
             return true;
         }
     }

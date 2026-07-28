@@ -1,4 +1,6 @@
 #include "RemoteExec.h"
+#include "RemoteInbound.h" // InboundSource — which connection asked to observe
+#include "RemoteServer.h"  // Add/RemoveObserver
 
 #include "AppState.h"
 #include "Platform/Constants.h"
@@ -241,28 +243,217 @@ namespace {
         return MakeOk(std::to_wstring(ms) + L" ms");
     }
 
+    // --- observe 1|0 --------------------------------------------------------
+    // The CALLER asks to be added to, or removed from, this instance's observer
+    // list. It can only ever nominate itself: the connection comes from the
+    // inbound guard, not from the payload, so there is no way to ask that events
+    // be sent to some third machine.
+    std::wstring DoObserve(const std::wstring &payload) {
+        const ConnId self = InboundSource();
+        if (self == CONN_NONE)
+            return MakeErr(RT::ERR_INTERNAL, L"observe requires a connection");
+
+        int on = 0;
+        if (!ParseInt(payload, on) || (on != 0 && on != 1))
+            return MakeErr(RT::ERR_BAD_PAYLOAD, L"expected 1 or 0");
+
+        if (on) AddObserver(self);
+        else    RemoveObserver(self);
+
+        return MakeOk(on ? L"observing" : L"not observing");
+    }
+
+    // --- sync <k=v;k=v;…> ---------------------------------------------------
+    // Adopt the sender's view and effect state wholesale.
+    //
+    // WHY THIS EXISTS: mirroring forwards TOGGLES, and a toggle applied to a
+    // different starting state inverts rather than matches — press Grayscale on
+    // a master whose slave already had it on and the two are now permanently
+    // opposite. Worse, the effect CHAIN is ordered (each effect applies to the
+    // previous one's result), so two instances can hold identical flags and
+    // still draw visibly different images. No amount of resending toggles
+    // repairs an ordering; only replacing the list does.
+    //
+    // Deliberately NOT carrying the playlist position. Applying a folder starts
+    // an asynchronous scan, so an index sent in the same breath would race it.
+    // The caller sends `sync`, then the index — which is also exactly what it
+    // does after a divergence is detected.
+    std::wstring DoSync(HWND hWnd, const std::wstring &payload) {
+        std::wstring folder;
+        int  sortOrder = -1, sortRev = -1;
+        bool sawSort = false;
+
+        // "k=v;k=v" — split on ';', then on the first '='. Unknown keys are
+        // IGNORED rather than rejected: a newer instance driving an older one
+        // must degrade to "applies what it understands", not fail outright.
+        size_t start = 0;
+        while (start <= payload.size()) {
+            const size_t semi = payload.find(L';', start);
+            const std::wstring tok =
+                payload.substr(start, semi == std::wstring::npos ? std::wstring::npos
+                                                                 : semi - start);
+            start = (semi == std::wstring::npos) ? payload.size() + 1 : semi + 1;
+            if (tok.empty()) continue;
+
+            const size_t eq = tok.find(L'=');
+            if (eq == std::wstring::npos) continue;
+            const std::wstring k = tok.substr(0, eq);
+            const std::wstring v = tok.substr(eq + 1);
+
+            int  iv = 0;
+            float fv = 0.0f;
+            auto asInt   = [&] { return ParseInt(v, iv); };
+            auto asFloat = [&] { return ParseFloatPercent(v, fv); };
+
+            if      (k == L"folder")   folder = v;
+            else if (k == L"sort")    { if (asInt()) { sortOrder = iv; sawSort = true; } }
+            else if (k == L"sortrev") { if (asInt()) { sortRev   = iv; sawSort = true; } }
+            else if (k == L"view")    { if (asInt() && iv >= 1 && iv <= 5)
+                                            app.viewMode = static_cast<Constants::ViewModes::ViewMode>(iv); }
+            else if (k == L"rot")     { if (asInt()) app.viewport.rotation = ((iv % 360) + 360) % 360; }
+            else if (k == L"fliph")   { if (asInt()) app.viewport.flippedH = (iv != 0); }
+            else if (k == L"flipv")   { if (asInt()) app.viewport.flippedV = (iv != 0); }
+            else if (k == L"gamma")   { if (asFloat()) app.gamma      = fv; }
+            else if (k == L"bright")  { if (asFloat()) app.brightness = fv - 1.0f; } // see BuildSyncPayload
+            else if (k == L"contrast"){ if (asFloat()) app.contrast   = fv; }
+            else if (k == L"sat")     { if (asFloat()) app.saturation = fv; }
+            else if (k == L"overlay") { if (asInt()) app.showOverlayInfoText = (iv != 0); }
+            else if (k == L"layout")  { if (asInt() && iv >= 0 && iv < Constants::Overlay::LAYOUT_MODE_COUNT)
+                                            app.overlayLayoutMode = iv; }
+            else if (k == L"interval"){ if (asInt() && iv >= 100 && iv <= 60000)
+                                            app.slideshow.intervalMs = iv; }
+            else if (k == L"loop")    { if (asInt()) app.slideshow.loop    = (iv != 0); }
+            else if (k == L"shuffle") { if (asInt()) app.slideshow.shuffle = (iv != 0); }
+            else if (k == L"effects") {
+                // REPLACED, not merged, and the ORDER is the payload's. This is
+                // the one piece of state the boolean flags cannot express, and
+                // the reason a flag-by-flag comparison can report "in sync"
+                // while the two screens visibly differ.
+                app.activeEffectsList.clear();
+                app.effectGrayscale = app.effectInvert = app.effectSepia =
+                app.effectSolarize  = app.effectOutline = app.effectThreshold = false;
+
+                size_t es = 0;
+                while (es <= v.size()) {
+                    const size_t comma = v.find(L',', es);
+                    const std::wstring name =
+                        v.substr(es, comma == std::wstring::npos ? std::wstring::npos
+                                                                 : comma - es);
+                    es = (comma == std::wstring::npos) ? v.size() + 1 : comma + 1;
+                    if (name.empty() || name == L"none") continue;
+
+                    if      (name == Constants::Strings::EFFECT_GRAYSCALE) app.effectGrayscale = true;
+                    else if (name == Constants::Strings::EFFECT_INVERT)    app.effectInvert    = true;
+                    else if (name == Constants::Strings::EFFECT_SEPIA)     app.effectSepia     = true;
+                    else if (name == Constants::Strings::EFFECT_SOLARIZE)  app.effectSolarize  = true;
+                    else if (name == Constants::Strings::EFFECT_OUTLINE)   app.effectOutline   = true;
+                    else if (name == Constants::Strings::EFFECT_THRESHOLD) app.effectThreshold = true;
+                    else continue; // unknown effect from a newer build — skip it
+
+                    app.activeEffectsList.push_back(name);
+                }
+            }
+        }
+
+        if (sawSort) {
+            if (sortOrder >= 0) app.fileHandlerDefaultSortOrder     = sortOrder;
+            if (sortRev   >= 0) app.fileHandlerIsReverseSortOrder   = (sortRev != 0);
+        }
+
+        // Folder last. It kicks off an asynchronous scan that re-sorts using the
+        // order just applied, so the two must land in this sequence.
+        if (!folder.empty()) {
+            std::error_code ec;
+            if (fs::is_directory(fs::path(folder), ec) && !ec)
+                OpenDirectory(hWnd, folder);
+        } else if (sawSort) {
+            ReSortPlaylistAndRebuildMap(hWnd);
+        }
+
+        app.UpdateRendererColorEffects(hWnd);
+        g_overlayManager.UpdateEffects();
+        InvalidateRect(hWnd, nullptr, FALSE);
+        return MakeOk(L"synced");
+    }
+
 } // namespace
 
-bool ExecutePayloadCommand(HWND hWnd, const RemoteRequest &req, std::wstring &replyOut) {
-    switch (req.cmd) {
+std::wstring BuildSyncPayload(bool includeFolder) {
+    auto num = [](int v) { return std::to_wstring(v); };
+    auto flt = [](float v) {
+        wchar_t b[32];
+        swprintf_s(b, L"%.3f", static_cast<double>(v));
+        return std::wstring(b);
+    };
+
+    std::wstring folder;
+    if (includeFolder && !app.playlist.empty())
+        folder = fs::path(app.playlist[0]).parent_path().wstring();
+
+    std::wstring effects;
+    for (const std::wstring &e : app.activeEffectsList) {
+        if (!effects.empty()) effects += L',';
+        effects += e;
+    }
+    if (effects.empty()) effects = L"none";
+
+    // brightness is the one signed value here, and ParseFloatPercent (shared
+    // with `zoom`) rejects a leading '-'. Biasing it by +1 keeps one number
+    // parser for the whole protocol rather than adding a second that differs
+    // only in sign handling; DoSync subtracts the same 1.
+    // An empty folder= is omitted entirely rather than sent blank: DoSync treats
+    // an absent key as "leave it alone", which is exactly right, whereas an
+    // empty value would have to be special-cased at the far end.
+    return (folder.empty() ? std::wstring() : L"folder=" + folder + L";") +
+           L"sort="       + num(app.fileHandlerDefaultSortOrder) +
+           L";sortrev="  + num(app.fileHandlerIsReverseSortOrder ? 1 : 0) +
+           L";view="     + num(static_cast<int>(app.viewMode)) +
+           L";rot="      + num(app.viewport.rotation) +
+           L";fliph="    + num(app.viewport.flippedH ? 1 : 0) +
+           L";flipv="    + num(app.viewport.flippedV ? 1 : 0) +
+           L";gamma="    + flt(app.gamma) +
+           L";bright="   + flt(app.brightness + 1.0f) +
+           L";contrast=" + flt(app.contrast) +
+           L";sat="      + flt(app.saturation) +
+           L";effects="  + effects +
+           L";overlay="  + num(app.showOverlayInfoText ? 1 : 0) +
+           L";layout="   + num(app.overlayLayoutMode) +
+           L";interval=" + num(app.slideshow.intervalMs) +
+           L";loop="     + num(app.slideshow.loop ? 1 : 0) +
+           L";shuffle="  + num(app.slideshow.shuffle ? 1 : 0);
+}
+
+bool ExecutePayload(HWND hWnd, Command cmd, const std::wstring &payload,
+                    std::wstring &replyOut) {
+    switch (cmd) {
+        case Command::Observe:
+            replyOut = DoObserve(payload);
+            return true;
+        case Command::Sync:
+            replyOut = DoSync(hWnd, payload);
+            return true;
         case Command::JumpToImage:
-            replyOut = DoJump(hWnd, req.payload);
+            replyOut = DoJump(hWnd, payload);
             return true;
         case Command::OpenFile:
-            replyOut = DoOpen(hWnd, req.payload);
+            replyOut = DoOpen(hWnd, payload);
             return true;
         case Command::FindImage:
-            replyOut = DoFind(hWnd, req.payload);
+            replyOut = DoFind(hWnd, payload);
             return true;
         case Command::ZoomTo:
-            replyOut = DoZoom(hWnd, req.payload);
+            replyOut = DoZoom(hWnd, payload);
             return true;
         case Command::SlideshowSetInterval:
-            replyOut = DoInterval(hWnd, req.payload);
+            replyOut = DoInterval(hWnd, payload);
             return true;
         default:
             return false;
     }
+}
+
+bool ExecutePayloadCommand(HWND hWnd, const RemoteRequest &req, std::wstring &replyOut) {
+    return ExecutePayload(hWnd, req.cmd, req.payload, replyOut);
 }
 
 } // namespace Remote

@@ -423,6 +423,17 @@ namespace Constants {
     // died). Lets the panel drop back to "stopped" without polling. WPARAM = a
     // Constants::RemoteTcpIp::ERR_* code, 0 for a clean stop.
     constexpr UINT WM_QIV_REMOTE_STOPPED = WM_USER + 12;
+    // Posted by a MIRROR sender thread when an observed target pushed an EVENT
+    // line. LPARAM = new std::wstring*, owned and deleted by the handler.
+    // Executed on the UI thread under the inbound guard, so an observer never
+    // re-forwards what it was shown.
+    constexpr UINT WM_QIV_REMOTE_EVENT = WM_USER + 13;
+    // Posted by a MIRROR sender thread when a target's reply named a DIFFERENT
+    // file than the one we landed on — the two playlists have diverged, so the
+    // index we sent meant something else there. WPARAM = target id. The UI
+    // thread answers by building a `sync` (it alone may read app.playlist) and
+    // resending. See RemoteMirror.h on why indices are sent at all.
+    constexpr UINT WM_QIV_REMOTE_DESYNC = WM_USER + 14;
 
     // ---------------------------------------------------------------------------
     // Directory watcher (ReadDirectoryChangesW / FindFirstChangeNotification)
@@ -484,6 +495,19 @@ namespace Constants {
         // file tolerates either convention.
         constexpr const wchar_t *LIST_SEPARATORS = L",;";
 
+        // --- The driving side's target list (src/Rem_TCP_IP/RemotesFile.*) ---
+        // Beside the exe, and DELIBERATELY not the exe-derived name: an .ini
+        // called qIV.ini next to qIV.exe is what makes the whole app switch from
+        // registry-backed to file-backed (Dedicated::DetectStartupMode). This
+        // name is invisible to that check, so writing it changes nothing about
+        // how the copy persists everything else.
+        constexpr const wchar_t *REMOTES_FILE_NAME = L"qivRemotes.ini";
+        constexpr const wchar_t *REMOTES_SECTION   = L"Remotes";
+
+        // Upper bound on rows, so a corrupted file cannot spin the reader. Far
+        // beyond any real setup — the use case is a handful of monitors.
+        constexpr int REMOTES_MAX = 64;
+
         // --- Wire protocol -------------------------------------------------
         // Newline-delimited UTF-8 text: "<command> [payload]\n". Deliberately
         // plain, so netcat, curl, telnet and a five-line Python script are all
@@ -497,6 +521,38 @@ namespace Constants {
         // Response prefixes. A client only ever needs to look at the first token.
         constexpr const wchar_t *RESP_OK  = L"OK";
         constexpr const wchar_t *RESP_ERR = L"ERR";
+
+        // UNSOLICITED line: an observed instance reporting something it just
+        // did, pushed down the connection its observer already holds open. The
+        // only line the server ever sends that is not an answer to a request.
+        //
+        // A third prefix rather than an OK variant, because a client sitting in
+        // a request/reply exchange has to be able to tell "this is my answer"
+        // from "this happened meanwhile" without tracking state. Existing
+        // clients that only branch on OK/ERR simply never see one: nothing is
+        // ever pushed to a connection that did not send `observe 1`.
+        constexpr const wchar_t *RESP_EVENT = L"EVENT";
+
+        // --- Mirroring (src/Rem_TCP_IP/RemoteMirror.*) ----------------------
+        // Per-target send queue depth. Bounded, and the OLDEST is dropped when
+        // it overflows: a backlog of keystrokes for a machine that stopped
+        // answering would replay minutes of stale navigation when it came back,
+        // and a mirrored keystroke only means anything at the moment it is made.
+        constexpr size_t MIRROR_QUEUE_MAX = 64;
+
+        // How long an idle sender thread waits on the socket for an unsolicited
+        // EVENT before looping to re-check its queue and the stop flag. Short
+        // enough that F11 responds immediately, long enough not to spin.
+        constexpr int MIRROR_IDLE_POLL_MS = 200;
+
+        // Wait before retrying a target that would not connect. A slave that is
+        // switched off must not be hammered, and its thread must not spin.
+        constexpr int MIRROR_RECONNECT_MS = 3000;
+
+        // Bound on a single mirrored send, so one wedged target cannot stall its
+        // own queue indefinitely. Shorter than the server's REPLY_TIMEOUT_MS
+        // because on loopback anything slower is already a fault.
+        constexpr int MIRROR_SEND_TIMEOUT_MS = 3000;
 
         // Error codes carried after ERR. Stable numbers: scripts branch on these,
         // so they may be appended to but never renumbered.
