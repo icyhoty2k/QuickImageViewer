@@ -1,19 +1,17 @@
 #include "RemoteWnd.h"
 #include "RemoteSettings.h"
 #include "RemoteServer.h"
-#include "RemoteClient.h"
 #include "RemoteCrypto.h"
-#include "RemotesFile.h"  // a proven peer is remembered here
-#include "RemoteMirror.h" // …and starts being driven immediately
 
 #include "AppState.h"
 #include "Dedicated/DedicatedSettings.h" // SettingsFilePath — what Save writes to
 #include "Platform/Constants.h"
 #include "Platform/ConstantsStrings.h"
 #include "UI/ThemedDialog.h"
+#include "UI/GdiPool.h" // brushes and pens are pooled — never DeleteObject them
 
 #include <algorithm>
-#include <thread>
+#include <shlobj_core.h> // ILCreateFromPathW / SHOpenFolderAndSelectItems
 #include <windowsx.h>
 
 extern AppState app;
@@ -34,23 +32,11 @@ namespace {
     constexpr int TITLE_H  = 44;
     constexpr int FOOTER_H = 46; // two lines: status, then last async result
 
-    // Posted by the peer worker thread. LPARAM = new std::wstring*, owned and
-    // deleted by the handler. WM_APP rather than WM_USER: WM_USER+N is already
-    // spoken for by the app's own WM_QIV_* messages, and a panel's private
-    // message space must not collide with them.
-    constexpr UINT WM_REMOTE_ASYNC_RESULT = WM_APP + 1;
-
-    enum ButtonId {
-        BTN_START = 1, BTN_STOP, BTN_CHECK,
-        BTN_SEND, BTN_SAVE
-    };
+    enum ButtonId { BTN_START = 1, BTN_STOP, BTN_SAVE };
 
     enum RowId {
         R_NONE = 0,
-        // Server
         R_ENABLE, R_NAME, R_BIND, R_PORT, R_ALLOW, R_BLOCK, R_PASSWORD, R_MAXCONN,
-        // Peer
-        R_PEER_HOST, R_PEER_PORT, R_PEER_PASSWORD, R_PEER_COMMAND,
     };
 
     bool BgIsDark(COLORREF bg) {
@@ -60,6 +46,19 @@ namespace {
 
     std::wstring OnOff(bool b) { return b ? L"On" : L"Off"; }
 
+    // Lighten a colour by a fixed amount per channel.
+    //
+    // Explicit masking rather than GetRValue/GetGValue/GetBValue: those macros
+    // cast COLORREF to BYTE, which on a constexpr argument trips C4310
+    // (constant truncation) under /W4. Constants.h works around the same thing
+    // for the link colour's float channels.
+    COLORREF Brighten(COLORREF c, int by) {
+        const int r = std::min(255, static_cast<int>( c        & 0xFF) + by);
+        const int g = std::min(255, static_cast<int>((c >>  8) & 0xFF) + by);
+        const int b = std::min(255, static_cast<int>((c >> 16) & 0xFF) + by);
+        return RGB(r, g, b);
+    }
+
     std::wstring OrUnset(const std::wstring &s) { return s.empty() ? L"(not set)" : s; }
 }
 
@@ -68,7 +67,7 @@ namespace {
 // =============================================================================
 void RemoteWnd::Init(HINSTANCE hInstance, HWND hParent) {
     const float s = app.dpiScale;
-    InitFloating(hInstance, hParent, L"qIVRemoteWnd", L"Remote Control",
+    InitFloating(hInstance, hParent, L"qIVRemoteWnd", L"Remote Server",
                  static_cast<int>(PANEL_W * s), static_cast<int>(PANEL_H * s));
     if (GetHwnd()) {
         SetWindowLongPtrW(GetHwnd(), GWL_EXSTYLE,
@@ -109,14 +108,16 @@ void RemoteWnd::BuildRows() {
     add(Kind::Toggle, L"Enable", OnOff(c.enable),
         L"Master switch. Off by default — a viewer nobody configured never opens a socket.", R_ENABLE);
     add(Kind::Text, L"Name", OrUnset(c.name),
-        L"How this instance identifies itself to a connecting client.", R_NAME);
+        L"REQUIRED. How this instance identifies itself — a driving instance records "
+        L"this as the row's identity, and names have to be distinct.", R_NAME);
     add(Kind::Choice, L"Bind address", c.bindAddress,
         L"127.0.0.1 = this machine only, no firewall prompt.  0.0.0.0 = every network interface.", R_BIND);
     add(Kind::Number, L"Port",
         c.port == RT::PORT_UNSET ? std::wstring(L"(not set)") : std::to_wstring(c.port),
         L"The port to listen on. Required — there is no default.", R_PORT);
     add(Kind::Text, L"AllowList", OrUnset(Remote::JoinList(c.allowList)),
-        L"IPs allowed to connect. EMPTY DENIES EVERYONE. Trailing * matches a subnet: 192.168.1.*", R_ALLOW);
+        L"IPs allowed to connect. EMPTY DENIES EVERYONE, including this machine. Starts as "
+        L"127.0.0.1. Trailing * matches a subnet: 192.168.1.*", R_ALLOW);
     add(Kind::Text, L"BlackList", OrUnset(Remote::JoinList(c.blackList)),
         L"IPs always refused. Checked first — deny always beats allow.", R_BLOCK);
     add(Kind::Secret, L"Password", c.passwordHash.empty() ? L"(none)" : L"(set)",
@@ -124,24 +125,11 @@ void RemoteWnd::BuildRows() {
     add(Kind::Number, L"Max connections", std::to_wstring(c.maxConnections),
         L"Simultaneous clients, 1-99. Further callers are told the limit was reached.", R_MAXCONN);
 
-    add(Kind::Header, L"Connect to another instance", L"", L"", R_NONE);
-    add(Kind::Text, L"Target host", OrUnset(m_peerHost),
-        L"Address or host name of the qIV instance to drive. Not saved — it describes a neighbour, not this screen.", R_PEER_HOST);
-    add(Kind::Number, L"Target port",
-        m_peerPort == 0 ? std::wstring(L"(not set)") : std::to_wstring(m_peerPort),
-        L"The port that instance is listening on.", R_PEER_PORT);
-    add(Kind::Secret, L"Target password", m_peerPassword.empty() ? L"(none)" : L"(set)",
-        L"Its password, if it has one. Used to answer the challenge; never sent as text.", R_PEER_PASSWORD);
-    add(Kind::Text, L"Command", m_peerCommand,
-        L"What to send. Try: ping, next, goto 42, zoom 200, help", R_PEER_COMMAND);
-
     m_buttons.clear();
     const bool running = Remote::IsRunning();
-    m_buttons.push_back({L"Start",            BTN_START, {}, !running, 0});
-    m_buttons.push_back({L"Stop",             BTN_STOP,  {},  running, 0});
-    m_buttons.push_back({L"Check Connection", BTN_CHECK, {}, true,     0});
-    m_buttons.push_back({L"Send Command",     BTN_SEND,  {}, true,     1});
-    m_buttons.push_back({L"Save to INI",      BTN_SAVE,  {}, true,     1});
+    m_buttons.push_back({L"Start",       BTN_START, {}, !running, 0});
+    m_buttons.push_back({L"Stop",        BTN_STOP,  {},  running, 0});
+    m_buttons.push_back({L"Save to INI", BTN_SAVE,  {}, true,     0});
 }
 
 std::wstring RemoteWnd::StatusLine() const {
@@ -167,7 +155,7 @@ void RemoteWnd::DoStart() {
     PushToConfig();
     std::wstring err;
     if (!Remote::Start(GetHwnd(), err)) {
-        DialogMessage(err.empty() ? L"Could not start." : err, L"Remote Control");
+        DialogMessage(err.empty() ? L"Could not start." : err, L"Remote Server");
     } else {
         m_lastResult = L"Started on " + Remote::BoundEndpoint();
     }
@@ -182,119 +170,19 @@ void RemoteWnd::DoStop() {
     Repaint();
 }
 
-// Both peer actions run here. The lambda-free function-pointer form keeps the
-// worker's captured state explicit: it touches only `self`, and everything it
-// writes back travels through the posted message rather than through members.
-void RemoteWnd::RunAsync(void (*work)(RemoteWnd *self)) {
-    std::thread(work, this).detach();
-}
-
-void RemoteWnd::DoCheckConnection() {
-    PushToConfig();
-    if (m_peerHost.empty() || m_peerPort == 0) {
-        DialogMessage(L"Set a target host and port first.", L"Remote Control");
-        return;
-    }
-    m_lastResult = L"Checking " + m_peerHost + L":" + std::to_wstring(m_peerPort) + L"…";
-    Repaint();
-
-    RunAsync([](RemoteWnd *self) {
-        std::wstring info, err;
-        const bool ok = Remote::Probe(self->m_peerHost, self->m_peerPort,
-                                      self->m_peerPassword, info, err);
-        // Recorded for the UI thread to act on. A worker may not touch the
-        // remotes file or the mirror target list — both are UI-thread-owned.
-        self->m_probeSucceeded = ok;
-        auto *msg = new std::wstring(ok ? L"Reachable — " + info
-                                        : L"Unreachable — " + err);
-        PostMessageW(self->GetHwnd(), WM_REMOTE_ASYNC_RESULT, 0,
-                     reinterpret_cast<LPARAM>(msg));
-    });
-}
-
-void RemoteWnd::DoSendToPeer() {
-    PushToConfig();
-    if (m_peerHost.empty() || m_peerPort == 0) {
-        DialogMessage(L"Set a target host and port first.", L"Remote Control");
-        return;
-    }
-    if (m_peerCommand.empty()) {
-        DialogMessage(L"Type a command to send.", L"Remote Control");
-        return;
-    }
-    m_lastResult = L"Sending…";
-    Repaint();
-
-    RunAsync([](RemoteWnd *self) {
-        Remote::Client c;
-        std::wstring err, reply;
-        std::wstring out;
-        if (!c.Connect(self->m_peerHost, self->m_peerPort, self->m_peerPassword, err)) {
-            out = L"Connect failed — " + err;
-        } else if (!c.Send(self->m_peerCommand, reply, err)) {
-            out = L"Send failed — " + err;
-        } else {
-            out = reply;
-        }
-        c.Disconnect();
-        PostMessageW(self->GetHwnd(), WM_REMOTE_ASYNC_RESULT, 0,
-                     reinterpret_cast<LPARAM>(new std::wstring(out)));
-    });
-}
-
-void RemoteWnd::RememberPeer() {
-    if (m_peerHost.empty() || m_peerPort == 0) return;
-
-    std::vector<Remote::RemoteEntry> list = Remote::LoadRemotes();
-
-    // Host+port is the identity. Re-checking a peer that is already listed
-    // updates its password rather than adding a duplicate row — otherwise
-    // pressing Check Connection twice would give the console two entries for
-    // one screen, and both would try to drive it.
-    for (Remote::RemoteEntry &e : list) {
-        if (e.host == m_peerHost && e.port == m_peerPort) {
-            e.password = m_peerPassword;
-            Remote::SaveRemotes(list);
-            m_lastResult += L"  ·  already listed";
-            return;
-        }
-    }
-
-    Remote::RemoteEntry e;
-    e.host     = m_peerHost;
-    e.port     = m_peerPort;
-    e.password = m_peerPassword;
-    // Remembered, but NOT reconnected on the next launch unless the user asks.
-    // A viewer that came back from a restart already joined to other machines —
-    // and therefore already in restricted mode, with delete and Find refused —
-    // would be a confusing thing to inherit from a connection made days ago.
-    // Starting as a plain viewer every time, and connecting deliberately, is the
-    // behaviour that matches what the app is most of the time.
-    e.autoConnect = false;
-    // The banner carries the far end's configured Name when it has one, which
-    // is a far better label than the address. It arrives as
-    // "OK qIV <version> remote v1 [Lobby-Screen]" — take what is in brackets.
-    {
-        const std::wstring &banner = m_lastResult;
-        const size_t open  = banner.find(L'[');
-        const size_t close = banner.find(L']', open == std::wstring::npos ? 0 : open);
-        if (open != std::wstring::npos && close != std::wstring::npos && close > open + 1)
-            e.name = banner.substr(open + 1, close - open - 1);
-    }
-    if (e.name.empty()) e.name = m_peerHost + L":" + std::to_wstring(m_peerPort);
-
-    list.push_back(e);
-    Remote::SaveRemotes(list);
-
-    // Live immediately — the point of proving the connection is to start using
-    // it, not to require a restart first.
-    (void) Remote::Mirror::AddTarget(e.name, e.host, e.port, e.password, e.exePath);
-
-    m_lastResult += L"  ·  saved to " + Remote::RemotesFilePath();
-}
-
 void RemoteWnd::DoSaveToIni() {
     PushToConfig();
+
+    // Saving a nameless configuration is allowed — half-finished settings are a
+    // normal state to leave a panel in — but it will not start, and finding that
+    // out later from a status line is worse than being told now.
+    if (Remote::Config().name.empty()) {
+        DialogMessage(L"This instance has no Name.\r\n\r\nIt will save, but the listener "
+                      L"will not start without one: whoever drives this instance "
+                      L"identifies it by name, and two unnamed instances would be "
+                      L"indistinguishable.",
+                      L"Remote Server");
+    }
 
     // Creating an .ini where none existed moves the WHOLE APP off the registry
     // onto the file, from the next launch. SaveToIniSeeded makes that lossless by
@@ -308,16 +196,42 @@ void RemoteWnd::DoSaveToIni() {
                 L"read ALL of its settings from that file instead of the registry.\r\n\r\n"
                 L"Your current settings are copied into it first, so nothing is lost.\r\n\r\n"
                 L"Create it?",
-                L"Remote Control"))
+                L"Remote Server"))
+            return;
+    }
+
+    // An ordinary overwrite still asks. This writes every field in the panel to
+    // disk, including a password that was just retyped, and there is no undo —
+    // the previous contents are gone. The creation case above asks a bigger
+    // question and has already been answered by the time we get here.
+    if (!willCreate) {
+        if (!DialogConfirm(L"Write these settings to\r\n\r\n    " +
+                           Dedicated::SettingsFilePath() +
+                           L"\r\n\r\nreplacing what is in the [" +
+                           std::wstring(RT::INI_SECTION) + L"] section?",
+                           L"Remote Server"))
             return;
     }
 
     bool created = false;
     Remote::SaveToIniSeeded(created);
-    m_lastResult = created ? L"Created " + Dedicated::SettingsFilePath()
-                           : L"Saved to " + Dedicated::SettingsFilePath();
+
+    m_savedPath  = Dedicated::SettingsFilePath();
+    m_lastResult = created ? L"Created " : L"Saved to ";
     BuildRows();
     Repaint();
+}
+
+// Reveal rather than open: clicking a path should show you where the file is,
+// not launch whatever happens to be associated with .ini on this machine —
+// which is a text editor at best and an unknown at worst. Matches the
+// reveal-in-Explorer the main window already does for the current image.
+void RemoteWnd::RevealSavedFile() {
+    if (m_savedPath.empty()) return;
+    if (PIDLIST_ABSOLUTE pidl = ILCreateFromPathW(m_savedPath.c_str())) {
+        SHOpenFolderAndSelectItems(pidl, 0, nullptr, 0);
+        ILFree(pidl);
+    }
 }
 
 // =============================================================================
@@ -382,16 +296,6 @@ void RemoteWnd::EditRow(int rowIndex) {
             return;
         }
 
-        case R_PEER_PORT: {
-            const int v = DialogPromptInt(L"Target Port", L"Peer port (1 - 65535):",
-                                          m_peerPort ? m_peerPort : 8770,
-                                          RT::PORT_MIN, RT::PORT_MAX, 8770);
-            if (v >= 0) m_peerPort = v;
-            BuildRows();
-            Repaint();
-            return;
-        }
-
         default:
             BeginTextEdit(rowIndex);
             return;
@@ -434,9 +338,6 @@ void RemoteWnd::CommitTextEdit() {
             if (text.empty()) { c.passwordHash.clear(); m_newPassword.clear(); }
             else               m_newPassword = text;
             break;
-        case R_PEER_HOST:      m_peerHost     = text;                      break;
-        case R_PEER_PASSWORD:  m_peerPassword = text;                      break;
-        case R_PEER_COMMAND:   m_peerCommand  = text;                      break;
         default: break;
     }
 
@@ -497,15 +398,19 @@ void RemoteWnd::EnsureFonts(HDC dc) {
     if (m_hFontBody)  DeleteObject(m_hFontBody);
     if (m_hFontBold)  DeleteObject(m_hFontBold);
     if (m_hFontSmall) DeleteObject(m_hFontSmall);
+    if (m_hFontLink)  DeleteObject(m_hFontLink);
     m_cachedFontDpi = dpi;
-    auto mk = [&](int pt, int w) {
-        return CreateFontW(-MulDiv(pt, dpi, 72), 0, 0, 0, w, FALSE, FALSE, FALSE,
+    auto mk = [&](int pt, int w, BOOL underline = FALSE) {
+        return CreateFontW(-MulDiv(pt, dpi, 72), 0, 0, 0, w, FALSE, underline, FALSE,
                            DEFAULT_CHARSET, OUT_TT_PRECIS, CLIP_DEFAULT_PRECIS,
                            CLEARTYPE_QUALITY, VARIABLE_PITCH, L"Segoe UI");
     };
     m_hFontBody  = mk(10, FW_NORMAL);
     m_hFontBold  = mk(11, FW_SEMIBOLD);
     m_hFontSmall = mk(8,  FW_NORMAL);
+    // Underline comes from the app-wide link convention rather than a local
+    // choice, so every clickable thing in the app looks the same.
+    m_hFontLink  = mk(8,  FW_NORMAL, Constants::Links::UNDERLINE ? TRUE : FALSE);
 }
 
 void RemoteWnd::EnsureBackBuffer(HDC refDC, int w, int h) {
@@ -589,33 +494,12 @@ bool RemoteWnd::OnLocalHide() {
 // =============================================================================
 LRESULT RemoteWnd::HandlePanelMessage(UINT message, WPARAM wParam, LPARAM lParam) {
     switch (message) {
-        // A peer worker finished. It owns nothing but the string it posted.
-        case WM_REMOTE_ASYNC_RESULT: {
-            auto *msg = reinterpret_cast<std::wstring *>(lParam);
-            if (msg) { m_lastResult = *msg; delete msg; }
-
-            // A peer that answered is worth remembering. THIS is where a remote
-            // enters the system: typed once here, proved to respond, then
-            // written to qivRemotes.ini and handed to the mirror — so the F10
-            // console and the next launch both already know about it.
-            //
-            // Deliberately gated on a SUCCESSFUL probe. Recording an address
-            // that never answered would fill the console with rows that only
-            // ever show red, and the user would have no way to tell a typo from
-            // a screen that is merely switched off.
-            if (m_probeSucceeded) {
-                m_probeSucceeded = false;
-                RememberPeer();
-            }
-            Repaint();
-            return 0;
-        }
-
         case WM_SETCURSOR: {
             if (LOWORD(lParam) != HTCLIENT) break;
             POINT pt; GetCursorPos(&pt);
             ScreenToClient(GetHwnd(), &pt);
-            SetCursor((HitTestButton(pt) >= 0 || HitTestRow(pt) >= 0)
+            SetCursor((HitTestButton(pt) >= 0 || HitTestRow(pt) >= 0 ||
+                       PtInRect(&m_savedLinkRect, pt))
                           ? Constants::Cursors::CURR_CLICK
                           : Constants::Cursors::CURR_DEFAULT);
             return TRUE;
@@ -625,8 +509,9 @@ LRESULT RemoteWnd::HandlePanelMessage(UINT message, WPARAM wParam, LPARAM lParam
             POINT pt{GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam)};
             const int r = HitTestRow(pt);
             const int b = HitTestButton(pt);
-            if (r != m_hotRow || b != m_hotButton) {
-                m_hotRow = r; m_hotButton = b;
+            const bool linkHot = PtInRect(&m_savedLinkRect, pt) != FALSE;
+            if (r != m_hotRow || b != m_hotButton || linkHot != m_savedLinkHot) {
+                m_hotRow = r; m_hotButton = b; m_savedLinkHot = linkHot;
                 Repaint();
             }
             return 0;
@@ -636,14 +521,19 @@ LRESULT RemoteWnd::HandlePanelMessage(UINT message, WPARAM wParam, LPARAM lParam
             SetFocus(GetHwnd());
             POINT pt{GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam)};
 
+            // Checked before the rows: the footer link sits below them, but a
+            // stale row rect from a previous layout must never win over it.
+            if (PtInRect(&m_savedLinkRect, pt)) {
+                RevealSavedFile();
+                return 0;
+            }
+
             const int b = HitTestButton(pt);
             if (b >= 0) {
                 switch (m_buttons[b].id) {
-                    case BTN_START: DoStart();           break;
-                    case BTN_STOP:  DoStop();            break;
-                    case BTN_CHECK: DoCheckConnection(); break;
-                    case BTN_SEND:  DoSendToPeer();      break;
-                    case BTN_SAVE:  DoSaveToIni();       break;
+                    case BTN_START: DoStart();     break;
+                    case BTN_STOP:  DoStop();      break;
+                    case BTN_SAVE:  DoSaveToIni(); break;
                     default: break;
                 }
                 return 0;
@@ -684,7 +574,7 @@ LRESULT RemoteWnd::HandlePanelMessage(UINT message, WPARAM wParam, LPARAM lParam
             const COLORREF hotBg = dark ? RGB(48,48,52)    : RGB(232,232,236);
             const COLORREF line  = dark ? RGB(64,64,64)    : RGB(220,220,220);
 
-            HBRUSH bgb = CreateSolidBrush(bg); FillRect(bb, &rc, bgb); DeleteObject(bgb);
+            FillRect(bb, &rc, Gdi::Brush(bg));
             SetBkMode(bb, TRANSPARENT);
 
             const float s      = app.dpiScale;
@@ -698,7 +588,7 @@ LRESULT RemoteWnd::HandlePanelMessage(UINT message, WPARAM wParam, LPARAM lParam
             SelectObject(bb, m_hFontBold);
             SetTextColor(bb, fg);
             RECT tr{pad, static_cast<int>(6 * s), W - pad, static_cast<int>(26 * s)};
-            DrawTextW(bb, L"Remote control (TCP/IP)", -1, &tr, DT_LEFT | DT_SINGLELINE);
+            DrawTextW(bb, L"Remote server (TCP/IP) — what other instances connect to", -1, &tr, DT_LEFT | DT_SINGLELINE);
 
             SelectObject(bb, m_hFontSmall);
             SetTextColor(bb, dim);
@@ -733,15 +623,12 @@ LRESULT RemoteWnd::HandlePanelMessage(UINT message, WPARAM wParam, LPARAM lParam
                                        std::min(255, GetGValue(base) + 40),
                                        std::min(255, GetBValue(base) + 40));
 
-                        HBRUSH bbr = CreateSolidBrush(base);
-                        FillRect(bb, &btn.rect, bbr);
-                        DeleteObject(bbr);
+                        FillRect(bb, &btn.rect, Gdi::Brush(base));
 
-                        HPEN pen = CreatePen(PS_SOLID, 1, line);
-                        HGDIOBJ op = SelectObject(bb, pen);
+                        HGDIOBJ op = SelectObject(bb, Gdi::Pen(line));
                         HGDIOBJ ob = SelectObject(bb, GetStockObject(NULL_BRUSH));
                         Rectangle(bb, btn.rect.left, btn.rect.top, btn.rect.right, btn.rect.bottom);
-                        SelectObject(bb, ob); SelectObject(bb, op); DeleteObject(pen);
+                        SelectObject(bb, ob); SelectObject(bb, op);
 
                         SetTextColor(bb, btn.enabled ? RGB(245,245,245) : dim);
                         RECT lr = btn.rect;
@@ -767,10 +654,8 @@ LRESULT RemoteWnd::HandlePanelMessage(UINT message, WPARAM wParam, LPARAM lParam
                     DrawTextW(bb, r.label.c_str(), -1, &hr,
                               DT_LEFT | DT_VCENTER | DT_SINGLELINE);
 
-                    HBRUSH stripe = CreateSolidBrush(PC::STRIPE);
                     RECT st{pad, y + hdrH / 4, pad + static_cast<int>(3 * s), y + hdrH * 3 / 4};
-                    FillRect(bb, &st, stripe);
-                    DeleteObject(stripe);
+                    FillRect(bb, &st, Gdi::Brush(PC::STRIPE));
 
                     y += hdrH;
                     continue;
@@ -778,12 +663,9 @@ LRESULT RemoteWnd::HandlePanelMessage(UINT message, WPARAM wParam, LPARAM lParam
 
                 r.rect = {pad, y, W - pad, y + rowH};
 
-                if (static_cast<int>(i) == m_selected || static_cast<int>(i) == m_hotRow) {
-                    HBRUSH hb = CreateSolidBrush(
-                        static_cast<int>(i) == m_selected ? selBg : hotBg);
-                    FillRect(bb, &r.rect, hb);
-                    DeleteObject(hb);
-                }
+                if (static_cast<int>(i) == m_selected || static_cast<int>(i) == m_hotRow)
+                    FillRect(bb, &r.rect,
+                             Gdi::Brush(static_cast<int>(i) == m_selected ? selBg : hotBg));
 
                 SelectObject(bb, m_hFontBody);
                 SetTextColor(bb, fg);
@@ -822,11 +704,10 @@ LRESULT RemoteWnd::HandlePanelMessage(UINT message, WPARAM wParam, LPARAM lParam
             // ── Footer: live status, then the last async result ──────────────
             {
                 const int fy = H - static_cast<int>(FOOTER_H * s);
-                HPEN pen = CreatePen(PS_SOLID, 1, line);
-                HGDIOBJ op = SelectObject(bb, pen);
+                HGDIOBJ op = SelectObject(bb, Gdi::Pen(line));
                 MoveToEx(bb, pad, fy - static_cast<int>(4 * s), nullptr);
                 LineTo(bb, W - pad, fy - static_cast<int>(4 * s));
-                SelectObject(bb, op); DeleteObject(pen);
+                SelectObject(bb, op);
 
                 SelectObject(bb, m_hFontBody);
                 SetTextColor(bb, Remote::IsRunning() ? PC::ON : dim);
@@ -841,6 +722,37 @@ LRESULT RemoteWnd::HandlePanelMessage(UINT message, WPARAM wParam, LPARAM lParam
                         fy + static_cast<int>(38 * s)};
                 DrawTextW(bb, m_lastResult.c_str(), -1, &rr,
                           DT_LEFT | DT_SINGLELINE | DT_END_ELLIPSIS);
+
+                // The path the last Save wrote, as a link. Measured off the end
+                // of the message above rather than positioned by hand, so the
+                // hit box is exactly the text and cannot drift from it when the
+                // wording changes.
+                m_savedLinkRect = RECT{};
+                if (!m_savedPath.empty()) {
+                    SIZE pre{};
+                    GetTextExtentPoint32W(bb, m_lastResult.c_str(),
+                                          static_cast<int>(m_lastResult.size()), &pre);
+
+                    SelectObject(bb, m_hFontLink);
+                    SIZE link{};
+                    GetTextExtentPoint32W(bb, m_savedPath.c_str(),
+                                          static_cast<int>(m_savedPath.size()), &link);
+
+                    const int lx = pad + pre.cx;
+                    const int ly = fy + static_cast<int>(20 * s);
+                    // Clipped to the panel: a long path must not draw past the
+                    // edge, and the hit box must not extend past what is drawn.
+                    const int lw = std::min<int>(link.cx, (W - pad) - lx);
+                    if (lw > 0) {
+                        m_savedLinkRect = {lx, ly, lx + lw, ly + static_cast<int>(18 * s)};
+                        SetTextColor(bb, m_savedLinkHot
+                                             ? Brighten(Constants::Links::COLOR, 50)
+                                             : Constants::Links::COLOR);
+                        RECT lr2 = m_savedLinkRect;
+                        DrawTextW(bb, m_savedPath.c_str(), -1, &lr2,
+                                  DT_LEFT | DT_SINGLELINE | DT_PATH_ELLIPSIS);
+                    }
+                }
             }
 
             BitBlt(dc, 0, 0, W, H, bb, 0, 0, SRCCOPY);

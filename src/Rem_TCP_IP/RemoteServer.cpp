@@ -416,6 +416,12 @@ namespace {
                 continue;
             }
             // 2. AllowList — empty means deny everyone, by design.
+            //
+            // No exception for loopback. 127.0.0.1 is SEEDED into the default
+            // list so a fresh instance is reachable without anyone discovering
+            // the fail-closed rule the hard way — but it is an ordinary entry,
+            // and removing it from the .ini really does lock this machine out.
+            // A list that some addresses can bypass is not a list.
             if (cfg.allowList.empty() || !InList(cfg.allowList, peer)) {
                 closesocket(client);
                 continue;

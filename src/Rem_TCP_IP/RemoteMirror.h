@@ -54,6 +54,24 @@ namespace Remote::Mirror {
     // One configured slave, as the F10 console shows it. This is a SNAPSHOT
     // type: Targets() copies the live state into these under the lock, so the
     // panel can paint from them without holding anything.
+    // WHY a target is not connected. The list in qivRemotes.ini outlives the
+    // instances it describes — one gets moved, renamed, reconfigured or simply
+    // switched off — so "could not connect" is the normal state of at least one
+    // row, and the useful question is which kind of not-connected it is. Each
+    // one has a different remedy:
+    //
+    //   Offline    nothing is listening there. Start it (the dot does this when
+    //              the instance is on this machine).
+    //   Address    the host does not resolve. The row is wrong, not the target.
+    //   Rejected   something accepted and hung up without speaking: almost
+    //              always an AllowList that does not include this machine, and
+    //              indistinguishable from "that port belongs to something else".
+    //   Auth       it answered but refused the credentials — its password
+    //              changed since this row was saved.
+    //   Protocol   it talks, but not this protocol. Wrong port, or a version
+    //              mismatch.
+    enum class Down { None, Offline, Address, Rejected, Auth, Protocol };
+
     struct TargetView {
         // The handle AddTarget returned — what RemoveTarget, SendTo and
         // SetObserving expect. NOT the row's position: removing a target leaves
@@ -68,11 +86,26 @@ namespace Remote::Mirror {
         // console's start button can do anything — CreateProcess only starts a
         // process here, so a remote row's dot cannot launch anything.
         bool         sameMachine = false;
+        // Is this row TRYING to be connected? Distinct from `connected`, which
+        // says whether it currently is. A row can be listed and idle: recorded
+        // for later, or for a screen that is switched off today.
+        bool         connecting = false;
         bool         connected = false;
         bool         observing = false;  // we asked it to echo its actions to us
         long long    lagUs     = -1;     // last round trip, µs; -1 = never measured
-        std::wstring lastError;          // why it is not connected, when it is not
+        Down         down      = Down::None; // classified reason, for the list
+        std::wstring lastError;          // the full sentence, for the footer
     };
+
+    // A short word for the list column — "offline", "auth", "rejected". The
+    // full sentence stays in lastError for the footer; a table needs something
+    // that fits beside a port number.
+    const wchar_t *DownLabel(Down d);
+
+    // What to actually do about it, in one line. Shown under the list, because
+    // knowing a target is "rejected" is only useful with "its AllowList probably
+    // does not include this machine" beside it.
+    const wchar_t *DownRemedy(Down d);
 
     // --- Session state ------------------------------------------------------
 
@@ -106,8 +139,22 @@ namespace Remote::Mirror {
     // Adds a target and starts its sender thread. Connecting happens ON that
     // thread, so this returns immediately even for a host that is switched off.
     // `id` is the caller's handle to it — the row index the console shows.
+    //
+    // `connectNow` false LISTS the target without dialling it. Adding a remote
+    // and connecting to it are separate acts: a screen can be recorded while it
+    // is switched off, or before it is even set up, and the alternative was a
+    // saved list that only contained things currently reachable.
     int  AddTarget(const std::wstring &name, const std::wstring &host, int port,
-                   const std::wstring &password, const std::wstring &exePath);
+                   const std::wstring &password, const std::wstring &exePath,
+                   bool connectNow = true);
+
+    // Start or stop trying to reach one target. Stopping drops the connection
+    // and leaves the row listed; the sender thread parks until asked again.
+    void SetConnecting(int id, bool on);
+
+    // Every target at once. The common case for a screen wall: bring the room
+    // up, or put it down, without visiting each row.
+    void SetConnectingAll(bool on);
 
     // Stops the thread, closes the connection, removes the row.
     void RemoveTarget(int id);

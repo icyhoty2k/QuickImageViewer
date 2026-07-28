@@ -82,7 +82,6 @@ set(SOURCES
         src/Input/CommandExecuter.cpp
         src/Input/CommandResolver.cpp
         src/Input/AppCommands.cpp
-        src/Input/ContextMenuHandler.cpp
         src/CmdArgsIO.cpp
         src/Dedicated/DedicatedInstance.cpp
         src/Dedicated/DedicatedWnd.cpp
@@ -95,6 +94,11 @@ set(SOURCES
         src/Rem_TCP_IP/RemoteServer.cpp
         src/Rem_TCP_IP/RemoteExec.cpp
         src/Rem_TCP_IP/RemoteClient.cpp
+        src/UI/GdiPool.cpp
+        src/UI/AppMenu/AppMenu.cpp
+        src/UI/AppMenu/AppMenuBuilders.cpp
+        src/UI/AppMenu/AppMenuSettings.cpp
+        src/UI/AppMenu/AppMenuIO.cpp
         src/Rem_TCP_IP/RemoteWnd.cpp
         src/Rem_TCP_IP/RemoteMirror.cpp
         src/Rem_TCP_IP/RemotesFile.cpp

@@ -7,6 +7,7 @@
 #include "RemoteClient.h"
 #include "RemoteProtocol.h"
 #include "RemoteServer.h" // ActiveConnections — the other half of SessionActive
+#include "RemotesFile.h"  // SplitStoredSecret — imported credentials
 
 #include "AppState.h"
 #include "Platform/Constants.h"
@@ -79,7 +80,12 @@ namespace {
         std::wstring             lastError;
 
         std::atomic<bool>      stop{false};
+        // Listed and idle vs listed and dialling. A saved list describes screens
+        // that may be switched off, not yet built, or simply not wanted right
+        // now — so being in the list cannot imply being connected to.
+        std::atomic<bool>      wantConnect{true};
         std::atomic<bool>      connected{false};
+        std::atomic<Down>      down{Down::None};
         std::atomic<bool>      observing{false};
         std::atomic<long long> lagUs{-1};
 
@@ -209,6 +215,26 @@ namespace {
         t.lastError = err;
     }
 
+    // Which kind of failure, from the message Client::Connect produced.
+    //
+    // Matching on the message rather than a status code because those messages
+    // are already the single place each failure is described (ConstantsStrings),
+    // and inventing a parallel code enum beside them would be one more pair to
+    // keep in step. The comparison is against the constants themselves, not
+    // against literal text, so rewording a message cannot silently break this.
+    Down Classify(const std::wstring &err) {
+        namespace M = Constants::Messages;
+        if (err == M::REMOTE_CLIENT_RESOLVE_FAILED)   return Down::Address;
+        if (err == M::REMOTE_CLIENT_CONNECT_FAILED)   return Down::Offline;
+        if (err == M::REMOTE_CLIENT_NO_BANNER)        return Down::Rejected;
+        if (err == M::REMOTE_CLIENT_AUTH_FAILED ||
+            err == M::REMOTE_CLIENT_PASSWORD_REQUIRED) return Down::Auth;
+        if (err == M::REMOTE_CLIENT_PROTOCOL_ERROR)   return Down::Protocol;
+        // Send/receive failures on an established link mean it went away
+        // mid-session, which is the same situation as never having answered.
+        return Down::Offline;
+    }
+
     void PostEventLine(const std::wstring &line) {
         if (!g_owner) return;
         PostMessageW(g_owner, Constants::WM_QIV_REMOTE_EVENT, 0,
@@ -223,11 +249,42 @@ namespace {
     void SenderLoop(Target *t) {
         while (!t->stop.load(std::memory_order_acquire)) {
 
+            // ── Idle: listed, but not asked to connect ──────────────────────
+            // Park rather than dial. Nothing is queued to a target in this
+            // state (PushTo drops it), so there is no backlog to replay when it
+            // is switched on.
+            if (!t->wantConnect.load(std::memory_order_acquire)) {
+                if (t->client.IsConnected()) {
+                    t->client.Disconnect();
+                    SetConnected(*t, false);
+                }
+                t->down.store(Down::None, std::memory_order_release);
+                SetError(*t, {});
+
+                std::unique_lock<std::mutex> lk(t->mtx);
+                t->cv.wait(lk, [t] {
+                    return t->stop.load(std::memory_order_acquire) ||
+                           t->wantConnect.load(std::memory_order_acquire);
+                });
+                continue;
+            }
+
             // ── Connect / reconnect ─────────────────────────────────────────
             if (!t->client.IsConnected()) {
+                // The password field carries EITHER a typed password OR an
+                // already-derived secret imported from the target's own settings
+                // file. Both end at the same shared value; the marker is what
+                // says which route to take, rather than guessing from the shape
+                // of the text.
                 std::wstring err;
-                if (!t->client.Connect(t->host, t->port, t->password, err)) {
+                std::wstring saltHex, digestHex;
+                const bool ok = SplitStoredSecret(t->password, saltHex, digestHex)
+                    ? t->client.ConnectWithSecret(t->host, t->port, digestHex, saltHex, err)
+                    : t->client.Connect(t->host, t->port, t->password, err);
+
+                if (!ok) {
                     SetConnected(*t, false);
+                    t->down.store(Classify(err), std::memory_order_release);
                     SetError(*t, err);
 
                     // Back off rather than spin: a slave that is switched off is
@@ -240,6 +297,7 @@ namespace {
                     continue;
                 }
                 SetConnected(*t, true);
+                t->down.store(Down::None, std::memory_order_release);
                 SetError(*t, {});
 
                 // Re-arm observation across a reconnect. The far end drops its
@@ -282,6 +340,7 @@ namespace {
 
                 if (!ok) {
                     SetConnected(*t, false);
+                    t->down.store(Classify(err), std::memory_order_release);
                     SetError(*t, err);
                 } else {
                     t->lagUs.store(t1 - t0, std::memory_order_release);
@@ -327,6 +386,10 @@ namespace {
 
     // Queue one line to one target. UI thread. Never blocks.
     void PushTo(Target &t, const std::wstring &line, const std::wstring &expectFile) {
+        // A listed-but-idle target is not being driven. Queuing for it would
+        // build a backlog that replayed the moment somebody pressed Connect —
+        // minutes of stale navigation arriving at once.
+        if (!t.wantConnect.load(std::memory_order_acquire)) return;
         {
             std::lock_guard<std::mutex> lk(t.mtx);
             // Drop the OLDEST on overflow. A backlog for a machine that stopped
@@ -351,6 +414,38 @@ namespace {
 // =============================================================================
 
 void SetOwner(HWND hOwner) { g_owner = hOwner; }
+
+const wchar_t *DownLabel(Down d) {
+    switch (d) {
+        case Down::Offline:  return L"offline";
+        case Down::Address:  return L"bad address";
+        case Down::Rejected: return L"rejected";
+        case Down::Auth:     return L"password";
+        case Down::Protocol: return L"not qIV";
+        default:             return L"—";
+    }
+}
+
+const wchar_t *DownRemedy(Down d) {
+    switch (d) {
+        case Down::Offline:
+            return L"Nothing is listening there. Click the red dot to start it, "
+                   L"if it is on this machine and has an exe recorded.";
+        case Down::Address:
+            return L"That address does not resolve — the row is wrong, not the target.";
+        case Down::Rejected:
+            return L"It accepted and hung up without speaking. Its AllowList "
+                   L"almost certainly does not include this machine.";
+        case Down::Auth:
+            return L"It refused the credentials — its password changed since this "
+                   L"row was saved. Remove the row and add it again.";
+        case Down::Protocol:
+            return L"Something is listening on that port, but it is not a qIV "
+                   L"remote. Wrong port?";
+        default:
+            return L"";
+    }
+}
 
 bool SessionActive() {
     // CONNECTED targets, not configured ones — see g_connectedCount. Two atomic
@@ -387,10 +482,12 @@ static void LeaveDiskOrderForSession(HWND hOwner) {
 }
 
 int AddTarget(const std::wstring &name, const std::wstring &host, int port,
-              const std::wstring &password, const std::wstring &exePath) {
-    // Before the first target exists: entering a session with disk order still
-    // selected would misalign the two playlists from the start.
-    if (g_targets.empty()) LeaveDiskOrderForSession(g_owner);
+              const std::wstring &password, const std::wstring &exePath,
+              bool connectNow) {
+    // Before the first LIVE target: entering a session with disk order still
+    // selected would misalign the two playlists from the start. A row that is
+    // only being listed changes nothing, so it does not trigger this.
+    if (connectNow && !HasLiveTargets()) LeaveDiskOrderForSession(g_owner);
 
     auto t = std::make_unique<Target>();
     t->id          = g_nextId++;
@@ -400,6 +497,7 @@ int AddTarget(const std::wstring &name, const std::wstring &host, int port,
     t->password    = password;
     t->exePath     = exePath;
     t->sameMachine = IsSameMachine(host);
+    t->wantConnect.store(connectNow, std::memory_order_release);
 
     Target *raw = t.get();
     g_targets.push_back(std::move(t));
@@ -455,9 +553,11 @@ std::vector<TargetView> Targets() {
         v.host      = t->host;
         v.port      = t->port;
         v.exePath   = t->exePath;
-        v.connected = t->connected.load(std::memory_order_acquire);
+        v.connecting = t->wantConnect.load(std::memory_order_acquire);
+        v.connected  = t->connected.load(std::memory_order_acquire);
         v.observing = t->observing.load(std::memory_order_acquire);
         v.lagUs     = t->lagUs.load(std::memory_order_acquire);
+        v.down      = t->down.load(std::memory_order_acquire);
         {
             std::lock_guard<std::mutex> lk(t->mtx);
             v.lastError = t->lastError;
@@ -533,6 +633,32 @@ void PingAll() {
     // — and the round trip on the channel actually in use is the more honest
     // number anyway.
     for (std::unique_ptr<Target> &t : g_targets) PushTo(*t, L"ping", {});
+}
+
+void SetConnecting(int id, bool on) {
+    Target *t = Find(id);
+    if (!t) return;
+
+    // Same guard as adding a live target: going from "nothing connected" to
+    // "something connected" is what starts a session, and disk order cannot
+    // survive one.
+    if (on && !HasLiveTargets()) LeaveDiskOrderForSession(g_owner);
+
+    t->wantConnect.store(on, std::memory_order_release);
+    // Wakes the sender thread out of whichever wait it is in — the idle park
+    // when switching on, the reconnect back-off when switching off.
+    t->cv.notify_all();
+}
+
+void SetConnectingAll(bool on) {
+    // The disk-order check runs once for the whole batch rather than per target
+    // — it is about entering a session at all, not about each connection.
+    if (on && !HasLiveTargets()) LeaveDiskOrderForSession(g_owner);
+
+    for (std::unique_ptr<Target> &t : g_targets) {
+        t->wantConnect.store(on, std::memory_order_release);
+        t->cv.notify_all();
+    }
 }
 
 void SetObserving(int id, bool on) {

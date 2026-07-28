@@ -1,4 +1,5 @@
 #include "FindWnd.h"
+#include "UI/GdiPool.h" // pooled brushes and pens — never DeleteObject them
 #include "../../AppState.h"
 #include "../../Platform/Constants.h"
 #include "../../Platform/FileHandler.h"
@@ -297,9 +298,7 @@ LRESULT FindWnd::HandlePanelMessage(UINT message, WPARAM wParam, LPARAM lParam) 
         HDC hdc = m_bbDC;
 
         // ── Background ───────────────────────────────────────────────────────
-        HBRUSH bgBrush = CreateSolidBrush(GetBgColor());
-        FillRect(hdc, &rc, bgBrush);
-        DeleteObject(bgBrush);
+        FillRect(hdc, &rc, UI::Gdi::Brush(GetBgColor()));
         SetBkMode(hdc, TRANSPARENT);
 
         const float dpi = app.dpiScale;
@@ -367,12 +366,11 @@ LRESULT FindWnd::HandlePanelMessage(UINT message, WPARAM wParam, LPARAM lParam) 
 
         // ── Divider ───────────────────────────────────────────────────────────
         {
-            HPEN divPen = CreatePen(PS_SOLID, 1, Constants::Theme::ThemedGray(0.22f, app.themeFactor));
-            HPEN old    = static_cast<HPEN>(SelectObject(hdc, divPen));
+            HPEN old = static_cast<HPEN>(SelectObject(hdc,
+                UI::Gdi::Pen(Constants::Theme::ThemedGray(0.22f, app.themeFactor))));
             MoveToEx(hdc, pad, y, nullptr);
             LineTo(hdc, rc.right - pad, y);
             SelectObject(hdc, old);
-            DeleteObject(divPen);
             y += gap;
         }
 
@@ -396,10 +394,8 @@ LRESULT FindWnd::HandlePanelMessage(UINT message, WPARAM wParam, LPARAM lParam) 
                 const MatchResult &mr = m_results[ri];
 
                 if (selected) {
-                    HBRUSH selBrush = CreateSolidBrush(clrSelBg);
                     RECT fillRect = { 0, y, rc.right, y + rowH };
-                    FillRect(hdc, &fillRect, selBrush);
-                    DeleteObject(selBrush);
+                    FillRect(hdc, &fillRect, UI::Gdi::Brush(clrSelBg));
                 }
 
                 const std::wstring &fullPath = mr.path;
@@ -428,12 +424,11 @@ LRESULT FindWnd::HandlePanelMessage(UINT message, WPARAM wParam, LPARAM lParam) 
 
         // ── Bottom divider ────────────────────────────────────────────────────
         {
-            HPEN divPen = CreatePen(PS_SOLID, 1, Constants::Theme::ThemedGray(0.22f, app.themeFactor));
-            HPEN old    = static_cast<HPEN>(SelectObject(hdc, divPen));
+            HPEN old = static_cast<HPEN>(SelectObject(hdc,
+                UI::Gdi::Pen(Constants::Theme::ThemedGray(0.22f, app.themeFactor))));
             MoveToEx(hdc, pad, y, nullptr);
             LineTo(hdc, rc.right - pad, y);
             SelectObject(hdc, old);
-            DeleteObject(divPen);
             y += gap;
         }
 

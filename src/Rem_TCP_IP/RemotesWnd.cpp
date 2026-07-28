@@ -7,8 +7,11 @@
 #include "Platform/Constants.h"
 #include "Platform/ConstantsStrings.h"
 #include "UI/ThemedDialog.h"
+#include "UI/ThemedTooltip.h" // hover help — the glyph controls are not guessable
+#include "UI/GdiPool.h" // pooled brushes and pens — never DeleteObject them
 
 #include <algorithm>
+#include <shobjidl.h> // IFileOpenDialog — Add from file
 #include <windowsx.h>
 
 extern AppState app;
@@ -19,14 +22,18 @@ namespace RT = Constants::RemoteTcpIp;
 namespace PC = Constants::Dedicated::PanelColors;
 
 namespace {
-    constexpr int PANEL_W  = 760;
-    constexpr int PANEL_H  = 520;
+    // Wide enough for eight buttons in ONE row without truncating any of them,
+    // and the extra width goes to the address column, which is the one that
+    // actually needs it.
+    constexpr int PANEL_W  = 980;
+    constexpr int PANEL_H  = 620;
     constexpr int PAD      = 14;
     constexpr int ROW_H    = 34;
+    constexpr int FIELD_H  = 40;
     constexpr int HDR_H    = 26;
     constexpr int BTN_H    = 34;
     constexpr int BTN_GAP  = 8;
-    constexpr int TITLE_H  = 44;
+    constexpr int TITLE_H  = 46;
     constexpr int FOOTER_H = 30;
 
     // How long a dot stays amber after a start/stop before the panel re-polls
@@ -35,7 +42,9 @@ namespace {
     constexpr UINT_PTR TIMER_PENDING    = 1;
     constexpr UINT     PENDING_DELAY_MS = 2500;
 
-    enum ButtonId { BTN_ADD = 1, BTN_POLL, BTN_SYNC_ALL, BTN_SAVE, BTN_REMOVE };
+    enum ButtonId { BTN_SAVE = 1, BTN_NEW, BTN_IMPORT,
+                    BTN_CONNECT_ALL, BTN_DISCONNECT_ALL,
+                    BTN_POLL, BTN_SYNC_ALL, BTN_REMOVE };
 
     bool BgIsDark(COLORREF bg) {
         const int lum = (GetRValue(bg) * 299 + GetGValue(bg) * 587 + GetBValue(bg) * 114) / 1000;
@@ -43,8 +52,8 @@ namespace {
     }
 
     // Lag reads as a number a human compares at a glance, not a raw count.
-    // Everything here is loopback, so sub-millisecond is the normal case and
-    // "0 ms" would look like a failed measurement rather than a fast one.
+    // Loopback is sub-millisecond, so "0 ms" would look like a failed
+    // measurement rather than a fast one.
     std::wstring FormatLag(long long us) {
         if (us < 0)    return L"—";
         if (us < 1000) return L"<1 ms";
@@ -52,6 +61,8 @@ namespace {
         swprintf_s(b, L"%.1f ms", static_cast<double>(us) / 1000.0);
         return b;
     }
+
+    std::wstring OrUnset(const std::wstring &s) { return s.empty() ? L"(not set)" : s; }
 }
 
 // =============================================================================
@@ -67,12 +78,18 @@ void RemotesWnd::Init(HINSTANCE hInstance, HWND hParent) {
         SetLayeredWindowAttributes(GetHwnd(), 0,
                                    Constants::Dedicated::PANEL_OPACITY, LWA_ALPHA);
     }
+    m_edit.SetMaxLength(260);
+    BuildFields();
     Rebuild();
 }
 
 void RemotesWnd::Init(HINSTANCE hInstance, HWND hParent, int8_t) { Init(hInstance, hParent); }
 
 void RemotesWnd::Show() {
+    // The popup is owned by this window and is destroyed with it when the panel
+    // closes, so what was last explained means nothing on reopening.
+    m_tipOwner = nullptr;
+    BuildFields();
     Rebuild();
     ShowCenterOverParent();
     // Opening the console is the moment you want to know what is up, so poll
@@ -87,12 +104,105 @@ void RemotesWnd::Show() {
 void RemotesWnd::AutoConnectAll(HWND hOwner) {
     Remote::Mirror::SetOwner(hOwner);
 
+    // EVERY saved row is loaded; only the ones marked AutoConnect are dialled.
+    //
+    // Loading only the auto-connecting ones was a bug with an obvious symptom
+    // and a confusing cause: a remote added yesterday was still in
+    // qivRemotes.ini, but the console came up empty, because the console shows
+    // Remote::Mirror's targets and nothing had put the row there. The list is a
+    // record of what exists; connecting is a separate question about each one.
     for (const Remote::RemoteEntry &e : Remote::LoadRemotes()) {
-        if (!e.autoConnect) continue;
-        // Returns immediately — the connection is made on the target's own
-        // thread, so a screen that is switched off does not delay startup.
-        (void) Remote::Mirror::AddTarget(e.name, e.host, e.port, e.password, e.exePath);
+        // Returns immediately either way — a connection is made on the target's
+        // own thread, so a screen that is switched off does not delay startup.
+        (void) Remote::Mirror::AddTarget(e.name, e.host, e.port, e.password,
+                                         e.exePath, e.autoConnect);
     }
+}
+
+// =============================================================================
+// The New-connection form
+// =============================================================================
+void RemotesWnd::BuildFields() {
+    m_fields.clear();
+    auto add = [&](FieldId id, const wchar_t *label, std::wstring value,
+                   const wchar_t *desc, bool secret = false) {
+        Field f;
+        f.id = id; f.label = label; f.value = std::move(value);
+        f.desc = desc; f.secret = secret;
+        m_fields.push_back(std::move(f));
+    };
+
+    add(F_HOST, L"Address", OrUnset(m_newHost),
+        L"Address or host name of the instance to drive. 127.0.0.1 for another copy on this machine.");
+    add(F_PORT, L"Port",
+        m_newPort == 0 ? std::wstring(L"(not set)") : std::to_wstring(m_newPort),
+        L"The port that instance is listening on — its PortNo, not this one's.");
+    add(F_PASSWORD, L"Password",
+        m_newPassword.empty() ? L"(none)"
+                              : (Remote::IsStoredSecret(m_newPassword) ? L"(imported)" : L"(set)"),
+        L"Its password, if it has one. Answers the challenge; never sent as text. "
+        L"Add from file brings this across, so there is nothing to type.", true);
+    add(F_NAME, L"Name", m_newName.empty() ? L"(required)" : m_newName,
+        L"REQUIRED. Identifies this remote — in the list, in messages about it, and when "
+        L"matching it up again later. Add from file fills it in.");
+    add(F_EXE, L"Exe to launch", OrUnset(m_newExe),
+        L"Optional. Lets the ● start this instance when it is down — only possible on this machine.");
+}
+
+void RemotesWnd::EditField(int fieldIndex) {
+    if (fieldIndex < 0 || fieldIndex >= static_cast<int>(m_fields.size())) return;
+
+    if (m_fields[fieldIndex].id == F_PORT) {
+        const int v = DialogPromptInt(L"Target Port", L"Port (1 - 65535):",
+                                      m_newPort ? m_newPort : 8770,
+                                      RT::PORT_MIN, RT::PORT_MAX, 8770);
+        if (v >= 0) m_newPort = v;
+        BuildFields();
+        Repaint();
+        return;
+    }
+    BeginTextEdit(fieldIndex);
+}
+
+void RemotesWnd::BeginTextEdit(int fieldIndex) {
+    m_editingField = fieldIndex;
+    const Field &f = m_fields[fieldIndex];
+
+    // A secret is never seeded with what is held: pre-filling a placeholder
+    // would let an accidental Enter overwrite the real value with literal text.
+    std::wstring seed;
+    if (!f.secret) {
+        switch (f.id) {
+            case F_HOST: seed = m_newHost; break;
+            case F_NAME: seed = m_newName; break;
+            case F_EXE:  seed = m_newExe;  break;
+            default: break;
+        }
+    }
+    m_edit.SetText(seed);
+    Repaint();
+}
+
+void RemotesWnd::CommitTextEdit() {
+    if (m_editingField < 0) return;
+    const std::wstring text = m_edit.GetText();
+
+    switch (m_fields[m_editingField].id) {
+        case F_HOST:     m_newHost     = text; break;
+        case F_PASSWORD: m_newPassword = text; break;
+        case F_NAME:     m_newName     = text; break;
+        case F_EXE:      m_newExe      = text; break;
+        default: break;
+    }
+
+    m_editingField = -1;
+    BuildFields();
+    Repaint();
+}
+
+void RemotesWnd::CancelTextEdit() {
+    m_editingField = -1;
+    Repaint();
 }
 
 // =============================================================================
@@ -112,16 +222,27 @@ void RemotesWnd::Rebuild() {
         // The mirror's own handle, not the row position — removing a target
         // does not renumber the rest, so a position would start addressing the
         // wrong screen after any removal.
-        r.id        = t.id;
-        r.name      = t.name;
-        r.host      = t.host;
-        r.port      = t.port;
+        r.id          = t.id;
+        r.name        = t.name;
+        r.host        = t.host;
+        r.port        = t.port;
         r.exePath     = t.exePath;
         r.sameMachine = t.sameMachine;
+        r.connecting  = t.connecting;
         r.lagUs       = t.lagUs;
-        r.observing = t.observing;
-        r.lastError = t.lastError;
-        r.dot       = t.connected ? DotState::Up : DotState::Down;
+        r.observing   = t.observing;
+        r.lastError   = t.lastError;
+        r.down        = t.down;
+        r.dot = t.connected      ? DotState::Up
+              : t.connecting     ? DotState::Down   // trying, and not getting there
+                                 : DotState::Idle;  // listed, nobody asked
+
+        // A saved list outlives the instances it names: an exe gets moved,
+        // renamed or deleted and the row keeps pointing at where it used to be.
+        // Checked here so the row can SAY so, rather than the start button
+        // failing with a Win32 error code when it is eventually pressed.
+        r.exeMissing = !r.exePath.empty() &&
+                       GetFileAttributesW(r.exePath.c_str()) == INVALID_FILE_ATTRIBUTES;
 
         if (std::find(pending.begin(), pending.end(), r.id) != pending.end() &&
             r.dot == DotState::Down)
@@ -130,21 +251,56 @@ void RemotesWnd::Rebuild() {
         m_rows.push_back(std::move(r));
     }
 
-    m_buttons.clear();
-    m_buttons.push_back({L"Add (F9)",   BTN_ADD,      {}, true});
-    m_buttons.push_back({L"Poll (F5)",  BTN_POLL,     {}, !m_rows.empty()});
-    m_buttons.push_back({L"Sync all",   BTN_SYNC_ALL, {}, !m_rows.empty()});
-    m_buttons.push_back({L"Remove",     BTN_REMOVE,   {}, !m_rows.empty()});
-    m_buttons.push_back({L"Save",       BTN_SAVE,     {}, true});
+    const bool haveRows = !m_rows.empty();
+    const bool editing  = m_editingRowId != 0;
 
-    if (m_selected >= static_cast<int>(m_rows.size()))
-        m_selected = std::max(0, static_cast<int>(m_rows.size()) - 1);
+    // Connecting ONE row is the Link cell in that row, not a button — the
+    // button acting on "the selected row" made it ambiguous which row a press
+    // referred to, when the same click that selects a row also loads it into
+    // the form. These two act on everything, which needs no selection at all.
+    m_buttons.clear();
+    m_buttons.push_back({editing ? L"Update" : L"Save", BTN_SAVE, {}, true,
+        editing ? L"Apply the form to the remote being edited."
+                : L"Record the form as a new remote.\nSaving does not connect — that is the "
+                  L"Link cell in its row, or Connect all."});
+    // Always available: it clears the form, which is meaningful whether or not a
+    // row is loaded. Enabling it only while editing made it look broken to
+    // anyone who had simply typed into the fields and wanted to start over.
+    m_buttons.push_back({L"New", BTN_NEW, {}, true,
+        L"Clear the form and start describing a new remote.\nAbandons any edit in progress."});
+    m_buttons.push_back({L"Add from file…", BTN_IMPORT, {}, true,
+        L"Read another instance's settings file — or its .exe, and the .ini beside it is "
+        L"found automatically.\nBrings across its port, name, exe and credentials, so there "
+        L"is nothing to type."});
+    m_buttons.push_back({L"Connect all", BTN_CONNECT_ALL, {}, haveRows,
+        L"Start dialling every remote in the list.\nEach keeps retrying on its own if it is "
+        L"not answering yet."});
+    m_buttons.push_back({L"Disconnect all", BTN_DISCONNECT_ALL, {}, haveRows,
+        L"Drop every connection. The rows stay in the list.\nEnds the session, so the "
+        L"restrictions on delete, Find and disk-order sort lift."});
+    m_buttons.push_back({L"Poll (F5)", BTN_POLL, {}, haveRows,
+        L"Ping every connected remote and fill in the Lag column.\nLag is the round trip on "
+        L"the link in use — on this machine it mostly reports how busy that viewer is."});
+    m_buttons.push_back({L"Sync all", BTN_SYNC_ALL, {}, haveRows,
+        L"Push THIS viewer's look onto every remote: sort order, view mode, rotation, flips, "
+        L"colour adjustments and the effect list in order.\n"
+        L"Mirroring sends toggles, and a toggle applied to a different starting state "
+        L"inverts instead of matching — this replaces their state outright.\n"
+        L"One-directional and immediate. Nothing comes back, and there is no undo."});
+    m_buttons.push_back({L"Remove", BTN_REMOVE, {}, haveRows,
+        L"Delete the selected remote from the list and from qivRemotes.ini.\nThe instance "
+        L"itself is not affected."});
+
+    if (m_selectedRow >= static_cast<int>(m_rows.size()))
+        m_selectedRow = std::max(0, static_cast<int>(m_rows.size()) - 1);
 }
 
 void RemotesWnd::PersistRows() {
-    // The password is not in RowView — the panel never displays one, and it has
-    // no business holding one. Re-read the file, update what the rows know
-    // about, and write it back, so a saved list keeps its credentials.
+    // Password and autoConnect are PRESERVED from the file, not invented here.
+    // The panel never displays a password, and it must not decide on the user's
+    // behalf that a remote should be reconnected at startup — that flag is
+    // hand-set by someone who wants a screen wall to come up already joined,
+    // and saving the list must not silently turn it on for everyone else.
     std::vector<Remote::RemoteEntry> stored = Remote::LoadRemotes();
     std::vector<Remote::RemoteEntry> out;
 
@@ -155,14 +311,11 @@ void RemotesWnd::PersistRows() {
         e.port    = r.port;
         e.exePath = r.exePath;
 
-        // Password and autoConnect are PRESERVED from the file, not invented
-        // here. The panel never displays a password, and it must not decide on
-        // the user's behalf that a remote should be reconnected at startup —
-        // that flag is hand-set in qivRemotes.ini by someone who wants a screen
-        // wall to come up already joined, and saving the list must not silently
-        // turn it on for everyone else.
+        // Matched by NAME, because that is the identity — a row whose port or
+        // folder was corrected keeps its password and its autoConnect, where
+        // matching on host+port would silently drop both.
         for (const Remote::RemoteEntry &s : stored) {
-            if (s.host == r.host && s.port == r.port) {
+            if (_wcsicmp(s.name.c_str(), r.name.c_str()) == 0) {
                 e.password    = s.password;
                 e.autoConnect = s.autoConnect;
                 break;
@@ -176,6 +329,254 @@ void RemotesWnd::PersistRows() {
 // =============================================================================
 // Actions
 // =============================================================================
+void RemotesWnd::FillFormFromRow(int row) {
+    if (row < 0 || row >= static_cast<int>(m_rows.size())) return;
+    if (m_editingField >= 0) CancelTextEdit();
+
+    const RowView &r = m_rows[row];
+    m_editingRowId = r.id;
+    m_newHost      = r.host;
+    m_newPort      = r.port;
+    m_newName      = r.name;
+    m_newExe       = r.exePath;
+
+    // The credential is not carried in the row — the panel never displays one —
+    // so it comes back out of the file, matched by name. Without this, saving an
+    // edited row would silently drop the password it was connecting with.
+    m_newPassword.clear();
+    for (const Remote::RemoteEntry &e : Remote::LoadRemotes()) {
+        if (_wcsicmp(e.name.c_str(), r.name.c_str()) == 0) { m_newPassword = e.password; break; }
+    }
+
+    BuildFields();
+    Rebuild(); // the Save button becomes Update
+    m_status = L"Editing \"" + r.name + L"\" — Save to apply, New to start a fresh one";
+    Repaint();
+}
+
+void RemotesWnd::DoNewEntry() {
+    if (m_editingField >= 0) CancelTextEdit();
+    m_editingRowId = 0;
+    m_newHost      = L"127.0.0.1";
+    m_newPort      = 0;
+    m_newName.clear();
+    m_newPassword.clear();
+    m_newExe.clear();
+    BuildFields();
+    Rebuild();
+    m_status.clear();
+    Repaint();
+}
+
+void RemotesWnd::DoSaveEntry() {
+    if (m_editingField >= 0) CommitTextEdit();
+
+    if (m_newHost.empty() || m_newPort == 0) {
+        DialogMessage(L"Fill in the address and port first.", L"Remotes");
+        return;
+    }
+
+    // A name is REQUIRED, because it is the identity: the console shows it, a
+    // failure message names it, and it is what makes a row the same row after
+    // its port or folder changes. It used to be optional only because a
+    // successful connection could borrow the target's own name out of its
+    // banner — and saving no longer requires connecting.
+    if (m_newName.empty()) {
+        DialogMessage(L"Give this remote a Name.\r\n\r\nNames identify a remote — in the "
+                      L"list, in every message about it, and when matching it up again "
+                      L"after its port or folder changes.\r\n\r\nAdd from file… fills it in "
+                      L"from the instance's own settings.", L"Remotes");
+        return;
+    }
+
+    // Two separate constraints, two separate messages — they mean different
+    // mistakes and have different fixes. The row being EDITED is skipped, or it
+    // would collide with itself.
+    for (const RowView &r : m_rows) {
+        if (r.id == m_editingRowId) continue;
+
+        // Same instance twice: it would receive every mirrored command once per
+        // row, and the console would show two dots for one screen.
+        if (r.host == m_newHost && r.port == m_newPort) {
+            DialogMessage(m_newHost + L":" + std::to_wstring(m_newPort) +
+                          L" is already in the list, as \"" + r.name + L"\".",
+                          L"Remotes");
+            return;
+        }
+        // Same name twice: the name is the identity, so every message that
+        // named it would be ambiguous.
+        if (_wcsicmp(r.name.c_str(), m_newName.c_str()) == 0) {
+            DialogMessage(L"There is already a remote called \"" + r.name +
+                          L"\" (" + r.host + L":" + std::to_wstring(r.port) +
+                          L").\r\n\r\nNames identify a remote, so they have to be "
+                          L"distinct — give this one a different name.", L"Remotes");
+            return;
+        }
+    }
+
+    Remote::RemoteEntry e;
+    e.name     = m_newName;
+    e.host     = m_newHost;
+    e.port     = m_newPort;
+    e.password = m_newPassword;
+    e.exePath  = m_newExe;
+    // Recorded, not dialled — on this launch or the next. Reconnecting at
+    // startup is a deliberate choice for a screen wall, set in the file rather
+    // than assumed for everything that was ever added.
+    e.autoConnect = false;
+
+    // The name being replaced, so the file row can be found even when the name
+    // itself is what changed.
+    std::wstring oldName;
+    bool wasConnecting = false;
+    for (const RowView &r : m_rows) {
+        if (r.id == m_editingRowId) { oldName = r.name; wasConnecting = r.connecting; break; }
+    }
+
+    std::vector<Remote::RemoteEntry> list = Remote::LoadRemotes();
+    if (!oldName.empty()) {
+        bool replaced = false;
+        for (Remote::RemoteEntry &s : list) {
+            if (_wcsicmp(s.name.c_str(), oldName.c_str()) == 0) {
+                // autoConnect is the file's to keep — it says what should happen
+                // at startup, which is not something this form asks about.
+                e.autoConnect = s.autoConnect;
+                s = e;
+                replaced = true;
+                break;
+            }
+        }
+        if (!replaced) list.push_back(e);
+
+        // The live target is rebuilt rather than mutated: its address, port or
+        // credential may all have changed, and its sender thread holds an open
+        // connection to whatever it used to be.
+        Remote::Mirror::RemoveTarget(m_editingRowId);
+    } else {
+        list.push_back(e);
+    }
+    Remote::SaveRemotes(list);
+
+    // Reconnected only if it was connected before the edit — saving a change is
+    // not a request to start driving something that was sitting idle.
+    (void) Remote::Mirror::AddTarget(e.name, e.host, e.port, e.password,
+                                     e.exePath, wasConnecting);
+
+    const bool wasEdit = !oldName.empty();
+    m_editingRowId = 0;
+    // The form is cleared: it described a remote that now exists as a row, and
+    // leaving it filled in invites adding the same one twice.
+    m_newName.clear();
+    m_newPassword.clear();
+    m_newExe.clear();
+
+    BuildFields();
+    Rebuild();
+    m_status = wasEdit ? (L"Updated \"" + e.name + L"\"")
+                       : (L"Saved \"" + e.name + L"\" — press Connect to reach it");
+    Repaint();
+}
+
+void RemotesWnd::DoToggleConnect(int row) {
+    if (row < 0 || row >= static_cast<int>(m_rows.size())) return;
+    const RowView &r = m_rows[row];
+
+    const bool on = !r.connecting;
+    const std::wstring name = r.name; // Rebuild() invalidates the row
+    Remote::Mirror::SetConnecting(r.id, on);
+
+    // The outcome arrives on the sender thread; the poll timer brings it into
+    // view. Saying what was ASKED for, rather than claiming a result that has
+    // not happened yet.
+    m_status = on ? (L"Connecting to " + name + L"…")
+                  : (L"Disconnected from " + name);
+    Rebuild();
+    if (on) SetTimer(GetHwnd(), TIMER_PENDING, PENDING_DELAY_MS, nullptr);
+    Repaint();
+}
+
+void RemotesWnd::DoConnectAll(bool on) {
+    Remote::Mirror::SetConnectingAll(on);
+    m_status = on ? (L"Connecting to " + std::to_wstring(m_rows.size()) + L" remote(s)…")
+                  : L"Disconnected from every remote";
+    Rebuild();
+    if (on) SetTimer(GetHwnd(), TIMER_PENDING, PENDING_DELAY_MS, nullptr);
+    Repaint();
+}
+
+void RemotesWnd::DoImportFromFile() {
+    if (m_editingField >= 0) CommitTextEdit();
+
+    // Both halves of the pair are offered, because either identifies the
+    // instance: the .ini holds the settings, the .exe sits beside it, and
+    // ImportFromInstanceFile finds the other from whichever was picked.
+    PushTopmostOff();
+    std::wstring chosen;
+    {
+        IFileOpenDialog *pfd = nullptr;
+        if (SUCCEEDED(CoCreateInstance(CLSID_FileOpenDialog, nullptr,
+                                       CLSCTX_INPROC_SERVER, IID_PPV_ARGS(&pfd))) && pfd) {
+            COMDLG_FILTERSPEC filters[] = {
+                {L"qIV instance (*.ini; *.exe)", L"*.ini;*.exe"},
+                {L"Settings file (*.ini)",       L"*.ini"},
+                {L"Program (*.exe)",             L"*.exe"},
+            };
+            pfd->SetFileTypes(ARRAYSIZE(filters), filters);
+            DWORD opts = 0;
+            pfd->GetOptions(&opts);
+            pfd->SetOptions(opts | FOS_FILEMUSTEXIST);
+            if (SUCCEEDED(pfd->Show(GetHwnd()))) {
+                IShellItem *psi = nullptr;
+                if (SUCCEEDED(pfd->GetResult(&psi)) && psi) {
+                    PWSTR path = nullptr;
+                    if (SUCCEEDED(psi->GetDisplayName(SIGDN_FILESYSPATH, &path))) {
+                        chosen = path;
+                        CoTaskMemFree(path);
+                    }
+                    psi->Release();
+                }
+            }
+            pfd->Release();
+        }
+    }
+    PopTopmost();
+    if (chosen.empty()) return;
+
+    Remote::RemoteEntry e;
+    std::wstring problem, warning;
+    if (!Remote::ImportFromInstanceFile(chosen, e, problem, warning)) {
+        DialogMessage(problem, L"Add from file");
+        return;
+    }
+
+    // Warnings describe something at the OTHER end that will stop the
+    // connection completing — a disabled listener, an AllowList that excludes
+    // this machine. Both are invisible from outside: the attempt would simply
+    // time out. Offered as a choice rather than a refusal, because the user may
+    // be about to go and fix it, or may want the row recorded either way.
+    if (!warning.empty()) {
+        if (!DialogConfirm(L"Imported " + e.name + L" — but it will not answer yet.\r\n\r\n" +
+                           warning + L"\r\n\r\nFill the form in anyway?",
+                           L"Add from file"))
+            return;
+    }
+
+    // An import describes a NEW remote, so it leaves any row being edited alone
+    // rather than quietly overwriting it.
+    m_editingRowId = 0;
+    m_newHost      = e.host;
+    m_newPort      = e.port;
+    m_newName      = e.name;
+    m_newExe       = e.exePath;
+    m_newPassword  = e.password; // may be a "secret:" field — never displayed
+
+    BuildFields();
+    m_status = e.password.empty()
+                   ? (L"Imported " + e.name + L" — press Connect && Save")
+                   : (L"Imported " + e.name + L" with its credentials — press Connect && Save");
+    Repaint();
+}
+
 void RemotesWnd::DoPollAll() {
     Remote::Mirror::PingAll();
     m_status = L"Polling…";
@@ -183,24 +584,6 @@ void RemotesWnd::DoPollAll() {
     // view without this function ever waiting for one.
     SetTimer(GetHwnd(), TIMER_PENDING, PENDING_DELAY_MS, nullptr);
     Repaint();
-}
-
-void RemotesWnd::DoAddTarget() {
-    // Adding happens in F9, not here.
-    //
-    // F9 already IS the form: address, port and password with a Check
-    // Connection button that proves them before anything is stored. Duplicating
-    // those three fields in this window would mean two places to type the same
-    // thing and two places for them to disagree — and, more to the point, a
-    // remote is only worth recording once it has been shown to answer. F9
-    // writes the row to qivRemotes.ini on a successful check; this console then
-    // owns it from then on.
-    DialogMessage(L"Remotes are added from the Remote Control panel (F9).\r\n\r\n"
-                  L"Fill in the target address, port and password there and press "
-                  L"Check Connection. Once it answers, it is written to\r\n\r\n"
-                  L"    " + Remote::RemotesFilePath() + L"\r\n\r\n"
-                  L"and appears here from then on.",
-                  L"Remotes");
 }
 
 void RemotesWnd::DoRemoveTarget(int row) {
@@ -213,9 +596,15 @@ void RemotesWnd::DoRemoveTarget(int row) {
                        L"Remotes"))
         return;
 
+    const bool wasEditing = (r.id == m_editingRowId);
+
     Remote::Mirror::RemoveTarget(r.id);
     Rebuild();
     PersistRows();
+
+    // The form was describing the row that no longer exists — saving it would
+    // silently re-create what was just removed.
+    if (wasEditing) DoNewEntry();
     Repaint();
 }
 
@@ -223,11 +612,10 @@ void RemotesWnd::DoStartTarget(int row) {
     if (row < 0 || row >= static_cast<int>(m_rows.size())) return;
     RowView &r = m_rows[row];
 
-    // CreateProcess starts a process on THIS machine. There is no way to launch
-    // one on another box without something already running there to ask, so for
-    // a remote row the button has nothing it can do — say that rather than
-    // starting a second copy of the viewer here, which is what the naive version
-    // would do.
+    // CreateProcess starts a process on THIS machine. Nothing here can launch
+    // one elsewhere without an agent already running there, so for a remote row
+    // the button has nothing it can do — say so rather than starting a second
+    // copy of the viewer here, which is what the naive version would do.
     if (!r.sameMachine) {
         DialogMessage(r.name + L" is on another machine.\r\n\r\n"
                       L"It can only be started at that machine — nothing here can "
@@ -239,8 +627,19 @@ void RemotesWnd::DoStartTarget(int row) {
 
     if (r.exePath.empty()) {
         DialogMessage(L"No exe recorded for this remote, so there is nothing to "
-                      L"launch.\r\n\r\nRemove and re-add it with the exe path to "
-                      L"enable the start button.", L"Remotes");
+                      L"launch.\r\n\r\nRemove it and add it again with the exe "
+                      L"path filled in to enable the start button.", L"Remotes");
+        return;
+    }
+
+    // Re-checked at the moment of use, not only when the list was built: a
+    // console can sit open for a long time, and the file may have gone in
+    // between.
+    if (GetFileAttributesW(r.exePath.c_str()) == INVALID_FILE_ATTRIBUTES) {
+        DialogMessage(L"That exe is no longer there:\r\n\r\n    " + r.exePath +
+                      L"\r\n\r\nIt has been moved, renamed or deleted. Remove this "
+                      L"row and add it again from the instance's current location.",
+                      L"Remotes");
         return;
     }
 
@@ -248,13 +647,12 @@ void RemotesWnd::DoStartTarget(int row) {
     si.cb = sizeof(si);
     PROCESS_INFORMATION pi{};
 
-    // Non-const buffer: CreateProcessW may write to the command line argument.
+    // Non-const buffer: CreateProcessW may write to the command-line argument.
     std::wstring cmd = L"\"" + r.exePath + L"\"";
     const BOOL ok = CreateProcessW(nullptr, cmd.data(), nullptr, nullptr, FALSE,
                                    0, nullptr, nullptr, &si, &pi);
     if (!ok) {
-        const DWORD err = GetLastError();
-        m_status = L"Launch failed (" + std::to_wstring(err) + L") — " + r.exePath;
+        m_status = L"Launch failed (" + std::to_wstring(GetLastError()) + L") — " + r.exePath;
         Repaint();
         return;
     }
@@ -291,14 +689,14 @@ void RemotesWnd::DoStopTarget(int row) {
 
 void RemotesWnd::DoToggleObserve(int row) {
     if (row < 0 || row >= static_cast<int>(m_rows.size())) return;
-    RowView &r = m_rows[row];
 
-    const bool on = !r.observing;
-    const std::wstring name = r.name; // Rebuild() invalidates `r`
+    const bool on = !m_rows[row].observing;
+    const std::wstring name = m_rows[row].name; // Rebuild() invalidates the row
+    const int id = m_rows[row].id;
 
     // Exclusive: SetObserving clears any other watched row, so the whole list
     // has to be re-read rather than just flipping this one.
-    Remote::Mirror::SetObserving(r.id, on);
+    Remote::Mirror::SetObserving(id, on);
     Rebuild();
 
     m_status = on ? (L"Observing " + name + L" — this viewer now follows it")
@@ -311,15 +709,12 @@ void RemotesWnd::DoSyncAll() {
     // and a toggle applied to a different starting state diverges — this is the
     // cure rather than the prevention, which is the cheaper trade for a set of
     // screens that normally start clean.
+    //
+    // Two spellings: the folder travels only to instances that share this
+    // filesystem. A drive letter means nothing on another machine.
     Remote::Mirror::BroadcastSync(L"sync " + Remote::BuildSyncPayload(true),
                                   L"sync " + Remote::BuildSyncPayload(false));
     m_status = L"Pushed view state to " + std::to_wstring(m_rows.size()) + L" remote(s)";
-    Repaint();
-}
-
-void RemotesWnd::DoSave() {
-    PersistRows();
-    m_status = L"Saved " + Remote::RemotesFilePath();
     Repaint();
 }
 
@@ -399,6 +794,78 @@ void RemotesWnd::DestroyBackBuffer() {
 
 void RemotesWnd::Repaint() { if (GetHwnd()) InvalidateRect(GetHwnd(), nullptr, FALSE); }
 
+void RemotesWnd::ShowTipAt(const RECT &clientRect, const wchar_t *text) {
+    if (!GetHwnd() || !text || !*text) return;
+
+    RECT anchor = clientRect;
+    MapWindowPoints(GetHwnd(), nullptr, reinterpret_cast<POINT *>(&anchor), 2);
+
+    // Below-right of the control rather than under the cursor, so the popup
+    // never sits on top of the thing it is describing.
+    POINT at{anchor.left, anchor.bottom + static_cast<int>(4 * app.dpiScale)};
+    ThemedTooltip::Show(GetHwnd(), text, at, anchor);
+}
+
+void RemotesWnd::UpdateTip(POINT pt) {
+    // ThemedTooltip dismisses itself when the cursor leaves the anchor rect, so
+    // it can be gone without this panel being told. Forget what was shown in
+    // that case, or moving back onto the same control would show nothing.
+    if (!ThemedTooltip::IsVisible()) m_tipOwner = nullptr;
+
+    // One pass over everything hoverable. The identity of the control is used to
+    // suppress re-showing the same popup on every pixel of movement inside it —
+    // ThemedTooltip would happily move the window each time otherwise.
+    const void *owner = nullptr;
+    const wchar_t *text = nullptr;
+    RECT rect{};
+
+    if (const int b = HitTestButton(pt); b >= 0) {
+        owner = &m_buttons[b]; text = m_buttons[b].tip; rect = m_buttons[b].rect;
+    } else if (const int d = HitTestDot(pt); d >= 0) {
+        owner = &m_rows[d].dotRect;
+        rect  = m_rows[d].dotRect;
+        text  = m_rows[d].dot == DotState::Up
+                    ? L"Running. Click to shut this instance down.\nIt exits immediately "
+                      L"without saving its session."
+                    : L"Click to launch this instance's exe.\nOnly possible for an instance "
+                      L"on this machine, and only if an exe was recorded for it.";
+    } else if (const int l = HitTestLink(pt); l >= 0) {
+        owner = &m_rows[l].linkRect;
+        rect  = m_rows[l].linkRect;
+        text  = m_rows[l].connecting
+                    ? L"Connected, or trying to be. Click to disconnect.\nThe row stays in "
+                      L"the list."
+                    : L"Listed but not dialled. Click to connect.\nBeing in the list does "
+                      L"not mean being connected to.";
+    } else if (const int e = HitTestEye(pt); e >= 0) {
+        owner = &m_rows[e].eyeRect;
+        rect  = m_rows[e].eyeRect;
+        text  = m_rows[e].observing
+                    ? L"Watching this instance — it reports what it does and this viewer "
+                      L"follows along. Click to stop."
+                    : L"Click to WATCH this instance: it reports what it does and this "
+                      L"viewer follows along, which is how you see a screen running its own "
+                      L"slideshow.\nOnly one at a time — this switches the others off.";
+    } else if (const int f = HitTestField(pt); f >= 0) {
+        owner = &m_fields[f]; text = m_fields[f].desc; rect = m_fields[f].rect;
+    }
+
+    if (!text || !*text) {
+        if (m_tipOwner) { ThemedTooltip::Hide(); m_tipOwner = nullptr; }
+        return;
+    }
+    if (owner == m_tipOwner) return;
+
+    m_tipOwner = owner;
+    ShowTipAt(rect, text);
+}
+
+int RemotesWnd::HitTestField(POINT pt) const {
+    for (size_t i = 0; i < m_fields.size(); ++i)
+        if (PtInRect(&m_fields[i].rect, pt)) return static_cast<int>(i);
+    return -1;
+}
+
 int RemotesWnd::HitTestRow(POINT pt) const {
     for (size_t i = 0; i < m_rows.size(); ++i)
         if (PtInRect(&m_rows[i].rect, pt)) return static_cast<int>(i);
@@ -408,6 +875,12 @@ int RemotesWnd::HitTestRow(POINT pt) const {
 int RemotesWnd::HitTestDot(POINT pt) const {
     for (size_t i = 0; i < m_rows.size(); ++i)
         if (PtInRect(&m_rows[i].dotRect, pt)) return static_cast<int>(i);
+    return -1;
+}
+
+int RemotesWnd::HitTestLink(POINT pt) const {
+    for (size_t i = 0; i < m_rows.size(); ++i)
+        if (PtInRect(&m_rows[i].linkRect, pt)) return static_cast<int>(i);
     return -1;
 }
 
@@ -428,24 +901,42 @@ int RemotesWnd::HitTestButton(POINT pt) const {
 // Keyboard
 // =============================================================================
 bool RemotesWnd::OnKeyDown(WPARAM vk, bool, bool, bool) {
+    // Enter/Escape are handled BEFORE delegating: InputBox has no notion of
+    // committing to a host, so the panel owns those two.
+    if (m_editingField >= 0) {
+        if (vk == VK_RETURN) { CommitTextEdit(); return true; }
+        if (vk == VK_ESCAPE) { CancelTextEdit(); return true; }
+        const InputResult r = m_edit.RouteKey(vk, GetHwnd());
+        if (r != InputResult::Ignored) {
+            if (r == InputResult::ConsumedRepaint) Repaint();
+            return true;
+        }
+        return false;
+    }
+
     switch (vk) {
+        // Arrow keys load the row too, so keyboard and mouse browsing behave the
+        // same — landing on a row means looking at it.
         case VK_UP:
-            if (m_selected > 0) { --m_selected; Repaint(); }
+            if (m_selectedRow > 0) { --m_selectedRow; FillFormFromRow(m_selectedRow); }
             return true;
         case VK_DOWN:
-            if (m_selected + 1 < static_cast<int>(m_rows.size())) { ++m_selected; Repaint(); }
+            if (m_selectedRow + 1 < static_cast<int>(m_rows.size())) {
+                ++m_selectedRow;
+                FillFormFromRow(m_selectedRow);
+            }
             return true;
         case VK_F5:
             DoPollAll();
             return true;
         case VK_DELETE:
-            DoRemoveTarget(m_selected);
+            DoRemoveTarget(m_selectedRow);
             return true;
         case VK_RETURN:
             // Enter on a row does the dot's job: bring it up, or take it down.
-            if (m_selected < static_cast<int>(m_rows.size())) {
-                if (m_rows[m_selected].dot == DotState::Up) DoStopTarget(m_selected);
-                else                                        DoStartTarget(m_selected);
+            if (m_selectedRow < static_cast<int>(m_rows.size())) {
+                if (m_rows[m_selectedRow].dot == DotState::Up) DoStopTarget(m_selectedRow);
+                else                                           DoStartTarget(m_selectedRow);
             }
             return true;
         default:
@@ -454,7 +945,12 @@ bool RemotesWnd::OnKeyDown(WPARAM vk, bool, bool, bool) {
     return false; // unhandled keys go to the app pipeline, per FloatingPanelWnd
 }
 
-bool RemotesWnd::OnLocalHide() { return false; } // nothing to clear — Esc closes
+bool RemotesWnd::OnLocalHide() {
+    // Esc while editing abandons the edit rather than closing the panel — the
+    // same rule the other panels' input fields follow.
+    if (m_editingField >= 0) { CancelTextEdit(); return true; }
+    return false;
+}
 
 // =============================================================================
 // Message handling
@@ -468,7 +964,6 @@ LRESULT RemotesWnd::HandlePanelMessage(UINT message, WPARAM wParam, LPARAM lPara
                 // sender threads what actually happened.
                 Remote::Mirror::PingAll();
                 Rebuild();
-                m_status.clear();
                 Repaint();
             }
             return 0;
@@ -478,7 +973,8 @@ LRESULT RemotesWnd::HandlePanelMessage(UINT message, WPARAM wParam, LPARAM lPara
             POINT pt; GetCursorPos(&pt);
             ScreenToClient(GetHwnd(), &pt);
             const bool hot = HitTestButton(pt) >= 0 || HitTestDot(pt) >= 0 ||
-                             HitTestEye(pt) >= 0 || HitTestRow(pt) >= 0;
+                             HitTestLink(pt) >= 0 || HitTestEye(pt) >= 0 ||
+                             HitTestRow(pt) >= 0 || HitTestField(pt) >= 0;
             SetCursor(hot ? Constants::Cursors::CURR_CLICK
                           : Constants::Cursors::CURR_DEFAULT);
             return TRUE;
@@ -492,6 +988,7 @@ LRESULT RemotesWnd::HandlePanelMessage(UINT message, WPARAM wParam, LPARAM lPara
                 m_hotRow = r; m_hotButton = b;
                 Repaint();
             }
+            UpdateTip(pt);
             return 0;
         }
 
@@ -502,35 +999,69 @@ LRESULT RemotesWnd::HandlePanelMessage(UINT message, WPARAM wParam, LPARAM lPara
             const int b = HitTestButton(pt);
             if (b >= 0) {
                 switch (m_buttons[b].id) {
-                    case BTN_ADD:      DoAddTarget();               break;
-                    case BTN_POLL:     DoPollAll();                 break;
-                    case BTN_SYNC_ALL: DoSyncAll();                 break;
-                    case BTN_REMOVE:   DoRemoveTarget(m_selected);  break;
-                    case BTN_SAVE:     DoSave();                    break;
+                    case BTN_SAVE:           DoSaveEntry();               break;
+                    case BTN_NEW:            DoNewEntry();                break;
+                    case BTN_IMPORT:         DoImportFromFile();          break;
+                    case BTN_CONNECT_ALL:    DoConnectAll(true);          break;
+                    case BTN_DISCONNECT_ALL: DoConnectAll(false);         break;
+                    case BTN_POLL:           DoPollAll();                 break;
+                    case BTN_SYNC_ALL:       DoSyncAll();                 break;
+                    case BTN_REMOVE:         DoRemoveTarget(m_selectedRow); break;
                     default: break;
                 }
                 return 0;
             }
 
-            // The dot and the eye are checked before the row, so clicking either
-            // performs its action rather than merely selecting the line.
+            const int f = HitTestField(pt);
+            if (f >= 0) {
+                if (m_editingField >= 0 && m_editingField != f) CommitTextEdit();
+                m_selectedField = f;
+                EditField(f);
+                return 0;
+            }
+
+            // The three action cells are checked before the row, so clicking any
+            // of them performs its action rather than merely selecting the line
+            // and loading it into the form.
             const int dot = HitTestDot(pt);
             if (dot >= 0) {
-                m_selected = dot;
+                m_selectedRow = dot;
                 if (m_rows[dot].dot == DotState::Up) DoStopTarget(dot);
                 else                                 DoStartTarget(dot);
                 return 0;
             }
 
+            const int link = HitTestLink(pt);
+            if (link >= 0) {
+                m_selectedRow = link;
+                DoToggleConnect(link);
+                return 0;
+            }
+
             const int eye = HitTestEye(pt);
             if (eye >= 0) {
-                m_selected = eye;
+                m_selectedRow = eye;
                 DoToggleObserve(eye);
                 return 0;
             }
 
+            // Clicking a row selects it AND loads it into the form above, so a
+            // saved remote is corrected in place instead of being removed and
+            // retyped. The dot and the eye were tested first, so this is a click
+            // on the row proper.
             const int row = HitTestRow(pt);
-            if (row >= 0) { m_selected = row; Repaint(); }
+            if (row >= 0) {
+                m_selectedRow = row;
+                FillFormFromRow(row);
+            }
+            return 0;
+        }
+
+        case WM_CHAR: {
+            if (m_editingField >= 0) {
+                m_edit.RouteChar(static_cast<wchar_t>(wParam), GetHwnd());
+                Repaint();
+            }
             return 0;
         }
 
@@ -552,23 +1083,16 @@ LRESULT RemotesWnd::HandlePanelMessage(UINT message, WPARAM wParam, LPARAM lPara
             const COLORREF hotBg = dark ? RGB(48,48,52)    : RGB(232,232,236);
             const COLORREF line  = dark ? RGB(64,64,64)    : RGB(220,220,220);
 
-            HBRUSH bgb = CreateSolidBrush(bg); FillRect(bb, &rc, bgb); DeleteObject(bgb);
+            FillRect(bb, &rc, Gdi::Brush(bg));
             SetBkMode(bb, TRANSPARENT);
 
             const float s   = app.dpiScale;
             const int pad   = static_cast<int>(PAD * s);
             const int rowH  = static_cast<int>(ROW_H * s);
+            const int fldH  = static_cast<int>(FIELD_H * s);
             const int hdrH  = static_cast<int>(HDR_H * s);
             const int btnH  = static_cast<int>(BTN_H * s);
-
-            // Column x-offsets, laid out once so header and rows cannot drift.
-            const int cNum  = pad + static_cast<int>(6  * s);
-            const int cName = pad + static_cast<int>(46 * s);
-            const int cHost = pad + static_cast<int>(220 * s);
-            const int cPort = pad + static_cast<int>(360 * s);
-            const int cLag  = pad + static_cast<int>(430 * s);
-            const int cDot  = pad + static_cast<int>(540 * s);
-            const int cEye  = pad + static_cast<int>(590 * s);
+            const int labelW = static_cast<int>(130 * s);
 
             // ── Title ────────────────────────────────────────────────────────
             SelectObject(bb, m_hFontBold);
@@ -584,39 +1108,91 @@ LRESULT RemotesWnd::HandlePanelMessage(UINT message, WPARAM wParam, LPARAM lPara
                 const std::wstring sub =
                     std::wstring(L"F11 mirror ") + (app.passCommandToRemote ? L"ON" : L"off") +
                     L"   ·   F12 execute here " + (app.resendCommandToCaller ? L"ON" : L"off") +
-                    L"   ·   dot = start/stop, eye = observe, F5 = poll";
+                    L"   ·   ● starts/stops the program · Link connects · ◉ observes · F5 polls";
                 DrawTextW(bb, sub.c_str(), -1, &sr, DT_LEFT | DT_SINGLELINE | DT_END_ELLIPSIS);
             }
 
+            int y = static_cast<int>(TITLE_H * s);
+
+            // ── New connection ───────────────────────────────────────────────
+            SelectObject(bb, m_hFontBold);
+            SetTextColor(bb, PC::HEADER);
+            {
+                RECT hr{pad + static_cast<int>(6 * s), y, W - pad, y + hdrH};
+                DrawTextW(bb, L"New connection", -1, &hr, DT_LEFT | DT_VCENTER | DT_SINGLELINE);
+                RECT st{pad, y + hdrH / 4, pad + static_cast<int>(3 * s), y + hdrH * 3 / 4};
+                FillRect(bb, &st, Gdi::Brush(PC::STRIPE));
+            }
+            y += hdrH;
+
+            for (size_t i = 0; i < m_fields.size(); ++i) {
+                Field &f = m_fields[i];
+                f.rect = {pad, y, W - pad, y + fldH};
+
+                if (static_cast<int>(i) == m_selectedField) {
+                    FillRect(bb, &f.rect, Gdi::Brush(selBg));
+                }
+
+                SelectObject(bb, m_hFontBody);
+                SetTextColor(bb, fg);
+                RECT lr{pad + static_cast<int>(6 * s), y, pad + labelW,
+                        y + static_cast<int>(22 * s)};
+                DrawTextW(bb, f.label.c_str(), -1, &lr, DT_LEFT | DT_VCENTER | DT_SINGLELINE);
+
+                RECT vr{pad + labelW, y, W - pad - static_cast<int>(6 * s),
+                        y + static_cast<int>(22 * s)};
+
+                if (m_editingField == static_cast<int>(i)) {
+                    m_edit.Draw(bb, m_hFontBody, vr, static_cast<int>(4 * s),
+                                GetFocus() == GetHwnd());
+                } else {
+                    COLORREF vc = PC::TEXT;
+                    if (f.id == F_PORT) vc = PC::NUMBER;
+                    else if (f.id == F_HOST || f.id == F_EXE) vc = PC::PATH;
+                    if (f.value == L"(not set)" || f.value == L"(none)" ||
+                        f.value == L"(from its banner)") vc = PC::WARN;
+                    SetTextColor(bb, vc);
+                    DrawTextW(bb, f.value.c_str(), -1, &vr,
+                              DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_PATH_ELLIPSIS);
+                }
+
+                SelectObject(bb, m_hFontSmall);
+                SetTextColor(bb, dim);
+                RECT dr{pad + static_cast<int>(6 * s), y + static_cast<int>(21 * s),
+                        W - pad, y + fldH};
+                DrawTextW(bb, f.desc, -1, &dr, DT_LEFT | DT_SINGLELINE | DT_END_ELLIPSIS);
+
+                y += fldH;
+            }
+
             // ── Buttons ──────────────────────────────────────────────────────
+            y += static_cast<int>(6 * s);
             {
                 const int gap   = static_cast<int>(BTN_GAP * s);
                 const int count = static_cast<int>(m_buttons.size());
                 const int total = W - pad * 2 - gap * (count - 1);
                 const int bw    = total / count;
                 int x = pad;
-                const int y = static_cast<int>(TITLE_H * s);
 
                 SelectObject(bb, m_hFontBody);
                 for (Button &btn : m_buttons) {
                     btn.rect = {x, y, x + bw, y + btnH};
                     const int myIndex = static_cast<int>(&btn - m_buttons.data());
-                    COLORREF base = PC::BTN_MAIN;
+                    // Save is the form's affirmative action and gets the accent;
+                    // everything else acts on the list and stays uniform.
+                    COLORREF base = (btn.id == BTN_SAVE) ? PC::BTN_ALT : PC::BTN_MAIN;
                     if (!btn.enabled) base = bg;
                     else if (myIndex == m_hotButton)
                         base = RGB(std::min(255, GetRValue(base) + 40),
                                    std::min(255, GetGValue(base) + 40),
                                    std::min(255, GetBValue(base) + 40));
 
-                    HBRUSH bbr = CreateSolidBrush(base);
-                    FillRect(bb, &btn.rect, bbr);
-                    DeleteObject(bbr);
+                    FillRect(bb, &btn.rect, Gdi::Brush(base));
 
-                    HPEN pen = CreatePen(PS_SOLID, 1, line);
-                    HGDIOBJ op = SelectObject(bb, pen);
+                    HGDIOBJ op = SelectObject(bb, Gdi::Pen(line));
                     HGDIOBJ ob = SelectObject(bb, GetStockObject(NULL_BRUSH));
                     Rectangle(bb, btn.rect.left, btn.rect.top, btn.rect.right, btn.rect.bottom);
-                    SelectObject(bb, ob); SelectObject(bb, op); DeleteObject(pen);
+                    SelectObject(bb, ob); SelectObject(bb, op);
 
                     SetTextColor(bb, btn.enabled ? RGB(245,245,245) : dim);
                     RECT lr = btn.rect;
@@ -625,10 +1201,18 @@ LRESULT RemotesWnd::HandlePanelMessage(UINT message, WPARAM wParam, LPARAM lPara
                     x += bw + gap;
                 }
             }
+            y += btnH + static_cast<int>(12 * s);
 
-            int y = static_cast<int>(TITLE_H * s) + btnH + static_cast<int>(12 * s);
+            // ── Remotes ──────────────────────────────────────────────────────
+            const int cNum  = pad + static_cast<int>(6   * s);
+            const int cName = pad + static_cast<int>(46  * s);
+            const int cHost = pad + static_cast<int>(250 * s);
+            const int cPort = pad + static_cast<int>(420 * s);
+            const int cLag  = pad + static_cast<int>(490 * s);
+            const int cDot  = pad + static_cast<int>(645 * s);
+            const int cLink = pad + static_cast<int>(705 * s);
+            const int cEye  = pad + static_cast<int>(790 * s);
 
-            // ── Column header ────────────────────────────────────────────────
             SelectObject(bb, m_hFontSmall);
             SetTextColor(bb, PC::HEADER);
             {
@@ -638,26 +1222,26 @@ LRESULT RemotesWnd::HandlePanelMessage(UINT message, WPARAM wParam, LPARAM lPara
                 };
                 hdr(cNum, L"#"); hdr(cName, L"Name"); hdr(cHost, L"Address");
                 hdr(cPort, L"Port"); hdr(cLag, L"Lag"); hdr(cDot, L"Up");
-                hdr(cEye, L"Watch");
+                hdr(cLink, L"Link"); hdr(cEye, L"Watch");
             }
             y += hdrH;
 
-            HPEN hp = CreatePen(PS_SOLID, 1, line);
-            HGDIOBJ ohp = SelectObject(bb, hp);
-            MoveToEx(bb, pad, y, nullptr);
-            LineTo(bb, W - pad, y);
-            SelectObject(bb, ohp); DeleteObject(hp);
+            {
+                HGDIOBJ ohp = SelectObject(bb, Gdi::Pen(line));
+                MoveToEx(bb, pad, y, nullptr);
+                LineTo(bb, W - pad, y);
+                SelectObject(bb, ohp);
+            }
 
-            // ── Rows ─────────────────────────────────────────────────────────
             if (m_rows.empty()) {
                 SelectObject(bb, m_hFontBody);
                 SetTextColor(bb, dim);
-                RECT er{pad, y + static_cast<int>(20 * s), W - pad,
-                        y + static_cast<int>(80 * s)};
+                RECT er{pad, y + static_cast<int>(16 * s), W - pad,
+                        y + static_cast<int>(70 * s)};
                 DrawTextW(bb,
-                          L"No remotes yet.\r\n\r\n"
-                          L"Press Add, give it the address and port the other instance "
-                          L"listens on, and it is remembered from then on.",
+                          L"No remotes yet. Fill in the address, port and name above and "
+                          L"press Save — or Add from file… to read them out of that "
+                          L"instance's own settings. Connect is a separate press.",
                           -1, &er, DT_LEFT | DT_WORDBREAK);
             }
 
@@ -665,12 +1249,9 @@ LRESULT RemotesWnd::HandlePanelMessage(UINT message, WPARAM wParam, LPARAM lPara
                 RowView &r = m_rows[i];
                 r.rect = {pad, y, W - pad, y + rowH};
 
-                if (static_cast<int>(i) == m_selected || static_cast<int>(i) == m_hotRow) {
-                    HBRUSH hb = CreateSolidBrush(
-                        static_cast<int>(i) == m_selected ? selBg : hotBg);
-                    FillRect(bb, &r.rect, hb);
-                    DeleteObject(hb);
-                }
+                if (static_cast<int>(i) == m_selectedRow || static_cast<int>(i) == m_hotRow)
+                    FillRect(bb, &r.rect,
+                             Gdi::Brush(static_cast<int>(i) == m_selectedRow ? selBg : hotBg));
 
                 SelectObject(bb, m_hFontBody);
                 auto cell = [&](int x, const std::wstring &t, COLORREF c) {
@@ -684,35 +1265,57 @@ LRESULT RemotesWnd::HandlePanelMessage(UINT message, WPARAM wParam, LPARAM lPara
                 cell(cName, r.name,                 PC::TEXT);
                 // A remote row is marked, because it behaves differently: it
                 // gets the portable command set, its start button cannot work,
-                // and it will show a different picture than this screen. Seeing
-                // that in the list beats discovering it from behaviour.
+                // and it will show different pictures than this screen.
                 cell(cHost, r.sameMachine ? r.host : (r.host + L"  (remote)"),
                      r.sameMachine ? PC::PATH : PC::CHOICE);
-                cell(cPort, std::to_wstring(r.port),PC::NUMBER);
-                cell(cLag,  FormatLag(r.lagUs),
-                     r.dot == DotState::Up ? PC::NUMBER : dim);
+                cell(cPort, std::to_wstring(r.port), PC::NUMBER);
+
+                // Connected: the round trip. Not connected: WHY not, in a word.
+                // A dash tells you nothing you could not already see from the
+                // dot, and this is the column with room for it.
+                if (r.dot == DotState::Up) {
+                    cell(cLag, FormatLag(r.lagUs), PC::NUMBER);
+                } else if (r.dot == DotState::Pending) {
+                    cell(cLag, L"…", PC::WARN);
+                } else if (r.dot == DotState::Idle) {
+                    cell(cLag, L"not connected", dim);
+                } else {
+                    cell(cLag, Remote::Mirror::DownLabel(r.down),
+                         r.down == Remote::Mirror::Down::Offline ? dim : PC::WARN);
+                }
 
                 // ● — the state and the button in one. Amber means an action is
                 // in flight, so a click is acknowledged before the re-poll
                 // confirms it.
-                const int dotR = static_cast<int>(6 * s);
+                const int dotR  = static_cast<int>(6 * s);
                 const int dotCY = y + rowH / 2;
                 r.dotRect = {cDot - dotR * 2, dotCY - dotR * 2,
                              cDot + dotR * 2, dotCY + dotR * 2};
                 {
-                    const COLORREF dc2 = (r.dot == DotState::Up)      ? PC::ON
-                                       : (r.dot == DotState::Pending) ? PC::WARN
-                                                                      : PC::OFF;
-                    HBRUSH db = CreateSolidBrush(dc2);
-                    HPEN   dp = CreatePen(PS_SOLID, 1, line);
-                    HGDIOBJ ob2 = SelectObject(bb, db);
-                    HGDIOBJ op2 = SelectObject(bb, dp);
+                    const COLORREF dotColour = (r.dot == DotState::Up)      ? PC::ON
+                                             : (r.dot == DotState::Pending) ? PC::WARN
+                                             : (r.dot == DotState::Idle)    ? dim
+                                                                            : PC::OFF;
+                    HGDIOBJ ob2 = SelectObject(bb, Gdi::Brush(dotColour));
+                    HGDIOBJ op2 = SelectObject(bb, Gdi::Pen(line));
                     Ellipse(bb, cDot - dotR, dotCY - dotR, cDot + dotR, dotCY + dotR);
                     SelectObject(bb, ob2); SelectObject(bb, op2);
-                    DeleteObject(db); DeleteObject(dp);
                 }
 
-                // 👁 — drawn as text so it follows the theme and needs no assets.
+                // Link — connect / disconnect THIS row. Words rather than a
+                // glyph: it sits beside two circles that already mean other
+                // things, and "on/off" cannot be confused with either.
+                r.linkRect = {cLink - static_cast<int>(6 * s), y,
+                              cLink + static_cast<int>(44 * s), y + rowH};
+                {
+                    SetTextColor(bb, r.connecting ? PC::ON : dim);
+                    RECT lkr = r.linkRect;
+                    DrawTextW(bb, r.connecting ? L"on" : L"off", -1, &lkr,
+                              DT_CENTER | DT_VCENTER | DT_SINGLELINE);
+                }
+
+                // Observation — drawn as text so it follows the theme and needs
+                // no assets. Filled when watched, hollow when not.
                 r.eyeRect = {cEye - static_cast<int>(12 * s), y,
                              cEye + static_cast<int>(20 * s), y + rowH};
                 {
@@ -728,17 +1331,25 @@ LRESULT RemotesWnd::HandlePanelMessage(UINT message, WPARAM wParam, LPARAM lPara
             // ── Footer ───────────────────────────────────────────────────────
             {
                 const int fy = H - static_cast<int>(FOOTER_H * s);
-                HPEN pen = CreatePen(PS_SOLID, 1, line);
-                HGDIOBJ op = SelectObject(bb, pen);
+                HGDIOBJ op = SelectObject(bb, Gdi::Pen(line));
                 MoveToEx(bb, pad, fy - static_cast<int>(4 * s), nullptr);
                 LineTo(bb, W - pad, fy - static_cast<int>(4 * s));
-                SelectObject(bb, op); DeleteObject(pen);
+                SelectObject(bb, op);
 
-                // A row that is down usually knows WHY, and "could not connect"
-                // beside a red dot saves a round of guessing.
+                // A row that is down knows WHY, and what to do about it. The
+                // list column has room for one word; this has room for the
+                // sentence that makes the word actionable.
                 std::wstring foot = m_status;
-                if (foot.empty() && m_selected < static_cast<int>(m_rows.size()))
-                    foot = m_rows[m_selected].lastError;
+                if (foot.empty() && m_selectedRow < static_cast<int>(m_rows.size())) {
+                    const RowView &sel = m_rows[m_selectedRow];
+                    if (sel.exeMissing) {
+                        foot = L"Exe not found — " + sel.exePath +
+                               L"   ·   moved or deleted, so the dot cannot start it";
+                    } else if (sel.dot == DotState::Down) {
+                        foot = Remote::Mirror::DownRemedy(sel.down);
+                        if (foot.empty()) foot = sel.lastError;
+                    }
+                }
 
                 SelectObject(bb, m_hFontSmall);
                 SetTextColor(bb, dim);

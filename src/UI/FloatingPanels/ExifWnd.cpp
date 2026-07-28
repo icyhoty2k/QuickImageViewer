@@ -1,4 +1,5 @@
 #include "ExifWnd.h"
+#include "UI/GdiPool.h" // pooled brushes and pens — never DeleteObject them
 #include "../../GeoNames.h"
 #include "../../Platform/Constants.h"
 #include "../../Platform/ConstantsTheme.h"
@@ -653,9 +654,7 @@ namespace UI {
                         Constants::Theme::ExifWindow::SCROLLBAR_TRACK_G,
                         Constants::Theme::ExifWindow::SCROLLBAR_TRACK_B, app.themeFactor);
 
-                HBRUSH hBg = CreateSolidBrush(clrBg);
-                FillRect(hdc, &rc, hBg);
-                DeleteObject(hBg);
+                FillRect(hdc, &rc, UI::Gdi::Brush(clrBg));
 
                 SetBkMode(hdc, TRANSPARENT);
 
@@ -703,7 +702,7 @@ namespace UI {
 
                 // Draw selection highlights before text (same hover color as HistoryListWnd)
                 if (!m_selectedRows.empty()) {
-                    HBRUSH hSel = CreateSolidBrush(RGB(40, 60, 80));
+                    HBRUSH hSel = UI::Gdi::Brush(RGB(40, 60, 80));
                     int hy = cTop - m_scrollOffsetY;
                     for (int i = 0; i < static_cast<int>(m_rows.size()); ++i) {
                         const int hh = m_rows[i].isSection ? (sectH + gap) : rowH;
@@ -713,7 +712,6 @@ namespace UI {
                         }
                         hy += hh;
                     }
-                    DeleteObject(hSel);
                 }
 
                 // Pre-scan FILE section bounds for right-side thumbnail positioning
@@ -775,9 +773,7 @@ namespace UI {
                     if (row.isSection) {
                         inFileSection = (row.label == L"FILE");
                         RECT sr = {0, y, rc.right, y + sectH};
-                        HBRUSH hSBr = CreateSolidBrush(clrSBg);
-                        FillRect(hdc, &sr, hSBr);
-                        DeleteObject(hSBr);
+                        FillRect(hdc, &sr, UI::Gdi::Brush(clrSBg));
 
                         SelectObject(hdc, m_hFontBold);
                         SetTextColor(hdc, clrSect);
@@ -809,18 +805,14 @@ namespace UI {
                     const int thH = std::max(MulDiv(20, dpi, 96), (cH * cH) / m_totalContentHeight);
                     const int thY = cTop + (cH - thH) * m_scrollOffsetY / maxScroll;
 
-                    HBRUSH hTrBr = CreateSolidBrush(clrSBg);
                     RECT trRc = {sbX, cTop, sbX + sbW, cBot};
-                    FillRect(hdc, &trRc, hTrBr);
-                    DeleteObject(hTrBr);
+                    FillRect(hdc, &trRc, UI::Gdi::Brush(clrSBg));
 
-                    HBRUSH hThBr = CreateSolidBrush(Constants::Theme::ThemedColor(
+                    RECT thRc = {sbX, thY, sbX + sbW, thY + thH};
+                    FillRect(hdc, &thRc, UI::Gdi::Brush(Constants::Theme::ThemedColor(
                             Constants::Theme::ExifWindow::SCROLLBAR_THUMB_R,
                             Constants::Theme::ExifWindow::SCROLLBAR_THUMB_G,
-                            Constants::Theme::ExifWindow::SCROLLBAR_THUMB_B, app.themeFactor));
-                    RECT thRc = {sbX, thY, sbX + sbW, thY + thH};
-                    FillRect(hdc, &thRc, hThBr);
-                    DeleteObject(hThBr);
+                            Constants::Theme::ExifWindow::SCROLLBAR_THUMB_B, app.themeFactor)));
                 }
 
                 SelectObject(hdc, hOld);

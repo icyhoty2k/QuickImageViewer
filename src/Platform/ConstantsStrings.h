@@ -263,8 +263,11 @@ namespace Constants::Messages {
     // status line. An enabled server with an empty AllowList refuses every
     // connection — stating that is the difference between a configured refusal
     // and something that merely looks broken.
-    constexpr const wchar_t *REMOTE_BLOCKED_DISABLED       = L"Remote control disabled";
+    constexpr const wchar_t *REMOTE_BLOCKED_DISABLED       = L"Remote server disabled";
     constexpr const wchar_t *REMOTE_BLOCKED_NO_PORT        = L"No port configured";
+    // A name identifies this instance to whoever drives it — see WhyCannotStart.
+    constexpr const wchar_t *REMOTE_BLOCKED_NO_NAME        =
+        L"No name set — a driving instance identifies this one by name";
     constexpr const wchar_t *REMOTE_WARN_EMPTY_ALLOWLIST   = L"AllowList empty — all connections denied";
 
     // Start-up failures. Each names the actual cause: "could not start" with no
@@ -293,6 +296,10 @@ namespace Constants::Messages {
     constexpr const wchar_t *REMOTE_CLIENT_NOT_CONNECTED     = L"Not connected";
     constexpr const wchar_t *REMOTE_CLIENT_SEND_FAILED       = L"Connection lost while sending";
     constexpr const wchar_t *REMOTE_CLIENT_NO_REPLY          = L"No reply from peer";
+    // Imported-credential failures. Distinct from a wrong password, because the
+    // remedy is different: re-import rather than retype.
+    constexpr const wchar_t *REMOTE_CLIENT_BAD_SECRET        = L"Stored credentials are malformed";
+    constexpr const wchar_t *REMOTE_CLIENT_SECRET_STALE      = L"Its password changed since this was imported";
 
     // Viewport lock (Y) — zoom + pan carried across image changes
     constexpr const wchar_t *VIEWPORT_LOCK_ON  = L"Viewport Lock" STR_STATE_ON;
