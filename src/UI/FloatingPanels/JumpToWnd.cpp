@@ -1,4 +1,5 @@
 #include "JumpToWnd.h"
+#include "UI/GdiPool.h" // pooled brushes and pens — never DeleteObject them
 #include "../../AppState.h"
 #include "../../Platform/Constants.h"
 #include "../../Platform/FileHandler.h"
@@ -122,9 +123,7 @@ namespace UI {
                 EnsureBackBuffer(screenDC, rc.right, rc.bottom);
                 HDC hdc = m_bbDC;
 
-                HBRUSH bgBrush = CreateSolidBrush(GetBgColor());
-                FillRect(hdc, &rc, bgBrush);
-                DeleteObject(bgBrush);
+                FillRect(hdc, &rc, UI::Gdi::Brush(GetBgColor()));
                 SetBkMode(hdc, TRANSPARENT);
 
                 const int pad = static_cast<int>(14.0f * app.dpiScale);

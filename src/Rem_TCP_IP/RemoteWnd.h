@@ -12,23 +12,20 @@
 // remote-related belongs together, the same way src/Dedicated keeps its own
 // window beside its own settings.
 //
-// Two halves, because qIV is both ends of this protocol:
+// THIS PANEL DESCRIBES THIS INSTANCE, AND NOTHING ELSE: the listener it runs.
+// Enable, identity, bind address, port, allow/block lists, password, connection
+// cap, and Start / Stop / Save.
 //
-//   SERVER   the listener this instance runs — enable, identity, bind address,
-//            port, allow/block lists, password, connection cap
-//   PEER     another instance to connect OUT to — host, port, password, and a
-//            command to send
+// It used to carry a second section for connecting OUT to another instance, and
+// that was the reason it read badly — one window answering both "what am I" and
+// "what am I talking to", with a form for each. Everything about driving other
+// instances now lives in the Remotes console (F10): the address list, their
+// status, and the form that adds one.
 //
-// -----------------------------------------------------------------------------
-// NOTHING HERE BLOCKS THE UI THREAD.
+// The division is: F9 is what others connect TO, F10 is what this connects to.
 //
-// Check Connection and Send both talk to a remote machine, which may be switched
-// off. Remote::Client bounds every wait, but a bounded stall is still a stall and
-// freezing the viewer for four seconds because a wall screen is unplugged would
-// be unacceptable. Both run on a short-lived worker thread that posts its result
-// back as WM_REMOTE_ASYNC_RESULT, carrying a heap std::wstring this window owns
-// and deletes.
-// -----------------------------------------------------------------------------
+// Nothing here talks to a socket except Start and Stop, both of which are local
+// operations on this instance's own listener and return immediately.
 //
 // Full design record: docs/REMOTE_TCP_IP_SPEC.md
 // =============================================================================
@@ -45,6 +42,7 @@ class RemoteWnd : public FloatingPanelWnd {
             if (m_hFontBody)  DeleteObject(m_hFontBody);
             if (m_hFontBold)  DeleteObject(m_hFontBold);
             if (m_hFontSmall) DeleteObject(m_hFontSmall);
+            if (m_hFontLink)  DeleteObject(m_hFontLink);
             DestroyBackBuffer();
         }
 
@@ -76,20 +74,7 @@ class RemoteWnd : public FloatingPanelWnd {
         // --- Actions ---------------------------------------------------------
         void DoStart();
         void DoStop();
-        void DoCheckConnection();  // probe the PEER, on a worker thread
-        void DoSendToPeer();       // connect, send one command, report the reply
         void DoSaveToIni();        // seeded generation — may create the .ini
-
-        // Shared by the two peer actions: both need a worker so the panel stays
-        // responsive while a dead host times out.
-        void RunAsync(void (*work)(RemoteWnd *self));
-
-        // Writes the current peer into qivRemotes.ini and hands it to
-        // Remote::Mirror, so the F10 console and the next launch both know it.
-        // Called ONLY after a successful Check Connection — see the note at the
-        // WM_REMOTE_ASYNC_RESULT handler on why an unproven address is not
-        // recorded. UI thread.
-        void RememberPeer();
 
         // --- Model -----------------------------------------------------------
         void BuildRows();
@@ -124,32 +109,20 @@ class RemoteWnd : public FloatingPanelWnd {
         int m_hotRow    = -1;
         int m_hotButton = -1;
 
-        // Set by the Check Connection worker, consumed on the UI thread.
-        // A plain bool rather than an atomic: exactly one worker is in flight at
-        // a time and the UI thread only reads it after that worker's message
-        // has arrived, which is itself the synchronisation.
-        bool m_probeSucceeded = false;
-
-        // Peer target. These four are the WORKING fields — what is currently
-        // typed in. They stay out of THIS instance's .ini, which describes the
-        // screen it runs on rather than its neighbours.
-        //
-        // A peer that answers is nevertheless remembered, in the separate
-        // qivRemotes.ini: that file belongs to the DRIVING side and is a list of
-        // machines this copy controls. The original note here said an address
-        // being driven is not part of this instance's configuration — true of a
-        // screen that is driven, and wrong for the one doing the driving, which
-        // needs its list of screens to survive a restart. See RemotesFile.h.
-        std::wstring m_peerHost = L"127.0.0.1";
-        int          m_peerPort = 0;
-        std::wstring m_peerPassword;
-        std::wstring m_peerCommand = L"ping";
-
         // Plaintext only while the user is typing it. Hashed on save and cleared;
         // the panel never redisplays a password it has already stored.
         std::wstring m_newPassword;
 
-        std::wstring m_lastResult; // last async reply or error, shown in the footer
+        std::wstring m_lastResult; // last action's outcome, shown in the footer
+
+        // The file the last Save wrote. Non-empty means the footer carries a
+        // clickable path — the app's link convention (Constants::Links), same as
+        // the Help footer and the History rows.
+        std::wstring m_savedPath;
+        RECT         m_savedLinkRect{}; // hit box, recomputed on every paint
+        bool         m_savedLinkHot = false;
+
+        void RevealSavedFile();
 
         InputBox m_edit;
         int      m_editingRow = -1;
@@ -157,6 +130,7 @@ class RemoteWnd : public FloatingPanelWnd {
         HFONT m_hFontBody  = nullptr;
         HFONT m_hFontBold  = nullptr;
         HFONT m_hFontSmall = nullptr;
+        HFONT m_hFontLink  = nullptr; // small + underline, per Constants::Links
         int   m_cachedFontDpi = 0;
 
         HDC     m_bbDC     = nullptr;

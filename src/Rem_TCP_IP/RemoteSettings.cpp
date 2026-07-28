@@ -66,6 +66,15 @@ Settings &Config() {
         d.bindAddress    = RT::BIND_ADDRESS_DEFAULT;
         d.port           = RT::PORT_UNSET;
         d.maxConnections = RT::MAX_CONNECTIONS_DEFAULT;
+        // Seeded with this machine, so a freshly configured instance is
+        // reachable from the copy beside it without anyone having to discover
+        // that an empty list means "refuse everything".
+        //
+        // A SEED, not a rule: the accept gate gives 127.0.0.1 no special status,
+        // so deleting this entry from the .ini really does lock this machine
+        // out. That is deliberate — a list some addresses could bypass would not
+        // be a list.
+        d.allowList      = { RT::BIND_ADDRESS_DEFAULT };
         return d;
     }();
     return s;
@@ -121,16 +130,29 @@ void Normalize(Settings &s) {
 }
 
 bool SectionExists() {
-    if (!Dedicated::SettingsUseFile()) return false;
+    // Same reasoning as LoadFromIni: the question is whether the section is in
+    // the file, which does not depend on where this process keeps its own
+    // settings.
+    if (!IniExists()) return false;
     // Enable is written by every save, so its presence is a reliable marker that
     // the section has been configured at least once.
     return !Dedicated::ReadSectionString(RT::INI_SECTION, RT::KEY_ENABLE).empty();
 }
 
 void LoadFromIni() {
-    // Registry-backed installs have no .ini at all. Remote control is then
-    // reachable only through command-line switches, by design.
-    if (!Dedicated::SettingsUseFile()) return;
+    // Gated on the FILE EXISTING, not on the app being file-backed.
+    //
+    // SettingsUseFile() answers "where does this process keep its settings",
+    // and it is decided once, at startup, from what was on disk then. Using it
+    // here meant: create the .ini from the F9 panel, reopen the panel, and the
+    // values just written were ignored — because at startup there had been no
+    // file, so the process was registry-backed for the rest of its life and
+    // this function returned immediately. The name typed in came back blank.
+    //
+    // Reading [REMOTE_TCP_IP] out of a file that is plainly sitting there
+    // changes nothing about where anything ELSE is persisted; those two
+    // questions were only ever conflated by this guard.
+    if (!IniExists()) return;
 
     Settings &s = Config();
 
@@ -249,6 +271,16 @@ std::wstring WhyCannotStart(const Settings &s) {
         return Constants::Messages::REMOTE_BLOCKED_DISABLED;
     if (s.port == RT::PORT_UNSET)
         return Constants::Messages::REMOTE_BLOCKED_NO_PORT;
+    // A NAME IS MANDATORY, and not merely for tidiness.
+    //
+    // It is what this instance calls itself in its banner, which is what a
+    // driving instance records as the row's identity — names are how remotes are
+    // told apart, matched across a port change, and referred to in every message
+    // about them. An unnamed instance produces a row nobody can name, so the
+    // requirement belongs here, where it stops the listener from starting,
+    // rather than being discovered at the far end later.
+    if (s.name.empty())
+        return Constants::Messages::REMOTE_BLOCKED_NO_NAME;
     // Not a hard stop — the server binds and listens — but every connection will
     // be refused, so saying nothing here would look exactly like a broken server.
     if (s.allowList.empty())

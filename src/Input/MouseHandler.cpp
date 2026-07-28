@@ -2,7 +2,7 @@
 #include "AppState.h"
 #include "AppCommands.h"
 #include "Command.h"          // every gesture resolves to a Command — see below
-#include "ContextMenuHandler.h"
+#include "UI/AppMenu/AppMenu.h"
 #include "../Platform/Constants.h"
 #include "../Platform/ConstantsStrings.h"
 #include "../Platform/FileHandler.h"
@@ -217,7 +217,7 @@ void MouseHandler::HandleButtonUp(HWND hWnd, UINT message, WPARAM, LPARAM) {
             InvalidateRect(hWnd, nullptr, FALSE);
             POINT scr;
             GetCursorPos(&scr);
-            Input::ContextMenuHandler::Show(hWnd, scr.x, scr.y);
+            UI::AppMenu::Show(hWnd, scr.x, scr.y);
             return;
         }
 

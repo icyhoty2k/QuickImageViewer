@@ -117,6 +117,27 @@ void Client::Disconnect() {
 
 bool Client::Connect(const std::wstring &host, int port,
                      const std::wstring &password, std::wstring &errorOut) {
+    return DoConnect(host, port, password, {}, {}, errorOut);
+}
+
+bool Client::ConnectWithSecret(const std::wstring &host, int port,
+                               const std::wstring &storedSecret,
+                               const std::wstring &storedSalt,
+                               std::wstring &errorOut) {
+    const std::vector<BYTE> secret = Crypto::FromHex(storedSecret);
+    const std::vector<BYTE> salt   = Crypto::FromHex(storedSalt);
+    if (secret.empty() || salt.empty()) {
+        errorOut = Constants::Messages::REMOTE_CLIENT_BAD_SECRET;
+        return false;
+    }
+    return DoConnect(host, port, {}, secret, salt, errorOut);
+}
+
+bool Client::DoConnect(const std::wstring &host, int port,
+                       const std::wstring &password,
+                       const std::vector<BYTE> &presetSecret,
+                       const std::vector<BYTE> &presetSalt,
+                       std::wstring &errorOut) {
     Disconnect();
 
     if (host.empty()) {
@@ -227,15 +248,35 @@ bool Client::Connect(const std::wstring &host, int port,
                 errorOut = Constants::Messages::REMOTE_CLIENT_PROTOCOL_ERROR;
                 return false;
             }
-            if (password.empty()) {
+            if (password.empty() && presetSecret.empty()) {
                 Disconnect();
                 errorOut = Constants::Messages::REMOTE_CLIENT_PASSWORD_REQUIRED;
                 return false;
             }
 
-            // Recompute the same digest the server stores, then HMAC the nonce.
-            // The password itself never goes on the wire.
-            const std::vector<BYTE> secret = Crypto::SecretFromPassword(password, salt);
+            // Two routes to one value. With a password we recompute the digest
+            // the server stores; with a secret imported from that server's own
+            // settings file we already have it.
+            //
+            // The imported form checks the SALT first. A different salt means
+            // the target's password has been changed since the import, so the
+            // stored secret is for a value that no longer exists — worth saying
+            // so, because the exchange would otherwise fail as an ordinary
+            // authentication error and look like the wrong password was typed.
+            std::vector<BYTE> secret;
+            if (!presetSecret.empty()) {
+                if (presetSalt != salt) {
+                    Disconnect();
+                    errorOut = Constants::Messages::REMOTE_CLIENT_SECRET_STALE;
+                    return false;
+                }
+                secret = presetSecret;
+            } else {
+                secret = Crypto::SecretFromPassword(password, salt);
+            }
+
+            // Whichever route produced it, the password itself never goes on
+            // the wire — the answer is an HMAC of the server's own nonce.
             const std::vector<BYTE> answer =
                 Crypto::HmacSha256(secret, nonce.data(), nonce.size());
             if (answer.empty()) {

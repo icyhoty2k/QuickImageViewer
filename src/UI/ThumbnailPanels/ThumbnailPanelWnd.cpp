@@ -1038,6 +1038,12 @@ namespace UI {
             }
 
             // -----------------------------------------------------------------
+            // WM_SYSKEYDOWN as well: F10 pressed alone, and every ALT
+            // combination, arrive as system keys rather than ordinary ones.
+            // Without this the strip swallowed F10 and all of Alt+W/A/S/D,
+            // Alt+Q/E/Z/C and Alt+X whenever it had focus — the same gap
+            // FloatingPanelWnd had, on a different base class.
+            case WM_SYSKEYDOWN:
             case WM_KEYDOWN: {
                 int key = static_cast<int>(wParam);
 
@@ -1147,9 +1153,19 @@ namespace UI {
                     }
                 }
 
-                // Forward unhandled keys to the main window
-                if (m_hOwner) return SendMessageW(m_hOwner, message, wParam, lParam);
-                break;
+                // Forward unhandled keys to the main window, as the SAME message
+                // they arrived as — the main WndProc handles both, and lParam
+                // carries the Alt context bit plus the scancode the resolver
+                // reads for Right Shift.
+                if (m_hOwner) SendMessageW(m_hOwner, message, wParam, lParam);
+
+                // A system key must still reach THIS window's DefWindowProc
+                // afterwards, or Alt+F4 over a thumbnail strip would close the
+                // main window instead of the strip — the forward alone would
+                // hand Alt+F4 to the main window's default handling.
+                if (message == WM_SYSKEYDOWN)
+                    return DefWindowProcW(m_hWnd, message, wParam, lParam);
+                return 0;
             }
 
             // -----------------------------------------------------------------

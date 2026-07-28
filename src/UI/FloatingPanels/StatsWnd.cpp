@@ -1,4 +1,5 @@
 #include "StatsWnd.h"
+#include "UI/GdiPool.h" // pooled brushes and pens — never DeleteObject them
 #include "../../AppState.h"
 #include "../../Platform/Constants.h"
 #include "../../Platform/WriteQueue.h"
@@ -348,9 +349,7 @@ namespace UI {
 
                 // Background
                 COLORREF bgColor = GetBgColor();
-                HBRUSH bgBr = CreateSolidBrush(bgColor);
-                FillRect(hdc, &rc, bgBr);
-                DeleteObject(bgBr);
+                FillRect(hdc, &rc, UI::Gdi::Brush(bgColor));
                 SetBkMode(hdc, TRANSPARENT);
 
                 // ── Metrics ──────────────────────────────────────────────────────────
@@ -457,10 +456,8 @@ namespace UI {
                     y += MulDiv(4, dpi, 96);
                     if (y + sec > 0 && y < rc.bottom) {
                         // Left accent stripe
-                        HBRUSH acBr = CreateSolidBrush(accentColor);
                         RECT strp = {pad, y + MulDiv(2, dpi, 96), pad + MulDiv(3, dpi, 96), y + sec - MulDiv(2, dpi, 96)};
-                        FillRect(hdc, &strp, acBr);
-                        DeleteObject(acBr);
+                        FillRect(hdc, &strp, UI::Gdi::Brush(accentColor));
                         // Title
                         SelectObject(hdc, m_hFontSec);
                         SetTextColor(hdc, accentColor);
@@ -470,12 +467,10 @@ namespace UI {
                     y += sec;
                     // Underline
                     if (y >= 0 && y < rc.bottom) {
-                        HPEN hPen = CreatePen(PS_SOLID, 1, clrSepLine);
-                        HPEN hOldP = static_cast<HPEN>(SelectObject(hdc, hPen));
+                        HPEN hOldP = static_cast<HPEN>(SelectObject(hdc, UI::Gdi::Pen(clrSepLine)));
                         MoveToEx(hdc, pad, y, nullptr);
                         LineTo(hdc, c3, y);
                         SelectObject(hdc, hOldP);
-                        DeleteObject(hPen);
                     }
                     y += gap + MulDiv(2, dpi, 96);
                 };
@@ -497,11 +492,9 @@ namespace UI {
                 auto cacheRow = [&](const CacheFile &e, bool altBg) {
                     if (y + row > 0 && y < rc.bottom) {
                         if (altBg) {
-                            HBRUSH altBr = CreateSolidBrush(
-                                    Constants::Theme::ThemedGray(0.06f, app.themeFactor));
                             RECT rAlt = {pad, y, c3, y + row};
-                            FillRect(hdc, &rAlt, altBr);
-                            DeleteObject(altBr);
+                            FillRect(hdc, &rAlt, UI::Gdi::Brush(
+                                    Constants::Theme::ThemedGray(0.06f, app.themeFactor)));
                         }
                         // Name
                         SelectObject(hdc, m_hFontBody);
@@ -884,15 +877,12 @@ namespace UI {
                     int thumbY = pad + static_cast<int>((trackH - thumbH) * m_scrollOffsetY / maxS);
                     int sX = rc.right - sb;
 
-                    HBRUSH trBr = CreateSolidBrush(clrDim);
                     RECT track = {sX, pad, rc.right - 1, pad + trackH};
-                    FillRect(hdc, &track, trBr);
-                    DeleteObject(trBr);
+                    FillRect(hdc, &track, UI::Gdi::Brush(clrDim));
 
-                    HBRUSH thBr = CreateSolidBrush(Constants::Theme::ThemedGray(0.48f, app.themeFactor));
                     RECT thumb = {sX, thumbY, rc.right - 1, thumbY + thumbH};
-                    FillRect(hdc, &thumb, thBr);
-                    DeleteObject(thBr);
+                    FillRect(hdc, &thumb, UI::Gdi::Brush(
+                            Constants::Theme::ThemedGray(0.48f, app.themeFactor)));
                 }
 
                 SelectObject(hdc, hOld);

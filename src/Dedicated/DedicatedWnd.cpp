@@ -1,4 +1,5 @@
 #include "DedicatedWnd.h"
+#include "UI/GdiPool.h" // pooled brushes and pens — never DeleteObject them
 #include "DedicatedSettings.h"
 #include "DedicatedLists.h"        // list paths + AppendFolder
 #include "SlideshowTransitions.h"  // TransitionDisplayOrder — same order as the menu
@@ -1335,7 +1336,7 @@ LRESULT DedicatedWnd::HandlePanelMessage(UINT message, WPARAM wParam, LPARAM lPa
             const COLORREF line   = dark ? RGB(64,64,64)    : RGB(220,220,220);
             namespace PC = Constants::Dedicated::PanelColors;
 
-            HBRUSH b = CreateSolidBrush(bg); FillRect(bb, &rc, b); DeleteObject(b);
+            FillRect(bb, &rc, UI::Gdi::Brush(bg));
             SetBkMode(bb, TRANSPARENT);
 
             const float s   = app.dpiScale;
@@ -1393,15 +1394,12 @@ LRESULT DedicatedWnd::HandlePanelMessage(UINT message, WPARAM wParam, LPARAM lPa
                                    std::min(255, GetGValue(base) + 40),
                                    std::min(255, GetBValue(base) + 40));
                     }
-                    HBRUSH bb2 = CreateSolidBrush(base);
-                    FillRect(bb, &btn.rect, bb2);
-                    DeleteObject(bb2);
+                    FillRect(bb, &btn.rect, UI::Gdi::Brush(base));
 
-                    HPEN pen = CreatePen(PS_SOLID, 1, line);
-                    HGDIOBJ oldPen = SelectObject(bb, pen);
+                    HGDIOBJ oldPen = SelectObject(bb, UI::Gdi::Pen(line));
                     HGDIOBJ oldBr  = SelectObject(bb, GetStockObject(NULL_BRUSH));
                     Rectangle(bb, btn.rect.left, btn.rect.top, btn.rect.right, btn.rect.bottom);
-                    SelectObject(bb, oldBr); SelectObject(bb, oldPen); DeleteObject(pen);
+                    SelectObject(bb, oldBr); SelectObject(bb, oldPen);
 
                     // Buttons are saturated, so white always reads — using the
                     // theme foreground would vanish on the light theme.
@@ -1441,9 +1439,7 @@ LRESULT DedicatedWnd::HandlePanelMessage(UINT message, WPARAM wParam, LPARAM lPa
                         RECT bar{row.rect.left, row.rect.top + static_cast<int>(10 * s),
                                  row.rect.left + static_cast<int>(3 * s),
                                  row.rect.bottom - static_cast<int>(2 * s)};
-                        HBRUSH sbr = CreateSolidBrush(PC::STRIPE);
-                        FillRect(bb, &bar, sbr);
-                        DeleteObject(sbr);
+                        FillRect(bb, &bar, UI::Gdi::Brush(PC::STRIPE));
 
                         SelectObject(bb, m_hFontBold);
                         SetTextColor(bb, PC::HEADER);
@@ -1453,11 +1449,9 @@ LRESULT DedicatedWnd::HandlePanelMessage(UINT message, WPARAM wParam, LPARAM lPa
                         DrawTextW(bb, row.label.c_str(), -1, &lr, DT_LEFT | DT_SINGLELINE);
                     } else {
                         if (static_cast<int>(i) == m_selected) {
-                            HBRUSH sb = CreateSolidBrush(selBg);
-                            FillRect(bb, &row.rect, sb); DeleteObject(sb);
+                            FillRect(bb, &row.rect, UI::Gdi::Brush(selBg));
                         } else if (static_cast<int>(i) == m_hotRow) {
-                            HBRUSH hb = CreateSolidBrush(hotBg);
-                            FillRect(bb, &row.rect, hb); DeleteObject(hb);
+                            FillRect(bb, &row.rect, UI::Gdi::Brush(hotBg));
                         }
 
                         // Line 1: label + value
@@ -1508,11 +1502,10 @@ LRESULT DedicatedWnd::HandlePanelMessage(UINT message, WPARAM wParam, LPARAM lPa
                                       DT_LEFT | DT_SINGLELINE | DT_END_ELLIPSIS);
                         }
 
-                        HPEN pen = CreatePen(PS_SOLID, 1, line);
-                        HGDIOBJ op = SelectObject(bb, pen);
+                        HGDIOBJ op = SelectObject(bb, UI::Gdi::Pen(line));
                         MoveToEx(bb, row.rect.left, row.rect.bottom, nullptr);
                         LineTo(bb, row.rect.right, row.rect.bottom);
-                        SelectObject(bb, op); DeleteObject(pen);
+                        SelectObject(bb, op);
                     }
                 }
                 y += h;
@@ -1529,9 +1522,7 @@ LRESULT DedicatedWnd::HandlePanelMessage(UINT message, WPARAM wParam, LPARAM lPa
             m_thumbRect = {};
             const int maxScroll = std::max(0, m_contentH - m_viewportH);
             if (maxScroll > 0 && m_viewportH > 0) {
-                HBRUSH tb = CreateSolidBrush(PC::SCROLL_TRACK);
-                FillRect(bb, &m_trackRect, tb);
-                DeleteObject(tb);
+                FillRect(bb, &m_trackRect, UI::Gdi::Brush(PC::SCROLL_TRACK));
 
                 const int minH = static_cast<int>(Constants::Dedicated::PANEL_SCROLL_MIN_H * s);
                 int thumbH = MulDiv(m_viewportH, m_viewportH, m_contentH);
@@ -1542,10 +1533,8 @@ LRESULT DedicatedWnd::HandlePanelMessage(UINT message, WPARAM wParam, LPARAM lPa
 
                 m_thumbRect = {listRight + static_cast<int>(2 * s), thumbY,
                                listRight + sbW - static_cast<int>(2 * s), thumbY + thumbH};
-                HBRUSH hb = CreateSolidBrush(
-                    (m_thumbHot || m_draggingThumb) ? PC::SCROLL_THUMB_HOT : PC::SCROLL_THUMB);
-                FillRect(bb, &m_thumbRect, hb);
-                DeleteObject(hb);
+                FillRect(bb, &m_thumbRect, UI::Gdi::Brush(
+                    (m_thumbHot || m_draggingThumb) ? PC::SCROLL_THUMB_HOT : PC::SCROLL_THUMB));
             }
 
             // ── Footer ───────────────────────────────────────────────────────

@@ -47,6 +47,27 @@ namespace Remote {
         bool Connect(const std::wstring &host, int port,
                      const std::wstring &password, std::wstring &errorOut);
 
+        // Same handshake, but with the shared secret already in hand instead of
+        // a password to derive it from.
+        //
+        // WHY THIS EXISTS: the digest IS the secret. A server stores
+        // "salt$digest" and never holds the plaintext; a client normally
+        // recomputes that digest from the password and the salt the server
+        // sends. Anything that can read the server's own .ini therefore already
+        // has everything needed to authenticate — which is what makes importing
+        // a local instance's settings file a complete setup rather than a
+        // partial one, with no password to type.
+        //
+        // `storedSecret` and `storedSalt` are the two halves of that value, hex
+        // as they appear in the file. The salt is checked against the one the
+        // server offers: a mismatch means its password has been changed since
+        // the import, which is worth saying plainly rather than letting the
+        // exchange fail as a generic auth error.
+        bool ConnectWithSecret(const std::wstring &host, int port,
+                               const std::wstring &storedSecret,
+                               const std::wstring &storedSalt,
+                               std::wstring &errorOut);
+
         // Sends one command line and returns the peer's reply verbatim
         // (including its "OK"/"ERR" prefix, which the caller may want to show).
         //
@@ -77,6 +98,15 @@ namespace Remote {
         const std::wstring &Banner() const { return m_banner; }
 
     private:
+        // Both public entry points land here. `password` is used when
+        // `presetSecret` is empty, and ignored when it is not — the two are the
+        // two routes to the same shared secret, never both at once.
+        bool DoConnect(const std::wstring &host, int port,
+                       const std::wstring &password,
+                       const std::vector<BYTE> &presetSecret,
+                       const std::vector<BYTE> &presetSalt,
+                       std::wstring &errorOut);
+
         // UINT_PTR rather than SOCKET so this header does not have to drag
         // winsock2.h into everything that includes it — and winsock2.h must
         // precede windows.h, which would put an ordering trap in every consumer.

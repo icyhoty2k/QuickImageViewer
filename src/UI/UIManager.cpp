@@ -1,4 +1,5 @@
 #include "UIManager.h"
+#include "GdiPool.h" // Flush() — pooled colours die with the theme they came from
 #include "../AppState.h"
 #include "../Overlays/OverlayManager.h"
 #include "../Platform/ConstantsStrings.h"
@@ -465,6 +466,12 @@ applyIfVisible(exifWnd);
     // client-area repaint so text/background colors follow the new factor.
     // -------------------------------------------------------------------------
     void UIManager::NotifyThemeChanged() {
+        // Drop every pooled brush and pen FIRST. They were built from the old
+        // theme colours, and the repaints below would otherwise redraw the
+        // panels in exactly the colours the theme just moved away from. Safe
+        // here — nothing is mid-paint on this thread.
+        Gdi::Flush();
+
         const BOOL dark = app.isDarkThemed ? TRUE : FALSE;
         const COLORREF capColor = Constants::Theme::ThemedGray(
             Constants::Theme::Panel::BACKGROUND_INACTIVE, app.themeFactor);

@@ -476,6 +476,9 @@ namespace Constants {
         constexpr bool ENABLE_DEFAULT = false;
         // Loopback: reachable only from this machine, and Windows Firewall never
         // prompts. A wall screen opts into 0.0.0.0 (every interface) knowingly.
+        //
+        // Also the value a new AllowList is seeded with. Seeded only — the accept
+        // gate gives it no special status, so it can be removed like any entry.
         constexpr const wchar_t *BIND_ADDRESS_DEFAULT = L"127.0.0.1";
         constexpr const wchar_t *BIND_ADDRESS_ANY     = L"0.0.0.0";
 

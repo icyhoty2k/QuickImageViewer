@@ -73,13 +73,40 @@ namespace UI {
             OnKillFocus();
             return 0;
         }
-        if (message == WM_KEYDOWN) {
+        // WM_SYSKEYDOWN as well as WM_KEYDOWN, and the reason is not obvious:
+        //
+        //   • F10 pressed ALONE arrives as WM_SYSKEYDOWN. Windows reserves it as
+        //     the menu-activation key, so it never appears as an ordinary
+        //     keypress — which meant F10 toggled its panel from the main window
+        //     and did nothing at all once that panel had focus.
+        //   • Every ALT combination arrives the same way. Alt+W/A/S/D (snap),
+        //     Alt+Q/E/Z/C (quarter-snap) and Alt+X (reset window) were therefore
+        //     dead in every panel, silently.
+        //
+        // AppMain's WndProc has always handled both for the main window. Panels
+        // forward to it, so they have to recognise the same pair or the two
+        // disagree about which keys exist.
+        if (message == WM_KEYDOWN || message == WM_SYSKEYDOWN) {
             bool ctrl = (GetKeyState(VK_CONTROL) & 0x8000) != 0;
             bool shift = (GetKeyState(VK_SHIFT) & 0x8000) != 0;
             bool alt = (GetKeyState(VK_MENU) & 0x8000) != 0;
-            if (!OnKeyDown(wParam, ctrl, shift, alt))
-                PostMessageW(m_hParent, WM_KEYDOWN, wParam, lParam);
-            return 0;
+
+            if (!OnKeyDown(wParam, ctrl, shift, alt)) {
+                // Forwarded as the SAME message it arrived as. Re-labelling a
+                // WM_SYSKEYDOWN as WM_KEYDOWN would strip the context bit in
+                // lParam that says whether Alt was held — and the resolver reads
+                // lParam for the Right-Shift scancode, so the original must
+                // survive intact.
+                PostMessageW(m_hParent, message, wParam, lParam);
+            }
+
+            // System keys still go to DefWindowProc, exactly as the main window
+            // does it, so Alt+F4 and Alt+Space keep working. Neither the main
+            // window nor a panel has a menu bar, so F10's own default behaviour
+            // has nothing to open.
+            return (message == WM_SYSKEYDOWN)
+                       ? DefWindowProcW(m_hWnd, message, wParam, lParam)
+                       : 0;
         }
         if (message == WM_MBUTTONUP) {
             if (!OnMButtonUp(GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam)))

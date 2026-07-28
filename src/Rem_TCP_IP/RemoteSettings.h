@@ -37,6 +37,12 @@
 //   • BlackList always beats AllowList
 //   • MaxConnections defaults to 1
 //
+// 127.0.0.1 is SEEDED into a new AllowList so a fresh instance is reachable
+// from the copy beside it without anyone meeting the fail-closed rule as a
+// mystery. It is an ordinary entry with no special status: delete it and this
+// machine is locked out like any other, which is the point — a list with
+// built-in exceptions is not a list.
+//
 // Full design record: docs/REMOTE_TCP_IP_SPEC.md
 // =============================================================================
 
@@ -58,6 +64,9 @@ namespace Remote {
         int port = 0;
 
         // IPs permitted to connect. EMPTY MEANS DENY EVERYONE — fail closed.
+        // Seeded with 127.0.0.1, which is an ordinary entry and can be removed;
+        // removing it locks this machine out, exactly as removing any other
+        // entry locks that one out.
         std::vector<std::wstring> allowList;
 
         // IPs always refused, checked BEFORE allowList. Deny overrides allow.
