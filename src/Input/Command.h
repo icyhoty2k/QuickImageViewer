@@ -1,12 +1,28 @@
 #pragma once
 #include <windows.h>
+#include <string>
 
 // =============================================================================
-// Command.h  —  All discrete keyboard actions in QIV.
+// Command.h  —  All discrete actions in QIV.
 //
 // Flow: WM_KEYDOWN → InputManager::handleKeyboard()
 //           Stage 1: ResolveKeyboardKeys()          → Command
 //           Stage 2: ExecuteCommand()                 → side effects
+//
+// EVERY input path resolves to a Command and goes through ExecuteCommand —
+// keyboard, mouse, tray, context menu, panel clicks and the TCP/IP socket
+// alike. Nothing applies a side effect by calling LoadImageIndex or an
+// AppCommands helper directly.
+//
+// That is not tidiness for its own sake: ExecuteCommand is where mirroring to
+// another instance is gated, so an input path that skips it is an input path
+// that silently does not mirror. Keeping the sink universal makes the gate
+// correct by construction rather than by remembering.
+//
+// ORDER IS NOT STABLE. Inserting an enumerator renumbers everything after it,
+// so nothing may persist or transmit a Command's ordinal — the wire protocol
+// uses NAMES for exactly this reason (see RemoteProtocol.h). The only ordering
+// contracts are the contiguous RANGES marked below.
 // =============================================================================
 
 enum class Command {
@@ -84,6 +100,10 @@ enum class Command {
     ToggleAllPanels, // N — close all if any visible, else restore the last-hidden set
     HardQuit,
     ResetAll,
+    // Middle-mouse click: window size/position/opacity + zoom/pan back to
+    // defaults. Deliberately NOT ResetAll — that also clears every image effect,
+    // which the middle click never did and must not start doing.
+    ResetWindowLayout,
 
     // --- Color effects (toggles) ---
     ToggleGrayscale,
@@ -108,6 +128,20 @@ enum class Command {
     ResetEffects,
     SaveImage,
 
+    // --- File operations on the thumbnail panel's selection -----------------
+    // Commands so that ONE gate can refuse them (see SESSION_BLOCKED in
+    // RemoteProtocol.cpp) rather than four scattered checks that a fifth call
+    // site could forget.
+    //
+    // All four are in NEVER_REMOTE, and a static_assert proves they have no row
+    // in the protocol table — adding one fails the build. They alter the folder,
+    // and a command that can delete files must not be one authentication bug
+    // away from a socket.
+    FileCopySelection,
+    FileMoveSelection,
+    FileDeleteSelection,
+    FilePasteIntoFolder,
+
     // --- Navigation ---
     ToggleLastDir, // Q — switch between current and previous folder
     ToggleLastImage, // E — switch between current and previously viewed image
@@ -120,6 +154,12 @@ enum class Command {
     NextFavoriteFolder, // Insert
     PrevFavoriteFolder, // Delete
 
+    // The horizontal wheel walks EVERY row the panel shows — favorites and
+    // non-favorites alike (WalkScope::All). That is a third scope, not either
+    // half above, so it needs its own pair rather than reusing one of them.
+    PrevHistoryFolderAll,
+    NextHistoryFolderAll,
+
     // --- Runtime theme ---
     ThemeFactorUp, // Ctrl+Alt+Shift+Numpad+
     ThemeFactorDown, // Ctrl+Alt+Shift+Numpad-
@@ -129,6 +169,8 @@ enum class Command {
     ToggleCornerPreference, // Ctrl+Shift+Numpad*   round ↔ square
     CycleBackdropType, // Ctrl+Shift+Numpad/   None→Mica→Acrylic→MicaAlt→None
     ToggleAlwaysOnTop, // Ctrl+T               always on top on/off
+    OpacityUp,   // Shift+Wheel up   — window alpha, OPACITY_STEP per notch
+    OpacityDown, // Shift+Wheel down
 
     // --- Sort order ---
     SortByName, // Ctrl+Alt+Shift+0
@@ -199,6 +241,23 @@ enum class Command {
     CmdArgsGenerateShortcut,// desktop .lnk carrying those switches
     CmdArgsTest,            // validate a cmdArgs .txt, report in a dialog
 
+    // --- Mirroring / observing (src/Rem_TCP_IP) -----------------------------
+    // Two LOCAL switches, both off at every startup — a viewer that boots
+    // forwarding its keystrokes to machines you forgot about would be a trap.
+    MirrorToggle,      // F11 — forward my commands to my connected targets
+    MirrorLocalToggle, // F12 — when mirroring, also execute here (not just forward)
+    ToggleRemotesConsole,  // F10 — the slave management console
+
+    // Remote-only, both payload-carrying, both handled headlessly in RemoteExec:
+    //   observe 1|0   the CALLER asks to be added to / removed from this
+    //                 instance's observer list. There is no local key and no
+    //                 AppState flag — the observer vector IS the state.
+    //   sync <k=v;…>  adopt the sender's view/effect state wholesale. Exists
+    //                 because mirroring forwards TOGGLES, and a toggle applied
+    //                 to a different starting state diverges silently.
+    Observe,
+    Sync,
+
     // --- Desktop wallpaper (context menu submenu) ---
     // Order must match Constants::Wallpaper::FILL..SPAN.
     SetWallpaperFill,
@@ -234,7 +293,30 @@ enum class Command {
 class InputManager {
     public:
         static void handleKeyboard(HWND hWnd, WPARAM wParam, LPARAM lParam);
+
+        // THE sink. Every input path — keyboard, mouse, tray, context menu,
+        // panel click, socket — ends here, which is what lets one gate at the
+        // top of it mirror the whole application to another instance.
         static void ExecuteCommand(HWND hWnd, Command cmd);
+
+        // Payload form: "do this WITH this value" rather than "open the picker
+        // for this". `goto 42` and pressing J are the same command; one carries
+        // the number, the other asks for it.
+        //
+        // The five payload commands (JumpToImage, OpenFile, FindImage, ZoomTo,
+        // SlideshowSetInterval) plus Observe/Sync route here. The body lives in
+        // RemoteExec, so a value that arrives from a panel and one that arrives
+        // from a socket run the SAME code — previously two implementations kept
+        // in step by hand.
+        static void ExecuteCommand(HWND hWnd, Command cmd, const std::wstring &payload);
+
+        // Current value of whatever `cmd` controls, read straight from `app`
+        // (the source of truth), for the "OK <name>=<value>" reply a remote
+        // caller gets back. Lives beside ExecuteCommand in CommandExecuter.cpp
+        // because it is a SECOND switch over the same enum and the two must be
+        // edited together — a command with a case there and none here reports
+        // "?" rather than silently reporting nothing.
+        static std::wstring GetCommandValue(HWND hWnd, Command cmd);
 
     private:
         static Command ResolveKeyboardKeys(UINT key, LPARAM lParam);

@@ -1,6 +1,7 @@
 #pragma once
 #include <windows.h>
 #include <string>
+#include <vector>
 
 // =============================================================================
 // RemoteClient — the "connect to another instance" half.
@@ -48,8 +49,25 @@ namespace Remote {
 
         // Sends one command line and returns the peer's reply verbatim
         // (including its "OK"/"ERR" prefix, which the caller may want to show).
+        //
+        // EVENT lines arriving mid-exchange are NOT part of the reply. An
+        // observed peer pushes them whenever it feels like it, including between
+        // our request and its answer, so they are pulled out here and appended
+        // to `eventsOut` instead of being folded into `replyOut` — which is what
+        // the multi-line `help` accumulation would otherwise do to them.
         bool Send(const std::wstring &commandLine,
-                  std::wstring &replyOut, std::wstring &errorOut);
+                  std::wstring &replyOut, std::wstring &errorOut,
+                  std::vector<std::wstring> *eventsOut = nullptr);
+
+        // Bounded read for an unsolicited line while no request is outstanding.
+        // Returns true when one arrived, false on timeout (not an error) or on
+        // a dead connection — check IsConnected() to tell those apart.
+        //
+        // Needed because an observed peer talks when IT acts, not when we ask.
+        // Without this the socket would only be read during a Send, and a slave
+        // whose slideshow advanced while we were idle would go unheard until we
+        // happened to send something.
+        bool PollLine(std::wstring &lineOut, int timeoutMs);
 
         void Disconnect();
         bool IsConnected() const;

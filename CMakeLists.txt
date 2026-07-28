@@ -96,6 +96,9 @@ set(SOURCES
         src/Rem_TCP_IP/RemoteExec.cpp
         src/Rem_TCP_IP/RemoteClient.cpp
         src/Rem_TCP_IP/RemoteWnd.cpp
+        src/Rem_TCP_IP/RemoteMirror.cpp
+        src/Rem_TCP_IP/RemotesFile.cpp
+        src/Rem_TCP_IP/RemotesWnd.cpp
         src/UI/UIManager.cpp
         src/Overlays/OverlayManager.cpp
         src/UI/ThumbnailPanels/ThumbnailPanelWnd.cpp

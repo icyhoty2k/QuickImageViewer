@@ -235,6 +235,23 @@ struct AppState {
     std::wstring windowClassName = Constants::WINDOW_CLASS_NAME;
     bool isAlwaysOnTop = Constants::IS_ALWAYS_ON_TOP; // Ctrl+T / -awaysOnTop
 
+    // --- Mirroring to other instances (src/Rem_TCP_IP) ----------------------
+    // F11: forward every mirrorable command to the connected targets.
+    // F12: while mirroring, ALSO execute it here. F11 on + F12 off makes this
+    //      viewer a pure remote control — it drives the other screens and its
+    //      own display stays put.
+    //
+    // DELIBERATELY NOT PERSISTED, and so deliberately absent from
+    // Constants::Registry and RegistryManager. A viewer that came back from a
+    // restart already forwarding keystrokes to machines the user had forgotten
+    // about would be the worst kind of surprise. Both start false, every launch.
+    //
+    // There is no third flag for "am I being observed": that is
+    // Remote::HasObservers(), i.e. whether the observer vector is non-empty. A
+    // bool beside it could only ever disagree with it.
+    bool passCommandToRemote   = false; // F11
+    bool resendCommandToCaller = false; // F12
+
     // Blocks the screensaver and display sleep while the main window is visible.
     // Acted on by AppCommands::ApplyDisplayAwake — never by touching
     // SetThreadExecutionState directly, because that call is per-THREAD and

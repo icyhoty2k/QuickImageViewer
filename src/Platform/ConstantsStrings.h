@@ -119,6 +119,27 @@ namespace Constants::Messages {
     // Ctrl+T — always on top
     constexpr const wchar_t *ALWAYS_ON_TOP_ON = L"Always on Top" STR_STATE_ON;
     constexpr const wchar_t *ALWAYS_ON_TOP_OFF = L"Always on Top" STR_STATE_OFF;
+
+    // F11 / F12 — mirroring to other instances. The ON message names the target
+    // count: "Mirroring: On" with nothing connected looks identical to a broken
+    // feature, and the number is the fastest way to see which it is.
+    constexpr const wchar_t *MIRROR_ON_PREFIX  = L"Mirroring" STR_STATE_ON L" → "; // append "<n> target(s)"
+    constexpr const wchar_t *MIRROR_OFF        = L"Mirroring" STR_STATE_OFF;
+    constexpr const wchar_t *MIRROR_NO_TARGETS = L"Mirroring" STR_STATE_ON L" — no targets (F10 to connect)";
+    // F12 is meaningless while F11 is off, and a keypress that appears to do
+    // nothing reads as a bug. Say why instead.
+    constexpr const wchar_t *MIRROR_LOCAL_ON   = L"Mirror: execute here too" STR_STATE_ON;
+    constexpr const wchar_t *MIRROR_LOCAL_OFF  = L"Mirror: remote only (this screen stays put)";
+    constexpr const wchar_t *MIRROR_LOCAL_IDLE = L"Mirroring is off (F11 to start)";
+
+    // Shown when connecting forces the sort order off disk order — see
+    // LeaveDiskOrderForSession.
+    constexpr const wchar_t *REMOTE_SORT_LEFT_DISK_ORDER =
+        L"Sort: by Name — disk order cannot be shared between instances";
+
+    // A command refused because a connection is live. The reason is appended
+    // from the SESSION_BLOCKED table, so this is only the opening.
+    constexpr const wchar_t *REMOTE_BLOCKED_PREFIX = L"Blocked while connected: ";
     // Shown when the lock is turned ON so the operator knows the window went
     // deaf on purpose, and that the tray is the way back.
     constexpr const wchar_t *KIOSK_LOCK_ON  = L"Kiosk Lock" STR_STATE_ON L" — unlock from the tray icon";

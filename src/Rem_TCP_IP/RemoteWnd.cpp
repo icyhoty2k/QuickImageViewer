@@ -3,6 +3,8 @@
 #include "RemoteServer.h"
 #include "RemoteClient.h"
 #include "RemoteCrypto.h"
+#include "RemotesFile.h"  // a proven peer is remembered here
+#include "RemoteMirror.h" // …and starts being driven immediately
 
 #include "AppState.h"
 #include "Dedicated/DedicatedSettings.h" // SettingsFilePath — what Save writes to
@@ -200,6 +202,9 @@ void RemoteWnd::DoCheckConnection() {
         std::wstring info, err;
         const bool ok = Remote::Probe(self->m_peerHost, self->m_peerPort,
                                       self->m_peerPassword, info, err);
+        // Recorded for the UI thread to act on. A worker may not touch the
+        // remotes file or the mirror target list — both are UI-thread-owned.
+        self->m_probeSucceeded = ok;
         auto *msg = new std::wstring(ok ? L"Reachable — " + info
                                         : L"Unreachable — " + err);
         PostMessageW(self->GetHwnd(), WM_REMOTE_ASYNC_RESULT, 0,
@@ -235,6 +240,57 @@ void RemoteWnd::DoSendToPeer() {
         PostMessageW(self->GetHwnd(), WM_REMOTE_ASYNC_RESULT, 0,
                      reinterpret_cast<LPARAM>(new std::wstring(out)));
     });
+}
+
+void RemoteWnd::RememberPeer() {
+    if (m_peerHost.empty() || m_peerPort == 0) return;
+
+    std::vector<Remote::RemoteEntry> list = Remote::LoadRemotes();
+
+    // Host+port is the identity. Re-checking a peer that is already listed
+    // updates its password rather than adding a duplicate row — otherwise
+    // pressing Check Connection twice would give the console two entries for
+    // one screen, and both would try to drive it.
+    for (Remote::RemoteEntry &e : list) {
+        if (e.host == m_peerHost && e.port == m_peerPort) {
+            e.password = m_peerPassword;
+            Remote::SaveRemotes(list);
+            m_lastResult += L"  ·  already listed";
+            return;
+        }
+    }
+
+    Remote::RemoteEntry e;
+    e.host     = m_peerHost;
+    e.port     = m_peerPort;
+    e.password = m_peerPassword;
+    // Remembered, but NOT reconnected on the next launch unless the user asks.
+    // A viewer that came back from a restart already joined to other machines —
+    // and therefore already in restricted mode, with delete and Find refused —
+    // would be a confusing thing to inherit from a connection made days ago.
+    // Starting as a plain viewer every time, and connecting deliberately, is the
+    // behaviour that matches what the app is most of the time.
+    e.autoConnect = false;
+    // The banner carries the far end's configured Name when it has one, which
+    // is a far better label than the address. It arrives as
+    // "OK qIV <version> remote v1 [Lobby-Screen]" — take what is in brackets.
+    {
+        const std::wstring &banner = m_lastResult;
+        const size_t open  = banner.find(L'[');
+        const size_t close = banner.find(L']', open == std::wstring::npos ? 0 : open);
+        if (open != std::wstring::npos && close != std::wstring::npos && close > open + 1)
+            e.name = banner.substr(open + 1, close - open - 1);
+    }
+    if (e.name.empty()) e.name = m_peerHost + L":" + std::to_wstring(m_peerPort);
+
+    list.push_back(e);
+    Remote::SaveRemotes(list);
+
+    // Live immediately — the point of proving the connection is to start using
+    // it, not to require a restart first.
+    (void) Remote::Mirror::AddTarget(e.name, e.host, e.port, e.password, e.exePath);
+
+    m_lastResult += L"  ·  saved to " + Remote::RemotesFilePath();
 }
 
 void RemoteWnd::DoSaveToIni() {
@@ -537,6 +593,20 @@ LRESULT RemoteWnd::HandlePanelMessage(UINT message, WPARAM wParam, LPARAM lParam
         case WM_REMOTE_ASYNC_RESULT: {
             auto *msg = reinterpret_cast<std::wstring *>(lParam);
             if (msg) { m_lastResult = *msg; delete msg; }
+
+            // A peer that answered is worth remembering. THIS is where a remote
+            // enters the system: typed once here, proved to respond, then
+            // written to qivRemotes.ini and handed to the mirror — so the F10
+            // console and the next launch both already know about it.
+            //
+            // Deliberately gated on a SUCCESSFUL probe. Recording an address
+            // that never answered would fill the console with rows that only
+            // ever show red, and the user would have no way to tell a typo from
+            // a screen that is merely switched off.
+            if (m_probeSucceeded) {
+                m_probeSucceeded = false;
+                RememberPeer();
+            }
             Repaint();
             return 0;
         }

@@ -84,6 +84,13 @@ class RemoteWnd : public FloatingPanelWnd {
         // responsive while a dead host times out.
         void RunAsync(void (*work)(RemoteWnd *self));
 
+        // Writes the current peer into qivRemotes.ini and hands it to
+        // Remote::Mirror, so the F10 console and the next launch both know it.
+        // Called ONLY after a successful Check Connection — see the note at the
+        // WM_REMOTE_ASYNC_RESULT handler on why an unproven address is not
+        // recorded. UI thread.
+        void RememberPeer();
+
         // --- Model -----------------------------------------------------------
         void BuildRows();
         void EditRow(int rowIndex);
@@ -117,9 +124,22 @@ class RemoteWnd : public FloatingPanelWnd {
         int m_hotRow    = -1;
         int m_hotButton = -1;
 
-        // Peer target. Session-only by design: an address you are driving from
-        // this machine is not part of THIS instance's configuration, and writing
-        // it into the .ini would make a screen's config describe its neighbour.
+        // Set by the Check Connection worker, consumed on the UI thread.
+        // A plain bool rather than an atomic: exactly one worker is in flight at
+        // a time and the UI thread only reads it after that worker's message
+        // has arrived, which is itself the synchronisation.
+        bool m_probeSucceeded = false;
+
+        // Peer target. These four are the WORKING fields — what is currently
+        // typed in. They stay out of THIS instance's .ini, which describes the
+        // screen it runs on rather than its neighbours.
+        //
+        // A peer that answers is nevertheless remembered, in the separate
+        // qivRemotes.ini: that file belongs to the DRIVING side and is a list of
+        // machines this copy controls. The original note here said an address
+        // being driven is not part of this instance's configuration — true of a
+        // screen that is driven, and wrong for the one doing the driving, which
+        // needs its list of screens to survive a restart. See RemotesFile.h.
         std::wstring m_peerHost = L"127.0.0.1";
         int          m_peerPort = 0;
         std::wstring m_peerPassword;

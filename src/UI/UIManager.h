@@ -17,6 +17,7 @@
 #include "FloatingPanels/ZoomWnd.h"
 #include "Dedicated/DedicatedWnd.h"
 #include "Rem_TCP_IP/RemoteWnd.h"
+#include "Rem_TCP_IP/RemotesWnd.h"
 #include "../Platform/Constants.h"
 
 namespace UI {
@@ -187,6 +188,7 @@ ThumbnailPanelWnd &getActiveDirWnd();
             StatsWnd        &getStatsWindow();
             DedicatedWnd    &getDedicatedWindow();
             RemoteWnd       &getRemoteWindow();
+            RemotesWnd      &getRemotesConsoleWindow();
             void             ApplyAlwaysOnTop(bool onTop);
 
             void SpawnDirWndForFolder(const std::wstring &folderPath, HWND hHistoryWnd);
@@ -250,6 +252,7 @@ ThumbnailPanelWnd &getActiveDirWnd();
             StatsWnd       statsWnd;
             DedicatedWnd   dedicatedWnd;
             RemoteWnd      remoteWnd;
+            RemotesWnd     remotesWnd;
 
             // Fixed pool of 4 pre-allocated SpawnedDirWnd instances — one per layout slot
             // (top, left, right, bottom). Reused across spawns; never deleted at runtime.
