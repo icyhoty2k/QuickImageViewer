@@ -24,8 +24,10 @@
 #include "UIManager.h"
 #include "Rem_TCP_IP/RemoteExec.h"    // ExecutePayload — the shared payload body
 #include "Rem_TCP_IP/RemoteMirror.h"  // the mirror gate at the top of ExecuteCommand
+#include "Rem_TCP_IP/RemoteLog.h"     // Ctrl+F12 — the recording switch
 #include "Rem_TCP_IP/RemoteInbound.h" // …and the loop cut that makes it safe
-#include "Rem_TCP_IP/MirrorPicker.h"  // F11 with several instances joined: which ones?
+// The Ctrl+F11 selection panel reaches ExecuteCommand through UIManager, which
+// CommandExecuter already includes — nothing extra is needed here.
 #include "Rem_TCP_IP/RemoteServer.h"  // EmitToObservers — the echo half
 
 // These two functions live in AppMain.cpp.
@@ -860,50 +862,52 @@ void InputManager::ExecuteCommand(HWND hWnd, Command cmd) {
                 // is the behaviour a wall of screens being switched on one at a
                 // time depends on. There is simply nobody to pick between yet.
                 g_overlayManager.PostCenterMessage(hWnd, Constants::Messages::MIRROR_NO_TARGETS);
+            } else if (Remote::Mirror::MirroredLiveCount() == 0) {
+                // Connected, but every one of them unticked in the Ctrl+F11
+                // panel. Switching the flag on would forward to nobody, so say
+                // what is actually wrong instead of showing "mirror ON" over a
+                // viewer that drives nothing.
+                app.passCommandToRemote = false;
+                g_overlayManager.PostCenterMessage(
+                    hWnd, Constants::Messages::MIRROR_NONE_PICKED);
             } else {
-                // WHICH of them? With two or more instances connected the
-                // question is real and used to be answered "all of them" with no
-                // way to say otherwise. PickTargets shows the popup only when
-                // there is something to choose between; with a single target it
-                // just counts and returns.
-                const int n = Remote::Mirror::PickTargets(hWnd);
-
-                // Unticking everything is a decision, not an empty gesture:
-                // mirroring to nobody is mirroring off, so say so rather than
-                // leave the flag on and forward nothing.
-                if (n == 0) {
-                    app.passCommandToRemote = false;
-                    g_overlayManager.PostCenterMessage(
-                        hWnd, Constants::Messages::MIRROR_NONE_PICKED);
-                } else {
-                    g_overlayManager.PostCenterMessage(
-                        hWnd, Constants::Messages::MIRROR_ON_PREFIX +
-                                  Remote::Mirror::SelectionSummary());
-                }
+                // WHICH of them is NOT asked here. F11 is a toggle, and making
+                // it also put a question up cost a keypress and a dismissal on
+                // the one path that has to be instant. The selection lives in
+                // the Ctrl+F11 panel (MirrorPickerWnd.h); this reports it.
+                g_overlayManager.PostCenterMessage(
+                    hWnd, Constants::Messages::MIRROR_ON_PREFIX +
+                              Remote::Mirror::SelectionSummary());
             }
             break;
 
-        // Shift+F11 — manage the selection without toggling. Also the only route
-        // to Sync now with a single instance joined, which is why it opens the
-        // picker even then.
-        case Command::MirrorPick: {
-            if (!Remote::Mirror::HasLiveTargets()) {
-                g_overlayManager.PostCenterMessage(hWnd, Constants::Messages::MIRROR_NO_TARGETS);
-                break;
-            }
-            const int n = Remote::Mirror::PickTargets(hWnd, true);
-
-            // Picking targets is a statement that you want them driven, so this
-            // switches mirroring ON if it was off — the alternative was a picker
-            // that appeared to do nothing until F11 was pressed as well.
-            // Unticking everything says the opposite just as clearly.
-            app.passCommandToRemote = (n > 0);
-            g_overlayManager.PostCenterMessage(
-                hWnd, n == 0 ? std::wstring(Constants::Messages::MIRROR_NONE_PICKED)
-                             : Constants::Messages::MIRROR_ON_PREFIX +
-                                   Remote::Mirror::SelectionSummary());
+        // Ctrl+F11 — the selection panel. Opens whatever the target list looks
+        // like, including empty: it explains what to do about that, which is
+        // more use than an overlay that appears and is gone.
+        //
+        // Does NOT touch app.passCommandToRemote. F11 owns that flag; a panel
+        // that also flipped it would be a second place deciding one bool, and
+        // the panel is meant to be left open while F11 goes on and off.
+        case Command::MirrorPick:
+            uiManager.Toggle(uiManager.getMirrorPickerWindow());
             break;
-        }
+
+        // Ctrl+F12 — the wire log. Opening it does NOT start recording: the
+        // switch is a button inside the panel, so looking at what was recorded
+        // and deciding to record are two separate acts.
+        case Command::ToggleRemoteLog:
+            uiManager.Toggle(uiManager.getRemoteLogWindow());
+            break;
+
+        // Reachable from a script or another instance as `enablelog 0|1`; that
+        // route is handled in RemoteExec and never lands here. Locally it is the
+        // panel's button, which calls this so the state change goes through the
+        // one sink like everything else.
+        case Command::EnableRemoteLog:
+            app.remoteLogEnabled = !app.remoteLogEnabled;
+            Remote::Log::SetEnabled(app.remoteLogEnabled);
+            Remote::Mirror::BroadcastEnableLog(app.remoteLogEnabled);
+            break;
 
         case Command::MirrorLocalToggle:
             app.resendCommandToCaller = !app.resendCommandToCaller;
@@ -1645,8 +1649,15 @@ std::wstring InputManager::GetCommandValue(HWND hWnd, Command cmd) {
         case Command::RestoreAllPanels: return OnOff(uiManager.AnyPanelVisible());
 
         // --- Mirroring --------------------------------------------------------
-        case Command::MirrorToggle:
-        case Command::MirrorPick:        return OnOff(app.passCommandToRemote);
+        case Command::MirrorToggle:      return OnOff(app.passCommandToRemote);
+        // A panel now, not a flag — report whether it is open, like the others.
+        case Command::MirrorPick:
+            return OnOff(uiManager.getMirrorPickerWindow().IsVisible());
+        case Command::ToggleRemoteLog:
+            return OnOff(uiManager.getRemoteLogWindow().IsVisible());
+        // The RECORDING state, not the panel's. This is the value a driving
+        // instance reads back to confirm `enablelog 1` actually took.
+        case Command::EnableRemoteLog: return OnOff(app.remoteLogEnabled);
         case Command::MirrorLocalToggle: return OnOff(app.resendCommandToCaller);
 
         // --- Actions with no lasting state; report that they ran --------------

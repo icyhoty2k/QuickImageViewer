@@ -82,6 +82,8 @@ Command CommandForId(int id) {
         case Id::ID_DEDICATED_PANEL: return Command::ToggleDedicatedPanel;
         case Id::ID_REMOTE_PANEL:    return Command::ToggleRemotePanel;
         case Id::ID_REMOTES_CONSOLE: return Command::ToggleRemotesConsole;
+        case Id::ID_REMOTES_CONTROL: return Command::MirrorPick;
+        case Id::ID_REMOTE_LOG:      return Command::ToggleRemoteLog;
         default:                     return Command::None;
     }
 }
@@ -366,8 +368,13 @@ HMENU Build(HWND hWnd) {
     AppendMenuW(m, MF_STRING, Id::ID_STATS,           L"Statistics\tK");
     AppendMenuW(m, MF_STRING, Id::ID_METADATA,        L"Metadata\tM");
     AppendMenuW(m, MF_STRING, Id::ID_DEDICATED_PANEL, L"Dedicated\tF8");
-    AppendMenuW(m, MF_STRING, Id::ID_REMOTE_PANEL,    L"Remote Server\tF9");
-    AppendMenuW(m, MF_STRING, Id::ID_REMOTES_CONSOLE, L"Remotes\tF10");
+    // The three sit together and read as one subject, in the order you meet
+    // them: what THIS instance offers, what it can reach, and which of the
+    // reachable ones the keystrokes go to.
+    AppendMenuW(m, MF_STRING, Id::ID_REMOTE_PANEL,    L"Local Server\tF9");
+    AppendMenuW(m, MF_STRING, Id::ID_REMOTES_CONSOLE, L"Remote Servers\tF10");
+    AppendMenuW(m, MF_STRING, Id::ID_REMOTES_CONTROL, L"Remotes Control\tCtrl+F11");
+    AppendMenuW(m, MF_STRING, Id::ID_REMOTE_LOG,      L"RemoteLog\tCtrl+F12");
     // Help
     const std::wstring help = std::wstring(L"Help v") + Constants::APP_VERSION + L"\tF1";
     AppendMenuW(m, MF_STRING, Id::ID_HELP, help.c_str());

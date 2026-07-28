@@ -7,7 +7,8 @@
 #include "RemoteMirror.h" // Down — the classified reason a row is not connected
 
 // =============================================================================
-// RemotesWnd (F10) — everything about the instances this copy drives.
+// RemotesWnd (F10, "Remote Servers") — everything about the instances this copy
+// can drive.
 //
 // The counterpart to F9: that panel describes what this instance IS (its
 // listener), this one describes what it TALKS TO. They were one window and it

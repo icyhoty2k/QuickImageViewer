@@ -9,6 +9,7 @@
 #include "RemoteSettings.h"
 #include "RemoteCrypto.h"
 #include "RemoteExec.h"
+#include "RemoteLog.h"    // Ctrl+F12 — the inbound half of the wire record
 
 #include "Platform/Constants.h"
 #include "Platform/ConstantsStrings.h"
@@ -180,6 +181,33 @@ namespace {
         if (s.rfind(L"::ffff:", 0) == 0 && mapped != std::wstring::npos)
             return s.substr(mapped + 1);
         return s;
+    }
+
+    // Microseconds from a monotonic source. Same body as the mirror's own NowUs
+    // — duplicated rather than shared because the two modules have no header in
+    // common and a four-line clock is not worth one.
+    long long NowUs() {
+        LARGE_INTEGER f, c;
+        QueryPerformanceFrequency(&f);
+        QueryPerformanceCounter(&c);
+        if (f.QuadPart == 0) return 0;
+        return (c.QuadPart * 1000000LL) / f.QuadPart;
+    }
+
+    // Who is at the other end of `s`, for the Ctrl+F12 log's Sender column.
+    //
+    // An ADDRESS, not a name: the protocol has no "who am I" handshake — the
+    // driving instance identifies the target, never itself — so an address is
+    // the only thing this end actually knows. Adding a handshake to make the
+    // column prettier would change the wire format for a diagnostic.
+    std::wstring PeerLabel(SOCKET s) {
+        if (s == INVALID_SOCKET) return L"(local)";
+        sockaddr_storage ss{};
+        int len = sizeof(ss);
+        if (getpeername(s, reinterpret_cast<sockaddr *>(&ss), &len) != 0)
+            return L"(unknown)";
+        const std::wstring addr = PeerAddress(ss);
+        return addr.empty() ? std::wstring(L"(unknown)") : addr;
     }
 
     // Is the peer on the other end of `s` this very machine?
@@ -471,6 +499,11 @@ bool Start(HWND hOwner, std::wstring &errorOut) {
     Settings cfg = Config();
     Normalize(cfg);
 
+    // UI thread, and the moment this instance's name starts appearing in other
+    // people's logs as well as its own. The socket threads that will want it
+    // cannot read Config() themselves — see RemoteLog.h.
+    Log::SetSelfName(cfg.name);
+
     const std::wstring blocked = WhyCannotStart(cfg);
     // An empty AllowList is a warning, not a refusal: the server binds and
     // listens, it just denies every caller. The panel reports it so a fully
@@ -589,7 +622,10 @@ std::wstring BoundEndpoint() {
 // =============================================================================
 // UI-thread execution
 // =============================================================================
-std::wstring ExecuteOnUiThread(HWND hWnd, const RemoteRequest &req, ConnId from) {
+// The body. Split out so ExecuteOnUiThread can time and log EVERY exit —
+// including the refusals, which are the ones you most want a record of — without
+// a log call before each of five returns, where the sixth would be forgotten.
+static std::wstring ExecuteOnUiThreadBody(HWND hWnd, const RemoteRequest &req, ConnId from) {
     // THE WIRE BOUNDARY. Unconditional — not gated on the session, not on the
     // password, not on the allow-list.
     //
@@ -632,6 +668,28 @@ std::wstring ExecuteOnUiThread(HWND hWnd, const RemoteRequest &req, ConnId from)
     std::wstring name;
     if (!NameForCommand(req.cmd, name)) return MakeOk();
     return MakeOk(name + L"=" + InputManager::GetCommandValue(hWnd, req.cmd));
+}
+
+std::wstring ExecuteOnUiThread(HWND hWnd, const RemoteRequest &req, ConnId from) {
+    // Nothing but the call when logging is off — not a timestamp, not a string.
+    if (!Log::IsEnabled()) return ExecuteOnUiThreadBody(hWnd, req, from);
+
+    const long long t0 = NowUs();
+    std::wstring reply = ExecuteOnUiThreadBody(hWnd, req, from);
+    const long long t1 = NowUs();
+
+    // The line as it ARRIVED, rebuilt from the parse rather than from the
+    // command enum: rawName is what the caller actually typed, which is what you
+    // need when the complaint is "it did not recognise my command".
+    std::wstring line = req.rawName;
+    if (!req.payload.empty()) { line += L' '; line += req.payload; }
+
+    // Delta is the HANDLING time, not a round trip — for an inbound command that
+    // is the honest number, and it is the one that says whether this instance is
+    // the reason a wall of screens is lagging.
+    Log::Add(Log::Direction::In, PeerLabel(static_cast<SOCKET>(from)),
+             line, Log::SelfName(), reply, t1 - t0);
+    return reply;
 }
 
 // =============================================================================

@@ -67,7 +67,7 @@ namespace {
 // =============================================================================
 void RemoteWnd::Init(HINSTANCE hInstance, HWND hParent) {
     const float s = app.dpiScale;
-    InitFloating(hInstance, hParent, L"qIVRemoteWnd", L"Remote Server",
+    InitFloating(hInstance, hParent, L"qIVRemoteWnd", L"Local Server",
                  static_cast<int>(PANEL_W * s), static_cast<int>(PANEL_H * s));
     if (GetHwnd()) {
         SetWindowLongPtrW(GetHwnd(), GWL_EXSTYLE,
@@ -155,7 +155,7 @@ void RemoteWnd::DoStart() {
     PushToConfig();
     std::wstring err;
     if (!Remote::Start(GetHwnd(), err)) {
-        DialogMessage(err.empty() ? L"Could not start." : err, L"Remote Server");
+        DialogMessage(err.empty() ? L"Could not start." : err, L"Local Server");
     } else {
         m_lastResult = L"Started on " + Remote::BoundEndpoint();
     }
@@ -181,7 +181,7 @@ void RemoteWnd::DoSaveToIni() {
                       L"will not start without one: whoever drives this instance "
                       L"identifies it by name, and two unnamed instances would be "
                       L"indistinguishable.",
-                      L"Remote Server");
+                      L"Local Server");
     }
 
     // Creating an .ini where none existed moves the WHOLE APP off the registry
@@ -196,7 +196,7 @@ void RemoteWnd::DoSaveToIni() {
                 L"read ALL of its settings from that file instead of the registry.\r\n\r\n"
                 L"Your current settings are copied into it first, so nothing is lost.\r\n\r\n"
                 L"Create it?",
-                L"Remote Server"))
+                L"Local Server"))
             return;
     }
 
@@ -209,7 +209,7 @@ void RemoteWnd::DoSaveToIni() {
                            Dedicated::SettingsFilePath() +
                            L"\r\n\r\nreplacing what is in the [" +
                            std::wstring(RT::INI_SECTION) + L"] section?",
-                           L"Remote Server"))
+                           L"Local Server"))
             return;
     }
 

@@ -56,8 +56,10 @@ namespace UI::AppMenu::Ids {
         ID_SS_LOOP,               // loop toggle                     (R)
         ID_SS_SHUFFLE,            // playlist shuffle toggle         (S)
         ID_DEDICATED_PANEL,       // open the Dedicated panel        (F8)
-        ID_REMOTE_PANEL,          // open the Remote Server panel   (F9)
-        ID_REMOTES_CONSOLE,       // open the Remotes console        (F10)
+        ID_REMOTE_PANEL,          // open the Local Server panel     (F9)
+        ID_REMOTES_CONSOLE,       // open the Remote Servers console (F10)
+        ID_REMOTES_CONTROL,       // open the Remotes Control panel  (Ctrl+F11)
+        ID_REMOTE_LOG,            // open the RemoteLog panel        (Ctrl+F12)
 
         // Contiguous blocks. Each resolves to its Command by offset, so a block
         // never needs one case per member — see CommandForId.
@@ -83,6 +85,13 @@ namespace UI::AppMenu::Ids {
         ID_VIEW_MODE_FIRST = VIEWER_BASE + 500,
         ID_VIEW_MODE_LAST  = ID_VIEW_MODE_FIRST + 4,
     };
+
+    // The scalar run above auto-numbers from VIEWER_BASE, so every id added to it
+    // walks one step closer to the first band. Adding the hundredth would land ON
+    // ID_WALLPAPER_FIRST and turn a menu click into a wallpaper mode — silently,
+    // because both sides are just ints. Fail the build instead.
+    static_assert(ID_REMOTE_LOG < ID_WALLPAPER_FIRST,
+                  "the scalar viewer ids have grown into the wallpaper band");
 
     // ── Settings ids (< VIEWER_BASE) ────────────────────────────────────────
     // Historically bare numbers on both sides of a file boundary. Named here so

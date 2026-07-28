@@ -234,7 +234,7 @@ enum class Command {
 
     // --- Dedicated instances (src/Dedicated) ---
     ToggleDedicatedPanel,   // F8 — the Dedicated configuration panel
-    ToggleRemotePanel,      // F9 — the Remote Server panel (this instance's listener)
+    ToggleRemotePanel,      // F9 — the Local Server panel (this instance's listener)
     ToggleDedicated,        // -dedicated: separate registry/history namespace
     CmdArgsExport,          // current settings → a cmdArgs .txt
     CmdArgsImport,          // read a cmdArgs .txt and apply it
@@ -245,14 +245,22 @@ enum class Command {
     // Two LOCAL switches, both off at every startup — a viewer that boots
     // forwarding its keystrokes to machines you forgot about would be a trap.
     MirrorToggle,      // F11 — forward my commands to my connected targets
-    // Shift+F11 — open the same picker F11 shows when several instances are
-    // joined, without toggling anything. The way to change the selection while
-    // mirroring is already running, to reach Sync now with a single instance
-    // connected (where F11 asks nothing because there is nothing to choose),
-    // and to look at what is currently selected at all.
-    MirrorPick,
+    // Ctrl+F11 — the panel that says WHICH connected instances F11 drives, and
+    // carries Sync now. Toggling a window, not a flag: it can be left open while
+    // mirroring goes on and off, and it never touches passCommandToRemote —
+    // F11 owns that, and two places deciding one bool is how they disagree.
+    MirrorPick,        // Ctrl+F11 — opens/closes the selection PANEL
     MirrorLocalToggle, // F12 — when mirroring, also execute here (not just forward)
-    ToggleRemotesConsole,  // F10 — the slave management console
+    ToggleRemotesConsole,  // F10 — Remote Servers, the slave management console
+    ToggleRemoteLog,       // Ctrl+F12 — open/close the RemoteLog panel. LOCAL:
+                           // it has no table row, so it is never mirrored — one
+                           // keypress must not open a window on every screen.
+    // The RECORDING switch, and a separate command from the panel that shows it.
+    // Payload-carrying (`enablelog 0|1`) rather than a toggle, because it is
+    // sent to the other instances: a toggle applied to ends that disagree makes
+    // them disagree in the opposite direction, and the whole point of turning
+    // logging on across a session is that every end records the same exchanges.
+    EnableRemoteLog,
 
     // Remote-only, both payload-carrying, both handled headlessly in RemoteExec:
     //   observe 1|0   the CALLER asks to be added to / removed from this
