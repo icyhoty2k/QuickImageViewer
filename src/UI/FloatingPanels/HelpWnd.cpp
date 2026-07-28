@@ -555,7 +555,7 @@ namespace UI {
             L"generate a shortcut for it. Drop that shortcut in shell:startup and the "
             L"screen starts itself.", sApp);
         Add(K(SC::SC_PANEL_REMOTE_TOGGLE),
-            L"Open the Remote Server panel — the listener THIS instance runs, and nothing "
+            L"Open the Local Server panel — the listener THIS instance runs, and nothing "
             L"else. qIV can listen on a TCP port and be driven over the network — next, "
             L"goto, zoom, open, slideshow — from a script, a phone, a home-automation "
             L"system, or another qIV instance.\r\n"
@@ -563,10 +563,10 @@ namespace UI {
             L"with -remote on the command line. It also needs a NAME and a PORT: an empty "
             L"AllowList denies every connection, and a driving instance identifies this one "
             L"by its name, so it will not start without one.\r\n"
-            L"What this instance connects OUT to lives in the Remotes console (F10). "
+            L"What this instance connects OUT to lives in Remote Servers (F10). "
             L"F9 is what others connect to; F10 is what this connects to.", sApp);
         Add(K(SC::SC_PANEL_REMOTES_CONSOLE),
-            L"Open the Remotes console — everything about the instances this copy drives.\r\n"
+            L"Open Remote Servers — everything about the instances this copy can drive.\r\n"
             L"Top: address, port, password, name and optional exe. Connect && Save proves the "
             L"target answers before recording it, then writes it to qivRemotes.ini beside the "
             L"exe and starts driving it — so an address is typed once.\r\n"
@@ -581,20 +581,41 @@ namespace UI {
             L"pushes this viewer's view and effect state to all of them at once.", sApp);
         Add(K(SC::SC_MIRROR_TOGGLE),
             L"MIRRORING on/off. While on, every command you give here is also sent to the "
-            L"instances listed in the Remotes console (F10) — navigation, zoom, effects, "
+            L"instances listed in Remote Servers (F10) — navigation, zoom, effects, "
             L"view mode, sort order, slideshow. Panels, window geometry, quit and hide are "
             L"deliberately never forwarded: one keypress must not close or move every "
             L"screen at once. Always OFF at startup.\r\n"
-            L"With TWO OR MORE instances connected, switching it on asks which of them to "
-            L"drive: a popup lists the connected instances, each one a tick you can turn on "
-            L"or off, with All, None and Done. Everything is ticked to begin with. Dismissing "
-            L"it keeps whatever is ticked; ticking nothing leaves mirroring off. The choice "
-            L"lasts for this session only and is shown in the Remotes console header. With a "
-            L"single instance connected there is nothing to choose and no popup appears.\r\n"
-            L"SHIFT+F11 opens that same popup at any time — while mirroring is already on, or "
-            L"with only one instance connected — without toggling anything. It also carries "
-            L"Sync now, which pushes this viewer's folder, current image and view state to the "
-            L"ticked instances, the same push as Sync all in the Remotes console.", sApp);
+            L"F11 asks nothing and puts nothing up — it is only the toggle. Which of the "
+            L"connected instances it drives is set in the Ctrl+F11 panel, and shown on "
+            L"screen each time mirroring goes on. Everything connected is driven to begin "
+            L"with; if you have unticked all of them, F11 says so instead of switching on "
+            L"and forwarding to nobody.\r\n"
+            L"CTRL+F11 opens Remotes Control: one row per CONNECTED instance, each "
+            L"a tick you can turn on or off, with All, None and Sync now. It is a real "
+            L"window — leave it open beside the pictures while you work; it refreshes itself "
+            L"as instances connect and drop, and every tick takes effect immediately. Sync "
+            L"now pushes this viewer's folder, current image and view state to the ticked "
+            L"instances, the same push as Sync all in Remote Servers. Rows that are "
+            L"listed but not connected do not appear — connect them in F10 first. The "
+            L"selection lasts for this session only and is echoed in the Remote Servers "
+            L"header.", sApp);
+        Add(L"CTRL+F12",
+            L"RemoteLog — every line that crossed the wire, both directions, in one list: "
+            L"number, who sent it, the command, who received it, the reply, the time, and "
+            L"how long it took. A mirroring session is a conversation, so both directions "
+            L"share one table in the order things actually happened.\r\n"
+            L"RECORDING IS OFF by default and costs nothing while it is off. The Recording "
+            L"button starts it — and tells every connected instance to start too, because "
+            L"a log of one end of a conversation answers half the question. Opening this "
+            L"panel does not start recording.\r\n"
+            L"Clear empties it (entry numbers carry on, so a number never means two "
+            L"different exchanges). Save writes a tab-separated UTF-8 file; Load reads one "
+            L"back, REPLACING what is in memory. Click #, Time or Δ time to sort, and again to "
+            L"reverse — the text columns do not sort, because grouping a conversation by "
+            L"sender destroys the ordering that makes it one. The newest 20000 entries are "
+            L"kept; older ones are dropped.\r\n"
+            L"The list follows the newest entry until you scroll up, and follows again when "
+            L"you scroll back to the bottom.", sApp);
         Add(L"While connected",
             L"A connection — driving another instance, or being driven by one — puts the "
             L"viewer into a restricted mode, and leaves it when the last connection drops.\r\n"
@@ -613,7 +634,7 @@ namespace UI {
             L"gets the portable commands only: navigation, zoom, effects, view mode and "
             L"slideshow, applied to its own content. Image numbers and folder paths are not "
             L"sent there, because a path from this machine names nothing on that one. The "
-            L"Remotes console marks those rows (remote), and its start button cannot launch "
+            L"Remote Servers marks those rows (remote), and its start button cannot launch "
             L"them — nothing here can start a process on another machine.", sApp);
         Add(K(SC::SC_MIRROR_LOCAL_TOGGLE),
             L"While mirroring, also execute the command HERE. Off (the default) makes this "

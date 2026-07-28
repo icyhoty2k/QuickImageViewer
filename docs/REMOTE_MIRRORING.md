@@ -4,9 +4,14 @@ Companion to `REMOTE_TCP_IP_SPEC.md`, which covers the wire protocol and the
 listener. This covers the layer built on top: **one qIV driving others**.
 
 > **Scope warning.** This documents the mirroring/observing work and the two
-> refactors that enabled it. It does **not** cover `MirrorPicker.cpp/.h`
-> (target selection at F11 time, Shift+F11, `MirroredLiveCount()`), which was
-> added separately. Read that file's own header comment for it.
+> refactors that enabled it. It does **not** cover `MirrorPickerWnd.cpp/.h`
+> (target selection, Ctrl+F11, `MirroredLiveCount()`), which was added
+> separately. Read that file's own header comment for it.
+>
+> That selection UI used to be a checkable popup put up by F11 itself
+> (`MirrorPicker.cpp/.h`, now deleted). It is a floating panel on **Ctrl+F11**:
+> F11 is the toggle and nothing else, and the panel can be left open while
+> mirroring goes on and off.
 
 ---
 
@@ -17,9 +22,11 @@ Two instances, or several. One drives; the rest follow.
 | Key | Meaning |
 |---|---|
 | **F11** | Mirroring on/off — forward my commands to my targets |
+| **Ctrl+F11** | Remotes Control — which connected instances F11 drives |
 | **F12** | While mirroring, also execute here (off = pure remote control) |
-| **F10** | Remotes console — the instances this copy drives |
-| **F9** | Remote Server — the listener *this* instance runs |
+| **F10** | Remote Servers — the instances this copy can drive |
+| **F9** | Local Server — the listener *this* instance runs |
+| **Ctrl+F12** | RemoteLog — every line that crossed the wire (recording off by default) |
 
 Both F11 and F12 are **session-only and start OFF at every launch**. A viewer
 that came back from a restart already driving machines you'd forgotten about

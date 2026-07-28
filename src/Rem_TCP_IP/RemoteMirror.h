@@ -237,6 +237,28 @@ namespace Remote::Mirror {
     // loopback is the only thing that varies.
     void PingAll();
 
+    // Put every connected target's wire log into the given state (`enablelog
+    // 1|0`). Sent to ALL of them, not just the mirrored selection: the log
+    // describes the session, and a screen left recording because it happened to
+    // be unticked in Remotes Control is a growing file nobody will look at.
+    //
+    // Does NOT touch this instance — the caller sets its own flag, because the
+    // caller is the one that owns app.remoteLogEnabled.
+    void BroadcastEnableLog(bool on);
+
+    // Ask every target to re-answer "are you on this machine?".
+    //
+    // The flag is resolved when a target is added, but the answer can go stale:
+    // DHCP renews to a different address, a laptop changes network, a name
+    // starts resolving elsewhere. A stale answer picks the wrong command set for
+    // the mirror, and greys out (or wrongly enables) the console's start button.
+    //
+    // Returns IMMEDIATELY — it only raises a flag per target. Each sender thread
+    // does its own getaddrinfo, because that call blocks and the UI thread may
+    // not. Fresh values appear in the next Targets() snapshot, so a caller pairs
+    // this with the repaint it was already scheduling rather than waiting.
+    void RefreshSameMachine();
+
     // Asks one target to start/stop echoing its own actions back to us. The
     // events arrive as EVENT lines on the same connection; there is no reverse
     // connection and nothing to configure at the far end.

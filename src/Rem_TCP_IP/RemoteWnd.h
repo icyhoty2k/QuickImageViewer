@@ -6,7 +6,10 @@
 #include "UI/CustomControls/InputBox.h"
 
 // =============================================================================
-// RemoteWnd — configure and control the TCP/IP remote server.
+// RemoteWnd (F9, "Local Server") — configure and control the TCP/IP listener
+// THIS instance runs. Named Local Server on screen because that is what it is
+// from where the user is standing: "Remote Server" was the same words F10 uses
+// for the machines at the other end, and the two read as each other.
 //
 // Lives in src/Rem_TCP_IP rather than UI/FloatingPanels because everything
 // remote-related belongs together, the same way src/Dedicated keeps its own
@@ -19,8 +22,8 @@
 // It used to carry a second section for connecting OUT to another instance, and
 // that was the reason it read badly — one window answering both "what am I" and
 // "what am I talking to", with a form for each. Everything about driving other
-// instances now lives in the Remotes console (F10): the address list, their
-// status, and the form that adds one.
+// instances now lives in Remote Servers (F10): the address list, their status,
+// and the form that adds one.
 //
 // The division is: F9 is what others connect TO, F10 is what this connects to.
 //

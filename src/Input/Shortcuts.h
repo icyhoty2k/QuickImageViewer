@@ -64,13 +64,13 @@ namespace Shortcuts {
     // (see src/Dedicated). Deliberately its own window rather than a menu, since
     // it is a form with folders, ranges and toggles.
     constexpr UINT SC_PANEL_DEDICATED_TOGGLE = VK_F8;
-    // F9 — Remote control panel (src/Rem_TCP_IP): start/stop the TCP listener,
-    // edit its configuration, and connect out to another instance. Its own
-    // window for the same reason F8 is: it is a form, not a menu.
+    // F9 — Local Server (src/Rem_TCP_IP): start/stop the TCP listener THIS
+    // instance runs and edit its configuration. Its own window for the same
+    // reason F8 is: it is a form, not a menu.
     constexpr UINT SC_PANEL_REMOTE_TOGGLE = VK_F9;
-    // F10 — Remotes console (src/Rem_TCP_IP): the list of slave instances with
+    // F10 — Remote Servers (src/Rem_TCP_IP): the list of slave instances with
     // their live status, and the buttons to start/stop, observe and sync each.
-    // F9 configures ONE connection; this manages them all.
+    // F9 is what others connect TO; F10 is what this connects OUT to.
     constexpr UINT SC_PANEL_REMOTES_CONSOLE = VK_F10;
     constexpr UINT SC_PANEL_HISTORY_TOGGLE = VK_TAB;
     // NOTE: F11 no longer toggles fullscreen — it is SC_MIRROR_TOGGLE below.
@@ -88,15 +88,20 @@ namespace Shortcuts {
     // -------------------------------------------------------------------------
     // Mirroring to other instances  (src/Rem_TCP_IP)
     // -------------------------------------------------------------------------
-    // F11 — forward every mirrorable command to the connected targets. With two
-    //       or more of them joined, switching it on first asks WHICH — see
-    //       Rem_TCP_IP/MirrorPicker.h.
-    // Shift+F11 — the same picker on demand: change the selection while
-    //       mirroring is running (plain F11 would switch it off), and reach its
-    //       Sync now item with a single instance connected.
+    // F11 — forward every mirrorable command to the connected targets. Nothing
+    //       but the toggle: it asks no question and puts nothing up, because
+    //       this is the path that has to be instant.
+    // Ctrl+F11 — the selection panel: WHICH connected instances F11 drives, plus
+    //       Sync now. A real window (Rem_TCP_IP/MirrorPickerWnd.h) that can be
+    //       left open beside the pictures, not a popup — Ctrl rather than Shift
+    //       to match the other panel shortcuts.
     // F12 — while mirroring, ALSO execute locally. With F11 on and F12 off this
     //       viewer is a pure remote control: it drives the other screens and its
     //       own display does not move.
+    // Ctrl+F12 — RemoteLog (Rem_TCP_IP/RemoteLogWnd.h): every line that crossed
+    //       the wire, both directions, with round-trip times. Recording is OFF
+    //       by default and switched on inside that panel — which also pushes the
+    //       same switch to the connected instances.
     // Both are session-only and start OFF at every launch. Persisting them would
     // mean a viewer that boots silently driving machines you had forgotten about.
     constexpr UINT SC_MIRROR_TOGGLE = VK_F11;

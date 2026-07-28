@@ -434,6 +434,15 @@ namespace Constants {
     // thread answers by building a `sync` (it alone may read app.playlist) and
     // resending. See RemoteMirror.h on why indices are sent at all.
     constexpr UINT WM_QIV_REMOTE_DESYNC = WM_USER + 14;
+    // Posted to the RemoteLog PANEL (not the main window) when an entry lands.
+    // Producers are a mirror sender thread and the inbound UI path, so this is
+    // the only safe way to tell a window from the first of those.
+    //
+    // COALESCED at the source: RemoteLog holds a "already posted" flag and skips
+    // the post while one is outstanding, so a burst of mirrored keystrokes costs
+    // one message and one rebuild, not one of each per keystroke. No payload —
+    // the handler re-snapshots, because by the time it runs there may be more.
+    constexpr UINT WM_QIV_REMOTE_LOG_ADDED = WM_USER + 15;
 
     // ---------------------------------------------------------------------------
     // Directory watcher (ReadDirectoryChangesW / FindFirstChangeNotification)
@@ -474,6 +483,22 @@ namespace Constants {
         // Never default ENABLE on. A viewer that binds a port because nobody
         // said otherwise is a viewer that surprises its owner.
         constexpr bool ENABLE_DEFAULT = false;
+
+        // The Ctrl+F12 remote log. OFF, and for the same reason: it is a
+        // DIAGNOSTIC, and a diagnostic that is always on is a cost everybody
+        // pays for the benefit of the one session that needed it.
+        //
+        // What the cost actually is: with it off, the record point in the sender
+        // thread short-circuits on one relaxed atomic load and copies no strings
+        // at all. With it on, every exchange copies four wstrings and takes a
+        // mutex. Neither is large next to a socket round trip — but "neither is
+        // large" is how a viewer built for hours-long slideshows accumulates a
+        // 20000-entry deque nobody asked for.
+        //
+        // Session-only, deliberately not persisted: switching logging on is
+        // something you do WHILE looking at a problem, and a viewer that came
+        // back from a restart still logging would be recording for nobody.
+        constexpr bool REMOTE_LOG_DEFAULT = false;
         // Loopback: reachable only from this machine, and Windows Firewall never
         // prompts. A wall screen opts into 0.0.0.0 (every interface) knowingly.
         //
