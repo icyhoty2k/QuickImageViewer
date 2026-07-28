@@ -70,7 +70,10 @@ extern void UpdateOverlaysForCurrentImage(HWND hWnd);
 
 DropTarget *g_pDropTarget = nullptr;
 AppState app;
-Input::TrayHandler trayHandler(uiManager, g_overlayManager);
+// Tray icon only. The menu it shows lives in UI::AppMenu and needs nothing from
+// here — the constructor used to take the UI and overlay managers because the
+// settings dispatch lived in this class, and both are globals anyway.
+Input::TrayHandler trayHandler;
 // Define the storage for the globals exactly once in your entry point file
 //   g_ioWorker      – IoThreadPool: started lazily in FileHandler once the
 //                     target drive is known (1 thread HDD, 2 threads SSD/NVMe)

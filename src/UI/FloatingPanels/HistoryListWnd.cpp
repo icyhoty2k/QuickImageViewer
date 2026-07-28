@@ -1,4 +1,5 @@
 #include "HistoryListWnd.h"
+#include "UI/GdiPool.h" // pooled brushes and pens — never DeleteObject them
 #include "../../Platform/Constants.h"
 #include "../../Platform/ConstantsTheme.h"
 #include "../../Platform/ConstantsStrings.h"
@@ -2114,9 +2115,7 @@ namespace UI {
                 bool needsScrollbar = (maxScroll > 0);
 
                 // Background — use active color if this panel is active
-                HBRUSH hBg = CreateSolidBrush(GetBgColor());
-                FillRect(hdc, &rc, hBg);
-                DeleteObject(hBg);
+                FillRect(hdc, &rc, UI::Gdi::Brush(GetBgColor()));
                 SetBkMode(hdc, TRANSPARENT);
 
                 int listFontSz = MulDiv(Constants::History::HISTORY_LIST_FONT_SIZE, dpi, 96);
@@ -2238,12 +2237,10 @@ namespace UI {
 
                 // Separator (fixed) — placed after shortcuts line
                 int sepY = hintBot + MulDiv(4, dpi, 96);
-                HPEN hPen = CreatePen(PS_SOLID, 1, RGB(50, 50, 50));
-                HPEN hOldPen = (HPEN) SelectObject(hdc, hPen);
+                HPEN hOldPen = (HPEN) SelectObject(hdc, UI::Gdi::Pen(RGB(50, 50, 50)));
                 MoveToEx(hdc, rc.left + padding, sepY, nullptr);
                 LineTo(hdc, rc.right - padding, sepY);
                 SelectObject(hdc, hOldPen);
-                DeleteObject(hPen);
 
                 int filterRowPx = MulDiv(Constants::History::HISTORY_FILTER_ROW_H, dpi, 96);
                 int footerSepY = rc.bottom - filterRowPx - 1 - MulDiv(fontSize + 2 + 8, dpi, 96);
@@ -2348,7 +2345,7 @@ namespace UI {
 
                         // Hover background
                         if (i == g_hoverRow) {
-                            HBRUSH hHover = CreateSolidBrush(
+                            FillRect(hdc, &rowRect, UI::Gdi::Brush(
                                     isMissing
                                         ? Constants::Theme::Markers::CRITICAL
                                         : isEmpty
@@ -2357,9 +2354,7 @@ namespace UI {
                                                     ? RGB(50, 50, 10)
                                                     : isLink
                                                           ? Constants::Theme::HistoryPanel::ROW_HOVER_SYMLINK
-                                                          : RGB(40, 60, 80));
-                            FillRect(hdc, &rowRect, hHover);
-                            DeleteObject(hHover);
+                                                          : RGB(40, 60, 80)));
                         }
 
                         // Row index number — red for missing, orange for empty, green for current, blue otherwise
@@ -2630,11 +2625,9 @@ namespace UI {
                     int sbX = rc.right - SB_W;
                     int bodyHeight = bodyBottom - rowsTop;
 
-                    HBRUSH hTrack = CreateSolidBrush(
-                            Constants::Theme::ThemedGray(Constants::Theme::HistoryPanel::SCROLLBAR_TRACK, app.themeFactor));
                     RECT sbTrack = {sbX, rowsTop, rc.right, bodyBottom};
-                    FillRect(hdc, &sbTrack, hTrack);
-                    DeleteObject(hTrack);
+                    FillRect(hdc, &sbTrack, UI::Gdi::Brush(
+                            Constants::Theme::ThemedGray(Constants::Theme::HistoryPanel::SCROLLBAR_TRACK, app.themeFactor)));
 
                     float visibleFrac = static_cast<float>(bodyHeight) / static_cast<float>(totalContentH);
                     int minThumb = MulDiv(static_cast<int>(Constants::History::SCROLLBAR_MIN_THUMB), dpi, 96);
@@ -2644,21 +2637,17 @@ namespace UI {
                         * static_cast<float>(bodyHeight - thumbLen));
                     thumbOff = std::clamp(thumbOff, 0, bodyHeight - thumbLen);
 
-                    HBRUSH hThumb = CreateSolidBrush(
-                            Constants::Theme::ThemedGray(Constants::Theme::HistoryPanel::SCROLLBAR_THUMB, app.themeFactor));
                     RECT sbThumb = {sbX, rowsTop + thumbOff, rc.right, rowsTop + thumbOff + thumbLen};
-                    FillRect(hdc, &sbThumb, hThumb);
-                    DeleteObject(hThumb);
+                    FillRect(hdc, &sbThumb, UI::Gdi::Brush(
+                            Constants::Theme::ThemedGray(Constants::Theme::HistoryPanel::SCROLLBAR_THUMB, app.themeFactor)));
                 }
 
                 // Footer separator line
                 {
-                    HPEN hFooterPen = CreatePen(PS_SOLID, 1, RGB(50, 50, 50));
-                    HPEN hOldFooterPen = (HPEN) SelectObject(hdc, hFooterPen);
+                    HPEN hOldFooterPen = (HPEN) SelectObject(hdc, UI::Gdi::Pen(RGB(50, 50, 50)));
                     MoveToEx(hdc, rc.left + padding, footerSepY, nullptr);
                     LineTo(hdc, rc.right - padding, footerSepY);
                     SelectObject(hdc, hOldFooterPen);
-                    DeleteObject(hFooterPen);
                 }
 
                 // FOOTER — QIV link | [Fkey] Cache | [Fkey] Dir  ···  summary  history-size
@@ -2858,13 +2847,11 @@ namespace UI {
                     int inset      = MulDiv(3,  dpi, 96);
 
                     // Separator above filter row
-                    HPEN hFiltPen = CreatePen(PS_SOLID, 1,
-                        Constants::Theme::ThemedGray(0.22f, app.themeFactor));
-                    HPEN hOldFP = (HPEN)SelectObject(hdc, hFiltPen);
+                    HPEN hOldFP = (HPEN)SelectObject(hdc,
+                        UI::Gdi::Pen(Constants::Theme::ThemedGray(0.22f, app.themeFactor)));
                     MoveToEx(hdc, rc.left + padding, filterSepY, nullptr);
                     LineTo(hdc, rc.right - padding, filterSepY);
                     SelectObject(hdc, hOldFP);
-                    DeleteObject(hFiltPen);
 
                     SelectObject(hdc, m_hFontBody);
                     RECT boxRect = { rc.left + padding, filterSepY + inset,

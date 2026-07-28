@@ -1,4 +1,5 @@
 #include "ZoomWnd.h"
+#include "UI/GdiPool.h" // pooled brushes and pens — never DeleteObject them
 #include "../../AppState.h"
 #include "../../Common/Converters.h"
 #include "../../Platform/Constants.h"
@@ -186,9 +187,7 @@ namespace UI {
                 EnsureBackBuffer(screenDC, rc.right, rc.bottom);
                 HDC hdc = m_bbDC;
 
-                HBRUSH bgBrush = CreateSolidBrush(GetBgColor());
-                FillRect(hdc, &rc, bgBrush);
-                DeleteObject(bgBrush);
+                FillRect(hdc, &rc, UI::Gdi::Brush(GetBgColor()));
                 SetBkMode(hdc, TRANSPARENT);
 
                 const int pad = static_cast<int>(Constants::ZoomPanel::PADDING * app.dpiScale);

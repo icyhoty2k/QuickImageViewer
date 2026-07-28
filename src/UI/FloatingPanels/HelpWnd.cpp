@@ -1,4 +1,5 @@
 #include "HelpWnd.h"
+#include "UI/GdiPool.h" // pooled brushes and pens — never DeleteObject them
 #include "../../Platform/Constants.h"
 #include "../../AppState.h"
 #include "Shortcuts.h"
@@ -554,22 +555,30 @@ namespace UI {
             L"generate a shortcut for it. Drop that shortcut in shell:startup and the "
             L"screen starts itself.", sApp);
         Add(K(SC::SC_PANEL_REMOTE_TOGGLE),
-            L"Open the Remote Control panel. qIV can listen on a TCP port and be driven "
-            L"over the network — next, goto, zoom, open, slideshow — from a script, a "
-            L"phone, a home-automation system, or another qIV instance. The listener is "
-            L"OFF unless you switch it on here, in the instance's .ini, or with -remote on "
-            L"the command line. An empty AllowList denies every connection.\r\n"
-            L"Check Connection also REMEMBERS a peer that answers: it is written to "
-            L"qivRemotes.ini beside the exe and appears in the Remotes console from then on, "
-            L"so an address is typed once.", sApp);
+            L"Open the Remote Server panel — the listener THIS instance runs, and nothing "
+            L"else. qIV can listen on a TCP port and be driven over the network — next, "
+            L"goto, zoom, open, slideshow — from a script, a phone, a home-automation "
+            L"system, or another qIV instance.\r\n"
+            L"The listener is OFF unless you switch it on here, in the instance's .ini, or "
+            L"with -remote on the command line. It also needs a NAME and a PORT: an empty "
+            L"AllowList denies every connection, and a driving instance identifies this one "
+            L"by its name, so it will not start without one.\r\n"
+            L"What this instance connects OUT to lives in the Remotes console (F10). "
+            L"F9 is what others connect to; F10 is what this connects to.", sApp);
         Add(K(SC::SC_PANEL_REMOTES_CONSOLE),
-            L"Open the Remotes console: every instance this copy drives, with its address, "
-            L"port, round-trip lag and whether it is up. The dot starts a stopped instance "
-            L"or shuts down a running one; the circle beside it toggles OBSERVING, where "
-            L"that instance reports what it does and this viewer follows along — which is "
-            L"how you watch a screen running its own slideshow. Only one at a time: "
-            L"switching it on for one row switches it off for the others. F5 polls every row. "
-            L"Sync all pushes this viewer's view and effect state to every instance at once.", sApp);
+            L"Open the Remotes console — everything about the instances this copy drives.\r\n"
+            L"Top: address, port, password, name and optional exe. Connect && Save proves the "
+            L"target answers before recording it, then writes it to qivRemotes.ini beside the "
+            L"exe and starts driving it — so an address is typed once.\r\n"
+            L"Below: one row per instance. Three separate controls per row — the dot starts "
+            L"a stopped instance or shuts down a running one; Link connects or disconnects "
+            L"(a remote can be listed without being dialled); the circle toggles OBSERVING, "
+            L"where that instance reports what it does and this viewer follows along, which "
+            L"is how you watch a screen running its own slideshow. Only one may be observed "
+            L"at a time.\r\n"
+            L"Clicking a row loads it into the form so it can be corrected in place. "
+            L"Connect all / Disconnect all act on every row, F5 polls them, and Sync all "
+            L"pushes this viewer's view and effect state to all of them at once.", sApp);
         Add(K(SC::SC_MIRROR_TOGGLE),
             L"MIRRORING on/off. While on, every command you give here is also sent to the "
             L"instances listed in the Remotes console (F10) — navigation, zoom, effects, "
@@ -1097,9 +1106,7 @@ namespace UI {
                 HDC hdc = m_memDC;
 
                 // ---- background --------------------------------------------
-                HBRUSH hBrush = CreateSolidBrush(GetBgColor());
-                FillRect(hdc, &rc, hBrush);
-                DeleteObject(hBrush);
+                FillRect(hdc, &rc, UI::Gdi::Brush(GetBgColor()));
                 SetBkMode(hdc, TRANSPARENT);
 
                 // ---- metrics ------------------------------------------------
@@ -1237,9 +1244,7 @@ namespace UI {
                     DrawTextW(hdc, head.c_str(), -1, &rt, DT_CALCRECT | DT_SINGLELINE | DT_NOPREFIX);
 
                     RECT barRect = {contentLeft, hy, contentLeft + barW, hy + rt.bottom};
-                    HBRUSH hBar = CreateSolidBrush(secColor);
-                    FillRect(hdc, &barRect, hBar);
-                    DeleteObject(hBar);
+                    FillRect(hdc, &barRect, UI::Gdi::Brush(secColor));
 
                     SetTextColor(hdc, secColor);
                     RECT headRect = {
@@ -1308,9 +1313,7 @@ namespace UI {
 
                             // thin separator under the row
                             RECT sep = {contentLeft + rowIndent, y + rowH - 1, contentRight, y + rowH};
-                            HBRUSH hSep = CreateSolidBrush(sepColor);
-                            FillRect(hdc, &sep, hSep);
-                            DeleteObject(hSep);
+                            FillRect(hdc, &sep, UI::Gdi::Brush(sepColor));
                         }
                         y += rowH;
                     }
@@ -1330,21 +1333,17 @@ namespace UI {
                                                 trackH * contentHeight / m_visibleContentHeight);
                     const int thumbY = trackTop + (trackH - thumbH) * m_scrollOffsetY / maxScroll;
 
-                    HBRUSH hTrack = CreateSolidBrush(Constants::Theme::ThemedColor(
+                    RECT trackRect = {sbX, trackTop, sbX + sbWidth, trackBottom};
+                    FillRect(hdc, &trackRect, UI::Gdi::Brush(Constants::Theme::ThemedColor(
                             Constants::Theme::HelpWindow::SCROLLBAR_TRACK_R,
                             Constants::Theme::HelpWindow::SCROLLBAR_TRACK_G,
-                            Constants::Theme::HelpWindow::SCROLLBAR_TRACK_B, app.themeFactor));
-                    RECT trackRect = {sbX, trackTop, sbX + sbWidth, trackBottom};
-                    FillRect(hdc, &trackRect, hTrack);
-                    DeleteObject(hTrack);
+                            Constants::Theme::HelpWindow::SCROLLBAR_TRACK_B, app.themeFactor)));
 
-                    HBRUSH hThumb = CreateSolidBrush(Constants::Theme::ThemedColor(
+                    RECT thumbRect = {sbX, thumbY, sbX + sbWidth, thumbY + thumbH};
+                    FillRect(hdc, &thumbRect, UI::Gdi::Brush(Constants::Theme::ThemedColor(
                             Constants::Theme::HelpWindow::SCROLLBAR_THUMB_R,
                             Constants::Theme::HelpWindow::SCROLLBAR_THUMB_G,
-                            Constants::Theme::HelpWindow::SCROLLBAR_THUMB_B, app.themeFactor));
-                    RECT thumbRect = {sbX, thumbY, sbX + sbWidth, thumbY + thumbH};
-                    FillRect(hdc, &thumbRect, hThumb);
-                    DeleteObject(hThumb);
+                            Constants::Theme::HelpWindow::SCROLLBAR_THUMB_B, app.themeFactor)));
                 }
 
                 // ---- footer --------------------------------------------------

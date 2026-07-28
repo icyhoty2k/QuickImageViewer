@@ -234,7 +234,7 @@ enum class Command {
 
     // --- Dedicated instances (src/Dedicated) ---
     ToggleDedicatedPanel,   // F8 — the Dedicated configuration panel
-    ToggleRemotePanel,      // F9 — the Remote control (TCP/IP) panel
+    ToggleRemotePanel,      // F9 — the Remote Server panel (this instance's listener)
     ToggleDedicated,        // -dedicated: separate registry/history namespace
     CmdArgsExport,          // current settings → a cmdArgs .txt
     CmdArgsImport,          // read a cmdArgs .txt and apply it
