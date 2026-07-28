@@ -714,7 +714,8 @@ void RemotesWnd::DoSyncAll() {
     // filesystem. A drive letter means nothing on another machine.
     Remote::Mirror::BroadcastSync(L"sync " + Remote::BuildSyncPayload(true),
                                   L"sync " + Remote::BuildSyncPayload(false));
-    m_status = L"Pushed view state to " + std::to_wstring(m_rows.size()) + L" remote(s)";
+    m_status = L"Pushed folder, image and view state to " +
+               std::to_wstring(m_rows.size()) + L" remote(s)";
     Repaint();
 }
 
@@ -1105,10 +1106,20 @@ LRESULT RemotesWnd::HandlePanelMessage(UINT message, WPARAM wParam, LPARAM lPara
             SetTextColor(bb, dim);
             RECT sr{pad, tr.bottom, W - pad, tr.bottom + static_cast<int>(16 * s)};
             {
+                // The mirror selection is made in a popup that is gone a second
+                // later (MirrorPicker.h), so this line is where it can be
+                // checked afterwards — named while it is narrowed, and silent
+                // while every connected row is following along, which is the
+                // ordinary case and needs no explaining.
+                std::wstring mirror = app.passCommandToRemote ? L"ON" : L"off";
+                if (app.passCommandToRemote && Remote::Mirror::HasLiveTargets())
+                    mirror += L" → " + Remote::Mirror::SelectionSummary();
+
                 const std::wstring sub =
-                    std::wstring(L"F11 mirror ") + (app.passCommandToRemote ? L"ON" : L"off") +
+                    std::wstring(L"F11 mirror ") + mirror +
                     L"   ·   F12 execute here " + (app.resendCommandToCaller ? L"ON" : L"off") +
-                    L"   ·   ● starts/stops the program · Link connects · ◉ observes · F5 polls";
+                    L"   ·   Shift+F11 picks which · ● starts/stops the program · "
+                    L"Link connects · ◉ observes · F5 polls";
                 DrawTextW(bb, sub.c_str(), -1, &sr, DT_LEFT | DT_SINGLELINE | DT_END_ELLIPSIS);
             }
 

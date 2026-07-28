@@ -169,7 +169,11 @@ Command InputManager::ResolveKeyboardKeys(UINT key, LPARAM lParam) {
             break;
 
         // --- Mirroring (F11 / F12) ---
-        case Shortcuts::SC_MIRROR_TOGGLE:       return Command::MirrorToggle;
+        // Shift+F11 manages the selection instead of toggling: same key, because
+        // it is the same subject, and the shifted form is the one you reach for
+        // while mirroring is already on — when plain F11 would switch it off.
+        case Shortcuts::SC_MIRROR_TOGGLE:
+            return shift ? Command::MirrorPick : Command::MirrorToggle;
         case Shortcuts::SC_MIRROR_LOCAL_TOGGLE: return Command::MirrorLocalToggle;
 
         // --- Fullscreen ---

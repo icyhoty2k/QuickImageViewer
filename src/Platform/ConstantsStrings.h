@@ -126,6 +126,10 @@ namespace Constants::Messages {
     constexpr const wchar_t *MIRROR_ON_PREFIX  = L"Mirroring" STR_STATE_ON L" → "; // append "<n> target(s)"
     constexpr const wchar_t *MIRROR_OFF        = L"Mirroring" STR_STATE_OFF;
     constexpr const wchar_t *MIRROR_NO_TARGETS = L"Mirroring" STR_STATE_ON L" — no targets (F10 to connect)";
+    // The picker (two or more instances connected) closed with nothing ticked.
+    // Mirroring to no one is mirroring off, so say that rather than claim it is
+    // on and then forward nothing.
+    constexpr const wchar_t *MIRROR_NONE_PICKED = L"Mirroring" STR_STATE_OFF L" — no instance chosen";
     // F12 is meaningless while F11 is off, and a keypress that appears to do
     // nothing reads as a bug. Say why instead.
     constexpr const wchar_t *MIRROR_LOCAL_ON   = L"Mirror: execute here too" STR_STATE_ON;
