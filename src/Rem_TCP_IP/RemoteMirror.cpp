@@ -84,6 +84,13 @@ namespace {
         // that may be switched off, not yet built, or simply not wanted right
         // now — so being in the list cannot imply being connected to.
         std::atomic<bool>      wantConnect{true};
+        // Does F11 drive THIS one? Connected and mirrored are different questions:
+        // a screen can be joined so it can be polled, started, stopped or watched
+        // from the console while the keystrokes go somewhere else. Session state,
+        // deliberately not persisted — a narrowed selection is about what is on
+        // the desk right now, and a saved one would silently leave screens out of
+        // a later session for a reason nobody remembers.
+        std::atomic<bool>      mirroring{true};
         std::atomic<bool>      connected{false};
         std::atomic<Down>      down{Down::None};
         std::atomic<bool>      observing{false};
@@ -401,6 +408,13 @@ namespace {
         t.cv.notify_one();
     }
 
+    // Does a BROADCAST reach this target? Only the fan-out asks: SendTo and
+    // PingAll are per-row console actions on a named target, and a row left out
+    // of the mirror selection is still a row you can poll, start or stop.
+    bool Mirrored(const Target &t) {
+        return t.mirroring.load(std::memory_order_acquire);
+    }
+
     Target *Find(int id) {
         for (std::unique_ptr<Target> &t : g_targets)
             if (t->id == id) return t.get();
@@ -554,6 +568,7 @@ std::vector<TargetView> Targets() {
         v.port      = t->port;
         v.exePath   = t->exePath;
         v.connecting = t->wantConnect.load(std::memory_order_acquire);
+        v.mirroring  = t->mirroring.load(std::memory_order_acquire);
         v.connected  = t->connected.load(std::memory_order_acquire);
         v.observing = t->observing.load(std::memory_order_acquire);
         v.lagUs     = t->lagUs.load(std::memory_order_acquire);
@@ -572,7 +587,8 @@ std::vector<TargetView> Targets() {
 // =============================================================================
 
 void BroadcastLine(const std::wstring &line) {
-    for (std::unique_ptr<Target> &t : g_targets) PushTo(*t, line, {});
+    for (std::unique_ptr<Target> &t : g_targets)
+        if (Mirrored(*t)) PushTo(*t, line, {});
 }
 
 void BroadcastPosition(const std::wstring &line, const std::wstring &expectFile) {
@@ -590,10 +606,15 @@ void BroadcastPosition(const std::wstring &line, const std::wstring &expectFile)
     // and checking would report a divergence on every single navigation and push
     // a `sync` each time — a repair loop for a problem that is not one.
     for (std::unique_ptr<Target> &t : g_targets)
-        if (t->sameMachine) PushTo(*t, line, expectFile);
+        if (t->sameMachine && Mirrored(*t)) PushTo(*t, line, expectFile);
 }
 
 void BroadcastSync(const std::wstring &full, const std::wstring &portable) {
+    // EVERY target, mirror selection included — this is the console's Sync All
+    // button, an explicit "line all of them up with me", not a mirrored
+    // keystroke. Skipping the rows F11 currently leaves out would make that
+    // button do less than its label says for no reason the user can see.
+    //
     // Same state, two spellings. `full` carries folder=; `portable` does not,
     // because a drive letter means nothing on another machine and applying it
     // would send that instance to a folder it cannot open.
@@ -620,7 +641,51 @@ void Broadcast(Command cmd) {
     if (!okLocal && !okRemote) return;
 
     for (std::unique_ptr<Target> &t : g_targets)
-        if (t->sameMachine ? okLocal : okRemote) PushTo(*t, name, {});
+        if (Mirrored(*t) && (t->sameMachine ? okLocal : okRemote))
+            PushTo(*t, name, {});
+}
+
+void SetMirroring(int id, bool on) {
+    if (Target *t = Find(id)) t->mirroring.store(on, std::memory_order_release);
+}
+
+void SetMirroringAll(bool on) {
+    for (std::unique_ptr<Target> &t : g_targets)
+        t->mirroring.store(on, std::memory_order_release);
+}
+
+int MirroredLiveCount() {
+    // Walks the list rather than keeping a counter: this is asked when F11 is
+    // pressed and when the picker is drawn, never on the keystroke path — the
+    // gate there is HasLiveTargets, which is one atomic load.
+    int n = 0;
+    for (std::unique_ptr<Target> &t : g_targets)
+        if (t->connected.load(std::memory_order_acquire) && Mirrored(*t)) ++n;
+    return n;
+}
+
+std::wstring SelectionSummary() {
+    int live = 0, picked = 0;
+    std::wstring names;
+    for (std::unique_ptr<Target> &t : g_targets) {
+        if (!t->connected.load(std::memory_order_acquire)) continue;
+        ++live;
+        if (!Mirrored(*t)) continue;
+        ++picked;
+        if (!names.empty()) names += L", ";
+        names += t->name.empty() ? t->host : t->name;
+    }
+
+    // Nothing narrowed: the count is the whole story, and naming three screens
+    // that are all following along is noise on top of an overlay that is only
+    // up for a second.
+    if (picked == live)
+        return std::to_wstring(picked) + (picked == 1 ? L" target" : L" targets");
+
+    // Narrowed: which ones, and out of how many — the count alone would leave
+    // the user counting screens to work out who was left out.
+    return names + L" (" + std::to_wstring(picked) + L" of " +
+           std::to_wstring(live) + L")";
 }
 
 void SendTo(int id, const std::wstring &line) {

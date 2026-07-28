@@ -226,7 +226,7 @@ All effects are non-destructive and GPU-accelerated via the Direct2D effect grap
 
 | Shortcut | Action |
 |:---|:---|
-| `F` / `F11` / `Enter` / `Ctrl+Shift+T` | Toggle borderless fullscreen |
+| `F` / `Enter` / `Ctrl+Shift+T` | Toggle borderless fullscreen |
 | `Ctrl+T` / `Ctrl+A` | Toggle always-on-top |
 | `Shift+W/A/S/D` | Nudge window 20 px up / left / down / right |
 | `Alt+W/A/S/D` | Snap to top / left / bottom / right half of work area |
