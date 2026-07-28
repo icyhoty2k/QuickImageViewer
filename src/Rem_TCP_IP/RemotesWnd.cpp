@@ -70,7 +70,7 @@ namespace {
 // =============================================================================
 void RemotesWnd::Init(HINSTANCE hInstance, HWND hParent) {
     const float s = app.dpiScale;
-    InitFloating(hInstance, hParent, L"qIVRemotesWnd", L"Remotes",
+    InitFloating(hInstance, hParent, L"qIVRemotesWnd", L"Remote Servers",
                  static_cast<int>(PANEL_W * s), static_cast<int>(PANEL_H * s));
     if (GetHwnd()) {
         SetWindowLongPtrW(GetHwnd(), GWL_EXSTYLE,
@@ -254,15 +254,16 @@ void RemotesWnd::Rebuild() {
     const bool haveRows = !m_rows.empty();
     const bool editing  = m_editingRowId != 0;
 
-    // Connecting ONE row is the Link cell in that row, not a button — the
-    // button acting on "the selected row" made it ambiguous which row a press
-    // referred to, when the same click that selects a row also loads it into
-    // the form. These two act on everything, which needs no selection at all.
+    // Connecting ONE row is the Connect/Disconnect button IN that row, not a
+    // toolbar button — a toolbar button acting on "the selected row" made it
+    // ambiguous which row a press referred to, when the same click that selects
+    // a row also loads it into the form. These two act on everything, which
+    // needs no selection at all.
     m_buttons.clear();
     m_buttons.push_back({editing ? L"Update" : L"Save", BTN_SAVE, {}, true,
         editing ? L"Apply the form to the remote being edited."
                 : L"Record the form as a new remote.\nSaving does not connect — that is the "
-                  L"Link cell in its row, or Connect all."});
+                  L"Connect button in its row, or Connect all."});
     // Always available: it clears the form, which is meaningful whether or not a
     // row is loaded. Enabling it only while editing made it look broken to
     // anyone who had simply typed into the fields and wanted to start over.
@@ -372,7 +373,7 @@ void RemotesWnd::DoSaveEntry() {
     if (m_editingField >= 0) CommitTextEdit();
 
     if (m_newHost.empty() || m_newPort == 0) {
-        DialogMessage(L"Fill in the address and port first.", L"Remotes");
+        DialogMessage(L"Fill in the address and port first.", L"Remote Servers");
         return;
     }
 
@@ -385,7 +386,7 @@ void RemotesWnd::DoSaveEntry() {
         DialogMessage(L"Give this remote a Name.\r\n\r\nNames identify a remote — in the "
                       L"list, in every message about it, and when matching it up again "
                       L"after its port or folder changes.\r\n\r\nAdd from file… fills it in "
-                      L"from the instance's own settings.", L"Remotes");
+                      L"from the instance's own settings.", L"Remote Servers");
         return;
     }
 
@@ -400,7 +401,7 @@ void RemotesWnd::DoSaveEntry() {
         if (r.host == m_newHost && r.port == m_newPort) {
             DialogMessage(m_newHost + L":" + std::to_wstring(m_newPort) +
                           L" is already in the list, as \"" + r.name + L"\".",
-                          L"Remotes");
+                          L"Remote Servers");
             return;
         }
         // Same name twice: the name is the identity, so every message that
@@ -409,7 +410,7 @@ void RemotesWnd::DoSaveEntry() {
             DialogMessage(L"There is already a remote called \"" + r.name +
                           L"\" (" + r.host + L":" + std::to_wstring(r.port) +
                           L").\r\n\r\nNames identify a remote, so they have to be "
-                          L"distinct — give this one a different name.", L"Remotes");
+                          L"distinct — give this one a different name.", L"Remote Servers");
             return;
         }
     }
@@ -481,7 +482,17 @@ void RemotesWnd::DoToggleConnect(int row) {
     if (row < 0 || row >= static_cast<int>(m_rows.size())) return;
     const RowView &r = m_rows[row];
 
-    const bool on = !r.connecting;
+    // The press does what its LABEL says, and the label comes from the dot:
+    //   Up      → "Disconnect"  → drop it
+    //   Pending → "Connecting…" → the press cancels the dial in progress
+    //   Idle/Down → "Connect"   → dial, or retry now
+    // Toggling the wish flag instead would leave a row that failed to connect
+    // showing "Disconnect", and the press would then silently ABANDON the
+    // retry the user thought they were asking for. SetConnecting(id, true) on a
+    // target that already wants to connect notifies its condition variable, so
+    // a second press cuts the reconnect back-off short — a real retry, not a
+    // no-op.
+    const bool on = (r.dot != DotState::Up && r.dot != DotState::Pending);
     const std::wstring name = r.name; // Rebuild() invalidates the row
     Remote::Mirror::SetConnecting(r.id, on);
 
@@ -579,6 +590,10 @@ void RemotesWnd::DoImportFromFile() {
 
 void RemotesWnd::DoPollAll() {
     Remote::Mirror::PingAll();
+    // Same beat as the ping: the poll is where the console re-asks the world
+    // what is true, and "is that row on this machine?" is one of those answers.
+    // Costs nothing here — it raises a flag and returns.
+    Remote::Mirror::RefreshSameMachine();
     m_status = L"Polling…";
     // The replies land on the sender threads; the timer brings the answers into
     // view without this function ever waiting for one.
@@ -593,7 +608,7 @@ void RemotesWnd::DoRemoveTarget(int row) {
     if (!DialogConfirm(L"Remove " + r.name + L" (" + r.host + L":" +
                        std::to_wstring(r.port) + L") from the list?\r\n\r\n"
                        L"The instance itself is not affected.",
-                       L"Remotes"))
+                       L"Remote Servers"))
         return;
 
     const bool wasEditing = (r.id == m_editingRowId);
@@ -621,14 +636,14 @@ void RemotesWnd::DoStartTarget(int row) {
                       L"It can only be started at that machine — nothing here can "
                       L"launch a process on it. Stopping it works, because that "
                       L"travels down the connection it already has open.",
-                      L"Remotes");
+                      L"Remote Servers");
         return;
     }
 
     if (r.exePath.empty()) {
         DialogMessage(L"No exe recorded for this remote, so there is nothing to "
                       L"launch.\r\n\r\nRemove it and add it again with the exe "
-                      L"path filled in to enable the start button.", L"Remotes");
+                      L"path filled in to enable the start button.", L"Remote Servers");
         return;
     }
 
@@ -639,7 +654,7 @@ void RemotesWnd::DoStartTarget(int row) {
         DialogMessage(L"That exe is no longer there:\r\n\r\n    " + r.exePath +
                       L"\r\n\r\nIt has been moved, renamed or deleted. Remove this "
                       L"row and add it again from the instance's current location.",
-                      L"Remotes");
+                      L"Remote Servers");
         return;
     }
 
@@ -673,7 +688,7 @@ void RemotesWnd::DoStopTarget(int row) {
 
     if (!DialogConfirm(L"Shut down " + r.name + L"?\r\n\r\n"
                        L"It exits immediately without saving its session.",
-                       L"Remotes"))
+                       L"Remote Servers"))
         return;
 
     // The existing HardQuit, down the connection already open. Note this is a
@@ -833,9 +848,13 @@ void RemotesWnd::UpdateTip(POINT pt) {
     } else if (const int l = HitTestLink(pt); l >= 0) {
         owner = &m_rows[l].linkRect;
         rect  = m_rows[l].linkRect;
-        text  = m_rows[l].connecting
-                    ? L"Connected, or trying to be. Click to disconnect.\nThe row stays in "
-                      L"the list."
+        text  = m_rows[l].dot == DotState::Up
+                    ? L"Connected. Click to disconnect.\nThe row stays in the list."
+                : m_rows[l].dot == DotState::Pending
+                    ? L"Dialling. Click to give up on it.\nNothing is connected yet."
+                : m_rows[l].connecting
+                    ? L"Asked for, but NOT connected — the other end is not answering.\n"
+                      L"Click to retry now instead of waiting for the next attempt."
                     : L"Listed but not dialled. Click to connect.\nBeing in the list does "
                       L"not mean being connected to.";
     } else if (const int e = HitTestEye(pt); e >= 0) {
@@ -1099,16 +1118,16 @@ LRESULT RemotesWnd::HandlePanelMessage(UINT message, WPARAM wParam, LPARAM lPara
             SelectObject(bb, m_hFontBold);
             SetTextColor(bb, fg);
             RECT tr{pad, static_cast<int>(6 * s), W - pad, static_cast<int>(26 * s)};
-            DrawTextW(bb, L"Remotes — instances this copy drives", -1, &tr,
+            DrawTextW(bb, L"Remote Servers — instances this copy can drive", -1, &tr,
                       DT_LEFT | DT_SINGLELINE);
 
             SelectObject(bb, m_hFontSmall);
             SetTextColor(bb, dim);
             RECT sr{pad, tr.bottom, W - pad, tr.bottom + static_cast<int>(16 * s)};
             {
-                // The mirror selection is made in a popup that is gone a second
-                // later (MirrorPicker.h), so this line is where it can be
-                // checked afterwards — named while it is narrowed, and silent
+                // The mirror selection has its own panel (Ctrl+F11), but this
+                // console is where the targets themselves are managed — so it
+                // names the selection while it is narrowed, and stays silent
                 // while every connected row is following along, which is the
                 // ordinary case and needs no explaining.
                 std::wstring mirror = app.passCommandToRemote ? L"ON" : L"off";
@@ -1118,7 +1137,7 @@ LRESULT RemotesWnd::HandlePanelMessage(UINT message, WPARAM wParam, LPARAM lPara
                 const std::wstring sub =
                     std::wstring(L"F11 mirror ") + mirror +
                     L"   ·   F12 execute here " + (app.resendCommandToCaller ? L"ON" : L"off") +
-                    L"   ·   Shift+F11 picks which · ● starts/stops the program · "
+                    L"   ·   Ctrl+F11 picks which · ● starts/stops the program · "
                     L"Link connects · ◉ observes · F5 polls";
                 DrawTextW(bb, sub.c_str(), -1, &sr, DT_LEFT | DT_SINGLELINE | DT_END_ELLIPSIS);
             }
@@ -1221,8 +1240,11 @@ LRESULT RemotesWnd::HandlePanelMessage(UINT message, WPARAM wParam, LPARAM lPara
             const int cPort = pad + static_cast<int>(420 * s);
             const int cLag  = pad + static_cast<int>(490 * s);
             const int cDot  = pad + static_cast<int>(645 * s);
-            const int cLink = pad + static_cast<int>(705 * s);
-            const int cEye  = pad + static_cast<int>(790 * s);
+            const int cEye  = pad + static_cast<int>(700 * s);
+            // Link is LAST and is a real button, so it needs a span, not an
+            // anchor: "Disconnect" is the widest label the column ever draws.
+            const int cLinkL = pad + static_cast<int>(770 * s);
+            const int cLinkR = pad + static_cast<int>(916 * s);
 
             SelectObject(bb, m_hFontSmall);
             SetTextColor(bb, PC::HEADER);
@@ -1231,9 +1253,19 @@ LRESULT RemotesWnd::HandlePanelMessage(UINT message, WPARAM wParam, LPARAM lPara
                     RECT r{x, y, W - pad, y + hdrH};
                     DrawTextW(bb, t, -1, &r, DT_LEFT | DT_VCENTER | DT_SINGLELINE);
                 };
+                // The last three columns draw CENTRED marks (two circles and a
+                // button), so their headers must be centred on the same axis —
+                // a left-aligned header over a centred glyph reads as belonging
+                // to the column beside it.
+                auto hdrC = [&](int cx, const wchar_t *t) {
+                    const int half = static_cast<int>(50 * s);
+                    RECT r{cx - half, y, cx + half, y + hdrH};
+                    DrawTextW(bb, t, -1, &r, DT_CENTER | DT_VCENTER | DT_SINGLELINE);
+                };
                 hdr(cNum, L"#"); hdr(cName, L"Name"); hdr(cHost, L"Address");
-                hdr(cPort, L"Port"); hdr(cLag, L"Lag"); hdr(cDot, L"Up");
-                hdr(cLink, L"Link"); hdr(cEye, L"Watch");
+                hdr(cPort, L"Port"); hdr(cLag, L"Lag");
+                hdrC(cDot, L"Up"); hdrC(cEye, L"Watch");
+                hdrC((cLinkL + cLinkR) / 2, L"Link");
             }
             y += hdrH;
 
@@ -1313,27 +1345,55 @@ LRESULT RemotesWnd::HandlePanelMessage(UINT message, WPARAM wParam, LPARAM lPara
                     SelectObject(bb, ob2); SelectObject(bb, op2);
                 }
 
-                // Link — connect / disconnect THIS row. Words rather than a
-                // glyph: it sits beside two circles that already mean other
-                // things, and "on/off" cannot be confused with either.
-                r.linkRect = {cLink - static_cast<int>(6 * s), y,
-                              cLink + static_cast<int>(44 * s), y + rowH};
-                {
-                    SetTextColor(bb, r.connecting ? PC::ON : dim);
-                    RECT lkr = r.linkRect;
-                    DrawTextW(bb, r.connecting ? L"on" : L"off", -1, &lkr,
-                              DT_CENTER | DT_VCENTER | DT_SINGLELINE);
-                }
-
                 // Observation — drawn as text so it follows the theme and needs
                 // no assets. Filled when watched, hollow when not.
-                r.eyeRect = {cEye - static_cast<int>(12 * s), y,
-                             cEye + static_cast<int>(20 * s), y + rowH};
+                // Symmetric about cEye — an off-centre rect makes DT_CENTER put
+                // the glyph half its skew away from the header above it.
+                r.eyeRect = {cEye - static_cast<int>(16 * s), y,
+                             cEye + static_cast<int>(16 * s), y + rowH};
                 {
                     SetTextColor(bb, r.observing ? PC::ON : dim);
                     RECT er2 = r.eyeRect;
                     DrawTextW(bb, r.observing ? L"◉" : L"○", -1, &er2,
                               DT_CENTER | DT_VCENTER | DT_SINGLELINE);
+                }
+
+                // Link — connect / disconnect THIS row. Last column, and drawn
+                // as a real button (fill + border) so it reads as the one thing
+                // in the row you press, rather than as another status word.
+                // The label states what the press DOES, not what the row is.
+                {
+                    const int vin = static_cast<int>(4 * s);
+                    r.linkRect = {cLinkL, y + vin, cLinkR, y + rowH - vin};
+
+                    // Label follows the LINK, not the wish. Asking to connect to
+                    // a machine that is off leaves wantConnect true while
+                    // nothing is connected — saying "Disconnect" there claims a
+                    // session that does not exist. Only a live round trip earns
+                    // that word; a dial in progress says so; everything else
+                    // offers the retry.
+                    const wchar_t *lbl = (r.dot == DotState::Up)      ? L"Disconnect"
+                                       : (r.dot == DotState::Pending) ? L"Connecting…"
+                                                                      : L"Connect";
+                    COLORREF base = (r.dot == DotState::Up) ? PC::BTN_ALT : PC::BTN_MAIN;
+                    if (static_cast<int>(i) == m_hotRow)
+                        base = RGB(std::min(255, GetRValue(base) + 40),
+                                   std::min(255, GetGValue(base) + 40),
+                                   std::min(255, GetBValue(base) + 40));
+                    FillRect(bb, &r.linkRect, Gdi::Brush(base));
+
+                    HGDIOBJ op3 = SelectObject(bb, Gdi::Pen(line));
+                    HGDIOBJ ob3 = SelectObject(bb, GetStockObject(NULL_BRUSH));
+                    Rectangle(bb, r.linkRect.left, r.linkRect.top,
+                              r.linkRect.right, r.linkRect.bottom);
+                    SelectObject(bb, ob3); SelectObject(bb, op3);
+
+                    SelectObject(bb, m_hFontSmall);
+                    SetTextColor(bb, RGB(245, 245, 245));
+                    RECT lkr = r.linkRect;
+                    DrawTextW(bb, lbl, -1, &lkr,
+                              DT_CENTER | DT_VCENTER | DT_SINGLELINE);
+                    SelectObject(bb, m_hFontBody);
                 }
 
                 y += rowH;

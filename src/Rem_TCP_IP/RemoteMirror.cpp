@@ -8,6 +8,8 @@
 #include "RemoteProtocol.h"
 #include "RemoteServer.h" // ActiveConnections — the other half of SessionActive
 #include "RemotesFile.h"  // SplitStoredSecret — imported credentials
+#include "RemoteLog.h"    // Ctrl+F12 — the record of what crossed the wire
+#include "RemoteSettings.h" // Config().name, snapshotted for the log's Sender column
 
 #include "AppState.h"
 #include "Platform/Constants.h"
@@ -59,9 +61,13 @@ namespace {
         std::wstring password;
         std::wstring exePath;
 
-        // Decided ONCE, when the target is added — the answer cannot change
-        // while the process runs, and resolving it per keystroke would put a DNS
-        // lookup in the mirror path.
+        // Resolved when the target is added and re-resolved on demand — never
+        // per keystroke, which would put a DNS lookup in the mirror path.
+        //
+        // ATOMIC because the re-resolve runs on the sender thread (DNS blocks,
+        // and the UI thread must not) while the UI thread reads it to pick a
+        // command set. One acquire load per broadcast — the same cost class as
+        // the other flags on this hot path.
         //
         // Same machine  → the full command set, positions included: both ends
         //                 see the same files, so an index means the same picture.
@@ -70,7 +76,14 @@ namespace {
         //                 same actions over its own content, rather than a
         //                 mirror of this screen — which is the most that can
         //                 honestly be delivered when the folders differ.
-        bool sameMachine = false;
+        std::atomic<bool> sameMachine{false};
+
+        // Set by the UI thread, serviced by the sender thread: "re-resolve your
+        // host". The answer CAN change while the process runs — DHCP hands out a
+        // new address, a laptop moves between networks, a name starts resolving
+        // somewhere else — and a stale answer sends the wrong command set or
+        // greys out a start button that would work.
+        std::atomic<bool> resolveWanted{false};
 
         Client client;                      // sender thread only
 
@@ -150,6 +163,23 @@ namespace {
     bool IsSameMachine(const std::wstring &host) {
         if (host.empty()) return false;
 
+        // getaddrinfo is a WINSOCK call and fails with WSANOTINITIALISED (10093)
+        // if nothing in this process has called WSAStartup yet. This runs from
+        // AddTarget on the UI thread, which happens at startup and on every
+        // panel open — long before the F9 server binds or a sender thread dials,
+        // so on a standalone viewer Winsock is usually DOWN right here. The
+        // failure looked exactly like "not this machine", which marked every
+        // local instance remote and disabled its start button.
+        //
+        // Winsock refcounts, so a balanced local reference is correct whether or
+        // not the server already holds one.
+        struct WsaScope {
+            bool up = false;
+            WsaScope()  { WSADATA d{}; up = (WSAStartup(MAKEWORD(2, 2), &d) == 0); }
+            ~WsaScope() { if (up) WSACleanup(); }
+        } wsa;
+        if (!wsa.up) return false;
+
         const std::string node = ToUtf8(host);
 
         addrinfo hints{};
@@ -181,12 +211,36 @@ namespace {
             return false;
         }
 
+        // Compare the ADDRESS BYTES only. memcmp over the whole sockaddr also
+        // compared sin_port (harmless, both zero here) and — the one that bit —
+        // sin6_scope_id and sin6_flowinfo: the same IPv6 address resolved from a
+        // literal carries scope 0 while the one resolved from our own host name
+        // carries the interface index, so two spellings of one address never
+        // matched.
+        auto addrBytes = [](const addrinfo *a, int &len) -> const void * {
+            if (a->ai_family == AF_INET) {
+                len = sizeof(in_addr);
+                return &reinterpret_cast<const sockaddr_in *>(a->ai_addr)->sin_addr;
+            }
+            if (a->ai_family == AF_INET6) {
+                len = sizeof(in6_addr);
+                return &reinterpret_cast<const sockaddr_in6 *>(a->ai_addr)->sin6_addr;
+            }
+            len = 0;
+            return nullptr;
+        };
+
         bool same = false;
         for (addrinfo *a = them; a && !same; a = a->ai_next) {
+            int la = 0;
+            const void *pa = addrBytes(a, la);
+            if (!pa) continue;
             for (addrinfo *b = mine; b; b = b->ai_next) {
                 if (a->ai_family != b->ai_family) continue;
-                if (a->ai_addrlen == b->ai_addrlen &&
-                    memcmp(a->ai_addr, b->ai_addr, a->ai_addrlen) == 0) {
+                int lb = 0;
+                const void *pb = addrBytes(b, lb);
+                if (!pb || la != lb) continue;
+                if (memcmp(pa, pb, static_cast<size_t>(la)) == 0) {
                     same = true;
                     break;
                 }
@@ -256,6 +310,16 @@ namespace {
     void SenderLoop(Target *t) {
         while (!t->stop.load(std::memory_order_acquire)) {
 
+            // ── Re-resolve "is this host us?" ───────────────────────────────
+            // HERE, not on the UI thread: getaddrinfo blocks for as long as DNS
+            // takes, and this thread is the one already allowed to wait on the
+            // network for this target. `t->host` is written once in AddTarget
+            // and never mutated, so reading it unlocked is safe; RemoveTarget
+            // joins this thread before destroying the Target, so `t` cannot
+            // dangle underneath us.
+            if (t->resolveWanted.exchange(false, std::memory_order_acq_rel))
+                t->sameMachine.store(IsSameMachine(t->host), std::memory_order_release);
+
             // ── Idle: listed, but not asked to connect ──────────────────────
             // Park rather than dial. Nothing is queued to a target in this
             // state (PushTo drops it), so there is no backlog to replay when it
@@ -271,7 +335,10 @@ namespace {
                 std::unique_lock<std::mutex> lk(t->mtx);
                 t->cv.wait(lk, [t] {
                     return t->stop.load(std::memory_order_acquire) ||
-                           t->wantConnect.load(std::memory_order_acquire);
+                           t->wantConnect.load(std::memory_order_acquire) ||
+                           // A listed-but-idle row still shows a start button,
+                           // so it still has to notice the address moving.
+                           t->resolveWanted.load(std::memory_order_acquire);
                 });
                 continue;
             }
@@ -331,7 +398,9 @@ namespace {
                     // pushes, so an ordinary mirrored keystroke goes out with no
                     // added latency at all.
                     t->cv.wait(lk, [t] {
-                        return t->stop.load(std::memory_order_acquire) || !t->queue.empty();
+                        return t->stop.load(std::memory_order_acquire) ||
+                               !t->queue.empty() ||
+                               t->resolveWanted.load(std::memory_order_acquire);
                     });
                     continue;
                 }
@@ -344,6 +413,19 @@ namespace {
                 const long long t0 = NowUs();
                 const bool ok = t->client.Send(item.line, reply, err, &events);
                 const long long t1 = NowUs();
+
+                // THE outbound record point. Here rather than inside Client::Send
+                // because this is where the round trip is already measured and
+                // where the target has a name — the client knows only a socket.
+                // A failed send is logged too, with its error as the response:
+                // "what did it say" and "it said nothing" are the same question.
+                //
+                // Gated BEFORE the call, not inside it: with logging off this is
+                // one relaxed atomic load and nothing is copied. SelfName() alone
+                // would take the store's mutex and return a string.
+                if (Log::IsEnabled())
+                    Log::Add(Log::Direction::Out, Log::SelfName(), item.line, t->name,
+                             ok ? reply : err, t1 - t0);
 
                 if (!ok) {
                     SetConnected(*t, false);
@@ -510,7 +592,13 @@ int AddTarget(const std::wstring &name, const std::wstring &host, int port,
     t->port        = port;
     t->password    = password;
     t->exePath     = exePath;
-    t->sameMachine = IsSameMachine(host);
+    // Resolved here, synchronously, so the row is right the moment it appears.
+    // The periodic refresh below only has to catch LATER changes.
+    t->sameMachine.store(IsSameMachine(host), std::memory_order_release);
+
+    // UI thread, and the last moment before a sender thread exists that will
+    // want this name and may not read Config() itself. See RemoteLog.h.
+    Log::SetSelfName(Remote::Config().name);
     t->wantConnect.store(connectNow, std::memory_order_release);
 
     Target *raw = t.get();
@@ -562,7 +650,7 @@ std::vector<TargetView> Targets() {
     for (std::unique_ptr<Target> &t : g_targets) {
         TargetView v;
         v.id          = t->id;
-        v.sameMachine = t->sameMachine;
+        v.sameMachine = t->sameMachine.load(std::memory_order_acquire);
         v.name        = t->name;
         v.host      = t->host;
         v.port      = t->port;
@@ -606,7 +694,8 @@ void BroadcastPosition(const std::wstring &line, const std::wstring &expectFile)
     // and checking would report a divergence on every single navigation and push
     // a `sync` each time — a repair loop for a problem that is not one.
     for (std::unique_ptr<Target> &t : g_targets)
-        if (t->sameMachine && Mirrored(*t)) PushTo(*t, line, expectFile);
+        if (t->sameMachine.load(std::memory_order_acquire) && Mirrored(*t))
+            PushTo(*t, line, expectFile);
 }
 
 void BroadcastSync(const std::wstring &full, const std::wstring &portable) {
@@ -619,7 +708,7 @@ void BroadcastSync(const std::wstring &full, const std::wstring &portable) {
     // because a drive letter means nothing on another machine and applying it
     // would send that instance to a folder it cannot open.
     for (std::unique_ptr<Target> &t : g_targets)
-        PushTo(*t, t->sameMachine ? full : portable, {});
+        PushTo(*t, t->sameMachine.load(std::memory_order_acquire) ? full : portable, {});
 }
 
 void Broadcast(Command cmd) {
@@ -641,7 +730,8 @@ void Broadcast(Command cmd) {
     if (!okLocal && !okRemote) return;
 
     for (std::unique_ptr<Target> &t : g_targets)
-        if (Mirrored(*t) && (t->sameMachine ? okLocal : okRemote))
+        if (Mirrored(*t) &&
+            (t->sameMachine.load(std::memory_order_acquire) ? okLocal : okRemote))
             PushTo(*t, name, {});
 }
 
@@ -698,6 +788,29 @@ void PingAll() {
     // — and the round trip on the channel actually in use is the more honest
     // number anyway.
     for (std::unique_ptr<Target> &t : g_targets) PushTo(*t, L"ping", {});
+}
+
+void BroadcastEnableLog(bool on) {
+    // The STATE, not a toggle — see Command::EnableRemoteLog. Sent as one line
+    // to every target, the same spelling both ways, because `enablelog` carries
+    // no paths and no indices and so needs no same-machine variant.
+    //
+    // EVERY connected target, not just the mirrored selection: the log is a
+    // diagnostic about the whole session, and a screen left recording because it
+    // happened to be unticked in Remotes Control is a file nobody will think to
+    // look at, still growing.
+    const std::wstring line = on ? L"enablelog 1" : L"enablelog 0";
+    for (std::unique_ptr<Target> &t : g_targets) PushTo(*t, line, {});
+}
+
+void RefreshSameMachine() {
+    // Only ASKS. The resolving happens on each sender thread, so a console poll
+    // never stalls the UI on DNS — the answers are picked up by the repaint the
+    // poll timer was already going to do.
+    for (std::unique_ptr<Target> &t : g_targets) {
+        t->resolveWanted.store(true, std::memory_order_release);
+        t->cv.notify_all();
+    }
 }
 
 void SetConnecting(int id, bool on) {

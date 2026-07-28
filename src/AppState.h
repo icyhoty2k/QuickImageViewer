@@ -252,6 +252,16 @@ struct AppState {
     bool passCommandToRemote   = false; // F11
     bool resendCommandToCaller = false; // F12
 
+    // Ctrl+F12 — is the remote log recording? Same session-only reasoning as the
+    // two above, and the default is the one place that decides it.
+    //
+    // THE UI-THREAD COPY. The producers are socket and sender threads, which may
+    // not read `app` at all, so the value that actually gates recording is an
+    // atomic inside Remote::Log — flipped in the same breath as this one. This
+    // field exists so the menu, the panel and GetCommandValue have something on
+    // the UI thread to read, exactly like every other toggle.
+    bool remoteLogEnabled = Constants::RemoteTcpIp::REMOTE_LOG_DEFAULT;
+
     // Blocks the screensaver and display sleep while the main window is visible.
     // Acted on by AppCommands::ApplyDisplayAwake — never by touching
     // SetThreadExecutionState directly, because that call is per-THREAD and

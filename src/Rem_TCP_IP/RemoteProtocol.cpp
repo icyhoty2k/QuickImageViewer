@@ -214,6 +214,17 @@ namespace {
         // resending toggles at all.
         { L"sync",                  Command::Sync,                            PayloadRule::Required },
         { L"Sync",                  Command::Sync,                            PayloadRule::Required },
+
+        // --- Diagnostics ---
+        // `enablelog 1` / `enablelog 0` — switch the Ctrl+F12 wire log on or off
+        // on THIS instance. Payload-required rather than a toggle so a driving
+        // instance can put a whole wall of screens into the same state; a toggle
+        // sent to ends that already disagree only swaps which one is wrong.
+        //
+        // Reachable remotely on purpose: the screen whose behaviour you are
+        // trying to explain is usually not the one you are sitting at.
+        { L"enablelog",             Command::EnableRemoteLog,                 PayloadRule::Required },
+        { L"EnableRemoteLog",       Command::EnableRemoteLog,                 PayloadRule::Required },
     };
 
     constexpr size_t TABLE_COUNT = sizeof(TABLE) / sizeof(TABLE[0]);
@@ -409,6 +420,13 @@ bool IsMirrorable(Command cmd) {
         case Command::MirrorLocalToggle:
         case Command::Observe:
         case Command::Sync:
+            return false;
+
+        // Fanned out by BroadcastEnableLog, which sends the STATE (`enablelog 1`)
+        // — not by the generic mirror path, which would send the bare verb and
+        // have every target reject it for a missing payload. Excluded here so
+        // the two routes cannot both fire and send it twice.
+        case Command::EnableRemoteLog:
             return false;
 
         default:

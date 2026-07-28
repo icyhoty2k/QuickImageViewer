@@ -1,6 +1,7 @@
 #include "RemoteExec.h"
 #include "RemoteInbound.h" // InboundSource — which connection asked to observe
 #include "RemoteServer.h"  // Add/RemoveObserver
+#include "RemoteLog.h"     // enablelog — the recording switch, both halves
 
 #include "AppState.h"
 #include "Platform/Constants.h"
@@ -183,6 +184,39 @@ namespace {
         const size_t slash = hit.find_last_of(L"\\/");
         return MakeOk(std::to_wstring(bestIdx + 1) + L" " +
                       (slash == std::wstring::npos ? hit : hit.substr(slash + 1)));
+    }
+
+    // --- enablelog <0|1> ----------------------------------------------------
+    // Switch the Ctrl+F12 wire log on or off HERE. Reachable remotely because
+    // the screen whose behaviour needs explaining is usually not the one you are
+    // sitting at.
+    //
+    // Sets both halves of the flag: the UI-thread bool the menu and panel read,
+    // and the atomic the socket/sender threads actually gate on. Setting one
+    // without the other gives a viewer whose panel and whose recording disagree.
+    //
+    // Does NOT fan out further. This is the RECEIVING end of a fan-out that
+    // BroadcastEnableLog already did; re-broadcasting would have every slave
+    // instruct its own targets, and two instances pointed at each other would
+    // trade the command forever.
+    std::wstring DoEnableLog(const std::wstring &payload) {
+        bool on = false;
+        if (payload == L"1" || _wcsicmp(payload.c_str(), L"on") == 0 ||
+            _wcsicmp(payload.c_str(), L"true") == 0) {
+            on = true;
+        } else if (payload == L"0" || _wcsicmp(payload.c_str(), L"off") == 0 ||
+                   _wcsicmp(payload.c_str(), L"false") == 0) {
+            on = false;
+        } else {
+            return MakeErr(RT::ERR_BAD_PAYLOAD, L"expected 0 or 1");
+        }
+
+        app.remoteLogEnabled = on;
+        Log::SetEnabled(on);
+        // An open panel is showing the OLD state on its Recording button — it
+        // did not make this change and has no timer to notice it.
+        Log::NotifyChanged();
+        return MakeOk(on ? L"1" : L"0");
     }
 
     // --- zoom <percent> -----------------------------------------------------
@@ -520,6 +554,9 @@ bool ExecutePayload(HWND hWnd, Command cmd, const std::wstring &payload,
             return true;
         case Command::SlideshowSetInterval:
             replyOut = DoInterval(hWnd, payload);
+            return true;
+        case Command::EnableRemoteLog:
+            replyOut = DoEnableLog(payload);
             return true;
         default:
             return false;

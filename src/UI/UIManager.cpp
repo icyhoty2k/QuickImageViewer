@@ -141,6 +141,18 @@ IPanelWindow *const fixed[] = {
         return remotesWnd;
     }
 
+    MirrorPickerWnd &UIManager::getMirrorPickerWindow() {
+        if (isInit(mirrorPickerWnd)) return mirrorPickerWnd;
+        mirrorPickerWnd.Init(m_hInstance, m_hMainWnd);
+        return mirrorPickerWnd;
+    }
+
+    RemoteLogWnd &UIManager::getRemoteLogWindow() {
+        if (isInit(remoteLogWnd)) return remoteLogWnd;
+        remoteLogWnd.Init(m_hInstance, m_hMainWnd);
+        return remoteLogWnd;
+    }
+
     DirWnd &UIManager::getDirWindow() {
         if (isInit(dirWnd)) return dirWnd;
         dirWnd.Init(m_hInstance, m_hMainWnd, Constants::CURRENT_DIR_WINDOW_POSITION);
