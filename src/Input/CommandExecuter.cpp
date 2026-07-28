@@ -22,6 +22,10 @@
 #include <shtypes.h>
 #include "AppCommands.h"
 #include "UIManager.h"
+#include "Rem_TCP_IP/RemoteExec.h"    // ExecutePayload — the shared payload body
+#include "Rem_TCP_IP/RemoteMirror.h"  // the mirror gate at the top of ExecuteCommand
+#include "Rem_TCP_IP/RemoteInbound.h" // …and the loop cut that makes it safe
+#include "Rem_TCP_IP/RemoteServer.h"  // EmitToObservers — the echo half
 
 // These two functions live in AppMain.cpp.
 // Declared here (not in a header) to keep them package-private.
@@ -76,6 +80,49 @@ static void CycleOverlaySlot(HWND hWnd, OverlayManager::Slot slot) {
     InvalidateRect(hWnd, nullptr, FALSE);
 }
 
+// Compact decimal for the GetCommandValue readouts. std::to_wstring on a float
+// yields six decimal places ("1.000000"), which is noise in a reply line meant
+// to be read by a human at a socket.
+static std::wstring Fmt1(float v) {
+    wchar_t buf[32];
+    swprintf_s(buf, L"%.2f", static_cast<double>(v));
+    // Trim trailing zeros, then a bare trailing point: 1.00 → 1, 1.50 → 1.5
+    std::wstring s(buf);
+    if (s.find(L'.') != std::wstring::npos) {
+        while (!s.empty() && s.back() == L'0') s.pop_back();
+        if (!s.empty() && s.back() == L'.') s.pop_back();
+    }
+    return s;
+}
+
+static std::wstring OnOff(bool b) { return b ? L"1" : L"0"; }
+
+// "<current>/<total> <filename>", 1-based — the same numbering the overlay and
+// the JumpTo panel show, so a caller reading the screen and a caller reading
+// this reply see the same figures.
+//
+// THE FILE NAME IS THE POINT, not decoration. A driving instance sends an INDEX
+// (indices are cheap, and stay meaningful because sort order is itself a
+// mirrored command, so both ends sort identically). But identical sort only
+// yields identical indices when both ends also hold the same FILE SET — one
+// file added or deleted on one side shifts everything after it, and from then
+// on every index lands on the wrong picture, silently.
+//
+// So the reply names what was actually landed on. The caller compares; on a
+// mismatch it pushes `sync` (folder + sort + view state) and resends the index.
+// Cheap to include, and it turns a silent divergence into a self-correcting one.
+static std::wstring PosOfTotal() {
+    const int total = static_cast<int>(app.playlist.size());
+    if (total <= 0 || app.currentIndex < 0 || app.currentIndex >= total) return L"0/0";
+
+    const std::wstring &path = app.playlist[app.currentIndex];
+    const size_t slash = path.find_last_of(L"\\/");
+    const std::wstring name = (slash == std::wstring::npos) ? path : path.substr(slash + 1);
+
+    return std::to_wstring(app.currentIndex + 1) + L"/" + std::to_wstring(total) +
+           L" " + name;
+}
+
 // =============================================================================
 // handleKeyboard — public entry point called from WM_KEYDOWN
 // =============================================================================
@@ -87,11 +134,114 @@ void InputManager::handleKeyboard(HWND hWnd, WPARAM wParam, LPARAM lParam) {
 }
 
 // =============================================================================
+// ExecuteCommand (payload form) — "do this WITH this value".
+//
+// Pressing J and sending `goto 42` are the same command; one carries the number
+// and the other asks for it. This overload is the carrying form, and its body
+// lives in Remote::ExecutePayload so that a value arriving from a panel and one
+// arriving from a socket run identical code.
+//
+// The reply line it produces is discarded here. Callers that need it — the
+// socket path — go to Remote::ExecutePayload directly rather than through the
+// input pipeline.
+// =============================================================================
+void InputManager::ExecuteCommand(HWND hWnd, Command cmd, const std::wstring &payload) {
+    std::wstring reply;
+    if (Remote::ExecutePayload(hWnd, cmd, payload, reply)) return;
+
+    // Not a payload-carrying command — the value is meaningless, so run the
+    // ordinary form rather than silently doing nothing.
+    ExecuteCommand(hWnd, cmd);
+}
+
+// =============================================================================
 // ExecuteCommand — runs a fully-resolved Command and applies all side effects.
 // Call from any input path (keyboard, mouse click, tray) to guarantee identical
 // behavior regardless of how the action was triggered.
 // =============================================================================
 void InputManager::ExecuteCommand(HWND hWnd, Command cmd) {
+    // =========================================================================
+    // THE MIRROR GATE.
+    //
+    // Deliberately the FIRST thing in this function — ahead of the transition
+    // range below, ahead of the switch, ahead of every side effect. Two reasons:
+    //
+    //   1. The transition block returns early. A gate placed after it would
+    //      never see that whole range of commands, and the omission would be
+    //      invisible.
+    //   2. "Forward but do not execute here" (F11 on, F12 off — the pure
+    //      remote-control mode) has to return before anything has happened
+    //      locally. At the top there is nothing to undo.
+    //
+    // It lives INSIDE ExecuteCommand rather than in a Dispatch() wrapper around
+    // it on purpose. A wrapper would leave every existing direct caller of
+    // ExecuteCommand silently un-mirrored — precisely the class of bug that
+    // routing the mouse and the panels through here was meant to eliminate. The
+    // gate has to be somewhere nothing can go around.
+    //
+    // Anything not mirrorable falls straight through and runs locally, which is
+    // what the deny-list means: not forwarded is not the same as not allowed.
+    // =========================================================================
+    // =========================================================================
+    // THE SESSION FILTER — checked before anything else, including the mirror
+    // gate below, so a refused command neither runs here nor travels.
+    //
+    // The connection IS the switch: an instance on its own behaves exactly as it
+    // always did, and joining one to another is what puts both into the
+    // restricted mode. One table (SESSION_BLOCKED, RemoteProtocol.cpp) decides
+    // what that mode excludes — so a command that would otherwise slip through
+    // some path nobody thought about is caught HERE, at the one place every
+    // input path already funnels into, rather than at each of them.
+    //
+    // Always says what it dropped and why. A keypress that silently does nothing
+    // is indistinguishable from a bug, and the user would rightly report it as
+    // one.
+    // =========================================================================
+    {
+        const wchar_t *reason = nullptr;
+        if (Remote::BlockedNow(cmd, reason)) {
+            std::wstring name;
+            if (!Remote::NameForCommand(cmd, name))
+                name = std::to_wstring(static_cast<int>(cmd));
+            g_overlayManager.PostCenterMessage(
+                hWnd, Constants::Messages::REMOTE_BLOCKED_PREFIX + name +
+                          L" — " + reason);
+            return;
+        }
+    }
+
+    // HasLiveTargets() before IsMirrorable(): mirroring stays switched on while
+    // the screens are off — the sender threads reconnect and it resumes by
+    // itself — so the flag alone would put a command-table walk on every
+    // keystroke for as long as nothing was answering.
+    const bool forwarded = app.passCommandToRemote && Remote::Mirror::HasLiveTargets() &&
+                           !Remote::InboundActive() && Remote::IsMirrorable(cmd);
+    if (forwarded) {
+        Remote::Mirror::Broadcast(cmd);
+        if (!app.resendCommandToCaller) return; // drive the others, stay put here
+    }
+
+    // Held for the rest of this dispatch. If executing the command below changes
+    // the picture, LoadImageIndex must NOT also forward the resulting index —
+    // we already said `next`, and each target applies that to its own playlist.
+    // See RemoteInbound.h.
+    Remote::ForwardGuard forwardGuard(forwarded);
+
+    // The echo half. An observed instance reports what it does to whoever asked
+    // to watch — skipped for anything that arrived from the wire, or a command
+    // would bounce back to the connection that sent it.
+    //
+    // HasObservers() first: it is one atomic load, and it is false in any viewer
+    // nobody is watching. IsMirrorable is a switch and NameForCommand walks the
+    // command table — neither belongs on the keystroke path of a standalone
+    // viewer, and this ordering keeps them off it.
+    if (Remote::HasObservers() && !Remote::InboundActive() &&
+        Remote::IsMirrorable(cmd)) {
+        std::wstring wireName;
+        if (Remote::NameForCommand(cmd, wireName))
+            Remote::EmitToObservers(wireName, Remote::CONN_NONE);
+    }
+
     // Direct transition pick — handled ahead of the switch because it is a
     // contiguous RANGE of commands (one per TransitionType), not discrete cases.
     static_assert(static_cast<int>(Command::SetTransitionLast) -
@@ -494,6 +644,51 @@ void InputManager::ExecuteCommand(HWND hWnd, Command cmd) {
             g_overlayManager.PostCenterMessage(hWnd, Constants::Messages::RESET_TO_DEFAULTS);
             break;
 
+        // Middle-click reset. Deliberately NOT ResetAll: this restores the
+        // window and viewport but leaves every image effect alone, which is what
+        // the middle button has always done. Centres on the MONITOR rather than
+        // the work area — also the existing behaviour, so a taskbar does not
+        // shift the result.
+        case Command::ResetWindowLayout: {
+            app.viewport.zoom    = 1.0f;
+            app.viewport.offsetX = 0.0f;
+            app.viewport.offsetY = 0.0f;
+
+            app.opacity = 255;
+            SetLayeredWindowAttributes(hWnd, 0, app.opacity, LWA_ALPHA);
+
+            const int targetW = static_cast<int>(app.baseWidth  * app.dpiScale);
+            const int targetH = static_cast<int>(app.baseHeight * app.dpiScale);
+
+            HMONITOR hMonitor = MonitorFromWindow(hWnd, MONITOR_DEFAULTTONEAREST);
+            MONITORINFO mi = {sizeof(mi)};
+            if (GetMonitorInfo(hMonitor, &mi)) {
+                const int monitorW = mi.rcMonitor.right - mi.rcMonitor.left;
+                const int monitorH = mi.rcMonitor.bottom - mi.rcMonitor.top;
+                SetWindowPos(hWnd, nullptr,
+                             mi.rcMonitor.left + (monitorW - targetW) / 2,
+                             mi.rcMonitor.top  + (monitorH - targetH) / 2,
+                             targetW, targetH,
+                             SWP_NOZORDER | SWP_NOACTIVATE | SWP_FRAMECHANGED);
+            }
+            InvalidateRect(hWnd, nullptr, FALSE);
+            break;
+        }
+
+        // Shift+Wheel. Floor is 10, not 0: an invisible window cannot be found
+        // again with the mouse, and the wheel is the only way back up.
+        case Command::OpacityUp:
+            app.opacity = static_cast<BYTE>(
+                std::min(255, static_cast<int>(app.opacity) + Constants::OPACITY_STEP));
+            SetLayeredWindowAttributes(hWnd, 0, app.opacity, LWA_ALPHA);
+            break;
+
+        case Command::OpacityDown:
+            app.opacity = static_cast<BYTE>(
+                std::max(10, static_cast<int>(app.opacity) - Constants::OPACITY_STEP));
+            SetLayeredWindowAttributes(hWnd, 0, app.opacity, LWA_ALPHA);
+            break;
+
         // -----------------------------------------------------------------------
         // Color effect toggles
         // -----------------------------------------------------------------------
@@ -608,6 +803,38 @@ void InputManager::ExecuteCommand(HWND hWnd, Command cmd) {
             AppCommands::CopyImageToClipboard(hWnd);
             break;
 
+        // ── File operations on the active thumbnail panel's selection ────────
+        // Commands purely so that ONE gate governs them: the session filter at
+        // the top of this function refuses the three destructive ones while a
+        // connection is live, and NEVER_REMOTE keeps all four off the wire with
+        // a static_assert behind it. Four scattered checks in the panel's menu
+        // handler would be four places for a fifth call site to be forgotten.
+        //
+        // The selection comes from the panel rather than a payload: these act on
+        // "what is selected right now", which is state the panel owns and no
+        // caller could sensibly supply.
+        case Command::FileCopySelection:
+        case Command::FileMoveSelection:
+        case Command::FileDeleteSelection: {
+            const auto &sel = uiManager.getActiveDirWnd().m_selectedPaths;
+            if (sel.empty()) break;
+            const std::vector<std::wstring> paths(sel.begin(), sel.end());
+
+            if (cmd == Command::FileDeleteSelection)
+                AppCommands::DeleteFilesToRecycleBin(paths);
+            else
+                AppCommands::CopyFilesToClipboard(hWnd, paths,
+                                                  cmd == Command::FileMoveSelection);
+            break;
+        }
+
+        case Command::FilePasteIntoFolder: {
+            const std::wstring dir = uiManager.getActiveDirWnd().GetPanelFolder();
+            if (dir.empty()) break;
+            AppCommands::PasteFilesFromClipboard(hWnd, dir);
+            break;
+        }
+
         // ── Dedicated instances ──────────────────────────────────────────────
         case Command::ToggleDedicatedPanel:
             uiManager.Toggle(uiManager.getDedicatedWindow());
@@ -616,6 +843,47 @@ void InputManager::ExecuteCommand(HWND hWnd, Command cmd) {
         // ── Remote control over TCP/IP (src/Rem_TCP_IP) ──────────────────────
         case Command::ToggleRemotePanel:
             uiManager.Toggle(uiManager.getRemoteWindow());
+            break;
+
+        // ── Mirroring (F11 / F12) ────────────────────────────────────────────
+        // Both are pure state flips reported on screen. The forwarding itself
+        // happens in the gate at the top of this function, not here.
+        case Command::MirrorToggle:
+            app.passCommandToRemote = !app.passCommandToRemote;
+            if (!app.passCommandToRemote) {
+                g_overlayManager.PostCenterMessage(hWnd, Constants::Messages::MIRROR_OFF);
+            } else {
+                // Turning it on with nothing connected is a configuration
+                // mistake, not a state worth reporting as success.
+                const int n = Remote::Mirror::TargetCount();
+                g_overlayManager.PostCenterMessage(
+                    hWnd, n == 0 ? std::wstring(Constants::Messages::MIRROR_NO_TARGETS)
+                                 : Constants::Messages::MIRROR_ON_PREFIX + std::to_wstring(n));
+            }
+            break;
+
+        case Command::MirrorLocalToggle:
+            app.resendCommandToCaller = !app.resendCommandToCaller;
+            if (!app.passCommandToRemote) {
+                // F12 alone does nothing observable. Saying so beats a keypress
+                // that silently changes a flag nobody can see the effect of.
+                g_overlayManager.PostCenterMessage(hWnd, Constants::Messages::MIRROR_LOCAL_IDLE);
+            } else {
+                g_overlayManager.PostCenterMessage(hWnd,
+                    app.resendCommandToCaller ? Constants::Messages::MIRROR_LOCAL_ON
+                                              : Constants::Messages::MIRROR_LOCAL_OFF);
+            }
+            break;
+
+        case Command::ToggleRemotesConsole:
+            uiManager.Toggle(uiManager.getRemotesConsoleWindow());
+            break;
+
+        // Payload-only: they cannot arrive without a value, and the bare forms
+        // would have nothing to act on. Listed so the switch is exhaustive
+        // rather than letting them fall into `default` and look unhandled.
+        case Command::Observe:
+        case Command::Sync:
             break;
 
         case Command::ToggleDedicated:
@@ -687,6 +955,16 @@ void InputManager::ExecuteCommand(HWND hWnd, Command cmd) {
             break;
         case Command::PrevFavoriteFolder:
             (void) UI::WalkHistoryFolder(hWnd, UI::WalkScope::FavoritesOnly, true);
+            break;
+
+        // The horizontal wheel's scope: every row the panel shows, favorites
+        // included. The four above split that list into halves; these two walk
+        // the whole of it.
+        case Command::PrevHistoryFolderAll:
+            (void) UI::WalkHistoryFolder(hWnd, UI::WalkScope::All, true);
+            break;
+        case Command::NextHistoryFolderAll:
+            (void) UI::WalkHistoryFolder(hWnd, UI::WalkScope::All, false);
             break;
 
         // Home / End — unconditional jump to either end of the playlist. Unlike
@@ -1178,5 +1456,175 @@ void InputManager::ExecuteCommand(HWND hWnd, Command cmd) {
 
         default:
             break;
+    }
+}
+
+// =============================================================================
+// GetCommandValue — what `cmd` controls, as it stands NOW.
+//
+// Feeds the "OK <name>=<value>" reply a remote caller receives, so a driving
+// instance can verify that what it sent actually took effect rather than
+// assuming it did. Values are read straight from `app`, which is the source of
+// truth; nothing is cached or recomputed here.
+//
+// THIS IS A SECOND SWITCH OVER THE SAME ENUM AS ExecuteCommand ABOVE, and the
+// two must be edited together. It sits directly below its partner for that
+// reason. A command with a case there and none here returns "?" — deliberately
+// visible the first time it is driven, rather than an empty string that reads
+// like a working command with nothing to report.
+//
+// Commands whose state is not a value report what a caller would actually want
+// to check instead: `next` answers "14/238", not "next=ok".
+// =============================================================================
+std::wstring InputManager::GetCommandValue(HWND hWnd, Command cmd) {
+    // Whole contiguous ranges answer with the same reading.
+    if (cmd >= Command::SetTransitionFirst && cmd <= Command::SetTransitionLast)
+        return std::to_wstring(static_cast<int>(app.slideshow.transition.type));
+    if (cmd >= Command::ViewMode1 && cmd <= Command::ViewMode5)
+        return std::to_wstring(static_cast<int>(app.viewMode));
+    if (cmd >= Command::SetWallpaperFill && cmd <= Command::SetWallpaperSpan)
+        return L"set";
+
+    switch (cmd) {
+        // --- Anything that moves the playlist position -----------------------
+        case Command::NextImage:
+        case Command::PrevImage:
+        case Command::GoToFirstImage:
+        case Command::GoToLastImage:
+        case Command::GoToLastImageInCurrentFolder:
+        case Command::ToggleFirstLastImageInCurrentFolder:
+        case Command::ToggleLastImage:
+        case Command::JumpToImage:
+        case Command::FindImage:
+        case Command::OpenFile:
+        case Command::ReloadCurrentDir:
+        case Command::PrevHistoryFolder:
+        case Command::NextHistoryFolder:
+        case Command::PrevFavoriteFolder:
+        case Command::NextFavoriteFolder:
+        case Command::PrevHistoryFolderAll:
+        case Command::NextHistoryFolderAll:
+        case Command::ToggleLastDir:
+        case Command::SortByName:
+        case Command::SortByDate:
+        case Command::SortBySize:
+        case Command::SortByType:
+        case Command::SortByDisk:
+            return PosOfTotal();
+
+        // --- Zoom / viewport --------------------------------------------------
+        case Command::ZoomIn:
+        case Command::ZoomOut:
+        case Command::ZoomReset:
+        case Command::ZoomTo:
+            return Converters::FormatZoomPercent(app.GetRealZoom(hWnd));
+        case Command::PanLeft:
+        case Command::PanRight:
+        case Command::PanUp:
+        case Command::PanDown:
+            return Fmt1(app.viewport.offsetX) + L"," + Fmt1(app.viewport.offsetY);
+        case Command::ToggleViewportLock: return OnOff(app.lockViewport);
+
+        // --- Transform --------------------------------------------------------
+        case Command::RotateCW:
+        case Command::RotateCCW: return std::to_wstring(app.viewport.rotation);
+        case Command::FlipH:     return OnOff(app.viewport.flippedH);
+        case Command::FlipV:     return OnOff(app.viewport.flippedV);
+
+        // --- Colour effects ---------------------------------------------------
+        case Command::ToggleGrayscale:      return OnOff(app.effectGrayscale);
+        case Command::ToggleInvert:         return OnOff(app.effectInvert);
+        case Command::ToggleSepia:          return OnOff(app.effectSepia);
+        case Command::ToggleSolarize:       return OnOff(app.effectSolarize);
+        case Command::ToggleOutline:        return OnOff(app.effectOutline);
+        case Command::ToggleThreshold:      return OnOff(app.effectThreshold);
+        case Command::ToggleEffectPreview:  return OnOff(app.effectPreviewEnabled);
+        case Command::GammaUp:
+        case Command::GammaDown:            return Fmt1(app.gamma);
+        case Command::BrightnessUp:
+        case Command::BrightnessDown:       return Fmt1(app.brightness);
+        case Command::ContrastUp:
+        case Command::ContrastDown:         return Fmt1(app.contrast);
+        case Command::SaturationUp:
+        case Command::SaturationDown:       return Fmt1(app.saturation);
+        // The effect CHAIN, in application order — the one piece of effect state
+        // the booleans above cannot express, and the reason two instances can
+        // report identical flags while showing visibly different images.
+        case Command::ResetEffects: {
+            std::wstring out;
+            for (const std::wstring &e : app.activeEffectsList) {
+                if (!out.empty()) out += L',';
+                out += e;
+            }
+            return out.empty() ? L"none" : out;
+        }
+
+        // --- Window / chrome --------------------------------------------------
+        case Command::ToggleFullscreen:        return OnOff(app.isFullscreen);
+        case Command::ToggleAlwaysOnTop:       return OnOff(app.isAlwaysOnTop);
+        case Command::AutosizeToWorkArea:      return OnOff(app.isAutosized);
+        case Command::OpacityUp:
+        case Command::OpacityDown:             return std::to_wstring(app.opacity);
+        case Command::CycleBackdropType:       return std::to_wstring(app.backdropType);
+        case Command::ToggleCornerPreference:  return std::to_wstring(app.cornerPreference);
+        case Command::ThemeFactorUp:
+        case Command::ThemeFactorDown:
+        case Command::ThemeFactorReset:        return Fmt1(app.themeFactor);
+
+        // --- Overlays ---------------------------------------------------------
+        case Command::ToggleOverlay:            return OnOff(app.showOverlayInfoText);
+        case Command::ToggleOverlayBackground:  return OnOff(app.overlayShowBackground);
+        case Command::CycleOverlayLayout:       return std::to_wstring(app.overlayLayoutMode);
+        case Command::ToggleThumbnailWrapAround:return OnOff(app.thumbnailPanelWheelWrapAround);
+        case Command::ToggleThumbnailEffects:   return OnOff(app.thumbnailEffectsEnabled);
+
+        // --- Slideshow --------------------------------------------------------
+        case Command::SlideshowToggle:
+        case Command::SlideshowPauseResume:
+            return app.slideshow.running
+                       ? (app.slideshow.paused ? L"paused" : L"running")
+                       : L"stopped";
+        case Command::SlideshowToggleLoop:      return OnOff(app.slideshow.loop);
+        case Command::SlideshowToggleShuffle:   return OnOff(app.slideshow.shuffle);
+        case Command::SlideshowSetInterval:     return std::to_wstring(app.slideshow.intervalMs);
+        case Command::SlideshowCycleTransition:
+            return std::to_wstring(static_cast<int>(app.slideshow.transition.type));
+
+        // --- Panels -----------------------------------------------------------
+        case Command::ToggleHelp:    return OnOff(uiManager.getHelpWindow().IsVisible());
+        case Command::ToggleCache:   return OnOff(uiManager.getCacheWindow().IsVisible());
+        case Command::ToggleDir:     return OnOff(uiManager.getDirWindow().IsVisible());
+        case Command::ToggleHistory: return OnOff(uiManager.getHistoryListWindow().IsVisible());
+        case Command::ShowInfo:      return OnOff(uiManager.getInfoWindow().IsVisible());
+        case Command::ToggleStats:   return OnOff(uiManager.getStatsWindow().IsVisible());
+        case Command::ToggleAllPanels:
+        case Command::CloseAllPanels:
+        case Command::RestoreAllPanels: return OnOff(uiManager.AnyPanelVisible());
+
+        // --- Mirroring --------------------------------------------------------
+        case Command::MirrorToggle:      return OnOff(app.passCommandToRemote);
+        case Command::MirrorLocalToggle: return OnOff(app.resendCommandToCaller);
+
+        // --- Actions with no lasting state; report that they ran --------------
+        case Command::ClearCache:
+        case Command::SaveImage:
+        case Command::CopyToClipboard:
+        case Command::ShowInExplorer:
+        case Command::ResetAll:
+        case Command::ResetWindowLayout:
+        // Listed for completeness only. These are in NEVER_REMOTE, so the wire
+        // path refuses them before a value is ever asked for — but a case here
+        // costs nothing and stops the next reader wondering whether the omission
+        // was deliberate.
+        case Command::FileCopySelection:
+        case Command::FileMoveSelection:
+        case Command::FileDeleteSelection:
+        case Command::FilePasteIntoFolder:
+            return L"done";
+
+        default:
+            // Visible on first use rather than silently blank — see the header
+            // comment. Add the case above when you add the command.
+            return L"?";
     }
 }

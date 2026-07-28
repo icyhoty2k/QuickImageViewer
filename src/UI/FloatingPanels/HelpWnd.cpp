@@ -319,9 +319,10 @@ namespace UI {
         Add(L"Drag near screen edge",
             L"Releasing a window drag within " + NumI(Constants::WINDOW_SNAP_DISTANCE) +
             L" px of a screen edge snaps the window to that edge.", sWin);
-        Add(K(SC::SC_PANEL_FULLSCREEN_F) + L" / " + K(SC::SC_PANEL_FULLSCREEN) + L" / " +
+        Add(K(SC::SC_PANEL_FULLSCREEN_F) + L" / " +
             K(SC::SC_PANEL_FULLSCREEN_ENTER) + L" / " + CtrlShift(SC::SC_PANEL_FULLSCREEN_T),
-            L"Toggle borderless fullscreen on the current monitor.", sWin);
+            L"Toggle borderless fullscreen on the current monitor. "
+            L"(F11 no longer does this — it is the mirroring toggle.)", sWin);
         Add(Ctrl(SC::SC_ALWAYS_ON_TOP) + L"  /  " + Ctrl(SC::SC_ALWAYS_ON_TOP_A),
             L"Toggle always-on-top — the main window and every visible panel stay above "
             L"all other windows.", sWin);
@@ -348,8 +349,9 @@ namespace UI {
         Add(K(SC::SC_APP_RELOAD_CURRENT_DIR),
             L"Reload the current directory from disk — picks up newly added, deleted or "
             L"renamed files without leaving the folder.", sPanels);
-        Add(K(SC::SC_PANEL_CACHE_CLEAR),
-            L"Clear the VRAM cache. Images are re-decoded on demand afterwards.", sPanels);
+        Add(Ctrl(SC::SC_PANEL_CACHE_CLEAR),
+            L"Clear the VRAM cache. Images are re-decoded on demand afterwards. "
+            L"(Moved from F12, which is now the mirroring toggle.)", sPanels);
         Add(K(SC::IPANNEL_WINDOW_LOCAL_HIDE) + L"  /  " + Ctrl(SC::SC_APP_HIDE_ALT),
             L"Close the focused panel — works in every panel window.", sPanels);
         Add(L"MMB click",
@@ -556,7 +558,48 @@ namespace UI {
             L"over the network — next, goto, zoom, open, slideshow — from a script, a "
             L"phone, a home-automation system, or another qIV instance. The listener is "
             L"OFF unless you switch it on here, in the instance's .ini, or with -remote on "
-            L"the command line. An empty AllowList denies every connection.", sApp);
+            L"the command line. An empty AllowList denies every connection.\r\n"
+            L"Check Connection also REMEMBERS a peer that answers: it is written to "
+            L"qivRemotes.ini beside the exe and appears in the Remotes console from then on, "
+            L"so an address is typed once.", sApp);
+        Add(K(SC::SC_PANEL_REMOTES_CONSOLE),
+            L"Open the Remotes console: every instance this copy drives, with its address, "
+            L"port, round-trip lag and whether it is up. The dot starts a stopped instance "
+            L"or shuts down a running one; the circle beside it toggles OBSERVING, where "
+            L"that instance reports what it does and this viewer follows along — which is "
+            L"how you watch a screen running its own slideshow. Only one at a time: "
+            L"switching it on for one row switches it off for the others. F5 polls every row. "
+            L"Sync all pushes this viewer's view and effect state to every instance at once.", sApp);
+        Add(K(SC::SC_MIRROR_TOGGLE),
+            L"MIRRORING on/off. While on, every command you give here is also sent to the "
+            L"instances listed in the Remotes console (F10) — navigation, zoom, effects, "
+            L"view mode, sort order, slideshow. Panels, window geometry, quit and hide are "
+            L"deliberately never forwarded: one keypress must not close or move every "
+            L"screen at once. Always OFF at startup.", sApp);
+        Add(L"While connected",
+            L"A connection — driving another instance, or being driven by one — puts the "
+            L"viewer into a restricted mode, and leaves it when the last connection drops.\r\n"
+            L"Refused while connected: sort by Disk Order (physical order differs per drive, "
+            L"so two instances would order their playlists differently), Find, and anything "
+            L"that changes the folder — delete, cut, paste, drag-drop and Ctrl+S. Adding or "
+            L"removing one file shifts every image number after it, which is exactly what "
+            L"the two instances rely on to stay on the same picture. Each refusal says so on "
+            L"screen. Copy to clipboard still works: it reads a file and writes nothing.\r\n"
+            L"Connecting while already sorted by disk order switches you to sort by Name.\r\n"
+            L"Delete, move, paste and save are additionally NEVER reachable over the network, "
+            L"whatever the password or allow-list says.", sApp);
+        Add(L"Driving another machine",
+            L"An instance on the SAME computer is mirrored exactly — it shares the folder, so "
+            L"image numbers mean the same picture on both. An instance on ANOTHER computer "
+            L"gets the portable commands only: navigation, zoom, effects, view mode and "
+            L"slideshow, applied to its own content. Image numbers and folder paths are not "
+            L"sent there, because a path from this machine names nothing on that one. The "
+            L"Remotes console marks those rows (remote), and its start button cannot launch "
+            L"them — nothing here can start a process on another machine.", sApp);
+        Add(K(SC::SC_MIRROR_LOCAL_TOGGLE),
+            L"While mirroring, also execute the command HERE. Off (the default) makes this "
+            L"viewer a pure remote control: it drives the other screens and its own display "
+            L"stays where it is. Has no effect while mirroring is off. Always OFF at startup.", sApp);
         Add(K(SC::SC_TOGGLE_ALL_PANELS),
             L"Toggle all panels: closes every floating panel and directory strip if any is "
             L"open, otherwise restores exactly the set the last close hid. Main viewer stays.", sApp);

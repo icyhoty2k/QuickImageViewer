@@ -60,6 +60,40 @@ namespace {
     // digest would be the weakest link in the exchange.
     constexpr size_t NONCE_LEN = 32;
 
+    // --- Observers ----------------------------------------------------------
+    // Connections that sent `observe 1`. Written by client threads (join/leave)
+    // and read by the UI thread (emit), so every access is under this mutex.
+    // The ConnId IS the socket — an observer cannot outlive its connection, so
+    // there is nothing to reconcile and nothing to persist.
+    // An observer, and whether it is on THIS machine.
+    //
+    // The locality matters for the same reason it does when driving: a playlist
+    // POSITION only means something against the same set of files. An observer
+    // on this box shares the folder and can follow the picture exactly; one
+    // across the network has its own content, so an index would send it
+    // somewhere arbitrary. It still receives the actions — zoom, rotate,
+    // effects, view mode, slideshow — and follows what is being DONE without
+    // following what is being SHOWN. That is the most that can honestly be
+    // delivered, and it is silently wrong to pretend otherwise.
+    struct Observer {
+        SOCKET sock        = INVALID_SOCKET;
+        bool   sameMachine = false;
+    };
+
+    std::vector<Observer> g_observers;
+    std::mutex            g_observerMutex;
+
+    // Shadow count, so the COMMON case costs an atomic load instead of a lock.
+    //
+    // HasObservers() is called on every command and every image change. A viewer
+    // that nobody is watching — which is nearly all of them, nearly all the time
+    // — would otherwise take and release a mutex on every keystroke to discover
+    // an empty vector. Written only under g_observerMutex, so it cannot disagree
+    // with the vector; read without it, because a stale "false" for the few
+    // nanoseconds between adding an observer and publishing the count costs at
+    // most one missed event on the connection that just asked to observe.
+    std::atomic<int> g_observerCount{0};
+
     void SetEndpoint(const std::wstring &s) {
         std::lock_guard<std::mutex> lk(g_endpointMutex);
         g_endpoint = s;
@@ -146,6 +180,56 @@ namespace {
         if (s.rfind(L"::ffff:", 0) == 0 && mapped != std::wstring::npos)
             return s.substr(mapped + 1);
         return s;
+    }
+
+    // Is the peer on the other end of `s` this very machine?
+    //
+    // Not a comparison against "127.0.0.1": a second instance on this box may
+    // have connected via the machine's LAN address or its name, and calling that
+    // remote would needlessly stop it following positions when it shares the
+    // folder and could follow them perfectly.
+    bool PeerIsSameMachine(SOCKET s) {
+        sockaddr_storage ss{};
+        int len = sizeof(ss);
+        if (getpeername(s, reinterpret_cast<sockaddr *>(&ss), &len) != 0) return false;
+
+        if (ss.ss_family == AF_INET) {
+            const auto *s4 = reinterpret_cast<const sockaddr_in *>(&ss);
+            if ((ntohl(s4->sin_addr.s_addr) >> 24) == 127) return true;
+        } else if (ss.ss_family == AF_INET6) {
+            const auto *s6 = reinterpret_cast<const sockaddr_in6 *>(&ss);
+            if (IN6_IS_ADDR_LOOPBACK(&s6->sin6_addr)) return true;
+            // IPv4-mapped loopback arrives here on a dual-stack socket.
+            if (IN6_IS_ADDR_V4MAPPED(&s6->sin6_addr) && s6->sin6_addr.s6_addr[12] == 127)
+                return true;
+        }
+
+        // Not loopback — but it may still be an address this machine answers to.
+        char self[256] = {};
+        if (gethostname(self, sizeof(self)) != 0) return false;
+
+        addrinfo hints{};
+        hints.ai_family   = AF_UNSPEC;
+        hints.ai_socktype = SOCK_STREAM;
+
+        addrinfo *mine = nullptr;
+        if (getaddrinfo(self, nullptr, &hints, &mine) != 0 || !mine) return false;
+
+        bool same = false;
+        for (addrinfo *b = mine; b && !same; b = b->ai_next) {
+            if (b->ai_family != ss.ss_family) continue;
+            if (b->ai_family == AF_INET) {
+                const auto *m4 = reinterpret_cast<const sockaddr_in *>(b->ai_addr);
+                const auto *p4 = reinterpret_cast<const sockaddr_in *>(&ss);
+                same = (m4->sin_addr.s_addr == p4->sin_addr.s_addr);
+            } else if (b->ai_family == AF_INET6) {
+                const auto *m6 = reinterpret_cast<const sockaddr_in6 *>(b->ai_addr);
+                const auto *p6 = reinterpret_cast<const sockaddr_in6 *>(&ss);
+                same = (memcmp(&m6->sin6_addr, &p6->sin6_addr, sizeof(in6_addr)) == 0);
+            }
+        }
+        freeaddrinfo(mine);
+        return same;
     }
 
     // --- Authentication -----------------------------------------------------
@@ -259,7 +343,8 @@ namespace {
                 // ownership note in RemoteServer.h — both sides hold a
                 // shared_ptr, so a timeout here cannot corrupt anything.
                 auto call = std::make_shared<RemoteCall>();
-                call->req = req;
+                call->req  = req;
+                call->conn = static_cast<ConnId>(client);
 
                 if (!call->doneEvent) {
                     SendLine(client, MakeErr(RT::ERR_INTERNAL, L"no event"));
@@ -282,6 +367,11 @@ namespace {
                 }
             }
         }
+
+        // Leave the observer list BEFORE the socket closes. The UI thread emits
+        // into these handles directly, and a closed socket still sitting in the
+        // list is a write to a dead descriptor on the next action.
+        RemoveObserver(static_cast<ConnId>(client));
 
         shutdown(client, SD_BOTH);
         closesocket(client);
@@ -493,23 +583,120 @@ std::wstring BoundEndpoint() {
 // =============================================================================
 // UI-thread execution
 // =============================================================================
-std::wstring ExecuteOnUiThread(HWND hWnd, const RemoteRequest &req) {
-    // The five payload-carrying commands go to their headless paths in
-    // RemoteExec. They must NOT reach ExecuteCommand, where each raises a panel
-    // or a dialog and would hold the client's connection open until somebody
+std::wstring ExecuteOnUiThread(HWND hWnd, const RemoteRequest &req, ConnId from) {
+    // THE WIRE BOUNDARY. Unconditional — not gated on the session, not on the
+    // password, not on the allow-list.
+    //
+    // A static_assert already proves no file-altering command has a row in the
+    // command table, so nothing should ever reach here. That is the point: this
+    // is the second lock. If a row is ever added by a route the assert does not
+    // see — a hand-built RemoteRequest, a future parser change — the answer must
+    // still be no, because the cost of being wrong once is deleted files.
+    if (IsNeverRemote(req.cmd))
+        return MakeErr(RT::ERR_UNKNOWN_COMMAND, L"not available remotely");
+
+    // Everything below runs as an INBOUND command: it must not be forwarded on
+    // to this instance's own targets, and must not be echoed back to the
+    // connection that sent it. Without this a master mirroring to a slave that
+    // is also observing the master trades one keystroke between them forever.
+    // Scoped, so an early return cannot leave the flag set.
+    InboundGuard guard(from);
+
+    // The payload-carrying commands go to their headless paths in RemoteExec.
+    // They must NOT reach the bare ExecuteCommand, where each raises a panel or
+    // a dialog and would hold the client's connection open until somebody
     // dismissed a window on the machine.
     std::wstring reply;
     if (ExecutePayloadCommand(hWnd, req, reply))
         return reply;
 
-    // The shared sink. Keyboard, mouse and tray all funnel through here, so a
-    // remote command behaves identically to the same command typed locally.
+    // The shared sink. Keyboard, mouse, tray and panels all funnel through
+    // here, so a remote command behaves identically to the same command given
+    // locally.
     //
     // The kiosk lock is deliberately NOT consulted: isLocked exists to stop
     // someone at the keyboard of an unattended screen, while a remote caller has
     // already passed the address gates and the password.
     InputManager::ExecuteCommand(hWnd, req.cmd);
-    return MakeOk();
+
+    // Report the resulting state, not a bare OK. A driving instance uses this
+    // to confirm that what it sent actually took effect — and for the commands
+    // that move the playlist, to notice that the two ends have diverged. See
+    // InputManager::GetCommandValue.
+    std::wstring name;
+    if (!NameForCommand(req.cmd, name)) return MakeOk();
+    return MakeOk(name + L"=" + InputManager::GetCommandValue(hWnd, req.cmd));
+}
+
+// =============================================================================
+// Observers
+// =============================================================================
+
+void AddObserver(ConnId conn) {
+    const SOCKET s = static_cast<SOCKET>(conn);
+    if (s == INVALID_SOCKET) return;
+
+    // Resolved ONCE, when the observer joins. It cannot change while the
+    // connection lives, and doing it per emitted event would put a name lookup
+    // on the image-change path.
+    const bool local = PeerIsSameMachine(s);
+
+    std::lock_guard<std::mutex> lk(g_observerMutex);
+    for (const Observer &o : g_observers)
+        if (o.sock == s) return; // `observe 1` twice is not two observers
+    g_observers.push_back(Observer{s, local});
+    g_observerCount.store(static_cast<int>(g_observers.size()), std::memory_order_release);
+}
+
+void RemoveObserver(ConnId conn) {
+    const SOCKET s = static_cast<SOCKET>(conn);
+    std::lock_guard<std::mutex> lk(g_observerMutex);
+    g_observers.erase(std::remove_if(g_observers.begin(), g_observers.end(),
+                                     [s](const Observer &o) { return o.sock == s; }),
+                      g_observers.end());
+    g_observerCount.store(static_cast<int>(g_observers.size()), std::memory_order_release);
+}
+
+bool HasObservers() {
+    // Lock-free by design — see g_observerCount. This is on the keystroke path.
+    return g_observerCount.load(std::memory_order_acquire) > 0;
+}
+
+void EmitToObservers(const std::wstring &line, ConnId except, bool positional) {
+    // Cheap test first: no lock, and no string built, when nobody is watching.
+    if (g_observerCount.load(std::memory_order_acquire) == 0) return;
+
+    const std::string bytes = ToUtf8(std::wstring(RT::RESP_EVENT) + L" " + line) + "\r\n";
+
+    std::lock_guard<std::mutex> lk(g_observerMutex);
+    for (const Observer &o : g_observers) {
+        const SOCKET s = o.sock;
+        if (static_cast<ConnId>(s) == except) continue;
+
+        // A POSITION goes only to an observer that shares this folder. Across
+        // machines an index names a different picture, so sending one would
+        // jump that viewer somewhere arbitrary — worse than leaving it where it
+        // is. Such an observer still receives every ACTION, and follows what is
+        // being done rather than what is being shown.
+        if (positional && !o.sameMachine) continue;
+
+        // NON-BLOCKING, and dropped rather than retried.
+        //
+        // This runs on the UI thread, mid-command. A default send() blocks once
+        // the peer's receive window fills, so an observer that stopped reading
+        // — paused in a debugger, hung, on a saturated link — would freeze the
+        // viewer it is watching. That trade is never worth making: the event is
+        // a courtesy, the responsiveness is not.
+        //
+        // One shot, no loop: a partial write would put half a line on the wire
+        // and desynchronise that observer's parser for good, so a short count is
+        // treated exactly like a refusal.
+        u_long nb = 1;
+        ioctlsocket(s, FIONBIO, &nb);
+        (void) send(s, bytes.data(), static_cast<int>(bytes.size()), 0);
+        nb = 0;
+        ioctlsocket(s, FIONBIO, &nb);
+    }
 }
 
 } // namespace Remote

@@ -1,6 +1,7 @@
 #include "MouseHandler.h"
 #include "AppState.h"
 #include "AppCommands.h"
+#include "Command.h"          // every gesture resolves to a Command — see below
 #include "ContextMenuHandler.h"
 #include "../Platform/Constants.h"
 #include "../Platform/ConstantsStrings.h"
@@ -18,6 +19,23 @@
 #include <shellapi.h>
 
 extern AppState app;
+
+// =============================================================================
+// A GESTURE THAT MEANS AN ACTION RESOLVES TO A Command AND GOES THROUGH
+// InputManager::ExecuteCommand — exactly as a keystroke does.
+//
+// This file used to apply several of those actions itself (LoadImageIndex for
+// the wheel, the zoom arithmetic inline, AppCommands::ToggleFullscreen on
+// double-click). Each was byte-identical to the matching case in
+// CommandExecuter.cpp, which made them two copies of one behaviour — and, once
+// mirroring existed, meant the mouse silently did not mirror while the keyboard
+// did. The sink has to be universal or the gate on it is a lie.
+//
+// What deliberately does NOT resolve to a Command: the continuous gestures —
+// window drag, viewport pan, middle-drag resize. They are a stream of pixel
+// deltas rather than a discrete action, there is no sensible enumerator for
+// them, and forwarding one to another machine would be meaningless.
+// =============================================================================
 
 namespace {
     // True when the Missing/Empty overlay is visible and pt lies on its path line.
@@ -50,7 +68,7 @@ void MouseHandler::HandleButtonDown(HWND hWnd, UINT message, WPARAM wParam, LPAR
     // New logic: Capture XButton 1
     if (message == WM_XBUTTONDOWN) {
         if (GET_XBUTTON_WPARAM(wParam) == XBUTTON1) {
-            uiManager.Toggle(uiManager.getHistoryListWindow());
+            InputManager::ExecuteCommand(hWnd, Command::ToggleHistory);
             return;
         }
     }
@@ -78,15 +96,8 @@ void MouseHandler::HandleButtonDown(HWND hWnd, UINT message, WPARAM wParam, LPAR
     // New logic: If RMB is down and we receive a Left Click
     if (message == WM_LBUTTONDOWN && app.isRmbDown) {
         app.rmbConsumed = true; // RMB+LMB combo — not a plain right-click
-        if (!app.playlist.empty() && app.currentIndex >= 0) {
-            const std::wstring &path = app.playlist[app.currentIndex];
-            PIDLIST_ABSOLUTE pidl = ILCreateFromPathW(path.c_str());
-            if (pidl) {
-                app.isRmbDown = false;
-                SHOpenFolderAndSelectItems(pidl, 0, nullptr, 0);
-                ILFree(pidl);
-            }
-        }
+        app.isRmbDown = false;
+        InputManager::ExecuteCommand(hWnd, Command::ShowInExplorer);
         return; // Handled
     }
     if (message == WM_MBUTTONDOWN) {
@@ -220,35 +231,10 @@ void MouseHandler::HandleButtonUp(HWND hWnd, UINT message, WPARAM, LPARAM) {
         InvalidateRect(hWnd, nullptr, FALSE);
     }
     if (message == WM_MBUTTONUP) {
+        // A middle CLICK resets the window; a middle DRAG resized it and must
+        // not also reset what it just changed.
         if (!app.hasMidMoved) {
-            // 1. Reset Zoom and Pan
-            app.viewport.zoom = 1.0f;
-            app.viewport.offsetX = 0.0f;
-            app.viewport.offsetY = 0.0f;
-
-            // 3. RESTORE OPACITY: Reset to full (255)
-            app.opacity = 255;
-            SetLayeredWindowAttributes(hWnd, 0, app.opacity, LWA_ALPHA);
-
-            // 2. Calculate DPI-scaled dimensions
-            int targetW = (int) (app.baseWidth  * app.dpiScale);
-            int targetH = (int) (app.baseHeight * app.dpiScale);
-
-            // 4. Center and RESIZE the window
-            HMONITOR hMonitor = MonitorFromWindow(hWnd, MONITOR_DEFAULTTONEAREST);
-            MONITORINFO mi = {sizeof(mi)};
-            if (GetMonitorInfo(hMonitor, &mi)) {
-                int monitorW = mi.rcMonitor.right - mi.rcMonitor.left;
-                int monitorH = mi.rcMonitor.bottom - mi.rcMonitor.top;
-
-                SetWindowPos(hWnd, NULL,
-                             mi.rcMonitor.left + (monitorW - targetW) / 2,
-                             mi.rcMonitor.top + (monitorH - targetH) / 2,
-                             targetW, targetH,
-                             SWP_NOZORDER | SWP_NOACTIVATE | SWP_FRAMECHANGED);
-            }
-
-            InvalidateRect(hWnd, nullptr, FALSE);
+            InputManager::ExecuteCommand(hWnd, Command::ResetWindowLayout);
             ShowCursor(TRUE);
             ClipCursor(nullptr);
         }
@@ -456,11 +442,8 @@ void MouseHandler::HandleMouseWheel(HWND hWnd, WPARAM wParam, LPARAM /*lParam*/)
     const int delta = app.invertWheelDirection ? -rawDelta : rawDelta;
 
     if ((GetKeyState(VK_SHIFT) & 0x8000) != 0) {
-        app.opacity = static_cast<BYTE>(
-            delta > 0
-                ? std::min(255, (int) app.opacity + Constants::OPACITY_STEP)
-                : std::max(10, (int) app.opacity - Constants::OPACITY_STEP));
-        SetLayeredWindowAttributes(hWnd, 0, app.opacity, LWA_ALPHA);
+        InputManager::ExecuteCommand(
+            hWnd, delta > 0 ? Command::OpacityUp : Command::OpacityDown);
         return;
     }
 
@@ -470,10 +453,7 @@ void MouseHandler::HandleMouseWheel(HWND hWnd, WPARAM wParam, LPARAM /*lParam*/)
 
     if (isRmbDown) {
         app.rmbConsumed = true; // RMB+wheel zoom — suppress the context menu on RMB up
-        app.viewport.zoom *= (delta > 0) ? Constants::ZoomPanel::ZOOM_STEP : (1.0f / Constants::ZoomPanel::ZOOM_STEP);
-        AnnounceZoomClamp(hWnd, ClampZoomToLimits(hWnd));
-        ClampViewportOffset(hWnd); // zoom changed the legal pan range
-        InvalidateRect(hWnd, nullptr, FALSE);
+        InputManager::ExecuteCommand(hWnd, delta > 0 ? Command::ZoomIn : Command::ZoomOut);
         // Update cursor for overflow state — UpdateHoverCursor bails on isDragging.
         if (app.imgWidth > 0 && app.imgHeight > 0) {
             RECT rc;
@@ -488,15 +468,11 @@ void MouseHandler::HandleMouseWheel(HWND hWnd, WPARAM wParam, LPARAM /*lParam*/)
                           : Constants::Cursors::CURR_ZOOM);
         }
     } else if (GET_KEYSTATE_WPARAM(wParam) & MK_CONTROL) {
-        app.viewport.zoom *= (delta > 0) ? Constants::ZoomPanel::ZOOM_STEP : (1.0f / Constants::ZoomPanel::ZOOM_STEP);
-        AnnounceZoomClamp(hWnd, ClampZoomToLimits(hWnd));
-        ClampViewportOffset(hWnd); // zoom changed the legal pan range
-        InvalidateRect(hWnd, nullptr, FALSE);
+        InputManager::ExecuteCommand(hWnd, delta > 0 ? Command::ZoomIn : Command::ZoomOut);
     } else {
-        int step = (delta < 0) ? 1 : -1;
-        int newIdx = (app.currentIndex + step + (int) app.playlist.size()) % (int) app.playlist.size();
-        LoadImageIndex(hWnd, newIdx);
-        InvalidateRect(hWnd, nullptr, FALSE);
+        // Wheel DOWN advances, matching the old `step = (delta < 0) ? 1 : -1`.
+        InputManager::ExecuteCommand(
+            hWnd, delta < 0 ? Command::NextImage : Command::PrevImage);
     }
 }
 
@@ -542,12 +518,16 @@ void MouseHandler::HandleMouseHWheel(HWND hWnd, WPARAM wParam, LPARAM /*lParam*/
 
     // The wheel visits every row the panel shows, favorites included — the two
     // key pairs are the ones that split the list into halves.
-    (void) UI::WalkHistoryFolder(hWnd, UI::WalkScope::All, reverse);
+    InputManager::ExecuteCommand(hWnd, reverse ? Command::PrevHistoryFolderAll
+                                               : Command::NextHistoryFolderAll);
 }
 
 void MouseHandler::HandleDoubleClick(HWND hWnd) {
+    // The redraw suppression stays here rather than moving into the command:
+    // it exists because a double-click resizes the window while the mouse still
+    // holds capture, which the keyboard path never does.
     SendMessageW(hWnd, WM_SETREDRAW, FALSE, 0);
-    AppCommands::ToggleFullscreen(hWnd);
+    InputManager::ExecuteCommand(hWnd, Command::ToggleFullscreen);
     SendMessageW(hWnd, WM_SETREDRAW, TRUE, 0);
     RedrawWindow(hWnd, nullptr, nullptr, RDW_INVALIDATE | RDW_UPDATENOW | RDW_FRAME);
 }
