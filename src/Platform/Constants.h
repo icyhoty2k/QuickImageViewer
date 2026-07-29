@@ -157,6 +157,12 @@ namespace Constants {
             constexpr COLORREF OFF      = RGB(214, 122, 122); // toggle disabled
             constexpr COLORREF NUMBER   = RGB(232, 190, 110); // numeric value
             constexpr COLORREF PATH     = RGB(120, 186, 244); // folder / file path
+            // A SECOND blue, for one list holding two classes of the same kind of
+            // item. The Ctrl+F10 command list uses the pair: PATH for a command that
+            // takes no value, this for one that does. Both blue because they are both
+            // commands; far enough apart in hue to separate at a glance in a list of
+            // ninety.
+            constexpr COLORREF PATH_ALT = RGB(126, 224, 236); // cyan-leaning blue
             constexpr COLORREF CHOICE   = RGB(196, 160, 240); // one of several options
             constexpr COLORREF TEXT     = RGB(230, 230, 230); // free text value
             constexpr COLORREF HEADER   = RGB(120, 190, 250); // section heading
@@ -453,8 +459,13 @@ namespace Constants {
     // filesystem call per target on the mirror path.
     //
     // Coalesced at the source, same as WM_QIV_REMOTE_LOG_ADDED. No payload —
-    // the console re-reads the whole target list, which is cheap and cannot go
+    // a subscriber re-reads the whole target list, which is cheap and cannot go
     // out of step with itself.
+    //
+    // SEVERAL SUBSCRIBERS, each with its own coalescing gate: the F10 console and
+    // the Ctrl+F10 Send Command panel both list connected instances, and while this
+    // notification took a single HWND the second one to open stole the first one's
+    // messages. See Remote::Mirror::AddPanelNotify.
     constexpr UINT WM_QIV_REMOTE_TARGETS_CHANGED = WM_USER + 16;
     // One reply to a HAND-SENT command (Ctrl+F10). LPARAM = new
     // Remote::Mirror::CmdReply*, owned and deleted by the handler.
@@ -464,6 +475,16 @@ namespace Constants {
     // message storm. A command somebody typed is the opposite: the answer is the
     // entire reason it was sent.
     constexpr UINT WM_QIV_REMOTE_CMD_REPLY = WM_USER + 17;
+    // Ctrl+Alt+Enter — the answer to "what are you showing?". Posted by a MIRROR
+    // sender thread after it asked one target `QueryState` and rebuilt the full
+    // path from the folder and name it reported. LPARAM = new std::wstring*, owned
+    // and deleted by the handler; an EMPTY string means that instance is showing
+    // nothing, which is an answer and not a failure.
+    //
+    // A message rather than a return value because the ask happens on the sender
+    // thread — the UI thread never waits on a socket — and only the UI thread may
+    // touch the interjection state the picture is then displayed through.
+    constexpr UINT WM_QIV_REMOTE_PULLED = WM_USER + 18;
 
     // ---------------------------------------------------------------------------
     // Directory watcher (ReadDirectoryChangesW / FindFirstChangeNotification)
@@ -561,11 +582,28 @@ namespace Constants {
         // Newline-delimited UTF-8 text: "<command> [payload]\n". Deliberately
         // plain, so netcat, curl, telnet and a five-line Python script are all
         // first-class clients with nothing to marshal.
-        constexpr int PROTOCOL_VERSION = 1;
+        // Announced in the banner and by the `version` verb, so a client knows what
+        // it is talking to before it tries anything.
+        //
+        // 1 → 2:  image STREAMING (StreamImageBegin/Chunk/Show, SendDisplayedImage),
+        //         the read-only QueryState, ShowImageOnce, a MAX_LINE_LEN raised from
+        //         4 KB to 256 KB so a chunk fits, and a `help` listing that carries
+        //         each command's description in a parseable form.
+        //
+        // The line limit is why this MATTERS rather than being decoration: a v1
+        // instance drops the connection on a line it cannot buffer, so a v2 sender
+        // has to check the version and refuse cleanly instead. See RunStreamOut.
+        constexpr int PROTOCOL_VERSION = 2;
 
         // Hard cap on one received line. A socket must never be allowed to grow
         // a buffer without bound just by never sending a newline.
-        constexpr size_t MAX_LINE_LEN = 4096;
+        // Longest line either end will buffer before dropping the connection. An
+        // unbounded line is the one input a peer fully controls, so there has to be
+        // a ceiling — but it also has to hold one STREAM_CHUNK_BYTES chunk after
+        // base64 expansion (see below), which is why this is not 4 KB any more.
+        // Still bounded, still per-connection, and 256 KB of accumulator is
+        // nothing next to the bitmaps this program already holds.
+        constexpr size_t MAX_LINE_LEN = 256 * 1024;
 
         // Response prefixes. A client only ever needs to look at the first token.
         constexpr const wchar_t *RESP_OK  = L"OK";
@@ -602,6 +640,47 @@ namespace Constants {
         // own queue indefinitely. Shorter than the server's REPLY_TIMEOUT_MS
         // because on loopback anything slower is already a fault.
         constexpr int MIRROR_SEND_TIMEOUT_MS = 3000;
+
+        // --- Ctrl+Enter: pushing this viewer's picture at the targets ---------
+        // Opening a folder on the far end starts an ASYNC scan there, and its
+        // reply comes back the moment the open was accepted — not when the
+        // playlist exists. An index sent into that gap lands on the old list or
+        // out of range, which is precisely why `sync` never carried one.
+        //
+        // So the push re-asks `QueryState` until the far end reports the folder
+        // it was told to open with a playlist long enough to hold the index. On
+        // loopback with a warm folder that is the first answer; a cold folder of
+        // a few thousand files is what the budget below is for. Bounded, because
+        // "wait until it settles" with no limit is a hung sender thread.
+        constexpr int PUSH_SETTLE_TRIES = 40;
+        constexpr int PUSH_SETTLE_MS    = 50;   // 40 × 50 ms = 2 s at worst
+
+        // --- Streaming an image over the wire (Alt+Enter / Ctrl+Alt+Enter) -----
+        //
+        // The picture's own FILE BYTES travel, base64-encoded, so that showing an
+        // image on another machine does not depend on it being able to read a path.
+        // The far end decodes them with its own WIC, exactly as if it had opened
+        // the file — sending raw pixels instead would multiply the transfer by ten
+        // or more for no gain.
+        //
+        // Chunked because the protocol has a bounded line length and an image does
+        // not fit in one line. Raw bytes per chunk; base64 makes it 4/3 as long on
+        // the wire, so this must stay comfortably under MAX_LINE_LEN together with
+        // the command name.
+        constexpr size_t STREAM_CHUNK_BYTES = 96 * 1024;   // → ~128 KB per line
+
+        // Refused above this. An unbounded transfer is an unbounded allocation on
+        // both ends, and a one-shot advert is not a file-transfer protocol: a
+        // 32 MB ceiling covers any camera JPEG or screenshot and stops a 2 GB TIFF
+        // from being buffered twice on a viewer that only wanted to show it.
+        constexpr size_t STREAM_MAX_BYTES = 32u * 1024u * 1024u;
+
+        // How much of a line the wire LOG keeps. The log is a diagnostic record,
+        // not a byte-for-byte archive, and a stream chunk is ~128 KB of base64 that
+        // says nothing a human can read — kept whole it would bloat the store and
+        // the file it saves to. Applied inside Log::Add, so every producer is
+        // covered by one rule.
+        constexpr size_t LOG_LINE_MAX = 200;
 
         // Error codes carried after ERR. Stable numbers: scripts branch on these,
         // so they may be appended to but never renumbered.

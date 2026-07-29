@@ -10,6 +10,7 @@
 #include "RemotesFile.h"  // SplitStoredSecret — imported credentials
 #include "RemoteLog.h"    // Ctrl+F12 — the record of what crossed the wire
 #include "RemoteSettings.h" // Config().name, snapshotted for the log's Sender column
+#include "RemoteImageXfer.h" // Alt+Enter / Ctrl+Alt+Enter — the image transfer
 
 #include "AppState.h"
 #include "Platform/Constants.h"
@@ -23,6 +24,7 @@ extern OverlayManager g_overlayManager;
 
 #include <atomic>
 #include <chrono>
+#include <cstdlib>      // _wtoi — parsing the QueryState reply on the sender thread
 #include <condition_variable>
 #include <deque>
 #include <memory>
@@ -52,6 +54,30 @@ namespace {
         // per keystroke per target would be a storm on the one path that has to
         // stay cheap.
         HWND replyTo = nullptr;
+
+        // A queued item is EITHER one ready-made line, or a Ctrl+Enter push the
+        // sender thread has to negotiate (ask, then send only the lines that turn
+        // out to be needed). ONE queue for both, so a push cannot overtake the
+        // keystrokes queued ahead of it — they are actions on the same screen and
+        // their order is the order the user made them in.
+        //
+        // LAST in the struct on purpose: PushTo brace-initialises the three
+        // fields above, and a new member ahead of them would silently shift that
+        // initialisation by one.
+        // Line     one ready-made command
+        // Position Ctrl+Enter — negotiate folder/sort/index (RunSendPosition)
+        // StreamOut Alt+Enter — carry the image's BYTES there (RunStreamOut)
+        // StreamIn Ctrl+Alt+Enter — fetch the bytes of what it is showing
+        //
+        // All four share ONE queue, so a transfer cannot overtake the keystrokes
+        // queued ahead of it: they are actions on the same screen, in the order the
+        // user made them.
+        enum class Kind { Line, Position, StreamOut, StreamIn };
+        Kind        kind = Kind::Line;
+        PushRequest push;   // meaningful only when kind == Position
+        // The file to stream out. Read on the SENDER thread, not the UI thread: a
+        // 20 MB file read is not something to do on the thread that paints.
+        std::wstring streamPath;
     };
 
     // One driven instance.
@@ -150,17 +176,37 @@ namespace {
     // Where the F10 console listens, and its coalescing gate. Outside any mutex
     // because the producers are sender threads and the point of the gate is that
     // they never serialise on it.
-    std::atomic<HWND> g_panelWnd{nullptr};
-    std::atomic<bool> g_panelPending{false};
+    // SEVERAL panels, not one. It was a single HWND, which meant whichever of the
+    // F10 console and the Ctrl+F10 Send Command panel registered last silently
+    // stole the other's notifications — and the loser had to poll on a timer to
+    // find out that a target had connected.
+    //
+    // A fixed array of slots rather than a vector: the producers are SENDER THREADS
+    // on a per-connection path, so this must be readable with no lock and no
+    // allocation. Two panels subscribe today; four slots means neither a
+    // reallocation nor a rule about who may subscribe.
+    //
+    // EACH SLOT HAS ITS OWN GATE. One coalescing flag for all of them would let a
+    // panel that is mid-rebuild suppress the message the other one has not had yet.
+    struct PanelNotify {
+        std::atomic<HWND> hwnd{nullptr};
+        std::atomic<bool> pending{false};
+    };
+    constexpr size_t PANEL_NOTIFY_SLOTS = 4;
+    PanelNotify g_panelNotify[PANEL_NOTIFY_SLOTS];
 
-    // Tell the console something about a CONNECTION changed. Cheap and silent
-    // when the console is closed, which is the usual case.
+    // Tell every subscribed panel that a CONNECTION changed. Cheap and silent when
+    // none is open, which is the usual case: four acquire loads and no branch taken.
     void NotifyTargetsChanged() {
-        HWND hwnd = g_panelWnd.load(std::memory_order_acquire);
-        if (!hwnd) return;
-        if (g_panelPending.exchange(true, std::memory_order_acq_rel)) return;
-        if (!PostMessageW(hwnd, Constants::WM_QIV_REMOTE_TARGETS_CHANGED, 0, 0))
-            g_panelPending.store(false, std::memory_order_release);
+        for (PanelNotify &p : g_panelNotify) {
+            HWND hwnd = p.hwnd.load(std::memory_order_acquire);
+            if (!hwnd) continue;
+            // Already told and not yet acknowledged — a batch of targets coming up
+            // together costs one message per panel, not one per target.
+            if (p.pending.exchange(true, std::memory_order_acq_rel)) continue;
+            if (!PostMessageW(hwnd, Constants::WM_QIV_REMOTE_TARGETS_CHANGED, 0, 0))
+                p.pending.store(false, std::memory_order_release);
+        }
     }
 
     void SetConnected(Target &t, bool up) {
@@ -329,10 +375,341 @@ namespace {
         return Down::Offline;
     }
 
+    // =========================================================================
+    // Ctrl+Enter push — the negotiation (sender thread only)
+    // =========================================================================
+
+    // Disk order, as CommandExecuter's SortByDisk case writes it. Named here
+    // because the push has to recognise it: it is the one order that is NOT
+    // reproducible on another drive, so an index taken from it means nothing at
+    // the far end — and the command that would set it is refused there anyway
+    // while a session is live (SESSION_BLOCKED).
+    constexpr int SORT_ORDER_DISK = 4;
+
+    // What the far end answered to `QueryState`.
+    struct FarState {
+        bool valid = false;          // did it understand the question at all?
+        int  count = 0;              // playlist length
+        int  index = 0;              // 1-based current position, 0 = nothing loaded
+        int  sortOrder = -1;
+        bool sortRev = false;
+        std::wstring fileName;       // what it is showing
+        std::wstring folder;         // the folder that picture lives in
+    };
+
+    // Trailing-separator- and case-insensitive path compare. Two instances reach
+    // the same folder by different spellings all the time — one opened
+    // `D:\Pics`, the other `d:\pics\` — and treating those as different would
+    // rescan a folder the far end is already sitting in.
+    bool SameFolder(const std::wstring &a, const std::wstring &b) {
+        if (a.empty() || b.empty()) return false;
+        auto trim = [](const std::wstring &s) {
+            size_t n = s.size();
+            while (n > 1 && (s[n - 1] == L'\\' || s[n - 1] == L'/')) --n;
+            return s.substr(0, n);
+        };
+        const std::wstring ta = trim(a), tb = trim(b);
+        return _wcsicmp(ta.c_str(), tb.c_str()) == 0;
+    }
+
+    // "OK QueryState=count=238;index=47;sort=0;sortrev=0;name=A.jpg;folder=D:\p"
+    //
+    // Anything that is not that — an ERR, or an OK from a build that predates the
+    // command — leaves `valid` false, and the caller falls back to the form that
+    // needs no agreement at all (a full path). Unknown keys are ignored, the same
+    // rule `sync` follows in both directions.
+    FarState ParseQueryState(const std::wstring &reply) {
+        FarState st;
+        const size_t eq = reply.find(L'=');
+        if (_wcsnicmp(reply.c_str(), RT::RESP_OK, 2) != 0 || eq == std::wstring::npos)
+            return st;
+
+        const std::wstring body = reply.substr(eq + 1);
+        size_t start = 0;
+        while (start <= body.size()) {
+            const size_t semi = body.find(L';', start);
+            const std::wstring tok = body.substr(
+                start, semi == std::wstring::npos ? std::wstring::npos : semi - start);
+            start = (semi == std::wstring::npos) ? body.size() + 1 : semi + 1;
+            if (tok.empty()) continue;
+
+            const size_t e = tok.find(L'=');
+            if (e == std::wstring::npos) continue;
+            const std::wstring k = tok.substr(0, e);
+            const std::wstring v = tok.substr(e + 1);
+
+            // A path or a file name containing ';' truncates its own value and
+            // nothing after it, because those two keys are sent LAST. The result
+            // is a folder that compares unequal — which costs an extra rescan and
+            // is still correct, rather than a wrong index.
+            if      (k == L"count")   st.count     = _wtoi(v.c_str());
+            else if (k == L"index")   st.index     = _wtoi(v.c_str());
+            else if (k == L"sort")    st.sortOrder = _wtoi(v.c_str());
+            else if (k == L"sortrev") st.sortRev   = (_wtoi(v.c_str()) != 0);
+            else if (k == L"name")    st.fileName  = v;
+            else if (k == L"folder")  st.folder    = v;
+        }
+
+        // `sort` is the one key that cannot be defaulted: without it there is no
+        // way to know whether the orders agree, and guessing "they do" is the
+        // mistake that puts a wrong picture on the screen.
+        st.valid = (st.sortOrder >= 0);
+        return st;
+    }
+
+    // The file the far end landed on, from "OK JumpToImage=47/238 my photo.jpg".
+    //
+    // The WHOLE remainder after the position, not the last token — file names
+    // contain spaces, and taking the last word would make "my photo.jpg" compare
+    // as "photo.jpg" and send every push down the repair path. FileNameFromReply
+    // (the desync check) takes the last token on purpose, because it also has to
+    // read replies that carry no position at all; this one knows there is one.
+    std::wstring LandedName(const std::wstring &reply) {
+        const size_t eq = reply.find(L'=');
+        if (eq == std::wstring::npos) return {};
+        const size_t sp = reply.find(L' ', eq);
+        if (sp == std::wstring::npos) return {};
+        return reply.substr(sp + 1);
+    }
+
+    // The command that SETS a given sort order, by the numbering
+    // CommandExecuter's SortBy* cases write into fileHandlerDefaultSortOrder.
+    // The wire spelling comes from NameForCommand so there is one source for it.
+    bool SortCommandFor(int order, std::wstring &name) {
+        switch (order) {
+            case 0:  return NameForCommand(Command::SortByName, name);
+            case 1:  return NameForCommand(Command::SortByDate, name);
+            case 2:  return NameForCommand(Command::SortBySize, name);
+            case 3:  return NameForCommand(Command::SortByType, name);
+            default: return false;  // 4 = disk, and anything a newer build adds
+        }
+    }
+
     void PostEventLine(const std::wstring &line) {
         if (!g_owner) return;
         PostMessageW(g_owner, Constants::WM_QIV_REMOTE_EVENT, 0,
                      reinterpret_cast<LPARAM>(new std::wstring(line)));
+    }
+
+    // Bounded pause between `QueryState` polls while the far end's scan runs.
+    // On the cv rather than a bare sleep, so Shutdown and Disconnect still stop
+    // this thread at once instead of at the end of the current wait.
+    bool PushPause(Target &t) {
+        std::unique_lock<std::mutex> lk(t.mtx);
+        t.cv.wait_for(lk, std::chrono::milliseconds(RT::PUSH_SETTLE_MS), [&t] {
+            return t.stop.load(std::memory_order_acquire) ||
+                   !t.wantConnect.load(std::memory_order_acquire);
+        });
+        return !t.stop.load(std::memory_order_acquire) &&
+               t.wantConnect.load(std::memory_order_acquire);
+    }
+
+    // Ctrl+Enter, for ONE target. Runs the steps described in RemoteMirror.h.
+    //
+    // Returns false only for a CONNECTION fault, which the caller then treats
+    // exactly like a failed ordinary send (mark down, classify, reconnect). A far
+    // end that answers ERR to a step is not a connection fault: the push does
+    // what it can and stops, because retrying a refusal gets the same refusal.
+    bool RunSendPosition(Target &t, const PushRequest &p, std::wstring &err,
+                 std::vector<std::wstring> *events) {
+        std::wstring reply;
+
+        // ── 1. What is it doing right now? ──────────────────────────────────
+        if (!t.client.Send(L"QueryState", reply, err, events)) return false;
+        // NOT named `far`: windef.h still defines `far` and `near` as empty macros
+        // for 16-bit compatibility, so that identifier vanishes at preprocess time.
+        const FarState there = ParseQueryState(reply);
+
+        // ── The path-only form ──────────────────────────────────────────────
+        // Used when an index cannot be trusted at all: the far end did not
+        // understand the query (an older build), or this viewer is sorted by
+        // DISK order, which is a property of the drive and reproduces nowhere.
+        //
+        // `OpenFile <full path>` is the whole answer in one line — it opens the
+        // folder and lands on that file through the far end's own scan, so there
+        // is no index and nothing to race.
+        if (!there.valid || p.sortOrder == SORT_ORDER_DISK)
+            return t.client.Send(L"OpenFile " + p.imagePath, reply, err, events);
+
+        const bool folderMatches = SameFolder(there.folder, p.folder);
+        const bool orderMatches  = (there.sortOrder == p.sortOrder) &&
+                                   (there.sortRev   == p.sortRev);
+
+        // ── 2. Already in the right folder, in the right order ──────────────
+        // One line, no rescan. This is the case that makes Ctrl+Enter usable as
+        // a repeated act — walk the folder here, push each picture as you reach
+        // it, and the other screen never rebuilds its playlist.
+        if (folderMatches && orderMatches && there.count >= p.index) {
+            if (!t.client.Send(L"JumpToImage " + std::to_wstring(p.index), reply, err, events))
+                return false;
+            // Landed somewhere else? Then the two playlists hold different files
+            // — one end has a picture the other does not — and every index from
+            // here on is off by the difference. Repaired by naming the file
+            // outright, which needs no agreement about order or count.
+            const std::wstring got = LandedName(reply);
+            if (!got.empty() && !p.fileName.empty() &&
+                _wcsicmp(got.c_str(), p.fileName.c_str()) != 0)
+                return t.client.Send(L"OpenFile " + p.imagePath, reply, err, events);
+            return true;
+        }
+
+        // ── 3. Send only what differs, index LAST ───────────────────────────
+        if (!folderMatches) {
+            if (!t.client.Send(L"OpenFile " + p.folder, reply, err, events)) return false;
+        }
+
+        if (!orderMatches) {
+            // SortBy* are TOGGLES, not setters: the command for the order you are
+            // ALREADY in flips ascending/descending instead. So the presses are
+            // computed from the state observed in step 1 — one press to move to a
+            // different order (which lands ascending), a second only if reverse
+            // is wanted; a single flip when the order is right and the direction
+            // is not.
+            std::wstring sortCmd;
+            if (SortCommandFor(p.sortOrder, sortCmd)) {
+                if (there.sortOrder != p.sortOrder) {
+                    if (!t.client.Send(sortCmd, reply, err, events)) return false;
+                    if (p.sortRev && !t.client.Send(sortCmd, reply, err, events)) return false;
+                } else if (there.sortRev != p.sortRev) {
+                    if (!t.client.Send(sortCmd, reply, err, events)) return false;
+                }
+            }
+        }
+
+        // ── 4. Wait for the far end's playlist to exist ─────────────────────
+        bool settled;
+        if (folderMatches) {
+            // Nothing is rescanning: only the order changed, and a sort command
+            // re-sorts and answers on the far end's UI thread, so its list is
+            // already in the new order by the time that reply arrives.
+            //
+            // A list SHORTER than the index is therefore not a timing problem —
+            // the two ends hold different files, and no amount of waiting fixes
+            // that. It falls through to the path form below.
+            settled = (there.count >= p.index);
+        } else {
+            // Opening a folder there starts an ASYNC scan and answers
+            // immediately. An index sent into that gap indexes the OLD playlist.
+            // So ask until the folder it reports is the one it was told to open
+            // and its list is long enough — bounded, because an unbounded wait is
+            // a hung sender thread. See PUSH_SETTLE_* in Constants.h.
+            settled = false;
+            for (int i = 0; !settled && i < RT::PUSH_SETTLE_TRIES; ++i) {
+                if (!PushPause(t)) return true;  // asked to stop or disconnect
+                if (!t.client.Send(L"QueryState", reply, err, events)) return false;
+                const FarState now = ParseQueryState(reply);
+                settled = now.valid && SameFolder(now.folder, p.folder) &&
+                          now.count >= p.index;
+            }
+        }
+
+        // ── 5. The index, or the path if the wait ran out ───────────────────
+        // A far end still not settled is not necessarily broken — a very large
+        // folder simply takes longer than the budget. Naming the file outright
+        // still lands correctly there, and its own scan finishes underneath it.
+        if (!settled)
+            return t.client.Send(L"OpenFile " + p.imagePath, reply, err, events);
+
+        if (!t.client.Send(L"JumpToImage " + std::to_wstring(p.index), reply, err, events))
+            return false;
+
+        const std::wstring got = LandedName(reply);
+        if (!got.empty() && !p.fileName.empty() &&
+            _wcsicmp(got.c_str(), p.fileName.c_str()) != 0)
+            return t.client.Send(L"OpenFile " + p.imagePath, reply, err, events);
+        return true;
+    }
+
+    // =========================================================================
+    // Streaming a picture, out and in (sender thread only)
+    //
+    // The image's own FILE BYTES travel — never a path — so both of these work to
+    // an instance on another machine, or to a phone. See RemoteImageXfer.h.
+    // =========================================================================
+
+    // Alt+Enter, for ONE target: StreamImageBegin, the chunks, StreamImageShow.
+    //
+    // Returns false only for a CONNECTION fault. A far end that answers ERR to a
+    // step is a refusal, not a broken link: the sequence stops there, because every
+    // later chunk would be refused for the same reason.
+    bool RunStreamOut(Target &t, const std::wstring &imagePath, std::wstring &err,
+                      std::vector<std::wstring> *events) {
+        // CAPABILITY FIRST. A v1 instance buffers 4 KB per line and drops the
+        // connection on a chunk it cannot hold — so sending one would report itself
+        // as "the link died", which points the reader at the network instead of at
+        // the version. Refused here with the actual reason, and the connection is
+        // left alone.
+        if (t.client.PeerProtocol() < 2) {
+            err = Constants::Messages::STREAM_ERR_PEER_TOO_OLD;
+            return true;
+        }
+
+        std::vector<unsigned char> bytes;
+        if (!Xfer::ReadImageFile(imagePath, bytes, err)) {
+            // OUR file, not the connection's fault — reported through err so the
+            // console footer says so, and the target is left alone.
+            return true;
+        }
+
+        const std::vector<std::wstring> lines =
+            Xfer::BuildStreamCommands(imagePath, bytes);
+
+        std::wstring reply;
+        for (const std::wstring &line : lines) {
+            if (!t.client.Send(line, reply, err, events)) return false;
+            // ERR from the far end: out of space, too large for its ceiling, or it
+            // does not know these commands at all (an older build). Stopping is
+            // right, and StreamImageBegin at the far end is what clears the partial
+            // transfer — there is nothing to tidy from here.
+            if (_wcsnicmp(reply.c_str(), RT::RESP_ERR, 3) == 0) return true;
+        }
+        return true;
+    }
+
+    // Ctrl+Alt+Enter, for ONE target: ask what it is displaying, decode the answer,
+    // write it to a temp file HERE, and hand the UI thread the path.
+    //
+    // The decode and the file write happen on this thread on purpose — several
+    // megabytes of base64 is not work for the thread that paints. The UI thread
+    // gets one message carrying one path.
+    bool RunStreamIn(Target &t, std::wstring &err, std::vector<std::wstring> *events) {
+        // Same gate, other direction: a v1 instance does not know the command, and
+        // its ERR would be reported as "showing nothing" — which is a different fact.
+        if (t.client.PeerProtocol() < 2) {
+            err = Constants::Messages::STREAM_ERR_PEER_TOO_OLD;
+            if (g_owner) {
+                // The UI thread is waiting for an answer either way; an empty path is
+                // how it is told there is nothing to show.
+                auto *p = new std::wstring();
+                if (!PostMessageW(g_owner, Constants::WM_QIV_REMOTE_PULLED, 0,
+                                  reinterpret_cast<LPARAM>(p)))
+                    delete p;
+            }
+            return true;
+        }
+
+        std::wstring reply;
+        if (!t.client.Send(L"SendDisplayedImage", reply, err, events)) return false;
+
+        // Refused, or showing nothing: an EMPTY path tells the UI thread which
+        // message to put up. Reported rather than swallowed — the user pressed a
+        // key and is owed an answer either way.
+        std::wstring tempPath;
+        std::vector<unsigned char> bytes;
+        if (_wcsnicmp(reply.c_str(), RT::RESP_ERR, 3) != 0 &&
+            Xfer::ParseDataReply(reply, bytes)) {
+            std::wstring name = Xfer::FileNameFromDataReply(reply);
+            if (name.empty()) name = L"remote.img";  // extension picks the decoder
+            (void) Xfer::WriteTempImage(name, bytes, tempPath);
+        }
+
+        if (g_owner) {
+            auto *p = new std::wstring(tempPath);
+            if (!PostMessageW(g_owner, Constants::WM_QIV_REMOTE_PULLED, 0,
+                              reinterpret_cast<LPARAM>(p)))
+                delete p;   // the window went away between ask and answer
+        }
+        return true;
     }
 
     // --- the sender thread --------------------------------------------------
@@ -461,7 +838,25 @@ namespace {
                 std::vector<std::wstring> events;
 
                 const long long t0 = NowUs();
-                const bool ok = t->client.Send(item.line, reply, err, &events);
+                // A push is SEVERAL exchanges, negotiated here rather than by the
+                // UI thread — this is the only thread allowed to wait for a
+                // reply. It reads the same event sink, so an observed target's
+                // EVENT lines arriving mid-negotiation are not lost.
+                bool ok = false;
+                switch (item.kind) {
+                    case QueuedLine::Kind::Position:
+                        ok = RunSendPosition(*t, item.push, err, &events);
+                        break;
+                    case QueuedLine::Kind::StreamOut:
+                        ok = RunStreamOut(*t, item.streamPath, err, &events);
+                        break;
+                    case QueuedLine::Kind::StreamIn:
+                        ok = RunStreamIn(*t, err, &events);
+                        break;
+                    case QueuedLine::Kind::Line:
+                        ok = t->client.Send(item.line, reply, err, &events);
+                        break;
+                }
                 const long long t1 = NowUs();
 
                 // NOT logged here. The record lives inside Client::Send, at the
@@ -484,6 +879,12 @@ namespace {
                 if (!ok) {
                     SetConnected(*t, false);
                     SetDown(*t, Classify(err));
+                    SetError(*t, err);
+                } else if (!err.empty()) {
+                    // The link is fine and the JOB failed — a stream whose source
+                    // file could not be read, for instance. Recorded so the F10
+                    // console's footer can say what happened, without marking a
+                    // healthy target as down.
                     SetError(*t, err);
                 } else {
                     t->lagUs.store(t1 - t0, std::memory_order_release);
@@ -541,6 +942,19 @@ namespace {
             // mirrored keystroke is only meaningful at the moment it is made.
             while (t.queue.size() >= RT::MIRROR_QUEUE_MAX) t.queue.pop_front();
             t.queue.push_back(QueuedLine{line, expectFile, replyTo});
+        }
+        t.cv.notify_one();
+    }
+
+    // Queue an already-built job (a Ctrl+Enter push). Same guards as PushTo —
+    // idle targets are skipped, and the oldest goes on overflow — so a push
+    // cannot build a backlog for a screen that is switched off either.
+    void PushJobTo(Target &t, QueuedLine &&job) {
+        if (!t.wantConnect.load(std::memory_order_acquire)) return;
+        {
+            std::lock_guard<std::mutex> lk(t.mtx);
+            while (t.queue.size() >= RT::MIRROR_QUEUE_MAX) t.queue.pop_front();
+            t.queue.push_back(std::move(job));
         }
         t.cv.notify_one();
     }
@@ -762,6 +1176,83 @@ void BroadcastPosition(const std::wstring &line, const std::wstring &expectFile)
             PushTo(*t, line, expectFile);
 }
 
+int SendImagePosition(const PushRequest &req, int *skippedRemote) {
+    int sent = 0, skipped = 0;
+
+    // SAME-MACHINE TARGETS ONLY, for the reason positions are: the job carries a
+    // folder path and an index, and neither survives the trip to a box with its
+    // own files at its own paths. Counted rather than dropped in silence — a
+    // caller that reported "pushed to 3" when two of them were never asked would
+    // be lying about the screens the user is looking at.
+    //
+    // The CONTROL ticks decide the rest (Mirrored), so pushing and mirroring
+    // cannot reach different screens. F11 itself is NOT consulted: this is an
+    // explicit act, and a viewer with mirroring off is the case it exists for.
+    for (std::unique_ptr<Target> &t : g_targets) {
+        if (!Mirrored(*t)) continue;
+        if (!t->connected.load(std::memory_order_acquire)) continue;
+        if (!t->sameMachine.load(std::memory_order_acquire)) { ++skipped; continue; }
+
+        QueuedLine job;
+        job.kind = QueuedLine::Kind::Position;
+        job.push = req;
+        PushJobTo(*t, std::move(job));
+        ++sent;
+    }
+
+    if (skippedRemote) *skippedRemote = skipped;
+    return sent;
+}
+
+int StreamImageToTargets(const std::wstring &imagePath) {
+    int sent = 0;
+
+    // EVERY controlled, connected target — this machine or any other. That is the
+    // whole reason this carries bytes instead of a path: locality stops mattering,
+    // so there is nothing to skip and no second command set to choose between.
+    for (std::unique_ptr<Target> &t : g_targets) {
+        if (!Mirrored(*t)) continue;
+        if (!t->connected.load(std::memory_order_acquire)) continue;
+
+        QueuedLine job;
+        job.kind       = QueuedLine::Kind::StreamOut;
+        job.streamPath = imagePath;
+        PushJobTo(*t, std::move(job));
+        ++sent;
+    }
+    return sent;
+}
+
+int RequestDisplayedImage(std::wstring &fromName) {
+    fromName.clear();
+
+    // ONE target, because the answer is a picture and this screen shows one at a
+    // time. Asking three would decode three images and throw two away.
+    //
+    // The choice, in order: the instance being WATCHED (Ctrl+F11's ◉) if there is
+    // one — you are already following that screen, so it is the one you mean —
+    // otherwise the first controlled, connected row. Named back to the caller so
+    // the overlay can say WHICH screen answered; with several ticked, a silent
+    // pick would be indistinguishable from picking the wrong one.
+    Target *chosen = nullptr;
+    for (std::unique_ptr<Target> &t : g_targets) {
+        if (!t->connected.load(std::memory_order_acquire)) continue;
+        if (t->observing.load(std::memory_order_acquire)) { chosen = t.get(); break; }
+        if (!Mirrored(*t)) continue;
+        if (!chosen) chosen = t.get();
+    }
+    if (!chosen) return 0;
+
+    fromName = chosen->name.empty()
+                   ? (chosen->host + L":" + std::to_wstring(chosen->port))
+                   : chosen->name;
+
+    QueuedLine job;
+    job.kind = QueuedLine::Kind::StreamIn;
+    PushJobTo(*chosen, std::move(job));
+    return 1;
+}
+
 void BroadcastSync(const std::wstring &full, const std::wstring &portable) {
     // EVERY target, mirror selection included — this is the console's Sync All
     // button, an explicit "line all of them up with me", not a mirrored
@@ -846,19 +1337,27 @@ void SendTo(int id, const std::wstring &line) {
     if (Target *t = Find(id)) PushTo(*t, line, {});
 }
 
-int SendToControlled(const std::wstring &line, HWND replyTo) {
+int SendToIds(const std::wstring &line, const std::vector<int> &ids, HWND replyTo) {
     int n = 0;
-    for (std::unique_ptr<Target> &t : g_targets) {
-        // CONNECTED and CONTROLLED. An unticked row is deliberately left out —
-        // the tick is what says "this viewer drives that one", and a typed
-        // command is no less driving than a keystroke.
+    // NAMED targets, so the mirror selection is deliberately not consulted: the
+    // caller has already said which instances it means. Only CONNECTED ones are
+    // counted, because the number is reported to a user as "sent to n", and a row
+    // that is merely listed would never answer.
+    for (const int id : ids) {
+        Target *t = Find(id);
+        if (!t) continue;                                    // removed meanwhile
         if (!t->connected.load(std::memory_order_acquire)) continue;
-        if (!Mirrored(*t)) continue;
         PushTo(*t, line, {}, replyTo);
         ++n;
     }
     return n;
 }
+
+// SendToControlled — the "every ☑ row in Ctrl+F11" form — is GONE, not merely
+// unused: the Send Command panel now names its recipients explicitly (SendToIds),
+// and keeping a second, differently-scoped send around would be the obvious thing
+// for the next caller to reach for by mistake. Where keystrokes go and where one
+// typed line goes are separate questions now.
 
 void PingAll() {
     // Down the LIVE connection: MaxConnections defaults to 1, so a second
@@ -881,15 +1380,50 @@ void BroadcastEnableLog(bool on) {
     for (std::unique_ptr<Target> &t : g_targets) PushTo(*t, line, {});
 }
 
-void SetPanelNotifyWindow(HWND hwnd) {
-    g_panelWnd.store(hwnd, std::memory_order_release);
-    // Unregistering must open the gate too, or the next console to open would
-    // never be told about anything.
-    if (!hwnd) g_panelPending.store(false, std::memory_order_release);
+void AddPanelNotify(HWND hwnd) {
+    if (!hwnd) return;
+
+    // IDEMPOTENT. A panel may be shown twice without an intervening hide (the
+    // cross-panel buttons do exactly that), and a second slot for the same window
+    // would double every message it receives.
+    for (PanelNotify &p : g_panelNotify)
+        if (p.hwnd.load(std::memory_order_acquire) == hwnd) return;
+
+    for (PanelNotify &p : g_panelNotify) {
+        HWND expected = nullptr;
+        if (p.hwnd.compare_exchange_strong(expected, hwnd,
+                                           std::memory_order_acq_rel,
+                                           std::memory_order_acquire)) {
+            // Fresh subscriber, open gate — otherwise a slot left `pending` by the
+            // panel that used it before would swallow this one's first message.
+            p.pending.store(false, std::memory_order_release);
+            return;
+        }
+    }
+    // Every slot taken. Silently not subscribed: the panel keeps working and
+    // simply refreshes when something else touches it, which is what it did before
+    // this notification existed. Raising the count is the fix if that ever happens.
 }
 
-void ClearPanelNotifyPending() {
-    g_panelPending.store(false, std::memory_order_release);
+void RemovePanelNotify(HWND hwnd) {
+    if (!hwnd) return;
+    for (PanelNotify &p : g_panelNotify) {
+        if (p.hwnd.load(std::memory_order_acquire) != hwnd) continue;
+        // Window first, gate second: between the two a sender thread can only find
+        // an empty slot and skip it. The other order could leave `pending` true on a
+        // slot that is about to be handed to another panel.
+        p.hwnd.store(nullptr, std::memory_order_release);
+        p.pending.store(false, std::memory_order_release);
+        return;
+    }
+}
+
+void ClearPanelNotifyPending(HWND hwnd) {
+    for (PanelNotify &p : g_panelNotify)
+        if (p.hwnd.load(std::memory_order_acquire) == hwnd) {
+            p.pending.store(false, std::memory_order_release);
+            return;
+        }
 }
 
 void RefreshSameMachine() {

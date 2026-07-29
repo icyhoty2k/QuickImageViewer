@@ -11,6 +11,8 @@
 #include "Overlays/OverlayManager.h"
 #include "Common/FuzzyMatch.h"
 #include "Common/Converters.h"
+#include "Common/Base64.h"      // StreamImageChunk — decoding one chunk
+#include "RemoteImageXfer.h"    // the shared transfer rules, both directions
 
 #include <algorithm>
 #include <cstring>    // _wcsicmp — file names compared case-insensitively
@@ -129,6 +131,197 @@ namespace {
             return MakeOk(L"image opened");
         }
         return MakeErr(RT::ERR_BAD_PAYLOAD, L"no such file or folder");
+    }
+
+    // --- ShowImageOnce <path> ------------------------------------------------
+    // Show ONE image, once, and change nothing else. The path form: no transfer,
+    // so it costs nothing — and it only works where the far end can read the path.
+    // For another machine the caller streams the bytes instead (below).
+    //
+    // Not a lighter `open`: `open` joins the file to this viewer — it rebuilds the
+    // playlist, moves the index, and the folder becomes where this instance lives.
+    // This does none of that. The picture goes up in place of the current slide,
+    // the playlist and index never move, and the next image change of any kind
+    // retires it (LoadImageIndex). A slideshow therefore carries on afterwards
+    // from exactly where it was, as if nothing had happened — which is the point:
+    // an advert between two slides.
+    //
+    // WHEN it appears is decided here:
+    //   slideshow running → the next SLIDE BOUNDARY, so the slide currently on
+    //                       screen is not cut short (AppMain's timer).
+    //   otherwise         → now, or the instant its decode lands.
+    //
+    // A read path, like `open`: nothing is written, moved or deleted, so the worst
+    // a permitted caller can do is put a picture on the screen for one slide.
+    std::wstring DoInterject(HWND hWnd, const std::wstring &payload) {
+        std::wstring path = payload;
+        if (path.size() >= 2 && path.front() == L'"' && path.back() == L'"')
+            path = path.substr(1, path.size() - 2);
+        if (path.empty())
+            return MakeErr(RT::ERR_BAD_PAYLOAD, L"expected a path");
+
+        std::error_code ec;
+        const fs::path p(path);
+        if (!fs::is_regular_file(p, ec) || ec)
+            return MakeErr(RT::ERR_BAD_PAYLOAD, L"no such file");
+        if (!is_image_ext(p.extension().wstring()))
+            return MakeErr(RT::ERR_BAD_PAYLOAD, L"not a supported image type");
+        // A FOLDER is refused rather than interpreted: `open` takes either, but
+        // "show this one image once" has no reading for a folder.
+
+        // Not a temp file: it belongs to the user, so retiring the interjection
+        // must not delete it.
+        if (ArmInterjection(hWnd, path, /*immediate=*/false, /*ownsTempFile=*/false))
+            return MakeOk(L"shown");
+        return MakeOk(app.slideshow.running && !app.slideshow.paused
+                          ? L"queued for the next slide"
+                          : L"decoding");
+    }
+
+    // --- The image STREAM (StreamImageBegin / Chunk / Show) -----------------
+    //
+    // The same one-shot display as above, for a caller that cannot name a file
+    // this machine can read — another machine, or a phone. The picture's own file
+    // bytes arrive base64-encoded across several commands and are assembled here.
+    //
+    // UI THREAD ONLY, like every other command handler, so this buffer needs no
+    // lock. One transfer at a time per instance: a second StreamImageBegin
+    // abandons the first, which is the only sane reading of "start a transfer"
+    // and stops a caller that died mid-stream from wedging the next one.
+    struct InboundStream {
+        std::wstring fileName;
+        size_t       declared = 0;   // bytes the sender promised
+        std::vector<unsigned char> bytes;
+    };
+    InboundStream g_inStream;
+
+    // `StreamImageBegin <totalBytes> <fileName>`
+    std::wstring DoStreamBegin(const std::wstring &payload) {
+        const size_t sp = payload.find(L' ');
+        if (sp == std::wstring::npos)
+            return MakeErr(RT::ERR_BAD_PAYLOAD, L"expected: <totalBytes> <fileName>");
+
+        int declared = 0;
+        if (!ParseInt(payload.substr(0, sp), declared) || declared <= 0)
+            return MakeErr(RT::ERR_BAD_PAYLOAD, L"byte count must be a positive number");
+        if (static_cast<size_t>(declared) > RT::STREAM_MAX_BYTES)
+            return MakeErr(RT::ERR_BAD_PAYLOAD, Constants::Messages::STREAM_ERR_TOO_LARGE);
+
+        std::wstring name = payload.substr(sp + 1);
+        if (name.empty())
+            return MakeErr(RT::ERR_BAD_PAYLOAD, L"expected a file name");
+        // A NAME, never a path. Only its extension matters — it selects the
+        // decoder — and a caller that sent a path must not have any of it used as
+        // one. Stripped rather than refused: the extension is still good.
+        name = fs::path(name).filename().wstring();
+
+        g_inStream = InboundStream{};
+        g_inStream.fileName = name;
+        g_inStream.declared = static_cast<size_t>(declared);
+        // Reserved once, from the declared size, so a large transfer does not
+        // reallocate its way up in a dozen steps.
+        g_inStream.bytes.reserve(g_inStream.declared);
+        return MakeOk(std::to_wstring(declared));
+    }
+
+    // `StreamImageChunk <base64>`
+    std::wstring DoStreamChunk(const std::wstring &payload) {
+        if (g_inStream.declared == 0)
+            return MakeErr(RT::ERR_BAD_PAYLOAD, Constants::Messages::STREAM_ERR_NO_TRANSFER);
+        if (payload.empty())
+            return MakeErr(RT::ERR_BAD_PAYLOAD, L"expected base64 data");
+
+        std::vector<unsigned char> part;
+        if (!Common::Base64::Decode(payload.c_str(), payload.size(), part))
+            return MakeErr(RT::ERR_BAD_PAYLOAD, L"malformed base64");
+
+        // Refused the moment it exceeds what was promised, rather than at Show:
+        // the declared size is the only bound on this buffer, so it has to be
+        // enforced on every chunk or it is not a bound at all.
+        if (g_inStream.bytes.size() + part.size() > g_inStream.declared) {
+            g_inStream = InboundStream{};
+            return MakeErr(RT::ERR_BAD_PAYLOAD, L"more bytes than declared");
+        }
+
+        g_inStream.bytes.insert(g_inStream.bytes.end(), part.begin(), part.end());
+        return MakeOk(std::to_wstring(g_inStream.bytes.size()) + L"/" +
+                      std::to_wstring(g_inStream.declared));
+    }
+
+    // `StreamImageShow` — assemble and display, once.
+    std::wstring DoStreamShow(HWND hWnd) {
+        if (g_inStream.declared == 0)
+            return MakeErr(RT::ERR_BAD_PAYLOAD, Constants::Messages::STREAM_ERR_NO_TRANSFER);
+
+        // Proven, not assumed. A phone on a flaky link is the expected caller, and
+        // half a JPEG decodes to a torn image rather than to an error.
+        if (g_inStream.bytes.size() != g_inStream.declared) {
+            const std::wstring got = std::to_wstring(g_inStream.bytes.size()) + L"/" +
+                                     std::to_wstring(g_inStream.declared);
+            g_inStream = InboundStream{};
+            return MakeErr(RT::ERR_BAD_PAYLOAD,
+                           std::wstring(Constants::Messages::STREAM_ERR_TRUNCATED) +
+                               L" (" + got + L")");
+        }
+
+        // Written to a temp file so the ordinary decode/cache/display path can be
+        // reused unchanged — and marked as ours, so retiring the interjection
+        // deletes it.
+        std::wstring tempPath;
+        if (!Xfer::WriteTempImage(g_inStream.fileName, g_inStream.bytes, tempPath)) {
+            g_inStream = InboundStream{};
+            return MakeErr(RT::ERR_INTERNAL, L"could not write the received image");
+        }
+
+        const std::wstring name = g_inStream.fileName;
+        const size_t       n    = g_inStream.bytes.size();
+        // The buffer is released as soon as the file exists: holding the bytes AND
+        // the decoded bitmap AND the file would be three copies of one picture.
+        g_inStream = InboundStream{};
+
+        const bool shown = ArmInterjection(hWnd, tempPath, /*immediate=*/false,
+                                           /*ownsTempFile=*/true);
+        return MakeOk(std::to_wstring(n) + L";" + name + L";" +
+                      (shown ? L"shown" : L"queued"));
+    }
+
+    // `SendDisplayedImage` — the INBOUND direction, answered in one reply.
+    //
+    // Body lines first, then the OK that terminates them and names the size and
+    // file. A reply may be multi-line (the `help` verb already is), so this needs
+    // none of the framing the outbound direction does.
+    //
+    // Reads the file ON THE UI THREAD, which is the one blocking call in this
+    // feature. Accepted deliberately: it is bounded by STREAM_MAX_BYTES, it
+    // happens only when somebody explicitly asks, and the alternative — handing
+    // the path to the socket thread — breaks the one-request-one-reply shape that
+    // makes the protocol implementable by a phone in fifty lines.
+    std::wstring DoSendDisplayedImage() {
+        // What is ON SCREEN, which is not always a playlist entry: if this viewer
+        // is itself showing a streamed or interjected picture, that is the honest
+        // answer to "what are you displaying".
+        std::wstring path;
+        if (app.interject.showing && !app.interject.path.empty())
+            path = app.interject.path;
+        else if (app.currentIndex >= 0 &&
+                 app.currentIndex < static_cast<int>(app.playlist.size()))
+            path = app.playlist[app.currentIndex];
+
+        // The OK line's shape is part of the protocol — "<bytes>;<name>" after the
+        // '=' — because a client reads the size to check what it received and the
+        // name to know what it is decoding. Spelled the same in both branches.
+        if (path.empty())
+            return MakeOk(L"SendDisplayedImage=0;");  // showing nothing: an answer
+
+        std::vector<unsigned char> bytes;
+        std::wstring err;
+        if (!Xfer::ReadImageFile(path, bytes, err))
+            return MakeErr(RT::ERR_BAD_PAYLOAD, err);
+
+        const std::wstring name = fs::path(path).filename().wstring();
+        return Xfer::BuildDataReplyBody(bytes) +
+               MakeOk(L"SendDisplayedImage=" + std::to_wstring(bytes.size()) +
+                      L";" + name);
     }
 
     // --- find <query> -------------------------------------------------------
@@ -567,6 +760,25 @@ bool ExecutePayload(HWND hWnd, Command cmd, const std::wstring &payload,
             return true;
         case Command::OpenFile:
             replyOut = DoOpen(hWnd, payload);
+            return true;
+        case Command::ShowImageOnce:
+            replyOut = DoInterject(hWnd, payload);
+            return true;
+        // The streaming trio and its inbound counterpart. Handled here rather than
+        // through ExecuteCommand for the same reason every payload command is: they
+        // answer with something a caller needs, and ExecuteCommand answers with
+        // state.
+        case Command::StreamImageBegin:
+            replyOut = DoStreamBegin(payload);
+            return true;
+        case Command::StreamImageChunk:
+            replyOut = DoStreamChunk(payload);
+            return true;
+        case Command::StreamImageShow:
+            replyOut = DoStreamShow(hWnd);
+            return true;
+        case Command::SendDisplayedImage:
+            replyOut = DoSendDisplayedImage();
             return true;
         case Command::FindImage:
             replyOut = DoFind(hWnd, payload);

@@ -136,6 +136,47 @@ namespace Constants::Messages {
     constexpr const wchar_t *MIRROR_LOCAL_OFF  = L"Mirror: remote only (this screen stays put)";
     constexpr const wchar_t *MIRROR_LOCAL_IDLE = L"Mirroring is off (F11 to start)";
 
+    // Ctrl+Enter — pushing this viewer's picture at the instances under Control.
+    // Every outcome says which it was: a push that reaches nothing must not look
+    // the same as one that reached three screens.
+    constexpr const wchar_t *PUSH_SENT_PREFIX = L"Pushed image → ";      // + count
+    constexpr const wchar_t *PUSH_SENT_SUFFIX = L" instance(s)";
+    constexpr const wchar_t *PUSH_NO_IMAGE    = L"Nothing to push — no image loaded";
+    // Alt+Enter. Worded differently from the Ctrl+Enter line on purpose: the two
+    // do visibly different things at the far end, and an identical message would
+    // make a mis-pressed modifier impossible to notice.
+    constexpr const wchar_t *PUSH_ONCE_PREFIX = L"Image streamed → ";  // + count
+    // Ctrl+Alt+Enter — asking one instance for the picture it is displaying.
+    constexpr const wchar_t *STREAM_IN_ASKING_PREFIX = L"Asking ";  // + target name
+    constexpr const wchar_t *STREAM_IN_ASKING_SUFFIX = L" for its image…";
+    constexpr const wchar_t *STREAM_IN_NO_TARGET =
+        L"Nobody to ask — tick an instance under Control (Ctrl+F11)";
+    // It answered, and it is showing nothing. An answer, not a failure.
+    constexpr const wchar_t *STREAM_IN_EMPTY = L"That instance is showing no image";
+    constexpr const wchar_t *STREAM_IN_FAILED = L"Could not fetch that instance's image";
+
+    // Refusals from the transfer itself, shared by both directions so the two ends
+    // describe the same fault with the same words.
+    constexpr const wchar_t *STREAM_ERR_UNREADABLE = L"cannot read that image file";
+    // The far end predates image streaming. Refused with a reason rather than tried:
+    // its line buffer is 4 KB, so it answers a chunk by dropping the connection, and
+    // "the link died" is a much worse explanation than this one.
+    constexpr const wchar_t *STREAM_ERR_PEER_TOO_OLD =
+        L"that instance is too old to receive an image — update it (protocol v2)";
+    constexpr const wchar_t *STREAM_ERR_TOO_LARGE  = L"image is too large to stream";
+    constexpr const wchar_t *STREAM_ERR_NO_TRANSFER =
+        L"no transfer in progress — send StreamImageBegin first";
+    constexpr const wchar_t *STREAM_ERR_TRUNCATED =
+        L"transfer incomplete — fewer bytes arrived than were declared";
+    constexpr const wchar_t *PUSH_NO_TARGETS  =
+        L"Nothing to push to — tick an instance under Control (Ctrl+F11)";
+    // Every ticked instance is on another machine, where a folder path and a
+    // playlist index both mean nothing. Named rather than silently skipped.
+    constexpr const wchar_t *PUSH_ONLY_REMOTE =
+        L"Not pushed — the ticked instances are on another machine";
+    constexpr const wchar_t *PUSH_SKIPPED_PREFIX = L" (";                // + count
+    constexpr const wchar_t *PUSH_SKIPPED_SUFFIX = L" skipped: another machine)";
+
     // Shown when connecting forces the sort order off disk order — see
     // LeaveDiskOrderForSession.
     constexpr const wchar_t *REMOTE_SORT_LEFT_DISK_ORDER =

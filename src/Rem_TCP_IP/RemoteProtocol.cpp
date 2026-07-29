@@ -31,166 +31,401 @@ namespace RT = Constants::RemoteTcpIp;
 namespace {
     constexpr CommandEntry TABLE[] = {
         // --- Navigation ---
-        { L"NextImage",             Command::NextImage,                       PayloadRule::None },
-        { L"PrevImage",             Command::PrevImage,                       PayloadRule::None },
-        { L"GoToFirstImage",        Command::GoToFirstImage,                  PayloadRule::None },
-        { L"GoToLastImage",         Command::GoToLastImage,                   PayloadRule::None },
+        { L"NextImage",             Command::NextImage,                       PayloadRule::None,
+          L"next image in the playlist" },
+        { L"PrevImage",             Command::PrevImage,                       PayloadRule::None,
+          L"previous image in the playlist" },
+        { L"GoToFirstImage",        Command::GoToFirstImage,                  PayloadRule::None,
+          L"first image of the whole playlist" },
+        { L"GoToLastImage",         Command::GoToLastImage,                   PayloadRule::None,
+          L"last image of the whole playlist" },
         { L"GoToLastImageInCurrentFolder",
-                                    Command::GoToLastImageInCurrentFolder,    PayloadRule::None },
+                                    Command::GoToLastImageInCurrentFolder,    PayloadRule::None,
+          L"last image of the CURRENT folder — different from GoToLastImage when the "
+          L"playlist spans several folders" },
         { L"ToggleFirstLastImageInCurrentFolder",
-                                    Command::ToggleFirstLastImageInCurrentFolder, PayloadRule::None },
-        { L"ShowInExplorer",        Command::ShowInExplorer,                  PayloadRule::None },
-        { L"ToggleLastDir",         Command::ToggleLastDir,                   PayloadRule::None },
-        { L"ToggleLastImage",       Command::ToggleLastImage,                 PayloadRule::None },
-        { L"PrevHistoryFolder",     Command::PrevHistoryFolder,               PayloadRule::None },
-        { L"NextHistoryFolder",     Command::NextHistoryFolder,               PayloadRule::None },
-        { L"NextFavoriteFolder",    Command::NextFavoriteFolder,              PayloadRule::None },
-        { L"PrevFavoriteFolder",    Command::PrevFavoriteFolder,              PayloadRule::None },
-        { L"ReloadCurrentDir",      Command::ReloadCurrentDir,                PayloadRule::None },
+                                    Command::ToggleFirstLastImageInCurrentFolder, PayloadRule::None,
+          L"jump between the first and last image of the current folder, alternating "
+          L"on each call" },
+        { L"ShowInExplorer",        Command::ShowInExplorer,                  PayloadRule::None,
+          L"open Explorer on the current file, selected. Opens a window ON THAT "
+          L"MACHINE — of no use on a screen nobody is sitting at" },
+        { L"ToggleLastDir",         Command::ToggleLastDir,                   PayloadRule::None,
+          L"jump back to the previous FOLDER, and again to come back — two folders, "
+          L"alternating" },
+        { L"ToggleLastImage",       Command::ToggleLastImage,                 PayloadRule::None,
+          L"jump back to the previous IMAGE, and again to come back — the A/B compare" },
+        { L"PrevHistoryFolder",     Command::PrevHistoryFolder,               PayloadRule::None,
+          L"walk back through recently opened folders (the Tab history list)" },
+        { L"NextHistoryFolder",     Command::NextHistoryFolder,               PayloadRule::None,
+          L"walk forward through recently opened folders" },
+        { L"NextFavoriteFolder",    Command::NextFavoriteFolder,              PayloadRule::None,
+          L"open the next FAVOURITE folder" },
+        { L"PrevFavoriteFolder",    Command::PrevFavoriteFolder,              PayloadRule::None,
+          L"open the previous FAVOURITE folder" },
+        { L"ReloadCurrentDir",      Command::ReloadCurrentDir,                PayloadRule::None,
+          L"rescan the current folder and rebuild the playlist — after files were "
+          L"added or removed behind the viewer's back" },
 
         // --- Commands carrying a value ---
+        // Payload rows carry TWO descriptions: what the command does, and what its
+        // value means. The Ctrl+F10 panel puts one over each box.
         { L"JumpToImage",           Command::JumpToImage,                     PayloadRule::Required,
-          L"image NUMBER in the playlist, 1-based" },
+          L"go to a numbered image in the current playlist",
+          L"image NUMBER, 1-based, 1…count — the same number the overlay and the "
+          L"JumpTo panel show.   e.g.  12   ·  out of range is refused, not clamped" },
         { L"OpenFile",              Command::OpenFile,                        PayloadRule::Required,
-          L"full path to a file or a folder" },
+          L"open a file, or a folder — and STAY there: the playlist is rebuilt and "
+          L"that folder becomes where the instance lives",
+          L"full path, read on the RECEIVER's disk. A file opens its folder and lands "
+          L"on it; a folder opens at the first image. Quotes are tolerated.   e.g.  "
+          L"D:\\Photos\\IMG_0042.jpg   ·   D:\\Photos" },
         { L"FindImage",             Command::FindImage,                       PayloadRule::Required,
-          L"jump to the first file whose name matches this text" },
+          L"jump to the best name match in this playlist. Refused while a connection "
+          L"is live — it searches one playlist and the two ends may hold different ones",
+          L"text matched against FILE NAMES, case-insensitive. Plain text is a fuzzy "
+          L"match, * and ? make it a wildcard.   e.g.  IMG_0042   ·   *.png   ·   dsc?9" },
         { L"ZoomTo",                Command::ZoomTo,                          PayloadRule::Required,
-          L"percent, e.g. 150. 0 returns to the view mode's natural fit" },
+          L"set the zoom level, ignoring the view mode's fit",
+          L"percent, no sign.   e.g.  150  = one and a half times   ·   50  = half   "
+          L"·   0  returns to the view mode's natural fit" },
+
+        // --- Read-only ---
+        // The one row that CHANGES NOTHING. Every other command reports its
+        // value as a side effect of doing something; this exists to be asked,
+        // and Ctrl+Enter's push is built on the answer: it is how the driving
+        // instance finds out whether the far end already holds this folder in
+        // this order, and therefore whether an index is safe to send at all.
+        { L"QueryState",            Command::QueryState,                      PayloadRule::None,
+          L"read-only, changes NOTHING: answers with that instance's folder, sort "
+          L"order, playlist length and current position. What Ctrl+Enter asks before "
+          L"deciding whether an image number is safe to send.   answer:  "
+          L"count=238;index=12;sort=0;sortrev=0;name=IMG_0012.jpg;folder=D:\\Photos" },
+
+        // --- One-shot display, and the image transfer that feeds it ---
+        //
+        // All five are in the table because the Ctrl+F10 Send Command panel builds
+        // its list from it: a feature that cannot be exercised by hand cannot be
+        // diagnosed by hand either. They show a picture WITHOUT joining it to
+        // anything — no playlist entry, no index, no sort order — and the next
+        // image change drops it. Read paths, like `OpenFile` and less invasive.
+        { L"ShowImageOnce",         Command::ShowImageOnce,                   PayloadRule::Required,
+          L"show ONE image once, in place of the current slide, and change nothing "
+          L"else — no folder, no sort order, no playlist position. Gone at the next "
+          L"image change. Same machine only: for another machine, stream it instead",
+          L"full path to one image file, read on the RECEIVER's disk. A folder is "
+          L"refused.   e.g.  D:\\Ads\\promo.png" },
+        { L"StreamImageBegin",      Command::StreamImageBegin,                PayloadRule::Required,
+          L"start an image transfer — the first of three: Begin, then Chunk for each "
+          L"slice, then Show. Replaces any transfer already in progress",
+          L"<totalBytes> <fileName>.  The count is enforced on every chunk and proved "
+          L"at Show; the name is used ONLY for its extension, to pick a decoder, and "
+          L"never as a path.   e.g.  204800 promo.png" },
+        { L"StreamImageChunk",      Command::StreamImageChunk,                PayloadRule::Required,
+          L"append one slice to the transfer in progress. Refused if the total would "
+          L"exceed what Begin declared",
+          L"base64 of the next raw bytes of the file. Any slice size fits, as long as "
+          L"the whole line stays under the protocol's line limit — 96 KB of bytes per "
+          L"chunk is what this app sends" },
+        { L"StreamImageShow",       Command::StreamImageShow,                 PayloadRule::None,
+          L"the transfer is complete: check the byte count, then show it once, exactly "
+          L"as ShowImageOnce would. A short transfer is refused rather than displayed "
+          L"torn" },
+        { L"SendDisplayedImage",    Command::SendDisplayedImage,              PayloadRule::None,
+          L"read-only: answers with the picture currently on THAT screen — including a "
+          L"one-shot image if one is up. Body lines of base64, then the OK naming the "
+          L"size and file.   answer:  DATA <base64> … then  "
+          L"OK SendDisplayedImage=204800;IMG_0012.jpg  (0; when it shows nothing)" },
+
+        // --- The three driving commands, so they can be sent by hand too ---
+        //
+        // Reachable so the Send Command panel can exercise them, and so a script
+        // can. Sending one to a target makes THAT instance do it to its own
+        // targets, which terminates: the commands it then sends do not themselves
+        // trigger another send. None of them is mirrorable — see IsMirrorable.
+        { L"SendImagePositionToRemotes",
+                                    Command::SendImagePositionToRemotes,      PayloadRule::None,
+          L"folder + sort order + position to the instances under Control (same "
+          L"machine only). They GO there and stay" },
+        { L"StreamImageToRemotes",  Command::StreamImageToRemotes,            PayloadRule::None,
+          L"stream the current image's bytes to the instances under Control, shown "
+          L"once. Works to any machine" },
+        { L"StreamImageFromRemote", Command::StreamImageFromRemote,           PayloadRule::None,
+          L"ask ONE controlled instance for the picture it is displaying and show "
+          L"it here, once. Works from any machine" },
         { L"SlideshowSetInterval",  Command::SlideshowSetInterval,            PayloadRule::Required,
-          L"slide duration in milliseconds" },
+          L"set how long each slide is held. Takes effect on the next slide; does not "
+          L"start or stop the slideshow",
+          L"milliseconds, 100 … 60000 — outside that is refused.   e.g.  5000  = five "
+          L"seconds   ·   30000  = half a minute" },
 
         // --- View modes ---
-        { L"ViewMode1",             Command::ViewMode1,                       PayloadRule::None },
-        { L"ViewMode2",             Command::ViewMode2,                       PayloadRule::None },
-        { L"ViewMode3",             Command::ViewMode3,                       PayloadRule::None },
-        { L"ViewMode4",             Command::ViewMode4,                       PayloadRule::None },
-        { L"ViewMode5",             Command::ViewMode5,                       PayloadRule::None },
+        // The five fits, by their numbers — the same 1…5 the V-key cycle and the
+        // `view=` key in `Sync` use, so a script and the keyboard agree.
+        { L"ViewMode1",             Command::ViewMode1,                       PayloadRule::None,
+          L"fit inside the window, aspect ratio KEPT (the default)" },
+        { L"ViewMode2",             Command::ViewMode2,                       PayloadRule::None,
+          L"fit to the window's WIDTH, aspect ratio not kept" },
+        { L"ViewMode3",             Command::ViewMode3,                       PayloadRule::None,
+          L"fit to the window's HEIGHT, aspect ratio not kept" },
+        { L"ViewMode4",             Command::ViewMode4,                       PayloadRule::None,
+          L"stretch to fill the window, aspect ratio not kept" },
+        { L"ViewMode5",             Command::ViewMode5,                       PayloadRule::None,
+          L"original pixel size, no scaling — 1:1" },
 
         // --- Zoom / viewport ---
-        { L"ZoomIn",                Command::ZoomIn,                          PayloadRule::None },
-        { L"ZoomOut",               Command::ZoomOut,                         PayloadRule::None },
-        { L"ZoomReset",             Command::ZoomReset,                       PayloadRule::None },
-        { L"ToggleViewportLock",    Command::ToggleViewportLock,              PayloadRule::None },
-        { L"PanLeft",               Command::PanLeft,                         PayloadRule::None },
-        { L"PanRight",              Command::PanRight,                        PayloadRule::None },
-        { L"PanUp",                 Command::PanUp,                           PayloadRule::None },
-        { L"PanDown",               Command::PanDown,                         PayloadRule::None },
+        { L"ZoomIn",                Command::ZoomIn,                          PayloadRule::None,
+          L"zoom in one step. ZoomTo sets an exact percentage instead" },
+        { L"ZoomOut",               Command::ZoomOut,                         PayloadRule::None,
+          L"zoom out one step" },
+        { L"ZoomReset",             Command::ZoomReset,                       PayloadRule::None,
+          L"drop zoom and pan, back to the view mode's own fit" },
+        { L"ToggleViewportLock",    Command::ToggleViewportLock,              PayloadRule::None,
+          L"carry the current zoom and pan to the NEXT image instead of resetting it "
+          L"— for flipping through same-framed shots at one detail" },
+        { L"PanLeft",               Command::PanLeft,                         PayloadRule::None,
+          L"pan the view one step left. Only does anything while zoomed in" },
+        { L"PanRight",              Command::PanRight,                        PayloadRule::None,
+          L"pan one step right (only while zoomed in)" },
+        { L"PanUp",                 Command::PanUp,                           PayloadRule::None,
+          L"pan one step up (only while zoomed in)" },
+        { L"PanDown",               Command::PanDown,                         PayloadRule::None,
+          L"pan one step down (only while zoomed in)" },
 
         // --- Transform ---
-        { L"RotateCW",              Command::RotateCW,                        PayloadRule::None },
-        { L"RotateCCW",             Command::RotateCCW,                       PayloadRule::None },
-        { L"FlipH",                 Command::FlipH,                           PayloadRule::None },
-        { L"FlipV",                 Command::FlipV,                           PayloadRule::None },
+        // Display-only, all four: nothing is written to the file. They are also
+        // overwritten by the next image's EXIF orientation, which is why a rotation
+        // does not persist across a navigation.
+        { L"RotateCW",              Command::RotateCW,                        PayloadRule::None,
+          L"rotate the VIEW 90° clockwise. Display only — the file is never touched" },
+        { L"RotateCCW",             Command::RotateCCW,                       PayloadRule::None,
+          L"rotate the view 90° anticlockwise. Display only" },
+        { L"FlipH",                 Command::FlipH,                           PayloadRule::None,
+          L"mirror the view left-to-right. Display only" },
+        { L"FlipV",                 Command::FlipV,                           PayloadRule::None,
+          L"mirror the view top-to-bottom. Display only" },
 
         // --- Slideshow ---
-        { L"SlideshowToggle",       Command::SlideshowToggle,                 PayloadRule::None },
-        { L"SlideshowPauseResume",  Command::SlideshowPauseResume,            PayloadRule::None },
-        { L"SlideshowToggleLoop",   Command::SlideshowToggleLoop,             PayloadRule::None },
-        { L"SlideshowToggleShuffle",Command::SlideshowToggleShuffle,          PayloadRule::None },
+        { L"SlideshowToggle",       Command::SlideshowToggle,                 PayloadRule::None,
+          L"start the slideshow, or stop it if it is running" },
+        { L"SlideshowPauseResume",  Command::SlideshowPauseResume,            PayloadRule::None,
+          L"hold the current slide, or carry on — the slideshow stays STARTED either "
+          L"way, unlike SlideshowToggle which ends it" },
+        { L"SlideshowToggleLoop",   Command::SlideshowToggleLoop,             PayloadRule::None,
+          L"at the end of the playlist: start again, or stop" },
+        { L"SlideshowToggleShuffle",Command::SlideshowToggleShuffle,          PayloadRule::None,
+          L"random order instead of playlist order. The permutation is rebuilt when "
+          L"the folder changes under it" },
         { L"SlideshowCycleTransition",
-                                    Command::SlideshowCycleTransition,        PayloadRule::None },
+                                    Command::SlideshowCycleTransition,        PayloadRule::None,
+          L"step to the next slide TRANSITION effect (cut, fade, and the rest)" },
 
         // --- Window / chrome ---
-        { L"ToggleFullscreen",      Command::ToggleFullscreen,                PayloadRule::None },
-        { L"ToggleAlwaysOnTop",     Command::ToggleAlwaysOnTop,               PayloadRule::None },
-        { L"AutosizeToWorkArea",    Command::AutosizeToWorkArea,              PayloadRule::None },
-        { L"ResizeWindowLarger",    Command::ResizeWindowLarger,              PayloadRule::None },
-        { L"ResizeWindowSmaller",   Command::ResizeWindowSmaller,             PayloadRule::None },
-        { L"MoveWindowLeft",        Command::MoveWindowLeft,                  PayloadRule::None },
-        { L"MoveWindowRight",       Command::MoveWindowRight,                 PayloadRule::None },
-        { L"MoveWindowUp",          Command::MoveWindowUp,                    PayloadRule::None },
-        { L"MoveWindowDown",        Command::MoveWindowDown,                  PayloadRule::None },
-        { L"SnapLeft",              Command::SnapLeft,                        PayloadRule::None },
-        { L"SnapRight",             Command::SnapRight,                       PayloadRule::None },
-        { L"SnapTop",               Command::SnapTop,                         PayloadRule::None },
-        { L"SnapBottom",            Command::SnapBottom,                      PayloadRule::None },
-        { L"SnapTopLeft",           Command::SnapTopLeft,                     PayloadRule::None },
-        { L"SnapTopRight",          Command::SnapTopRight,                    PayloadRule::None },
-        { L"SnapBottomLeft",        Command::SnapBottomLeft,                  PayloadRule::None },
-        { L"SnapBottomRight",       Command::SnapBottomRight,                 PayloadRule::None },
-        { L"ToggleCornerPreference",Command::ToggleCornerPreference,          PayloadRule::None },
-        { L"CycleBackdropType",     Command::CycleBackdropType,               PayloadRule::None },
+        // Geometry, all of it. Reachable by hand and by script, but deliberately NOT
+        // mirrored: slaves are placed on fixed monitors, usually fullscreen, and a
+        // forwarded snap or move knocks one off the screen it was put on.
+        { L"ToggleFullscreen",      Command::ToggleFullscreen,                PayloadRule::None,
+          L"borderless fullscreen on the monitor the window is on, or back" },
+        { L"ToggleAlwaysOnTop",     Command::ToggleAlwaysOnTop,               PayloadRule::None,
+          L"keep this window (and its panels) above other windows" },
+        { L"AutosizeToWorkArea",    Command::AutosizeToWorkArea,              PayloadRule::None,
+          L"resize to fill the monitor's work area — the screen minus the taskbar" },
+        { L"ResizeWindowLarger",    Command::ResizeWindowLarger,              PayloadRule::None,
+          L"grow the window one step, centre held" },
+        { L"ResizeWindowSmaller",   Command::ResizeWindowSmaller,             PayloadRule::None,
+          L"shrink the window one step" },
+        { L"MoveWindowLeft",        Command::MoveWindowLeft,                  PayloadRule::None,
+          L"nudge the window one step left" },
+        { L"MoveWindowRight",       Command::MoveWindowRight,                 PayloadRule::None,
+          L"nudge the window one step right" },
+        { L"MoveWindowUp",          Command::MoveWindowUp,                    PayloadRule::None,
+          L"nudge the window one step up" },
+        { L"MoveWindowDown",        Command::MoveWindowDown,                  PayloadRule::None,
+          L"nudge the window one step down" },
+        { L"SnapLeft",              Command::SnapLeft,                        PayloadRule::None,
+          L"snap to the LEFT HALF of the work area" },
+        { L"SnapRight",             Command::SnapRight,                       PayloadRule::None,
+          L"snap to the right half" },
+        { L"SnapTop",               Command::SnapTop,                         PayloadRule::None,
+          L"snap to the top half" },
+        { L"SnapBottom",            Command::SnapBottom,                      PayloadRule::None,
+          L"snap to the bottom half" },
+        { L"SnapTopLeft",           Command::SnapTopLeft,                     PayloadRule::None,
+          L"snap to the top-left QUARTER" },
+        { L"SnapTopRight",          Command::SnapTopRight,                    PayloadRule::None,
+          L"snap to the top-right quarter" },
+        { L"SnapBottomLeft",        Command::SnapBottomLeft,                  PayloadRule::None,
+          L"snap to the bottom-left quarter" },
+        { L"SnapBottomRight",       Command::SnapBottomRight,                 PayloadRule::None,
+          L"snap to the bottom-right quarter" },
+        { L"ToggleCornerPreference",Command::ToggleCornerPreference,          PayloadRule::None,
+          L"square window corners, or the rounded ones Windows 11 draws" },
+        { L"CycleBackdropType",     Command::CycleBackdropType,               PayloadRule::None,
+          L"step through the window backdrop materials — plain, Mica, acrylic" },
 
         // --- Panels / overlays ---
-        { L"ToggleHelp",            Command::ToggleHelp,                      PayloadRule::None },
-        { L"ToggleCache",           Command::ToggleCache,                     PayloadRule::None },
-        { L"ClearCache",            Command::ClearCache,                      PayloadRule::None },
-        { L"ToggleDir",             Command::ToggleDir,                       PayloadRule::None },
-        { L"ToggleHistory",         Command::ToggleHistory,                   PayloadRule::None },
-        { L"ToggleHistoryFull",     Command::ToggleHistoryFull,               PayloadRule::None },
-        { L"ToggleOverlay",         Command::ToggleOverlay,                   PayloadRule::None },
-        { L"CycleOverlayLayout",    Command::CycleOverlayLayout,              PayloadRule::None },
+        // Panels raise a WINDOW on the receiving screen, which then has to be closed
+        // from here — reachable on purpose (a script setting a wall up), never
+        // mirrored, because one keypress must not open a window on every screen.
+        { L"ToggleHelp",            Command::ToggleHelp,                      PayloadRule::None,
+          L"open or close the Help panel on that instance" },
+        { L"ToggleCache",           Command::ToggleCache,                     PayloadRule::None,
+          L"open or close the VRAM cache panel" },
+        { L"ClearCache",            Command::ClearCache,                      PayloadRule::None,
+          L"drop every decoded bitmap from the VRAM cache. The current image is "
+          L"re-decoded; nothing on disk changes" },
+        { L"ToggleDir",             Command::ToggleDir,                       PayloadRule::None,
+          L"open or close the folder thumbnail strip" },
+        { L"ToggleHistory",         Command::ToggleHistory,                   PayloadRule::None,
+          L"open or close the recent-folders list" },
+        { L"ToggleHistoryFull",     Command::ToggleHistoryFull,               PayloadRule::None,
+          L"the same list in its FULL form — every recorded folder, not the short "
+          L"recent set" },
+        { L"ToggleOverlay",         Command::ToggleOverlay,                   PayloadRule::None,
+          L"the on-image text overlay (file name, size, position) on or off" },
+        { L"CycleOverlayLayout",    Command::CycleOverlayLayout,              PayloadRule::None,
+          L"step the overlay through its layouts — where the text sits and how much "
+          L"of it there is" },
         { L"ToggleOverlayBackground",
-                                    Command::ToggleOverlayBackground,         PayloadRule::None },
-        { L"ShowInfo",              Command::ShowInfo,                        PayloadRule::None },
-        { L"ToggleStats",           Command::ToggleStats,                     PayloadRule::None },
-        { L"CloseAllPanels",        Command::CloseAllPanels,                  PayloadRule::None },
-        { L"RestoreAllPanels",      Command::RestoreAllPanels,                PayloadRule::None },
-        { L"ToggleAllPanels",       Command::ToggleAllPanels,                 PayloadRule::None },
-        { L"ToggleDedicatedPanel",  Command::ToggleDedicatedPanel,            PayloadRule::None },
+                                    Command::ToggleOverlayBackground,         PayloadRule::None,
+          L"the shaded plate behind the overlay text, for light images" },
+        { L"ShowInfo",              Command::ShowInfo,                        PayloadRule::None,
+          L"open or close the EXIF / file information panel" },
+        { L"ToggleStats",           Command::ToggleStats,                     PayloadRule::None,
+          L"open or close the render statistics panel" },
+        { L"CloseAllPanels",        Command::CloseAllPanels,                  PayloadRule::None,
+          L"close every open panel, remembering which were open" },
+        { L"RestoreAllPanels",      Command::RestoreAllPanels,                PayloadRule::None,
+          L"reopen the panels CloseAllPanels remembered" },
+        { L"ToggleAllPanels",       Command::ToggleAllPanels,                 PayloadRule::None,
+          L"close them all, or restore them — whichever the current state is not" },
+        { L"ToggleDedicatedPanel",  Command::ToggleDedicatedPanel,            PayloadRule::None,
+          L"open or close the Dedicated-instance configuration panel" },
         { L"ToggleThumbnailWrapAround",
-                                    Command::ToggleThumbnailWrapAround,       PayloadRule::None },
-        { L"ToggleThumbnailEffects",Command::ToggleThumbnailEffects,          PayloadRule::None },
+                                    Command::ToggleThumbnailWrapAround,       PayloadRule::None,
+          L"whether the wheel over a thumbnail strip wraps past the ends or stops" },
+        { L"ToggleThumbnailEffects",Command::ToggleThumbnailEffects,          PayloadRule::None,
+          L"whether thumbnails are drawn with the active colour effects applied" },
 
         // --- Colour effects ---
-        { L"ToggleGrayscale",       Command::ToggleGrayscale,                 PayloadRule::None },
-        { L"ToggleInvert",          Command::ToggleInvert,                    PayloadRule::None },
-        { L"ToggleSepia",           Command::ToggleSepia,                     PayloadRule::None },
-        { L"ToggleSolarize",        Command::ToggleSolarize,                  PayloadRule::None },
-        { L"ToggleOutline",         Command::ToggleOutline,                   PayloadRule::None },
-        { L"ToggleThreshold",       Command::ToggleThreshold,                 PayloadRule::None },
-        { L"ToggleEffectPreview",   Command::ToggleEffectPreview,             PayloadRule::None },
-        { L"ResetEffects",          Command::ResetEffects,                    PayloadRule::None },
-        { L"GammaUp",               Command::GammaUp,                         PayloadRule::None },
-        { L"GammaDown",             Command::GammaDown,                       PayloadRule::None },
-        { L"BrightnessUp",          Command::BrightnessUp,                    PayloadRule::None },
-        { L"BrightnessDown",        Command::BrightnessDown,                  PayloadRule::None },
-        { L"ContrastUp",            Command::ContrastUp,                      PayloadRule::None },
-        { L"ContrastDown",          Command::ContrastDown,                    PayloadRule::None },
-        { L"SaturationUp",          Command::SaturationUp,                    PayloadRule::None },
-        { L"SaturationDown",        Command::SaturationDown,                  PayloadRule::None },
+        // The six named effects STACK, in the order they are switched on, each
+        // applying to the result of the last. That order is state a flag cannot
+        // express, which is why `Sync` carries the list and not six booleans.
+        { L"ToggleGrayscale",       Command::ToggleGrayscale,                 PayloadRule::None,
+          L"grayscale on or off. Effects stack in the order switched on" },
+        { L"ToggleInvert",          Command::ToggleInvert,                    PayloadRule::None,
+          L"invert the colours (negative)" },
+        { L"ToggleSepia",           Command::ToggleSepia,                     PayloadRule::None,
+          L"sepia tone" },
+        { L"ToggleSolarize",        Command::ToggleSolarize,                  PayloadRule::None,
+          L"solarize — invert only the tones above a threshold" },
+        { L"ToggleOutline",         Command::ToggleOutline,                   PayloadRule::None,
+          L"edge detection: draw the outlines only" },
+        { L"ToggleThreshold",       Command::ToggleThreshold,                 PayloadRule::None,
+          L"reduce to two tones at a cut-off — pure black and white" },
+        { L"ToggleEffectPreview",   Command::ToggleEffectPreview,             PayloadRule::None,
+          L"show the effect stack applied to a small preview instead of the whole "
+          L"image, for judging one before committing to it" },
+        { L"ResetEffects",          Command::ResetEffects,                    PayloadRule::None,
+          L"clear every colour effect and the four adjustments below. Leaves the view "
+          L"mode, zoom and window alone — ResetAll is the bigger hammer" },
+        { L"GammaUp",               Command::GammaUp,                         PayloadRule::None,
+          L"gamma one step up — brightens the midtones, leaves black and white put" },
+        { L"GammaDown",             Command::GammaDown,                       PayloadRule::None,
+          L"gamma one step down" },
+        { L"BrightnessUp",          Command::BrightnessUp,                    PayloadRule::None,
+          L"brightness one step up — lifts the whole range" },
+        { L"BrightnessDown",        Command::BrightnessDown,                  PayloadRule::None,
+          L"brightness one step down" },
+        { L"ContrastUp",            Command::ContrastUp,                      PayloadRule::None,
+          L"contrast one step up" },
+        { L"ContrastDown",          Command::ContrastDown,                    PayloadRule::None,
+          L"contrast one step down" },
+        { L"SaturationUp",          Command::SaturationUp,                    PayloadRule::None,
+          L"colour saturation one step up" },
+        { L"SaturationDown",        Command::SaturationDown,                  PayloadRule::None,
+          L"saturation one step down; far enough is grey" },
 
         // --- Sort order ---
-        { L"SortByName",            Command::SortByName,                      PayloadRule::None },
-        { L"SortByDate",            Command::SortByDate,                      PayloadRule::None },
-        { L"SortBySize",            Command::SortBySize,                      PayloadRule::None },
-        { L"SortByType",            Command::SortByType,                      PayloadRule::None },
-        { L"SortByDisk",            Command::SortByDisk,                      PayloadRule::None },
+        // TOGGLES, not setters: the command for the order you are already in flips
+        // ascending/descending instead. Sending it twice from a different order is
+        // therefore how a caller reaches "this order, descending".
+        { L"SortByName",            Command::SortByName,                      PayloadRule::None,
+          L"sort the playlist by NAME. Already sorted by name? Then this reverses it "
+          L"— the sort commands are toggles" },
+        { L"SortByDate",            Command::SortByDate,                      PayloadRule::None,
+          L"sort by modified DATE; again to reverse" },
+        { L"SortBySize",            Command::SortBySize,                      PayloadRule::None,
+          L"sort by file SIZE; again to reverse" },
+        { L"SortByType",            Command::SortByType,                      PayloadRule::None,
+          L"sort by file TYPE (extension); again to reverse" },
+        { L"SortByDisk",            Command::SortByDisk,                      PayloadRule::None,
+          L"physical order on the drive — fastest to read, and REFUSED while a "
+          L"connection is live: it reproduces on no other drive, so every shared "
+          L"image number would land somewhere else" },
 
         // --- Wallpaper ---
-        { L"SetWallpaperFill",      Command::SetWallpaperFill,                PayloadRule::None },
-        { L"SetWallpaperFit",       Command::SetWallpaperFit,                 PayloadRule::None },
-        { L"SetWallpaperStretch",   Command::SetWallpaperStretch,             PayloadRule::None },
-        { L"SetWallpaperTile",      Command::SetWallpaperTile,                PayloadRule::None },
-        { L"SetWallpaperCenter",    Command::SetWallpaperCenter,              PayloadRule::None },
-        { L"SetWallpaperSpan",      Command::SetWallpaperSpan,                PayloadRule::None },
+        // All six set the desktop wallpaper of the machine that RECEIVES them, from
+        // the image it is displaying. A write to that machine's settings, not to any
+        // file of the user's.
+        { L"SetWallpaperFill",      Command::SetWallpaperFill,                PayloadRule::None,
+          L"set the current image as desktop wallpaper, FILL (crop to cover)" },
+        { L"SetWallpaperFit",       Command::SetWallpaperFit,                 PayloadRule::None,
+          L"as wallpaper, FIT — whole image, bars where it does not reach" },
+        { L"SetWallpaperStretch",   Command::SetWallpaperStretch,             PayloadRule::None,
+          L"as wallpaper, STRETCHED to the screen, aspect ratio not kept" },
+        { L"SetWallpaperTile",      Command::SetWallpaperTile,                PayloadRule::None,
+          L"as wallpaper, TILED at original size" },
+        { L"SetWallpaperCenter",    Command::SetWallpaperCenter,              PayloadRule::None,
+          L"as wallpaper, CENTRED at original size" },
+        { L"SetWallpaperSpan",      Command::SetWallpaperSpan,                PayloadRule::None,
+          L"as wallpaper, SPANNED across all monitors as one surface" },
 
         // --- Theme ---
-        { L"ThemeFactorUp",         Command::ThemeFactorUp,                   PayloadRule::None },
-        { L"ThemeFactorDown",       Command::ThemeFactorDown,                 PayloadRule::None },
-        { L"ThemeFactorReset",      Command::ThemeFactorReset,                PayloadRule::None },
+        { L"ThemeFactorUp",         Command::ThemeFactorUp,                   PayloadRule::None,
+          L"lighten the app's own background one step — the surround, not the image" },
+        { L"ThemeFactorDown",       Command::ThemeFactorDown,                 PayloadRule::None,
+          L"darken the app background one step" },
+        { L"ThemeFactorReset",      Command::ThemeFactorReset,                PayloadRule::None,
+          L"back to the default background shade" },
 
         // --- Clipboard ---
-        { L"CopyToClipboard",       Command::CopyToClipboard,                 PayloadRule::None },
+        { L"CopyToClipboard",       Command::CopyToClipboard,                 PayloadRule::None,
+          L"copy the current image to the clipboard OF THAT MACHINE — which is why it "
+          L"is never mirrored: a clipboard is per-machine and copying on a wall screen "
+          L"achieves nothing" },
 
         // --- Application control ---
         // HideToTray and quit are the two a screen-management script actually
         // needs; both are safe because the tray icon remains the way back.
-        { L"HideToTray",            Command::HideToTray,                      PayloadRule::None },
-        { L"NewWindow",             Command::NewWindow,                       PayloadRule::None },
-        { L"ResetAll",              Command::ResetAll,                        PayloadRule::None },
-        { L"ResetWindowLayout",     Command::ResetWindowLayout,               PayloadRule::None },
+        { L"HideToTray",            Command::HideToTray,                      PayloadRule::None,
+          L"hide that instance to the tray. The tray icon is the way back, which is "
+          L"what makes this safe to send remotely" },
+        { L"NewWindow",             Command::NewWindow,                       PayloadRule::None,
+          L"launch ANOTHER viewer process on that machine, on the same folder" },
+        { L"ResetAll",              Command::ResetAll,                        PayloadRule::None,
+          L"reset everything: effects, adjustments, zoom, rotation, view mode AND the "
+          L"window layout. ResetEffects is colour only; ResetWindowLayout geometry only" },
+        { L"ResetWindowLayout",     Command::ResetWindowLayout,               PayloadRule::None,
+          L"window back to its default size and position, leaving the image, the view "
+          L"mode and every effect exactly as they are" },
         { L"HardQuit",              Command::HardQuit,                        PayloadRule::None,
-          L"exits that instance immediately, without saving its session" },
+          L"exit that instance IMMEDIATELY, without saving its session. Never "
+          L"mirrored: one keypress must not close every screen at once" },
 
         // --- Window opacity ---
-        { L"OpacityUp",             Command::OpacityUp,                       PayloadRule::None },
-        { L"OpacityDown",           Command::OpacityDown,                     PayloadRule::None },
+        { L"OpacityUp",             Command::OpacityUp,                       PayloadRule::None,
+          L"make the window one step more opaque" },
+        { L"OpacityDown",           Command::OpacityDown,                     PayloadRule::None,
+          L"make the window one step more transparent — far enough and what is behind "
+          L"it shows through" },
 
         // --- History walk, all rows (the horizontal-wheel scope) ---
-        { L"PrevHistoryFolderAll",  Command::PrevHistoryFolderAll,            PayloadRule::None },
-        { L"NextHistoryFolderAll",  Command::NextHistoryFolderAll,            PayloadRule::None },
+        { L"PrevHistoryFolderAll",  Command::PrevHistoryFolderAll,            PayloadRule::None,
+          L"previous folder across the WHOLE history, ignoring the recent/favourite "
+          L"split that PrevHistoryFolder walks" },
+        { L"NextHistoryFolderAll",  Command::NextHistoryFolderAll,            PayloadRule::None,
+          L"next folder across the whole history" },
 
         // --- Mirroring / observing ---
         // `observe` is how a CALLER asks to be fed this instance's actions: it
@@ -199,13 +434,22 @@ namespace {
         // only ever be the connection that asked, which is what stops this from
         // being a way to make one screen shout at another.
         { L"Observe",               Command::Observe,                         PayloadRule::Required,
-          L"1 = start reporting my actions to you, 0 = stop" },
+          L"ask the receiver to report what IT does back to the caller — how you watch "
+          L"a screen running its own slideshow. The observer can only ever be the "
+          L"connection that asked; there is no way to nominate a third party",
+          L"1 = start reporting, 0 = stop.   e.g.  1" },
         // `sync` pushes the sender's whole view/effect state. Exists because
         // mirroring forwards TOGGLES: a toggle applied to a different starting
         // state diverges, and the effect CHAIN ORDER cannot be repaired by
         // resending toggles at all.
         { L"Sync",                  Command::Sync,                            PayloadRule::Required,
-          L"adopt the sender's whole view state (built by the console, not typed)" },
+          L"adopt the sender's WHOLE view state: sort order, view mode, rotation, "
+          L"flips, gamma/brightness/contrast/saturation, the effect list in order, "
+          L"overlay, slideshow settings, and the folder. The cure for toggle drift — "
+          L"and far heavier than Ctrl+Enter, which moves only the position",
+          L"k=v;k=v… Unknown keys are ignored, so a newer sender can drive an older "
+          L"receiver. Normally built by the console rather than typed.   e.g.  "
+          L"view=1;rot=0;gamma=1.000;effects=none" },
 
         // --- Diagnostics ---
         // `enablelog 1` / `enablelog 0` — switch the Ctrl+F12 wire log on or off
@@ -216,14 +460,21 @@ namespace {
         // Reachable remotely on purpose: the screen whose behaviour you are
         // trying to explain is usually not the one you are sitting at.
         { L"EnableRemoteLog",       Command::EnableRemoteLog,                 PayloadRule::Required,
-          L"1 = start recording the wire log, 0 = stop" },
+          L"switch the RECEIVER's wire log recording on or off. A value rather than a "
+          L"toggle so a whole wall can be put into the same state; recording is off by "
+          L"default and costs nothing while off",
+          L"1 = start recording, 0 = stop.   e.g.  1" },
 
         // `msg <text>` — say something on the RECEIVER's screen. The console's
         // Identify button sends each target its own name, which is how you tell
         // two otherwise identical viewers apart.
         //
         { L"msgRemote",             Command::msgRemote,                       PayloadRule::Required,
-          L"show this text centre-screen on the receiver" },
+          L"put a centre-screen message on the receiver — how a wall of identical "
+          L"viewers is told apart. The F10 console's Identify button sends each target "
+          L"its own name",
+          L"the text to show, trimmed to 200 characters. It fades on that screen's "
+          L"normal message timer.   e.g.  Monitor 2   ·   check this one" },
     };
 
     constexpr size_t TABLE_COUNT = sizeof(TABLE) / sizeof(TABLE[0]);
@@ -489,6 +740,31 @@ bool IsMirrorable(Command cmd) {
         case Command::msgRemote:
             return false;
 
+        // Asked, never fanned out. QueryState is how a push INTERROGATES one
+        // named target; broadcasting it would query every screen and throw the
+        // answers away. The three driving commands are the acts themselves — a
+        // keystroke fanned out to every screen would have each of them drive its
+        // own targets, which is not what the key means. A slave told to
+        // perform it would push its own picture back at whoever asked.
+        case Command::QueryState:
+        case Command::SendImagePositionToRemotes:
+        case Command::StreamImageToRemotes:
+        case Command::StreamImageFromRemote:
+            return false;
+
+        // The one-shot display commands. Each is sent EXPLICITLY, by a streaming
+        // job that does its own per-target work; through the generic mirror path
+        // `ShowImageOnce` would carry a path to machines where it means nothing,
+        // and a chunk fanned out to every screen would assemble half a transfer on
+        // each of them. A slave that re-forwarded any of them would also stream
+        // into ITS targets.
+        case Command::ShowImageOnce:
+        case Command::StreamImageBegin:
+        case Command::StreamImageChunk:
+        case Command::StreamImageShow:
+        case Command::SendDisplayedImage:
+            return false;
+
         default:
             break;
     }
@@ -655,15 +931,43 @@ std::wstring MakeErrFor(const RemoteRequest &req) {
 std::wstring BuildHelpText() {
     // Built from the same table the parser uses, so the listing can never drift
     // from what is actually accepted.
+    //
+    // MACHINE-READABLE, not just human-readable. This is the one call a foreign
+    // client — the phone app — makes to learn what this instance accepts, so it
+    // carries the DESCRIPTIONS too and in a shape that parses without guessing:
+    //
+    //   CMD <name>|<0|1 takes a value>|<what it does>|<what the value means>
+    //
+    // Pipe-separated because a description contains spaces and commas and a name
+    // never contains a pipe; four fields always, empty where there is nothing to
+    // say, so a reader can split on '|' and stop thinking. A client that only wants
+    // names reads field 1 and ignores the rest.
+    //
+    // The alternative was every client hardcoding its own copy of a ninety-row
+    // table, which would be wrong the first time a command was added here.
     std::wstring out = L"qIV remote protocol v" +
                        std::to_wstring(RT::PROTOCOL_VERSION) + L"\r\n";
-    out += L"  help | ?                  this listing\r\n";
-    out += L"  ping                      liveness check\r\n";
-    out += L"  version                   app and protocol version\r\n";
+    out += L"VERB help|this listing\r\n";
+    out += L"VERB ping|liveness check, executes nothing\r\n";
+    out += L"VERB version|app and protocol version\r\n";
+    out += L"FORMAT CMD <name>|<takesValue 0|1>|<description>|<value description>\r\n";
+
+    // A '|' inside a description would silently give a reader a fifth field. No
+    // row contains one today; this makes sure the format survives one that does.
+    auto field = [](const wchar_t *s) {
+        std::wstring v = s ? s : L"";
+        std::replace(v.begin(), v.end(), L'|', L'/');
+        return v;
+    };
+
     for (size_t i = 0; i < TABLE_COUNT; ++i) {
-        out += L"  ";
-        out += TABLE[i].name;
-        if (TABLE[i].payload == PayloadRule::Required) out += L" <value>";
+        const CommandEntry &e = TABLE[i];
+        out += L"CMD ";
+        out += e.name;
+        out += (e.payload == PayloadRule::Required) ? L"|1|" : L"|0|";
+        out += field(e.desc);
+        out += L"|";
+        out += field(e.valueDesc);
         out += L"\r\n";
     }
     return out;

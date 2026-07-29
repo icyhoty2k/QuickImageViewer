@@ -781,8 +781,96 @@ void ReclampLockedViewport(HWND hWnd) {
     ClampViewportOffset(hWnd);
 }
 
+// =============================================================================
+// One-shot interjected image — see FileHandler.h and AppState::Interjection.
+// =============================================================================
+bool ShowInterjectedImage(HWND hWnd) {
+    if (app.interject.path.empty() || !app.renderer) return false;
+
+    // Cache probe keyed by PATH. On a hit this becomes the active bitmap and
+    // Render draws it — no playlist entry involved, so nothing else moves.
+    if (FAILED(app.renderer->LoadBitmap(nullptr, 0, 0, app.interject.path))) {
+        WarmInterjectedImage();
+        return false;   // caller leaves it queued and tries again
+    }
+
+    app.interject.showing = true;
+    app.interject.queued  = false;
+
+    // Shown clean and full-frame, ignoring whatever pan/zoom the images were
+    // using: it is a message dropped between two slides, not part of the walk.
+    app.viewport = ViewportState{};
+    // An interjection is one frame. Whatever the previous image had running must
+    // not keep firing over it.
+    KillTimer(hWnd, Constants::Slideshow::GIF_TIMER_ID);
+    InvalidateRect(hWnd, nullptr, FALSE);
+    return true;
+}
+
+bool ArmInterjection(HWND hWnd, const std::wstring &path, bool immediate,
+                     bool ownsTempFile) {
+    // Replaces whatever was queued or showing — and, if that was a streamed temp
+    // file, deletes it. Only the newest one-shot means anything; a queue of them
+    // would deliver adverts minutes after they were sent.
+    ClearInterjection();
+
+    app.interject.path         = path;
+    app.interject.queued       = true;
+    app.interject.immediate    = immediate;
+    app.interject.ownsTempFile = ownsTempFile;
+
+    // A running slideshow owns the MOMENT: the timer puts it up at the next slide
+    // boundary so the picture on screen is not cut short. Decoded ahead here, or
+    // the timer would find it undecoded and show it one interval late.
+    if (!immediate && app.slideshow.running && !app.slideshow.paused) {
+        WarmInterjectedImage();
+        return false;
+    }
+    return ShowInterjectedImage(hWnd);
+}
+
+void WarmInterjectedImage() {
+    if (app.interject.path.empty() || !app.renderer) return;
+    // Under the NEIGHBOUR guard (index-based), exactly like a promotion preload:
+    // the MAIN decode guard is path-hash based and would cancel this at once,
+    // since an interjection is deliberately never the "wanted" playlist image.
+    (void) app.renderer->PreloadBitmap(app.interject.path, app.currentIndex,
+                                       app.currentIndex);
+}
+
+void ClearInterjection() {
+    if (app.interject.path.empty() && !app.interject.showing &&
+        !app.interject.queued)
+        return;
+
+    // Evicted, not merely forgotten. A one-shot advert that stayed in the VRAM
+    // cache would go on occupying it — and would then be served instantly to a
+    // later probe for the same path, which is not what "one-shot" means.
+    if (app.renderer && !app.interject.path.empty())
+        app.renderer->RemoveFromCache(app.interject.path);
+
+    // A STREAMED image lives in a temp file this process wrote. Deleted with it —
+    // the alternative is a temp folder that grows by one file per advert. Done
+    // after the cache eviction, so nothing still holds the handle.
+    if (app.interject.ownsTempFile && !app.interject.path.empty()) {
+        std::error_code ec;
+        std::filesystem::remove(std::filesystem::path(app.interject.path), ec);
+        // A failure here is not worth reporting: the file is in the temp folder,
+        // it is named after this process, and Windows clears it eventually.
+    }
+
+    app.interject = AppState::Interjection{};
+}
+
 void LoadImageIndex(HWND hWnd, int index) {
     if (index < 0 || index >= static_cast<int>(app.playlist.size())) return;
+
+    // ANY change of picture retires an interjection — the slideshow's next tick,
+    // a wheel notch, a thumbnail click, an inbound `JumpToImage`. This is the one
+    // place every image change passes through, which is why "shown once" needs no
+    // timer and no bookkeeping of its own. A queued-but-unshown one is dropped
+    // too: it was meant for the moment it arrived.
+    if (app.interject.showing || app.interject.queued) ClearInterjection();
 
     if (app.currentIndex != index) {
         // Viewport lock (Y) carries zoom + pan to the next image so a flip

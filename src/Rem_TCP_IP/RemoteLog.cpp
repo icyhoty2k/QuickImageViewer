@@ -118,14 +118,30 @@ void Add(Direction dir,
     FILETIME ft{};
     GetSystemTimeAsFileTime(&ft);
 
+    // TRUNCATED HERE, at the one point every producer passes through.
+    //
+    // An image stream puts ~128 KB of base64 on a single line, several lines per
+    // picture. That is not a record of anything a reader can use, and kept whole
+    // it would bloat both the in-memory store and the file it saves to. A
+    // diagnostic log wants to know a chunk went past and how big it was.
+    //
+    // Applied to the two peer-controlled fields only; sender and receiver are this
+    // program's own labels.
+    auto clip = [](const std::wstring &s) {
+        namespace RT = Constants::RemoteTcpIp;
+        if (s.size() <= RT::LOG_LINE_MAX) return s;
+        return s.substr(0, RT::LOG_LINE_MAX) + L"… (" +
+               std::to_wstring(s.size()) + L" chars)";
+    };
+
     Entry e;
     e.whenFt   = (static_cast<long long>(ft.dwHighDateTime) << 32) | ft.dwLowDateTime;
     e.deltaUs  = deltaUs;
     e.dir      = dir;
     e.sender   = sender;
-    e.command  = command;
+    e.command  = clip(command);
     e.receiver = receiver;
-    e.response = response;
+    e.response = clip(response);
 
     {
         std::lock_guard<std::mutex> lk(g_mutex);

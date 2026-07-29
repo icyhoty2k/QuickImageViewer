@@ -99,7 +99,7 @@ void RemotesWnd::Show() {
     ShowCenterOverParent();
     // Subscribe: a target coming up or dropping while this sits open now says
     // so, instead of waiting for the next click to force a repaint.
-    Remote::Mirror::SetPanelNotifyWindow(GetHwnd());
+    Remote::Mirror::AddPanelNotify(GetHwnd());
     // Opening the console is the moment you want to know what is up, so poll
     // immediately rather than showing a table of dashes until F5 is pressed.
     DoPollAll();
@@ -109,7 +109,7 @@ void RemotesWnd::Show() {
 void RemotesWnd::Hide() {
     // Unsubscribe FIRST, so no sender thread can post to a window on its way
     // out. A closed console costs them one atomic load.
-    Remote::Mirror::SetPanelNotifyWindow(nullptr);
+    Remote::Mirror::RemovePanelNotify(GetHwnd());
     FloatingPanelWnd::Hide();
 }
 
@@ -1079,7 +1079,7 @@ LRESULT RemotesWnd::HandlePanelMessage(UINT message, WPARAM wParam, LPARAM lPara
             // landed during it: that change would find the gate still closed,
             // skip its post, and the console would sit stale again — which is
             // the bug this whole path exists to fix.
-            Remote::Mirror::ClearPanelNotifyPending();
+            Remote::Mirror::ClearPanelNotifyPending(GetHwnd());
             Rebuild();
             Repaint();
             return 0;
@@ -1087,7 +1087,7 @@ LRESULT RemotesWnd::HandlePanelMessage(UINT message, WPARAM wParam, LPARAM lPara
         // Belt and braces alongside Hide(): a window can also go away without
         // being hidden first.
         case WM_DESTROY:
-            Remote::Mirror::SetPanelNotifyWindow(nullptr);
+            Remote::Mirror::RemovePanelNotify(GetHwnd());
             break;
 
         case WM_TIMER:

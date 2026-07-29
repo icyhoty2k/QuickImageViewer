@@ -110,6 +110,7 @@ set(SOURCES
         src/Rem_TCP_IP/RemoteServer.cpp
         src/Rem_TCP_IP/RemoteExec.cpp
         src/Rem_TCP_IP/RemoteClient.cpp
+        src/Rem_TCP_IP/RemoteImageXfer.cpp
         src/UI/GdiPool.cpp
         src/UI/AppMenu/AppMenu.cpp
         src/UI/AppMenu/AppMenuBuilders.cpp

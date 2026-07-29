@@ -44,6 +44,43 @@ bool is_image_ext(const std::wstring &ext);
 // and kicks off async preload. Declared here so AppMain and MouseHandler can call it.
 void LoadImageIndex(HWND hWnd, int index);
 
+// --- One-shot interjected image (app.interject) ------------------------------
+//
+// ONE picture to be shown once, from any of the three routes that produce one:
+// `ShowImageOnce <path>`, an inbound StreamImage* transfer (Alt+Enter elsewhere),
+// or Ctrl+Alt+Enter here fetching what another instance is displaying. These
+// functions are the whole mechanism, and they live beside LoadImageIndex because
+// that is the function they have to stay honest with.
+//
+// Nothing here touches app.playlist, app.currentIndex or the sort order. The
+// image becomes the renderer's ACTIVE bitmap through the PATH-keyed cache — the
+// same trick a Dedicated promotion uses — so the sequence resumes afterwards
+// with nothing to restore.
+
+// Makes app.interject.path the active bitmap. Returns false when it is not
+// decoded yet: the cache is warmed and the caller leaves the request queued, so
+// a slideshow is never stalled waiting for a decode.
+bool ShowInterjectedImage(HWND hWnd);
+
+// Arms an interjection for `path` and either shows it or leaves it queued,
+// according to the same rule everywhere: a running slideshow gets it at the next
+// slide boundary unless `immediate` (a picture the user asked for AT THIS
+// keyboard, i.e. a stream-in, which must not appear to do nothing).
+//
+// `ownsTempFile` says the path is a temp file written from streamed bytes, so
+// retiring it deletes the file. Returns true when it is on screen already.
+bool ArmInterjection(HWND hWnd, const std::wstring &path, bool immediate,
+                     bool ownsTempFile);
+
+// Decode-ahead without displaying. Used when a slideshow is running and the
+// image is meant to appear at the NEXT slide boundary rather than now.
+void WarmInterjectedImage();
+
+// Forgets the interjection and EVICTS it from the VRAM cache — a one-shot image
+// must not sit there afterwards holding memory nobody asked it to hold. Called
+// by every path that changes picture, so "shown once" needs no timer.
+void ClearInterjection();
+
 // Re-sorts the current playlist using app.fileHandlerDefaultSortOrder and
 // app.fileHandlerIsReverseSortOrder, then rebuilds the O(1) index map.
 // Call after changing either setting at runtime.

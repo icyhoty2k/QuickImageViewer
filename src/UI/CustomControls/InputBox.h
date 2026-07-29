@@ -66,6 +66,14 @@ public:
     // Set text and notify — use for external programmatic changes.
     void SetText(const std::wstring& t) { m_text = t; m_caretPos = (int)t.size(); m_selAnchor = -1; notify(); }
 
+    // Select the whole text, caret at the end. For a box that was FILLED
+    // programmatically — a list pick dropped into it — so the next character the
+    // user types replaces it instead of appending to a name they did not type.
+    //
+    // Delegates to the same primitive Ctrl+A and the context menu use, so there is
+    // one definition of what "select all" does to the anchor and the caret.
+    void SelectAll() { doSelectAll(); }
+
     // Clear text and notify — use for ESC / programmatic clear / the ✕ button.
     void Clear()  { m_text.clear(); m_caretPos = 0; m_selAnchor = -1; m_scrollX = 0; m_clearRect = {}; m_clearHovered = false; notify(); }
 
