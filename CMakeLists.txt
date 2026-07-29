@@ -13,6 +13,22 @@ set(CMAKE_CXX_SCAN_FOR_MODULES OFF)
 # --- Custom Option for Static MSVC Runtime ---
 option(QIV_STATIC_RUNTIME "Statically link the MSVC C/C++ runtime (/MT instead of /MD)" OFF)
 
+# --- Fast edit-build-run iteration ---------------------------------------
+# The link, not the compile, is what a rebuild-to-test loop actually pays for
+# here: BuildNumber.h is rewritten every build, so every build relinks, and a
+# plain /LTCG relink re-optimizes all ~120 objects from scratch.
+#
+# ON switches /LTCG to /LTCG:INCREMENTAL, which reoptimizes only the modules
+# affected by the edit and reuses cached results for the rest. Whole-program
+# optimization stays ON — cross-module inlining, interprocedural register
+# allocation and the rest are all still applied, so the runtime characteristics
+# of the binary do not change. What is given up is bit-for-bit reproducibility
+# (/Brepro), because the linker is now reusing cached codegen.
+#
+# Not to be confused with /INCREMENTAL, which is a different mechanism and is
+# explicitly documented as invalid together with /LTCG.
+option(QIV_FAST_ITERATE "Use incremental LTCG (/LTCG:INCREMENTAL) for fast rebuild cycles" OFF)
+
 if (QIV_STATIC_RUNTIME)
     set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>")
 else ()
@@ -135,13 +151,27 @@ add_executable(QuickImageViewer WIN32 ${SOURCES})
 # includes it is compiled.
 add_dependencies(QuickImageViewer QIV_IncreaseBuildNumber)
 
-# --- Enable Link Time Optimization (LTCG) the CMake Way ---
-include(CheckIPOSupported)
-check_ipo_supported(RESULT ipo_supported)
-if (ipo_supported)
-    set_target_properties(QuickImageViewer PROPERTIES INTERPROCEDURAL_OPTIMIZATION TRUE)
-endif ()
-# ----------------------------------------------------------
+# --- Precompiled header ---------------------------------------------------
+# MSVC consumes this via /FI (force include), so NO source file includes it by
+# hand — see the header itself for what may and may not go in it.
+# The COMPILE_LANGUAGE:CXX guard keeps miniz.c (the only C file) out of it; a
+# C++ PCH cannot be applied to a C translation unit.
+target_precompile_headers(QuickImageViewer PRIVATE
+        "$<$<COMPILE_LANGUAGE:CXX>:${CMAKE_CURRENT_SOURCE_DIR}/src/pch.h>"
+)
+# ---------------------------------------------------------------------------
+
+# --- Link Time Code Generation, spelled out ---------------------------------
+# Deliberately NOT set_target_properties(... INTERPROCEDURAL_OPTIMIZATION TRUE).
+# That property emits /GL plus a bare /LTCG, and there is no supported way to
+# make it emit /LTCG:INCREMENTAL instead — appending a second /LTCG:... would
+# leave two conflicting forms on the linker command line. Both halves are
+# written out here so the flag that reaches link.exe is the flag in this file.
+#
+# /GL on the compile side is what makes the objects eligible; the linker form
+# below decides how much of that work is redone on each link.
+target_compile_options(QuickImageViewer PRIVATE $<$<CONFIG:Release>:/GL>)
+# ----------------------------------------------------------------------------
 
 # 1. Compile Definitions
 target_compile_definitions(QuickImageViewer PRIVATE
@@ -153,6 +183,18 @@ target_compile_definitions(QuickImageViewer PRIVATE
 )
 
 # 2. Compile Options
+#
+# /MP tells ONE cl.exe invocation to fan out over several source files. Under
+# Ninja (and Make) the generator already runs N compiles in parallel, so /MP
+# multiplies that by another N and the machine ends up oversubscribed. It is
+# only a win with the Visual Studio generator, which hands cl.exe a whole file
+# list in a single invocation.
+if (CMAKE_GENERATOR MATCHES "Visual Studio")
+    set(QIV_MP_FLAG /MP)
+else ()
+    set(QIV_MP_FLAG "")
+endif ()
+
 target_compile_options(QuickImageViewer PRIVATE
         /W4
         /permissive-
@@ -160,9 +202,7 @@ target_compile_options(QuickImageViewer PRIVATE
         /utf-8
         /Zc:__cplusplus
         /Zc:preprocessor
-        /MP
-        # Disable /MP if sccache is active to prevent caching failures
-        #        $<$<NOT:$<BOOL:${SCCACHE_PROGRAM}>>:/MP>
+        ${QIV_MP_FLAG} # /MP, but only under the Visual Studio generator — see above
 
         # --- Explicit Release Performance Overrides ---
         $<$<CONFIG:Release>:/O2>         # Maximize speed (implies /Ot)
@@ -179,14 +219,31 @@ target_compile_options(QuickImageViewer PRIVATE
 )
 
 # 3. Explicit Linker Flags
+#
+# /OPT:REF and /OPT:ICF stay on in BOTH configurations — they are image-level
+# passes, cheap next to code generation, and dropping them would change the
+# binary's layout and size. Only the LTCG form differs between the two.
 target_link_options(QuickImageViewer PRIVATE
-        $<$<CONFIG:Release>:/Brepro>         # Reproducible builds
         /MANIFEST:NO                         # Prevent default manifest generation
-        $<$<CONFIG:Release>:/INCREMENTAL:NO> # Clean, non-fragmented binary
+        $<$<CONFIG:Release>:/DEBUG:NONE>     # DO NOT Generate PDB (exe size remains small)
+        $<$<CONFIG:Release>:/INCREMENTAL:NO> # /INCREMENTAL is invalid with /LTCG
         $<$<CONFIG:Release>:/OPT:REF>        # Eliminate unreferenced functions/data
         $<$<CONFIG:Release>:/OPT:ICF>        # Fold identical functions
-        $<$<CONFIG:Release>:/DEBUG:NONE>     #DO NOT Generate PDB for crash dumps (exe size remains small)
 )
+
+if (QIV_FAST_ITERATE)
+    # Reoptimize only the modules the edit touched. Whole-program optimization
+    # is still performed; the linker caches per-module results in a .iobj beside
+    # the exe. /Brepro is omitted because that cache defeats bit-reproducibility.
+    target_link_options(QuickImageViewer PRIVATE
+            $<$<CONFIG:Release>:/LTCG:INCREMENTAL>
+    )
+else ()
+    target_link_options(QuickImageViewer PRIVATE
+            $<$<CONFIG:Release>:/LTCG>   # Full whole-program optimization every link
+            $<$<CONFIG:Release>:/Brepro> # Reproducible builds
+    )
+endif ()
 
 # 4. External Libraries (Static Linking: resvg only)
 set(STATIC_LIBS_DIR "${CMAKE_CURRENT_SOURCE_DIR}/libs/lib/static")
