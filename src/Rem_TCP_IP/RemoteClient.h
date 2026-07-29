@@ -97,6 +97,14 @@ namespace Remote {
         // and the instance Name when it has one.
         const std::wstring &Banner() const { return m_banner; }
 
+        // The far end's PROTOCOL version, parsed out of that banner ("… remote v2
+        // [Name]"), or 0 when it did not say. What a caller checks before using
+        // anything the older protocol had no idea about — chiefly the image stream,
+        // whose chunk lines a v1 peer cannot buffer and answers by dropping the
+        // connection. Refusing on the number is the difference between a clear
+        // message and a link that dies mid-transfer.
+        int PeerProtocol() const { return m_peerProtocol; }
+
         // What to call the far end in the Ctrl+F12 log.
         //
         // THE LOG IS WRITTEN IN HERE, at the wire boundary — inside Send,
@@ -139,6 +147,7 @@ namespace Remote {
         UINT_PTR     m_sock = static_cast<UINT_PTR>(~0ull); // INVALID_SOCKET
         std::string  m_accum;                                // partial line buffer
         std::wstring m_banner;
+        int          m_peerProtocol = 0;   // 0 = the banner did not say
         bool         m_connected = false;
     };
 

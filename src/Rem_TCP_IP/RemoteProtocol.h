@@ -69,6 +69,16 @@ namespace Remote {
         // name does NOT say it: what the payload means, what the units are, and
         // the handful of commands whose effect is not guessable.
         const wchar_t *desc = L"";
+        // What the VALUE means, for the rows that take one — units, range, format.
+        //
+        // SEPARATE from `desc` because they answer different questions and the
+        // Ctrl+F10 panel shows them in different places: the command's description
+        // sits over the command box, the value's over the value box. While the two
+        // shared one field, a payload row's only text described its value, so the
+        // panel had nothing to say about what the command DID.
+        //
+        // Empty for every row that takes no value — there is nothing to describe.
+        const wchar_t *valueDesc = L"";
     };
 
     // Why a line was rejected. Maps onto Constants::RemoteTcpIp::ERR_*.

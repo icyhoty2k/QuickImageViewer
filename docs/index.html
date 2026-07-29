@@ -15,9 +15,9 @@
 
     <!-- SEO Meta Tags -->
     <meta name="description"
-          content="QuickImageViewer(qIV) — free portable image viewer for Windows 10 &amp; 11.Opens HEIC, AVIF, JPEG XL, WebP, SVG, and 18+ formats. <10 MB, no ads, no telemetry.">
+          content="QuickImageViewer(qIV) — free portable image viewer for Windows 10 &amp; 11.Opens HEIC, AVIF, JPEG XL, WebP, SVG, and 18+ formats. Drive other screens over TCP. <10 MB, no ads, no telemetry.">
     <meta name="keywords"
-          content="image viewer windows 11, image viewer windows 10, free image viewer windows, heic viewer windows, avif viewer windows, jpeg xl viewer, webp viewer windows, svg viewer windows, openexr viewer, portable image viewer, open source image viewer, gpu accelerated image viewer, fast photo viewer windows, best image viewer windows, quickimageviewer, qiv">
+          content="image viewer windows 11, image viewer windows 10, free image viewer windows, heic viewer windows, avif viewer windows, jpeg xl viewer, webp viewer windows, svg viewer windows, openexr viewer, portable image viewer, open source image viewer, gpu accelerated image viewer, fast photo viewer windows, best image viewer windows, quickimageviewer, qiv, remote control image viewer, mirror image viewer screens, digital signage image viewer">
     <meta name="author"
           content="Ivan Hristov Yanev (IcyHoty2k)">
     <meta name="robots"
@@ -41,7 +41,7 @@
     <meta property="og:title"
           content="QuickImageViewer (qIV) — Fast, Free, Portable Image Viewer for Windows">
     <meta property="og:description"
-          content="QuickImageViewer(qIV) — free portable image viewer for Windows 10 &amp; 11.Opens HEIC, AVIF, JPEG XL, WebP, SVG, and 18+ formats. <10 MB, no ads, no telemetry.">
+          content="QuickImageViewer(qIV) — free portable image viewer for Windows 10 &amp; 11.Opens HEIC, AVIF, JPEG XL, WebP, SVG, and 18+ formats. Drive other screens over TCP. <10 MB, no ads, no telemetry.">
     <meta property="og:type"
           content="website">
     <meta property="og:url"
@@ -61,7 +61,7 @@
     <meta name="twitter:title"
           content="QuickImageViewer (qIV) — Fast, Free, Portable Image Viewer for Windows">
     <meta name="twitter:description"
-          content="QuickImageViewer(qIV) — free portable image viewer for Windows 10 &amp; 11.Opens HEIC, AVIF, JPEG XL, WebP, SVG, and 18+ formats. <10 MB, no ads, no telemetry.">
+          content="QuickImageViewer(qIV) — free portable image viewer for Windows 10 &amp; 11.Opens HEIC, AVIF, JPEG XL, WebP, SVG, and 18+ formats. Drive other screens over TCP. <10 MB, no ads, no telemetry.">
     <meta name="twitter:image"
           content="https://icyhoty2k.github.io/QuickImageViewer/screenshots/2026-07-15_045800.png">
     <meta name="twitter:image:alt"
@@ -2971,8 +2971,6 @@
                 <td>
                     <code>F</code>
                     /
-                    <code>F11</code>
-                    /
                     <code>Enter</code>
                     /
                     <code>Ctrl+Shift+T</code>
@@ -2981,6 +2979,20 @@
                     Toggle
                     borderless
                     fullscreen
+                    (<code>F11</code> is now the mirroring toggle)
+                </td>
+            </tr>
+            <tr>
+                <td>
+                    <code>Ctrl+Enter</code>
+                    /
+                    <code>Alt+Enter</code>
+                    /
+                    <code>Ctrl+Alt+Enter</code>
+                </td>
+                <td>
+                    Send this position / stream this image / fetch the image another instance is
+                    showing &mdash; see <a href="#remote">Remote Control &amp; Mirroring</a>
                 </td>
             </tr>
             <tr>
@@ -4990,6 +5002,259 @@ D:\Screens\promotionList_qIV_dedicated_Lobby.qpr    promotion folders</code></pr
     </section>
 
     <section
+            id="remote">
+        <h2>
+            Remote
+            Control
+            &amp;
+            Mirroring</h2>
+        <p>
+            One qIV can drive others &mdash; a wall of screens from the copy on your desk, or a
+            single display in another room. It is a plain UTF-8 line protocol over TCP, so a
+            script, <code>netcat</code>, a home-automation system or a phone app are all
+            first-class clients.
+        </p>
+
+        <table>
+            <thead>
+            <tr>
+                <th>
+                    Shortcut
+                </th>
+                <th>
+                    Panel / Action
+                </th>
+            </tr>
+            </thead>
+            <tbody>
+            <tr>
+                <td>
+                    <kbd>F9</kbd>
+                </td>
+                <td>
+                    <strong>Local Server</strong> &mdash; the listener <em>this</em> instance
+                    runs. Off unless switched on; needs a name and a port
+                </td>
+            </tr>
+            <tr>
+                <td>
+                    <kbd>F10</kbd>
+                </td>
+                <td>
+                    <strong>Remote Servers</strong> &mdash; the instances this copy can drive.
+                    Connect, start / stop, watch, sync
+                </td>
+            </tr>
+            <tr>
+                <td>
+                    <kbd>Ctrl+F10</kbd>
+                </td>
+                <td>
+                    <strong>Send Command</strong> &mdash; pick any wire command from the list,
+                    give it a value, send it
+                </td>
+            </tr>
+            <tr>
+                <td>
+                    <kbd>F11</kbd>
+                </td>
+                <td>
+                    <strong>Mirroring on / off</strong> &mdash; forward every mirrorable command
+                    to the connected targets
+                </td>
+            </tr>
+            <tr>
+                <td>
+                    <kbd>Ctrl+F11</kbd>
+                </td>
+                <td>
+                    <strong>Remotes Control</strong> &mdash; which connected instances F11
+                    drives, plus Identify and Watch
+                </td>
+            </tr>
+            <tr>
+                <td>
+                    <kbd>F12</kbd>
+                </td>
+                <td>
+                    While mirroring, <strong>also execute here</strong> (off = this viewer is a
+                    pure remote control)
+                </td>
+            </tr>
+            <tr>
+                <td>
+                    <kbd>Ctrl+F12</kbd>
+                </td>
+                <td>
+                    <strong>RemoteLog</strong> &mdash; every line that crossed the wire, both
+                    directions, with round trips
+                </td>
+            </tr>
+            </tbody>
+        </table>
+
+        <p>
+            F11 and F12 are session-only and always start <strong>off</strong> &mdash; a viewer
+            that came back from a restart already driving machines you had forgotten about would
+            be the worst kind of surprise.
+        </p>
+
+        <h3>
+            Putting
+            one
+            picture
+            on
+            another
+            screen</h3>
+        <p>
+            Three keys, one question at three depths.
+        </p>
+
+        <table>
+            <thead>
+            <tr>
+                <th>
+                    Key
+                </th>
+                <th>
+                    What travels
+                </th>
+                <th>
+                    Across machines
+                </th>
+                <th>
+                    The far end
+                </th>
+            </tr>
+            </thead>
+            <tbody>
+            <tr>
+                <td>
+                    <kbd>Ctrl+Enter</kbd>
+                </td>
+                <td>
+                    a <strong>position</strong> &mdash; folder, sort order, image number
+                </td>
+                <td>
+                    ❌ same machine only
+                </td>
+                <td>
+                    goes there and <strong>stays</strong>
+                </td>
+            </tr>
+            <tr>
+                <td>
+                    <kbd>Alt+Enter</kbd>
+                </td>
+                <td>
+                    the <strong>image bytes</strong>, outbound
+                </td>
+                <td>
+                    ✅
+                </td>
+                <td>
+                    shows it <strong>once</strong>, unchanged otherwise
+                </td>
+            </tr>
+            <tr>
+                <td>
+                    <kbd>Ctrl+Alt+Enter</kbd>
+                </td>
+                <td>
+                    the <strong>image bytes</strong>, inbound
+                </td>
+                <td>
+                    ✅
+                </td>
+                <td>
+                    is only read from &mdash; you see what it shows
+                </td>
+            </tr>
+            </tbody>
+        </table>
+
+        <p>
+            <strong><kbd>Ctrl+Enter</kbd> asks before it sends.</strong> It queries the target:
+            already in the same folder in the same order? Then just the image number &mdash; one
+            round trip, no rescan, no flicker, so you can walk a folder and push each picture as
+            you reach it. In a different folder? Then the folder, then the sort order, then
+            &mdash; after waiting for that instance's own scan to finish &mdash; the number.
+            Sending a position before the scan lands is the race this avoids.
+        </p>
+        <p>
+            <strong><kbd>Alt+Enter</kbd> and <kbd>Ctrl+Alt+Enter</kbd> carry the picture's own
+            file bytes</strong>, base64 across several protocol lines, and the far end decodes
+            them with its own decoder. That is why they work to a machine that cannot read your
+            disk. The received image is shown <strong>once</strong> and changes nothing else: no
+            folder, no sort order, no playlist position. A target running a fullscreen slideshow
+            keeps running it and simply continues from the pushed image &mdash; the picture never
+            enters its playlist, and both the received file and its cache entry are thrown away
+            afterwards. An advert dropped between two slides is the case it was built for.
+        </p>
+
+        <h3>
+            The
+            Send
+            Command
+            panel</h3>
+        <p>
+            Every command has one wire name, spelled exactly like its internal enumerator, and
+            the panel's list is built from the same table the parser accepts &mdash; so a name
+            shown there cannot come back &ldquo;unknown command&rdquo;.
+        </p>
+        <ul>
+            <li>
+                <strong>Browse, don't remember</strong> &mdash; the list is permanent and
+                filterable; names are shown in two blues, the second marking a command that takes
+                a value
+            </li>
+            <li>
+                <strong>Descriptions where they belong</strong> &mdash; what the highlighted
+                command does sits over the list, what its value means sits over the Value box,
+                with units, limits and an example
+            </li>
+            <li>
+                <strong>Send to</strong> &mdash; its own box of connected instances with a
+                checkbox each, so an arbitrary command reaches an arbitrary subset without
+                disturbing what <kbd>F11</kbd> drives
+            </li>
+            <li>
+                <strong>Session log</strong> &mdash; every line sent and every answer, numbered,
+                newest first, with the instance that answered and its round trip
+            </li>
+        </ul>
+
+        <h3>
+            The
+            protocol
+            describes
+            itself</h3>
+        <pre><code>$ nc 127.0.0.1 7777
+OK qIV 2.96.0.113 remote v2 [Monitor2]
+help
+qIV remote protocol v2
+FORMAT CMD &lt;name&gt;|&lt;takesValue 0|1&gt;|&lt;description&gt;|&lt;value description&gt;
+CMD NextImage|0|next image in the playlist|
+CMD JumpToImage|1|go to a numbered image in the current playlist|image NUMBER, 1-based …
+…</code></pre>
+        <p>
+            <code>help</code> lists everything this build accepts with its descriptions, so a
+            client builds its own command list from one call instead of carrying a copy that goes
+            stale. <code>ping</code> checks liveness, <code>version</code> reports the app and
+            protocol version.
+        </p>
+        <p>
+            <strong>Security.</strong> The protocol is plaintext and authentication happens once,
+            at connect. That is fine on loopback, which is what it binds to by default. On a
+            routable network, treat the network as the boundary (VPN or a trusted VLAN).
+            File-altering commands &mdash; delete, move, paste, save &mdash; are
+            <em>structurally</em> unreachable over the wire: a compile-time assertion proves none
+            of them has a row in the command table, and the executor refuses them again at run
+            time.
+        </p>
+    </section>
+
+    <section
             id="kiosk-cli">
         <h2>
             Command-Line
@@ -5831,6 +6096,34 @@ D:\Screens\promotionList_qIV_dedicated_Lobby.qpr    promotion folders</code></pr
                     limited
                 </td>
             </tr>
+            <tr>
+                <td>
+                    Drive other copies over TCP
+                </td>
+                <td>
+                    ✅ plain-text protocol, self-describing
+                </td>
+                <td>
+                    ❌
+                </td>
+                <td>
+                    ❌
+                </td>
+            </tr>
+            <tr>
+                <td>
+                    Mirror one screen to many
+                </td>
+                <td>
+                    ✅ F11, per-target selection
+                </td>
+                <td>
+                    ❌
+                </td>
+                <td>
+                    ❌
+                </td>
+            </tr>
             </tbody>
         </table>
     </section>
@@ -5841,6 +6134,24 @@ D:\Screens\promotionList_qIV_dedicated_Lobby.qpr    promotion folders</code></pr
             Frequently
             Asked
             Questions</h2>
+
+        <details>
+            <summary>
+                Can qIV control another PC's image viewer, or a screen in another room?
+            </summary>
+            <p>
+                Yes. Each copy can run a small TCP listener (<kbd>F9</kbd>) and any other copy
+                can drive it (<kbd>F10</kbd>). <kbd>F11</kbd> mirrors what you do to every
+                selected screen; <kbd>Ctrl+F10</kbd> sends a single typed command to whichever
+                instances you tick. Because the protocol is plain UTF-8 text and describes
+                itself &mdash; send <code>help</code> and it lists every command with its
+                description &mdash; a script, <code>netcat</code>, a home-automation system or a
+                phone app can drive it just as well. Sending one picture to a screen on a
+                different machine works too: <kbd>Alt+Enter</kbd> streams the image's own bytes,
+                so nothing depends on the far end being able to read your disk. See
+                <a href="#remote">Remote Control &amp; Mirroring</a>.
+            </p>
+        </details>
 
         <details>
             <summary>

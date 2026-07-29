@@ -251,6 +251,65 @@ enum class Command {
     // F11 owns that, and two places deciding one bool is how they disagree.
     MirrorPick,        // Ctrl+F11 — opens/closes the selection PANEL
     MirrorLocalToggle, // F12 — when mirroring, also execute here (not just forward)
+    // ─── Three ways to put one picture on another instance's screen ──────────
+    //
+    // They differ in what travels and what it disturbs, and the names say which:
+    //
+    //   Ctrl+Enter      SendImagePositionToRemotes   a POSITION travels
+    //   Alt+Enter       StreamImageToRemotes         the IMAGE BYTES travel, out
+    //   Ctrl+Alt+Enter  StreamImageFromRemote        the IMAGE BYTES travel, in
+    //
+    // ── Ctrl+Enter. Sends a PLACE, not a picture: folder, sort order and index,
+    // negotiated against what the far end already has (QueryState). Both ends
+    // then hold the same picture from the same file on the same disk, and the far
+    // end STAYS there.
+    //
+    // SAME-MACHINE ONLY, necessarily: a folder path and a playlist index are both
+    // read against the far end's own filesystem.
+    SendImagePositionToRemotes,
+    // `QueryState` — READ-ONLY, and the only command in the table that is. Every
+    // other one reports its value as a by-product of doing something; this one is
+    // asked. The position send above is built on the answer (folder, sort order,
+    // playlist length, current position), because whether an index is safe to send
+    // depends entirely on whether the far end already holds the same folder in the
+    // same order. No local keystroke — a viewer does not need to ask itself.
+    QueryState,
+    // ── Alt+Enter. Sends the PICTURE ITSELF — the file's bytes, in base64 chunks
+    // — to be shown ONCE and change nothing else there: no folder, no sort order,
+    // no playlist position. It goes up in place of the current slide and the far
+    // end carries on afterwards as though it had not. An advert, in other words.
+    //
+    // Bytes rather than a path precisely so this works to ANOTHER MACHINE, where a
+    // path means nothing. That is the whole reason it is a separate mechanism from
+    // Ctrl+Enter rather than a lighter version of it.
+    StreamImageToRemotes,
+    // ── Ctrl+Alt+Enter. The same transfer in reverse: ask ONE instance for the
+    // picture it is displaying and show it here, once. For looking at what a screen
+    // in another room is showing without going to it, so it must not depend on
+    // sharing a filesystem either.
+    StreamImageFromRemote,
+    // --- The wire half of the two streaming commands -------------------------
+    //
+    // A line-based protocol with a bounded line length cannot carry a whole image
+    // in one request, so an OUTBOUND stream is framed across several ordinary
+    // commands, each its own request and reply:
+    //
+    //   StreamImageBegin <file name>   start (or restart) an inbound transfer
+    //   StreamImageChunk <base64>      append — repeated
+    //   StreamImageShow                assemble and display it once
+    //
+    // The INBOUND direction needs no framing: a reply may be several lines, so
+    // `SendDisplayedImage` answers with its body lines followed by its OK.
+    StreamImageBegin,
+    StreamImageChunk,
+    StreamImageShow,
+    SendDisplayedImage,
+    // `ShowImageOnce <full path>` — the same one-shot display, but naming a file
+    // the far end can already read. No transfer, so it costs nothing on one
+    // machine; useless across two. Kept because it is the honest spelling for a
+    // script or a hand-sent line, and because the streaming path assembles into
+    // exactly the same mechanism (AppState::Interjection, FileHandler.h).
+    ShowImageOnce,
     ToggleRemotesConsole,  // F10 — Remote Servers, the slave management console
     ToggleRemoteCmd,       // Ctrl+F10 — the Send Command panel. LOCAL, like the
                            // other panel toggles: no table row, never mirrored.

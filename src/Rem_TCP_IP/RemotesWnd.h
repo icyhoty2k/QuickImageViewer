@@ -85,7 +85,7 @@ class RemotesWnd : public FloatingPanelWnd {
         void Init(HINSTANCE hInstance, HWND hParent, int8_t position) override;
         void Show() override;
         // Overridden only to unsubscribe from Remote::Mirror's change
-        // notification — see SetPanelNotifyWindow.
+        // notification — see AddPanelNotify.
         void Hide() override;
 
         ~RemotesWnd() {

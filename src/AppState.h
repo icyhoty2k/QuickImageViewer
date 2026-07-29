@@ -262,6 +262,49 @@ struct AppState {
     // the UI thread to read, exactly like every other toggle.
     bool remoteLogEnabled = Constants::RemoteTcpIp::REMOTE_LOG_DEFAULT;
 
+    // --- One-shot INTERJECTED image -------------------------------------------
+    //
+    // On the wire this arrives either as `ShowImageOnce <path>` (one machine) or
+    // as a StreamImageBegin/Chunk/Show transfer (any machine, the picture's own
+    // bytes) — and from Ctrl+Alt+Enter here, which fetches what another instance
+    // is displaying. All three land in this one piece of state.
+    //
+    // Another instance pressed Alt+Enter and sent one picture to be shown ONCE.
+    // It is displayed INSTEAD of the current playlist entry and changes nothing
+    // else: playlist, currentIndex, sort order and the async pipeline are all left
+    // exactly as they were, and the next image change of any kind drops it. Think
+    // advert between two slides — afterwards the sequence carries on as if it had
+    // never happened, because as far as the sequence is concerned it did not.
+    //
+    // Mechanically this is the Dedicated PROMOTION trick (DedicatedInstance.cpp):
+    // the path is made the renderer's ACTIVE bitmap through the path-keyed cache,
+    // so nothing has to know a playlist entry was not involved.
+    //
+    // SESSION-ONLY, like the mirror flags — nothing here is persisted. A one-shot
+    // image that survived a restart would be neither one-shot nor asked for.
+    struct Interjection {
+        // Queued but not yet on screen. A running slideshow owns the MOMENT: the
+        // timer shows it at the next slide boundary rather than cutting the
+        // current slide short. A still viewer shows it as soon as it is decoded.
+        bool         queued  = false;
+        bool         showing = false;
+        std::wstring path;
+        // Show it the moment it is decoded, even with a slideshow running.
+        //
+        // Set for a PULLED image (Ctrl+Alt+Enter here): the user asked for it at
+        // this keyboard and is waiting to look at it, so making them wait for a
+        // slide boundary would read as the key having done nothing. An interjection
+        // ARRIVING from elsewhere is the opposite case — it waits for the boundary
+        // so the slide on screen is not cut short.
+        bool         immediate = false;
+        // The path is a TEMP FILE this process wrote from streamed bytes, so
+        // retiring the interjection must delete it. False for `ShowImageOnce`,
+        // which names a file that belongs to the user and must be left alone —
+        // one flag decides that, rather than every retire site guessing.
+        bool         ownsTempFile = false;
+    };
+    Interjection interject;
+
     // Blocks the screensaver and display sleep while the main window is visible.
     // Acted on by AppCommands::ApplyDisplayAwake — never by touching
     // SetThreadExecutionState directly, because that call is per-THREAD and

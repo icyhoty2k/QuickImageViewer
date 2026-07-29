@@ -43,6 +43,13 @@ namespace {
     // adds to it, and the adder can say so. RemoteLog posts
     // WM_QIV_REMOTE_LOG_ADDED, coalesced at the source.
     enum ButtonId { BTN_RECORD = 1, BTN_CLEAR, BTN_SAVE, BTN_LOAD,
+                    // Beside Load…, because the log and the Send Command panel are
+                    // two halves of one activity: you read what crossed the wire,
+                    // then type the next line, then read what came back. Walking
+                    // between them by keyboard shortcut meant leaving the panel you
+                    // were reading. Lit while the other one is open, like the two
+                    // buttons below.
+                    BTN_SEND_CMD,
                     // Right-aligned status readouts that are also shortcuts.
                     // They sit in the empty half of the button row, which was
                     // doing nothing, and answer the question you have while
@@ -210,6 +217,7 @@ void RemoteLogWnd::BuildButtons() {
     m_buttons.push_back({L"Clear",  BTN_CLEAR, {}, any});
     m_buttons.push_back({L"Save…",  BTN_SAVE,  {}, any});
     m_buttons.push_back({L"Load…",  BTN_LOAD,  {}, true});
+    m_buttons.push_back({L"Send Command", BTN_SEND_CMD, {}, true});
 
     // Labels deliberately EMPTY. These two carry live counts, and building the
     // text here would freeze it until the next Rebuild — which only happens
@@ -659,6 +667,10 @@ LRESULT RemoteLogWnd::HandlePanelMessage(UINT message, WPARAM wParam, LPARAM lPa
                     case BTN_CLEAR:  DoClear();         break;
                     case BTN_SAVE:   DoSave();          break;
                     case BTN_LOAD:   DoLoad();          break;
+                    case BTN_SEND_CMD:
+                        ToggleToFront(uiManager.getRemoteCmdWindow());
+                        Repaint();
+                        break;
                     case BTN_CONNS:
                         ToggleToFront(uiManager.getRemotesConsoleWindow());
                         // The button's own lit state just changed, and opening
@@ -800,8 +812,11 @@ LRESULT RemoteLogWnd::HandlePanelMessage(UINT message, WPARAM wParam, LPARAM lPa
                     // Recording is wider: its label carries the state, so it
                     // changes width, and a button that resizes as you press it
                     // moves the one beside it under the cursor.
+                    // Send Command needs room for its label, the same way Recording
+                    // does — a two-word button clipped to 92 px reads as "Send Co…".
                     const int bw = isStatus ? wide
-                                 : static_cast<int>((btn.id == BTN_RECORD ? 150 : 92) * s);
+                                 : static_cast<int>((btn.id == BTN_RECORD   ? 150 :
+                                                     btn.id == BTN_SEND_CMD ? 130 : 92) * s);
 
                     if (isStatus) {
                         // Right to left, in reverse of the order they are
@@ -838,6 +853,8 @@ LRESULT RemoteLogWnd::HandlePanelMessage(UINT message, WPARAM wParam, LPARAM lPa
                              uiManager.getRemotesConsoleWindow().IsVisible()) base = PC::BTN_ALT;
                     else if (btn.id == BTN_CONTROL &&
                              uiManager.getMirrorPickerWindow().IsVisible())   base = PC::BTN_ALT;
+                    else if (btn.id == BTN_SEND_CMD &&
+                             uiManager.getRemoteCmdWindow().IsVisible())      base = PC::BTN_ALT;
 
                     if (!btn.enabled) base = bg;
                     else if (myIndex == m_hotButton)

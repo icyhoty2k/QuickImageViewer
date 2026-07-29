@@ -5,6 +5,10 @@
 #include "AppState.h"
 #include "Platform/Constants.h"
 #include "Input/Command.h"
+// Safe from a .cpp even though UIManager.h includes THIS header: the guard has
+// already fired by the time it is reached, so there is no cycle. Same note as
+// RemoteLogWnd.cpp, which reaches the other way for the same reason.
+#include "UI/UIManager.h"      // the Log button opens/closes Ctrl+F12
 #include "UI/GdiPool.h"
 
 #include <algorithm>
@@ -29,10 +33,28 @@ namespace {
 
     // The left column holds the list; the right holds everything about the one
     // command that is highlighted.
+    // The description row along the top: the highlighted command's description on
+    // the left, its value's description on the right, each over the box it belongs
+    // to. Fixed so the two boxes below stay level whichever text is longer — three
+    // lines of the small font, which is what the longest entries in the table need.
+    constexpr int DESC_H  = 48;
+
+    // The recipients box under the buttons: which connected instances this send
+    // reaches. Re-read when Remote::Mirror says a connection changed — see Show().
+    constexpr int TARGETS_HDR_H = 20;
+
+    // The session log along the bottom. Bounded so a panel left open all day cannot
+    // grow without limit; the oldest rows go, because the recent end of a
+    // conversation is the interesting one.
+    constexpr size_t LOG_MAX_ROWS = 400;
     constexpr int LIST_W  = 380;
     constexpr int LOG_H   = 120;   // the replies strip along the bottom
 
-    enum ButtonId { BTN_SEND = 1, BTN_CLEAR, BTN_CLOSE };
+    // BTN_LOG sits beside Clear and toggles the Ctrl+F12 wire log: typing a line
+    // and reading what came back are one activity, and the log's own button row
+    // carries the mirror of this one. Lit while that panel is open, so the pair
+    // says which way you are about to jump.
+    enum ButtonId { BTN_SEND = 1, BTN_CLEAR, BTN_LOG, BTN_CLOSE };
 
     bool BgIsDark(COLORREF bg) {
         const int lum = (GetRValue(bg) * 299 + GetGValue(bg) * 587 + GetBValue(bg) * 114) / 1000;
@@ -105,20 +127,97 @@ void RemoteCmdWnd::Init(HINSTANCE hInstance, HWND hParent, int8_t) {
 }
 
 void RemoteCmdWnd::Show() {
-    // Last time's answers described a send that may be minutes old; the filter
-    // and the value are kept, because sending the same command again with a
-    // different value is the common case.
-    m_replies.clear();
+    // The LOG survives a close and reopen, along with the filter and the value: the
+    // panel is closed and opened constantly while working — to see the picture
+    // behind it, to look at the wire log — and a record that emptied itself each
+    // time would be no record. Clear is the button for that, and it says so.
+    //
+    // The waiting counter does NOT survive: any answer still owed to a send from
+    // before the panel was closed will never be counted down, and a footer stuck on
+    // "waiting for 2…" forever is worse than not knowing.
     m_awaiting = 0;
     m_status.clear();
-    m_log.scrollY = 0;
     m_focus = Focus::Filter;
 
     ApplyFilter();
     BuildButtons();
+    RefreshTargets();
     ShowCenterOverParent();
     SetFocus(GetHwnd());
+    // Instances come and go while this panel sits open, and the recipient list is
+    // the one part of it that would otherwise show whatever was true when it was
+    // last touched. TOLD, not polled: Remote::Mirror posts
+    // WM_QIV_REMOTE_TARGETS_CHANGED on every connect/disconnect, coalesced at the
+    // source, and it holds several subscribers so the F10 console can be open at the
+    // same time. This panel briefly used a timer for exactly this, because that
+    // notification took a single HWND.
+    Remote::Mirror::AddPanelNotify(GetHwnd());
     Repaint();
+}
+
+void RemoteCmdWnd::Hide() {
+    // Unsubscribe FIRST, so no sender thread can post to a window on its way out.
+    Remote::Mirror::RemovePanelNotify(GetHwnd());
+    FloatingPanelWnd::Hide();
+}
+
+void RemoteCmdWnd::RefreshTargets() {
+    const std::vector<Remote::Mirror::TargetView> live = Remote::Mirror::Targets();
+
+    m_targetRows.clear();
+    for (const Remote::Mirror::TargetView &t : live) {
+        // CONNECTED only. A listed-but-idle row cannot answer, so a tick beside it
+        // would promise a delivery the send cannot make.
+        if (!t.connected) continue;
+        m_targetRows.push_back({t.id, t.name, t.host, t.port});
+    }
+
+    // Exclusions for instances that no longer exist are dropped, so a removed row
+    // cannot come back unticked years later under a recycled id.
+    std::vector<int> stillHere;
+    stillHere.reserve(m_untickedIds.size());
+    for (const int id : m_untickedIds)
+        for (const TargetRow &r : m_targetRows)
+            if (r.id == id) { stillHere.push_back(id); break; }
+    m_untickedIds.swap(stillHere);
+}
+
+void RemoteCmdWnd::AddLogRow(Reply &&row) {
+    // NEWEST AT THE TOP — the opposite of the Ctrl+F12 wire log, deliberately.
+    //
+    // That log is a transcript you read forwards to follow an exchange. This one
+    // answers "what did that just say?", and the answer to that is always the newest
+    // line: at the top it is there the instant it lands, with no scrolling and
+    // nothing to follow. The wire log's order is right for its job and wrong for
+    // this one.
+    row.seq = m_nextSeq++;
+    m_replies.insert(m_replies.begin(), std::move(row));
+
+    // Bounded. The OLDEST is dropped, which is now the LAST row rather than the
+    // first — a panel left open through a long session must not grow without limit,
+    // and the recent end of a conversation is the interesting one.
+    while (m_replies.size() > LOG_MAX_ROWS) m_replies.pop_back();
+
+    // Keep the reader's PLACE. Everything already in the box has just moved down by
+    // one row, so a reader who had scrolled into the history would otherwise drift
+    // by a row per arriving message. At the top (the normal case) the offset stays 0
+    // and the new line simply appears.
+    const int rowH = static_cast<int>(ROW_H * app.dpiScale);
+    m_log.contentH = static_cast<int>(m_replies.size()) * rowH;
+    if (m_log.scrollY > 0) m_log.scrollY += rowH;
+    m_log.Clamp();
+}
+
+std::vector<int> RemoteCmdWnd::CheckedTargetIds() const {
+    std::vector<int> ids;
+    ids.reserve(m_targetRows.size());
+    for (const TargetRow &r : m_targetRows) {
+        const bool unticked =
+            std::find(m_untickedIds.begin(), m_untickedIds.end(), r.id) !=
+            m_untickedIds.end();
+        if (!unticked) ids.push_back(r.id);
+    }
+    return ids;
 }
 
 // =============================================================================
@@ -145,6 +244,7 @@ void RemoteCmdWnd::BuildCommands() {
 
         m_all.push_back({e.name,
                          e.desc ? e.desc : L"",
+                         e.valueDesc ? e.valueDesc : L"",
                          e.payload == Remote::PayloadRule::Required});
     }
 
@@ -182,6 +282,7 @@ void RemoteCmdWnd::BuildButtons() {
     m_buttons.clear();
     m_buttons.push_back({L"Send",  BTN_SEND,  {}, Selected() != nullptr});
     m_buttons.push_back({L"Clear", BTN_CLEAR, {}, true});
+    m_buttons.push_back({L"Log",   BTN_LOG,   {}, true});
     m_buttons.push_back({L"Close", BTN_CLOSE, {}, true});
 }
 
@@ -252,9 +353,21 @@ void RemoteCmdWnd::DoSend() {
                                   ? (c->name + L" " + value)
                                   : c->name;
 
-    m_replies.clear();
-    m_log.scrollY = 0;
-    m_awaiting = Remote::Mirror::SendToControlled(line, GetHwnd());
+    // NOT cleared. The log keeps the whole session — see AddLogRow.
+    //
+    // The ticks in THIS panel's Send-to box decide the recipients — not the
+    // Ctrl+F11 Control selection, which decides where keystrokes go. Refreshed
+    // first, so a screen that dropped a moment ago is not counted as reached.
+    RefreshTargets();
+    m_awaiting = Remote::Mirror::SendToIds(line, CheckedTargetIds(), GetHwnd());
+
+    // The SENT line goes in first, so the answers that follow have something to be
+    // answers to. Without it the log was a column of replies to a command you had
+    // to remember typing.
+    AddLogRow({0, /*outbound=*/true,
+               m_awaiting == 1 ? std::wstring(L"1 instance")
+                               : (std::to_wstring(m_awaiting) + L" instances"),
+               line, m_awaiting > 0 || m_alsoLocal, -1});
 
     if (m_alsoLocal) {
         // The headless path, not the bare sink: the payload commands raise
@@ -265,27 +378,37 @@ void RemoteCmdWnd::DoSend() {
         std::wstring reply;
         Remote::RemoteRequest req = Remote::ParseLine(line);
         if (req.status != Remote::ParseStatus::Ok) {
-            m_replies.push_back({L"(this instance)",
-                                 L"ERR this build cannot run that locally", false, -1});
+            AddLogRow({0, false, L"(this instance)",
+                       L"ERR this build cannot run that locally", false, -1});
         } else if (Remote::ExecutePayload(m_hParent, req.cmd, req.payload, reply)) {
-            m_replies.push_back({L"(this instance)", reply, true, -1});
+            AddLogRow({0, false, L"(this instance)", reply, true, -1});
         } else {
             InputManager::ExecuteCommand(m_hParent, req.cmd);
-            m_replies.push_back({L"(this instance)", L"OK", true, -1});
+            AddLogRow({0, false, L"(this instance)", L"OK", true, -1});
         }
     }
 
-    m_status = (m_awaiting == 0 && !m_alsoLocal)
-                   ? L"Nothing to send to — no instance is ticked under Control in Ctrl+F11."
-                   : (L"Sent `" + line + L"` to " + std::to_wstring(m_awaiting) +
-                      L" instance(s)" + (m_alsoLocal ? L" and this one" : L""));
+    m_status =
+        (m_awaiting == 0 && !m_alsoLocal)
+            ? (m_targetRows.empty()
+                   ? std::wstring(L"Nothing to send to — no instance is connected "
+                                  L"(connect one in F10).")
+                   : std::wstring(L"Nothing to send to — no instance is ticked in "
+                                  L"Send to."))
+            : (L"Sent `" + line + L"` to " + std::to_wstring(m_awaiting) +
+               L" instance(s)" + (m_alsoLocal ? L" and this one" : L""));
     Repaint();
 }
 
 void RemoteCmdWnd::DoClear() {
     m_filterBox.Clear();
     m_valueBox.Clear();
+    // The one place the log is emptied — and the numbering restarts at 1 with it.
+    // Clear here means "start a fresh session", so the first line of that session is
+    // line 1; carrying the old count on would leave a number nothing on screen
+    // explains.
     m_replies.clear();
+    m_nextSeq = 1;
     m_awaiting = 0;
     m_status.clear();
     m_log.scrollY = 0;
@@ -310,6 +433,13 @@ int RemoteCmdWnd::HitTestCommandRow(POINT pt) const {
     const int rowH = static_cast<int>(ROW_H * app.dpiScale);
     const int idx  = (pt.y - m_list.view.top + m_list.scrollY) / rowH;
     return (idx >= 0 && idx < static_cast<int>(m_shown.size())) ? idx : -1;
+}
+
+int RemoteCmdWnd::HitTestTargetRow(POINT pt) const {
+    if (!PtInRect(&m_targets.view, pt)) return -1;
+    const int rowH = static_cast<int>(ROW_H * app.dpiScale);
+    const int idx  = (pt.y - m_targets.view.top + m_targets.scrollY) / rowH;
+    return (idx >= 0 && idx < static_cast<int>(m_targetRows.size())) ? idx : -1;
 }
 
 // =============================================================================
@@ -372,12 +502,11 @@ LRESULT RemoteCmdWnd::HandlePanelMessage(UINT message, WPARAM wParam, LPARAM lPa
         case Constants::WM_QIV_REMOTE_CMD_REPLY: {
             auto *r = reinterpret_cast<Remote::Mirror::CmdReply *>(lParam);
             if (!r) return 0;
-            m_replies.push_back({r->target, r->reply, r->ok, r->deltaUs});
+            // Tail-following and the row cap both live in AddLogRow, so an answer
+            // and a send are recorded by the same rules.
+            AddLogRow({0, /*outbound=*/false, r->target, r->reply, r->ok, r->deltaUs});
             if (m_awaiting > 0) --m_awaiting;
             delete r;
-            // Follow the tail: the answer that just arrived is the one being
-            // waited for.
-            m_log.scrollY = m_log.MaxScroll();
             Repaint();
             return 0;
         }
@@ -398,6 +527,9 @@ LRESULT RemoteCmdWnd::HandlePanelMessage(UINT message, WPARAM wParam, LPARAM lPa
             POINT pt; GetCursorPos(&pt);
             ScreenToClient(GetHwnd(), &pt);
             const bool hot = HitTestButton(pt) >= 0 || HitTestCommandRow(pt) >= 0 ||
+                             HitTestTargetRow(pt) >= 0 ||
+                             PtInRect(&m_targetsAllRect, pt) ||
+                             PtInRect(&m_targetsNoneRect, pt) ||
                              PtInRect(&m_localRect, pt) ||
                              PtInRect(&m_filterRect, pt) || PtInRect(&m_valueRect, pt);
             SetCursor(hot ? Constants::Cursors::CURR_CLICK
@@ -405,11 +537,32 @@ LRESULT RemoteCmdWnd::HandlePanelMessage(UINT message, WPARAM wParam, LPARAM lPa
             return TRUE;
         }
 
+        // A target connected, dropped, or changed why it is down. The recipients box
+        // is the part of this panel that goes stale otherwise — it offers a tick per
+        // connected instance, and a tick for a screen that has gone is a promise the
+        // send cannot keep.
+        case Constants::WM_QIV_REMOTE_TARGETS_CHANGED:
+            // BEFORE the re-read, so a change landing during it posts again rather
+            // than finding the gate closed and being dropped — the same ordering the
+            // F10 console uses, and for the same reason.
+            Remote::Mirror::ClearPanelNotifyPending(GetHwnd());
+            RefreshTargets();
+            Repaint();
+            return 0;
+
+        // Belt and braces alongside Hide(): a window can also go away without being
+        // hidden first.
+        case WM_DESTROY:
+            Remote::Mirror::RemovePanelNotify(GetHwnd());
+            break;
+
         case WM_MOUSEMOVE: {
             POINT pt{GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam)};
 
             if (m_drag != Drag::None) {
-                ScrollView &sv = (m_drag == Drag::List) ? m_list : m_log;
+                ScrollView &sv = (m_drag == Drag::List)    ? m_list
+                               : (m_drag == Drag::Targets) ? m_targets
+                                                           : m_log;
                 const int travel = std::max(1, RectH(sv.track) - m_dragThumbSpan);
                 const int want   = pt.y - sv.track.top - m_dragGrabPx;
                 sv.scrollY = MulDiv(std::clamp(want, 0, travel), sv.MaxScroll(), travel);
@@ -450,7 +603,9 @@ LRESULT RemoteCmdWnd::HandlePanelMessage(UINT message, WPARAM wParam, LPARAM lPa
             const int rowH = static_cast<int>(ROW_H * app.dpiScale);
             // Whichever list the pointer is over. Defaulting to the commands is
             // right when it is over neither: that is the list you are reading.
-            ScrollView &sv = PtInRect(&m_log.view, pt) ? m_log : m_list;
+            ScrollView &sv = PtInRect(&m_log.view, pt)     ? m_log
+                           : PtInRect(&m_targets.view, pt) ? m_targets
+                                                           : m_list;
             sv.ScrollBy(-(GET_WHEEL_DELTA_WPARAM(wParam) / WHEEL_DELTA) * rowH * 3);
             Repaint();
             return 0;
@@ -463,9 +618,9 @@ LRESULT RemoteCmdWnd::HandlePanelMessage(UINT message, WPARAM wParam, LPARAM lPa
             // Scrollbars first — they overlap nothing, but they are the smallest
             // targets and must not be stolen by a list row.
             {
-                ScrollView *svs[2]  = {&m_list, &m_log};
-                const Drag  which[2] = {Drag::List, Drag::Log};
-                for (int i = 0; i < 2; ++i) {
+                ScrollView *svs[3]   = {&m_list, &m_log, &m_targets};
+                const Drag  which[3] = {Drag::List, Drag::Log, Drag::Targets};
+                for (int i = 0; i < 3; ++i) {
                     ScrollView *sv = svs[i];
                     if (PtInRect(&sv->thumb, pt)) {
                         m_drag          = which[i];
@@ -486,6 +641,19 @@ LRESULT RemoteCmdWnd::HandlePanelMessage(UINT message, WPARAM wParam, LPARAM lPa
             const int row = HitTestCommandRow(pt);
             if (row >= 0) {
                 m_selected = row;
+
+                // The name goes INTO the box — it is the command box as much as it is
+                // the filter — but the filter is deliberately NOT re-run: narrowing
+                // the list to the one row just clicked throws away the browsing
+                // position, and browsing is what the list is for.
+                //
+                // Whole text selected, so the next character typed replaces a name
+                // the user did not type rather than appending to it.
+                if (const Command *c = Selected()) {
+                    m_filterBox.SetText(c->name);
+                    m_filterBox.SelectAll();
+                }
+
                 // Selecting is not sending. The list is a browser, and a click
                 // that fired a command at every screen would make it a minefield.
                 if (Selected() && Selected()->needsValue) m_focus = Focus::Value;
@@ -499,6 +667,28 @@ LRESULT RemoteCmdWnd::HandlePanelMessage(UINT message, WPARAM wParam, LPARAM lPa
                 switch (m_buttons[b].id) {
                     case BTN_SEND:  DoSend();  break;
                     case BTN_CLEAR: DoClear(); break;
+                    case BTN_LOG: {
+                        // Open it, or close it if it is open — and when opening,
+                        // actually put it in FRONT. Every panel here is
+                        // WS_EX_TOPMOST, so re-showing one already visible leaves it
+                        // wherever it sat in that band, which is usually behind this
+                        // window. The HWND_TOPMOST re-assert is what reorders it
+                        // within the band. (RemoteLogWnd.cpp does the same for the
+                        // button pointing back here.)
+                        UI::IPanelWindow &log = uiManager.getRemoteLogWindow();
+                        if (log.IsVisible()) {
+                            log.Hide();
+                        } else {
+                            log.Show();
+                            if (HWND h = log.GetHwnd())
+                                SetWindowPos(h, HWND_TOPMOST, 0, 0, 0, 0,
+                                             SWP_NOMOVE | SWP_NOSIZE);
+                        }
+                        // Its lit state just changed, and opening another window
+                        // takes the focus, so nothing else would repaint this.
+                        Repaint();
+                        break;
+                    }
                     case BTN_CLOSE: Hide();    break;
                     default: break;
                 }
@@ -509,6 +699,34 @@ LRESULT RemoteCmdWnd::HandlePanelMessage(UINT message, WPARAM wParam, LPARAM lPa
                 m_alsoLocal = !m_alsoLocal;
                 Repaint();
                 return 0;
+            }
+
+            // --- Recipients ------------------------------------------------
+            // The WHOLE ROW toggles, not just the box: the row is the thing being
+            // included or left out, and a 14 px checkbox is a poor target on a
+            // touchpad. Nothing else on a row is clickable, so there is no second
+            // meaning to collide with.
+            {
+                const int tr = HitTestTargetRow(pt);
+                if (tr >= 0) {
+                    const int id = m_targetRows[static_cast<size_t>(tr)].id;
+                    auto it = std::find(m_untickedIds.begin(), m_untickedIds.end(), id);
+                    if (it == m_untickedIds.end()) m_untickedIds.push_back(id);
+                    else                           m_untickedIds.erase(it);
+                    Repaint();
+                    return 0;
+                }
+                if (!m_targetRows.empty() && PtInRect(&m_targetsAllRect, pt)) {
+                    m_untickedIds.clear();
+                    Repaint();
+                    return 0;
+                }
+                if (!m_targetRows.empty() && PtInRect(&m_targetsNoneRect, pt)) {
+                    m_untickedIds.clear();
+                    for (const TargetRow &t : m_targetRows) m_untickedIds.push_back(t.id);
+                    Repaint();
+                    return 0;
+                }
             }
 
             if (PtInRect(&m_filterRect, pt))      m_focus = Focus::Filter;
@@ -566,26 +784,51 @@ LRESULT RemoteCmdWnd::HandlePanelMessage(UINT message, WPARAM wParam, LPARAM lPa
             const int logH  = static_cast<int>(LOG_H * s);
             const int gap   = static_cast<int>(16 * s);
 
-            // ── Title ────────────────────────────────────────────────────────
-            SelectObject(bb, m_hFontBold);
-            SetTextColor(bb, fg);
-            RECT tr{pad, static_cast<int>(6 * s), W - pad, static_cast<int>(26 * s)};
-            DrawTextW(bb, L"Send Command — to the instances under Control", -1, &tr,
-                      DT_LEFT | DT_SINGLELINE);
-
-            SelectObject(bb, m_hFontSmall);
-            SetTextColor(bb, dim);
-            {
-                RECT sr{pad, tr.bottom, W - pad, tr.bottom + static_cast<int>(16 * s)};
-                DrawTextW(bb,
-                          L"Type to filter · ↑↓ picks · Tab swaps boxes · Enter sends",
-                          -1, &sr, DT_LEFT | DT_SINGLELINE | DT_END_ELLIPSIS);
-            }
-
-            const int top      = static_cast<int>(50 * s);
             const int rightX   = pad + listW + gap;
-            const int rightW   = W - pad - rightX;
             const int listBot  = H - pad - logH - static_cast<int>(22 * s);
+
+            // ── Row 1: the two DESCRIPTIONS, side by side ────────────────────
+            //
+            // The panel's title and its key-hint line used to live here. Both were
+            // text you read once: the window is called Send Command, and the keys
+            // are in Help. What you want in their place is what the highlighted
+            // command DOES, and what its value MEANS — one over each of the two
+            // boxes below, on one line, so the pairing is visible rather than
+            // remembered.
+            //
+            // Fixed height for both cells, so the boxes underneath stay level
+            // whichever description happens to be longer. Anything past three lines
+            // is ellipsised — the list on the left shows the same text, and the
+            // panel is resizable.
+            const int descTop = static_cast<int>(8 * s);
+            const int descH   = static_cast<int>(DESC_H * s);
+            const int top     = descTop + descH + static_cast<int>(6 * s);
+            {
+                const Command *c = Selected();
+
+                SelectObject(bb, m_hFontSmall);
+
+                // LEFT — what the command does. Its NAME is not repeated here: the
+                // list shows it, highlighted, two lines down.
+                SetTextColor(bb, c ? fg : dim);
+                RECT cd{pad, descTop, pad + listW, descTop + descH};
+                DrawTextW(bb,
+                          !c ? L"Pick a command from the list below."
+                             : (c->desc.empty() ? c->name.c_str() : c->desc.c_str()),
+                          -1, &cd, DT_LEFT | DT_WORDBREAK | DT_END_ELLIPSIS);
+
+                // RIGHT — what its value means, aligned with the left cell and
+                // sitting over the Value box it describes.
+                SetTextColor(bb, (c && c->needsValue) ? fg : dim);
+                RECT vd{rightX, descTop, W - pad, descTop + descH};
+                DrawTextW(bb,
+                          !c ? L""
+                             : !c->needsValue
+                                   ? L"This command takes no value."
+                                   : (c->valueDesc.empty() ? L"Takes a value."
+                                                           : c->valueDesc.c_str()),
+                          -1, &vd, DT_LEFT | DT_WORDBREAK | DT_END_ELLIPSIS);
+            }
 
             // ── Left: filter + the command list ──────────────────────────────
             {
@@ -607,6 +850,13 @@ LRESULT RemoteCmdWnd::HandlePanelMessage(UINT message, WPARAM wParam, LPARAM lPa
                 const std::wstring lh = L"Commands  (" + std::to_wstring(m_shown.size()) +
                                         L" of " + std::to_wstring(m_all.size()) + L")";
                 DrawTextW(bb, lh.c_str(), -1, &cl, DT_LEFT | DT_VCENTER | DT_SINGLELINE);
+
+                // The key to the two blues, in the second blue itself — a colour code
+                // nothing explains is a colour code nobody reads.
+                SetTextColor(bb, PC::PATH_ALT);
+                RECT cll = cl;
+                DrawTextW(bb, L"takes a value", -1, &cll,
+                          DT_RIGHT | DT_VCENTER | DT_SINGLELINE);
 
                 RECT frame{pad, listTop + hdrH, pad + listW, listBot};
                 FrameBox(bb, frame, boxBg, line);
@@ -633,21 +883,22 @@ LRESULT RemoteCmdWnd::HandlePanelMessage(UINT message, WPARAM wParam, LPARAM lPa
                     if (i == m_selected)   FillRect(bb, &rr, Gdi::Brush(selBg));
                     else if (i % 2)        FillRect(bb, &rr, Gdi::Brush(altBg));
 
+                    // THE NAME ONLY. The description used to share this row and was
+                    // clipped to a few words by the column width, which made it a
+                    // teaser rather than an explanation — and it is already stated in
+                    // full above the box, for whichever row is highlighted. One
+                    // sentence, one place.
+                    //
+                    // TWO BLUES: whether a command takes a VALUE is the one thing you
+                    // want to know before picking it, because it decides whether the
+                    // Value box has to be filled in. Carried by colour rather than by a
+                    // second column, which is what the row is now wide enough for.
                     SelectObject(bb, m_hFontBody);
-                    SetTextColor(bb, PC::PATH);
+                    SetTextColor(bb, c.needsValue ? PC::PATH_ALT : PC::PATH);
                     RECT nr{rr.left + static_cast<int>(8 * s), ry,
-                            rr.left + static_cast<int>(150 * s), ry + rowH};
+                            rr.right - static_cast<int>(6 * s), ry + rowH};
                     DrawTextW(bb, c.name.c_str(), -1, &nr,
                               DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
-
-                    SelectObject(bb, m_hFontSmall);
-                    SetTextColor(bb, c.needsValue ? PC::NUMBER : dim);
-                    RECT dr{rr.left + static_cast<int>(156 * s), ry,
-                            rr.right - static_cast<int>(6 * s), ry + rowH};
-                    DrawTextW(bb,
-                              c.desc.empty() ? (c.needsValue ? L"needs a value" : L"")
-                                             : c.desc.c_str(),
-                              -1, &dr, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
                 }
                 RestoreDC(bb, saved);
 
@@ -661,36 +912,22 @@ LRESULT RemoteCmdWnd::HandlePanelMessage(UINT message, WPARAM wParam, LPARAM lPa
                 }
             }
 
-            // ── Right: the highlighted command, its value, and Send ──────────
+            // ── Right: the Value box, LEVEL with the filter box, then Send ────
             {
                 int y = top;
                 const Command *c = Selected();
 
-                SelectObject(bb, m_hFontBold);
-                SetTextColor(bb, fg);
-                RECT nr{rightX, y, W - pad, y + static_cast<int>(24 * s)};
-                DrawTextW(bb,
-                          c ? (c->needsValue ? (c->name + L"  <value>").c_str()
-                                             : c->name.c_str())
-                            : L"— no command selected —",
-                          -1, &nr, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
-                y += static_cast<int>(26 * s);
-
+                // The caption carries the command NAME, so what is armed sits
+                // directly over the box you are typing its value into — the pane no
+                // longer needs a heading of its own to say it.
                 SelectObject(bb, m_hFontSmall);
-                SetTextColor(bb, dim);
-                RECT dr{rightX, y, W - pad, y + static_cast<int>(46 * s)};
-                DrawTextW(bb,
-                          !c ? L"Pick one from the list on the left."
-                             : (c->desc.empty()
-                                    ? (c->needsValue ? L"Takes a value."
-                                                     : L"Takes no value.")
-                                    : c->desc.c_str()),
-                          -1, &dr, DT_LEFT | DT_WORDBREAK);
-                y += static_cast<int>(52 * s);
-
                 SetTextColor(bb, PC::HEADER);
                 RECT vl{rightX, y, W - pad, y + hdrH};
-                DrawTextW(bb, L"Value", -1, &vl, DT_LEFT | DT_VCENTER | DT_SINGLELINE);
+                DrawTextW(bb,
+                          !c ? L"Value"
+                             : (c->needsValue ? (c->name + L"  <value>").c_str()
+                                              : c->name.c_str()),
+                          -1, &vl, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
                 y += hdrH;
 
                 m_valueRect = {rightX, y, W - pad, y + fldH};
@@ -706,7 +943,14 @@ LRESULT RemoteCmdWnd::HandlePanelMessage(UINT message, WPARAM wParam, LPARAM lPa
                     btn.rect = {x, y, x + bw, y + btnH};
                     const int myIndex = static_cast<int>(&btn - m_buttons.data());
 
-                    COLORREF base = (btn.id == BTN_SEND) ? PC::BTN_ALT : PC::BTN_MAIN;
+                    // Send is accented because it is the action. Log is accented
+                    // while the panel it toggles is open — a toggle whose lit state
+                    // tracked anything else would lie about its own press.
+                    COLORREF base = (btn.id == BTN_SEND) ? PC::BTN_ALT
+                                  : (btn.id == BTN_LOG &&
+                                     uiManager.getRemoteLogWindow().IsVisible())
+                                        ? PC::BTN_ALT
+                                        : PC::BTN_MAIN;
                     if (!btn.enabled) base = bg;
                     else if (myIndex == m_hotButton)
                         base = RGB(std::min(255, GetRValue(base) + 40),
@@ -731,9 +975,125 @@ LRESULT RemoteCmdWnd::HandlePanelMessage(UINT message, WPARAM wParam, LPARAM lPa
                 DrawTextW(bb, m_alsoLocal ? L"☑  also run it here"
                                           : L"☐  also run it here",
                           -1, &cr, DT_LEFT | DT_VCENTER | DT_SINGLELINE);
+                y = m_localRect.bottom + static_cast<int>(12 * s);
+
+                // ── Recipients: WHICH connected instances this send reaches ────
+                //
+                // Its own selection, deliberately not the Ctrl+F11 Control ticks.
+                // Those decide where KEYSTROKES go; this decides where one typed
+                // line goes, and lining a screen up by hand should not change what
+                // F11 drives afterwards.
+                //
+                // The same box as the command list, on purpose: a checkbox, a name,
+                // an address. Everything connected is ticked to begin with, because
+                // "send to whatever is up" is the normal case — the state held is
+                // the EXCLUSIONS (see m_untickedIds).
+                {
+                    const std::vector<int> checked = CheckedTargetIds();
+
+                    SelectObject(bb, m_hFontSmall);
+                    SetTextColor(bb, PC::HEADER);
+                    RECT th{rightX, y, W - pad, y + static_cast<int>(TARGETS_HDR_H * s)};
+                    const std::wstring hdr =
+                        L"Send to  (" + std::to_wstring(checked.size()) + L" of " +
+                        std::to_wstring(m_targetRows.size()) + L" connected)";
+                    DrawTextW(bb, hdr.c_str(), -1, &th,
+                              DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
+
+                    // All / None, right-aligned on the header line. Two words rather
+                    // than buttons: they belong to the list, not to the row of
+                    // actions above, and a wall of eight screens should not need
+                    // eight clicks to exclude one.
+                    const int allW  = static_cast<int>(34 * s);
+                    const int noneW = static_cast<int>(44 * s);
+                    m_targetsNoneRect = {W - pad - noneW, th.top, W - pad, th.bottom};
+                    m_targetsAllRect  = {m_targetsNoneRect.left - static_cast<int>(6 * s) - allW,
+                                         th.top,
+                                         m_targetsNoneRect.left - static_cast<int>(6 * s),
+                                         th.bottom};
+                    SetTextColor(bb, m_targetRows.empty() ? dim : PC::PATH);
+                    RECT ar = m_targetsAllRect, nrr = m_targetsNoneRect;
+                    DrawTextW(bb, L"All",  -1, &ar,  DT_RIGHT | DT_VCENTER | DT_SINGLELINE);
+                    DrawTextW(bb, L"None", -1, &nrr, DT_RIGHT | DT_VCENTER | DT_SINGLELINE);
+
+                    RECT frame{rightX, th.bottom, W - pad, listBot};
+                    FrameBox(bb, frame, boxBg, line);
+
+                    const int sbW =
+                        static_cast<int>(Constants::Dedicated::PANEL_SCROLLBAR_W * s);
+                    m_targets.contentH = static_cast<int>(m_targetRows.size()) * rowH;
+                    const bool needBar = m_targets.contentH > RectH(frame) - 2;
+                    m_targets.view = {frame.left + 1, frame.top + 1,
+                                      frame.right - 1 - (needBar ? sbW : 0),
+                                      frame.bottom - 1};
+                    m_targets.Clamp();
+
+                    const int saved = SaveDC(bb);
+                    IntersectClipRect(bb, m_targets.view.left, m_targets.view.top,
+                                      m_targets.view.right, m_targets.view.bottom);
+
+                    if (m_targetRows.empty()) {
+                        SelectObject(bb, m_hFontSmall);
+                        SetTextColor(bb, dim);
+                        RECT er{m_targets.view.left + static_cast<int>(8 * s),
+                                m_targets.view.top + static_cast<int>(6 * s),
+                                m_targets.view.right, m_targets.view.top + rowH * 2};
+                        // Says what to DO about it. "No instances" alone leaves the
+                        // reader looking for the thing that is broken.
+                        DrawTextW(bb, L"Nothing connected — connect a server in F10.",
+                                  -1, &er, DT_LEFT | DT_WORDBREAK | DT_END_ELLIPSIS);
+                    }
+
+                    const int firstT = std::max(0, m_targets.scrollY / rowH);
+                    const int lastT  = std::min(static_cast<int>(m_targetRows.size()),
+                                                firstT + RectH(m_targets.view) / rowH + 2);
+                    for (int i = firstT; i < lastT; ++i) {
+                        const TargetRow &t = m_targetRows[static_cast<size_t>(i)];
+                        const int ry = m_targets.view.top + i * rowH - m_targets.scrollY;
+                        RECT rr{m_targets.view.left, ry, m_targets.view.right, ry + rowH};
+                        if (i % 2) FillRect(bb, &rr, Gdi::Brush(altBg));
+
+                        const bool ticked =
+                            std::find(checked.begin(), checked.end(), t.id) != checked.end();
+
+                        SelectObject(bb, m_hFontBody);
+                        SetTextColor(bb, ticked ? PC::ON : dim);
+                        RECT kr{rr.left + static_cast<int>(8 * s), ry,
+                                rr.left + static_cast<int>(30 * s), ry + rowH};
+                        DrawTextW(bb, ticked ? L"☑" : L"☐", -1, &kr,
+                                  DT_LEFT | DT_VCENTER | DT_SINGLELINE);
+
+                        // Dimmed when unticked, so a glance at the box says where the
+                        // next Send lands without reading every checkbox.
+                        SetTextColor(bb, ticked ? PC::TEXT : dim);
+                        RECT nrw{rr.left + static_cast<int>(34 * s), ry,
+                                 rr.left + static_cast<int>(170 * s), ry + rowH};
+                        DrawTextW(bb,
+                                  t.name.empty() ? L"(unnamed)" : t.name.c_str(), -1, &nrw,
+                                  DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
+
+                        SelectObject(bb, m_hFontSmall);
+                        SetTextColor(bb, ticked ? PC::PATH : dim);
+                        RECT hr{rr.left + static_cast<int>(176 * s), ry,
+                                rr.right - static_cast<int>(6 * s), ry + rowH};
+                        const std::wstring addr = t.host + L":" + std::to_wstring(t.port);
+                        DrawTextW(bb, addr.c_str(), -1, &hr,
+                                  DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
+                    }
+                    RestoreDC(bb, saved);
+
+                    m_targets.track = {};
+                    m_targets.thumb = {};
+                    if (needBar) {
+                        m_targets.track = {frame.right - 1 - sbW, m_targets.view.top,
+                                           frame.right - 1, m_targets.view.bottom};
+                        DrawScrollBar(bb, m_targets, s, PC::SCROLL_TRACK, PC::SCROLL_THUMB,
+                                      PC::SCROLL_THUMB_HOT, m_drag == Drag::Targets);
+                    }
+                }
             }
 
-            // ── Bottom: status + replies ─────────────────────────────────────
+            // ── Bottom: status + the session LOG ─────────────────────────────
             {
                 const int stY = listBot + static_cast<int>(4 * s);
                 SelectObject(bb, m_hFontSmall);
@@ -748,6 +1108,21 @@ LRESULT RemoteCmdWnd::HandlePanelMessage(UINT message, WPARAM wParam, LPARAM lPa
                                : m_status);
                 DrawTextW(bb, line2.c_str(), -1, &st,
                           DT_LEFT | DT_SINGLELINE | DT_END_ELLIPSIS);
+
+                // Row count on the right of the same line — it is the log's header,
+                // and a log that does not say how much it is holding gives no clue
+                // that it has started dropping its oldest rows.
+                if (!m_replies.empty()) {
+                    SetTextColor(bb, dim);
+                    RECT cnt = st;
+                    const std::wstring hdr =
+                        L"Log  " + std::to_wstring(m_replies.size()) +
+                        (m_replies.size() >= LOG_MAX_ROWS
+                             ? std::wstring(L" (oldest dropping)")
+                             : std::wstring());
+                    DrawTextW(bb, hdr.c_str(), -1, &cnt,
+                              DT_RIGHT | DT_SINGLELINE | DT_END_ELLIPSIS);
+                }
 
                 RECT frame{pad, H - pad - logH, W - pad, H - pad};
                 FrameBox(bb, frame, boxBg, line);
@@ -766,19 +1141,47 @@ LRESULT RemoteCmdWnd::HandlePanelMessage(UINT message, WPARAM wParam, LPARAM lPa
                 const int first = std::max(0, m_log.scrollY / rowH);
                 const int last  = std::min(static_cast<int>(m_replies.size()),
                                            first + RectH(m_log.view) / rowH + 2);
+                // Five columns, the same reading order as the Ctrl+F12 wire log:
+                // number, direction, who, what, how long. Both directions share one
+                // table in the order things actually happened, because a typed
+                // session is a conversation and splitting it into "sent" and
+                // "received" halves loses which answer belongs to which send.
                 for (int i = first; i < last; ++i) {
                     const Reply &r = m_replies[static_cast<size_t>(i)];
                     const int ry = m_log.view.top + i * rowH - m_log.scrollY;
+                    RECT rowRc{m_log.view.left, ry, m_log.view.right, ry + rowH};
+
+                    // The SENT rows are shaded, not the alternate ones: banding by
+                    // parity in a two-direction log fights the thing you actually
+                    // scan for, which is where each exchange starts.
+                    if (r.outbound) FillRect(bb, &rowRc, Gdi::Brush(altBg));
+
+                    SelectObject(bb, m_hFontSmall);
+                    SetTextColor(bb, dim);
+                    RECT sr{m_log.view.left + static_cast<int>(6 * s), ry,
+                            m_log.view.left + static_cast<int>(44 * s), ry + rowH};
+                    DrawTextW(bb, std::to_wstring(r.seq).c_str(), -1, &sr,
+                              DT_RIGHT | DT_VCENTER | DT_SINGLELINE);
+
+                    // Direction, as an arrow rather than a word: it is read once per
+                    // row and a column of "sent"/"reply" is wider and slower.
+                    SetTextColor(bb, r.outbound ? PC::NUMBER : (r.ok ? PC::ON : PC::WARN));
+                    RECT ar{m_log.view.left + static_cast<int>(52 * s), ry,
+                            m_log.view.left + static_cast<int>(72 * s), ry + rowH};
+                    DrawTextW(bb, r.outbound ? L"→" : L"←", -1, &ar,
+                              DT_LEFT | DT_VCENTER | DT_SINGLELINE);
 
                     SelectObject(bb, m_hFontBody);
                     SetTextColor(bb, PC::TEXT);
-                    RECT tnr{m_log.view.left + static_cast<int>(8 * s), ry,
-                             m_log.view.left + static_cast<int>(160 * s), ry + rowH};
+                    RECT tnr{m_log.view.left + static_cast<int>(74 * s), ry,
+                             m_log.view.left + static_cast<int>(214 * s), ry + rowH};
                     DrawTextW(bb, r.target.c_str(), -1, &tnr,
                               DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
 
-                    SetTextColor(bb, r.ok ? PC::PATH : PC::WARN);
-                    RECT vr{m_log.view.left + static_cast<int>(168 * s), ry,
+                    // The command line, or the answer to one. An ERR is coloured on
+                    // the way in, so a failed send does not need reading to be seen.
+                    SetTextColor(bb, r.outbound ? fg : (r.ok ? PC::PATH : PC::WARN));
+                    RECT vr{m_log.view.left + static_cast<int>(222 * s), ry,
                             m_log.view.right - static_cast<int>(76 * s), ry + rowH};
                     DrawTextW(bb, r.text.c_str(), -1, &vr,
                               DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
