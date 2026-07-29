@@ -120,6 +120,7 @@ set(SOURCES
         src/Rem_TCP_IP/MirrorPickerWnd.cpp
         src/Rem_TCP_IP/RemoteLog.cpp
         src/Rem_TCP_IP/RemoteLogWnd.cpp
+        src/Rem_TCP_IP/RemoteCmdWnd.cpp
         src/Rem_TCP_IP/RemotesFile.cpp
         src/Rem_TCP_IP/RemotesWnd.cpp
         src/UI/UIManager.cpp

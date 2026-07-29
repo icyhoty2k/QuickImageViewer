@@ -229,10 +229,10 @@ LRESULT CALLBACK MainAppWndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM l
             // can report one back that disagrees — which is why the folder is
             // included here without asking.
             const int targetId = static_cast<int>(wParam);
-            Remote::Mirror::SendTo(targetId, L"sync " + Remote::BuildSyncPayload(true));
+            Remote::Mirror::SendTo(targetId, L"Sync " + Remote::BuildSyncPayload(true));
             if (app.currentIndex >= 0)
                 Remote::Mirror::SendTo(targetId,
-                                       L"goto " + std::to_wstring(app.currentIndex + 1));
+                                       L"JumpToImage " + std::to_wstring(app.currentIndex + 1));
             return 0;
         }
 

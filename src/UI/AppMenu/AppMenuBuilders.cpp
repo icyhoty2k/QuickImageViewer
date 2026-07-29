@@ -85,6 +85,7 @@ Command CommandForId(int id) {
         case Id::ID_REMOTE_PANEL:    return Command::ToggleRemotePanel;
         case Id::ID_REMOTES_CONSOLE: return Command::ToggleRemotesConsole;
         case Id::ID_REMOTES_CONTROL: return Command::MirrorPick;
+        case Id::ID_REMOTE_CMD:      return Command::ToggleRemoteCmd;
         case Id::ID_REMOTE_LOG:      return Command::ToggleRemoteLog;
         // Straight to the same commands F11 and F12 resolve to, so the menu and
         // the keys cannot drift apart — the overlay, the mirror gate and the
@@ -418,6 +419,7 @@ HMENU Build(HWND hWnd) {
     AppendMenuW(m, MF_STRING, Id::ID_REMOTE_PANEL,    L"Local Server\tF9");
     AppendMenuW(m, MF_STRING, Id::ID_REMOTES_CONSOLE, L"Remote Servers\tF10");
     AppendMenuW(m, MF_STRING, Id::ID_REMOTES_CONTROL, L"Remotes Control\tCtrl+F11");
+    AppendMenuW(m, MF_STRING, Id::ID_REMOTE_CMD,      L"Send Command\tCtrl+F10");
     AppendMenuW(m, MF_STRING, Id::ID_REMOTE_LOG,      L"RemoteLog\tCtrl+F12");
     // Last of the remote group and immediately before Help: the two switches
     // are what you check most often, and this is the shortest reach to them.

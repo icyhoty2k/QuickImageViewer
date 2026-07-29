@@ -31,13 +31,9 @@ namespace RT = Constants::RemoteTcpIp;
 namespace {
     constexpr CommandEntry TABLE[] = {
         // --- Navigation ---
-        { L"next",                  Command::NextImage,                       PayloadRule::None },
         { L"NextImage",             Command::NextImage,                       PayloadRule::None },
-        { L"prev",                  Command::PrevImage,                       PayloadRule::None },
         { L"PrevImage",             Command::PrevImage,                       PayloadRule::None },
-        { L"first",                 Command::GoToFirstImage,                  PayloadRule::None },
         { L"GoToFirstImage",        Command::GoToFirstImage,                  PayloadRule::None },
-        { L"last",                  Command::GoToLastImage,                   PayloadRule::None },
         { L"GoToLastImage",         Command::GoToLastImage,                   PayloadRule::None },
         { L"GoToLastImageInCurrentFolder",
                                     Command::GoToLastImageInCurrentFolder,    PayloadRule::None },
@@ -50,20 +46,19 @@ namespace {
         { L"NextHistoryFolder",     Command::NextHistoryFolder,               PayloadRule::None },
         { L"NextFavoriteFolder",    Command::NextFavoriteFolder,              PayloadRule::None },
         { L"PrevFavoriteFolder",    Command::PrevFavoriteFolder,              PayloadRule::None },
-        { L"reload",                Command::ReloadCurrentDir,                PayloadRule::None },
         { L"ReloadCurrentDir",      Command::ReloadCurrentDir,                PayloadRule::None },
 
         // --- Commands carrying a value ---
-        { L"goto",                  Command::JumpToImage,                     PayloadRule::Required },
-        { L"JumpToImage",           Command::JumpToImage,                     PayloadRule::Required },
-        { L"open",                  Command::OpenFile,                        PayloadRule::Required },
-        { L"OpenFile",              Command::OpenFile,                        PayloadRule::Required },
-        { L"find",                  Command::FindImage,                       PayloadRule::Required },
-        { L"FindImage",             Command::FindImage,                       PayloadRule::Required },
-        { L"zoom",                  Command::ZoomTo,                          PayloadRule::Required },
-        { L"ZoomTo",                Command::ZoomTo,                          PayloadRule::Required },
-        { L"interval",              Command::SlideshowSetInterval,            PayloadRule::Required },
-        { L"SlideshowSetInterval",  Command::SlideshowSetInterval,            PayloadRule::Required },
+        { L"JumpToImage",           Command::JumpToImage,                     PayloadRule::Required,
+          L"image NUMBER in the playlist, 1-based" },
+        { L"OpenFile",              Command::OpenFile,                        PayloadRule::Required,
+          L"full path to a file or a folder" },
+        { L"FindImage",             Command::FindImage,                       PayloadRule::Required,
+          L"jump to the first file whose name matches this text" },
+        { L"ZoomTo",                Command::ZoomTo,                          PayloadRule::Required,
+          L"percent, e.g. 150. 0 returns to the view mode's natural fit" },
+        { L"SlideshowSetInterval",  Command::SlideshowSetInterval,            PayloadRule::Required,
+          L"slide duration in milliseconds" },
 
         // --- View modes ---
         { L"ViewMode1",             Command::ViewMode1,                       PayloadRule::None },
@@ -89,9 +84,7 @@ namespace {
         { L"FlipV",                 Command::FlipV,                           PayloadRule::None },
 
         // --- Slideshow ---
-        { L"slideshow",             Command::SlideshowToggle,                 PayloadRule::None },
         { L"SlideshowToggle",       Command::SlideshowToggle,                 PayloadRule::None },
-        { L"pause",                 Command::SlideshowPauseResume,            PayloadRule::None },
         { L"SlideshowPauseResume",  Command::SlideshowPauseResume,            PayloadRule::None },
         { L"SlideshowToggleLoop",   Command::SlideshowToggleLoop,             PayloadRule::None },
         { L"SlideshowToggleShuffle",Command::SlideshowToggleShuffle,          PayloadRule::None },
@@ -99,7 +92,6 @@ namespace {
                                     Command::SlideshowCycleTransition,        PayloadRule::None },
 
         // --- Window / chrome ---
-        { L"fullscreen",            Command::ToggleFullscreen,                PayloadRule::None },
         { L"ToggleFullscreen",      Command::ToggleFullscreen,                PayloadRule::None },
         { L"ToggleAlwaysOnTop",     Command::ToggleAlwaysOnTop,               PayloadRule::None },
         { L"AutosizeToWorkArea",    Command::AutosizeToWorkArea,              PayloadRule::None },
@@ -189,8 +181,8 @@ namespace {
         { L"NewWindow",             Command::NewWindow,                       PayloadRule::None },
         { L"ResetAll",              Command::ResetAll,                        PayloadRule::None },
         { L"ResetWindowLayout",     Command::ResetWindowLayout,               PayloadRule::None },
-        { L"quit",                  Command::HardQuit,                        PayloadRule::None },
-        { L"HardQuit",              Command::HardQuit,                        PayloadRule::None },
+        { L"HardQuit",              Command::HardQuit,                        PayloadRule::None,
+          L"exits that instance immediately, without saving its session" },
 
         // --- Window opacity ---
         { L"OpacityUp",             Command::OpacityUp,                       PayloadRule::None },
@@ -206,14 +198,14 @@ namespace {
         // removes it. There is no way to nominate a THIRD party — an observer can
         // only ever be the connection that asked, which is what stops this from
         // being a way to make one screen shout at another.
-        { L"observe",               Command::Observe,                         PayloadRule::Required },
-        { L"Observe",               Command::Observe,                         PayloadRule::Required },
+        { L"Observe",               Command::Observe,                         PayloadRule::Required,
+          L"1 = start reporting my actions to you, 0 = stop" },
         // `sync` pushes the sender's whole view/effect state. Exists because
         // mirroring forwards TOGGLES: a toggle applied to a different starting
         // state diverges, and the effect CHAIN ORDER cannot be repaired by
         // resending toggles at all.
-        { L"sync",                  Command::Sync,                            PayloadRule::Required },
-        { L"Sync",                  Command::Sync,                            PayloadRule::Required },
+        { L"Sync",                  Command::Sync,                            PayloadRule::Required,
+          L"adopt the sender's whole view state (built by the console, not typed)" },
 
         // --- Diagnostics ---
         // `enablelog 1` / `enablelog 0` — switch the Ctrl+F12 wire log on or off
@@ -223,19 +215,71 @@ namespace {
         //
         // Reachable remotely on purpose: the screen whose behaviour you are
         // trying to explain is usually not the one you are sitting at.
-        { L"enablelog",             Command::EnableRemoteLog,                 PayloadRule::Required },
-        { L"EnableRemoteLog",       Command::EnableRemoteLog,                 PayloadRule::Required },
+        { L"EnableRemoteLog",       Command::EnableRemoteLog,                 PayloadRule::Required,
+          L"1 = start recording the wire log, 0 = stop" },
 
         // `msg <text>` — say something on the RECEIVER's screen. The console's
         // Identify button sends each target its own name, which is how you tell
         // two otherwise identical viewers apart.
         //
-        // ONE spelling on purpose, unlike observe/sync/quit which carry a long
-        // alias beside the short one. `msg` is what it is called.
-        { L"msg",                   Command::msgRemote,                       PayloadRule::Required },
+        { L"msgRemote",             Command::msgRemote,                       PayloadRule::Required,
+          L"show this text centre-screen on the receiver" },
     };
 
     constexpr size_t TABLE_COUNT = sizeof(TABLE) / sizeof(TABLE[0]);
+
+    // =========================================================================
+    // ONE NAME PER COMMAND, and it is the enumerator's own spelling.
+    //
+    // The table used to carry a short alias beside the long one — `goto` for
+    // JumpToImage, `quit` for HardQuit, `msg` for msgRemote. That is gone. A
+    // command now has exactly one wire name, identical to its Command.h
+    // enumerator, so there is one spelling to learn and no question about which
+    // of two names a log line or a script is using.
+    //
+    // The one command that cannot follow the rule is JumpToImage: `goto` is a
+    // C++ keyword, so `Command::goto` could never have existed. The long name is
+    // the only name there, which is exactly the rule anyway.
+    //
+    // The two asserts below enforce it from the table alone:
+    constexpr bool TableHasOneRowPerCommand() {
+        for (size_t i = 0; i < TABLE_COUNT; ++i)
+            for (size_t j = i + 1; j < TABLE_COUNT; ++j)
+                if (TABLE[i].cmd == TABLE[j].cmd) return false;
+        return true;
+    }
+
+    constexpr bool ConstEqualI(const wchar_t *a, const wchar_t *b) {
+        for (;; ++a, ++b) {
+            const wchar_t ca = (*a >= L'A' && *a <= L'Z') ? *a + 32 : *a;
+            const wchar_t cb = (*b >= L'A' && *b <= L'Z') ? *b + 32 : *b;
+            if (ca != cb) return false;
+            if (ca == 0) return true;
+        }
+    }
+
+    constexpr bool TableNamesAreUnique() {
+        for (size_t i = 0; i < TABLE_COUNT; ++i)
+            for (size_t j = i + 1; j < TABLE_COUNT; ++j)
+                // Case-insensitive, because LookupCommand is: two rows differing
+                // only in case would be one name with two meanings, and which
+                // one won would depend on table order.
+                if (ConstEqualI(TABLE[i].name, TABLE[j].name)) return false;
+        return true;
+    }
+
+    static_assert(TableHasOneRowPerCommand(),
+                  "two rows map to the same Command — aliases were removed on purpose, "
+                  "give the command one name and make it the enumerator's spelling");
+    static_assert(TableNamesAreUnique(),
+                  "two rows share a wire name (lookup is case-insensitive), so which one "
+                  "answers would depend on table order");
+
+    // NOT checked, and it cannot be from here: that every remotely-reachable
+    // Command HAS a row. Proving that needs a second list of what ought to be
+    // reachable, which is the thing this table already is. A missing row means a
+    // command is silently unreachable — an inconvenience. An extra row could
+    // mean deleted files, and THAT is what the NEVER_REMOTE assert below covers.
 
     // =========================================================================
     // NEVER_REMOTE — commands that alter files.

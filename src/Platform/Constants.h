@@ -456,6 +456,14 @@ namespace Constants {
     // the console re-reads the whole target list, which is cheap and cannot go
     // out of step with itself.
     constexpr UINT WM_QIV_REMOTE_TARGETS_CHANGED = WM_USER + 16;
+    // One reply to a HAND-SENT command (Ctrl+F10). LPARAM = new
+    // Remote::Mirror::CmdReply*, owned and deleted by the handler.
+    //
+    // Mirrored keystrokes deliberately have no such message — nobody reads the
+    // answer to "next image" and posting one per keystroke per target would be a
+    // message storm. A command somebody typed is the opposite: the answer is the
+    // entire reason it was sent.
+    constexpr UINT WM_QIV_REMOTE_CMD_REPLY = WM_USER + 17;
 
     // ---------------------------------------------------------------------------
     // Directory watcher (ReadDirectoryChangesW / FindFirstChangeNotification)

@@ -233,6 +233,27 @@ namespace Remote::Mirror {
     // by the mirror selection.
     void SendTo(int id, const std::wstring &line);
 
+    // --- Hand-sent commands (Ctrl+F10) ----------------------------------------
+
+    // One target's answer to a line somebody typed. Delivered as
+    // WM_QIV_REMOTE_CMD_REPLY; the handler owns the pointer and deletes it.
+    struct CmdReply {
+        std::wstring target;   // which instance answered
+        std::wstring line;     // what was sent, verbatim
+        std::wstring reply;    // its answer, or the error when ok is false
+        bool         ok = false;
+        long long    deltaUs = -1;
+    };
+
+    // Send one typed line to every CONTROLLED target — the ☑ rows in Ctrl+F11,
+    // which is the same selection F11 drives, so "send a command" and "mirror a
+    // keystroke" cannot reach different machines.
+    //
+    // Each target answers separately to `replyTo`. Returns how many were sent,
+    // so the caller can say "0 targets" rather than waiting for replies that
+    // will never come.
+    int SendToControlled(const std::wstring &line, HWND replyTo);
+
     // `ping` every target and record the round trip in TargetView::lagUs.
     //
     // Deliberately reuses each target's LIVE connection rather than opening a

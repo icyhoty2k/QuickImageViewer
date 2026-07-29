@@ -188,7 +188,7 @@ void MirrorPickerWnd::DoIdentify(int row) {
     const std::wstring who = r.name.empty()
                                  ? (r.host + L":" + std::to_wstring(r.port))
                                  : r.name;
-    Remote::Mirror::SendTo(r.id, L"msg " + who);
+    Remote::Mirror::SendTo(r.id, L"msgRemote " + who);
 
     m_status = L"Told " + who + L" to show its name on screen";
     Repaint();
@@ -214,8 +214,8 @@ void MirrorPickerWnd::DoSyncSelected() {
     // image path and goes only to instances that share this filesystem; the
     // portable one names the file without a path, because a drive letter from
     // here means nothing there.
-    const std::wstring full     = L"sync " + Remote::BuildSyncPayload(true);
-    const std::wstring portable = L"sync " + Remote::BuildSyncPayload(false);
+    const std::wstring full     = L"Sync " + Remote::BuildSyncPayload(true);
+    const std::wstring portable = L"Sync " + Remote::BuildSyncPayload(false);
 
     int n = 0;
     for (const RowView &r : m_rows) {

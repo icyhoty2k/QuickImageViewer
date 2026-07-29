@@ -20,6 +20,7 @@
 #include "Rem_TCP_IP/RemotesWnd.h"
 #include "Rem_TCP_IP/MirrorPickerWnd.h"
 #include "Rem_TCP_IP/RemoteLogWnd.h"
+#include "Rem_TCP_IP/RemoteCmdWnd.h"
 #include "../Platform/Constants.h"
 
 namespace UI {
@@ -193,6 +194,7 @@ ThumbnailPanelWnd &getActiveDirWnd();
             RemotesWnd      &getRemotesConsoleWindow();
             MirrorPickerWnd &getMirrorPickerWindow();
             RemoteLogWnd    &getRemoteLogWindow();
+            RemoteCmdWnd    &getRemoteCmdWindow();
             void             ApplyAlwaysOnTop(bool onTop);
 
             void SpawnDirWndForFolder(const std::wstring &folderPath, HWND hHistoryWnd);
@@ -259,6 +261,7 @@ ThumbnailPanelWnd &getActiveDirWnd();
             RemotesWnd     remotesWnd;
             MirrorPickerWnd mirrorPickerWnd;
             RemoteLogWnd    remoteLogWnd;
+            RemoteCmdWnd    remoteCmdWnd;
 
             // Fixed pool of 4 pre-allocated SpawnedDirWnd instances — one per layout slot
             // (top, left, right, bottom). Reused across spawns; never deleted at runtime.
