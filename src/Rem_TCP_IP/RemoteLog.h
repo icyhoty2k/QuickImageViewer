@@ -11,13 +11,28 @@
 // question you have when a screen is a picture behind, or when a command
 // visibly worked here and did nothing there.
 //
-// Two producers, and they are on different threads:
+// THE RECORD LIVES AT THE WIRE BOUNDARY, not at the call sites. This was got
+// wrong first: two call sites were instrumented, and everything that sent or
+// received by any other route — the `observe` re-arm, the handshake, the
+// standalone probe, the verb replies, the parse-error refusals, and the entire
+// inbound EVENT stream from a watched instance — was silently absent from a log
+// that looked complete. A log with invisible holes is worse than no log,
+// because it is believed. So every byte is recorded by the four functions it
+// must physically pass through:
 //
-//   OUT  a mirror sender thread, right after Client::Send returns. It has the
-//        line, the reply and both timestamps already — the round trip is
-//        measured there anyway, for the console's Lag column.
-//   IN   the UI thread, in RemoteServer::ExecuteOnUiThread, around the call
-//        that actually runs the command.
+//   Client::Send        every request/reply this instance makes  (OUT, + IN for
+//                       any EVENT that lands mid-exchange)
+//   Client::PollLine    unsolicited lines from a watched target  (IN)
+//   Client::DoConnect   the handshake, banner or failure         (OUT)
+//   Server SendLine     every line this instance's listener writes (OUT)
+//   Server RecvLine     every line it reads                        (IN)
+//   EmitToObservers     the echo push, which bypasses SendLine to stay
+//                       non-blocking and so needs its own                (OUT)
+//
+// Handshake lines are REDACTED at capture — see RedactForLog in RemoteServer.cpp.
+//
+// Producers are on several threads: mirror sender threads, per-client socket
+// threads, and the UI thread.
 //
 // So the store is MUTEX-GUARDED, and deliberately not lock-free: a socket round
 // trip is milliseconds and a mutex is nanoseconds, so the lock is free next to

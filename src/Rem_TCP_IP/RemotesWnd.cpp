@@ -25,7 +25,9 @@ namespace {
     // Wide enough for eight buttons in ONE row without truncating any of them,
     // and the extra width goes to the address column, which is the one that
     // actually needs it.
-    constexpr int PANEL_W  = 980;
+    // Widened for the Identify button, which needs a real column of its own —
+    // it is a press, not a glyph, and it sits beside the Link button.
+    constexpr int PANEL_W  = 990;
     constexpr int PANEL_H  = 620;
     constexpr int PAD      = 14;
     constexpr int ROW_H    = 34;
@@ -44,7 +46,10 @@ namespace {
 
     enum ButtonId { BTN_SAVE = 1, BTN_NEW, BTN_IMPORT,
                     BTN_CONNECT_ALL, BTN_DISCONNECT_ALL,
-                    BTN_POLL, BTN_SYNC_ALL, BTN_REMOVE };
+                    BTN_POLL, BTN_SYNC_ALL, BTN_REMOVE,
+                    // The read-only latch: BTN_EDIT unlocks the form, BTN_CANCEL
+                    // locks it again without saving. See the note in Rebuild.
+                    BTN_EDIT, BTN_CANCEL };
 
     bool BgIsDark(COLORREF bg) {
         const int lum = (GetRValue(bg) * 299 + GetGValue(bg) * 587 + GetBValue(bg) * 114) / 1000;
@@ -92,10 +97,20 @@ void RemotesWnd::Show() {
     BuildFields();
     Rebuild();
     ShowCenterOverParent();
+    // Subscribe: a target coming up or dropping while this sits open now says
+    // so, instead of waiting for the next click to force a repaint.
+    Remote::Mirror::SetPanelNotifyWindow(GetHwnd());
     // Opening the console is the moment you want to know what is up, so poll
     // immediately rather than showing a table of dashes until F5 is pressed.
     DoPollAll();
     Repaint();
+}
+
+void RemotesWnd::Hide() {
+    // Unsubscribe FIRST, so no sender thread can post to a window on its way
+    // out. A closed console costs them one atomic load.
+    Remote::Mirror::SetPanelNotifyWindow(nullptr);
+    FloatingPanelWnd::Hide();
 }
 
 // =============================================================================
@@ -151,6 +166,9 @@ void RemotesWnd::BuildFields() {
 
 void RemotesWnd::EditField(int fieldIndex) {
     if (fieldIndex < 0 || fieldIndex >= static_cast<int>(m_fields.size())) return;
+    // The latch, checked at the ONE place every field edit starts — keyboard and
+    // mouse both land here, so neither can get in behind the other's back.
+    if (m_formLocked) return;
 
     if (m_fields[fieldIndex].id == F_PORT) {
         const int v = DialogPromptInt(L"Target Port", L"Port (1 - 65535):",
@@ -260,15 +278,33 @@ void RemotesWnd::Rebuild() {
     // a row also loads it into the form. These two act on everything, which
     // needs no selection at all.
     m_buttons.clear();
-    m_buttons.push_back({editing ? L"Update" : L"Save", BTN_SAVE, {}, true,
-        editing ? L"Apply the form to the remote being edited."
-                : L"Record the form as a new remote.\nSaving does not connect — that is the "
-                  L"Connect button in its row, or Connect all."});
-    // Always available: it clears the form, which is meaningful whether or not a
-    // row is loaded. Enabling it only while editing made it look broken to
-    // anyone who had simply typed into the fields and wanted to start over.
-    m_buttons.push_back({L"New", BTN_NEW, {}, true,
-        L"Clear the form and start describing a new remote.\nAbandons any edit in progress."});
+
+    // THE FORM IS READ-ONLY UNTIL YOU SAY OTHERWISE.
+    //
+    // Clicking a row loads it into the form, and the fields used to be live the
+    // moment it landed there — so a stray click on an address, one keystroke,
+    // and a working remote was quietly repointed at nothing. The form is a
+    // VIEW of the selected row by default; editing is a decision.
+    //
+    // So the first pair of buttons swaps between two modes rather than sitting
+    // there permanently: Update/New to get in, Save/Cancel to get out. Two
+    // buttons either way, in the same two positions, so nothing moves.
+    if (m_formLocked) {
+        m_buttons.push_back({L"Update", BTN_EDIT, {}, haveRows,
+            L"Unlock the form so the selected remote can be corrected in place.\n"
+            L"Until then the fields are read-only — a stray click on an address is "
+            L"otherwise one keystroke away from repointing a working remote."});
+        m_buttons.push_back({L"New", BTN_NEW, {}, true,
+            L"Clear the form, unlock it, and start describing a new remote."});
+    } else {
+        m_buttons.push_back({editing ? L"Save changes" : L"Save new", BTN_SAVE, {}, true,
+            editing ? L"Apply the form to the remote being edited, and lock it again."
+                    : L"Record the form as a new remote, and lock it again.\nSaving does "
+                      L"not connect — that is the Connect button in its row, or Connect all."});
+        m_buttons.push_back({L"Cancel", BTN_CANCEL, {}, true,
+            L"Discard the changes and lock the form again.\nThe remote is left exactly as "
+            L"it was."});
+    }
     m_buttons.push_back({L"Add from file…", BTN_IMPORT, {}, true,
         L"Read another instance's settings file — or its .exe, and the .ini beside it is "
         L"found automatically.\nBrings across its port, name, exe and credentials, so there "
@@ -350,8 +386,52 @@ void RemotesWnd::FillFormFromRow(int row) {
     }
 
     BuildFields();
-    Rebuild(); // the Save button becomes Update
-    m_status = L"Editing \"" + r.name + L"\" — Save to apply, New to start a fresh one";
+    Rebuild();
+    // Loading a row does NOT unlock the form. Selecting is looking; editing is a
+    // decision, and it is the Update button.
+    m_status = m_formLocked
+                   ? (L"Showing \"" + r.name + L"\" — press Update to change it")
+                   : (L"Editing \"" + r.name + L"\" — Save changes, or Cancel");
+    Repaint();
+}
+
+void RemotesWnd::DoBeginEdit() {
+    if (m_rows.empty()) return;
+
+    // Whatever row is selected, loaded fresh: the form may still be showing a
+    // row that was clicked several selections ago if nothing reloaded it.
+    FillFormFromRow(m_selectedRow);
+
+    m_formLocked = false;
+    Rebuild();   // Update/New become Save changes/Cancel
+    m_status = L"Editing \"" + m_newName + L"\" — Save changes, or Cancel";
+    Repaint();
+}
+
+void RemotesWnd::DoCancelEdit() {
+    if (m_editingField >= 0) CancelTextEdit();
+
+    m_formLocked = true;
+
+    // Reloaded from the target list rather than merely locked, so a half-typed
+    // address does not sit there looking like the saved value.
+    if (m_editingRowId != 0) {
+        for (size_t i = 0; i < m_rows.size(); ++i) {
+            if (m_rows[i].id != m_editingRowId) continue;
+            FillFormFromRow(static_cast<int>(i));
+            break;
+        }
+    } else {
+        m_newHost = L"127.0.0.1";
+        m_newPort = 0;
+        m_newName.clear();
+        m_newPassword.clear();
+        m_newExe.clear();
+        BuildFields();
+    }
+
+    Rebuild();
+    m_status = L"Nothing was changed.";
     Repaint();
 }
 
@@ -363,9 +443,12 @@ void RemotesWnd::DoNewEntry() {
     m_newName.clear();
     m_newPassword.clear();
     m_newExe.clear();
+    // New is the other way IN to editing — there is nothing to describe a new
+    // remote with while the form is read-only.
+    m_formLocked = false;
     BuildFields();
     Rebuild();
-    m_status.clear();
+    m_status = L"New remote — fill in address, port and name, then Save new";
     Repaint();
 }
 
@@ -471,6 +554,11 @@ void RemotesWnd::DoSaveEntry() {
     m_newPassword.clear();
     m_newExe.clear();
 
+    // Locked again. A save is the end of an edit, so the fields go back to being
+    // read-only without a second press — leaving them live would put the
+    // accidental-keystroke hole straight back.
+    m_formLocked = true;
+
     BuildFields();
     Rebuild();
     m_status = wasEdit ? (L"Updated \"" + e.name + L"\"")
@@ -503,6 +591,25 @@ void RemotesWnd::DoToggleConnect(int row) {
                   : (L"Disconnected from " + name);
     Rebuild();
     if (on) SetTimer(GetHwnd(), TIMER_PENDING, PENDING_DELAY_MS, nullptr);
+    Repaint();
+}
+
+void RemotesWnd::DoIdentify(int row) {
+    if (row < 0 || row >= static_cast<int>(m_rows.size())) return;
+    const RowView &r = m_rows[row];
+
+    // The row's OWN name, so the screen answers the question the button asks:
+    // which of you is this? Falls back to the address, which is still unique and
+    // still tells the two apart.
+    const std::wstring who = r.name.empty()
+                                 ? (r.host + L":" + std::to_wstring(r.port))
+                                 : r.name;
+
+    // SendTo, not a broadcast: every target gets a DIFFERENT text — its own
+    // name — so there is nothing here to fan out.
+    Remote::Mirror::SendTo(r.id, L"msg " + who);
+
+    m_status = L"Told " + who + L" to show its name on screen";
     Repaint();
 }
 
@@ -702,23 +809,6 @@ void RemotesWnd::DoStopTarget(int row) {
     Repaint();
 }
 
-void RemotesWnd::DoToggleObserve(int row) {
-    if (row < 0 || row >= static_cast<int>(m_rows.size())) return;
-
-    const bool on = !m_rows[row].observing;
-    const std::wstring name = m_rows[row].name; // Rebuild() invalidates the row
-    const int id = m_rows[row].id;
-
-    // Exclusive: SetObserving clears any other watched row, so the whole list
-    // has to be re-read rather than just flipping this one.
-    Remote::Mirror::SetObserving(id, on);
-    Rebuild();
-
-    m_status = on ? (L"Observing " + name + L" — this viewer now follows it")
-                  : (L"Stopped observing " + name);
-    Repaint();
-}
-
 void RemotesWnd::DoSyncAll() {
     // One push of this instance's whole view state. Mirroring forwards toggles,
     // and a toggle applied to a different starting state diverges — this is the
@@ -845,6 +935,12 @@ void RemotesWnd::UpdateTip(POINT pt) {
                       L"without saving its session."
                     : L"Click to launch this instance's exe.\nOnly possible for an instance "
                       L"on this machine, and only if an exe was recorded for it.";
+    } else if (const int id = HitTestIdentify(pt); id >= 0) {
+        owner = &m_rows[id].idRect;
+        rect  = m_rows[id].idRect;
+        text  = L"Make that screen say its own name, in the middle of its window.\n"
+                L"Two identical viewers side by side are otherwise anonymous — this "
+                L"is how you tell which row drives which.";
     } else if (const int l = HitTestLink(pt); l >= 0) {
         owner = &m_rows[l].linkRect;
         rect  = m_rows[l].linkRect;
@@ -857,15 +953,6 @@ void RemotesWnd::UpdateTip(POINT pt) {
                       L"Click to retry now instead of waiting for the next attempt."
                     : L"Listed but not dialled. Click to connect.\nBeing in the list does "
                       L"not mean being connected to.";
-    } else if (const int e = HitTestEye(pt); e >= 0) {
-        owner = &m_rows[e].eyeRect;
-        rect  = m_rows[e].eyeRect;
-        text  = m_rows[e].observing
-                    ? L"Watching this instance — it reports what it does and this viewer "
-                      L"follows along. Click to stop."
-                    : L"Click to WATCH this instance: it reports what it does and this "
-                      L"viewer follows along, which is how you see a screen running its own "
-                      L"slideshow.\nOnly one at a time — this switches the others off.";
     } else if (const int f = HitTestField(pt); f >= 0) {
         owner = &m_fields[f]; text = m_fields[f].desc; rect = m_fields[f].rect;
     }
@@ -898,15 +985,18 @@ int RemotesWnd::HitTestDot(POINT pt) const {
     return -1;
 }
 
-int RemotesWnd::HitTestLink(POINT pt) const {
+int RemotesWnd::HitTestIdentify(POINT pt) const {
     for (size_t i = 0; i < m_rows.size(); ++i)
-        if (PtInRect(&m_rows[i].linkRect, pt)) return static_cast<int>(i);
+        // Connected rows only — the button is greyed otherwise, and a hit test
+        // that disagreed with the drawing would fire an invisible button.
+        if (m_rows[i].dot == DotState::Up && PtInRect(&m_rows[i].idRect, pt))
+            return static_cast<int>(i);
     return -1;
 }
 
-int RemotesWnd::HitTestEye(POINT pt) const {
+int RemotesWnd::HitTestLink(POINT pt) const {
     for (size_t i = 0; i < m_rows.size(); ++i)
-        if (PtInRect(&m_rows[i].eyeRect, pt)) return static_cast<int>(i);
+        if (PtInRect(&m_rows[i].linkRect, pt)) return static_cast<int>(i);
     return -1;
 }
 
@@ -969,6 +1059,9 @@ bool RemotesWnd::OnLocalHide() {
     // Esc while editing abandons the edit rather than closing the panel — the
     // same rule the other panels' input fields follow.
     if (m_editingField >= 0) { CancelTextEdit(); return true; }
+    // Then Esc again leaves edit MODE, before a third one closes the panel. Two
+    // escapes to back all the way out of a form is the shape every dialog has.
+    if (!m_formLocked) { DoCancelEdit(); return true; }
     return false;
 }
 
@@ -977,6 +1070,26 @@ bool RemotesWnd::OnLocalHide() {
 // =============================================================================
 LRESULT RemotesWnd::HandlePanelMessage(UINT message, WPARAM wParam, LPARAM lParam) {
     switch (message) {
+        // A target connected, dropped, or changed why it is down. The dot, the
+        // Lag column and the Connect/Disconnect button all read from that state,
+        // so the whole list is re-read — it is a handful of atomic loads plus
+        // one exe stat per row, and it cannot go out of step with itself.
+        case Constants::WM_QIV_REMOTE_TARGETS_CHANGED:
+            // BEFORE the rebuild. Clearing afterwards would drop a change that
+            // landed during it: that change would find the gate still closed,
+            // skip its post, and the console would sit stale again — which is
+            // the bug this whole path exists to fix.
+            Remote::Mirror::ClearPanelNotifyPending();
+            Rebuild();
+            Repaint();
+            return 0;
+
+        // Belt and braces alongside Hide(): a window can also go away without
+        // being hidden first.
+        case WM_DESTROY:
+            Remote::Mirror::SetPanelNotifyWindow(nullptr);
+            break;
+
         case WM_TIMER:
             if (wParam == TIMER_PENDING) {
                 KillTimer(GetHwnd(), TIMER_PENDING);
@@ -992,9 +1105,13 @@ LRESULT RemotesWnd::HandlePanelMessage(UINT message, WPARAM wParam, LPARAM lPara
             if (LOWORD(lParam) != HTCLIENT) break;
             POINT pt; GetCursorPos(&pt);
             ScreenToClient(GetHwnd(), &pt);
+            // A locked field is not clickable, so it must not offer the hand —
+            // the cursor is the first thing that says whether something can be
+            // pressed, and a hand over a dead control is a lie.
             const bool hot = HitTestButton(pt) >= 0 || HitTestDot(pt) >= 0 ||
-                             HitTestLink(pt) >= 0 || HitTestEye(pt) >= 0 ||
-                             HitTestRow(pt) >= 0 || HitTestField(pt) >= 0;
+                             HitTestIdentify(pt) >= 0 ||
+                             HitTestLink(pt) >= 0 || HitTestRow(pt) >= 0 ||
+                             (!m_formLocked && HitTestField(pt) >= 0);
             SetCursor(hot ? Constants::Cursors::CURR_CLICK
                           : Constants::Cursors::CURR_DEFAULT);
             return TRUE;
@@ -1020,6 +1137,8 @@ LRESULT RemotesWnd::HandlePanelMessage(UINT message, WPARAM wParam, LPARAM lPara
             if (b >= 0) {
                 switch (m_buttons[b].id) {
                     case BTN_SAVE:           DoSaveEntry();               break;
+                    case BTN_EDIT:           DoBeginEdit();               break;
+                    case BTN_CANCEL:         DoCancelEdit();              break;
                     case BTN_NEW:            DoNewEntry();                break;
                     case BTN_IMPORT:         DoImportFromFile();          break;
                     case BTN_CONNECT_ALL:    DoConnectAll(true);          break;
@@ -1034,6 +1153,14 @@ LRESULT RemotesWnd::HandlePanelMessage(UINT message, WPARAM wParam, LPARAM lPara
 
             const int f = HitTestField(pt);
             if (f >= 0) {
+                if (m_formLocked) {
+                    // Say why nothing happened. A field that simply ignores a
+                    // click is indistinguishable from one that is broken.
+                    m_status = L"The form is read-only — press Update to change this "
+                               L"remote, or New to add one.";
+                    Repaint();
+                    return 0;
+                }
                 if (m_editingField >= 0 && m_editingField != f) CommitTextEdit();
                 m_selectedField = f;
                 EditField(f);
@@ -1051,6 +1178,13 @@ LRESULT RemotesWnd::HandlePanelMessage(UINT message, WPARAM wParam, LPARAM lPara
                 return 0;
             }
 
+            const int ident = HitTestIdentify(pt);
+            if (ident >= 0) {
+                m_selectedRow = ident;
+                DoIdentify(ident);
+                return 0;
+            }
+
             const int link = HitTestLink(pt);
             if (link >= 0) {
                 m_selectedRow = link;
@@ -1058,12 +1192,6 @@ LRESULT RemotesWnd::HandlePanelMessage(UINT message, WPARAM wParam, LPARAM lPara
                 return 0;
             }
 
-            const int eye = HitTestEye(pt);
-            if (eye >= 0) {
-                m_selectedRow = eye;
-                DoToggleObserve(eye);
-                return 0;
-            }
 
             // Clicking a row selects it AND loads it into the form above, so a
             // saved remote is corrected in place instead of being removed and
@@ -1137,8 +1265,8 @@ LRESULT RemotesWnd::HandlePanelMessage(UINT message, WPARAM wParam, LPARAM lPara
                 const std::wstring sub =
                     std::wstring(L"F11 mirror ") + mirror +
                     L"   ·   F12 execute here " + (app.resendCommandToCaller ? L"ON" : L"off") +
-                    L"   ·   Ctrl+F11 picks which · ● starts/stops the program · "
-                    L"Link connects · ◉ observes · F5 polls";
+                    L"   ·   Ctrl+F11 picks which & watches · ● starts/stops the "
+                    L"program · Identify names the screen · F5 polls";
                 DrawTextW(bb, sub.c_str(), -1, &sr, DT_LEFT | DT_SINGLELINE | DT_END_ELLIPSIS);
             }
 
@@ -1148,10 +1276,20 @@ LRESULT RemotesWnd::HandlePanelMessage(UINT message, WPARAM wParam, LPARAM lPara
             SelectObject(bb, m_hFontBold);
             SetTextColor(bb, PC::HEADER);
             {
+                // The heading says which mode the form is in, because the fields
+                // themselves look nearly the same either way and "why can I not
+                // type here" is the question this whole latch invites.
+                const wchar_t *title = m_formLocked
+                                           ? L"Connection details  (read-only)"
+                                       : m_editingRowId != 0
+                                           ? L"Editing connection"
+                                           : L"New connection";
                 RECT hr{pad + static_cast<int>(6 * s), y, W - pad, y + hdrH};
-                DrawTextW(bb, L"New connection", -1, &hr, DT_LEFT | DT_VCENTER | DT_SINGLELINE);
+                DrawTextW(bb, title, -1, &hr, DT_LEFT | DT_VCENTER | DT_SINGLELINE);
                 RECT st{pad, y + hdrH / 4, pad + static_cast<int>(3 * s), y + hdrH * 3 / 4};
-                FillRect(bb, &st, Gdi::Brush(PC::STRIPE));
+                // The stripe goes the accent colour while the form is live, so
+                // "these fields will accept typing" reads from across the panel.
+                FillRect(bb, &st, Gdi::Brush(m_formLocked ? PC::STRIPE : PC::ON));
             }
             y += hdrH;
 
@@ -1181,6 +1319,9 @@ LRESULT RemotesWnd::HandlePanelMessage(UINT message, WPARAM wParam, LPARAM lPara
                     else if (f.id == F_HOST || f.id == F_EXE) vc = PC::PATH;
                     if (f.value == L"(not set)" || f.value == L"(none)" ||
                         f.value == L"(from its banner)") vc = PC::WARN;
+                    // Dimmed while locked — the same language every disabled
+                    // control in this panel already speaks.
+                    if (m_formLocked) vc = dim;
                     SetTextColor(bb, vc);
                     DrawTextW(bb, f.value.c_str(), -1, &vr,
                               DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_PATH_ELLIPSIS);
@@ -1240,11 +1381,21 @@ LRESULT RemotesWnd::HandlePanelMessage(UINT message, WPARAM wParam, LPARAM lPara
             const int cPort = pad + static_cast<int>(420 * s);
             const int cLag  = pad + static_cast<int>(490 * s);
             const int cDot  = pad + static_cast<int>(645 * s);
-            const int cEye  = pad + static_cast<int>(700 * s);
-            // Link is LAST and is a real button, so it needs a span, not an
-            // anchor: "Disconnect" is the widest label the column ever draws.
-            const int cLinkL = pad + static_cast<int>(770 * s);
-            const int cLinkR = pad + static_cast<int>(916 * s);
+            // No Watch column here any more — the eye moved to Ctrl+F11, where
+            // the rest of the "who drives whom" questions live. This console is
+            // about which instances EXIST and how to reach them.
+            //
+            // Two real buttons, so both need a span rather than an anchor.
+            // Identify sits BEFORE Link: it is the question you ask first —
+            // which screen is this row? — and Link is the one that changes
+            // something, which belongs at the end of the row.
+            // Identify is sized to the WORD; Link stays wider because it has to
+            // hold "Disconnect" and "Connecting…" without the label changing the
+            // button's width as you press it.
+            const int cIdL  = pad + static_cast<int>(700 * s);
+            const int cIdR  = pad + static_cast<int>(776 * s);
+            const int cLinkL = pad + static_cast<int>(798 * s);
+            const int cLinkR = pad + static_cast<int>(944 * s);
 
             SelectObject(bb, m_hFontSmall);
             SetTextColor(bb, PC::HEADER);
@@ -1264,7 +1415,8 @@ LRESULT RemotesWnd::HandlePanelMessage(UINT message, WPARAM wParam, LPARAM lPara
                 };
                 hdr(cNum, L"#"); hdr(cName, L"Name"); hdr(cHost, L"Address");
                 hdr(cPort, L"Port"); hdr(cLag, L"Lag");
-                hdrC(cDot, L"Up"); hdrC(cEye, L"Watch");
+                hdrC(cDot, L"Up");
+                hdrC((cIdL + cIdR) / 2, L"Identify");
                 hdrC((cLinkL + cLinkR) / 2, L"Link");
             }
             y += hdrH;
@@ -1345,17 +1497,38 @@ LRESULT RemotesWnd::HandlePanelMessage(UINT message, WPARAM wParam, LPARAM lPara
                     SelectObject(bb, ob2); SelectObject(bb, op2);
                 }
 
-                // Observation — drawn as text so it follows the theme and needs
-                // no assets. Filled when watched, hollow when not.
-                // Symmetric about cEye — an off-centre rect makes DT_CENTER put
-                // the glyph half its skew away from the header above it.
-                r.eyeRect = {cEye - static_cast<int>(16 * s), y,
-                             cEye + static_cast<int>(16 * s), y + rowH};
+                // Identify — make THIS screen say who it is. Sends the row's own
+                // name as a centre-screen message to that instance, which is the
+                // only way to tell two identical viewers apart without walking
+                // over to them.
+                //
+                // Only meaningful down a live connection, so it is greyed when
+                // the row is not connected — a press that queues a message for a
+                // screen that is not listening looks like a broken button.
                 {
-                    SetTextColor(bb, r.observing ? PC::ON : dim);
-                    RECT er2 = r.eyeRect;
-                    DrawTextW(bb, r.observing ? L"◉" : L"○", -1, &er2,
+                    const int vin = static_cast<int>(4 * s);
+                    r.idRect = {cIdL, y + vin, cIdR, y + rowH - vin};
+
+                    const bool live = (r.dot == DotState::Up);
+                    COLORREF base = live ? PC::BTN_MAIN : bg;
+                    if (live && static_cast<int>(i) == m_hotRow)
+                        base = RGB(std::min(255, GetRValue(base) + 40),
+                                   std::min(255, GetGValue(base) + 40),
+                                   std::min(255, GetBValue(base) + 40));
+                    FillRect(bb, &r.idRect, Gdi::Brush(base));
+
+                    HGDIOBJ op4 = SelectObject(bb, Gdi::Pen(line));
+                    HGDIOBJ ob4 = SelectObject(bb, GetStockObject(NULL_BRUSH));
+                    Rectangle(bb, r.idRect.left, r.idRect.top,
+                              r.idRect.right, r.idRect.bottom);
+                    SelectObject(bb, ob4); SelectObject(bb, op4);
+
+                    SelectObject(bb, m_hFontSmall);
+                    SetTextColor(bb, live ? RGB(245, 245, 245) : dim);
+                    RECT ir = r.idRect;
+                    DrawTextW(bb, L"Identify", -1, &ir,
                               DT_CENTER | DT_VCENTER | DT_SINGLELINE);
+                    SelectObject(bb, m_hFontBody);
                 }
 
                 // Link — connect / disconnect THIS row. Last column, and drawn

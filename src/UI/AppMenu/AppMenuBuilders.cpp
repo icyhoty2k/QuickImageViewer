@@ -8,6 +8,8 @@
 #include "Platform/Constants.h"
 #include "Platform/ConstantsStrings.h"
 #include "SlideshowTransitions.h" // TransitionDisplayOrder — shared menu/sequential order
+#include "Rem_TCP_IP/RemoteMirror.h" // ConnectedCount / MirroredLiveCount — the
+                                     // status line under RemoteActivation
 
 #include <string>
 
@@ -84,6 +86,11 @@ Command CommandForId(int id) {
         case Id::ID_REMOTES_CONSOLE: return Command::ToggleRemotesConsole;
         case Id::ID_REMOTES_CONTROL: return Command::MirrorPick;
         case Id::ID_REMOTE_LOG:      return Command::ToggleRemoteLog;
+        // Straight to the same commands F11 and F12 resolve to, so the menu and
+        // the keys cannot drift apart — the overlay, the mirror gate and the
+        // "nothing picked" handling all come free.
+        case Id::ID_REMOTE_MIRROR:    return Command::MirrorToggle;
+        case Id::ID_REMOTE_EXEC_HERE: return Command::MirrorLocalToggle;
         default:                     return Command::None;
     }
 }
@@ -331,6 +338,43 @@ static HMENU BuildSortMenu() {
     return m;
 }
 
+// RemoteActivation — the two mirroring switches, shown as checkboxes.
+//
+// The point is READING them, not only setting them. F11 and F12 announce
+// themselves on a centre overlay that fades after a couple of seconds, so once
+// it had gone the only way to find out whether mirroring was on was to press
+// the key — which also changed it. Opening this submenu answers the question
+// without touching anything.
+//
+// Checkable rather than two separate on/off rows: these are toggles, and a tick
+// is how Windows spells a toggle everywhere else in this menu.
+static HMENU BuildRemoteActivationMenu() {
+    HMENU m = CreatePopupMenu();
+
+    AppendMenuW(m, MF_STRING | CheckFlag(app.passCommandToRemote),
+                Id::ID_REMOTE_MIRROR, L"Mirror my commands to remotes\tF11");
+    // Says plainly what OFF means, because "also execute here" being off turns
+    // this viewer into a pure remote control — its own screen stops moving,
+    // which looks broken to anyone who did not set it.
+    AppendMenuW(m, MF_STRING | CheckFlag(app.resendCommandToCaller),
+                Id::ID_REMOTE_EXEC_HERE, L"…and also run them here\tF12");
+
+    AppendMenuW(m, MF_SEPARATOR, 0, nullptr);
+
+    // Disabled context line, not a clickable item: this is the state the two
+    // ticks above cannot show — WHO is being driven. Without it "Mirror" ticked
+    // with nothing connected reads as working.
+    const int live   = Remote::Mirror::ConnectedCount();
+    const int driven = Remote::Mirror::MirroredLiveCount();
+    const std::wstring status =
+        live == 0 ? std::wstring(L"Nothing connected — see Remote Servers (F10)")
+                  : (L"Driving " + std::to_wstring(driven) + L" of " +
+                     std::to_wstring(live) + L" connected");
+    AppendMenuW(m, MF_STRING | MF_DISABLED, 0, status.c_str());
+
+    return m;
+}
+
 static HMENU BuildWallpaperMenu() {
     HMENU m = CreatePopupMenu();
     for (int i = 0; i < Constants::Wallpaper::COUNT; ++i)
@@ -375,6 +419,11 @@ HMENU Build(HWND hWnd) {
     AppendMenuW(m, MF_STRING, Id::ID_REMOTES_CONSOLE, L"Remote Servers\tF10");
     AppendMenuW(m, MF_STRING, Id::ID_REMOTES_CONTROL, L"Remotes Control\tCtrl+F11");
     AppendMenuW(m, MF_STRING, Id::ID_REMOTE_LOG,      L"RemoteLog\tCtrl+F12");
+    // Last of the remote group and immediately before Help: the two switches
+    // are what you check most often, and this is the shortest reach to them.
+    AppendMenuW(m, MF_POPUP,
+                reinterpret_cast<UINT_PTR>(BuildRemoteActivationMenu()),
+                L"RemoteActivation");
     // Help
     const std::wstring help = std::wstring(L"Help v") + Constants::APP_VERSION + L"\tF1";
     AppendMenuW(m, MF_STRING, Id::ID_HELP, help.c_str());

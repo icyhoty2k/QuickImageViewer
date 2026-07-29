@@ -17,18 +17,25 @@
 //
 // Two sections:
 //
-//   New connection   address, port, password, name, exe. Save records it in
-//                    qivRemotes.ini; Connect dials it. Two acts, two buttons —
-//                    a screen can be listed while it is switched off, or before
-//                    it has been configured at all, and the alternative was a
-//                    saved list that could only contain reachable things.
+//   Connection       address, port, password, name, exe. READ-ONLY until Update
+//   details          or New is pressed; Save or Cancel locks it again. Clicking
+//                    a row loads it here, and the fields used to be live the
+//                    moment it landed — a stray click on an address plus one
+//                    keystroke quietly repointed a working remote at nothing.
+//                    Selecting is looking; editing is a decision.
+//
+//                    Save records it in qivRemotes.ini; Connect dials it. Two
+//                    acts, two buttons — a screen can be listed while it is
+//                    switched off, or before it has been configured at all, and
+//                    the alternative was a saved list that could only contain
+//                    reachable things.
 //
 //   Remotes          one row per known instance:
 //
-//     #   Name        IP           Port   Lag      Up   Link  Watch
-//     1   Monitor2    127.0.0.1    8771   0.4 ms   ●    on    ◉
-//     2   Monitor3    10.0.0.5     8772   offline  ●    on    ○
-//     3   Spare       127.0.0.1    8773   not conn ●    off   ○
+//     #   Name        IP           Port   Lag      Up  Identify    Link
+//     1   Monitor2    127.0.0.1    8771   0.4 ms   ●   [Identify]  [Disconnect]
+//     2   Monitor3    10.0.0.5     8772   offline  ●               [Connect]
+//     3   Spare       127.0.0.1    8773   not conn ●               [Connect]
 //
 //   Three separate things, deliberately not merged into one control:
 //
@@ -44,13 +51,18 @@
 //        a row also loads it into the form, which made "the selected row"
 //        ambiguous at exactly the moment it mattered.
 //
-//     ◉  observation. On, the target reports what IT does and this viewer
-//        follows along — how you watch a screen running its own slideshow.
-//        A RADIO BUTTON, not a checkbox: switching one on switches the others
-//        off, because two at once would interleave two unrelated streams of
-//        actions into this one screen and follow neither.
+//     Identify  makes that screen say its own name, centre-screen (`msg` on the
+//        wire). A wall of identical viewers gives no clue which row drives
+//        which; this is the answer, and it needs no walk across the room. Live
+//        rows only — queueing a message for a screen that is not listening
+//        would look like a button that did nothing.
 //
 //     F5 polls every row and fills in the lag column.
+//
+//   WATCH (◉) LIVES IN Ctrl+F11 now, not here. This console answers "which
+//   instances exist, and how do I reach them"; who drives whom — mirroring,
+//   observing, identifying — is the Remotes Control panel's whole subject, and
+//   the eye was the one control here that answered that question instead.
 //
 // -----------------------------------------------------------------------------
 // NOTHING HERE BLOCKS THE UI THREAD.
@@ -72,6 +84,9 @@ class RemotesWnd : public FloatingPanelWnd {
         void Init(HINSTANCE hInstance, HWND hParent) override;
         void Init(HINSTANCE hInstance, HWND hParent, int8_t position) override;
         void Show() override;
+        // Overridden only to unsubscribe from Remote::Mirror's change
+        // notification — see SetPanelNotifyWindow.
+        void Hide() override;
 
         ~RemotesWnd() {
             if (m_hFontBody)  DeleteObject(m_hFontBody);
@@ -133,8 +148,8 @@ class RemotesWnd : public FloatingPanelWnd {
 
             RECT rect{};      // whole row
             RECT dotRect{};   // ● hit box — start / stop the PROCESS
-            RECT linkRect{};  // on/off hit box — connect / disconnect the LINK
-            RECT eyeRect{};   // ◉ hit box — observe
+            RECT idRect{};    // Identify — make that screen say its own name
+            RECT linkRect{};  // Connect/Disconnect hit box — the LINK
         };
 
         struct Button {
@@ -152,8 +167,13 @@ class RemotesWnd : public FloatingPanelWnd {
         //
         // Adds a row, or UPDATES the one loaded by clicking it (m_editingRowId).
         void DoSaveEntry();
-        // Abandon an edit and go back to describing a new remote.
+        // Abandon an edit and go back to describing a new remote. Unlocks.
         void DoNewEntry();
+        // Unlock the form on the selected row, so it can be corrected in place.
+        void DoBeginEdit();
+        // Lock it again, discarding whatever was typed — the row is reloaded
+        // from the target list, so a half-finished edit leaves no trace.
+        void DoCancelEdit();
         // Clicking a row loads it into the form — its address, port, name, exe
         // and stored credential — so it can be corrected in place rather than
         // removed and retyped.
@@ -169,7 +189,9 @@ class RemotesWnd : public FloatingPanelWnd {
         void DoRemoveTarget(int row);
         void DoStartTarget(int row);   // CreateProcess on its exe (same machine only)
         void DoStopTarget(int row);    // `quit` down the live connection
-        void DoToggleObserve(int row);
+        // Send this row its own name as a centre-screen message, so that screen
+        // says who it is. Two viewers side by side are otherwise anonymous.
+        void DoIdentify(int row);
         void DoSyncAll();          // push this instance's view state to every target
 
         // --- Form ------------------------------------------------------------
@@ -206,8 +228,8 @@ class RemotesWnd : public FloatingPanelWnd {
         int  HitTestField(POINT pt) const;
         int  HitTestRow(POINT pt) const;
         int  HitTestDot(POINT pt) const;
+        int  HitTestIdentify(POINT pt) const;
         int  HitTestLink(POINT pt) const;
-        int  HitTestEye(POINT pt) const;
         int  HitTestButton(POINT pt) const;
 
         // --- Dialog helpers (panel is topmost; dialogs are not) --------------
@@ -236,6 +258,15 @@ class RemotesWnd : public FloatingPanelWnd {
         // Remove-then-retype, and Save would refuse the edit as a duplicate
         // name — the row it collided with being the row being edited.
         int m_editingRowId = 0;
+
+        // Is the New-connection form READ-ONLY? True until Update or New is
+        // pressed; true again after Save or Cancel.
+        //
+        // Clicking a row loads it into the form, and the fields used to be live
+        // the moment it landed there — so a stray click on an address plus one
+        // keystroke quietly repointed a working remote at nothing. The form is a
+        // VIEW of the selected row by default; editing is a decision.
+        bool m_formLocked = true;
 
         InputBox m_edit;
         int      m_editingField = -1;

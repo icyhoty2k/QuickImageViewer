@@ -219,6 +219,28 @@ namespace {
         return MakeOk(on ? L"1" : L"0");
     }
 
+    // --- msg <text> ---------------------------------------------------------
+    // Put a centre-screen message on THIS instance, on somebody else's say-so.
+    //
+    // The whole point is the F10 console's Identify button: a wall of identical
+    // viewers gives no clue which row drives which screen, so each target is
+    // sent its own name and says who it is.
+    //
+    // Bounded, because the payload is attacker-controlled in the sense that
+    // anything past the address gates can send it: an unbounded string would be
+    // drawn every frame by the overlay until it expires.
+    std::wstring DoMsgRemote(HWND hWnd, const std::wstring &payload) {
+        if (payload.empty())
+            return MakeErr(RT::ERR_BAD_PAYLOAD, L"expected some text");
+
+        std::wstring text = payload;
+        constexpr size_t MAX_MSG = 200;
+        if (text.size() > MAX_MSG) text.resize(MAX_MSG);
+
+        g_overlayManager.PostCenterMessage(hWnd, text);
+        return MakeOk(text);
+    }
+
     // --- zoom <percent> -----------------------------------------------------
     // Same arithmetic as ZoomWnd, and for the same reason: viewport.zoom is a
     // MULTIPLIER on the view mode's base scale, not an absolute percentage, so
@@ -557,6 +579,9 @@ bool ExecutePayload(HWND hWnd, Command cmd, const std::wstring &payload,
             return true;
         case Command::EnableRemoteLog:
             replyOut = DoEnableLog(payload);
+            return true;
+        case Command::msgRemote:
+            replyOut = DoMsgRemote(hWnd, payload);
             return true;
         default:
             return false;

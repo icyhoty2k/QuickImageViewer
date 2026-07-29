@@ -21,6 +21,32 @@
 // only thing worth seeing: what this instance did in response to what it was
 // told, in the order it happened.
 //
+// TWO LIVE COUNTS sit at the right of the button row, in space that was empty:
+//
+//   Connections  n / m   how many targets are CONNECTED, of how many are listed
+//   Control      n / m   how many of the connected ones F11 actually DRIVES —
+//                        the mirror ticks in Ctrl+F11
+//
+// They are also TOGGLE BUTTONS for the panels behind those numbers: pressing
+// one opens the F10 console or the Ctrl+F11 panel and brings it to the front,
+// pressing it again closes it. "2 / 5" is immediately followed by wanting to
+// know which three are missing, and then by wanting the window out of the way
+// again.
+//
+// Bringing it to the front needs an explicit HWND_TOPMOST re-assert, not just
+// Show(): every panel in this app is WS_EX_TOPMOST, so they share one z-band,
+// and re-showing a window that is already visible leaves it wherever it sat in
+// that band — behind this log, which is exactly where it cannot be read.
+//
+// Their fill shows the TOGGLE state (is that panel open?), not the count. A
+// toggle whose lit state tracked something other than what it toggles is a
+// button that lies about its own press. The count instead speaks through the
+// TEXT: dimmed digits mean zero.
+//
+// Their labels are built by the PAINTER, not by BuildButtons: a label baked in
+// at rebuild time would freeze until the next log entry landed, and the whole
+// value of a count is that it is current.
+//
 // RECORDING IS OFF BY DEFAULT (Constants::RemoteTcpIp::REMOTE_LOG_DEFAULT) and
 // is switched on by the button in this panel — which also pushes the same switch
 // to every connected instance, because a log of one end of a conversation
@@ -58,6 +84,8 @@
 
 namespace UI {
 
+class RemoteLogWnd;   // the detail window steps through ITS ordering — see below
+
 // =============================================================================
 // RemoteLogEntryWnd — ONE entry, every field on its own row, nothing trimmed.
 //
@@ -94,6 +122,12 @@ class RemoteLogEntryWnd : public FloatingPanelWnd {
         // show me this one" would leave a trail of windows to close.
         void ShowEntry(const Remote::Log::Entry &e);
 
+        // Prev/Next walk the LIST's current ordering, not the entry numbers: the
+        // list owns the sort, and stepping by seq while the user is sorted by
+        // Δ time would jump somewhere they cannot see. So the step is delegated
+        // back to the owner, which moves its selection and calls ShowEntry.
+        void SetOwner(RemoteLogWnd *owner) { m_owner = owner; }
+
     protected:
         LRESULT HandlePanelMessage(UINT message, WPARAM wParam, LPARAM lParam) override;
         bool    OnKeyDown(WPARAM vk, bool ctrl, bool shift, bool alt) override;
@@ -104,8 +138,17 @@ class RemoteLogEntryWnd : public FloatingPanelWnd {
             std::wstring   value;
         };
 
+        struct Btn {
+            const wchar_t *label;
+            int            id = 0;
+            RECT           rect{};
+            bool           enabled = true;
+        };
+
         void DoCopy();            // the whole entry, as text, to the clipboard
+        void DoStep(int delta);   // −1 previous, +1 next, in the list's order
         void BuildFields();
+        int  HitTestBtn(POINT pt) const;
         int  ContentHeightPx();   // measured with DT_CALCRECT — values wrap
         int  ViewHeightPx() const;
         void ScrollTo(int y);
@@ -115,11 +158,12 @@ class RemoteLogEntryWnd : public FloatingPanelWnd {
         void DestroyBackBuffer();
         void Repaint();
 
+        RemoteLogWnd      *m_owner = nullptr;
         Remote::Log::Entry m_entry{};
         std::vector<Field> m_fields;
+        std::vector<Btn>   m_buttons;
 
-        RECT m_copyRect{};
-        bool m_copyHot = false;
+        int m_hotBtn = -1;
 
         RECT m_track{}, m_thumb{};
         bool m_thumbHot  = false;
@@ -147,6 +191,16 @@ class RemoteLogWnd : public FloatingPanelWnd {
         void Init(HINSTANCE hInstance, HWND hParent, int8_t position) override;
         void Show() override;
         void Hide() override;
+
+        // Move the selection by `delta` rows in the CURRENT ordering and push
+        // the new row into the detail window if it is open. Public because the
+        // detail window's Prev/Next call it — the list owns the sort, so it is
+        // the only thing that knows what "next" means.
+        //
+        // Returns false when the move would leave the list, so the caller can
+        // grey a button rather than silently do nothing.
+        bool StepSelection(int delta);
+        bool CanStepSelection(int delta) const;
 
         ~RemoteLogWnd() {
             if (m_hFontBody)  DeleteObject(m_hFontBody);
@@ -189,6 +243,9 @@ class RemoteLogWnd : public FloatingPanelWnd {
         void DoSave();
         void DoLoad();
         void DoSort(SortKey key); // same key again reverses
+        // Open the selected row in the detail window — the answer to a table
+        // that has to ellipsise. Double-click, or Enter.
+        void DoOpenDetail();
 
         // --- Model -----------------------------------------------------------
         void Rebuild();           // Remote::Log::Snapshot() → m_rows, then sorted
@@ -221,6 +278,12 @@ class RemoteLogWnd : public FloatingPanelWnd {
         void Repaint();
         int  HitTestButton(POINT pt) const;
         int  HitTestHeader(POINT pt) const;  // index into m_columns, or -1
+        // Row under the cursor, or -1. Computed from the scroll offset rather
+        // than from stored rects: only the visible band is painted, so most rows
+        // have no rect to test against.
+        int  HitTestRow(POINT pt) const;
+        // Scrolls the selected row into view after a keyboard move.
+        void EnsureSelectionVisible();
 
         std::vector<Remote::Log::Entry> m_rows;
         std::vector<Button>             m_buttons;
@@ -228,6 +291,17 @@ class RemoteLogWnd : public FloatingPanelWnd {
 
         SortKey m_sortKey       = SortKey::Seq;
         bool    m_sortAscending = true;
+
+        // Tracked by ENTRY NUMBER, not row index. New entries arrive constantly
+        // and a sort reorders everything; an index would silently come to mean a
+        // different exchange, which is exactly the row the user is about to open.
+        // 0 = nothing selected.
+        long long m_selectedSeq = 0;
+        int       m_selectedRow = -1;   // resolved from m_selectedSeq by Rebuild
+
+        // The detail window. Owned here because it has no life of its own — it
+        // exists to show a row of this list.
+        RemoteLogEntryWnd m_detail;
 
         // Scroll offsets in PIXELS, both clamped by UpdateScrollBars. Pixels
         // rather than rows for the vertical one too, so a wheel notch and a thumb

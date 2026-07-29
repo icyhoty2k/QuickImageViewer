@@ -4,6 +4,9 @@
 #include "AppState.h"
 #include "Platform/Constants.h"
 #include "Input/Command.h"       // InputManager::ExecuteCommand — the one sink
+// Safe from a .cpp even though UIManager.h includes THIS header: the guard has
+// already fired by the time it is reached, so there is no cycle.
+#include "UI/UIManager.h"        // the two readouts open F10 / Ctrl+F11
 #include "UI/GdiPool.h"          // pooled brushes and pens — never DeleteObject them
 
 #include <algorithm>
@@ -39,7 +42,13 @@ namespace {
     // of change to hook; this one is a list that only ever grows when something
     // adds to it, and the adder can say so. RemoteLog posts
     // WM_QIV_REMOTE_LOG_ADDED, coalesced at the source.
-    enum ButtonId { BTN_RECORD = 1, BTN_CLEAR, BTN_SAVE, BTN_LOAD };
+    enum ButtonId { BTN_RECORD = 1, BTN_CLEAR, BTN_SAVE, BTN_LOAD,
+                    // Right-aligned status readouts that are also shortcuts.
+                    // They sit in the empty half of the button row, which was
+                    // doing nothing, and answer the question you have while
+                    // looking at a log: is anything actually connected, and is
+                    // anything actually being driven?
+                    BTN_CONNS, BTN_CONTROL };
 
     // RECT members are LONG, and every size here is compared against an int
     // expression — std::max(0, rc.bottom - rc.top) will not deduce a common type
@@ -47,6 +56,25 @@ namespace {
     // of the six call sites.
     int RectW(const RECT &r) { return static_cast<int>(r.right - r.left); }
     int RectH(const RECT &r) { return static_cast<int>(r.bottom - r.top); }
+
+    // Open it, or close it if it is already open — and when opening, actually
+    // put it in front.
+    //
+    // Show() alone is not enough: every panel here is WS_EX_TOPMOST, so they sit
+    // in the same z-band and re-showing one that is already visible leaves it
+    // wherever it was in that band — behind this log, usually, which is exactly
+    // where you cannot see it. The explicit HWND_TOPMOST re-assert is what
+    // reorders it WITHIN the band; SetForegroundWindow alone does not, because
+    // the window never lost activation to begin with.
+    void ToggleToFront(UI::IPanelWindow &panel) {
+        if (panel.IsVisible()) { panel.Hide(); return; }
+
+        panel.Show();
+        if (HWND h = panel.GetHwnd()) {
+            SetWindowPos(h, HWND_TOPMOST, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE);
+            SetForegroundWindow(h);
+        }
+    }
 
     bool BgIsDark(COLORREF bg) {
         const int lum = (GetRValue(bg) * 299 + GetGValue(bg) * 587 + GetBValue(bg) * 114) / 1000;
@@ -63,8 +91,11 @@ namespace {
 // =============================================================================
 void RemoteLogWnd::Init(HINSTANCE hInstance, HWND hParent) {
     const float s = app.dpiScale;
+    // CS_DBLCLKS, or WM_LBUTTONDBLCLK is never sent and a double-click arrives
+    // as two separate downs — the window class decides this, not the window.
     InitFloating(hInstance, hParent, L"qIVRemoteLogWnd", L"RemoteLog",
-                 static_cast<int>(PANEL_W * s), static_cast<int>(PANEL_H * s));
+                 static_cast<int>(PANEL_W * s), static_cast<int>(PANEL_H * s),
+                 CS_DBLCLKS);
     if (!GetHwnd()) return;
 
     SetWindowLongPtrW(GetHwnd(), GWL_EXSTYLE,
@@ -112,6 +143,10 @@ void RemoteLogWnd::Hide() {
     // Unsubscribe FIRST, so a sender thread cannot post to a window that is on
     // its way out. A closed panel costs the producers one atomic load.
     Remote::Log::SetNotifyWindow(nullptr);
+    // The detail window is a satellite: it shows a row of THIS list, and its
+    // Prev/Next step through this list's ordering. Leaving it floating after the
+    // list closed would leave buttons that act on something not on screen.
+    if (m_detail.GetHwnd()) m_detail.Hide();
     FloatingPanelWnd::Hide();
 }
 
@@ -122,6 +157,15 @@ void RemoteLogWnd::Rebuild() {
     m_rows = RL::Snapshot();
     ApplySort();
     BuildButtons();
+
+    // Re-find the selection by entry number. Rows arrive and the sort reorders,
+    // so the index that pointed at an exchange a moment ago points at a
+    // different one now. -1 when the selected entry has been trimmed away.
+    m_selectedRow = -1;
+    if (m_selectedSeq) {
+        for (size_t i = 0; i < m_rows.size(); ++i)
+            if (m_rows[i].seq == m_selectedSeq) { m_selectedRow = static_cast<int>(i); break; }
+    }
 
     // Tail-following, but only while the view is already at the bottom — see
     // the header. Set before the clamp so the clamp confirms it rather than
@@ -166,6 +210,13 @@ void RemoteLogWnd::BuildButtons() {
     m_buttons.push_back({L"Clear",  BTN_CLEAR, {}, any});
     m_buttons.push_back({L"Save…",  BTN_SAVE,  {}, any});
     m_buttons.push_back({L"Load…",  BTN_LOAD,  {}, true});
+
+    // Labels deliberately EMPTY. These two carry live counts, and building the
+    // text here would freeze it until the next Rebuild — which only happens
+    // when a log entry lands. The painter fills them in on every repaint
+    // instead, so they are current whenever the panel is on screen.
+    m_buttons.push_back({L"", BTN_CONNS,   {}, true});
+    m_buttons.push_back({L"", BTN_CONTROL, {}, true});
 }
 
 // =============================================================================
@@ -375,6 +426,69 @@ int RemoteLogWnd::HitTestHeader(POINT pt) const {
     return -1;
 }
 
+int RemoteLogWnd::HitTestRow(POINT pt) const {
+    const int top = ListTopPx();
+    const int bot = top + ViewHeightPx();
+    if (pt.y < top || pt.y >= bot) return -1;
+
+    const float s = app.dpiScale;
+    const int pad = static_cast<int>(PAD * s);
+    if (pt.x < pad || pt.x >= pad + ViewWidthPx()) return -1;
+
+    // Arithmetic, not stored rects: only the visible band is painted, so the
+    // rows above and below the viewport have no rect to test.
+    const int idx = (pt.y - top + m_scrollY) / RowHeightPx();
+    return (idx >= 0 && idx < static_cast<int>(m_rows.size())) ? idx : -1;
+}
+
+void RemoteLogWnd::EnsureSelectionVisible() {
+    if (m_selectedRow < 0) return;
+    const int rowH = RowHeightPx();
+    const int top  = m_selectedRow * rowH;
+    const int bot  = top + rowH;
+
+    // Only moves when the row is actually outside — scrolling a row that is
+    // already visible into the middle of the view makes the list lurch on every
+    // arrow press.
+    if (top < m_scrollY)                     ScrollTo(m_scrollX, top);
+    else if (bot > m_scrollY + ViewHeightPx()) ScrollTo(m_scrollX, bot - ViewHeightPx());
+    else Repaint();
+}
+
+void RemoteLogWnd::DoOpenDetail() {
+    if (m_selectedRow < 0 || m_selectedRow >= static_cast<int>(m_rows.size())) return;
+
+    // Parented to the MAIN window, not to this panel: a panel owned by a panel
+    // is destroyed when the owner hides, and closing the list while reading a
+    // row would take the row with it.
+    if (!m_detail.GetHwnd()) {
+        m_detail.Init(reinterpret_cast<HINSTANCE>(GetWindowLongPtrW(GetHwnd(), GWLP_HINSTANCE)),
+                      m_hParent);
+        m_detail.SetOwner(this);
+    }
+    m_detail.ShowEntry(m_rows[static_cast<size_t>(m_selectedRow)]);
+}
+
+bool RemoteLogWnd::CanStepSelection(int delta) const {
+    const int next = m_selectedRow + delta;
+    return m_selectedRow >= 0 && next >= 0 && next < static_cast<int>(m_rows.size());
+}
+
+bool RemoteLogWnd::StepSelection(int delta) {
+    if (!CanStepSelection(delta)) return false;
+
+    m_selectedRow += delta;
+    m_selectedSeq  = m_rows[static_cast<size_t>(m_selectedRow)].seq;
+
+    // Stepping from the detail window scrolls the LIST too, so closing it leaves
+    // the caret where the reading got to rather than back where it started.
+    EnsureSelectionVisible();
+
+    if (m_detail.GetHwnd() && m_detail.IsVisible())
+        m_detail.ShowEntry(m_rows[static_cast<size_t>(m_selectedRow)]);
+    return true;
+}
+
 // =============================================================================
 // Keyboard
 // =============================================================================
@@ -382,15 +496,35 @@ bool RemoteLogWnd::OnKeyDown(WPARAM vk, bool ctrl, bool /*shift*/, bool /*alt*/)
     const int row  = RowHeightPx();
     const int page = std::max(row, ViewHeightPx());
 
+    // Rows per page, so PgUp/PgDn move the SELECTION by a screenful rather than
+    // scrolling out from under it.
+    const int perPage = std::max(1, page / row);
+
     switch (vk) {
-        case VK_UP:    ScrollTo(m_scrollX, m_scrollY - row);  return true;
-        case VK_DOWN:  ScrollTo(m_scrollX, m_scrollY + row);  return true;
-        case VK_PRIOR: ScrollTo(m_scrollX, m_scrollY - page); return true;
-        case VK_NEXT:  ScrollTo(m_scrollX, m_scrollY + page); return true;
+        // Up/Down move the selection, not the view — the list is clickable now,
+        // and a caret that the arrow keys cannot move is a caret that looks
+        // broken. The view follows via EnsureSelectionVisible.
+        case VK_UP:
+            if (m_selectedRow < 0) { m_selectedRow = 0; m_selectedSeq = m_rows.empty() ? 0 : m_rows[0].seq; EnsureSelectionVisible(); }
+            else StepSelection(-1);
+            return true;
+        case VK_DOWN:
+            if (m_selectedRow < 0) { m_selectedRow = 0; m_selectedSeq = m_rows.empty() ? 0 : m_rows[0].seq; EnsureSelectionVisible(); }
+            else StepSelection(+1);
+            return true;
+        case VK_PRIOR:
+            if (!StepSelection(-perPage)) StepSelection(-m_selectedRow);
+            return true;
+        case VK_NEXT:
+            if (!StepSelection(+perPage))
+                StepSelection(static_cast<int>(m_rows.size()) - 1 - m_selectedRow);
+            return true;
+        // Horizontal stays pure scrolling: there is nothing to select sideways.
         case VK_LEFT:  ScrollTo(m_scrollX - row * 2, m_scrollY); return true;
         case VK_RIGHT: ScrollTo(m_scrollX + row * 2, m_scrollY); return true;
         case VK_HOME:  ScrollTo(0, 0); return true;
         case VK_END:   ScrollTo(m_scrollX, ContentHeightPx()); return true;
+        case VK_RETURN: DoOpenDetail(); return true;
         case VK_F5:    Rebuild(); Repaint(); return true;
         case 'S': if (ctrl) { DoSave(); return true; } break;
         case 'O': if (ctrl) { DoLoad(); return true; } break;
@@ -525,6 +659,17 @@ LRESULT RemoteLogWnd::HandlePanelMessage(UINT message, WPARAM wParam, LPARAM lPa
                     case BTN_CLEAR:  DoClear();         break;
                     case BTN_SAVE:   DoSave();          break;
                     case BTN_LOAD:   DoLoad();          break;
+                    case BTN_CONNS:
+                        ToggleToFront(uiManager.getRemotesConsoleWindow());
+                        // The button's own lit state just changed, and opening
+                        // another window takes the focus — so this panel would
+                        // not otherwise repaint until something else touched it.
+                        Repaint();
+                        break;
+                    case BTN_CONTROL:
+                        ToggleToFront(uiManager.getMirrorPickerWindow());
+                        Repaint();
+                        break;
                     default: break;
                 }
                 return 0;
@@ -560,6 +705,27 @@ LRESULT RemoteLogWnd::HandlePanelMessage(UINT message, WPARAM wParam, LPARAM lPa
                          m_scrollY);
                 return 0;
             }
+
+            // Last, so the bars and the header get the click first.
+            const int r = HitTestRow(pt);
+            if (r >= 0) {
+                m_selectedRow = r;
+                m_selectedSeq = m_rows[static_cast<size_t>(r)].seq;
+                Repaint();
+            }
+            return 0;
+        }
+
+        // Double-click a row → the whole entry, untrimmed. The table has to
+        // ellipsise; this is where the full text lives.
+        case WM_LBUTTONDBLCLK: {
+            POINT pt{GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam)};
+            const int r = HitTestRow(pt);
+            if (r >= 0) {
+                m_selectedRow = r;
+                m_selectedSeq = m_rows[static_cast<size_t>(r)].seq;
+                DoOpenDetail();
+            }
             return 0;
         }
 
@@ -578,6 +744,7 @@ LRESULT RemoteLogWnd::HandlePanelMessage(UINT message, WPARAM wParam, LPARAM lPa
             const COLORREF fg    = dark ? RGB(235,235,235) : RGB(24,24,24);
             const COLORREF dim   = dark ? RGB(150,150,150) : RGB(110,110,110);
             const COLORREF altBg = dark ? RGB(42,42,46)    : RGB(244,244,246);
+            const COLORREF selBg = dark ? RGB(58,86,132)   : RGB(203,222,250);
             const COLORREF line  = dark ? RGB(64,64,64)    : RGB(220,220,220);
 
             FillRect(bb, &rc, Gdi::Brush(bg));
@@ -604,28 +771,74 @@ LRESULT RemoteLogWnd::HandlePanelMessage(UINT message, WPARAM wParam, LPARAM lPa
                     std::wstring(L"→ sent by this instance · ← received   ·   ") +
                     std::to_wstring(m_rows.size()) + L" of " +
                     std::to_wstring(RL::CAPACITY) + L" entries   ·   " +
-                    L"click #, Time or Δ time to sort   ·   F5 refreshes";
+                    L"click #, Time or Δ time to sort   ·   double-click a row for the "
+                    L"full text   ·   the two counts on the right open F10 / Ctrl+F11";
                 DrawTextW(bb, sub.c_str(), -1, &sr, DT_LEFT | DT_SINGLELINE | DT_END_ELLIPSIS);
             }
 
             // ── Buttons ──────────────────────────────────────────────────────
             {
-                const int gap = static_cast<int>(BTN_GAP * s);
-                int x = pad;
-                int y = static_cast<int>(TITLE_H * s);
+                const int gap  = static_cast<int>(BTN_GAP * s);
+                const int y    = static_cast<int>(TITLE_H * s);
+                const int wide = static_cast<int>(168 * s);   // the two readouts
+
+                // Read ONCE for this frame, so the two buttons cannot disagree
+                // about how many targets are connected.
+                const int total  = Remote::Mirror::TargetCount();
+                const int live   = Remote::Mirror::ConnectedCount();
+                const int driven = Remote::Mirror::MirroredLiveCount();
+
+                // The readouts are laid out from the RIGHT edge, so the gap
+                // between the two groups grows with the window instead of
+                // leaving the row lopsided.
+                int x     = pad;
+                int rightX = W - pad;
+
                 for (Button &btn : m_buttons) {
+                    const bool isStatus = (btn.id == BTN_CONNS || btn.id == BTN_CONTROL);
+
                     // Recording is wider: its label carries the state, so it
                     // changes width, and a button that resizes as you press it
                     // moves the one beside it under the cursor.
-                    const int bw = static_cast<int>((btn.id == BTN_RECORD ? 150 : 92) * s);
-                    btn.rect = {x, y, x + bw, y + btnH};
+                    const int bw = isStatus ? wide
+                                 : static_cast<int>((btn.id == BTN_RECORD ? 150 : 92) * s);
+
+                    if (isStatus) {
+                        // Right to left, in reverse of the order they are
+                        // declared, so Connections ends up left of Control.
+                        rightX -= bw;
+                        btn.rect = {rightX, y, rightX + bw, y + btnH};
+                        rightX -= gap;
+                    } else {
+                        btn.rect = {x, y, x + bw, y + btnH};
+                        x += bw + gap;
+                    }
+
+                    // Live text, built here rather than in BuildButtons — see
+                    // the note there. "active / total", the way every other
+                    // count in this app reads.
+                    std::wstring label = btn.label;
+                    if (btn.id == BTN_CONNS)
+                        label = L"Connections  " + std::to_wstring(live) +
+                                L" / " + std::to_wstring(total);
+                    else if (btn.id == BTN_CONTROL)
+                        label = L"Control  " + std::to_wstring(driven) +
+                                L" / " + std::to_wstring(live);
+
                     const int myIndex = static_cast<int>(&btn - m_buttons.data());
 
-                    // The recording button is the affirmative action here and is
-                    // the only one that carries state, so it takes the accent —
-                    // and only while it is actually ON.
-                    COLORREF base = (btn.id == BTN_RECORD && app.remoteLogEnabled)
-                                        ? PC::BTN_ALT : PC::BTN_MAIN;
+                    // All three of these are TOGGLES, so the accent shows what
+                    // is switched ON — for the two readouts that means "the
+                    // panel I open is open", not "my count is non-zero". A
+                    // toggle whose lit state tracked something other than what
+                    // it toggles is a button that lies about its own press.
+                    COLORREF base = PC::BTN_MAIN;
+                    if (btn.id == BTN_RECORD && app.remoteLogEnabled) base = PC::BTN_ALT;
+                    else if (btn.id == BTN_CONNS &&
+                             uiManager.getRemotesConsoleWindow().IsVisible()) base = PC::BTN_ALT;
+                    else if (btn.id == BTN_CONTROL &&
+                             uiManager.getMirrorPickerWindow().IsVisible())   base = PC::BTN_ALT;
+
                     if (!btn.enabled) base = bg;
                     else if (myIndex == m_hotButton)
                         base = RGB(std::min(255, GetRValue(base) + 40),
@@ -639,11 +852,18 @@ LRESULT RemoteLogWnd::HandlePanelMessage(UINT message, WPARAM wParam, LPARAM lPa
                     Rectangle(bb, btn.rect.left, btn.rect.top, btn.rect.right, btn.rect.bottom);
                     SelectObject(bb, ob); SelectObject(bb, op);
 
-                    SetTextColor(bb, btn.enabled ? RGB(245,245,245) : dim);
+                    // The "is anything there" signal moved to the TEXT, since
+                    // the fill now belongs to the toggle: dimmed digits mean the
+                    // count is zero, which reads at a glance without stealing
+                    // the accent from the toggle state.
+                    COLORREF fgText = RGB(245, 245, 245);
+                    if (!btn.enabled)                            fgText = dim;
+                    else if (btn.id == BTN_CONNS   && live   == 0) fgText = dim;
+                    else if (btn.id == BTN_CONTROL && driven == 0) fgText = dim;
+                    SetTextColor(bb, fgText);
                     RECT lr = btn.rect;
-                    DrawTextW(bb, btn.label.c_str(), -1, &lr,
+                    DrawTextW(bb, label.c_str(), -1, &lr,
                               DT_CENTER | DT_VCENTER | DT_SINGLELINE);
-                    x += bw + gap;
                 }
             }
 
@@ -709,11 +929,12 @@ LRESULT RemoteLogWnd::HandlePanelMessage(UINT message, WPARAM wParam, LPARAM lPa
                     const RL::Entry &e = m_rows[static_cast<size_t>(i)];
                     const int y = listTop + i * rowH - m_scrollY;
 
-                    RECT rr{pad, y, W - pad, y + rowH};
-                    // Banded, not selected-highlighted: nothing here is
-                    // selectable, and seven columns of small text across a wide
-                    // window is where the eye loses the row it is reading.
-                    if (i % 2) FillRect(bb, &rr, Gdi::Brush(altBg));
+                    RECT rr{pad, y, pad + ViewWidthPx(), y + rowH};
+                    // Banded so the eye keeps its place across seven columns of
+                    // small text, and the selected row on top of that — it is
+                    // what Enter and the detail window act on.
+                    if (i == m_selectedRow)  FillRect(bb, &rr, Gdi::Brush(selBg));
+                    else if (i % 2)          FillRect(bb, &rr, Gdi::Brush(altBg));
 
                     const bool out = (e.dir == RL::Direction::Out);
 
@@ -852,6 +1073,433 @@ LRESULT RemoteLogWnd::HandlePanelMessage(UINT message, WPARAM wParam, LPARAM lPa
     }
     return DefWindowProcW(GetHwnd(), message, wParam, lParam);
 }
+
+// =============================================================================
+// RemoteLogEntryWnd — one entry, nothing trimmed
+// =============================================================================
+namespace {
+    constexpr int DETAIL_W    = 660;
+    constexpr int DETAIL_H    = 520;
+    constexpr int DETAIL_LBL  = 96;   // label gutter, design units
+    constexpr int DETAIL_GAP  = 10;   // between fields
+
+    enum DetailBtnId { DBTN_PREV = 1, DBTN_NEXT, DBTN_COPY, DBTN_CLOSE };
+}
+
+void RemoteLogEntryWnd::Init(HINSTANCE hInstance, HWND hParent) {
+    const float s = app.dpiScale;
+    InitFloating(hInstance, hParent, L"qIVRemoteLogEntryWnd", L"Log entry",
+                 static_cast<int>(DETAIL_W * s), static_cast<int>(DETAIL_H * s));
+    if (!GetHwnd()) return;
+    SetWindowLongPtrW(GetHwnd(), GWL_EXSTYLE,
+                      GetWindowLongPtrW(GetHwnd(), GWL_EXSTYLE) | WS_EX_LAYERED);
+    SetLayeredWindowAttributes(GetHwnd(), 0,
+                               Constants::Dedicated::PANEL_OPACITY, LWA_ALPHA);
+}
+
+void RemoteLogEntryWnd::Init(HINSTANCE hInstance, HWND hParent, int8_t) {
+    Init(hInstance, hParent);
+}
+
+void RemoteLogEntryWnd::Show() { ShowCenterOverParent(); Repaint(); }
+
+void RemoteLogEntryWnd::ShowEntry(const Remote::Log::Entry &e) {
+    // COPIED, not referenced — the store trims from the front as it fills, and
+    // this window is meant to sit open while you read it.
+    m_entry = e;
+    BuildFields();
+
+    // Back to the top for a new entry: stepping to the next one and landing
+    // halfway down its Response is not where anybody wants to start reading.
+    m_scrollY = 0;
+
+    if (!IsVisible()) ShowCenterOverParent();
+    else              SetForegroundWindow(GetHwnd());
+    Repaint();
+}
+
+void RemoteLogEntryWnd::BuildFields() {
+    const bool out = (m_entry.dir == Remote::Log::Direction::Out);
+
+    m_fields = {
+        { L"#",         std::to_wstring(m_entry.seq) },
+        { L"Direction", out ? L"→ sent by this instance" : L"← received" },
+        { L"Sender",    m_entry.sender },
+        { L"Command",   m_entry.command },
+        { L"Receiver",  m_entry.receiver },
+        { L"Response",  m_entry.response },
+        { L"Time",      Remote::Log::FormatTime(m_entry.whenFt) },
+        { L"Δ time",    Remote::Log::FormatDelta(m_entry.deltaUs) +
+                        (out ? L"   (round trip)" : L"   (handling time here)") },
+    };
+
+    // Greyed rather than hidden at the ends of the list: buttons that vanish
+    // move the ones beside them under the cursor between two clicks.
+    const bool canPrev = m_owner && m_owner->CanStepSelection(-1);
+    const bool canNext = m_owner && m_owner->CanStepSelection(+1);
+
+    m_buttons = {
+        { L"◀ Previous", DBTN_PREV,  {}, canPrev },
+        { L"Next ▶",     DBTN_NEXT,  {}, canNext },
+        { L"Copy",       DBTN_COPY,  {}, true    },
+        { L"Close",      DBTN_CLOSE, {}, true    },
+    };
+}
+
+void RemoteLogEntryWnd::DoStep(int delta) {
+    // Delegated: the LIST owns the sort, so it is the only thing that knows
+    // which entry is next. It calls back into ShowEntry.
+    if (m_owner) m_owner->StepSelection(delta);
+}
+
+void RemoteLogEntryWnd::DoCopy() {
+    std::wstring text;
+    for (const Field &f : m_fields) {
+        text += f.label;
+        text += L": ";
+        text += f.value;
+        text += L"\r\n";
+    }
+
+    if (!OpenClipboard(GetHwnd())) return;
+    EmptyClipboard();
+    const size_t bytes = (text.size() + 1) * sizeof(wchar_t);
+    if (HGLOBAL h = GlobalAlloc(GMEM_MOVEABLE, bytes)) {
+        if (void *p = GlobalLock(h)) {
+            memcpy(p, text.c_str(), bytes);
+            GlobalUnlock(h);
+            // Ownership passes to the clipboard on success only — freeing it
+            // after a successful SetClipboardData is a double free.
+            if (!SetClipboardData(CF_UNICODETEXT, h)) GlobalFree(h);
+        } else {
+            GlobalFree(h);
+        }
+    }
+    CloseClipboard();
+}
+
+int RemoteLogEntryWnd::HitTestBtn(POINT pt) const {
+    for (size_t i = 0; i < m_buttons.size(); ++i)
+        if (m_buttons[i].enabled && PtInRect(&m_buttons[i].rect, pt))
+            return static_cast<int>(i);
+    return -1;
+}
+
+int RemoteLogEntryWnd::ViewHeightPx() const {
+    if (!GetHwnd()) return 0;
+    RECT rc{};
+    GetClientRect(GetHwnd(), &rc);
+    const float s = app.dpiScale;
+    return std::max(0, RectH(rc) - static_cast<int>((TITLE_H + BTN_H + 12) * s));
+}
+
+void RemoteLogEntryWnd::ScrollTo(int y) {
+    m_scrollY = std::clamp(y, 0, std::max(0, m_contentH - ViewHeightPx()));
+    Repaint();
+}
+
+bool RemoteLogEntryWnd::OnKeyDown(WPARAM vk, bool /*ctrl*/, bool /*shift*/, bool /*alt*/) {
+    switch (vk) {
+        // Prev/Next on the keys that already mean "the one before / after" in
+        // every list in this app.
+        case VK_LEFT:
+        case VK_PRIOR: DoStep(-1); return true;
+        case VK_RIGHT:
+        case VK_NEXT:  DoStep(+1); return true;
+
+        case VK_UP:    ScrollTo(m_scrollY - static_cast<int>(24 * app.dpiScale)); return true;
+        case VK_DOWN:  ScrollTo(m_scrollY + static_cast<int>(24 * app.dpiScale)); return true;
+        case VK_HOME:  ScrollTo(0); return true;
+        case VK_END:   ScrollTo(m_contentH); return true;
+        case 'C':      DoCopy(); return true;
+        default: break;
+    }
+    return false;
+}
+
+LRESULT RemoteLogEntryWnd::HandlePanelMessage(UINT message, WPARAM wParam, LPARAM lParam) {
+    switch (message) {
+        case WM_SETCURSOR: {
+            if (LOWORD(lParam) != HTCLIENT) break;
+            POINT pt; GetCursorPos(&pt);
+            ScreenToClient(GetHwnd(), &pt);
+            SetCursor(HitTestBtn(pt) >= 0 ? Constants::Cursors::CURR_CLICK
+                                          : Constants::Cursors::CURR_DEFAULT);
+            return TRUE;
+        }
+
+        case WM_MOUSEMOVE: {
+            POINT pt{GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam)};
+            if (m_dragging) {
+                const int travel = std::max(1, RectH(m_track) - m_dragThumbSpan);
+                const int wanted = pt.y - m_track.top - m_dragGrabPx;
+                ScrollTo(MulDiv(std::clamp(wanted, 0, travel),
+                                std::max(0, m_contentH - ViewHeightPx()), travel));
+                return 0;
+            }
+            const int b = HitTestBtn(pt);
+            const bool tHot = PtInRect(&m_thumb, pt) != 0;
+            if (b != m_hotBtn || tHot != m_thumbHot) {
+                m_hotBtn = b; m_thumbHot = tHot;
+                Repaint();
+            }
+            return 0;
+        }
+
+        case WM_LBUTTONDOWN: {
+            SetFocus(GetHwnd());
+            POINT pt{GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam)};
+
+            const int b = HitTestBtn(pt);
+            if (b >= 0) {
+                switch (m_buttons[b].id) {
+                    case DBTN_PREV:  DoStep(-1); break;
+                    case DBTN_NEXT:  DoStep(+1); break;
+                    case DBTN_COPY:  DoCopy();   break;
+                    case DBTN_CLOSE: Hide();     break;
+                    default: break;
+                }
+                return 0;
+            }
+            if (PtInRect(&m_thumb, pt)) {
+                m_dragging      = true;
+                m_dragGrabPx    = pt.y - m_thumb.top;
+                m_dragThumbSpan = RectH(m_thumb);
+                SetCapture(GetHwnd());
+                return 0;
+            }
+            if (PtInRect(&m_track, pt))
+                ScrollTo(m_scrollY + (pt.y < m_thumb.top ? -ViewHeightPx() : ViewHeightPx()));
+            return 0;
+        }
+
+        case WM_LBUTTONUP:
+            if (m_dragging) { m_dragging = false; ReleaseCapture(); Repaint(); }
+            return 0;
+
+        case WM_CAPTURECHANGED:
+            m_dragging = false;
+            Repaint();
+            return 0;
+
+        case WM_MOUSEWHEEL: {
+            const int delta = GET_WHEEL_DELTA_WPARAM(wParam);
+            ScrollTo(m_scrollY - (delta / WHEEL_DELTA) * static_cast<int>(48 * app.dpiScale));
+            return 0;
+        }
+
+        case WM_SIZE:
+            Repaint();
+            return 0;
+
+        case WM_PAINT: {
+            PAINTSTRUCT ps;
+            HDC dc = BeginPaint(GetHwnd(), &ps);
+            RECT rc; GetClientRect(GetHwnd(), &rc);
+            const int W = rc.right - rc.left, H = rc.bottom - rc.top;
+
+            EnsureFonts(dc);
+            EnsureBackBuffer(dc, W, H);
+            HDC bb = m_bbDC;
+
+            const COLORREF bg   = GetBgColor();
+            const bool     dark = BgIsDark(bg);
+            const COLORREF fg   = dark ? RGB(235,235,235) : RGB(24,24,24);
+            const COLORREF dim  = dark ? RGB(150,150,150) : RGB(110,110,110);
+            const COLORREF line = dark ? RGB(64,64,64)    : RGB(220,220,220);
+
+            FillRect(bb, &rc, Gdi::Brush(bg));
+            SetBkMode(bb, TRANSPARENT);
+
+            const float s   = app.dpiScale;
+            const int pad   = static_cast<int>(PAD * s);
+            const int btnH  = static_cast<int>(BTN_H * s);
+            const int lblW  = static_cast<int>(DETAIL_LBL * s);
+            const int gap   = static_cast<int>(DETAIL_GAP * s);
+            const int sbW   = static_cast<int>(Constants::Dedicated::PANEL_SCROLLBAR_W * s);
+
+            // ── Title ────────────────────────────────────────────────────────
+            SelectObject(bb, m_hFontBold);
+            SetTextColor(bb, fg);
+            {
+                RECT tr{pad, static_cast<int>(6 * s), W - pad, static_cast<int>(26 * s)};
+                const std::wstring t = L"Log entry #" + std::to_wstring(m_entry.seq);
+                DrawTextW(bb, t.c_str(), -1, &tr, DT_LEFT | DT_SINGLELINE);
+
+                SelectObject(bb, m_hFontSmall);
+                SetTextColor(bb, dim);
+                RECT sr{pad, tr.bottom, W - pad, tr.bottom + static_cast<int>(16 * s)};
+                DrawTextW(bb, L"Full text, nothing trimmed   ·   ← → steps entries   ·   "
+                              L"C copies   ·   Esc closes",
+                          -1, &sr, DT_LEFT | DT_SINGLELINE | DT_END_ELLIPSIS);
+            }
+
+            // ── Buttons ──────────────────────────────────────────────────────
+            {
+                const int bgap = static_cast<int>(BTN_GAP * s);
+                const int bw   = static_cast<int>(104 * s);
+                int x = pad;
+                const int y = static_cast<int>(TITLE_H * s);
+                for (Btn &btn : m_buttons) {
+                    btn.rect = {x, y, x + bw, y + btnH};
+                    const int myIndex = static_cast<int>(&btn - m_buttons.data());
+
+                    COLORREF base = PC::BTN_MAIN;
+                    if (!btn.enabled) base = bg;
+                    else if (myIndex == m_hotBtn)
+                        base = RGB(std::min(255, GetRValue(base) + 40),
+                                   std::min(255, GetGValue(base) + 40),
+                                   std::min(255, GetBValue(base) + 40));
+
+                    FillRect(bb, &btn.rect, Gdi::Brush(base));
+                    HGDIOBJ op = SelectObject(bb, Gdi::Pen(line));
+                    HGDIOBJ ob = SelectObject(bb, GetStockObject(NULL_BRUSH));
+                    Rectangle(bb, btn.rect.left, btn.rect.top, btn.rect.right, btn.rect.bottom);
+                    SelectObject(bb, ob); SelectObject(bb, op);
+
+                    SelectObject(bb, m_hFontSmall);
+                    SetTextColor(bb, btn.enabled ? RGB(245,245,245) : dim);
+                    RECT lr = btn.rect;
+                    DrawTextW(bb, btn.label, -1, &lr,
+                              DT_CENTER | DT_VCENTER | DT_SINGLELINE);
+                    x += bw + bgap;
+                }
+            }
+
+            // ── Fields ───────────────────────────────────────────────────────
+            const int listTop = static_cast<int>((TITLE_H + BTN_H + 12) * s);
+            const int viewH   = ViewHeightPx();
+
+            // Measured first, because the value column's height depends on how
+            // the text wraps and the scrollbar has to exist before the rows are
+            // drawn against it.
+            int valueRight = W - pad;
+            {
+                // Reserve the bar only when it is needed, which needs the height
+                // — measured once with the bar absent, then again if it turned
+                // out to be needed. Two passes rather than a guess.
+                for (int pass = 0; pass < 2; ++pass) {
+                    SelectObject(bb, m_hFontBody);
+                    int h = 0;
+                    for (const Field &f : m_fields) {
+                        RECT mr{pad + lblW, 0, valueRight, 0};
+                        DrawTextW(bb, f.value.empty() ? L"—" : f.value.c_str(), -1, &mr,
+                                  DT_LEFT | DT_WORDBREAK | DT_CALCRECT | DT_EDITCONTROL);
+                        h += std::max(static_cast<int>(18 * s), RectH(mr)) + gap;
+                    }
+                    m_contentH = h;
+                    if (m_contentH <= viewH || valueRight != W - pad) break;
+                    valueRight = W - pad - sbW; // needs a bar: measure again narrower
+                }
+            }
+            m_scrollY = std::clamp(m_scrollY, 0, std::max(0, m_contentH - viewH));
+
+            {
+                const int saved = SaveDC(bb);
+                IntersectClipRect(bb, pad, listTop, W - pad, listTop + viewH);
+
+                int y = listTop - m_scrollY;
+                for (const Field &f : m_fields) {
+                    SelectObject(bb, m_hFontBody);
+                    RECT vr{pad + lblW, y, valueRight, y};
+                    DrawTextW(bb, f.value.empty() ? L"—" : f.value.c_str(), -1, &vr,
+                              DT_LEFT | DT_WORDBREAK | DT_CALCRECT | DT_EDITCONTROL);
+                    const int blockH = std::max(static_cast<int>(18 * s), RectH(vr));
+
+                    // Label and value share a baseline; the value is the one
+                    // that wraps, so the label sits at the top of the block.
+                    SelectObject(bb, m_hFontSmall);
+                    SetTextColor(bb, PC::HEADER);
+                    RECT lr{pad, y, pad + lblW - static_cast<int>(8 * s),
+                            y + static_cast<int>(18 * s)};
+                    DrawTextW(bb, f.label, -1, &lr, DT_LEFT | DT_SINGLELINE);
+
+                    SelectObject(bb, m_hFontBody);
+                    SetTextColor(bb, fg);
+                    RECT dr{pad + lblW, y, valueRight, y + blockH};
+                    DrawTextW(bb, f.value.empty() ? L"—" : f.value.c_str(), -1, &dr,
+                              DT_LEFT | DT_WORDBREAK | DT_EDITCONTROL);
+
+                    y += blockH + gap;
+                }
+
+                RestoreDC(bb, saved);
+            }
+
+            // ── Scrollbar ────────────────────────────────────────────────────
+            m_track = {}; m_thumb = {};
+            if (m_contentH > viewH && viewH > 0) {
+                m_track = {W - pad - sbW, listTop, W - pad, listTop + viewH};
+                FillRect(bb, &m_track, Gdi::Brush(PC::SCROLL_TRACK));
+
+                const int minT = static_cast<int>(Constants::Dedicated::PANEL_SCROLL_MIN_H * s);
+                int th = std::max(minT, MulDiv(viewH, viewH, m_contentH));
+                th = std::min(th, viewH);
+                const int travel = std::max(0, viewH - th);
+                const int ty = listTop + MulDiv(m_scrollY, travel,
+                                                std::max(1, m_contentH - viewH));
+
+                m_thumb = {m_track.left + static_cast<int>(2 * s), ty,
+                           m_track.right - static_cast<int>(2 * s), ty + th};
+                FillRect(bb, &m_thumb, Gdi::Brush(
+                    (m_thumbHot || m_dragging) ? PC::SCROLL_THUMB_HOT : PC::SCROLL_THUMB));
+            }
+
+            BitBlt(dc, 0, 0, W, H, bb, 0, 0, SRCCOPY);
+            EndPaint(GetHwnd(), &ps);
+            return 0;
+        }
+
+        case WM_ERASEBKGND:
+            return 1;
+
+        default:
+            break;
+    }
+    return DefWindowProcW(GetHwnd(), message, wParam, lParam);
+}
+
+void RemoteLogEntryWnd::EnsureFonts(HDC dc) {
+    const int dpi = GetDeviceCaps(dc, LOGPIXELSY);
+    if (m_hFontBody && dpi == m_cachedFontDpi) return;
+    if (m_hFontBody)  DeleteObject(m_hFontBody);
+    if (m_hFontBold)  DeleteObject(m_hFontBold);
+    if (m_hFontSmall) DeleteObject(m_hFontSmall);
+    m_cachedFontDpi = dpi;
+    auto mk = [&](int pt, int w, const wchar_t *face) {
+        return CreateFontW(-MulDiv(pt, dpi, 72), 0, 0, 0, w, FALSE, FALSE, FALSE,
+                           DEFAULT_CHARSET, OUT_TT_PRECIS, CLIP_DEFAULT_PRECIS,
+                           CLEARTYPE_QUALITY, VARIABLE_PITCH, face);
+    };
+    // Monospaced values, same as the list: these are protocol tokens and paths,
+    // and a proportional font makes a long payload harder to read, not easier.
+    m_hFontBody  = mk(9,  FW_NORMAL,   L"Consolas");
+    m_hFontBold  = mk(11, FW_SEMIBOLD, L"Segoe UI");
+    m_hFontSmall = mk(8,  FW_NORMAL,   L"Segoe UI");
+}
+
+void RemoteLogEntryWnd::EnsureBackBuffer(HDC refDC, int w, int h) {
+    if (m_bbDC && m_bbW == w && m_bbH == h) return;
+    DestroyBackBuffer();
+    m_bbDC     = CreateCompatibleDC(refDC);
+    m_bbBmp    = CreateCompatibleBitmap(refDC, w, h);
+    m_bbBmpOld = static_cast<HBITMAP>(SelectObject(m_bbDC, m_bbBmp));
+    m_bbW = w; m_bbH = h;
+}
+
+void RemoteLogEntryWnd::DestroyBackBuffer() {
+    if (!m_bbDC) return;
+    SelectObject(m_bbDC, m_bbBmpOld);
+    DeleteObject(m_bbBmp);
+    DeleteDC(m_bbDC);
+    m_bbDC = nullptr; m_bbBmp = nullptr; m_bbBmpOld = nullptr; m_bbW = m_bbH = 0;
+}
+
+void RemoteLogEntryWnd::Repaint() {
+    if (GetHwnd()) InvalidateRect(GetHwnd(), nullptr, FALSE);
+}
+
+int RemoteLogEntryWnd::ContentHeightPx() { return m_contentH; }
 
 // =============================================================================
 // Paint helpers

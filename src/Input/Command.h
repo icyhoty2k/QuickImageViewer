@@ -261,6 +261,16 @@ enum class Command {
     // them disagree in the opposite direction, and the whole point of turning
     // logging on across a session is that every end records the same exchanges.
     EnableRemoteLog,
+    // `msg <text>` — put a centre-screen message on the RECEIVING instance.
+    //
+    // Exists because a wall of identical viewers is anonymous: two windows side
+    // by side give no clue which row in the F10 console drives which screen.
+    // The console's Identify button sends each target its own name, and the
+    // screen says who it is.
+    //
+    // Remote-only in practice: it carries a payload, and there is no local
+    // keystroke for it — a viewer already knows what it is called.
+    msgRemote,
 
     // Remote-only, both payload-carrying, both handled headlessly in RemoteExec:
     //   observe 1|0   the CALLER asks to be added to / removed from this

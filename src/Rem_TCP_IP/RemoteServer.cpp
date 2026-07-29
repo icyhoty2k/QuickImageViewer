@@ -142,7 +142,44 @@ namespace {
         return true;
     }
 
+    // Forward declarations — the log helpers need PeerLabel/NowUs, which are
+    // defined below with the rest of the socket helpers.
+    std::wstring PeerLabel(SOCKET s);
+    long long    NowUs();
+
+    // The handshake carries a salt, a nonce and an HMAC over that nonce. None of
+    // it is reusable against the next connection — but it is still credential
+    // material, and this log gets SAVED TO DISK and handed to whoever is helping
+    // you debug. Redacted at CAPTURE, so it never enters the store at all: a
+    // filter applied at save time would be one forgotten code path away from
+    // writing the real thing.
+    std::wstring RedactForLog(const std::wstring &line) {
+        if (_wcsnicmp(line.c_str(), L"AUTH", 4) != 0) return line;
+        return L"AUTH <redacted>";
+    }
+
+    // When THIS connection's last inbound line was read. thread_local because
+    // every client gets its own thread, which makes this exactly per-connection
+    // with no map and no lock. Lets the reply carry the handling time without
+    // threading a timestamp through six call sites.
+    thread_local long long t_inboundAtUs = 0;
+
+    // EVERY line this server writes goes through SendLine, and every line it
+    // reads goes through RecvLine. That is why the Ctrl+F12 record sits in these
+    // two and not at the call sites: the banner, the auth challenge, the verb
+    // replies (help/ping/version) and the parse-error refusals never reach the
+    // UI thread at all, so instrumenting the command path alone left a log with
+    // invisible holes in it.
     bool SendLine(SOCKET s, const std::wstring &line) {
+        if (Log::IsEnabled()) {
+            // Delta is the time since the line being answered arrived — the
+            // handling cost of this instance, which is the number that says
+            // whether it is the reason a wall of screens is lagging.
+            const long long d = t_inboundAtUs ? NowUs() - t_inboundAtUs : -1;
+            t_inboundAtUs = 0;
+            Log::Add(Log::Direction::Out, Log::SelfName(), L"(reply)",
+                     PeerLabel(s), RedactForLog(line), d);
+        }
         return SendAll(s, ToUtf8(line) + "\r\n");
     }
 
@@ -157,6 +194,11 @@ namespace {
                 accum.erase(0, nl + 1);
                 if (!raw.empty() && raw.back() == '\r') raw.pop_back();
                 lineOut = FromUtf8(raw.data(), raw.size());
+                if (Log::IsEnabled() && !lineOut.empty()) {
+                    t_inboundAtUs = NowUs();
+                    Log::Add(Log::Direction::In, PeerLabel(s), RedactForLog(lineOut),
+                             Log::SelfName(), L"(awaiting reply)", -1);
+                }
                 return true;
             }
             if (accum.size() > RT::MAX_LINE_LEN) return false;
@@ -671,25 +713,11 @@ static std::wstring ExecuteOnUiThreadBody(HWND hWnd, const RemoteRequest &req, C
 }
 
 std::wstring ExecuteOnUiThread(HWND hWnd, const RemoteRequest &req, ConnId from) {
-    // Nothing but the call when logging is off — not a timestamp, not a string.
-    if (!Log::IsEnabled()) return ExecuteOnUiThreadBody(hWnd, req, from);
-
-    const long long t0 = NowUs();
-    std::wstring reply = ExecuteOnUiThreadBody(hWnd, req, from);
-    const long long t1 = NowUs();
-
-    // The line as it ARRIVED, rebuilt from the parse rather than from the
-    // command enum: rawName is what the caller actually typed, which is what you
-    // need when the complaint is "it did not recognise my command".
-    std::wstring line = req.rawName;
-    if (!req.payload.empty()) { line += L' '; line += req.payload; }
-
-    // Delta is the HANDLING time, not a round trip — for an inbound command that
-    // is the honest number, and it is the one that says whether this instance is
-    // the reason a wall of screens is lagging.
-    Log::Add(Log::Direction::In, PeerLabel(static_cast<SOCKET>(from)),
-             line, Log::SelfName(), reply, t1 - t0);
-    return reply;
+    // NOT logged here any more. The record moved down to SendLine/RecvLine, the
+    // two functions every byte actually passes through — this only sees the
+    // commands that got as far as the UI thread, which is a subset, and a log
+    // that quietly omits the refusals is a log that misleads.
+    return ExecuteOnUiThreadBody(hWnd, req, from);
 }
 
 // =============================================================================
@@ -757,9 +785,21 @@ void EmitToObservers(const std::wstring &line, ConnId except, bool positional) {
         // treated exactly like a refusal.
         u_long nb = 1;
         ioctlsocket(s, FIONBIO, &nb);
-        (void) send(s, bytes.data(), static_cast<int>(bytes.size()), 0);
+        const int sent = send(s, bytes.data(), static_cast<int>(bytes.size()), 0);
         nb = 0;
         ioctlsocket(s, FIONBIO, &nb);
+
+        // The OTHER outbound path — this one deliberately bypasses SendLine to
+        // stay non-blocking, so it needs its own record or every event this
+        // instance pushes to a watcher would be missing from the log. The result
+        // is reported honestly: a dropped event is exactly the thing you would
+        // open the log to discover.
+        if (Log::IsEnabled())
+            Log::Add(Log::Direction::Out, Log::SelfName(),
+                     std::wstring(RT::RESP_EVENT) + L" " + line, PeerLabel(s),
+                     sent == static_cast<int>(bytes.size()) ? L"(pushed)"
+                                                            : L"(dropped — observer not reading)",
+                     -1);
     }
 }
 
