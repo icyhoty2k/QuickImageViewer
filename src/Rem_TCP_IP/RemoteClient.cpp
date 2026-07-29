@@ -236,6 +236,18 @@ bool Client::DoConnectBody(const std::wstring &host, int port,
     }
     m_banner = line;
 
+    // "OK qIV 2.96.0.113 remote v2 [Name]" → 2. Parsed here, once, because this is
+    // the only moment it is known and a caller that had to re-read the banner would
+    // re-parse it per send. A banner without the marker leaves 0, which every
+    // capability check reads as "too old", the safe way round.
+    m_peerProtocol = 0;
+    if (const size_t at = m_banner.find(L" remote v"); at != std::wstring::npos) {
+        const wchar_t *p = m_banner.c_str() + at + 9;   // past " remote v"
+        int v = 0;
+        while (*p >= L'0' && *p <= L'9') { v = v * 10 + (*p - L'0'); ++p; }
+        m_peerProtocol = v;
+    }
+
     // Then either an AUTH challenge, or nothing more until we speak.
     // Peek only if the server actually challenged: a passwordless server sends
     // no AUTH line at all, so blocking for one would stall until IO_TIMEOUT.

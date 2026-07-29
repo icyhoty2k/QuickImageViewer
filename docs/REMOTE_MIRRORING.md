@@ -27,6 +27,9 @@ Two instances, or several. One drives; the rest follow.
 | **F10** | Remote Servers — the instances this copy can drive |
 | **F9** | Local Server — the listener *this* instance runs |
 | **Ctrl+F12** | RemoteLog — every line that crossed the wire (recording off by default) |
+| **Ctrl+Enter** | Push THIS picture to the instances under Control, without disturbing what they are doing — see §7b |
+| **Alt+Enter** | STREAM this picture there, shown once, changing nothing at all — any machine — see §7c |
+| **Ctrl+Alt+Enter** | Ask one instance for the picture it is displaying and show it here, once — any machine — see §7c |
 
 Both F11 and F12 are **session-only and start OFF at every launch**. A viewer
 that came back from a restart already driving machines you'd forgotten about
@@ -197,6 +200,185 @@ the folder (same-machine only). Built and parsed in the same file
 
 Deliberately carries **no playlist position** — applying a folder starts an async
 scan a position would race. Position travels separately.
+
+---
+
+## 7b. Ctrl+Enter — pushing one picture, without disturbing the screen
+
+`sync` lines the screens up by **replacing** state. Ctrl+Enter is the opposite
+instrument, and both exist because the two jobs are different.
+
+**The job:** choose a picture on the driving copy, press Ctrl+Enter, and the
+instances under Control show it *while carrying on with whatever they were
+doing*. A target running a fullscreen slideshow keeps running it — same view
+mode, same effects, same interval — and simply continues from the pushed image.
+
+So the push sends **folder, sort order and position, and nothing else**. `sync`
+was considered for this and rejected: it also carries view mode, rotation, flips,
+gamma/brightness/contrast/saturation, the effect chain, overlay state *and*
+slideshow interval/loop/shuffle, so it would stamp the driving viewer's whole
+look over a screen that was deliberately set up differently.
+
+### It asks before it sends
+
+`QueryState` (`Command::QueryState`, `RemoteProtocol.cpp`) is the **only
+read-only row in the command table** — every other command reports its value as
+a by-product of doing something. It answers
+`count`, `index`, `sort`, `sortrev`, `name`, `folder`.
+
+Per target, on **that target's own sender thread** — the one thread allowed to
+wait for a reply:
+
+1. `QueryState`.
+2. Same folder, same order, long enough list → **`JumpToImage <n>` alone.** One
+   round trip, no rescan, no flicker. This is what makes Ctrl+Enter usable
+   repeatedly: walk a folder here, push each picture as you reach it.
+3. Otherwise send only what differs — `OpenFile <folder>`, then the sort
+   command — then **wait for the far end's async scan**, re-asking `QueryState`
+   until it reports that folder with a list long enough for the index
+   (`PUSH_SETTLE_TRIES` × `PUSH_SETTLE_MS`, Constants.h). The index goes **last**.
+
+Step 3 is why a position was never put in `sync`: opening a folder answers the
+moment the open is *accepted*, not when the playlist exists, so an index sent
+into that gap indexes the old list. The push closes the gap by asking instead of
+assuming.
+
+**`SortBy*` are toggles, not setters** — the command for the order you are
+already in flips ascending/descending. The presses are therefore computed from
+the state observed in step 1: one press to change order (which lands ascending),
+a second only if reverse is wanted; a single press to flip direction alone.
+
+### Falling back to a path
+
+Three cases cannot trust an index, and all three degrade to
+`OpenFile <full image path>` — one line that opens the folder *and* lands on the
+file through the far end's own scan:
+
+- the far end did not understand `QueryState` (an older build);
+- this viewer is sorted by **disk order**, which reproduces on no other drive
+  (and which a live session already refuses — §3);
+- the reply names a **different file** than the one pushed, i.e. the two
+  playlists hold different file sets. Repaired by naming the file outright rather
+  than by the heavier `sync`-and-resend the mirror path uses.
+
+### The parts that are deliberate
+
+- **Same-machine targets only**, like every other position — and skipped ones are
+  **counted and reported**, not dropped silently.
+- **Independent of F11**, like Sync now: it is an explicit act, and a viewer with
+  mirroring off is the case it exists for. It *does* respect the Ctrl+F11 Control
+  ticks, so pushing and mirroring cannot reach different screens.
+- **No table row for `PushImageToRemotes`.** A slave told to perform it would push
+  its own picture back at whoever asked.
+- **One queue for lines and pushes**, so a push cannot overtake the keystrokes
+  queued ahead of it.
+- **The shuffle permutation is rebuilt when the playlist size changes**
+  (`AppMain.cpp`, slideshow timer), started at the picture on screen. It was built
+  once at slideshow start, so a folder replaced underneath a shuffled slideshow
+  left it walking indices into a list that no longer existed.
+
+---
+
+## 7c. Alt+Enter / Ctrl+Alt+Enter — streaming one picture, either way
+
+Three keys, one question at three depths:
+
+| Key | What travels | Works across machines | The far end |
+|---|---|---|---|
+| **Ctrl+Enter** | a POSITION (folder, sort, index) | no — same machine only | GOES there and stays |
+| **Alt+Enter** | the IMAGE BYTES, outbound | **yes** | shows it once, unchanged otherwise |
+| **Ctrl+Alt+Enter** | the IMAGE BYTES, inbound | **yes** | is only read from |
+
+Ctrl+Enter **moves** the far end to a picture. The two streaming keys **show** a
+picture and leave nothing behind.
+
+### Why bytes, and what exactly travels
+
+A path is worth nothing on a machine that cannot read it, and these two exist
+precisely for the screen in another room. So the picture's **own file bytes**
+travel, base64-encoded, and the far end decodes them with its own WIC — as if it
+had opened the file.
+
+The FILE's bytes, not its pixels: a decoded frame is ten to fifty times larger
+than the JPEG it came from, and every end already owns a decoder. The file **name**
+rides along for exactly one reason — its extension selects that decoder. It is
+never treated as a path.
+
+### The plumbing is the point
+
+This is deliberately built as protocol, not as an internal shortcut, because the
+next client is **an Android app**: send a picture to a screen, or ask a screen what
+it is showing. Everything here is implementable by any client:
+
+```
+StreamImageBegin <totalBytes> <fileName>    → OK <totalBytes>
+StreamImageChunk <base64>                   → OK <received>/<declared>     (× n)
+StreamImageShow                             → OK <bytes>;<name>;shown|queued
+
+SendDisplayedImage        → DATA <base64>            (× n, body lines)
+                            OK SendDisplayedImage=<bytes>;<name>
+```
+
+Outbound is a **sequence of ordinary commands** because a request cannot be
+multi-line; inbound needs no framing because a **reply** can be (the `help` verb
+already is). The declared byte count is what lets a receiver *prove* the transfer
+arrived whole — a phone on a flaky link is an expected caller, and half a JPEG
+decodes to a torn picture rather than to an error. Chunks are refused the moment
+they exceed the declaration, so that number is also the only bound on the buffer.
+
+`MAX_LINE_LEN` rose from 4 KB to 256 KB to hold one chunk; still bounded, still
+per-connection. `Log::Add` now clips the two peer-controlled fields to
+`LOG_LINE_MAX`, so a transfer does not put megabytes of base64 into the wire log.
+
+### `ShowImageOnce <path>`
+
+The path form is kept: on one machine it costs nothing, and it is the honest
+spelling for a script. It assembles into the same mechanism.
+
+### What the receiving end does
+
+All three routes — the path form, an assembled stream, and Ctrl+Alt+Enter's answer
+— land in ONE piece of state (`AppState::Interjection`, `FileHandler.cpp`,
+`RemoteExec`):
+
+- the path is made the renderer's **active bitmap through the path-keyed cache** —
+  the Dedicated *promotion* trick. `app.playlist`, `app.currentIndex`, the sort
+  order and the async pipeline are untouched, so there is nothing to put back;
+- **when** it appears is decided at arrival: a running slideshow gets it at the
+  **next slide boundary** (so the slide on screen is not cut short) and it
+  occupies exactly one slide; a still viewer shows it immediately, or the instant
+  its decode lands, and it stays until something else changes the picture;
+- it is retired by **`LoadImageIndex`** — the one function every image change
+  passes through — so "shown once" needs no timer of its own. Retiring **evicts
+  it from the VRAM cache**: a one-shot advert must not go on holding memory, nor
+  be served instantly to a later probe for the same path;
+- a newly arrived interjection **replaces** one not yet shown. A queue would
+  deliver adverts minutes after they were sent;
+- a STREAMED picture is written to a **temp file** so the existing decode/cache/
+  display path is reused unchanged, and the interjection **owns** that file:
+  retiring it deletes the file as well as evicting the bitmap. Ctrl+Alt+Enter's
+  answer is the same, with `immediate` set — the user asked for it at this
+  keyboard, so it does not wait for a slide boundary the way an arriving advert
+  does;
+- the read and the base64 work happen on a **sender thread**, never the UI thread:
+  the UI thread hands over a path and is given back a path.
+
+`SendDisplayedImage` answers with what is **on screen**, which is not always a
+playlist entry — an instance already showing an interjection reports that. Its one
+blocking call, reading the file on the UI thread, is accepted knowingly: bounded by
+`STREAM_MAX_BYTES`, only on explicit request, and the alternative breaks the
+one-request-one-reply shape that makes the protocol implementable in fifty lines.
+
+**Why not a lighter `OpenFile`:** `open` *joins* the file to that viewer — it
+rebuilds the playlist, moves the index, and the folder becomes where that
+instance lives. Every one of those is the thing this feature must not do.
+
+Two paint-path guards make it hold still: `WM_QIV_REPAINT` must not activate the
+current playlist entry while an interjection (or a promotion) is up, or any
+landing decode rips it off the screen — the bug that once made promotions flash
+and vanish. The queued-but-undecoded case is checked **before** the `wParam == 1`
+early return, because an interjection is warmed through the neighbour-preload
+path and its arrival *is* a `wParam == 1` message.
 
 ---
 

@@ -185,7 +185,17 @@ Command InputManager::ResolveKeyboardKeys(UINT key, LPARAM lParam) {
             if (ctrl && !alt && !shift) return Command::FindImage; // Ctrl+F → find
             if (!ctrl && !alt && !shift) return Command::ToggleFullscreen; // F → fullscreen
             break;
-        case Shortcuts::SC_PANEL_FULLSCREEN_ENTER: return Command::ToggleFullscreen;
+        // One key, three depths (Shortcuts.h):
+        //   Ctrl+Enter      go to MY picture there    — position, same machine
+        //   Alt+Enter       show MY picture there     — bytes, any machine
+        //   Ctrl+Alt+Enter  show ITS picture here     — bytes, any machine
+        // Fullscreen keeps plain Enter, and also 'F' and Ctrl+Shift+T.
+        case Shortcuts::SC_PANEL_FULLSCREEN_ENTER:
+            if (ctrl && alt && !shift) return Command::StreamImageFromRemote;
+            if (ctrl && !alt && !shift) return Command::SendImagePositionToRemotes;
+            if (alt && !ctrl && !shift) return Command::StreamImageToRemotes;
+            if (!ctrl && !alt) return Command::ToggleFullscreen;
+            break;
 
         case Shortcuts::SC_PANEL_FULLSCREEN_T: // 'T' — shared key
             if (ctrl && shift) return Command::ToggleFullscreen;

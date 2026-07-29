@@ -931,6 +931,111 @@ void InputManager::ExecuteCommand(HWND hWnd, Command cmd) {
             uiManager.Toggle(uiManager.getRemotesConsoleWindow());
             break;
 
+        // Ctrl+Enter — put THIS viewer's picture on the screens under Control.
+        //
+        // Folder, sort order and position ONLY. Nothing else is sent, and that is
+        // the requirement, not an omission: a target running a fullscreen
+        // slideshow must carry on running it, from the pushed image, in its own
+        // view mode with its own effects. `sync` is the opposite instrument — it
+        // stamps this viewer's whole look onto the far end — so it is deliberately
+        // not reused here.
+        //
+        // The state is snapshotted HERE because `app` belongs to this thread; the
+        // sender threads negotiate entirely from this copy (RemoteMirror.h).
+        case Command::SendImagePositionToRemotes: {
+            if (app.currentIndex < 0 ||
+                app.currentIndex >= static_cast<int>(app.playlist.size())) {
+                g_overlayManager.PostCenterMessage(hWnd, Constants::Messages::PUSH_NO_IMAGE);
+                break;
+            }
+
+            const std::filesystem::path cur(app.playlist[app.currentIndex]);
+            Remote::Mirror::PushRequest req;
+            req.imagePath = cur.wstring();
+            req.folder    = cur.parent_path().wstring();
+            req.fileName  = cur.filename().wstring();
+            req.index     = app.currentIndex + 1;  // 1-based, as JumpToImage counts
+            req.sortOrder = app.fileHandlerDefaultSortOrder;
+            req.sortRev   = app.fileHandlerIsReverseSortOrder;
+
+            int skipped = 0;
+            const int n = Remote::Mirror::SendImagePosition(req, &skipped);
+
+            // Says what actually happened, including the two ways it can do
+            // nothing: no screen ticked in Ctrl+F11, or every ticked one on
+            // another machine, where a path and an index mean nothing.
+            if (n == 0) {
+                g_overlayManager.PostCenterMessage(
+                    hWnd, skipped > 0 ? Constants::Messages::PUSH_ONLY_REMOTE
+                                      : Constants::Messages::PUSH_NO_TARGETS);
+            } else {
+                std::wstring msg = Constants::Messages::PUSH_SENT_PREFIX +
+                                   std::to_wstring(n) +
+                                   Constants::Messages::PUSH_SENT_SUFFIX;
+                if (skipped > 0)
+                    msg += Constants::Messages::PUSH_SKIPPED_PREFIX +
+                           std::to_wstring(skipped) +
+                           Constants::Messages::PUSH_SKIPPED_SUFFIX;
+                g_overlayManager.PostCenterMessage(hWnd, msg);
+            }
+            break;
+        }
+
+        // Alt+Enter — STREAM this picture to those screens, shown once, changing
+        // nothing else about them. The file's BYTES travel, so unlike the position
+        // send above this reaches an instance on any machine.
+        case Command::StreamImageToRemotes: {
+            if (app.currentIndex < 0 ||
+                app.currentIndex >= static_cast<int>(app.playlist.size())) {
+                g_overlayManager.PostCenterMessage(hWnd, Constants::Messages::PUSH_NO_IMAGE);
+                break;
+            }
+
+            // Only the PATH is handed over; the file is read on each sender thread,
+            // because a 20 MB read does not belong on the thread that paints.
+            const int n =
+                Remote::Mirror::StreamImageToTargets(app.playlist[app.currentIndex]);
+            if (n == 0) {
+                g_overlayManager.PostCenterMessage(hWnd,
+                                                   Constants::Messages::PUSH_NO_TARGETS);
+            } else {
+                g_overlayManager.PostCenterMessage(
+                    hWnd, Constants::Messages::PUSH_ONCE_PREFIX + std::to_wstring(n) +
+                              Constants::Messages::PUSH_SENT_SUFFIX);
+            }
+            break;
+        }
+
+        // Ctrl+Alt+Enter — ask ONE instance what it is displaying and show that
+        // picture here, once. This only starts it and says which screen was asked:
+        // the image arrives later as WM_QIV_REMOTE_PULLED.
+        case Command::StreamImageFromRemote: {
+            std::wstring who;
+            if (Remote::Mirror::RequestDisplayedImage(who) == 0) {
+                g_overlayManager.PostCenterMessage(
+                    hWnd, Constants::Messages::STREAM_IN_NO_TARGET);
+                break;
+            }
+            // Acknowledged while waiting: the transfer takes as long as the picture
+            // is large, and a keypress with nothing on screen reads as a dud.
+            g_overlayManager.PostCenterMessage(
+                hWnd, Constants::Messages::STREAM_IN_ASKING_PREFIX + who +
+                          Constants::Messages::STREAM_IN_ASKING_SUFFIX);
+            break;
+        }
+
+        // Read-only, and therefore does nothing here. The whole command IS its
+        // reply — see GetCommandValue. Listed so the switch stays exhaustive
+        // rather than letting it look unhandled in `default`.
+        case Command::QueryState:
+            break;
+
+        // Payload-only, and handled entirely in RemoteExec (DoInterject) — it
+        // never reaches this switch. Listed for the same reason Observe and Sync
+        // are: so it does not look forgotten.
+        case Command::ShowImageOnce:
+            break;
+
         // Payload-only: they cannot arrive without a value, and the bare forms
         // would have nothing to act on. Listed so the switch is exhaustive
         // rather than letting them fall into `default` and look unhandled.
@@ -1667,6 +1772,49 @@ std::wstring InputManager::GetCommandValue(HWND hWnd, Command cmd) {
         case Command::EnableRemoteLog: return OnOff(app.remoteLogEnabled);
         case Command::MirrorLocalToggle: return OnOff(app.resendCommandToCaller);
 
+        // The read-only one. Everything a driving instance needs in order to
+        // decide whether an index is safe to send it: which folder this viewer is
+        // in, in what order, how long the list is, and where it is standing.
+        //
+        // KEY ORDER MATTERS. The two free-text values go LAST, because a ';' in a
+        // file name (legal on Windows, if unusual) truncates its own value and
+        // whatever follows. With them at the end, the worst case is a folder that
+        // compares unequal — one extra rescan, still the right picture — instead
+        // of a mangled number.
+        case Command::QueryState: {
+            const int total = static_cast<int>(app.playlist.size());
+            const bool have = app.currentIndex >= 0 && app.currentIndex < total;
+
+            // The folder is reported even with nothing displayed — a viewer part
+            // way through its first scan holds a playlist before it holds a
+            // current index, and answering "no folder" there would make a pusher
+            // reopen the folder it is already in.
+            std::wstring folder, name;
+            if (have) {
+                const std::filesystem::path cur(app.playlist[app.currentIndex]);
+                name   = cur.filename().wstring();
+                folder = cur.parent_path().wstring();
+            } else if (total > 0) {
+                folder = std::filesystem::path(app.playlist[0]).parent_path().wstring();
+            }
+
+            std::wstring s = L"count=" + std::to_wstring(total);
+            s += L";index=" + std::to_wstring(have ? app.currentIndex + 1 : 0);
+            s += L";sort="  + std::to_wstring(app.fileHandlerDefaultSortOrder);
+            s += L";sortrev=";
+            s += app.fileHandlerIsReverseSortOrder ? L"1" : L"0";
+            s += L";name="   + name;
+            s += L";folder=" + folder;
+            return s;
+        }
+
+        // Whether the picture a driving instance interjected is up yet: "shown",
+        // "queued" for the next slide boundary, or "none" once it has been retired.
+        case Command::ShowImageOnce:
+            return app.interject.showing ? L"shown"
+                 : app.interject.queued  ? L"queued"
+                                         : L"none";
+
         // --- Actions with no lasting state; report that they ran --------------
         case Command::ClearCache:
         case Command::SaveImage:
@@ -1674,6 +1822,15 @@ std::wstring InputManager::GetCommandValue(HWND hWnd, Command cmd) {
         case Command::ShowInExplorer:
         case Command::ResetAll:
         case Command::ResetWindowLayout:
+        // Local only — they have no table row, so no caller can ask. A case here
+        // costs nothing and stops the next reader wondering.
+        case Command::SendImagePositionToRemotes:
+        case Command::StreamImageToRemotes:
+        case Command::StreamImageFromRemote:
+        case Command::StreamImageBegin:
+        case Command::StreamImageChunk:
+        case Command::StreamImageShow:
+        case Command::SendDisplayedImage:
         // Listed for completeness only. These are in NEVER_REMOTE, so the wire
         // path refuses them before a value is ever asked for — but a case here
         // costs nothing and stops the next reader wondering whether the omission

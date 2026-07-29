@@ -66,6 +66,8 @@ Built on Direct2D, WIC, and native Win32 APIs. Single EXE, no installer(portable
 | No background services | ✅ process exits cleanly | ❌ always-on UWP runtime | ✅ |
 | Open source | ✅ AGPLv3 | ❌ | ❌ |
 | Kiosk / locked display mode | ✅ CLI flag | ❌ | ⚠️ limited |
+| Drive other copies over TCP | ✅ plain-text protocol, self-describing | ❌ | ❌ |
+| Mirror one screen to many | ✅ F11, per-target selection | ❌ | ❌ |
 
 ---
 
@@ -227,6 +229,7 @@ All effects are non-destructive and GPU-accelerated via the Direct2D effect grap
 | Shortcut | Action |
 |:---|:---|
 | `F` / `Enter` / `Ctrl+Shift+T` | Toggle borderless fullscreen |
+| `Ctrl+Enter` / `Alt+Enter` / `Ctrl+Alt+Enter` | Send this position / stream this image / fetch its image — see [Remote Control](#remote-control--mirroring) |
 | `Ctrl+T` / `Ctrl+A` | Toggle always-on-top |
 | `Shift+W/A/S/D` | Nudge window 20 px up / left / down / right |
 | `Alt+W/A/S/D` | Snap to top / left / bottom / right half of work area |
@@ -401,6 +404,95 @@ Both triggers are `(from, to)` pairs and run **independently** — set either, o
 - `(0, 0)` — off
 - `(5, 0)` — exactly every 5
 - `(5, 15)` — re-rolled between 5 and 15 each time, so it never looks mechanical
+
+---
+
+## Remote Control & Mirroring
+
+One qIV can drive others — a wall of screens from the copy on your desk, or a single
+display in another room. It is plain UTF-8 line protocol over TCP, so a script,
+`netcat`, a home-automation system or a phone app are all first-class clients.
+
+| Shortcut | Panel / Action |
+|:---|:---|
+| `F9` | **Local Server** — the listener *this* instance runs. Off unless switched on; needs a name and a port |
+| `F10` | **Remote Servers** — the instances this copy can drive. Connect, start/stop, watch, sync |
+| `Ctrl+F10` | **Send Command** — pick any wire command from the list, give it a value, send it |
+| `F11` | **Mirroring on/off** — forward every mirrorable command to the connected targets |
+| `Ctrl+F11` | **Remotes Control** — which connected instances F11 drives, plus Identify and Watch |
+| `F12` | While mirroring, **also execute here** (off = this viewer is a pure remote control) |
+| `Ctrl+F12` | **RemoteLog** — every line that crossed the wire, both directions, with round trips |
+
+F11 and F12 are session-only and always start **off** — a viewer that came back from a
+restart already driving machines you had forgotten about would be the worst kind of
+surprise.
+
+### Putting one picture on another screen
+
+Three keys, one question at three depths:
+
+| Key | What travels | Across machines | The far end |
+|:---|:---|:---:|:---|
+| `Ctrl+Enter` | a **position** — folder, sort order, image number | ✗ same machine only | goes there and **stays** |
+| `Alt+Enter` | the **image bytes**, outbound | ✅ | shows it **once**, unchanged otherwise |
+| `Ctrl+Alt+Enter` | the **image bytes**, inbound | ✅ | is only read from — you see what it shows |
+
+**`Ctrl+Enter` asks before it sends.** It queries the target: already in the same folder
+in the same order? Then just the image number — one round trip, no rescan, no flicker,
+so you can walk a folder and push each picture as you reach it. In a different folder?
+Then the folder, then the sort order, then — after waiting for that instance's own scan
+to finish — the number. Sending a position before the scan lands is the race this
+avoids.
+
+**`Alt+Enter` / `Ctrl+Alt+Enter` carry the picture's own file bytes**, base64 across
+several protocol lines, and the far end decodes them with its own decoder. That is why
+they work to a machine that cannot read your disk. The received image is shown **once**
+and changes nothing else: no folder, no sort order, no playlist position. A target
+running a fullscreen slideshow keeps running it and simply continues from the pushed
+image — the picture never enters its playlist, and both the received file and its cache
+entry are thrown away afterwards. An advert dropped between two slides is the case it
+was built for.
+
+### The Send Command panel (`Ctrl+F10`)
+
+Every command has one wire name, spelled exactly like its internal enumerator, and the
+panel's list is built from the same table the parser accepts — so a name shown there
+cannot come back "unknown command".
+
+- **Browse, don't remember** — the list is permanent and filterable; names are shown in
+  two blues, the second marking a command that takes a value
+- **Descriptions where they belong** — what the highlighted command does sits over the
+  list, what its value means sits over the Value box, with units, limits and an example
+- **Send to** — its own box of connected instances with a checkbox each, so an arbitrary
+  command reaches an arbitrary subset without disturbing what `F11` drives
+- **Session log** — every line sent and every answer, numbered, newest first, with the
+  instance that answered and its round trip
+
+### The protocol describes itself
+
+```
+$ nc 127.0.0.1 7777
+OK qIV 2.96.0.113 remote v2 [Monitor2]
+help
+qIV remote protocol v2
+FORMAT CMD <name>|<takesValue 0|1>|<description>|<value description>
+CMD NextImage|0|next image in the playlist|
+CMD JumpToImage|1|go to a numbered image in the current playlist|image NUMBER, 1-based …
+…
+```
+
+`help` lists everything this build accepts with its descriptions, so a client builds its
+own command list from one call instead of carrying a copy that goes stale. `ping` checks
+liveness, `version` reports app and protocol version.
+
+> **Security.** The protocol is plaintext and authentication happens once, at connect.
+> That is fine on loopback, which is what it binds to by default. On a routable network
+> treat the network as the boundary (VPN or a trusted VLAN). File-altering commands —
+> delete, move, paste, save — are *structurally* unreachable over the wire: a compile-time
+> assertion proves none of them has a row in the command table, and the executor refuses
+> them again at run time.
+
+**Full design record:** [`docs/REMOTE_MIRRORING.md`](docs/REMOTE_MIRRORING.md)
 
 ---
 

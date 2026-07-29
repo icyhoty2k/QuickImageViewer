@@ -193,6 +193,83 @@ namespace Remote::Mirror {
     // reach the same folder by different spellings.
     void BroadcastPosition(const std::wstring &line, const std::wstring &expectFile);
 
+    // --- Ctrl+Enter: push THIS viewer's picture at the controlled targets ----
+    //
+    // Prepare a picture here, press Ctrl+Enter, and the screens under Control
+    // show it. Distinct from mirroring, which forwards keystrokes and therefore
+    // only lines two viewers up if they already agree on folder and order.
+    //
+    // NOT a single line, and that is the whole design. The push is a
+    // NEGOTIATION, run per target on that target's own sender thread — the one
+    // thread allowed to wait for a reply:
+    //
+    //   1. `QueryState` — what folder is it in, in what order, how long is its
+    //      playlist, and where is it standing?
+    //   2. Same folder AND same order → `JumpToImage <n>` and nothing else. The
+    //      cheap case, and the common one: one round trip, no rescan, no flicker
+    //      on a screen that is already in the right place.
+    //   3. Otherwise send only what actually differs — the folder, then the sort
+    //      order — then WAIT for the far end's async scan to produce a playlist
+    //      that matches (re-asking `QueryState`, bounded: see PUSH_SETTLE_*),
+    //      and send the index last. Sending it before the scan finishes is the
+    //      race that kept a position out of `sync` altogether.
+    //
+    // SAME-MACHINE TARGETS ONLY, for the same reason positions are: a folder
+    // path and an index are both meaningless against another machine's files.
+    // Those targets are skipped and counted, not silently ignored.
+    //
+    // Independent of F11. This is an explicit act, like Sync now — a viewer with
+    // mirroring off is exactly the case it exists for. It does respect the
+    // Ctrl+F11 Control ticks, so "push" and "mirror" cannot reach different
+    // screens.
+    struct PushRequest {
+        std::wstring folder;    // full path of the folder holding the picture
+        std::wstring imagePath; // full path of the picture itself
+        std::wstring fileName;  // its bare name — what the far end must land on
+        int  index     = 0;     // 1-BASED position in this viewer's playlist
+        int  sortOrder = 0;     // app.fileHandlerDefaultSortOrder
+        bool sortRev   = false; // app.fileHandlerIsReverseSortOrder
+    };
+
+    // Queues the job to every CONTROLLED same-machine target and returns
+    // immediately — the negotiation happens on the sender threads.
+    //
+    // `skippedRemote` receives how many controlled targets were left out for
+    // being on another machine, so the caller can say so rather than reporting a
+    // push to screens that were never asked.
+    int SendImagePosition(const PushRequest &req, int *skippedRemote = nullptr);
+
+    // --- Alt+Enter: STREAM one image there, shown once ------------------------
+    //
+    // Carries the picture's own FILE BYTES (RemoteImageXfer.h) to every controlled,
+    // connected target — on this machine or any other. The far end shows it in
+    // place of its current slide and carries on exactly as it was: no folder
+    // change, no sort order, no playlist position, and the next image change there
+    // retires it (AppState::Interjection).
+    //
+    // NO same-machine restriction, and that is the point of sending bytes: the
+    // screen may be in another room, or the caller may be a phone. Nothing here
+    // depends on the far end being able to read a path.
+    //
+    // Returns how many targets the transfer was queued to. The transfer itself runs
+    // on each target's sender thread — the UI thread neither reads the file nor
+    // waits for a reply.
+    int StreamImageToTargets(const std::wstring &imagePath);
+
+    // --- Ctrl+Alt+Enter: ask ONE instance for the picture it is displaying -----
+    //
+    // The same transfer inbound. ONE target, because the answer is a picture and
+    // this screen shows one at a time: the WATCHED instance if there is one
+    // (Ctrl+F11's ◉ — you are already following that screen), otherwise the first
+    // controlled, connected row. `fromName` receives which, so the overlay can say
+    // who answered rather than leaving a multi-target selection ambiguous.
+    //
+    // Returns 1 when the request was queued, 0 when there was nobody to ask. The
+    // answer arrives later as WM_QIV_REMOTE_PULLED, carrying the path of a temp
+    // file the sender thread wrote — or an empty string, meaning that instance is
+    // showing nothing or refused.
+    int RequestDisplayedImage(std::wstring &fromName);
+
     // A `sync` in both spellings: `full` includes folder=, `portable` does not.
     // Each target is sent the one that suits it — a drive letter is worth
     // nothing on another machine, and applying it would send that instance to a
@@ -245,14 +322,18 @@ namespace Remote::Mirror {
         long long    deltaUs = -1;
     };
 
-    // Send one typed line to every CONTROLLED target — the ☑ rows in Ctrl+F11,
-    // which is the same selection F11 drives, so "send a command" and "mirror a
-    // keystroke" cannot reach different machines.
+    // Send one typed line to the targets whose ids are given, each answering
+    // separately to `replyTo`. Returns how many were actually reached.
     //
-    // Each target answers separately to `replyTo`. Returns how many were sent,
-    // so the caller can say "0 targets" rather than waiting for replies that
-    // will never come.
-    int SendToControlled(const std::wstring &line, HWND replyTo);
+    // Exists because the Send Command panel picks its OWN recipients: a list of
+    // connected instances with a tick each, so an arbitrary command can go to an
+    // arbitrary subset without disturbing the Ctrl+F11 selection, which decides
+    // where KEYSTROKES go. The two questions look alike and are not the same one —
+    // lining up a screen by hand should not change what F11 drives.
+    //
+    // The mirror selection is therefore NOT consulted here: the caller has already
+    // named the instances it means.
+    int SendToIds(const std::wstring &line, const std::vector<int> &ids, HWND replyTo);
 
     // `ping` every target and record the round trip in TargetView::lagUs.
     //
@@ -264,13 +345,24 @@ namespace Remote::Mirror {
     // loopback is the only thing that varies.
     void PingAll();
 
-    // --- Telling the console, instead of it asking -----------------------------
+    // --- Telling the panels, instead of them asking ----------------------------
     //
-    // The F10 Remote Servers console registers here while it is open and is sent
-    // WM_QIV_REMOTE_TARGETS_CHANGED whenever a target CONNECTS, DISCONNECTS, or
-    // changes the reason it is down. Without this the console showed whatever
-    // was true when it was last touched: a target coming up while it sat open
-    // did not appear until something forced a repaint.
+    // A panel registers while it is open and is sent WM_QIV_REMOTE_TARGETS_CHANGED
+    // whenever a target CONNECTS, DISCONNECTS, or changes the reason it is down.
+    // Without this a panel showed whatever was true when it was last touched: a
+    // target coming up while it sat open did not appear until something forced a
+    // repaint.
+    //
+    // SEVERAL SUBSCRIBERS. This was one HWND, which meant the F10 console and the
+    // Ctrl+F10 Send Command panel — both of which list connected instances — could
+    // not both be told, and whichever registered second stole the other's
+    // notifications. The loser then had to poll on a timer to notice a connection,
+    // which is a worse version of the thing this exists to replace.
+    //
+    // A fixed number of slots, each with its OWN coalescing gate: the producers are
+    // sender threads on a per-connection path, so subscribing must cost no lock and
+    // no allocation, and one shared gate would let a panel mid-rebuild suppress the
+    // message another panel has not had yet.
     //
     // PostMessage from a sender thread, never Send: a socket thread must not
     // wait on the UI thread, least of all for a repaint.
@@ -279,14 +371,18 @@ namespace Remote::Mirror {
     // keystroke, and the console's rebuild stats each row's exe; notifying on it
     // would put a filesystem call per target on the mirror path.
     //
-    // Coalesced: the post is skipped while one is outstanding, so a batch of
-    // targets coming up together costs one message. nullptr unregisters, and a
-    // closed console costs the sender threads one atomic load.
-    void SetPanelNotifyWindow(HWND hwnd);
+    // Coalesced per subscriber: a post is skipped while one is outstanding, so a
+    // batch of targets coming up together costs one message each. Idempotent — a
+    // panel shown twice without an intervening hide does not subscribe twice.
+    void AddPanelNotify(HWND hwnd);
 
-    // Called by the console, FIRST THING in the handler — before it re-reads the
+    // Call from Hide() AND from WM_DESTROY: a window can go away without being
+    // hidden first, and a sender thread must never post to a dead HWND.
+    void RemovePanelNotify(HWND hwnd);
+
+    // Called by the subscriber, FIRST THING in its handler — before it re-reads the
     // list, so a change landing mid-rebuild posts again rather than being lost.
-    void ClearPanelNotifyPending();
+    void ClearPanelNotifyPending(HWND hwnd);
 
     // Put every connected target's wire log into the given state (`enablelog
     // 1|0`). Sent to ALL of them, not just the mirrored selection: the log

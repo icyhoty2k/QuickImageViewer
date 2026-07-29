@@ -236,6 +236,34 @@ LRESULT CALLBACK MainAppWndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM l
             return 0;
         }
 
+        // Ctrl+Alt+Enter's answer: the picture another instance is displaying,
+        // already decoded from base64 and written to a temp file by the sender
+        // thread. LPARAM is that path — EMPTY when the far end is showing nothing
+        // or refused, which is an answer and gets said out loud.
+        case Constants::WM_QIV_REMOTE_PULLED: {
+            std::unique_ptr<std::wstring> path(reinterpret_cast<std::wstring *>(lParam));
+            if (!path) return 0;
+
+            if (path->empty()) {
+                g_overlayManager.PostCenterMessage(hWnd,
+                                                   Constants::Messages::STREAM_IN_EMPTY);
+                return 0;
+            }
+
+            // immediate: the user asked for this AT THIS KEYBOARD and is waiting to
+            // look at it, so it does not queue behind a slide boundary the way an
+            // arriving advert does. ownsTempFile: retiring it deletes the file.
+            if (!ArmInterjection(hWnd, *path, /*immediate=*/true,
+                                 /*ownsTempFile=*/true)) {
+                // Not decoded yet — WM_QIV_REPAINT puts it up when it lands. Only a
+                // failure to even arm it is worth a message.
+                if (!app.interject.queued)
+                    g_overlayManager.PostCenterMessage(
+                        hWnd, Constants::Messages::STREAM_IN_FAILED);
+            }
+            return 0;
+        }
+
         // The listener stopped by itself (socket died, or Stop ran). Nothing to
         // clean up here — Stop() owns the teardown; this only exists so the
         // panel can drop to "stopped" without polling.
@@ -270,6 +298,29 @@ LRESULT CALLBACK MainAppWndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM l
 
             if (wParam == Constants::Slideshow::TIMER_ID) {
                 if (app.slideshow.running && !app.slideshow.paused && !app.playlist.empty()) {
+                    // ── A one-shot interjected image ────────────────────────
+                    // Another instance sent one picture to be shown once
+                    // (Alt+Enter there). It occupies exactly ONE slide and leaves
+                    // nothing behind: the playlist and currentIndex never moved,
+                    // so clearing it and falling through advances from precisely
+                    // where the sequence was.
+                    //
+                    // Shown at this boundary rather than the instant it arrived,
+                    // so the slide already on screen is not cut short.
+                    if (app.interject.showing) {
+                        ClearInterjection();
+                        // fall through — this tick is the normal advance
+                    } else if (app.interject.queued) {
+                        if (ShowInterjectedImage(hWnd)) {
+                            SetTimer(hWnd, Constants::Slideshow::TIMER_ID,
+                                     app.slideshow.intervalMs, nullptr);
+                            return 0;   // it holds this slide — do not advance
+                        }
+                        // Still decoding. Leave it queued and advance normally;
+                        // it goes up at the next boundary rather than stalling
+                        // the slideshow for a file that is not ready.
+                    }
+
                     // ── Dedicated promotions ────────────────────────────────
                     // The ONLY seam the promotions system has in established
                     // code. A promotion replaces one slide: it is drawn from a
@@ -301,6 +352,35 @@ LRESULT CALLBACK MainAppWndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM l
                     }
 
                     int size = static_cast<int>(app.playlist.size());
+
+                    // The playlist can be REPLACED under a running slideshow: the
+                    // folder watcher reloads it, and a Ctrl+Enter push from
+                    // another instance changes the folder outright. The shuffle
+                    // permutation is built once, when the slideshow starts, so a
+                    // stale one indexes a list that no longer exists.
+                    //
+                    // Rebuilt here, and started AT the picture on screen, so a
+                    // pushed image is the one the slideshow carries on from —
+                    // which is the whole point of pushing to a screen that is
+                    // already running one.
+                    if (app.slideshow.shuffle &&
+                        static_cast<int>(app.slideshow.shuffleOrder.size()) != size) {
+                        app.slideshow.shuffleOrder.resize(size);
+                        std::iota(app.slideshow.shuffleOrder.begin(),
+                                  app.slideshow.shuffleOrder.end(), 0);
+                        std::shuffle(app.slideshow.shuffleOrder.begin(),
+                                     app.slideshow.shuffleOrder.end(),
+                                     std::mt19937{std::random_device{}()});
+                        app.slideshow.shufflePos = 0;
+                        for (int i = 0; i < size && app.currentIndex >= 0 &&
+                                        app.currentIndex < size; ++i) {
+                            if (app.slideshow.shuffleOrder[i] != app.currentIndex) continue;
+                            std::swap(app.slideshow.shuffleOrder[0],
+                                      app.slideshow.shuffleOrder[i]);
+                            break;
+                        }
+                    }
+
                     if (app.slideshow.shuffle && !app.slideshow.shuffleOrder.empty()) {
                         int next = app.slideshow.shufflePos + 1;
                         if (next >= size) {
@@ -491,6 +571,19 @@ LRESULT CALLBACK MainAppWndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM l
             return 0;
         }
         case Constants::WM_QIV_REPAINT: {
+            // A queued interjection whose decode has just landed, on a viewer with
+            // no slideshow running — so there is no slide boundary coming and
+            // nothing else will show it. BEFORE the wParam==1 early return on
+            // purpose: an interjection is warmed through the NEIGHBOUR preload
+            // path, so its arrival IS a wParam==1 message.
+            if (app.interject.queued && !app.interject.showing &&
+                (app.interject.immediate ||
+                 !(app.slideshow.running && !app.slideshow.paused))) {
+                if (ShowInterjectedImage(hWnd)) {
+                    uiManager.getCacheWindow().UpdateCacheView();
+                    return 0;
+                }
+            }
             // wParam=1: a neighbor preload landed — only refresh the cache panel.
             if (wParam == 1) {
                 uiManager.getCacheWindow().UpdateCacheView();
@@ -501,7 +594,10 @@ LRESULT CALLBACK MainAppWndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM l
             // decode lands — which is exactly what made promotions flash and
             // vanish. Leave the screen alone; the slideshow timer restores the
             // images when the promotion's time is up.
-            if (Dedicated::State().showingPromotion) {
+            // Same for an interjection: it is not a playlist entry either, and
+            // activating the current one here would rip it off the screen the
+            // moment any decode landed.
+            if (Dedicated::State().showingPromotion || app.interject.showing) {
                 uiManager.getCacheWindow().UpdateCacheView();
                 return 0;
             }

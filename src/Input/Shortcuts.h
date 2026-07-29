@@ -111,6 +111,40 @@ namespace Shortcuts {
     constexpr UINT SC_MIRROR_TOGGLE = VK_F11;
     constexpr UINT SC_MIRROR_LOCAL_TOGGLE = VK_F12;
 
+    // Ctrl+Enter — PUSH this viewer's folder and current image at the instances
+    // under Control (the ticked rows in Ctrl+F11), in one act. The point is
+    // preparing a picture here and then putting it on the other screens: F11
+    // forwards keystrokes, which only lines two viewers up if they already hold
+    // the same folder — this states the folder and the file outright.
+    //
+    // Deliberately NOT gated on F11. It is an explicit push, like Sync now: a
+    // viewer with mirroring off is exactly the case this exists for.
+    //
+    // Same key as fullscreen, whose PLAIN form is untouched (Enter, and also 'F'
+    // and Ctrl+Shift+T) — only the Ctrl form is taken.
+    constexpr UINT SC_REMOTE_SEND_POSITION = VK_RETURN; // requires ctrl
+
+    // Alt+Enter — send ONE picture to those same instances to be shown ONCE, and
+    // change nothing else about them: no folder, no sort order, no playlist
+    // position. It goes up in place of the current slide and the far end carries
+    // on exactly as it was — an advert dropped into a running slideshow.
+    //
+    // The picture's own BYTES travel, so this works to an instance on ANOTHER
+    // MACHINE — which Ctrl+Enter cannot, since a folder path and an index are read
+    // against the far end's own disk. It is also the half a phone app can speak.
+    //
+    // Alt+Enter used to be a fullscreen combination. Fullscreen keeps plain Enter,
+    // 'F' and Ctrl+Shift+T, so nothing was lost.
+    constexpr UINT SC_REMOTE_STREAM_IMAGE_OUT = VK_RETURN; // requires alt
+
+    // Ctrl+Alt+Enter — the same transfer INBOUND: ask one instance for the picture
+    // it is displaying and show it here, once. For seeing what a screen in another
+    // room has up without walking to it, so it carries bytes for the same reason.
+    //
+    // All three live on Enter because they are one question at three depths — go
+    // there, show this there, show that here.
+    constexpr UINT SC_REMOTE_STREAM_IMAGE_IN = VK_RETURN; // requires ctrl+alt
+
     // N (no modifier)  —  Master overlay toggle (all slots on/off)
     constexpr UINT SC_PANEL_OVERLAY_TOGGLE = 'N'; // not used
 
