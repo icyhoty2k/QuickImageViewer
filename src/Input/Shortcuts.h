@@ -71,6 +71,10 @@ namespace Shortcuts {
     // F10 — Remote Servers (src/Rem_TCP_IP): the list of slave instances with
     // their live status, and the buttons to start/stop, observe and sync each.
     // F9 is what others connect TO; F10 is what this connects OUT to.
+    // Ctrl+F10 — Send Command (Rem_TCP_IP/RemoteCmdWnd.h): type a command and
+    //       send it to the instances under Control. The manual counterpart to
+    //       F11 — it sends what you TYPE, including the commands that have no
+    //       key at all.
     constexpr UINT SC_PANEL_REMOTES_CONSOLE = VK_F10;
     constexpr UINT SC_PANEL_HISTORY_TOGGLE = VK_TAB;
     // NOTE: F11 no longer toggles fullscreen — it is SC_MIRROR_TOGGLE below.

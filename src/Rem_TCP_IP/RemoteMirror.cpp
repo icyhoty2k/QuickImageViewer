@@ -45,6 +45,13 @@ namespace {
     struct QueuedLine {
         std::wstring line;
         std::wstring expectFile;
+        // Where to report the answer, or nullptr for "nobody is listening".
+        //
+        // Only hand-sent commands (Ctrl+F10) set this. A mirrored keystroke does
+        // not: nobody reads the reply to "next image", and posting one message
+        // per keystroke per target would be a storm on the one path that has to
+        // stay cheap.
+        HWND replyTo = nullptr;
     };
 
     // One driven instance.
@@ -412,7 +419,7 @@ namespace {
                 // being watched before a restart would silently stop reporting.
                 if (t->observing.load(std::memory_order_acquire)) {
                     std::wstring reply, err2;
-                    (void) t->client.Send(L"observe 1", reply, err2);
+                    (void) t->client.Send(L"Observe 1", reply, err2);
                 }
             }
 
@@ -463,6 +470,17 @@ namespace {
                 // standalone ping, the whole inbound EVENT stream) was silently
                 // missing from a log that looked complete. See RemoteClient.h.
 
+                // Somebody typed this one and is waiting for the answer. Posted,
+                // not called: this is a sender thread, and the panel that reads
+                // it lives on the UI thread. Ownership passes with the pointer.
+                if (item.replyTo) {
+                    auto *r = new CmdReply{t->name, item.line, ok ? reply : err,
+                                           ok, t1 - t0};
+                    if (!PostMessageW(item.replyTo, Constants::WM_QIV_REMOTE_CMD_REPLY,
+                                      0, reinterpret_cast<LPARAM>(r)))
+                        delete r;   // the panel closed between send and answer
+                }
+
                 if (!ok) {
                     SetConnected(*t, false);
                     SetDown(*t, Classify(err));
@@ -510,7 +528,8 @@ namespace {
     }
 
     // Queue one line to one target. UI thread. Never blocks.
-    void PushTo(Target &t, const std::wstring &line, const std::wstring &expectFile) {
+    void PushTo(Target &t, const std::wstring &line, const std::wstring &expectFile,
+                HWND replyTo = nullptr) {
         // A listed-but-idle target is not being driven. Queuing for it would
         // build a backlog that replayed the moment somebody pressed Connect —
         // minutes of stale navigation arriving at once.
@@ -521,7 +540,7 @@ namespace {
             // answering would replay stale navigation when it came back, and a
             // mirrored keystroke is only meaningful at the moment it is made.
             while (t.queue.size() >= RT::MIRROR_QUEUE_MAX) t.queue.pop_front();
-            t.queue.push_back(QueuedLine{line, expectFile});
+            t.queue.push_back(QueuedLine{line, expectFile, replyTo});
         }
         t.cv.notify_one();
     }
@@ -827,6 +846,20 @@ void SendTo(int id, const std::wstring &line) {
     if (Target *t = Find(id)) PushTo(*t, line, {});
 }
 
+int SendToControlled(const std::wstring &line, HWND replyTo) {
+    int n = 0;
+    for (std::unique_ptr<Target> &t : g_targets) {
+        // CONNECTED and CONTROLLED. An unticked row is deliberately left out —
+        // the tick is what says "this viewer drives that one", and a typed
+        // command is no less driving than a keystroke.
+        if (!t->connected.load(std::memory_order_acquire)) continue;
+        if (!Mirrored(*t)) continue;
+        PushTo(*t, line, {}, replyTo);
+        ++n;
+    }
+    return n;
+}
+
 void PingAll() {
     // Down the LIVE connection: MaxConnections defaults to 1, so a second
     // connection to a target this master already drives would simply be refused
@@ -844,7 +877,7 @@ void BroadcastEnableLog(bool on) {
     // diagnostic about the whole session, and a screen left recording because it
     // happened to be unticked in Remotes Control is a file nobody will think to
     // look at, still growing.
-    const std::wstring line = on ? L"enablelog 1" : L"enablelog 0";
+    const std::wstring line = on ? L"EnableRemoteLog 1" : L"EnableRemoteLog 0";
     for (std::unique_ptr<Target> &t : g_targets) PushTo(*t, line, {});
 }
 
@@ -916,12 +949,12 @@ void SetObserving(int id, bool on) {
             // Told to stop, not merely forgotten: an instance left believing it
             // has an observer keeps pushing events down a connection that is no
             // longer acting on them.
-            PushTo(*other, L"observe 0", {});
+            PushTo(*other, L"Observe 0", {});
         }
     }
 
     t->observing.store(on, std::memory_order_release);
-    PushTo(*t, on ? L"observe 1" : L"observe 0", {});
+    PushTo(*t, on ? L"Observe 1" : L"Observe 0", {});
 }
 
 } // namespace Remote::Mirror

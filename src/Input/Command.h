@@ -252,6 +252,8 @@ enum class Command {
     MirrorPick,        // Ctrl+F11 — opens/closes the selection PANEL
     MirrorLocalToggle, // F12 — when mirroring, also execute here (not just forward)
     ToggleRemotesConsole,  // F10 — Remote Servers, the slave management console
+    ToggleRemoteCmd,       // Ctrl+F10 — the Send Command panel. LOCAL, like the
+                           // other panel toggles: no table row, never mirrored.
     ToggleRemoteLog,       // Ctrl+F12 — open/close the RemoteLog panel. LOCAL:
                            // it has no table row, so it is never mirrored — one
                            // keypress must not open a window on every screen.

@@ -61,6 +61,14 @@ namespace Remote {
         const wchar_t *name;
         Command        cmd;
         PayloadRule    payload;
+        // A few words, for the Ctrl+F10 command picker and the `help` listing.
+        //
+        // OPTIONAL, and empty for most rows on purpose: "NextImage — next image"
+        // is noise, and a table where two thirds of the descriptions restate the
+        // name teaches the reader to stop reading them. Filled in only where the
+        // name does NOT say it: what the payload means, what the units are, and
+        // the handful of commands whose effect is not guessable.
+        const wchar_t *desc = L"";
     };
 
     // Why a line was rejected. Maps onto Constants::RemoteTcpIp::ERR_*.

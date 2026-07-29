@@ -848,7 +848,7 @@ void LoadImageIndex(HWND hWnd, int index) {
     const bool tellObservers = Remote::HasObservers() && !Remote::InboundActive();
 
     if (tellTargets || tellObservers) {
-        const std::wstring line = L"goto " + std::to_wstring(index + 1);
+        const std::wstring line = L"JumpToImage " + std::to_wstring(index + 1);
 
         // Same-machine targets only — BroadcastPosition drops the rest, because
         // an index means nothing against a playlist of different files.

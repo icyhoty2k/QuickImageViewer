@@ -204,7 +204,11 @@ Command InputManager::ResolveKeyboardKeys(UINT key, LPARAM lParam) {
         case Shortcuts::SC_PANEL_DIR_TOGGLE: return Command::ToggleDir;
         case Shortcuts::SC_PANEL_DEDICATED_TOGGLE: return Command::ToggleDedicatedPanel;
         case Shortcuts::SC_PANEL_REMOTE_TOGGLE: return Command::ToggleRemotePanel;
-        case Shortcuts::SC_PANEL_REMOTES_CONSOLE: return Command::ToggleRemotesConsole;
+        // Ctrl+F10 sends a typed command, the same way Ctrl+F11 picks targets
+        // and Ctrl+F12 shows the wire: the plain key is the panel about the
+        // subject, the Ctrl form is the thing you DO with it.
+        case Shortcuts::SC_PANEL_REMOTES_CONSOLE:
+            return ctrl ? Command::ToggleRemoteCmd : Command::ToggleRemotesConsole;
         case Shortcuts::SC_PANEL_HISTORY_TOGGLE:
             if (ctrl) return Command::ToggleHistoryFull;
             return Command::ToggleHistory;
