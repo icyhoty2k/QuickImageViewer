@@ -122,11 +122,11 @@ set(SOURCES
 
 set_source_files_properties(libs/lib/tinyexr/include/miniz.c PROPERTIES COMPILE_FLAGS "/wd4132")
 
-find_program(SCCACHE_PROGRAM sccache)
-if (SCCACHE_PROGRAM)
-    set(CMAKE_C_COMPILER_LAUNCHER ${SCCACHE_PROGRAM})
-    set(CMAKE_CXX_COMPILER_LAUNCHER ${SCCACHE_PROGRAM})
-endif ()
+#find_program(SCCACHE_PROGRAM sccache)
+#if (SCCACHE_PROGRAM)
+#    set(CMAKE_C_COMPILER_LAUNCHER ${SCCACHE_PROGRAM})
+#    set(CMAKE_CXX_COMPILER_LAUNCHER ${SCCACHE_PROGRAM})
+#endif ()
 
 # WIN32 implicitly handles /SUBSYSTEM:WINDOWS
 add_executable(QuickImageViewer WIN32 ${SOURCES})
@@ -160,9 +160,9 @@ target_compile_options(QuickImageViewer PRIVATE
         /utf-8
         /Zc:__cplusplus
         /Zc:preprocessor
-
+        /MP
         # Disable /MP if sccache is active to prevent caching failures
-        $<$<NOT:$<BOOL:${SCCACHE_PROGRAM}>>:/MP>
+        #        $<$<NOT:$<BOOL:${SCCACHE_PROGRAM}>>:/MP>
 
         # --- Explicit Release Performance Overrides ---
         $<$<CONFIG:Release>:/O2>         # Maximize speed (implies /Ot)
