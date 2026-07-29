@@ -6,6 +6,7 @@
 #include "RemoteClient.h"
 #include "RemoteProtocol.h"
 #include "RemoteCrypto.h"
+#include "RemoteLog.h"   // Ctrl+F12 — recorded HERE, at the wire boundary
 
 #include "Platform/Constants.h"
 #include "Platform/ConstantsStrings.h"
@@ -37,6 +38,32 @@ namespace {
         }
         ~WsaRef() { if (up) WSACleanup(); }
     };
+
+    // --- Ctrl+F12 log helpers -------------------------------------------------
+    // The record lives at the WIRE BOUNDARY (see RemoteClient.h) so no send or
+    // receive can bypass it. All three short-circuit before building anything
+    // when recording is off.
+    long long LogNowUs() {
+        if (!Log::IsEnabled()) return 0;
+        LARGE_INTEGER f, c;
+        QueryPerformanceFrequency(&f);
+        QueryPerformanceCounter(&c);
+        return f.QuadPart ? (c.QuadPart * 1000000LL) / f.QuadPart : 0;
+    }
+
+    // A Client knows a socket; the owner supplies the readable name. Falls back
+    // rather than leaving the column blank, which would read as a bug.
+    std::wstring LogPeer(const std::wstring &label) {
+        return label.empty() ? std::wstring(L"(peer)") : label;
+    }
+
+    // One unsolicited line from the far end. No delta: nothing was asked, so
+    // there is no interval to report and a number would be invented.
+    void LogInbound(const std::wstring &peer, const std::wstring &line) {
+        if (!Log::IsEnabled() || line.empty()) return;
+        Log::Add(Log::Direction::In, LogPeer(peer), line,
+                 Log::SelfName(), L"(unsolicited)", -1);
+    }
 
     bool SendAll(SOCKET s, const std::string &bytes) {
         size_t sent = 0;
@@ -133,11 +160,13 @@ bool Client::ConnectWithSecret(const std::wstring &host, int port,
     return DoConnect(host, port, {}, secret, salt, errorOut);
 }
 
-bool Client::DoConnect(const std::wstring &host, int port,
-                       const std::wstring &password,
-                       const std::vector<BYTE> &presetSecret,
-                       const std::vector<BYTE> &presetSalt,
-                       std::wstring &errorOut) {
+// The body. Split out so DoConnect can record EVERY exit — and it has eight,
+// which is exactly why a log call before each of them would eventually miss one.
+bool Client::DoConnectBody(const std::wstring &host, int port,
+                           const std::wstring &password,
+                           const std::vector<BYTE> &presetSecret,
+                           const std::vector<BYTE> &presetSalt,
+                           std::wstring &errorOut) {
     Disconnect();
 
     if (host.empty()) {
@@ -313,11 +342,49 @@ bool Client::DoConnect(const std::wstring &host, int port,
     return true;
 }
 
+bool Client::DoConnect(const std::wstring &host, int port,
+                       const std::wstring &password,
+                       const std::vector<BYTE> &presetSecret,
+                       const std::vector<BYTE> &presetSalt,
+                       std::wstring &errorOut) {
+    const long long t0 = LogNowUs();
+    const bool ok = DoConnectBody(host, port, password, presetSecret, presetSalt, errorOut);
+
+    // The handshake is a wire exchange like any other and belongs in the log:
+    // "connect" with the banner as the reply, or with the reason it failed. A
+    // target that will not come up is the single most common thing this log is
+    // opened to explain, and it used to leave no trace at all.
+    //
+    // The label may not be set yet on the very first attempt, so the address is
+    // used — it is what was dialled, which is the useful thing here anyway.
+    if (Log::IsEnabled()) {
+        const std::wstring peer =
+            m_peerLabel.empty() ? (host + L":" + std::to_wstring(port)) : m_peerLabel;
+        Log::Add(Log::Direction::Out, Log::SelfName(),
+                 L"connect " + host + L":" + std::to_wstring(port),
+                 peer, ok ? (m_banner.empty() ? L"OK connected" : m_banner) : errorOut,
+                 LogNowUs() - t0);
+    }
+    return ok;
+}
+
 bool Client::Send(const std::wstring &commandLine,
                   std::wstring &replyOut, std::wstring &errorOut,
                   std::vector<std::wstring> *eventsOut) {
+    // Every exit from this function is recorded, including the three failures
+    // below. Doing it here rather than at the call sites is the whole point:
+    // `observe 1`, `ping`, `sync` and the reconnect re-arm all come through
+    // here, and only one of them used to be logged.
+    const long long t0 = LogNowUs();
+    const auto record = [&](const std::wstring &response) {
+        if (!Log::IsEnabled()) return;
+        Log::Add(Log::Direction::Out, Log::SelfName(), commandLine,
+                 LogPeer(m_peerLabel), response, LogNowUs() - t0);
+    };
+
     if (!m_connected) {
         errorOut = Constants::Messages::REMOTE_CLIENT_NOT_CONNECTED;
+        record(errorOut);
         return false;
     }
     const SOCKET s = static_cast<SOCKET>(m_sock);
@@ -325,6 +392,7 @@ bool Client::Send(const std::wstring &commandLine,
     if (!SendAll(s, ToUtf8(commandLine) + "\r\n")) {
         Disconnect();
         errorOut = Constants::Messages::REMOTE_CLIENT_SEND_FAILED;
+        record(errorOut);
         return false;
     }
 
@@ -332,6 +400,7 @@ bool Client::Send(const std::wstring &commandLine,
     if (!RecvLine(s, m_accum, line)) {
         Disconnect();
         errorOut = Constants::Messages::REMOTE_CLIENT_NO_REPLY;
+        record(errorOut);
         return false;
     }
 
@@ -344,18 +413,26 @@ bool Client::Send(const std::wstring &commandLine,
         // one into replyOut here would corrupt the reply AND lose the event.
         if (_wcsnicmp(line.c_str(), RT::RESP_EVENT, 5) == 0) {
             if (eventsOut) eventsOut->push_back(line);
+            // An EVENT is a line the WATCHED instance sent us of its own accord.
+            // Its own entry, in the IN direction — it is not our reply and it
+            // did not take us any time, so a delta would be a fiction.
+            if (Log::IsEnabled())
+                Log::Add(Log::Direction::In, LogPeer(m_peerLabel), line,
+                         Log::SelfName(), L"(unsolicited)", -1);
         } else {
             replyOut += line + L"\r\n";
         }
         if (!RecvLine(s, m_accum, line)) {
             Disconnect();
             errorOut = Constants::Messages::REMOTE_CLIENT_NO_REPLY;
+            record(errorOut);
             return false;
         }
     }
 
     replyOut += line;
     errorOut.clear();
+    record(replyOut);
     return true;
 }
 
@@ -373,6 +450,7 @@ bool Client::PollLine(std::wstring &lineOut, int timeoutMs) {
             m_accum.erase(0, nl + 1);
             if (!raw.empty() && raw.back() == '\r') raw.pop_back();
             lineOut = FromUtf8(raw.data(), raw.size());
+            LogInbound(m_peerLabel, lineOut);
             return true;
         }
     }
@@ -382,6 +460,10 @@ bool Client::PollLine(std::wstring &lineOut, int timeoutMs) {
                reinterpret_cast<const char *>(&shortTo), sizeof(shortTo));
 
     const bool got = RecvLine(s, m_accum, lineOut);
+    // THE watched-instance stream. This is the path that carries what a target
+    // does on its own — the reason F10's ◉ exists — and it never went through
+    // Send, which is why none of it appeared in the log before.
+    if (got) LogInbound(m_peerLabel, lineOut);
 
     // A timeout and a dead peer are indistinguishable at RecvLine (both return
     // false), so the socket must NOT be torn down here: an idle connection is
@@ -398,6 +480,9 @@ bool Client::PollLine(std::wstring &lineOut, int timeoutMs) {
 bool Probe(const std::wstring &host, int port, const std::wstring &password,
            std::wstring &infoOut, std::wstring &errorOut) {
     Client c;
+    // A short-lived client with no target behind it, so the address IS the name.
+    // Labelled anyway — an unlabelled row in the log reads as a bug.
+    c.SetPeerLabel(host + L":" + std::to_wstring(port));
     if (!c.Connect(host, port, password, errorOut)) return false;
 
     std::wstring reply;

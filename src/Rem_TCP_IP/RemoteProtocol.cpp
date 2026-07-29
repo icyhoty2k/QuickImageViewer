@@ -225,6 +225,14 @@ namespace {
         // trying to explain is usually not the one you are sitting at.
         { L"enablelog",             Command::EnableRemoteLog,                 PayloadRule::Required },
         { L"EnableRemoteLog",       Command::EnableRemoteLog,                 PayloadRule::Required },
+
+        // `msg <text>` — say something on the RECEIVER's screen. The console's
+        // Identify button sends each target its own name, which is how you tell
+        // two otherwise identical viewers apart.
+        //
+        // ONE spelling on purpose, unlike observe/sync/quit which carry a long
+        // alias beside the short one. `msg` is what it is called.
+        { L"msg",                   Command::msgRemote,                       PayloadRule::Required },
     };
 
     constexpr size_t TABLE_COUNT = sizeof(TABLE) / sizeof(TABLE[0]);
@@ -427,6 +435,14 @@ bool IsMirrorable(Command cmd) {
         // have every target reject it for a missing payload. Excluded here so
         // the two routes cannot both fire and send it twice.
         case Command::EnableRemoteLog:
+            return false;
+
+        // Aimed, never fanned out. `msg` is sent to ONE target on purpose — the
+        // Identify button gives each screen a DIFFERENT text, its own name, so a
+        // broadcast would be meaningless. And a slave that re-forwarded it to
+        // its own targets would put one instance's name on somebody else's
+        // screen.
+        case Command::msgRemote:
             return false;
 
         default:

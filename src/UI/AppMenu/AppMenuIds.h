@@ -60,6 +60,14 @@ namespace UI::AppMenu::Ids {
         ID_REMOTES_CONSOLE,       // open the Remote Servers console (F10)
         ID_REMOTES_CONTROL,       // open the Remotes Control panel  (Ctrl+F11)
         ID_REMOTE_LOG,            // open the RemoteLog panel        (Ctrl+F12)
+        // RemoteActivation submenu — the two mirroring switches, CHECKABLE.
+        // They are the only settings in this app with no visible resting state:
+        // F11 and F12 report themselves on an overlay that fades, so the only
+        // way to check whether mirroring is on was to press the key and read
+        // what it said — which also changed it. A menu that merely SHOWS them
+        // is the fix; being able to set them from there too is the bonus.
+        ID_REMOTE_MIRROR,         // F11 — forward my commands
+        ID_REMOTE_EXEC_HERE,      // F12 — while mirroring, also execute locally
 
         // Contiguous blocks. Each resolves to its Command by offset, so a block
         // never needs one case per member — see CommandForId.
@@ -90,7 +98,7 @@ namespace UI::AppMenu::Ids {
     // walks one step closer to the first band. Adding the hundredth would land ON
     // ID_WALLPAPER_FIRST and turn a menu click into a wallpaper mode — silently,
     // because both sides are just ints. Fail the build instead.
-    static_assert(ID_REMOTE_LOG < ID_WALLPAPER_FIRST,
+    static_assert(ID_REMOTE_EXEC_HERE < ID_WALLPAPER_FIRST,
                   "the scalar viewer ids have grown into the wallpaper band");
 
     // ── Settings ids (< VIEWER_BASE) ────────────────────────────────────────

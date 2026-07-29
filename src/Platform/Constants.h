@@ -443,6 +443,19 @@ namespace Constants {
     // one message and one rebuild, not one of each per keystroke. No payload —
     // the handler re-snapshots, because by the time it runs there may be more.
     constexpr UINT WM_QIV_REMOTE_LOG_ADDED = WM_USER + 15;
+    // Posted to the F10 Remote Servers console when a target's CONNECTION state
+    // changes — connected/disconnected, or the reason it is down. Posted from a
+    // sender thread, which is why it is a message and not a call.
+    //
+    // Connection state ONLY, deliberately not lag: lag is rewritten on every
+    // mirrored keystroke, and that console's rebuild stats each row's exe to
+    // fill the "exe missing" column. A notification per keystroke would put a
+    // filesystem call per target on the mirror path.
+    //
+    // Coalesced at the source, same as WM_QIV_REMOTE_LOG_ADDED. No payload —
+    // the console re-reads the whole target list, which is cheap and cannot go
+    // out of step with itself.
+    constexpr UINT WM_QIV_REMOTE_TARGETS_CHANGED = WM_USER + 16;
 
     // ---------------------------------------------------------------------------
     // Directory watcher (ReadDirectoryChangesW / FindFirstChangeNotification)
