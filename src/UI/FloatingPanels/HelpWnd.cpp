@@ -589,6 +589,28 @@ namespace UI {
             L"a time: out of a field, then out of edit mode, then closes the panel.\r\n"
             L"Connect all / Disconnect all act on every row, F5 polls them, and Sync all "
             L"pushes this viewer's view and effect state to all of them at once.", sApp);
+        Add(L"CTRL+F10",
+            L"Send Command — type a command and send it to the instances under Control "
+            L"(the ticked rows in Ctrl+F11). The manual counterpart to mirroring: F11 "
+            L"forwards what you DO, this sends what you TYPE, including the commands that "
+            L"have no key at all — msgRemote, OpenFile, JumpToImage, "
+            L"SlideshowSetInterval, EnableRemoteLog.\r\n"
+            L"Every command has ONE wire name, and it is spelled exactly like its "
+            L"Command.h enumerator — no short aliases to remember or confuse.\r\n"
+            L"BROWSE FIRST: the full command list is permanently on the left, scrollable "
+            L"and filterable — nobody remembers ninety wire names. Highlighting one "
+            L"explains it on the right, where its Value box and Send are. The list comes "
+            L"from the same table the wire parser accepts, so a name shown here cannot "
+            L"come back \"unknown command\".\r\n"
+            L"Type to filter (it matches the descriptions too). ARROWS and PgUp/PgDn move "
+            L"the highlight wherever the caret is. TAB swaps Filter and Value. ENTER in "
+            L"the filter takes the highlighted command — straight to Value if it needs "
+            L"one, otherwise it sends. ENTER in Value sends. ESC clears, then closes. "
+            L"Clicking a command selects it; it never sends on its own.\r\n"
+            L"Each instance answers separately, and the replies appear at the top with "
+            L"their round trip. Tick ALSO RUN IT HERE to include this viewer — off by "
+            L"default, since the usual reason to type a command here is to do something to "
+            L"the other screens.", sApp);
         Add(K(SC::SC_MIRROR_TOGGLE),
             L"MIRRORING on/off. While on, every command you give here is also sent to the "
             L"instances listed in Remote Servers (F10) — navigation, zoom, effects, "

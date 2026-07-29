@@ -59,6 +59,7 @@ namespace UI::AppMenu::Ids {
         ID_REMOTE_PANEL,          // open the Local Server panel     (F9)
         ID_REMOTES_CONSOLE,       // open the Remote Servers console (F10)
         ID_REMOTES_CONTROL,       // open the Remotes Control panel  (Ctrl+F11)
+        ID_REMOTE_CMD,            // open the Send Command panel     (Ctrl+F10)
         ID_REMOTE_LOG,            // open the RemoteLog panel        (Ctrl+F12)
         // RemoteActivation submenu — the two mirroring switches, CHECKABLE.
         // They are the only settings in this app with no visible resting state:

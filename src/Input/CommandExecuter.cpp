@@ -899,6 +899,11 @@ void InputManager::ExecuteCommand(HWND hWnd, Command cmd) {
             uiManager.Toggle(uiManager.getRemoteLogWindow());
             break;
 
+        // Ctrl+F10 — type a command and send it to the controlled instances.
+        case Command::ToggleRemoteCmd:
+            uiManager.Toggle(uiManager.getRemoteCmdWindow());
+            break;
+
         // Reachable from a script or another instance as `enablelog 0|1`; that
         // route is handled in RemoteExec and never lands here. Locally it is the
         // panel's button, which calls this so the state change goes through the
@@ -1655,6 +1660,8 @@ std::wstring InputManager::GetCommandValue(HWND hWnd, Command cmd) {
             return OnOff(uiManager.getMirrorPickerWindow().IsVisible());
         case Command::ToggleRemoteLog:
             return OnOff(uiManager.getRemoteLogWindow().IsVisible());
+        case Command::ToggleRemoteCmd:
+            return OnOff(uiManager.getRemoteCmdWindow().IsVisible());
         // The RECORDING state, not the panel's. This is the value a driving
         // instance reads back to confirm `enablelog 1` actually took.
         case Command::EnableRemoteLog: return OnOff(app.remoteLogEnabled);

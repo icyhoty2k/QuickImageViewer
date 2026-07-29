@@ -607,7 +607,7 @@ void RemotesWnd::DoIdentify(int row) {
 
     // SendTo, not a broadcast: every target gets a DIFFERENT text — its own
     // name — so there is nothing here to fan out.
-    Remote::Mirror::SendTo(r.id, L"msg " + who);
+    Remote::Mirror::SendTo(r.id, L"msgRemote " + who);
 
     m_status = L"Told " + who + L" to show its name on screen";
     Repaint();
@@ -802,7 +802,7 @@ void RemotesWnd::DoStopTarget(int row) {
     // command the MIRROR deny-list refuses to fan out — one Ctrl+Q must never
     // take every screen down at once — but a deliberate per-row button is
     // exactly the case that deny-list exists to leave available.
-    Remote::Mirror::SendTo(r.id, L"quit");
+    Remote::Mirror::SendTo(r.id, L"HardQuit");
     r.dot    = DotState::Pending;
     m_status = L"Stopping " + r.name + L"…";
     SetTimer(GetHwnd(), TIMER_PENDING, PENDING_DELAY_MS, nullptr);
@@ -817,8 +817,8 @@ void RemotesWnd::DoSyncAll() {
     //
     // Two spellings: the folder travels only to instances that share this
     // filesystem. A drive letter means nothing on another machine.
-    Remote::Mirror::BroadcastSync(L"sync " + Remote::BuildSyncPayload(true),
-                                  L"sync " + Remote::BuildSyncPayload(false));
+    Remote::Mirror::BroadcastSync(L"Sync " + Remote::BuildSyncPayload(true),
+                                  L"Sync " + Remote::BuildSyncPayload(false));
     m_status = L"Pushed folder, image and view state to " +
                std::to_wstring(m_rows.size()) + L" remote(s)";
     Repaint();
