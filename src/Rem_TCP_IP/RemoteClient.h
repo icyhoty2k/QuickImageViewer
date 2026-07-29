@@ -97,6 +97,20 @@ namespace Remote {
         // and the instance Name when it has one.
         const std::wstring &Banner() const { return m_banner; }
 
+        // What to call the far end in the Ctrl+F12 log.
+        //
+        // THE LOG IS WRITTEN IN HERE, at the wire boundary — inside Send,
+        // PollLine and the handshake — rather than by the callers. It was done
+        // by callers first and that was wrong: every path that sent a line by
+        // some other route was silently absent from the log, and a log with
+        // invisible gaps is worse than no log, because it is believed. The
+        // observe re-arm, the handshake, the standalone ping and the whole
+        // inbound EVENT stream from a watched instance were all missing.
+        //
+        // A Client knows only a socket, so the readable name has to be handed to
+        // it. Set once, right after construction; falls back to host:port.
+        void SetPeerLabel(const std::wstring &label) { m_peerLabel = label; }
+
     private:
         // Both public entry points land here. `password` is used when
         // `presetSecret` is empty, and ignored when it is not — the two are the
@@ -107,9 +121,21 @@ namespace Remote {
                        const std::vector<BYTE> &presetSalt,
                        std::wstring &errorOut);
 
+        // The handshake itself. DoConnect wraps it to time and log every exit —
+        // there are eight, which is why the record is not written inline.
+        bool DoConnectBody(const std::wstring &host, int port,
+                           const std::wstring &password,
+                           const std::vector<BYTE> &presetSecret,
+                           const std::vector<BYTE> &presetSalt,
+                           std::wstring &errorOut);
+
         // UINT_PTR rather than SOCKET so this header does not have to drag
         // winsock2.h into everything that includes it — and winsock2.h must
         // precede windows.h, which would put an ordering trap in every consumer.
+        // How the far end is named in the log. Written once by the owner; read
+        // on the sender thread only, which is the same thread that does the I/O.
+        std::wstring m_peerLabel;
+
         UINT_PTR     m_sock = static_cast<UINT_PTR>(~0ull); // INVALID_SOCKET
         std::string  m_accum;                                // partial line buffer
         std::wstring m_banner;

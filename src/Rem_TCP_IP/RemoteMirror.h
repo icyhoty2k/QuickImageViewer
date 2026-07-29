@@ -216,6 +216,12 @@ namespace Remote::Mirror {
     // there is anything to choose between.
     int  MirroredLiveCount();
 
+    // How many targets are CONNECTED right now, out of TargetCount(). One
+    // atomic load — the same counter HasLiveTargets tests, exposed as a number
+    // so a status readout does not have to build the whole Targets() vector to
+    // count it.
+    int  ConnectedCount();
+
     // What the F11 overlay says after the arrow: "3 targets" when everything
     // connected is following along, "Monitor2 (1 of 3)" when the selection has
     // been narrowed. A narrowed selection is invisible otherwise — this line is
@@ -236,6 +242,30 @@ namespace Remote::Mirror {
     // number — it reflects how busy that viewer's UI thread is, which on
     // loopback is the only thing that varies.
     void PingAll();
+
+    // --- Telling the console, instead of it asking -----------------------------
+    //
+    // The F10 Remote Servers console registers here while it is open and is sent
+    // WM_QIV_REMOTE_TARGETS_CHANGED whenever a target CONNECTS, DISCONNECTS, or
+    // changes the reason it is down. Without this the console showed whatever
+    // was true when it was last touched: a target coming up while it sat open
+    // did not appear until something forced a repaint.
+    //
+    // PostMessage from a sender thread, never Send: a socket thread must not
+    // wait on the UI thread, least of all for a repaint.
+    //
+    // CONNECTION STATE ONLY — not lag. Lag is rewritten on every mirrored
+    // keystroke, and the console's rebuild stats each row's exe; notifying on it
+    // would put a filesystem call per target on the mirror path.
+    //
+    // Coalesced: the post is skipped while one is outstanding, so a batch of
+    // targets coming up together costs one message. nullptr unregisters, and a
+    // closed console costs the sender threads one atomic load.
+    void SetPanelNotifyWindow(HWND hwnd);
+
+    // Called by the console, FIRST THING in the handler — before it re-reads the
+    // list, so a change landing mid-rebuild posts again rather than being lost.
+    void ClearPanelNotifyPending();
 
     // Put every connected target's wire log into the given state (`enablelog
     // 1|0`). Sent to ALL of them, not just the mirrored selection: the log

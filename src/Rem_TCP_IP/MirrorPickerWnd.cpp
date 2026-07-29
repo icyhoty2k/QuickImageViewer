@@ -4,7 +4,8 @@
 
 #include "AppState.h"
 #include "Platform/Constants.h"
-#include "UI/GdiPool.h"   // pooled brushes and pens — never DeleteObject them
+#include "Input/Command.h"   // InputManager::ExecuteCommand — the one sink
+#include "UI/GdiPool.h"      // pooled brushes and pens — never DeleteObject them
 
 #include <algorithm>
 #include <windowsx.h>
@@ -19,7 +20,10 @@ namespace {
 
     // Narrow enough to sit beside the pictures rather than over them: this panel
     // is meant to be left open while working, unlike the F10 console.
-    constexpr int PANEL_W  = 620;
+    // Widened for the Watch and Identify columns, which moved here from the F10
+    // console — see the header for why they belong on this panel.
+    // Six buttons in one row (96·3 + 132·2 + gaps = 688 units) plus the pads.
+    constexpr int PANEL_W  = 740;
     constexpr int PANEL_H  = 420;
     constexpr int PAD      = 14;
     constexpr int ROW_H    = 32;
@@ -35,7 +39,14 @@ namespace {
     constexpr UINT_PTR TIMER_REFRESH    = 1;
     constexpr UINT     REFRESH_PERIOD_MS = 1200;
 
-    enum ButtonId { BTN_ALL = 1, BTN_NONE, BTN_SYNC, BTN_CLOSE };
+    enum ButtonId { BTN_ALL = 1, BTN_NONE, BTN_SYNC,
+                    // The two mirroring switches, as toggle buttons. This panel
+                    // says WHICH instances are controlled; these say whether
+                    // anything is being sent at all — the question immediately
+                    // before and after the ticks, and previously answerable only
+                    // by pressing a key whose overlay had already faded.
+                    BTN_F11, BTN_F12,
+                    BTN_CLOSE };
 
     bool BgIsDark(COLORREF bg) {
         const int lum = (GetRValue(bg) * 299 + GetGValue(bg) * 587 + GetBValue(bg) * 114) / 1000;
@@ -101,6 +112,7 @@ void MirrorPickerWnd::Rebuild() {
         r.port        = v.port;
         r.sameMachine = v.sameMachine;
         r.mirroring   = v.mirroring;
+        r.observing   = v.observing;
         m_rows.push_back(std::move(r));
     }
 
@@ -122,6 +134,16 @@ void MirrorPickerWnd::BuildButtons() {
     // Greyed rather than hidden when nothing is ticked: a button that comes and
     // goes moves the one beside it under the cursor between two clicks.
     m_buttons.push_back({L"Sync now", BTN_SYNC,  {}, any});
+
+    // Labels carry their own state, so they say what is true rather than what a
+    // press would do — a toggle button reads as "this is on", not "turn on".
+    m_buttons.push_back({app.passCommandToRemote ? L"F11 Mirror: ON"
+                                                 : L"F11 Mirror: off",
+                         BTN_F11, {}, true});
+    m_buttons.push_back({app.resendCommandToCaller ? L"F12 Run here: ON"
+                                                   : L"F12 Run here: off",
+                         BTN_F12, {}, true});
+
     m_buttons.push_back({L"Close",    BTN_CLOSE, {}, true});
 }
 
@@ -138,6 +160,37 @@ void MirrorPickerWnd::DoToggleRow(int row) {
 
     Rebuild();
     m_status = L"Mirroring to " + Remote::Mirror::SelectionSummary();
+    Repaint();
+}
+
+void MirrorPickerWnd::DoToggleObserve(int row) {
+    if (row < 0 || row >= static_cast<int>(m_rows.size())) return;
+    const RowView &r = m_rows[row];
+    const bool on = !r.observing;
+    const std::wstring name = r.name.empty() ? r.host : r.name;
+
+    // EXCLUSIVE, and the exclusivity is enforced inside SetObserving rather than
+    // here — so it holds for any caller, not just for a panel that remembered.
+    Remote::Mirror::SetObserving(r.id, on);
+
+    m_status = on ? (L"Watching " + name + L" — this viewer follows what it does")
+                  : (L"Stopped watching " + name);
+    Rebuild();
+    Repaint();
+}
+
+void MirrorPickerWnd::DoIdentify(int row) {
+    if (row < 0 || row >= static_cast<int>(m_rows.size())) return;
+    const RowView &r = m_rows[row];
+
+    // The row's OWN name, so the screen answers the question the button asks.
+    // SendTo, not a broadcast: every target gets a different text.
+    const std::wstring who = r.name.empty()
+                                 ? (r.host + L":" + std::to_wstring(r.port))
+                                 : r.name;
+    Remote::Mirror::SendTo(r.id, L"msg " + who);
+
+    m_status = L"Told " + who + L" to show its name on screen";
     Repaint();
 }
 
@@ -191,6 +244,24 @@ int MirrorPickerWnd::HitTestButton(POINT pt) const {
     return -1;
 }
 
+int MirrorPickerWnd::HitTestMark(POINT pt) const {
+    for (size_t i = 0; i < m_rows.size(); ++i)
+        if (PtInRect(&m_rows[i].markRect, pt)) return static_cast<int>(i);
+    return -1;
+}
+
+int MirrorPickerWnd::HitTestEye(POINT pt) const {
+    for (size_t i = 0; i < m_rows.size(); ++i)
+        if (PtInRect(&m_rows[i].eyeRect, pt)) return static_cast<int>(i);
+    return -1;
+}
+
+int MirrorPickerWnd::HitTestIdentify(POINT pt) const {
+    for (size_t i = 0; i < m_rows.size(); ++i)
+        if (PtInRect(&m_rows[i].idRect, pt)) return static_cast<int>(i);
+    return -1;
+}
+
 // =============================================================================
 // Keyboard
 // =============================================================================
@@ -211,6 +282,8 @@ bool MirrorPickerWnd::OnKeyDown(WPARAM vk, bool /*ctrl*/, bool /*shift*/, bool /
             return true;
         case 'A': DoSetAll(true);   return true;
         case 'N': DoSetAll(false);  return true;
+        case 'W': DoToggleObserve(m_selectedRow); return true;
+        case 'I': DoIdentify(m_selectedRow);      return true;
         case 'S':
             if (std::any_of(m_rows.begin(), m_rows.end(),
                             [](const RowView &r) { return r.mirroring; }))
@@ -244,7 +317,9 @@ LRESULT MirrorPickerWnd::HandlePanelMessage(UINT message, WPARAM wParam, LPARAM 
             if (LOWORD(lParam) != HTCLIENT) break;
             POINT pt; GetCursorPos(&pt);
             ScreenToClient(GetHwnd(), &pt);
-            const bool hot = HitTestButton(pt) >= 0 || HitTestRow(pt) >= 0;
+            const bool hot = HitTestButton(pt) >= 0 || HitTestMark(pt) >= 0 ||
+                             HitTestEye(pt) >= 0 || HitTestIdentify(pt) >= 0 ||
+                             HitTestRow(pt) >= 0;
             SetCursor(hot ? Constants::Cursors::CURR_CLICK
                           : Constants::Cursors::CURR_DEFAULT);
             return TRUE;
@@ -276,20 +351,43 @@ LRESULT MirrorPickerWnd::HandlePanelMessage(UINT message, WPARAM wParam, LPARAM 
                     case BTN_ALL:   DoSetAll(true);    break;
                     case BTN_NONE:  DoSetAll(false);   break;
                     case BTN_SYNC:  DoSyncSelected();  break;
+                    // Through ExecuteCommand, the same sink F11 and F12 use, so
+                    // the overlay, the mirror gate and the "connected but
+                    // nothing under Control" refusal all behave identically
+                    // whether the switch was thrown here or from the keyboard.
+                    case BTN_F11:
+                        InputManager::ExecuteCommand(m_hParent, Command::MirrorToggle);
+                        Rebuild();   // the label and the accent both just changed
+                        Repaint();
+                        break;
+                    case BTN_F12:
+                        InputManager::ExecuteCommand(m_hParent, Command::MirrorLocalToggle);
+                        Rebuild();
+                        Repaint();
+                        break;
                     case BTN_CLOSE: Hide();            break;
                     default: break;
                 }
                 return 0;
             }
 
-            // The WHOLE row toggles, not just the tick box. This panel has
-            // exactly one action per row, so there is nothing for a click to be
-            // ambiguous between — unlike the F10 console, where three different
-            // controls share a line and the row itself only selects.
+            // Each control owns its hit box, checked BEFORE the row. With three
+            // of them on a line the row itself can only select — a whole-row
+            // toggle would be a coin toss between mirroring, watching and
+            // identifying.
+            const int mk = HitTestMark(pt);
+            if (mk >= 0) { m_selectedRow = mk; DoToggleRow(mk); return 0; }
+
+            const int ey = HitTestEye(pt);
+            if (ey >= 0) { m_selectedRow = ey; DoToggleObserve(ey); return 0; }
+
+            const int id = HitTestIdentify(pt);
+            if (id >= 0) { m_selectedRow = id; DoIdentify(id); return 0; }
+
             const int r = HitTestRow(pt);
             if (r >= 0) {
                 m_selectedRow = r;
-                DoToggleRow(r);
+                Repaint();
             }
             return 0;
         }
@@ -325,16 +423,19 @@ LRESULT MirrorPickerWnd::HandlePanelMessage(UINT message, WPARAM wParam, LPARAM 
             SelectObject(bb, m_hFontBold);
             SetTextColor(bb, fg);
             RECT tr{pad, static_cast<int>(6 * s), W - pad, static_cast<int>(26 * s)};
-            DrawTextW(bb, L"Remotes Control — which instances F11 drives", -1, &tr,
+            DrawTextW(bb, L"Remotes Control — which instances F11 drives, and which drive this one",
+                      -1, &tr,
                       DT_LEFT | DT_SINGLELINE);
 
             SelectObject(bb, m_hFontSmall);
             SetTextColor(bb, dim);
             {
                 RECT sr{pad, tr.bottom, W - pad, tr.bottom + static_cast<int>(16 * s)};
+                // The F11 state used to be spelled out here; it now has its own
+                // button, and saying it twice invites the two to disagree.
                 const std::wstring sub =
-                    std::wstring(L"F11 mirror ") + (app.passCommandToRemote ? L"ON" : L"off") +
-                    L"   ·   click a row to tick it · A all · N none · S sync · F5 refresh";
+                    L"☑ controls it · ◉ watches it · Identify names the screen"
+                    L"   ·   A all · N none · S sync · W watch · I identify";
                 DrawTextW(bb, sub.c_str(), -1, &sr, DT_LEFT | DT_SINGLELINE | DT_END_ELLIPSIS);
             }
 
@@ -343,13 +444,25 @@ LRESULT MirrorPickerWnd::HandlePanelMessage(UINT message, WPARAM wParam, LPARAM 
             // ── Buttons ──────────────────────────────────────────────────────
             {
                 const int gap = static_cast<int>(BTN_GAP * s);
-                const int bw  = static_cast<int>(96 * s);
                 int x = pad;
                 for (Button &btn : m_buttons) {
+                    // The two switches carry their state in the label, so they
+                    // are wider — and a FIXED width, not one that follows the
+                    // text, or the button beside them would shift under the
+                    // cursor every time one was pressed.
+                    const bool isSwitch = (btn.id == BTN_F11 || btn.id == BTN_F12);
+                    const int bw = static_cast<int>((isSwitch ? 132 : 96) * s);
+
                     btn.rect = {x, y, x + bw, y + btnH};
                     const int myIndex = static_cast<int>(&btn - m_buttons.data());
 
-                    COLORREF base = (btn.id == BTN_SYNC) ? PC::BTN_ALT : PC::BTN_MAIN;
+                    // Accent means ON for the two toggles, and "this is the
+                    // affirmative action" for Sync.
+                    COLORREF base = PC::BTN_MAIN;
+                    if (btn.id == BTN_SYNC)                                base = PC::BTN_ALT;
+                    else if (btn.id == BTN_F11 && app.passCommandToRemote) base = PC::BTN_ALT;
+                    else if (btn.id == BTN_F12 && app.resendCommandToCaller) base = PC::BTN_ALT;
+
                     if (!btn.enabled) base = bg;
                     else if (myIndex == m_hotButton)
                         base = RGB(std::min(255, GetRValue(base) + 40),
@@ -375,10 +488,21 @@ LRESULT MirrorPickerWnd::HandlePanelMessage(UINT message, WPARAM wParam, LPARAM 
             // ── Rows ─────────────────────────────────────────────────────────
             const int cNum  = pad + static_cast<int>(6   * s);
             const int cName = pad + static_cast<int>(46  * s);
-            const int cHost = pad + static_cast<int>(250 * s);
-            // The tick is the column you press, so it goes LAST and is centred —
-            // the same layout rule the F10 console's Link button follows.
-            const int cMark = pad + static_cast<int>(510 * s);
+            const int cHost = pad + static_cast<int>(240 * s);
+            // Identify sits right after Address because it ANSWERS the address:
+            // "which screen is 10.0.0.5?" is the question the column beside it
+            // raises, and the answer should not be at the far end of the row.
+            // Sized to the WORD, not to the column. "Identify" needs about 76
+            // units at the small font; anything wider is a button pretending to
+            // be more important than it is.
+            const int cIdL  = pad + static_cast<int>(420 * s);
+            const int cIdR  = pad + static_cast<int>(496 * s);
+            // Control — does F11 drive it? What this panel is FOR.
+            const int cMark = pad + static_cast<int>(560 * s);
+            // Watch last: it is the other DIRECTION, and the least used of the
+            // three, so it goes at the end rather than between the two that get
+            // pressed together.
+            const int cEye  = pad + static_cast<int>(640 * s);
 
             SelectObject(bb, m_hFontSmall);
             SetTextColor(bb, PC::HEADER);
@@ -393,7 +517,13 @@ LRESULT MirrorPickerWnd::HandlePanelMessage(UINT message, WPARAM wParam, LPARAM 
                     DrawTextW(bb, t, -1, &r, DT_CENTER | DT_VCENTER | DT_SINGLELINE);
                 };
                 hdr(cNum, L"#"); hdr(cName, L"Name"); hdr(cHost, L"Address");
-                hdrC(cMark, L"Mirror");
+                hdrC((cIdL + cIdR) / 2, L"Identify");
+                // "Control", not "Mirror": mirroring says HOW it works, which is
+                // an implementation detail, and reads as "shows the same thing".
+                // What the tick actually decides is whether this viewer DRIVES
+                // that one — so it says so.
+                hdrC(cMark, L"Control");
+                hdrC(cEye, L"Watch");
             }
             y += hdrH;
 
@@ -442,15 +572,54 @@ LRESULT MirrorPickerWnd::HandlePanelMessage(UINT message, WPARAM wParam, LPARAM 
                             (r.sameMachine ? L"" : L"  (remote)"),
                      r.sameMachine ? PC::PATH : PC::CHOICE);
 
-                // ☑ / ☐ — text rather than an owner-drawn control so it follows
-                // the theme and needs no assets. Symmetric about cMark, or
-                // DT_CENTER would put it off the axis its header sits on.
+                // Identify — make that screen say its own name. Every row here
+                // is connected by definition, so it is never greyed.
+                {
+                    const int vin = static_cast<int>(4 * s);
+                    r.idRect = {cIdL, y + vin, cIdR, y + rowH - vin};
+
+                    COLORREF base = PC::BTN_MAIN;
+                    if (static_cast<int>(i) == m_hotRow)
+                        base = RGB(std::min(255, GetRValue(base) + 40),
+                                   std::min(255, GetGValue(base) + 40),
+                                   std::min(255, GetBValue(base) + 40));
+                    FillRect(bb, &r.idRect, Gdi::Brush(base));
+
+                    HGDIOBJ op3 = SelectObject(bb, Gdi::Pen(line));
+                    HGDIOBJ ob3 = SelectObject(bb, GetStockObject(NULL_BRUSH));
+                    Rectangle(bb, r.idRect.left, r.idRect.top,
+                              r.idRect.right, r.idRect.bottom);
+                    SelectObject(bb, ob3); SelectObject(bb, op3);
+
+                    SelectObject(bb, m_hFontSmall);
+                    SetTextColor(bb, RGB(245, 245, 245));
+                    RECT ir = r.idRect;
+                    DrawTextW(bb, L"Identify", -1, &ir,
+                              DT_CENTER | DT_VCENTER | DT_SINGLELINE);
+                    SelectObject(bb, m_hFontBody);
+                }
+
+                // Control ☑ / ☐ — does F11 drive this one? Text rather than an
+                // owner-drawn control so it follows the theme and needs no
+                // assets. Symmetric about cMark, or DT_CENTER would put it off
+                // the axis its header sits on.
                 r.markRect = {cMark - static_cast<int>(16 * s), y,
                               cMark + static_cast<int>(16 * s), y + rowH};
                 {
                     SetTextColor(bb, r.mirroring ? PC::ON : dim);
                     RECT mr = r.markRect;
                     DrawTextW(bb, r.mirroring ? L"☑" : L"☐", -1, &mr,
+                              DT_CENTER | DT_VCENTER | DT_SINGLELINE);
+                }
+
+                // Watch ◉ / ○ — the other DIRECTION: does that instance drive
+                // THIS one? Last, because it is the odd one out of the three.
+                r.eyeRect = {cEye - static_cast<int>(16 * s), y,
+                             cEye + static_cast<int>(16 * s), y + rowH};
+                {
+                    SetTextColor(bb, r.observing ? PC::ON : dim);
+                    RECT er2 = r.eyeRect;
+                    DrawTextW(bb, r.observing ? L"◉" : L"○", -1, &er2,
                               DT_CENTER | DT_VCENTER | DT_SINGLELINE);
                 }
 
@@ -474,11 +643,12 @@ LRESULT MirrorPickerWnd::HandlePanelMessage(UINT message, WPARAM wParam, LPARAM 
                 std::wstring foot = m_status;
                 COLORREF     fc   = dim;
                 if (app.passCommandToRemote && !m_rows.empty() && !any) {
-                    foot = L"F11 is ON but nothing is ticked — no keystroke is being "
-                           L"forwarded anywhere.";
+                    foot = L"F11 is ON but nothing is under Control — no keystroke is "
+                           L"being forwarded anywhere.";
                     fc   = PC::WARN;
                 } else if (foot.empty()) {
-                    foot = L"Ticks take effect immediately. Esc closes; the selection stays.";
+                    foot = L"Ticks take effect immediately. ◉ is a radio button — one "
+                           L"watched instance at a time. Esc closes; the selection stays.";
                 }
 
                 SelectObject(bb, m_hFontSmall);

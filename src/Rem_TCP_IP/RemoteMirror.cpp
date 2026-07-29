@@ -140,10 +140,36 @@ namespace {
     // Keeps the counter in step with a target's connected flag. The two must
     // move together or the count drifts: a thread that reconnected without
     // publishing it would leave the viewer unrestricted while it was driving.
+    // Where the F10 console listens, and its coalescing gate. Outside any mutex
+    // because the producers are sender threads and the point of the gate is that
+    // they never serialise on it.
+    std::atomic<HWND> g_panelWnd{nullptr};
+    std::atomic<bool> g_panelPending{false};
+
+    // Tell the console something about a CONNECTION changed. Cheap and silent
+    // when the console is closed, which is the usual case.
+    void NotifyTargetsChanged() {
+        HWND hwnd = g_panelWnd.load(std::memory_order_acquire);
+        if (!hwnd) return;
+        if (g_panelPending.exchange(true, std::memory_order_acq_rel)) return;
+        if (!PostMessageW(hwnd, Constants::WM_QIV_REMOTE_TARGETS_CHANGED, 0, 0))
+            g_panelPending.store(false, std::memory_order_release);
+    }
+
     void SetConnected(Target &t, bool up) {
         const bool was = t.connected.exchange(up, std::memory_order_acq_rel);
         if (was == up) return;
         g_connectedCount.fetch_add(up ? 1 : -1, std::memory_order_acq_rel);
+        // Only reached on a REAL transition — the early return above is the
+        // filter, so a reconnect loop that keeps failing does not spam this.
+        NotifyTargetsChanged();
+    }
+
+    // The other half of "connection state": WHY a row is down. Exchanged rather
+    // than stored so an unchanged reason does not repaint — a target that is
+    // switched off re-classifies as Offline on every retry.
+    void SetDown(Target &t, Down d) {
+        if (t.down.exchange(d, std::memory_order_acq_rel) != d) NotifyTargetsChanged();
     }
 
     // --- helpers ------------------------------------------------------------
@@ -329,7 +355,7 @@ namespace {
                     t->client.Disconnect();
                     SetConnected(*t, false);
                 }
-                t->down.store(Down::None, std::memory_order_release);
+                SetDown(*t, Down::None);
                 SetError(*t, {});
 
                 std::unique_lock<std::mutex> lk(t->mtx);
@@ -358,7 +384,7 @@ namespace {
 
                 if (!ok) {
                     SetConnected(*t, false);
-                    t->down.store(Classify(err), std::memory_order_release);
+                    SetDown(*t, Classify(err));
                     SetError(*t, err);
 
                     // Back off rather than spin: a slave that is switched off is
@@ -367,11 +393,18 @@ namespace {
                     // Shutdown still stops this thread promptly.
                     std::unique_lock<std::mutex> lk(t->mtx);
                     t->cv.wait_for(lk, std::chrono::milliseconds(RT::MIRROR_RECONNECT_MS),
-                                   [t] { return t->stop.load(std::memory_order_acquire); });
+                                   [t] {
+                                       return t->stop.load(std::memory_order_acquire) ||
+                                              // Pressing Disconnect on a row that
+                                              // is still retrying should stop the
+                                              // retrying NOW, not at the end of
+                                              // the current back-off.
+                                              !t->wantConnect.load(std::memory_order_acquire);
+                                   });
                     continue;
                 }
                 SetConnected(*t, true);
-                t->down.store(Down::None, std::memory_order_release);
+                SetDown(*t, Down::None);
                 SetError(*t, {});
 
                 // Re-arm observation across a reconnect. The far end drops its
@@ -400,6 +433,16 @@ namespace {
                     t->cv.wait(lk, [t] {
                         return t->stop.load(std::memory_order_acquire) ||
                                !t->queue.empty() ||
+                               // DISCONNECT. Without this the thread parks here
+                               // holding a live socket and never looks at
+                               // wantConnect again: SetConnecting(id, false)
+                               // notifies, the predicate is re-evaluated, none
+                               // of the other terms is true, and it goes
+                               // straight back to sleep still connected. The
+                               // idle branch at the top of the loop is the only
+                               // thing that tears the socket down, and it is
+                               // unreachable until something else wakes this.
+                               !t->wantConnect.load(std::memory_order_acquire) ||
                                t->resolveWanted.load(std::memory_order_acquire);
                     });
                     continue;
@@ -414,22 +457,15 @@ namespace {
                 const bool ok = t->client.Send(item.line, reply, err, &events);
                 const long long t1 = NowUs();
 
-                // THE outbound record point. Here rather than inside Client::Send
-                // because this is where the round trip is already measured and
-                // where the target has a name — the client knows only a socket.
-                // A failed send is logged too, with its error as the response:
-                // "what did it say" and "it said nothing" are the same question.
-                //
-                // Gated BEFORE the call, not inside it: with logging off this is
-                // one relaxed atomic load and nothing is copied. SelfName() alone
-                // would take the store's mutex and return a string.
-                if (Log::IsEnabled())
-                    Log::Add(Log::Direction::Out, Log::SelfName(), item.line, t->name,
-                             ok ? reply : err, t1 - t0);
+                // NOT logged here. The record lives inside Client::Send, at the
+                // wire boundary — logging at call sites meant every other path
+                // that sent a line (the observe re-arm, the handshake, the
+                // standalone ping, the whole inbound EVENT stream) was silently
+                // missing from a log that looked complete. See RemoteClient.h.
 
                 if (!ok) {
                     SetConnected(*t, false);
-                    t->down.store(Classify(err), std::memory_order_release);
+                    SetDown(*t, Classify(err));
                     SetError(*t, err);
                 } else {
                     t->lagUs.store(t1 - t0, std::memory_order_release);
@@ -554,6 +590,10 @@ bool HasLiveTargets() {
     return g_connectedCount.load(std::memory_order_acquire) > 0;
 }
 
+int ConnectedCount() {
+    return g_connectedCount.load(std::memory_order_acquire);
+}
+
 // Disk order is refused while connected, but blocking the COMMAND does not undo
 // having been in that mode already. Connecting while sorted by disk would leave
 // two instances quietly ordering their playlists differently, which is the exact
@@ -599,6 +639,11 @@ int AddTarget(const std::wstring &name, const std::wstring &host, int port,
     // UI thread, and the last moment before a sender thread exists that will
     // want this name and may not read Config() itself. See RemoteLog.h.
     Log::SetSelfName(Remote::Config().name);
+
+    // How the log names the far end. Set before the sender thread starts, so
+    // even the first handshake is recorded against a readable name rather than
+    // an address.
+    t->client.SetPeerLabel(name.empty() ? (host + L":" + std::to_wstring(port)) : name);
     t->wantConnect.store(connectNow, std::memory_order_release);
 
     Target *raw = t.get();
@@ -801,6 +846,17 @@ void BroadcastEnableLog(bool on) {
     // look at, still growing.
     const std::wstring line = on ? L"enablelog 1" : L"enablelog 0";
     for (std::unique_ptr<Target> &t : g_targets) PushTo(*t, line, {});
+}
+
+void SetPanelNotifyWindow(HWND hwnd) {
+    g_panelWnd.store(hwnd, std::memory_order_release);
+    // Unregistering must open the gate too, or the next console to open would
+    // never be told about anything.
+    if (!hwnd) g_panelPending.store(false, std::memory_order_release);
+}
+
+void ClearPanelNotifyPending() {
+    g_panelPending.store(false, std::memory_order_release);
 }
 
 void RefreshSameMachine() {
