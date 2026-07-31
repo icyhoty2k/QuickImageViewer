@@ -1,15 +1,36 @@
-name: Publish to WinGet2
+name: Publish to WinGet23
 
 on:
   release:
     types: [ released ]
   workflow_dispatch:
+    inputs:
+      version:
+        description: "QIV release version"
+        required: true
+        type: string
 
 jobs:
   publish:
     runs-on: windows-latest
 
     steps:
+      - name: Determine version
+        id: version
+        shell: pwsh
+        run: |
+          if ("${{ github.event_name }}" -eq "release") {
+            $version = "${{ github.event.release.tag_name }}"
+          }
+          else {
+            $version = "${{ inputs.version }}"
+          }
+
+          $version = $version.TrimStart("v")
+
+          Write-Host "Version: $version"
+          "version=$version" >> $env:GITHUB_OUTPUT
+
       - name: Install wingetcreate
         shell: pwsh
         run: |
@@ -17,13 +38,20 @@ jobs:
             -Uri "https://aka.ms/wingetcreate/latest" `
             -OutFile "$env:RUNNER_TEMP\wingetcreate.exe"
 
-      - name: Update WinGet manifest
+      - name: Update WinGet
         shell: pwsh
         env:
           WINGET_TOKEN: ${{ secrets.WINGET_TOKEN }}
         run: |
+          $version = "${{ steps.version.outputs.version }}"
+          $url = "https://github.com/icyhoty2k/QuickImageViewer/releases/download/$version/QuickImageViewer.exe"
+
+          Write-Host "Updating WinGet:"
+          Write-Host "  Version: $version"
+          Write-Host "  URL: $url"
+
           & "$env:RUNNER_TEMP\wingetcreate.exe" update `
             IcyHotY2K.QuickImageViewer `
-            --urls "https://github.com/icyhoty2k/QuickImageViewer/releases/download/${{ github.event.release.tag_name }}/QuickImageViewer.exe" `
+            --urls "$url" `
             --submit `
             --token "$env:WINGET_TOKEN"
