@@ -1,4 +1,4 @@
-name: Publish to WinGet112
+name: Publish to WinGet3
 
 on:
   workflow_dispatch:
@@ -26,7 +26,9 @@ jobs:
             throw "GitHub Release '$env:TAG' was not found."
           }
 
-          $asset = $release.assets | Where-Object { $_.name -eq "QuickImageViewer.exe" }
+          $asset = $release.assets | Where-Object {
+            $_.name -eq "QuickImageViewer.exe"
+          }
 
           if (-not $asset) {
             throw "QuickImageViewer.exe was not found in release '$env:TAG'."
@@ -37,7 +39,7 @@ jobs:
           Write-Host "Release tag: $env:TAG"
           Write-Host "WinGet version: $version"
           Write-Host "Asset: $($asset.name)"
-          Write-Host "Download URL: $($asset.browser_download_url)"
+          Write-Host "URL: $($asset.browser_download_url)"
 
           "tag=$env:TAG" >> $env:GITHUB_OUTPUT
           "version=$version" >> $env:GITHUB_OUTPUT
@@ -55,14 +57,8 @@ jobs:
         env:
           WINGET_TOKEN: ${{ secrets.WINGET_TOKEN }}
         run: |
-          $version = "${{ steps.release.outputs.version }}"
-          $url = "${{ steps.release.outputs.url }}"
-
-          Write-Host "Publishing version: $version"
-          Write-Host "Installer URL: $url"
-
           & "$env:RUNNER_TEMP\wingetcreate.exe" update `
             IcyHotY2K.QuickImageViewer `
-            --urls "$url" `
+            --urls "${{ steps.release.outputs.url }}" `
             --submit `
             --token "$env:WINGET_TOKEN"
