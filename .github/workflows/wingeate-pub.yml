@@ -1,4 +1,4 @@
-name: Publish to WinGet
+name: Publish to WinGet7
 
 on:
   workflow_dispatch:
@@ -13,29 +13,6 @@ jobs:
     runs-on: windows-latest
 
     steps:
-      - name: Verify release asset
-        shell: pwsh
-        env:
-          TAG: ${{ inputs.tag }}
-        run: |
-          $url = "https://github.com/${{ github.repository }}/releases/download/$env:TAG/QuickImageViewer.exe"
-
-          Write-Host "Checking:"
-          Write-Host $url
-
-          try {
-            Invoke-WebRequest `
-              -Uri $url `
-              -Method Head `
-              -MaximumRedirection 10 `
-              -ErrorAction Stop
-
-            Write-Host "QuickImageViewer.exe found."
-          }
-          catch {
-            throw "QuickImageViewer.exe was not found at $url"
-          }
-
       - name: Install wingetcreate
         shell: pwsh
         run: |
@@ -51,7 +28,7 @@ jobs:
         run: |
           $url = "https://github.com/${{ github.repository }}/releases/download/$env:TAG/QuickImageViewer.exe"
 
-          Write-Host "Publishing:"
+          Write-Host "Publishing QIV release:"
           Write-Host "Tag: $env:TAG"
           Write-Host "URL: $url"
 
@@ -60,3 +37,7 @@ jobs:
             --urls "$url" `
             --submit `
             --token "$env:WINGET_TOKEN"
+
+          if ($LASTEXITCODE -ne 0) {
+            exit $LASTEXITCODE
+          }
