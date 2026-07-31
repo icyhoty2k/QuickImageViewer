@@ -1,12 +1,10 @@
-name: Publish to WinGet23
+name: Publish to WinGet112
 
 on:
-  release:
-    types: [ released ]
   workflow_dispatch:
     inputs:
-      version:
-        description: "QIV release version"
+      tag:
+        description: "GitHub Release tag to publish"
         required: true
         type: string
 
@@ -15,21 +13,35 @@ jobs:
     runs-on: windows-latest
 
     steps:
-      - name: Determine version
-        id: version
+      - name: Get release information
+        id: release
         shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ inputs.tag }}
         run: |
-          if ("${{ github.event_name }}" -eq "release") {
-            $version = "${{ github.event.release.tag_name }}"
-          }
-          else {
-            $version = "${{ inputs.version }}"
+          $release = gh api "repos/${{ github.repository }}/releases/tags/$env:TAG" | ConvertFrom-Json
+
+          if (-not $release) {
+            throw "GitHub Release '$env:TAG' was not found."
           }
 
-          $version = $version.TrimStart("v")
+          $asset = $release.assets | Where-Object { $_.name -eq "QuickImageViewer.exe" }
 
-          Write-Host "Version: $version"
+          if (-not $asset) {
+            throw "QuickImageViewer.exe was not found in release '$env:TAG'."
+          }
+
+          $version = $env:TAG.TrimStart("v")
+
+          Write-Host "Release tag: $env:TAG"
+          Write-Host "WinGet version: $version"
+          Write-Host "Asset: $($asset.name)"
+          Write-Host "Download URL: $($asset.browser_download_url)"
+
+          "tag=$env:TAG" >> $env:GITHUB_OUTPUT
           "version=$version" >> $env:GITHUB_OUTPUT
+          "url=$($asset.browser_download_url)" >> $env:GITHUB_OUTPUT
 
       - name: Install wingetcreate
         shell: pwsh
@@ -38,17 +50,16 @@ jobs:
             -Uri "https://aka.ms/wingetcreate/latest" `
             -OutFile "$env:RUNNER_TEMP\wingetcreate.exe"
 
-      - name: Update WinGet
+      - name: Publish to WinGet
         shell: pwsh
         env:
           WINGET_TOKEN: ${{ secrets.WINGET_TOKEN }}
         run: |
-          $version = "${{ steps.version.outputs.version }}"
-          $url = "https://github.com/icyhoty2k/QuickImageViewer/releases/download/$version/QuickImageViewer.exe"
+          $version = "${{ steps.release.outputs.version }}"
+          $url = "${{ steps.release.outputs.url }}"
 
-          Write-Host "Updating WinGet:"
-          Write-Host "  Version: $version"
-          Write-Host "  URL: $url"
+          Write-Host "Publishing version: $version"
+          Write-Host "Installer URL: $url"
 
           & "$env:RUNNER_TEMP\wingetcreate.exe" update `
             IcyHotY2K.QuickImageViewer `
