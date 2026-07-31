@@ -1,4 +1,4 @@
-name: Publish to WinGet5
+name: Publish to WinGet
 
 on:
   workflow_dispatch:
@@ -13,34 +13,28 @@ jobs:
     runs-on: windows-latest
 
     steps:
-      - name: Find existing release
-        id: release
+      - name: Verify release asset
         shell: pwsh
         env:
-          GH_TOKEN: ${{ github.token }}
           TAG: ${{ inputs.tag }}
         run: |
-          $release = gh api `
-            "repos/${{ github.repository }}/releases/tags/$env:TAG" |
-            ConvertFrom-Json
+          $url = "https://github.com/${{ github.repository }}/releases/download/$env:TAG/QuickImageViewer.exe"
 
-          if (-not $release) {
-            throw "Release '$env:TAG' does not exist."
+          Write-Host "Checking:"
+          Write-Host $url
+
+          try {
+            Invoke-WebRequest `
+              -Uri $url `
+              -Method Head `
+              -MaximumRedirection 10 `
+              -ErrorAction Stop
+
+            Write-Host "QuickImageViewer.exe found."
           }
-
-          $asset = $release.assets |
-            Where-Object { $_.name -eq "QuickImageViewer.exe" }
-
-          if (-not $asset) {
-            throw "QuickImageViewer.exe is missing from release '$env:TAG'."
+          catch {
+            throw "QuickImageViewer.exe was not found at $url"
           }
-
-          Write-Host "Release: $($release.name)"
-          Write-Host "Tag: $($release.tag_name)"
-          Write-Host "Asset: $($asset.name)"
-          Write-Host "URL: $($asset.browser_download_url)"
-
-          "url=$($asset.browser_download_url)" >> $env:GITHUB_OUTPUT
 
       - name: Install wingetcreate
         shell: pwsh
@@ -53,9 +47,16 @@ jobs:
         shell: pwsh
         env:
           WINGET_TOKEN: ${{ secrets.WINGET_TOKEN }}
+          TAG: ${{ inputs.tag }}
         run: |
+          $url = "https://github.com/${{ github.repository }}/releases/download/$env:TAG/QuickImageViewer.exe"
+
+          Write-Host "Publishing:"
+          Write-Host "Tag: $env:TAG"
+          Write-Host "URL: $url"
+
           & "$env:RUNNER_TEMP\wingetcreate.exe" update `
             IcyHotY2K.QuickImageViewer `
-            --urls "${{ steps.release.outputs.url }}" `
+            --urls "$url" `
             --submit `
             --token "$env:WINGET_TOKEN"
