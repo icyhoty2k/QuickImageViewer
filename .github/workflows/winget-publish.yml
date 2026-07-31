@@ -2,7 +2,7 @@ name: Publish to WinGet
 
 on:
   release:
-    types: [released]
+    types: [ released ]
   workflow_dispatch:
 
 jobs:
@@ -12,7 +12,7 @@ jobs:
       - name: Publish to WinGet
         uses: vedantmgoyal9/winget-releaser@v2
         with:
-          identifier: icyhoty2k.QuickImageViewer
+          identifier: IcyHotY2K.QuickImageViewer
           token: ${{ secrets.WINGET_TOKEN }}
           # Uncomment if you publish multiple assets and want only the .exe picked up:
           # installers-regex: '\.exe$'
