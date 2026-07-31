@@ -1,10 +1,10 @@
-name: Publish to WinGet3
+name: Publish to WinGet5
 
 on:
   workflow_dispatch:
     inputs:
       tag:
-        description: "GitHub Release tag to publish"
+        description: "Existing GitHub Release tag"
         required: true
         type: string
 
@@ -13,36 +13,33 @@ jobs:
     runs-on: windows-latest
 
     steps:
-      - name: Get release information
+      - name: Find existing release
         id: release
         shell: pwsh
         env:
           GH_TOKEN: ${{ github.token }}
           TAG: ${{ inputs.tag }}
         run: |
-          $release = gh api "repos/${{ github.repository }}/releases/tags/$env:TAG" | ConvertFrom-Json
+          $release = gh api `
+            "repos/${{ github.repository }}/releases/tags/$env:TAG" |
+            ConvertFrom-Json
 
           if (-not $release) {
-            throw "GitHub Release '$env:TAG' was not found."
+            throw "Release '$env:TAG' does not exist."
           }
 
-          $asset = $release.assets | Where-Object {
-            $_.name -eq "QuickImageViewer.exe"
-          }
+          $asset = $release.assets |
+            Where-Object { $_.name -eq "QuickImageViewer.exe" }
 
           if (-not $asset) {
-            throw "QuickImageViewer.exe was not found in release '$env:TAG'."
+            throw "QuickImageViewer.exe is missing from release '$env:TAG'."
           }
 
-          $version = $env:TAG.TrimStart("v")
-
-          Write-Host "Release tag: $env:TAG"
-          Write-Host "WinGet version: $version"
+          Write-Host "Release: $($release.name)"
+          Write-Host "Tag: $($release.tag_name)"
           Write-Host "Asset: $($asset.name)"
           Write-Host "URL: $($asset.browser_download_url)"
 
-          "tag=$env:TAG" >> $env:GITHUB_OUTPUT
-          "version=$version" >> $env:GITHUB_OUTPUT
           "url=$($asset.browser_download_url)" >> $env:GITHUB_OUTPUT
 
       - name: Install wingetcreate
