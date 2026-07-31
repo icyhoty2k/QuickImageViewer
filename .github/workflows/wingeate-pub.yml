@@ -1,0 +1,29 @@
+name: Publish to WinGet2
+
+on:
+  release:
+    types: [ released ]
+  workflow_dispatch:
+
+jobs:
+  publish:
+    runs-on: windows-latest
+
+    steps:
+      - name: Install wingetcreate
+        shell: pwsh
+        run: |
+          Invoke-WebRequest `
+            -Uri "https://aka.ms/wingetcreate/latest" `
+            -OutFile "$env:RUNNER_TEMP\wingetcreate.exe"
+
+      - name: Update WinGet manifest
+        shell: pwsh
+        env:
+          WINGET_TOKEN: ${{ secrets.WINGET_TOKEN }}
+        run: |
+          & "$env:RUNNER_TEMP\wingetcreate.exe" update `
+            IcyHotY2K.QuickImageViewer `
+            --urls "https://github.com/icyhoty2k/QuickImageViewer/releases/download/${{ github.event.release.tag_name }}/QuickImageViewer.exe" `
+            --submit `
+            --token "$env:WINGET_TOKEN"
