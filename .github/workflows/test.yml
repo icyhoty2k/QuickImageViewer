@@ -1,0 +1,17 @@
+- name: Test release asset
+    shell: pwsh
+    env:
+      TAG: ${{ inputs.tag }}
+    run: |
+      $url = "https://github.com/${{ github.repository }}/releases/download/$env:TAG/QuickImageViewer.exe"
+      
+      Write-Host "Testing $url"
+      
+      $response = Invoke-WebRequest `
+        -Uri $url `
+        -MaximumRedirection 10 `
+        -UseBasicParsing `
+        -ErrorAction Stop
+      
+      Write-Host "HTTP status: $($response.StatusCode)"
+      Write-Host "Content length: $($response.RawContentLength)"
