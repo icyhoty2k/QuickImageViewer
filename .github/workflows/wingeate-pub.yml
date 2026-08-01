@@ -1,4 +1,4 @@
-name: Publish to WinGet7
+name: Publish to WinGet9
 
 on:
   workflow_dispatch:
@@ -20,6 +20,24 @@ jobs:
             -Uri "https://aka.ms/wingetcreate/latest" `
             -OutFile "$env:RUNNER_TEMP\wingetcreate.exe"
 
+      - name: Test release asset
+        shell: pwsh
+        env:
+          TAG: ${{ inputs.tag }}
+        run: |
+          $url = "https://github.com/${{ github.repository }}/releases/download/$env:TAG/QuickImageViewer.exe"
+
+          Write-Host "Testing $url"
+
+          $response = Invoke-WebRequest `
+            -Uri $url `
+            -MaximumRedirection 10 `
+            -UseBasicParsing `
+            -ErrorAction Stop
+
+          Write-Host "HTTP status: $($response.StatusCode)"
+          Write-Host "Content length: $($response.RawContentLength)"
+
       - name: Publish to WinGet
         shell: pwsh
         env:
@@ -39,5 +57,5 @@ jobs:
             --token "$env:WINGET_TOKEN"
 
           if ($LASTEXITCODE -ne 0) {
-            exit $LASTEXITCODE
+            throw "wingetcreate failed with exit code $LASTEXITCODE"
           }
