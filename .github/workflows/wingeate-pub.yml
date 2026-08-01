@@ -1,4 +1,4 @@
-name: Publish to WinGet234
+name: Publish to WinGet2341
 
 on:
   workflow_dispatch:
@@ -64,14 +64,19 @@ jobs:
         shell: pwsh
         env:
           WINGET_TOKEN: ${{ secrets.WINGET_TOKEN }}
+          TAG: ${{ inputs.tag }}
         run: |
-          $url = "${{ steps.release.outputs.url }}"
+          $version = $env:TAG -replace '^[Vv]', ''
+          $url = "https://github.com/${{ github.repository }}/releases/download/$env:TAG/QuickImageViewer.exe"
 
-          Write-Host "Publishing:"
+          Write-Host "Publishing QIV:"
+          Write-Host "GitHub tag: $env:TAG"
+          Write-Host "WinGet version: $version"
           Write-Host "Installer URL: $url"
 
           & "$env:RUNNER_TEMP\wingetcreate.exe" update `
             IcyHotY2K.QuickImageViewer `
+            --version $version `
             --urls "$url" `
             --submit `
             --token "$env:WINGET_TOKEN"
