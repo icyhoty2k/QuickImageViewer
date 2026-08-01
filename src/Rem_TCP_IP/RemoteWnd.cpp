@@ -115,11 +115,18 @@ void RemoteWnd::BuildRows() {
     add(Kind::Number, L"Port",
         c.port == RT::PORT_UNSET ? std::wstring(L"(not set)") : std::to_wstring(c.port),
         L"The port to listen on. Required — there is no default.", R_PORT);
+    // The separator rule leads, and the wordier warnings that used to open these
+    // two lines follow it. This description is painted with DT_SINGLELINE |
+    // DT_END_ELLIPSIS — one line, truncated — so anything put at the end is not
+    // shortened, it is INVISIBLE. Getting the separator wrong fails silently
+    // (Normalize drops "10.0.0.1 10.0.0.2" as one malformed entry and the list
+    // ends up empty, denying everyone), so it is the part that must survive.
     add(Kind::Text, L"AllowList", OrUnset(Remote::JoinList(c.allowList)),
-        L"IPs allowed to connect. EMPTY DENIES EVERYONE, including this machine. Starts as "
-        L"127.0.0.1. Trailing * matches a subnet: 192.168.1.*", R_ALLOW);
+        L"Separate with , or ; — NOT a space. IPs allowed to connect; empty denies "
+        L"everyone. Trailing * matches a subnet: 192.168.1.*", R_ALLOW);
     add(Kind::Text, L"BlackList", OrUnset(Remote::JoinList(c.blackList)),
-        L"IPs always refused. Checked first — deny always beats allow.", R_BLOCK);
+        L"Separate with , or ; — NOT a space. IPs always refused, checked first: "
+        L"deny beats allow.", R_BLOCK);
     add(Kind::Secret, L"Password", c.passwordHash.empty() ? L"(none)" : L"(set)",
         L"Stored hashed, never in plain text. Sent as a challenge-response, so it never crosses the wire.", R_PASSWORD);
     add(Kind::Number, L"Max connections", std::to_wstring(c.maxConnections),
@@ -154,7 +161,14 @@ std::wstring RemoteWnd::StatusLine() const {
 void RemoteWnd::DoStart() {
     PushToConfig();
     std::wstring err;
-    if (!Remote::Start(GetHwnd(), err)) {
+    // THE MAIN WINDOW, never this panel's own HWND. The server posts
+    // WM_QIV_REMOTE_COMMAND to whatever it is given here, and only AppMain's
+    // window proc has a case for it — a panel HWND swallows the message in
+    // DefWindowProc, nothing ever calls SetEvent, and every client sits out the
+    // full REPLY_TIMEOUT_MS before answering "viewer did not respond in time".
+    // A server started from AppMain worked and one started from this panel did
+    // not, which is what made it look like a client-side fault.
+    if (!Remote::Start(m_hParent, err)) {
         DialogMessage(err.empty() ? L"Could not start." : err, L"Local Server");
     } else {
         m_lastResult = L"Started on " + Remote::BoundEndpoint();
@@ -327,11 +341,17 @@ void RemoteWnd::CommitTextEdit() {
     const std::wstring text = m_edit.GetText();
     Remote::Settings &c = Remote::Config();
 
+    // What the user actually typed, kept so it can be compared against what
+    // survives Normalize below. Only the two list rows can lose entries.
+    std::vector<std::wstring> typed;
+
     switch (r.id) {
         case R_NAME:           c.name       = text;                        break;
         case R_BIND:           c.bindAddress = text;                       break;
-        case R_ALLOW:          c.allowList  = Remote::ParseList(text);     break;
-        case R_BLOCK:          c.blackList  = Remote::ParseList(text);     break;
+        case R_ALLOW:          c.allowList  = Remote::ParseList(text);
+                               typed        = c.allowList;                 break;
+        case R_BLOCK:          c.blackList  = Remote::ParseList(text);
+                               typed        = c.blackList;                 break;
         // Held as plaintext only until the next save hashes it. Clearing the
         // field is how a password is removed.
         case R_PASSWORD:
@@ -341,10 +361,38 @@ void RemoteWnd::CommitTextEdit() {
         default: break;
     }
 
+    // Read before BuildRows(), which clears m_rows and leaves `r` dangling.
+    const int editedId = r.id;
+
     m_editingRow = -1;
     Remote::Normalize(c);
     BuildRows();
     Repaint();
+
+    // SAY SO WHEN AN ENTRY IS THROWN AWAY. Normalize prunes anything that is not
+    // a plausible address, which is what turns a space-separated list into one
+    // malformed entry that vanishes — leaving an EMPTY AllowList, which denies
+    // everyone including this machine. Silently, and with the panel showing a
+    // list the user believes they typed. The row description warns in advance;
+    // this reports it at the moment it happens and names what was lost.
+    if (editedId == R_ALLOW || editedId == R_BLOCK) {
+        const std::vector<std::wstring> &kept =
+            (editedId == R_ALLOW) ? c.allowList : c.blackList;
+
+        std::wstring dropped;
+        for (const std::wstring &t : typed) {
+            if (std::find(kept.begin(), kept.end(), t) == kept.end()) {
+                if (!dropped.empty()) dropped += L", ";
+                dropped += t;
+            }
+        }
+
+        if (!dropped.empty())
+            DialogMessage(L"Not a valid address — dropped:\n\n" + dropped +
+                          L"\n\nSeparate entries with a comma or semicolon. "
+                          L"A space is not a separator.",
+                          L"Local Server");
+    }
 }
 
 void RemoteWnd::CancelTextEdit() {
