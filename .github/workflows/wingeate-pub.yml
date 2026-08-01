@@ -1,4 +1,4 @@
-name: Publish to WinGet9
+name: Publish to WinGet234
 
 on:
   workflow_dispatch:
@@ -13,6 +13,46 @@ jobs:
     runs-on: windows-latest
 
     steps:
+      - name: Get release asset
+        id: release
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ inputs.tag }}
+        run: |
+          $headers = @{
+            Authorization = "Bearer $env:GH_TOKEN"
+            Accept        = "application/vnd.github+json"
+            "X-GitHub-Api-Version" = "2022-11-28"
+          }
+
+          $repo = "${{ github.repository }}"
+
+          $releaseUrl = "https://api.github.com/repos/$repo/releases/tags/$env:TAG"
+
+          Write-Host "Getting release:"
+          Write-Host $releaseUrl
+
+          $release = Invoke-RestMethod `
+            -Uri $releaseUrl `
+            -Headers $headers `
+            -Method Get
+
+          $asset = $release.assets |
+            Where-Object { $_.name -eq "QuickImageViewer.exe" }
+
+          if (-not $asset) {
+            throw "QuickImageViewer.exe was not found in release '$env:TAG'."
+          }
+
+          Write-Host "Release: $($release.name)"
+          Write-Host "Tag: $($release.tag_name)"
+          Write-Host "Asset: $($asset.name)"
+          Write-Host "Asset ID: $($asset.id)"
+          Write-Host "Asset size: $($asset.size)"
+
+          "url=$($asset.browser_download_url)" >> $env:GITHUB_OUTPUT
+
       - name: Install wingetcreate
         shell: pwsh
         run: |
@@ -20,35 +60,15 @@ jobs:
             -Uri "https://aka.ms/wingetcreate/latest" `
             -OutFile "$env:RUNNER_TEMP\wingetcreate.exe"
 
-      - name: Test release asset
-        shell: pwsh
-        env:
-          TAG: ${{ inputs.tag }}
-        run: |
-          $url = "https://github.com/${{ github.repository }}/releases/download/$env:TAG/QuickImageViewer.exe"
-
-          Write-Host "Testing $url"
-
-          $response = Invoke-WebRequest `
-            -Uri $url `
-            -MaximumRedirection 10 `
-            -UseBasicParsing `
-            -ErrorAction Stop
-
-          Write-Host "HTTP status: $($response.StatusCode)"
-          Write-Host "Content length: $($response.RawContentLength)"
-
       - name: Publish to WinGet
         shell: pwsh
         env:
           WINGET_TOKEN: ${{ secrets.WINGET_TOKEN }}
-          TAG: ${{ inputs.tag }}
         run: |
-          $url = "https://github.com/${{ github.repository }}/releases/download/$env:TAG/QuickImageViewer.exe"
+          $url = "${{ steps.release.outputs.url }}"
 
-          Write-Host "Publishing QIV release:"
-          Write-Host "Tag: $env:TAG"
-          Write-Host "URL: $url"
+          Write-Host "Publishing:"
+          Write-Host "Installer URL: $url"
 
           & "$env:RUNNER_TEMP\wingetcreate.exe" update `
             IcyHotY2K.QuickImageViewer `
