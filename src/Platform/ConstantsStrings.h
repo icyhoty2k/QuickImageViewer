@@ -208,6 +208,12 @@ namespace Constants::Messages {
     constexpr const wchar_t *AUTOSIZE_TO_WORK_AREA = L"Fit to Screen";
     constexpr const wchar_t *AUTOSIZE_RESTORE = L"Default Size";
 
+    // Ctrl+M — move the window to the next monitor. The single-monitor case is
+    // reported rather than ignored: a key that does nothing silently reads as
+    // broken, and "there is nowhere to go" is the actual answer.
+    constexpr const wchar_t *MONITOR_MOVED_PREFIX = L"Monitor ";
+    constexpr const wchar_t *MONITOR_ONLY_ONE = L"Only One Monitor";
+
     // Sort order  (Ctrl+Alt+Shift+0/6/7/8/9)  — press once: ascending, press again: descending
     constexpr const wchar_t *SORT_BY_NAME = L"Sort: Name (A→Z)";
     constexpr const wchar_t *SORT_BY_NAME_REV = L"Sort: Name (Z→A)";
@@ -314,6 +320,62 @@ namespace Constants::Messages {
     constexpr const wchar_t *REMOTE_BLOCKED_NO_NAME        =
         L"No name set — a driving instance identifies this one by name";
     constexpr const wchar_t *REMOTE_WARN_EMPTY_ALLOWLIST   = L"AllowList empty — all connections denied";
+    // A HARD STOP, not a warning, and the only rule here that refuses a
+    // configuration the user explicitly asked for.
+    //
+    // An unauthenticated listener on loopback is a local convenience and stays
+    // permitted. The same listener on a LAN or public interface is an open door
+    // to the folder history, to opening any path, and to reading back whatever
+    // is on screen — with no step at which anyone is asked who they are.
+    //
+    // Refusing to start is the only honest response: a warning on a panel nobody
+    // has open does not defend anything, and this is precisely the mistake that
+    // is invisible until it has already been exploited.
+    constexpr const wchar_t *REMOTE_BLOCKED_NO_PASSWORD    =
+        L"No password set — required unless bound to loopback (127.0.0.1)";
+    // A stored value this build cannot parse — in practice one written before
+    // the move to PBKDF2. It cannot be converted, because converting it needs
+    // the plaintext and the stored form deliberately does not keep it.
+    //
+    // Refusing to start is the only safe reading. The alternative — treating an
+    // unparseable password as no password — is how a listener ends up
+    // unauthenticated because of a file format change, which is exactly the
+    // class of accident that must not be possible.
+    constexpr const wchar_t *REMOTE_BLOCKED_BAD_PASSWORD   =
+        L"Stored password is in an old or damaged format — set it again";
+
+    // Written into qivRemoteServerBlacklist.ini by the brute-force guard. The
+    // count is spliced in from Constants::RemoteTcpIp::AUTH_MAX_FAILURES rather
+    // than spelled out, so raising the threshold cannot leave the file claiming
+    // a figure that is no longer true.
+    //
+    // Says what happened in plain words on purpose: this line is read months
+    // later by somebody deciding whether it is safe to delete.
+    constexpr const wchar_t *BLACKLIST_REASON_AUTH_PREFIX = L"blocked automatically: ";
+    constexpr const wchar_t *BLACKLIST_REASON_AUTH_SUFFIX =
+        L" failed authentications in 10 minutes";
+    // --- TLS (src/Rem_TCP_IP/RemoteTls.*) ---------------------------------
+    constexpr const wchar_t *REMOTE_TLS_HANDSHAKE_FAILED =
+        L"TLS handshake failed";
+    // Refusing an unpinned server is the CORRECT outcome, so the text explains
+    // rather than apologises: the first connection is the one an attacker has
+    // to be present for, and trusting it silently is what pinning exists to
+    // prevent.
+    constexpr const wchar_t *REMOTE_TLS_NO_PIN =
+        L"No fingerprint stored for this server. Compare the one shown against "
+        L"the server's F9 panel, then save it to allow this connection.";
+    constexpr const wchar_t *REMOTE_TLS_PIN_MISMATCH =
+        L"CERTIFICATE MISMATCH — this is not the server you saved. Either its "
+        L"certificate was regenerated, or something is impersonating it. "
+        L"Connection refused.";
+    // A listener that cannot obtain credentials must not run. Falling back to
+    // plaintext on an address reachable from off the machine would be the exact
+    // failure TLS was added to prevent, arrived at by accident.
+    constexpr const wchar_t *REMOTE_BLOCKED_TLS_UNAVAILABLE =
+        L"TLS could not be initialised — refusing to listen unencrypted: ";
+
+    constexpr const wchar_t *BLACKLIST_REASON_CMDLINE = L"added with -remoteBlock";
+    constexpr const wchar_t *BLACKLIST_REASON_PANEL   = L"added in the F9 panel";
 
     // Start-up failures. Each names the actual cause: "could not start" with no
     // reason is the least useful thing a status line can say.

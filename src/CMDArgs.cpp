@@ -260,14 +260,14 @@ void ApplyCmdArgs(HWND hWnd, const CmdArgs &args, int nCmdShow) {
     // 1a. Dedicated mode (affects history file and registry — must be set before any of that)
     if (args.dedicated) app.isDedicated = true;
 
-    // 1b. Remote control (src/Rem_TCP_IP). Order matters: the .ini is read FIRST
-    // so a fully configured screen works from `-remote` alone, then the switches
-    // are layered on top. Nothing is written back — a command line describes one
-    // launch, not a permanent reconfiguration.
+    // 1b. Remote control (src/Rem_TCP_IP). Order matters: qivLocalServer.ini is
+    // read FIRST so a fully configured screen works from `-remote` alone, then
+    // the switches are layered on top. Nothing is written back — a command line
+    // describes one launch, not a permanent reconfiguration.
     //
-    // Registry-backed installs have no .ini, so LoadFromIni is a no-op there and
-    // the switches are the only way in. That is by design: a network listener
-    // should not be reachable through a setting somebody flipped by accident.
+    // With no such file LoadFromIni is a no-op and the switches are the only way
+    // in. That is by design: a network listener should not be reachable through
+    // a setting somebody flipped by accident.
     {
         Remote::LoadFromIni();
 

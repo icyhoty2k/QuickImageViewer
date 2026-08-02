@@ -123,7 +123,7 @@ void RemotesWnd::AutoConnectAll(HWND hOwner) {
     //
     // Loading only the auto-connecting ones was a bug with an obvious symptom
     // and a confusing cause: a remote added yesterday was still in
-    // qivRemotes.ini, but the console came up empty, because the console shows
+    // qivRemoteServers.ini, but the console came up empty, because the console shows
     // Remote::Mirror's targets and nothing had put the row there. The list is a
     // record of what exists; connecting is a separate question about each one.
     for (const Remote::RemoteEntry &e : Remote::LoadRemotes()) {
@@ -306,9 +306,9 @@ void RemotesWnd::Rebuild() {
             L"it was."});
     }
     m_buttons.push_back({L"Add from file…", BTN_IMPORT, {}, true,
-        L"Read another instance's settings file — or its .exe, and the .ini beside it is "
-        L"found automatically.\nBrings across its port, name, exe and credentials, so there "
-        L"is nothing to type."});
+        L"Read another instance's qivLocalServer.ini — or its .exe, and the file beside it "
+        L"is found automatically.\nBrings across its port, name, exe and credentials, so "
+        L"there is nothing to type."});
     m_buttons.push_back({L"Connect all", BTN_CONNECT_ALL, {}, haveRows,
         L"Start dialling every remote in the list.\nEach keeps retrying on its own if it is "
         L"not answering yet."});
@@ -325,7 +325,7 @@ void RemotesWnd::Rebuild() {
         L"inverts instead of matching — this replaces their state outright.\n"
         L"One-directional and immediate. Nothing comes back, and there is no undo."});
     m_buttons.push_back({L"Remove", BTN_REMOVE, {}, haveRows,
-        L"Delete the selected remote from the list and from qivRemotes.ini.\nThe instance "
+        L"Delete the selected remote from the list and from qivRemoteServers.ini.\nThe instance "
         L"itself is not affected."});
 
     if (m_selectedRow >= static_cast<int>(m_rows.size()))
@@ -625,9 +625,9 @@ void RemotesWnd::DoConnectAll(bool on) {
 void RemotesWnd::DoImportFromFile() {
     if (m_editingField >= 0) CommitTextEdit();
 
-    // Both halves of the pair are offered, because either identifies the
-    // instance: the .ini holds the settings, the .exe sits beside it, and
-    // ImportFromInstanceFile finds the other from whichever was picked.
+    // Either half identifies the instance: pick its exe and the listener file
+    // is found in the same folder by its fixed name, or pick qivLocalServer.ini
+    // directly — which is also the way in for a copy started with -config.
     PushTopmostOff();
     std::wstring chosen;
     {
@@ -635,9 +635,9 @@ void RemotesWnd::DoImportFromFile() {
         if (SUCCEEDED(CoCreateInstance(CLSID_FileOpenDialog, nullptr,
                                        CLSCTX_INPROC_SERVER, IID_PPV_ARGS(&pfd))) && pfd) {
             COMDLG_FILTERSPEC filters[] = {
-                {L"qIV instance (*.ini; *.exe)", L"*.ini;*.exe"},
-                {L"Settings file (*.ini)",       L"*.ini"},
-                {L"Program (*.exe)",             L"*.exe"},
+                {L"qIV instance (*.ini; *.exe)",   L"*.ini;*.exe"},
+                {L"Listener file (qivLocalServer.ini)", L"qivLocalServer.ini"},
+                {L"Program (*.exe)",               L"*.exe"},
             };
             pfd->SetFileTypes(ARRAYSIZE(filters), filters);
             DWORD opts = 0;

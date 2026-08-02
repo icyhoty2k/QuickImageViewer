@@ -273,18 +273,34 @@ bool Client::DoConnectBody(const std::wstring &host, int port,
                 return false;
             }
 
-            // "AUTH <salt-hex> <nonce-hex>"
+            // "AUTH <iterations> <salt-hex> <nonce-hex>"
+            //
+            // Three fields since protocol v3. A v2 server sends two and lands in
+            // the parse failure below — correct, and deliberately not worked
+            // around: its passwords are derived by a method this build refuses
+            // to use, so connecting to it anyway would be the one outcome worth
+            // preventing.
             const std::wstring rest = maybeAuth.substr(5);
-            const size_t sp = rest.find(L' ');
-            if (sp == std::wstring::npos) {
+            const size_t sp1 = rest.find(L' ');
+            const size_t sp2 = (sp1 == std::wstring::npos)
+                                   ? std::wstring::npos
+                                   : rest.find(L' ', sp1 + 1);
+            if (sp1 == std::wstring::npos || sp2 == std::wstring::npos) {
                 Disconnect();
                 errorOut = Constants::Messages::REMOTE_CLIENT_PROTOCOL_ERROR;
                 return false;
             }
 
-            const std::vector<BYTE> salt  = Crypto::FromHex(rest.substr(0, sp));
-            const std::vector<BYTE> nonce = Crypto::FromHex(rest.substr(sp + 1));
-            if (salt.empty() || nonce.empty()) {
+            const std::wstring iterText = rest.substr(0, sp1);
+            const int iterations =
+                (iterText.find_first_not_of(L"0123456789") == std::wstring::npos &&
+                 !iterText.empty())
+                    ? static_cast<int>(wcstol(iterText.c_str(), nullptr, 10))
+                    : 0;
+
+            const std::vector<BYTE> salt  = Crypto::FromHex(rest.substr(sp1 + 1, sp2 - sp1 - 1));
+            const std::vector<BYTE> nonce = Crypto::FromHex(rest.substr(sp2 + 1));
+            if (iterations <= 0 || salt.empty() || nonce.empty()) {
                 Disconnect();
                 errorOut = Constants::Messages::REMOTE_CLIENT_PROTOCOL_ERROR;
                 return false;
@@ -313,7 +329,10 @@ bool Client::DoConnectBody(const std::wstring &host, int port,
                 }
                 secret = presetSecret;
             } else {
-                secret = Crypto::SecretFromPassword(password, salt);
+                // The expensive step, and the only one: PBKDF2 at the server's
+                // stated work factor. It runs once per connect on this thread —
+                // never on the UI thread, which is why DoConnect is where it is.
+                secret = Crypto::SecretFromPassword(password, salt, iterations);
             }
 
             // Whichever route produced it, the password itself never goes on

@@ -84,6 +84,8 @@ set(SOURCES
         src/Platform/FileHandler.cpp
         src/Platform/WriteQueue.cpp
         src/Persistence/RegistryManager.cpp
+        src/Persistence/IniFile.cpp
+        src/Persistence/SessionFile.cpp
         src/Renderer/RendererGDI.cpp
         src/Renderer/RendererD2D.cpp
         src/UI/FloatingPanels/FloatingPanelWnd.cpp
@@ -105,7 +107,9 @@ set(SOURCES
         src/Dedicated/DedicatedLists.cpp
         src/Dedicated/PromotionPlaylist.cpp
         src/Rem_TCP_IP/RemoteSettings.cpp
+        src/Rem_TCP_IP/RemoteBlacklist.cpp
         src/Rem_TCP_IP/RemoteCrypto.cpp
+        src/Rem_TCP_IP/RemoteTls.cpp
         src/Rem_TCP_IP/RemoteProtocol.cpp
         src/Rem_TCP_IP/RemoteServer.cpp
         src/Rem_TCP_IP/RemoteExec.cpp
@@ -283,6 +287,7 @@ target_link_libraries(QuickImageViewer PRIVATE
         uxtheme advapi32 shell32 ole32 oleaut32 uuid shlwapi shcore
         ws2_32 ntdll userenv # ws2_32 also carries the Rem_TCP_IP sockets
         bcrypt               # CNG — remote-control password hashing / HMAC
+        secur32 crypt32 ncrypt # Schannel TLS + the self-signed server certificate
 )
 
 # 7. Track Manifest Changes

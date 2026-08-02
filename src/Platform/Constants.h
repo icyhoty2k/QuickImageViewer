@@ -503,13 +503,26 @@ namespace Constants {
     // REMOTE CONTROL over TCP/IP  (src/Rem_TCP_IP)
     //
     // The listener is OFF unless explicitly switched on — either by command-line
-    // switches or by a [REMOTE_TCP_IP] section in the instance .ini. There is no
-    // third way in, and no default that opens a socket. A viewer that has never
-    // been configured for remote control never binds a port.
+    // switches or by qivLocalServer.ini beside the exe. There is no third way
+    // in, and no default that opens a socket. A viewer that has never been
+    // configured for remote control never binds a port.
     //
     // Full design record: docs/REMOTE_TCP_IP_SPEC.md
     // =========================================================================
     namespace RemoteTcpIp {
+        // --- The listener's own file ---
+        //
+        // ITS OWN FILE, not a section of the instance .ini, for the reason set
+        // out in Persistence/IniFile.h: the exe-derived .ini existing is what
+        // makes the whole application file-backed, so parking the listener
+        // configuration there meant configuring a port could silently move every
+        // unrelated setting off the registry. A fixed name is invisible to that
+        // check, and the listener configuration is then just a file — deletable,
+        // hand-editable, and copyable between machines on its own.
+        constexpr const wchar_t *LOCAL_SERVER_FILE_NAME = L"qivLocalServer.ini";
+        constexpr const wchar_t *LOCAL_SERVER_FILE_HEADER =
+            L"Local remote-control server (F9). Delete this file to reset it.";
+
         // --- .ini section and key names ---
         constexpr const wchar_t *INI_SECTION      = L"REMOTE_TCP_IP";
         constexpr const wchar_t *KEY_ENABLE       = L"Enable";
@@ -518,8 +531,50 @@ namespace Constants {
         constexpr const wchar_t *KEY_PORT_NO      = L"PortNo";
         constexpr const wchar_t *KEY_ALLOW_LIST   = L"AllowList";
         constexpr const wchar_t *KEY_PASSWORD     = L"Password";
-        constexpr const wchar_t *KEY_BLACK_LIST   = L"BlackList";
         constexpr const wchar_t *KEY_MAX_CONNS    = L"MaxConnections";
+
+        // --- The blacklist, in a file of its own -----------------------------
+        //
+        // Separate from the listener's configuration because it is the one part
+        // the PROGRAM writes: crossing the failed-authentication threshold adds
+        // the offending address here, unattended, possibly at three in the
+        // morning. Configuration is what the user decides; this is a log of what
+        // the machine decided, and mixing the two means a hand-edited settings
+        // file racing an automatic writer.
+        //
+        // LINE-BASED, one entry per line, NOT key=value:
+        //
+        //     203.0.113.7;2026-08-03 04:11:52;5 failed authentications in 10 min
+        //     198.51.100.0/…            <- ignored, not an address literal
+        //     192.0.2.44                <- bare address, hand-added, equally valid
+        //
+        // Bare addresses are accepted so blocking something by hand is one line
+        // with nothing to look up. Anything the PROGRAM adds carries all three
+        // fields, because an automatic entry that does not say when or why is an
+        // entry nobody can safely delete later.
+        //
+        // Trailing "*" works exactly as it does in the AllowList, and for the
+        // same reason — one rule, one implementation (Remote::AddressMatches).
+        constexpr const wchar_t *BLACKLIST_FILE_NAME = L"qivRemoteServerBlacklist.ini";
+        constexpr const wchar_t *BLACKLIST_FILE_HEADER =
+            L"; Blocked addresses, one per line:  <ip>;<date time>;<reason>\r\n"
+            L"; The date and reason are optional - a bare IP on its own line works.\r\n"
+            L"; Lines starting with ; or # are ignored. Trailing * matches a subnet.\r\n"
+            L"; qIV appends to this file automatically when an address fails to\r\n"
+            L"; authenticate too often. Delete a line to unblock that address.\r\n";
+
+        // Field separator. Semicolon rather than comma because an address never
+        // contains one and a reason plausibly contains a comma.
+        constexpr wchar_t BLACKLIST_FIELD_SEP = L';';
+
+        // Also the comment marker, which is why a line is only a COMMENT when
+        // the separator is the FIRST character — "1.2.3.4;…" is an entry.
+        constexpr wchar_t BLACKLIST_COMMENT_ALT = L'#';
+
+        // Upper bound on entries held in memory, so a file that has grown for
+        // years — or been tampered with — cannot cost unbounded memory or an
+        // unbounded scan on every accept().
+        constexpr size_t BLACKLIST_MAX = 8192;
 
         // --- Defaults ---
         // Never default ENABLE on. A viewer that binds a port because nobody
@@ -565,13 +620,103 @@ namespace Constants {
         // file tolerates either convention.
         constexpr const wchar_t *LIST_SEPARATORS = L",;";
 
+        // --- TLS (src/Rem_TCP_IP/RemoteTls.*) --------------------------------
+        //
+        // Self-signed, pinned by fingerprint. No CA is involved and none could
+        // be: this server is reached by IP on a home connection, which no public
+        // authority will ever issue for.
+        constexpr const wchar_t *TLS_CERT_FILE_NAME = L"qivServerCert.pfx";
+        constexpr const wchar_t *TLS_CERT_SUBJECT   = L"CN=QuickImageViewer Remote";
+
+        // Ten years. A self-signed certificate the user pins by hand gains
+        // nothing from expiring — expiry exists so a compromised CA-issued
+        // identity stops being trusted eventually, and here the trust anchor IS
+        // the pin. A short life would only mean the pin breaking on a schedule.
+        constexpr int TLS_CERT_VALID_YEARS = 10;
+
+        // RSA-2048. Not 4096: the handshake cost lands on a phone, the key is
+        // pinned rather than chained, and nobody is factoring 2048 bits to read
+        // somebody's wallpaper.
+        constexpr DWORD TLS_KEY_BITS = 2048;
+
+        // Bound on ONE handshake, so a peer that opens a socket and then says
+        // nothing cannot hold a client thread forever. The plaintext path has no
+        // equivalent because it has nothing to wait for.
+        constexpr int TLS_HANDSHAKE_TIMEOUT_MS = 15000;
+
+        // Upper bound on handshake token exchange, as a guard against a peer
+        // that keeps a handshake going indefinitely.
+        constexpr int TLS_HANDSHAKE_MAX_STEPS = 32;
+
+        // --- Password derivation -------------------------------------------
+        //
+        // PBKDF2-HMAC-SHA256. The stored value and the shared secret are the
+        // SAME number, so whatever produces it is also what an attacker has to
+        // run per guess if the .ini ever leaks. A bare SHA-256 costs them one
+        // hash — billions per second on a GPU, which makes any password a human
+        // chose recoverable in minutes.
+        //
+        // 210,000 is OWASP's current figure for this PRF. It costs the CLIENT
+        // roughly a fifth of a second at connect time and costs the SERVER
+        // nothing at all: the server stores the derived value and uses it
+        // directly as the HMAC key, so it runs this only when a password is set.
+        //
+        // WRITTEN INTO the stored value rather than assumed, so raising it later
+        // does not invalidate every existing password — a value carrying its own
+        // cost parameter can be verified by any build.
+        constexpr int PBKDF2_ITERATIONS = 210000;
+
+        // Length of the random salt, in bytes. 16 is the usual floor and its job
+        // is uniqueness, not secrecy — it travels in the challenge.
+        constexpr size_t PBKDF2_SALT_LEN = 16;
+
+        // --- Brute-force resistance ----------------------------------------
+        //
+        // The handshake proves knowledge of a password, and a password is only
+        // as strong as the number of guesses an attacker gets. A failed AUTH
+        // costs an attacker one TCP connection and nothing else, so without a
+        // limit the whole scheme reduces to how fast sockets can be opened.
+        //
+        // Counted PER PEER ADDRESS rather than globally: one attacker must not
+        // be able to lock out every other client by failing on purpose, which a
+        // global counter would allow and which is a denial of service dressed
+        // up as a security control.
+        //
+        // The delay is applied BEFORE the failure is reported, on the socket
+        // thread, so it costs the attacker wall-clock time on every attempt
+        // even before the ban engages. It is small enough to be invisible to a
+        // human who mistyped and large enough to make a dictionary run
+        // impractical when multiplied by the whole keyspace.
+        constexpr int AUTH_FAIL_DELAY_MS = 1000;
+
+        // Failures from one address before it is refused outright. Generous:
+        // the case being served is a phone with a saved-but-stale password
+        // retrying, not a careful attacker, and five is past any typo.
+        constexpr int AUTH_MAX_FAILURES = 5;
+
+        // Failures older than this are forgotten, so an address that fails once
+        // a day forever is never blacklisted for it. The counter measures a
+        // BURST — five wrong guesses in ten minutes is an attack; five spread
+        // over a fortnight is somebody who keeps mistyping.
+        constexpr int AUTH_FAIL_WINDOW_MS = 10 * 60 * 1000;   // 10 minutes
+
+        // Upper bound on tracked addresses, so a spoofed-source flood cannot
+        // grow the table without limit. At the cap the oldest entry is dropped:
+        // an attacker CAN evict their own ban that way, but only by producing
+        // enough distinct source addresses that they were never being stopped
+        // by an address-keyed rule to begin with.
+        constexpr size_t AUTH_TRACK_MAX = 1024;
+
         // --- The driving side's target list (src/Rem_TCP_IP/RemotesFile.*) ---
         // Beside the exe, and DELIBERATELY not the exe-derived name: an .ini
         // called qIV.ini next to qIV.exe is what makes the whole app switch from
         // registry-backed to file-backed (Dedicated::DetectStartupMode). This
         // name is invisible to that check, so writing it changes nothing about
         // how the copy persists everything else.
-        constexpr const wchar_t *REMOTES_FILE_NAME = L"qivRemotes.ini";
+        // Named for what it holds — the list of OTHER instances this one drives
+        // (F10). "qivRemotes" read as though it were this instance's own remote
+        // settings, which is qivLocalServer.ini and the opposite direction.
+        constexpr const wchar_t *REMOTES_FILE_NAME = L"qivRemoteServers.ini";
         constexpr const wchar_t *REMOTES_SECTION   = L"Remotes";
 
         // Upper bound on rows, so a corrupted file cannot spin the reader. Far
@@ -593,7 +738,33 @@ namespace Constants {
         // The line limit is why this MATTERS rather than being decoration: a v1
         // instance drops the connection on a line it cannot buffer, so a v2 sender
         // has to check the version and refuse cleanly instead. See RunStreamOut.
-        constexpr int PROTOCOL_VERSION = 2;
+        // 2 → 3:  the AUTH challenge gained its ITERATION COUNT — "AUTH <iter>
+        //         <salt> <nonce>" — because the password digest moved from a
+        //         single SHA-256 to PBKDF2-HMAC-SHA256, and a client cannot
+        //         derive the secret without knowing the work factor.
+        //
+        //         A CLEAN BREAK, with no negotiation: a v2 client sends an
+        //         answer derived the old way and is refused, which is the
+        //         correct outcome — the whole point of the change is that the
+        //         old derivation is too cheap to keep accepting. Existing
+        //         stored passwords are in the old format and must be re-entered;
+        //         they cannot be upgraded in place, because upgrading needs the
+        //         plaintext and the stored form deliberately does not have it.
+        //
+        // 3 → 4:  TLS. A listener bound to anything other than loopback now
+        //         speaks TLS 1.2/1.3 from the first byte — before the banner,
+        //         which is application data and belongs inside the tunnel.
+        //
+        //         NOT NEGOTIATED. Both ends decide from the address, so there is
+        //         no offer for an attacker to strip and no plaintext fallback to
+        //         force. A v3 client reaching a v4 listener fails the handshake,
+        //         which is the correct outcome: its traffic would be readable.
+        //
+        //         The server is identified by a self-signed certificate that the
+        //         client PINS by SHA-256 fingerprint (RemoteTls.h). Loopback is
+        //         unchanged and still plaintext — nothing off-machine can reach
+        //         it, so there is nothing there to encrypt against.
+        constexpr int PROTOCOL_VERSION = 4;
 
         // Hard cap on one received line. A socket must never be allowed to grow
         // a buffer without bound just by never sending a newline.
@@ -778,14 +949,38 @@ namespace Constants {
         constexpr const wchar_t *KIOSK_LOCK               = L"qivKioskLock";
         constexpr const wchar_t *ALWAYS_ON_TOP            = L"qivAlwaysOnTop";
         constexpr const wchar_t *KEEP_DISPLAY_AWAKE       = L"qivKeepDisplayAwake";
-        // Last image on screen at exit — reopened on the next launch so the app
-        // resumes where it was left instead of prompting. Routes to the registry
-        // or, when the app is .ini-backed, into that file like every other value.
-        constexpr const wchar_t *LAST_IMAGE              = L"qivLastImage";
+        // NOTE: the last-image-on-exit value used to live here. It is SESSION
+        // state, not a setting — it changes on every close and is meaningless on
+        // another machine — and it now has its own file, Constants::Session.
+        // Keeping it here meant rewriting the entire settings store for one line
+        // at every exit.
         constexpr const wchar_t *THUMB_COPY_ENABLED      = L"qivThumbCopy";
         constexpr const wchar_t *THUMB_MOVE_ENABLED      = L"qivThumbMove";
         constexpr const wchar_t *THUMB_DELETE_ENABLED    = L"qivThumbDelete";
         constexpr const wchar_t *THUMB_PASTE_ENABLED     = L"qivThumbPaste";
+    }
+
+    // =========================================================================
+    // SESSION STATE — what this copy was doing, not how it is configured.
+    //
+    // Its own file because of how often it is written and how little it means:
+    // the resume position changes at every exit, and an .ini write rewrites the
+    // whole file. Held in the settings store, one line of session state made
+    // every close rewrite every setting the application has — pointless write
+    // traffic on an SSD, and a needless opportunity to corrupt the settings.
+    //
+    // Nothing here is worth preserving. Delete the file and the next launch
+    // simply opens from history instead.
+    // =========================================================================
+    namespace Session {
+        constexpr const wchar_t *FILE_NAME = L"qivSession.ini";
+        constexpr const wchar_t *FILE_HEADER =
+            L"Session state (last image viewed). Safe to delete.";
+        constexpr const wchar_t *SECTION    = L"Session";
+
+        // Full path of the image on screen at the last exit, reopened on the
+        // next launch so the app resumes where it was left instead of prompting.
+        constexpr const wchar_t *KEY_LAST_IMAGE = L"LastImage";
     }
 
     namespace SettingsFile {

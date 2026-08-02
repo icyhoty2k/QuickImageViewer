@@ -94,6 +94,18 @@ enum class Command {
 
     // --- App control ---
     HideToTray,
+    // Hide if shown, show if hidden — one command, so a REMOTE caller that
+    // cannot see the screen still has a way back. HideToTray is one-way from a
+    // socket: once the window is gone the only restore is the tray icon, and a
+    // phone cannot click it. This always takes the keep-alive path (tray icon +
+    // SW_HIDE) regardless of app.isKeepInBackground, because destroying the
+    // window would take the listener with it and strand the caller.
+    ToggleAppVisibility,
+    // Move the window to the NEXT monitor, wrapping at the end. Monitors are
+    // ordered left-to-right, then top-to-bottom, by their virtual-desktop
+    // coordinates — the order the eye reads them in, not the order Windows
+    // happens to enumerate them.
+    MoveToNextMonitor,
     NewWindow,
     CloseAllPanels, // hide every floating panel + spawned DirWnd (main window stays)
     RestoreAllPanels, // re-open exactly the panels the last CloseAllPanels hid
@@ -285,6 +297,42 @@ enum class Command {
     // currently has, against its cap, and what it is bound to. A caller can
     // otherwise only discover the cap by being refused at it.
     QueryClients,
+    // `QueryToggles` — READ-ONLY. Every command's current value in one reply,
+    // as `Name=value;Name=value;…`.
+    //
+    // Exists because a client that has just connected knows NOTHING about the
+    // viewer's state, and the protocol otherwise only reveals a value as the
+    // by-product of CHANGING it: the phone app's toggle buttons could not be
+    // drawn correctly without first pressing all of them. Asking one command
+    // at a time would be a dozen round trips over a link that may be a phone
+    // on mobile data, so it is one.
+    //
+    // Built by walking the command TABLE and asking GetCommandValue for each
+    // row, rather than from a hand-written list. A list would be a second
+    // place to remember, and the failure mode is silent — a new toggle would
+    // simply never initialise, on a screen nobody is looking at closely.
+    // Aliases are emitted too, each carrying the same value, so a client keyed
+    // on either spelling finds its entry.
+    QueryToggles,
+    // `ImageChanged <n>/<total> <file name>` — a NOTIFICATION, and the only
+    // command in the table whose local execution is deliberately nothing.
+    //
+    // It exists because the picture-change event the viewer already pushes is
+    // `JumpToImage <n>`, and an INDEX is meaningless to an observer that does
+    // not share the folder — so EmitToObservers marks it positional and drops
+    // it for every off-machine watcher. Correct for a qIV following another
+    // qIV, and it left the phone app frozen on whatever frame was up when it
+    // bound: a running slideshow changes picture without issuing a single
+    // command, so no other event ever reached it.
+    //
+    // This is the machine-independent half of the same announcement. It names
+    // what is being shown rather than where it sits, carries no instruction,
+    // and a client's correct response is to ask (SendDisplayedImage) — which
+    // is exactly what the phone's preview does.
+    //
+    // In the table so a qIV observer that replays events parses it instead of
+    // answering ERR, and so a third-party client can look it up.
+    ImageChanged,
     // ── Alt+Enter. Sends the PICTURE ITSELF — the file's bytes, in base64 chunks
     // — to be shown ONCE and change nothing else there: no folder, no sort order,
     // no playlist position. It goes up in place of the current slide and the far

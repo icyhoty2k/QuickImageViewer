@@ -359,8 +359,9 @@ Command InputManager::ResolveKeyboardKeys(UINT key, LPARAM lParam) {
             if (!ctrl && alt && !shift) return Command::ResetAll;
             break;
 
-        case Shortcuts::SC_SHOW_INFO: // 'M'
+        case Shortcuts::SC_SHOW_INFO: // 'M'  plain=info panel  ctrl=next monitor
             if (!ctrl && !alt && !shift) return Command::ShowInfo;
+            if (ctrl && !alt && !shift) return Command::MoveToNextMonitor;
             break;
 
         case Shortcuts::SC_NAV_JUMP_TO_IMAGE: // 'J'

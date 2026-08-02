@@ -1,8 +1,9 @@
 #include "RemoteSettings.h"
+#include "RemoteBlacklist.h"  // -remoteBlock writes straight into the file
 #include "RemoteCrypto.h"
 
 #include "Dedicated/DedicatedSettings.h"
-#include "Persistence/RegistryManager.h" // ForEachSetting — the one settings walk
+#include "Persistence/IniFile.h"  // qivLocalServer.ini — this subsystem's own file
 #include "AppState.h"
 #include "Platform/Constants.h"
 #include "Platform/ConstantsStrings.h"
@@ -26,28 +27,21 @@ namespace {
         return s.substr(b, e - b);
     }
 
-    // A stored list entry must at least look like an address literal. Anything
-    // with a path separator, a space in the middle or an obviously illegal
-    // character is dropped rather than silently compared against and never matched.
-    bool LooksLikeAddress(const std::wstring &s) {
-        if (s.empty() || s.size() > 64) return false;
-        for (wchar_t c : s) {
-            const bool ok = (c >= L'0' && c <= L'9') ||
-                            (c >= L'a' && c <= L'f') ||
-                            (c >= L'A' && c <= L'F') ||
-                            c == L'.' || c == L':' || c == L'*';
-            if (!ok) return false;
-        }
-        return true;
-    }
-
     // The .ini stores decimal text. GetPrivateProfileIntW cannot distinguish
     // "key absent" from "key present but zero", so ranged values are read as
     // strings and parsed here — that is what lets a garbage value fall back to
     // the default instead of silently becoming 0.
+    // The listener's own file, beside the exe. Resolved once — the exe cannot
+    // move while the process runs.
+    const std::wstring &LocalServerPath() {
+        static const std::wstring path =
+            Persistence::Ini::PathBesideExe(RT::LOCAL_SERVER_FILE_NAME);
+        return path;
+    }
+
     int ReadIntKey(const wchar_t *key, int defaultValue) {
         const std::wstring raw = Trim(
-            Dedicated::ReadSectionString(RT::INI_SECTION, key));
+            Persistence::Ini::ReadString(LocalServerPath(), RT::INI_SECTION, key));
         if (raw.empty()) return defaultValue;
         for (wchar_t c : raw)
             if (c < L'0' || c > L'9') return defaultValue;
@@ -97,6 +91,39 @@ std::vector<std::wstring> ParseList(const std::wstring &raw) {
     return out;
 }
 
+// A stored list entry must at least look like an address literal. Anything with
+// a path separator, a space in the middle or an obviously illegal character is
+// dropped rather than silently compared against and never matched.
+bool LooksLikeAddress(const std::wstring &s) {
+    if (s.empty() || s.size() > 64) return false;
+    for (wchar_t c : s) {
+        const bool ok = (c >= L'0' && c <= L'9') ||
+                        (c >= L'a' && c <= L'f') ||
+                        (c >= L'A' && c <= L'F') ||
+                        c == L'.' || c == L':' || c == L'*';
+        if (!ok) return false;
+    }
+    return true;
+}
+
+bool AddressMatches(const std::wstring &pattern, const std::wstring &addr) {
+    if (pattern.empty()) return false;
+    if (pattern == L"*") return true;
+
+    if (pattern.back() == L'*') {
+        const std::wstring prefix = pattern.substr(0, pattern.size() - 1);
+        return addr.size() >= prefix.size() &&
+               _wcsnicmp(addr.c_str(), prefix.c_str(), prefix.size()) == 0;
+    }
+    return _wcsicmp(pattern.c_str(), addr.c_str()) == 0;
+}
+
+bool InList(const std::vector<std::wstring> &list, const std::wstring &addr) {
+    for (const std::wstring &p : list)
+        if (AddressMatches(p, addr)) return true;
+    return false;
+}
+
 std::wstring JoinList(const std::vector<std::wstring> &items) {
     std::wstring out;
     for (const std::wstring &s : items) {
@@ -126,76 +153,76 @@ void Normalize(Settings &s) {
                 v.end());
     };
     prune(s.allowList);
-    prune(s.blackList);
 }
 
 bool SectionExists() {
-    // Same reasoning as LoadFromIni: the question is whether the section is in
-    // the file, which does not depend on where this process keeps its own
-    // settings.
     if (!IniExists()) return false;
     // Enable is written by every save, so its presence is a reliable marker that
-    // the section has been configured at least once.
-    return !Dedicated::ReadSectionString(RT::INI_SECTION, RT::KEY_ENABLE).empty();
+    // the file has been configured at least once rather than merely created.
+    return !Persistence::Ini::ReadString(LocalServerPath(),
+                                         RT::INI_SECTION, RT::KEY_ENABLE).empty();
 }
 
 void LoadFromIni() {
-    // Gated on the FILE EXISTING, not on the app being file-backed.
+    // Gated on the FILE EXISTING, and on nothing else.
     //
-    // SettingsUseFile() answers "where does this process keep its settings",
-    // and it is decided once, at startup, from what was on disk then. Using it
-    // here meant: create the .ini from the F9 panel, reopen the panel, and the
-    // values just written were ignored — because at startup there had been no
-    // file, so the process was registry-backed for the rest of its life and
-    // this function returned immediately. The name typed in came back blank.
+    // It used to be entangled with SettingsUseFile() — "where does this process
+    // keep its settings" — which is decided once at startup from what was on
+    // disk then. That produced a genuinely baffling bug: configure the listener,
+    // reopen the panel, and everything typed in came back blank, because at
+    // startup there had been no file and the process stayed registry-backed for
+    // the rest of its life.
     //
-    // Reading [REMOTE_TCP_IP] out of a file that is plainly sitting there
-    // changes nothing about where anything ELSE is persisted; those two
-    // questions were only ever conflated by this guard.
+    // Now that the listener owns a file of its own, the two questions cannot be
+    // conflated again: this one has no bearing on where anything else lives.
     if (!IniExists()) return;
 
+    const std::wstring &path = LocalServerPath();
     Settings &s = Config();
 
-    s.enable = Dedicated::ParseBoolValue(
-        Dedicated::ReadSectionString(RT::INI_SECTION, RT::KEY_ENABLE),
+    s.enable = Persistence::Ini::ParseBool(
+        Persistence::Ini::ReadString(path, RT::INI_SECTION, RT::KEY_ENABLE),
         RT::ENABLE_DEFAULT);
 
-    s.name = Trim(Dedicated::ReadSectionString(RT::INI_SECTION, RT::KEY_NAME));
+    s.name = Trim(Persistence::Ini::ReadString(path, RT::INI_SECTION, RT::KEY_NAME));
 
     const std::wstring bind =
-        Trim(Dedicated::ReadSectionString(RT::INI_SECTION, RT::KEY_IP_ADDRESS));
+        Trim(Persistence::Ini::ReadString(path, RT::INI_SECTION, RT::KEY_IP_ADDRESS));
     s.bindAddress = bind.empty() ? RT::BIND_ADDRESS_DEFAULT : bind;
 
     s.port           = ReadIntKey(RT::KEY_PORT_NO,   RT::PORT_UNSET);
     s.maxConnections = ReadIntKey(RT::KEY_MAX_CONNS, RT::MAX_CONNECTIONS_DEFAULT);
 
-    s.allowList = ParseList(Dedicated::ReadSectionString(RT::INI_SECTION, RT::KEY_ALLOW_LIST));
-    s.blackList = ParseList(Dedicated::ReadSectionString(RT::INI_SECTION, RT::KEY_BLACK_LIST));
+    s.allowList = ParseList(
+        Persistence::Ini::ReadString(path, RT::INI_SECTION, RT::KEY_ALLOW_LIST));
 
     // Stored already-hashed. Nothing here ever sees or writes a plaintext
     // password — hashing happens where the user types it.
     s.passwordHash =
-        Trim(Dedicated::ReadSectionString(RT::INI_SECTION, RT::KEY_PASSWORD));
+        Trim(Persistence::Ini::ReadString(path, RT::INI_SECTION, RT::KEY_PASSWORD));
 
     Normalize(s);
 }
 
 void SaveToIni() {
+    const std::wstring &path = LocalServerPath();
+    const wchar_t *hdr = RT::LOCAL_SERVER_FILE_HEADER;
     const Settings &s = Config();
 
-    Dedicated::WriteSectionString(RT::INI_SECTION, RT::KEY_ENABLE,
-                                  s.enable ? L"true" : L"false");
-    Dedicated::WriteSectionString(RT::INI_SECTION, RT::KEY_NAME,       s.name);
-    Dedicated::WriteSectionString(RT::INI_SECTION, RT::KEY_IP_ADDRESS, s.bindAddress);
-    Dedicated::WriteSectionDword (RT::INI_SECTION, RT::KEY_PORT_NO,
-                                  static_cast<DWORD>(s.port));
-    Dedicated::WriteSectionString(RT::INI_SECTION, RT::KEY_ALLOW_LIST,
-                                  JoinList(s.allowList));
-    Dedicated::WriteSectionString(RT::INI_SECTION, RT::KEY_PASSWORD,   s.passwordHash);
-    Dedicated::WriteSectionString(RT::INI_SECTION, RT::KEY_BLACK_LIST,
-                                  JoinList(s.blackList));
-    Dedicated::WriteSectionDword (RT::INI_SECTION, RT::KEY_MAX_CONNS,
-                                  static_cast<DWORD>(s.maxConnections));
+    // Creating this file has NO side effect on how the application persists
+    // anything else — which is the whole reason it is a separate file, and why
+    // the seeding dance that used to guard this write is gone.
+    Persistence::Ini::WriteString(path, RT::INI_SECTION, RT::KEY_ENABLE,
+                                  s.enable ? L"true" : L"false", hdr);
+    Persistence::Ini::WriteString(path, RT::INI_SECTION, RT::KEY_NAME,       s.name, hdr);
+    Persistence::Ini::WriteString(path, RT::INI_SECTION, RT::KEY_IP_ADDRESS, s.bindAddress, hdr);
+    Persistence::Ini::WriteDword (path, RT::INI_SECTION, RT::KEY_PORT_NO,
+                                  static_cast<DWORD>(s.port), hdr);
+    Persistence::Ini::WriteString(path, RT::INI_SECTION, RT::KEY_ALLOW_LIST,
+                                  JoinList(s.allowList), hdr);
+    Persistence::Ini::WriteString(path, RT::INI_SECTION, RT::KEY_PASSWORD,   s.passwordHash, hdr);
+    Persistence::Ini::WriteDword (path, RT::INI_SECTION, RT::KEY_MAX_CONNS,
+                                  static_cast<DWORD>(s.maxConnections), hdr);
 }
 
 void ApplyOverrides(const Overrides &o) {
@@ -209,7 +236,13 @@ void ApplyOverrides(const Overrides &o) {
     if (!o.name.empty())        s.name        = o.name;
     if (!o.bindAddress.empty()) s.bindAddress = o.bindAddress;
     if (!o.allowList.empty())   s.allowList   = ParseList(o.allowList);
-    if (!o.blackList.empty())   s.blackList   = ParseList(o.blackList);
+    // -remoteBlock goes STRAIGHT INTO THE BLACKLIST FILE rather than into a
+    // Settings field, because there is no longer a blacklist anywhere else.
+    // Written rather than held for the session on purpose: blocking an address
+    // is the one command-line action whose whole point is that it outlives the
+    // launch that asked for it.
+    for (const std::wstring &addr : ParseList(o.blackList))
+        Blacklist::Add(addr, Constants::Messages::BLACKLIST_REASON_CMDLINE);
 
     if (o.port >= 0)           s.port           = o.port;
     if (o.maxConnections >= 0) s.maxConnections = o.maxConnections;
@@ -228,42 +261,17 @@ void ApplyOverrides(const Overrides &o) {
 }
 
 bool IniExists() {
-    const std::wstring &path = Dedicated::SettingsFilePath();
-    if (path.empty()) return false;
-    const DWORD attr = GetFileAttributesW(path.c_str());
-    return attr != INVALID_FILE_ATTRIBUTES && !(attr & FILE_ATTRIBUTE_DIRECTORY);
+    return Persistence::Ini::Exists(LocalServerPath());
 }
 
-void SaveToIniSeeded(bool &createdFileOut) {
-    createdFileOut = !IniExists();
-
-    if (createdFileOut) {
-        // Seed [Settings] BEFORE writing anything else. From the next launch the
-        // .ini is authoritative for every setting, so a file that holds only a
-        // port number would silently reset the user's entire configuration.
-        //
-        // The key list comes from Persistence::Registry::ForEachSetting — the
-        // same walk the tray's Export uses — so a setting added later is seeded
-        // automatically rather than being quietly forgotten here.
-        Persistence::Registry::ForEachSetting(
-            app,
-            [](const wchar_t *key, DWORD value, void *) {
-                Dedicated::WriteDword(key, value); // [Settings]
-            },
-            nullptr);
-
-        // Identity, so a generated file says what it belongs to rather than
-        // appearing as an anonymous block of keys. Dedicated=0: an .ini created
-        // to hold remote settings makes the copy file-backed, but it does NOT
-        // make it a dedicated appliance.
-        if (Dedicated::ReadInstanceName().empty())
-            Dedicated::WriteInstanceString(L"Name", Dedicated::ExeStemName());
-        if (Dedicated::ReadInstanceString(L"Dedicated").empty())
-            Dedicated::WriteInstanceString(L"Dedicated", L"0");
-        Dedicated::WriteInstanceString(L"Version", Constants::APP_VERSION);
-    }
-
-    SaveToIni();
+bool IsLoopbackBind(const std::wstring &addr) {
+    if (addr.empty()) return false;
+    if (_wcsicmp(addr.c_str(), L"localhost") == 0) return true;
+    if (_wcsicmp(addr.c_str(), L"::1") == 0)       return true;
+    // The whole 127.0.0.0/8 block, not just 127.0.0.1 — every address in it is
+    // loopback, and a prefix test is exact here because the range is defined by
+    // its first octet. Matched on "127." with the dot so "1270.x" cannot pass.
+    return addr.rfind(L"127.", 0) == 0;
 }
 
 std::wstring WhyCannotStart(const Settings &s) {
@@ -281,6 +289,21 @@ std::wstring WhyCannotStart(const Settings &s) {
     // rather than being discovered at the far end later.
     if (s.name.empty())
         return Constants::Messages::REMOTE_BLOCKED_NO_NAME;
+    // A PASSWORD IS MANDATORY off loopback. See the message's own comment for
+    // why this refuses rather than warns.
+    //
+    // The test is the BIND ADDRESS, not the AllowList: what decides whether a
+    // stranger can reach the socket at all is which interfaces it is on. An
+    // AllowList is checked after the connection exists, and its entries are
+    // addresses a caller asserts by connecting from — a second line, not the
+    // first one.
+    if (s.passwordHash.empty() && !IsLoopbackBind(s.bindAddress))
+        return Constants::Messages::REMOTE_BLOCKED_NO_PASSWORD;
+    // A password that is SET but unparseable. Checked separately from the empty
+    // case and never folded into it: "cannot read the password" must never
+    // resolve to "there is no password".
+    if (!s.passwordHash.empty() && !Crypto::StoredIsUsable(s.passwordHash))
+        return Constants::Messages::REMOTE_BLOCKED_BAD_PASSWORD;
     // Not a hard stop — the server binds and listens — but every connection will
     // be refused, so saying nothing here would look exactly like a broken server.
     if (s.allowList.empty())

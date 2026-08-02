@@ -46,7 +46,7 @@ extern void UpdateOverlaysForCurrentImage(HWND hWnd);
 #include "Rem_TCP_IP/RemoteMirror.h"     // the driving half — targets + sender threads
 #include "Rem_TCP_IP/RemoteInbound.h"    // InboundGuard — the loop cut
 #include "Rem_TCP_IP/RemoteExec.h"       // BuildSyncPayload for the desync repair
-#include "Rem_TCP_IP/RemotesFile.h"      // qivRemotes.ini — the saved target list
+#include "Rem_TCP_IP/RemotesFile.h"      // qivRemoteServers.ini — the saved target list
 #include "Rem_TCP_IP/RemotesWnd.h"       // F10 console + startup AutoConnectAll
 #include <windows.h>
 #ifndef MF_RADIOCHECK
@@ -62,6 +62,7 @@ extern void UpdateOverlaysForCurrentImage(HWND hWnd);
 #include "Platform/DpiAwareInit.h"
 #include "../resources/resource.h"
 #include "Persistence/RegistryManager.h"
+#include "Persistence/SessionFile.h"   // qivSession.ini — the resume position
 #include "Renderer/RendererD2D.h"
 #include "Renderer/RendererGDI.h"
 
@@ -1045,13 +1046,13 @@ int WINAPI wWinMain(HINSTANCE hInstance, [[maybe_unused]] HINSTANCE hPrevInstanc
         }
     }
 
-    // The DRIVING half. Reads qivRemotes.ini and opens a connection to every
+    // The DRIVING half. Reads qivRemoteServers.ini and opens a connection to every
     // row marked AutoConnect, each on its own thread — so a screen that is
     // switched off costs this startup nothing.
     //
     // Unconditional, unlike the listener above: connecting OUT opens no port and
     // accepts nothing, so there is no surface to gate. A copy with no
-    // qivRemotes.ini simply has no targets. Note that mirroring itself is still
+    // qivRemoteServers.ini simply has no targets. Note that mirroring itself is still
     // off (F11 and F12 always start false) — the connections exist, but nothing
     // travels down them until asked.
     UI::RemotesWnd::AutoConnectAll(hWnd);
@@ -1081,13 +1082,16 @@ int WINAPI wWinMain(HINSTANCE hInstance, [[maybe_unused]] HINSTANCE hPrevInstanc
 
     // --- CRITICAL CLEANUP ---
     // Remember the image on screen so the next launch resumes here instead of
-    // prompting. Written BEFORE the flush below so it makes it to disk.
+    // prompting. Its own small file (qivSession.ini) rather than the settings
+    // store: this changes at every close, and an .ini write rewrites the whole
+    // file, so parking it with the settings meant rewriting every setting the
+    // application has for one line — see Persistence/SessionFile.h.
+    //
     // Skipped for a dedicated instance: it always starts from its configured
-    // folder, so a resume position would only be noise in its .ini.
+    // folder, so a resume position would only be noise.
     if (!Dedicated::IsDedicatedFlag() && app.currentIndex >= 0 &&
         app.currentIndex < static_cast<int>(app.playlist.size()))
-        Persistence::Registry::SaveStringSetting(Constants::Registry::LAST_IMAGE,
-                                                 app.playlist[app.currentIndex]);
+        Persistence::Session::SaveLastImage(app.playlist[app.currentIndex]);
 
     g_writeQueue.Flush(); // drain all pending registry + file writes before teardown
     app.renderer.reset();
