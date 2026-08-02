@@ -263,6 +263,34 @@ ThumbnailPanelWnd &getActiveDirWnd();
             RemoteLogWnd    remoteLogWnd;
             RemoteCmdWnd    remoteCmdWnd;
 
+            // =================================================================
+            // EVERY fixed floating panel, listed ONCE.
+            //
+            // Two functions walk this set — HideAllPanelWindows() and
+            // AnyPanelVisible() — and each used to carry its own copy of it.
+            // They drifted, and silently: both listed only the original eight,
+            // so Find, the Dedicated panel, F9 (Local Server), F10 (Remote
+            // Servers), the mirror picker, Ctrl+F10 (Send Command) and Ctrl+F12
+            // (wire log) were left on screen by "close all panels" — and
+            // AnyPanelVisible reported nothing was open while they were, which
+            // also made ToggleAllPanels restore instead of close.
+            //
+            // A panel added to the class but not to a list is the failure this
+            // prevents: there is now one place to forget, not two.
+            //
+            // Declared AFTER the panels themselves because a default member
+            // initializer may only take the address of an already-declared
+            // member. The spawned DirWnd pool is deliberately not here — it has
+            // its own array and its own IsPanelVisible().
+            // =================================================================
+            static constexpr size_t FIXED_PANEL_COUNT = 15;
+            IPanelWindow *const m_fixedPanels[FIXED_PANEL_COUNT] = {
+                &helpWnd,     &cacheWnd,       &dirWnd,       &historyListWnd,
+                &exifWnd,     &jumpToWnd,      &zoomWnd,      &findWnd,
+                &statsWnd,    &dedicatedWnd,   &remoteWnd,    &remotesWnd,
+                &mirrorPickerWnd, &remoteLogWnd, &remoteCmdWnd
+            };
+
             // Fixed pool of 4 pre-allocated SpawnedDirWnd instances — one per layout slot
             // (top, left, right, bottom). Reused across spawns; never deleted at runtime.
             SpawnedDirWnd m_spawned0{0};

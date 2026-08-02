@@ -65,26 +65,22 @@ namespace UI {
         // Snapshot what is visible so RestoreAllPanels() can replay it. Fixed
         // panels first, then the spawned DirWnd pool. Keep the previous snapshot
         // if nothing is currently visible (nothing new to remember).
-IPanelWindow *const fixed[] = {
-            &helpWnd, &cacheWnd, &dirWnd, &historyListWnd,
-            &exifWnd, &jumpToWnd, &zoomWnd, &statsWnd
-        };
+        //
+        // Both the snapshot and the hiding walk m_fixedPanels — see the note on
+        // its declaration. Hiding used to be a hand-written run of eight Hide()
+        // calls that did not match even the list beside it.
         std::vector<IPanelWindow *> visibleNow;
-        for (IPanelWindow *p : fixed)
+        for (IPanelWindow *p : m_fixedPanels)
             if (p->IsVisible()) visibleNow.push_back(p);
         for (auto *p : m_spawnedPool)
             if (p->IsPanelVisible()) visibleNow.push_back(p);
         if (!visibleNow.empty())
             m_restoreList = std::move(visibleNow);
 
-        helpWnd.Hide();
-        cacheWnd.Hide();
-        dirWnd.Hide();
-        historyListWnd.Hide();
-        exifWnd.Hide();
-        jumpToWnd.Hide();
-        zoomWnd.Hide();
-        statsWnd.Hide();
+        // Unconditional, as before: Hide() on a panel that was never initialised
+        // is a no-op, so there is nothing to guard against.
+        for (IPanelWindow *p : m_fixedPanels)
+            p->Hide();
         HideAllSpawnedDirWnds();
     }
 
@@ -96,11 +92,11 @@ IPanelWindow *const fixed[] = {
     }
 
     bool UIManager::AnyPanelVisible() const {
-        const IPanelWindow *const fixed[] = {
-            &helpWnd, &cacheWnd, &dirWnd, &historyListWnd,
-            &exifWnd, &jumpToWnd, &zoomWnd, &statsWnd
-        };
-        for (const IPanelWindow *p : fixed)
+        // Same list HideAllPanelWindows uses. When these two disagreed,
+        // ToggleAllPanels restored panels instead of closing them: only F9 was
+        // open, this said "nothing is visible", and the toggle took the
+        // restore branch.
+        for (const IPanelWindow *p : m_fixedPanels)
             if (p->IsVisible()) return true;
         for (const auto *p : m_spawnedPool)
             if (p->IsPanelVisible()) return true;

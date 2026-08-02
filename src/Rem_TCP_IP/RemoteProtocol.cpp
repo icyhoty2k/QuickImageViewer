@@ -101,6 +101,15 @@ namespace {
           L"order, playlist length and current position. What Ctrl+Enter asks before "
           L"deciding whether an image number is safe to send.   answer:  "
           L"count=238;index=12;sort=0;sortrev=0;name=IMG_0012.jpg;folder=D:\\Photos" },
+        { L"QueryHistory",          Command::QueryHistory,                    PayloadRule::None,
+          L"read-only, changes NOTHING: answers with this instance's folder history, "
+          L"so a client that cannot see that machine's disk can offer a folder to jump "
+          L"to and then send OpenFile. Favourites carry a leading *.   answer:  "
+          L"count=12;folders=*D:\\Photos|D:\\Scans|C:\\Wallpapers" },
+        { L"QueryClients",          Command::QueryClients,                    PayloadRule::None,
+          L"read-only, changes NOTHING: how many clients this listener has, its "
+          L"configured cap, and the address it is bound to. The count INCLUDES the "
+          L"caller.   answer:  clients=2;max=4;endpoint=0.0.0.0:8770" },
 
         // --- One-shot display, and the image transfer that feeds it ---
         //
@@ -747,6 +756,8 @@ bool IsMirrorable(Command cmd) {
         // own targets, which is not what the key means. A slave told to
         // perform it would push its own picture back at whoever asked.
         case Command::QueryState:
+        case Command::QueryHistory:
+        case Command::QueryClients:
         case Command::SendImagePositionToRemotes:
         case Command::StreamImageToRemotes:
         case Command::StreamImageFromRemote:
