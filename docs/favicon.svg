@@ -1,8 +1,82 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
-  <rect width="512" height="512" rx="100" ry="100" fill="#1b1e26"/>
-  <rect x="64" y="64" width="384" height="384" rx="40" ry="40" fill="#000000"/>
-  <circle cx="160" cy="160" r="60" fill="#ff4d4d"/>
-  <circle cx="160" cy="160" r="40" fill="#ff8c00"/>
-  <path d="M128 448 L272 128 L352 448 Z" fill="#6a0dad"/>
-  <path d="M256 448 L384 192 L448 448 Z" fill="#00e5ff"/>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="100%" height="100%">
+  <defs>
+    <!-- Clip path to perfectly round the corners of the background AND the mountains -->
+    <clipPath id="iconClip">
+      <rect width="512" height="512" rx="112" />
+    </clipPath>
+
+    <!-- Deep Space Background Gradient -->
+    <linearGradient id="bgGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#1b1e30"/>
+      <stop offset="100%" stop-color="#0a0c14"/>
+    </linearGradient>
+
+    <!-- Sun Gradient (Yellow center to dark red edge) -->
+    <radialGradient id="sunGrad" cx="35%" cy="35%" r="65%">
+      <stop offset="0%" stop-color="#ffcc00"/>
+      <stop offset="35%" stop-color="#ff4400"/>
+      <stop offset="80%" stop-color="#d50000"/>
+      <stop offset="100%" stop-color="#8e0000"/>
+    </radialGradient>
+
+    <!-- Filters for Sun Glow, Shadows, and Rim Lighting -->
+    <filter id="sunGlow" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur stdDeviation="15" result="blur"/>
+      <feComposite in="SourceGraphic" in2="blur" operator="over"/>
+    </filter>
+
+    <filter id="dropShadow" x="-30%" y="-30%" width="160%" height="160%">
+      <feDropShadow dx="-12" dy="12" stdDeviation="16" flood-color="#000000" flood-opacity="0.85"/>
+    </filter>
+
+    <filter id="rimGlow" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur stdDeviation="2" result="blur"/>
+      <feComposite in="SourceGraphic" in2="blur" operator="over"/>
+    </filter>
+
+    <!-- Mountain Face Gradients -->
+    <linearGradient id="purpleGrad" x1="20%" y1="0%" x2="80%" y2="100%">
+      <stop offset="0%" stop-color="#e040fb"/>
+      <stop offset="60%" stop-color="#651fff"/>
+      <stop offset="100%" stop-color="#12003b"/>
+    </linearGradient>
+
+    <linearGradient id="blueGrad" x1="10%" y1="0%" x2="90%" y2="100%">
+      <stop offset="0%" stop-color="#00ffff"/>
+      <stop offset="50%" stop-color="#0055ff"/>
+      <stop offset="100%" stop-color="#00072b"/>
+    </linearGradient>
+  </defs>
+
+  <!-- Apply the clip path to everything inside this group -->
+  <g clip-path="url(#iconClip)">
+    
+    <!-- Background -->
+    <rect width="512" height="512" fill="url(#bgGrad)" />
+
+    <!-- Concentric Glow Rings -->
+    <g stroke="#ff2a00" fill="none">
+      <circle cx="170" cy="170" r="115" stroke-width="2.5" opacity="0.5"/>
+      <circle cx="170" cy="170" r="150" stroke-width="1.5" opacity="0.25"/>
+      <circle cx="170" cy="170" r="190" stroke-width="1" opacity="0.12"/>
+    </g>
+
+    <!-- Glowing Sun -->
+    <circle cx="170" cy="170" r="92" fill="url(#sunGrad)" filter="url(#sunGlow)"/>
+
+    <!-- Back Mountain (Purple) -->
+    <g filter="url(#dropShadow)">
+      <polygon points="-80,550 290,160 600,550" fill="url(#purpleGrad)"/>
+    </g>
+    <!-- Purple Highlight Edge (Rim Light) -->
+    <line x1="-80" y1="550" x2="290" y2="160" stroke="#ff5eff" stroke-width="7" filter="url(#rimGlow)"/>
+
+    <!-- Front Mountain (Blue) -->
+    <g filter="url(#dropShadow)">
+      <polygon points="110,550 385,245 700,550" fill="url(#blueGrad)"/>
+    </g>
+    <!-- Blue Highlight Edge (Rim Light) -->
+    <line x1="110" y1="550" x2="385" y2="245" stroke="#00ffff" stroke-width="7" filter="url(#rimGlow)"/>
+
+  </g>
 </svg>
