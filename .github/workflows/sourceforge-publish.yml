@@ -1,14 +1,27 @@
-name: Publish to SourceForge
+# MANUAL BACKUP ONLY.
+#
+# Normal path: SourceForge's own "GitHub Releases Integration" webhook mirrors
+# every release automatically (project admin -> Files -> GitHub Integration).
+# This workflow exists for when that integration is broken, disabled, or a
+# release needs re-pushing by hand. It never runs on its own.
+#
+# Requires repo secrets:
+#   SF_SSH_PRIVATE_KEY  - private key whose public half is on the SourceForge account
+#   SF_API_KEY          - optional; only used to flip the default-download flags
+name: Publish to SourceForge (manual backup)
 
 on:
-  release:
-    types: [ released ]
   workflow_dispatch:
     inputs:
       tag:
         description: 'Release tag to mirror (e.g. v1.2.3). Blank = latest release.'
         required: false
         default: ''
+      set_default:
+        description: 'Also mark it as the default download (needs SF_API_KEY)'
+        type: boolean
+        required: false
+        default: true
 
 permissions:
   contents: read
@@ -26,18 +39,16 @@ jobs:
         id: tag
         env:
           GH_TOKEN: ${{ github.token }}
-          INPUT_TAG: ${{ github.event.inputs.tag }}
+          INPUT_TAG: ${{ inputs.tag }}
         run: |
           set -euo pipefail
-          if [ "${{ github.event_name }}" = "release" ]; then
-            TAG="${{ github.event.release.tag_name }}"
-          elif [ -n "$INPUT_TAG" ]; then
+          if [ -n "$INPUT_TAG" ]; then
             TAG="$INPUT_TAG"
           else
             TAG=$(gh release view --repo "$GITHUB_REPOSITORY" --json tagName -q .tagName)
           fi
-          echo "tag=$TAG"            >> "$GITHUB_OUTPUT"
-          echo "version=${TAG#v}"    >> "$GITHUB_OUTPUT"
+          echo "Mirroring tag: $TAG"
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
 
       - name: Download release assets
         env:
@@ -56,17 +67,22 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
+          # SourceForge renders README.md of a release folder as its notes.
           gh release view "${{ steps.tag.outputs.tag }}" \
             --repo "$GITHUB_REPOSITORY" \
             --json body -q .body > upload/README.md
-          # SourceForge shows README.md of the folder as the release notes.
-          head -c 400 upload/README.md || true
 
       - name: Setup SSH key
+        env:
+          SF_SSH_PRIVATE_KEY: ${{ secrets.SF_SSH_PRIVATE_KEY }}
         run: |
           set -euo pipefail
+          if [ -z "$SF_SSH_PRIVATE_KEY" ]; then
+            echo "::error::SF_SSH_PRIVATE_KEY secret is not set - cannot upload."
+            exit 1
+          fi
           mkdir -p ~/.ssh
-          printf '%s\n' "${{ secrets.SF_SSH_PRIVATE_KEY }}" > ~/.ssh/id_sf
+          printf '%s\n' "$SF_SSH_PRIVATE_KEY" > ~/.ssh/id_sf
           chmod 600 ~/.ssh/id_sf
           ssh-keyscan -H frs.sourceforge.net >> ~/.ssh/known_hosts 2>/dev/null
 
@@ -80,7 +96,7 @@ jobs:
       - name: Set as default download for all platforms
         env:
           SF_API_KEY: ${{ secrets.SF_API_KEY }}
-        if: ${{ env.SF_API_KEY != '' }}
+        if: ${{ inputs.set_default && env.SF_API_KEY != '' }}
         run: |
           set -euo pipefail
           curl -sS -H "Accept: application/json" -X PUT \
