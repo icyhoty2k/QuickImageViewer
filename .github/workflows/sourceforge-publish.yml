@@ -1,0 +1,95 @@
+name: Publish to SourceForge
+
+on:
+  release:
+    types: [ released ]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Release tag to mirror (e.g. v1.2.3). Blank = latest release.'
+        required: false
+        default: ''
+
+permissions:
+  contents: read
+
+env:
+  SF_PROJECT: quickimageviewer
+  SF_USER: icyhoty2k
+  ASSET_NAME: QuickImageViewer.exe
+
+jobs:
+  mirror:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Resolve tag
+        id: tag
+        env:
+          GH_TOKEN: ${{ github.token }}
+          INPUT_TAG: ${{ github.event.inputs.tag }}
+        run: |
+          set -euo pipefail
+          if [ "${{ github.event_name }}" = "release" ]; then
+            TAG="${{ github.event.release.tag_name }}"
+          elif [ -n "$INPUT_TAG" ]; then
+            TAG="$INPUT_TAG"
+          else
+            TAG=$(gh release view --repo "$GITHUB_REPOSITORY" --json tagName -q .tagName)
+          fi
+          echo "tag=$TAG"            >> "$GITHUB_OUTPUT"
+          echo "version=${TAG#v}"    >> "$GITHUB_OUTPUT"
+
+      - name: Download release assets
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          mkdir -p upload
+          gh release download "${{ steps.tag.outputs.tag }}" \
+            --repo "$GITHUB_REPOSITORY" \
+            --pattern "$ASSET_NAME" \
+            --dir upload
+          ls -l upload
+
+      - name: Build release notes file
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          gh release view "${{ steps.tag.outputs.tag }}" \
+            --repo "$GITHUB_REPOSITORY" \
+            --json body -q .body > upload/README.md
+          # SourceForge shows README.md of the folder as the release notes.
+          head -c 400 upload/README.md || true
+
+      - name: Setup SSH key
+        run: |
+          set -euo pipefail
+          mkdir -p ~/.ssh
+          printf '%s\n' "${{ secrets.SF_SSH_PRIVATE_KEY }}" > ~/.ssh/id_sf
+          chmod 600 ~/.ssh/id_sf
+          ssh-keyscan -H frs.sourceforge.net >> ~/.ssh/known_hosts 2>/dev/null
+
+      - name: Upload to SourceForge File Release System
+        run: |
+          set -euo pipefail
+          DEST="/home/frs/project/${SF_PROJECT}/${{ steps.tag.outputs.tag }}/"
+          rsync -avP -e "ssh -i ~/.ssh/id_sf -o StrictHostKeyChecking=yes" \
+            upload/ "${SF_USER}@frs.sourceforge.net:${DEST}"
+
+      - name: Set as default download for all platforms
+        env:
+          SF_API_KEY: ${{ secrets.SF_API_KEY }}
+        if: ${{ env.SF_API_KEY != '' }}
+        run: |
+          set -euo pipefail
+          curl -sS -H "Accept: application/json" -X PUT \
+            -d "api_key=${SF_API_KEY}" \
+            -d "default=windows" \
+            -d "default=mac" \
+            -d "default=linux" \
+            -d "default=bsd" \
+            -d "default=solaris" \
+            -d "default=others" \
+            "https://sourceforge.net/projects/${SF_PROJECT}/files/${{ steps.tag.outputs.tag }}/${ASSET_NAME}" \
+            | head -c 500
