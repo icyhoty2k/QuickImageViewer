@@ -1,5 +1,6 @@
 #include "RemotesFile.h"
 
+#include "RemoteCrypto.h"   // StoredIsUsable — the same check the target applies
 #include "Platform/Constants.h"
 
 #include <cwctype>
@@ -100,12 +101,25 @@ bool IsStoredSecret(const std::wstring &f) {
 bool SplitStoredSecret(const std::wstring &f,
                        std::wstring &saltHexOut, std::wstring &digestHexOut) {
     if (!IsStoredSecret(f)) return false;
+
+    // The body is the target's stored value verbatim:
+    // "<iterations>$<salt-hex>$<digest-hex>".
+    //
+    // The ITERATION COUNT is parsed past and discarded on purpose. It is the
+    // cost of DERIVING the digest from a password, and this route already has
+    // the digest — the whole point of an imported secret is that no derivation
+    // happens. Only the salt (to notice the target's password has changed since
+    // the import) and the digest (the shared secret itself) are wanted.
     const std::wstring body = f.substr(wcslen(SECRET_PREFIX));
-    const size_t sep = body.find(L'$');
-    if (sep == std::wstring::npos || sep == 0 || sep + 1 >= body.size()) return false;
-    saltHexOut   = body.substr(0, sep);
-    digestHexOut = body.substr(sep + 1);
-    return true;
+
+    const size_t a = body.find(L'$');
+    if (a == std::wstring::npos) return false;
+    const size_t b = body.find(L'$', a + 1);
+    if (b == std::wstring::npos) return false;
+
+    saltHexOut   = body.substr(a + 1, b - a - 1);
+    digestHexOut = body.substr(b + 1);
+    return !saltHexOut.empty() && !digestHexOut.empty();
 }
 
 // =============================================================================
@@ -120,10 +134,14 @@ bool ImportFromInstanceFile(const std::wstring &chosenPath,
     warningOut.clear();
     if (chosenPath.empty()) { problemOut = L"No file chosen."; return false; }
 
-    // Work out which of the pair was picked. An instance's settings file is its
-    // exe path with the extension swapped — the same derivation
-    // Dedicated::SettingsFilePath uses, so either half finds the other.
-    std::wstring iniPath = chosenPath;
+    // Work out which of the pair was picked.
+    //
+    // The listener's configuration is qivLocalServer.ini IN THE TARGET'S FOLDER
+    // — a fixed name, not derived from the exe. So pointing at an exe means
+    // "look in that folder", and pointing at the .ini means "its exe is
+    // whichever one sits beside it", which cannot be derived at all and is only
+    // needed for the console's start button.
+    std::wstring iniPath;
     std::wstring exePath;
 
     const size_t dot   = chosenPath.find_last_of(L'.');
@@ -131,24 +149,32 @@ bool ImportFromInstanceFile(const std::wstring &chosenPath,
     const bool hasExt  = dot != std::wstring::npos &&
                          (slash == std::wstring::npos || dot > slash);
 
+    const std::wstring folder =
+        (slash == std::wstring::npos) ? std::wstring() : chosenPath.substr(0, slash + 1);
+
     if (hasExt && _wcsicmp(chosenPath.c_str() + dot, L".exe") == 0) {
         exePath = chosenPath;
-        iniPath = chosenPath.substr(0, dot) + L".ini";
+        iniPath = folder + RT::LOCAL_SERVER_FILE_NAME;
 
         if (GetFileAttributesW(iniPath.c_str()) == INVALID_FILE_ATTRIBUTES) {
-            // The most likely reason to land here: that copy has never been
-            // configured, or it is launched with -config pointing somewhere
-            // else entirely. Neither is something this can guess its way out of.
-            problemOut = L"That exe has no settings file beside it.\r\n\r\nExpected:\r\n    " +
-                         iniPath +
-                         L"\r\n\r\nEither the instance has never been configured (open it and "
-                         L"use F9 → Save to INI), or it is started with -config pointing at a "
-                         L"file elsewhere — in which case pick that file instead.";
+            // The most likely reason to land here: that copy has never had its
+            // listener configured. Nothing here can guess its way out of that.
+            problemOut = L"That exe has no listener configuration beside it."
+                         L"\r\n\r\nExpected:\r\n    " + iniPath +
+                         L"\r\n\r\nThat instance has never been configured for remote "
+                         L"control — open it and use F9 → Save to INI.";
             return false;
         }
     } else {
-        // An .ini was picked. Its exe is the same derivation in reverse, and is
-        // optional: without it the console simply cannot start that instance.
+        // A file was picked directly. Taken as the listener configuration
+        // whatever it is called, so a copy launched with -config, or one whose
+        // file was renamed, can still be imported by pointing straight at it.
+        iniPath = chosenPath;
+
+        // The exe is optional: without it the console simply cannot START that
+        // instance, which is a lesser feature than driving one that is running.
+        // A fixed-name .ini gives no clue which exe it belongs to, so this only
+        // guesses when the file was named after one.
         if (hasExt) {
             const std::wstring candidate = chosenPath.substr(0, dot) + L".exe";
             if (GetFileAttributesW(candidate.c_str()) != INVALID_FILE_ATTRIBUTES)
@@ -241,13 +267,18 @@ bool ImportFromInstanceFile(const std::wstring &chosenPath,
     entryOut.exePath     = exePath;
     entryOut.autoConnect = false;
 
-    // The stored "salt$digest" IS the shared secret — see the header. Carried
-    // across with a marker so the connect path knows not to treat it as a typed
-    // password. An instance with no password needs none.
+    // The stored value IS the shared secret — see the header. Carried across
+    // verbatim with a marker, so the connect path knows not to treat it as a
+    // typed password. An instance with no password needs none.
+    //
+    // Validated through Crypto::StoredIsUsable rather than by looking for a '$':
+    // that is the SAME check the target's own listener applies before it will
+    // start, so an import cannot succeed on a value the target would refuse.
     if (!rawPass.empty()) {
-        if (rawPass.find(L'$') == std::wstring::npos) {
-            problemOut = L"That instance's stored password is malformed — it should be "
-                         L"\"salt$hash\". Re-set it in its F9 panel.";
+        if (!Crypto::StoredIsUsable(rawPass)) {
+            problemOut = L"That instance's stored password is in an old or damaged "
+                         L"format.\r\n\r\nIts own listener will refuse to start with it "
+                         L"too — open that instance and set the password again in F9.";
             return false;
         }
         entryOut.password = std::wstring(SECRET_PREFIX) + rawPass;

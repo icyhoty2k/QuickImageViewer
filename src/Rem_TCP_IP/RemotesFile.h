@@ -31,12 +31,12 @@
 // settings by looking for an .ini named after the exe (qIV.exe → qIV.ini). Put
 // this list in there and a registry-backed master would silently become
 // file-backed on its next launch, with every unrelated preference reverting to
-// its default — which is the accident RemoteSettings::SaveToIniSeeded exists to
-// contain.
+// its default.
 //
-// "qivRemotes.ini" is not the exe-derived name, so that check never sees it.
-// Creating it changes nothing about how the rest of the app persists itself,
-// whichever mode the copy is in.
+// "qivRemoteServers.ini" is not the exe-derived name, so that check never sees
+// it. Creating it changes nothing about how the rest of the app persists itself,
+// whichever mode the copy is in. The listener's own configuration
+// (qivLocalServer.ini) is arranged the same way and for the same reason.
 //
 // It also belongs to the DRIVING side only. RemoteWnd's peer fields were
 // deliberately session-only on the grounds that "an address you are driving
@@ -75,11 +75,11 @@ namespace Remote {
     };
 
     // Marks a password field that holds an already-derived SECRET rather than a
-    // typed password: "secret:<salt-hex>$<digest-hex>", exactly the two halves
-    // the target's own settings file stores.
+    // typed password: "secret:<iterations>$<salt-hex>$<digest-hex>", exactly
+    // what the target's own listener file stores, copied verbatim.
     //
     // The prefix exists so the two forms are told apart without guessing. A
-    // plaintext password could in principle look like "abc$def", and a wrong
+    // plaintext password could in principle look like "1$abc$def", and a wrong
     // guess would mean silently attempting the wrong authentication route.
     constexpr const wchar_t *SECRET_PREFIX = L"secret:";
 
@@ -93,14 +93,14 @@ namespace Remote {
     // =========================================================================
     // IMPORT — read another instance's settings file and build a row from it.
     //
-    // Point at a dedicated instance's .ini (or its .exe, and the .ini beside it
-    // is found by swapping the extension, exactly as Dedicated::SettingsFilePath
-    // derives it) and everything needed to drive it comes out: port, name, exe,
-    // and the credentials.
+    // Point at another instance's qivLocalServer.ini (or its .exe, and the file
+    // is found in the same folder by its fixed name) and everything needed to
+    // drive it comes out: port, name, exe, and the credentials.
     //
     // THE CREDENTIALS COME OUT TOO, and that is the point rather than an
-    // oversight. A server stores "salt$digest" and never holds the plaintext;
-    // the digest IS the shared secret. Anything that can read that file can
+    // oversight. A server stores "<iterations>$<salt>$<digest>" and never holds
+    // the plaintext; the digest IS the shared secret. Anything that can read
+    // that file can
     // already authenticate to that instance — so importing it is a complete
     // setup with nothing to type, and it grants no access that reading the file
     // did not already grant.
@@ -117,7 +117,7 @@ namespace Remote {
                                 std::wstring &problemOut,
                                 std::wstring &warningOut);
 
-    // <exe folder>\qivRemotes.ini — resolvable whether or not the file exists.
+    // <exe folder>\qivRemoteServers.ini — resolvable whether or not the file exists.
     const std::wstring &RemotesFilePath();
     bool RemotesFileExists();
 

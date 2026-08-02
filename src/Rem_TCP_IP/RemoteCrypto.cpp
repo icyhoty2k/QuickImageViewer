@@ -1,5 +1,7 @@
 #include "RemoteCrypto.h"
 
+#include "Platform/Constants.h"   // PBKDF2_ITERATIONS / PBKDF2_SALT_LEN
+
 #include <bcrypt.h>
 #include <algorithm>
 
@@ -14,8 +16,9 @@
 namespace Remote::Crypto {
 
 namespace {
+    namespace RT = Constants::RemoteTcpIp;
+
     constexpr size_t SHA256_LEN = 32;
-    constexpr size_t SALT_LEN   = 16;
     constexpr wchar_t STORED_SEPARATOR = L'$';
 
     // RAII for a BCrypt algorithm handle. Every early return below would
@@ -131,40 +134,104 @@ std::vector<BYTE> RandomBytes(size_t count) {
     return out;
 }
 
+std::vector<BYTE> Pbkdf2Sha256(const std::wstring &plaintext,
+                               const std::vector<BYTE> &salt,
+                               int iterations) {
+    if (plaintext.empty() || salt.empty() || iterations <= 0) return {};
+
+    // The PRF handle must be opened WITH the HMAC flag — BCryptDeriveKeyPBKDF2
+    // takes a keyed hash provider, and passing a plain SHA-256 handle fails
+    // rather than silently computing something else.
+    AlgHandle prf;
+    if (BCryptOpenAlgorithmProvider(&prf.h, BCRYPT_SHA256_ALGORITHM, nullptr,
+                                    BCRYPT_ALG_HANDLE_HMAC_FLAG) != STATUS_SUCCESS)
+        return {};
+
+    std::vector<BYTE> pw = ToUtf8(plaintext);
+    std::vector<BYTE> out(SHA256_LEN);
+
+    const NTSTATUS st = BCryptDeriveKeyPBKDF2(
+        prf.h,
+        pw.data(), static_cast<ULONG>(pw.size()),
+        const_cast<PUCHAR>(salt.data()), static_cast<ULONG>(salt.size()),
+        static_cast<ULONGLONG>(iterations),
+        out.data(), static_cast<ULONG>(out.size()),
+        0);
+
+    // The password bytes are wiped rather than left in a freed heap block. Not
+    // a defence against anything sophisticated — the plaintext is in a wstring
+    // the caller still owns — but this copy has no reason to outlive the call.
+    SecureZeroMemory(pw.data(), pw.size());
+
+    if (st != STATUS_SUCCESS) return {};
+    return out;
+}
+
 std::vector<BYTE> SecretFromPassword(const std::wstring &plaintext,
-                                     const std::vector<BYTE> &salt) {
-    if (plaintext.empty() || salt.empty()) return {};
-    // salt || utf8(password) — the salt is prepended so two instances sharing a
-    // password never produce the same stored string. This is the ONE definition
-    // of that arithmetic; HashPassword and VerifyPassword both go through it, so
-    // the client and server can never drift apart on how the digest is formed.
-    std::vector<BYTE> buf = salt;
-    const std::vector<BYTE> pw = ToUtf8(plaintext);
-    buf.insert(buf.end(), pw.begin(), pw.end());
-    return Sha256(buf.data(), buf.size());
+                                     const std::vector<BYTE> &salt,
+                                     int iterations) {
+    // THE one definition of the arithmetic. HashPassword, VerifyPassword and
+    // both clients go through it, so the two ends of a connection cannot drift
+    // apart on how the digest is formed.
+    return Pbkdf2Sha256(plaintext, salt, iterations);
 }
 
 std::wstring HashPassword(const std::wstring &plaintext) {
     if (plaintext.empty()) return {};
 
-    const std::vector<BYTE> salt = RandomBytes(SALT_LEN);
+    const std::vector<BYTE> salt = RandomBytes(RT::PBKDF2_SALT_LEN);
     if (salt.empty()) return {};
 
-    const std::vector<BYTE> digest = SecretFromPassword(plaintext, salt);
+    const std::vector<BYTE> digest =
+        SecretFromPassword(plaintext, salt, RT::PBKDF2_ITERATIONS);
     if (digest.empty()) return {};
 
-    return ToHex(salt) + STORED_SEPARATOR + ToHex(digest);
+    // "<iterations>$<salt>$<digest>". The cost parameter is stored WITH the
+    // value it produced, so raising PBKDF2_ITERATIONS later leaves every
+    // existing password verifiable instead of silently breaking it.
+    return std::to_wstring(RT::PBKDF2_ITERATIONS) + STORED_SEPARATOR +
+           ToHex(salt) + STORED_SEPARATOR + ToHex(digest);
+}
+
+namespace {
+    // Splits "<iterations>$<salt>$<digest>". Returns false for anything else —
+    // including the two-field form earlier builds wrote, which cannot be
+    // upgraded in place because upgrading needs the plaintext and the whole
+    // point of the stored form is that it does not have it.
+    bool SplitStored(const std::wstring &stored,
+                     int &iterOut, std::wstring &saltHexOut, std::wstring &digestHexOut) {
+        const size_t a = stored.find(STORED_SEPARATOR);
+        if (a == std::wstring::npos) return false;
+        const size_t b = stored.find(STORED_SEPARATOR, a + 1);
+        if (b == std::wstring::npos) return false;
+
+        const std::wstring iterText = stored.substr(0, a);
+        if (iterText.empty() ||
+            iterText.find_first_not_of(L"0123456789") != std::wstring::npos)
+            return false;
+
+        // wcstol rather than stoi: a value too large to fit must be rejected,
+        // not thrown out of a function every caller would have to guard.
+        const long v = wcstol(iterText.c_str(), nullptr, 10);
+        if (v <= 0 || v > 100000000L) return false;
+
+        iterOut      = static_cast<int>(v);
+        saltHexOut   = stored.substr(a + 1, b - a - 1);
+        digestHexOut = stored.substr(b + 1);
+        return true;
+    }
 }
 
 bool VerifyPassword(const std::wstring &plaintext, const std::wstring &stored) {
-    const size_t sep = stored.find(STORED_SEPARATOR);
-    if (sep == std::wstring::npos) return false;
+    int iterations = 0;
+    std::wstring saltHex, digestHex;
+    if (!SplitStored(stored, iterations, saltHex, digestHex)) return false;
 
-    const std::vector<BYTE> salt   = FromHex(stored.substr(0, sep));
-    const std::vector<BYTE> expect = FromHex(stored.substr(sep + 1));
+    const std::vector<BYTE> salt   = FromHex(saltHex);
+    const std::vector<BYTE> expect = FromHex(digestHex);
     if (salt.empty() || expect.size() != SHA256_LEN) return false;
 
-    const std::vector<BYTE> actual = SecretFromPassword(plaintext, salt);
+    const std::vector<BYTE> actual = SecretFromPassword(plaintext, salt, iterations);
     if (actual.size() != expect.size()) return false;
 
     // Compare every byte regardless of where the first mismatch is, so the time
@@ -175,19 +242,36 @@ bool VerifyPassword(const std::wstring &plaintext, const std::wstring &stored) {
     return diff == 0;
 }
 
+bool StoredIsUsable(const std::wstring &stored) {
+    int iterations = 0;
+    std::wstring saltHex, digestHex;
+    if (!SplitStored(stored, iterations, saltHex, digestHex)) return false;
+    return !FromHex(saltHex).empty() && FromHex(digestHex).size() == SHA256_LEN;
+}
+
 std::vector<BYTE> SecretFromStored(const std::wstring &stored) {
-    // The stored digest half IS the shared secret for the challenge-response.
-    // The server holds it without ever knowing the plaintext; a client that
-    // knows the password derives the same value from the salt the server sends.
-    const size_t sep = stored.find(STORED_SEPARATOR);
-    if (sep == std::wstring::npos) return {};
-    return FromHex(stored.substr(sep + 1));
+    // The stored digest IS the shared secret for the challenge-response. The
+    // server holds it without ever knowing the plaintext; a client that knows
+    // the password derives the same value from the salt and iteration count the
+    // server sends in the challenge.
+    int iterations = 0;
+    std::wstring saltHex, digestHex;
+    if (!SplitStored(stored, iterations, saltHex, digestHex)) return {};
+    return FromHex(digestHex);
 }
 
 std::vector<BYTE> SaltFromStored(const std::wstring &stored) {
-    const size_t sep = stored.find(STORED_SEPARATOR);
-    if (sep == std::wstring::npos) return {};
-    return FromHex(stored.substr(0, sep));
+    int iterations = 0;
+    std::wstring saltHex, digestHex;
+    if (!SplitStored(stored, iterations, saltHex, digestHex)) return {};
+    return FromHex(saltHex);
+}
+
+int IterationsFromStored(const std::wstring &stored) {
+    int iterations = 0;
+    std::wstring saltHex, digestHex;
+    if (!SplitStored(stored, iterations, saltHex, digestHex)) return 0;
+    return iterations;
 }
 
 } // namespace Remote::Crypto

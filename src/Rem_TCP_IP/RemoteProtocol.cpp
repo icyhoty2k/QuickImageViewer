@@ -110,6 +110,36 @@ namespace {
           L"read-only, changes NOTHING: how many clients this listener has, its "
           L"configured cap, and the address it is bound to. The count INCLUDES the "
           L"caller.   answer:  clients=2;max=4;endpoint=0.0.0.0:8770" },
+        // The whole state in one round trip. A client that has just connected
+        // knows nothing, and every OTHER way to learn a value is to change it.
+        { L"QueryToggles",          Command::QueryToggles,                    PayloadRule::None,
+          L"read-only, changes NOTHING: the current value of every command in this "
+          L"table, as Name=value pairs. What a freshly connected client asks so its "
+          L"toggle buttons show this viewer's state instead of a guess. Rows with no "
+          L"value to report are omitted, as are the Query commands themselves.   "
+          L"answer:  ToggleGrayscale=0;ToggleFullscreen=1;SlideshowToggle=running;…" },
+
+        // PUSHED, not asked — and the only row here whose local execution does
+        // nothing at all. An observed instance emits it whenever the picture on
+        // its screen changes, alongside the `JumpToImage <n>` it already emits.
+        //
+        // Two events for one change, because they serve different watchers. The
+        // index one is exact and useless off-machine, so EmitToObservers drops it
+        // for an observer elsewhere; this one names the picture instead of its
+        // position and travels everywhere. Without it a watcher on another
+        // machine never learns that a SLIDESHOW advanced — a slideshow changes
+        // picture without issuing any command, so no other event is produced.
+        //
+        // In the table so a qIV observer replaying events parses it rather than
+        // answering ERR, and so a third-party client can look it up.
+        // Required rather than optional: the emitter always names the picture,
+        // and a bare `ImageChanged` carries no information worth accepting.
+        { L"ImageChanged",          Command::ImageChanged,                    PayloadRule::Required,
+          L"NOTIFICATION pushed by an observed instance: the picture on its screen just "
+          L"changed. Carries no instruction — a client that wants the picture asks for it "
+          L"with SendDisplayedImage. Executing it does nothing",
+          L"<n>/<total> <file name>, the same numbering QueryState reports.   e.g.  "
+          L"12/238 IMG_0012.jpg" },
 
         // --- One-shot display, and the image transfer that feeds it ---
         //
@@ -410,6 +440,18 @@ namespace {
         { L"HideToTray",            Command::HideToTray,                      PayloadRule::None,
           L"hide that instance to the tray. The tray icon is the way back, which is "
           L"what makes this safe to send remotely" },
+        // The two-way form, and the one a client without a view of that desktop
+        // should use. HideToTray is one-way from a socket — the tray icon is
+        // the only restore, and a phone cannot click it.
+        { L"ToggleAppVisibility",   Command::ToggleAppVisibility,             PayloadRule::None,
+          L"hide the window if it is showing, show it if it is hidden. Unlike HideToTray "
+          L"this always keeps the process (and this connection) alive, so the same command "
+          L"brings it back" },
+        { L"MoveToNextMonitor",     Command::MoveToNextMonitor,               PayloadRule::None,
+          L"move that window to the next monitor, wrapping at the last. Monitors are "
+          L"ordered left-to-right by their desktop coordinates; position and size are "
+          L"carried across proportionally, so a different resolution does not strand the "
+          L"window off-screen" },
         { L"NewWindow",             Command::NewWindow,                       PayloadRule::None,
           L"launch ANOTHER viewer process on that machine, on the same folder" },
         { L"ResetAll",              Command::ResetAll,                        PayloadRule::None,
@@ -664,7 +706,13 @@ bool IsMirrorable(Command cmd) {
         // Would end or hide every connected screen at once.
         case Command::HardQuit:
         case Command::HideToTray:
+        case Command::ToggleAppVisibility:
         case Command::NewWindow:
+            return false;
+
+        // A pushed notification, never a keystroke. Fanning it out would have
+        // every target announce a picture change it did not make.
+        case Command::ImageChanged:
             return false;
 
         // Opens Explorer on a machine nobody is sitting at.
@@ -710,6 +758,7 @@ bool IsMirrorable(Command cmd) {
         case Command::ResizeWindowLarger:
         case Command::ResizeWindowSmaller:
         case Command::AutosizeToWorkArea:
+        case Command::MoveToNextMonitor:
         case Command::ResetWindowLayout:
         case Command::ResetAll:
             return false;
@@ -758,6 +807,7 @@ bool IsMirrorable(Command cmd) {
         case Command::QueryState:
         case Command::QueryHistory:
         case Command::QueryClients:
+        case Command::QueryToggles:
         case Command::SendImagePositionToRemotes:
         case Command::StreamImageToRemotes:
         case Command::StreamImageFromRemote:

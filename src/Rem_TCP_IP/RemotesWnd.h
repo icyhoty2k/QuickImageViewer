@@ -24,7 +24,7 @@
 //                    keystroke quietly repointed a working remote at nothing.
 //                    Selecting is looking; editing is a decision.
 //
-//                    Save records it in qivRemotes.ini; Connect dials it. Two
+//                    Save records it in qivRemoteServers.ini; Connect dials it. Two
 //                    acts, two buttons — a screen can be listed while it is
 //                    switched off, or before it has been configured at all, and
 //                    the alternative was a saved list that could only contain
@@ -203,7 +203,7 @@ class RemotesWnd : public FloatingPanelWnd {
 
         // --- Model -----------------------------------------------------------
         void Rebuild();            // Remote::Mirror::Targets() → m_rows
-        void PersistRows();        // m_rows → qivRemotes.ini
+        void PersistRows();        // m_rows → qivRemoteServers.ini
 
         // Hover help. Several controls here are a single glyph or a two-letter
         // word, and what they do is not guessable from the drawing — the dot,

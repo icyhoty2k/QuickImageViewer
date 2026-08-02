@@ -309,6 +309,14 @@ namespace Shortcuts {
     constexpr UINT SC_SHOW_INFO = 'M'; // M (no modifier) — image info / EXIF window
 
     // -------------------------------------------------------------------------
+    // Multi-monitor
+    // -------------------------------------------------------------------------
+    // Ctrl+M — move the window to the next monitor, wrapping at the last.
+    // Shares 'M' with the plain-key info panel, split by modifier: both are
+    // "M for Monitor / Metadata" and neither had a Ctrl form.
+    constexpr UINT SC_MOVE_TO_NEXT_MONITOR = 'M'; // requires ctrl
+
+    // -------------------------------------------------------------------------
     // Jump to image by number
     // -------------------------------------------------------------------------
     constexpr UINT SC_NAV_JUMP_TO_IMAGE = 'J'; // J (no modifier) — open jump dialog

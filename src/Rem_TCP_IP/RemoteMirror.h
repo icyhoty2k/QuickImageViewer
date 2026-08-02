@@ -54,7 +54,7 @@ namespace Remote::Mirror {
     // One configured slave, as the F10 console shows it. This is a SNAPSHOT
     // type: Targets() copies the live state into these under the lock, so the
     // panel can paint from them without holding anything.
-    // WHY a target is not connected. The list in qivRemotes.ini outlives the
+    // WHY a target is not connected. The list in qivRemoteServers.ini outlives the
     // instances it describes — one gets moved, renamed, reconfigured or simply
     // switched off — so "could not connect" is the normal state of at least one
     // row, and the useful question is which kind of not-connected it is. Each
