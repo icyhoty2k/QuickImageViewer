@@ -274,6 +274,17 @@ enum class Command {
     // depends entirely on whether the far end already holds the same folder in the
     // same order. No local keystroke — a viewer does not need to ask itself.
     QueryState,
+    // `QueryHistory` — READ-ONLY, like QueryState. Answers with the folder
+    // history this instance has on disk, so a client with no filesystem access
+    // to that machine (the phone app) can offer a folder list to jump to and
+    // then send `OpenFile <path>`. Without it a remote caller can only walk the
+    // history blindly with Next/PrevHistoryFolder, moving the viewer at every
+    // step just to discover where it could go.
+    QueryHistory,
+    // `QueryClients` — READ-ONLY. How many clients this instance's listener
+    // currently has, against its cap, and what it is bound to. A caller can
+    // otherwise only discover the cap by being refused at it.
+    QueryClients,
     // ── Alt+Enter. Sends the PICTURE ITSELF — the file's bytes, in base64 chunks
     // — to be shown ONCE and change nothing else there: no folder, no sort order,
     // no playlist position. It goes up in place of the current slide and the far

@@ -29,6 +29,8 @@
 // The Ctrl+F11 selection panel reaches ExecuteCommand through UIManager, which
 // CommandExecuter already includes — nothing extra is needed here.
 #include "Rem_TCP_IP/RemoteServer.h"  // EmitToObservers — the echo half
+#include "Persistence/HistoryFoldersManager.h" // QueryHistory reads the list from disk
+#include "Rem_TCP_IP/RemoteSettings.h"         // QueryClients reports the configured cap
 
 // These two functions live in AppMain.cpp.
 // Declared here (not in a header) to keep them package-private.
@@ -1028,6 +1030,8 @@ void InputManager::ExecuteCommand(HWND hWnd, Command cmd) {
         // reply — see GetCommandValue. Listed so the switch stays exhaustive
         // rather than letting it look unhandled in `default`.
         case Command::QueryState:
+        case Command::QueryHistory:
+        case Command::QueryClients:
             break;
 
         // Payload-only, and handled entirely in RemoteExec (DoInterject) — it
@@ -1807,6 +1811,38 @@ std::wstring InputManager::GetCommandValue(HWND hWnd, Command cmd) {
             s += L";folder=" + folder;
             return s;
         }
+
+        // Read straight from disk rather than from the History panel's list.
+        // That list is a file-static inside HistoryListWnd and only exists once
+        // the panel has been opened, so asking it would answer "no history" on
+        // an instance nobody has pressed F3 on. The file is the source of truth
+        // and AppMenuIO already loads it this way.
+        case Command::QueryHistory: {
+            HistoryFoldersManager hfm;
+            hfm.LoadHistoryFromDisk();
+
+            // Pipe-separated: a Windows path cannot contain '|', but it very
+            // often contains spaces and commas. Favourites carry a leading '*'
+            // so a client can group them without a second round trip.
+            std::wstring list;
+            for (const std::wstring &folder : hfm.folderHistory) {
+                if (HistoryPath::IsBroken(folder)) continue; // never offer a path that cannot open
+                if (!list.empty()) list += L'|';
+                if (hfm.favorites.count(folder)) list += L'*';
+                list += folder;
+            }
+            return L"count=" + std::to_wstring(hfm.folderHistory.size()) +
+                   L";folders=" + list;
+        }
+
+        // The count INCLUDES the caller — it is asking over one of the very
+        // connections being counted. Saying so here rather than subtracting one:
+        // a client that wants "others" can do that arithmetic, and a client
+        // showing a status line wants the number the server's own F9 panel shows.
+        case Command::QueryClients:
+            return L"clients="  + std::to_wstring(Remote::ActiveConnections()) +
+                   L";max="     + std::to_wstring(Remote::Config().maxConnections) +
+                   L";endpoint=" + Remote::BoundEndpoint();
 
         // Whether the picture a driving instance interjected is up yet: "shown",
         // "queued" for the next slide boundary, or "none" once it has been retired.
