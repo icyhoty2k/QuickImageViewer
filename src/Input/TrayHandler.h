@@ -20,8 +20,11 @@ class TrayHandler {
 public:
     LRESULT Handle(HWND hWnd, WPARAM wParam, LPARAM lParam);
 
-private:
-    void RestoreWindow(HWND hWnd);
+    // Public and static because the tray double-click is no longer the only
+    // way back: Command::ToggleAppVisibility restores the window too, and a
+    // remote caller has no tray icon to click. One copy of the foreground
+    // hand-over (AttachThreadInput — see the .cpp) rather than two that drift.
+    static void RestoreWindow(HWND hWnd);
 };
 
 } // namespace Input

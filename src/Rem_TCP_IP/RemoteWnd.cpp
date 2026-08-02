@@ -4,7 +4,9 @@
 #include "RemoteCrypto.h"
 
 #include "AppState.h"
-#include "Dedicated/DedicatedSettings.h" // SettingsFilePath — what Save writes to
+#include "Dedicated/DedicatedSettings.h" // PanelColors / PANEL_OPACITY only
+#include "Persistence/IniFile.h"         // PathBesideExe — what Save writes to
+#include "RemoteBlacklist.h"             // the BlackList row is a view onto the file
 #include "Platform/Constants.h"
 #include "Platform/ConstantsStrings.h"
 #include "UI/ThemedDialog.h"
@@ -124,9 +126,18 @@ void RemoteWnd::BuildRows() {
     add(Kind::Text, L"AllowList", OrUnset(Remote::JoinList(c.allowList)),
         L"Separate with , or ; — NOT a space. IPs allowed to connect; empty denies "
         L"everyone. Trailing * matches a subnet: 192.168.1.*", R_ALLOW);
-    add(Kind::Text, L"BlackList", OrUnset(Remote::JoinList(c.blackList)),
-        L"Separate with , or ; — NOT a space. IPs always refused, checked first: "
-        L"deny beats allow.", R_BLOCK);
+    // Not a settings field any more — it is qivRemoteServerBlacklist.ini, which
+    // qIV also writes to on its own. Typing here APPENDS to that file rather
+    // than replacing a value, so the row shows a count instead of a list: it
+    // would otherwise look like an editable value that mysteriously keeps
+    // growing entries nobody typed.
+    add(Kind::Text, L"BlackList",
+        Remote::Blacklist::Count() == 0
+            ? std::wstring(L"(empty)")
+            : std::to_wstring(Remote::Blacklist::Count()) + L" blocked",
+        L"Type an IP to block it — added to qivRemoteServerBlacklist.ini with the time "
+        L"and reason. qIV adds addresses here itself after repeated failed logins. Edit "
+        L"or delete the file to unblock.", R_BLOCK);
     add(Kind::Secret, L"Password", c.passwordHash.empty() ? L"(none)" : L"(set)",
         L"Stored hashed, never in plain text. Sent as a challenge-response, so it never crosses the wire.", R_PASSWORD);
     add(Kind::Number, L"Max connections", std::to_wstring(c.maxConnections),
@@ -198,40 +209,25 @@ void RemoteWnd::DoSaveToIni() {
                       L"Local Server");
     }
 
-    // Creating an .ini where none existed moves the WHOLE APP off the registry
-    // onto the file, from the next launch. SaveToIniSeeded makes that lossless by
-    // writing every current setting first — but the user still has to know their
-    // persistence model just changed, because it affects far more than this panel.
+    // Creating the file no longer changes anything outside this panel — the
+    // listener owns qivLocalServer.ini and nothing else reads it — so the
+    // creation case needs no warning of its own any more. What remains is worth
+    // asking on every save: this writes every field to disk, including a
+    // password that was just retyped, and the previous contents are gone.
     const bool willCreate = !Remote::IniExists();
-    if (willCreate) {
-        if (!DialogConfirm(
-                L"No settings file exists for this instance yet.\r\n\r\n"
-                L"Saving creates one beside the exe. From the next launch qIV will "
-                L"read ALL of its settings from that file instead of the registry.\r\n\r\n"
-                L"Your current settings are copied into it first, so nothing is lost.\r\n\r\n"
-                L"Create it?",
-                L"Local Server"))
-            return;
-    }
+    const std::wstring path =
+        Persistence::Ini::PathBesideExe(RT::LOCAL_SERVER_FILE_NAME);
 
-    // An ordinary overwrite still asks. This writes every field in the panel to
-    // disk, including a password that was just retyped, and there is no undo —
-    // the previous contents are gone. The creation case above asks a bigger
-    // question and has already been answered by the time we get here.
-    if (!willCreate) {
-        if (!DialogConfirm(L"Write these settings to\r\n\r\n    " +
-                           Dedicated::SettingsFilePath() +
-                           L"\r\n\r\nreplacing what is in the [" +
-                           std::wstring(RT::INI_SECTION) + L"] section?",
-                           L"Local Server"))
-            return;
-    }
+    if (!DialogConfirm((willCreate ? L"Create\r\n\r\n    " : L"Overwrite\r\n\r\n    ") +
+                       path +
+                       L"\r\n\r\nwith these settings?",
+                       L"Local Server"))
+        return;
 
-    bool created = false;
-    Remote::SaveToIniSeeded(created);
+    Remote::SaveToIni();
 
-    m_savedPath  = Dedicated::SettingsFilePath();
-    m_lastResult = created ? L"Created " : L"Saved to ";
+    m_savedPath  = path;
+    m_lastResult = willCreate ? L"Created " : L"Saved to ";
     BuildRows();
     Repaint();
 }
@@ -350,8 +346,16 @@ void RemoteWnd::CommitTextEdit() {
         case R_BIND:           c.bindAddress = text;                       break;
         case R_ALLOW:          c.allowList  = Remote::ParseList(text);
                                typed        = c.allowList;                 break;
-        case R_BLOCK:          c.blackList  = Remote::ParseList(text);
-                               typed        = c.blackList;                 break;
+        // APPENDS, and does not replace. The field is a way in to a file that
+        // has other writers — the brute-force guard among them — so treating
+        // what was typed as the whole new list would silently delete every
+        // address qIV blocked on its own.
+        case R_BLOCK:
+            for (const std::wstring &a : Remote::ParseList(text)) {
+                typed.push_back(a);
+                Remote::Blacklist::Add(a, Constants::Messages::BLACKLIST_REASON_PANEL);
+            }
+            break;
         // Held as plaintext only until the next save hashes it. Clearing the
         // field is how a password is removed.
         case R_PASSWORD:
@@ -376,12 +380,15 @@ void RemoteWnd::CommitTextEdit() {
     // list the user believes they typed. The row description warns in advance;
     // this reports it at the moment it happens and names what was lost.
     if (editedId == R_ALLOW || editedId == R_BLOCK) {
-        const std::vector<std::wstring> &kept =
-            (editedId == R_ALLOW) ? c.allowList : c.blackList;
-
         std::wstring dropped;
         for (const std::wstring &t : typed) {
-            if (std::find(kept.begin(), kept.end(), t) == kept.end()) {
+            // AllowList: kept means it survived Normalize. BlackList: kept means
+            // the file now blocks it — Add refuses anything that is not an
+            // address literal, so the same question answers both.
+            const bool kept = (editedId == R_ALLOW)
+                ? std::find(c.allowList.begin(), c.allowList.end(), t) != c.allowList.end()
+                : Remote::Blacklist::IsBlocked(t);
+            if (!kept) {
                 if (!dropped.empty()) dropped += L", ";
                 dropped += t;
             }
@@ -642,8 +649,8 @@ LRESULT RemoteWnd::HandlePanelMessage(UINT message, WPARAM wParam, LPARAM lParam
             SetTextColor(bb, dim);
             RECT sr{pad, tr.bottom, W - pad, tr.bottom + static_cast<int>(16 * s)};
             DrawTextW(bb, Remote::IniExists()
-                              ? L"Settings file present — values persist here"
-                              : L"No settings file — Save to INI creates one",
+                              ? L"qivLocalServer.ini present — values persist here"
+                              : L"No qivLocalServer.ini — Save to INI creates one",
                       -1, &sr, DT_LEFT | DT_SINGLELINE | DT_PATH_ELLIPSIS);
 
             // ── Buttons ──────────────────────────────────────────────────────

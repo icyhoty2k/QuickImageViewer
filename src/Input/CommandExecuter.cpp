@@ -21,8 +21,10 @@
 #include <shlobj_core.h>
 #include <shtypes.h>
 #include "AppCommands.h"
+#include "TrayHandler.h"   // RestoreWindow — the way back for ToggleAppVisibility
 #include "UIManager.h"
 #include "Rem_TCP_IP/RemoteExec.h"    // ExecutePayload — the shared payload body
+#include "Rem_TCP_IP/RemoteProtocol.h" // CommandTable — QueryToggles walks it
 #include "Rem_TCP_IP/RemoteMirror.h"  // the mirror gate at the top of ExecuteCommand
 #include "Rem_TCP_IP/RemoteLog.h"     // Ctrl+F12 — the recording switch
 #include "Rem_TCP_IP/RemoteInbound.h" // …and the loop cut that makes it safe
@@ -71,6 +73,121 @@ static void SnapWindowToZone(HWND hWnd, int zone) {
                  t.right - t.left, t.bottom - t.top,
                  SWP_NOZORDER | SWP_NOACTIVATE | SWP_FRAMECHANGED);
     InvalidateRect(hWnd, nullptr, FALSE);
+}
+
+// -----------------------------------------------------------------------------
+// Ctrl+M — move the window to the NEXT monitor, wrapping at the last.
+//
+// Monitors are collected with EnumDisplayMonitors and then SORTED by their
+// virtual-desktop coordinates (left, then top). The enumeration order is
+// whatever the display driver reports and bears no relation to the physical
+// arrangement, so "next" built on it would jump around unpredictably on a
+// three-screen desk. Sorting makes "next" mean "the one to the right", which is
+// what the key appears to promise.
+//
+// Placement is PROPORTIONAL, not absolute: the window keeps its relative
+// position and its relative size within the work area. Copying the pixel rect
+// straight across puts a window sized for a 4K screen half off a 1080p one, and
+// two monitors of different resolution is the normal case, not the exotic one.
+// -----------------------------------------------------------------------------
+static BOOL CALLBACK CollectMonitorProc(HMONITOR hMon, HDC, LPRECT, LPARAM lParam) {
+    auto *out = reinterpret_cast<std::vector<MONITORINFO> *>(lParam);
+    MONITORINFO mi = {sizeof(mi)};
+    if (GetMonitorInfo(hMon, &mi)) out->push_back(mi);
+    return TRUE;
+}
+
+// Returns false when there is nowhere to go — a single monitor, or the
+// enumeration failed. The caller reports that rather than doing nothing.
+static bool MoveWindowToNextMonitor(HWND hWnd, int &monitorNumberOut, int &monitorCountOut) {
+    std::vector<MONITORINFO> mons;
+    if (!EnumDisplayMonitors(nullptr, nullptr, CollectMonitorProc,
+                             reinterpret_cast<LPARAM>(&mons)))
+        return false;
+
+    monitorCountOut = static_cast<int>(mons.size());
+    if (mons.size() < 2) return false;
+
+    std::sort(mons.begin(), mons.end(),
+              [](const MONITORINFO &a, const MONITORINFO &b) {
+                  if (a.rcMonitor.left != b.rcMonitor.left)
+                      return a.rcMonitor.left < b.rcMonitor.left;
+                  return a.rcMonitor.top < b.rcMonitor.top;
+              });
+
+    // Which one the window is on now. Matched by the monitor rect rather than by
+    // HMONITOR, because the handles were not kept — the rects are unique and are
+    // what the sort already ordered by.
+    HMONITOR hCur = MonitorFromWindow(hWnd, MONITOR_DEFAULTTONEAREST);
+    MONITORINFO cur = {sizeof(cur)};
+    if (!GetMonitorInfo(hCur, &cur)) return false;
+
+    size_t curIdx = 0;
+    for (size_t i = 0; i < mons.size(); ++i) {
+        if (mons[i].rcMonitor.left == cur.rcMonitor.left &&
+            mons[i].rcMonitor.top  == cur.rcMonitor.top) {
+            curIdx = i;
+            break;
+        }
+    }
+
+    const MONITORINFO &dst = mons[(curIdx + 1) % mons.size()];
+    monitorNumberOut = static_cast<int>((curIdx + 1) % mons.size()) + 1; // 1-based, for the message
+
+    // Fullscreen is a separate case: the window IS the monitor, so it simply
+    // becomes the new one. savedWindowRect is left alone — it holds the
+    // pre-fullscreen geometry on the OLD screen, and rewriting it here would
+    // make the eventual exit from fullscreen land somewhere the user never put
+    // the window.
+    if (app.isFullscreen) {
+        SetWindowPos(hWnd, HWND_TOPMOST,
+                     dst.rcMonitor.left, dst.rcMonitor.top,
+                     dst.rcMonitor.right - dst.rcMonitor.left,
+                     dst.rcMonitor.bottom - dst.rcMonitor.top,
+                     SWP_FRAMECHANGED | SWP_NOCOPYBITS);
+        InvalidateRect(hWnd, nullptr, FALSE);
+        return true;
+    }
+
+    RECT wr;
+    if (!GetWindowRect(hWnd, &wr)) return false;
+
+    const double srcW = static_cast<double>(cur.rcWork.right - cur.rcWork.left);
+    const double srcH = static_cast<double>(cur.rcWork.bottom - cur.rcWork.top);
+    const double dstW = static_cast<double>(dst.rcWork.right - dst.rcWork.left);
+    const double dstH = static_cast<double>(dst.rcWork.bottom - dst.rcWork.top);
+    if (srcW <= 0.0 || srcH <= 0.0 || dstW <= 0.0 || dstH <= 0.0) return false;
+
+    const double fx = (wr.left - cur.rcWork.left) / srcW;
+    const double fy = (wr.top  - cur.rcWork.top)  / srcH;
+    const double fw = (wr.right - wr.left) / srcW;
+    const double fh = (wr.bottom - wr.top) / srcH;
+
+    int newW = static_cast<int>(fw * dstW);
+    int newH = static_cast<int>(fh * dstH);
+    newW = std::max(newW, 100);
+    newH = std::max(newH, 100);
+    newW = std::min(newW, static_cast<int>(dstW));
+    newH = std::min(newH, static_cast<int>(dstH));
+
+    int newX = dst.rcWork.left + static_cast<int>(fx * dstW);
+    int newY = dst.rcWork.top  + static_cast<int>(fy * dstH);
+    // Clamp so a window that sat near the right/bottom edge of a wider screen
+    // cannot end up entirely past the edge of a narrower one.
+    newX = std::min(newX, static_cast<int>(dst.rcWork.right)  - newW);
+    newY = std::min(newY, static_cast<int>(dst.rcWork.bottom) - newH);
+    newX = std::max(newX, static_cast<int>(dst.rcWork.left));
+    newY = std::max(newY, static_cast<int>(dst.rcWork.top));
+
+    SetWindowPos(hWnd, nullptr, newX, newY, newW, newH,
+                 SWP_NOZORDER | SWP_NOACTIVATE | SWP_FRAMECHANGED);
+    InvalidateRect(hWnd, nullptr, FALSE);
+
+    // The window may now be under a different DPI. WM_DPICHANGED arrives on its
+    // own for a cross-DPI move, so nothing is recomputed here — doing it twice
+    // is what produces the half-scaled frame.
+    app.isAutosized = false; // it no longer fills the work area it was fitted to
+    return true;
 }
 
 // ClampViewportOffset now lives in AppState.h (next to GetRenderSize) so every
@@ -611,6 +728,46 @@ void InputManager::ExecuteCommand(HWND hWnd, Command cmd) {
             }
             break;
         }
+        // Hide ⇄ show, as one command, so a caller who cannot see the screen
+        // still has a way back. Deliberately NOT the HideToTray body:
+        //
+        //  - it always takes the keep-alive path (tray icon + SW_HIDE) even
+        //    when app.isKeepInBackground is off, because the DestroyWindow path
+        //    takes the TCP listener down with it, and a remote "hide" that
+        //    kills the connection can never be followed by a remote "show";
+        //  - the panels are not restored on the way back. HideAllPanelWindows
+        //    records what it hid, but a viewer that pops open five panels on a
+        //    wall screen because a phone asked for the picture back is not what
+        //    the button appears to promise.
+        case Command::ToggleAppVisibility:
+            if (IsWindowVisible(hWnd)) {
+                uiManager.HideAllPanelWindows();
+                AppCommands::AddTrayIcon(hWnd);
+                ShowWindow(hWnd, SW_HIDE);
+            } else {
+                Input::TrayHandler::RestoreWindow(hWnd);
+                InvalidateRect(hWnd, nullptr, FALSE);
+            }
+            break;
+
+        case Command::MoveToNextMonitor: {
+            int monNum = 0, monCount = 0;
+            if (MoveWindowToNextMonitor(hWnd, monNum, monCount)) {
+                g_overlayManager.PostCenterMessage(
+                    hWnd, std::wstring(Constants::Messages::MONITOR_MOVED_PREFIX) +
+                          std::to_wstring(monNum) + L"/" + std::to_wstring(monCount));
+            } else {
+                g_overlayManager.PostCenterMessage(hWnd, Constants::Messages::MONITOR_ONLY_ONE);
+            }
+            break;
+        }
+
+        // A notification, not an instruction — see Command.h. It exists so that
+        // an observer on ANOTHER MACHINE learns the picture changed; acting on
+        // it here would mean this viewer responding to its own announcement.
+        case Command::ImageChanged:
+            break;
+
         case Command::NewWindow: {
             std::wstring exePath = Persistence::Registry::GetExePathW();
             if (!exePath.empty()) {
@@ -1032,6 +1189,7 @@ void InputManager::ExecuteCommand(HWND hWnd, Command cmd) {
         case Command::QueryState:
         case Command::QueryHistory:
         case Command::QueryClients:
+        case Command::QueryToggles:
             break;
 
         // Payload-only, and handled entirely in RemoteExec (DoInterject) — it
@@ -1724,6 +1882,33 @@ std::wstring InputManager::GetCommandValue(HWND hWnd, Command cmd) {
         case Command::ToggleFullscreen:        return OnOff(app.isFullscreen);
         case Command::ToggleAlwaysOnTop:       return OnOff(app.isAlwaysOnTop);
         case Command::AutosizeToWorkArea:      return OnOff(app.isAutosized);
+        // 1 = the window is on screen. Named after what it reports, not after
+        // the command: a caller asking "is it showing?" wants that, not an echo
+        // of which way the toggle just went.
+        case Command::ToggleAppVisibility:     return OnOff(IsWindowVisible(hWnd) != FALSE);
+        // Which monitor it landed on, 1-based, in the same left-to-right order
+        // the move itself uses — so a caller can tell a wrap from a step.
+        case Command::MoveToNextMonitor: {
+            std::vector<MONITORINFO> mons;
+            EnumDisplayMonitors(nullptr, nullptr, CollectMonitorProc,
+                                reinterpret_cast<LPARAM>(&mons));
+            if (mons.empty()) return L"1/1";
+            std::sort(mons.begin(), mons.end(),
+                      [](const MONITORINFO &a, const MONITORINFO &b) {
+                          if (a.rcMonitor.left != b.rcMonitor.left)
+                              return a.rcMonitor.left < b.rcMonitor.left;
+                          return a.rcMonitor.top < b.rcMonitor.top;
+                      });
+            MONITORINFO cur = {sizeof(cur)};
+            if (!GetMonitorInfo(MonitorFromWindow(hWnd, MONITOR_DEFAULTTONEAREST), &cur))
+                return L"1/" + std::to_wstring(mons.size());
+            for (size_t i = 0; i < mons.size(); ++i) {
+                if (mons[i].rcMonitor.left == cur.rcMonitor.left &&
+                    mons[i].rcMonitor.top  == cur.rcMonitor.top)
+                    return std::to_wstring(i + 1) + L"/" + std::to_wstring(mons.size());
+            }
+            return L"1/" + std::to_wstring(mons.size());
+        }
         case Command::OpacityUp:
         case Command::OpacityDown:             return std::to_wstring(app.opacity);
         case Command::CycleBackdropType:       return std::to_wstring(app.backdropType);
@@ -1785,6 +1970,55 @@ std::wstring InputManager::GetCommandValue(HWND hWnd, Command cmd) {
         // whatever follows. With them at the end, the worst case is a folder that
         // compares unequal — one extra rescan, still the right picture — instead
         // of a mangled number.
+        // Every row's value in one reply, for a client that has just connected
+        // and knows nothing about this viewer.
+        //
+        // WALKS THE TABLE rather than naming the commands, so a toggle added
+        // later is included the day it is added. The alternative — a list here —
+        // is a second place to remember, and forgetting it fails silently: the
+        // new button would simply never initialise.
+        //
+        // Three kinds of row are left out, each for a reason that would otherwise
+        // corrupt the reply rather than merely pad it:
+        //
+        //   - the Query* commands themselves. This one would recurse; the others
+        //     answer with `k=v;k=v` bodies of their own, and nesting one inside
+        //     this one's `;`-separated list makes both unparseable.
+        //   - "?" — a command with no GetCommandValue case. Nothing to report,
+        //     and the marker is for a developer reading a single reply, not for
+        //     a client to store.
+        //   - any value containing ';' or '=' — a file name may legally hold
+        //     either, and one such name would silently truncate the rest of the
+        //     list. Dropped rather than escaped: no client needs a file name
+        //     from here (QueryState reports it, in a field of its own), so an
+        //     escaping scheme would be complexity bought for nothing.
+        case Command::QueryToggles: {
+            size_t rowCount = 0;
+            const Remote::CommandEntry *rows = Remote::CommandTable(rowCount);
+
+            std::wstring out;
+            for (size_t i = 0; i < rowCount; ++i) {
+                const Command rc = rows[i].cmd;
+                if (rc == Command::QueryToggles || rc == Command::QueryState ||
+                    rc == Command::QueryHistory  || rc == Command::QueryClients)
+                    continue;
+
+                // Safe to call for every row: GetCommandValue only READS `app`
+                // and panel visibility — it is the reporting half, and nothing
+                // in it has a side effect.
+                const std::wstring v = GetCommandValue(hWnd, rc);
+                if (v == L"?" || v.empty()) continue;
+                if (v.find(L';') != std::wstring::npos ||
+                    v.find(L'=') != std::wstring::npos) continue;
+
+                if (!out.empty()) out += L';';
+                out += rows[i].name;
+                out += L'=';
+                out += v;
+            }
+            return out;
+        }
+
         case Command::QueryState: {
             const int total = static_cast<int>(app.playlist.size());
             const bool have = app.currentIndex >= 0 && app.currentIndex < total;

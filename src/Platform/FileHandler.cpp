@@ -2,6 +2,7 @@
 #include "../AppState.h"
 #include "../Overlays/OverlayManager.h"
 #include "../Persistence/RegistryManager.h"
+#include "../Persistence/SessionFile.h"   // qivSession.ini — the resume position
 #include "Constants.h"
 #include "../ImageLoadStats.h"
 #include <commdlg.h>
@@ -945,8 +946,33 @@ void LoadImageIndex(HWND hWnd, int index) {
                 line, currentPath.substr(currentPath.find_last_of(L"\\/") + 1));
         }
         // positional: a `goto` reaches same-machine observers only.
-        if (tellObservers)
+        if (tellObservers) {
             Remote::EmitToObservers(line, Remote::CONN_NONE, /*positional=*/true);
+
+            // …and the machine-independent half of the same announcement.
+            //
+            // The `goto` above is dropped for every observer that does not share
+            // this folder, correctly: an index names a different picture over
+            // there. But that left an off-machine watcher — the phone app — with
+            // NO event at all for a picture change, and a running slideshow
+            // changes picture without issuing a command, so nothing else was
+            // ever emitted either. Its preview simply froze on whatever frame
+            // was up when it bound.
+            //
+            // So this names WHAT is being shown rather than WHERE it sits, and
+            // goes to every observer. It instructs nothing; a client that wants
+            // the picture asks for it (SendDisplayedImage).
+            //
+            // Built inside the `tellObservers` branch, after the flags have
+            // already been tested — a viewer nobody is watching still allocates
+            // nothing on this path, which is the whole point of the ordering
+            // above.
+            Remote::EmitToObservers(
+                L"ImageChanged " + std::to_wstring(index + 1) + L"/" +
+                    std::to_wstring(app.playlist.size()) + L" " +
+                    currentPath.substr(currentPath.find_last_of(L"\\/") + 1),
+                Remote::CONN_NONE);
+        }
     }
     // Path-identity guard for the main decode — same file keeps the same hash
     // across a folder re-sort, so its in-flight decode is not cancelled when the
@@ -1214,9 +1240,8 @@ void ReloadCurrentDirectory(HWND hWnd) {
 void OpenStartupTarget(HWND hWnd) {
     std::error_code ec;
 
-    // 1. The image on screen at the last exit.
-    const std::wstring last =
-        Persistence::Registry::LoadStringSetting(Constants::Registry::LAST_IMAGE);
+    // 1. The image on screen at the last exit — qivSession.ini, not a setting.
+    const std::wstring last = Persistence::Session::LoadLastImage();
     if (!last.empty() && fs::is_regular_file(last, ec) && !ec) {
         OpenSpecificImage(hWnd, last);
         return;

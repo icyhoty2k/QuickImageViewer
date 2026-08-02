@@ -7,6 +7,8 @@
 
 #include "RemoteServer.h"
 #include "RemoteSettings.h"
+#include "RemoteBlacklist.h"   // gate 1, and where the brute-force guard writes
+#include "RemoteTls.h"         // Schannel — mandatory on any non-loopback bind
 #include "RemoteCrypto.h"
 #include "RemoteExec.h"
 #include "RemoteLog.h"    // Ctrl+F12 — the inbound half of the wire record
@@ -16,6 +18,7 @@
 #include "Input/Command.h"
 
 #include <algorithm>
+#include <map>      // the failed-authentication table, keyed by peer address
 #include <mutex>
 #include <thread>
 #include <vector>
@@ -61,6 +64,88 @@ namespace {
     // digest would be the weakest link in the exchange.
     constexpr size_t NONCE_LEN = 32;
 
+    // --- Failed-authentication tracking -------------------------------------
+    //
+    // Keyed by peer ADDRESS, and touched from several client threads at once,
+    // so every access is under the mutex. Deliberately in memory only: a ban
+    // that survived a process restart would need a file, and a file recording
+    // who tried to connect is a new thing to leak.
+    //
+    // It is NOT cleared by Stop(), so stopping and starting the listener from
+    // the F9 panel does not hand an attacker a reset. Only exiting qIV clears
+    // it, and an attacker cannot cause that.
+    struct AuthFailures {
+        int       count      = 0;   // failures inside the current window
+        long long firstMs    = 0;   // when the window opened
+        long long lastSeenMs = 0;   // for eviction at AUTH_TRACK_MAX
+    };
+
+    std::map<std::wstring, AuthFailures> g_authFails;
+    std::mutex                           g_authFailMutex;
+
+    long long NowMs() { return static_cast<long long>(GetTickCount64()); }
+
+    // One failed handshake. Opens or extends the window, and on the Nth failure
+    // inside it hands the address to the BLACKLIST.
+    //
+    // The blacklist is where a ban lives now — a file, written with the time and
+    // the reason, surviving restarts. The counter here is only the trigger: it
+    // exists so a single mistyped password is not a permanent block, and so what
+    // ends up in the file is a BURST rather than an accumulation of unrelated
+    // mistakes months apart.
+    void NoteAuthFailure(const std::wstring &peer) {
+        const long long now = NowMs();
+        bool blacklist = false;
+
+        {
+            std::lock_guard<std::mutex> lk(g_authFailMutex);
+
+            // Cap the table before inserting, so a flood of distinct sources
+            // cannot grow it without bound. Evicts the least recently seen —
+            // the entry least likely to be an attack in progress.
+            if (g_authFails.size() >= RT::AUTH_TRACK_MAX && !g_authFails.count(peer)) {
+                auto oldest = g_authFails.begin();
+                for (auto it = g_authFails.begin(); it != g_authFails.end(); ++it)
+                    if (it->second.lastSeenMs < oldest->second.lastSeenMs) oldest = it;
+                g_authFails.erase(oldest);
+            }
+
+            AuthFailures &f = g_authFails[peer];
+            f.lastSeenMs = now;
+
+            // A stale window is a NEW window, not a continuation. Without this
+            // an address that fails once a month is eventually blocked for it.
+            if (f.count == 0 || now - f.firstMs > RT::AUTH_FAIL_WINDOW_MS) {
+                f.count   = 1;
+                f.firstMs = now;
+            } else if (++f.count >= RT::AUTH_MAX_FAILURES) {
+                blacklist = true;
+                // Reset rather than erase: the address is about to be refused at
+                // accept(), so this record has done its job, and leaving the
+                // count at the threshold would re-trigger on any later attempt
+                // that slipped through.
+                f.count   = 0;
+                f.firstMs = 0;
+            }
+        }
+
+        // Outside the lock — this writes a file, and the accept path must not
+        // wait behind disk IO.
+        if (blacklist) {
+            Blacklist::Add(peer,
+                           std::wstring(Constants::Messages::BLACKLIST_REASON_AUTH_PREFIX) +
+                               std::to_wstring(RT::AUTH_MAX_FAILURES) +
+                               Constants::Messages::BLACKLIST_REASON_AUTH_SUFFIX);
+        }
+    }
+
+    // A completed handshake clears the record entirely — the address has proved
+    // it holds the password, so its earlier typos are not evidence of anything.
+    void ClearAuthFailures(const std::wstring &peer) {
+        std::lock_guard<std::mutex> lk(g_authFailMutex);
+        g_authFails.erase(peer);
+    }
+
     // --- Observers ----------------------------------------------------------
     // Connections that sent `observe 1`. Written by client threads (join/leave)
     // and read by the UI thread (emit), so every access is under this mutex.
@@ -79,10 +164,37 @@ namespace {
     struct Observer {
         SOCKET sock        = INVALID_SOCKET;
         bool   sameMachine = false;
+        // Null on a plaintext (loopback) listener. Owned by the client thread's
+        // stack; safe to hold because that thread removes itself from
+        // g_observers before the session is destroyed — see ClientThread.
+        Tls::Session *tls  = nullptr;
     };
 
     std::vector<Observer> g_observers;
     std::mutex            g_observerMutex;
+
+    // ConnId → the TLS session for that connection.
+    //
+    // Needed because AddObserver is reached from the COMMAND path (`observe 1`
+    // in RemoteExec), which knows only the connection id — while the session is
+    // a local of the client thread. Registered for the life of that thread and
+    // removed before it returns, so an entry here always outlives every lookup.
+    std::map<ConnId, Tls::Session *> g_sessions;
+    std::mutex                       g_sessionMutex;
+
+    void RegisterSession(ConnId c, Tls::Session *t) {
+        std::lock_guard<std::mutex> lk(g_sessionMutex);
+        if (t) g_sessions[c] = t;
+    }
+    void UnregisterSession(ConnId c) {
+        std::lock_guard<std::mutex> lk(g_sessionMutex);
+        g_sessions.erase(c);
+    }
+    Tls::Session *SessionFor(ConnId c) {
+        std::lock_guard<std::mutex> lk(g_sessionMutex);
+        auto it = g_sessions.find(c);
+        return it == g_sessions.end() ? nullptr : it->second;
+    }
 
     // Shadow count, so the COMMON case costs an atomic load instead of a lock.
     //
@@ -105,33 +217,19 @@ namespace {
         return g_snapshot;
     }
 
-    // --- Address matching ---------------------------------------------------
-
-    // Literal match, plus a trailing "*" wildcard so "192.168.1.*" covers a
-    // subnet without spelling out 254 entries. Deliberately NOT a CIDR parser:
-    // hand-edited text files get CIDR subtly wrong, and a rule that silently
-    // matches more than the author intended is worse than no rule.
-    bool AddressMatches(const std::wstring &pattern, const std::wstring &addr) {
-        if (pattern.empty()) return false;
-        if (pattern == L"*") return true;
-
-        if (pattern.back() == L'*') {
-            const std::wstring prefix = pattern.substr(0, pattern.size() - 1);
-            return addr.size() >= prefix.size() &&
-                   _wcsnicmp(addr.c_str(), prefix.c_str(), prefix.size()) == 0;
-        }
-        return _wcsicmp(pattern.c_str(), addr.c_str()) == 0;
-    }
-
-    bool InList(const std::vector<std::wstring> &list, const std::wstring &addr) {
-        for (const std::wstring &p : list)
-            if (AddressMatches(p, addr)) return true;
-        return false;
-    }
+    // Address matching (AddressMatches / InList) now lives in RemoteSettings, so
+    // the AllowList here and the blacklist in its own translation unit cannot
+    // drift apart on what "matches" means.
 
     // --- Socket helpers -----------------------------------------------------
 
-    bool SendAll(SOCKET s, const std::string &bytes) {
+    // `tls` is null on a loopback-bound listener, where the socket carries plain
+    // bytes, and non-null everywhere else. Threading it through these three
+    // functions rather than wrapping the SOCKET keeps every existing call site
+    // unchanged and puts the branch in one place per direction.
+    bool SendAll(SOCKET s, const std::string &bytes, Tls::Session *tls = nullptr) {
+        if (tls) return tls->Send(s, bytes.data(), bytes.size());
+
         size_t sent = 0;
         while (sent < bytes.size()) {
             const int n = send(s, bytes.data() + sent,
@@ -170,7 +268,7 @@ namespace {
     // replies (help/ping/version) and the parse-error refusals never reach the
     // UI thread at all, so instrumenting the command path alone left a log with
     // invisible holes in it.
-    bool SendLine(SOCKET s, const std::wstring &line) {
+    bool SendLine(SOCKET s, const std::wstring &line, Tls::Session *tls = nullptr) {
         if (Log::IsEnabled()) {
             // Delta is the time since the line being answered arrived — the
             // handling cost of this instance, which is the number that says
@@ -180,13 +278,14 @@ namespace {
             Log::Add(Log::Direction::Out, Log::SelfName(), L"(reply)",
                      PeerLabel(s), RedactForLog(line), d);
         }
-        return SendAll(s, ToUtf8(line) + "\r\n");
+        return SendAll(s, ToUtf8(line) + "\r\n", tls);
     }
 
     // Reads one \n-terminated line. Returns false on disconnect, error, or a
     // line that exceeds MAX_LINE_LEN — an unbounded line is the one input a
     // peer fully controls, so the connection is dropped rather than buffered.
-    bool RecvLine(SOCKET s, std::string &accum, std::wstring &lineOut) {
+    bool RecvLine(SOCKET s, std::string &accum, std::wstring &lineOut,
+                  Tls::Session *tls = nullptr) {
         for (;;) {
             const size_t nl = accum.find('\n');
             if (nl != std::string::npos) {
@@ -202,6 +301,15 @@ namespace {
                 return true;
             }
             if (accum.size() > RT::MAX_LINE_LEN) return false;
+
+            // The TLS session does its own buffering — it must, because a record
+            // boundary and a line boundary have nothing to do with each other.
+            // `accum` still holds the LINE remainder on top of that, so a reply
+            // that arrives in one record but spans two lines still works.
+            if (tls) {
+                if (!tls->Recv(s, accum)) return false;
+                continue;
+            }
 
             char buf[1024];
             const int n = recv(s, buf, sizeof(buf), 0);
@@ -308,33 +416,47 @@ namespace {
     // a fresh random nonce, the client returns HMAC(secret, nonce), and the
     // secret is derived from the stored hash so the server never holds plaintext
     // either. A captured response is useless against the next nonce.
-    bool Authenticate(SOCKET s, const Settings &cfg, std::string &accum) {
-        if (cfg.passwordHash.empty()) return true; // no password configured
+    bool Authenticate(SOCKET s, const Settings &cfg, std::string &accum,
+                      const std::wstring &peer, Tls::Session *tls) {
+        // No password configured. WhyCannotStart has already refused to start a
+        // listener in this state on anything but loopback, so reaching here
+        // means a local-only server and the openness is the intended one.
+        if (cfg.passwordHash.empty()) return true;
 
         const std::vector<BYTE> secret = Crypto::SecretFromStored(cfg.passwordHash);
         const std::vector<BYTE> salt   = Crypto::SaltFromStored(cfg.passwordHash);
+        const int         iterations   = Crypto::IterationsFromStored(cfg.passwordHash);
         const std::vector<BYTE> nonce  = Crypto::RandomBytes(NONCE_LEN);
         // A failed RNG must abort the connection. Falling back to anything
         // predictable would silently remove the replay protection.
-        if (secret.empty() || salt.empty() || nonce.empty()) {
-            SendLine(s, MakeErr(RT::ERR_INTERNAL, L"server cannot generate a challenge"));
+        if (secret.empty() || salt.empty() || iterations <= 0 || nonce.empty()) {
+            SendLine(s, MakeErr(RT::ERR_INTERNAL, L"server cannot generate a challenge"), tls);
             return false;
         }
 
-        // "AUTH <salt> <nonce>". The salt has to travel: the client holds only
-        // the plaintext password, and cannot derive the shared digest without it.
-        // Sending it costs nothing — a salt's job is uniqueness, not secrecy.
-        if (!SendLine(s, L"AUTH " + Crypto::ToHex(salt) + L" " + Crypto::ToHex(nonce)))
+        // "AUTH <iterations> <salt> <nonce>". All three have to travel: the
+        // client holds only the plaintext password and cannot derive the shared
+        // digest without the salt AND the work factor it was made with. Neither
+        // is secret — a salt's job is uniqueness and an iteration count's is
+        // cost, and hiding either would only prevent legitimate clients from
+        // computing the same value.
+        if (!SendLine(s, L"AUTH " + std::to_wstring(iterations) + L" " +
+                             Crypto::ToHex(salt) + L" " + Crypto::ToHex(nonce), tls))
             return false;
 
         std::wstring line;
-        if (!RecvLine(s, accum, line)) return false;
+        if (!RecvLine(s, accum, line, tls)) return false;
 
         // Expected form: "AUTH <hex>"
         std::wstring got = line;
         if (_wcsnicmp(got.c_str(), L"AUTH ", 5) == 0) got = got.substr(5);
         else {
-            SendLine(s, MakeErr(RT::ERR_NOT_AUTHENTICATED, L"expected AUTH <response>"));
+            // Counted as a failure like any other. A brute-forcer is free to
+            // send a malformed line instead of a wrong one, and a rule that
+            // only counted well-formed guesses would be trivially sidestepped.
+            NoteAuthFailure(peer);
+            Sleep(RT::AUTH_FAIL_DELAY_MS);
+            SendLine(s, MakeErr(RT::ERR_NOT_AUTHENTICATED, L"expected AUTH <response>"), tls);
             return false;
         }
 
@@ -351,33 +473,66 @@ namespace {
         }
 
         if (!ok) {
-            SendLine(s, MakeErr(RT::ERR_AUTH_FAILED, L"authentication failed"));
+            NoteAuthFailure(peer);
+            // BEFORE the reply, not after. The cost has to be paid inside the
+            // attempt: a delay applied after the answer is sent is a delay the
+            // attacker skips by dropping the connection and opening the next.
+            Sleep(RT::AUTH_FAIL_DELAY_MS);
+            SendLine(s, MakeErr(RT::ERR_AUTH_FAILED, L"authentication failed"), tls);
             return false;
         }
+
+        // Proved. Its earlier typos are not evidence of anything.
+        ClearAuthFailures(peer);
         return true;
     }
 
     // --- Per-client conversation --------------------------------------------
 
-    // The peer address is deliberately NOT passed in: it is used by the accept
-    // gates and has no consumer once a connection is admitted. Re-add it when
-    // something actually reports it — a connected-client list, or a log.
-    void ClientThread(SOCKET client, Settings cfg, HWND owner) {
+    // The peer address IS passed now — the failed-authentication table is keyed
+    // by it, and that table is written from here, after the accept gates have
+    // finished with it.
+    void ClientThread(SOCKET client, Settings cfg, HWND owner, std::wstring peer) {
         std::string accum;
+
+        // TLS FIRST, before the banner — the banner is already application data
+        // and must travel inside the tunnel, not in front of it.
+        //
+        // Whether to do this at all is decided by the BIND ADDRESS, not by
+        // anything the client said, so there is nothing here for a peer to
+        // influence. A client that opens the connection and speaks plaintext to
+        // a TLS endpoint simply fails the handshake and is dropped.
+        Tls::Session  tlsSession;
+        Tls::Session *tls = nullptr;
+        if (Tls::RequiredForAddress(cfg.bindAddress)) {
+            std::wstring err;
+            if (!tlsSession.AcceptHandshake(client, err)) {
+                // Silent. A failed handshake is either a scanner, a stale
+                // client, or an attacker; none of them are owed a diagnostic,
+                // and the plaintext channel needed to deliver one is precisely
+                // what this endpoint refuses to use.
+                shutdown(client, SD_BOTH);
+                closesocket(client);
+                g_activeClients.fetch_sub(1, std::memory_order_acq_rel);
+                return;
+            }
+            tls = &tlsSession;
+            RegisterSession(static_cast<ConnId>(client), tls);
+        }
 
         SendLine(client, MakeOk(L"qIV " + std::wstring(Constants::APP_VERSION) +
                                 L" remote v" + std::to_wstring(RT::PROTOCOL_VERSION) +
-                                (cfg.name.empty() ? L"" : L" [" + cfg.name + L"]")));
+                                (cfg.name.empty() ? L"" : L" [" + cfg.name + L"]")), tls);
 
-        if (Authenticate(client, cfg, accum)) {
+        if (Authenticate(client, cfg, accum, peer, tls)) {
             for (;;) {
                 if (g_stopRequested.load(std::memory_order_acquire)) {
-                    SendLine(client, MakeErr(RT::ERR_INTERNAL, L"server shutting down"));
+                    SendLine(client, MakeErr(RT::ERR_INTERNAL, L"server shutting down"), tls);
                     break;
                 }
 
                 std::wstring line;
-                if (!RecvLine(client, accum, line)) break;
+                if (!RecvLine(client, accum, line, tls)) break;
 
                 const RemoteRequest req = ParseLine(line);
 
@@ -386,26 +541,26 @@ namespace {
                 if (req.status == ParseStatus::Verb) {
                     switch (req.verb) {
                         case Verb::Help:
-                            SendAll(client, ToUtf8(BuildHelpText()));
-                            SendLine(client, MakeOk());
+                            SendAll(client, ToUtf8(BuildHelpText()), tls);
+                            SendLine(client, MakeOk(), tls);
                             break;
                         case Verb::Ping:
-                            SendLine(client, MakeOk(L"pong"));
+                            SendLine(client, MakeOk(L"pong"), tls);
                             break;
                         case Verb::Version:
                             SendLine(client, MakeOk(std::wstring(Constants::APP_VERSION) +
                                                     L" protocol " +
-                                                    std::to_wstring(RT::PROTOCOL_VERSION)));
+                                                    std::to_wstring(RT::PROTOCOL_VERSION)), tls);
                             break;
                         default:
-                            SendLine(client, MakeErr(RT::ERR_INTERNAL, L"unhandled verb"));
+                            SendLine(client, MakeErr(RT::ERR_INTERNAL, L"unhandled verb"), tls);
                             break;
                     }
                     continue;
                 }
 
                 if (req.status != ParseStatus::Ok) {
-                    SendLine(client, MakeErrFor(req));
+                    SendLine(client, MakeErrFor(req), tls);
                     continue;
                 }
 
@@ -417,22 +572,22 @@ namespace {
                 call->conn = static_cast<ConnId>(client);
 
                 if (!call->doneEvent) {
-                    SendLine(client, MakeErr(RT::ERR_INTERNAL, L"no event"));
+                    SendLine(client, MakeErr(RT::ERR_INTERNAL, L"no event"), tls);
                     continue;
                 }
 
                 if (!PostMessageW(owner, Constants::WM_QIV_REMOTE_COMMAND, 0,
                                   reinterpret_cast<LPARAM>(
                                       new std::shared_ptr<RemoteCall>(call)))) {
-                    SendLine(client, MakeErr(RT::ERR_INTERNAL, L"viewer not accepting commands"));
+                    SendLine(client, MakeErr(RT::ERR_INTERNAL, L"viewer not accepting commands"), tls);
                     continue;
                 }
 
                 const DWORD w = WaitForSingleObject(call->doneEvent, REPLY_TIMEOUT_MS);
                 if (w == WAIT_OBJECT_0) {
-                    if (!SendLine(client, call->result)) break;
+                    if (!SendLine(client, call->result, tls)) break;
                 } else {
-                    if (!SendLine(client, MakeErr(RT::ERR_INTERNAL, L"viewer did not respond in time")))
+                    if (!SendLine(client, MakeErr(RT::ERR_INTERNAL, L"viewer did not respond in time"), tls))
                         break;
                 }
             }
@@ -442,7 +597,11 @@ namespace {
         // into these handles directly, and a closed socket still sitting in the
         // list is a write to a dead descriptor on the next action.
         RemoveObserver(static_cast<ConnId>(client));
+        // Same ordering rule, same reason: nothing may look this connection's
+        // session up after the stack frame holding it is gone.
+        UnregisterSession(static_cast<ConnId>(client));
 
+        if (tls) tls->Shutdown(client);
         shutdown(client, SD_BOTH);
         closesocket(client);
         g_activeClients.fetch_sub(1, std::memory_order_acq_rel);
@@ -481,7 +640,12 @@ namespace {
             // permitted here gets a diagnostic.
 
             // 1. BlackList — deny always overrides allow.
-            if (InList(cfg.blackList, peer)) {
+            //
+            // Read LIVE from the blacklist module rather than from `cfg`, which
+            // is a snapshot taken at Start(). An address blacklisted mid-session
+            // by the brute-force guard has to be refused from that moment, not
+            // from the next restart.
+            if (Blacklist::IsBlocked(peer)) {
                 closesocket(client);
                 continue;
             }
@@ -496,10 +660,22 @@ namespace {
                 closesocket(client);
                 continue;
             }
-            // 3. Connection cap — this peer is trusted, so it is told why.
+            // 3. Connection cap.
+            //
+            // A permitted peer is told WHY on a plaintext endpoint. On a TLS
+            // endpoint it is not: the diagnostic would have to go out before the
+            // handshake, in the clear, to a client that is expecting a TLS
+            // record — so it would read as a protocol error rather than "busy".
+            //
+            // Handshaking first purely to deliver a refusal was the alternative,
+            // and it is worse: it hands anyone a way to make this machine do
+            // asymmetric crypto for a connection that was never going to be
+            // served. The cap is not a security boundary, and a silent close is
+            // honest enough.
             if (g_activeClients.load(std::memory_order_acquire) >= cfg.maxConnections) {
-                SendLine(client, MakeErr(RT::ERR_TOO_MANY_CLIENTS,
-                                         L"connection limit reached"));
+                if (!Tls::RequiredForAddress(cfg.bindAddress))
+                    SendLine(client, MakeErr(RT::ERR_TOO_MANY_CLIENTS,
+                                             L"connection limit reached"));
                 shutdown(client, SD_BOTH);
                 closesocket(client);
                 continue;
@@ -508,7 +684,7 @@ namespace {
             g_activeClients.fetch_add(1, std::memory_order_acq_rel);
             // Detached: a client's lifetime is its socket's, and Stop() closes
             // the sockets rather than joining every conversation.
-            std::thread(ClientThread, client, cfg, g_owner).detach();
+            std::thread(ClientThread, client, cfg, g_owner, peer).detach();
         }
 
         g_running.store(false, std::memory_order_release);
@@ -553,6 +729,27 @@ bool Start(HWND hOwner, std::wstring &errorOut) {
     if (!blocked.empty() && blocked != Constants::Messages::REMOTE_WARN_EMPTY_ALLOWLIST) {
         errorOut = blocked;
         return false;
+    }
+
+    // Read the blacklist BEFORE the socket exists. A listener that binds first
+    // and loads its block list a moment later has a window in which a blocked
+    // address is admitted, and that window is exactly when an attacker who was
+    // blocked last night is retrying.
+    Blacklist::Reload();
+
+    // Same ordering, same reasoning: obtain the TLS identity before binding.
+    //
+    // A FAILURE HERE REFUSES TO START. There is no fallback to plaintext, and
+    // that is the single most important line in this function: the whole point
+    // of deciding encryption from the bind address is that it cannot be
+    // negotiated away, and a listener that quietly opened in the clear because a
+    // certificate could not be generated would negotiate it away by accident.
+    if (Tls::RequiredForAddress(cfg.bindAddress)) {
+        std::wstring tlsErr;
+        if (!Tls::EnsureServerCredentials(tlsErr)) {
+            errorOut = std::wstring(Constants::Messages::REMOTE_BLOCKED_TLS_UNAVAILABLE) + tlsErr;
+            return false;
+        }
     }
 
     if (!g_wsaUp) {
@@ -736,7 +933,7 @@ void AddObserver(ConnId conn) {
     std::lock_guard<std::mutex> lk(g_observerMutex);
     for (const Observer &o : g_observers)
         if (o.sock == s) return; // `observe 1` twice is not two observers
-    g_observers.push_back(Observer{s, local});
+    g_observers.push_back(Observer{s, local, SessionFor(conn)});
     g_observerCount.store(static_cast<int>(g_observers.size()), std::memory_order_release);
 }
 
@@ -783,11 +980,25 @@ void EmitToObservers(const std::wstring &line, ConnId except, bool positional) {
         // One shot, no loop: a partial write would put half a line on the wire
         // and desynchronise that observer's parser for good, so a short count is
         // treated exactly like a refusal.
-        u_long nb = 1;
-        ioctlsocket(s, FIONBIO, &nb);
-        const int sent = send(s, bytes.data(), static_cast<int>(bytes.size()), 0);
-        nb = 0;
-        ioctlsocket(s, FIONBIO, &nb);
+        int sent = 0;
+        if (o.tls) {
+            // TLS cannot be written non-blockingly the same way — a record is
+            // all-or-nothing, and half of one on the wire is unrecoverable. So
+            // the "never stall the UI thread" rule is kept a different way:
+            // TrySend gives up immediately if the client thread holds the
+            // session, and the socket keeps its blocking mode so a record is
+            // never torn. The remaining exposure is a full send buffer on one
+            // observer, bounded by the socket's own send timeout.
+            sent = o.tls->TrySend(s, bytes.data(), bytes.size())
+                       ? static_cast<int>(bytes.size())
+                       : 0;
+        } else {
+            u_long nb = 1;
+            ioctlsocket(s, FIONBIO, &nb);
+            sent = send(s, bytes.data(), static_cast<int>(bytes.size()), 0);
+            nb = 0;
+            ioctlsocket(s, FIONBIO, &nb);
+        }
 
         // The OTHER outbound path — this one deliberately bypasses SendLine to
         // stay non-blocking, so it needs its own record or every event this

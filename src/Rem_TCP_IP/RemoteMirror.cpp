@@ -155,7 +155,7 @@ namespace {
     // How many targets are CONNECTED right now — not how many are configured.
     //
     // The distinction decides two things that both matter. A copy that merely
-    // has a qivRemotes.ini has targets from the moment it starts, and if that
+    // has a qivRemoteServers.ini has targets from the moment it starts, and if that
     // counted as a session it would sit in restricted mode — delete and Find
     // refused — forever, whether or not anything ever answered. And a slave that
     // is switched off after ten minutes leaves its target configured (the sender

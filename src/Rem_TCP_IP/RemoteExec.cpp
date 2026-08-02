@@ -795,6 +795,17 @@ bool ExecutePayload(HWND hWnd, Command cmd, const std::wstring &payload,
         case Command::msgRemote:
             replyOut = DoMsgRemote(hWnd, payload);
             return true;
+        // A NOTIFICATION: the sender says what it is now showing, the receiver
+        // acknowledges and changes nothing. Handled here rather than in
+        // ExecuteCommand's switch because it carries a payload, and everything
+        // payload-carrying is answered from this function.
+        //
+        // The payload is echoed back so the reply says WHICH announcement was
+        // acknowledged — with events arriving unsolicited mid-exchange, an
+        // "OK" that named nothing would be unmatchable to what caused it.
+        case Command::ImageChanged:
+            replyOut = payload;
+            return true;
         default:
             return false;
     }

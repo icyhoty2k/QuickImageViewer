@@ -317,6 +317,12 @@ namespace UI {
             L"shrinking further to avoid any visible panel (F3 cache strip, F6 directory strip, "
             L"spawned directory panels). Second press restores the default window size "
             L"(baseWidth × baseHeight from Constants.h), centered on the current monitor.", sWin);
+        Add(Ctrl(SC::SC_MOVE_TO_NEXT_MONITOR),
+            L"Move the window to the next monitor, wrapping round at the last. Monitors "
+            L"are ordered left to right by their desktop coordinates. Position and size "
+            L"are carried across proportionally, so a screen of a different resolution "
+            L"does not leave the window half off the edge; in fullscreen the window "
+            L"simply fills the new monitor.", sWin);
         Add(L"Drag near screen edge",
             L"Releasing a window drag within " + NumI(Constants::WINDOW_SNAP_DISTANCE) +
             L" px of a screen edge snaps the window to that edge.", sWin);
@@ -575,7 +581,7 @@ namespace UI {
         Add(K(SC::SC_PANEL_REMOTES_CONSOLE),
             L"Open Remote Servers — everything about the instances this copy can drive.\r\n"
             L"Top: address, port, password, name and optional exe. Connect && Save proves the "
-            L"target answers before recording it, then writes it to qivRemotes.ini beside the "
+            L"target answers before recording it, then writes it to qivRemoteServers.ini beside the "
             L"exe and starts driving it — so an address is typed once.\r\n"
             L"Below: one row per instance. The dot starts a stopped instance or shuts down "
             L"a running one; Connect/Disconnect brings the link up or down (a remote can be "

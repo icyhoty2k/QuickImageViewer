@@ -14,7 +14,8 @@
 // There is deliberately no registry default and no "sensible" fallback port. A
 // viewer nobody configured for remote control never binds a socket.
 //
-// FILE LAYOUT — a section of the same .ini the Dedicated subsystem already owns:
+// FILE LAYOUT — qivLocalServer.ini, beside the exe and owned entirely by this
+// subsystem:
 //
 //     [REMOTE_TCP_IP]
 //     Enable=false
@@ -23,19 +24,30 @@
 //     PortNo=8770
 //     AllowList=192.168.1.10,192.168.1.11
 //     Password=<hash>
-//     BlackList=
 //     MaxConnections=1
 //
-// Reads and writes go through Dedicated::ReadSectionString / WriteSectionString,
-// which write ONE KEY AT A TIME. That matters: the same file holds [Instance] and
-// [Settings], and a wholesale rewrite would silently eat them.
+// The BLACKLIST is not in here. It is qivRemoteServerBlacklist.ini — see
+// RemoteBlacklist.h for why the one list qIV writes to by itself is kept apart
+// from the settings a person edits.
+//
+// ITS OWN FILE, and this used to be a section of the instance .ini. That was a
+// real hazard rather than an untidiness: an .ini named after the exe existing at
+// all is what makes the WHOLE application file-backed
+// (Dedicated::DetectStartupMode), so saving a port number from the F9 panel
+// could silently move every unrelated setting off the registry onto a file that
+// contained none of them. A whole seeding mechanism existed to make that
+// survivable; a separate file removes the problem instead of managing it.
+//
+// A fixed name is invisible to DetectStartupMode, so nothing here can affect
+// where anything else is stored — same arrangement as the remote-servers list.
 //
 // SECURITY POSTURE — fail closed at every step:
 //   • Enable defaults false
 //   • bind address defaults to loopback, not 0.0.0.0
 //   • an EMPTY AllowList denies everyone rather than allowing everyone
-//   • BlackList always beats AllowList
+//   • the blacklist always beats AllowList — it is gate 1, AllowList is gate 2
 //   • MaxConnections defaults to 1
+//   • no password refuses to start at all off loopback
 //
 // 127.0.0.1 is SEEDED into a new AllowList so a fresh instance is reachable
 // from the copy beside it without anyone meeting the fail-closed rule as a
@@ -69,8 +81,11 @@ namespace Remote {
         // entry locks that one out.
         std::vector<std::wstring> allowList;
 
-        // IPs always refused, checked BEFORE allowList. Deny overrides allow.
-        std::vector<std::wstring> blackList;
+        // NOTE: the blacklist is NOT here. It lives in its own file and its own
+        // module (RemoteBlacklist.h), because it is the one list the PROGRAM
+        // writes — the brute-force guard appends to it unattended — and because
+        // a snapshot of it taken at Start() would mean an address blocked at
+        // 04:11 was still admitted until the next restart.
 
         // Stored hashed, never plaintext. Empty = no password configured.
         std::wstring passwordHash;
@@ -85,44 +100,23 @@ namespace Remote {
 
     // --- .ini access -----------------------------------------------------------
 
-    // True when the .ini actually carries a [REMOTE_TCP_IP] section. Distinguishes
-    // "configured off" from "never configured", which the panel shows differently.
+    // True when qivLocalServer.ini actually carries a configured section.
+    // Distinguishes "configured off" from "never configured", which the panel
+    // shows differently.
     bool SectionExists();
 
-    // Reads [REMOTE_TCP_IP] into Config(). Absent keys keep their defaults;
+    // Reads qivLocalServer.ini into Config(). Absent keys keep their defaults;
     // out-of-range or unparseable values fall back to the default rather than
     // failing the load, so one bad line never stops the app from starting.
-    // No-op when the app is registry-backed (no .ini exists).
+    // No-op when the file is not there.
     void LoadFromIni();
 
-    // Writes every field back to [REMOTE_TCP_IP], one key at a time. Creates the
-    // file (UTF-16LE + BOM, [Instance] header first) when it does not exist.
-    //
-    // CAUTION: creating an .ini where none existed flips the WHOLE APP from
-    // registry-backed to file-backed on the next launch — see
-    // Dedicated::DetectStartupMode(). Callers that may be creating the file must
-    // seed [Settings] with the current values first, or every unrelated setting
-    // silently reverts to its default. SaveToIniSeeded() does this correctly.
+    // Writes every field back, one key at a time, creating the file (UTF-16LE +
+    // BOM) if needed. Creating it has NO effect on how the application persists
+    // anything else — which is the entire point of it being a separate file.
     void SaveToIni();
 
-    // The safe way for the panel to persist. Does what SaveToIni does, but when
-    // the .ini does NOT already exist it first writes every current app setting
-    // into [Settings].
-    //
-    // Why that matters: an .ini beside the exe is what makes the app file-backed
-    // (Dedicated::DetectStartupMode). Creating one to hold a port number would
-    // otherwise silently move the entire app off the registry onto a file that
-    // contains none of its settings, and every unrelated preference would revert
-    // to its default on the next launch. Seeding makes the switch lossless
-    // instead of merely disclosed.
-    //
-    // `createdFileOut` reports whether the file was created by this call, so the
-    // caller can tell the user the persistence model just changed.
-    void SaveToIniSeeded(bool &createdFileOut);
-
-    // True when an .ini already exists for this instance. The panel uses it to
-    // decide whether saving is an ordinary write or a first-time creation with
-    // the consequence above.
+    // True when qivLocalServer.ini exists.
     bool IniExists();
 
     // --- Command-line overrides ------------------------------------------------
@@ -139,7 +133,9 @@ namespace Remote {
         std::wstring name;
         std::wstring bindAddress;
         std::wstring allowList;        // raw, comma/semicolon separated
-        std::wstring blackList;        // raw, comma/semicolon separated
+        std::wstring blackList;        // raw, comma/semicolon separated — appended
+                                       // to qivRemoteServerBlacklist.ini, since
+                                       // that file is now the only blacklist
         std::wstring plainPassword;    // hashed here; never stored as given
         int          port           = -1;
         int          maxConnections = -1;
@@ -156,6 +152,23 @@ namespace Remote {
     // Tolerates whitespace and trailing separators from hand-edited files.
     std::vector<std::wstring> ParseList(const std::wstring &raw);
 
+    // Literal match, plus a trailing "*" wildcard so "192.168.1.*" covers a
+    // subnet without spelling out 254 entries. Deliberately NOT a CIDR parser:
+    // hand-edited text files get CIDR subtly wrong, and a rule that silently
+    // matches more than the author intended is worse than no rule.
+    //
+    // Here rather than inside the server because the AllowList and the blacklist
+    // must agree on what "matches" means, and they now live in different files
+    // and different translation units. Two copies of this rule is two chances
+    // for an address to be allowed by one and not blocked by the other.
+    bool AddressMatches(const std::wstring &pattern, const std::wstring &addr);
+    bool InList(const std::vector<std::wstring> &list, const std::wstring &addr);
+
+    // True when an entry could plausibly be an address literal — digits, hex,
+    // dots, colons and the trailing star. Anything else is dropped rather than
+    // silently compared against and never matched.
+    bool LooksLikeAddress(const std::wstring &s);
+
     // Rejoins for storage. Comma-separated, no spaces.
     std::wstring JoinList(const std::vector<std::wstring> &items);
 
@@ -164,6 +177,12 @@ namespace Remote {
     // Clamps port and maxConnections into their legal ranges and drops malformed
     // list entries. Called by LoadFromIni and before any Start.
     void Normalize(Settings &s);
+
+    // True for 127.0.0.0/8, ::1 and "localhost" — a bind address only this
+    // machine can reach. Exposed because the password requirement hangs off it:
+    // an unauthenticated listener is a local convenience and a remote hole, and
+    // the bind address is what separates the two.
+    bool IsLoopbackBind(const std::wstring &addr);
 
     // Human-readable reason the server cannot start, or empty when it can.
     // Drives the panel's status line so a refusing server never looks like a bug:
