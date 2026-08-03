@@ -544,6 +544,19 @@ namespace {
         // 0.0.0.0 break every loopback client.
         Tls::Session  tlsSession;
         Tls::Session *tls = nullptr;
+
+        // Recorded because this decision is INVISIBLE otherwise, and getting it
+        // wrong looks like nothing at all: the server waits for a ClientHello,
+        // the client waits for a banner, and both sit there until somebody times
+        // out. The peer address is the whole input to the decision, so the log
+        // has to name it — "which address did you actually see me as" is the
+        // question that cannot be answered from the client side.
+        if (Log::IsEnabled())
+            Log::Add(Log::Direction::In, peer,
+                     Tls::RequiredForAddress(peer) ? L"(accepted — expecting TLS)"
+                                                   : L"(accepted — plaintext)",
+                     Log::SelfName(), L"(connection)", -1);
+
         if (Tls::RequiredForAddress(peer)) {
             std::wstring err;
             if (!tlsSession.AcceptHandshake(client, err)) {

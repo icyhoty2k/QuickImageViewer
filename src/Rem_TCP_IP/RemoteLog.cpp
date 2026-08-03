@@ -127,11 +127,32 @@ void Add(Direction dir,
     //
     // Applied to the two peer-controlled fields only; sender and receiver are this
     // program's own labels.
+    // SANITISED as well as truncated, and for a reason that is not cosmetic.
+    //
+    // What arrives on this socket is not always text. A client that speaks TLS
+    // to a plaintext listener sends a ClientHello, and those bytes land here as
+    // a "command" full of control characters — including TAB and newline, which
+    // are the FIELD and RECORD separators of the saved .tsv. One such line
+    // silently corrupts the file's structure, so the log of the very failure you
+    // are trying to diagnose is the log that cannot be read.
+    //
+    // Replaced rather than escaped: this is a diagnostic, and knowing a byte was
+    // unprintable is all a reader can use. The count still comes from the
+    // ORIGINAL length, so a clipped line reports what really went past.
     auto clip = [](const std::wstring &s) {
         namespace RT = Constants::RemoteTcpIp;
-        if (s.size() <= RT::LOG_LINE_MAX) return s;
-        return s.substr(0, RT::LOG_LINE_MAX) + L"… (" +
-               std::to_wstring(s.size()) + L" chars)";
+
+        std::wstring out;
+        out.reserve(std::min(s.size(), RT::LOG_LINE_MAX));
+        for (size_t i = 0; i < s.size() && i < RT::LOG_LINE_MAX; ++i) {
+            const wchar_t c = s[i];
+            // Everything below space, plus DEL — tab and newline among them.
+            out += (c < 0x20 || c == 0x7F) ? L'·' : c;
+        }
+
+        if (s.size() > RT::LOG_LINE_MAX)
+            out += L"… (" + std::to_wstring(s.size()) + L" chars)";
+        return out;
     };
 
     Entry e;
