@@ -169,10 +169,22 @@ namespace Remote {
     // Tolerates whitespace and trailing separators from hand-edited files.
     std::vector<std::wstring> ParseList(const std::wstring &raw);
 
-    // Literal match, plus a trailing "*" wildcard so "192.168.1.*" covers a
-    // subnet without spelling out 254 entries. Deliberately NOT a CIDR parser:
-    // hand-edited text files get CIDR subtly wrong, and a rule that silently
-    // matches more than the author intended is worse than no rule.
+    // Five pattern forms, in the order they are tried:
+    //
+    //   *                          everything
+    //   192.168.1.*                TEXT prefix — see the warning below
+    //   192.168.0.0/24             CIDR, either family (2001:db8::/32)
+    //   192.168.0.10-50            range, IPv4 only; also 10-192.168.0.50
+    //   192.168.0.5                exact, compared NUMERICALLY when both sides
+    //                              parse, so "::1" and its expanded spelling are
+    //                              one address and a "%scope" suffix on the peer
+    //                              does not defeat the rule
+    //
+    // THE STAR IS A STRING PREFIX, not an octet boundary. "192.168.1.*" is what
+    // it looks like, but "192.168.1*" — no trailing dot — also covers
+    // 192.168.10.x and 192.168.100.x, and "1*" covers most of the internet. It
+    // stays that way because existing lists mean it; /N is the form to reach for
+    // when the boundary matters.
     //
     // Here rather than inside the server because the AllowList and the blacklist
     // must agree on what "matches" means, and they now live in different files
@@ -182,8 +194,16 @@ namespace Remote {
     bool InList(const std::vector<std::wstring> &list, const std::wstring &addr);
 
     // True when an entry could plausibly be an address literal — digits, hex,
-    // dots, colons and the trailing star. Anything else is dropped rather than
-    // silently compared against and never matched.
+    // dots, colons, the trailing star, and the '/' and '-' of the two ranged
+    // forms. Those two are additionally required to PARSE: "192.168.0.0/99" is
+    // spelled out of legal characters and can never match anything, which is the
+    // sort of entry this exists to drop. Anything rejected is pruned by
+    // Normalize and reported by the panel rather than kept and disbelieved.
+    //
+    // DOMAIN NAMES ARE NOT ADDRESSES and are refused here. A rule is checked
+    // against the address a connection actually arrived from; resolving a name
+    // per connection would put DNS — and whoever answers it — inside the access
+    // decision.
     bool LooksLikeAddress(const std::wstring &s);
 
     // Rejoins for storage. Comma-separated, no spaces.

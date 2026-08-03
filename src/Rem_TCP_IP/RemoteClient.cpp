@@ -6,6 +6,7 @@
 #include "RemoteClient.h"
 #include "RemoteProtocol.h"
 #include "RemoteCrypto.h"
+#include "RemoteSettings.h"   // Config().name — what this instance calls itself
 #include "RemoteTls.h"
 #include "RemoteLog.h"   // Ctrl+F12 — recorded HERE, at the wire boundary
 
@@ -63,7 +64,7 @@ namespace {
     void LogInbound(const std::wstring &peer, const std::wstring &line) {
         if (!Log::IsEnabled() || line.empty()) return;
         Log::Add(Log::Direction::In, LogPeer(peer), line,
-                 Log::SelfName(), L"(unsolicited)", -1);
+                 Log::SelfLabel(), L"(unsolicited)", -1);
     }
 
     // `tls` is null for a loopback target, non-null otherwise. Same shape as
@@ -139,6 +140,42 @@ namespace {
         u_long blocking = 0;
         ioctlsocket(s, FIONBIO, &blocking);
         return ok;
+    }
+
+    // Is the address we ACTUALLY CONNECTED TO a loopback one?
+    //
+    // The rule is the server's, but it has to be applied to the same KIND of
+    // thing the server applies it to. The server decides from the peer address
+    // it was handed by accept(); this end used to decide from the host STRING
+    // the user typed, and the two disagree for any name that resolves to
+    // loopback — a hosts-file entry, an mDNS alias, a machine name pointing at
+    // 127.0.0.1. "lobby-pc" is exactly the case the resolve above exists to
+    // support, so it is not a hypothetical.
+    //
+    // WHEN THIS IS WRONG IT IS INVISIBLE: one end waits for a ClientHello, the
+    // other waits for a banner, and both sit silent until a timeout with
+    // nothing on screen to say why. Deciding after the connect costs nothing —
+    // the resolved address is already in hand — and removes the disagreement.
+    bool AddressIsLoopback(const sockaddr *sa) {
+        if (!sa) return false;
+        if (sa->sa_family == AF_INET) {
+            // The whole 127.0.0.0/8 block, which is what IsLoopbackBind means by
+            // its "127." prefix — the range is defined by its first octet.
+            const auto *a = reinterpret_cast<const sockaddr_in *>(sa);
+            return (ntohl(a->sin_addr.s_addr) >> 24) == 127;
+        }
+        if (sa->sa_family == AF_INET6) {
+            const auto *a = reinterpret_cast<const sockaddr_in6 *>(sa);
+            if (IN6_IS_ADDR_LOOPBACK(&a->sin6_addr)) return true;
+            // IPv4-mapped ("::ffff:127.0.0.1"), which is what a dual-stack
+            // resolve of a loopback name can produce. The server normalises
+            // these in PeerAddress before applying its own rule, so this end
+            // has to see them the same way or the two ends disagree on
+            // precisely the addresses that normalisation exists for.
+            if (IN6_IS_ADDR_V4MAPPED(&a->sin6_addr))
+                return reinterpret_cast<const BYTE *>(&a->sin6_addr)[12] == 127;
+        }
+        return false;
     }
 }
 
@@ -224,11 +261,17 @@ bool Client::DoConnectBody(const std::wstring &host, int port,
 
     SOCKET s = INVALID_SOCKET;
     bool connected = false;
+    // The address the connect actually landed on. Kept because it — not the
+    // typed host — decides TLS below, and `ai` does not outlive freeaddrinfo.
+    sockaddr_storage connectedTo{};
     for (addrinfo *ai = res; ai && !connected; ai = ai->ai_next) {
         s = socket(ai->ai_family, ai->ai_socktype, ai->ai_protocol);
         if (s == INVALID_SOCKET) continue;
         if (ConnectWithTimeout(s, ai->ai_addr, static_cast<int>(ai->ai_addrlen),
                                CONNECT_TIMEOUT_MS)) {
+            const size_t n = static_cast<size_t>(ai->ai_addrlen);
+            CopyMemory(&connectedTo, ai->ai_addr,
+                       n < sizeof(connectedTo) ? n : sizeof(connectedTo));
             connected = true;
             break;
         }
@@ -254,12 +297,13 @@ bool Client::DoConnectBody(const std::wstring &host, int port,
     // TLS BEFORE THE BANNER — the banner is application data and travels inside
     // the tunnel, exactly as the server sends it.
     //
-    // Whether to do this is decided from the ADDRESS BEING DIALLED, by the same
-    // rule the server applies to its bind address. Nothing on the wire selects
-    // it, so the two ends cannot be talked into disagreeing; they can only be
-    // misconfigured, and then the handshake fails loudly instead of quietly
-    // falling back to plaintext.
-    if (Tls::RequiredForAddress(host)) {
+    // Whether to do this is decided from the RESOLVED ADDRESS THIS SOCKET IS
+    // CONNECTED TO — see AddressIsLoopback — by the same rule the server
+    // applies to the peer address it accepted. Both ends therefore judge the
+    // same value. Nothing on the wire selects it, so the two cannot be talked
+    // into disagreeing; they can only be misconfigured, and then the handshake
+    // fails loudly instead of quietly falling back to plaintext.
+    if (!AddressIsLoopback(reinterpret_cast<const sockaddr *>(&connectedTo))) {
         auto session = std::make_unique<Tls::Session>();
         std::wstring tlsErr;
         if (!session->ConnectHandshake(s, m_pin, m_lastFingerprint, tlsErr)) {
@@ -284,6 +328,17 @@ bool Client::DoConnectBody(const std::wstring &host, int port,
     }
     m_banner = line;
 
+    // A REFUSAL CAN ARRIVE IN THE BANNER'S PLACE. The accept loop answers a
+    // connection over the cap with "ERR 8 …" and closes, before any banner. Read
+    // as a banner it leaves m_peerProtocol at 0 and the handshake then fails
+    // further down for the wrong reason, reporting a protocol problem for a
+    // server that was simply busy.
+    if (_wcsnicmp(m_banner.c_str(), RT::RESP_ERR, 3) == 0) {
+        Disconnect();
+        errorOut = m_banner;
+        return false;
+    }
+
     // "OK qIV 2.96.0.113 remote v2 [Name]" → 2. Parsed here, once, because this is
     // the only moment it is known and a caller that had to re-read the banner would
     // re-parse it per send. A banner without the marker leaves 0, which every
@@ -296,124 +351,180 @@ bool Client::DoConnectBody(const std::wstring &host, int port,
         m_peerProtocol = v;
     }
 
-    // Then either an AUTH challenge, or nothing more until we speak.
-    // Peek only if the server actually challenged: a passwordless server sends
-    // no AUTH line at all, so blocking for one would stall until IO_TIMEOUT.
-    // The banner tells us nothing about that, so the challenge is detected by
-    // trying a read that is allowed to time out — the reply to our first real
-    // command would otherwise be mistaken for a challenge.
+    // EXACTLY ONE LINE FOLLOWS THE BANNER, always — protocol v5. "AUTH <iter>
+    // <salt> <nonce>" when the server wants a password, a bare "OK" when it does
+    // not. So this read BLOCKS on the ordinary IO timeout and the answer is read
+    // rather than inferred.
     //
-    // Simpler and deterministic: the server sends AUTH immediately after the
-    // banner when it wants one, so a short read decides it.
-    {
-        DWORD shortTimeout = 750;
-        setsockopt(s, SOL_SOCKET, SO_RCVTIMEO,
-                   reinterpret_cast<const char *>(&shortTimeout), sizeof(shortTimeout));
-        std::wstring maybeAuth;
-        const bool got = RecvLine(s, m_accum, maybeAuth, tls);
-        setsockopt(s, SOL_SOCKET, SO_RCVTIMEO,
-                   reinterpret_cast<const char *>(&io), sizeof(io));
+    // It used to be a 750 ms probe whose EXPIRY meant "no password", because a
+    // v4 server signalled that by saying nothing. Two ways for that to be wrong,
+    // and both were silent: a challenge slower than the probe read as "no
+    // password", after which this client entered command mode unauthenticated
+    // and every command failed for no stated reason; and every genuinely
+    // passwordless connect paid the full 750 ms to learn nothing.
+    std::wstring challenge;
+    if (!RecvLine(s, m_accum, challenge, tls)) {
+        Disconnect();
+        errorOut = Constants::Messages::REMOTE_CLIENT_PROTOCOL_ERROR;
+        return false;
+    }
 
-        if (got) {
-            if (_wcsnicmp(maybeAuth.c_str(), L"AUTH ", 5) != 0) {
-                Disconnect();
-                errorOut = Constants::Messages::REMOTE_CLIENT_PROTOCOL_ERROR;
-                return false;
-            }
+    // A refusal can land here too — the same "ERR …" the banner check above
+    // guards against, one line later.
+    if (_wcsnicmp(challenge.c_str(), RT::RESP_ERR, 3) == 0) {
+        Disconnect();
+        errorOut = challenge;
+        return false;
+    }
 
-            // "AUTH <iterations> <salt-hex> <nonce-hex>"
-            //
-            // Three fields since protocol v3. A v2 server sends two and lands in
-            // the parse failure below — correct, and deliberately not worked
-            // around: its passwords are derived by a method this build refuses
-            // to use, so connecting to it anyway would be the one outcome worth
-            // preventing.
-            const std::wstring rest = maybeAuth.substr(5);
-            const size_t sp1 = rest.find(L' ');
-            const size_t sp2 = (sp1 == std::wstring::npos)
-                                   ? std::wstring::npos
-                                   : rest.find(L' ', sp1 + 1);
-            if (sp1 == std::wstring::npos || sp2 == std::wstring::npos) {
-                Disconnect();
-                errorOut = Constants::Messages::REMOTE_CLIENT_PROTOCOL_ERROR;
-                return false;
-            }
-
-            const std::wstring iterText = rest.substr(0, sp1);
-            const int iterations =
-                (iterText.find_first_not_of(L"0123456789") == std::wstring::npos &&
-                 !iterText.empty())
-                    ? static_cast<int>(wcstol(iterText.c_str(), nullptr, 10))
-                    : 0;
-
-            const std::vector<BYTE> salt  = Crypto::FromHex(rest.substr(sp1 + 1, sp2 - sp1 - 1));
-            const std::vector<BYTE> nonce = Crypto::FromHex(rest.substr(sp2 + 1));
-            if (iterations <= 0 || salt.empty() || nonce.empty()) {
-                Disconnect();
-                errorOut = Constants::Messages::REMOTE_CLIENT_PROTOCOL_ERROR;
-                return false;
-            }
-            if (password.empty() && presetSecret.empty()) {
-                Disconnect();
-                errorOut = Constants::Messages::REMOTE_CLIENT_PASSWORD_REQUIRED;
-                return false;
-            }
-
-            // Two routes to one value. With a password we recompute the digest
-            // the server stores; with a secret imported from that server's own
-            // settings file we already have it.
-            //
-            // The imported form checks the SALT first. A different salt means
-            // the target's password has been changed since the import, so the
-            // stored secret is for a value that no longer exists — worth saying
-            // so, because the exchange would otherwise fail as an ordinary
-            // authentication error and look like the wrong password was typed.
-            std::vector<BYTE> secret;
-            if (!presetSecret.empty()) {
-                if (presetSalt != salt) {
-                    Disconnect();
-                    errorOut = Constants::Messages::REMOTE_CLIENT_SECRET_STALE;
-                    return false;
-                }
-                secret = presetSecret;
-            } else {
-                // The expensive step, and the only one: PBKDF2 at the server's
-                // stated work factor. It runs once per connect on this thread —
-                // never on the UI thread, which is why DoConnect is where it is.
-                secret = Crypto::SecretFromPassword(password, salt, iterations);
-            }
-
-            // Whichever route produced it, the password itself never goes on
-            // the wire — the answer is an HMAC of the server's own nonce.
-            const std::vector<BYTE> answer =
-                Crypto::HmacSha256(secret, nonce.data(), nonce.size());
-            if (answer.empty()) {
-                Disconnect();
-                errorOut = Constants::Messages::REMOTE_CLIENT_PROTOCOL_ERROR;
-                return false;
-            }
-
-            if (!SendAll(s, ToUtf8(L"AUTH " + Crypto::ToHex(answer)) + "\r\n", tls)) {
-                Disconnect();
-                errorOut = Constants::Messages::REMOTE_CLIENT_CONNECT_FAILED;
-                return false;
-            }
-
-            // The server stays silent on success and sends ERR on failure, so a
-            // short read that times out means we are in.
-            setsockopt(s, SOL_SOCKET, SO_RCVTIMEO,
-                       reinterpret_cast<const char *>(&shortTimeout), sizeof(shortTimeout));
-            std::wstring authReply;
-            const bool rejected = RecvLine(s, m_accum, authReply, tls);
-            setsockopt(s, SOL_SOCKET, SO_RCVTIMEO,
-                       reinterpret_cast<const char *>(&io), sizeof(io));
-
-            if (rejected && _wcsnicmp(authReply.c_str(), RT::RESP_ERR, 3) == 0) {
-                Disconnect();
-                errorOut = Constants::Messages::REMOTE_CLIENT_AUTH_FAILED;
-                return false;
-            }
+    if (_wcsnicmp(challenge.c_str(), L"AUTH ", 5) != 0) {
+        // Not a challenge, so it must be the passwordless "OK". Anything
+        // else is a server that did not follow v5, and guessing at it is
+        // how the old probe got things wrong.
+        if (_wcsnicmp(challenge.c_str(), RT::RESP_OK, 2) != 0) {
+            Disconnect();
+            errorOut = Constants::Messages::REMOTE_CLIENT_PROTOCOL_ERROR;
+            return false;
         }
+        // SAY WHO WE ARE, once, before anything else. The server has no way to know
+        // otherwise — it sees an address, and an address is not an identity when two
+        // instances share a machine or three phones share a router. Its Ctrl+F12 log
+        // then names this instance instead of only addressing it.
+        //
+        // BEST EFFORT: a server that does not know the verb answers ERR and the
+        // connection carries on unaffected, because nothing here depends on the
+        // reply. The name is a label, not a credential, and this is deliberately
+        // sent AFTER authentication — nothing may be decided by a string a peer
+        // chooses about itself.
+        if (const std::wstring self = Config().name; !self.empty()) {
+            SendAll(s, ToUtf8(L"hello " + self) + "\r\n", tls);
+            std::wstring ack;
+            RecvLine(s, m_accum, ack, tls);   // consumed so it cannot be read as a reply
+        }
+
+        m_connected = true;
+        errorOut.clear();
+        return true;
+    }
+
+    // "AUTH <iterations> <salt-hex> <nonce-hex>"
+    //
+    // Three fields since protocol v3. A v2 server sends two and lands in
+    // the parse failure below — correct, and deliberately not worked
+    // around: its passwords are derived by a method this build refuses
+    // to use, so connecting to it anyway would be the one outcome worth
+    // preventing.
+    const std::wstring rest = challenge.substr(5);
+    const size_t sp1 = rest.find(L' ');
+    const size_t sp2 = (sp1 == std::wstring::npos)
+                           ? std::wstring::npos
+                           : rest.find(L' ', sp1 + 1);
+    if (sp1 == std::wstring::npos || sp2 == std::wstring::npos) {
+        Disconnect();
+        errorOut = Constants::Messages::REMOTE_CLIENT_PROTOCOL_ERROR;
+        return false;
+    }
+
+    const std::wstring iterText = rest.substr(0, sp1);
+    const int iterations =
+        (iterText.find_first_not_of(L"0123456789") == std::wstring::npos &&
+         !iterText.empty())
+            ? static_cast<int>(wcstol(iterText.c_str(), nullptr, 10))
+            : 0;
+
+    const std::vector<BYTE> salt  = Crypto::FromHex(rest.substr(sp1 + 1, sp2 - sp1 - 1));
+    const std::vector<BYTE> nonce = Crypto::FromHex(rest.substr(sp2 + 1));
+    if (iterations <= 0 || salt.empty() || nonce.empty()) {
+        Disconnect();
+        errorOut = Constants::Messages::REMOTE_CLIENT_PROTOCOL_ERROR;
+        return false;
+    }
+    if (password.empty() && presetSecret.empty()) {
+        Disconnect();
+        errorOut = Constants::Messages::REMOTE_CLIENT_PASSWORD_REQUIRED;
+        return false;
+    }
+
+    // Two routes to one value. With a password we recompute the digest
+    // the server stores; with a secret imported from that server's own
+    // settings file we already have it.
+    //
+    // The imported form checks the SALT first. A different salt means
+    // the target's password has been changed since the import, so the
+    // stored secret is for a value that no longer exists — worth saying
+    // so, because the exchange would otherwise fail as an ordinary
+    // authentication error and look like the wrong password was typed.
+    std::vector<BYTE> secret;
+    if (!presetSecret.empty()) {
+        if (presetSalt != salt) {
+            Disconnect();
+            errorOut = Constants::Messages::REMOTE_CLIENT_SECRET_STALE;
+            return false;
+        }
+        secret = presetSecret;
+    } else {
+        // The expensive step, and the only one: PBKDF2 at the server's
+        // stated work factor. It runs once per connect on this thread —
+        // never on the UI thread, which is why DoConnect is where it is.
+        secret = Crypto::SecretFromPassword(password, salt, iterations);
+    }
+
+    // Whichever route produced it, the password itself never goes on
+    // the wire — the answer is an HMAC of the server's own nonce.
+    const std::vector<BYTE> answer =
+        Crypto::HmacSha256(secret, nonce.data(), nonce.size());
+    if (answer.empty()) {
+        Disconnect();
+        errorOut = Constants::Messages::REMOTE_CLIENT_PROTOCOL_ERROR;
+        return false;
+    }
+
+    if (!SendAll(s, ToUtf8(L"AUTH " + Crypto::ToHex(answer)) + "\r\n", tls)) {
+        Disconnect();
+        errorOut = Constants::Messages::REMOTE_CLIENT_CONNECT_FAILED;
+        return false;
+    }
+
+    // ONE LINE, ALWAYS — "OK" or "ERR". A blocking read, for the same reason as
+    // the challenge above: under v4 success was silence, so this was a second
+    // 750 ms probe whose expiry was read as "we are in". A rejection slower than
+    // the probe was therefore taken for an acceptance, and this client went on
+    // to run commands against a server that had already refused it.
+    std::wstring authReply;
+    if (!RecvLine(s, m_accum, authReply, tls)) {
+        Disconnect();
+        errorOut = Constants::Messages::REMOTE_CLIENT_CONNECT_FAILED;
+        return false;
+    }
+
+    if (_wcsnicmp(authReply.c_str(), RT::RESP_ERR, 3) == 0) {
+        Disconnect();
+        errorOut = Constants::Messages::REMOTE_CLIENT_AUTH_FAILED;
+        return false;
+    }
+    // Neither OK nor ERR is a server that is not speaking v5. Refused rather
+    // than assumed — an unread line here is the one that desynchronises every
+    // reply that follows.
+    if (_wcsnicmp(authReply.c_str(), RT::RESP_OK, 2) != 0) {
+        Disconnect();
+        errorOut = Constants::Messages::REMOTE_CLIENT_PROTOCOL_ERROR;
+        return false;
+    }
+
+    // SAY WHO WE ARE, once, before anything else. The server has no way to know
+    // otherwise — it sees an address, and an address is not an identity when two
+    // instances share a machine or three phones share a router. Its Ctrl+F12 log
+    // then names this instance instead of only addressing it.
+    //
+    // BEST EFFORT: a server that does not know the verb answers ERR and the
+    // connection carries on unaffected, because nothing here depends on the
+    // reply. The name is a label, not a credential, and this is deliberately
+    // sent AFTER authentication — nothing may be decided by a string a peer
+    // chooses about itself.
+    if (const std::wstring self = Config().name; !self.empty()) {
+        SendAll(s, ToUtf8(L"hello " + self) + "\r\n", tls);
+        std::wstring ack;
+        RecvLine(s, m_accum, ack, tls);   // consumed so it cannot be read as a reply
     }
 
     m_connected = true;
@@ -439,7 +550,7 @@ bool Client::DoConnect(const std::wstring &host, int port,
     if (Log::IsEnabled()) {
         const std::wstring peer =
             m_peerLabel.empty() ? (host + L":" + std::to_wstring(port)) : m_peerLabel;
-        Log::Add(Log::Direction::Out, Log::SelfName(),
+        Log::Add(Log::Direction::Out, Log::SelfLabel(),
                  L"connect " + host + L":" + std::to_wstring(port),
                  peer, ok ? (m_banner.empty() ? L"OK connected" : m_banner) : errorOut,
                  LogNowUs() - t0);
@@ -457,7 +568,7 @@ bool Client::Send(const std::wstring &commandLine,
     const long long t0 = LogNowUs();
     const auto record = [&](const std::wstring &response) {
         if (!Log::IsEnabled()) return;
-        Log::Add(Log::Direction::Out, Log::SelfName(), commandLine,
+        Log::Add(Log::Direction::Out, Log::SelfLabel(), commandLine,
                  LogPeer(m_peerLabel), response, LogNowUs() - t0);
     };
 
@@ -498,7 +609,7 @@ bool Client::Send(const std::wstring &commandLine,
             // did not take us any time, so a delta would be a fiction.
             if (Log::IsEnabled())
                 Log::Add(Log::Direction::In, LogPeer(m_peerLabel), line,
-                         Log::SelfName(), L"(unsolicited)", -1);
+                         Log::SelfLabel(), L"(unsolicited)", -1);
         } else {
             replyOut += line + L"\r\n";
         }

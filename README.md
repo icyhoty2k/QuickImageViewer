@@ -421,7 +421,7 @@ display in another room. It is plain UTF-8 line protocol over TCP, so a script,
 | `F11` | **Mirroring on/off** — forward every mirrorable command to the connected targets |
 | `Ctrl+F11` | **Remotes Control** — which connected instances F11 drives, plus Identify and Watch |
 | `F12` | While mirroring, **also execute here** (off = this viewer is a pure remote control) |
-| `Ctrl+F12` | **RemoteLog** — every line that crossed the wire, both directions, with round trips |
+| `Ctrl+F12` | **RemoteLog** — every line that crossed the wire, both directions, with round trips — plus a line each time a client arrives, leaves, drops or is refused, naming its address and port and how long it stayed |
 
 F11 and F12 are session-only and always start **off** — a viewer that came back from a
 restart already driving machines you had forgotten about would be the worst kind of
@@ -472,9 +472,10 @@ cannot come back "unknown command".
 
 ```
 $ nc 127.0.0.1 7777
-OK qIV 2.96.0.113 remote v2 [Monitor2]
+OK qIV 2.96.0.113 remote v5 [Monitor2]
+OK
 help
-qIV remote protocol v2
+qIV remote protocol v5
 FORMAT CMD <name>|<takesValue 0|1>|<description>|<value description>
 CMD NextImage|0|next image in the playlist|
 CMD JumpToImage|1|go to a numbered image in the current playlist|image NUMBER, 1-based …
@@ -485,12 +486,62 @@ CMD JumpToImage|1|go to a numbered image in the current playlist|image NUMBER, 1
 own command list from one call instead of carrying a copy that goes stale. `ping` checks
 liveness, `version` reports app and protocol version.
 
-> **Security.** The protocol is plaintext and authentication happens once, at connect.
-> That is fine on loopback, which is what it binds to by default. On a routable network
-> treat the network as the boundary (VPN or a trusted VLAN). File-altering commands —
-> delete, move, paste, save — are *structurally* unreachable over the wire: a compile-time
-> assertion proves none of them has a row in the command table, and the executor refuses
-> them again at run time.
+Since **protocol v5** exactly one line always follows the banner, so a client never has to
+guess: `AUTH <iterations> <salt> <nonce>` when the server wants a password, or a bare `OK`
+when it does not — which is the `OK` on the second line above. A successful `AUTH` is
+answered `OK` as well. Nothing is signalled by silence, so no client needs a timeout to
+discover what kind of server it reached.
+
+### Security
+
+**Encryption is decided by the address, and never negotiated.** A peer on the same machine
+(`127.0.0.0/8`, `::1`, `localhost`) gets plaintext; **every** other peer — your own LAN
+included — gets TLS 1.2/1.3 from the first byte, before the banner. One listener on
+`0.0.0.0` serves both. Both ends decide from the address independently, so there is no
+offer on the wire for an attacker to strip and no plaintext fallback to force.
+
+The certificate is self-signed and the client **pins** it by SHA-256 fingerprint — no CA
+chain, which is right for a box no public CA would ever issue for. The fingerprint is
+shown at the bottom of the `F9` panel; read it there and enter it in the client. A client
+with no pin stored refuses to connect rather than trusting what it is handed.
+
+**A password is compulsory off loopback** — the listener refuses to start without one. It
+never crosses the wire: the server stores a PBKDF2-HMAC-SHA256 digest (210,000 iterations)
+and the client answers an HMAC over a fresh per-connection nonce. Each guess costs the
+guesser a full derivation and the server one HMAC, which is the right way round. Five
+failures from one address within ten minutes blacklists it, every failure is answered a
+second late, and a peer that connects and then goes quiet is dropped after ten seconds.
+
+**AllowList / BlackList take addresses, never domain names** — a rule is matched against
+the address a connection actually arrived from, so DNS never enters the access decision.
+An empty AllowList denies everyone, by design. Both lists accept:
+
+| Form | Example | Notes |
+|:---|:---|:---|
+| everything | `*` | |
+| text prefix | `192.168.1.*` | **compares characters** — see below |
+| CIDR | `192.168.0.0/24`, `2001:db8::/32` | either family, any prefix length |
+| range | `192.168.0.10-50` | shorthand: last octet |
+| range, full | `192.168.0.10-192.168.1.5` | crosses octet boundaries |
+| one host | `192.168.0.5`, `2001:db8::1` | compared numerically, so spelling does not matter |
+
+> ⚠️ The star is a **string** prefix, not an octet boundary. `192.168.1.*` is what it looks
+> like, but `192.168.1*` — no trailing dot — also matches `192.168.10.x` and
+> `192.168.100.x`, and `1*` matches most of the internet. Use `/24` when the boundary
+> matters. Entries that could never match an address are dropped when you save, and the
+> panel names what it dropped.
+
+**File-altering commands — delete, move, paste, save — are *structurally* unreachable over
+the wire:** a compile-time assertion proves none of them has a row in the command table,
+and the executor refuses them again at run time.
+
+> **Exposing it to the internet.** Authentication is the only boundary — behind it, a peer
+> can do what someone sitting at the viewer can, including opening a local path and
+> pulling the displayed image back. The AllowList is address-based, so a client on a
+> dynamic IP pushes you toward `*` and leaves the password as the sole gate. Prefer a VPN
+> (WireGuard, Tailscale) over port-forwarding: every protection above still applies, the
+> AllowList becomes meaningful again with stable addresses, and the listener stops being
+> reachable by anyone who scans the port.
 
 **Full design record:** [`docs/REMOTE_MIRRORING.md`](docs/REMOTE_MIRRORING.md)
 
