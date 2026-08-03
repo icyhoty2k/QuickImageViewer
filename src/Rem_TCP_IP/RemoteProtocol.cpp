@@ -947,6 +947,14 @@ RemoteRequest ParseLine(const std::wstring &line) {
         req.status = ParseStatus::Verb;
         return req;
     }
+    // The payload travels as-is; the server sanitises it, because it is the one
+    // string on the wire a peer chooses freely about ITSELF.
+    if (_wcsicmp(name.c_str(), L"hello") == 0) {
+        req.verb    = Verb::Hello;
+        req.payload = payload;
+        req.status  = ParseStatus::Verb;
+        return req;
+    }
 
     const CommandEntry *entry = nullptr;
     if (!LookupCommand(name, entry)) {

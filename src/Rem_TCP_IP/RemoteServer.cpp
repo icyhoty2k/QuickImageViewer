@@ -20,6 +20,7 @@
 
 #include <algorithm>
 #include <map>      // the failed-authentication table, keyed by peer address
+#include <memory>   // shared_ptr — the per-connection send lock outlives its thread
 #include <mutex>
 #include <thread>
 #include <vector>
@@ -210,6 +211,70 @@ namespace {
         return it == g_sessions.end() ? nullptr : it->second;
     }
 
+    // ConnId → that connection's SEND LOCK. For the PLAINTEXT path; the TLS one
+    // already has an equivalent inside the session.
+    //
+    // TWO THREADS WRITE TO ONE SOCKET. The client thread answers commands; the
+    // UI thread pushes EVENT lines from EmitToObservers, mid-command, to every
+    // observer at once. Two sends running at the same time on one TCP stream
+    // interleave wherever the send buffer forces a partial write, and half a
+    // line inside another line desynchronises that peer's parser permanently —
+    // on a wall streaming an image, a corrupted picture rather than a glitch.
+    //
+    // The TLS half was never exposed: Session::TrySend refuses outright when the
+    // client thread holds the session, which is the same rule. This is that rule
+    // for the other half — which only ever runs on loopback, and so was the easy
+    // one to leave out.
+    //
+    // shared_ptr because the two sides do NOT share a lifetime: the UI thread
+    // can still be holding the lock at the moment the client thread tears its
+    // connection down and unregisters.
+    std::map<ConnId, std::shared_ptr<std::mutex>> g_sendLocks;
+    std::mutex                                    g_sendLockMutex;
+
+    // ConnId → the name that connection asked to be called, from `hello <name>`.
+    //
+    // A LABEL, NEVER A CREDENTIAL. It is the only string on the wire a peer
+    // chooses about itself, so nothing is decided by it: not the AllowList, not
+    // the blacklist, not the failed-authentication table — all of those stay
+    // keyed by the address, which a peer cannot choose. It reaches exactly one
+    // place, the log, and it is always shown BESIDE the address rather than
+    // instead of it, so a peer calling itself "127.0.0.1" or "Monitor2" cannot
+    // make a log row lie about where it came from.
+    std::map<ConnId, std::wstring> g_peerNames;
+    std::mutex                     g_peerNameMutex;
+
+    void SetPeerName(ConnId c, const std::wstring &name) {
+        std::lock_guard<std::mutex> lk(g_peerNameMutex);
+        if (name.empty()) g_peerNames.erase(c);
+        else              g_peerNames[c] = name;
+    }
+    void ForgetPeerName(ConnId c) {
+        std::lock_guard<std::mutex> lk(g_peerNameMutex);
+        g_peerNames.erase(c);
+    }
+    std::wstring PeerNameFor(ConnId c) {
+        std::lock_guard<std::mutex> lk(g_peerNameMutex);
+        auto it = g_peerNames.find(c);
+        return it == g_peerNames.end() ? std::wstring() : it->second;
+    }
+
+    void RegisterSendLock(ConnId c) {
+        std::lock_guard<std::mutex> lk(g_sendLockMutex);
+        g_sendLocks[c] = std::make_shared<std::mutex>();
+    }
+    void UnregisterSendLock(ConnId c) {
+        std::lock_guard<std::mutex> lk(g_sendLockMutex);
+        g_sendLocks.erase(c);
+    }
+    // Null for a socket no other thread can reach — the accept loop's
+    // connection-cap refusal writes to one before any client thread exists.
+    std::shared_ptr<std::mutex> SendLockFor(ConnId c) {
+        std::lock_guard<std::mutex> lk(g_sendLockMutex);
+        auto it = g_sendLocks.find(c);
+        return it == g_sendLocks.end() ? nullptr : it->second;
+    }
+
     // Shadow count, so the COMMON case costs an atomic load instead of a lock.
     //
     // HasObservers() is called on every command and every image change. A viewer
@@ -250,6 +315,14 @@ namespace {
     // unchanged and puts the branch in one place per direction.
     bool SendAll(SOCKET s, const std::string &bytes, Tls::Session *tls = nullptr) {
         if (tls) return tls->Send(s, bytes.data(), bytes.size());
+
+        // HELD FOR THE WHOLE LINE, partial writes included — that is the point.
+        // See g_sendLocks: the UI thread may be pushing an EVENT into this same
+        // socket, and it only ever TRIES for this lock, so waiting here costs it
+        // nothing.
+        const std::shared_ptr<std::mutex> lock = SendLockFor(static_cast<ConnId>(s));
+        std::unique_lock<std::mutex> guard;
+        if (lock) guard = std::unique_lock<std::mutex>(*lock);
 
         size_t sent = 0;
         while (sent < bytes.size()) {
@@ -296,7 +369,7 @@ namespace {
             // whether it is the reason a wall of screens is lagging.
             const long long d = t_inboundAtUs ? NowUs() - t_inboundAtUs : -1;
             t_inboundAtUs = 0;
-            Log::Add(Log::Direction::Out, Log::SelfName(), L"(reply)",
+            Log::Add(Log::Direction::Out, Log::SelfLabel(), L"(reply)",
                      PeerLabel(s), RedactForLog(line), d);
         }
         return SendAll(s, ToUtf8(line) + "\r\n", tls);
@@ -317,7 +390,7 @@ namespace {
                 if (Log::IsEnabled() && !lineOut.empty()) {
                     t_inboundAtUs = NowUs();
                     Log::Add(Log::Direction::In, PeerLabel(s), RedactForLog(lineOut),
-                             Log::SelfName(), L"(awaiting reply)", -1);
+                             Log::SelfLabel(), L"(awaiting reply)", -1);
                 }
                 return true;
             }
@@ -365,20 +438,62 @@ namespace {
         return (c.QuadPart * 1000000LL) / f.QuadPart;
     }
 
+    int PeerPort(const sockaddr_storage &ss) {
+        if (ss.ss_family == AF_INET)
+            return ntohs(reinterpret_cast<const sockaddr_in *>(&ss)->sin_port);
+        if (ss.ss_family == AF_INET6)
+            return ntohs(reinterpret_cast<const sockaddr_in6 *>(&ss)->sin6_port);
+        return 0;
+    }
+
+    // "192.168.0.7:51423", or "[2001:db8::1]:51423".
+    //
+    // THE PORT IS WHAT MAKES TWO CONNECTIONS TELLABLE APART. An address alone
+    // cannot: a phone that reconnects every few minutes, or a wall where two
+    // instances on one box both dial in, produce rows that are identical in
+    // every visible column — and an arrival then cannot be paired with its own
+    // departure, which is most of what these lines are for.
+    //
+    // Brackets around a v6 address because its own colons would otherwise read
+    // as the separator. Address alone when the port is unknown; a made-up 0 in
+    // the label would be worse than an absent one.
+    std::wstring ConnLabel(const std::wstring &addr, int port) {
+        if (addr.empty()) return L"(unknown)";
+        if (port <= 0) return addr;
+        const bool v6 = addr.find(L':') != std::wstring::npos;
+        return (v6 ? L"[" + addr + L"]" : addr) + L":" + std::to_wstring(port);
+    }
+
+    // "Ada's phone 192.168.0.7:51423" once that peer has said hello, and the
+    // bare endpoint until it does.
+    //
+    // NAME FIRST, ADDRESS ALWAYS. The name is what a person recognises and the
+    // address is what is true — a peer chooses the first and cannot choose the
+    // second, so dropping the address for a nicer column would be handing the
+    // peer control of what the log says about it.
+    std::wstring NamedLabel(ConnId c, const std::wstring &endpoint) {
+        const std::wstring name = PeerNameFor(c);
+        return name.empty() ? endpoint : name + L" " + endpoint;
+    }
+
     // Who is at the other end of `s`, for the Ctrl+F12 log's Sender column.
     //
     // An ADDRESS, not a name: the protocol has no "who am I" handshake — the
     // driving instance identifies the target, never itself — so an address is
     // the only thing this end actually knows. Adding a handshake to make the
     // column prettier would change the wire format for a diagnostic.
+    //
+    // With the source port, so a command line and the connection line that
+    // opened it name the SAME thing. Two spellings of "who" across one log is a
+    // correlation the reader has to do by hand, and cannot do at all when one
+    // address holds two connections.
     std::wstring PeerLabel(SOCKET s) {
         if (s == INVALID_SOCKET) return L"(local)";
         sockaddr_storage ss{};
         int len = sizeof(ss);
         if (getpeername(s, reinterpret_cast<sockaddr *>(&ss), &len) != 0)
             return L"(unknown)";
-        const std::wstring addr = PeerAddress(ss);
-        return addr.empty() ? std::wstring(L"(unknown)") : addr;
+        return NamedLabel(static_cast<ConnId>(s), ConnLabel(PeerAddress(ss), PeerPort(ss)));
     }
 
     // Is the peer on the other end of `s` this very machine?
@@ -442,7 +557,13 @@ namespace {
         // No password configured. WhyCannotStart has already refused to start a
         // listener in this state on anything but loopback, so reaching here
         // means a local-only server and the openness is the intended one.
-        if (cfg.passwordHash.empty()) return true;
+        //
+        // SAID OUT LOUD, not signalled by silence. Exactly one line follows the
+        // banner on every connection — "OK" here, an AUTH challenge below — so a
+        // client blocks for it and reads what it says. Staying quiet was the v4
+        // behaviour and it forced both clients to guess from a timeout, which
+        // got the answer wrong whenever a challenge was slower than the probe.
+        if (cfg.passwordHash.empty()) return SendLine(s, MakeOk(), tls);
 
         const std::vector<BYTE> secret = Crypto::SecretFromStored(cfg.passwordHash);
         const std::vector<BYTE> salt   = Crypto::SaltFromStored(cfg.passwordHash);
@@ -516,8 +637,35 @@ namespace {
     // The peer address IS passed now — the failed-authentication table is keyed
     // by it, and that table is written from here, after the accept gates have
     // finished with it.
-    void ClientThread(SOCKET client, Settings cfg, HWND owner, std::wstring peer) {
+    void ClientThread(SOCKET client, Settings cfg, HWND owner, std::wstring peer,
+                      int peerPort) {
         std::string accum;
+
+        // `peer` stays the BARE ADDRESS — it is what the AllowList, the
+        // blacklist and the failed-authentication table are keyed by, and a port
+        // in any of those would break every rule ever written. `who` is the
+        // display form, and it exists only for the log.
+        const std::wstring who = ConnLabel(peer, peerPort);
+
+        // For the session duration on the departure line. Cheap enough to take
+        // unconditionally: recording can be switched on mid-connection, and a
+        // duration that only exists when the log happened to be running at the
+        // moment of the accept would be missing from exactly the sessions
+        // somebody turned the log on to watch.
+        const long long startedUs = NowUs();
+
+        // WHY this connection ended, recorded at the exit that ends it.
+        //
+        // The log has always shown arrivals and never departures, which leaves
+        // the most common question about a wall of screens unanswerable: a row
+        // that stopped responding could have gone away an hour ago or be sitting
+        // there connected and idle, and the log looked identical either way.
+        //
+        // Assigned at each break rather than worked out at the bottom, because
+        // by then they are indistinguishable — "the peer closed", "the read
+        // timed out" and "we could not write to it" all arrive at the same line,
+        // and telling them apart is the whole reason to look.
+        const wchar_t *departure = L"(disconnected)";
 
         // WIC is COM, and SendDisplayedPreview decodes on THIS thread. MTA
         // rather than STA: nothing here pumps a message loop, and an STA
@@ -525,6 +673,28 @@ namespace {
         //
         // Balanced at every exit below — there are two, and both are after this.
         const HRESULT comInit = CoInitializeEx(nullptr, COINIT_MULTITHREADED);
+
+        // THE HANDSHAKE DEADLINE, and it goes on BEFORE the TLS handshake
+        // because that is the first thing a silent peer can stall.
+        //
+        // Everything from here to a completed authentication is bounded: the
+        // ClientHello, the AUTH answer, every recv in between. Without it this
+        // thread blocks in recv() for ever on a peer that connects and says
+        // nothing, and MAX_CONNECTIONS of those take the listener off the air at
+        // the cost of one open socket each — no password, no protocol, nothing
+        // the gates above can see. See HANDSHAKE_TIMEOUT_MS.
+        //
+        // The SEND bound stays on for the whole connection. It is generous
+        // enough never to cut a real image transfer short and only bites on a
+        // peer that has stopped reading altogether.
+        {
+            const DWORD rcv = RT::HANDSHAKE_TIMEOUT_MS;
+            const DWORD snd = RT::SEND_TIMEOUT_MS;
+            setsockopt(client, SOL_SOCKET, SO_RCVTIMEO,
+                       reinterpret_cast<const char *>(&rcv), sizeof(rcv));
+            setsockopt(client, SOL_SOCKET, SO_SNDTIMEO,
+                       reinterpret_cast<const char *>(&snd), sizeof(snd));
+        }
 
         // TLS FIRST, before the banner — the banner is already application data
         // and must travel inside the tunnel, not in front of it.
@@ -555,18 +725,32 @@ namespace {
         // has to name it — "which address did you actually see me as" is the
         // question that cannot be answered from the client side.
         if (Log::IsEnabled())
-            Log::Add(Log::Direction::In, peer,
-                     Tls::RequiredForAddress(peer) ? L"(accepted — expecting TLS)"
-                                                   : L"(accepted — plaintext)",
-                     Log::SelfName(), L"(connection)", -1);
+            Log::Add(Log::Direction::In, who,
+                     std::wstring(Tls::RequiredForAddress(peer)
+                                      ? L"(accepted — expecting TLS"
+                                      : L"(accepted — plaintext") +
+                         // SAID OUT LOUD, because the address alone cannot say
+                         // it. A second copy on this machine that dialled in
+                         // over the LAN address rather than loopback shows up
+                         // with the SAME address this instance listens on, and
+                         // the log then looks like it is reporting itself.
+                         (PeerIsSameMachine(client) ? L" — same machine)" : L")"),
+                     Log::SelfLabel(), L"(connection)", -1);
 
         if (Tls::RequiredForAddress(peer)) {
             std::wstring err;
             if (!tlsSession.AcceptHandshake(client, err)) {
-                // Silent. A failed handshake is either a scanner, a stale
-                // client, or an attacker; none of them are owed a diagnostic,
-                // and the plaintext channel needed to deliver one is precisely
-                // what this endpoint refuses to use.
+                // Silent TO THE PEER. A failed handshake is either a scanner, a
+                // stale client, or an attacker; none of them are owed a
+                // diagnostic, and the plaintext channel needed to deliver one is
+                // precisely what this endpoint refuses to use.
+                //
+                // Recorded LOCALLY all the same — this is the single most
+                // confusing failure the remote has, because both ends simply
+                // wait, and the owner of the machine is not the attacker.
+                if (Log::IsEnabled())
+                    Log::Add(Log::Direction::In, who, L"(dropped — TLS handshake failed)",
+                             Log::SelfLabel(), L"(connection)", NowUs() - startedUs);
                 shutdown(client, SD_BOTH);
                 closesocket(client);
                 g_activeClients.fetch_sub(1, std::memory_order_acq_rel);
@@ -578,19 +762,48 @@ namespace {
             RegisterSession(static_cast<ConnId>(client), tls);
         }
 
+        // AFTER the handshake, BEFORE the first byte of application data — so
+        // the banner below is already covered, and the early return above (a
+        // failed handshake) has nothing to unregister. See g_sendLocks.
+        RegisterSendLock(static_cast<ConnId>(client));
+
         SendLine(client, MakeOk(L"qIV " + std::wstring(Constants::APP_VERSION) +
                                 L" remote v" + std::to_wstring(RT::PROTOCOL_VERSION) +
                                 (cfg.name.empty() ? L"" : L" [" + cfg.name + L"]")), tls);
 
         if (Authenticate(client, cfg, accum, peer, tls)) {
+            // DEADLINE LIFTED, now that this peer has proved it is allowed to be
+            // here. An authenticated connection is expected to sit idle: a
+            // mirrored screen waits for the next keystroke on the driving
+            // instance, and that gap is minutes, not seconds. Keeping the
+            // handshake bound in force would drop exactly the connections the
+            // feature exists to hold open.
+            //
+            // What it cost the attacker is already paid — a slot can now only be
+            // held by someone who knows the password, which is a different
+            // problem with a different answer (MAX_CONNECTIONS, the AllowList).
+            const DWORD noTimeout = 0;
+            setsockopt(client, SOL_SOCKET, SO_RCVTIMEO,
+                       reinterpret_cast<const char *>(&noTimeout), sizeof(noTimeout));
+
             for (;;) {
                 if (g_stopRequested.load(std::memory_order_acquire)) {
                     SendLine(client, MakeErr(RT::ERR_INTERNAL, L"server shutting down"), tls);
+                    departure = L"(disconnected — server shutting down)";
                     break;
                 }
 
                 std::wstring line;
-                if (!RecvLine(client, accum, line, tls)) break;
+                if (!RecvLine(client, accum, line, tls)) {
+                    // One line covers three causes and they cannot be separated
+                    // here: a clean close, a reset, and — for an unauthenticated
+                    // peer — the handshake deadline all surface as a failed read.
+                    // The command loop only runs AFTER authentication, so by this
+                    // point there is no deadline left and it is genuinely the
+                    // peer that went away.
+                    departure = L"(disconnected — closed by peer)";
+                    break;
+                }
 
                 const RemoteRequest req = ParseLine(line);
 
@@ -605,6 +818,28 @@ namespace {
                         case Verb::Ping:
                             SendLine(client, MakeOk(L"pong"), tls);
                             break;
+                        case Verb::Hello: {
+                            // SANITISED HARD, because this is peer-chosen text
+                            // that goes straight into a log column. Control
+                            // characters and the log's own separators are out —
+                            // a name carrying a tab would split a saved row into
+                            // one that never happened — and the length is capped
+                            // so a peer cannot push the address out of view.
+                            std::wstring name;
+                            for (wchar_t ch : req.payload) {
+                                if (name.size() >= RT::PEER_NAME_MAX) break;
+                                if (ch < 0x20 || ch == 0x7F) continue;
+                                name += ch;
+                            }
+                            while (!name.empty() && name.back() == L' ') name.pop_back();
+
+                            SetPeerName(static_cast<ConnId>(client), name);
+                            // Answered so the client knows it was heard; the
+                            // name is echoed so a log at THAT end records what
+                            // this end actually stored after sanitising.
+                            SendLine(client, MakeOk(name), tls);
+                            break;
+                        }
                         case Verb::Version:
                             SendLine(client, MakeOk(std::wstring(Constants::APP_VERSION) +
                                                     L" protocol " +
@@ -674,17 +909,48 @@ namespace {
                             }
                         }
 
-                        if (!SendAll(client, ToUtf8(reply) + "\r\n", tls)) break;
+                        if (!SendAll(client, ToUtf8(reply) + "\r\n", tls)) {
+                            // Distinct from "closed by peer" on purpose: a write
+                            // that fails mid-image usually means a client that
+                            // stopped reading, not one that hung up, and the two
+                            // want different things looked at.
+                            departure = L"(dropped — send failed)";
+                            break;
+                        }
                         continue;
                     }
 
-                    if (!SendLine(client, call->result, tls)) break;
-                } else {
-                    if (!SendLine(client, MakeErr(RT::ERR_INTERNAL, L"viewer did not respond in time"), tls))
+                    if (!SendLine(client, call->result, tls)) {
+                        departure = L"(dropped — send failed)";
                         break;
+                    }
+                } else {
+                    if (!SendLine(client, MakeErr(RT::ERR_INTERNAL, L"viewer did not respond in time"), tls)) {
+                        departure = L"(dropped — send failed)";
+                        break;
+                    }
                 }
             }
+        } else {
+            // Authenticate has already sent the peer its ERR. This records the
+            // CONNECTION ENDING, which is a different fact and the one that
+            // closes the pair opened by the accept line.
+            departure = L"(disconnected — authentication failed)";
         }
+
+        // ONE DEPARTURE FOR EVERY ARRIVAL. Every path that reaches this point
+        // passed the accept line above, so the two always come in pairs and a
+        // connection still open is exactly an arrival with nothing under it.
+        // That is the property the log needs for "who is on this machine right
+        // now" to be answerable by reading it.
+        if (Log::IsEnabled())
+            // HOW LONG IT LASTED goes in the Δ column, which is otherwise "—" on
+            // a connection row. On a command row that column is a round trip; on
+            // this one it is the session, and the two are never confused because
+            // only these rows say "(connection)".
+            Log::Add(Log::Direction::In,
+                     NamedLabel(static_cast<ConnId>(client), who), departure,
+                     Log::SelfLabel(), L"(connection)", NowUs() - startedUs);
 
         // Leave the observer list BEFORE the socket closes. The UI thread emits
         // into these handles directly, and a closed socket still sitting in the
@@ -693,6 +959,11 @@ namespace {
         // Same ordering rule, same reason: nothing may look this connection's
         // session up after the stack frame holding it is gone.
         UnregisterSession(static_cast<ConnId>(client));
+        // Safe in either order with the push above — it holds a shared_ptr, so
+        // a lock it already took stays alive after this drops the map's copy.
+        UnregisterSendLock(static_cast<ConnId>(client));
+        // After the departure line above, which is the last row that wants it.
+        ForgetPeerName(static_cast<ConnId>(client));
 
         if (tls) tls->Shutdown(client);
         shutdown(client, SD_BOTH);
@@ -729,6 +1000,12 @@ namespace {
             const std::wstring peer = PeerAddress(ss);
             const Settings cfg = SnapshotCopy();
 
+            // Address for the RULES, address+port for the LOG. Kept apart on
+            // purpose: every list and table below is keyed by the bare address,
+            // and a port reaching any of them would break every rule ever typed.
+            const int          peerPort = PeerPort(ss);
+            const std::wstring who      = ConnLabel(peer, peerPort);
+
             // Gates in the order the spec fixes, and the order matters:
             // an address that fails 1 or 2 is told NOTHING, not even that
             // something is listening. Only a peer that has already proved it is
@@ -741,6 +1018,14 @@ namespace {
             // by the brute-force guard has to be refused from that moment, not
             // from the next restart.
             if (Blacklist::IsBlocked(peer)) {
+                // LOGGED, though the peer is told nothing. A refused connection
+                // never reaches ClientThread, so until now it left no trace at
+                // all — the one category of arrival the owner of an exposed
+                // listener most wants to see. The store is a fixed-size ring, so
+                // a scanner hammering the port rotates it rather than growing it.
+                if (Log::IsEnabled())
+                    Log::Add(Log::Direction::In, who, L"(refused — blacklisted)",
+                             Log::SelfLabel(), L"(connection)", -1);
                 closesocket(client);
                 continue;
             }
@@ -752,6 +1037,15 @@ namespace {
             // and removing it from the .ini really does lock this machine out.
             // A list that some addresses can bypass is not a list.
             if (cfg.allowList.empty() || !InList(cfg.allowList, peer)) {
+                // Which of the two it was, because they need opposite fixes: an
+                // empty list is a server nobody configured, a non-match is a
+                // rule that does not cover the address shown right here — and
+                // that address is the answer to "what should I have typed".
+                if (Log::IsEnabled())
+                    Log::Add(Log::Direction::In, who,
+                             cfg.allowList.empty() ? L"(refused — AllowList empty)"
+                                                   : L"(refused — not on the AllowList)",
+                             Log::SelfLabel(), L"(connection)", -1);
                 closesocket(client);
                 continue;
             }
@@ -768,6 +1062,9 @@ namespace {
             // served. The cap is not a security boundary, and a silent close is
             // honest enough.
             if (g_activeClients.load(std::memory_order_acquire) >= cfg.maxConnections) {
+                if (Log::IsEnabled())
+                    Log::Add(Log::Direction::In, who, L"(refused — connection limit reached)",
+                             Log::SelfLabel(), L"(connection)", -1);
                 if (!Tls::RequiredForAddress(peer))
                     SendLine(client, MakeErr(RT::ERR_TOO_MANY_CLIENTS,
                                              L"connection limit reached"));
@@ -780,7 +1077,7 @@ namespace {
             NotifyClientsChanged();
             // Detached: a client's lifetime is its socket's, and Stop() closes
             // the sockets rather than joining every conversation.
-            std::thread(ClientThread, client, cfg, g_owner, peer).detach();
+            std::thread(ClientThread, client, cfg, g_owner, peer, peerPort).detach();
         }
 
         g_running.store(false, std::memory_order_release);
@@ -907,6 +1204,10 @@ bool Start(HWND hOwner, std::wstring &errorOut) {
         g_snapshot = cfg;
     }
     SetEndpoint(cfg.bindAddress + L":" + std::to_wstring(cfg.port));
+    // The saved log's preamble names it, so a reader can tell this instance's
+    // own address from a peer's — which matters most when they are the same,
+    // because a second copy on this box may dial in over the LAN address.
+    Log::SetSelfEndpoint(cfg.bindAddress + L":" + std::to_wstring(cfg.port));
 
     g_owner = hOwner;
     g_listenSocket.store(s, std::memory_order_release);
@@ -939,6 +1240,7 @@ void Stop() {
 
     g_running.store(false, std::memory_order_release);
     SetEndpoint({});
+    Log::SetSelfEndpoint({});
     NotifyClientsChanged();   // the overlay indicator goes away
 
     // Releases the TLS credentials and deletes the key container importing the
@@ -1107,11 +1409,36 @@ void EmitToObservers(const std::wstring &line, ConnId except, bool positional) {
                        ? static_cast<int>(bytes.size())
                        : 0;
         } else {
-            u_long nb = 1;
-            ioctlsocket(s, FIONBIO, &nb);
-            sent = send(s, bytes.data(), static_cast<int>(bytes.size()), 0);
-            nb = 0;
-            ioctlsocket(s, FIONBIO, &nb);
+            // Same two rules as the TLS branch, reached differently.
+            //
+            // 1. NEVER WAIT FOR THE CLIENT THREAD. try_lock, and a failure drops
+            //    the event — blocking here to take a lock that thread holds for
+            //    the length of an image transfer would freeze the viewer.
+            //
+            // 2. WRITABILITY IS TESTED, NOT IMPOSED. This used to flip the
+            //    socket to non-blocking and back around the send. That mode is a
+            //    property of the SOCKET, not of the call: the client thread is
+            //    sitting in recv() on the same handle, and a recv entering
+            //    during the flip returns WSAEWOULDBLOCK instead of blocking. Its
+            //    RecvLine reads n <= 0 as "the peer is gone" and tears the
+            //    connection down — an observer dropped at random the moment
+            //    somebody presses a key was this race. select() answers the same
+            //    question without touching state the other thread depends on.
+            const std::shared_ptr<std::mutex> lock = SendLockFor(static_cast<ConnId>(s));
+            std::unique_lock<std::mutex> guard;
+            if (lock) guard = std::unique_lock<std::mutex>(*lock, std::try_to_lock);
+
+            if (!lock || guard.owns_lock()) {
+                fd_set wr;
+                FD_ZERO(&wr);
+                FD_SET(s, &wr);
+                timeval zero{0, 0};
+                // Writable means the send buffer has room, and one EVENT line
+                // fits in whatever is left of 64 KB — which is what lets the
+                // all-or-nothing check below stand in for a partial write.
+                if (select(0, nullptr, &wr, nullptr, &zero) > 0 && FD_ISSET(s, &wr))
+                    sent = send(s, bytes.data(), static_cast<int>(bytes.size()), 0);
+            }
         }
 
         // The OTHER outbound path — this one deliberately bypasses SendLine to
@@ -1120,7 +1447,7 @@ void EmitToObservers(const std::wstring &line, ConnId except, bool positional) {
         // is reported honestly: a dropped event is exactly the thing you would
         // open the log to discover.
         if (Log::IsEnabled())
-            Log::Add(Log::Direction::Out, Log::SelfName(),
+            Log::Add(Log::Direction::Out, Log::SelfLabel(),
                      std::wstring(RT::RESP_EVENT) + L" " + line, PeerLabel(s),
                      sent == static_cast<int>(bytes.size()) ? L"(pushed)"
                                                             : L"(dropped — observer not reading)",

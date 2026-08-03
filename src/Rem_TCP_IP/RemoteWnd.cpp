@@ -150,7 +150,8 @@ void RemoteWnd::BuildRows() {
     // ends up empty, denying everyone), so it is the part that must survive.
     add(Kind::Text, L"AllowList", OrUnset(Remote::JoinList(c.allowList)),
         L"Separate with , or ; — NOT a space. IPs allowed to connect; empty denies "
-        L"everyone. Trailing * matches a subnet: 192.168.1.*", R_ALLOW);
+        L"everyone. 192.168.1.* or 192.168.0.0/24 or 192.168.0.10-50. No domain names",
+        R_ALLOW);
     // Not a settings field any more — it is qivRemoteServerBlacklist.ini, which
     // qIV also writes to on its own. Typing here APPENDS to that file rather
     // than replacing a value, so the row shows a count instead of a list: it

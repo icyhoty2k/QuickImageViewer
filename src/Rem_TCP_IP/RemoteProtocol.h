@@ -101,6 +101,16 @@ namespace Remote {
         Help,     // the reachable-command listing, built from the table below
         Ping,     // liveness check that executes nothing
         Version,  // app version + protocol version
+        // "hello <name>" — the client says what to CALL it. Optional, sent once
+        // after authentication, and it changes nothing about what the connection
+        // may do; it exists so the Ctrl+F12 log can name a peer instead of only
+        // addressing it. An address is not an identity when three phones share a
+        // router, and it is not even unique when a second instance on this very
+        // machine dials in over the LAN address.
+        //
+        // The payload is a LABEL, never a credential. It is chosen by the peer,
+        // so nothing may be decided by it — see how the server stores it.
+        Hello,
     };
 
     struct RemoteRequest {
