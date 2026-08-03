@@ -4,6 +4,7 @@
 #include <vector>
 #include "UI/FloatingPanels/FloatingPanelWnd.h"
 #include "UI/CustomControls/InputBox.h"
+#include "RemoteServer.h"   // ClientInfo — the live connection rows
 
 // =============================================================================
 // RemoteWnd (F9, "Local Server") — configure and control the TCP/IP listener
@@ -79,6 +80,17 @@ class RemoteWnd : public FloatingPanelWnd {
         void DoStop();
         void DoSaveToIni();        // seeded generation — may create the .ini
 
+        // Act on the selected connection row. Both confirm first: neither is
+        // undoable from here — a kicked client is simply gone, and an unban
+        // means editing qivRemoteServerBlacklist.ini by hand.
+        void DoKickSelected();
+        void DoBanSelected();
+
+        // Index into m_conns for the selected row, or -1 when the selection is
+        // an ordinary settings row. The one place the R_CONN_BASE band is
+        // decoded, so the arithmetic exists once.
+        int  SelectedConnIndex() const;
+
         // --- Model -----------------------------------------------------------
         void BuildRows();
         void EditRow(int rowIndex);
@@ -108,6 +120,13 @@ class RemoteWnd : public FloatingPanelWnd {
 
         std::vector<Row>    m_rows;
         std::vector<Button> m_buttons;
+
+        // The connection snapshot the current rows were built from. Held so a
+        // button press can map the selected ROW back to a ConnId without asking
+        // the server again — re-querying between the click and the action would
+        // let the list shift under the operator and act on a different peer than
+        // the one they were looking at.
+        std::vector<Remote::ClientInfo> m_conns;
         int m_selected  = 0;
         int m_hotRow    = -1;
         int m_hotButton = -1;

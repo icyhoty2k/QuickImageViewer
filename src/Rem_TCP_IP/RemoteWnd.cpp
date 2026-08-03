@@ -42,12 +42,35 @@ namespace {
     // one blank line.
     constexpr int FOOTER_H = 64;
 
-    enum ButtonId { BTN_START = 1, BTN_STOP, BTN_SAVE };
+    enum ButtonId { BTN_START = 1, BTN_STOP, BTN_SAVE, BTN_KICK, BTN_BAN };
 
     enum RowId {
         R_NONE = 0,
         R_ENABLE, R_NAME, R_BIND, R_PORT, R_ALLOW, R_BLOCK, R_PASSWORD, R_MAXCONN,
+
+        // Connection rows occupy a BAND rather than named ids, because there is
+        // one per live client and the count is not known until BuildRows runs.
+        // Well clear of the settings ids above so the two can never collide, and
+        // decoded in exactly one place — SelectedConnIndex.
+        R_CONN_BASE = 1000,
     };
+
+    // Shown under every connection row. A literal because Row::desc is a
+    // const wchar_t* — the rows do not own their description strings.
+    constexpr const wchar_t *CONN_DESC =
+        L"Select a connection, then Kick (close it — it may reconnect) or "
+        L"Ban (blacklist it first, then close it).";
+
+    // "3s", "4m", "2h" — one unit, because this column answers "is that the
+    // client I just started" and never needs to be more precise than that.
+    std::wstring Elapsed(long long sinceMs) {
+        const long long ms = static_cast<long long>(GetTickCount64()) - sinceMs;
+        if (ms < 0) return L"0s";               // clock went backwards; not worth a branch elsewhere
+        const long long sec = ms / 1000;
+        if (sec < 60)   return std::to_wstring(sec) + L"s";
+        if (sec < 3600) return std::to_wstring(sec / 60) + L"m";
+        return std::to_wstring(sec / 3600) + L"h";
+    }
 
     bool BgIsDark(COLORREF bg) {
         const int lum = (GetRValue(bg) * 299 + GetGValue(bg) * 587 + GetBValue(bg) * 114) / 1000;
@@ -171,11 +194,60 @@ void RemoteWnd::BuildRows() {
     add(Kind::Number, L"Max connections", std::to_wstring(c.maxConnections),
         L"Simultaneous clients, 1-99. Further callers are told the limit was reached.", R_MAXCONN);
 
+    // --- Live connections ---------------------------------------------------
+    //
+    // A SNAPSHOT, taken here and held in m_conns until the next BuildRows. The
+    // section is omitted entirely when nothing is connected rather than showing
+    // an empty header, so a quiet server does not grow a section that is only
+    // ever blank.
+    m_conns = Remote::IsRunning() ? Remote::Connections()
+                                  : std::vector<Remote::ClientInfo>{};
+    if (!m_conns.empty()) {
+        add(Kind::Header, L"Connections", L"", L"", R_NONE);
+        for (size_t i = 0; i < m_conns.size(); ++i) {
+            const Remote::ClientInfo &ci = m_conns[i];
+
+            // ADDRESS AS THE LABEL, name as part of the value. The name is the
+            // only string on the wire a peer chooses about itself, so it never
+            // stands where the identity goes — see g_peerNames in RemoteServer.
+            std::wstring value;
+            if (!ci.name.empty()) value = ci.name + L" — ";
+            value += ci.tls ? L"TLS" : L"plain";
+            if (ci.sameMachine) value += L", this machine";
+            value += L", " + Elapsed(ci.sinceMs);
+
+            Row r;
+            r.kind  = Kind::ReadOnly;
+            r.label = Remote::FormatEndpoint(ci.address, ci.port);
+            r.value = std::move(value);
+            r.desc  = CONN_DESC;
+            r.id    = R_CONN_BASE + static_cast<int>(i);
+            m_rows.push_back(std::move(r));
+        }
+    }
+
     m_buttons.clear();
     const bool running = Remote::IsRunning();
+    // Enabled only with a connection row selected, so neither can fire against
+    // a settings row — the alternative is a button that is always pressable and
+    // usually does nothing, which reads as broken.
+    const bool haveConn = SelectedConnIndex() >= 0;
     m_buttons.push_back({L"Start",       BTN_START, {}, !running, 0});
     m_buttons.push_back({L"Stop",        BTN_STOP,  {},  running, 0});
+    m_buttons.push_back({L"Kick",        BTN_KICK,  {}, haveConn, 0});
+    m_buttons.push_back({L"Ban",         BTN_BAN,   {}, haveConn, 0});
     m_buttons.push_back({L"Save to INI", BTN_SAVE,  {}, true,     0});
+}
+
+int RemoteWnd::SelectedConnIndex() const {
+    if (m_selected < 0 || m_selected >= static_cast<int>(m_rows.size())) return -1;
+    const int id = m_rows[m_selected].id;
+    if (id < R_CONN_BASE) return -1;
+    const int idx = id - R_CONN_BASE;
+    // Bounds-checked against the snapshot rather than trusted from the row: the
+    // two are rebuilt together, but a stale row surviving a rebuild would index
+    // out of a shorter vector, and that is a crash rather than a wrong answer.
+    return idx < static_cast<int>(m_conns.size()) ? idx : -1;
 }
 
 std::wstring RemoteWnd::StatusLine() const {
@@ -227,6 +299,62 @@ void RemoteWnd::DoStart() {
 void RemoteWnd::DoStop() {
     Remote::Stop();
     m_lastResult = L"Stopped.";
+    BuildRows();
+    Repaint();
+}
+
+void RemoteWnd::DoKickSelected() {
+    const int idx = SelectedConnIndex();
+    if (idx < 0) return;
+    const Remote::ClientInfo &ci = m_conns[static_cast<size_t>(idx)];
+    const std::wstring where = Remote::FormatEndpoint(ci.address, ci.port);
+
+    if (!DialogConfirm(L"Close the connection from " + where + L"?\r\n\r\n"
+                       L"This does not block the address — the same client may "
+                       L"reconnect immediately. Use Ban for that.",
+                       L"Local Server"))
+        return;
+
+    // False means it ended on its own between the panel being drawn and the
+    // button being pressed. Said out loud rather than silently ignored: the row
+    // vanishing on the next rebuild would otherwise look like the kick worked.
+    m_lastResult = Remote::KickConnection(ci.id)
+                       ? L"Kicked " + where
+                       : L"That connection had already closed.";
+    BuildRows();
+    Repaint();
+}
+
+void RemoteWnd::DoBanSelected() {
+    const int idx = SelectedConnIndex();
+    if (idx < 0) return;
+    const Remote::ClientInfo &ci = m_conns[static_cast<size_t>(idx)];
+    const std::wstring where = Remote::FormatEndpoint(ci.address, ci.port);
+
+    // WHAT WILL ACTUALLY BE WRITTEN, computed before the question is asked. For
+    // IPv6 that is a /64 rather than the address on the row, and banning a
+    // prefix without having said so would be the panel doing something wider
+    // than it appeared to offer.
+    const std::wstring scope = Remote::BlockScope(ci.address);
+    const bool         wider = (scope != ci.address);
+
+    std::wstring text = L"Block " + scope + L" and close this connection?\r\n\r\n";
+    if (wider)
+        text += L"That is the whole /64 this client's address belongs to, not "
+                L"just " + ci.address + L". A single IPv6 address is not worth "
+                L"blocking — the peer has billions of others in that same "
+                L"prefix.\r\n\r\n";
+    text += L"Written to qivRemoteServerBlacklist.ini. Undo it by editing or "
+            L"deleting that file.";
+
+    if (!DialogConfirm(text, L"Local Server")) return;
+
+    std::wstring written;
+    m_lastResult = Remote::BanConnection(ci.id, written)
+                       ? L"Blocked " + written
+                       : L"That connection had already closed — nothing was blocked.";
+    // The BlackList row above counts the file, so it is stale the moment a ban
+    // lands. Rebuilding refreshes both it and the connection list.
     BuildRows();
     Repaint();
 }
@@ -344,6 +472,12 @@ void RemoteWnd::EditRow(int rowIndex) {
         }
 
         default:
+            // A CONNECTION ROW IS NOT EDITABLE. Without this it falls into the
+            // text editor below and offers to let someone retype a live peer's
+            // address, which edits nothing and looks like it edited something.
+            // Clicking one selects it, and the selection is the whole point —
+            // it is what Kick and Ban act on.
+            if (r.id >= R_CONN_BASE) { Repaint(); return; }
             BeginTextEdit(rowIndex);
             return;
     }
@@ -522,7 +656,18 @@ void RemoteWnd::DestroyBackBuffer() {
     m_bbDC = nullptr; m_bbBmp = nullptr; m_bbBmpOld = nullptr; m_bbW = m_bbH = 0;
 }
 
-void RemoteWnd::Repaint() { if (GetHwnd()) InvalidateRect(GetHwnd(), nullptr, FALSE); }
+void RemoteWnd::Repaint() {
+    // Kick and Ban follow the SELECTION, and the selection moves without
+    // rebuilding rows — arrow keys and a click on a row both just repaint. Done
+    // here rather than at each of those sites because it is the one call every
+    // one of them already makes, so a new way to move the selection cannot
+    // forget it and leave two buttons lying about what they will act on.
+    const bool haveConn = SelectedConnIndex() >= 0;
+    for (Button &b : m_buttons)
+        if (b.id == BTN_KICK || b.id == BTN_BAN) b.enabled = haveConn;
+
+    if (GetHwnd()) InvalidateRect(GetHwnd(), nullptr, FALSE);
+}
 
 int RemoteWnd::HitTestRow(POINT pt) const {
     for (size_t i = 0; i < m_rows.size(); ++i)
@@ -633,9 +778,11 @@ LRESULT RemoteWnd::HandlePanelMessage(UINT message, WPARAM wParam, LPARAM lParam
             const int b = HitTestButton(pt);
             if (b >= 0) {
                 switch (m_buttons[b].id) {
-                    case BTN_START: DoStart();     break;
-                    case BTN_STOP:  DoStop();      break;
-                    case BTN_SAVE:  DoSaveToIni(); break;
+                    case BTN_START: DoStart();        break;
+                    case BTN_STOP:  DoStop();         break;
+                    case BTN_KICK:  DoKickSelected(); break;
+                    case BTN_BAN:   DoBanSelected();  break;
+                    case BTN_SAVE:  DoSaveToIni();    break;
                     default: break;
                 }
                 return 0;

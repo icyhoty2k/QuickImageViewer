@@ -3,6 +3,7 @@
 #include <atomic>
 #include <memory>
 #include <string>
+#include <vector>   // Connections() — the F9 panel's live list
 #include "RemoteProtocol.h"
 #include "RemoteInbound.h"
 
@@ -77,6 +78,63 @@ namespace Remote {
 
     // Live client count, for the panel's status line.
     int ActiveConnections();
+
+    // =========================================================================
+    // LIVE CONNECTIONS, AND EJECTING THEM — the F9 panel's Kick and Ban.
+    //
+    // DELIBERATELY NOT ON THE WIRE. Neither of these appears in the command
+    // table and neither should: `ban` writes access-control state to a file that
+    // is read before every accept and survives a restart, which is the same
+    // category as delete/move/save that NEVER_REMOTE keeps off the wire. A
+    // remotely reachable ban would also let any authenticated peer blacklist the
+    // OPERATOR's own address — turning one leaked password into a lockout that
+    // can only be undone by hand-editing a file on the machine itself.
+    //
+    // These are called from the panel, on the UI thread, and nowhere else.
+    // =========================================================================
+
+    struct ClientInfo {
+        ConnId       id;              // the value Kick/Ban take
+        std::wstring address;         // bare peer address — no port, no brackets
+        int          port        = 0; // the peer's source port
+        std::wstring name;            // from `hello <name>`; empty until sent
+        long long    sinceMs     = 0; // connected at, GetTickCount64 base
+        bool         tls         = false;
+        bool         sameMachine = false;
+    };
+
+    // Snapshot of what is connected right now, ordered oldest first. A snapshot
+    // because a connection can end between the call and the next line — Kick and
+    // Ban both tolerate an id that has since gone away.
+    //
+    // Includes connections that have not finished the TLS handshake or
+    // authenticated: those are precisely the ones an operator wants to eject.
+    std::vector<ClientInfo> Connections();
+
+    // Closes one connection. False when the id is no longer live.
+    //
+    // shutdown(), NOT closesocket(): the client thread owns that socket and will
+    // close it itself. Shutting it down makes its blocked recv() return, so the
+    // thread unwinds through its ordinary path — logging its departure, leaving
+    // the observer list, releasing its locks. Closing the descriptor from here
+    // would race that thread and could shutdown a number the system had already
+    // reissued.
+    //
+    // NOT a ban. The same peer may reconnect immediately.
+    bool KickConnection(ConnId id);
+
+    // Blacklists the peer, then kicks it. In that order, so a reconnect racing
+    // the disconnect is refused at the accept gate rather than admitted.
+    //
+    // What gets WRITTEN is BlockScope(address) — the exact address for IPv4, the
+    // /64 for IPv6. Banning one v6 address is close to useless, since the peer
+    // has 2^64 of them; see the note on BlockScope in RemoteSettings.h, which is
+    // the same rule the brute-force guard applies.
+    //
+    // `scopeOut` receives what was actually written, so the panel can tell the
+    // operator they just banned a prefix rather than an address. False when the
+    // id is no longer live, in which case nothing is written.
+    bool BanConnection(ConnId id, std::wstring &scopeOut);
 
     // True when the RUNNING listener is speaking TLS. False when stopped, and
     // false for a loopback-bound listener, which is plaintext by design.

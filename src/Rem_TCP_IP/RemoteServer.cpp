@@ -270,6 +270,37 @@ namespace {
         return it == g_peerNames.end() ? std::wstring() : it->second;
     }
 
+    // ConnId → the FACTS about that connection, for the F9 panel's live list and
+    // for Kick/Ban to act on a row the operator can actually see.
+    //
+    // A fourth map keyed by ConnId rather than fields bolted onto one of the
+    // three above, because its lifetime is deliberately the WIDEST of them: a
+    // connection appears here before the TLS handshake, so a peer stalling in
+    // the handshake — the one an operator most wants to eject — is listed and
+    // kickable. The session and send-lock maps cannot start that early, since
+    // neither thing exists yet.
+    //
+    // `address` is the bare peer address, kept because Ban needs it AFTER the
+    // socket is gone; ConnLabel's combined form cannot be taken apart again.
+    struct LiveConn {
+        std::wstring address;
+        int          port        = 0;
+        long long    sinceMs     = 0;
+        bool         tls         = false;
+        bool         sameMachine = false;
+    };
+    std::map<ConnId, LiveConn> g_liveConns;
+    std::mutex                 g_liveConnMutex;
+
+    void RegisterLiveConn(ConnId c, const LiveConn &info) {
+        std::lock_guard<std::mutex> lk(g_liveConnMutex);
+        g_liveConns[c] = info;
+    }
+    void UnregisterLiveConn(ConnId c) {
+        std::lock_guard<std::mutex> lk(g_liveConnMutex);
+        g_liveConns.erase(c);
+    }
+
     void RegisterSendLock(ConnId c) {
         std::lock_guard<std::mutex> lk(g_sendLockMutex);
         g_sendLocks[c] = std::make_shared<std::mutex>();
@@ -715,6 +746,22 @@ namespace {
         // otherwise wait in recv() forever on a connection that is already gone.
         EnableKeepAlive(static_cast<UINT_PTR>(client));
 
+        // LISTED FROM HERE, before the TLS handshake — see g_liveConns. Both
+        // exits below unregister; there are exactly two, and the early one is
+        // the failed handshake a few lines down.
+        {
+            LiveConn info;
+            info.address     = peer;
+            info.port        = peerPort;
+            info.sinceMs     = NowMs();
+            // The DECISION, which is known before the handshake runs and does
+            // not depend on it succeeding — the same rule the peer is about to
+            // be held to.
+            info.tls         = Tls::RequiredForAddress(peer);
+            info.sameMachine = PeerIsSameMachine(client);
+            RegisterLiveConn(static_cast<ConnId>(client), info);
+        }
+
         // TLS FIRST, before the banner — the banner is already application data
         // and must travel inside the tunnel, not in front of it.
         //
@@ -770,6 +817,7 @@ namespace {
                 if (Log::IsEnabled())
                     Log::Add(Log::Direction::In, who, L"(dropped — TLS handshake failed)",
                              Log::SelfLabel(), L"(connection)", NowUs() - startedUs);
+                UnregisterLiveConn(static_cast<ConnId>(client));
                 shutdown(client, SD_BOTH);
                 closesocket(client);
                 g_activeClients.fetch_sub(1, std::memory_order_acq_rel);
@@ -983,6 +1031,11 @@ namespace {
         UnregisterSendLock(static_cast<ConnId>(client));
         // After the departure line above, which is the last row that wants it.
         ForgetPeerName(static_cast<ConnId>(client));
+        // Last of the four, and BEFORE the socket closes: a row the panel can
+        // still see is a row Kick can still act on, and acting on it once the
+        // descriptor is closed would be a shutdown() against a number the
+        // system may already have handed to something else.
+        UnregisterLiveConn(static_cast<ConnId>(client));
 
         if (tls) tls->Shutdown(client);
         shutdown(client, SD_BOTH);
@@ -1298,6 +1351,77 @@ void Stop() {
 bool IsRunning() { return g_running.load(std::memory_order_acquire); }
 
 int ActiveConnections() { return g_activeClients.load(std::memory_order_acquire); }
+
+// =============================================================================
+// Live connections — Kick and Ban. UI thread only; see the header.
+// =============================================================================
+
+std::vector<ClientInfo> Connections() {
+    std::vector<ClientInfo> out;
+    {
+        std::lock_guard<std::mutex> lk(g_liveConnMutex);
+        out.reserve(g_liveConns.size());
+        for (const auto &[id, c] : g_liveConns) {
+            ClientInfo info;
+            info.id          = id;
+            info.address     = c.address;
+            info.port        = c.port;
+            info.sinceMs     = c.sinceMs;
+            info.tls         = c.tls;
+            info.sameMachine = c.sameMachine;
+            out.push_back(std::move(info));
+        }
+    }
+
+    // The NAME is filled outside the connection lock, because PeerNameFor takes
+    // a different mutex and holding two of them in an order nothing else agrees
+    // on is how a deadlock is built. A name that arrives between the two loops
+    // simply shows up on the next refresh.
+    for (ClientInfo &info : out) info.name = PeerNameFor(info.id);
+
+    // OLDEST FIRST, so the list does not reorder under the operator's cursor
+    // every time somebody connects. The map is keyed by socket, and socket
+    // numbers are reused — they are not an arrival order.
+    std::sort(out.begin(), out.end(),
+              [](const ClientInfo &a, const ClientInfo &b) { return a.sinceMs < b.sinceMs; });
+    return out;
+}
+
+bool KickConnection(ConnId id) {
+    {
+        std::lock_guard<std::mutex> lk(g_liveConnMutex);
+        if (!g_liveConns.count(id)) return false;
+    }
+
+    // OUTSIDE the lock, and see the header for why this is shutdown() rather
+    // than closesocket(). The client thread notices its read failing, unwinds
+    // through the ordinary departure path, and unregisters itself — so nothing
+    // here erases the map entry.
+    shutdown(static_cast<SOCKET>(id), SD_BOTH);
+    return true;
+}
+
+bool BanConnection(ConnId id, std::wstring &scopeOut) {
+    std::wstring address;
+    {
+        std::lock_guard<std::mutex> lk(g_liveConnMutex);
+        auto it = g_liveConns.find(id);
+        if (it == g_liveConns.end()) return false;
+        address = it->second.address;
+    }
+    if (address.empty()) return false;
+
+    scopeOut = BlockScope(address);
+
+    // BLACKLIST FIRST, THEN KICK. The other order leaves a gap: the peer's
+    // socket closes, it reconnects immediately, and the accept gate has not been
+    // told about it yet — so the ban silently fails to take on exactly the peer
+    // it was aimed at. Written before the connection is torn down, that race
+    // does not exist.
+    Blacklist::Add(scopeOut, Constants::Messages::BLACKLIST_REASON_OPERATOR);
+    KickConnection(id);
+    return true;
+}
 
 bool IsEncrypted() {
     if (!g_running.load(std::memory_order_acquire)) return false;
