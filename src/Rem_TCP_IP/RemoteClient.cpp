@@ -111,6 +111,26 @@ namespace {
         }
     }
 
+    // What this instance calls itself to a server, for that server's log.
+    //
+    // The F9 name when there is one - it is what the user already calls this
+    // machine everywhere else in the remote UI, so it needs no explaining at the
+    // other end. The COMPUTER NAME when there is not, and that fallback is the
+    // point rather than a nicety: an instance that only DRIVES others never
+    // needed an F9 name, has no listener of its own, and is therefore exactly
+    // the case where the far end has nothing but an address to go on.
+    //
+    // Never empty, so the announcement is never skipped for want of a label.
+    std::wstring SelfAnnounceName() {
+        if (const std::wstring configured = Config().name; !configured.empty())
+            return configured;
+
+        wchar_t host[MAX_COMPUTERNAME_LENGTH + 1] = {};
+        DWORD   n = MAX_COMPUTERNAME_LENGTH + 1;
+        if (GetComputerNameW(host, &n) && host[0]) return host;
+        return L"qIV";
+    }
+
     // Non-blocking connect with an explicit deadline. This is the whole reason
     // the client does not simply call connect() and hope.
     bool ConnectWithTimeout(SOCKET s, const sockaddr *addr, int addrLen, int timeoutMs) {
@@ -396,8 +416,8 @@ bool Client::DoConnectBody(const std::wstring &host, int port,
         // reply. The name is a label, not a credential, and this is deliberately
         // sent AFTER authentication — nothing may be decided by a string a peer
         // chooses about itself.
-        if (const std::wstring self = Config().name; !self.empty()) {
-            SendAll(s, ToUtf8(L"hello " + self) + "\r\n", tls);
+        {
+            SendAll(s, ToUtf8(L"hello " + SelfAnnounceName()) + "\r\n", tls);
             std::wstring ack;
             RecvLine(s, m_accum, ack, tls);   // consumed so it cannot be read as a reply
         }
@@ -521,8 +541,8 @@ bool Client::DoConnectBody(const std::wstring &host, int port,
     // reply. The name is a label, not a credential, and this is deliberately
     // sent AFTER authentication — nothing may be decided by a string a peer
     // chooses about itself.
-    if (const std::wstring self = Config().name; !self.empty()) {
-        SendAll(s, ToUtf8(L"hello " + self) + "\r\n", tls);
+    {
+        SendAll(s, ToUtf8(L"hello " + SelfAnnounceName()) + "\r\n", tls);
         std::wstring ack;
         RecvLine(s, m_accum, ack, tls);   // consumed so it cannot be read as a reply
     }
