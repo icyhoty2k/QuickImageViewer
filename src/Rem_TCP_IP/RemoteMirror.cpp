@@ -1080,7 +1080,7 @@ int AddTarget(const std::wstring &name, const std::wstring &host, int port,
     // How the log names the far end. Set before the sender thread starts, so
     // even the first handshake is recorded against a readable name rather than
     // an address.
-    t->client.SetPeerLabel(name.empty() ? (host + L":" + std::to_wstring(port)) : name);
+    t->client.SetPeerLabel(name.empty() ? FormatEndpoint(host, port) : name);
     // Set before any connect attempt: the pin is checked during the TLS
     // handshake, which happens before the banner, so supplying it afterwards
     // would be supplying it too late.
@@ -1252,7 +1252,7 @@ int RequestDisplayedImage(std::wstring &fromName) {
     if (!chosen) return 0;
 
     fromName = chosen->name.empty()
-                   ? (chosen->host + L":" + std::to_wstring(chosen->port))
+                   ? FormatEndpoint(chosen->host, chosen->port)
                    : chosen->name;
 
     QueuedLine job;

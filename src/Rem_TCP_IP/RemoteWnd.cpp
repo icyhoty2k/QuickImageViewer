@@ -138,7 +138,9 @@ void RemoteWnd::BuildRows() {
         L"this as the row's identity, and names have to be distinct.", R_NAME);
     add(Kind::Choice, L"Bind address", c.bindAddress,
         L"CLICK CYCLES: 127.0.0.1 (this machine only, no firewall prompt) → 0.0.0.0 "
-        L"(every interface, needs TLS + a password) → type your own.", R_BIND);
+        L"(every IPv4 interface, needs TLS + a password) → :: (every interface, "
+        L"IPv6 AND IPv4 — use this one to be reachable over the internet) → "
+        L"type your own.", R_BIND);
     add(Kind::Number, L"Port",
         c.port == RT::PORT_UNSET ? std::wstring(L"(not set)") : std::to_wstring(c.port),
         L"The port to listen on, 1-65535.", R_PORT);
@@ -308,10 +310,11 @@ void RemoteWnd::EditRow(int rowIndex) {
             return;
 
         case R_BIND: {
-            // Cycle the two useful literals, then fall through to free text —
-            // those two cover almost every case and typing them is error-prone.
+            // Cycle the three useful literals, then fall through to free text —
+            // those three cover almost every case and typing them is error-prone.
             if (c.bindAddress == RT::BIND_ADDRESS_DEFAULT)      c.bindAddress = RT::BIND_ADDRESS_ANY;
-            else if (c.bindAddress == RT::BIND_ADDRESS_ANY)     { BeginTextEdit(rowIndex); return; }
+            else if (c.bindAddress == RT::BIND_ADDRESS_ANY)     c.bindAddress = RT::BIND_ADDRESS_ANY6;
+            else if (c.bindAddress == RT::BIND_ADDRESS_ANY6)    { BeginTextEdit(rowIndex); return; }
             else                                                c.bindAddress = RT::BIND_ADDRESS_DEFAULT;
             BuildRows();
             Repaint();

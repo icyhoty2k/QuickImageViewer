@@ -464,13 +464,13 @@ bool LoadFrom(const std::wstring &path, std::wstring &errorOut) {
             if (line == FILE_HEADER_V1) {
                 version = 1;
             } else {
-                const std::vector<std::wstring> h = SplitTabs(line);
-                if (h.size() < 2 || h[0] != FILE_MAGIC) {
+                const std::vector<std::wstring> header = SplitTabs(line);
+                if (header.size() < 2 || header[0] != FILE_MAGIC) {
                     errorOut = L"That is not a qIV remote log.\r\n\r\nThe first line "
                                L"must be the header qIV writes when it saves one.";
                     return false;
                 }
-                version = static_cast<int>(ToLL(h[1]));
+                version = static_cast<int>(ToLL(header[1]));
                 if (version != FILE_VERSION) {
                     errorOut = L"That log was written by a different version of qIV "
                                L"and this build cannot read its columns.";

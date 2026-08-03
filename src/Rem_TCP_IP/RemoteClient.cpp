@@ -309,6 +309,14 @@ bool Client::DoConnectBody(const std::wstring &host, int port,
     setsockopt(s, SOL_SOCKET, SO_RCVTIMEO, reinterpret_cast<const char *>(&io), sizeof(io));
     setsockopt(s, SOL_SOCKET, SO_SNDTIMEO, reinterpret_cast<const char *>(&io), sizeof(io));
 
+    // The other half of the NAT problem. This end has IO_TIMEOUT_MS on every
+    // read, so a dead connection surfaces here within seconds of anything being
+    // SENT — but a mirror sender that has nothing to send sits between two
+    // sends for minutes, which is exactly the gap a router closes the mapping
+    // in. Keepalive is what turns that into a detected disconnect and a
+    // reconnect attempt, rather than a send that fails much later.
+    EnableKeepAlive(static_cast<UINT_PTR>(s));
+
     m_sock = static_cast<UINT_PTR>(s);
     m_accum.clear();
     m_tls.reset();
@@ -568,10 +576,10 @@ bool Client::DoConnect(const std::wstring &host, int port,
     // The label may not be set yet on the very first attempt, so the address is
     // used — it is what was dialled, which is the useful thing here anyway.
     if (Log::IsEnabled()) {
-        const std::wstring peer =
-            m_peerLabel.empty() ? (host + L":" + std::to_wstring(port)) : m_peerLabel;
+        const std::wstring endpoint = FormatEndpoint(host, port);
+        const std::wstring peer     = m_peerLabel.empty() ? endpoint : m_peerLabel;
         Log::Add(Log::Direction::Out, Log::SelfLabel(),
-                 L"connect " + host + L":" + std::to_wstring(port),
+                 L"connect " + endpoint,
                  peer, ok ? (m_banner.empty() ? L"OK connected" : m_banner) : errorOut,
                  LogNowUs() - t0);
     }
@@ -693,7 +701,7 @@ bool Probe(const std::wstring &host, int port, const std::wstring &password,
     Client c;
     // A short-lived client with no target behind it, so the address IS the name.
     // Labelled anyway — an unlabelled row in the log reads as a bug.
-    c.SetPeerLabel(host + L":" + std::to_wstring(port));
+    c.SetPeerLabel(FormatEndpoint(host, port));
     if (!c.Connect(host, port, password, errorOut)) return false;
 
     std::wstring reply;
