@@ -1076,7 +1076,7 @@ LRESULT RemoteCmdWnd::HandlePanelMessage(UINT message, WPARAM wParam, LPARAM lPa
                         SetTextColor(bb, ticked ? PC::PATH : dim);
                         RECT hr{rr.left + static_cast<int>(176 * s), ry,
                                 rr.right - static_cast<int>(6 * s), ry + rowH};
-                        const std::wstring addr = t.host + L":" + std::to_wstring(t.port);
+                        const std::wstring addr = Remote::FormatEndpoint(t.host, t.port);
                         DrawTextW(bb, addr.c_str(), -1, &hr,
                                   DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
                     }

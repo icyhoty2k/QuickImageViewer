@@ -652,6 +652,11 @@ namespace Constants {
         // gate gives it no special status, so it can be removed like any entry.
         constexpr const wchar_t *BIND_ADDRESS_DEFAULT = L"127.0.0.1";
         constexpr const wchar_t *BIND_ADDRESS_ANY     = L"0.0.0.0";
+        // Every interface, DUAL STACK. Distinct from 0.0.0.0 because that one is
+        // IPv4 only — the socket family follows the literal — and a mobile client
+        // on a carrier that hands out no IPv4 can reach this and nothing else.
+        // Start() clears IPV6_V6ONLY on it, so one socket serves both families.
+        constexpr const wchar_t *BIND_ADDRESS_ANY6    = L"::";
 
         // 0 means "not configured" — still refused by WhyCannotStart, since a
         // hand-edited file can say PortNo=0.
@@ -798,6 +803,30 @@ namespace Constants {
         // never drains its receive window, which without a timeout pins the
         // sending thread indefinitely.
         constexpr int SEND_TIMEOUT_MS = 30000;
+
+        // --- TCP keepalive -------------------------------------------------
+        //
+        // WHAT THIS IS FOR IS NAT, not a slow peer. An authenticated connection
+        // deliberately has NO receive timeout (see the note beside
+        // HANDSHAKE_TIMEOUT_MS): a mirrored screen is supposed to sit silent for
+        // minutes. On a LAN that is free. Across a home router it is not — a NAT
+        // mapping with no traffic through it is discarded after a few minutes,
+        // and the discard is SILENT IN BOTH DIRECTIONS. Neither end sees a close,
+        // so the server thread stays blocked in recv() on a socket that can never
+        // deliver anything again and the driving end's row stays green while the
+        // mirror does nothing. That failure has no other detection path, because
+        // the whole design of an idle mirror is that nothing is sent.
+        //
+        // Sixty seconds because typical consumer NAT UDP/TCP idle timeouts start
+        // around five minutes; this is comfortably inside the shortest of them
+        // while costing one empty segment a minute per connection.
+        constexpr DWORD KEEPALIVE_IDLE_MS     = 60000;
+
+        // Gap between probes once one has gone unanswered. Windows fixes the
+        // retry COUNT at 10 on Vista and later — it is not settable through
+        // SIO_KEEPALIVE_VALS — so this is the only lever on how fast a dead peer
+        // is declared dead: 10 s x 10 gives roughly 100 s after the idle period.
+        constexpr DWORD KEEPALIVE_INTERVAL_MS = 10000;
 
         // Longest peer-chosen name kept from "hello <name>". A LABEL for the
         // log and nothing else — capped so a peer cannot pad its name until the

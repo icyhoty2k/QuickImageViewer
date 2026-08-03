@@ -227,4 +227,37 @@ namespace Remote {
     std::string  ToUtf8(const std::wstring &s);
     std::wstring FromUtf8(const char *data, size_t len);
 
+    // --- Socket options -----------------------------------------------------
+    // Turns on TCP keepalive with this program's intervals. Called by BOTH ends
+    // — the server on each accepted socket, the client on each connected one —
+    // because a NAT mapping is dropped for both and whichever side notices first
+    // is the one that recovers. See KEEPALIVE_IDLE_MS.
+    //
+    // Best effort by design: the socket is perfectly usable without it (that is
+    // the state everything was in before), so a failure is not worth failing a
+    // connection over and there is nothing a caller could do about it anyway.
+    // SOCKET is spelled UINT_PTR here so this header stays free of winsock2.h,
+    // whose include ORDER is load-bearing in this project.
+    void EnableKeepAlive(UINT_PTR sock);
+
+    // --- Addresses ----------------------------------------------------------
+    // "host:port" for display, with IPv6 literals BRACKETED: "[fe80::1]:5555".
+    //
+    // Not cosmetic. An IPv6 literal is full of colons, so gluing one to a port
+    // with another colon produces "fe80::1:5555" — which is itself a valid IPv6
+    // address, and the reader cannot tell where the address stopped. "::" is
+    // worse still: it renders as ":::5555". Brackets are the RFC 3986 answer and
+    // the one every other tool prints, so a person reading a qIV panel sees the
+    // same shape they see everywhere else.
+    //
+    // DISPLAY ONLY. Nothing parses this back, and getaddrinfo does not accept
+    // brackets — host and port are stored as separate fields precisely so this
+    // string never has to be taken apart again.
+    std::wstring FormatEndpoint(const std::wstring &host, int port);
+
+    // Removes one surrounding pair of brackets from a typed address, so pasting
+    // "[fe80::1]" back out of a panel into a host field connects rather than
+    // failing to resolve. A no-op on everything else.
+    std::wstring StripAddressBrackets(const std::wstring &host);
+
 } // namespace Remote
