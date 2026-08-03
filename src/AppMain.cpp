@@ -271,6 +271,13 @@ LRESULT CALLBACK MainAppWndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM l
         case Constants::WM_QIV_REMOTE_STOPPED:
             return 0;
 
+        // The listener started, stopped, or gained/lost a client. Repaint the
+        // overlay's server indicator — the only thing that shows it.
+        case Constants::WM_QIV_REMOTE_CLIENTS:
+            g_overlayManager.UpdateRemoteStatus();
+            InvalidateRect(hWnd, nullptr, FALSE);
+            return 0;
+
         case Constants::WM_QIV_SWITCH_TO_FIND:
             uiManager.ToggleFindWindow();
             return 0;
@@ -1036,7 +1043,7 @@ int WINAPI wWinMain(HINSTANCE hInstance, [[maybe_unused]] HINSTANCE hPrevInstanc
     // Starting is conditional on Enable, which defaults false and can only be
     // set by an .ini section or an explicit switch — a viewer nobody configured
     // for remote control never opens a socket.
-    if (Remote::Config().enable) {
+    if (Remote::Config().autostart) {
         std::wstring remoteErr;
         if (!Remote::Start(hWnd, remoteErr)) {
             // Non-fatal by design: a wall screen whose port is taken must still

@@ -6,25 +6,29 @@
 // =============================================================================
 // RemoteSettings — configuration for qIV's TCP/IP remote control.
 //
-// THE LISTENER IS OFF UNLESS EXPLICITLY ENABLED. Two ways in, and only two:
+// THE LISTENER NEVER STARTS BY ITSELF UNLESS ASKED. Three ways it comes up:
 //
 //   1. command-line switches   (-remote, -remotePort=…, …)
-//   2. a [REMOTE_TCP_IP] section in the instance .ini
+//   2. Autostart=true in qivLocalServer.ini
+//   3. the Start button in the F9 panel — always available, and deliberately
+//      not gated on Autostart, which describes launch behaviour and nothing else
 //
-// There is deliberately no registry default and no "sensible" fallback port. A
-// viewer nobody configured for remote control never binds a socket.
+// There is deliberately no registry default. Name, port and connection cap DO
+// have defaults now — nothing binds a socket without Autostart or an explicit
+// Start, so pre-filling them costs no safety and saves filling in fields with
+// one obvious answer.
 //
 // FILE LAYOUT — qivLocalServer.ini, beside the exe and owned entirely by this
 // subsystem:
 //
 //     [REMOTE_TCP_IP]
-//     Enable=false
-//     Name=Lobby-Screen
+//     Autostart=false
+//     Name=qIV
 //     IpAddress=127.0.0.1
 //     PortNo=8770
 //     AllowList=192.168.1.10,192.168.1.11
 //     Password=<hash>
-//     MaxConnections=1
+//     MaxConnections=4
 //
 // The BLACKLIST is not in here. It is qivRemoteServerBlacklist.ini — see
 // RemoteBlacklist.h for why the one list qIV writes to by itself is kept apart
@@ -42,11 +46,11 @@
 // where anything else is stored — same arrangement as the remote-servers list.
 //
 // SECURITY POSTURE — fail closed at every step:
-//   • Enable defaults false
+//   • Autostart defaults false, and the file is usually absent entirely
 //   • bind address defaults to loopback, not 0.0.0.0
 //   • an EMPTY AllowList denies everyone rather than allowing everyone
 //   • the blacklist always beats AllowList — it is gate 1, AllowList is gate 2
-//   • MaxConnections defaults to 1
+//   • MaxConnections defaults to 4
 //   • no password refuses to start at all off loopback
 //
 // 127.0.0.1 is SEEDED into a new AllowList so a fresh instance is reachable
@@ -61,10 +65,19 @@
 namespace Remote {
 
     struct Settings {
-        // Master switch. Nothing binds a socket while this is false.
-        bool enable = false;
+        // Start the listener automatically at launch. NOT a master switch: the
+        // F9 panel's Start button works regardless, and always did the work —
+        // it was only refused because this flag doubled as a gate, so pressing
+        // Start could answer "Remote server disabled", which is a sentence with
+        // no useful action in it.
+        //
+        // False by default, and the file is usually absent entirely, so a viewer
+        // nobody configured still never opens a socket on its own.
+        bool autostart = false;
 
         // How this instance identifies itself to a connecting client.
+        // Defaults to NAME_DEFAULT so F9 opens ready to run; distinct names
+        // still matter once several instances are driven at once.
         std::wstring name;
 
         // BIND address — which local interfaces the listener accepts on.
@@ -72,7 +85,8 @@ namespace Remote {
         // NOT the same field as the client's connect-to target.
         std::wstring bindAddress;
 
-        // 0 = not configured. The server refuses to start without a real port.
+        // 0 = not configured, and still refused — a hand-edited file can say
+        // PortNo=0. Config() seeds PORT_DEFAULT.
         int port = 0;
 
         // IPs permitted to connect. EMPTY MEANS DENY EVERYONE — fail closed.
@@ -91,7 +105,10 @@ namespace Remote {
         std::wstring passwordHash;
 
         // Simultaneous clients, clamped to [MAX_CONNECTIONS_MIN, MAX].
-        int maxConnections = 1;
+        // Literal rather than MAX_CONNECTIONS_DEFAULT: this header does not
+        // include Constants.h, and Config() overwrites it from the constant
+        // anyway — this only covers a default-constructed Settings.
+        int maxConnections = 4;
     };
 
     // The process-wide remote configuration. Owned and mutated by the UI thread
@@ -129,7 +146,7 @@ namespace Remote {
     // An absent switch NEVER overwrites a stored value — that is what lets
     // `-remote` alone start a fully .ini-configured listener.
     struct Overrides {
-        bool         enable = false;   // -remote; only ever turns it ON
+        bool         autostart = false; // -remote; only ever turns it ON
         std::wstring name;
         std::wstring bindAddress;
         std::wstring allowList;        // raw, comma/semicolon separated

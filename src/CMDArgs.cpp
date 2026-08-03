@@ -272,7 +272,7 @@ void ApplyCmdArgs(HWND hWnd, const CmdArgs &args, int nCmdShow) {
         Remote::LoadFromIni();
 
         Remote::Overrides ro;
-        ro.enable         = args.remoteEnable;
+        ro.autostart      = args.remoteEnable;
         ro.name           = args.remoteName;
         ro.bindAddress    = args.remoteIp;
         ro.allowList      = args.remoteAllow;

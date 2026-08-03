@@ -175,6 +175,19 @@ namespace {
           L"one-shot image if one is up. Body lines of base64, then the OK naming the "
           L"size and file.   answer:  DATA <base64> … then  "
           L"OK SendDisplayedImage=204800;IMG_0012.jpg  (0; when it shows nothing)" },
+        // The one to use for a preview. Same reply shape, a fraction of the
+        // bytes — see Command.h for why it is a separate command rather than a
+        // change to the one above.
+        // Payload REQUIRED, though both parts have defaults: a client always
+        // knows the size it can use, and making it say so removes the question
+        // of whose default applies.
+        { L"SendDisplayedPreview",  Command::SendDisplayedPreview,            PayloadRule::Required,
+          L"read-only: the picture on that screen, SCALED DOWN and re-encoded as JPEG. "
+          L"Typically 25-40x smaller than SendDisplayedImage, which sends the original "
+          L"file. For DISPLAY — use SendDisplayedImage when the bytes are being saved.   "
+          L"answer:  DATA <base64> … then  OK SendDisplayedPreview=204800;IMG_0012.jpg",
+          L"<maxDim>[;<quality>] — longest edge in px (64-4096) and JPEG quality "
+          L"(20-100, default 80). Never upscales.   e.g.  1080;75" },
 
         // --- The three driving commands, so they can be sent by hand too ---
         //
@@ -824,6 +837,7 @@ bool IsMirrorable(Command cmd) {
         case Command::StreamImageChunk:
         case Command::StreamImageShow:
         case Command::SendDisplayedImage:
+        case Command::SendDisplayedPreview:
             return false;
 
         default:

@@ -92,6 +92,7 @@ class RemotesWnd : public FloatingPanelWnd {
             if (m_hFontBody)  DeleteObject(m_hFontBody);
             if (m_hFontBold)  DeleteObject(m_hFontBold);
             if (m_hFontSmall) DeleteObject(m_hFontSmall);
+            if (m_hFontLink)  DeleteObject(m_hFontLink);
             DestroyBackBuffer();
         }
 
@@ -117,7 +118,7 @@ class RemotesWnd : public FloatingPanelWnd {
 
         // The New-connection form. Ids rather than indices so the field a row
         // edits survives the list being rebuilt underneath it.
-        enum FieldId { F_NONE = 0, F_HOST, F_PORT, F_PASSWORD, F_NAME, F_EXE };
+        enum FieldId { F_NONE = 0, F_HOST, F_PORT, F_PASSWORD, F_PIN, F_NAME, F_EXE };
 
         struct Field {
             FieldId        id = F_NONE;
@@ -250,6 +251,9 @@ class RemotesWnd : public FloatingPanelWnd {
         std::wstring m_newHost = L"127.0.0.1";
         int          m_newPort = 0;
         std::wstring m_newPassword;
+        // TLS certificate fingerprint to pin, lower-case hex. Empty for a
+        // loopback target, which speaks plaintext and presents no certificate.
+        std::wstring m_newPin;
         std::wstring m_newName;
         std::wstring m_newExe;
 
@@ -276,11 +280,17 @@ class RemotesWnd : public FloatingPanelWnd {
         int m_hotRow    = -1;
         int m_hotButton = -1;
 
-        std::wstring m_status; // footer line
+        std::wstring m_status;   // footer line, label part only
+        // The file the list came from, drawn after m_status as a link. Empty
+        // when there is no file — the label then says so on its own.
+        std::wstring m_statusPath;
+        RECT         m_statusLinkRect{}; // hit box, recomputed on every paint
+        bool         m_statusLinkHot = false;
 
         HFONT m_hFontBody  = nullptr;
         HFONT m_hFontBold  = nullptr;
         HFONT m_hFontSmall = nullptr;
+        HFONT m_hFontLink  = nullptr; // small + underline, per Constants::Links
         int   m_cachedFontDpi = 0;
 
         HDC     m_bbDC     = nullptr;

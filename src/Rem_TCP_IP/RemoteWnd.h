@@ -16,7 +16,7 @@
 // window beside its own settings.
 //
 // THIS PANEL DESCRIBES THIS INSTANCE, AND NOTHING ELSE: the listener it runs.
-// Enable, identity, bind address, port, allow/block lists, password, connection
+// Autostart, identity, bind address, port, allow/block lists, password, connection
 // cap, and Start / Stop / Save.
 //
 // It used to carry a second section for connecting OUT to another instance, and
@@ -126,6 +126,13 @@ class RemoteWnd : public FloatingPanelWnd {
         bool         m_savedLinkHot = false;
 
         void RevealSavedFile();
+
+        // The TLS fingerprint on the footer's third line, as a link that COPIES
+        // rather than opens. 64 hex characters is not a value anyone retypes,
+        // and it has to reach a phone or another machine somehow.
+        RECT         m_fpLinkRect{};      // hit box, recomputed on every paint
+        bool         m_fpLinkHot = false;
+        bool         m_fpCopied  = false; // shows the confirmation until reopened
 
         InputBox m_edit;
         int      m_editingRow = -1;

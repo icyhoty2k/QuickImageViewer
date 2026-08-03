@@ -25,22 +25,28 @@
 // -----------------------------------------------------------------------------
 // WHEN IT IS ON
 //
-// The server decides from ITS OWN BIND ADDRESS, once, at Start():
+// The server decides PER CONNECTION, from the PEER's address:
 //
-//     bound to 127.0.0.0/8 or ::1   →  plaintext
-//     bound to anything else        →  TLS, always
+//     peer on 127.0.0.0/8 or ::1   →  plaintext
+//     peer anywhere else           →  TLS, always
 //
 // THIS IS NOT NEGOTIATION AND HAS NO DOWNGRADE HOLE. Nothing on the wire selects
-// it and no client can ask for one or the other: a loopback-bound socket cannot
-// be reached from off the machine at all, so there is no attacker in a position
-// to strip anything. A packet that can leave the machine is encrypted; a packet
-// that cannot is not, and the local multi-screen wall keeps working with no
-// certificates to manage.
+// it, and a peer address is not something an attacker can choose: TCP requires a
+// completed handshake, so a connection claiming to come from 127.0.0.1 cannot
+// carry a conversation unless it really is local. A packet that left the machine
+// is encrypted; one that never did is not.
 //
-// The client learns which to speak the same way — from the address it is
-// dialling — so the two ends cannot disagree without one of them being
-// misconfigured, in which case the handshake fails loudly rather than falling
-// back.
+// PER CONNECTION rather than per listener, because the two cases coexist. A
+// server on 0.0.0.0 serves the local multi-screen wall in plaintext — no
+// certificates to manage, no handshake per keystroke — while the phone on the
+// LAN talking to the same port gets TLS. Deciding from the BIND address forced
+// one mode on everybody and made 0.0.0.0 break every loopback client.
+//
+// The client learns which to speak from the address it DIALS, which is the same
+// address the server will see it arrive from — so the two agree by construction.
+// The one case needing care is an alias: the Android emulator's 10.0.2.2 reaches
+// the host's loopback, so the client counts it as local, exactly as the server
+// will when the connection turns up as 127.0.0.1.
 //
 // -----------------------------------------------------------------------------
 // IDENTITY: A SELF-SIGNED CERTIFICATE AND A PINNED FINGERPRINT
@@ -81,8 +87,14 @@
 
 namespace Remote::Tls {
 
-    // True when this bind address means "reachable from off this machine", and
-    // therefore that TLS is mandatory. The single rule both ends apply.
+    // True when this address is NOT on this machine, and therefore that TLS is
+    // mandatory. The single rule both ends apply — the server to each PEER it
+    // accepts, the client to the address it dials.
+    //
+    // Also used with the BIND address in two places, where the question is
+    // different but the answer is the same: whether this listener can be reached
+    // from off-machine at all, which decides whether a certificate is needed and
+    // whether a password is compulsory.
     bool RequiredForAddress(const std::wstring &address);
 
     // --- Server credentials -------------------------------------------------
@@ -102,6 +114,27 @@ namespace Remote::Tls {
     // THE VALUE A CLIENT PINS. Shown in the F9 panel so it can be read off and
     // typed into a phone.
     std::wstring ServerFingerprint();
+
+    // Releases the credentials AND deletes the key container that importing the
+    // PFX created in the user's keyset.
+    //
+    // The deletion is the point. Schannel's server side cannot use an ephemeral
+    // key, so the private key has to be persisted on import — which means one
+    // container per launch would accumulate in the profile forever if nobody
+    // cleaned up. The PFX beside the exe stays the durable copy; the keyset
+    // entry is meant to live exactly as long as the listener.
+    //
+    // Called from Remote::Stop(). Safe to call when nothing was ever acquired.
+    void ShutdownServerCredentials();
+
+    // SHA-256 of the certificate inside a .pfx at `pfxPath`, lower-case hex.
+    // Empty when the file is missing or unreadable.
+    //
+    // For IMPORT: pointing at another instance's folder yields its pin without
+    // anyone reading a fingerprint off a screen and typing it back. Reads only
+    // the certificate — the private key is never touched, so this works on a
+    // file whose key it could not use.
+    std::wstring FingerprintOfCertFile(const std::wstring &pfxPath);
 
     // Deletes the certificate and forgets the credentials, so the next
     // EnsureServerCredentials mints a fresh one. Every existing pin is

@@ -63,4 +63,16 @@ namespace Remote {
     // UI thread only — it reads `app`.
     std::wstring BuildSyncPayload(bool includeFolder = true);
 
+    // INTERNAL, and never seen by a client.
+    //
+    // SendDisplayedPreview is answered in two stages: the UI thread returns the
+    // displayed file's PATH behind this marker (cheap), and the socket thread
+    // then decodes, scales and encodes it — work far too slow to do while the
+    // viewer is blocked on it. ClientThread strips the marker and replaces the
+    // reply with the real one.
+    //
+    // Distinctive on purpose: if this ever reached a client it would mean the
+    // dispatch broke, and it should be obvious rather than look like an answer.
+    constexpr const wchar_t *PREVIEW_PATH_MARKER = L"\x01qIV-preview-path\x01";
+
 } // namespace Remote

@@ -1,5 +1,6 @@
 #pragma once
 #include <windows.h>
+#include <memory>
 #include <string>
 #include <vector>
 
@@ -31,9 +32,18 @@
 
 namespace Remote {
 
+    // Forward-declared so this header stays free of winsock2.h — RemoteTls.h
+    // pulls it in, and this header exists partly to keep that ordering trap out
+    // of every consumer. Held by unique_ptr; ~Client is already out-of-line,
+    // which is what makes an incomplete type legal here.
+    namespace Tls { class Session; }
+
     class Client {
     public:
-        Client() = default;
+        // BOTH out-of-line, and the constructor is not an oversight: a defaulted
+        // inline constructor still instantiates ~unique_ptr<Tls::Session> for
+        // unwinding, and Session is incomplete here on purpose.
+        Client();
         ~Client();
         Client(const Client &)            = delete;
         Client &operator=(const Client &) = delete;
@@ -119,6 +129,22 @@ namespace Remote {
         // it. Set once, right after construction; falls back to host:port.
         void SetPeerLabel(const std::wstring &label) { m_peerLabel = label; }
 
+        // The certificate fingerprint this target must present, lower-case hex.
+        //
+        // Set BEFORE Connect. Only consulted when the dialled address requires
+        // TLS — a loopback target has no certificate and needs no pin.
+        //
+        // EMPTY MEANS REFUSE, not "trust anything". A connection with no pin
+        // fails and reports what the server offered, so the first connection —
+        // the only one an attacker has to be present for — is never the
+        // unprotected one.
+        void SetPin(const std::wstring &sha256Hex) { m_pin = sha256Hex; }
+
+        // What the last attempt actually saw, whether it matched or not. How the
+        // panel shows a fingerprint to accept, and how a mismatch can be
+        // compared against the value on the server's own F9 panel.
+        const std::wstring &LastFingerprint() const { return m_lastFingerprint; }
+
     private:
         // Both public entry points land here. `password` is used when
         // `presetSecret` is empty, and ignored when it is not — the two are the
@@ -143,6 +169,12 @@ namespace Remote {
         // How the far end is named in the log. Written once by the owner; read
         // on the sender thread only, which is the same thread that does the I/O.
         std::wstring m_peerLabel;
+
+        // Non-null only while a TLS connection is up. Every read and write goes
+        // through it when present; the socket carries plain bytes when not.
+        std::unique_ptr<Tls::Session> m_tls;
+        std::wstring m_pin;             // expected fingerprint, from the caller
+        std::wstring m_lastFingerprint; // what the peer actually presented
 
         UINT_PTR     m_sock = static_cast<UINT_PTR>(~0ull); // INVALID_SOCKET
         std::string  m_accum;                                // partial line buffer

@@ -46,6 +46,7 @@ namespace UI::AppMenu::Ids {
         ID_COPY,                  // copy image to clipboard         (Ctrl+C)
         ID_SAVE_AS,               // save image as…                  (Ctrl+S)
         ID_EXPLORER,              // reveal current file in Explorer (L)
+        ID_NEXT_MONITOR,          // move the window to the next monitor (Ctrl+M)
         ID_HELP,                  // help / shortcuts window         (F1)
         ID_CLOSE_APP,             // hide to tray if kept in bg      (Esc)
         ID_CLOSE_PANELS,          // hide all panels + spawned DirWnds
@@ -170,8 +171,12 @@ namespace UI::AppMenu::Ids {
         // Moved off 67, which the overlay "Off" band also claimed.
         SET_LOCK_VIEWPORT    = 18,
 
+        // "Location = Registry / File". Reports where settings actually live
+        // and opens it — regedit at the key, or Explorer with the .ini selected.
+        SET_LOCATION         = 68,
+
         // Highest scalar id. The bands below must start above it — asserted.
-        SET_SCALAR_LAST      = SET_KEEP_AWAKE,
+        SET_SCALAR_LAST      = SET_LOCATION,
 
         // ── Overlay bands ───────────────────────────────────────────────────
         // Based well clear of the scalars, with room to grow on both sides.

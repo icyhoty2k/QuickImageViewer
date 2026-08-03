@@ -8,6 +8,7 @@
 #include <cstring>
 #include "../AppState.h"
 #include "RegistryManager.h"
+#include "IniFile.h"                       // TimeStampNow — one clock format
 #include "../Platform/WriteQueue.h"
 #include "../Dedicated/DedicatedSettings.h" // SettingsUseFile — history is off for dedicated
 
@@ -174,6 +175,39 @@ static fs::path MakeBackupPath(const fs::path &backupDir,
     return backupDir / (stem + suffix + ext);
 }
 
+// A line whose first non-space character is ';' or '#'.
+//
+// Checked BEFORE the keep-unusable-lines rule in the loader: that rule exists so
+// a mistyped path is never silently swallowed, but a comment is not a mistake
+// and must not be painted as a dead folder row.
+static bool IsCommentLine(const std::wstring &line) {
+    for (wchar_t c : line) {
+        if (iswspace(c)) continue;
+        return c == Constants::History::COMMENT_MARK_SEMI ||
+               c == Constants::History::COMMENT_MARK_HASH;
+    }
+    return false; // blank line — not a comment; the loader drops it separately
+}
+
+// Writes the explanatory header, but only into a file that does not exist yet or
+// is empty. Never touched again — see HISTORY_FILE_TITLE for why there is no
+// "Updated" stamp here.
+static void EnsureTextHeader(const std::wstring &path, const wchar_t *title) {
+    {
+        std::ifstream probe(path, std::ios::in | std::ios::binary | std::ios::ate);
+        if (probe.is_open() && probe.tellg() > 0) return;
+    }
+
+    std::wofstream f(path, std::ios::out | std::ios::app);
+    if (!f.is_open()) return;
+
+    f << L"; QuickImageViewer - " << title << L"\n"
+      << L"; Generated: " << Persistence::Ini::TimeStampNow() << L"\n"
+      << L"; Lines starting with ; or # are comments and are ignored.\n"
+      << L"; This header is not rewritten later - the file's modified date is the\n"
+      << L"; accurate last-changed time.\n";
+}
+
 // Writes the mandatory first line:
 //   BACKUP COMPUTER_NAME, dd.MM.YYYY, HH:MM:SS.ms, Backup Version Schema : 1.0
 static void WriteBackupHeader(std::wofstream &f, const SYSTEMTIME &st) {
@@ -255,6 +289,7 @@ void HistoryFoldersManager::LoadHistoryFromDisk() {
         if (fav.is_open()) {
             std::wstring line, path;
             while (std::getline(fav, line)) {
+                if (IsCommentLine(line)) continue;
                 if (!HistoryPath::Normalize(line, path)) continue;
                 // FolderPathSet dedupes case-insensitively on insert.
                 favorites.insert(path); // no cap — all favorites must always be loadable
@@ -271,6 +306,7 @@ void HistoryFoldersManager::LoadHistoryFromDisk() {
         FolderPathSet seen; // case-insensitive duplicate guard
         std::wstring line;
         while (std::getline(file, line)) {
+            if (IsCommentLine(line)) continue;
             // Legacy: old-format '*' prefix — migrate to favorites set.
             // Checked before normalization, which would reject the '*'.
             bool legacyFavorite = false;
@@ -342,6 +378,7 @@ void HistoryFoldersManager::MergeHistoryFromDisk() {
         if (file.is_open()) {
             std::wstring line;
             while (std::getline(file, line)) {
+                if (IsCommentLine(line)) continue;
                 // Legacy '*' prefix — treat path as history entry. Stripped
                 // before normalization, which would otherwise reject the mark.
                 size_t b = 0;
@@ -392,6 +429,7 @@ void HistoryFoldersManager::MergeHistoryFromDisk() {
         if (fav.is_open()) {
             std::wstring line, path;
             while (std::getline(fav, line)) {
+                if (IsCommentLine(line)) continue;
                 if (HistoryPath::Normalize(line, path))
                     diskFavSet.insert(path);
             }
@@ -425,6 +463,7 @@ void HistoryFoldersManager::AppendNewFolderToDisk(const std::wstring &folderPath
     std::wstring entry;
     if (!HistoryPath::Normalize(folderPath, entry)) return; // never write junk
     g_writeQueue.PushTask([path = std::move(path), entry = std::move(entry)]() {
+        EnsureTextHeader(path, Constants::History::HISTORY_FILE_TITLE);
         // The file may not end with a newline: a previous write can be cut short
         // by the process exiting, and a person editing the file in Notepad often
         // leaves the last line unterminated. Appending blindly then glues the new
@@ -465,7 +504,13 @@ void HistoryFoldersManager::RewriteHistoryToDisk() const {
     // writes a consistent view even if folderHistory changes before it wakes.
     std::vector<std::wstring> snap(folderHistory.rbegin(), folderHistory.rend());
     g_writeQueue.PushTask([path = std::move(path), snap = std::move(snap)]() {
-        std::wofstream f(path, std::ios::out | std::ios::trunc);
+        // trunc wipes the header along with the rows, so it is laid down again
+        // before them. The Generated time therefore tracks the last full
+        // rewrite here, which is the only honest thing it can say.
+        { std::wofstream wipe(path, std::ios::out | std::ios::trunc); }
+        EnsureTextHeader(path, Constants::History::HISTORY_FILE_TITLE);
+
+        std::wofstream f(path, std::ios::out | std::ios::app);
         if (!f.is_open()) return;
         for (const auto &e : snap) f << e << L"\n";
     });
@@ -482,7 +527,10 @@ void HistoryFoldersManager::RewriteFavoritesToDisk() const {
     std::wstring path = GetFavoritesFilePath();
     std::vector<std::wstring> snap(favorites.begin(), favorites.end());
     g_writeQueue.PushTask([path = std::move(path), snap = std::move(snap)]() {
-        std::wofstream f(path, std::ios::out | std::ios::trunc);
+        { std::wofstream wipe(path, std::ios::out | std::ios::trunc); }
+        EnsureTextHeader(path, Constants::History::FAVORITES_FILE_TITLE);
+
+        std::wofstream f(path, std::ios::out | std::ios::app);
         if (!f.is_open()) return;
         // Everything in RAM is written — the cap belongs at the point a favorite
         // is ADDED, not here. Truncating on save silently destroys favorites the

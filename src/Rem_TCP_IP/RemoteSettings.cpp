@@ -56,9 +56,10 @@ namespace {
 Settings &Config() {
     static Settings s = [] {
         Settings d;
-        d.enable         = RT::ENABLE_DEFAULT;
+        d.autostart      = RT::AUTOSTART_DEFAULT;
+        d.name           = RT::NAME_DEFAULT;
         d.bindAddress    = RT::BIND_ADDRESS_DEFAULT;
-        d.port           = RT::PORT_UNSET;
+        d.port           = RT::PORT_DEFAULT;
         d.maxConnections = RT::MAX_CONNECTIONS_DEFAULT;
         // Seeded with this machine, so a freshly configured instance is
         // reachable from the copy beside it without anyone having to discover
@@ -157,10 +158,10 @@ void Normalize(Settings &s) {
 
 bool SectionExists() {
     if (!IniExists()) return false;
-    // Enable is written by every save, so its presence is a reliable marker that
+    // Autostart is written by every save, so its presence is a reliable marker that
     // the file has been configured at least once rather than merely created.
     return !Persistence::Ini::ReadString(LocalServerPath(),
-                                         RT::INI_SECTION, RT::KEY_ENABLE).empty();
+                                         RT::INI_SECTION, RT::KEY_AUTOSTART).empty();
 }
 
 void LoadFromIni() {
@@ -180,17 +181,22 @@ void LoadFromIni() {
     const std::wstring &path = LocalServerPath();
     Settings &s = Config();
 
-    s.enable = Persistence::Ini::ParseBool(
-        Persistence::Ini::ReadString(path, RT::INI_SECTION, RT::KEY_ENABLE),
-        RT::ENABLE_DEFAULT);
+    s.autostart = Persistence::Ini::ParseBool(
+        Persistence::Ini::ReadString(path, RT::INI_SECTION, RT::KEY_AUTOSTART),
+        RT::AUTOSTART_DEFAULT);
 
-    s.name = Trim(Persistence::Ini::ReadString(path, RT::INI_SECTION, RT::KEY_NAME));
+    // An ABSENT key keeps the default; it does not blank the field. A file that
+    // simply omits Name must not leave an instance nameless — which is a state
+    // that refuses to start.
+    const std::wstring nm =
+        Trim(Persistence::Ini::ReadString(path, RT::INI_SECTION, RT::KEY_NAME));
+    if (!nm.empty()) s.name = nm;
 
     const std::wstring bind =
         Trim(Persistence::Ini::ReadString(path, RT::INI_SECTION, RT::KEY_IP_ADDRESS));
     s.bindAddress = bind.empty() ? RT::BIND_ADDRESS_DEFAULT : bind;
 
-    s.port           = ReadIntKey(RT::KEY_PORT_NO,   RT::PORT_UNSET);
+    s.port           = ReadIntKey(RT::KEY_PORT_NO,   RT::PORT_DEFAULT);
     s.maxConnections = ReadIntKey(RT::KEY_MAX_CONNS, RT::MAX_CONNECTIONS_DEFAULT);
 
     s.allowList = ParseList(
@@ -209,11 +215,46 @@ void SaveToIni() {
     const wchar_t *hdr = RT::LOCAL_SERVER_FILE_HEADER;
     const Settings &s = Config();
 
+    // On CREATION, lay the whole file out annotated — a comment block above each
+    // key. WritePrivateProfileString can only append bare keys, but it does keep
+    // surrounding comments when it later updates a value, so doing it once here
+    // is what makes the documentation survive every subsequent save.
+    //
     // Creating this file has NO side effect on how the application persists
-    // anything else — which is the whole reason it is a separate file, and why
-    // the seeding dance that used to guard this write is gone.
-    Persistence::Ini::WriteString(path, RT::INI_SECTION, RT::KEY_ENABLE,
-                                  s.enable ? L"true" : L"false", hdr);
+    // anything else — the reason it is a separate file at all.
+    if (!Persistence::Ini::Exists(path)) {
+        auto entry = [](const wchar_t *doc, const wchar_t *key,
+                        const std::wstring &value) {
+            return std::wstring(doc) + key + L"=" + value + L"\r\n\r\n";
+        };
+
+        std::wstring body;
+        body += L"; QuickImageViewer\r\n; ";
+        body += hdr;
+        body += L"\r\n";
+        body += Persistence::Ini::GeneratedStampLines();
+        body += L";\r\n";
+        body += L"; Values are applied when the listener STARTS. Edit while it is\r\n"
+                L"; running and press Stop then Start in F9, or restart qIV.\r\n\r\n";
+        body += L"["; body += RT::INI_SECTION; body += L"]\r\n\r\n";
+
+        body += entry(RT::DOC_AUTOSTART,  RT::KEY_AUTOSTART,
+                      s.autostart ? L"true" : L"false");
+        body += entry(RT::DOC_NAME,       RT::KEY_NAME,       s.name);
+        body += entry(RT::DOC_IP_ADDRESS, RT::KEY_IP_ADDRESS, s.bindAddress);
+        body += entry(RT::DOC_PORT_NO,    RT::KEY_PORT_NO,    std::to_wstring(s.port));
+        body += entry(RT::DOC_ALLOW_LIST, RT::KEY_ALLOW_LIST, JoinList(s.allowList));
+        body += entry(RT::DOC_PASSWORD,   RT::KEY_PASSWORD,   s.passwordHash);
+        body += entry(RT::DOC_MAX_CONNS,  RT::KEY_MAX_CONNS,
+                      std::to_wstring(s.maxConnections));
+
+        Persistence::Ini::CreateWithTextIfMissing(path, body);
+    }
+
+    // Still written key by key: this is also the UPDATE path, and the values
+    // above are only correct for the launch that created the file.
+    Persistence::Ini::WriteString(path, RT::INI_SECTION, RT::KEY_AUTOSTART,
+                                  s.autostart ? L"true" : L"false", hdr);
     Persistence::Ini::WriteString(path, RT::INI_SECTION, RT::KEY_NAME,       s.name, hdr);
     Persistence::Ini::WriteString(path, RT::INI_SECTION, RT::KEY_IP_ADDRESS, s.bindAddress, hdr);
     Persistence::Ini::WriteDword (path, RT::INI_SECTION, RT::KEY_PORT_NO,
@@ -223,6 +264,9 @@ void SaveToIni() {
     Persistence::Ini::WriteString(path, RT::INI_SECTION, RT::KEY_PASSWORD,   s.passwordHash, hdr);
     Persistence::Ini::WriteDword (path, RT::INI_SECTION, RT::KEY_MAX_CONNS,
                                   static_cast<DWORD>(s.maxConnections), hdr);
+
+    // Last, so the stamp reflects a completed save rather than a started one.
+    Persistence::Ini::TouchUpdatedStamp(path);
 }
 
 void ApplyOverrides(const Overrides &o) {
@@ -231,7 +275,7 @@ void ApplyOverrides(const Overrides &o) {
     // -remote only ever switches the listener ON. There is no command-line way
     // to switch it off, because the absence of a switch already means "leave the
     // stored value alone" — a -remote=false would be indistinguishable from it.
-    if (o.enable) s.enable = true;
+    if (o.autostart) s.autostart = true;
 
     if (!o.name.empty())        s.name        = o.name;
     if (!o.bindAddress.empty()) s.bindAddress = o.bindAddress;
@@ -275,8 +319,6 @@ bool IsLoopbackBind(const std::wstring &addr) {
 }
 
 std::wstring WhyCannotStart(const Settings &s) {
-    if (!s.enable)
-        return Constants::Messages::REMOTE_BLOCKED_DISABLED;
     if (s.port == RT::PORT_UNSET)
         return Constants::Messages::REMOTE_BLOCKED_NO_PORT;
     // A NAME IS MANDATORY, and not merely for tidiness.
