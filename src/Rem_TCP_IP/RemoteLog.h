@@ -121,6 +121,19 @@ namespace Remote::Log {
     // ordinary case — F10 works without one — and a blank column would read as a
     // bug rather than as an unnamed instance.
     void         SetSelfName(const std::wstring &name);
+
+    // The listener's bound endpoint, for the saved file's preamble. Pushed in
+    // from the server rather than read back out of it — this module is a leaf,
+    // and a diagnostic that has to link against the thing it diagnoses is one
+    // that cannot be used from anywhere else.
+    void         SetSelfEndpoint(const std::wstring &endpoint);
+    std::wstring SelfEndpoint();
+
+    // "Monitor2 192.168.0.102:7777" — what this instance is called in a log
+    // row, in the same name-then-address shape a peer is given. SelfName alone
+    // could not answer "which machine wrote this", which is the question a
+    // saved log exists to answer.
+    std::wstring SelfLabel();
     std::wstring SelfName();
 
     size_t Count();

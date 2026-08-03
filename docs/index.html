@@ -5087,7 +5087,9 @@ D:\Screens\promotionList_qIV_dedicated_Lobby.qpr    promotion folders</code></pr
                 </td>
                 <td>
                     <strong>RemoteLog</strong> &mdash; every line that crossed the wire, both
-                    directions, with round trips
+                    directions, with round trips &mdash; plus a line each time a client arrives,
+                    leaves, drops or is refused, naming its address and port and how long
+                    it stayed
                 </td>
             </tr>
             </tbody>
@@ -5230,9 +5232,10 @@ D:\Screens\promotionList_qIV_dedicated_Lobby.qpr    promotion folders</code></pr
             describes
             itself</h3>
         <pre><code>$ nc 127.0.0.1 7777
-OK qIV 2.96.0.113 remote v2 [Monitor2]
+OK qIV 2.96.0.113 remote v5 [Monitor2]
+OK
 help
-qIV remote protocol v2
+qIV remote protocol v5
 FORMAT CMD &lt;name&gt;|&lt;takesValue 0|1&gt;|&lt;description&gt;|&lt;value description&gt;
 CMD NextImage|0|next image in the playlist|
 CMD JumpToImage|1|go to a numbered image in the current playlist|image NUMBER, 1-based …
@@ -5244,13 +5247,152 @@ CMD JumpToImage|1|go to a numbered image in the current playlist|image NUMBER, 1
             protocol version.
         </p>
         <p>
-            <strong>Security.</strong> The protocol is plaintext and authentication happens once,
-            at connect. That is fine on loopback, which is what it binds to by default. On a
-            routable network, treat the network as the boundary (VPN or a trusted VLAN).
-            File-altering commands &mdash; delete, move, paste, save &mdash; are
+            Since <strong>protocol v5</strong> exactly one line always follows the banner, so a
+            client never has to guess: <code>AUTH &lt;iterations&gt; &lt;salt&gt; &lt;nonce&gt;</code>
+            when the server wants a password, or a bare <code>OK</code> when it does not &mdash;
+            which is the <code>OK</code> on the second line above. A successful <code>AUTH</code>
+            is answered <code>OK</code> as well. Nothing is signalled by silence, so no client
+            needs a timeout to discover what kind of server it reached.
+        </p>
+
+        <h3>
+            Security</h3>
+        <p>
+            <strong>Encryption is decided by the address, and never negotiated.</strong> A peer on
+            the same machine (<code>127.0.0.0/8</code>, <code>::1</code>, <code>localhost</code>)
+            gets plaintext; <em>every</em> other peer &mdash; your own LAN included &mdash; gets
+            TLS 1.2 / 1.3 from the first byte, before the banner. One listener on
+            <code>0.0.0.0</code> serves both. Each end decides from the address independently, so
+            there is no offer on the wire for an attacker to strip and no plaintext fallback to
+            force.
+        </p>
+        <p>
+            The certificate is self-signed and the client <strong>pins</strong> it by SHA-256
+            fingerprint &mdash; no CA chain, which is the right answer for a machine no public CA
+            would ever issue for. The fingerprint is shown at the bottom of the <kbd>F9</kbd>
+            panel; read it there and enter it in the client. A client with no pin stored refuses
+            to connect rather than trusting whatever it is handed.
+        </p>
+        <p>
+            <strong>A password is compulsory off loopback</strong> &mdash; the listener refuses to
+            start without one. It never crosses the wire: the server stores a PBKDF2-HMAC-SHA256
+            digest (210,000 iterations) and the client answers an HMAC over a fresh per-connection
+            nonce, so every guess costs the guesser a full derivation and the server one HMAC.
+            Five failures from one address within ten minutes blacklist it, each failure is
+            answered a second late, and a peer that connects and then goes quiet is dropped after
+            ten seconds.
+        </p>
+        <p>
+            <strong>AllowList and BlackList take addresses, never domain names</strong> &mdash; a
+            rule is matched against the address a connection actually arrived from, so DNS never
+            enters the access decision. An empty AllowList denies everyone, by design. Both lists
+            accept:
+        </p>
+        <table>
+            <thead>
+            <tr>
+                <th>
+                    Form
+                </th>
+                <th>
+                    Example
+                </th>
+                <th>
+                    Notes
+                </th>
+            </tr>
+            </thead>
+            <tbody>
+            <tr>
+                <td>
+                    everything
+                </td>
+                <td>
+                    <code>*</code>
+                </td>
+                <td>
+                </td>
+            </tr>
+            <tr>
+                <td>
+                    text prefix
+                </td>
+                <td>
+                    <code>192.168.1.*</code>
+                </td>
+                <td>
+                    compares <em>characters</em> &mdash; see the warning below
+                </td>
+            </tr>
+            <tr>
+                <td>
+                    CIDR
+                </td>
+                <td>
+                    <code>192.168.0.0/24</code>, <code>2001:db8::/32</code>
+                </td>
+                <td>
+                    either family, any prefix length
+                </td>
+            </tr>
+            <tr>
+                <td>
+                    range
+                </td>
+                <td>
+                    <code>192.168.0.10-50</code>
+                </td>
+                <td>
+                    shorthand &mdash; the upper bound is the last octet
+                </td>
+            </tr>
+            <tr>
+                <td>
+                    range, full
+                </td>
+                <td>
+                    <code>192.168.0.10-192.168.1.5</code>
+                </td>
+                <td>
+                    crosses octet boundaries
+                </td>
+            </tr>
+            <tr>
+                <td>
+                    one host
+                </td>
+                <td>
+                    <code>192.168.0.5</code>, <code>2001:db8::1</code>
+                </td>
+                <td>
+                    compared numerically, so IPv6 spelling does not matter
+                </td>
+            </tr>
+            </tbody>
+        </table>
+        <p>
+            &#9888; The star is a <strong>string</strong> prefix, not an octet boundary.
+            <code>192.168.1.*</code> is what it looks like, but <code>192.168.1*</code> &mdash; no
+            trailing dot &mdash; also matches <code>192.168.10.x</code> and
+            <code>192.168.100.x</code>, and <code>1*</code> matches most of the internet. Use
+            <code>/24</code> when the boundary matters. Entries that could never match an address
+            are dropped when you save, and the panel names what it dropped.
+        </p>
+        <p>
+            <strong>File-altering commands</strong> &mdash; delete, move, paste, save &mdash; are
             <em>structurally</em> unreachable over the wire: a compile-time assertion proves none
             of them has a row in the command table, and the executor refuses them again at run
             time.
+        </p>
+        <p>
+            <strong>Exposing it to the internet.</strong> Authentication is the only boundary
+            &mdash; behind it, a peer can do what someone sitting at the viewer can, including
+            opening a local path and pulling the displayed image back. The AllowList is
+            address-based, so a client on a dynamic IP pushes you toward <code>*</code> and leaves
+            the password as the sole gate. Prefer a VPN (WireGuard, Tailscale) over
+            port-forwarding: every protection above still applies, the AllowList becomes
+            meaningful again with stable addresses, and the listener stops being reachable by
+            anyone who scans the port.
         </p>
     </section>
 

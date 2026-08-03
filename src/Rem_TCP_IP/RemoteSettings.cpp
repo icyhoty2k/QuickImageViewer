@@ -1,3 +1,14 @@
+// winsock2.h MUST come before anything that pulls in windows.h — see the note at
+// the top of RemoteServer.cpp for why. AppState.h and RemoteSettings.h both
+// reach windows.h, so these two stay pinned above every other include here.
+//
+// They are here for InetPtonW, which is what turns "192.168.0.0/24" into a
+// number. Written by hand instead, the IPv6 half would have to implement "::"
+// compression — and getting that subtly wrong inside a rule that decides WHO IS
+// ALLOWED IN is the expensive kind of wrong.
+#include <winsock2.h>
+#include <ws2tcpip.h>
+
 #include "RemoteSettings.h"
 #include "RemoteBlacklist.h"  // -remoteBlock writes straight into the file
 #include "RemoteCrypto.h"
@@ -9,6 +20,9 @@
 #include "Platform/ConstantsStrings.h"
 
 #include <algorithm>
+#include <cstdint>   // uint32_t — an IPv4 address as a number, for /N and ranges
+#include <cstdlib>   // wcstol — the prefix length and the range's upper bound
+#include <cstring>   // memcmp/memcpy — the 16 raw bytes of an IPv6 address
 #include <cwctype>
 
 extern AppState app;
@@ -25,6 +39,97 @@ namespace {
         while (b < e && ::iswspace(s[b])) ++b;
         while (e > b && ::iswspace(s[e - 1])) --e;
         return s.substr(b, e - b);
+    }
+
+    // --- Address literals ---------------------------------------------------
+    //
+    // Three of the pattern forms below cannot be answered with string work: a
+    // /24 is not a prefix of anything, and "10-50" is not a substring. These
+    // turn text into numbers so those forms can be decided by arithmetic.
+
+    // A peer address can arrive with a scope id — "fe80::1%12" is what
+    // GetNameInfoW returns for a link-local peer. It identifies the INTERFACE,
+    // not the address, and InetPton rejects it, so it comes off first. Removing
+    // it is also what lets a link-local address be written in a rule at all.
+    std::wstring StripScope(const std::wstring &s) {
+        const size_t pct = s.find(L'%');
+        return pct == std::wstring::npos ? s : s.substr(0, pct);
+    }
+
+    // Host byte order, so the range comparison below is ordinary arithmetic.
+    bool ParseV4(const std::wstring &s, uint32_t &out) {
+        in_addr a{};
+        if (InetPtonW(AF_INET, s.c_str(), &a) != 1) return false;
+        out = ntohl(a.S_un.S_addr);
+        return true;
+    }
+
+    bool ParseV6(const std::wstring &s, BYTE out[16]) {
+        in6_addr a{};
+        if (InetPtonW(AF_INET6, StripScope(s).c_str(), &a) != 1) return false;
+        memcpy(out, &a, 16);
+        return true;
+    }
+
+    // "<address>/<bits>", either family.
+    struct Cidr {
+        bool     v6      = false;
+        uint32_t net4    = 0;
+        BYTE     net6[16]{};
+        int      bits    = 0;
+    };
+
+    // Separated from the matching so the SAME check can validate an entry as a
+    // user types it. An unparseable rule must be refused at the panel, not left
+    // in the list quietly matching nothing — a rule that is believed and does
+    // not work is worse than one that was rejected out loud.
+    bool ParseCidr(const std::wstring &pattern, Cidr &out) {
+        const size_t slash = pattern.find(L'/');
+        if (slash == std::wstring::npos) return false;
+
+        const std::wstring net  = pattern.substr(0, slash);
+        const std::wstring bits = pattern.substr(slash + 1);
+        if (net.empty() || bits.empty()) return false;
+        if (bits.find_first_not_of(L"0123456789") != std::wstring::npos) return false;
+        out.bits = static_cast<int>(wcstol(bits.c_str(), nullptr, 10));
+
+        out.v6 = net.find(L':') != std::wstring::npos;
+        if (out.v6) {
+            if (out.bits < 0 || out.bits > 128) return false;
+            return ParseV6(net, out.net6);
+        }
+        if (out.bits < 0 || out.bits > 32) return false;
+        return ParseV4(net, out.net4);
+    }
+
+    // "192.168.0.10-192.168.0.50", or the shorthand "192.168.0.10-50" in which
+    // the upper bound names only the last octet.
+    //
+    // IPv4 ONLY, deliberately. A v6 range is written as a prefix, which /N
+    // already expresses exactly and unambiguously — and a 128-bit range needs
+    // arithmetic this does not otherwise require.
+    bool ParseRange(const std::wstring &pattern, uint32_t &lo, uint32_t &hi) {
+        const size_t dash = pattern.find(L'-');
+        if (dash == std::wstring::npos) return false;
+
+        const std::wstring loText = pattern.substr(0, dash);
+        const std::wstring hiText = pattern.substr(dash + 1);
+        if (loText.empty() || hiText.empty()) return false;
+        if (loText.find(L':') != std::wstring::npos) return false;
+        if (!ParseV4(loText, lo)) return false;
+
+        if (hiText.find(L'.') == std::wstring::npos) {
+            // Shorthand — the upper bound replaces the final octet.
+            if (hiText.find_first_not_of(L"0123456789") != std::wstring::npos) return false;
+            const long last = wcstol(hiText.c_str(), nullptr, 10);
+            if (last < 0 || last > 255) return false;
+            hi = (lo & 0xFFFFFF00u) | static_cast<uint32_t>(last);
+        } else if (!ParseV4(hiText, hi)) {
+            return false;
+        }
+
+        // Backwards bounds match nothing, so they are a typo rather than a rule.
+        return hi >= lo;
     }
 
     // The .ini stores decimal text. GetPrivateProfileIntW cannot distinguish
@@ -101,8 +206,27 @@ bool LooksLikeAddress(const std::wstring &s) {
         const bool ok = (c >= L'0' && c <= L'9') ||
                         (c >= L'a' && c <= L'f') ||
                         (c >= L'A' && c <= L'F') ||
-                        c == L'.' || c == L':' || c == L'*';
+                        c == L'.' || c == L':' || c == L'*' ||
+                        c == L'/' || c == L'-';
         if (!ok) return false;
+    }
+
+    // A CIDR or a range must PARSE, not merely be spelled out of legal
+    // characters. The filter above happily passes "192.168.0.0/99" and
+    // "10.0.0.5-1", and an entry that can never match any address is precisely
+    // what this function exists to drop: the panel reports what it pruned, so a
+    // refusal is visible, while a rule that is kept and silently matches nothing
+    // is believed.
+    //
+    // The older forms are left alone. None of them can contain '/' or '-', so
+    // nothing that worked before reaches this and changes behaviour.
+    if (s.find(L'/') != std::wstring::npos) {
+        Cidr c;
+        return ParseCidr(s, c);
+    }
+    if (s.find(L'-') != std::wstring::npos) {
+        uint32_t lo = 0, hi = 0;
+        return ParseRange(s, lo, hi);
     }
     return true;
 }
@@ -111,11 +235,66 @@ bool AddressMatches(const std::wstring &pattern, const std::wstring &addr) {
     if (pattern.empty()) return false;
     if (pattern == L"*") return true;
 
+    // TEXT PREFIX, and it stays one. "192.168.1.*" is what most rules are, it
+    // costs nothing to answer, and rewriting it as a /24 would change what
+    // existing lists mean — the two are not the same rule. Note the sharp edge
+    // it keeps: the prefix is compared as CHARACTERS, so "192.168.1*" without
+    // the trailing dot also matches 192.168.10.x and 192.168.100.x. That is why
+    // /N now exists beside it.
     if (pattern.back() == L'*') {
         const std::wstring prefix = pattern.substr(0, pattern.size() - 1);
         return addr.size() >= prefix.size() &&
                _wcsnicmp(addr.c_str(), prefix.c_str(), prefix.size()) == 0;
     }
+
+    // "192.168.0.0/24", "2001:db8::/32". FAMILIES MUST AGREE: a v4 rule never
+    // matches a v6 peer, which is what stops a /24 covering addresses that
+    // merely begin with the same bytes in another notation.
+    if (pattern.find(L'/') != std::wstring::npos) {
+        Cidr c;
+        if (!ParseCidr(pattern, c)) return false;
+
+        if (c.v6) {
+            BYTE a[16];
+            if (!ParseV6(addr, a)) return false;
+            const int whole = c.bits / 8, rest = c.bits % 8;
+            if (memcmp(c.net6, a, static_cast<size_t>(whole)) != 0) return false;
+            if (rest == 0) return true;
+            const BYTE mask = static_cast<BYTE>(0xFF << (8 - rest));
+            return (c.net6[whole] & mask) == (a[whole] & mask);
+        }
+
+        uint32_t a = 0;
+        if (!ParseV4(addr, a)) return false;
+        // /0 is every address, and it is handled here rather than by the shift:
+        // shifting a 32-bit value by 32 is undefined behaviour, not zero.
+        if (c.bits == 0) return true;
+        const uint32_t mask = 0xFFFFFFFFu << (32 - c.bits);
+        return (c.net4 & mask) == (a & mask);
+    }
+
+    // "192.168.0.10-192.168.0.50" or "192.168.0.10-50".
+    if (pattern.find(L'-') != std::wstring::npos) {
+        uint32_t lo = 0, hi = 0, a = 0;
+        if (!ParseRange(pattern, lo, hi)) return false;
+        if (!ParseV4(addr, a)) return false;
+        return a >= lo && a <= hi;
+    }
+
+    // EXACT — and numerically first, because one address has more than one
+    // spelling. "2001:db8::1" and "2001:0db8:0000:0000:0000:0000:0000:0001" are
+    // the same host, and a rule typed the long way round matching nothing would
+    // be a silent lockout. This also lets "fe80::1" match a peer that arrives
+    // as "fe80::1%12" with its scope id attached.
+    //
+    // Text comparison remains the fallback, so anything that is not an address
+    // literal behaves exactly as it did.
+    uint32_t p4 = 0, a4 = 0;
+    if (ParseV4(pattern, p4) && ParseV4(addr, a4)) return p4 == a4;
+
+    BYTE p6[16], a6[16];
+    if (ParseV6(pattern, p6) && ParseV6(addr, a6)) return memcmp(p6, a6, 16) == 0;
+
     return _wcsicmp(pattern.c_str(), addr.c_str()) == 0;
 }
 

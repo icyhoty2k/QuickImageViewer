@@ -771,6 +771,40 @@ namespace Constants {
         // by an address-keyed rule to begin with.
         constexpr size_t AUTH_TRACK_MAX = 1024;
 
+        // --- Handshake deadline ---------------------------------------------
+        //
+        // Bounds every read from the moment a connection is accepted until it is
+        // authenticated: the TLS handshake, the banner, and the AUTH exchange.
+        // LIFTED once the client is in — commands can be minutes apart, and an
+        // idle authenticated connection waiting for the next keystroke is the
+        // normal state of a mirrored screen, not a fault.
+        //
+        // WITHOUT THIS THE LISTENER IS TRIVIALLY DENIED. A peer that completes
+        // the TCP handshake and then says nothing holds a worker thread blocked
+        // in recv() for ever; MAX_CONNECTIONS of those and no real client can get
+        // in until the app restarts. It costs an attacker one open socket each,
+        // needs no password, and survives every gate above — the AllowList admits
+        // the address, and nothing after that ever asks it to speak.
+        //
+        // Ten seconds because the slowest legitimate case is a phone deriving
+        // PBKDF2 at 210,000 iterations over a cellular link, which is well under
+        // a second of compute and a few round trips of network.
+        constexpr int HANDSHAKE_TIMEOUT_MS = 10000;
+
+        // Bounds a SEND that makes no progress at all, for the whole life of a
+        // connection. Deliberately generous: a 32 MB image to a phone on a bad
+        // link is slow by design, and this must never cut one short. What it
+        // stops is the other thing — a peer that accepts a connection and then
+        // never drains its receive window, which without a timeout pins the
+        // sending thread indefinitely.
+        constexpr int SEND_TIMEOUT_MS = 30000;
+
+        // Longest peer-chosen name kept from "hello <name>". A LABEL for the
+        // log and nothing else — capped so a peer cannot pad its name until the
+        // address it is shown beside scrolls out of the column, which would let
+        // it choose what the log appears to say about where it came from.
+        constexpr size_t PEER_NAME_MAX = 40;
+
         // --- The driving side's target list (src/Rem_TCP_IP/RemotesFile.*) ---
         // Beside the exe, and DELIBERATELY not the exe-derived name: an .ini
         // called qIV.ini next to qIV.exe is what makes the whole app switch from
@@ -828,7 +862,31 @@ namespace Constants {
         //         client PINS by SHA-256 fingerprint (RemoteTls.h). Loopback is
         //         unchanged and still plaintext — nothing off-machine can reach
         //         it, so there is nothing there to encrypt against.
-        constexpr int PROTOCOL_VERSION = 4;
+        //
+        // 4 → 5:  the handshake gained a MANDATORY SECOND LINE. After the banner
+        //         the server now always sends exactly one more line before it
+        //         will read anything: "AUTH <iter> <salt> <nonce>" when it wants
+        //         a password, and a bare "OK" when it does not. A successful
+        //         AUTH is likewise answered "OK" instead of silence.
+        //
+        //         WHY IT IS WORTH A VERSION: under v4 "no password" was signalled
+        //         by SAYING NOTHING, so a client could only detect it by waiting
+        //         for a timeout — 750 ms in the desktop client, 2 s in the
+        //         Android one — and guessing from the silence. That is wrong in
+        //         both directions. A challenge delayed past the probe by a slow
+        //         link read as "no password", and the client then entered command
+        //         mode unauthenticated while the server waited for an answer that
+        //         never came; every command failed and nothing said why. A server
+        //         that DID want a password but whose OK was silent left the
+        //         Android client blocking its full 10 s read and reporting
+        //         "Read timed out" for a CORRECT password.
+        //
+        //         A CLEAN BREAK, no negotiation and no probing: both clients now
+        //         block for that line and branch on what it says. A v4 server
+        //         talking to a v5 client stalls at the handshake instead of
+        //         guessing, which is the honest outcome — the two builds ship
+        //         together.
+        constexpr int PROTOCOL_VERSION = 5;
 
         // Hard cap on one received line. A socket must never be allowed to grow
         // a buffer without bound just by never sending a newline.

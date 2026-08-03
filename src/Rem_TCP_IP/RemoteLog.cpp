@@ -23,6 +23,11 @@ namespace {
     std::deque<Entry> g_entries;
     long long         g_nextSeq = 1;
     std::wstring      g_selfName;   // guarded by g_mutex — see SetSelfName
+    // What this instance is listening ON, for the saved file's preamble. A log
+    // that names only the peer leaves "is that address me or them" unanswerable
+    // — which is the one question a same-machine connection makes urgent, since
+    // then both ends really do share an address.
+    std::wstring      g_selfEndpoint;
 
     // OUTSIDE the mutex on purpose: the whole value of the switch is that a
     // viewer with logging off never touches the lock. Relaxed ordering, because
@@ -38,8 +43,48 @@ namespace {
     // The file's own version marker. A loader that meets a header it does not
     // know refuses rather than guessing at the column order — a log read back
     // with the sender and receiver swapped is worse than no log.
-    constexpr const wchar_t *FILE_HEADER =
+    // v1 wrote magic, version and every column name on one long line, then rows
+    // whose first two fields were a raw FILETIME and a raw microsecond count. It
+    // parsed perfectly and read terribly — "134302577811182526" and "85783695"
+    // are the two facts a person most wants out of a log, written in the two
+    // forms a person cannot use, and nothing in the file said which machine it
+    // came from.
+    //
+    // v2 loses NO precision: the raw pair is still on every row, moved to the
+    // END where only the loader looks. What changed is what the eye lands on
+    // first, and a preamble that names the instance, its listener and the time
+    // the file was written.
+    constexpr const wchar_t *FILE_MAGIC = L"#qIV-remote-log";
+    constexpr int            FILE_VERSION = 2;
+
+    // Still recognised on load. Reading somebody's old export must keep working
+    // — the format changed for the writer's benefit, not the reader's.
+    constexpr const wchar_t *FILE_HEADER_V1 =
         L"#qIV-remote-log\t1\tseq\twhenFt\tdeltaUs\tdir\tsender\tcommand\treceiver\tresponse";
+
+    // Date AND time. FormatTime is the panel's form and omits the date, which is
+    // right for a live column and wrong for a file that can span midnight.
+    std::wstring FormatStamp(long long whenFt) {
+        if (whenFt <= 0) return L"—";
+        FILETIME utc;
+        utc.dwLowDateTime  = static_cast<DWORD>(whenFt & 0xFFFFFFFF);
+        utc.dwHighDateTime = static_cast<DWORD>((whenFt >> 32) & 0xFFFFFFFF);
+        FILETIME local{};
+        if (!FileTimeToLocalFileTime(&utc, &local)) return L"—";
+        SYSTEMTIME st{};
+        if (!FileTimeToSystemTime(&local, &st)) return L"—";
+        wchar_t b[40];
+        swprintf_s(b, L"%04u-%02u-%02u %02u:%02u:%02u.%03u",
+                   st.wYear, st.wMonth, st.wDay,
+                   st.wHour, st.wMinute, st.wSecond, st.wMilliseconds);
+        return b;
+    }
+
+    long long NowFt() {
+        FILETIME ft{};
+        GetSystemTimeAsFileTime(&ft);
+        return (static_cast<long long>(ft.dwHighDateTime) << 32) | ft.dwLowDateTime;
+    }
 
     // Tabs and newlines are the record separators, so a field carrying one would
     // split into a row that never happened. Replaced rather than escaped: this
@@ -230,6 +275,28 @@ std::wstring SelfName() {
     return g_selfName.empty() ? std::wstring(L"(this)") : g_selfName;
 }
 
+// NAME THEN ADDRESS, the same shape a peer gets, so both sides of a row read
+// alike and neither has to be guessed at. The address is dropped when there is
+// none — a driving instance with no listener of its own has no endpoint to give,
+// and "(not listening)" on every row it writes would be noise, not information.
+std::wstring SelfLabel() {
+    std::lock_guard<std::mutex> lk(g_mutex);
+    const std::wstring n = g_selfName.empty() ? std::wstring(L"(this)") : g_selfName;
+    return g_selfEndpoint.empty() ? n : n + L" " + g_selfEndpoint;
+}
+
+// Pushed in rather than read out: this module is a leaf and knows nothing about
+// the server, which is what keeps a diagnostic from becoming a dependency.
+void SetSelfEndpoint(const std::wstring &endpoint) {
+    std::lock_guard<std::mutex> lk(g_mutex);
+    g_selfEndpoint = endpoint;
+}
+
+std::wstring SelfEndpoint() {
+    std::lock_guard<std::mutex> lk(g_mutex);
+    return g_selfEndpoint.empty() ? std::wstring(L"(not listening)") : g_selfEndpoint;
+}
+
 void Clear() {
     std::lock_guard<std::mutex> lk(g_mutex);
     g_entries.clear();
@@ -262,9 +329,19 @@ std::wstring FormatDelta(long long us) {
     // Three bands, because the interesting range spans five orders of
     // magnitude: loopback is sub-millisecond, a LAN screen is single-digit
     // milliseconds, and a target that is swapping is seconds.
-    if (us < 1000)         swprintf_s(b, L"%lld µs", us);
-    else if (us < 1000000) swprintf_s(b, L"%.1f ms", static_cast<double>(us) / 1000.0);
-    else                   swprintf_s(b, L"%.2f s",  static_cast<double>(us) / 1000000.0);
+    if (us < 1000)          swprintf_s(b, L"%lld µs", us);
+    else if (us < 1000000)  swprintf_s(b, L"%.1f ms", static_cast<double>(us) / 1000.0);
+    else if (us < 60000000) swprintf_s(b, L"%.2f s",  static_cast<double>(us) / 1000000.0);
+    else {
+        // A FOURTH BAND, for the connection rows. A round trip never reaches a
+        // minute — REPLY_TIMEOUT_MS bounds it at five seconds — but a SESSION
+        // does, and a wall left running overnight rendered as "50400.00 s",
+        // which is a number nobody reads as fourteen hours.
+        const long long total = us / 1000000;
+        const long long h = total / 3600, m = (total % 3600) / 60, sec = total % 60;
+        if (h > 0) swprintf_s(b, L"%lldh %02lldm", h, m);
+        else       swprintf_s(b, L"%lldm %02llds", m, sec);
+    }
     return b;
 }
 
@@ -277,18 +354,36 @@ bool SaveTo(const std::wstring &path, std::wstring &errorOut) {
     // Built whole, then written in one go: a partially written log that was
     // interrupted mid-flush is a file that loads as garbage, and the whole
     // buffer is a few megabytes at CAPACITY.
-    std::wstring text = FILE_HEADER;
-    text += L"\r\n";
+    // A PREAMBLE, because the first question asked of any log is "whose is
+    // this". Every line starts with '#' and the loader skips them all, so this
+    // block can grow without touching the parser.
+    std::wstring text = std::wstring(FILE_MAGIC) + L'\t' +
+                        std::to_wstring(FILE_VERSION) + L"\r\n";
+    text += L"# instance\t"  + Flatten(SelfName()) + L"\r\n";
+    text += L"# listening\t" + Flatten(SelfEndpoint()) + L"\r\n";
+    text += L"# saved\t"     + FormatStamp(NowFt()) + L"\r\n";
+    text += L"# rows\t"      + std::to_wstring(rows.size()) + L"\r\n";
+    text += L"# note\ttime and elapsed are written to be read; whenFt and deltaUs "
+            L"at the end of each row are the exact values this file reloads from\r\n";
+    text += L"# note\tfrom/to name a PEER as address:port and this instance by its "
+            L"name — a row with this instance's own name on both sides never happens\r\n";
+    text += L"# columns\tseq\ttime\telapsed\tdir\tfrom\tline\tto\tresult\twhenFt\tdeltaUs\r\n";
+
     for (const Entry &e : rows) {
-        text += std::to_wstring(e.seq);      text += L'\t';
-        text += std::to_wstring(e.whenFt);   text += L'\t';
-        text += std::to_wstring(e.deltaUs);  text += L'\t';
+        text += std::to_wstring(e.seq);         text += L'\t';
+        // Readable first — this is the half a person reads.
+        text += FormatStamp(e.whenFt);          text += L'\t';
+        text += FormatDelta(e.deltaUs);         text += L'\t';
         text += (e.dir == Direction::Out) ? L"OUT" : L"IN";
         text += L'\t';
-        text += Flatten(e.sender);           text += L'\t';
-        text += Flatten(e.command);          text += L'\t';
-        text += Flatten(e.receiver);         text += L'\t';
-        text += Flatten(e.response);
+        text += Flatten(e.sender);              text += L'\t';
+        text += Flatten(e.command);             text += L'\t';
+        text += Flatten(e.receiver);            text += L'\t';
+        text += Flatten(e.response);            text += L'\t';
+        // Exact last — this is the half the loader reads. Keeping both is the
+        // whole reason nothing had to be traded away for legibility.
+        text += std::to_wstring(e.whenFt);      text += L'\t';
+        text += std::to_wstring(e.deltaUs);
         text += L"\r\n";
     }
 
@@ -351,6 +446,7 @@ bool LoadFrom(const std::wstring &path, std::wstring &errorOut) {
 
     std::vector<Entry> loaded;
     bool headerSeen = false;
+    int  version    = 0;
 
     size_t start = 0;
     while (start <= text.size()) {
@@ -362,28 +458,61 @@ bool LoadFrom(const std::wstring &path, std::wstring &errorOut) {
         if (line.empty()) { if (start > text.size()) break; continue; }
 
         if (!headerSeen) {
-            if (line != FILE_HEADER) {
-                errorOut = L"That is not a qIV remote log, or it was written by a "
-                           L"different version.\r\n\r\nThe first line must be the "
-                           L"header this build writes.";
-                return false;
+            // v1 is matched WHOLE, because its version and its column names were
+            // one inseparable line. v2 needs only the magic and a number, which
+            // is what lets its preamble grow later without breaking this.
+            if (line == FILE_HEADER_V1) {
+                version = 1;
+            } else {
+                const std::vector<std::wstring> h = SplitTabs(line);
+                if (h.size() < 2 || h[0] != FILE_MAGIC) {
+                    errorOut = L"That is not a qIV remote log.\r\n\r\nThe first line "
+                               L"must be the header qIV writes when it saves one.";
+                    return false;
+                }
+                version = static_cast<int>(ToLL(h[1]));
+                if (version != FILE_VERSION) {
+                    errorOut = L"That log was written by a different version of qIV "
+                               L"and this build cannot read its columns.";
+                    return false;
+                }
             }
             headerSeen = true;
             continue;
         }
 
+        // The whole preamble, and any comment somebody added by hand. A data row
+        // always begins with its sequence number, so '#' can never start one.
+        if (line[0] == L'#') continue;
+
         const std::vector<std::wstring> f = SplitTabs(line);
-        if (f.size() < 8) continue; // a truncated tail line, not a reason to fail
 
         Entry e;
-        e.seq      = ToLL(f[0]);
-        e.whenFt   = ToLL(f[1]);
-        e.deltaUs  = ToLL(f[2]);
-        e.dir      = (f[3] == L"IN") ? Direction::In : Direction::Out;
-        e.sender   = f[4];
-        e.command  = f[5];
-        e.receiver = f[6];
-        e.response = f[7];
+        if (version == 1) {
+            if (f.size() < 8) continue; // a truncated tail line, not a failure
+            e.seq      = ToLL(f[0]);
+            e.whenFt   = ToLL(f[1]);
+            e.deltaUs  = ToLL(f[2]);
+            e.dir      = (f[3] == L"IN") ? Direction::In : Direction::Out;
+            e.sender   = f[4];
+            e.command  = f[5];
+            e.receiver = f[6];
+            e.response = f[7];
+        } else {
+            if (f.size() < 10) continue;
+            e.seq      = ToLL(f[0]);
+            // f[1] and f[2] are the READABLE time and elapsed. Deliberately not
+            // parsed: they are a rendering of the exact pair at the end, and
+            // reading them back would turn a display rounding into the stored
+            // value.
+            e.dir      = (f[3] == L"IN") ? Direction::In : Direction::Out;
+            e.sender   = f[4];
+            e.command  = f[5];
+            e.receiver = f[6];
+            e.response = f[7];
+            e.whenFt   = ToLL(f[8]);
+            e.deltaUs  = ToLL(f[9]);
+        }
         loaded.push_back(std::move(e));
     }
 
