@@ -236,12 +236,22 @@ namespace {
         return ok;
     }
 
-    // Reads the PFX and returns the certificate, key attached.
+    // Reads the PFX and returns the certificate with its private key attached.
     //
-    // PKCS12_NO_PERSIST_KEY keeps the imported private key EPHEMERAL. Without
-    // it every load would deposit another key container in the user's profile —
-    // a slow leak, and copies of the key in the very place the file-based model
-    // was chosen to avoid.
+    // THE KEY IS PERSISTED ON IMPORT, and it took a wrong turn to establish
+    // that it has to be. The obvious choice is PKCS12_NO_PERSIST_KEY — keep the
+    // key in-process, leave nothing in the user's profile, which is exactly the
+    // spirit of storing the identity in a portable file. It works for a TLS
+    // CLIENT context and fails for a SERVER one: AcquireCredentialsHandle
+    // returns SEC_E_NO_CREDENTIALS (0x8009030E), because the server side needs
+    // a key it can acquire through the certificate rather than one that only
+    // exists as a handle inside this process.
+    //
+    // So the key is imported into the user's CNG keyset under a container name
+    // Windows picks, and DELETED again at shutdown (ShutdownServerCredentials)
+    // — otherwise every launch would leave another container behind for the
+    // life of the profile. The PFX beside the exe remains the durable copy; the
+    // keyset entry lives exactly as long as the listener does.
     PCCERT_CONTEXT LoadCertificate(std::wstring &errorOut) {
         HANDLE h = CreateFileW(CertPath().c_str(), GENERIC_READ, FILE_SHARE_READ,
                                nullptr, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, nullptr);
