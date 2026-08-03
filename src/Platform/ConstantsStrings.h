@@ -356,6 +356,14 @@ namespace Constants::Messages {
     constexpr const wchar_t *BLACKLIST_REASON_AUTH_PREFIX = L"blocked automatically: ";
     constexpr const wchar_t *BLACKLIST_REASON_AUTH_SUFFIX =
         L" failed authentications in 10 minutes";
+
+    // The OTHER way a row gets into that file: somebody pressed Ban in the F9
+    // panel. Distinguished from the automatic reason above because the two are
+    // undone differently — an automatic block is evidence of an attack, an
+    // operator block is a decision, and the person reading the file later needs
+    // to know which of the two they are looking at.
+    constexpr const wchar_t *BLACKLIST_REASON_OPERATOR =
+        L"blocked by hand from the Local Server panel";
     // Panel footers reporting WHERE the values on screen came from.
     //
     // Every panel backed by a file says this on open, because a populated panel
