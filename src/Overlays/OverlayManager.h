@@ -57,6 +57,19 @@ class OverlayManager {
             SLOT_COUNT = 9
         };
 
+        // The persisted masks are one bit per slot, and Constants::Overlay
+        // builds its defaults by writing those bit positions out by hand — it
+        // cannot see this enum. These assertions are what stops the two drifting:
+        // renumber a slot without updating the mask builders and the build
+        // fails here rather than silently starting the wrong slots.
+        static_assert(TOP_LEFT == 0 && TOP_CENTER == 1 && TOP_RIGHT == 2 &&
+                      MID_LEFT == 3 && MID_CENTER == 4 && MID_RIGHT == 5 &&
+                      BOT_LEFT == 6 && BOT_CENTER == 7 && BOT_RIGHT == 8,
+                      "Slot indices must match the bit positions used by "
+                      "Constants::Overlay::DEFAULT_SLOT_*_MASK");
+        static_assert(SLOT_COUNT == 9,
+                      "Nine slots, nine SLOT_STATE_* constants — add both or neither");
+
         // ── Public overlays (content set by callers) ──────────────────────────
         TextOverlay slotTopLeft; // [1] index / total + filename
         TextOverlay slotTopCenter; // [2] unused
@@ -88,6 +101,11 @@ class OverlayManager {
 
         // TOP_CENTER — raw zoom scalar, e.g. 0.86f → "86.0%"
         void UpdateZoom(float zoom, HWND hWnd);
+
+        // Repaints TOP_RIGHT's server indicator. Called from the
+        // WM_QIV_REMOTE_CLIENTS handler — the listener starting, stopping, or
+        // gaining/losing a client.
+        void UpdateRemoteStatus();
 
         // BOT_RIGHT  — pixel dimensions + file size in bytes
         void UpdateDims(int imgW, int imgH, int64_t fileSizeBytes);
@@ -280,6 +298,10 @@ class OverlayManager {
         // also appends the zoom + dimensions/size summary as a second line, so
         // that mode needs no other slot.
         void RebuildTopLeft();
+
+        // TOP_RIGHT's text: the zoom, prefixed with the server dot and
+        // active/max client count while the listener is running.
+        std::wstring BuildTopRightText() const;
 
         // Stores the raw data so compact toggle / layout change can re-render
         int m_infoIndex = 0;

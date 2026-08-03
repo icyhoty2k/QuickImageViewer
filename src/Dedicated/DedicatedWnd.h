@@ -40,6 +40,7 @@ class DedicatedWnd : public FloatingPanelWnd {
             if (m_hFontBody)  DeleteObject(m_hFontBody);
             if (m_hFontBold)  DeleteObject(m_hFontBold);
             if (m_hFontSmall) DeleteObject(m_hFontSmall);
+            if (m_hFontLink)  DeleteObject(m_hFontLink);
             DestroyBackBuffer();
         }
 
@@ -161,6 +162,12 @@ class DedicatedWnd : public FloatingPanelWnd {
         HFONT m_hFontBody  = nullptr;
         HFONT m_hFontBold  = nullptr;
         HFONT m_hFontSmall = nullptr;
+        HFONT m_hFontLink  = nullptr; // small + underline, per Constants::Links
+
+        // The subtitle's "Editing: <path>" — the path half, drawn as a link.
+        RECT m_iniLinkRect{};          // hit box, recomputed on every paint
+        bool m_iniLinkHot = false;
+
         int   m_cachedFontDpi = 0;
 
         HDC     m_bbDC     = nullptr;

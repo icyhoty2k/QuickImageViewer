@@ -1,6 +1,8 @@
 #include "RemotesWnd.h"
 #include "RemoteMirror.h"
 #include "RemotesFile.h"
+#include "UI/LinkText.h"
+#include "RemoteTls.h"   // RequiredForAddress — is a pin needed for this host?
 #include "RemoteExec.h"   // BuildSyncPayload
 
 #include "AppState.h"
@@ -11,6 +13,7 @@
 #include "UI/GdiPool.h" // pooled brushes and pens — never DeleteObject them
 
 #include <algorithm>
+#include <cwctype>    // towlower — fingerprint normalisation
 #include <shobjidl.h> // IFileOpenDialog — Add from file
 #include <windowsx.h>
 
@@ -94,6 +97,22 @@ void RemotesWnd::Show() {
     // The popup is owned by this window and is destroyed with it when the panel
     // closes, so what was last explained means nothing on reopening.
     m_tipOwner = nullptr;
+
+    // Where this list came from. Same reasoning as the F9 panel: a populated
+    // table and an empty one look the same whether they were read from disk or
+    // are simply a session's worth of typing, and only the file makes them
+    // survive a restart.
+    //
+    // Set before Rebuild so a row-derived footer (a target that is down) still
+    // wins — that is the more urgent thing to say.
+    if (Remote::RemotesFileExists()) {
+        m_status     = Constants::Messages::REMOTE_PANEL_READ_FROM;
+        m_statusPath = Remote::RemotesFilePath();
+    } else {
+        m_status = Constants::Messages::REMOTES_PANEL_NO_FILE;
+        m_statusPath.clear();
+    }
+
     BuildFields();
     Rebuild();
     ShowCenterOverParent();
@@ -130,7 +149,7 @@ void RemotesWnd::AutoConnectAll(HWND hOwner) {
         // Returns immediately either way — a connection is made on the target's
         // own thread, so a screen that is switched off does not delay startup.
         (void) Remote::Mirror::AddTarget(e.name, e.host, e.port, e.password,
-                                         e.exePath, e.autoConnect);
+                                         e.exePath, e.pin, e.autoConnect);
     }
 }
 
@@ -157,6 +176,17 @@ void RemotesWnd::BuildFields() {
                               : (Remote::IsStoredSecret(m_newPassword) ? L"(imported)" : L"(set)"),
         L"Its password, if it has one. Answers the challenge; never sent as text. "
         L"Add from file brings this across, so there is nothing to type.", true);
+    // Shown as a truncated prefix rather than 64 hex digits: the field is wide
+    // enough for a name, not a digest, and the first bytes are what anyone
+    // actually compares against the server's F9 panel.
+    add(F_PIN, L"TLS fingerprint",
+        m_newPin.empty()
+            ? std::wstring(Remote::Tls::RequiredForAddress(m_newHost) ? L"(required)"
+                                                                      : L"(not needed)")
+            : m_newPin.substr(0, 16) + L"…",
+        L"SHA-256 of that instance's certificate — read it off its F9 panel. Required "
+        L"for any address other than loopback; Add from file fills it in when the "
+        L"target's folder is reachable.");
     add(F_NAME, L"Name", m_newName.empty() ? L"(required)" : m_newName,
         L"REQUIRED. Identifies this remote — in the list, in messages about it, and when "
         L"matching it up again later. Add from file fills it in.");
@@ -172,8 +202,8 @@ void RemotesWnd::EditField(int fieldIndex) {
 
     if (m_fields[fieldIndex].id == F_PORT) {
         const int v = DialogPromptInt(L"Target Port", L"Port (1 - 65535):",
-                                      m_newPort ? m_newPort : 8770,
-                                      RT::PORT_MIN, RT::PORT_MAX, 8770);
+                                      m_newPort ? m_newPort : RT::PORT_DEFAULT,
+                                      RT::PORT_MIN, RT::PORT_MAX, RT::PORT_DEFAULT);
         if (v >= 0) m_newPort = v;
         BuildFields();
         Repaint();
@@ -194,6 +224,9 @@ void RemotesWnd::BeginTextEdit(int fieldIndex) {
             case F_HOST: seed = m_newHost; break;
             case F_NAME: seed = m_newName; break;
             case F_EXE:  seed = m_newExe;  break;
+            // Seeded with the FULL value, not the truncated display form —
+            // editing a field must never silently shorten what it holds.
+            case F_PIN:  seed = m_newPin;  break;
             default: break;
         }
     }
@@ -210,6 +243,18 @@ void RemotesWnd::CommitTextEdit() {
         case F_PASSWORD: m_newPassword = text; break;
         case F_NAME:     m_newName     = text; break;
         case F_EXE:      m_newExe      = text; break;
+        // Normalised on entry: a fingerprint is compared case-insensitively but
+        // stored lower-case, and pasting from a tool that prints colons or
+        // spaces between bytes is the ordinary case rather than an error.
+        case F_PIN: {
+            std::wstring clean;
+            for (wchar_t c : text) {
+                if (c == L':' || c == L' ' || c == L'-') continue;
+                clean += static_cast<wchar_t>(::towlower(c));
+            }
+            m_newPin = clean;
+            break;
+        }
         default: break;
     }
 
@@ -376,13 +421,18 @@ void RemotesWnd::FillFormFromRow(int row) {
     m_newPort      = r.port;
     m_newName      = r.name;
     m_newExe       = r.exePath;
+    m_newPin.clear();
 
     // The credential is not carried in the row — the panel never displays one —
     // so it comes back out of the file, matched by name. Without this, saving an
     // edited row would silently drop the password it was connecting with.
     m_newPassword.clear();
     for (const Remote::RemoteEntry &e : Remote::LoadRemotes()) {
-        if (_wcsicmp(e.name.c_str(), r.name.c_str()) == 0) { m_newPassword = e.password; break; }
+        if (_wcsicmp(e.name.c_str(), r.name.c_str()) == 0) {
+            m_newPassword = e.password;
+            m_newPin      = e.pin;   // same reason: not carried in the row view
+            break;
+        }
     }
 
     BuildFields();
@@ -427,6 +477,7 @@ void RemotesWnd::DoCancelEdit() {
         m_newName.clear();
         m_newPassword.clear();
         m_newExe.clear();
+        m_newPin.clear();
         BuildFields();
     }
 
@@ -443,6 +494,7 @@ void RemotesWnd::DoNewEntry() {
     m_newName.clear();
     m_newPassword.clear();
     m_newExe.clear();
+    m_newPin.clear();
     // New is the other way IN to editing — there is nothing to describe a new
     // remote with while the form is read-only.
     m_formLocked = false;
@@ -498,12 +550,27 @@ void RemotesWnd::DoSaveEntry() {
         }
     }
 
+    // A pin is REQUIRED off loopback. Refused here rather than at connect time:
+    // the row would otherwise save cleanly, sit in the list looking correct, and
+    // fail every attempt with an error about a fingerprint — at a moment when
+    // the panel that could fix it is not open.
+    if (Remote::Tls::RequiredForAddress(m_newHost) && m_newPin.empty()) {
+        DialogMessage(m_newHost + L" is not loopback, so that instance speaks TLS and "
+                      L"this row needs its certificate fingerprint.\r\n\r\n"
+                      L"Read it from that instance's F9 panel and paste it into the "
+                      L"TLS fingerprint field — or use Add from file if you can reach "
+                      L"its folder, which fills it in for you.",
+                      L"Remote Servers");
+        return;
+    }
+
     Remote::RemoteEntry e;
     e.name     = m_newName;
     e.host     = m_newHost;
     e.port     = m_newPort;
     e.password = m_newPassword;
     e.exePath  = m_newExe;
+    e.pin      = m_newPin;
     // Recorded, not dialled — on this launch or the next. Reconnecting at
     // startup is a deliberate choice for a screen wall, set in the file rather
     // than assumed for everything that was ever added.
@@ -544,7 +611,7 @@ void RemotesWnd::DoSaveEntry() {
     // Reconnected only if it was connected before the edit — saving a change is
     // not a request to start driving something that was sitting idle.
     (void) Remote::Mirror::AddTarget(e.name, e.host, e.port, e.password,
-                                     e.exePath, wasConnecting);
+                                     e.exePath, e.pin, wasConnecting);
 
     const bool wasEdit = !oldName.empty();
     m_editingRowId = 0;
@@ -870,15 +937,17 @@ void RemotesWnd::EnsureFonts(HDC dc) {
     if (m_hFontBody)  DeleteObject(m_hFontBody);
     if (m_hFontBold)  DeleteObject(m_hFontBold);
     if (m_hFontSmall) DeleteObject(m_hFontSmall);
+    if (m_hFontLink)  DeleteObject(m_hFontLink);
     m_cachedFontDpi = dpi;
-    auto mk = [&](int pt, int w) {
-        return CreateFontW(-MulDiv(pt, dpi, 72), 0, 0, 0, w, FALSE, FALSE, FALSE,
+    auto mk = [&](int pt, int w, BOOL underline = FALSE) {
+        return CreateFontW(-MulDiv(pt, dpi, 72), 0, 0, 0, w, FALSE, underline, FALSE,
                            DEFAULT_CHARSET, OUT_TT_PRECIS, CLIP_DEFAULT_PRECIS,
                            CLEARTYPE_QUALITY, VARIABLE_PITCH, L"Segoe UI");
     };
     m_hFontBody  = mk(10, FW_NORMAL);
     m_hFontBold  = mk(11, FW_SEMIBOLD);
     m_hFontSmall = mk(8,  FW_NORMAL);
+    m_hFontLink  = mk(8,  FW_NORMAL, Constants::Links::UNDERLINE ? TRUE : FALSE);
 }
 
 void RemotesWnd::EnsureBackBuffer(HDC refDC, int w, int h) {
@@ -1111,6 +1180,7 @@ LRESULT RemotesWnd::HandlePanelMessage(UINT message, WPARAM wParam, LPARAM lPara
             const bool hot = HitTestButton(pt) >= 0 || HitTestDot(pt) >= 0 ||
                              HitTestIdentify(pt) >= 0 ||
                              HitTestLink(pt) >= 0 || HitTestRow(pt) >= 0 ||
+                             PtInRect(&m_statusLinkRect, pt) ||
                              (!m_formLocked && HitTestField(pt) >= 0);
             SetCursor(hot ? Constants::Cursors::CURR_CLICK
                           : Constants::Cursors::CURR_DEFAULT);
@@ -1121,8 +1191,9 @@ LRESULT RemotesWnd::HandlePanelMessage(UINT message, WPARAM wParam, LPARAM lPara
             POINT pt{GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam)};
             const int r = HitTestRow(pt);
             const int b = HitTestButton(pt);
-            if (r != m_hotRow || b != m_hotButton) {
-                m_hotRow = r; m_hotButton = b;
+            const bool linkHot = PtInRect(&m_statusLinkRect, pt) != FALSE;
+            if (r != m_hotRow || b != m_hotButton || linkHot != m_statusLinkHot) {
+                m_hotRow = r; m_hotButton = b; m_statusLinkHot = linkHot;
                 Repaint();
             }
             UpdateTip(pt);
@@ -1132,6 +1203,14 @@ LRESULT RemotesWnd::HandlePanelMessage(UINT message, WPARAM wParam, LPARAM lPara
         case WM_LBUTTONDOWN: {
             SetFocus(GetHwnd());
             POINT pt{GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam)};
+
+            // Before the buttons: the footer link sits below every control, so
+            // nothing else can claim this point, and testing it first keeps the
+            // ordering obvious rather than accidental.
+            if (PtInRect(&m_statusLinkRect, pt)) {
+                UI::Link::Reveal(m_statusPath);
+                return 0;
+            }
 
             const int b = HitTestButton(pt);
             if (b >= 0) {
@@ -1600,6 +1679,17 @@ LRESULT RemotesWnd::HandlePanelMessage(UINT message, WPARAM wParam, LPARAM lPara
                 RECT frc{pad, fy, W - pad, fy + static_cast<int>(20 * s)};
                 DrawTextW(bb, foot.c_str(), -1, &frc,
                           DT_LEFT | DT_SINGLELINE | DT_END_ELLIPSIS);
+
+                // The source file, as a link, measured off the end of the label
+                // so the hit box cannot drift from the glyphs. Only when the
+                // footer is still showing the label — a row-derived message
+                // (a target that is down) replaced it and owns the line.
+                m_statusLinkRect = RECT{};
+                if (!m_statusPath.empty() && foot == m_status) {
+                    const int lx = pad + UI::Link::MeasureIn(bb, m_hFontSmall, m_status);
+                    m_statusLinkRect = UI::Link::Draw(bb, m_hFontLink, lx, fy, W - pad,
+                                                      m_statusPath, m_statusLinkHot, s);
+                }
             }
 
             BitBlt(dc, 0, 0, W, H, bb, 0, 0, SRCCOPY);

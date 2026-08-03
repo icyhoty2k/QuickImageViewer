@@ -1,4 +1,5 @@
 #include "DedicatedWnd.h"
+#include "UI/LinkText.h"
 #include "UI/GdiPool.h" // pooled brushes and pens — never DeleteObject them
 #include "DedicatedSettings.h"
 #include "DedicatedLists.h"        // list paths + AppendFolder
@@ -1246,15 +1247,17 @@ void DedicatedWnd::EnsureFonts(HDC dc) {
     if (m_hFontBody)  DeleteObject(m_hFontBody);
     if (m_hFontBold)  DeleteObject(m_hFontBold);
     if (m_hFontSmall) DeleteObject(m_hFontSmall);
+    if (m_hFontLink)  DeleteObject(m_hFontLink);
     m_cachedFontDpi = dpi;
-    auto mk = [&](int pt, int w) {
-        return CreateFontW(-MulDiv(pt, dpi, 72), 0, 0, 0, w, FALSE, FALSE, FALSE,
+    auto mk = [&](int pt, int w, BOOL underline = FALSE) {
+        return CreateFontW(-MulDiv(pt, dpi, 72), 0, 0, 0, w, FALSE, underline, FALSE,
                            DEFAULT_CHARSET, OUT_TT_PRECIS, CLIP_DEFAULT_PRECIS,
                            CLEARTYPE_QUALITY, VARIABLE_PITCH, L"Segoe UI");
     };
     m_hFontBody  = mk(10, FW_NORMAL);
     m_hFontBold  = mk(11, FW_SEMIBOLD);
     m_hFontSmall = mk(8,  FW_NORMAL);
+    m_hFontLink  = mk(8,  FW_NORMAL, Constants::Links::UNDERLINE ? TRUE : FALSE);
 }
 
 void DedicatedWnd::EnsureBackBuffer(HDC refDC, int w, int h) {
@@ -1309,7 +1312,8 @@ LRESULT DedicatedWnd::HandlePanelMessage(UINT message, WPARAM wParam, LPARAM lPa
                 SetCursor(Constants::Cursors::CURR_DEFAULT);
                 return TRUE;
             }
-            if (HitTestButton(pt) >= 0 || HitTestRow(pt) >= 0) {
+            if (HitTestButton(pt) >= 0 || HitTestRow(pt) >= 0 ||
+                PtInRect(&m_iniLinkRect, pt)) {
                 SetCursor(Constants::Cursors::CURR_CLICK);
                 return TRUE;
             }
@@ -1357,12 +1361,20 @@ LRESULT DedicatedWnd::HandlePanelMessage(UINT message, WPARAM wParam, LPARAM lPa
             SelectObject(bb, m_hFontSmall);
             SetTextColor(bb, dim);
             RECT sr{pad, tr.bottom, W - pad, tr.bottom + static_cast<int>(16 * s)};
-            const std::wstring which =
-                Dedicated::SettingsUseFile()
-                    ? L"Editing: " + Dedicated::SettingsFilePath()
-                    : std::wstring(L"New instance — not yet generated");
-            DrawTextW(bb, which.c_str(), -1, &sr,
-                      DT_LEFT | DT_SINGLELINE | DT_PATH_ELLIPSIS);
+            m_iniLinkRect = RECT{};
+            if (Dedicated::SettingsUseFile()) {
+                // Label then path, so the path can be a link measured off the
+                // end of the label rather than positioned by hand.
+                const std::wstring label = L"Editing: ";
+                DrawTextW(bb, label.c_str(), -1, &sr, DT_LEFT | DT_SINGLELINE);
+                const int lx = pad + UI::Link::MeasureIn(bb, m_hFontSmall, label);
+                m_iniLinkRect = UI::Link::Draw(bb, m_hFontLink, lx, sr.top, W - pad,
+                                               Dedicated::SettingsFilePath(),
+                                               m_iniLinkHot, s);
+            } else {
+                DrawTextW(bb, L"New instance — not yet generated", -1, &sr,
+                          DT_LEFT | DT_SINGLELINE | DT_PATH_ELLIPSIS);
+            }
 
             // ── Buttons ──────────────────────────────────────────────────────
             {
@@ -1579,9 +1591,12 @@ LRESULT DedicatedWnd::HandlePanelMessage(UINT message, WPARAM wParam, LPARAM lPa
             }
 
             const bool overThumb = PtInRect(&m_thumbRect, pt) != FALSE;
+            const bool linkHot   = PtInRect(&m_iniLinkRect, pt) != FALSE;
             const int hr = HitTestRow(pt), hb = HitTestButton(pt);
-            if (hr != m_hotRow || hb != m_hotButton || overThumb != m_thumbHot) {
+            if (hr != m_hotRow || hb != m_hotButton || overThumb != m_thumbHot ||
+                linkHot != m_iniLinkHot) {
                 m_hotRow = hr; m_hotButton = hb; m_thumbHot = overThumb;
+                m_iniLinkHot = linkHot;
                 Repaint();
             }
             if (m_editingRow >= 0) m_edit.RouteMouse(message, wParam, lParam, GetHwnd());
@@ -1590,6 +1605,13 @@ LRESULT DedicatedWnd::HandlePanelMessage(UINT message, WPARAM wParam, LPARAM lPa
 
         case WM_LBUTTONDOWN: {
             const POINT pt{GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam)};
+
+            // The subtitle link sits above every control, so nothing else can
+            // claim this point.
+            if (PtInRect(&m_iniLinkRect, pt)) {
+                UI::Link::Reveal(Dedicated::SettingsFilePath());
+                return 0;
+            }
 
             // Scrollbar first — it overlays the row band on the right.
             if (PtInRect(&m_thumbRect, pt)) {

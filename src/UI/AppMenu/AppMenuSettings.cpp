@@ -4,6 +4,7 @@
 
 #include "AppState.h"
 #include "Common/Converters.h"
+#include "Dedicated/DedicatedSettings.h" // SettingsUseFile / SettingsFilePath
 #include "Input/AppCommands.h"
 #include "Overlays/OverlayManager.h"
 #include "Persistence/RegistryManager.h"
@@ -14,7 +15,8 @@
 #include "UI/ThemedDialog.h"
 #include "UI/UIManager.h"
 
-#include <commdlg.h> // ChooseColorW — overlay font colour picker
+#include <commdlg.h>     // ChooseColorW — overlay font colour picker
+#include <shlobj_core.h> // ILCreateFromPathW / SHOpenFolderAndSelectItems
 #include <string>
 
 extern AppState app;
@@ -525,6 +527,37 @@ void DispatchSetting(HWND hWnd, int cmd) {
             app.historyMaxDirsSave = v;
             Persistence::Registry::SaveSetting(Constants::Registry::HISTORY_MAX_DIRS_SAVE,
                 static_cast<DWORD>(app.historyMaxDirsSave));
+        }
+        break;
+    }
+
+    // Open wherever settings actually live: Explorer with the .ini selected, or
+    // regedit at qIV's key.
+    //
+    // Regedit is driven through its LastKey value, which is the only way to make
+    // it open somewhere specific — it has no command line for a key. HKCU, so no
+    // elevation is involved and nothing else is disturbed.
+    case Id::SET_LOCATION: {
+        if (Dedicated::SettingsUseFile()) {
+            const std::wstring &path = Dedicated::SettingsFilePath();
+            if (path.empty()) break;
+            if (PIDLIST_ABSOLUTE pidl = ILCreateFromPathW(path.c_str())) {
+                SHOpenFolderAndSelectItems(pidl, 0, nullptr, 0);
+                ILFree(pidl);
+            }
+        } else {
+            HKEY k = nullptr;
+            if (RegCreateKeyExW(HKEY_CURRENT_USER,
+                                L"Software\\Microsoft\\Windows\\CurrentVersion\\Applets\\Regedit",
+                                0, nullptr, 0, KEY_SET_VALUE, nullptr, &k, nullptr) == ERROR_SUCCESS) {
+                const std::wstring last =
+                    std::wstring(L"Computer\\HKEY_CURRENT_USER\\") + Constants::Registry::ROOT_KEY;
+                RegSetValueExW(k, L"LastKey", 0, REG_SZ,
+                               reinterpret_cast<const BYTE *>(last.c_str()),
+                               static_cast<DWORD>((last.size() + 1) * sizeof(wchar_t)));
+                RegCloseKey(k);
+            }
+            ShellExecuteW(nullptr, L"open", L"regedit.exe", nullptr, nullptr, SW_SHOWNORMAL);
         }
         break;
     }

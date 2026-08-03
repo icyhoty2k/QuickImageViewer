@@ -1,5 +1,6 @@
 #include "RemoteWnd.h"
 #include "RemoteSettings.h"
+#include "RemoteTls.h"   // ServerFingerprint — the value a client pins
 #include "RemoteServer.h"
 #include "RemoteCrypto.h"
 
@@ -10,6 +11,7 @@
 #include "Platform/Constants.h"
 #include "Platform/ConstantsStrings.h"
 #include "UI/ThemedDialog.h"
+#include "UI/LinkText.h" // Draw / MeasureIn / CopyToClipboard
 #include "UI/GdiPool.h" // brushes and pens are pooled — never DeleteObject them
 
 #include <algorithm>
@@ -32,7 +34,13 @@ namespace {
     constexpr int BTN_H    = 34;
     constexpr int BTN_GAP  = 8;
     constexpr int TITLE_H  = 44;
-    constexpr int FOOTER_H = 46; // two lines: status, then last async result
+    // Three lines: status, last async result, then the TLS fingerprint.
+    //
+    // The third is reserved unconditionally rather than sized per state — a
+    // footer that changed height when the server started would move every row
+    // above it, and a panel that reflows while you are reading it is worse than
+    // one blank line.
+    constexpr int FOOTER_H = 64;
 
     enum ButtonId { BTN_START = 1, BTN_STOP, BTN_SAVE };
 
@@ -87,6 +95,21 @@ void RemoteWnd::Show() {
     // Re-read on every open so the panel always describes what this instance is
     // actually running, not what was last typed here.
     Remote::LoadFromIni();
+
+    // Say WHERE these values came from, in the same footer line and with the
+    // same clickable path that Save uses. Without it a populated panel is
+    // ambiguous: identical whether it was loaded from a file or is showing
+    // built-in defaults, and the difference decides whether Save creates a file
+    // or overwrites one.
+    if (Remote::IniExists()) {
+        m_savedPath  = Persistence::Ini::PathBesideExe(RT::LOCAL_SERVER_FILE_NAME);
+        m_lastResult = Constants::Messages::REMOTE_PANEL_READ_FROM;
+    } else {
+        m_savedPath.clear();
+        m_lastResult = Constants::Messages::REMOTE_PANEL_NO_INI;
+    }
+
+    m_fpCopied = false;   // a stale confirmation from a previous visit
     BuildRows();
     ShowCenterOverParent();
     Repaint();
@@ -107,16 +130,18 @@ void RemoteWnd::BuildRows() {
     };
 
     add(Kind::Header, L"Server", L"", L"", R_NONE);
-    add(Kind::Toggle, L"Enable", OnOff(c.enable),
-        L"Master switch. Off by default — a viewer nobody configured never opens a socket.", R_ENABLE);
+    add(Kind::Toggle, L"Autostart", OnOff(c.autostart),
+        L"Start the listener automatically when qIV launches. Off by default. The Start "
+        L"button below works either way — this only decides what happens at launch.", R_ENABLE);
     add(Kind::Text, L"Name", OrUnset(c.name),
         L"REQUIRED. How this instance identifies itself — a driving instance records "
         L"this as the row's identity, and names have to be distinct.", R_NAME);
     add(Kind::Choice, L"Bind address", c.bindAddress,
-        L"127.0.0.1 = this machine only, no firewall prompt.  0.0.0.0 = every network interface.", R_BIND);
+        L"CLICK CYCLES: 127.0.0.1 (this machine only, no firewall prompt) → 0.0.0.0 "
+        L"(every interface, needs TLS + a password) → type your own.", R_BIND);
     add(Kind::Number, L"Port",
         c.port == RT::PORT_UNSET ? std::wstring(L"(not set)") : std::to_wstring(c.port),
-        L"The port to listen on. Required — there is no default.", R_PORT);
+        L"The port to listen on, 1-65535.", R_PORT);
     // The separator rule leads, and the wordier warnings that used to open these
     // two lines follow it. This description is painted with DT_SINGLELINE |
     // DT_END_ELLIPSIS — one line, truncated — so anything put at the end is not
@@ -152,9 +177,17 @@ void RemoteWnd::BuildRows() {
 
 std::wstring RemoteWnd::StatusLine() const {
     if (Remote::IsRunning()) {
+        const bool tls = Remote::IsEncrypted();
+
         std::wstring s = L"Listening on " + Remote::BoundEndpoint() +
+                         L"   " + (tls ? Constants::Messages::REMOTE_STATUS_TLS
+                                       : Constants::Messages::REMOTE_STATUS_PLAIN) +
                          L"   clients: " + std::to_wstring(Remote::ActiveConnections()) +
                          L"/" + std::to_wstring(Remote::Config().maxConnections);
+
+        // The fingerprint gets its own footer line — this one is DT_SINGLELINE,
+        // so an embedded newline would draw as a box rather than wrap.
+
         // An empty AllowList binds and listens but refuses every caller. Saying
         // only "Listening" there would make a deliberately closed server look
         // like a broken one.
@@ -268,7 +301,7 @@ void RemoteWnd::EditRow(int rowIndex) {
 
     switch (r.id) {
         case R_ENABLE:
-            c.enable = !c.enable;
+            c.autostart = !c.autostart;
             BuildRows();
             Repaint();
             return;
@@ -286,8 +319,8 @@ void RemoteWnd::EditRow(int rowIndex) {
 
         case R_PORT: {
             const int v = DialogPromptInt(L"Listen Port", L"Port (1 - 65535):",
-                                          c.port ? c.port : 8770,
-                                          RT::PORT_MIN, RT::PORT_MAX, 8770);
+                                          c.port ? c.port : RT::PORT_DEFAULT,
+                                          RT::PORT_MIN, RT::PORT_MAX, RT::PORT_DEFAULT);
             if (v >= 0) c.port = v;
             BuildRows();
             Repaint();
@@ -554,7 +587,8 @@ LRESULT RemoteWnd::HandlePanelMessage(UINT message, WPARAM wParam, LPARAM lParam
             POINT pt; GetCursorPos(&pt);
             ScreenToClient(GetHwnd(), &pt);
             SetCursor((HitTestButton(pt) >= 0 || HitTestRow(pt) >= 0 ||
-                       PtInRect(&m_savedLinkRect, pt))
+                       PtInRect(&m_savedLinkRect, pt) ||
+                       PtInRect(&m_fpLinkRect, pt))
                           ? Constants::Cursors::CURR_CLICK
                           : Constants::Cursors::CURR_DEFAULT);
             return TRUE;
@@ -565,8 +599,11 @@ LRESULT RemoteWnd::HandlePanelMessage(UINT message, WPARAM wParam, LPARAM lParam
             const int r = HitTestRow(pt);
             const int b = HitTestButton(pt);
             const bool linkHot = PtInRect(&m_savedLinkRect, pt) != FALSE;
-            if (r != m_hotRow || b != m_hotButton || linkHot != m_savedLinkHot) {
+            const bool fpHot   = PtInRect(&m_fpLinkRect, pt) != FALSE;
+            if (r != m_hotRow || b != m_hotButton || linkHot != m_savedLinkHot ||
+                fpHot != m_fpLinkHot) {
                 m_hotRow = r; m_hotButton = b; m_savedLinkHot = linkHot;
+                m_fpLinkHot = fpHot;
                 Repaint();
             }
             return 0;
@@ -580,6 +617,12 @@ LRESULT RemoteWnd::HandlePanelMessage(UINT message, WPARAM wParam, LPARAM lParam
             // stale row rect from a previous layout must never win over it.
             if (PtInRect(&m_savedLinkRect, pt)) {
                 RevealSavedFile();
+                return 0;
+            }
+            if (PtInRect(&m_fpLinkRect, pt)) {
+                m_fpCopied = UI::Link::CopyToClipboard(
+                    GetHwnd(), Remote::Tls::ServerFingerprint());
+                Repaint();
                 return 0;
             }
 
@@ -806,6 +849,43 @@ LRESULT RemoteWnd::HandlePanelMessage(UINT message, WPARAM wParam, LPARAM lParam
                         RECT lr2 = m_savedLinkRect;
                         DrawTextW(bb, m_savedPath.c_str(), -1, &lr2,
                                   DT_LEFT | DT_SINGLELINE | DT_PATH_ELLIPSIS);
+                    }
+                }
+
+                // Third line: the certificate fingerprint a client must pin.
+                // The one value that has to be carried to the phone by hand, so
+                // it belongs somewhere it can be read off rather than only in a
+                // file. Shown only with TLS up, where it means anything.
+                m_fpLinkRect = RECT{};
+                if (Remote::IsEncrypted()) {
+                    const std::wstring fp = Remote::Tls::ServerFingerprint();
+                    if (!fp.empty()) {
+                        const int fpy = fy + static_cast<int>(38 * s);
+
+                        SelectObject(bb, m_hFontSmall);
+                        SetTextColor(bb, dim);
+                        const std::wstring label =
+                            Constants::Messages::REMOTE_STATUS_FINGERPRINT;
+                        RECT lr{pad, fpy, W - pad, fpy + static_cast<int>(18 * s)};
+                        DrawTextW(bb, label.c_str(), -1, &lr, DT_LEFT | DT_SINGLELINE);
+
+                        // The digest itself is the link — clicking copies it.
+                        const int fx = pad + UI::Link::MeasureIn(bb, m_hFontSmall, label);
+                        m_fpLinkRect = UI::Link::Draw(bb, m_hFontLink, fx, fpy, W - pad,
+                                                      fp, m_fpLinkHot, s);
+
+                        // Confirmation after the value, not in place of it: the
+                        // fingerprint is what you are checking against the other
+                        // machine, and replacing it with "copied" would take the
+                        // thing being verified off screen at the moment of use.
+                        if (m_fpCopied && m_fpLinkRect.right > m_fpLinkRect.left) {
+                            SelectObject(bb, m_hFontSmall);
+                            SetTextColor(bb, dim);
+                            RECT cr{m_fpLinkRect.right + static_cast<int>(8 * s), fpy,
+                                    W - pad, fpy + static_cast<int>(18 * s)};
+                            DrawTextW(bb, Constants::Messages::REMOTE_FINGERPRINT_COPIED,
+                                      -1, &cr, DT_LEFT | DT_SINGLELINE);
+                        }
                     }
                 }
             }

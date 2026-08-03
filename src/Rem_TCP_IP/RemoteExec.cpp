@@ -296,6 +296,17 @@ namespace {
     // happens only when somebody explicitly asks, and the alternative — handing
     // the path to the socket thread — breaks the one-request-one-reply shape that
     // makes the protocol implementable by a phone in fifty lines.
+    // The path of what is on screen, or empty. UI THREAD ONLY — it reads
+    // app.playlist and app.interject.
+    std::wstring DisplayedPath() {
+        if (app.interject.showing && !app.interject.path.empty())
+            return app.interject.path;
+        if (app.currentIndex >= 0 &&
+            app.currentIndex < static_cast<int>(app.playlist.size()))
+            return app.playlist[app.currentIndex];
+        return {};
+    }
+
     std::wstring DoSendDisplayedImage() {
         // What is ON SCREEN, which is not always a playlist entry: if this viewer
         // is itself showing a streamed or interjected picture, that is the honest
@@ -779,6 +790,21 @@ bool ExecutePayload(HWND hWnd, Command cmd, const std::wstring &payload,
             return true;
         case Command::SendDisplayedImage:
             replyOut = DoSendDisplayedImage();
+            return true;
+
+        // TWO-STAGE, and this is only the first half.
+        //
+        // Decoding, scaling and re-encoding a 40-megapixel image takes far
+        // longer than REPLY_TIMEOUT_MS and would freeze the viewer while it ran
+        // — this function is on the UI thread. So the UI thread answers only
+        // with the PATH, which costs nothing, and the socket thread does the
+        // work and builds the real reply (see ClientThread).
+        //
+        // The marker is internal: this string never reaches a client. Anything
+        // that did receive it would be a bug in the dispatch, which is why it is
+        // spelled distinctively rather than looking like a plausible reply.
+        case Command::SendDisplayedPreview:
+            replyOut = std::wstring(PREVIEW_PATH_MARKER) + DisplayedPath();
             return true;
         case Command::FindImage:
             replyOut = DoFind(hWnd, payload);

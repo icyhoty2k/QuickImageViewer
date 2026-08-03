@@ -6,6 +6,7 @@
 #include "RemoteClient.h"
 #include "RemoteProtocol.h"
 #include "RemoteCrypto.h"
+#include "RemoteTls.h"
 #include "RemoteLog.h"   // Ctrl+F12 — recorded HERE, at the wire boundary
 
 #include "Platform/Constants.h"
@@ -65,7 +66,12 @@ namespace {
                  Log::SelfName(), L"(unsolicited)", -1);
     }
 
-    bool SendAll(SOCKET s, const std::string &bytes) {
+    // `tls` is null for a loopback target, non-null otherwise. Same shape as
+    // the server side, and for the same reason: one branch per direction rather
+    // than a wrapper around SOCKET that every call site would have to adopt.
+    bool SendAll(SOCKET s, const std::string &bytes, Tls::Session *tls = nullptr) {
+        if (tls) return tls->Send(s, bytes.data(), bytes.size());
+
         size_t sent = 0;
         while (sent < bytes.size()) {
             const int n = send(s, bytes.data() + sent,
@@ -76,7 +82,8 @@ namespace {
         return true;
     }
 
-    bool RecvLine(SOCKET s, std::string &accum, std::wstring &lineOut) {
+    bool RecvLine(SOCKET s, std::string &accum, std::wstring &lineOut,
+                  Tls::Session *tls = nullptr) {
         for (;;) {
             const size_t nl = accum.find('\n');
             if (nl != std::string::npos) {
@@ -87,6 +94,14 @@ namespace {
                 return true;
             }
             if (accum.size() > RT::MAX_LINE_LEN) return false;
+
+            // The session buffers records; `accum` buffers lines on top. A
+            // record boundary and a line boundary have nothing to do with each
+            // other, so both layers are needed.
+            if (tls) {
+                if (!tls->Recv(s, accum)) return false;
+                continue;
+            }
 
             char buf[1024];
             const int n = recv(s, buf, sizeof(buf), 0);
@@ -127,6 +142,9 @@ namespace {
     }
 }
 
+// Defined here, where Tls::Session is complete. See the header.
+Client::Client() = default;
+
 Client::~Client() { Disconnect(); }
 
 bool Client::IsConnected() const { return m_connected; }
@@ -140,6 +158,10 @@ void Client::Disconnect() {
     m_sock = static_cast<UINT_PTR>(INVALID_SOCKET);
     m_connected = false;
     m_accum.clear();
+    // After the socket is closed: the session's close_notify has nowhere to go
+    // once the handle is gone, and holding a context for a dead socket is a
+    // trap for the next Connect.
+    m_tls.reset();
 }
 
 bool Client::Connect(const std::wstring &host, int port,
@@ -226,10 +248,36 @@ bool Client::DoConnectBody(const std::wstring &host, int port,
 
     m_sock = static_cast<UINT_PTR>(s);
     m_accum.clear();
+    m_tls.reset();
+    m_lastFingerprint.clear();
+
+    // TLS BEFORE THE BANNER — the banner is application data and travels inside
+    // the tunnel, exactly as the server sends it.
+    //
+    // Whether to do this is decided from the ADDRESS BEING DIALLED, by the same
+    // rule the server applies to its bind address. Nothing on the wire selects
+    // it, so the two ends cannot be talked into disagreeing; they can only be
+    // misconfigured, and then the handshake fails loudly instead of quietly
+    // falling back to plaintext.
+    if (Tls::RequiredForAddress(host)) {
+        auto session = std::make_unique<Tls::Session>();
+        std::wstring tlsErr;
+        if (!session->ConnectHandshake(s, m_pin, m_lastFingerprint, tlsErr)) {
+            Disconnect();
+            // The reason travels verbatim: "no pin stored" and "certificate
+            // mismatch" are different problems with different remedies, and
+            // collapsing them into "connection failed" would hide which.
+            errorOut = tlsErr;
+            return false;
+        }
+        m_tls = std::move(session);
+    }
+
+    Tls::Session *tls = m_tls.get();
 
     // Banner first — the server always sends one before anything else.
     std::wstring line;
-    if (!RecvLine(s, m_accum, line)) {
+    if (!RecvLine(s, m_accum, line, tls)) {
         Disconnect();
         errorOut = Constants::Messages::REMOTE_CLIENT_NO_BANNER;
         return false;
@@ -262,7 +310,7 @@ bool Client::DoConnectBody(const std::wstring &host, int port,
         setsockopt(s, SOL_SOCKET, SO_RCVTIMEO,
                    reinterpret_cast<const char *>(&shortTimeout), sizeof(shortTimeout));
         std::wstring maybeAuth;
-        const bool got = RecvLine(s, m_accum, maybeAuth);
+        const bool got = RecvLine(s, m_accum, maybeAuth, tls);
         setsockopt(s, SOL_SOCKET, SO_RCVTIMEO,
                    reinterpret_cast<const char *>(&io), sizeof(io));
 
@@ -345,7 +393,7 @@ bool Client::DoConnectBody(const std::wstring &host, int port,
                 return false;
             }
 
-            if (!SendAll(s, ToUtf8(L"AUTH " + Crypto::ToHex(answer)) + "\r\n")) {
+            if (!SendAll(s, ToUtf8(L"AUTH " + Crypto::ToHex(answer)) + "\r\n", tls)) {
                 Disconnect();
                 errorOut = Constants::Messages::REMOTE_CLIENT_CONNECT_FAILED;
                 return false;
@@ -356,7 +404,7 @@ bool Client::DoConnectBody(const std::wstring &host, int port,
             setsockopt(s, SOL_SOCKET, SO_RCVTIMEO,
                        reinterpret_cast<const char *>(&shortTimeout), sizeof(shortTimeout));
             std::wstring authReply;
-            const bool rejected = RecvLine(s, m_accum, authReply);
+            const bool rejected = RecvLine(s, m_accum, authReply, tls);
             setsockopt(s, SOL_SOCKET, SO_RCVTIMEO,
                        reinterpret_cast<const char *>(&io), sizeof(io));
 
@@ -419,8 +467,9 @@ bool Client::Send(const std::wstring &commandLine,
         return false;
     }
     const SOCKET s = static_cast<SOCKET>(m_sock);
+    Tls::Session *tls = m_tls.get();
 
-    if (!SendAll(s, ToUtf8(commandLine) + "\r\n")) {
+    if (!SendAll(s, ToUtf8(commandLine) + "\r\n", tls)) {
         Disconnect();
         errorOut = Constants::Messages::REMOTE_CLIENT_SEND_FAILED;
         record(errorOut);
@@ -428,7 +477,7 @@ bool Client::Send(const std::wstring &commandLine,
     }
 
     std::wstring line;
-    if (!RecvLine(s, m_accum, line)) {
+    if (!RecvLine(s, m_accum, line, tls)) {
         Disconnect();
         errorOut = Constants::Messages::REMOTE_CLIENT_NO_REPLY;
         record(errorOut);
@@ -453,7 +502,7 @@ bool Client::Send(const std::wstring &commandLine,
         } else {
             replyOut += line + L"\r\n";
         }
-        if (!RecvLine(s, m_accum, line)) {
+        if (!RecvLine(s, m_accum, line, tls)) {
             Disconnect();
             errorOut = Constants::Messages::REMOTE_CLIENT_NO_REPLY;
             record(errorOut);
@@ -490,7 +539,7 @@ bool Client::PollLine(std::wstring &lineOut, int timeoutMs) {
     setsockopt(s, SOL_SOCKET, SO_RCVTIMEO,
                reinterpret_cast<const char *>(&shortTo), sizeof(shortTo));
 
-    const bool got = RecvLine(s, m_accum, lineOut);
+    const bool got = RecvLine(s, m_accum, lineOut, m_tls.get());
     // THE watched-instance stream. This is the path that carries what a target
     // does on its own — the reason F10's ◉ exists — and it never went through
     // Send, which is why none of it appeared in the log before.

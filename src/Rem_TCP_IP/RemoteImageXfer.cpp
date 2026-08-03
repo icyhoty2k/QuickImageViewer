@@ -4,6 +4,10 @@
 #include "Platform/Constants.h"
 #include "Platform/ConstantsStrings.h"
 
+#include <wincodec.h>   // WIC decode / scale / JPEG encode for the preview
+#include <wrl/client.h>
+
+#include <algorithm>
 #include <filesystem>
 #include <fstream>
 
@@ -17,6 +21,139 @@ namespace RT = Constants::RemoteTcpIp;
 // bare base64 so the body can never be mistaken for a status line, and so a
 // third-party client can skip anything it does not recognise.
 const wchar_t *DATA_PREFIX = L"DATA ";
+
+bool BuildPreviewJpeg(const std::wstring &path, int maxDim, int quality,
+                      std::vector<unsigned char> &out, std::wstring &errOut) {
+    out.clear();
+    maxDim  = std::clamp(maxDim,  RT::PREVIEW_MAX_DIM_MIN, RT::PREVIEW_MAX_DIM_MAX);
+    quality = std::clamp(quality, RT::PREVIEW_QUALITY_MIN, RT::PREVIEW_QUALITY_MAX);
+
+    using Microsoft::WRL::ComPtr;
+
+    // This thread's own factory — see the header.
+    ComPtr<IWICImagingFactory> factory;
+    if (FAILED(CoCreateInstance(CLSID_WICImagingFactory, nullptr, CLSCTX_INPROC_SERVER,
+                                IID_PPV_ARGS(&factory)))) {
+        errOut = Constants::Messages::PREVIEW_NO_WIC;
+        return false;
+    }
+
+    ComPtr<IWICBitmapDecoder> decoder;
+    if (FAILED(factory->CreateDecoderFromFilename(
+            path.c_str(), nullptr, GENERIC_READ,
+            WICDecodeMetadataCacheOnDemand, &decoder))) {
+        errOut = Constants::Messages::PREVIEW_CANNOT_DECODE;
+        return false;
+    }
+
+    ComPtr<IWICBitmapFrameDecode> frame;
+    if (FAILED(decoder->GetFrame(0, &frame))) {
+        errOut = Constants::Messages::PREVIEW_CANNOT_DECODE;
+        return false;
+    }
+
+    UINT w = 0, h = 0;
+    if (FAILED(frame->GetSize(&w, &h)) || w == 0 || h == 0) {
+        errOut = Constants::Messages::PREVIEW_CANNOT_DECODE;
+        return false;
+    }
+
+    // Fit the longest edge, preserving aspect. Never up.
+    UINT tw = w, th = h;
+    const UINT longest = std::max(w, h);
+    if (longest > static_cast<UINT>(maxDim)) {
+        const double k = static_cast<double>(maxDim) / static_cast<double>(longest);
+        tw = std::max(1u, static_cast<UINT>(w * k));
+        th = std::max(1u, static_cast<UINT>(h * k));
+    }
+
+    // Convert BEFORE scaling: the scaler works on the format it is given, and
+    // the JPEG encoder wants 24bpp BGR. Going through the converter first also
+    // flattens any palette or alpha to something JPEG can actually represent —
+    // a PNG with transparency would otherwise fail at the encoder.
+    ComPtr<IWICFormatConverter> converter;
+    if (FAILED(factory->CreateFormatConverter(&converter)) ||
+        FAILED(converter->Initialize(frame.Get(), GUID_WICPixelFormat24bppBGR,
+                                     WICBitmapDitherTypeNone, nullptr, 0.0,
+                                     WICBitmapPaletteTypeMedianCut))) {
+        errOut = Constants::Messages::PREVIEW_CANNOT_DECODE;
+        return false;
+    }
+
+    ComPtr<IWICBitmapSource> source = converter;
+    ComPtr<IWICBitmapScaler>  scaler;
+    if (tw != w || th != h) {
+        if (FAILED(factory->CreateBitmapScaler(&scaler)) ||
+            // Fant: the slowest of WIC's modes and the only one that does not
+            // alias badly on a large downscale. This runs once per picture
+            // change on a socket thread, so quality is the right trade.
+            FAILED(scaler->Initialize(converter.Get(), tw, th,
+                                      WICBitmapInterpolationModeFant))) {
+            errOut = Constants::Messages::PREVIEW_CANNOT_DECODE;
+            return false;
+        }
+        source = scaler;
+    }
+
+    ComPtr<IStream> stream;
+    if (FAILED(CreateStreamOnHGlobal(nullptr, TRUE, &stream))) {
+        errOut = Constants::Messages::PREVIEW_ENCODE_FAILED;
+        return false;
+    }
+
+    ComPtr<IWICBitmapEncoder> encoder;
+    ComPtr<IWICBitmapFrameEncode> outFrame;
+    ComPtr<IPropertyBag2> props;
+    if (FAILED(factory->CreateEncoder(GUID_ContainerFormatJpeg, nullptr, &encoder)) ||
+        FAILED(encoder->Initialize(stream.Get(), WICBitmapEncoderNoCache)) ||
+        FAILED(encoder->CreateNewFrame(&outFrame, &props))) {
+        errOut = Constants::Messages::PREVIEW_ENCODE_FAILED;
+        return false;
+    }
+
+    {
+        PROPBAG2 opt{};
+        opt.pstrName = const_cast<LPOLESTR>(L"ImageQuality");
+        VARIANT v;
+        VariantInit(&v);
+        v.vt      = VT_R4;
+        v.fltVal  = static_cast<float>(quality) / 100.0f;
+        props->Write(1, &opt, &v);   // best effort: a default quality still encodes
+    }
+
+    GUID fmt = GUID_WICPixelFormat24bppBGR;
+    if (FAILED(outFrame->Initialize(props.Get())) ||
+        FAILED(outFrame->SetSize(tw, th)) ||
+        FAILED(outFrame->SetPixelFormat(&fmt)) ||
+        FAILED(outFrame->WriteSource(source.Get(), nullptr)) ||
+        FAILED(outFrame->Commit()) ||
+        FAILED(encoder->Commit())) {
+        errOut = Constants::Messages::PREVIEW_ENCODE_FAILED;
+        return false;
+    }
+
+    HGLOBAL hg = nullptr;
+    if (FAILED(GetHGlobalFromStream(stream.Get(), &hg)) || !hg) {
+        errOut = Constants::Messages::PREVIEW_ENCODE_FAILED;
+        return false;
+    }
+
+    const SIZE_T size = GlobalSize(hg);
+    if (size == 0 || size > RT::STREAM_MAX_BYTES) {
+        errOut = Constants::Messages::PREVIEW_ENCODE_FAILED;
+        return false;
+    }
+
+    if (const void *src = GlobalLock(hg)) {
+        out.assign(static_cast<const unsigned char *>(src),
+                   static_cast<const unsigned char *>(src) + size);
+        GlobalUnlock(hg);
+        return true;
+    }
+
+    errOut = Constants::Messages::PREVIEW_ENCODE_FAILED;
+    return false;
+}
 
 bool ReadImageFile(const std::wstring &path, std::vector<unsigned char> &out,
                    std::wstring &errOut) {

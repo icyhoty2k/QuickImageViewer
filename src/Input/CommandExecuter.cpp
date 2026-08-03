@@ -2101,6 +2101,7 @@ std::wstring InputManager::GetCommandValue(HWND hWnd, Command cmd) {
         case Command::StreamImageChunk:
         case Command::StreamImageShow:
         case Command::SendDisplayedImage:
+        case Command::SendDisplayedPreview:
         // Listed for completeness only. These are in NEVER_REMOTE, so the wire
         // path refuses them before a value is ever asked for — but a case here
         // costs nothing and stops the next reader wondering whether the omission

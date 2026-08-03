@@ -47,6 +47,32 @@ namespace Persistence::Ini {
     // so a user opening the file finds out what wrote it.
     void CreateWithHeaderIfMissing(const std::wstring &path, const wchar_t *headerComment);
 
+    // "YYYY-MM-DD HH:MM:SS", local time — these files are read by a person.
+    std::wstring TimeStampNow();
+
+    // The two header lines every generated file carries. `Generated` is written
+    // once, in the creation body, and never touched again; `Updated` is rewritten
+    // by TouchUpdatedStamp on each save.
+    //
+    // Two lines rather than one because they answer different questions, and a
+    // single line relabelled on every write could answer neither honestly.
+    std::wstring GeneratedStampLines();
+
+    // Rewrites the "; Updated:" line, inserting it after "; Generated:" if it is
+    // missing. Reads and rewrites the whole file — which costs nothing here,
+    // because WritePrivateProfileString already does exactly that for one key.
+    //
+    // No-op when the file does not exist: a stamp is not worth creating a file for.
+    void TouchUpdatedStamp(const std::wstring &path);
+
+    // Creates the file with a BOM and `text` verbatim. No-op if it exists.
+    //
+    // For writing a fully ANNOTATED file — comments above each key — in one go.
+    // WritePrivateProfileString cannot produce that: it appends bare keys. It
+    // does PRESERVE surrounding comment lines when it later updates a value, so
+    // laying the file out once at creation is what makes the annotations stick.
+    void CreateWithTextIfMissing(const std::wstring &path, const std::wstring &text);
+
     // Reads grow their buffer until the value fits, so a long path is never
     // silently truncated. Empty when absent.
     std::wstring ReadString(const std::wstring &path, const wchar_t *section,

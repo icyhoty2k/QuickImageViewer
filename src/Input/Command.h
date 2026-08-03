@@ -363,6 +363,18 @@ enum class Command {
     StreamImageChunk,
     StreamImageShow,
     SendDisplayedImage,
+    // `SendDisplayedPreview [maxDim[;quality]]` — the same picture, DOWNSCALED
+    // and re-encoded as JPEG.
+    //
+    // Exists because SendDisplayedImage sends the original file, and for a phone
+    // that is 25-40x more bytes than the screen can use: a 6 MB wallpaper became
+    // ~8 MB of base64 to draw something shown at about 1080 px, which the phone
+    // then had to decode at full size.
+    //
+    // NOT a replacement. The original is what Save writes, and a re-encoded JPEG
+    // is not the file the user asked to keep — so a client displays the preview
+    // and asks for the original only when saving.
+    SendDisplayedPreview,
     // `ShowImageOnce <full path>` — the same one-shot display, but naming a file
     // the far end can already read. No transfer, so it costs nothing on one
     // machine; useless across two. Kept because it is the honest spelling for a
