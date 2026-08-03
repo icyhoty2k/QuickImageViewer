@@ -128,6 +128,9 @@ namespace {
         if (creating) {
             text += static_cast<wchar_t>(0xFEFF);   // UTF-16LE BOM — must be first
             text += RT::BLACKLIST_FILE_HEADER;
+            text += L";\r\n";
+            text += Persistence::Ini::GeneratedStampLines();
+            text += L"\r\n";
         }
         text += line;
         text += L"\r\n";
@@ -136,6 +139,10 @@ namespace {
         WriteFile(h, text.data(), static_cast<DWORD>(text.size() * sizeof(wchar_t)),
                   &written, nullptr);
         CloseHandle(h);
+
+        // After the append, so the stamp records when the last address was
+        // added — which for this file is the interesting question.
+        if (!creating) Persistence::Ini::TouchUpdatedStamp(path);
     }
 
     // Caller holds g_mutex.

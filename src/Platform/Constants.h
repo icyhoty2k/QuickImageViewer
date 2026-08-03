@@ -486,6 +486,14 @@ namespace Constants {
     // touch the interjection state the picture is then displayed through.
     constexpr UINT WM_QIV_REMOTE_PULLED = WM_USER + 18;
 
+    // The listener started, stopped, or gained/lost a client — repaint the
+    // overlay's server indicator. No payload; the handler reads the live figures.
+    //
+    // Posted rather than polled on a timer: the count changes only on connect
+    // and disconnect, which is rare, and a viewer nobody is driving should not
+    // wake up once a second to discover nothing happened.
+    constexpr UINT WM_QIV_REMOTE_CLIENTS = WM_USER + 19;
+
     // ---------------------------------------------------------------------------
     // Directory watcher (ReadDirectoryChangesW / FindFirstChangeNotification)
     // ---------------------------------------------------------------------------
@@ -523,9 +531,48 @@ namespace Constants {
         constexpr const wchar_t *LOCAL_SERVER_FILE_HEADER =
             L"Local remote-control server (F9). Delete this file to reset it.";
 
+        // Documentation written above each key when the file is CREATED. The
+        // file is meant to be hand-edited, so it explains itself rather than
+        // requiring the manual. Kept beside the key names so the two cannot
+        // drift; composed into a file by RemoteSettings::SaveToIni.
+        constexpr const wchar_t *DOC_AUTOSTART =
+            L"; Start the listener automatically when qIV launches (true/false).\r\n"
+            L"; Off by default. The Start button in F9 works either way - this only\r\n"
+            L"; decides what happens at launch.\r\n";
+        constexpr const wchar_t *DOC_NAME =
+            L"; REQUIRED. How this instance identifies itself to whoever drives it.\r\n"
+            L"; Names must be distinct - the listener refuses to start without one.\r\n";
+        constexpr const wchar_t *DOC_IP_ADDRESS =
+            L"; Which local interfaces to listen on - NOT the address you connect to.\r\n"
+            L";   127.0.0.1 = this machine only, no firewall prompt, no encryption needed\r\n"
+            L";   0.0.0.0   = every interface (LAN / internet)\r\n"
+            L"; Anything other than 127.x forces TLS and requires a Password.\r\n";
+        constexpr const wchar_t *DOC_PORT_NO =
+            L"; TCP port to listen on, 1-65535. No default - 0 means unconfigured\r\n"
+            L"; and the listener will not start.\r\n";
+        constexpr const wchar_t *DOC_ALLOW_LIST =
+            L"; IPs allowed to connect, separated by , or ; (NOT spaces).\r\n"
+            L"; EMPTY DENIES EVERYONE - this list fails closed by design.\r\n"
+            L"; A trailing * matches a prefix:  192.168.1.*\r\n"
+            L"; Blocked addresses live in qivRemoteServerBlacklist.ini and win over this.\r\n";
+        constexpr const wchar_t *DOC_PASSWORD =
+            L"; PBKDF2-HMAC-SHA256 of the password, as <iterations>$<salt>$<digest>.\r\n"
+            L"; Never the password itself, and never sent over the wire - clients prove\r\n"
+            L"; they know it by answering a challenge.\r\n"
+            L"; Set it in the F9 panel; typing a plain password here does NOT work.\r\n"
+            L"; Required unless IpAddress is loopback. Anyone who can read this line can\r\n"
+            L"; authenticate, so treat this file as secret.\r\n";
+        constexpr const wchar_t *DOC_MAX_CONNS =
+            L"; Simultaneous clients, 1-99. Further callers are refused.\r\n";
+
         // --- .ini section and key names ---
         constexpr const wchar_t *INI_SECTION      = L"REMOTE_TCP_IP";
-        constexpr const wchar_t *KEY_ENABLE       = L"Enable";
+        // AUTOSTART, not "Enable" — it decides whether the listener comes up on
+        // its own at launch, and nothing else. It used to also gate the F9
+        // panel's Start button, which made "Enable=false" mean two things at
+        // once and produced the genuinely baffling state of pressing Start and
+        // being told the server is disabled. Start now always starts.
+        constexpr const wchar_t *KEY_AUTOSTART    = L"Autostart";
         constexpr const wchar_t *KEY_NAME         = L"Name";
         constexpr const wchar_t *KEY_IP_ADDRESS   = L"IpAddress";
         constexpr const wchar_t *KEY_PORT_NO      = L"PortNo";
@@ -577,9 +624,11 @@ namespace Constants {
         constexpr size_t BLACKLIST_MAX = 8192;
 
         // --- Defaults ---
-        // Never default ENABLE on. A viewer that binds a port because nobody
-        // said otherwise is a viewer that surprises its owner.
-        constexpr bool ENABLE_DEFAULT = false;
+        // Never autostart by default. A viewer that binds a port because nobody
+        // said otherwise is a viewer that surprises its owner — and with the
+        // file absent entirely, which is the normal case, nothing here is even
+        // read.
+        constexpr bool AUTOSTART_DEFAULT = false;
 
         // The Ctrl+F12 remote log. OFF, and for the same reason: it is a
         // DIAGNOSTIC, and a diagnostic that is always on is a cost everybody
@@ -604,17 +653,32 @@ namespace Constants {
         constexpr const wchar_t *BIND_ADDRESS_DEFAULT = L"127.0.0.1";
         constexpr const wchar_t *BIND_ADDRESS_ANY     = L"0.0.0.0";
 
-        // 0 means "not configured". There is no sensible default port to pick —
-        // guessing one would make an unconfigured instance bind something.
-        constexpr int PORT_UNSET = 0;
-        constexpr int PORT_MIN   = 1;
-        constexpr int PORT_MAX   = 65535;
+        // 0 means "not configured" — still refused by WhyCannotStart, since a
+        // hand-edited file can say PortNo=0.
+        //
+        // A DEFAULT is now safe, and was not before: nothing binds a socket
+        // unless Autostart is on or Start is pressed, so pre-filling the port no
+        // longer risks an unconfigured instance opening one. It saves the user
+        // filling in a field that has one obvious answer.
+        constexpr int PORT_UNSET   = 0;
+        constexpr int PORT_DEFAULT = 8770;
+        constexpr int PORT_MIN     = 1;
+        constexpr int PORT_MAX     = 65535;
+
+        // A name is REQUIRED to start, so defaulting it means F9 opens ready to
+        // run rather than with a blank that must be filled before anything works.
+        // Distinct names still matter when several instances are driven at once —
+        // this is a starting point, not a recommendation to leave it alone.
+        constexpr const wchar_t *NAME_DEFAULT = L"qIV";
 
         // Simultaneous clients. Values outside the range fall back to DEFAULT
         // rather than refusing to start.
         constexpr int MAX_CONNECTIONS_MIN     = 1;
         constexpr int MAX_CONNECTIONS_MAX     = 99;
-        constexpr int MAX_CONNECTIONS_DEFAULT = 1;
+        // 4: a phone, a second phone or a desktop client, and headroom for a
+        // connection still authenticating. 1 was needlessly tight now that the
+        // failed-auth delay holds a slot for a second.
+        constexpr int MAX_CONNECTIONS_DEFAULT = 4;
 
         // Separators accepted inside AllowList / BlackList, so a hand-edited
         // file tolerates either convention.
@@ -846,6 +910,26 @@ namespace Constants {
         // from being buffered twice on a viewer that only wanted to show it.
         constexpr size_t STREAM_MAX_BYTES = 32u * 1024u * 1024u;
 
+        // --- Preview transfer (SendDisplayedPreview) -------------------------
+        //
+        // A phone preview does not need the original file. Sending one means a
+        // 6 MB wallpaper becomes ~8 MB of base64 to draw something the phone
+        // shows at about 1080 px, and the phone then decodes a bitmap larger
+        // than its own screen. Downscaling and re-encoding first is 25-40x less
+        // on the wire and far less work at the far end.
+        //
+        // The ORIGINAL is still available through SendDisplayedImage, which is
+        // what Save uses — a preview is for looking at, not for keeping.
+        constexpr int PREVIEW_MAX_DIM_DEFAULT = 1440; // longest edge, px
+        constexpr int PREVIEW_MAX_DIM_MIN     = 64;
+        constexpr int PREVIEW_MAX_DIM_MAX     = 4096; // past a phone screen already
+
+        // JPEG quality, 1-100. 80 is the usual "no visible artefacts at a
+        // glance" point and roughly halves the size against 95.
+        constexpr int PREVIEW_QUALITY_DEFAULT = 80;
+        constexpr int PREVIEW_QUALITY_MIN     = 20;
+        constexpr int PREVIEW_QUALITY_MAX     = 100;
+
         // How much of a line the wire LOG keeps. The log is a diagnostic record,
         // not a byte-for-byte archive, and a stream chunk is ~128 KB of base64 that
         // says nothing a human can read — kept whole it would bloat the store and
@@ -1007,6 +1091,48 @@ namespace Constants {
 
     namespace Overlay {
         constexpr bool DEFAULT_SHOW_OVERLAY = true;
+
+        // =====================================================================
+        // PER-SLOT STARTING STATE  —  one constant per slot, three values each
+        // =====================================================================
+        //
+        //   0 = OFF      the slot is not drawn
+        //   1 = COMPACT  one line
+        //   2 = FULL     two lines / the long form
+        //
+        // These are FIRST-RUN DEFAULTS. Once a slot has been cycled with
+        // Ctrl+1..9 the choice is persisted (qivOverlaySlotVisible /
+        // qivOverlaySlotCompact) and read from there instead — changing a
+        // constant here will not move a slot that has already been set. Clear
+        // those two registry values, or Restore Defaults, to pick them up.
+        //
+        // INDEPENDENT OF THE MASTER TOGGLE (I / Ctrl+0, app.showOverlayInfoText).
+        // That switch hides every slot at once and restores them to whatever
+        // these produced; it does not change them.
+        //
+        // Grid positions:
+        //   [1] TOP_LEFT    [2] TOP_CENTER    [3] TOP_RIGHT
+        //   [4] MID_LEFT    [5] MID_CENTER    [6] MID_RIGHT
+        //   [7] BOT_LEFT    [8] BOT_CENTER    [9] BOT_RIGHT
+        constexpr int SLOT_OFF     = 0;
+        constexpr int SLOT_COMPACT = 1;
+        constexpr int SLOT_FULL    = 2;
+
+        constexpr int SLOT_STATE_TOP_LEFT   = SLOT_COMPACT; // index/total + filename
+        constexpr int SLOT_STATE_TOP_CENTER = SLOT_COMPACT; // top panel selection
+        constexpr int SLOT_STATE_TOP_RIGHT  = SLOT_FULL; // server dot + zoom %
+        constexpr int SLOT_STATE_MID_LEFT   = SLOT_COMPACT; // left panel selection
+        // MID_CENTER is the centre message queue. It has NO compact form —
+        // COMPACT and FULL both mean "on", and only OFF differs.
+        constexpr int SLOT_STATE_MID_CENTER = SLOT_COMPACT;
+        constexpr int SLOT_STATE_MID_RIGHT  = SLOT_COMPACT; // right panel selection
+        constexpr int SLOT_STATE_BOT_LEFT   = SLOT_COMPACT; // effects + folder name
+        constexpr int SLOT_STATE_BOT_CENTER = SLOT_COMPACT; // bottom panel selection
+        constexpr int SLOT_STATE_BOT_RIGHT  = SLOT_COMPACT; // dimensions / file size
+
+        // Kept because TextOverlay's own member initialiser uses it as the
+        // starting value for a slot nobody has wired yet. The per-slot
+        // constants above are what actually decide the startup state.
         constexpr const bool IS_COMPACT_OVERLAY_MODE = true; // true → 1-line, false → 2-line
         // P key — toggle semi-transparent background behind all overlay text.
         // Text is always drawn; only the background rect is suppressed when false.
@@ -1033,9 +1159,35 @@ namespace Constants {
         // Per-slot visibility / compact state is persisted as one bit per slot,
         // indexed by OverlayManager::Slot. Nine slots → the low 9 bits.
         constexpr unsigned SLOT_MASK_ALL = 0x1FFu;
-        constexpr unsigned DEFAULT_SLOT_VISIBLE_MASK = SLOT_MASK_ALL;
+
+        // The nine SLOT_STATE_* constants folded into the two bitmasks the rest
+        // of the program uses. Two masks rather than nine values because that is
+        // the persisted shape (one DWORD each) and the runtime shape the slots
+        // are wired from — this is the one place the two representations meet.
+        //
+        // The ORDER of these two lists is the Slot enum's order, and it must
+        // stay that way: bit N is slot N. A static_assert cannot check that, so
+        // it is written once, here, rather than repeated anywhere else.
+        constexpr unsigned SlotBit(int state, int index) {
+            return state == SLOT_OFF ? 0u : (1u << index);
+        }
+        constexpr unsigned SlotCompactBit(int state, int index) {
+            return state == SLOT_COMPACT ? (1u << index) : 0u;
+        }
+
+        constexpr unsigned DEFAULT_SLOT_VISIBLE_MASK =
+                SlotBit(SLOT_STATE_TOP_LEFT,   0) | SlotBit(SLOT_STATE_TOP_CENTER, 1) |
+                SlotBit(SLOT_STATE_TOP_RIGHT,  2) | SlotBit(SLOT_STATE_MID_LEFT,   3) |
+                SlotBit(SLOT_STATE_MID_CENTER, 4) | SlotBit(SLOT_STATE_MID_RIGHT,  5) |
+                SlotBit(SLOT_STATE_BOT_LEFT,   6) | SlotBit(SLOT_STATE_BOT_CENTER, 7) |
+                SlotBit(SLOT_STATE_BOT_RIGHT,  8);
+
         constexpr unsigned DEFAULT_SLOT_COMPACT_MASK =
-                IS_COMPACT_OVERLAY_MODE ? SLOT_MASK_ALL : 0u;
+                SlotCompactBit(SLOT_STATE_TOP_LEFT,   0) | SlotCompactBit(SLOT_STATE_TOP_CENTER, 1) |
+                SlotCompactBit(SLOT_STATE_TOP_RIGHT,  2) | SlotCompactBit(SLOT_STATE_MID_LEFT,   3) |
+                SlotCompactBit(SLOT_STATE_MID_CENTER, 4) | SlotCompactBit(SLOT_STATE_MID_RIGHT,  5) |
+                SlotCompactBit(SLOT_STATE_BOT_LEFT,   6) | SlotCompactBit(SLOT_STATE_BOT_CENTER, 7) |
+                SlotCompactBit(SLOT_STATE_BOT_RIGHT,  8);
 
         // =========================================================================
         // Overlay — Center-Center message queue (MID_CENTER slot)
@@ -1099,6 +1251,23 @@ namespace Constants {
         constexpr bool HISTORY_SHOW_FULL_HISTORY = false; // controls initial behaviour of HistoryWnd full or limited , you can swith with key comb that after you show but this is for inital behaviour
         constexpr const wchar_t *HISTORY_FILE_NAME = L"qivHistory.txt";
         constexpr const wchar_t *FAVORITES_FILE_NAME = L"qivFavorites.txt";
+
+        // Comment markers. A line whose first non-space character is one of
+        // these is skipped by the loaders — which is what lets these files carry
+        // a header without it appearing as a folder row in the panel.
+        constexpr wchar_t COMMENT_MARK_SEMI = L';';
+        constexpr wchar_t COMMENT_MARK_HASH = L'#';
+
+        // Written once, when the file is first created. Deliberately NO
+        // "Updated" line: these files are APPENDED to on every folder visit, and
+        // refreshing a header would mean rewriting the whole file each time —
+        // the write amplification that keeping them as plain text avoids. The
+        // file's own modified date is the accurate last-write, and the header
+        // says so rather than carrying a stamp that would quietly go stale.
+        constexpr const wchar_t *HISTORY_FILE_TITLE =
+            L"folder history, oldest first (the panel shows it newest first)";
+        constexpr const wchar_t *FAVORITES_FILE_TITLE =
+            L"favourite folders, one per line";
         //backup name must be the same as the file name only append the currentDate ex: qivHistory_DATE.bak
         //We Backup when we delete history/favorites only then we first backup then delete !
         constexpr const wchar_t *HISTORY_FAVORITES_BACKUP_FOLDER = L"/QivBackup";

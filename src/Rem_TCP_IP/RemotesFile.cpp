@@ -1,6 +1,8 @@
 #include "RemotesFile.h"
 
 #include "RemoteCrypto.h"   // StoredIsUsable — the same check the target applies
+#include "RemoteTls.h"      // FingerprintOfCertFile — the pin, taken at import
+#include "Persistence/IniFile.h" // Generated / Updated stamps
 #include "Platform/Constants.h"
 
 #include <cwctype>
@@ -47,22 +49,22 @@ namespace {
         return path;
     }
 
-    // A row is "Name,IP,Port,Password,AutoConnect,ExePath".
+    // A row is "Name,IP,Port,Password,AutoConnect,ExePath,Pin" — SEVEN fields,
+    // and a row with any other count is dropped.
     //
-    // Split on the first five commas ONLY, so the sixth field keeps whatever it
-    // contains. A Windows path cannot hold a comma, but it is the field most
-    // likely to be hand-edited and it costs nothing to make it the safe one.
+    // Split on the first six commas; the seventh field keeps the remainder. Pin
+    // is hex and can never contain a comma, so nothing is lost by making it the
+    // open-ended one, and a Windows path cannot contain a comma either.
     bool ParseRow(const std::wstring &raw, RemoteEntry &out) {
-        std::wstring f[6];
+        std::wstring f[7];
         size_t start = 0;
-        int    i     = 0;
-        for (; i < 5; ++i) {
+        for (int i = 0; i < 6; ++i) {
             const size_t c = raw.find(L',', start);
-            if (c == std::wstring::npos) return false; // too few fields — skip the row
+            if (c == std::wstring::npos) return false; // too few fields — skip
             f[i]  = Trim(raw.substr(start, c - start));
             start = c + 1;
         }
-        f[5] = Trim(raw.substr(start));
+        f[6] = Trim(raw.substr(start));
 
         if (f[0].empty() || f[1].empty()) return false;
 
@@ -80,12 +82,14 @@ namespace {
         out.password    = f[3];
         out.autoConnect = (f[4] == L"1" || _wcsicmp(f[4].c_str(), L"true") == 0);
         out.exePath     = f[5];
+        out.pin         = f[6];
         return true;
     }
 
     std::wstring BuildRow(const RemoteEntry &e) {
         return e.name + L"," + e.host + L"," + std::to_wstring(e.port) + L"," +
-               e.password + L"," + (e.autoConnect ? L"1" : L"0") + L"," + e.exePath;
+               e.password + L"," + (e.autoConnect ? L"1" : L"0") + L"," +
+               e.exePath + L"," + e.pin;
     }
 
 } // namespace
@@ -196,7 +200,7 @@ bool ImportFromInstanceFile(const std::wstring &chosenPath,
         return Trim(buf);
     };
 
-    const std::wstring rawEnable = readKey(RT::KEY_ENABLE);
+    const std::wstring rawEnable = readKey(RT::KEY_AUTOSTART);
     const std::wstring rawPort   = readKey(RT::KEY_PORT_NO);
     const std::wstring rawName   = readKey(RT::KEY_NAME);
     const std::wstring rawAllow  = readKey(RT::KEY_ALLOW_LIST);
@@ -234,8 +238,12 @@ bool ImportFromInstanceFile(const std::wstring &chosenPath,
         warningOut = L"It has no Name set, and a listener will not start without one — "
                      L"a driving instance identifies it by name. Set one in its F9 panel.";
     } else if (!Dedicated_ParseBool(rawEnable)) {
-        warningOut = L"Its listener is disabled (Enable=false), so it will not accept "
-                     L"anything until that is switched on in its F9 panel.";
+        // A warning, not a refusal: Autostart=false only means it will not be
+        // listening after a fresh launch. Someone may well have pressed Start in
+        // its F9 panel, in which case this row works immediately.
+        warningOut = L"It does not start its listener automatically (Autostart=false), so "
+                     L"unless somebody presses Start in its F9 panel there will be nothing "
+                     L"to connect to after it restarts.";
     } else if (rawAllow.empty()) {
         warningOut = L"Its AllowList is empty, which denies EVERY connection — that is "
                      L"the fail-closed default. Add 127.0.0.1 to it in its F9 panel.";
@@ -282,6 +290,33 @@ bool ImportFromInstanceFile(const std::wstring &chosenPath,
             return false;
         }
         entryOut.password = std::wstring(SECRET_PREFIX) + rawPass;
+    }
+
+    // The PIN, taken straight from the certificate beside that instance.
+    //
+    // Only for a target that will actually use TLS — a loopback-bound listener
+    // presents no certificate, and storing a pin it will never offer would make
+    // a working row look misconfigured.
+    //
+    // This is what keeps import a COMPLETE setup: without it, adding a LAN
+    // target would import everything except the one value that decides whether
+    // the connection is allowed, and the user would be reading 64 hex digits off
+    // one screen to type into another.
+    if (Tls::RequiredForAddress(rawBind)) {
+        // The certificate sits beside the CONFIG file, which is not necessarily
+        // the folder the user picked — pointing at an exe resolves iniPath into
+        // the same directory, but pointing at a file elsewhere does not.
+        const size_t iniSlash = iniPath.find_last_of(L"\\/");
+        const std::wstring dir =
+            (iniSlash == std::wstring::npos) ? std::wstring() : iniPath.substr(0, iniSlash + 1);
+        entryOut.pin = Tls::FingerprintOfCertFile(dir + RT::TLS_CERT_FILE_NAME);
+
+        if (entryOut.pin.empty() && warningOut.empty()) {
+            warningOut = L"That instance listens off-loopback, so it requires TLS, but "
+                         L"no certificate was found beside it. Start its listener once "
+                         L"to generate one, then import again — without the fingerprint "
+                         L"this row cannot connect.";
+        }
     }
 
     return true;
@@ -346,12 +381,31 @@ void SaveRemotes(const std::vector<RemoteEntry> &entries) {
         HANDLE h = CreateFileW(path.c_str(), GENERIC_WRITE, 0, nullptr,
                                CREATE_NEW, FILE_ATTRIBUTE_NORMAL, nullptr);
         if (h != INVALID_HANDLE_VALUE) {
-            const wchar_t header[] = L"\xFEFF"
-                L"; QuickImageViewer - instances this copy drives\r\n"
-                L"; Name,IP,Port,Password,AutoConnect,ExePath\r\n"
-                L"[Remotes]\r\n";
+            const std::wstring header = std::wstring(1, static_cast<wchar_t>(0xFEFF)) +
+                L"; QuickImageViewer - the instances THIS copy drives (F10).\r\n"
+                L"; The opposite direction from qivLocalServer.ini, which is what\r\n"
+                L"; others connect to.\r\n"
+                L";\r\n"
+                L"; One numbered row per instance, six comma-separated fields:\r\n"
+                L";\r\n"
+                L";   Name         identity in the console; must be unique\r\n"
+                L";   IP           address to dial (127.0.0.1 for a local screen)\r\n"
+                L";   Port         its listener's port\r\n"
+                L";   Password     as typed, OR secret:<iterations>$<salt>$<digest>\r\n"
+                L";                copied from that instance's qivLocalServer.ini\r\n"
+                L";   AutoConnect  1 = dial it at launch, 0 = only on request\r\n"
+                L";   ExePath      full path, so the console can start it if it is off\r\n"
+                L";\r\n"
+                L"; Only the last field may contain commas. Rewritten in full on every\r\n"
+                L"; save, so rows added by hand survive but formatting does not.\r\n"
+                L"; PASSWORDS ARE STORED AS TYPED - keep this file as secret as the\r\n"
+                L"; machines it opens.\r\n"
+                L";\r\n";
+            const std::wstring full =
+                header + Persistence::Ini::GeneratedStampLines() + L"[Remotes]\r\n";
             DWORD written = 0;
-            WriteFile(h, header, static_cast<DWORD>(sizeof(header) - sizeof(wchar_t)),
+            WriteFile(h, full.data(),
+                      static_cast<DWORD>(full.size() * sizeof(wchar_t)),
                       &written, nullptr);
             CloseHandle(h);
         }
@@ -369,6 +423,8 @@ void SaveRemotes(const std::vector<RemoteEntry> &entries) {
                                    BuildRow(e).c_str(), path.c_str());
         ++i;
     }
+
+    Persistence::Ini::TouchUpdatedStamp(path);
 }
 
 } // namespace Remote

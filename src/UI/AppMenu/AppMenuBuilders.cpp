@@ -3,6 +3,7 @@
 #include "AppMenuInternal.h"
 
 #include "AppState.h"
+#include "Dedicated/DedicatedSettings.h" // SettingsUseFile — the Location item
 #include "Input/Command.h"
 #include "Overlays/OverlayManager.h"
 #include "Platform/Constants.h"
@@ -72,6 +73,7 @@ Command CommandForId(int id) {
         case Id::ID_COPY:            return Command::CopyToClipboard;
         case Id::ID_SAVE_AS:         return Command::SaveImage;
         case Id::ID_EXPLORER:        return Command::ShowInExplorer;
+        case Id::ID_NEXT_MONITOR:    return Command::MoveToNextMonitor;
         case Id::ID_HELP:            return Command::ToggleHelp;
         case Id::ID_CLOSE_APP:       return Command::HideToTray;
         case Id::ID_CLOSE_PANELS:    return Command::CloseAllPanels;
@@ -182,6 +184,16 @@ static HMENU BuildOverlaysMenu() {
 // ── Settings submenu (settings id space) ────────────────────────────────────
 static HMENU BuildSettingsMenu() {
     HMENU m = CreatePopupMenu();
+
+    // TOP, and deliberately: every item below it writes somewhere, and this
+    // says where. The two backing stores are indistinguishable from the menu
+    // otherwise, and which one is in use decides whether a settings problem is
+    // fixed by editing a file or by clearing a registry key.
+    AppendMenuW(m, MF_STRING, Id::SET_LOCATION,
+                Dedicated::SettingsUseFile() ? L"Location = File — open folder"
+                                             : L"Location = Registry — open regedit");
+    AppendMenuW(m, MF_SEPARATOR, 0, nullptr);
+
     AppendMenuW(m, MF_STRING | CheckFlag(app.isKeepInBackground),      Id::SET_KEEP_IN_BG,     L"Keep in Background");
     AppendMenuW(m, MF_STRING | CheckFlag(app.isEnableRunOnStartup),    Id::SET_RUN_ON_STARTUP, L"Run on Startup");
     AppendMenuW(m, MF_STRING | CheckFlag(app.thumbnailEffectsEnabled), Id::SET_THUMB_EFFECTS,  L"Thumbnail Effects");
@@ -434,6 +446,7 @@ HMENU Build(HWND hWnd) {
     AppendMenuW(m, MF_STRING, Id::ID_COPY,        L"Copy\tCtrl+C");
     AppendMenuW(m, MF_STRING, Id::ID_SAVE_AS,     L"Save As…\tCtrl+S");
     AppendMenuW(m, MF_STRING, Id::ID_EXPLORER,    L"Open File in Explorer\tL");
+    AppendMenuW(m, MF_STRING, Id::ID_NEXT_MONITOR, L"Move to Next Monitor\tCtrl+M");
     AppendMenuW(m, MF_POPUP, reinterpret_cast<UINT_PTR>(BuildWallpaperMenu()), L"Set as Desktop Wallpaper");
     //Group
     AppendMenuW(m, MF_SEPARATOR, 0, nullptr);

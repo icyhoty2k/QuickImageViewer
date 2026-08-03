@@ -121,6 +121,24 @@ namespace {
                 errorOut = SecErr(L"Cannot set the TLS key length", st);
                 goto done;
             }
+
+            // EXPORT POLICY, and the whole scheme depends on it. A CNG persisted
+            // key is NON-EXPORTABLE by default, so PFXExportCertStoreEx below
+            // writes the certificate and silently omits the key — producing a
+            // PFX that loads fine and then fails at the point of use with
+            // "no usable private key". PLAINTEXT_EXPORT because the PFX carries
+            // no password; see the export call.
+            //
+            // Must be set BEFORE NCryptFinalizeKey: the policy is fixed when the
+            // key material is generated and cannot be relaxed afterwards.
+            DWORD policy = NCRYPT_ALLOW_EXPORT_FLAG | NCRYPT_ALLOW_PLAINTEXT_EXPORT_FLAG;
+            st = NCryptSetProperty(key, NCRYPT_EXPORT_POLICY_PROPERTY,
+                                   reinterpret_cast<PBYTE>(&policy), sizeof(policy), 0);
+            if (st != ERROR_SUCCESS) {
+                errorOut = SecErr(L"Cannot make the TLS key exportable", st);
+                goto done;
+            }
+
             st = NCryptFinalizeKey(key, 0);
             if (st != ERROR_SUCCESS) {
                 errorOut = SecErr(L"Cannot finalize the TLS key", st);
@@ -188,16 +206,26 @@ namespace {
             // Empty password. The file is protected by where it sits and by its
             // DACL, not by a passphrase — a passphrase this program had to store
             // beside the file it protects would be decoration.
+            // REPORT_NOT_ABLE_TO_EXPORT_PRIVATE_KEY is the one that matters:
+            // without it a non-exportable key is not an error, it is simply
+            // left out, and the failure surfaces much later as a listener that
+            // cannot acquire credentials. Fail here, where the cause is visible.
             if (!PFXExportCertStoreEx(store, &pfx, L"", nullptr,
-                                      EXPORT_PRIVATE_KEYS | REPORT_NO_PRIVATE_KEY)) {
-                errorOut = L"Cannot export the certificate.";
+                                      EXPORT_PRIVATE_KEYS | REPORT_NO_PRIVATE_KEY |
+                                          REPORT_NOT_ABLE_TO_EXPORT_PRIVATE_KEY)) {
+                errorOut = L"Cannot export the certificate with its private key.";
                 goto done;
             }
             std::vector<BYTE> blob(pfx.cbData);
             pfx.pbData = blob.data();
+            // REPORT_NOT_ABLE_TO_EXPORT_PRIVATE_KEY is the one that matters:
+            // without it a non-exportable key is not an error, it is simply
+            // left out, and the failure surfaces much later as a listener that
+            // cannot acquire credentials. Fail here, where the cause is visible.
             if (!PFXExportCertStoreEx(store, &pfx, L"", nullptr,
-                                      EXPORT_PRIVATE_KEYS | REPORT_NO_PRIVATE_KEY)) {
-                errorOut = L"Cannot export the certificate.";
+                                      EXPORT_PRIVATE_KEYS | REPORT_NO_PRIVATE_KEY |
+                                          REPORT_NOT_ABLE_TO_EXPORT_PRIVATE_KEY)) {
+                errorOut = L"Cannot export the certificate with its private key.";
                 goto done;
             }
 
@@ -279,7 +307,8 @@ namespace {
 
         CRYPT_DATA_BLOB blob{static_cast<DWORD>(bytes.size()), bytes.data()};
         HCERTSTORE store = PFXImportCertStore(
-            &blob, L"", PKCS12_NO_PERSIST_KEY | PKCS12_ALWAYS_CNG_KSP);
+            &blob, L"",
+            CRYPT_EXPORTABLE | CRYPT_USER_KEYSET | PKCS12_ALWAYS_CNG_KSP);
         if (!store) {
             errorOut = L"The certificate file could not be read — delete " +
                        CertPath() + L" to have a new one generated.";
@@ -294,8 +323,48 @@ namespace {
         if (cert) CertFreeCertificateContext(cert);
         CertCloseStore(store, 0);
 
-        if (!kept) errorOut = L"The certificate file contains no certificate.";
+        if (!kept) {
+            errorOut = L"The certificate file contains no certificate.";
+            return nullptr;
+        }
+
+        // Prove the private key is reachable HERE rather than letting
+        // AcquireCredentialsHandle fail with SEC_E_NO_CREDENTIALS, which names
+        // nothing and sends the reader looking at the wrong end of the problem.
+        NCRYPT_KEY_HANDLE key = 0;
+        DWORD keySpec = 0;
+        BOOL  owned   = FALSE;
+        if (!CryptAcquireCertificatePrivateKey(
+                kept,
+                CRYPT_ACQUIRE_ONLY_NCRYPT_KEY_FLAG | CRYPT_ACQUIRE_SILENT_FLAG,
+                nullptr, &key, &keySpec, &owned)) {
+            CertFreeCertificateContext(kept);
+            errorOut = L"The certificate has no usable private key — delete " +
+                       CertPath() + L" to have a new one generated.";
+            return nullptr;
+        }
+        if (owned && key) NCryptFreeObject(key);
+
         return kept;
+    }
+
+    // Deletes the key container this process imported, so the user's keyset does
+    // not collect one per launch. Best effort: a key that cannot be deleted is
+    // an untidy profile, not a broken program.
+    void DeleteImportedKey(PCCERT_CONTEXT cert) {
+        if (!cert) return;
+
+        NCRYPT_KEY_HANDLE key = 0;
+        DWORD keySpec = 0;
+        BOOL  owned   = FALSE;
+        if (!CryptAcquireCertificatePrivateKey(
+                cert, CRYPT_ACQUIRE_ONLY_NCRYPT_KEY_FLAG | CRYPT_ACQUIRE_SILENT_FLAG,
+                nullptr, &key, &keySpec, &owned) || !key)
+            return;
+
+        // NCryptDeleteKey frees the handle whether or not it succeeds, so there
+        // is deliberately no NCryptFreeObject after it.
+        NCryptDeleteKey(key, NCRYPT_SILENT_FLAG);
     }
 
     // Restricts the PFX to the current user. Stops another account on this
@@ -445,25 +514,65 @@ std::wstring ServerFingerprint() {
     return g_fingerprint;
 }
 
-bool RegenerateServerCertificate(std::wstring &errorOut) {
-    {
-        std::lock_guard<std::mutex> lk(g_credMutex);
-        if (g_haveServerCred) {
-            FreeCredentialsHandle(&g_serverCred);
-            g_haveServerCred = false;
-        }
-        if (g_serverCert) {
-            CertFreeCertificateContext(g_serverCert);
-            g_serverCert = nullptr;
-        }
-        g_fingerprint.clear();
+std::wstring FingerprintOfCertFile(const std::wstring &pfxPath) {
+    if (!Persistence::Ini::Exists(pfxPath)) return {};
 
-        if (Persistence::Ini::Exists(CertPath()) &&
-            !DeleteFileW(CertPath().c_str())) {
-            errorOut = L"Cannot delete " + CertPath() +
-                       L" — stop the server and close anything holding the file.";
-            return false;
-        }
+    HANDLE h = CreateFileW(pfxPath.c_str(), GENERIC_READ, FILE_SHARE_READ, nullptr,
+                           OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, nullptr);
+    if (h == INVALID_HANDLE_VALUE) return {};
+
+    LARGE_INTEGER size{};
+    if (!GetFileSizeEx(h, &size) || size.QuadPart <= 0 || size.QuadPart > 1024 * 1024) {
+        CloseHandle(h);
+        return {};
+    }
+
+    std::vector<BYTE> bytes(static_cast<size_t>(size.QuadPart));
+    DWORD got = 0;
+    const bool read = ReadFile(h, bytes.data(), static_cast<DWORD>(bytes.size()),
+                               &got, nullptr) != 0;
+    CloseHandle(h);
+    if (!read || got != bytes.size()) return {};
+
+    // NO_PERSIST_KEY here, unlike the server load: only the certificate is
+    // wanted, and persisting somebody else's key into this user's keyset would
+    // be a side effect nobody asked for.
+    CRYPT_DATA_BLOB blob{static_cast<DWORD>(bytes.size()), bytes.data()};
+    HCERTSTORE store = PFXImportCertStore(&blob, L"", PKCS12_NO_PERSIST_KEY);
+    if (!store) return {};
+
+    PCCERT_CONTEXT cert = CertFindCertificateInStore(
+        store, X509_ASN_ENCODING, 0, CERT_FIND_ANY, nullptr, nullptr);
+    std::wstring fp = cert ? FingerprintOf(cert) : std::wstring();
+    if (cert) CertFreeCertificateContext(cert);
+    CertCloseStore(store, 0);
+    return fp;
+}
+
+void ShutdownServerCredentials() {
+    std::lock_guard<std::mutex> lk(g_credMutex);
+    if (g_haveServerCred) {
+        FreeCredentialsHandle(&g_serverCred);
+        g_haveServerCred = false;
+    }
+    if (g_serverCert) {
+        // Order matters: the key container is found THROUGH the certificate, so
+        // it has to go before the context that names it.
+        DeleteImportedKey(g_serverCert);
+        CertFreeCertificateContext(g_serverCert);
+        g_serverCert = nullptr;
+    }
+    g_fingerprint.clear();
+}
+
+bool RegenerateServerCertificate(std::wstring &errorOut) {
+    ShutdownServerCredentials();
+
+    if (Persistence::Ini::Exists(CertPath()) &&
+        !DeleteFileW(CertPath().c_str())) {
+        errorOut = L"Cannot delete " + CertPath() +
+                   L" — stop the server and close anything holding the file.";
+        return false;
     }
     return EnsureServerCredentials(errorOut);
 }

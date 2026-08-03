@@ -1,6 +1,7 @@
 #include "DedicatedSettings.h"
 #include "DedicatedInstance.h"
 #include "Persistence/RegistryManager.h" // GetExePathW
+#include "Persistence/IniFile.h"         // Generated / Updated stamps
 #include "Platform/Constants.h"
 #include <algorithm>
 #include <cwctype>
@@ -178,18 +179,31 @@ namespace {
 
         std::wstring head;
         head += static_cast<wchar_t>(0xFEFF); // UTF-16LE BOM — must be first
-        head += L"; QuickImageViewer - dedicated instance settings\r\n";
-        head += L"; This instance never reads or writes the registry.\r\n";
+        head += L"; QuickImageViewer - instance settings.\r\n"
+                L";\r\n"
+                L"; THIS FILE EXISTING is what makes the copy beside it file-backed:\r\n"
+                L"; it then reads and writes every setting here and never touches the\r\n"
+                L"; registry. Delete it and that copy goes back to the registry, losing\r\n"
+                L"; whatever is stored here.\r\n"
+                L";\r\n"
+                L"; Remote control is NOT configured here - see qivLocalServer.ini.\r\n"
+                L";\r\n";
+        head += Persistence::Ini::GeneratedStampLines();
         head += L"\r\n";
         head += L"["; head += SECTION_INSTANCE; head += L"]\r\n";
-        // Placeholders so the identity keys keep their position at the top;
-        // the writers below fill them in immediately after.
-        // Dedicated: 1/true/on/yes (or any non-zero number) = dedicated
-        //            0/false/off/no                          = ordinary copy,
-        //            which still reads its settings from this file.
+        head += L"; Name         what this instance calls itself\r\n"
+                L"; Description  free text, for your own reference\r\n"
+                L"; Version      the qIV build that last wrote this file\r\n"
+                L"; Dedicated    1 = isolated appliance (own history/favourites, own icon)\r\n"
+                L";              0 = ordinary copy that still keeps its settings here\r\n"
+                L"; Mutex        single-instance identity; pins it across an exe rename\r\n";
+        // Placeholders so the identity keys keep their position at the top; the
+        // writers below fill them in immediately after.
         head += L"Name=\r\nDescription=\r\nVersion=\r\nDedicated=\r\nMutex=\r\n";
         head += L"\r\n";
         head += L"["; head += SECTION; head += L"]\r\n";
+        head += L"; Application settings, written by qIV. Same names as the registry\r\n"
+                L"; values they replace. Edit with the app closed.\r\n";
 
         DWORD written = 0;
         WriteFile(h, head.data(),

@@ -7,10 +7,14 @@
 // RemotesFile — the list of instances THIS copy drives, kept beside the exe.
 //
 //     [Remotes]
-//     1=Monitor2,127.0.0.1,8771,hunter2,1,D:\qIV\qIV_dedicated_Mon2.exe
+//     1=Monitor2,127.0.0.1,8771,hunter2,1,D:\qIV\qIV_dedicated_Mon2.exe,
 //     2=Monitor3,127.0.0.1,8772,hunter2,1,D:\qIV\qIV_dedicated_Mon3.exe
 //
-// Fields, in order: Name, IP, Port, Password, AutoConnect, ExePath.
+// Fields, in order: Name, IP, Port, Password, AutoConnect, ExePath, Pin.
+//
+// Pin is the TLS certificate fingerprint and is empty for a loopback target.
+// SEVEN FIELDS, always — a row with any other count is dropped. No field may
+// contain a comma; a Windows path cannot, and a pin is hex.
 //
 // THE NAME IS THE IDENTITY. It is what the console shows, what a message names
 // when something fails, and what makes a row the same row after its port or its
@@ -72,6 +76,15 @@ namespace Remote {
         // copy (*dedicated*.exe), so this is a distinct binary per row, and the
         // .ini beside it carries that screen's whole configuration.
         std::wstring exePath;
+
+        // SHA-256 of the target's TLS certificate, lower-case hex — the value
+        // this end PINS. Empty for a loopback target, which speaks plaintext and
+        // has no certificate to check.
+        //
+        // Empty for an off-machine target means the connection is REFUSED and
+        // the fingerprint the server offered is reported, so accepting one is
+        // always a deliberate act.
+        std::wstring pin;
     };
 
     // Marks a password field that holds an already-derived SECRET rather than a

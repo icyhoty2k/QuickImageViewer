@@ -1,5 +1,7 @@
 ﻿#include "OverlayManager.h"
 #include "../AppState.h"
+#include "../Rem_TCP_IP/RemoteServer.h"   // IsRunning / ActiveConnections
+#include "../Rem_TCP_IP/RemoteSettings.h" // Config().maxConnections
 #include "../Common/Converters.h"
 #include "../Persistence/RegistryManager.h"
 #include "../Platform/Constants.h"
@@ -439,7 +441,7 @@ void OverlayManager::RebuildTopLeft() {
         text += buf;
         text += m_infoFilename;
         text += L"  ";
-        text += Converters::FormatZoomPercent(m_zoom);
+        text += BuildTopRightText();
         text += L"  ";
         wchar_t dimBuf[32];
         swprintf_s(dimBuf, L"%d×%d", m_imgW, m_imgH);
@@ -513,9 +515,40 @@ void OverlayManager::ApplyLayoutMode(HWND /*hWnd*/) {
     // All three depend on the mode: TOP_LEFT switches between the summary block
     // and the plain index/filename, and BOT_LEFT moves the folder-name line.
     RebuildTopLeft();
-    slotTopRight.UpdateText(Converters::FormatZoomPercent(m_zoom));
+    slotTopRight.UpdateText(BuildTopRightText());
     UpdateEffects();                                // BOT_LEFT
     UpdateDims(m_imgW, m_imgH, m_fileSizeBytes);    // BOT_RIGHT
+}
+
+// TOP_RIGHT is "<dot> <active>/<max>  <zoom>" while the listener runs, and just
+// the zoom otherwise — the indicator's ABSENCE is the stopped state, so there is
+// nothing to grey out and no second visual language to learn.
+//
+// The figures are read live rather than cached: this is called on a zoom change
+// or a connect/disconnect, never per frame, so two atomic loads cost nothing.
+std::wstring OverlayManager::BuildTopRightText() const {
+    const std::wstring zoom = Converters::FormatZoomPercent(m_zoom);
+    if (!Remote::IsRunning()) return zoom;
+
+    // Green = encrypted, orange = plaintext loopback. See the constants.
+    const std::wstring dot = Remote::IsEncrypted()
+                                 ? Constants::Messages::OVERLAY_SERVER_DOT_TLS
+                                 : Constants::Messages::OVERLAY_SERVER_DOT_PLAIN;
+
+    // COMPACT shows the dot alone — the slot's compact state means "the least
+    // that still carries the information", and for a server that is "it is up,
+    // and this is how it is exposed". FULL adds the client count.
+    if (m_slots[TOP_RIGHT].compact) return dot + L"  " + zoom;
+
+    return dot + L" " + std::to_wstring(Remote::ActiveConnections()) + L"/" +
+           std::to_wstring(Remote::Config().maxConnections) + L"  " + zoom;
+}
+
+void OverlayManager::UpdateRemoteStatus() {
+    slotTopRight.UpdateText(BuildTopRightText());
+    // Summary mode folds TOP_RIGHT into TOP_LEFT's second line.
+    if (app.overlayLayoutMode == 2)
+        RebuildTopLeft();
 }
 
 void OverlayManager::UpdateInfo(int index, int total, const std::wstring &filename) {
@@ -541,7 +574,7 @@ void OverlayManager::UpdateZoom(float /*zoom*/, HWND /*hWnd*/) {
     if (newZoom == m_zoom && !slotTopRight.text.empty())
         return;
     m_zoom = newZoom;
-    slotTopRight.UpdateText(Converters::FormatZoomPercent(m_zoom));
+    slotTopRight.UpdateText(BuildTopRightText());
     // Summary mode mirrors the zoom into TOP_LEFT's second line.
     if (app.overlayLayoutMode == 2)
         RebuildTopLeft();
@@ -911,6 +944,9 @@ void OverlayManager::CycleSlotState(Slot slot) {
 void OverlayManager::RebuildForCompactChange(Slot slot) {
     if (slot == TOP_LEFT) RebuildTopLeft();
     if (slot == BOT_RIGHT) UpdateDims(m_imgW, m_imgH, m_fileSizeBytes);
+    // TOP_RIGHT joined this list when the server indicator arrived: compact is
+    // the dot alone, full adds the client count.
+    if (slot == TOP_RIGHT) UpdateRemoteStatus();
 }
 
 std::wstring OverlayManager::SlotStateMessage(Slot slot) const {
@@ -1085,11 +1121,15 @@ void OverlayManager::RenderAll(ID2D1DeviceContext *ctx) const {
 
         // Draw text in the user-chosen outer-slot colour, falling back to the
         // renderer's shared brush if the device context was gone at Init time.
+        // ENABLE_COLOR_FONT so the server dot (U+1F7E2) renders as the colour
+        // glyph rather than a monochrome outline in the slot's brush colour.
+        // Only affects glyphs that actually carry colour layers, so ordinary
+        // text — including every other slot — is drawn exactly as before.
         ctx->DrawTextLayout(
                 D2D1::Point2F(slotRect.left, slotRect.top),
                 layout,
                 m_pOuterBrush ? m_pOuterBrush.Get() : m_pTextBrush,
-                D2D1_DRAW_TEXT_OPTIONS_NONE);
+                D2D1_DRAW_TEXT_OPTIONS_ENABLE_COLOR_FONT);
     }
 }
 

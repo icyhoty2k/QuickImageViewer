@@ -150,6 +150,7 @@ namespace Remote::Mirror {
     // saved list that only contained things currently reachable.
     int  AddTarget(const std::wstring &name, const std::wstring &host, int port,
                    const std::wstring &password, const std::wstring &exePath,
+                   const std::wstring &pin,
                    bool connectNow = true);
 
     // Start or stop trying to reach one target. Stopping drops the connection

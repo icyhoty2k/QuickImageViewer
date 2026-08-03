@@ -93,6 +93,9 @@ namespace {
         int          port = 0;
         std::wstring password;
         std::wstring exePath;
+        // TLS certificate fingerprint to pin. Empty for a loopback target, which
+        // speaks plaintext and presents nothing to check.
+        std::wstring pin;
 
         // Resolved when the target is added and re-resolved on demand — never
         // per keystroke, which would put a DNS lookup in the mirror path.
@@ -1052,7 +1055,7 @@ static void LeaveDiskOrderForSession(HWND hOwner) {
 
 int AddTarget(const std::wstring &name, const std::wstring &host, int port,
               const std::wstring &password, const std::wstring &exePath,
-              bool connectNow) {
+              const std::wstring &pin, bool connectNow) {
     // Before the first LIVE target: entering a session with disk order still
     // selected would misalign the two playlists from the start. A row that is
     // only being listed changes nothing, so it does not trigger this.
@@ -1065,6 +1068,7 @@ int AddTarget(const std::wstring &name, const std::wstring &host, int port,
     t->port        = port;
     t->password    = password;
     t->exePath     = exePath;
+    t->pin         = pin;
     // Resolved here, synchronously, so the row is right the moment it appears.
     // The periodic refresh below only has to catch LATER changes.
     t->sameMachine.store(IsSameMachine(host), std::memory_order_release);
@@ -1077,6 +1081,10 @@ int AddTarget(const std::wstring &name, const std::wstring &host, int port,
     // even the first handshake is recorded against a readable name rather than
     // an address.
     t->client.SetPeerLabel(name.empty() ? (host + L":" + std::to_wstring(port)) : name);
+    // Set before any connect attempt: the pin is checked during the TLS
+    // handshake, which happens before the banner, so supplying it afterwards
+    // would be supplying it too late.
+    t->client.SetPin(pin);
     t->wantConnect.store(connectNow, std::memory_order_release);
 
     Target *raw = t.get();

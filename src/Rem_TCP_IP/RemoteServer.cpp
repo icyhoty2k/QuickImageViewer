@@ -11,6 +11,7 @@
 #include "RemoteTls.h"         // Schannel — mandatory on any non-loopback bind
 #include "RemoteCrypto.h"
 #include "RemoteExec.h"
+#include "RemoteImageXfer.h" // BuildPreviewJpeg — runs on THIS thread
 #include "RemoteLog.h"    // Ctrl+F12 — the inbound half of the wire record
 
 #include "Platform/Constants.h"
@@ -84,6 +85,19 @@ namespace {
     std::mutex                           g_authFailMutex;
 
     long long NowMs() { return static_cast<long long>(GetTickCount64()); }
+
+    // "<maxDim>[;<quality>]". Anything unparseable leaves the default in place
+    // rather than failing the request — a preview that is the wrong size is a
+    // far better answer than no preview, and the clamps in BuildPreviewJpeg
+    // catch out-of-range values anyway.
+    void ParsePreviewPayload(const std::wstring &payload, int &maxDim, int &quality) {
+        const size_t sep = payload.find(L';');
+        const std::wstring a = payload.substr(0, sep);
+        const std::wstring b = (sep == std::wstring::npos) ? std::wstring()
+                                                           : payload.substr(sep + 1);
+        try { if (!a.empty()) maxDim  = std::stoi(a); } catch (...) {}
+        try { if (!b.empty()) quality = std::stoi(b); } catch (...) {}
+    }
 
     // One failed handshake. Opens or extends the window, and on the Nth failure
     // inside it hands the address to the BLACKLIST.
@@ -206,6 +220,13 @@ namespace {
     // nanoseconds between adding an observer and publishing the count costs at
     // most one missed event on the connection that just asked to observe.
     std::atomic<int> g_observerCount{0};
+
+    // Tell the UI thread the client count (or the running state) changed, so the
+    // overlay's server indicator repaints. Posted, never sent: this is called
+    // from socket threads and from Stop(), and none of them may block on the UI.
+    void NotifyClientsChanged() {
+        if (g_owner) PostMessageW(g_owner, Constants::WM_QIV_REMOTE_CLIENTS, 0, 0);
+    }
 
     void SetEndpoint(const std::wstring &s) {
         std::lock_guard<std::mutex> lk(g_endpointMutex);
@@ -495,6 +516,13 @@ namespace {
     void ClientThread(SOCKET client, Settings cfg, HWND owner, std::wstring peer) {
         std::string accum;
 
+        // WIC is COM, and SendDisplayedPreview decodes on THIS thread. MTA
+        // rather than STA: nothing here pumps a message loop, and an STA
+        // apartment without one deadlocks the moment a proxy is needed.
+        //
+        // Balanced at every exit below — there are two, and both are after this.
+        const HRESULT comInit = CoInitializeEx(nullptr, COINIT_MULTITHREADED);
+
         // TLS FIRST, before the banner — the banner is already application data
         // and must travel inside the tunnel, not in front of it.
         //
@@ -502,9 +530,21 @@ namespace {
         // anything the client said, so there is nothing here for a peer to
         // influence. A client that opens the connection and speaks plaintext to
         // a TLS endpoint simply fails the handshake and is dropped.
+        // PER CONNECTION, from the PEER's address — not from the bind address.
+        //
+        // A listener on 0.0.0.0 serves both: another copy on this machine gets
+        // plaintext (nothing left the box, and the local multi-screen wall pays
+        // no handshake), while anything from off-machine gets TLS.
+        //
+        // Safe because a peer address is not something an attacker can choose:
+        // a TCP connection has to complete a handshake, so a packet claiming to
+        // come from 127.0.0.1 cannot carry a conversation unless it really is
+        // local. Deciding from the BIND address instead — which is what this
+        // used to do — forced the whole listener into one mode and made
+        // 0.0.0.0 break every loopback client.
         Tls::Session  tlsSession;
         Tls::Session *tls = nullptr;
-        if (Tls::RequiredForAddress(cfg.bindAddress)) {
+        if (Tls::RequiredForAddress(peer)) {
             std::wstring err;
             if (!tlsSession.AcceptHandshake(client, err)) {
                 // Silent. A failed handshake is either a scanner, a stale
@@ -514,6 +554,8 @@ namespace {
                 shutdown(client, SD_BOTH);
                 closesocket(client);
                 g_activeClients.fetch_sub(1, std::memory_order_acq_rel);
+                NotifyClientsChanged();
+                if (SUCCEEDED(comInit)) CoUninitialize();
                 return;
             }
             tls = &tlsSession;
@@ -585,6 +627,41 @@ namespace {
 
                 const DWORD w = WaitForSingleObject(call->doneEvent, REPLY_TIMEOUT_MS);
                 if (w == WAIT_OBJECT_0) {
+                    // SendDisplayedPreview's second stage. The UI thread has
+                    // returned only the PATH; the decode, downscale and JPEG
+                    // encode happen HERE, on this socket thread, because they
+                    // take far longer than REPLY_TIMEOUT_MS on a large image and
+                    // would freeze the viewer for the duration.
+                    const std::wstring marker = PREVIEW_PATH_MARKER;
+                    if (call->result.rfind(marker, 0) == 0) {
+                        const std::wstring path = call->result.substr(marker.size());
+                        std::wstring reply;
+
+                        if (path.empty()) {
+                            reply = MakeOk(L"SendDisplayedPreview=0;"); // showing nothing
+                        } else {
+                            int maxDim  = RT::PREVIEW_MAX_DIM_DEFAULT;
+                            int quality = RT::PREVIEW_QUALITY_DEFAULT;
+                            ParsePreviewPayload(req.payload, maxDim, quality);
+
+                            std::vector<unsigned char> jpeg;
+                            std::wstring err;
+                            if (Xfer::BuildPreviewJpeg(path, maxDim, quality, jpeg, err)) {
+                                const size_t slash = path.find_last_of(L"\\/");
+                                const std::wstring name =
+                                    (slash == std::wstring::npos) ? path : path.substr(slash + 1);
+                                reply = Xfer::BuildDataReplyBody(jpeg) +
+                                        MakeOk(L"SendDisplayedPreview=" +
+                                               std::to_wstring(jpeg.size()) + L";" + name);
+                            } else {
+                                reply = MakeErr(RT::ERR_BAD_PAYLOAD, err);
+                            }
+                        }
+
+                        if (!SendAll(client, ToUtf8(reply) + "\r\n", tls)) break;
+                        continue;
+                    }
+
                     if (!SendLine(client, call->result, tls)) break;
                 } else {
                     if (!SendLine(client, MakeErr(RT::ERR_INTERNAL, L"viewer did not respond in time"), tls))
@@ -605,6 +682,8 @@ namespace {
         shutdown(client, SD_BOTH);
         closesocket(client);
         g_activeClients.fetch_sub(1, std::memory_order_acq_rel);
+        NotifyClientsChanged();
+        if (SUCCEEDED(comInit)) CoUninitialize();
     }
 
     // --- Listener -----------------------------------------------------------
@@ -673,7 +752,7 @@ namespace {
             // served. The cap is not a security boundary, and a silent close is
             // honest enough.
             if (g_activeClients.load(std::memory_order_acquire) >= cfg.maxConnections) {
-                if (!Tls::RequiredForAddress(cfg.bindAddress))
+                if (!Tls::RequiredForAddress(peer))
                     SendLine(client, MakeErr(RT::ERR_TOO_MANY_CLIENTS,
                                              L"connection limit reached"));
                 shutdown(client, SD_BOTH);
@@ -682,6 +761,7 @@ namespace {
             }
 
             g_activeClients.fetch_add(1, std::memory_order_acq_rel);
+            NotifyClientsChanged();
             // Detached: a client's lifetime is its socket's, and Stop() closes
             // the sockets rather than joining every conversation.
             std::thread(ClientThread, client, cfg, g_owner, peer).detach();
@@ -819,6 +899,7 @@ bool Start(HWND hOwner, std::wstring &errorOut) {
     g_activeClients.store(0, std::memory_order_release);
 
     g_listenThread = std::thread(ListenThread);
+    NotifyClientsChanged();   // the overlay indicator appears
     errorOut.clear();
     return true;
 }
@@ -842,6 +923,17 @@ void Stop() {
 
     g_running.store(false, std::memory_order_release);
     SetEndpoint({});
+    NotifyClientsChanged();   // the overlay indicator goes away
+
+    // Releases the TLS credentials and deletes the key container importing the
+    // PFX created. Deliberately AFTER the listener thread has joined and the
+    // listening socket is closed, so no handshake can be in flight against
+    // credentials that are being torn down.
+    //
+    // Detached client threads may still be running, but each holds its own
+    // security CONTEXT, which stays valid after the credential handle is freed —
+    // Schannel keeps a reference for as long as a context derived from it lives.
+    Tls::ShutdownServerCredentials();
 
     if (g_wsaUp) {
         WSACleanup();
@@ -852,6 +944,12 @@ void Stop() {
 bool IsRunning() { return g_running.load(std::memory_order_acquire); }
 
 int ActiveConnections() { return g_activeClients.load(std::memory_order_acquire); }
+
+bool IsEncrypted() {
+    if (!g_running.load(std::memory_order_acquire)) return false;
+    // The SNAPSHOT's bind address — what the socket was actually opened with.
+    return Tls::RequiredForAddress(SnapshotCopy().bindAddress);
+}
 
 std::wstring BoundEndpoint() {
     std::lock_guard<std::mutex> lk(g_endpointMutex);

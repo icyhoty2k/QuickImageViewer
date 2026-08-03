@@ -78,6 +78,15 @@ namespace Remote {
     // Live client count, for the panel's status line.
     int ActiveConnections();
 
+    // True when the RUNNING listener is speaking TLS. False when stopped, and
+    // false for a loopback-bound listener, which is plaintext by design.
+    //
+    // Answered from the snapshot taken at Start(), NOT from live Config(): the
+    // user can retype the bind address in the panel while clients are connected,
+    // and an indicator that changed colour before Stop/Start would be reporting
+    // an intention rather than the state of the socket.
+    bool IsEncrypted();
+
     // The address:port actually bound, once running. Empty when stopped.
     // Reports what the socket really got, not what was configured.
     std::wstring BoundEndpoint();

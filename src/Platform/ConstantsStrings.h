@@ -314,7 +314,9 @@ namespace Constants::Messages {
     // status line. An enabled server with an empty AllowList refuses every
     // connection — stating that is the difference between a configured refusal
     // and something that merely looks broken.
-    constexpr const wchar_t *REMOTE_BLOCKED_DISABLED       = L"Remote server disabled";
+    // NOTE: there is no "server disabled" reason any more. Autostart describes
+    // launch behaviour only, so there is no state in which the user asks the
+    // server to start and is told it is not allowed to.
     constexpr const wchar_t *REMOTE_BLOCKED_NO_PORT        = L"No port configured";
     // A name identifies this instance to whoever drives it — see WhyCannotStart.
     constexpr const wchar_t *REMOTE_BLOCKED_NO_NAME        =
@@ -354,6 +356,58 @@ namespace Constants::Messages {
     constexpr const wchar_t *BLACKLIST_REASON_AUTH_PREFIX = L"blocked automatically: ";
     constexpr const wchar_t *BLACKLIST_REASON_AUTH_SUFFIX =
         L" failed authentications in 10 minutes";
+    // Panel footers reporting WHERE the values on screen came from.
+    //
+    // Every panel backed by a file says this on open, because a populated panel
+    // is otherwise ambiguous — identical whether it was loaded from disk or is
+    // showing defaults — and that difference decides whether saving creates a
+    // file or overwrites one.
+    constexpr const wchar_t *REMOTE_PANEL_READ_FROM = L"Read from ";
+    constexpr const wchar_t *REMOTE_PANEL_NO_INI =
+        L"No settings file — these are defaults. Save to INI creates one.";
+    constexpr const wchar_t *REMOTES_PANEL_NO_FILE =
+        L"No qivRemoteServers.ini — added rows are saved to it automatically.";
+    // The F8 Dedicated panel says the same thing in its own subtitle
+    // ("Editing: <path>" / "New instance — not yet generated"), so it needs
+    // nothing here.
+
+    // Overlay top-right server indicator: "<dot> 2/4  86.0%".
+    //
+    // COLOUR emoji glyphs, so they keep their own colour while the rest of the
+    // slot is drawn in the user's chosen overlay colour. The outer slots share
+    // one brush; a per-range drawing effect would be the alternative and is far
+    // more machinery for one dot.
+    //
+    // Shown only while the listener is running, so its absence is the "stopped"
+    // state and there is nothing to grey out. The COLOUR then carries a second
+    // fact that is otherwise invisible until something goes wrong:
+    //
+    //   GREEN  (U+1F7E2)  TLS — reachable from off this machine, encrypted
+    //   ORANGE (U+1F7E0)  plaintext — loopback only, nothing to encrypt against
+    //
+    // Orange rather than red on purpose: a loopback listener is not a fault or a
+    // misconfiguration, it is the normal local case. Red would cry wolf on the
+    // setup most people run.
+    constexpr const wchar_t *OVERLAY_SERVER_DOT_TLS   = L"\U0001F7E2";
+    constexpr const wchar_t *OVERLAY_SERVER_DOT_PLAIN = L"\U0001F7E0";
+
+    // F9 status line. The wording matches the overlay dot's two colours, so the
+    // panel and the indicator cannot appear to disagree.
+    constexpr const wchar_t *REMOTE_STATUS_TLS   = L"· TLS for remote clients";
+    constexpr const wchar_t *REMOTE_STATUS_PLAIN = L"· loopback only — nothing to encrypt";
+    constexpr const wchar_t *REMOTE_STATUS_FINGERPRINT = L"Fingerprint: ";
+    constexpr const wchar_t *REMOTE_FINGERPRINT_COPIED = L"— copied";
+
+    // SendDisplayedPreview failures. Separate reasons because the remedies
+    // differ: no WIC is a broken install, a decode failure is a format this
+    // build cannot read, and an encode failure is neither.
+    constexpr const wchar_t *PREVIEW_NO_WIC =
+        L"imaging component unavailable on this machine";
+    constexpr const wchar_t *PREVIEW_CANNOT_DECODE =
+        L"cannot decode that image for a preview — ask for the original instead";
+    constexpr const wchar_t *PREVIEW_ENCODE_FAILED =
+        L"could not encode the preview";
+
     // --- TLS (src/Rem_TCP_IP/RemoteTls.*) ---------------------------------
     constexpr const wchar_t *REMOTE_TLS_HANDSHAKE_FAILED =
         L"TLS handshake failed";

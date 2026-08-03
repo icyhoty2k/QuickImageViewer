@@ -63,6 +63,21 @@ namespace Remote::Xfer {
     std::vector<std::wstring> BuildStreamCommands(const std::wstring &fileName,
                                                   const std::vector<unsigned char> &bytes);
 
+    // Decodes `path`, scales it to fit `maxDim` on its longest edge, and encodes
+    // the result as JPEG. False with a reason on any failure.
+    //
+    // NEVER UPSCALES: a picture already smaller than maxDim is re-encoded at its
+    // own size. Enlarging would send more bytes than the original to show the
+    // same detail, which is the opposite of the point.
+    //
+    // THREAD-SAFE, and it has to be — this runs on a socket thread, not the UI
+    // thread. It creates its OWN WIC factory rather than touching app.wicFactory,
+    // for the same reason the decoder workers do (see the threading rules in
+    // CLAUDE.md): a COM object created on one apartment is not free to use from
+    // another. Requires CoInitializeEx on the calling thread.
+    bool BuildPreviewJpeg(const std::wstring &path, int maxDim, int quality,
+                          std::vector<unsigned char> &out, std::wstring &errOut);
+
     // The REPLY form, for answering `SendDisplayedImage`: base64 body lines each
     // prefixed with the data marker, followed by the caller's own OK line. One
     // string with embedded CRLFs — the transport sends it as written and the

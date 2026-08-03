@@ -84,6 +84,7 @@ set(SOURCES
         src/Platform/FileHandler.cpp
         src/Platform/WriteQueue.cpp
         src/Persistence/RegistryManager.cpp
+        src/UI/LinkText.cpp
         src/Persistence/IniFile.cpp
         src/Persistence/SessionFile.cpp
         src/Renderer/RendererGDI.cpp
