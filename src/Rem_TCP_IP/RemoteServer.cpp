@@ -505,7 +505,10 @@ namespace {
 
         // Proved. Its earlier typos are not evidence of anything.
         ClearAuthFailures(peer);
+        // Tell the client it is authenticated — clients expect an OK line here.
+        if (!SendLine(s, MakeOk(), tls)) return false;
         return true;
+
     }
 
     // --- Per-client conversation --------------------------------------------
