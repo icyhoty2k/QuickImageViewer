@@ -1,5 +1,6 @@
 #include "HelpWnd.h"
 #include "UI/GdiPool.h" // pooled brushes and pens — never DeleteObject them
+#include "UI/CustomControls/ScrollView.h" // WheelDeltaToPixels — the one wheel rule
 #include "../../Platform/Constants.h"
 #include "../../AppState.h"
 #include "Shortcuts.h"
@@ -118,7 +119,7 @@ namespace UI {
             m_query = text;
             for (auto& c : m_query) c = static_cast<wchar_t>(towlower(c));
             RebuildFilter();
-            m_scrollOffsetY = 0; // filtered content restarts at the top
+            m_view.scrollY = 0; // filtered content restarts at the top
             InvalidateRect(m_hWnd, nullptr, FALSE);
         };
     }
@@ -600,7 +601,26 @@ namespace UI {
             L"an address is dropped when you save, and the panel names what it "
             L"dropped.\r\n"
             L"What this instance connects OUT to lives in Remote Servers (F10). "
-            L"F9 is what others connect to; F10 is what this connects to.", sApp);
+            L"F9 is what others connect to; F10 is what this connects to.\r\n"
+            L"WHO is connected right now is Ctrl+F9, not here.", sApp);
+        Add(Ctrl(SC::SC_PANEL_REMOTE_TOGGLE),
+            L"Server Clients — every peer currently connected to the listener above, with "
+            L"its address, the name it gave itself, whether it is encrypted, and how long "
+            L"it has been on. The list refreshes itself while the panel is open.\r\n"
+            L"THREE WAYS TO GET RID OF ONE, and the middle one is the useful one:\r\n"
+            L"KICK closes the connection. Against a person that is enough; against anything "
+            L"automated it is useless, because it reconnects inside a second.\r\n"
+            L"KICK FOR N closes it AND refuses that peer for the number of minutes you "
+            L"type. This is what answers a bot: it outlasts a retry loop and then forgets "
+            L"by itself. The block is held in memory only — restarting qIV clears every "
+            L"one of them, which is also how you undo shutting yourself out.\r\n"
+            L"BAN writes the address to qivRemoteServerBlacklist.ini and it survives "
+            L"restarts. Undo it by editing or deleting that file.\r\n"
+            L"For an IPv6 peer all three act on its /64 rather than the single address, "
+            L"and the panel says so before it does it — blocking one IPv6 address is "
+            L"close to useless, since the peer has billions of others in the same prefix.\r\n"
+            L"None of this is reachable over the wire: a connected client cannot kick or "
+            L"ban anything, including you.", sApp);
         Add(K(SC::SC_PANEL_REMOTES_CONSOLE),
             L"Open Remote Servers — everything about the instances this copy can drive.\r\n"
             L"Top: address, port, password, name and optional exe. Connect && Save proves the "
@@ -626,7 +646,7 @@ namespace UI {
             L"Connect all / Disconnect all act on every row, F5 polls them, and Sync all "
             L"pushes this viewer's view and effect state to all of them at once.", sApp);
         Add(L"CTRL+F10",
-            L"Send Command — type a command and send it to the instances YOU TICK in this "
+            L"Remote Commands — type a command and send it to the instances YOU TICK in this "
             L"panel's own SEND TO box, which lists everything currently connected with a "
             L"checkbox, name and address each. Its own selection on purpose: the Ctrl+F11 "
             L"Control ticks decide where keystrokes go, and lining up one screen by hand "
@@ -749,9 +769,19 @@ namespace UI {
             L"advert it appears IMMEDIATELY, without waiting for a slide boundary, because "
             L"you asked for it at this keyboard.\r\n"
             L"All three of these — and the wire commands behind them — are in the Ctrl+F10 "
-            L"Send Command list, which is where to test them by hand.", sApp);
+            L"Remote Commands list, which is where to test them by hand.", sApp);
+        Add(CtrlShift(SC::SC_REMOTE_PUSH_IMAGE_ALL),
+            L"The Ctrl+Enter push, WIDENED: send this folder, sort order and position to "
+            L"EVERY connected instance rather than only the ones ticked under Control "
+            L"(Ctrl+F11).\r\n"
+            L"For lining up a whole wall at once without first going to a panel to tick "
+            L"rows you are about to untick again. Still same-machine only, for the same "
+            L"reason Ctrl+Enter is — a folder path and an image number are read against "
+            L"the far end's own disk, and choosing more targets cannot change that. "
+            L"Instances on other machines are skipped and counted, and the overlay says "
+            L"how many.", sApp);
         Add(L"CTRL+F12",
-            L"RemoteLog — every line that crossed the wire, both directions, in one list: "
+            L"Server Log — every line that crossed the wire, both directions, in one list: "
             L"number, who sent it, the command, who received it, the reply, the time, and "
             L"how long it took. A mirroring session is a conversation, so both directions "
             L"share one table in the order things actually happened.\r\n"
@@ -1235,17 +1265,23 @@ namespace UI {
         SelectObject(hdc, oldFont);
         m_measuredWidth = contentW;
         m_measuredDpi = static_cast<int>(dpi);
-        m_scrollOffsetY = std::clamp(m_scrollOffsetY, 0, std::max(0, m_totalContentHeight));
+        m_view.scrollY = std::clamp(m_view.scrollY, 0, std::max(0, m_totalContentHeight));
     }
 
     // =========================================================================
     // Show
     // =========================================================================
+    // One wheel "line" is roughly one text line here. The base applies the
+    // user's Mouse setting and the Shift accelerator on top.
+    int HelpWnd::ScrollLinePx(const UI::ScrollView &) const {
+        return static_cast<int>(20 * app.dpiScale);
+    }
+
     void HelpWnd::Show() {
         m_filter.Reset(); // fresh open starts unfiltered
         m_query.clear();
         m_entryMatch.clear();
-        m_scrollOffsetY = 0;
+        m_view.scrollY = 0;
         ShowCenterOverParent();
     }
 
@@ -1268,18 +1304,19 @@ namespace UI {
             return true;
         }
         if (vk == VK_PRIOR || vk == VK_NEXT) {
-            const int page = std::max(m_viewHeight * 9 / 10, 40); // ~one viewport per press
-            m_scrollOffsetY += (vk == VK_NEXT) ? page : -page;
+            // ~one viewport per press, floored so a tiny window still moves.
+            const int page = std::max(m_view.Height() * 9 / 10, 40);
+            m_view.ScrollBy(0, (vk == VK_NEXT) ? page : -page);
             InvalidateRect(m_hWnd, nullptr, FALSE);
             return true;
         }
         if (vk == VK_HOME) {
-            m_scrollOffsetY = 0;
+            m_view.scrollY = 0;
             InvalidateRect(m_hWnd, nullptr, FALSE);
             return true;
         }
         if (vk == VK_END) {
-            m_scrollOffsetY = std::max(0, m_visibleContentHeight - m_viewHeight);
+            m_view.scrollY = m_view.MaxScrollY();
             InvalidateRect(m_hWnd, nullptr, FALSE);
             return true;
         }
@@ -1328,7 +1365,7 @@ namespace UI {
 
                 // ---- metrics ------------------------------------------------
                 const int padding = MulDiv(28, dpiI, 96);
-                const int sbWidth = MulDiv(10, dpiI, 96);
+                const int sbWidth = UI::ScrollBarThicknessPx(app.dpiScale);
                 const int rowIndent = MulDiv(14, dpiI, 96);
                 const int colGap = MulDiv(14, dpiI, 96);
                 const int rowPadY = MulDiv(6, dpiI, 96);
@@ -1407,10 +1444,11 @@ namespace UI {
                 const int contentTop = filterRect.bottom + MulDiv(14, dpiI, 96);
                 const int footerH = MulDiv(44, dpiI, 96);
                 const int contentBottom = rc.bottom - footerH;
-                const int contentHeight = std::max(contentBottom - contentTop, 1);
 
-                m_contentTop = contentTop;
-                m_viewHeight = contentHeight;
+                // No contentHeight local, and no m_contentTop / m_viewHeight
+                // members: all three existed only to feed the scroll maths, and
+                // m_view.view carries the same numbers as one rectangle once
+                // Layout has set it below.
 
                 MeasureContent(hdc, keyColW, descColW, dpi);
 
@@ -1425,14 +1463,18 @@ namespace UI {
                             m_visibleContentHeight += m_rowHeights[i];
                 }
 
-                const int maxScroll = std::max(0, m_visibleContentHeight - contentHeight);
-                m_scrollOffsetY = std::clamp(m_scrollOffsetY, 0, maxScroll);
+                // Which bars, where the content goes, and the clamp — one call.
+                // The bar's column is inside the region, so Layout takes it back
+                // out only when a bar is actually needed.
+                m_view.contentH = m_visibleContentHeight;
+                m_view.Layout(RECT{contentLeft, contentTop,
+                                   contentRight + sbWidth, contentBottom}, sbWidth);
 
                 // ---- clip + draw sections -----------------------------------
                 HRGN hrgn = CreateRectRgn(contentLeft, contentTop, contentRight + sbWidth, contentBottom);
                 SelectClipRgn(hdc, hrgn);
 
-                int y = contentTop - m_scrollOffsetY;
+                int y = contentTop - m_view.scrollY;
 
                 for (size_t s = 0; s < m_sections.size(); ++s) {
                     // Filter: skip sections with no matching entry.
@@ -1540,28 +1582,8 @@ namespace UI {
                 DeleteObject(hrgn);
 
                 // ---- scrollbar ----------------------------------------------
-                if (maxScroll > 0) {
-                    const int sbX = rc.right - sbWidth - MulDiv(5, dpiI, 96);
-                    const int trackTop = contentTop;
-                    const int trackBottom = contentBottom;
-                    const int trackH = trackBottom - trackTop;
-
-                    const int thumbH = std::max(MulDiv(30, dpiI, 96),
-                                                trackH * contentHeight / m_visibleContentHeight);
-                    const int thumbY = trackTop + (trackH - thumbH) * m_scrollOffsetY / maxScroll;
-
-                    RECT trackRect = {sbX, trackTop, sbX + sbWidth, trackBottom};
-                    FillRect(hdc, &trackRect, UI::Gdi::Brush(Constants::Theme::ThemedColor(
-                            Constants::Theme::HelpWindow::SCROLLBAR_TRACK_R,
-                            Constants::Theme::HelpWindow::SCROLLBAR_TRACK_G,
-                            Constants::Theme::HelpWindow::SCROLLBAR_TRACK_B, app.themeFactor)));
-
-                    RECT thumbRect = {sbX, thumbY, sbX + sbWidth, thumbY + thumbH};
-                    FillRect(hdc, &thumbRect, UI::Gdi::Brush(Constants::Theme::ThemedColor(
-                            Constants::Theme::HelpWindow::SCROLLBAR_THUMB_R,
-                            Constants::Theme::HelpWindow::SCROLLBAR_THUMB_G,
-                            Constants::Theme::HelpWindow::SCROLLBAR_THUMB_B, app.themeFactor)));
-                }
+                UI::DrawBars(hdc, m_view, app.dpiScale,
+                             UI::ThemeScrollBarColors(app.themeFactor));
 
                 // ---- footer --------------------------------------------------
                 SelectObject(hdc, m_hFontFooter);
@@ -1599,12 +1621,8 @@ namespace UI {
                 return 0;
             }
 
-            case WM_MOUSEWHEEL: {
-                int delta = GET_WHEEL_DELTA_WPARAM(wParam);
-                m_scrollOffsetY -= (delta / WHEEL_DELTA) * static_cast<int>(60 * app.dpiScale);
-                InvalidateRect(m_hWnd, nullptr, FALSE);
-                return 0;
-            }
+            // No wheel cases: FloatingPanelWnd drives both against
+            // ScrollViewAt() and consumes them before this panel is asked.
 
             case WM_RBUTTONUP:
                 // Right-click inside the filter → Cut/Copy/Paste menu.
@@ -1634,12 +1652,9 @@ namespace UI {
                 int sbWidth = MulDiv(10, static_cast<int>(dpi), 96);
                 int sbX = rc.right - sbWidth - MulDiv(5, static_cast<int>(dpi), 96);
 
-                if (pt.x >= sbX && pt.x < sbX + sbWidth) {
-                    m_sbDragging = true;
-                    m_sbDragStartY = pt.y;
-                    m_sbDragStartOffset = m_scrollOffsetY;
-                    SetCapture(m_hWnd);
-                }
+                // The bar never reaches here — the base consumes thumb and track
+                // clicks. What is left is the bar's column with no bar drawn.
+                (void) sbX;
                 return 0;
             }
 
@@ -1657,22 +1672,13 @@ namespace UI {
                     SetCursor(Constants::Cursors::CURR_DEFAULT);
                 }
 
-                if (m_sbDragging) {
-                    const int maxScroll = std::max(0, m_visibleContentHeight - m_viewHeight);
-                    const int delta = pt.y - m_sbDragStartY;
-                    if (m_viewHeight > 0)
-                        m_scrollOffsetY = m_sbDragStartOffset + delta * maxScroll / m_viewHeight;
-                    InvalidateRect(m_hWnd, nullptr, FALSE);
-                }
+                // A thumb drag never reaches here — the base holds capture.
                 return 0;
             }
 
             case WM_LBUTTONUP: {
-                if (m_sbDragging) {
-                    m_sbDragging = false;
-                    ReleaseCapture();
-                    return 0; // scrollbar drag owned the button — not the filter's
-                }
+                // A scrollbar release never arrives here — the base owns that
+                // button-up — so this cannot be mistaken for the filter's.
                 // Ends a filter-box drag-select. Without it the box only drops
                 // m_dragging on the next WM_MOUSEMOVE, so moving after release
                 // keeps extending the selection.

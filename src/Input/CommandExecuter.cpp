@@ -1007,6 +1007,13 @@ void InputManager::ExecuteCommand(HWND hWnd, Command cmd) {
             uiManager.Toggle(uiManager.getRemoteWindow());
             break;
 
+        // Ctrl+F9 — who is connected to the listener above, and kick / timed
+        // kick / ban. A separate panel because that one is a form and this is a
+        // live list; see RemoteClientsWnd.h.
+        case Command::ToggleRemoteClients:
+            uiManager.Toggle(uiManager.getRemoteClientsWindow());
+            break;
+
         // ── Mirroring (F11 / F12) ────────────────────────────────────────────
         // Both are pure state flips reported on screen. The forwarding itself
         // happens in the gate at the top of this function, not here.
@@ -1101,7 +1108,14 @@ void InputManager::ExecuteCommand(HWND hWnd, Command cmd) {
         //
         // The state is snapshotted HERE because `app` belongs to this thread; the
         // sender threads negotiate entirely from this copy (RemoteMirror.h).
+        // Ctrl+Shift+Enter shares every line of this: same payload, same
+        // reporting, same failure modes. The ONLY difference is whether the
+        // Ctrl+F11 ticks are consulted, so it is one case with one flag rather
+        // than a copy that would have to be kept in step.
+        case Command::SendImagePositionToAllRemotes:
         case Command::SendImagePositionToRemotes: {
+            const bool everyConnected = (cmd == Command::SendImagePositionToAllRemotes);
+
             if (app.currentIndex < 0 ||
                 app.currentIndex >= static_cast<int>(app.playlist.size())) {
                 g_overlayManager.PostCenterMessage(hWnd, Constants::Messages::PUSH_NO_IMAGE);
@@ -1118,7 +1132,7 @@ void InputManager::ExecuteCommand(HWND hWnd, Command cmd) {
             req.sortRev   = app.fileHandlerIsReverseSortOrder;
 
             int skipped = 0;
-            const int n = Remote::Mirror::SendImagePosition(req, &skipped);
+            const int n = Remote::Mirror::SendImagePosition(req, &skipped, everyConnected);
 
             // Says what actually happened, including the two ways it can do
             // nothing: no screen ticked in Ctrl+F11, or every ticked one on
@@ -1137,6 +1151,25 @@ void InputManager::ExecuteCommand(HWND hWnd, Command cmd) {
                            Constants::Messages::PUSH_SKIPPED_SUFFIX;
                 g_overlayManager.PostCenterMessage(hWnd, msg);
             }
+            break;
+        }
+
+        // "Sync now" — stamp this viewer's whole look onto the controlled
+        // instances: folder, image, view mode, zoom, effects.
+        //
+        // The two spellings are built HERE because this is where RemoteExec is
+        // already reachable; RemoteMirror picks which target gets which, since
+        // it is the one holding the same-machine flags.
+        case Command::MirrorSyncNow: {
+            const std::wstring full     = L"Sync " + Remote::BuildSyncPayload(true);
+            const std::wstring portable = L"Sync " + Remote::BuildSyncPayload(false);
+
+            const int n = Remote::Mirror::SyncNow(full, portable);
+            g_overlayManager.PostCenterMessage(
+                hWnd, n == 0 ? std::wstring(Constants::Messages::PUSH_NO_TARGETS)
+                             : Constants::Messages::SYNC_SENT_PREFIX +
+                                   std::to_wstring(n) +
+                                   Constants::Messages::PUSH_SENT_SUFFIX);
             break;
         }
 
@@ -2095,6 +2128,8 @@ std::wstring InputManager::GetCommandValue(HWND hWnd, Command cmd) {
         // Local only — they have no table row, so no caller can ask. A case here
         // costs nothing and stops the next reader wondering.
         case Command::SendImagePositionToRemotes:
+        case Command::SendImagePositionToAllRemotes:
+        case Command::MirrorSyncNow:
         case Command::StreamImageToRemotes:
         case Command::StreamImageFromRemote:
         case Command::StreamImageBegin:

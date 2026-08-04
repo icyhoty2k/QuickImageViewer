@@ -3,6 +3,7 @@
 #include <vector>
 #include <string>
 #include "FloatingPanelWnd.h"
+#include "UI/CustomControls/ScrollView.h"
 
 namespace UI {
     class StatsWnd : public FloatingPanelWnd {
@@ -96,8 +97,14 @@ namespace UI {
         std::vector<ClickLink> m_links;
 
         // ── Scroll ───────────────────────────────────────────────
-        int m_scrollOffsetY = 0;
-        int m_totalContentH = 0;
+        // Scroll state. This panel used to draw a track and a thumb and handle
+        // no clicks at all — the bar was decoration you could not grab. The base
+        // supplies every interaction; these two overrides are all this panel
+        // contributes.
+        UI::ScrollView m_view;
+
+        UI::ScrollView *ScrollViewAt(POINT) override { return &m_view; }
+        int ScrollLinePx(const UI::ScrollView &) const override;
 
         // Cached GDI fonts — recreated only when DPI changes
         HFONT m_hFontBody = nullptr;

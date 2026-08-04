@@ -247,6 +247,11 @@ enum class Command {
     // --- Dedicated instances (src/Dedicated) ---
     ToggleDedicatedPanel,   // F8 — the Dedicated configuration panel
     ToggleRemotePanel,      // F9 — the Local Server panel (this instance's listener)
+    // Ctrl+F9 — Server Clients: who is connected to THIS instance's listener,
+    // and kick / timed kick / ban. Split out of the Local Server panel because
+    // that one describes the listener's CONFIGURATION, and a live list of peers
+    // is not configuration — it changes while you look at it.
+    ToggleRemoteClients,
     ToggleDedicated,        // -dedicated: separate registry/history namespace
     CmdArgsExport,          // current settings → a cmdArgs .txt
     CmdArgsImport,          // read a cmdArgs .txt and apply it
@@ -279,6 +284,24 @@ enum class Command {
     // SAME-MACHINE ONLY, necessarily: a folder path and a playlist index are both
     // read against the far end's own filesystem.
     SendImagePositionToRemotes,
+    // ── Ctrl+Shift+Enter. The same push, to EVERY CONNECTED INSTANCE, ignoring
+    // the Ctrl+F11 Control ticks.
+    //
+    // The ticks exist so mirroring and pushing cannot reach different screens,
+    // and that is right for the routine case. This is the deliberate exception:
+    // lining up a whole wall at once, without first going to a panel to tick
+    // rows you are about to untick again. Still same-machine only — the
+    // constraint is the payload, not the target list, and a folder path does not
+    // survive the trip whoever it is sent to.
+    SendImagePositionToAllRemotes,
+    // ── "Sync now" — stamps this viewer's whole look (folder, image, view mode,
+    // zoom, effects) onto the controlled instances.
+    //
+    // A Command rather than a private method on the picker, because the picker's
+    // button and the menu item must be the same act. Anything that reaches the
+    // sender threads without passing ExecuteCommand skips the mirror gate, and a
+    // second path that "also syncs" is exactly how two of them drift apart.
+    MirrorSyncNow,
     // `QueryState` — READ-ONLY, and the only command in the table that is. Every
     // other one reports its value as a by-product of doing something; this one is
     // asked. The position send above is built on the answer (folder, sort order,

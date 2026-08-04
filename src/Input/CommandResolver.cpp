@@ -186,13 +186,19 @@ Command InputManager::ResolveKeyboardKeys(UINT key, LPARAM lParam) {
             if (!ctrl && !alt && !shift) return Command::ToggleFullscreen; // F → fullscreen
             break;
         // One key, three depths (Shortcuts.h):
-        //   Ctrl+Enter      go to MY picture there    — position, same machine
-        //   Alt+Enter       show MY picture there     — bytes, any machine
-        //   Ctrl+Alt+Enter  show ITS picture here     — bytes, any machine
+        //   Ctrl+Enter        go to MY picture there    — position, ticked screens
+        //   Ctrl+Shift+Enter  the same, to EVERY connected instance
+        //   Alt+Enter         show MY picture there     — bytes, any machine
+        //   Ctrl+Alt+Enter    show ITS picture here     — bytes, any machine
         // Fullscreen keeps plain Enter, and also 'F' and Ctrl+Shift+T.
         case Shortcuts::SC_PANEL_FULLSCREEN_ENTER:
             if (ctrl && alt && !shift) return Command::StreamImageFromRemote;
             if (ctrl && !alt && !shift) return Command::SendImagePositionToRemotes;
+            // Shift WIDENS the plain Ctrl form from the ticked screens to every
+            // connected one — the same relationship Shift has elsewhere in this
+            // resolver, and the reason it reads as the fourth depth of one key
+            // rather than a separate binding.
+            if (ctrl && shift && !alt) return Command::SendImagePositionToAllRemotes;
             if (alt && !ctrl && !shift) return Command::StreamImageToRemotes;
             if (!ctrl && !alt) return Command::ToggleFullscreen;
             break;
@@ -213,7 +219,10 @@ Command InputManager::ResolveKeyboardKeys(UINT key, LPARAM lParam) {
             break;
         case Shortcuts::SC_PANEL_DIR_TOGGLE: return Command::ToggleDir;
         case Shortcuts::SC_PANEL_DEDICATED_TOGGLE: return Command::ToggleDedicatedPanel;
-        case Shortcuts::SC_PANEL_REMOTE_TOGGLE: return Command::ToggleRemotePanel;
+        // Same shape as the three keys below: plain key = the panel about the
+        // subject, Ctrl form = the live view of it.
+        case Shortcuts::SC_PANEL_REMOTE_TOGGLE:
+            return ctrl ? Command::ToggleRemoteClients : Command::ToggleRemotePanel;
         // Ctrl+F10 sends a typed command, the same way Ctrl+F11 picks targets
         // and Ctrl+F12 shows the wire: the plain key is the panel about the
         // subject, the Ctrl form is the thing you DO with it.

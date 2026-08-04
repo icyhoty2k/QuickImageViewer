@@ -5,6 +5,7 @@
 #include "RemoteTls.h"   // RequiredForAddress — is a pin needed for this host?
 #include "RemoteExec.h"   // BuildSyncPayload
 #include "RemoteProtocol.h" // FormatEndpoint / StripAddressBrackets — IPv6 literals
+#include "RemoteSettings.h" // SameHost — one address has many spellings
 
 #include "AppState.h"
 #include "Platform/Constants.h"
@@ -537,7 +538,10 @@ void RemotesWnd::DoSaveEntry() {
 
         // Same instance twice: it would receive every mirrored command once per
         // row, and the console would show two dots for one screen.
-        if (r.host == m_newHost && r.port == m_newPort) {
+        // SameHost, not string equality: "fe80::1" and "fe80:0:0:0:0:0:0:1" are
+        // one machine and would otherwise both be admitted, giving one instance
+        // two rows — each receiving every mirrored command once.
+        if (Remote::SameHost(r.host, m_newHost) && r.port == m_newPort) {
             DialogMessage(Remote::FormatEndpoint(m_newHost, m_newPort) +
                           L" is already in the list, as \"" + r.name + L"\".",
                           L"Remote Servers");

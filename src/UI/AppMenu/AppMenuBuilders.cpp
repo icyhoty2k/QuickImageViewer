@@ -94,6 +94,15 @@ Command CommandForId(int id) {
         // "nothing picked" handling all come free.
         case Id::ID_REMOTE_MIRROR:    return Command::MirrorToggle;
         case Id::ID_REMOTE_EXEC_HERE: return Command::MirrorLocalToggle;
+        case Id::ID_REMOTE_CLIENTS:   return Command::ToggleRemoteClients;
+        // The same commands Ctrl+Enter, Ctrl+Shift+Enter, Alt+Enter and
+        // Ctrl+Alt+Enter resolve to. The menu is a second way to press the key,
+        // never a second implementation.
+        case Id::ID_REMOTE_SYNC_NOW:     return Command::MirrorSyncNow;
+        case Id::ID_REMOTE_PUSH_POS:     return Command::SendImagePositionToRemotes;
+        case Id::ID_REMOTE_PUSH_POS_ALL: return Command::SendImagePositionToAllRemotes;
+        case Id::ID_REMOTE_STREAM_OUT:   return Command::StreamImageToRemotes;
+        case Id::ID_REMOTE_STREAM_IN:    return Command::StreamImageFromRemote;
         default:                     return Command::None;
     }
 }
@@ -361,7 +370,7 @@ static HMENU BuildSortMenu() {
 //
 // Checkable rather than two separate on/off rows: these are toggles, and a tick
 // is how Windows spells a toggle everywhere else in this menu.
-static HMENU BuildRemoteActivationMenu() {
+static HMENU BuildRemoteBindingsMenu() {
     HMENU m = CreatePopupMenu();
 
     AppendMenuW(m, MF_STRING | CheckFlag(app.passCommandToRemote),
@@ -374,16 +383,64 @@ static HMENU BuildRemoteActivationMenu() {
 
     AppendMenuW(m, MF_SEPARATOR, 0, nullptr);
 
+    // The ACTS, under the two switches. Every one is a key that already exists;
+    // gathering them here is what makes the set visible — the three Enter forms
+    // in particular are impossible to discover from the keyboard alone.
+    //
+    // Greyed with nothing connected rather than hidden: an item that disappears
+    // teaches nothing, and "why is this grey" is answered by the status line at
+    // the bottom of this same menu.
+    const int live   = Remote::Mirror::ConnectedCount();
+    const int driven = Remote::Mirror::MirroredLiveCount();
+    const UINT actFlag = (live == 0) ? (MF_STRING | MF_GRAYED) : MF_STRING;
+
+    AppendMenuW(m, actFlag, Id::ID_REMOTE_SYNC_NOW,
+                L"Sync now — send my folder, image && view");
+    AppendMenuW(m, MF_SEPARATOR, 0, nullptr);
+    AppendMenuW(m, actFlag, Id::ID_REMOTE_PUSH_POS,
+                L"Go to my picture there\tCtrl+Enter");
+    AppendMenuW(m, actFlag, Id::ID_REMOTE_PUSH_POS_ALL,
+                L"…on every connected instance\tCtrl+Shift+Enter");
+    AppendMenuW(m, actFlag, Id::ID_REMOTE_STREAM_OUT,
+                L"Show my picture there\tAlt+Enter");
+    AppendMenuW(m, actFlag, Id::ID_REMOTE_STREAM_IN,
+                L"Show its picture here\tCtrl+Alt+Enter");
+
+    AppendMenuW(m, MF_SEPARATOR, 0, nullptr);
+
     // Disabled context line, not a clickable item: this is the state the two
     // ticks above cannot show — WHO is being driven. Without it "Mirror" ticked
     // with nothing connected reads as working.
-    const int live   = Remote::Mirror::ConnectedCount();
-    const int driven = Remote::Mirror::MirroredLiveCount();
     const std::wstring status =
         live == 0 ? std::wstring(L"Nothing connected — see Remote Servers (F10)")
                   : (L"Driving " + std::to_wstring(driven) + L" of " +
                      std::to_wstring(live) + L" connected");
     AppendMenuW(m, MF_STRING | MF_DISABLED, 0, status.c_str());
+
+    return m;
+}
+
+// Everything TCP/IP, in one place. The main menu used to carry six of these as
+// top-level rows plus a submenu, which is most of what made it long — and they
+// are one subject that most users never touch at all.
+//
+// Order is the order you meet them: what THIS instance offers, who is on it,
+// what it can reach, which of those it drives, then the tools for driving them.
+static HMENU BuildTcpIpMenu() {
+    HMENU m = CreatePopupMenu();
+
+    AppendMenuW(m, MF_STRING, Id::ID_REMOTE_PANEL,    L"Local Server\tF9");
+    AppendMenuW(m, MF_STRING, Id::ID_REMOTE_CLIENTS,  L"Server Clients\tCtrl+F9");
+    AppendMenuW(m, MF_SEPARATOR, 0, nullptr);
+    AppendMenuW(m, MF_STRING, Id::ID_REMOTES_CONSOLE, L"Remote Servers\tF10");
+    AppendMenuW(m, MF_STRING, Id::ID_REMOTES_CONTROL, L"Remote Control\tCtrl+F11");
+    AppendMenuW(m, MF_SEPARATOR, 0, nullptr);
+    AppendMenuW(m, MF_STRING, Id::ID_REMOTE_CMD,      L"Remote Commands\tCtrl+F10");
+    AppendMenuW(m, MF_STRING, Id::ID_REMOTE_LOG,      L"Server Log\tCtrl+F12");
+    AppendMenuW(m, MF_SEPARATOR, 0, nullptr);
+    AppendMenuW(m, MF_POPUP,
+                reinterpret_cast<UINT_PTR>(BuildRemoteBindingsMenu()),
+                L"Remote Bindings");
 
     return m;
 }
@@ -425,19 +482,11 @@ HMENU Build(HWND hWnd) {
     AppendMenuW(m, MF_STRING, Id::ID_STATS,           L"Statistics\tK");
     AppendMenuW(m, MF_STRING, Id::ID_METADATA,        L"Metadata\tM");
     AppendMenuW(m, MF_STRING, Id::ID_DEDICATED_PANEL, L"Dedicated\tF8");
-    // The three sit together and read as one subject, in the order you meet
-    // them: what THIS instance offers, what it can reach, and which of the
-    // reachable ones the keystrokes go to.
-    AppendMenuW(m, MF_STRING, Id::ID_REMOTE_PANEL,    L"Local Server\tF9");
-    AppendMenuW(m, MF_STRING, Id::ID_REMOTES_CONSOLE, L"Remote Servers\tF10");
-    AppendMenuW(m, MF_STRING, Id::ID_REMOTES_CONTROL, L"Remotes Control\tCtrl+F11");
-    AppendMenuW(m, MF_STRING, Id::ID_REMOTE_CMD,      L"Send Command\tCtrl+F10");
-    AppendMenuW(m, MF_STRING, Id::ID_REMOTE_LOG,      L"RemoteLog\tCtrl+F12");
-    // Last of the remote group and immediately before Help: the two switches
-    // are what you check most often, and this is the shortest reach to them.
+    // ONE row for the whole subject. Six top-level rows and a submenu became a
+    // submenu — the remote features are one thing, and a viewer that never
+    // touches them should not read past them to reach Help.
     AppendMenuW(m, MF_POPUP,
-                reinterpret_cast<UINT_PTR>(BuildRemoteActivationMenu()),
-                L"RemoteActivation");
+                reinterpret_cast<UINT_PTR>(BuildTcpIpMenu()), L"TCP / IP");
     // Help
     const std::wstring help = std::wstring(L"Help v") + Constants::APP_VERSION + L"\tF1";
     AppendMenuW(m, MF_STRING, Id::ID_HELP, help.c_str());

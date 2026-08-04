@@ -4,6 +4,7 @@
 #include <vector>
 #include <set>
 #include "FloatingPanelWnd.h"
+#include "UI/CustomControls/ScrollView.h"
 
 namespace UI {
     class ExifWnd : public FloatingPanelWnd {
@@ -44,11 +45,15 @@ namespace UI {
         HBITMAP  m_thumbBitmap     = nullptr;
         int      m_thumbW          = 0;
         int      m_thumbH          = 0;
-        int  m_scrollOffsetY      = 0;
-        int  m_totalContentHeight = 0;
-        bool  m_sbDragging         = false;
-        int   m_sbDragStartY       = 0;
-        int   m_sbDragStartOffset  = 0;
+        // Scroll state. The BASE drives it — wheels, drag, paging and cursor all
+        // live in FloatingPanelWnd now, reached through the two overrides below.
+        // This panel used to carry all four, and its drag never took capture:
+        // releasing outside the window left it dragging until the next click.
+        // contentH of 0 doubles as the "needs re-measuring" sentinel.
+        UI::ScrollView m_view;
+
+        UI::ScrollView *ScrollViewAt(POINT) override { return &m_view; }
+        int ScrollLinePx(const UI::ScrollView &) const override;
         bool  m_moving             = false;
         POINT m_moveStartCursor    = {};
         RECT  m_moveStartRect      = {};

@@ -1401,6 +1401,27 @@ bool KickConnection(ConnId id) {
     return true;
 }
 
+bool TimedKickConnection(ConnId id, int minutes, std::wstring &scopeOut) {
+    std::wstring address;
+    {
+        std::lock_guard<std::mutex> lk(g_liveConnMutex);
+        auto it = g_liveConns.find(id);
+        if (it == g_liveConns.end()) return false;
+        address = it->second.address;
+    }
+    if (address.empty()) return false;
+
+    scopeOut = BlockScope(address);
+
+    // BLOCK FIRST, THEN KICK — the same race Ban has. A peer whose socket is
+    // closed before the block is recorded reconnects into the gap, and a timed
+    // kick that admits the peer it just ejected is worse than none: it looks
+    // like it worked.
+    Blacklist::AddTimed(scopeOut, minutes, Constants::Messages::BLACKLIST_REASON_TIMED);
+    KickConnection(id);
+    return true;
+}
+
 bool BanConnection(ConnId id, std::wstring &scopeOut) {
     std::wstring address;
     {
