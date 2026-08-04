@@ -561,11 +561,10 @@ LRESULT RemoteCmdWnd::HandlePanelMessage(UINT message, WPARAM wParam, LPARAM lPa
             POINT pt{GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam)};
 
             // A thumb drag never reaches here — the base holds capture for it.
+            // Thumb hot states belong to the base, for all three views.
             const int b = HitTestButton(pt);
-            const bool lh = PtInRect(&m_list.vThumb, pt) != 0;
-            const bool gh = PtInRect(&m_log.vThumb, pt) != 0;
-            if (b != m_hotButton || lh != m_list.vThumbHot || gh != m_log.vThumbHot) {
-                m_hotButton = b; m_list.vThumbHot = lh; m_log.vThumbHot = gh;
+            if (b != m_hotButton) {
+                m_hotButton = b;
                 Repaint();
             }
             return 0;
@@ -625,28 +624,15 @@ LRESULT RemoteCmdWnd::HandlePanelMessage(UINT message, WPARAM wParam, LPARAM lPa
                 switch (m_buttons[b].id) {
                     case BTN_SEND:  DoSend();  break;
                     case BTN_CLEAR: DoClear(); break;
-                    case BTN_LOG: {
-                        // Open it, or close it if it is open — and when opening,
-                        // actually put it in FRONT. Every panel here is
-                        // WS_EX_TOPMOST, so re-showing one already visible leaves it
-                        // wherever it sat in that band, which is usually behind this
-                        // window. The HWND_TOPMOST re-assert is what reorders it
-                        // within the band. (RemoteLogWnd.cpp does the same for the
-                        // button pointing back here.)
-                        UI::IPanelWindow &log = uiManager.getRemoteLogWindow();
-                        if (log.IsVisible()) {
-                            log.Hide();
-                        } else {
-                            log.Show();
-                            if (HWND h = log.GetHwnd())
-                                SetWindowPos(h, HWND_TOPMOST, 0, 0, 0, 0,
-                                             SWP_NOMOVE | SWP_NOSIZE);
-                        }
+                    case BTN_LOG:
+                        // This panel had its own copy of the open-and-raise
+                        // dance; it is IPanelWindow::ToggleToFront now, shared
+                        // with every other cross-panel button.
+                        uiManager.getRemoteLogWindow().ToggleToFront();
                         // Its lit state just changed, and opening another window
                         // takes the focus, so nothing else would repaint this.
                         Repaint();
                         break;
-                    }
                     case BTN_CLOSE: Hide();    break;
                     default: break;
                 }

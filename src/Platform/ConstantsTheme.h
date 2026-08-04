@@ -99,9 +99,9 @@ namespace Constants {
         // HISTORY PANEL COLORS (GDI)
         // =====================================================================
         namespace HistoryPanel {
-            // Scrollbar — track (28,28,28), thumb (110,110,110)
-            constexpr float SCROLLBAR_TRACK = 0.1098f + DEFAULT_THEME_FACTOR * (1.0f - 2.0f * 0.1098f);
-            constexpr float SCROLLBAR_THUMB = 0.4314f + DEFAULT_THEME_FACTOR * (1.0f - 2.0f * 0.4314f);
+            // Scrollbar colours are Theme::Scrollbar now — one palette for every
+            // scrolled surface. This panel's darker pair is gone with them.
+
             // Accent color used for the history file-size value in the header
             constexpr COLORREF SIZE_HIGHLIGHT = RGB(240, 50, 50);
 
@@ -173,13 +173,14 @@ namespace Constants {
             constexpr float SECTION_G = 0.7843f + DEFAULT_THEME_FACTOR * (1.0f - 2.0f * 0.7843f);
             constexpr float SECTION_B = 1.0000f + DEFAULT_THEME_FACTOR * (1.0f - 2.0f * 1.0000f);
 
-            // Scrollbar — track (50,50,55), thumb (150,150,160)
-            constexpr float SCROLLBAR_TRACK_R = 0.1961f + DEFAULT_THEME_FACTOR * (1.0f - 2.0f * 0.1961f);
-            constexpr float SCROLLBAR_TRACK_G = 0.1961f + DEFAULT_THEME_FACTOR * (1.0f - 2.0f * 0.1961f);
-            constexpr float SCROLLBAR_TRACK_B = 0.2157f + DEFAULT_THEME_FACTOR * (1.0f - 2.0f * 0.2157f);
-            constexpr float SCROLLBAR_THUMB_R = 0.5882f + DEFAULT_THEME_FACTOR * (1.0f - 2.0f * 0.5882f);
-            constexpr float SCROLLBAR_THUMB_G = 0.5882f + DEFAULT_THEME_FACTOR * (1.0f - 2.0f * 0.5882f);
-            constexpr float SCROLLBAR_THUMB_B = 0.6275f + DEFAULT_THEME_FACTOR * (1.0f - 2.0f * 0.6275f);
+            // SECTION HEADER BACKGROUND — the stripe behind "FILE", "CAMERA" and
+            // the rest. It was named SCROLLBAR_TRACK_* and the section painter
+            // borrowed it; the scrollbar's own colours are Theme::Scrollbar now,
+            // so the name is what it has always actually been used for.
+            // (50,50,55)
+            constexpr float SECTION_BG_R = 0.1961f + DEFAULT_THEME_FACTOR * (1.0f - 2.0f * 0.1961f);
+            constexpr float SECTION_BG_G = 0.1961f + DEFAULT_THEME_FACTOR * (1.0f - 2.0f * 0.1961f);
+            constexpr float SECTION_BG_B = 0.2157f + DEFAULT_THEME_FACTOR * (1.0f - 2.0f * 0.2157f);
         }
 
         // =====================================================================
@@ -230,13 +231,9 @@ namespace Constants {
             // Link colors: see Constants::Links in Constants.h — the app-wide
             // single source of truth for clickable link color + underline.
 
-            // Scrollbar — track (50,50,55), thumb (150,150,160)
-            constexpr float SCROLLBAR_TRACK_R = 0.1961f + DEFAULT_THEME_FACTOR * (1.0f - 2.0f * 0.1961f);
-            constexpr float SCROLLBAR_TRACK_G = 0.1961f + DEFAULT_THEME_FACTOR * (1.0f - 2.0f * 0.1961f);
-            constexpr float SCROLLBAR_TRACK_B = 0.2157f + DEFAULT_THEME_FACTOR * (1.0f - 2.0f * 0.2157f);
-            constexpr float SCROLLBAR_THUMB_R = 0.5882f + DEFAULT_THEME_FACTOR * (1.0f - 2.0f * 0.5882f);
-            constexpr float SCROLLBAR_THUMB_G = 0.5882f + DEFAULT_THEME_FACTOR * (1.0f - 2.0f * 0.5882f);
-            constexpr float SCROLLBAR_THUMB_B = 0.6275f + DEFAULT_THEME_FACTOR * (1.0f - 2.0f * 0.6275f);
+            // Scrollbar colours are Theme::Scrollbar now — this panel's copy was
+            // byte-identical to ExifWindow's, which is what made one shared set
+            // the obvious answer.
         }
 
         // =====================================================================

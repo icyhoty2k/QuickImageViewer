@@ -56,9 +56,9 @@
 // SCROLLBARS ARE DRAWN, not WS_HSCROLL/WS_VSCROLL. The native ones were tried
 // and are wrong here: they are non-client, so they ignore the panel's theme and
 // render as white gutters on a dark window whatever DWM is told about the frame.
-// Every other scrolling surface in this app draws its own (DedicatedWnd), using
-// the same PC::SCROLL_TRACK / SCROLL_THUMB / SCROLL_THUMB_HOT and
-// PANEL_SCROLLBAR_W — so this one does too, and they match.
+// Every scrolling surface in this app draws its own, through UI::ScrollView:
+// one thickness (Constants::Scrollbar) and one palette
+// (Constants::Theme::Scrollbar), so they cannot differ between windows.
 //
 // Both axes, because the seven columns are wider than the window at small sizes
 // and the list is unbounded downward. Wheel, shift-wheel, thumb drag, click in

@@ -28,8 +28,8 @@ namespace {
     // why this panel has a horizontal scrollbar and the others do not.
     // Wide enough that the seven columns (970 design units) plus the drawn
     // vertical bar and both pads fit without horizontal scrolling at 100%.
-    constexpr int PANEL_W  = 1030;
-    constexpr int PANEL_H  = 560;
+    constexpr int PANEL_W  = 1080;
+    constexpr int PANEL_H  = 680;
     constexpr int PAD      = 14;
     constexpr int ROW_H    = 22;
     constexpr int HDR_H    = 26;
@@ -65,24 +65,8 @@ namespace {
     int RectW(const RECT &r) { return static_cast<int>(r.right - r.left); }
     int RectH(const RECT &r) { return static_cast<int>(r.bottom - r.top); }
 
-    // Open it, or close it if it is already open — and when opening, actually
-    // put it in front.
-    //
-    // Show() alone is not enough: every panel here is WS_EX_TOPMOST, so they sit
-    // in the same z-band and re-showing one that is already visible leaves it
-    // wherever it was in that band — behind this log, usually, which is exactly
-    // where you cannot see it. The explicit HWND_TOPMOST re-assert is what
-    // reorders it WITHIN the band; SetForegroundWindow alone does not, because
-    // the window never lost activation to begin with.
-    void ToggleToFront(UI::IPanelWindow &panel) {
-        if (panel.IsVisible()) { panel.Hide(); return; }
-
-        panel.Show();
-        if (HWND h = panel.GetHwnd()) {
-            SetWindowPos(h, HWND_TOPMOST, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE);
-            SetForegroundWindow(h);
-        }
-    }
+    // ToggleToFront moved to IPanelWindow — it is what every cross-panel button
+    // in the app wants, not just this one's.
 
     bool BgIsDark(COLORREF bg) {
         const int lum = (GetRValue(bg) * 299 + GetGValue(bg) * 587 + GetBValue(bg) * 114) / 1000;
@@ -602,14 +586,11 @@ LRESULT RemoteLogWnd::HandlePanelMessage(UINT message, WPARAM wParam, LPARAM lPa
             // A drag never reaches here — the base holds capture and consumes
             // every move while one is running, which is also what stops the
             // hover logic below from fighting it.
+            // Both thumbs' hot states belong to the base.
             const int b = HitTestButton(pt);
             const int h = HitTestHeader(pt);
-            const bool vHot = PtInRect(&m_view.vThumb, pt) != 0;
-            const bool hHot = PtInRect(&m_view.hThumb, pt) != 0;
-            if (b != m_hotButton || h != m_hotHeader ||
-                vHot != m_view.vThumbHot || hHot != m_view.hThumbHot) {
+            if (b != m_hotButton || h != m_hotHeader) {
                 m_hotButton = b; m_hotHeader = h;
-                m_view.vThumbHot = vHot; m_view.hThumbHot = hHot;
                 Repaint();
             }
             return 0;
@@ -631,18 +612,18 @@ LRESULT RemoteLogWnd::HandlePanelMessage(UINT message, WPARAM wParam, LPARAM lPa
                     case BTN_SAVE:   DoSave();          break;
                     case BTN_LOAD:   DoLoad();          break;
                     case BTN_SEND_CMD:
-                        ToggleToFront(uiManager.getRemoteCmdWindow());
+                        uiManager.getRemoteCmdWindow().ToggleToFront();
                         Repaint();
                         break;
                     case BTN_CONNS:
-                        ToggleToFront(uiManager.getRemotesConsoleWindow());
+                        uiManager.getRemotesConsoleWindow().ToggleToFront();
                         // The button's own lit state just changed, and opening
                         // another window takes the focus — so this panel would
                         // not otherwise repaint until something else touched it.
                         Repaint();
                         break;
                     case BTN_CONTROL:
-                        ToggleToFront(uiManager.getMirrorPickerWindow());
+                        uiManager.getMirrorPickerWindow().ToggleToFront();
                         Repaint();
                         break;
                     default: break;
@@ -1160,13 +1141,13 @@ LRESULT RemoteLogEntryWnd::HandlePanelMessage(UINT message, WPARAM wParam, LPARA
             return TRUE;
         }
 
-        // A thumb drag never reaches here — the base holds capture for it.
+        // A thumb drag never reaches here — the base holds capture for it — and
+        // the thumb's hot state is the base's too.
         case WM_MOUSEMOVE: {
             POINT pt{GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam)};
             const int b = HitTestBtn(pt);
-            const bool tHot = PtInRect(&m_view.vThumb, pt) != 0;
-            if (b != m_hotBtn || tHot != m_view.vThumbHot) {
-                m_hotBtn = b; m_view.vThumbHot = tHot;
+            if (b != m_hotBtn) {
+                m_hotBtn = b;
                 Repaint();
             }
             return 0;

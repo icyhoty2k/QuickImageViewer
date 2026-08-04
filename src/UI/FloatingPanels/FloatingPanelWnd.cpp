@@ -200,11 +200,17 @@ namespace UI {
                 return false;
             }
 
-            // ── Drag, and the cursor while merely hovering a bar ────────────
+            // ── Drag, hover highlight, and the cursor over a bar ────────────
             case WM_MOUSEMOVE: {
                 if (m_scrollDragView) {
                     if (m_scrollDragHoriz) m_scrollDragView->DragToX(GET_X_LPARAM(lParam), m_scrollDragGrabPx);
                     else                   m_scrollDragView->DragToY(GET_Y_LPARAM(lParam), m_scrollDragGrabPx);
+                    // HELD LIT FOR THE WHOLE DRAG. The pointer leaves the thumb
+                    // constantly while dragging — that is what dragging IS — and
+                    // a highlight that tracked containment would flicker off the
+                    // moment the drag became useful.
+                    m_scrollDragView->vThumbHot = !m_scrollDragHoriz;
+                    m_scrollDragView->hThumbHot =  m_scrollDragHoriz;
                     OnScrolled();
                     return true;
                 }
@@ -223,8 +229,25 @@ namespace UI {
                 // should light up.
                 POINT pt{GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam)};
                 if (ScrollView *sv = ScrollViewAt(pt)) {
+                    // THE HOVER HIGHLIGHT, and it is maintained on EVERY move,
+                    // not only the ones over a bar — the clearing half matters
+                    // as much as the lighting half. Panels used to do this
+                    // themselves, which stopped working the moment the base
+                    // began consuming moves over the bar: the highlight could be
+                    // set but never unset, or never set at all.
+                    const bool vHot = PtInRect(&sv->vThumb, pt) != 0;
+                    const bool hHot = PtInRect(&sv->hThumb, pt) != 0;
+                    if (vHot != sv->vThumbHot || hHot != sv->hThumbHot) {
+                        sv->vThumbHot = vHot;
+                        sv->hThumbHot = hHot;
+                        // Invalidate directly rather than through OnScrolled:
+                        // nothing scrolled, and a panel that overrides that hook
+                        // for scroll-specific work should not see a hover as one.
+                        if (m_hWnd) InvalidateRect(m_hWnd, nullptr, FALSE);
+                    }
+
                     if (PtInRect(&sv->vTrack, pt) || PtInRect(&sv->hTrack, pt) ||
-                        PtInRect(&sv->vThumb, pt) || PtInRect(&sv->hThumb, pt)) {
+                        vHot || hHot) {
                         SetCursor(Constants::Cursors::CURR_CLICK);
                         return true;
                     }
@@ -243,6 +266,12 @@ namespace UI {
             // drag mode, scrolling on every later mouse-move with no button held.
             case WM_CAPTURECHANGED:
                 if (!m_scrollDragView) return false;
+                // The drag held the highlight on regardless of where the pointer
+                // was; dropping it here stops a thumb staying lit after a drag
+                // that ended with the cursor somewhere else entirely.
+                m_scrollDragView->vThumbHot = false;
+                m_scrollDragView->hThumbHot = false;
+                if (m_hWnd) InvalidateRect(m_hWnd, nullptr, FALSE);
                 m_scrollDragView  = nullptr;
                 m_scrollDragHoriz = false;
                 return true;
