@@ -1574,12 +1574,13 @@ LRESULT DedicatedWnd::HandlePanelMessage(UINT message, WPARAM wParam, LPARAM lPa
 
             // Dragging the thumb maps cursor travel onto scroll range, keeping
             // the grab point under the cursor so the thumb does not jump.
-            const bool overThumb = PtInRect(&m_list.vThumb, pt) != FALSE;
-            const bool linkHot   = PtInRect(&m_iniLinkRect, pt) != FALSE;
+            // The thumb's hot state belongs to the base now — see the note in
+            // RemoteClientsWnd's equivalent.
+            const bool linkHot = PtInRect(&m_iniLinkRect, pt) != FALSE;
             const int hr = HitTestRow(pt), hb = HitTestButton(pt);
-            if (hr != m_hotRow || hb != m_hotButton || overThumb != m_list.vThumbHot ||
+            if (hr != m_hotRow || hb != m_hotButton ||
                 linkHot != m_iniLinkHot) {
-                m_hotRow = hr; m_hotButton = hb; m_list.vThumbHot = overThumb;
+                m_hotRow = hr; m_hotButton = hb;
                 m_iniLinkHot = linkHot;
                 Repaint();
             }

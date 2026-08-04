@@ -7,6 +7,10 @@
 #include "Platform/Constants.h"
 #include "Platform/ConstantsStrings.h"
 #include "UI/ThemedDialog.h"
+// Safe from a .cpp despite UIManager.h including this panel's header — the guard
+// has already fired, so there is no cycle. Same as RemoteWnd.cpp, whose button
+// points back here.
+#include "UI/UIManager.h"  // the Local Server button opens F9
 #include "UI/GdiPool.h" // brushes and pens are pooled — never DeleteObject them
 
 #include <algorithm>
@@ -20,7 +24,7 @@ namespace RT = Constants::RemoteTcpIp;
 namespace PC = Constants::Dedicated::PanelColors;
 
 namespace {
-    constexpr int PANEL_W = 720;
+    constexpr int PANEL_W = 820;
     constexpr int PANEL_H = 560;
     constexpr int PAD     = 14;
     constexpr int ROW_H   = 42;
@@ -38,7 +42,10 @@ namespace {
     constexpr UINT TIMER_REFRESH    = 1;
     constexpr UINT REFRESH_INTERVAL = 1000;
 
-    enum ButtonId { BTN_KICK = 1, BTN_TIMED, BTN_BAN, BTN_LIFT };
+    // BTN_SERVER opens F9 — the counterpart of the Server Clients button there.
+    // The two panels are one subject split in half, and the crossing is constant:
+    // ban an address here, widen the AllowList there.
+    enum ButtonId { BTN_KICK = 1, BTN_TIMED, BTN_BAN, BTN_LIFT, BTN_SERVER };
 
     bool BgIsDark(COLORREF bg) {
         const int lum = (GetRValue(bg) * 299 + GetGValue(bg) * 587 + GetBValue(bg) * 114) / 1000;
@@ -176,10 +183,12 @@ void RemoteClientsWnd::BuildRows() {
     m_scrollToSelection = true;
 
     m_buttons.clear();
-    m_buttons.push_back({L"Kick",         BTN_KICK,  {}, false});
-    m_buttons.push_back({L"Kick for…",    BTN_TIMED, {}, false});
-    m_buttons.push_back({L"Ban",          BTN_BAN,   {}, false});
-    m_buttons.push_back({L"Lift block",   BTN_LIFT,  {}, false});
+    m_buttons.push_back({L"Kick",         BTN_KICK,   {}, false});
+    m_buttons.push_back({L"Kick for…",    BTN_TIMED,  {}, false});
+    m_buttons.push_back({L"Ban",          BTN_BAN,    {}, false});
+    m_buttons.push_back({L"Lift block",   BTN_LIFT,   {}, false});
+    // Always enabled — unlike the four above it does not act on a selection.
+    m_buttons.push_back({L"Local Server", BTN_SERVER, {}, true});
     SyncButtons();
 }
 
@@ -532,11 +541,13 @@ LRESULT RemoteClientsWnd::HandlePanelMessage(UINT message, WPARAM wParam, LPARAM
         case WM_MOUSEMOVE: {
             POINT pt{GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam)};
 
-            const int  r  = HitTestRow(pt);
-            const int  b  = HitTestButton(pt);
-            const bool th = PtInRect(&m_list.vThumb, pt) != 0;
-            if (r != m_hotRow || b != m_hotButton || th != m_list.vThumbHot) {
-                m_hotRow = r; m_hotButton = b; m_list.vThumbHot = th;
+            // The thumb's own hot state is the base's — it maintains it on every
+            // move and consumes the ones over a bar, so testing it here would
+            // both duplicate that and never see the interesting case.
+            const int r = HitTestRow(pt);
+            const int b = HitTestButton(pt);
+            if (r != m_hotRow || b != m_hotButton) {
+                m_hotRow = r; m_hotButton = b;
                 Repaint();
             }
             return 0;
@@ -549,10 +560,11 @@ LRESULT RemoteClientsWnd::HandlePanelMessage(UINT message, WPARAM wParam, LPARAM
             const int b = HitTestButton(pt);
             if (b >= 0) {
                 switch (m_buttons[b].id) {
-                    case BTN_KICK:  DoKick();      break;
-                    case BTN_TIMED: DoTimedKick(); break;
-                    case BTN_BAN:   DoBan();       break;
-                    case BTN_LIFT:  DoLiftBlock(); break;
+                    case BTN_KICK:   DoKick();      break;
+                    case BTN_TIMED:  DoTimedKick(); break;
+                    case BTN_BAN:    DoBan();       break;
+                    case BTN_LIFT:   DoLiftBlock(); break;
+                    case BTN_SERVER: uiManager.getRemoteWindow().ToggleToFront(); break;
                     default: break;
                 }
                 return 0;
