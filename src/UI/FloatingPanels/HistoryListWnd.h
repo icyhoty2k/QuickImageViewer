@@ -51,6 +51,19 @@ namespace UI {
             bool    OnMButtonUp(int x, int y) override;
             LRESULT HandlePanelMessage(UINT message, WPARAM wParam, LPARAM lParam) override;
 
+            // The scroll state is a file static, like everything else in this
+            // panel's implementation, so these are defined in the .cpp where it
+            // is visible. The base drives both wheels, the thumb drag, track
+            // paging and the bar cursor against what they return.
+            UI::ScrollView *ScrollViewAt(POINT) override;
+            int ScrollLinePx(const UI::ScrollView &) const override;
+
+            // Every scroll moves rows under the cursor, so the hover popup now
+            // describes a row that is not there. Dropped here rather than in a
+            // wheel case, because paging the track and dragging the thumb do it
+            // just as much and only this hook sees all three.
+            void OnScrolled() override;
+
         public:
             ~HistoryListWnd() {
                 if (m_hFontTitle)     DeleteObject(m_hFontTitle);

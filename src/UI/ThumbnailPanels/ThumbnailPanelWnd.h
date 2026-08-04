@@ -202,6 +202,17 @@ namespace UI {
             float m_scrollDragStartOffset = 0.0f; // m_offset at drag start
 
         protected:
+            // Moves the strip by one wheel step, wrap-around included.
+            //
+            // ONE BODY FOR BOTH WHEELS AND EVERY STRIP. It lives on the base
+            // because DirWnd, CacheWnd and the spawned strips all inherit this
+            // class's WndProc — a fix here reaches all of them, and none of them
+            // needs a wheel handler of its own.
+            //
+            // `horizontal` says which wheel it came from, and it is not cosmetic:
+            // the two send opposite signs for the same intent. See the definition.
+            void ScrollByWheel(int delta, bool horizontal);
+
             // Builds the text shown in the scrollbar strip.
             // Returns {fullText, boldStartIndex}. Empty text = no label.
             // CacheWnd overrides to show vRam stats instead of a folder path.

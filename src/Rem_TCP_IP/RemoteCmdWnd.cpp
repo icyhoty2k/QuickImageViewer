@@ -84,20 +84,21 @@ namespace {
 
 } // namespace
 
-// =============================================================================
-// ScrollView
-// =============================================================================
-int RemoteCmdWnd::ScrollView::MaxScroll() const {
-    return std::max(0, contentH - RectH(view));
+// Whichever list the pointer is over. Defaulting to the commands when it is over
+// none of them is right: that is the list you are reading, and a wheel notch in
+// the gap between boxes should not do nothing.
+//
+// Tested against the VIEWS rather than the frames, so the answer matches exactly
+// the region each bar scrolls.
+ScrollView *RemoteCmdWnd::ScrollViewAt(POINT pt) {
+    if (PtInRect(&m_log.view, pt)     || PtInRect(&m_log.vTrack, pt))     return &m_log;
+    if (PtInRect(&m_targets.view, pt) || PtInRect(&m_targets.vTrack, pt)) return &m_targets;
+    return &m_list;
 }
 
-void RemoteCmdWnd::ScrollView::Clamp() {
-    scrollY = std::clamp(scrollY, 0, MaxScroll());
-}
-
-void RemoteCmdWnd::ScrollView::ScrollBy(int dy) {
-    scrollY += dy;
-    Clamp();
+// One wheel "line" is one row, in all three lists.
+int RemoteCmdWnd::ScrollLinePx(const ScrollView &) const {
+    return static_cast<int>(ROW_H * app.dpiScale);
 }
 
 // =============================================================================
@@ -105,7 +106,7 @@ void RemoteCmdWnd::ScrollView::ScrollBy(int dy) {
 // =============================================================================
 void RemoteCmdWnd::Init(HINSTANCE hInstance, HWND hParent) {
     const float s = app.dpiScale;
-    InitFloating(hInstance, hParent, L"qIVRemoteCmdWnd", L"Send Command",
+    InitFloating(hInstance, hParent, L"qIVRemoteCmdWnd", L"Remote Commands",
                  static_cast<int>(PANEL_W * s), static_cast<int>(PANEL_H * s));
     if (!GetHwnd()) return;
 
@@ -559,31 +560,21 @@ LRESULT RemoteCmdWnd::HandlePanelMessage(UINT message, WPARAM wParam, LPARAM lPa
         case WM_MOUSEMOVE: {
             POINT pt{GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam)};
 
-            if (m_drag != Drag::None) {
-                ScrollView &sv = (m_drag == Drag::List)    ? m_list
-                               : (m_drag == Drag::Targets) ? m_targets
-                                                           : m_log;
-                const int travel = std::max(1, RectH(sv.track) - m_dragThumbSpan);
-                const int want   = pt.y - sv.track.top - m_dragGrabPx;
-                sv.scrollY = MulDiv(std::clamp(want, 0, travel), sv.MaxScroll(), travel);
-                sv.Clamp();
-                Repaint();
-                return 0;
-            }
-
+            // A thumb drag never reaches here — the base holds capture for it.
             const int b = HitTestButton(pt);
-            const bool lh = PtInRect(&m_list.thumb, pt) != 0;
-            const bool gh = PtInRect(&m_log.thumb, pt) != 0;
-            if (b != m_hotButton || lh != m_list.thumbHot || gh != m_log.thumbHot) {
-                m_hotButton = b; m_list.thumbHot = lh; m_log.thumbHot = gh;
+            const bool lh = PtInRect(&m_list.vThumb, pt) != 0;
+            const bool gh = PtInRect(&m_log.vThumb, pt) != 0;
+            if (b != m_hotButton || lh != m_list.vThumbHot || gh != m_log.vThumbHot) {
+                m_hotButton = b; m_list.vThumbHot = lh; m_log.vThumbHot = gh;
                 Repaint();
             }
             return 0;
         }
 
+        // A thumb release never arrives here — the base holds capture for the
+        // whole drag and consumes the button-up that ends it.
         case WM_LBUTTONUP:
-            if (m_drag != Drag::None) { m_drag = Drag::None; ReleaseCapture(); Repaint(); }
-            else {
+            {
                 InputBox &box = (m_focus == Focus::Filter) ? m_filterBox : m_valueBox;
                 if (box.RouteMouse(message, wParam, lParam, GetHwnd()) ==
                     InputResult::ConsumedRepaint)
@@ -591,52 +582,19 @@ LRESULT RemoteCmdWnd::HandlePanelMessage(UINT message, WPARAM wParam, LPARAM lPa
             }
             return 0;
 
-        // A drag can end without the button coming up — Alt+Tab, a message box.
-        case WM_CAPTURECHANGED:
-            m_drag = Drag::None;
-            Repaint();
-            return 0;
 
-        case WM_MOUSEWHEEL: {
-            POINT pt{GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam)};
-            ScreenToClient(GetHwnd(), &pt);
-            const int rowH = static_cast<int>(ROW_H * app.dpiScale);
-            // Whichever list the pointer is over. Defaulting to the commands is
-            // right when it is over neither: that is the list you are reading.
-            ScrollView &sv = PtInRect(&m_log.view, pt)     ? m_log
-                           : PtInRect(&m_targets.view, pt) ? m_targets
-                                                           : m_list;
-            sv.ScrollBy(-(GET_WHEEL_DELTA_WPARAM(wParam) / WHEEL_DELTA) * rowH * 3);
-            Repaint();
-            return 0;
-        }
+        // No wheel cases: FloatingPanelWnd drives both wheels against
+        // ScrollViewAt(), which picks whichever of the three lists the pointer
+        // is over. That point-based choice is the reason the hook takes a POINT
+        // rather than returning a fixed member.
 
         case WM_LBUTTONDOWN: {
             SetFocus(GetHwnd());
             POINT pt{GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam)};
 
-            // Scrollbars first — they overlap nothing, but they are the smallest
-            // targets and must not be stolen by a list row.
-            {
-                ScrollView *svs[3]   = {&m_list, &m_log, &m_targets};
-                const Drag  which[3] = {Drag::List, Drag::Log, Drag::Targets};
-                for (int i = 0; i < 3; ++i) {
-                    ScrollView *sv = svs[i];
-                    if (PtInRect(&sv->thumb, pt)) {
-                        m_drag          = which[i];
-                        m_dragGrabPx    = pt.y - sv->thumb.top;
-                        m_dragThumbSpan = RectH(sv->thumb);
-                        SetCapture(GetHwnd());
-                        return 0;
-                    }
-                    if (PtInRect(&sv->track, pt)) {
-                        sv->ScrollBy(pt.y < sv->thumb.top ? -RectH(sv->view)
-                                                          : RectH(sv->view));
-                        Repaint();
-                        return 0;
-                    }
-                }
-            }
+            // No scrollbar block: the base consumes thumb and track clicks for
+            // all three views before this panel is asked, so a bar can no longer
+            // be stolen by a list row and there is no per-view drag state here.
 
             const int row = HitTestCommandRow(pt);
             if (row >= 0) {
@@ -861,7 +819,7 @@ LRESULT RemoteCmdWnd::HandlePanelMessage(UINT message, WPARAM wParam, LPARAM lPa
                 RECT frame{pad, listTop + hdrH, pad + listW, listBot};
                 FrameBox(bb, frame, boxBg, line);
 
-                const int sbW = static_cast<int>(Constants::Dedicated::PANEL_SCROLLBAR_W * s);
+                const int sbW = UI::ScrollBarThicknessPx(s);
                 m_list.contentH = static_cast<int>(m_shown.size()) * rowH;
                 const bool needBar = m_list.contentH > RectH(frame) - 2;
                 m_list.view = {frame.left + 1, frame.top + 1,
@@ -902,13 +860,11 @@ LRESULT RemoteCmdWnd::HandlePanelMessage(UINT message, WPARAM wParam, LPARAM lPa
                 }
                 RestoreDC(bb, saved);
 
-                m_list.track = {};
-                m_list.thumb = {};
+                m_list.ClearBars();
                 if (needBar) {
-                    m_list.track = {frame.right - 1 - sbW, m_list.view.top,
-                                    frame.right - 1, m_list.view.bottom};
-                    DrawScrollBar(bb, m_list, s, PC::SCROLL_TRACK, PC::SCROLL_THUMB,
-                                  PC::SCROLL_THUMB_HOT, m_drag == Drag::List);
+                    m_list.vTrack = {frame.right - 1 - sbW, m_list.view.top,
+                                     frame.right - 1, m_list.view.bottom};
+                    DrawBars(bb, m_list, s, ThemeScrollBarColors(app.themeFactor));
                 }
             }
 
@@ -1020,7 +976,7 @@ LRESULT RemoteCmdWnd::HandlePanelMessage(UINT message, WPARAM wParam, LPARAM lPa
                     FrameBox(bb, frame, boxBg, line);
 
                     const int sbW =
-                        static_cast<int>(Constants::Dedicated::PANEL_SCROLLBAR_W * s);
+                        UI::ScrollBarThicknessPx(s);
                     m_targets.contentH = static_cast<int>(m_targetRows.size()) * rowH;
                     const bool needBar = m_targets.contentH > RectH(frame) - 2;
                     m_targets.view = {frame.left + 1, frame.top + 1,
@@ -1082,13 +1038,11 @@ LRESULT RemoteCmdWnd::HandlePanelMessage(UINT message, WPARAM wParam, LPARAM lPa
                     }
                     RestoreDC(bb, saved);
 
-                    m_targets.track = {};
-                    m_targets.thumb = {};
+                    m_targets.ClearBars();
                     if (needBar) {
-                        m_targets.track = {frame.right - 1 - sbW, m_targets.view.top,
-                                           frame.right - 1, m_targets.view.bottom};
-                        DrawScrollBar(bb, m_targets, s, PC::SCROLL_TRACK, PC::SCROLL_THUMB,
-                                      PC::SCROLL_THUMB_HOT, m_drag == Drag::Targets);
+                        m_targets.vTrack = {frame.right - 1 - sbW, m_targets.view.top,
+                                            frame.right - 1, m_targets.view.bottom};
+                        DrawBars(bb, m_targets, s, ThemeScrollBarColors(app.themeFactor));
                     }
                 }
             }
@@ -1127,7 +1081,7 @@ LRESULT RemoteCmdWnd::HandlePanelMessage(UINT message, WPARAM wParam, LPARAM lPa
                 RECT frame{pad, H - pad - logH, W - pad, H - pad};
                 FrameBox(bb, frame, boxBg, line);
 
-                const int sbW = static_cast<int>(Constants::Dedicated::PANEL_SCROLLBAR_W * s);
+                const int sbW = UI::ScrollBarThicknessPx(s);
                 m_log.contentH = static_cast<int>(m_replies.size()) * rowH;
                 const bool needBar = m_log.contentH > RectH(frame) - 2;
                 m_log.view = {frame.left + 1, frame.top + 1,
@@ -1198,13 +1152,11 @@ LRESULT RemoteCmdWnd::HandlePanelMessage(UINT message, WPARAM wParam, LPARAM lPa
                 }
                 RestoreDC(bb, saved);
 
-                m_log.track = {};
-                m_log.thumb = {};
+                m_log.ClearBars();
                 if (needBar) {
-                    m_log.track = {frame.right - 1 - sbW, m_log.view.top,
-                                   frame.right - 1, m_log.view.bottom};
-                    DrawScrollBar(bb, m_log, s, PC::SCROLL_TRACK, PC::SCROLL_THUMB,
-                                  PC::SCROLL_THUMB_HOT, m_drag == Drag::Log);
+                    m_log.vTrack = {frame.right - 1 - sbW, m_log.view.top,
+                                    frame.right - 1, m_log.view.bottom};
+                    DrawBars(bb, m_log, s, ThemeScrollBarColors(app.themeFactor));
                 }
             }
 
@@ -1225,28 +1177,6 @@ LRESULT RemoteCmdWnd::HandlePanelMessage(UINT message, WPARAM wParam, LPARAM lPa
 // =============================================================================
 // Paint helpers
 // =============================================================================
-void RemoteCmdWnd::DrawScrollBar(HDC bb, ScrollView &sv, float s, COLORREF trackCol,
-                                 COLORREF thumbCol, COLORREF thumbHotCol, bool dragging) {
-    FillRect(bb, &sv.track, Gdi::Brush(trackCol));
-
-    const int viewH = RectH(sv.view);
-    const int minT  = static_cast<int>(Constants::Dedicated::PANEL_SCROLL_MIN_H * s);
-    // Floored so it stays grabbable: proportional height against a long list is
-    // a couple of pixels.
-    int th = std::max(minT, MulDiv(viewH, viewH, std::max(1, sv.contentH)));
-    th = std::min(th, viewH);
-
-    const int travel = std::max(0, viewH - th);
-    const int ty = sv.track.top + (sv.MaxScroll() > 0
-                                       ? MulDiv(sv.scrollY, travel, sv.MaxScroll())
-                                       : 0);
-
-    sv.thumb = {sv.track.left + static_cast<int>(2 * s), ty,
-                sv.track.right - static_cast<int>(2 * s), ty + th};
-    FillRect(bb, &sv.thumb,
-             Gdi::Brush((sv.thumbHot || dragging) ? thumbHotCol : thumbCol));
-}
-
 void RemoteCmdWnd::EnsureFonts(HDC dc) {
     const int dpi = GetDeviceCaps(dc, LOGPIXELSY);
     if (m_hFontBody && dpi == m_cachedFontDpi) return;

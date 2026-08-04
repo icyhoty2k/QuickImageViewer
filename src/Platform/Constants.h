@@ -144,6 +144,23 @@ namespace Constants {
     // from a SECOND playlist of "promotions" that is never merged into the
     // normal image playlist.
     // =========================================================================
+    // =========================================================================
+    // Scrollbar geometry — ONE set, for every scrolled surface in the app.
+    //
+    // There were three thicknesses: 12 in the Dedicated panel, a hardcoded 10 in
+    // Help and Exif, and 6 in the History list. Nothing chose those numbers
+    // together, so the same control was a different size depending on which
+    // window it was in — most visible at high DPI, where a 6-DIP strip is a hard
+    // target and a 12-DIP one is comfortable.
+    //
+    // DIPs at 96 DPI. Scaled at draw time through UI::ScrollBarThicknessPx, which
+    // is the only thing that should read these.
+    // =========================================================================
+    namespace Scrollbar {
+        constexpr int THICKNESS = 12; // strip width / height
+        constexpr int MIN_THUMB = 28; // shortest the thumb may get, either axis
+    }
+
     namespace Dedicated {
         // ── F8 panel appearance — single place to restyle the whole window ──
         // Opacity of the Dedicated panel, 0 = invisible .. 255 = opaque.
@@ -176,9 +193,11 @@ namespace Constants {
             constexpr COLORREF SCROLL_THUMB_HOT = RGB(132, 156, 196);
         }
 
-        // Scrollbar geometry for the F8 panel (DPI-scaled at draw time).
-        constexpr int PANEL_SCROLLBAR_W  = 12;
-        constexpr int PANEL_SCROLL_MIN_H = 28; // shortest the thumb may get
+        // Scrollbar geometry lives in Constants::Scrollbar now — one thickness
+        // for every panel. These are aliases so existing call sites keep
+        // reading, and they cannot drift from the shared numbers.
+        constexpr int PANEL_SCROLLBAR_W  = Scrollbar::THICKNESS;
+        constexpr int PANEL_SCROLL_MIN_H = Scrollbar::MIN_THUMB;
 
         // Promotion weighting. A promo's weight is its relative chance of being
         // drawn; 65535 is ~65535× more likely than 1.
@@ -299,6 +318,15 @@ namespace Constants {
     constexpr float THUMBNAIL_PANEL_THUMB_MARGIN = 20.0f;
     constexpr BYTE THUMBNAIL_PANEL_WINDOW_OPACITY = 210;
     constexpr float THUMBNAIL_PANEL_WINDOW_MOUSE_WHEEL_SPEED = 120.0f;
+    // Shift multiplies a wheel step, in EVERY scrolling surface — the strips and
+    // every list panel through UI::WheelBoost. One number, because a modifier
+    // that accelerates by different amounts depending on which window is under
+    // the cursor is worse than no accelerator at all.
+    //
+    // Deliberately NOT the other convention, where Shift+wheel means "scroll
+    // sideways": this app has a second wheel for that, and the horizontal
+    // wheel is unambiguous where a modifier is not.
+    constexpr int WHEEL_SHIFT_ACCELERATOR = 3;
     constexpr int8_t THUMBNAIL_PANEL_WINDOW_MOUSE_WHEEL_DIRECTION = 1; // 1 is forward -1 is reverse
     constexpr bool THUMBNAIL_PANEL_WHEEL_WRAP_AROUND = false; // wrap strip from last→first and first→last on wheel overflow
     constexpr bool THUMBNAIL_PANEL_WHEEL_WRAP_OVERLAY = true; // show center overlay message on strip wrap-around
@@ -622,6 +650,24 @@ namespace Constants {
         // years — or been tampered with — cannot cost unbounded memory or an
         // unbounded scan on every accept().
         constexpr size_t BLACKLIST_MAX = 8192;
+
+        // --- Timed blocks (a kick that keeps the peer out for a while) -------
+        //
+        // Far smaller than the permanent list because these are made BY HAND,
+        // one press at a time, and they expire on their own. Thousands of them
+        // would mean something had gone wrong rather than that somebody had been
+        // busy.
+        constexpr size_t TIMED_BLOCK_MAX = 256;
+
+        // What the panel's duration prompt opens on. Ten minutes is long enough
+        // to outlast a bot's retry loop and short enough that shutting out a
+        // real client by mistake fixes itself before anyone files a complaint.
+        constexpr int TIMED_BLOCK_DEFAULT_MIN = 10;
+        constexpr int TIMED_BLOCK_MIN_MIN     = 1;
+        // A day. Past this, the permanent list is the honest tool — a "timed"
+        // block measured in weeks is a ban that forgets itself at the next
+        // restart, which is the worst of both.
+        constexpr int TIMED_BLOCK_MAX_MIN     = 1440;
 
         // --- Defaults ---
         // Never autostart by default. A viewer that binds a port because nobody

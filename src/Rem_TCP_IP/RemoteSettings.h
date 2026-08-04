@@ -232,6 +232,26 @@ namespace Remote {
     // that does not work at all.
     std::wstring BlockScope(const std::wstring &address);
 
+    // Are these two strings the SAME HOST?
+    //
+    // Not `a == b`. One address has many spellings and IPv6 has more than most:
+    // "fe80::1", "fe80:0:0:0:0:0:0:1" and "FE80::1" are one machine, and
+    // "127.0.0.1" and "127.000.000.001" are another. Compared as text they are
+    // all different, which is how the Remote Servers list ends up with two rows
+    // driving one instance — each getting every mirrored command once, and the
+    // console showing two dots for one screen.
+    //
+    // Both sides are parsed and compared as BYTES when they are literals, so
+    // spelling stops mattering. Anything that does not parse — a host name — is
+    // compared case-insensitively as text, which is the right rule for names:
+    // "lobby-pc" and "LOBBY-PC" are the same host, and resolving them to decide
+    // would put DNS inside a list-management decision.
+    //
+    // A NAME AND A LITERAL ARE NEVER EQUAL here, even when the name resolves to
+    // that address. Saying otherwise would need a lookup per comparison, and the
+    // answer could change between two calls.
+    bool SameHost(const std::wstring &a, const std::wstring &b);
+
     // Rejoins for storage. Comma-separated, no spaces.
     std::wstring JoinList(const std::vector<std::wstring> &items);
 

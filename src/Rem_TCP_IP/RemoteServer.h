@@ -123,6 +123,19 @@ namespace Remote {
     // NOT a ban. The same peer may reconnect immediately.
     bool KickConnection(ConnId id);
 
+    // Kick, and refuse this peer for `minutes` afterwards.
+    //
+    // THE MIDDLE OPTION, and the one that actually answers a bot: a plain kick
+    // it reconnects through in a second, and a ban is a permanent decision
+    // nobody wants to make about an address that may be a customer tomorrow. A
+    // timed block outlasts a retry loop and then forgets.
+    //
+    // The block is IN MEMORY and does not survive a restart — see the timed
+    // section of RemoteBlacklist.h. Scoped with BlockScope, like Ban, so a v6
+    // peer cannot step around it with the next address in its /64. `scopeOut`
+    // receives what was actually blocked.
+    bool TimedKickConnection(ConnId id, int minutes, std::wstring &scopeOut);
+
     // Blacklists the peer, then kicks it. In that order, so a reconnect racing
     // the disconnect is refused at the accept gate rather than admitted.
     //

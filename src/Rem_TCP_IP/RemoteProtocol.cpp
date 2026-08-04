@@ -762,6 +762,7 @@ bool IsMirrorable(Command cmd) {
         case Command::ToggleAllPanels:
         case Command::ToggleDedicatedPanel:
         case Command::ToggleRemotePanel:
+        case Command::ToggleRemoteClients:
         case Command::ToggleRemotesConsole:
             return false;
 

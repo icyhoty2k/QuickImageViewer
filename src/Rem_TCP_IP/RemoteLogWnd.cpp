@@ -8,6 +8,7 @@
 // already fired by the time it is reached, so there is no cycle.
 #include "UI/UIManager.h"        // the two readouts open F10 / Ctrl+F11
 #include "UI/GdiPool.h"          // pooled brushes and pens — never DeleteObject them
+#include "UI/CustomControls/ScrollView.h" // WheelDeltaToPixels — the one wheel rule
 
 #include <algorithm>
 #include <commdlg.h>
@@ -100,7 +101,7 @@ void RemoteLogWnd::Init(HINSTANCE hInstance, HWND hParent) {
     const float s = app.dpiScale;
     // CS_DBLCLKS, or WM_LBUTTONDBLCLK is never sent and a double-click arrives
     // as two separate downs — the window class decides this, not the window.
-    InitFloating(hInstance, hParent, L"qIVRemoteLogWnd", L"RemoteLog",
+    InitFloating(hInstance, hParent, L"qIVRemoteLogWnd", L"Server Log",
                  static_cast<int>(PANEL_W * s), static_cast<int>(PANEL_H * s),
                  CS_DBLCLKS);
     if (!GetHwnd()) return;
@@ -177,7 +178,7 @@ void RemoteLogWnd::Rebuild() {
     // Tail-following, but only while the view is already at the bottom — see
     // the header. Set before the clamp so the clamp confirms it rather than
     // fighting it.
-    if (m_followTail) m_scrollY = std::max(0, ContentHeightPx() - ViewHeightPx());
+    if (m_followTail) m_view.scrollY = std::max(0, ContentHeightPx() - ViewHeightPx());
     ClampScroll();
 }
 
@@ -217,7 +218,7 @@ void RemoteLogWnd::BuildButtons() {
     m_buttons.push_back({L"Clear",  BTN_CLEAR, {}, any});
     m_buttons.push_back({L"Save…",  BTN_SAVE,  {}, any});
     m_buttons.push_back({L"Load…",  BTN_LOAD,  {}, true});
-    m_buttons.push_back({L"Send Command", BTN_SEND_CMD, {}, true});
+    m_buttons.push_back({L"Remote Commands", BTN_SEND_CMD, {}, true});
 
     // Labels deliberately EMPTY. These two carry live counts, and building the
     // text here would freeze it until the next Rebuild — which only happens
@@ -246,7 +247,7 @@ void RemoteLogWnd::DoToggleLogging() {
 
 void RemoteLogWnd::DoClear() {
     RL::Clear();
-    m_scrollY   = 0;
+    m_view.scrollY   = 0;
     m_followTail = true;
     m_status    = L"Cleared. Entry numbers carry on from where they were — a "
                   L"number never means two different exchanges.";
@@ -313,7 +314,7 @@ void RemoteLogWnd::DoLoad() {
     std::wstring err;
     if (RL::LoadFrom(path, err)) {
         m_followTail = false;   // a loaded log is read from the top, not tailed
-        m_scrollY    = 0;
+        m_view.scrollY    = 0;
         m_status     = std::wstring(L"Loaded ") + path;
         Rebuild();
     } else {
@@ -375,7 +376,7 @@ int RemoteLogWnd::ViewWidthPx() const {
     GetClientRect(GetHwnd(), &rc);
     const float s = app.dpiScale;
     const int pad = static_cast<int>(PAD * s);
-    const int sbW = static_cast<int>(Constants::Dedicated::PANEL_SCROLLBAR_W * s);
+    const int sbW = UI::ScrollBarThicknessPx(s);
 
     int w = RectW(rc) - pad * 2;
     if (ContentHeightPx() > RectH(rc) - ListTopPx() - static_cast<int>(FOOTER_H * s))
@@ -389,16 +390,22 @@ int RemoteLogWnd::ViewHeightPx() const {
     GetClientRect(GetHwnd(), &rc);
     const float s = app.dpiScale;
     const int pad = static_cast<int>(PAD * s);
-    const int sbW = static_cast<int>(Constants::Dedicated::PANEL_SCROLLBAR_W * s);
+    const int sbW = UI::ScrollBarThicknessPx(s);
 
     int h = RectH(rc) - ListTopPx() - static_cast<int>(FOOTER_H * s);
     if (ContentWidthPx() > RectW(rc) - pad * 2) h -= sbW;
     return std::max(0, h);
 }
 
+// One wheel "line" is one table row, on both axes. The base applies the user's
+// Mouse setting and the Shift accelerator on top.
+int RemoteLogWnd::ScrollLinePx(const UI::ScrollView &) const {
+    return RowHeightPx();
+}
+
 void RemoteLogWnd::ClampScroll() {
-    m_scrollX = std::clamp(m_scrollX, 0, std::max(0, ContentWidthPx()  - ViewWidthPx()));
-    m_scrollY = std::clamp(m_scrollY, 0, std::max(0, ContentHeightPx() - ViewHeightPx()));
+    m_view.scrollX = std::clamp(m_view.scrollX, 0, std::max(0, ContentWidthPx()  - ViewWidthPx()));
+    m_view.scrollY = std::clamp(m_view.scrollY, 0, std::max(0, ContentHeightPx() - ViewHeightPx()));
 }
 
 void RemoteLogWnd::ScrollTo(int x, int y) {
@@ -407,12 +414,12 @@ void RemoteLogWnd::ScrollTo(int x, int y) {
     const int maxY = std::max(0, ContentHeightPx() - ViewHeightPx());
     const int maxX = std::max(0, ContentWidthPx()  - ViewWidthPx());
 
-    m_scrollX = std::clamp(x, 0, maxX);
-    m_scrollY = std::clamp(y, 0, maxY);
+    m_view.scrollX = std::clamp(x, 0, maxX);
+    m_view.scrollY = std::clamp(y, 0, maxY);
 
     // Re-arm tail-following the moment the view is back at the bottom, so
     // scrolling down to catch up resumes it without a second gesture.
-    m_followTail = (m_scrollY >= maxY);
+    m_followTail = (m_view.scrollY >= maxY);
 
     Repaint();
 }
@@ -445,7 +452,7 @@ int RemoteLogWnd::HitTestRow(POINT pt) const {
 
     // Arithmetic, not stored rects: only the visible band is painted, so the
     // rows above and below the viewport have no rect to test.
-    const int idx = (pt.y - top + m_scrollY) / RowHeightPx();
+    const int idx = (pt.y - top + m_view.scrollY) / RowHeightPx();
     return (idx >= 0 && idx < static_cast<int>(m_rows.size())) ? idx : -1;
 }
 
@@ -458,8 +465,8 @@ void RemoteLogWnd::EnsureSelectionVisible() {
     // Only moves when the row is actually outside — scrolling a row that is
     // already visible into the middle of the view makes the list lurch on every
     // arrow press.
-    if (top < m_scrollY)                     ScrollTo(m_scrollX, top);
-    else if (bot > m_scrollY + ViewHeightPx()) ScrollTo(m_scrollX, bot - ViewHeightPx());
+    if (top < m_view.scrollY)                     ScrollTo(m_view.scrollX, top);
+    else if (bot > m_view.scrollY + ViewHeightPx()) ScrollTo(m_view.scrollX, bot - ViewHeightPx());
     else Repaint();
 }
 
@@ -528,10 +535,10 @@ bool RemoteLogWnd::OnKeyDown(WPARAM vk, bool ctrl, bool /*shift*/, bool /*alt*/)
                 StepSelection(static_cast<int>(m_rows.size()) - 1 - m_selectedRow);
             return true;
         // Horizontal stays pure scrolling: there is nothing to select sideways.
-        case VK_LEFT:  ScrollTo(m_scrollX - row * 2, m_scrollY); return true;
-        case VK_RIGHT: ScrollTo(m_scrollX + row * 2, m_scrollY); return true;
+        case VK_LEFT:  ScrollTo(m_view.scrollX - row * 2, m_view.scrollY); return true;
+        case VK_RIGHT: ScrollTo(m_view.scrollX + row * 2, m_view.scrollY); return true;
         case VK_HOME:  ScrollTo(0, 0); return true;
-        case VK_END:   ScrollTo(m_scrollX, ContentHeightPx()); return true;
+        case VK_END:   ScrollTo(m_view.scrollX, ContentHeightPx()); return true;
         case VK_RETURN: DoOpenDetail(); return true;
         case VK_F5:    Rebuild(); Repaint(); return true;
         case 'S': if (ctrl) { DoSave(); return true; } break;
@@ -574,23 +581,10 @@ LRESULT RemoteLogWnd::HandlePanelMessage(UINT message, WPARAM wParam, LPARAM lPa
             Repaint();
             return 0;
 
-        case WM_MOUSEWHEEL: {
-            const int delta = GET_WHEEL_DELTA_WPARAM(wParam);
-            UINT lines = 3;
-            SystemParametersInfoW(SPI_GETWHEELSCROLLLINES, 0, &lines, 0);
-            if (lines == 0) lines = 3;
-            ScrollTo(m_scrollX,
-                     m_scrollY - (delta / WHEEL_DELTA) * static_cast<int>(lines) * RowHeightPx());
-            return 0;
-        }
-
-        // Shift+wheel scrolls sideways on every list Windows ships; a table this
-        // wide is exactly where that reflex gets used.
-        case WM_MOUSEHWHEEL: {
-            const int delta = GET_WHEEL_DELTA_WPARAM(wParam);
-            ScrollTo(m_scrollX + (delta / WHEEL_DELTA) * RowHeightPx() * 3, m_scrollY);
-            return 0;
-        }
+        // No wheel cases. The base drives both axes against ScrollViewAt() —
+        // this table is wider than any window it fits in, so it is the one
+        // surface where the horizontal wheel does real work rather than being
+        // swallowed to keep it away from the main window.
 
         case WM_SETCURSOR: {
             if (LOWORD(lParam) != HTCLIENT) break;
@@ -605,56 +599,25 @@ LRESULT RemoteLogWnd::HandlePanelMessage(UINT message, WPARAM wParam, LPARAM lPa
         case WM_MOUSEMOVE: {
             POINT pt{GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam)};
 
-            // A drag in progress owns the mouse: the pointer leaves the thumb
-            // constantly while dragging, and letting the hover logic run would
-            // fight it.
-            if (m_drag != Drag::None) {
-                if (m_drag == Drag::Vert) {
-                    const int trackH = RectH(m_vTrack);
-                    const int travel = std::max(1, trackH - m_dragThumbSpan);
-                    const int wanted = pt.y - m_vTrack.top - m_dragGrabPx;
-                    ScrollTo(m_scrollX,
-                             MulDiv(std::clamp(wanted, 0, travel),
-                                    std::max(0, ContentHeightPx() - ViewHeightPx()), travel));
-                } else {
-                    const int trackW = RectW(m_hTrack);
-                    const int travel = std::max(1, trackW - m_dragThumbSpan);
-                    const int wanted = pt.x - m_hTrack.left - m_dragGrabPx;
-                    ScrollTo(MulDiv(std::clamp(wanted, 0, travel),
-                                    std::max(0, ContentWidthPx() - ViewWidthPx()), travel),
-                             m_scrollY);
-                }
-                return 0;
-            }
-
+            // A drag never reaches here — the base holds capture and consumes
+            // every move while one is running, which is also what stops the
+            // hover logic below from fighting it.
             const int b = HitTestButton(pt);
             const int h = HitTestHeader(pt);
-            const bool vHot = PtInRect(&m_vThumb, pt) != 0;
-            const bool hHot = PtInRect(&m_hThumb, pt) != 0;
+            const bool vHot = PtInRect(&m_view.vThumb, pt) != 0;
+            const bool hHot = PtInRect(&m_view.hThumb, pt) != 0;
             if (b != m_hotButton || h != m_hotHeader ||
-                vHot != m_vThumbHot || hHot != m_hThumbHot) {
+                vHot != m_view.vThumbHot || hHot != m_view.hThumbHot) {
                 m_hotButton = b; m_hotHeader = h;
-                m_vThumbHot = vHot; m_hThumbHot = hHot;
+                m_view.vThumbHot = vHot; m_view.hThumbHot = hHot;
                 Repaint();
             }
             return 0;
         }
 
-        case WM_LBUTTONUP:
-            if (m_drag != Drag::None) {
-                m_drag = Drag::None;
-                ReleaseCapture();
-                Repaint();
-            }
-            return 0;
-
-        // The drag can be cancelled by something other than the button coming
-        // up — an Alt+Tab, a message box. Without this the panel would think it
-        // was still dragging and every mouse-move would scroll.
-        case WM_CAPTURECHANGED:
-            m_drag = Drag::None;
-            Repaint();
-            return 0;
+        // No WM_LBUTTONUP / WM_CAPTURECHANGED cases for the bars: the base owns
+        // the drag from grab to release, including the Alt+Tab and message-box
+        // cases that end one without a button-up.
 
         case WM_LBUTTONDOWN: {
             SetFocus(GetHwnd());
@@ -690,33 +653,8 @@ LRESULT RemoteLogWnd::HandlePanelMessage(UINT message, WPARAM wParam, LPARAM lPa
             const int h = HitTestHeader(pt);
             if (h >= 0) { DoSort(m_columns[h].key); return 0; }
 
-            // --- The drawn scrollbars ---------------------------------------
-            // Thumb → drag. Track above/below the thumb → page, the same as a
-            // native bar, so the muscle memory carries over.
-            if (PtInRect(&m_vThumb, pt)) {
-                m_drag           = Drag::Vert;
-                m_dragGrabPx     = pt.y - m_vThumb.top;
-                m_dragThumbSpan  = RectH(m_vThumb);
-                SetCapture(GetHwnd());
-                return 0;
-            }
-            if (PtInRect(&m_vTrack, pt)) {
-                ScrollTo(m_scrollX,
-                         m_scrollY + (pt.y < m_vThumb.top ? -ViewHeightPx() : ViewHeightPx()));
-                return 0;
-            }
-            if (PtInRect(&m_hThumb, pt)) {
-                m_drag          = Drag::Horz;
-                m_dragGrabPx    = pt.x - m_hThumb.left;
-                m_dragThumbSpan = RectW(m_hThumb);
-                SetCapture(GetHwnd());
-                return 0;
-            }
-            if (PtInRect(&m_hTrack, pt)) {
-                ScrollTo(m_scrollX + (pt.x < m_hThumb.left ? -ViewWidthPx() : ViewWidthPx()),
-                         m_scrollY);
-                return 0;
-            }
+            // Neither bar reaches here: the base consumes thumb and track
+            // clicks on BOTH axes, drags them, and pages the tracks.
 
             // Last, so the bars and the header get the click first.
             const int r = HitTestRow(pt);
@@ -890,7 +828,7 @@ LRESULT RemoteLogWnd::HandlePanelMessage(UINT message, WPARAM wParam, LPARAM lPa
             const int hdrY = HeaderTopPx();
             {
                 SelectObject(bb, m_hFontSmall);
-                int x = pad - m_scrollX;
+                int x = pad - m_view.scrollX;
                 for (Column &c : m_columns) {
                     const int cw = static_cast<int>(c.width * s);
                     c.headerRect = {x, hdrY, x + cw, hdrY + hdrH};
@@ -938,13 +876,13 @@ LRESULT RemoteLogWnd::HandlePanelMessage(UINT message, WPARAM wParam, LPARAM lPa
                 // Only the visible band is drawn. With CAPACITY at 20000 the
                 // difference between this and painting every row is the
                 // difference between a panel that scrolls and one that does not.
-                const int first = std::max(0, m_scrollY / rowH);
+                const int first = std::max(0, m_view.scrollY / rowH);
                 const int last  = std::min(static_cast<int>(m_rows.size()),
                                            first + (listBot - listTop) / rowH + 2);
 
                 for (int i = first; i < last; ++i) {
                     const RL::Entry &e = m_rows[static_cast<size_t>(i)];
-                    const int y = listTop + i * rowH - m_scrollY;
+                    const int y = listTop + i * rowH - m_view.scrollY;
 
                     RECT rr{pad, y, pad + ViewWidthPx(), y + rowH};
                     // Banded so the eye keeps its place across seven columns of
@@ -955,7 +893,7 @@ LRESULT RemoteLogWnd::HandlePanelMessage(UINT message, WPARAM wParam, LPARAM lPa
 
                     const bool out = (e.dir == RL::Direction::Out);
 
-                    int x = pad - m_scrollX;
+                    int x = pad - m_view.scrollX;
                     auto cell = [&](int colIndex, const std::wstring &t, COLORREF col) {
                         const int cw = static_cast<int>(m_columns[colIndex].width * s);
                         SetTextColor(bb, col);
@@ -1007,53 +945,23 @@ LRESULT RemoteLogWnd::HandlePanelMessage(UINT message, WPARAM wParam, LPARAM lPa
             // The rects are stored as they are drawn, and the hit tests read
             // exactly what is on screen. An empty rect means "that axis does not
             // overflow", which is also how the hit test knows to ignore it.
+            //
+            // THE ONE PLACE BOTH BARS APPEAR AT ONCE, so this is what exercises
+            // Layout's corner handling: each track spans only its own axis's
+            // view extent, leaving the bottom-right square unclaimed by either.
             {
-                const int sbW = static_cast<int>(Constants::Dedicated::PANEL_SCROLLBAR_W * s);
-                const int minT = static_cast<int>(Constants::Dedicated::PANEL_SCROLL_MIN_H * s);
-                const int viewW = ViewWidthPx();
-                const int viewH = ViewHeightPx();
-                const int contW = ContentWidthPx();
-                const int contH = ContentHeightPx();
+                const int sbW = UI::ScrollBarThicknessPx(s);
 
-                m_vTrack = {}; m_vThumb = {};
-                m_hTrack = {}; m_hThumb = {};
+                m_view.contentW = ContentWidthPx();
+                m_view.contentH = ContentHeightPx();
 
-                if (contH > viewH && viewH > 0) {
-                    m_vTrack = {W - pad - sbW, listTop, W - pad, listTop + viewH};
-                    FillRect(bb, &m_vTrack, Gdi::Brush(PC::SCROLL_TRACK));
+                // The region is the full band the table may occupy; Layout takes
+                // a bar's width back out of whichever axes actually need one.
+                m_view.Layout(RECT{pad, listTop,
+                                   W - pad, listTop + ViewHeightPx() + sbW}, sbW);
 
-                    // Proportional, floored so it stays grabbable: with 20000
-                    // entries the honest height would be a couple of pixels.
-                    int th = std::max(minT, MulDiv(viewH, viewH, contH));
-                    th = std::min(th, viewH);
-                    const int travel = std::max(0, viewH - th);
-                    const int ty = listTop +
-                                   (contH > viewH ? MulDiv(m_scrollY, travel, contH - viewH) : 0);
-
-                    m_vThumb = {m_vTrack.left + static_cast<int>(2 * s), ty,
-                                m_vTrack.right - static_cast<int>(2 * s), ty + th};
-                    FillRect(bb, &m_vThumb, Gdi::Brush(
-                        (m_vThumbHot || m_drag == Drag::Vert) ? PC::SCROLL_THUMB_HOT
-                                                             : PC::SCROLL_THUMB));
-                }
-
-                if (contW > viewW && viewW > 0) {
-                    const int hy = listTop + viewH;
-                    m_hTrack = {pad, hy, pad + viewW, hy + sbW};
-                    FillRect(bb, &m_hTrack, Gdi::Brush(PC::SCROLL_TRACK));
-
-                    int tw = std::max(minT, MulDiv(viewW, viewW, contW));
-                    tw = std::min(tw, viewW);
-                    const int travel = std::max(0, viewW - tw);
-                    const int tx = pad +
-                                   (contW > viewW ? MulDiv(m_scrollX, travel, contW - viewW) : 0);
-
-                    m_hThumb = {tx, m_hTrack.top + static_cast<int>(2 * s),
-                                tx + tw, m_hTrack.bottom - static_cast<int>(2 * s)};
-                    FillRect(bb, &m_hThumb, Gdi::Brush(
-                        (m_hThumbHot || m_drag == Drag::Horz) ? PC::SCROLL_THUMB_HOT
-                                                             : PC::SCROLL_THUMB));
-                }
+                DrawBars(bb, m_view, s,
+                         UI::ThemeScrollBarColors(app.themeFactor));
             }
 
             // ── Footer ───────────────────────────────────────────────────────
@@ -1128,7 +1036,7 @@ void RemoteLogEntryWnd::ShowEntry(const Remote::Log::Entry &e) {
 
     // Back to the top for a new entry: stepping to the next one and landing
     // halfway down its Response is not where anybody wants to start reading.
-    m_scrollY = 0;
+    m_view.scrollY = 0;
 
     if (!IsVisible()) ShowCenterOverParent();
     else              SetForegroundWindow(GetHwnd());
@@ -1211,8 +1119,15 @@ int RemoteLogEntryWnd::ViewHeightPx() const {
 }
 
 void RemoteLogEntryWnd::ScrollTo(int y) {
-    m_scrollY = std::clamp(y, 0, std::max(0, m_contentH - ViewHeightPx()));
+    m_view.scrollY = y;
+    m_view.Clamp();
     Repaint();
+}
+
+// One wheel "line" is a text line of the detail body. The base applies the
+// user's Mouse setting and the Shift accelerator on top.
+int RemoteLogEntryWnd::ScrollLinePx(const UI::ScrollView &) const {
+    return static_cast<int>(16 * app.dpiScale);
 }
 
 bool RemoteLogEntryWnd::OnKeyDown(WPARAM vk, bool /*ctrl*/, bool /*shift*/, bool /*alt*/) {
@@ -1224,10 +1139,10 @@ bool RemoteLogEntryWnd::OnKeyDown(WPARAM vk, bool /*ctrl*/, bool /*shift*/, bool
         case VK_RIGHT:
         case VK_NEXT:  DoStep(+1); return true;
 
-        case VK_UP:    ScrollTo(m_scrollY - static_cast<int>(24 * app.dpiScale)); return true;
-        case VK_DOWN:  ScrollTo(m_scrollY + static_cast<int>(24 * app.dpiScale)); return true;
+        case VK_UP:    ScrollTo(m_view.scrollY - static_cast<int>(24 * app.dpiScale)); return true;
+        case VK_DOWN:  ScrollTo(m_view.scrollY + static_cast<int>(24 * app.dpiScale)); return true;
         case VK_HOME:  ScrollTo(0); return true;
-        case VK_END:   ScrollTo(m_contentH); return true;
+        case VK_END:   ScrollTo(m_view.MaxScrollY()); return true;
         case 'C':      DoCopy(); return true;
         default: break;
     }
@@ -1245,19 +1160,13 @@ LRESULT RemoteLogEntryWnd::HandlePanelMessage(UINT message, WPARAM wParam, LPARA
             return TRUE;
         }
 
+        // A thumb drag never reaches here — the base holds capture for it.
         case WM_MOUSEMOVE: {
             POINT pt{GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam)};
-            if (m_dragging) {
-                const int travel = std::max(1, RectH(m_track) - m_dragThumbSpan);
-                const int wanted = pt.y - m_track.top - m_dragGrabPx;
-                ScrollTo(MulDiv(std::clamp(wanted, 0, travel),
-                                std::max(0, m_contentH - ViewHeightPx()), travel));
-                return 0;
-            }
             const int b = HitTestBtn(pt);
-            const bool tHot = PtInRect(&m_thumb, pt) != 0;
-            if (b != m_hotBtn || tHot != m_thumbHot) {
-                m_hotBtn = b; m_thumbHot = tHot;
+            const bool tHot = PtInRect(&m_view.vThumb, pt) != 0;
+            if (b != m_hotBtn || tHot != m_view.vThumbHot) {
+                m_hotBtn = b; m_view.vThumbHot = tHot;
                 Repaint();
             }
             return 0;
@@ -1278,30 +1187,8 @@ LRESULT RemoteLogEntryWnd::HandlePanelMessage(UINT message, WPARAM wParam, LPARA
                 }
                 return 0;
             }
-            if (PtInRect(&m_thumb, pt)) {
-                m_dragging      = true;
-                m_dragGrabPx    = pt.y - m_thumb.top;
-                m_dragThumbSpan = RectH(m_thumb);
-                SetCapture(GetHwnd());
-                return 0;
-            }
-            if (PtInRect(&m_track, pt))
-                ScrollTo(m_scrollY + (pt.y < m_thumb.top ? -ViewHeightPx() : ViewHeightPx()));
-            return 0;
-        }
-
-        case WM_LBUTTONUP:
-            if (m_dragging) { m_dragging = false; ReleaseCapture(); Repaint(); }
-            return 0;
-
-        case WM_CAPTURECHANGED:
-            m_dragging = false;
-            Repaint();
-            return 0;
-
-        case WM_MOUSEWHEEL: {
-            const int delta = GET_WHEEL_DELTA_WPARAM(wParam);
-            ScrollTo(m_scrollY - (delta / WHEEL_DELTA) * static_cast<int>(48 * app.dpiScale));
+            // The bar never reaches here — the base consumes thumb and track
+            // clicks, holds capture for the drag, and drives both wheels.
             return 0;
         }
 
@@ -1333,7 +1220,7 @@ LRESULT RemoteLogEntryWnd::HandlePanelMessage(UINT message, WPARAM wParam, LPARA
             const int btnH  = static_cast<int>(BTN_H * s);
             const int lblW  = static_cast<int>(DETAIL_LBL * s);
             const int gap   = static_cast<int>(DETAIL_GAP * s);
-            const int sbW   = static_cast<int>(Constants::Dedicated::PANEL_SCROLLBAR_W * s);
+            const int sbW   = UI::ScrollBarThicknessPx(s);
 
             // ── Title ────────────────────────────────────────────────────────
             SelectObject(bb, m_hFontBold);
@@ -1404,18 +1291,22 @@ LRESULT RemoteLogEntryWnd::HandlePanelMessage(UINT message, WPARAM wParam, LPARA
                                   DT_LEFT | DT_WORDBREAK | DT_CALCRECT | DT_EDITCONTROL);
                         h += std::max(static_cast<int>(18 * s), RectH(mr)) + gap;
                     }
-                    m_contentH = h;
-                    if (m_contentH <= viewH || valueRight != W - pad) break;
+                    m_view.contentH = h;
+                    if (m_view.contentH <= viewH || valueRight != W - pad) break;
                     valueRight = W - pad - sbW; // needs a bar: measure again narrower
                 }
             }
-            m_scrollY = std::clamp(m_scrollY, 0, std::max(0, m_contentH - viewH));
+
+            // Which bar, where the body goes, and the clamp — one call. The
+            // measure loop above already decided the wrap width, so the region
+            // handed over here matches what was measured against.
+            m_view.Layout(RECT{pad, listTop, W - pad, listTop + viewH}, sbW);
 
             {
                 const int saved = SaveDC(bb);
                 IntersectClipRect(bb, pad, listTop, W - pad, listTop + viewH);
 
-                int y = listTop - m_scrollY;
+                int y = listTop - m_view.scrollY;
                 for (const Field &f : m_fields) {
                     SelectObject(bb, m_hFontBody);
                     RECT vr{pad + lblW, y, valueRight, y};
@@ -1444,23 +1335,8 @@ LRESULT RemoteLogEntryWnd::HandlePanelMessage(UINT message, WPARAM wParam, LPARA
             }
 
             // ── Scrollbar ────────────────────────────────────────────────────
-            m_track = {}; m_thumb = {};
-            if (m_contentH > viewH && viewH > 0) {
-                m_track = {W - pad - sbW, listTop, W - pad, listTop + viewH};
-                FillRect(bb, &m_track, Gdi::Brush(PC::SCROLL_TRACK));
-
-                const int minT = static_cast<int>(Constants::Dedicated::PANEL_SCROLL_MIN_H * s);
-                int th = std::max(minT, MulDiv(viewH, viewH, m_contentH));
-                th = std::min(th, viewH);
-                const int travel = std::max(0, viewH - th);
-                const int ty = listTop + MulDiv(m_scrollY, travel,
-                                                std::max(1, m_contentH - viewH));
-
-                m_thumb = {m_track.left + static_cast<int>(2 * s), ty,
-                           m_track.right - static_cast<int>(2 * s), ty + th};
-                FillRect(bb, &m_thumb, Gdi::Brush(
-                    (m_thumbHot || m_dragging) ? PC::SCROLL_THUMB_HOT : PC::SCROLL_THUMB));
-            }
+            DrawBars(bb, m_view, s,
+                     UI::ThemeScrollBarColors(app.themeFactor));
 
             BitBlt(dc, 0, 0, W, H, bb, 0, 0, SRCCOPY);
             EndPaint(GetHwnd(), &ps);
@@ -1516,7 +1392,7 @@ void RemoteLogEntryWnd::Repaint() {
     if (GetHwnd()) InvalidateRect(GetHwnd(), nullptr, FALSE);
 }
 
-int RemoteLogEntryWnd::ContentHeightPx() { return m_contentH; }
+int RemoteLogEntryWnd::ContentHeightPx() { return m_view.contentH; }
 
 // =============================================================================
 // Paint helpers

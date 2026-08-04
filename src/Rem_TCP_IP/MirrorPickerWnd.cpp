@@ -1,6 +1,5 @@
 #include "MirrorPickerWnd.h"
 #include "RemoteMirror.h"
-#include "RemoteExec.h"   // BuildSyncPayload — the Sync now button
 #include "RemoteProtocol.h" // FormatEndpoint — brackets IPv6 literals for display
 
 #include "AppState.h"
@@ -215,17 +214,14 @@ void MirrorPickerWnd::DoSyncSelected() {
     // image path and goes only to instances that share this filesystem; the
     // portable one names the file without a path, because a drive letter from
     // here means nothing there.
-    const std::wstring full     = L"Sync " + Remote::BuildSyncPayload(true);
-    const std::wstring portable = L"Sync " + Remote::BuildSyncPayload(false);
+    // THROUGH ExecuteCommand, not straight at the sender threads. This button
+    // and the Remote Bindings menu item are the same act, and a panel that
+    // reached the targets by its own route would skip the mirror gate and drift
+    // from the menu the first time either changed. The count and the overlay
+    // come from the command; this panel only says it happened.
+    InputManager::ExecuteCommand(m_hParent, Command::MirrorSyncNow);
 
-    int n = 0;
-    for (const RowView &r : m_rows) {
-        if (!r.mirroring) continue;
-        Remote::Mirror::SendTo(r.id, r.sameMachine ? full : portable);
-        ++n;
-    }
-
-    m_status = L"Sent folder · image · view to " + std::to_wstring(n) + L" instance(s)";
+    m_status = L"Sent folder · image · view";
     Repaint();
 }
 

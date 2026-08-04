@@ -305,6 +305,36 @@ namespace Constants {
             return D2D1::ColorF(v, v, v, alpha);
         }
 
+        // =====================================================================
+        // Scrollbar — ONE set, for every scrolled surface in the app.
+        //
+        // There were four: HelpWindow and ExifWindow had byte-identical values
+        // written out twice, HistoryPanel had its own darker pair, and the
+        // Dedicated panel used flat COLORREFs that ignored the theme factor
+        // entirely — so the same control changed colour depending on which
+        // window it was in, and one of them did not follow the theme at all.
+        //
+        // The Help/Exif values win because two panels already agreed on them.
+        // The HOT thumb comes from the Dedicated set, which was the only one
+        // that had a hover state worth keeping.
+        //
+        // Read through UI::ThemeScrollBarColors(app.themeFactor); nothing should
+        // reach for these directly.
+        namespace Scrollbar {
+            // track (50,50,55), thumb (150,150,160), hot thumb (132,156,196)
+            constexpr float TRACK_R = 0.1961f + DEFAULT_THEME_FACTOR * (1.0f - 2.0f * 0.1961f);
+            constexpr float TRACK_G = 0.1961f + DEFAULT_THEME_FACTOR * (1.0f - 2.0f * 0.1961f);
+            constexpr float TRACK_B = 0.2157f + DEFAULT_THEME_FACTOR * (1.0f - 2.0f * 0.2157f);
+
+            constexpr float THUMB_R = 0.5882f + DEFAULT_THEME_FACTOR * (1.0f - 2.0f * 0.5882f);
+            constexpr float THUMB_G = 0.5882f + DEFAULT_THEME_FACTOR * (1.0f - 2.0f * 0.5882f);
+            constexpr float THUMB_B = 0.6275f + DEFAULT_THEME_FACTOR * (1.0f - 2.0f * 0.6275f);
+
+            constexpr float THUMB_HOT_R = 0.5176f + DEFAULT_THEME_FACTOR * (1.0f - 2.0f * 0.5176f);
+            constexpr float THUMB_HOT_G = 0.6118f + DEFAULT_THEME_FACTOR * (1.0f - 2.0f * 0.6118f);
+            constexpr float THUMB_HOT_B = 0.7686f + DEFAULT_THEME_FACTOR * (1.0f - 2.0f * 0.7686f);
+        }
+
         // Runtime-themed grayscale GDI color
         inline COLORREF ThemedGray(float base, float factor) {
             return RGB(ToByte(Apply(base, factor)), ToByte(Apply(base, factor)), ToByte(Apply(base, factor)));

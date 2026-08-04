@@ -131,6 +131,12 @@ namespace UI {
         return remoteWnd;
     }
 
+    RemoteClientsWnd &UIManager::getRemoteClientsWindow() {
+        if (isInit(remoteClientsWnd)) return remoteClientsWnd;
+        remoteClientsWnd.Init(m_hInstance, m_hMainWnd);
+        return remoteClientsWnd;
+    }
+
     RemotesWnd &UIManager::getRemotesConsoleWindow() {
         if (isInit(remotesWnd)) return remotesWnd;
         remotesWnd.Init(m_hInstance, m_hMainWnd);
