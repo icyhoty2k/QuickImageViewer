@@ -72,9 +72,9 @@ namespace Remote::Xfer {
     //
     // THREAD-SAFE, and it has to be — this runs on a socket thread, not the UI
     // thread. It creates its OWN WIC factory rather than touching app.wicFactory,
-    // for the same reason the decoder workers do (see the threading rules in
-    // CLAUDE.md): a COM object created on one apartment is not free to use from
-    // another. Requires CoInitializeEx on the calling thread.
+    // for the same reason the decoder workers do: a COM object created on one
+    // apartment is not free to use from another. Requires CoInitializeEx on the
+    // calling thread.
     bool BuildPreviewJpeg(const std::wstring &path, int maxDim, int quality,
                           std::vector<unsigned char> &out, std::wstring &errOut);
 
