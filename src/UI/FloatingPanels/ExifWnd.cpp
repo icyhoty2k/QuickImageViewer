@@ -661,10 +661,13 @@ namespace UI {
                         Constants::Theme::ExifWindow::SECTION_R,
                         Constants::Theme::ExifWindow::SECTION_G,
                         Constants::Theme::ExifWindow::SECTION_B, app.themeFactor);
+                // The SECTION HEADER stripe. It read SCROLLBAR_TRACK_* until the
+                // scrollbar palette moved out from under it — same colour, name
+                // now says what it paints.
                 const COLORREF clrSBg = Constants::Theme::ThemedColor(
-                        Constants::Theme::ExifWindow::SCROLLBAR_TRACK_R,
-                        Constants::Theme::ExifWindow::SCROLLBAR_TRACK_G,
-                        Constants::Theme::ExifWindow::SCROLLBAR_TRACK_B, app.themeFactor);
+                        Constants::Theme::ExifWindow::SECTION_BG_R,
+                        Constants::Theme::ExifWindow::SECTION_BG_G,
+                        Constants::Theme::ExifWindow::SECTION_BG_B, app.themeFactor);
 
                 FillRect(hdc, &rc, UI::Gdi::Brush(clrBg));
 

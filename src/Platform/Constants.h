@@ -157,8 +157,8 @@ namespace Constants {
     // is the only thing that should read these.
     // =========================================================================
     namespace Scrollbar {
-        constexpr int THICKNESS = 12; // strip width / height
-        constexpr int MIN_THUMB = 28; // shortest the thumb may get, either axis
+        constexpr int THICKNESS = 10; // strip width / height
+        constexpr int MIN_THUMB = 14; // shortest the thumb may get, either axis
     }
 
     namespace Dedicated {
@@ -193,11 +193,10 @@ namespace Constants {
             constexpr COLORREF SCROLL_THUMB_HOT = RGB(132, 156, 196);
         }
 
-        // Scrollbar geometry lives in Constants::Scrollbar now — one thickness
-        // for every panel. These are aliases so existing call sites keep
-        // reading, and they cannot drift from the shared numbers.
-        constexpr int PANEL_SCROLLBAR_W  = Scrollbar::THICKNESS;
-        constexpr int PANEL_SCROLL_MIN_H = Scrollbar::MIN_THUMB;
+        // Scrollbar geometry is Constants::Scrollbar, reached through
+        // UI::ScrollBarThicknessPx / ScrollBarMinThumbPx. The PANEL_SCROLLBAR_W
+        // and PANEL_SCROLL_MIN_H aliases that briefly bridged the two are gone —
+        // every call site reads the shared names directly.
 
         // Promotion weighting. A promo's weight is its relative chance of being
         // drawn; 65535 is ~65535× more likely than 1.
@@ -1419,10 +1418,9 @@ namespace Constants {
         constexpr int HISTORY_FONT_SIZE = 14; // pt at 96 DPI — header / hint lines
         constexpr int HISTORY_LIST_FONT_SIZE = 16; // pt at 96 DPI — list item text (tune independently)
         constexpr int HISTORY_FILTER_ROW_H = 24; // px at 96 DPI — filter input row below the footer
-        // Scrollbar (right-edge GDI strip) - geometry only
-        constexpr int SCROLLBAR_THICKNESS = 6; // px width
-        constexpr int SCROLLBAR_MIN_THUMB = 16; // minimum thumb height in px
-        // Note: Scrollbar colors moved to ConstantsTheme.h
+        // Scrollbar geometry and colours are Constants::Scrollbar and
+        // Constants::Theme::Scrollbar — one set for every scrolled surface.
+        // This panel's own 6px width and 16px thumb are gone with them.
 
         // How long the startup folder sweep waits before touching the disk.
         // It runs at background I/O priority anyway, but holding off entirely
