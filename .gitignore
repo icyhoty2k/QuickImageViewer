@@ -25,3 +25,27 @@ build/
 # Marker dropped by the CLion Run configuration to suppress the build-number
 # increment for that build. Transient, machine-local.
 .qiv_skip_build_number
+
+# Local AI/agent tooling working files and generated notes. Machine-local, never
+# part of this project. Both forms of .claude are listed on purpose: the trailing
+# slash matches only a directory, the bare name also matches the placeholder FILE
+# used to stop the directory being recreated.
+.claude
+.claude/
+CLAUDE.md
+AGENTS.md
+GEMINI.md
+codemap.md
+**/codemap.md
+.cursor/
+.aider*
+.opencode/
+.continue/
+.windsurf/
+.codeium/
+.cline/
+.roo/
+.gemini/
+.zed/
+.mcp.json
+mcp-scripts/
