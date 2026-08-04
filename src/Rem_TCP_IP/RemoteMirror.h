@@ -238,7 +238,24 @@ namespace Remote::Mirror {
     // `skippedRemote` receives how many controlled targets were left out for
     // being on another machine, so the caller can say so rather than reporting a
     // push to screens that were never asked.
-    int SendImagePosition(const PushRequest &req, int *skippedRemote = nullptr);
+    // `everyConnected` ignores the Ctrl+F11 Control ticks and pushes to every
+    // connected same-machine target — Ctrl+Shift+Enter. The same-machine rule is
+    // NOT relaxed by it: that one comes from the payload carrying a folder path
+    // and an index, which no target list can make meaningful elsewhere.
+    int SendImagePosition(const PushRequest &req, int *skippedRemote = nullptr,
+                          bool everyConnected = false);
+
+    // --- "Sync now": stamp this viewer's whole look onto the controlled ones ---
+    //
+    // The two payloads are built by the CALLER, not here, because building them
+    // needs RemoteExec and this module has no business depending on it. What
+    // this decides is the part only it can: WHICH spelling each target gets.
+    // `full` carries the folder and the image path and is only meaningful to an
+    // instance sharing this filesystem; `portable` names the file without a
+    // path, for everyone else.
+    //
+    // Returns how many targets were sent to.
+    int SyncNow(const std::wstring &full, const std::wstring &portable);
 
     // --- Alt+Enter: STREAM one image there, shown once ------------------------
     //

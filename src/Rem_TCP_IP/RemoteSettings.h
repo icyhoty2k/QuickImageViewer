@@ -206,6 +206,52 @@ namespace Remote {
     // decision.
     bool LooksLikeAddress(const std::wstring &s);
 
+    // THE UNIT A PUNISHMENT APPLIES TO, which is not always a single address.
+    //
+    // Counting failed passwords per exact address is the obvious rule and it is
+    // useless against IPv6. A residential v6 connection is handed a /64 — 2^64
+    // addresses, all equally usable, and changing between them costs nothing.
+    // An attacker rotates after every fifth guess and no counter ever reaches
+    // its threshold; worse, the rotation evicts the table's real entries and
+    // fills the blacklist with rows that each block one address out of
+    // eighteen quintillion.
+    //
+    // So a v6 peer is tracked and blocked as its /64, returned as a CIDR string
+    // ("2001:db8:abcd:1234::/64") that AddressMatches already understands — the
+    // blacklist stores it verbatim and matches the whole prefix with no changes
+    // of its own.
+    //
+    // v4 is returned UNCHANGED. There the address is the smallest unit a peer
+    // actually controls, and widening to a prefix would punish a whole ISP —
+    // and under CGNAT, thousands of unrelated subscribers — for one attacker.
+    //
+    // THE COST, stated plainly: a /64 is one household, so this blocks the
+    // attacker's whole connection rather than one address of it. That is the
+    // intent. It also means a legitimate client sharing that /64 is blocked
+    // with them, which is the correct trade when the alternative is a guard
+    // that does not work at all.
+    std::wstring BlockScope(const std::wstring &address);
+
+    // Are these two strings the SAME HOST?
+    //
+    // Not `a == b`. One address has many spellings and IPv6 has more than most:
+    // "fe80::1", "fe80:0:0:0:0:0:0:1" and "FE80::1" are one machine, and
+    // "127.0.0.1" and "127.000.000.001" are another. Compared as text they are
+    // all different, which is how the Remote Servers list ends up with two rows
+    // driving one instance — each getting every mirrored command once, and the
+    // console showing two dots for one screen.
+    //
+    // Both sides are parsed and compared as BYTES when they are literals, so
+    // spelling stops mattering. Anything that does not parse — a host name — is
+    // compared case-insensitively as text, which is the right rule for names:
+    // "lobby-pc" and "LOBBY-PC" are the same host, and resolving them to decide
+    // would put DNS inside a list-management decision.
+    //
+    // A NAME AND A LITERAL ARE NEVER EQUAL here, even when the name resolves to
+    // that address. Saying otherwise would need a lookup per comparison, and the
+    // answer could change between two calls.
+    bool SameHost(const std::wstring &a, const std::wstring &b);
+
     // Rejoins for storage. Comma-separated, no spaces.
     std::wstring JoinList(const std::vector<std::wstring> &items);
 

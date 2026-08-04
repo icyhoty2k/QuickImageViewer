@@ -4,6 +4,7 @@
 #include <vector>
 #include "UI/FloatingPanels/FloatingPanelWnd.h"
 #include "UI/CustomControls/InputBox.h"
+#include "UI/CustomControls/ScrollView.h"
 #include "DedicatedInstance.h"
 
 // =============================================================================
@@ -133,16 +134,15 @@ class DedicatedWnd : public FloatingPanelWnd {
         void Repaint();
         int  HitTestRow(POINT pt) const;
         int  HitTestButton(POINT pt) const;
-        void ClampScroll();
 
-        // Scrollbar geometry, recomputed each paint. Kept as members so the
-        // mouse handlers hit-test exactly what was drawn.
-        RECT m_trackRect{};
-        RECT m_thumbRect{};
-        bool m_thumbHot     = false;
-        bool m_draggingThumb = false;
-        int  m_dragGrabDY   = 0; // cursor offset inside the thumb when grabbed
-        int  m_dragStartScroll = 0;
+        // The list's scroll state. Was eight separate members and a private
+        // ClampScroll(); the interactions on top of them now live in the base,
+        // so this panel contributes only the two overrides below.
+        // See UI/CustomControls/ScrollView.h.
+        ScrollView m_list;
+
+        ScrollView *ScrollViewAt(POINT) override { return &m_list; }
+        int ScrollLinePx(const ScrollView &) const override;
 
         Dedicated::InstanceConfig m_cfg;
         std::wstring              m_targetFolder; // where the copy was generated
@@ -152,9 +152,6 @@ class DedicatedWnd : public FloatingPanelWnd {
         int  m_selected  = 0;
         int  m_hotRow    = -1; // under the cursor — drives the hand cursor
         int  m_hotButton = -1;
-        int  m_scrollY   = 0;
-        int  m_contentH  = 0;
-        int  m_viewportH = 0;
 
         InputBox m_edit;
         int      m_editingRow = -1;

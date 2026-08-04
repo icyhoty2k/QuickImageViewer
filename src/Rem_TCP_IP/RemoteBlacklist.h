@@ -57,6 +57,9 @@ namespace Remote::Blacklist {
     // Is this peer refused? Matches with Remote::AddressMatches, so a trailing
     // "*" covers a subnet exactly as it does in the AllowList.
     //
+    // Answers for BOTH lists — the permanent file-backed one and the timed
+    // blocks below. One question, one answer, one place the accept path calls.
+    //
     // ON THE ACCEPT PATH: one mutex and a linear scan of a list that is empty in
     // any ordinary install. Deliberately not an index — an ordered container
     // cannot answer a wildcard match, and building one to serve the empty case
@@ -76,5 +79,43 @@ namespace Remote::Blacklist {
     // from socket threads.
     std::vector<Entry> Snapshot();
     size_t Count();
+
+    // =========================================================================
+    // TIMED BLOCKS — a kick that keeps the peer out for a while.
+    //
+    // IN MEMORY ONLY, AND DELIBERATELY SO. Nothing here is written to
+    // qivRemoteServerBlacklist.ini and nothing survives a restart. A temporary
+    // block that outlived the process would be neither temporary nor visible —
+    // the file is the permanent list, the thing you read to find out who is
+    // barred, and salting it with entries that expire would make it answer that
+    // question wrongly. Restarting qIV clears every timed block, which is the
+    // documented escape hatch when you have shut yourself out.
+    //
+    // Kept in this module rather than beside the socket because IsBlocked is the
+    // ONE question the accept path asks, and it must have ONE answer. A second
+    // list consulted from a second place is how an address ends up blocked by
+    // one rule and admitted by another.
+    // =========================================================================
+
+    struct TimedEntry {
+        std::wstring address;      // literal or pattern, exactly like Entry
+        std::wstring reason;
+        long long    untilMs = 0;  // GetTickCount64 base; past means expired
+    };
+
+    // Blocks `address` for `minutes`, replacing any timed block already on it
+    // (the new expiry wins, whether it is longer or shorter — the operator's
+    // most recent decision is the current one).
+    //
+    // Bounded by Constants::RemoteTcpIp::TIMED_BLOCK_MAX so a script driving the
+    // panel cannot grow the table without limit; the soonest-expiring entry is
+    // dropped when it is full, since that is the one closest to being irrelevant.
+    void AddTimed(const std::wstring &address, int minutes, const std::wstring &reason);
+
+    // Lifts a timed block early. False when that address had none.
+    bool ClearTimed(const std::wstring &address);
+
+    // Live timed blocks, expired ones removed. For the panel's list.
+    std::vector<TimedEntry> TimedSnapshot();
 
 } // namespace Remote::Blacklist

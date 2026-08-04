@@ -805,6 +805,39 @@ bool ShowInterjectedImage(HWND hWnd) {
     // not keep firing over it.
     KillTimer(hWnd, Constants::Slideshow::GIF_TIMER_ID);
     InvalidateRect(hWnd, nullptr, FALSE);
+
+    // TELL THE WATCHERS. This is a picture change like any other, and until now
+    // it was the ONE that announced nothing:
+    //
+    //   • The playlist index does not move, so the ImageChanged emitted further
+    //     up this file — which is keyed to an index change — never fires.
+    //   • The observer echo in ExecuteCommand is skipped for anything that came
+    //     from the wire, so `StreamImageShow` does not echo either.
+    //   • With a slideshow running this does not even happen at command time: it
+    //     happens later, on the slide-boundary timer, with no command in flight
+    //     at all.
+    //
+    // The result was a client that pushed a picture, saw it appear on the far
+    // screen, and had no way to learn that it had — its preview showed whatever
+    // was underneath. Announced here, at the moment it actually goes up, which
+    // is the only place that is true for all three paths above.
+    //
+    // SENT TO EVERY OBSERVER INCLUDING THE ONE THAT PUSHED IT. This is an
+    // announcement, not a command echo — it instructs nothing, and a client that
+    // wants the picture asks for it — so there is no bounce to guard against.
+    // The sender is precisely who needs it most.
+    //
+    // The index is the playlist's, unchanged and meaningless for a one-shot; the
+    // NAME is what identifies it, which is what a remote client keys on anyway.
+    if (Remote::HasObservers()) {
+        const std::wstring name =
+            app.interject.path.substr(app.interject.path.find_last_of(L"\\/") + 1);
+        Remote::EmitToObservers(
+            L"ImageChanged " + std::to_wstring(app.currentIndex + 1) + L"/" +
+                std::to_wstring(app.playlist.size()) + L" " + name,
+            Remote::CONN_NONE);
+    }
+
     return true;
 }
 

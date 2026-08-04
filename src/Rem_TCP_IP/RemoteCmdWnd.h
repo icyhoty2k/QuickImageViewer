@@ -4,6 +4,7 @@
 #include <vector>
 #include "UI/FloatingPanels/FloatingPanelWnd.h"
 #include "UI/CustomControls/InputBox.h"
+#include "UI/CustomControls/ScrollView.h"
 #include "RemoteMirror.h"   // CmdReply
 
 // =============================================================================
@@ -160,18 +161,10 @@ class RemoteCmdWnd : public FloatingPanelWnd {
         // One scrollable region. Two of them here (commands, replies) and the
         // arithmetic is identical, so it lives in one place rather than twice —
         // the drawn bar, the clamp, and the drag all read the same fields.
-        struct ScrollView {
-            RECT view{};      // where the rows are drawn, bar excluded
-            RECT track{};     // empty when the content fits
-            RECT thumb{};
-            int  scrollY   = 0;
-            int  contentH  = 0;
-            bool thumbHot  = false;
-
-            int  MaxScroll() const;
-            void Clamp();
-            void ScrollBy(int dy);
-        };
+        // ScrollView moved to UI/CustomControls/ScrollView.h when Server Clients
+        // needed the same thing — see the note in that header. Unqualified here
+        // because this class is in namespace UI.
+        using ScrollView = UI::ScrollView;
 
         struct Command {
             std::wstring name;
@@ -246,10 +239,6 @@ class RemoteCmdWnd : public FloatingPanelWnd {
         void DestroyBackBuffer();
         void Repaint();
         void EnsureSelectionVisible();
-        // Draws a view's bar and fills in its track/thumb. Empty rects when the
-        // content fits, which is also how the hit tests know to ignore it.
-        void DrawScrollBar(HDC bb, ScrollView &sv, float s, COLORREF trackCol,
-                           COLORREF thumbCol, COLORREF thumbHotCol, bool dragging);
         int  HitTestButton(POINT pt) const;
         int  HitTestCommandRow(POINT pt) const;
         int  HitTestTargetRow(POINT pt) const;
@@ -293,12 +282,15 @@ class RemoteCmdWnd : public FloatingPanelWnd {
         std::vector<int>       m_untickedIds;
         RECT m_targetsAllRect{}, m_targetsNoneRect{};
 
-        // Which bar is being dragged, if any. Held because the pointer leaves
-        // the thumb during a drag and the drag must continue.
-        enum class Drag { None, List, Log, Targets };
-        Drag m_drag = Drag::None;
-        int  m_dragGrabPx    = 0;
-        int  m_dragThumbSpan = 0;
+        // Drag state used to live here as a Drag enum naming which of the three
+        // bars was held. The base owns it now, keyed by the ScrollView pointer
+        // itself, so there is nothing to name and nothing to keep in step.
+        //
+        // Both overrides are the whole of this panel's scroll code. The POINT is
+        // load-bearing here and nowhere else in the app: three lists share one
+        // window, and the wheel has to move the one under the cursor.
+        ScrollView *ScrollViewAt(POINT pt) override;
+        int ScrollLinePx(const ScrollView &) const override;
 
         bool m_alsoLocal = false;
         RECT m_localRect{};

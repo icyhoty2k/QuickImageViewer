@@ -70,6 +70,17 @@ namespace UI::AppMenu::Ids {
         // is the fix; being able to set them from there too is the bonus.
         ID_REMOTE_MIRROR,         // F11 — forward my commands
         ID_REMOTE_EXEC_HERE,      // F12 — while mirroring, also execute locally
+        // The rest of Remote Bindings: the acts, beside the two switches. Menu
+        // entries for keys that already exist — every one resolves to the same
+        // Command its shortcut does, so there is no second implementation to
+        // drift.
+        ID_REMOTE_SYNC_NOW,       // stamp this viewer's look on the controlled ones
+        ID_REMOTE_PUSH_POS,       // Ctrl+Enter       — position, ticked screens
+        ID_REMOTE_PUSH_POS_ALL,   // Ctrl+Shift+Enter — position, every connected
+        ID_REMOTE_STREAM_OUT,     // Alt+Enter        — bytes out
+        ID_REMOTE_STREAM_IN,      // Ctrl+Alt+Enter   — bytes in
+
+        ID_REMOTE_CLIENTS,        // open the Server Clients panel   (Ctrl+F9)
 
         // Contiguous blocks. Each resolves to its Command by offset, so a block
         // never needs one case per member — see CommandForId.
@@ -100,7 +111,7 @@ namespace UI::AppMenu::Ids {
     // walks one step closer to the first band. Adding the hundredth would land ON
     // ID_WALLPAPER_FIRST and turn a menu click into a wallpaper mode — silently,
     // because both sides are just ints. Fail the build instead.
-    static_assert(ID_REMOTE_EXEC_HERE < ID_WALLPAPER_FIRST,
+    static_assert(ID_REMOTE_CLIENTS < ID_WALLPAPER_FIRST,
                   "the scalar viewer ids have grown into the wallpaper band");
 
     // ── Settings ids (< VIEWER_BASE) ────────────────────────────────────────

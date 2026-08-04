@@ -122,6 +122,7 @@ set(SOURCES
         src/UI/AppMenu/AppMenuSettings.cpp
         src/UI/AppMenu/AppMenuIO.cpp
         src/Rem_TCP_IP/RemoteWnd.cpp
+        src/Rem_TCP_IP/RemoteClientsWnd.cpp
         src/Rem_TCP_IP/RemoteMirror.cpp
         src/Rem_TCP_IP/MirrorPickerWnd.cpp
         src/Rem_TCP_IP/RemoteLog.cpp

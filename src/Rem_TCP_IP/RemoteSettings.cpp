@@ -231,6 +231,68 @@ bool LooksLikeAddress(const std::wstring &s) {
     return true;
 }
 
+bool SameHost(const std::wstring &a, const std::wstring &b) {
+    if (a.empty() || b.empty()) return false;
+
+    // v6 first: an IPv4-mapped literal ("::ffff:1.2.3.4") parses as v6 and must
+    // not be silently compared against the plain v4 form as though the two were
+    // unrelated — checking v6 first keeps both sides in the same family.
+    BYTE a6[16]{}, b6[16]{};
+    const bool aIs6 = ParseV6(a, a6);
+    const bool bIs6 = ParseV6(b, b6);
+    if (aIs6 || bIs6) {
+        if (aIs6 != bIs6) return false;
+        return memcmp(a6, b6, 16) == 0;
+    }
+
+    uint32_t a4 = 0, b4 = 0;
+    const bool aIs4 = ParseV4(a, a4);
+    const bool bIs4 = ParseV4(b, b4);
+    if (aIs4 || bIs4) {
+        if (aIs4 != bIs4) return false;   // a literal and a name are not equal
+        return a4 == b4;
+    }
+
+    // Neither parses — two host names. Case-insensitive, and nothing else: a
+    // trailing dot or a different domain suffix is a different entry as far as
+    // this list is concerned.
+    return _wcsicmp(a.c_str(), b.c_str()) == 0;
+}
+
+std::wstring BlockScope(const std::wstring &address) {
+    BYTE b[16]{};
+    // Not v6 — an IPv4 literal, or something that does not parse at all. Either
+    // way there is no prefix to widen to, and returning it untouched keeps the
+    // v4 behaviour exactly as it was.
+    if (!ParseV6(address, b)) return address;
+
+    // IPv4-MAPPED ("::ffff:192.168.1.5") IS NOT A v6 HOST. Its low 64 bits carry
+    // a v4 address, so a /64 over one would read as ::ffff:0:0/64 and block the
+    // ENTIRE IPv4 internet from a single wrong password. AcceptedPeerAddress
+    // already flattens these to dotted quad before anything here sees them, so
+    // this is a second line rather than the first — but it is the one mistake in
+    // this function that would be catastrophic rather than merely wrong.
+    bool mapped = (b[10] == 0xFF && b[11] == 0xFF);
+    for (int i = 0; i < 10 && mapped; ++i)
+        if (b[i] != 0) mapped = false;
+    if (mapped) return address;
+
+    // An all-zero prefix is "::" and its neighbours — loopback lives there, and
+    // a rule spanning it is never what anyone wants. Nothing routable arrives
+    // with one, so this is a guard, not a case.
+    if (!b[0] && !b[1] && !b[2] && !b[3] && !b[4] && !b[5] && !b[6] && !b[7])
+        return address;
+
+    // The first four groups, then "::" — the canonical way to write a /64, and
+    // what every other tool prints. Lower case and no leading zeros, so two
+    // spellings of one prefix cannot produce two blacklist rows.
+    wchar_t buf[48]{};
+    swprintf_s(buf, L"%x:%x:%x:%x::/64",
+               (b[0] << 8) | b[1], (b[2] << 8) | b[3],
+               (b[4] << 8) | b[5], (b[6] << 8) | b[7]);
+    return buf;
+}
+
 bool AddressMatches(const std::wstring &pattern, const std::wstring &addr) {
     if (pattern.empty()) return false;
     if (pattern == L"*") return true;
