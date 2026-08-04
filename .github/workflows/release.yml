@@ -1,93 +1,164 @@
-name: Release
+# Updates the PAD file and the website's JSON-LD after a release is published.
+#
+# IT DOES NOT BUILD, AND IT DOES NOT CREATE A RELEASE. It used to do both — a
+# tag push compiled the exe on a runner and published it. Releases are now made
+# by hand from a locally built exe, so this workflow only writes the metadata
+# that has to follow one.
+#
+# WHY IT TRIGGERS ON THE RELEASE AND NOT ON THE TAG. The file size comes from the
+# published asset. At tag-push time that asset does not exist yet, so the only
+# way to know its size was to build a second copy of the exe on the runner and
+# measure that — which is what the build job was really for. Reading it back from
+# the release is both simpler and more honest: it reports the size of the file
+# people actually download, not of a runner's rebuild of it.
+#
+# 'released' rather than 'published' matches winget-publish.yml: a prerelease is
+# not something the website should advertise as the current version.
+name: Update PAD and site metadata
 
 on:
-  push:
-    tags:
-      - 'v*'
-      
+  release:
+    types: [released]
+
+  # Re-runs, and the first run for a release that predates this workflow.
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Release tag to read (blank = latest published release)'
+        required: false
+        type: string
+
 permissions:
   contents: write
 
+# Two of these pushing to main at once would leave one of them rejected. They
+# are not cancelled — each run writes a different version, and dropping one
+# would silently skip a release's metadata.
+concurrency:
+  group: docs-metadata
+  cancel-in-progress: false
+
+env:
+  ASSET_NAME: QuickImageViewer.exe
+
 jobs:
-  release:
-    runs-on: windows-latest
-    outputs:
-      filesize: ${{ steps.get_size.outputs.size }} # Pass this to the next job
-    steps:
-      - name: Checkout source
-        uses: actions/checkout@v4
-
-      - name: Setup sccache
-        uses: mozilla/sccache-action@v0.0.5
-        env:
-          SCCACHE_GHA_ENABLED: "true"
-
-      - name: Setup MSVC
-        uses: ilammy/msvc-dev-cmd@v1
-
-      - name: Configure CMake
-        env:
-          SCCACHE_GHA_ENABLED: "true"
-        run: cmake -B build -DCMAKE_BUILD_TYPE=Release
-
-      - name: Build
-        env:
-          SCCACHE_GHA_ENABLED: "true"
-        run: cmake --build build --config Release
-
-      - name: Calculate File Size
-        id: get_size
-        shell: powershell
-        run: |
-          $file = Get-Item "build/Release/QuickImageViewer.exe"
-          # This formats as thousands with 2 decimal places and appends KB
-          $size = "{0:N2} KB" -f ($file.Length / 1KB)
-          echo "size=$size" >> $env:GITHUB_OUTPUT
-
-      - name: Create GitHub Release
-        uses: softprops/action-gh-release@v2
-        with:
-          files: build/Release/QuickImageViewer.exe
-          generate_release_notes: true
-
-  update-pad:
+  update-metadata:
     runs-on: ubuntu-latest
-    needs: release
-    permissions:
-      contents: write
-
     steps:
+      - name: Resolve the release
+        id: rel
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO: ${{ github.repository }}
+          EVENT_TAG: ${{ github.event.release.tag_name }}
+          INPUT_TAG: ${{ inputs.tag }}
+        run: |
+          set -euo pipefail
+
+          TAG="${EVENT_TAG:-}"
+          [ -z "$TAG" ] && TAG="${INPUT_TAG:-}"
+
+          if [ -z "$TAG" ]; then
+            echo "No tag given — falling back to the latest published release."
+            TAG="$(gh release list --limit 1 --exclude-drafts --exclude-pre-releases \
+                     --json tagName -q '.[0].tagName')"
+          fi
+
+          if [ -z "$TAG" ] || [ "$TAG" = "null" ]; then
+            echo "::error::Could not determine which release to read."
+            exit 1
+          fi
+
+          # The asset's size in bytes, and the date the release was PUBLISHED —
+          # not today's date. A re-run weeks later must not restamp the site with
+          # the day the re-run happened.
+          BYTES="$(gh release view "$TAG" --json assets \
+                     -q ".assets[] | select(.name==\"$ASSET_NAME\") | .size")"
+          PUBLISHED="$(gh release view "$TAG" --json publishedAt -q .publishedAt)"
+
+          if [ -z "$BYTES" ] || [ "$BYTES" = "null" ]; then
+            echo "::error::Release $TAG has no asset named $ASSET_NAME — nothing to measure."
+            echo "::error::Upload the exe to the release first, then re-run this workflow."
+            exit 1
+          fi
+
+          echo "tag=$TAG"                        >> "$GITHUB_OUTPUT"
+          echo "bytes=$BYTES"                    >> "$GITHUB_OUTPUT"
+          echo "date=${PUBLISHED%%T*}"           >> "$GITHUB_OUTPUT"
+          echo "Release $TAG — $BYTES bytes, published ${PUBLISHED%%T*}"
+
       - name: Checkout main
         uses: actions/checkout@v4
         with:
           ref: main
           token: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Update PAD version, date, and size
+      - name: Write the version, date and size
+        env:
+          TAG:   ${{ steps.rel.outputs.tag }}
+          BYTES: ${{ steps.rel.outputs.bytes }}
+          DATE:  ${{ steps.rel.outputs.date }}
         run: |
-          VERSION="${{ github.ref_name }}"
-          VERSION="${VERSION#v}"
-          YEAR=$(date -u +%Y)
-          MONTH=$(date -u +%m)
-          DAY=$(date -u +%d)
-          DATE_ISO=$(date -u +%Y-%m-%d)
-          SIZE="${{ needs.release.outputs.filesize }}" # Get size from release job
+          set -euo pipefail
 
-          # Update PAD XML
+          VERSION="${TAG#v}"
+          YEAR="${DATE%%-*}"
+          MONTH="$(echo "$DATE" | cut -d- -f2)"
+          DAY="$(echo "$DATE" | cut -d- -f3)"
+
+          # Thousands separators by hand rather than through printf %'d, which
+          # depends on a locale the runner is not guaranteed to have installed —
+          # and silently prints an ungrouped number when it does not.
+          group() {
+            local int="${1%.*}" frac="${1#*.}"
+            int="$(printf '%s' "$int" | rev | sed -E 's/([0-9]{3})/\1,/g' | rev | sed 's/^,//')"
+            printf '%s.%s' "$int" "$frac"
+          }
+
+          KB_PLAIN="$(awk -v b="$BYTES" 'BEGIN{printf "%.2f", b/1024}')"
+          MB_PLAIN="$(awk -v b="$BYTES" 'BEGIN{printf "%.2f", b/1048576}')"
+          KB_HUMAN="$(group "$KB_PLAIN") KB"        # e.g. 9,209.00 KB
+
+          echo "version=$VERSION  size=$KB_HUMAN  date=$DATE"
+
+          # --- PAD ----------------------------------------------------------
           sed -i "s|<Program_Version>.*</Program_Version>|<Program_Version>$VERSION</Program_Version>|" docs/pad.xml
           sed -i "s|<Program_Release_Month>.*</Program_Release_Month>|<Program_Release_Month>$MONTH</Program_Release_Month>|" docs/pad.xml
           sed -i "s|<Program_Release_Day>.*</Program_Release_Day>|<Program_Release_Day>$DAY</Program_Release_Day>|" docs/pad.xml
           sed -i "s|<Program_Release_Year>.*</Program_Release_Year>|<Program_Release_Year>$YEAR</Program_Release_Year>|" docs/pad.xml
-          
-          # Update Website JSON-LD (index.html)
+
+          # These three were left EMPTY by the old workflow, which measured a
+          # size and then only wrote it to the website. PAD readers show the
+          # download size from these fields, so an empty value reads as unknown.
+          # Plain numbers, no separators and no unit — that is what the PAD spec
+          # asks for, unlike the human string the site prints.
+          sed -i "s|<File_Size_Bytes>.*</File_Size_Bytes>|<File_Size_Bytes>$BYTES</File_Size_Bytes>|" docs/pad.xml
+          sed -i "s|<File_Size_K>.*</File_Size_K>|<File_Size_K>$KB_PLAIN</File_Size_K>|" docs/pad.xml
+          sed -i "s|<File_Size_MB>.*</File_Size_MB>|<File_Size_MB>$MB_PLAIN</File_Size_MB>|" docs/pad.xml
+
+          # --- Website JSON-LD ----------------------------------------------
           sed -i "s/\"softwareVersion\": \".*\"/\"softwareVersion\": \"$VERSION\"/" docs/index.html
-          sed -i "s/\"datePublished\": \".*\"/\"datePublished\": \"$DATE_ISO\"/" docs/index.html
-          # New command for File Size
-          sed -i "s/\"fileSize\": \".*\"/\"fileSize\": \"$SIZE\"/" docs/index.html
+          sed -i "s/\"datePublished\": \".*\"/\"datePublished\": \"$DATE\"/" docs/index.html
+          sed -i "s/\"fileSize\": \".*\"/\"fileSize\": \"$KB_HUMAN\"/" docs/index.html
 
       - name: Commit if changed
+        env:
+          TAG: ${{ steps.rel.outputs.tag }}
         run: |
-          git config user.name "github-actions[bot]"
+          set -euo pipefail
+
+          git config user.name  "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          git diff --quiet docs/pad.xml docs/index.html || git commit -am "chore: update metadata to ${{ github.ref_name }} [skip ci]"
+
+          if git diff --quiet docs/pad.xml docs/index.html; then
+            echo "Nothing changed — the metadata already matches $TAG."
+            exit 0
+          fi
+
+          git commit -am "chore: update metadata to $TAG [skip ci]"
+
+          # update-date.yml pushes to the same branch and can land between the
+          # checkout above and this push. Rebase rather than fail: the two touch
+          # different lines of index.html.
+          git pull --rebase origin main
           git push
