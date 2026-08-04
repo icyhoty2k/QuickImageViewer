@@ -141,6 +141,10 @@ namespace Constants::Messages {
     // the same as one that reached three screens.
     constexpr const wchar_t *PUSH_SENT_PREFIX = L"Pushed image → ";      // + count
     constexpr const wchar_t *PUSH_SENT_SUFFIX = L" instance(s)";
+    // Sync now. Says what travelled, because this one sends the whole LOOK and
+    // a push sends a place — the two must not read alike on an overlay that
+    // fades before you can check which key you pressed.
+    constexpr const wchar_t *SYNC_SENT_PREFIX = L"Synced folder · image · view → ";
     constexpr const wchar_t *PUSH_NO_IMAGE    = L"Nothing to push — no image loaded";
     // Alt+Enter. Worded differently from the Ctrl+Enter line on purpose: the two
     // do visibly different things at the far end, and an identical message would
@@ -356,6 +360,20 @@ namespace Constants::Messages {
     constexpr const wchar_t *BLACKLIST_REASON_AUTH_PREFIX = L"blocked automatically: ";
     constexpr const wchar_t *BLACKLIST_REASON_AUTH_SUFFIX =
         L" failed authentications in 10 minutes";
+
+    // The OTHER way a row gets into that file: somebody pressed Ban in the F9
+    // panel. Distinguished from the automatic reason above because the two are
+    // undone differently — an automatic block is evidence of an attack, an
+    // operator block is a decision, and the person reading the file later needs
+    // to know which of the two they are looking at.
+    constexpr const wchar_t *BLACKLIST_REASON_OPERATOR =
+        L"blocked by hand from the Server Clients panel";
+
+    // A TIMED block, which never reaches the file — this shows in the panel's
+    // own list only. Says "kick" rather than "block" because that is the button
+    // that produced it and the word the operator will be looking for.
+    constexpr const wchar_t *BLACKLIST_REASON_TIMED =
+        L"timed kick from the Server Clients panel";
     // Panel footers reporting WHERE the values on screen came from.
     //
     // Every panel backed by a file says this on open, because a populated panel

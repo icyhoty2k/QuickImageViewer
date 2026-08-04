@@ -1,5 +1,6 @@
 #include "StatsWnd.h"
 #include "UI/GdiPool.h" // pooled brushes and pens — never DeleteObject them
+#include "UI/CustomControls/ScrollView.h" // WheelDeltaToPixels — the one wheel rule
 #include "../../AppState.h"
 #include "../../Platform/Constants.h"
 #include "../../Platform/WriteQueue.h"
@@ -250,7 +251,7 @@ namespace UI {
 
     void StatsWnd::Show() {
         if (!m_hWnd) return;
-        m_scrollOffsetY = 0;
+        m_view.scrollY = 0;
         m_links.clear();
         GatherStats();
 
@@ -293,22 +294,24 @@ namespace UI {
     // Message handler
     // ─────────────────────────────────────────────────────────────────────────────
 
+    // One wheel "line" is roughly one row of this panel's stacked text. The base
+    // applies the user's Mouse setting and the Shift accelerator on top.
+    int StatsWnd::ScrollLinePx(const UI::ScrollView &) const {
+        return static_cast<int>(10.0f * app.dpiScale);
+    }
+
     LRESULT StatsWnd::HandlePanelMessage(UINT message, WPARAM wParam, LPARAM lParam) {
         if (message == WM_ERASEBKGND) return 1;
         switch (message) {
-            // ── Mouse wheel scroll ────────────────────────────────────────────────────
-            case WM_MOUSEWHEEL: {
-                int step = static_cast<int>(30.0f * app.dpiScale);
-                m_scrollOffsetY -= (GET_WHEEL_DELTA_WPARAM(wParam) > 0 ? step : -step);
-                RECT rc;
-                GetClientRect(m_hWnd, &rc);
-                int maxS = std::max(0, m_totalContentH - static_cast<int>(rc.bottom - rc.top));
-                m_scrollOffsetY = std::clamp(m_scrollOffsetY, 0, maxS);
-                InvalidateRect(m_hWnd, nullptr, FALSE);
-                return 0;
-            }
+            // No wheel, drag, paging or bar-cursor cases: FloatingPanelWnd
+            // handles all of them against ScrollViewAt() and consumes the
+            // message before this panel is asked.
 
             // ── Click on a link ───────────────────────────────────────────────────────
+            //
+            // A thumb release never arrives here — the base holds capture for
+            // the whole drag — so this cannot mistake letting go of the
+            // scrollbar over a link for a click on that link.
             case WM_LBUTTONUP: {
                 POINT pt = {GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam)};
                 for (auto &lnk: m_links) {
@@ -361,7 +364,9 @@ namespace UI {
                 const int sgap = MulDiv(16, dpi, 96);
                 const int fs = MulDiv(12, dpi, 96);
                 const int fss = MulDiv(11, dpi, 96);
-                const int sb = MulDiv(6, dpi, 96); // scrollbar width
+                // The shared thickness, not a local 6 — this panel's bar was half
+                // the width of every other one in the app.
+                const int sb = UI::ScrollBarThicknessPx(app.dpiScale);
                 const int colR = rc.right - pad - sb;
 
                 // 3-column boundaries for cache rows
@@ -416,7 +421,7 @@ namespace UI {
                 const COLORREF clrSepLine = Constants::Theme::ThemedColor(0.18f, 0.44f, 0.60f, app.themeFactor);
 
                 // ── Drawing helpers ───────────────────────────────────────────────────
-                int y = pad - m_scrollOffsetY;
+                int y = pad - m_view.scrollY;
 
                 // Label on left, underlined clickable value on right
                 auto linkRow = [&](const wchar_t *label, const std::wstring &display,
@@ -865,25 +870,15 @@ namespace UI {
                 }
 
                 y += pad;
-                m_totalContentH = y + m_scrollOffsetY;
+                m_view.contentH = y + m_view.scrollY;
 
                 // ── Scrollbar ─────────────────────────────────────────────────────────
-                int clientH = rc.bottom - rc.top;
-                if (m_totalContentH > clientH) {
-                    int trackH = clientH - 2 * pad;
-                    float ratio = std::clamp(static_cast<float>(clientH) / m_totalContentH, 0.0f, 1.0f);
-                    int thumbH = std::max(MulDiv(20, dpi, 96), static_cast<int>(trackH * ratio));
-                    float maxS = static_cast<float>(std::max(1, m_totalContentH - clientH));
-                    int thumbY = pad + static_cast<int>((trackH - thumbH) * m_scrollOffsetY / maxS);
-                    int sX = rc.right - sb;
+                // Which bars, where the content goes, and the clamp — one call.
+                const int clientH = rc.bottom - rc.top;
+                m_view.Layout(RECT{0, pad, rc.right, pad + (clientH - 2 * pad)}, sb);
 
-                    RECT track = {sX, pad, rc.right - 1, pad + trackH};
-                    FillRect(hdc, &track, UI::Gdi::Brush(clrDim));
-
-                    RECT thumb = {sX, thumbY, rc.right - 1, thumbY + thumbH};
-                    FillRect(hdc, &thumb, UI::Gdi::Brush(
-                            Constants::Theme::ThemedGray(0.48f, app.themeFactor)));
-                }
+                UI::DrawBars(hdc, m_view, app.dpiScale,
+                             UI::ThemeScrollBarColors(app.themeFactor));
 
                 SelectObject(hdc, hOld);
                 // Fonts are cached members — not deleted here

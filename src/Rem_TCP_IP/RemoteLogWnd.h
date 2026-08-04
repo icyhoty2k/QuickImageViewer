@@ -56,9 +56,9 @@
 // SCROLLBARS ARE DRAWN, not WS_HSCROLL/WS_VSCROLL. The native ones were tried
 // and are wrong here: they are non-client, so they ignore the panel's theme and
 // render as white gutters on a dark window whatever DWM is told about the frame.
-// Every other scrolling surface in this app draws its own (DedicatedWnd), using
-// the same PC::SCROLL_TRACK / SCROLL_THUMB / SCROLL_THUMB_HOT and
-// PANEL_SCROLLBAR_W — so this one does too, and they match.
+// Every scrolling surface in this app draws its own, through UI::ScrollView:
+// one thickness (Constants::Scrollbar) and one palette
+// (Constants::Theme::Scrollbar), so they cannot differ between windows.
 //
 // Both axes, because the seven columns are wider than the window at small sizes
 // and the list is unbounded downward. Wheel, shift-wheel, thumb drag, click in
@@ -165,14 +165,14 @@ class RemoteLogEntryWnd : public FloatingPanelWnd {
 
         int m_hotBtn = -1;
 
-        RECT m_track{}, m_thumb{};
-        bool m_thumbHot  = false;
-        bool m_dragging  = false;
-        int  m_dragGrabPx    = 0;
-        int  m_dragThumbSpan = 0;
+        // Scroll state. The base drives every interaction against it — both
+        // wheels, thumb drag with capture, track paging, the bar cursor.
+        // contentH is filled by the painter, which measures in two passes
+        // because the bar's presence changes the wrap width.
+        UI::ScrollView m_view;
 
-        int m_scrollY     = 0;
-        int m_contentH    = 0;   // filled by the painter, used by the scrollers
+        UI::ScrollView *ScrollViewAt(POINT) override { return &m_view; }
+        int ScrollLinePx(const UI::ScrollView &) const override;
 
         HFONT m_hFontBody  = nullptr;
         HFONT m_hFontBold  = nullptr;
@@ -269,7 +269,6 @@ class RemoteLogWnd : public FloatingPanelWnd {
         // Which bar the mouse is dragging. Held rather than derived, because the
         // pointer leaves the thumb during a drag and the drag must continue —
         // that is what a captured drag means.
-        enum class Drag { None, Vert, Horz };
 
         // --- Paint -----------------------------------------------------------
         void EnsureFonts(HDC dc);
@@ -303,11 +302,16 @@ class RemoteLogWnd : public FloatingPanelWnd {
         // exists to show a row of this list.
         RemoteLogEntryWnd m_detail;
 
-        // Scroll offsets in PIXELS, both clamped by UpdateScrollBars. Pixels
-        // rather than rows for the vertical one too, so a wheel notch and a thumb
-        // drag move the same units and the list does not jump between them.
-        int m_scrollX = 0;
-        int m_scrollY = 0;
+        // Scroll state, BOTH AXES — the only genuinely two-dimensional surface
+        // in the app, and the one that exercises Layout's corner handling and
+        // DrawBars drawing two bars at once.
+        //
+        // Offsets are in PIXELS on both axes, so a wheel notch and a thumb drag
+        // move the same units and the list does not jump between them.
+        UI::ScrollView m_view;
+
+        UI::ScrollView *ScrollViewAt(POINT) override { return &m_view; }
+        int ScrollLinePx(const UI::ScrollView &) const override;
 
         // Follow the tail while the newest entry is already on screen — the
         // behaviour a live log needs — but stop the moment the user scrolls up,
@@ -318,16 +322,10 @@ class RemoteLogWnd : public FloatingPanelWnd {
         int m_hotButton = -1;
         int m_hotHeader = -1;
 
-        // Filled by the painter, read by the hit tests. Empty when that axis has
-        // nothing to scroll — which is also how the hit test knows to ignore it.
-        RECT m_vTrack{}, m_vThumb{};
-        RECT m_hTrack{}, m_hThumb{};
-        bool m_vThumbHot = false;
-        bool m_hThumbHot = false;
-
-        Drag m_drag = Drag::None;
-        int  m_dragGrabPx    = 0;  // cursor offset INSIDE the thumb when grabbed
-        int  m_dragThumbSpan = 0;  // thumb length at grab time, for the mapping
+        // Bar geometry and hot state live in m_view now, filled by the painter
+        // and read by the base's hit tests. The Drag enum that named which of
+        // the two bars was held is gone with them — the base keys a drag off the
+        // ScrollView pointer and the axis it grabbed.
 
         std::wstring m_status;   // footer line
 

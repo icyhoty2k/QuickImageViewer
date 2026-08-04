@@ -157,7 +157,7 @@ void DedicatedWnd::Show() {
         }
     }
     CancelTextEdit();
-    m_scrollY = 0;
+    m_list.scrollY = 0;
     BuildRows();
     ShowCenterOverParent();
 
@@ -1224,8 +1224,8 @@ bool DedicatedWnd::OnKeyDown(WPARAM vk, bool, bool, bool) {
     switch (vk) {
         case VK_UP:    step(-1); return true;
         case VK_DOWN:  step(+1); return true;
-        case VK_PRIOR: m_scrollY -= m_viewportH; ClampScroll(); Repaint(); return true;
-        case VK_NEXT:  m_scrollY += m_viewportH; ClampScroll(); Repaint(); return true;
+        case VK_PRIOR: m_list.ScrollBy(0, -m_list.Height()); Repaint(); return true;
+        case VK_NEXT:  m_list.ScrollBy(0,  m_list.Height()); Repaint(); return true;
         case VK_RETURN:
         case VK_SPACE: EditRow(m_selected); return true;
         default: break;
@@ -1279,9 +1279,10 @@ void DedicatedWnd::DestroyBackBuffer() {
 
 void DedicatedWnd::Repaint() { if (GetHwnd()) InvalidateRect(GetHwnd(), nullptr, FALSE); }
 
-void DedicatedWnd::ClampScroll() {
-    const int maxScroll = std::max(0, m_contentH - m_viewportH);
-    m_scrollY = std::clamp(m_scrollY, 0, maxScroll);
+// One wheel "line" is one row. The base applies the user's Mouse setting and the
+// Shift accelerator on top.
+int DedicatedWnd::ScrollLinePx(const ScrollView &) const {
+    return static_cast<int>(ROW_H * app.dpiScale);
 }
 
 int DedicatedWnd::HitTestRow(POINT pt) const {
@@ -1306,12 +1307,11 @@ LRESULT DedicatedWnd::HandlePanelMessage(UINT message, WPARAM wParam, LPARAM lPa
             if (LOWORD(lParam) != HTCLIENT) break;
             POINT pt; GetCursorPos(&pt);
             ScreenToClient(GetHwnd(), &pt);
-            // The scrollbar keeps the arrow — a hand there would suggest the
-            // track is a button.
-            if (PtInRect(&m_trackRect, pt)) {
-                SetCursor(Constants::Cursors::CURR_DEFAULT);
-                return TRUE;
-            }
+            // The bar is not tested here: the base answers for it with a hand,
+            // the same as every other panel now, and only passes this on when
+            // the cursor is somewhere else. This panel used to show an arrow
+            // over its track deliberately — one rule across the app is worth
+            // more than that distinction.
             if (HitTestButton(pt) >= 0 || HitTestRow(pt) >= 0 ||
                 PtInRect(&m_iniLinkRect, pt)) {
                 SetCursor(Constants::Cursors::CURR_CLICK);
@@ -1430,16 +1430,22 @@ LRESULT DedicatedWnd::HandlePanelMessage(UINT message, WPARAM wParam, LPARAM lPa
                                 btnH * 2 + static_cast<int>(BTN_GAP * s) +
                                 static_cast<int>(10 * s);
             const int listBot = H - static_cast<int>(FOOTER_H * s);
-            m_viewportH = listBot - listTop;
 
             HRGN clip = CreateRectRgn(0, listTop, W, listBot);
             SelectClipRgn(bb, clip);
 
             // Leave room for the scrollbar so text never runs under it.
-            const int sbW = static_cast<int>(Constants::Dedicated::PANEL_SCROLLBAR_W * s);
+            const int sbW = UI::ScrollBarThicknessPx(s);
             const int listRight = W - pad - sbW;
 
-            int y = listTop - m_scrollY;
+            // Content height is only known after the row loop below, so the
+            // view is set by hand here and Layout is not used: the bar's column
+            // is reserved whether or not a bar is drawn, which also stops a list
+            // crossing the "needs scrolling" threshold from reflowing its rows
+            // sideways under the cursor.
+            m_list.view = {pad, listTop, listRight, listBot};
+
+            int y = listTop - m_list.scrollY;
             for (size_t i = 0; i < m_rows.size(); ++i) {
                 Row &row = m_rows[i];
                 const int h = (row.kind == Kind::Header) ? hdrH : rowH;
@@ -1522,7 +1528,7 @@ LRESULT DedicatedWnd::HandlePanelMessage(UINT message, WPARAM wParam, LPARAM lPa
                 }
                 y += h;
             }
-            m_contentH = y + m_scrollY - listTop;
+            m_list.contentH = y + m_list.scrollY - listTop;
 
             SelectClipRgn(bb, nullptr);
             DeleteObject(clip);
@@ -1530,24 +1536,15 @@ LRESULT DedicatedWnd::HandlePanelMessage(UINT message, WPARAM wParam, LPARAM lPa
             // ── Scrollbar ────────────────────────────────────────────────────
             // Drawn only when there is something to scroll — a permanent empty
             // track on a short list is just noise.
-            m_trackRect = {listRight, listTop, listRight + sbW, listBot};
-            m_thumbRect = {};
-            const int maxScroll = std::max(0, m_contentH - m_viewportH);
-            if (maxScroll > 0 && m_viewportH > 0) {
-                FillRect(bb, &m_trackRect, UI::Gdi::Brush(PC::SCROLL_TRACK));
+            // Cleared, then set only when there is something to scroll: the
+            // track rect IS the hit box, so a stale one leaves a strip of empty
+            // panel swallowing clicks.
+            m_list.ClearBars();
+            if (m_list.MaxScrollY() > 0 && m_list.Height() > 0)
+                m_list.vTrack = {listRight, listTop, listRight + sbW, listBot};
 
-                const int minH = static_cast<int>(Constants::Dedicated::PANEL_SCROLL_MIN_H * s);
-                int thumbH = MulDiv(m_viewportH, m_viewportH, m_contentH);
-                thumbH = std::clamp(thumbH, minH, m_viewportH);
-
-                const int travel = m_viewportH - thumbH;
-                const int thumbY = listTop + (travel > 0 ? MulDiv(m_scrollY, travel, maxScroll) : 0);
-
-                m_thumbRect = {listRight + static_cast<int>(2 * s), thumbY,
-                               listRight + sbW - static_cast<int>(2 * s), thumbY + thumbH};
-                FillRect(bb, &m_thumbRect, UI::Gdi::Brush(
-                    (m_thumbHot || m_draggingThumb) ? PC::SCROLL_THUMB_HOT : PC::SCROLL_THUMB));
-            }
+            DrawBars(bb, m_list, s,
+                     ThemeScrollBarColors(app.themeFactor));
 
             // ── Footer ───────────────────────────────────────────────────────
             SelectObject(bb, m_hFontSmall);
@@ -1577,25 +1574,13 @@ LRESULT DedicatedWnd::HandlePanelMessage(UINT message, WPARAM wParam, LPARAM lPa
 
             // Dragging the thumb maps cursor travel onto scroll range, keeping
             // the grab point under the cursor so the thumb does not jump.
-            if (m_draggingThumb) {
-                const int thumbH = m_thumbRect.bottom - m_thumbRect.top;
-                const int travel = m_viewportH - thumbH;
-                const int maxScroll = std::max(0, m_contentH - m_viewportH);
-                if (travel > 0 && maxScroll > 0) {
-                    const int wantTop = pt.y - m_dragGrabDY - m_trackRect.top;
-                    m_scrollY = MulDiv(std::clamp(wantTop, 0, travel), maxScroll, travel);
-                    ClampScroll();
-                    Repaint();
-                }
-                return 0;
-            }
-
-            const bool overThumb = PtInRect(&m_thumbRect, pt) != FALSE;
-            const bool linkHot   = PtInRect(&m_iniLinkRect, pt) != FALSE;
+            // The thumb's hot state belongs to the base now — see the note in
+            // RemoteClientsWnd's equivalent.
+            const bool linkHot = PtInRect(&m_iniLinkRect, pt) != FALSE;
             const int hr = HitTestRow(pt), hb = HitTestButton(pt);
-            if (hr != m_hotRow || hb != m_hotButton || overThumb != m_thumbHot ||
+            if (hr != m_hotRow || hb != m_hotButton ||
                 linkHot != m_iniLinkHot) {
-                m_hotRow = hr; m_hotButton = hb; m_thumbHot = overThumb;
+                m_hotRow = hr; m_hotButton = hb;
                 m_iniLinkHot = linkHot;
                 Repaint();
             }
@@ -1614,21 +1599,8 @@ LRESULT DedicatedWnd::HandlePanelMessage(UINT message, WPARAM wParam, LPARAM lPa
             }
 
             // Scrollbar first — it overlays the row band on the right.
-            if (PtInRect(&m_thumbRect, pt)) {
-                m_draggingThumb = true;
-                m_dragGrabDY = pt.y - m_thumbRect.top;
-                m_dragStartScroll = m_scrollY;
-                SetCapture(GetHwnd());
-                Repaint();
-                return 0;
-            }
-            if (PtInRect(&m_trackRect, pt)) {
-                // Clicking the empty track pages toward the cursor.
-                m_scrollY += (pt.y < m_thumbRect.top) ? -m_viewportH : m_viewportH;
-                ClampScroll();
-                Repaint();
-                return 0;
-            }
+            // The bar never reaches here — FloatingPanelWnd consumes thumb and
+            // track clicks before this panel is asked.
 
             if (m_editingRow >= 0 && PtInRect(&m_rows[m_editingRow].rect, pt)) {
                 m_edit.RouteMouse(message, wParam, lParam, GetHwnd());
@@ -1659,13 +1631,9 @@ LRESULT DedicatedWnd::HandlePanelMessage(UINT message, WPARAM wParam, LPARAM lPa
             return 0;
         }
 
+        // A thumb release never arrives here — the base holds capture for the
+        // whole drag and consumes the button-up that ends it.
         case WM_LBUTTONUP:
-            if (m_draggingThumb) {
-                m_draggingThumb = false;
-                ReleaseCapture();
-                Repaint();
-                return 0;
-            }
             [[fallthrough]];
         case WM_RBUTTONUP:
             if (m_editingRow >= 0 &&
@@ -1673,13 +1641,8 @@ LRESULT DedicatedWnd::HandlePanelMessage(UINT message, WPARAM wParam, LPARAM lPa
                     InputResult::ConsumedRepaint) Repaint();
             return 0;
 
-        case WM_MOUSEWHEEL: {
-            m_scrollY -= (GET_WHEEL_DELTA_WPARAM(wParam) / WHEEL_DELTA) *
-                         static_cast<int>(ROW_H * app.dpiScale) * 3;
-            ClampScroll();
-            Repaint();
-            return 0;
-        }
+        // No wheel cases: FloatingPanelWnd drives both wheels against
+        // ScrollViewAt() and consumes them before this panel is asked.
 
         default: break;
     }

@@ -4,6 +4,8 @@
 #include "UI/LinkText.h"
 #include "RemoteTls.h"   // RequiredForAddress — is a pin needed for this host?
 #include "RemoteExec.h"   // BuildSyncPayload
+#include "RemoteProtocol.h" // FormatEndpoint / StripAddressBrackets — IPv6 literals
+#include "RemoteSettings.h" // SameHost — one address has many spellings
 
 #include "AppState.h"
 #include "Platform/Constants.h"
@@ -239,7 +241,10 @@ void RemotesWnd::CommitTextEdit() {
     const std::wstring text = m_edit.GetText();
 
     switch (m_fields[m_editingField].id) {
-        case F_HOST:     m_newHost     = text; break;
+        // Brackets stripped for the same reason the pin below drops colons: the
+        // panel PRINTS an IPv6 literal bracketed, so pasting one back in is the
+        // ordinary case, and getaddrinfo rejects the brackets.
+        case F_HOST:     m_newHost     = Remote::StripAddressBrackets(text); break;
         case F_PASSWORD: m_newPassword = text; break;
         case F_NAME:     m_newName     = text; break;
         case F_EXE:      m_newExe      = text; break;
@@ -533,8 +538,11 @@ void RemotesWnd::DoSaveEntry() {
 
         // Same instance twice: it would receive every mirrored command once per
         // row, and the console would show two dots for one screen.
-        if (r.host == m_newHost && r.port == m_newPort) {
-            DialogMessage(m_newHost + L":" + std::to_wstring(m_newPort) +
+        // SameHost, not string equality: "fe80::1" and "fe80:0:0:0:0:0:0:1" are
+        // one machine and would otherwise both be admitted, giving one instance
+        // two rows — each receiving every mirrored command once.
+        if (Remote::SameHost(r.host, m_newHost) && r.port == m_newPort) {
+            DialogMessage(Remote::FormatEndpoint(m_newHost, m_newPort) +
                           L" is already in the list, as \"" + r.name + L"\".",
                           L"Remote Servers");
             return;
@@ -543,7 +551,7 @@ void RemotesWnd::DoSaveEntry() {
         // named it would be ambiguous.
         if (_wcsicmp(r.name.c_str(), m_newName.c_str()) == 0) {
             DialogMessage(L"There is already a remote called \"" + r.name +
-                          L"\" (" + r.host + L":" + std::to_wstring(r.port) +
+                          L"\" (" + Remote::FormatEndpoint(r.host, r.port) +
                           L").\r\n\r\nNames identify a remote, so they have to be "
                           L"distinct — give this one a different name.", L"Remote Servers");
             return;
@@ -669,7 +677,7 @@ void RemotesWnd::DoIdentify(int row) {
     // which of you is this? Falls back to the address, which is still unique and
     // still tells the two apart.
     const std::wstring who = r.name.empty()
-                                 ? (r.host + L":" + std::to_wstring(r.port))
+                                 ? Remote::FormatEndpoint(r.host, r.port)
                                  : r.name;
 
     // SendTo, not a broadcast: every target gets a DIFFERENT text — its own
@@ -779,8 +787,8 @@ void RemotesWnd::DoRemoveTarget(int row) {
     if (row < 0 || row >= static_cast<int>(m_rows.size())) return;
     const RowView &r = m_rows[row];
 
-    if (!DialogConfirm(L"Remove " + r.name + L" (" + r.host + L":" +
-                       std::to_wstring(r.port) + L") from the list?\r\n\r\n"
+    if (!DialogConfirm(L"Remove " + r.name + L" (" + Remote::FormatEndpoint(r.host, r.port) +
+                       L") from the list?\r\n\r\n"
                        L"The instance itself is not affected.",
                        L"Remote Servers"))
         return;
