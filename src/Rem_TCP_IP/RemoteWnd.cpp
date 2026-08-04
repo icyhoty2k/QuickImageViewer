@@ -11,6 +11,11 @@
 #include "Platform/Constants.h"
 #include "Platform/ConstantsStrings.h"
 #include "UI/ThemedDialog.h"
+// Safe from a .cpp even though UIManager.h includes this panel's header: the
+// guard has already fired by the time it is reached, so there is no cycle. Same
+// note as RemoteLogWnd.cpp and RemoteCmdWnd.cpp, which reach across for the same
+// reason — their buttons open each other too.
+#include "UI/UIManager.h"  // the Server Clients button opens Ctrl+F9
 #include "UI/LinkText.h" // Draw / MeasureIn / CopyToClipboard
 #include "UI/GdiPool.h" // brushes and pens are pooled — never DeleteObject them
 
@@ -26,7 +31,7 @@ namespace RT  = Constants::RemoteTcpIp;
 namespace PC  = Constants::Dedicated::PanelColors;
 
 namespace {
-    constexpr int PANEL_W  = 700;
+    constexpr int PANEL_W  = 900;
     constexpr int PANEL_H  = 640;
     constexpr int PAD      = 14;
     constexpr int ROW_H    = 42;
@@ -42,7 +47,12 @@ namespace {
     // one blank line.
     constexpr int FOOTER_H = 64;
 
-    enum ButtonId { BTN_START = 1, BTN_STOP, BTN_SAVE };
+    // BTN_CLIENTS opens Ctrl+F9 and BTN_LOG opens Ctrl+F12. The three panels are
+    // one subject in three views — this one is the listener's configuration,
+    // Server Clients is who is on it, Server Log is what they said — and the
+    // crossing is constant: change the AllowList here, watch who it lets in
+    // there, read why one was refused in the log.
+    enum ButtonId { BTN_START = 1, BTN_STOP, BTN_SAVE, BTN_CLIENTS, BTN_LOG };
 
     enum RowId {
         R_NONE = 0,
@@ -70,6 +80,26 @@ namespace {
     }
 
     std::wstring OrUnset(const std::wstring &s) { return s.empty() ? L"(not set)" : s; }
+
+    // Return the height needed by a description when wrapped to at most two
+    // lines. The row layout uses the same font and width, so measurement and
+    // painting stay in sync. Explicit newlines in a description are preserved.
+    int DescriptionHeight(HDC dc, HFONT font, const wchar_t *text, int width, int maxLines) {
+        if (!text || !*text || width <= 0) return 0;
+
+        HGDIOBJ oldFont = SelectObject(dc, font);
+        RECT rc{0, 0, width, 0};
+        DrawTextW(dc, text, -1, &rc, DT_LEFT | DT_WORDBREAK | DT_CALCRECT | DT_NOPREFIX);
+
+        TEXTMETRICW tm{};
+        GetTextMetricsW(dc, &tm);
+        const int lineH = std::max(1, static_cast<int>(tm.tmHeight));
+        const int maxH = lineH * maxLines;
+        const int measuredH = std::max(lineH, static_cast<int>(rc.bottom - rc.top));
+
+        SelectObject(dc, oldFont);
+        return std::min(measuredH, maxH);
+    }
 }
 
 // =============================================================================
@@ -138,16 +168,19 @@ void RemoteWnd::BuildRows() {
         L"this as the row's identity, and names have to be distinct.", R_NAME);
     add(Kind::Choice, L"Bind address", c.bindAddress,
         L"CLICK CYCLES: 127.0.0.1 (this machine only, no firewall prompt) → 0.0.0.0 "
-        L"(every interface, needs TLS + a password) → type your own.", R_BIND);
+        L"(every IPv4 interface, needs TLS + a password) → :: (every interface, "
+        L"IPv6 AND IPv4 — use this one to be reachable over the internet) → "
+        L"type your own.", R_BIND);
     add(Kind::Number, L"Port",
         c.port == RT::PORT_UNSET ? std::wstring(L"(not set)") : std::to_wstring(c.port),
         L"The port to listen on, 1-65535.", R_PORT);
     // The separator rule leads, and the wordier warnings that used to open these
-    // two lines follow it. This description is painted with DT_SINGLELINE |
-    // DT_END_ELLIPSIS — one line, truncated — so anything put at the end is not
-    // shortened, it is INVISIBLE. Getting the separator wrong fails silently
-    // (Normalize drops "10.0.0.1 10.0.0.2" as one malformed entry and the list
-    // ends up empty, denying everyone), so it is the part that must survive.
+    // two lines follow it. Descriptions are automatically wrapped to at most two
+    // lines when painted, so the important warning remains visible instead of
+    // silently disappearing behind DT_SINGLELINE truncation. Getting the
+    // separator wrong fails silently (Normalize drops "10.0.0.1 10.0.0.2" as one
+    // malformed entry and the list ends up empty, denying everyone), so it is the
+    // part that must survive.
     add(Kind::Text, L"AllowList", OrUnset(Remote::JoinList(c.allowList)),
         L"Separate with , or ; — NOT a space. IPs allowed to connect; empty denies "
         L"everyone. 192.168.1.* or 192.168.0.0/24 or 192.168.0.10-50. No domain names",
@@ -169,11 +202,21 @@ void RemoteWnd::BuildRows() {
     add(Kind::Number, L"Max connections", std::to_wstring(c.maxConnections),
         L"Simultaneous clients, 1-99. Further callers are told the limit was reached.", R_MAXCONN);
 
+    // NO CONNECTION LIST HERE. Who is connected lives in Server Clients
+    // (Ctrl+F9) — this panel is the listener's CONFIGURATION, a form you open,
+    // change and save, and a live list that moves while you type in it belongs
+    // to a different kind of window. See RemoteClientsWnd.h.
+
     m_buttons.clear();
     const bool running = Remote::IsRunning();
-    m_buttons.push_back({L"Start",       BTN_START, {}, !running, 0});
-    m_buttons.push_back({L"Stop",        BTN_STOP,  {},  running, 0});
-    m_buttons.push_back({L"Save to INI", BTN_SAVE,  {}, true,     0});
+    m_buttons.push_back({L"Start",         BTN_START,   {}, !running, 0});
+    m_buttons.push_back({L"Stop",          BTN_STOP,    {},  running, 0});
+    m_buttons.push_back({L"Save to INI",   BTN_SAVE,    {}, true,     0});
+    // Both enabled even when stopped: the client panel is where timed blocks are
+    // listed and lifted, and the log holds what happened BEFORE the listener was
+    // stopped — which is usually why it was.
+    m_buttons.push_back({L"Server Clients", BTN_CLIENTS, {}, true,    0});
+    m_buttons.push_back({L"Server Log",     BTN_LOG,     {}, true,    0});
 }
 
 std::wstring RemoteWnd::StatusLine() const {
@@ -308,10 +351,11 @@ void RemoteWnd::EditRow(int rowIndex) {
             return;
 
         case R_BIND: {
-            // Cycle the two useful literals, then fall through to free text —
-            // those two cover almost every case and typing them is error-prone.
+            // Cycle the three useful literals, then fall through to free text —
+            // those three cover almost every case and typing them is error-prone.
             if (c.bindAddress == RT::BIND_ADDRESS_DEFAULT)      c.bindAddress = RT::BIND_ADDRESS_ANY;
-            else if (c.bindAddress == RT::BIND_ADDRESS_ANY)     { BeginTextEdit(rowIndex); return; }
+            else if (c.bindAddress == RT::BIND_ADDRESS_ANY)     c.bindAddress = RT::BIND_ADDRESS_ANY6;
+            else if (c.bindAddress == RT::BIND_ADDRESS_ANY6)    { BeginTextEdit(rowIndex); return; }
             else                                                c.bindAddress = RT::BIND_ADDRESS_DEFAULT;
             BuildRows();
             Repaint();
@@ -633,6 +677,12 @@ LRESULT RemoteWnd::HandlePanelMessage(UINT message, WPARAM wParam, LPARAM lParam
                     case BTN_START: DoStart();     break;
                     case BTN_STOP:  DoStop();      break;
                     case BTN_SAVE:  DoSaveToIni(); break;
+                    case BTN_CLIENTS:
+                        uiManager.getRemoteClientsWindow().ToggleToFront();
+                        break;
+                    case BTN_LOG:
+                        uiManager.getRemoteLogWindow().ToggleToFront();
+                        break;
                     default: break;
                 }
                 return 0;
@@ -680,6 +730,8 @@ LRESULT RemoteWnd::HandlePanelMessage(UINT message, WPARAM wParam, LPARAM lParam
             const int pad      = static_cast<int>(PAD * s);
             const int rowH     = static_cast<int>(ROW_H * s);
             const int hdrH     = static_cast<int>(HDR_H * s);
+            const int descX    = pad + static_cast<int>(6 * s);
+            const int descW    = W - pad - descX;
             const int btnH     = static_cast<int>(BTN_H * s);
             const int labelW   = static_cast<int>(150 * s);
 
@@ -760,7 +812,14 @@ LRESULT RemoteWnd::HandlePanelMessage(UINT message, WPARAM wParam, LPARAM lParam
                     continue;
                 }
 
-                r.rect = {pad, y, W - pad, y + rowH};
+                // A normal row is 42 px, but descriptions are allowed to wrap.
+                // Measure them before drawing so every row gets exactly the height
+                // it needs, with a maximum of two description lines.
+                SelectObject(bb, m_hFontSmall);
+                const int descH = static_cast<int>(DescriptionHeight(bb, m_hFontSmall, r.desc, descW, 2));
+                const int rowActualH = std::max(rowH, static_cast<int>(21 * s) + descH + static_cast<int>(2 * s));
+
+                r.rect = {pad, y, W - pad, y + rowActualH};
 
                 if (static_cast<int>(i) == m_selected || static_cast<int>(i) == m_hotRow)
                     FillRect(bb, &r.rect,
@@ -793,11 +852,12 @@ LRESULT RemoteWnd::HandlePanelMessage(UINT message, WPARAM wParam, LPARAM lParam
 
                 SelectObject(bb, m_hFontSmall);
                 SetTextColor(bb, dim);
-                RECT dr{pad + static_cast<int>(6 * s), y + static_cast<int>(21 * s),
-                        W - pad, y + rowH};
-                DrawTextW(bb, r.desc, -1, &dr, DT_LEFT | DT_SINGLELINE | DT_END_ELLIPSIS);
+                RECT dr{descX, y + static_cast<int>(21 * s),
+                        W - pad, y + static_cast<int>(21 * s) + descH};
+                DrawTextW(bb, r.desc, -1, &dr,
+                          DT_LEFT | DT_WORDBREAK | DT_NOPREFIX);
 
-                y += rowH;
+                y += rowActualH;
             }
 
             // ── Footer: live status, then the last async result ──────────────

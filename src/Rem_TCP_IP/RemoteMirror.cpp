@@ -1080,7 +1080,7 @@ int AddTarget(const std::wstring &name, const std::wstring &host, int port,
     // How the log names the far end. Set before the sender thread starts, so
     // even the first handshake is recorded against a readable name rather than
     // an address.
-    t->client.SetPeerLabel(name.empty() ? (host + L":" + std::to_wstring(port)) : name);
+    t->client.SetPeerLabel(name.empty() ? FormatEndpoint(host, port) : name);
     // Set before any connect attempt: the pin is checked during the TLS
     // handshake, which happens before the banner, so supplying it afterwards
     // would be supplying it too late.
@@ -1184,7 +1184,7 @@ void BroadcastPosition(const std::wstring &line, const std::wstring &expectFile)
             PushTo(*t, line, expectFile);
 }
 
-int SendImagePosition(const PushRequest &req, int *skippedRemote) {
+int SendImagePosition(const PushRequest &req, int *skippedRemote, bool everyConnected) {
     int sent = 0, skipped = 0;
 
     // SAME-MACHINE TARGETS ONLY, for the reason positions are: the job carries a
@@ -1197,7 +1197,10 @@ int SendImagePosition(const PushRequest &req, int *skippedRemote) {
     // cannot reach different screens. F11 itself is NOT consulted: this is an
     // explicit act, and a viewer with mirroring off is the case it exists for.
     for (std::unique_ptr<Target> &t : g_targets) {
-        if (!Mirrored(*t)) continue;
+        // The ticks are the ONLY thing everyConnected relaxes. The two below are
+        // not negotiable: an unconnected target has nowhere to queue to, and a
+        // target on another machine cannot use a path.
+        if (!everyConnected && !Mirrored(*t)) continue;
         if (!t->connected.load(std::memory_order_acquire)) continue;
         if (!t->sameMachine.load(std::memory_order_acquire)) { ++skipped; continue; }
 
@@ -1209,6 +1212,22 @@ int SendImagePosition(const PushRequest &req, int *skippedRemote) {
     }
 
     if (skippedRemote) *skippedRemote = skipped;
+    return sent;
+}
+
+int SyncNow(const std::wstring &full, const std::wstring &portable) {
+    int sent = 0;
+
+    // CONTROLLED targets, like the push — syncing and mirroring must not reach
+    // different screens. F11 itself is not consulted: this is an explicit act,
+    // and a viewer with mirroring off is exactly when you reach for it.
+    for (std::unique_ptr<Target> &t : g_targets) {
+        if (!Mirrored(*t)) continue;
+        if (!t->connected.load(std::memory_order_acquire)) continue;
+
+        SendTo(t->id, t->sameMachine.load(std::memory_order_acquire) ? full : portable);
+        ++sent;
+    }
     return sent;
 }
 
@@ -1252,7 +1271,7 @@ int RequestDisplayedImage(std::wstring &fromName) {
     if (!chosen) return 0;
 
     fromName = chosen->name.empty()
-                   ? (chosen->host + L":" + std::to_wstring(chosen->port))
+                   ? FormatEndpoint(chosen->host, chosen->port)
                    : chosen->name;
 
     QueuedLine job;

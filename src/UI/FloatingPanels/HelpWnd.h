@@ -103,14 +103,16 @@ namespace UI {
             int m_totalContentHeight = 0;
 
             // Geometry cached during paint, reused by scroll/drag/key handlers
-            int m_contentTop = 0;
-            int m_viewHeight = 1;
 
-            // Scrolling state
-            int m_scrollOffsetY = 0;
-            bool m_sbDragging = false;
-            int m_sbDragStartY = 0;
-            int m_sbDragStartOffset = 0;
+            // Scrolling state. The base drives every interaction against this —
+            // both wheels, thumb drag with capture, track paging, bar cursor.
+            // The drag used to be a ratio of cursor travel to content height, so
+            // the thumb drifted away from the pointer, and grabbing anywhere in
+            // the bar's column started one; both are gone with the shared code.
+            UI::ScrollView m_view;
+
+            UI::ScrollView *ScrollViewAt(POINT) override { return &m_view; }
+            int ScrollLinePx(const UI::ScrollView &) const override;
 
             // Footer link rect
             RECT m_footerLinkRect = {0, 0, 0, 0};

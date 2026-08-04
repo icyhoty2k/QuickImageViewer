@@ -1,5 +1,6 @@
 #include "HistoryListWnd.h"
 #include "UI/GdiPool.h" // pooled brushes and pens — never DeleteObject them
+#include "UI/CustomControls/ScrollView.h" // WheelDeltaToPixels — the one wheel rule
 #include "../../Platform/Constants.h"
 #include "../../Platform/ConstantsTheme.h"
 #include "../../Platform/ConstantsStrings.h"
@@ -66,10 +67,14 @@ namespace UI {
     // whenever a spawned panel opens/closes (Shift+Enter) — without this the
     // keyboard selection resets every time. -1 = nothing to restore.
     static int g_savedHoverRow = -1;
-    static int g_scrollOffsetY = 0;
-    static bool g_sbDragging = false;
-    static int g_sbDragStartY = 0;
-    static int g_sbDragStartOff = 0;
+    // Scroll state. A file static like everything else in this panel; the base
+    // drives every interaction against it through ScrollViewAt.
+    static UI::ScrollView g_view;
+    // The scrollbar drag statics are gone with the code that used them: the base
+    // owns the drag, keyed off the ScrollView above. Its mapping is cursor
+    // travel onto THUMB travel, where this panel's was travel × maxScroll ÷
+    // thumb-free length — close, but it drifted from the pointer on long lists.
+
     // Full vs short list lives in app.historyFullModeEnabled — AppState is the
     // single source of truth for every persistent toggle. There is deliberately
     // NO local copy: a panel-scoped bool would be reset from AppState on every
@@ -846,7 +851,7 @@ namespace UI {
     // AppState flag from outside this file — can produce the same visible result
     // instead of leaving a stale list on screen until the next repaint.
     static void ApplyFullHistoryMode(HWND hWnd) {
-        g_scrollOffsetY = 0;
+        g_view.scrollY = 0;
         BuildDisplayList();
         HoverCurrentFolderRow();
         int x, y, w, h;
@@ -1731,7 +1736,7 @@ namespace UI {
                 histWnd.Hide();
             } else {
                 g_fullModeOverride = true; // view-only: no preference write
-                g_scrollOffsetY = 0;
+                g_view.scrollY = 0;
                 BuildDisplayList();
                 HoverCurrentFolderRow();
                 InvalidateRect(histWnd.GetHwnd(), nullptr, TRUE);
@@ -1742,7 +1747,7 @@ namespace UI {
                 int x, y, w, h;
             GetHistoryWindowBounds(g_hHistOwner ? g_hHistOwner : histWnd.GetHwnd(), x, y, w, h);
             SetWindowPos(histWnd.GetHwnd(), HWND_TOPMOST, x, y, w, h, SWP_FRAMECHANGED);
-            g_scrollOffsetY = 0;
+            g_view.scrollY = 0;
             HoverCurrentFolderRow();
             ShowWindow(histWnd.GetHwnd(), SW_SHOW);
             SetForegroundWindow(histWnd.GetHwnd());
@@ -1812,11 +1817,11 @@ namespace UI {
                     if (g_rowH > 0) {
                         int bodyH = g_bodyBottom - g_bodyTop;
                         if (g_hoverRow == navMax - 1) {
-                            g_scrollOffsetY = std::max(0, navMax * g_rowH - bodyH);
+                            g_view.scrollY = std::max(0, navMax * g_rowH - bodyH);
                         } else {
                             int rowStart = g_hoverRow * g_rowH;
-                            if (rowStart < g_scrollOffsetY)
-                                g_scrollOffsetY = rowStart;
+                            if (rowStart < g_view.scrollY)
+                                g_view.scrollY = rowStart;
                         }
                     }
                     InvalidateRect(m_hWnd, nullptr, FALSE);
@@ -1828,12 +1833,12 @@ namespace UI {
                     g_hoverRow = (g_hoverRow < navMax - 1) ? g_hoverRow + 1 : 0;
                     if (g_rowH > 0) {
                         if (g_hoverRow == 0) {
-                            g_scrollOffsetY = 0;
+                            g_view.scrollY = 0;
                         } else {
                             int bodyH = g_bodyBottom - g_bodyTop;
                             int rowEnd = (g_hoverRow + 1) * g_rowH;
-                            if (rowEnd - g_scrollOffsetY > bodyH)
-                                g_scrollOffsetY = rowEnd - bodyH;
+                            if (rowEnd - g_view.scrollY > bodyH)
+                                g_view.scrollY = rowEnd - bodyH;
                         }
                     }
                     InvalidateRect(m_hWnd, nullptr, FALSE);
@@ -2106,13 +2111,19 @@ namespace UI {
 
                 // Scrollbar geometry — computed before any drawing.
                 int SB_W = static_cast<int>(
-                    MulDiv(Constants::History::SCROLLBAR_THICKNESS, dpi, 96));
+                    UI::ScrollBarThicknessPx(app.dpiScale));
                 int totalContentH = CalcTotalContentH(
                         static_cast<int>(g_displayList.size()), dpi);
                 int windowH = rc.bottom - rc.top;
                 int maxScroll = std::max(0, totalContentH - windowH);
-                g_scrollOffsetY = std::clamp(g_scrollOffsetY, 0, maxScroll);
+                g_view.scrollY = std::clamp(g_view.scrollY, 0, maxScroll);
                 bool needsScrollbar = (maxScroll > 0);
+
+                // The thumb is sized from these two. Content is measured against
+                // the WINDOW here — as the clamp above is — while the bar is
+                // drawn down the body band only, so the view rect is set later
+                // beside the track rather than derived from Layout.
+                g_view.contentH = totalContentH;
 
                 // Background — use active color if this panel is active
                 FillRect(hdc, &rc, UI::Gdi::Brush(GetBgColor()));
@@ -2273,7 +2284,7 @@ namespace UI {
                         // then clamp to the ends so we never scroll past the list.
                         const int maxOffset = std::max(0, rowCount * rowH - bodyH);
                         int desired = g_hoverRow * rowH - (bodyH - rowH) / 2;
-                        g_scrollOffsetY = std::clamp(desired, 0, maxOffset);
+                        g_view.scrollY = std::clamp(desired, 0, maxOffset);
                     }
                 }
 
@@ -2308,14 +2319,14 @@ namespace UI {
                 const std::wstring currentFolder = AppCurrentFolder();
 
                 if (g_displayList.empty()) {
-                    int y = rowsTop - g_scrollOffsetY;
+                    int y = rowsTop - g_view.scrollY;
                     SetTextColor(hdc, RGB(100, 100, 100));
                     RECT emptyRect = {rc.left + padding, y, rc.right - padding, y + rowH};
                     DrawTextW(hdc, L"No folders visited yet.", -1, &emptyRect,
                               DT_LEFT | DT_VCENTER | DT_SINGLELINE);
                 } else {
                     for (int i = 0; i < static_cast<int>(g_displayList.size()); ++i) {
-                        int rowTop = rowsTop - g_scrollOffsetY + i * rowH;
+                        int rowTop = rowsTop - g_view.scrollY + i * rowH;
                         int rowBottom = rowTop + rowH;
 
                         const DisplayEntry &entry = g_displayList[i];
@@ -2620,27 +2631,22 @@ namespace UI {
 
                 RestoreDC(hdc, -1);
 
-                // Scrollbar (drawn only in body area between header and footer)
-                if (needsScrollbar) {
-                    int sbX = rc.right - SB_W;
-                    int bodyHeight = bodyBottom - rowsTop;
-
-                    RECT sbTrack = {sbX, rowsTop, rc.right, bodyBottom};
-                    FillRect(hdc, &sbTrack, UI::Gdi::Brush(
-                            Constants::Theme::ThemedGray(Constants::Theme::HistoryPanel::SCROLLBAR_TRACK, app.themeFactor)));
-
-                    float visibleFrac = static_cast<float>(bodyHeight) / static_cast<float>(totalContentH);
-                    int minThumb = MulDiv(static_cast<int>(Constants::History::SCROLLBAR_MIN_THUMB), dpi, 96);
-                    int thumbLen = std::max(minThumb, static_cast<int>(bodyHeight * visibleFrac));
-                    int thumbOff = static_cast<int>(
-                        static_cast<float>(g_scrollOffsetY) / static_cast<float>(maxScroll)
-                        * static_cast<float>(bodyHeight - thumbLen));
-                    thumbOff = std::clamp(thumbOff, 0, bodyHeight - thumbLen);
-
-                    RECT sbThumb = {sbX, rowsTop + thumbOff, rc.right, rowsTop + thumbOff + thumbLen};
-                    FillRect(hdc, &sbThumb, UI::Gdi::Brush(
-                            Constants::Theme::ThemedGray(Constants::Theme::HistoryPanel::SCROLLBAR_THUMB, app.themeFactor)));
-                }
+                // Scrollbar — body area only, between header and footer.
+                //
+                // The track is set by hand rather than by Layout because the bar
+                // occupies the BODY band while the rows are laid out against the
+                // whole window; Layout's single region cannot express that.
+                //
+                // The view is set UNCONDITIONALLY, bar or no bar. It is what the
+                // base clamps the wheel against and what sizes the thumb, so a
+                // view left empty on a short list would let the wheel run away
+                // and be silently corrected by the next paint.
+                g_view.view = {rc.left, rowsTop, rc.right - SB_W, bodyBottom};
+                g_view.ClearBars();
+                if (needsScrollbar)
+                    g_view.vTrack = {rc.right - SB_W, rowsTop, rc.right, bodyBottom};
+                DrawBars(hdc, g_view, app.dpiScale,
+                         UI::ThemeScrollBarColors(app.themeFactor));
 
                 // Footer separator line
                 {
@@ -2942,35 +2948,18 @@ namespace UI {
                     return 0;
                 }
 
-                // Check scrollbar drag
-                int sbW = MulDiv(Constants::History::SCROLLBAR_THICKNESS, dpi2, 96);
-                if (mx >= rc2.right - sbW) {
-                    int totalH2 = CalcTotalContentH(static_cast<int>(g_displayList.size()), dpi2);
-                    int winH2 = rc2.bottom - rc2.top;
-                    int maxScr2 = std::max(0, totalH2 - winH2);
-                    if (maxScr2 > 0) {
-                        g_sbDragging = true;
-                        g_sbDragStartY = my;
-                        g_sbDragStartOff = g_scrollOffsetY;
-                        SetCapture(m_hWnd);
-                        return 0;
-                    }
-                }
+                // No scrollbar-drag block: the base consumes thumb and track
+                // clicks before this panel is asked, and it distinguishes the
+                // two — this code treated the whole bar column as a grab handle,
+                // so a click on empty track teleported the list instead of
+                // paging it.
                 return 0;
             }
 
-            case WM_MOUSEWHEEL: {
-                UINT dpi = static_cast<UINT>(app.dpiScale * 96.0f);
-                int rowH = MulDiv(Constants::History::HISTORY_ROW_HEIGHT, dpi, 96);
-                int delta = GET_WHEEL_DELTA_WPARAM(wParam);
-                g_scrollOffsetY -= (delta / WHEEL_DELTA) * rowH;
-                g_scrollOffsetY = std::max(0, g_scrollOffsetY);
-                // Rows moved under the cursor — the popup now describes a row that
-                // is no longer there. Drop it; the next WM_MOUSEMOVE re-arms it.
-                HideLinkTip();
-                InvalidateRect(m_hWnd, nullptr, FALSE);
-                return 0;
-            }
+            // No wheel case — the base consumes it, so nothing here would run.
+            // The link tip is dropped from OnScrolled instead, which fires for
+            // EVERY scroll rather than only the wheel: paging the track and
+            // dragging the thumb move rows under the cursor just as much.
 
             case WM_MOUSEMOVE: {
                 int mx = GET_X_LPARAM(lParam);
@@ -3045,52 +3034,37 @@ namespace UI {
                     return 0;
                 }
 
-                // Check if hovering over scrollbar
-                RECT rcSb{};
-                GetClientRect(m_hWnd, &rcSb);
-                UINT dpiSbHover = static_cast<UINT>(app.dpiScale * 96.0f);
-                int sbWHover = MulDiv(Constants::History::SCROLLBAR_THICKNESS, dpiSbHover, 96);
+                // Whether something above the rows already owns the cursor. The
+                // row logic at the bottom must not overwrite it — that is what
+                // this flag is for, and its absence was a bug: the arrow set
+                // here ran on EVERY move while the row's hand was set only on
+                // the frame the hovered row CHANGED, so the hand appeared for
+                // one message at each row boundary and the arrow came back
+                // inside the row. Exactly backwards.
+                bool cursorClaimed = false;
+
                 if (g_scanRunning) {
                     // Arrow-with-circle: work is happening in the background. The
                     // panel is NOT blocked — the user can scroll, pick a folder, or
                     // close it, and the sweep carries on either way.
                     SetCursor(Constants::Cursors::CURR_APPSTARTING);
-                } else if (mx >= rcSb.right - sbWHover) {
-                    UINT dpiSb = static_cast<UINT>(app.dpiScale * 96.0f);
-                    int totalHSb = CalcTotalContentH(static_cast<int>(g_displayList.size()), dpiSb);
-                    int winHSb = rcSb.bottom - rcSb.top;
-                    int maxScrSb = std::max(0, totalHSb - winHSb);
-                    SetCursor((maxScrSb > 0) ? Constants::Cursors::CURR_CLICK : Constants::Cursors::CURR_DEFAULT);
+                    cursorClaimed = true;
+                } else if (PtInRect(&g_view.vTrack, {mx, my})) {
+                    // The scrollbar's cursor belongs to FloatingPanelWnd now, and
+                    // it has already answered for this position — the panel used
+                    // to test the right-edge strip itself, with its own width.
+                    cursorClaimed = true;
                 } else {
                     POINT ptMov = {mx, my};
                     const RECT& cr = g_filter.GetClearRect();
-                    bool onClearIcon = (cr.right > cr.left) && PtInRect(&cr, ptMov);
-                    SetCursor(onClearIcon ? Constants::Cursors::CURR_CLICK : Constants::Cursors::CURR_DEFAULT);
+                    if ((cr.right > cr.left) && PtInRect(&cr, ptMov)) {
+                        SetCursor(Constants::Cursors::CURR_CLICK);
+                        cursorClaimed = true;
+                    }
                 }
 
-                if (g_sbDragging) {
-                    RECT rc3{};
-                    GetClientRect(m_hWnd, &rc3);
-                    UINT dpi3 = static_cast<UINT>(app.dpiScale * 96.0f);
-                    int totalH3 = CalcTotalContentH(static_cast<int>(g_displayList.size()), dpi3);
-                    int winH3 = rc3.bottom - rc3.top;
-                    int maxScr3 = std::max(0, totalH3 - winH3);
-                    if (maxScr3 > 0) {
-                        float visF = static_cast<float>(winH3) / static_cast<float>(totalH3);
-                        int minThumbD = MulDiv(static_cast<int>(Constants::History::SCROLLBAR_MIN_THUMB), dpi3, 96);
-                        int thumbL = std::max(minThumbD, static_cast<int>(winH3 * visF));
-                        int scrollPx = winH3 - thumbL;
-                        if (scrollPx > 0) {
-                            int delta3 = my - g_sbDragStartY;
-                            g_scrollOffsetY = std::clamp(
-                                    g_sbDragStartOff + static_cast<int>(
-                                        static_cast<float>(delta3) * maxScr3 / scrollPx),
-                                    0, maxScr3);
-                            InvalidateRect(m_hWnd, nullptr, FALSE);
-                        }
-                    }
-                    return 0;
-                }
+                // A thumb drag never reaches here — the base holds capture for
+                // the whole of it, so the hover logic below cannot fight one.
 
                 int newHover = -1;
                 for (int i = 0; i < static_cast<int>(g_rowRects.size()); ++i) {
@@ -3135,9 +3109,18 @@ namespace UI {
                     }
                 }
 
+                // CURSOR EVERY MOVE, REPAINT ONLY ON CHANGE. These two were tied
+                // together and they answer different questions: the cursor is
+                // "where is the pointer now", which is true on every message,
+                // while the repaint is "did the highlighted row change", which
+                // is not. Tying them made the hand a one-frame flash at each row
+                // boundary — see the note by cursorClaimed above.
+                if (!cursorClaimed)
+                    SetCursor((newHover >= 0) ? Constants::Cursors::CURR_CLICK
+                                              : Constants::Cursors::CURR_DEFAULT);
+
                 if (newHover != g_hoverRow) {
                     g_hoverRow = newHover;
-                    SetCursor((g_hoverRow >= 0) ? Constants::Cursors::CURR_CLICK : Constants::Cursors::CURR_DEFAULT);
                     InvalidateRect(m_hWnd, nullptr, FALSE);
                 }
                 return 0;
@@ -3149,11 +3132,8 @@ namespace UI {
                     ReleaseCapture();
                     return 0;
                 }
-                if (g_sbDragging) {
-                    g_sbDragging = false;
-                    ReleaseCapture();
-                    return 0;
-                }
+                // A scrollbar release never arrives here — the base owns that
+                // button-up — so it cannot be mistaken for the filter's.
                 // A drag-select started in the filter box owns this release — end
                 // it here (otherwise the box only drops m_dragging on the next
                 // WM_MOUSEMOVE) and return, so a drag that happens to end over a
@@ -3309,6 +3289,23 @@ namespace UI {
         ShowWindow(m_hWnd, SW_HIDE);
     }
 
+    // --- Scrolling, driven by FloatingPanelWnd -------------------------------
+
+    UI::ScrollView *HistoryListWnd::ScrollViewAt(POINT) { return &g_view; }
+
+    // One wheel "line" is one history row. Was hard-coded to a single row per
+    // notch, which made this the slowest list in the app; the count is the
+    // user's Mouse setting now, like everywhere else.
+    int HistoryListWnd::ScrollLinePx(const UI::ScrollView &) const {
+        const UINT dpi = static_cast<UINT>(app.dpiScale * 96.0f);
+        return MulDiv(Constants::History::HISTORY_ROW_HEIGHT, dpi, 96);
+    }
+
+    void HistoryListWnd::OnScrolled() {
+        HideLinkTip();
+        if (m_hWnd) InvalidateRect(m_hWnd, nullptr, FALSE);
+    }
+
     void HistoryListWnd::OnSetFocus() {
         UI::SetActivePanelWindow(m_hWnd);
         // Restore the selection that OnKillFocus saved when focus bounced away
@@ -3362,7 +3359,7 @@ namespace UI {
         int x, y, w, h;
         GetHistoryWindowBounds(g_hHistOwner ? g_hHistOwner : m_hWnd, x, y, w, h);
         SetWindowPos(m_hWnd, HWND_TOPMOST, x, y, w, h, SWP_FRAMECHANGED);
-        g_scrollOffsetY = 0;
+        g_view.scrollY = 0;
         g_savedHoverRow = -1;   // nothing to restore on a fresh open
         HoverCurrentFolderRow(); // land on the folder you are actually in
         // Every open validates, not just F5 — the missing / empty / link markers

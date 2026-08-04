@@ -144,6 +144,23 @@ namespace Constants {
     // from a SECOND playlist of "promotions" that is never merged into the
     // normal image playlist.
     // =========================================================================
+    // =========================================================================
+    // Scrollbar geometry — ONE set, for every scrolled surface in the app.
+    //
+    // There were three thicknesses: 12 in the Dedicated panel, a hardcoded 10 in
+    // Help and Exif, and 6 in the History list. Nothing chose those numbers
+    // together, so the same control was a different size depending on which
+    // window it was in — most visible at high DPI, where a 6-DIP strip is a hard
+    // target and a 12-DIP one is comfortable.
+    //
+    // DIPs at 96 DPI. Scaled at draw time through UI::ScrollBarThicknessPx, which
+    // is the only thing that should read these.
+    // =========================================================================
+    namespace Scrollbar {
+        constexpr int THICKNESS = 10; // strip width / height
+        constexpr int MIN_THUMB = 14; // shortest the thumb may get, either axis
+    }
+
     namespace Dedicated {
         // ── F8 panel appearance — single place to restyle the whole window ──
         // Opacity of the Dedicated panel, 0 = invisible .. 255 = opaque.
@@ -176,9 +193,10 @@ namespace Constants {
             constexpr COLORREF SCROLL_THUMB_HOT = RGB(132, 156, 196);
         }
 
-        // Scrollbar geometry for the F8 panel (DPI-scaled at draw time).
-        constexpr int PANEL_SCROLLBAR_W  = 12;
-        constexpr int PANEL_SCROLL_MIN_H = 28; // shortest the thumb may get
+        // Scrollbar geometry is Constants::Scrollbar, reached through
+        // UI::ScrollBarThicknessPx / ScrollBarMinThumbPx. The PANEL_SCROLLBAR_W
+        // and PANEL_SCROLL_MIN_H aliases that briefly bridged the two are gone —
+        // every call site reads the shared names directly.
 
         // Promotion weighting. A promo's weight is its relative chance of being
         // drawn; 65535 is ~65535× more likely than 1.
@@ -299,6 +317,15 @@ namespace Constants {
     constexpr float THUMBNAIL_PANEL_THUMB_MARGIN = 20.0f;
     constexpr BYTE THUMBNAIL_PANEL_WINDOW_OPACITY = 210;
     constexpr float THUMBNAIL_PANEL_WINDOW_MOUSE_WHEEL_SPEED = 120.0f;
+    // Shift multiplies a wheel step, in EVERY scrolling surface — the strips and
+    // every list panel through UI::WheelBoost. One number, because a modifier
+    // that accelerates by different amounts depending on which window is under
+    // the cursor is worse than no accelerator at all.
+    //
+    // Deliberately NOT the other convention, where Shift+wheel means "scroll
+    // sideways": this app has a second wheel for that, and the horizontal
+    // wheel is unambiguous where a modifier is not.
+    constexpr int WHEEL_SHIFT_ACCELERATOR = 3;
     constexpr int8_t THUMBNAIL_PANEL_WINDOW_MOUSE_WHEEL_DIRECTION = 1; // 1 is forward -1 is reverse
     constexpr bool THUMBNAIL_PANEL_WHEEL_WRAP_AROUND = false; // wrap strip from last→first and first→last on wheel overflow
     constexpr bool THUMBNAIL_PANEL_WHEEL_WRAP_OVERLAY = true; // show center overlay message on strip wrap-around
@@ -623,6 +650,24 @@ namespace Constants {
         // unbounded scan on every accept().
         constexpr size_t BLACKLIST_MAX = 8192;
 
+        // --- Timed blocks (a kick that keeps the peer out for a while) -------
+        //
+        // Far smaller than the permanent list because these are made BY HAND,
+        // one press at a time, and they expire on their own. Thousands of them
+        // would mean something had gone wrong rather than that somebody had been
+        // busy.
+        constexpr size_t TIMED_BLOCK_MAX = 256;
+
+        // What the panel's duration prompt opens on. Ten minutes is long enough
+        // to outlast a bot's retry loop and short enough that shutting out a
+        // real client by mistake fixes itself before anyone files a complaint.
+        constexpr int TIMED_BLOCK_DEFAULT_MIN = 10;
+        constexpr int TIMED_BLOCK_MIN_MIN     = 1;
+        // A day. Past this, the permanent list is the honest tool — a "timed"
+        // block measured in weeks is a ban that forgets itself at the next
+        // restart, which is the worst of both.
+        constexpr int TIMED_BLOCK_MAX_MIN     = 1440;
+
         // --- Defaults ---
         // Never autostart by default. A viewer that binds a port because nobody
         // said otherwise is a viewer that surprises its owner — and with the
@@ -652,6 +697,11 @@ namespace Constants {
         // gate gives it no special status, so it can be removed like any entry.
         constexpr const wchar_t *BIND_ADDRESS_DEFAULT = L"127.0.0.1";
         constexpr const wchar_t *BIND_ADDRESS_ANY     = L"0.0.0.0";
+        // Every interface, DUAL STACK. Distinct from 0.0.0.0 because that one is
+        // IPv4 only — the socket family follows the literal — and a mobile client
+        // on a carrier that hands out no IPv4 can reach this and nothing else.
+        // Start() clears IPV6_V6ONLY on it, so one socket serves both families.
+        constexpr const wchar_t *BIND_ADDRESS_ANY6    = L"::";
 
         // 0 means "not configured" — still refused by WhyCannotStart, since a
         // hand-edited file can say PortNo=0.
@@ -798,6 +848,30 @@ namespace Constants {
         // never drains its receive window, which without a timeout pins the
         // sending thread indefinitely.
         constexpr int SEND_TIMEOUT_MS = 30000;
+
+        // --- TCP keepalive -------------------------------------------------
+        //
+        // WHAT THIS IS FOR IS NAT, not a slow peer. An authenticated connection
+        // deliberately has NO receive timeout (see the note beside
+        // HANDSHAKE_TIMEOUT_MS): a mirrored screen is supposed to sit silent for
+        // minutes. On a LAN that is free. Across a home router it is not — a NAT
+        // mapping with no traffic through it is discarded after a few minutes,
+        // and the discard is SILENT IN BOTH DIRECTIONS. Neither end sees a close,
+        // so the server thread stays blocked in recv() on a socket that can never
+        // deliver anything again and the driving end's row stays green while the
+        // mirror does nothing. That failure has no other detection path, because
+        // the whole design of an idle mirror is that nothing is sent.
+        //
+        // Sixty seconds because typical consumer NAT UDP/TCP idle timeouts start
+        // around five minutes; this is comfortably inside the shortest of them
+        // while costing one empty segment a minute per connection.
+        constexpr DWORD KEEPALIVE_IDLE_MS     = 60000;
+
+        // Gap between probes once one has gone unanswered. Windows fixes the
+        // retry COUNT at 10 on Vista and later — it is not settable through
+        // SIO_KEEPALIVE_VALS — so this is the only lever on how fast a dead peer
+        // is declared dead: 10 s x 10 gives roughly 100 s after the idle period.
+        constexpr DWORD KEEPALIVE_INTERVAL_MS = 10000;
 
         // Longest peer-chosen name kept from "hello <name>". A LABEL for the
         // log and nothing else — capped so a peer cannot pad its name until the
@@ -1344,10 +1418,9 @@ namespace Constants {
         constexpr int HISTORY_FONT_SIZE = 14; // pt at 96 DPI — header / hint lines
         constexpr int HISTORY_LIST_FONT_SIZE = 16; // pt at 96 DPI — list item text (tune independently)
         constexpr int HISTORY_FILTER_ROW_H = 24; // px at 96 DPI — filter input row below the footer
-        // Scrollbar (right-edge GDI strip) - geometry only
-        constexpr int SCROLLBAR_THICKNESS = 6; // px width
-        constexpr int SCROLLBAR_MIN_THUMB = 16; // minimum thumb height in px
-        // Note: Scrollbar colors moved to ConstantsTheme.h
+        // Scrollbar geometry and colours are Constants::Scrollbar and
+        // Constants::Theme::Scrollbar — one set for every scrolled surface.
+        // This panel's own 6px width and 16px thumb are gone with them.
 
         // How long the startup folder sweep waits before touching the disk.
         // It runs at background I/O priority anyway, but holding off entirely

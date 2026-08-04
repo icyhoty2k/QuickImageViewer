@@ -2,17 +2,139 @@ name: Publish to WinGet
 
 on:
   release:
-    types: [ released ]
+    types: [released]
+
+  # Manual runs. The tag is an input rather than assumed, because on a manual
+  # run there is no release event to read one from — which is why the old
+  # workflow silently did nothing useful here: every step below referenced
+  # github.event.release.*, and all of those are empty when a human presses Run.
   workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Release tag to publish (blank = latest published release)'
+        required: false
+        type: string
+
+# gh release edit needs write access to this repo's releases. The default token
+# is read-only for contents on some org settings, and the failure looks like a
+# 403 from a step that "used to work".
+permissions:
+  contents: write
 
 jobs:
   publish:
     runs-on: ubuntu-latest
     steps:
+      # ---------------------------------------------------------------------
+      # 1. Work out WHICH release we are publishing.
+      #
+      # A release event carries the tag; a manual run may or may not. Falling
+      # back to the latest PUBLISHED release (not the latest tag) keeps the
+      # manual path honest — a draft or prerelease is not something winget
+      # should be told about.
+      # ---------------------------------------------------------------------
+      - name: Resolve release tag
+        id: rel
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO: ${{ github.repository }}
+          EVENT_TAG: ${{ github.event.release.tag_name }}
+          INPUT_TAG: ${{ inputs.tag }}
+        run: |
+          set -euo pipefail
+
+          TAG="${EVENT_TAG:-}"
+          [ -z "$TAG" ] && TAG="${INPUT_TAG:-}"
+
+          if [ -z "$TAG" ]; then
+            echo "No tag given — falling back to the latest published release."
+            TAG="$(gh release list --limit 1 --exclude-drafts --exclude-pre-releases \
+                     --json tagName -q '.[0].tagName')"
+          fi
+
+          if [ -z "$TAG" ] || [ "$TAG" = "null" ]; then
+            echo "::error::Could not determine a release tag to publish."
+            exit 1
+          fi
+
+          echo "Publishing tag: $TAG"
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+
+      # ---------------------------------------------------------------------
+      # 2. Make sure the release has notes.
+      #
+      # The Microsoft validation bot complains about an empty release body, and
+      # the old check only looked at github.event.release.body — empty on every
+      # manual run, so the safety net never fired exactly when it was needed.
+      # This reads the body back from the API instead, which works on both paths.
+      #
+      # --generate-notes first: real notes built from the commits since the last
+      # release are worth having, and the canned sentence is only a floor for
+      # when that produces nothing (a first release, or no commits between tags).
+      # ---------------------------------------------------------------------
+      - name: Ensure the release has notes
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO: ${{ github.repository }}
+          TAG: ${{ steps.rel.outputs.tag }}
+        run: |
+          set -euo pipefail
+
+          BODY="$(gh release view "$TAG" --json body -q .body || true)"
+
+          # Whitespace-only counts as empty. A body of a single newline reads as
+          # present to a [ -z ] test and as blank to the bot.
+          if [ -n "$(printf '%s' "$BODY" | tr -d '[:space:]')" ]; then
+            echo "Release already has notes — leaving them alone."
+            exit 0
+          fi
+
+          echo "Release body is empty; generating notes."
+          gh release edit "$TAG" --generate-notes || true
+
+          BODY="$(gh release view "$TAG" --json body -q .body || true)"
+          if [ -z "$(printf '%s' "$BODY" | tr -d '[:space:]')" ]; then
+            echo "Generated notes were empty too; writing a fallback."
+            gh release edit "$TAG" --notes \
+              "QuickImageViewer $TAG — general bug fixes and performance improvements."
+          fi
+
+      # ---------------------------------------------------------------------
+      # 3. Bring the winget-pkgs fork up to date with Microsoft's.
+      #
+      # THIS IS THE ONE THAT KEEPS BREAKING THE RUN. winget-releaser branches off
+      # the fork's default branch; if the fork is behind, the PR it opens carries
+      # every unrelated manifest change since the fork last synced, and the
+      # action errors out rather than producing that.
+      #
+      # --force because the fork is a mirror and nothing should ever be committed
+      # to its master directly. If you HAVE made local commits there, this
+      # discards them — that is the intended behaviour for a publishing mirror,
+      # but it is worth knowing before the first run.
+      #
+      # Needs WINGET_TOKEN (the token that owns the fork), not GITHUB_TOKEN,
+      # which has no access to another repository at all.
+      # ---------------------------------------------------------------------
+      - name: Sync winget-pkgs fork with upstream
+        env:
+          GH_TOKEN: ${{ secrets.WINGET_TOKEN }}
+        run: |
+          set -euo pipefail
+          gh repo sync icyhoty2k/winget-pkgs \
+            --source microsoft/winget-pkgs \
+            --force
+
+      # ---------------------------------------------------------------------
+      # 4. Publish.
+      #
+      # release-tag is passed explicitly so a manual run publishes the tag
+      # resolved in step 1. Without it the action falls back to the event's tag,
+      # which is empty on workflow_dispatch.
+      # ---------------------------------------------------------------------
       - name: Publish to WinGet
         uses: vedantmgoyal9/winget-releaser@v2
         with:
           identifier: IcyHotY2K.QuickImageViewer
           token: ${{ secrets.WINGET_TOKEN }}
-          # Uncomment if you publish multiple assets and want only the .exe picked up:
-          # installers-regex: '\.exe$'
+          installers-regex: '\.exe$'
+          release-tag: ${{ steps.rel.outputs.tag }}

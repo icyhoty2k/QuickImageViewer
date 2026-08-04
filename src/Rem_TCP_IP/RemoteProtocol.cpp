@@ -1,3 +1,8 @@
+// winsock2.h before anything that pulls windows.h — see the note in
+// RemoteServer.cpp. Needed here for EnableKeepAlive at the bottom of this file.
+#include <winsock2.h>
+#include <mstcpip.h>   // tcp_keepalive, SIO_KEEPALIVE_VALS
+
 #include "RemoteProtocol.h"
 #include "RemoteMirror.h" // SessionActive — the switch BlockedNow hangs off
 #include "Platform/Constants.h"
@@ -757,6 +762,7 @@ bool IsMirrorable(Command cmd) {
         case Command::ToggleAllPanels:
         case Command::ToggleDedicatedPanel:
         case Command::ToggleRemotePanel:
+        case Command::ToggleRemoteClients:
         case Command::ToggleRemotesConsole:
             return false;
 
@@ -1076,6 +1082,53 @@ std::wstring FromUtf8(const char *data, size_t len) {
     std::wstring out(static_cast<size_t>(n), L'\0');
     MultiByteToWideChar(CP_UTF8, 0, data, static_cast<int>(len), out.data(), n);
     return out;
+}
+
+// =============================================================================
+// Socket options
+// =============================================================================
+
+void EnableKeepAlive(UINT_PTR sock) {
+    const SOCKET s = static_cast<SOCKET>(sock);
+    if (s == INVALID_SOCKET) return;
+
+    // SIO_KEEPALIVE_VALS rather than setsockopt(SO_KEEPALIVE): the plain option
+    // switches keepalive on but leaves the SYSTEM-WIDE defaults in force, and
+    // the Windows default idle is TWO HOURS. That is far longer than any NAT
+    // mapping survives, so it would be the appearance of a fix and none of the
+    // effect. The ioctl sets both the flag and the intervals, per socket.
+    tcp_keepalive ka{};
+    ka.onoff             = 1;
+    ka.keepalivetime     = Constants::RemoteTcpIp::KEEPALIVE_IDLE_MS;
+    ka.keepaliveinterval = Constants::RemoteTcpIp::KEEPALIVE_INTERVAL_MS;
+
+    DWORD returned = 0;
+    // Return value deliberately ignored — see the header. Nothing here is worth
+    // dropping a working connection over, and every caller is on a path where
+    // the only alternative would be to carry on anyway.
+    WSAIoctl(s, SIO_KEEPALIVE_VALS, &ka, sizeof(ka), nullptr, 0,
+             &returned, nullptr, nullptr);
+}
+
+// =============================================================================
+// Addresses
+// =============================================================================
+
+std::wstring FormatEndpoint(const std::wstring &host, int port) {
+    // A colon anywhere is the test. A host NAME cannot contain one and an IPv4
+    // literal cannot either, so this cannot misfire on the common cases, and it
+    // does not need to know whether the literal is well-formed — an address that
+    // is already bracketed is left alone rather than double-wrapped.
+    const bool v6 = host.find(L':') != std::wstring::npos;
+    if (!v6 || (!host.empty() && host.front() == L'['))
+        return host + L":" + std::to_wstring(port);
+    return L"[" + host + L"]:" + std::to_wstring(port);
+}
+
+std::wstring StripAddressBrackets(const std::wstring &host) {
+    if (host.size() >= 2 && host.front() == L'[' && host.back() == L']')
+        return host.substr(1, host.size() - 2);
+    return host;
 }
 
 } // namespace Remote

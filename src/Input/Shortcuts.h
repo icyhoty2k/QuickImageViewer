@@ -68,6 +68,10 @@ namespace Shortcuts {
     // instance runs and edit its configuration. Its own window for the same
     // reason F8 is: it is a form, not a menu.
     constexpr UINT SC_PANEL_REMOTE_TOGGLE = VK_F9;
+    // Ctrl+F9 — Server Clients (Rem_TCP_IP/RemoteClientsWnd.h): who is connected
+    // to the listener above, and the buttons to kick, timed-kick or ban them.
+    // The modifier form of the key that opens the listener's own panel, matching
+    // Ctrl+F10 and Ctrl+F11 — plain key configures a thing, Ctrl inspects it.
     // F10 — Remote Servers (src/Rem_TCP_IP): the list of slave instances with
     // their live status, and the buttons to start/stop, observe and sync each.
     // F9 is what others connect TO; F10 is what this connects OUT to.
@@ -144,6 +148,15 @@ namespace Shortcuts {
     // All three live on Enter because they are one question at three depths — go
     // there, show this there, show that here.
     constexpr UINT SC_REMOTE_STREAM_IMAGE_IN = VK_RETURN; // requires ctrl+alt
+
+    // Ctrl+Shift+Enter — the Ctrl+Enter push, WIDENED to every connected instance
+    // instead of the ones ticked under Control (Ctrl+F11).
+    //
+    // Shift widens, as it does elsewhere in the resolver, which is why this is a
+    // fourth depth of the same key rather than a binding of its own. Still
+    // same-machine only: that limit comes from the payload carrying a folder
+    // path, and no choice of targets can make a path mean something elsewhere.
+    constexpr UINT SC_REMOTE_PUSH_IMAGE_ALL = VK_RETURN; // requires ctrl+shift
 
     // N (no modifier)  —  Master overlay toggle (all slots on/off)
     constexpr UINT SC_PANEL_OVERLAY_TOGGLE = 'N'; // not used

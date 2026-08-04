@@ -151,6 +151,33 @@ namespace {
             if (Remote::AddressMatches(e.address, address)) return true;
         return false;
     }
+
+    // --- Timed blocks -------------------------------------------------------
+    //
+    // Its own mutex, not g_mutex: this list is written from the UI thread (the
+    // panel's buttons) and read on the accept path, while g_mutex additionally
+    // guards file IO. Sharing one lock would put a panel click behind a disk
+    // write, on the same mutex every incoming connection takes.
+    std::vector<TimedEntry> g_timed;
+    std::mutex              g_timedMutex;
+
+    long long NowTicks() { return static_cast<long long>(GetTickCount64()); }
+
+    // Caller holds g_timedMutex. Drops what has run out, so the list is pruned
+    // by ordinary use rather than by a timer — the accept path and the panel
+    // between them touch it often enough, and an expired entry that nobody has
+    // looked at yet has no effect on anything.
+    void PruneTimedLocked() {
+        const long long now = NowTicks();
+        std::erase_if(g_timed, [now](const TimedEntry &t) { return t.untilMs <= now; });
+    }
+
+    // Caller holds g_timedMutex.
+    bool IsTimedBlockedLocked(const std::wstring &address) {
+        for (const TimedEntry &t : g_timed)
+            if (Remote::AddressMatches(t.address, address)) return true;
+        return false;
+    }
 }
 
 const std::wstring &FilePath() {
@@ -194,8 +221,69 @@ bool IsBlocked(const std::wstring &address) {
     }
     if (needLoad) Reload();
 
+    // TIMED FIRST, because it is the cheap one: an in-memory vector that is
+    // empty in every ordinary install, with no file behind it. The permanent
+    // list is checked second and is equally empty most of the time — neither
+    // costs anything real, and the order only matters for saying which.
+    {
+        std::lock_guard<std::mutex> lk(g_timedMutex);
+        PruneTimedLocked();
+        if (IsTimedBlockedLocked(address)) return true;
+    }
+
     std::lock_guard<std::mutex> lk(g_mutex);
     return IsBlockedLocked(address);
+}
+
+void AddTimed(const std::wstring &address, int minutes, const std::wstring &reason) {
+    if (address.empty() || !Remote::LooksLikeAddress(address)) return;
+    if (minutes <= 0) return;
+
+    const long long until = NowTicks() + static_cast<long long>(minutes) * 60 * 1000;
+
+    std::lock_guard<std::mutex> lk(g_timedMutex);
+    PruneTimedLocked();
+
+    // REPLACE rather than accumulate. Two timed blocks on one address would
+    // both have to expire before it came back, which makes "blocked for ten
+    // minutes" mean something different depending on what was pressed before.
+    for (TimedEntry &t : g_timed) {
+        if (t.address == address) {
+            t.untilMs = until;
+            t.reason  = reason;
+            return;
+        }
+    }
+
+    // Full: drop the entry closest to expiring, which is the one whose loss
+    // changes the least. Not a refusal like the permanent list's cap — that one
+    // fails closed on a file it cannot grow, while this is a live decision an
+    // operator just made and is entitled to see take effect.
+    if (g_timed.size() >= RT::TIMED_BLOCK_MAX) {
+        auto soonest = g_timed.begin();
+        for (auto it = g_timed.begin(); it != g_timed.end(); ++it)
+            if (it->untilMs < soonest->untilMs) soonest = it;
+        g_timed.erase(soonest);
+    }
+
+    TimedEntry t;
+    t.address = address;
+    t.reason  = reason;
+    t.untilMs = until;
+    g_timed.push_back(std::move(t));
+}
+
+bool ClearTimed(const std::wstring &address) {
+    std::lock_guard<std::mutex> lk(g_timedMutex);
+    const size_t before = g_timed.size();
+    std::erase_if(g_timed, [&address](const TimedEntry &t) { return t.address == address; });
+    return g_timed.size() != before;
+}
+
+std::vector<TimedEntry> TimedSnapshot() {
+    std::lock_guard<std::mutex> lk(g_timedMutex);
+    PruneTimedLocked();
+    return g_timed;
 }
 
 void Add(const std::wstring &address, const std::wstring &reason) {

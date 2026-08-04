@@ -45,6 +45,32 @@ namespace UI {
                 IsVisible() ? Hide() : Show();
             }
 
+            // Toggle, but when OPENING actually put the panel in front.
+            //
+            // Show() alone is not enough and the reason is not obvious: every
+            // panel here is WS_EX_TOPMOST, so they all sit in the same z-band,
+            // and re-showing one that is already visible leaves it wherever it
+            // was inside that band — usually behind whichever panel you pressed
+            // the button on, which is exactly where you cannot see it. The
+            // explicit HWND_TOPMOST re-assert is what reorders it WITHIN the
+            // band; SetForegroundWindow alone does not, because the window never
+            // lost activation to begin with.
+            //
+            // This is what every cross-panel button wants — the pairs that open
+            // each other (Server Log ↔ Remote Commands, Local Server ↔ Server
+            // Clients) all behave identically because they all come through
+            // here. It began as a file static in RemoteLogWnd.cpp and moved the
+            // moment a second panel needed it.
+            void ToggleToFront() {
+                if (IsVisible()) { Hide(); return; }
+                Show();
+                if (m_hWnd) {
+                    SetWindowPos(m_hWnd, HWND_TOPMOST, 0, 0, 0, 0,
+                                 SWP_NOMOVE | SWP_NOSIZE);
+                    SetForegroundWindow(m_hWnd);
+                }
+            }
+
             bool IsVisible() const {
                 return m_hWnd && IsWindowVisible(m_hWnd);
             }
