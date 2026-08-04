@@ -113,6 +113,166 @@ namespace UI {
                 Hide();
             return 0;
         }
+        // Scrolling, before the panel sees anything. A panel that returns no
+        // view from ScrollViewAt is unaffected — except for the horizontal
+        // wheel, which is swallowed for every panel whether it scrolls or not.
+        //
+        // THAT SWALLOW IS THE POINT, not a side effect. Unhandled, WM_MOUSEHWHEEL
+        // travels on and reaches the main window, whose horizontal wheel changes
+        // FOLDER — so a stray thumb-wheel nudge while reading the Help panel used
+        // to move the viewer somewhere else entirely, with the panel still on top
+        // hiding that it had happened.
+        {
+            LRESULT r = 0;
+            if (HandleScrollMessage(message, wParam, lParam, r)) return r;
+        }
+
         return HandlePanelMessage(message, wParam, lParam);
+    }
+
+    void FloatingPanelWnd::OnScrolled() {
+        if (m_hWnd) InvalidateRect(m_hWnd, nullptr, FALSE);
+    }
+
+    bool FloatingPanelWnd::HandleScrollMessage(UINT message, WPARAM wParam,
+                                               LPARAM lParam, LRESULT &resultOut) {
+        resultOut = 0;
+
+        switch (message) {
+            // ── Wheels ──────────────────────────────────────────────────────
+            //
+            // The pointer is in SCREEN coordinates for both wheel messages —
+            // unlike every other mouse message here — so it is converted before
+            // ScrollViewAt sees it. Getting that wrong picks the wrong view on a
+            // multi-list panel and silently scrolls the other one.
+            case WM_MOUSEWHEEL:
+            case WM_MOUSEHWHEEL: {
+                const bool horizontal = (message == WM_MOUSEHWHEEL);
+
+                POINT pt{GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam)};
+                ScreenToClient(m_hWnd, &pt);
+
+                ScrollView *sv = ScrollViewAt(pt);
+                if (!sv) {
+                    // Nothing to scroll. The vertical wheel is left to the panel
+                    // (some use it for their own purposes); the horizontal one is
+                    // eaten regardless — see the note in HandleMessage.
+                    return horizontal;
+                }
+
+                const int linePx = ScrollLinePx(*sv);
+                if (linePx <= 0) return horizontal;
+
+                if (horizontal) sv->ScrollBy(HWheelDeltaToPixels(wParam, linePx), 0);
+                else            sv->ScrollBy(0, WheelDeltaToPixels(wParam, linePx));
+                OnScrolled();
+                return true;
+            }
+
+            // ── Grab a thumb, or page the track ─────────────────────────────
+            case WM_LBUTTONDOWN: {
+                POINT pt{GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam)};
+                ScrollView *sv = ScrollViewAt(pt);
+                if (!sv) return false;
+
+                // Thumbs before tracks, and both before the panel's own rows:
+                // a bar is the smallest target on any panel and must not be
+                // stolen by whatever is drawn beside it.
+                if (PtInRect(&sv->vThumb, pt) || PtInRect(&sv->hThumb, pt)) {
+                    const bool horiz = PtInRect(&sv->hThumb, pt) != 0;
+                    m_scrollDragView   = sv;
+                    m_scrollDragHoriz  = horiz;
+                    m_scrollDragGrabPx = horiz ? (pt.x - sv->hThumb.left)
+                                         : (pt.y - sv->vThumb.top);
+                    SetCapture(m_hWnd);
+                    return true;
+                }
+                if (PtInRect(&sv->vTrack, pt)) {
+                    sv->ScrollBy(0, pt.y < sv->vThumb.top ? -sv->Height() : sv->Height());
+                    OnScrolled();
+                    return true;
+                }
+                if (PtInRect(&sv->hTrack, pt)) {
+                    sv->ScrollBy(pt.x < sv->hThumb.left ? -sv->Width() : sv->Width(), 0);
+                    OnScrolled();
+                    return true;
+                }
+                return false;
+            }
+
+            // ── Drag, and the cursor while merely hovering a bar ────────────
+            case WM_MOUSEMOVE: {
+                if (m_scrollDragView) {
+                    if (m_scrollDragHoriz) m_scrollDragView->DragToX(GET_X_LPARAM(lParam), m_scrollDragGrabPx);
+                    else                   m_scrollDragView->DragToY(GET_Y_LPARAM(lParam), m_scrollDragGrabPx);
+                    OnScrolled();
+                    return true;
+                }
+
+                // HOVERING A BAR IS CONSUMED HERE, not left to WM_SETCURSOR
+                // alone. Several panels call SetCursor unconditionally in their
+                // own WM_MOUSEMOVE — "over my link? hand : arrow" — which runs
+                // AFTER the base has already answered WM_SETCURSOR and quietly
+                // puts the arrow back. The result was a scrollbar that showed a
+                // hand in some windows and not others, which is exactly the
+                // inconsistency this base class exists to remove.
+                //
+                // Swallowing the message also stops those panels updating their
+                // hover highlight while the pointer is over the bar. That is the
+                // right answer anyway: the pointer is not over a row, so no row
+                // should light up.
+                POINT pt{GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam)};
+                if (ScrollView *sv = ScrollViewAt(pt)) {
+                    if (PtInRect(&sv->vTrack, pt) || PtInRect(&sv->hTrack, pt) ||
+                        PtInRect(&sv->vThumb, pt) || PtInRect(&sv->hThumb, pt)) {
+                        SetCursor(Constants::Cursors::CURR_CLICK);
+                        return true;
+                    }
+                }
+                return false;
+            }
+
+            case WM_LBUTTONUP:
+                if (!m_scrollDragView) return false;
+                ReleaseCapture();       // WM_CAPTURECHANGED clears the state
+                return true;
+
+            // A drag can end without the button coming up — Alt+Tab, a message
+            // box, another window taking capture. Clearing HERE rather than only
+            // on WM_LBUTTONUP is what stops a panel being left permanently in
+            // drag mode, scrolling on every later mouse-move with no button held.
+            case WM_CAPTURECHANGED:
+                if (!m_scrollDragView) return false;
+                m_scrollDragView  = nullptr;
+                m_scrollDragHoriz = false;
+                return true;
+
+            // ── Cursor ──────────────────────────────────────────────────────
+            case WM_SETCURSOR: {
+                if (LOWORD(lParam) != HTCLIENT) return false;
+                POINT pt;
+                GetCursorPos(&pt);
+                ScreenToClient(m_hWnd, &pt);
+
+                ScrollView *sv = ScrollViewAt(pt);
+                if (!sv) return false;
+
+                // A HAND OVER EITHER BAR, everywhere. The panels disagreed about
+                // this — one deliberately showed an arrow over its track on the
+                // grounds that a hand suggests a button. One rule is worth more
+                // than either argument: the bar IS clickable, the track pages
+                // and the thumb drags, so the hand is telling the truth.
+                if (PtInRect(&sv->vTrack, pt) || PtInRect(&sv->hTrack, pt) ||
+                    PtInRect(&sv->vThumb, pt) || PtInRect(&sv->hThumb, pt)) {
+                    SetCursor(Constants::Cursors::CURR_CLICK);
+                    resultOut = TRUE;
+                    return true;
+                }
+                return false;
+            }
+
+            default:
+                return false;
+        }
     }
 } // namespace UI

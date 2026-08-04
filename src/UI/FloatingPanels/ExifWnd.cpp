@@ -148,6 +148,13 @@ namespace UI {
                      MulDiv(520, dpi, 96), MulDiv(640, dpi, 96));
     }
 
+    // One wheel "line" here is one metadata row. The base multiplies it by the
+    // user's Mouse setting and the Shift accelerator — this only says what a
+    // line means in this panel.
+    int ExifWnd::ScrollLinePx(const UI::ScrollView &) const {
+        return static_cast<int>(14 * app.dpiScale);
+    }
+
     void ExifWnd::Refresh() {
         if (!m_hWnd || !IsWindowVisible(m_hWnd)) return;
         if (app.currentIndex < 0 || app.currentIndex >= static_cast<int>(app.playlist.size())) return;
@@ -193,8 +200,8 @@ namespace UI {
             m_thumbBitmap = nullptr;
         }
         m_thumbW = m_thumbH = 0;
-        m_scrollOffsetY = 0;
-        m_totalContentHeight = 0;
+        m_view.scrollY  = 0;
+        m_view.contentH = 0;
         m_selectedRows.clear();
         m_anchorRow = -1;
 
@@ -572,20 +579,25 @@ namespace UI {
             case 'M':
                 Hide();
                 return true;
+            // A real page rather than a fixed 200px — the view knows its own
+            // height, which is what a page means.
             case VK_PRIOR:
-                m_scrollOffsetY -= static_cast<int>(200 * app.dpiScale);
+                m_view.ScrollBy(0, -m_view.Height());
                 InvalidateRect(m_hWnd, nullptr, FALSE);
                 return true;
             case VK_NEXT:
-                m_scrollOffsetY += static_cast<int>(200 * app.dpiScale);
+                m_view.ScrollBy(0, m_view.Height());
                 InvalidateRect(m_hWnd, nullptr, FALSE);
                 return true;
             case VK_HOME:
-                m_scrollOffsetY = 0;
+                m_view.scrollY = 0;
                 InvalidateRect(m_hWnd, nullptr, FALSE);
                 return true;
             case VK_END:
-                m_scrollOffsetY = INT_MAX;
+                // Was INT_MAX and left for the paint to clamp. Asking the view
+                // means the offset is never briefly nonsense, which matters now
+                // that the thumb is drawn from it.
+                m_view.scrollY = m_view.MaxScrollY();
                 InvalidateRect(m_hWnd, nullptr, FALSE);
                 return true;
         }
@@ -629,7 +641,7 @@ namespace UI {
 
                 const UINT dpi = static_cast<UINT>(app.dpiScale * 96.0f);
                 const int pad = MulDiv(12, dpi, 96);
-                const int sbW = MulDiv(10, dpi, 96);
+                const int sbW = UI::ScrollBarThicknessPx(app.dpiScale);
                 const int rowH = MulDiv(22, dpi, 96);
                 const int sectH = MulDiv(28, dpi, 96);
                 const int gap = MulDiv(4, dpi, 96);
@@ -679,7 +691,9 @@ namespace UI {
 
                 const int cTop = pad;
                 const int cBot = rc.bottom - pad;
-                const int cH = cBot - cTop;
+                // The content band's height is m_view.Height() now — the view
+                // rect is set from cTop/cBot below and MaxScrollY reads it, so a
+                // separate cH would be the same number computed twice.
                 const int cR = rc.right - sbW - pad / 2;
 
                 // Thumbnail column: right side of FILE section
@@ -688,14 +702,17 @@ namespace UI {
                 const int thumbColW = exifThumbSize + exifThumbGap;
                 const int textCR = cR - thumbColW; // right edge for FILE section text
 
-                if (m_totalContentHeight == 0) {
+                if (m_view.contentH == 0) {
                     int h = 0;
                     for (const auto &r: m_rows) h += r.isSection ? (sectH + gap) : rowH;
-                    m_totalContentHeight = h + pad;
+                    m_view.contentH = h + pad;
                 }
 
-                const int maxScroll = std::max(0, m_totalContentHeight - cH);
-                m_scrollOffsetY = std::clamp(m_scrollOffsetY, 0, maxScroll);
+                // The view is the content band, minus the bar's column. Set
+                // before the clamp, because Height() is what MaxScrollY reads.
+                m_view.view = {0, cTop, cR, cBot};
+                m_view.Clamp();
+                const int maxScroll = m_view.MaxScrollY();
 
                 HRGN hClip = CreateRectRgn(0, cTop, cR, cBot);
                 SelectClipRgn(hdc, hClip);
@@ -703,7 +720,7 @@ namespace UI {
                 // Draw selection highlights before text (same hover color as HistoryListWnd)
                 if (!m_selectedRows.empty()) {
                     HBRUSH hSel = UI::Gdi::Brush(RGB(40, 60, 80));
-                    int hy = cTop - m_scrollOffsetY;
+                    int hy = cTop - m_view.scrollY;
                     for (int i = 0; i < static_cast<int>(m_rows.size()); ++i) {
                         const int hh = m_rows[i].isSection ? (sectH + gap) : rowH;
                         if (m_selectedRows.count(i)) {
@@ -718,7 +735,7 @@ namespace UI {
                 int fileRowsY = 0, fileRowsH = 0;
                 {
                     bool inFile = false;
-                    int scanY = cTop - m_scrollOffsetY;
+                    int scanY = cTop - m_view.scrollY;
                     for (const auto &r: m_rows) {
                         const int h = r.isSection ? (sectH + gap) : rowH;
                         if (r.isSection) {
@@ -767,7 +784,7 @@ namespace UI {
                     }
                 }
 
-                int y = cTop - m_scrollOffsetY;
+                int y = cTop - m_view.scrollY;
                 bool inFileSection = false;
                 for (const auto &row: m_rows) {
                     if (row.isSection) {
@@ -799,21 +816,17 @@ namespace UI {
                 SelectClipRgn(hdc, nullptr);
                 DeleteObject(hClip);
 
-                // Scrollbar
+                // Scrollbar. Geometry and the thumb rect come from the shared
+                // view now, so the hit box below is exactly what was drawn —
+                // this panel used to compute the two independently and its drag
+                // therefore did not track the cursor.
+                m_view.ClearBars();
                 if (maxScroll > 0) {
                     const int sbX = rc.right - sbW - MulDiv(3, dpi, 96);
-                    const int thH = std::max(MulDiv(20, dpi, 96), (cH * cH) / m_totalContentHeight);
-                    const int thY = cTop + (cH - thH) * m_scrollOffsetY / maxScroll;
-
-                    RECT trRc = {sbX, cTop, sbX + sbW, cBot};
-                    FillRect(hdc, &trRc, UI::Gdi::Brush(clrSBg));
-
-                    RECT thRc = {sbX, thY, sbX + sbW, thY + thH};
-                    FillRect(hdc, &thRc, UI::Gdi::Brush(Constants::Theme::ThemedColor(
-                            Constants::Theme::ExifWindow::SCROLLBAR_THUMB_R,
-                            Constants::Theme::ExifWindow::SCROLLBAR_THUMB_G,
-                            Constants::Theme::ExifWindow::SCROLLBAR_THUMB_B, app.themeFactor)));
+                    m_view.vTrack = {sbX, cTop, sbX + sbW, cBot};
                 }
+                UI::DrawBars(hdc, m_view, app.dpiScale,
+                             UI::ThemeScrollBarColors(app.themeFactor));
 
                 SelectObject(hdc, hOld);
                 // Fonts are cached members — not deleted here
@@ -822,12 +835,6 @@ namespace UI {
                 return 0;
             }
 
-            case WM_MOUSEWHEEL: {
-                const int delta = GET_WHEEL_DELTA_WPARAM(wParam);
-                m_scrollOffsetY -= (delta / WHEEL_DELTA) * static_cast<int>(40 * app.dpiScale);
-                InvalidateRect(m_hWnd, nullptr, FALSE);
-                return 0;
-            }
 
             case WM_SETCURSOR: {
                 if (LOWORD(lParam) != HTCLIENT) break;
@@ -841,10 +848,10 @@ namespace UI {
                 const int gap = MulDiv(4, dpi, 96);
                 RECT rc;
                 GetClientRect(m_hWnd, &rc);
-                const int sbX = rc.right - MulDiv(10, dpi, 96) - MulDiv(3, dpi, 96);
+                const int sbX = rc.right - UI::ScrollBarThicknessPx(app.dpiScale) - MulDiv(3, dpi, 96);
                 bool hand = false;
                 if (pt.x < sbX) {
-                    int y = pad - m_scrollOffsetY;
+                    int y = pad - m_view.scrollY;
                     for (int i = 0; i < static_cast<int>(m_rows.size()); ++i) {
                         const int h = m_rows[i].isSection ? (sectH + gap) : rowH;
                         if (pt.y >= y && pt.y < y + h) {
@@ -880,19 +887,21 @@ namespace UI {
                 RECT rc;
                 GetClientRect(m_hWnd, &rc);
                 const UINT dpi = static_cast<UINT>(app.dpiScale * 96.0f);
-                const int sbW = MulDiv(10, dpi, 96);
+                const int sbW = UI::ScrollBarThicknessPx(app.dpiScale);
                 const int sbX = rc.right - sbW - MulDiv(3, dpi, 96);
 
+                // The bar itself never reaches here — FloatingPanelWnd consumes
+                // clicks on a thumb or a track before this panel is asked. What
+                // is left is the bar's COLUMN with no bar drawn, which must not
+                // fall through to row selection.
                 if (pt.x >= sbX) {
-                    m_sbDragging = true;
-                    m_sbDragStartY = pt.y;
-                    m_sbDragStartOffset = m_scrollOffsetY;
+                    // nothing to do
                 } else {
                     const int pad = MulDiv(12, dpi, 96);
                     const int rowH = MulDiv(22, dpi, 96);
                     const int sectH = MulDiv(28, dpi, 96);
                     const int gap = MulDiv(4, dpi, 96);
-                    int y = pad - m_scrollOffsetY;
+                    int y = pad - m_view.scrollY;
                     int hit = -1;
                     for (int i = 0; i < static_cast<int>(m_rows.size()); ++i) {
                         const int h = m_rows[i].isSection ? (sectH + gap) : rowH;
@@ -958,17 +967,8 @@ namespace UI {
                                  0, 0, SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE);
                     return 0;
                 }
-                if (m_sbDragging) {
-                    RECT rc;
-                    GetClientRect(m_hWnd, &rc);
-                    const UINT dpi = static_cast<UINT>(app.dpiScale * 96.0f);
-                    const int pad = MulDiv(12, dpi, 96);
-                    const int cH = rc.bottom - 2 * pad;
-                    const int maxSc = std::max(0, m_totalContentHeight - cH);
-                    m_scrollOffsetY = m_sbDragStartOffset
-                                      + (GET_Y_LPARAM(lParam) - m_sbDragStartY) * maxSc / std::max(1, cH);
-                    InvalidateRect(m_hWnd, nullptr, FALSE);
-                }
+                // A thumb drag never reaches here — the base holds capture and
+                // consumes the move while one is in progress.
                 return 0;
             }
 
@@ -978,15 +978,14 @@ namespace UI {
                     m_moving = false;
                     ReleaseCapture();
                 }
-                m_sbDragging = false;
                 return 0;
 
             case WM_EXIF_READY: {
                 auto *result = reinterpret_cast<ExifResult *>(lParam);
                 m_rows = std::move(result->rows);
                 delete result;
-                m_totalContentHeight = 0;
-                m_scrollOffsetY = 0;
+                m_view.contentH = 0;
+                m_view.scrollY  = 0;
                 m_selectedRows.clear();
                 m_anchorRow = -1;
                 InvalidateRect(m_hWnd, nullptr, FALSE);
@@ -1005,7 +1004,7 @@ namespace UI {
                     m_thumbW = bm.bmWidth;
                     m_thumbH = bm.bmHeight;
                 }
-                m_totalContentHeight = 0; // layout changes when thumb column appears
+                m_view.contentH = 0; // layout changes when thumb column appears
                 InvalidateRect(m_hWnd, nullptr, FALSE);
                 return 0;
             }

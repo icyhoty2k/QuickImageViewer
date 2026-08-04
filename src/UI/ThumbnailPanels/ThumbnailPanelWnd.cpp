@@ -1,4 +1,5 @@
 #include "ThumbnailPanelWnd.h"
+#include "UI/CustomControls/ScrollView.h" // WheelBoost — the shared Shift rule
 #include <algorithm>
 #include <filesystem>
 #include <unordered_set>
@@ -820,6 +821,80 @@ namespace UI {
         return (m_position == 2 || m_position == 4);
     }
 
+    // One wheel body for both wheels, and for every strip that inherits this
+    // WndProc — DirWnd, CacheWnd and the spawned strips all reach it here rather
+    // than each carrying a copy. It was inline in WM_MOUSEWHEEL; adding the
+    // horizontal wheel is what made a second caller exist, and a second caller
+    // is the point at which the code moves rather than being duplicated.
+    //
+    // THE TWO WHEELS DISAGREE ABOUT SIGN, and this offset inverts it again:
+    //
+    //   vertical   delta > 0 = rotated AWAY = go back  = m_offset toward 0
+    //   horizontal delta > 0 = tilted RIGHT = go ahead = m_offset toward minOff
+    //
+    // m_offset runs [minOff, 0] with 0 at the START, so "go ahead" is negative.
+    // Tilting right on a strip that runs left-to-right has to advance it, which
+    // is the opposite of what the same delta means on the vertical wheel.
+    //
+    // Deliberately still ONE STEP PER MESSAGE rather than proportional to the
+    // accumulated delta: the wrap-around below is a discrete decision — "already
+    // at the end and pushed further" — and feeding it a distance would make a
+    // fast flick skip the boundary it is supposed to catch.
+    void ThumbnailPanelWnd::ScrollByWheel(int delta, bool horizontal) {
+        if (delta == 0) return;
+
+        // The accelerator comes from the shared rule, not a local 3.0f — the
+        // strips and the list panels boost by the same amount or the modifier
+        // means something different depending on what is under the cursor.
+        float scroll = Constants::THUMBNAIL_PANEL_WINDOW_MOUSE_WHEEL_SPEED
+                       * static_cast<float>(UI::WheelBoost());
+
+        const bool forward = horizontal ? (delta > 0) : (delta < 0);
+        const float step = (forward ? -scroll : scroll)
+                           * Constants::THUMBNAIL_PANEL_WINDOW_MOUSE_WHEEL_DIRECTION;
+
+        // Wrap-around: when already at a boundary and the wheel pushes past it,
+        // jump to the opposite end instead of doing nothing.
+        // m_offset range is [minOff, 0]: 0 = start, minOff (<0) = end.
+        {
+            RECT crw{};
+            GetClientRect(m_hWnd, &crw);
+            const bool vert = IsVertical();
+            const float thumbSz = (vert
+                                       ? Constants::THUMBNAIL_PANEL_THUMB_HEIGHT
+                                       : Constants::THUMBNAIL_PANEL_THUMB_WIDTH) * app.dpiScale;
+            const float spacing = Constants::THUMBNAIL_PANEL_THUMB_SPACING * app.dpiScale;
+            const float margin = Constants::THUMBNAIL_PANEL_THUMB_MARGIN * app.dpiScale;
+            const float surface = static_cast<float>(vert ? crw.bottom : crw.right);
+            const float total = static_cast<float>(m_thumbnails.size()) * (thumbSz + spacing) - spacing;
+            const float minOff = surface - total - 2.0f * margin;
+
+            if (minOff < 0.0f) { // content overflows — scrolling is possible
+                const float eps = 0.5f;
+                if (app.thumbnailPanelWheelWrapAround) {
+                    if (step < 0.0f && m_offset <= minOff + eps) {
+                        m_offset = 0.0f; // at end, pushing further → wrap to start
+                        if constexpr (Constants::THUMBNAIL_PANEL_WHEEL_WRAP_OVERLAY)
+                            g_overlayManager.PostCenterMessage(m_hOwner,
+                                                               Constants::Messages::THUMB_STRIP_WRAP_TO_START);
+                    } else if (step > 0.0f && m_offset >= -eps) {
+                        m_offset = minOff; // at start, pushing back → wrap to end
+                        if constexpr (Constants::THUMBNAIL_PANEL_WHEEL_WRAP_OVERLAY)
+                            g_overlayManager.PostCenterMessage(m_hOwner,
+                                                               Constants::Messages::THUMB_STRIP_WRAP_TO_END);
+                    } else {
+                        m_offset += step; // normal scroll (clamped in rebuild)
+                    }
+                } else {
+                    m_offset += step; // wrap disabled — clamp in rebuild
+                }
+            } else {
+                m_offset += step;
+            }
+        }
+        UpdateView();
+    }
+
     // =========================================================================
     // GetWindowBounds  —  shared 5-slot geometry for all thumbnail panels
     // =========================================================================
@@ -987,55 +1062,22 @@ namespace UI {
                 return 0;
 
             // -----------------------------------------------------------------
-            case WM_MOUSEWHEEL: {
-                int delta = GET_WHEEL_DELTA_WPARAM(wParam);
-                float scroll = Constants::THUMBNAIL_PANEL_WINDOW_MOUSE_WHEEL_SPEED;
-                if (GetKeyState(VK_SHIFT) & 0x8000) scroll *= 3.0f;
-                const float step = (delta > 0 ? scroll : -scroll)
-                                   * Constants::THUMBNAIL_PANEL_WINDOW_MOUSE_WHEEL_DIRECTION;
-
-                // Wrap-around: when already at a boundary and the wheel pushes
-                // past it, jump to the opposite end instead of doing nothing.
-                // m_offset range is [minOff, 0]: 0 = start, minOff (<0) = end.
-                {
-                    RECT crw{};
-                    GetClientRect(m_hWnd, &crw);
-                    const bool vert = IsVertical();
-                    const float thumbSz = (vert
-                                               ? Constants::THUMBNAIL_PANEL_THUMB_HEIGHT
-                                               : Constants::THUMBNAIL_PANEL_THUMB_WIDTH) * app.dpiScale;
-                    const float spacing = Constants::THUMBNAIL_PANEL_THUMB_SPACING * app.dpiScale;
-                    const float margin = Constants::THUMBNAIL_PANEL_THUMB_MARGIN * app.dpiScale;
-                    const float surface = static_cast<float>(vert ? crw.bottom : crw.right);
-                    const float total = static_cast<float>(m_thumbnails.size()) * (thumbSz + spacing) - spacing;
-                    const float minOff = surface - total - 2.0f * margin;
-
-                    if (minOff < 0.0f) { // content overflows — scrolling is possible
-                        const float eps = 0.5f;
-                        if (app.thumbnailPanelWheelWrapAround) {
-                            if (step < 0.0f && m_offset <= minOff + eps) {
-                                m_offset = 0.0f; // at end, pushing further → wrap to start
-                                if constexpr (Constants::THUMBNAIL_PANEL_WHEEL_WRAP_OVERLAY)
-                                    g_overlayManager.PostCenterMessage(m_hOwner,
-                                                                       Constants::Messages::THUMB_STRIP_WRAP_TO_START);
-                            } else if (step > 0.0f && m_offset >= -eps) {
-                                m_offset = minOff; // at start, pushing back → wrap to end
-                                if constexpr (Constants::THUMBNAIL_PANEL_WHEEL_WRAP_OVERLAY)
-                                    g_overlayManager.PostCenterMessage(m_hOwner,
-                                                                       Constants::Messages::THUMB_STRIP_WRAP_TO_END);
-                            } else {
-                                m_offset += step; // normal scroll (clamped in rebuild)
-                            }
-                        } else {
-                            m_offset += step; // wrap disabled — clamp in rebuild
-                        }
-                    } else {
-                        m_offset += step;
-                    }
-                }
-                UpdateView();
+            case WM_MOUSEWHEEL:
+                ScrollByWheel(GET_WHEEL_DELTA_WPARAM(wParam), false);
                 return 0;
-            }
+
+            // The thumb / tilt wheel, and it belongs HERE rather than in DirWnd
+            // and CacheWnd separately — they inherit this WndProc, so one case
+            // gives every strip the second wheel.
+            //
+            // A strip is one-dimensional: it has a single axis whichever way it
+            // is oriented, so both wheels drive the same offset. That is also
+            // what the hardware makes people expect — a horizontal strip under a
+            // thumb wheel should move sideways, and a vertical one still has
+            // only one direction it can go.
+            case WM_MOUSEHWHEEL:
+                ScrollByWheel(GET_WHEEL_DELTA_WPARAM(wParam), true);
+                return 0;
 
             // -----------------------------------------------------------------
             // WM_SYSKEYDOWN as well: F10 pressed alone, and every ALT

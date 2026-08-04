@@ -17,6 +17,7 @@
 #include "FloatingPanels/ZoomWnd.h"
 #include "Dedicated/DedicatedWnd.h"
 #include "Rem_TCP_IP/RemoteWnd.h"
+#include "Rem_TCP_IP/RemoteClientsWnd.h"
 #include "Rem_TCP_IP/RemotesWnd.h"
 #include "Rem_TCP_IP/MirrorPickerWnd.h"
 #include "Rem_TCP_IP/RemoteLogWnd.h"
@@ -191,6 +192,7 @@ ThumbnailPanelWnd &getActiveDirWnd();
             StatsWnd        &getStatsWindow();
             DedicatedWnd    &getDedicatedWindow();
             RemoteWnd       &getRemoteWindow();
+            RemoteClientsWnd &getRemoteClientsWindow();
             RemotesWnd      &getRemotesConsoleWindow();
             MirrorPickerWnd &getMirrorPickerWindow();
             RemoteLogWnd    &getRemoteLogWindow();
@@ -258,6 +260,7 @@ ThumbnailPanelWnd &getActiveDirWnd();
             StatsWnd       statsWnd;
             DedicatedWnd   dedicatedWnd;
             RemoteWnd      remoteWnd;
+            RemoteClientsWnd remoteClientsWnd;
             RemotesWnd     remotesWnd;
             MirrorPickerWnd mirrorPickerWnd;
             RemoteLogWnd    remoteLogWnd;
@@ -283,12 +286,12 @@ ThumbnailPanelWnd &getActiveDirWnd();
             // member. The spawned DirWnd pool is deliberately not here — it has
             // its own array and its own IsPanelVisible().
             // =================================================================
-            static constexpr size_t FIXED_PANEL_COUNT = 15;
+            static constexpr size_t FIXED_PANEL_COUNT = 16;
             IPanelWindow *const m_fixedPanels[FIXED_PANEL_COUNT] = {
                 &helpWnd,     &cacheWnd,       &dirWnd,       &historyListWnd,
                 &exifWnd,     &jumpToWnd,      &zoomWnd,      &findWnd,
-                &statsWnd,    &dedicatedWnd,   &remoteWnd,    &remotesWnd,
-                &mirrorPickerWnd, &remoteLogWnd, &remoteCmdWnd
+                &statsWnd,    &dedicatedWnd,   &remoteWnd,    &remoteClientsWnd,
+                &remotesWnd,  &mirrorPickerWnd, &remoteLogWnd, &remoteCmdWnd
             };
 
             // Fixed pool of 4 pre-allocated SpawnedDirWnd instances — one per layout slot

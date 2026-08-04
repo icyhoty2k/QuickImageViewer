@@ -231,6 +231,34 @@ bool LooksLikeAddress(const std::wstring &s) {
     return true;
 }
 
+bool SameHost(const std::wstring &a, const std::wstring &b) {
+    if (a.empty() || b.empty()) return false;
+
+    // v6 first: an IPv4-mapped literal ("::ffff:1.2.3.4") parses as v6 and must
+    // not be silently compared against the plain v4 form as though the two were
+    // unrelated — checking v6 first keeps both sides in the same family.
+    BYTE a6[16]{}, b6[16]{};
+    const bool aIs6 = ParseV6(a, a6);
+    const bool bIs6 = ParseV6(b, b6);
+    if (aIs6 || bIs6) {
+        if (aIs6 != bIs6) return false;
+        return memcmp(a6, b6, 16) == 0;
+    }
+
+    uint32_t a4 = 0, b4 = 0;
+    const bool aIs4 = ParseV4(a, a4);
+    const bool bIs4 = ParseV4(b, b4);
+    if (aIs4 || bIs4) {
+        if (aIs4 != bIs4) return false;   // a literal and a name are not equal
+        return a4 == b4;
+    }
+
+    // Neither parses — two host names. Case-insensitive, and nothing else: a
+    // trailing dot or a different domain suffix is a different entry as far as
+    // this list is concerned.
+    return _wcsicmp(a.c_str(), b.c_str()) == 0;
+}
+
 std::wstring BlockScope(const std::wstring &address) {
     BYTE b[16]{};
     // Not v6 — an IPv4 literal, or something that does not parse at all. Either
