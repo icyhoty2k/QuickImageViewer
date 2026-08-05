@@ -33,6 +33,7 @@ extern void UpdateOverlaysForCurrentImage(HWND hWnd);
 #include "WorkerThread.h"
 #include "Platform/Constants.h"
 #include "Platform/ConstantsStrings.h"
+#include "Platform/CrashHandler.h"  // installed as the first statement of wWinMain
 #include "../DropTarget.h"
 #include "Platform/FileHandler.h"
 #include "GeoNames.h"
@@ -762,6 +763,11 @@ static bool HasAVX2Support() {
 }
 
 int WINAPI wWinMain(HINSTANCE hInstance, [[maybe_unused]] HINSTANCE hPrevInstance, [[maybe_unused]] PWSTR pCmdLine, int nCmdShow) {
+    // FIRST STATEMENT IN THE PROGRAM, before the CPU check and before OLE.
+    // Anything that runs ahead of this crashes invisibly, which is the state
+    // qIV was in until now — see CrashHandler.h.
+    Platform::Crash::Install();
+
     if (!HasAVX2Support()) {
         TaskDialog(nullptr, nullptr,
                    L"QuickImageViewer — CPU not supported",

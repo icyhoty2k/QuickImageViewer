@@ -19,7 +19,7 @@
 #include "RemoteTls.h"         // Schannel — mandatory on any non-loopback bind
 #include "RemoteCrypto.h"
 #include "RemoteExec.h"
-#include "RemoteImageXfer.h" // BuildPreviewJpeg — runs on THIS thread
+#include "RemoteImageXfer.h" // BuildPreviewJpeg + ReadImageFile — both run on THIS thread
 #include "RemoteLog.h"    // Ctrl+F12 — the inbound half of the wire record
 
 #include "Platform/Constants.h"
@@ -958,6 +958,49 @@ namespace {
                     // encode happen HERE, on this socket thread, because they
                     // take far longer than REPLY_TIMEOUT_MS on a large image and
                     // would freeze the viewer for the duration.
+                    // SendDisplayedImage's second stage, same shape as the
+                    // preview one below. The UI thread returned only the PATH;
+                    // reading the file and base64-encoding it happens HERE.
+                    //
+                    // This one is the LARGER of the two — it is the original
+                    // file, not a downscaled JPEG — so it is the one that hurt
+                    // most while it ran on the UI thread. It is also what a
+                    // phone sends when the user saves the displayed picture,
+                    // which made an ordinary action stall the viewer.
+                    const std::wstring origMarker = ORIGINAL_PATH_MARKER;
+                    if (call->result.rfind(origMarker, 0) == 0) {
+                        const std::wstring path = call->result.substr(origMarker.size());
+                        std::wstring reply;
+
+                        // The OK line's shape is protocol — "<bytes>;<name>"
+                        // after the '=' — because a client checks the size
+                        // against what it received and reads the name to know
+                        // what it is decoding. Unchanged from when this ran on
+                        // the UI thread: no client can tell the difference.
+                        if (path.empty()) {
+                            reply = MakeOk(L"SendDisplayedImage=0;"); // showing nothing
+                        } else {
+                            std::vector<unsigned char> bytes;
+                            std::wstring err;
+                            if (Xfer::ReadImageFile(path, bytes, err)) {
+                                const size_t slash = path.find_last_of(L"\\/");
+                                const std::wstring name =
+                                    (slash == std::wstring::npos) ? path : path.substr(slash + 1);
+                                reply = Xfer::BuildDataReplyBody(bytes) +
+                                        MakeOk(L"SendDisplayedImage=" +
+                                               std::to_wstring(bytes.size()) + L";" + name);
+                            } else {
+                                reply = MakeErr(RT::ERR_BAD_PAYLOAD, err);
+                            }
+                        }
+
+                        if (!SendAll(client, ToUtf8(reply) + "\r\n", tls)) {
+                            departure = L"(dropped — send failed)";
+                            break;
+                        }
+                        continue;
+                    }
+
                     const std::wstring marker = PREVIEW_PATH_MARKER;
                     if (call->result.rfind(marker, 0) == 0) {
                         const std::wstring path = call->result.substr(marker.size());
