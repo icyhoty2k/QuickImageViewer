@@ -631,7 +631,7 @@ namespace UI {
             L"F9 is what others connect to; F10 is what this connects to.\r\n"
             L"WHO is connected right now is Ctrl+F9, not here.", sRemote);
         Add(Ctrl(SC::SC_PANEL_REMOTE_TOGGLE),
-            L"Server Clients — every peer currently connected to the listener above, with "
+            L"My Clients — every peer currently connected to the listener above, with "
             L"its address, the name it gave itself, whether it is encrypted, and how long "
             L"it has been on. The list refreshes itself while the panel is open.\r\n"
             L"THREE WAYS TO GET RID OF ONE, and the middle one is the useful one:\r\n"
@@ -727,7 +727,7 @@ namespace UI {
             L"screen each time mirroring goes on. Everything connected is driven to begin "
             L"with; if you have unticked all of them, F11 says so instead of switching on "
             L"and forwarding to nobody.\r\n"
-            L"CTRL+F11 opens Remotes Control: one row per CONNECTED instance, with three "
+            L"CTRL+F11 opens Mirroring: one row per CONNECTED instance, with three "
             L"controls each, in the order you ask them — IDENTIFY makes that screen say "
             L"its own name so you can tell two identical viewers apart; the CONTROL tick "
             L"says whether F11 drives it; and WATCH is the other direction, where that "

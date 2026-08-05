@@ -57,6 +57,7 @@ extern void UpdateOverlaysForCurrentImage(HWND hWnd);
 #include "Rem_TCP_IP/RemoteSettings.h"   // Remote::Config — is the listener enabled?
 #include "Rem_TCP_IP/RemoteServer.h"     // WM_QIV_REMOTE_COMMAND execution + shutdown
 #include "Rem_TCP_IP/RemoteMirror.h"     // the driving half — targets + sender threads
+#include "Rem_TCP_IP/RemoteBeacon.h"     // withdraw the network announcement on exit
 #include "Rem_TCP_IP/RemoteInbound.h"    // InboundGuard — the loop cut
 #include "Rem_TCP_IP/RemoteExec.h"       // BuildSyncPayload for the desync repair
 #include "Rem_TCP_IP/RemotesFile.h"      // qivRemoteServers.ini — the saved target list
@@ -747,6 +748,11 @@ LRESULT CALLBACK MainAppWndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM l
             // Same reasoning for the driving half: every sender thread must be
             // joined before the HWND it posts results to stops existing.
             Remote::Mirror::Shutdown();
+            // Remote::Stop above already withdraws the announcement through
+            // Refresh; this frees the instance outright. Belt to that brace, and
+            // it matters more than most teardown: a service record left behind
+            // makes this machine visible on the network after it has quit.
+            Remote::Beacon::Shutdown();
             PostQuitMessage(0);
             return 0;
     }

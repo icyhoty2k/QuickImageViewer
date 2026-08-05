@@ -81,6 +81,7 @@ set(SOURCES
         src/SimpleFormats.cpp
         src/Platform/DpiAwareInit.cpp
         src/Platform/DriveInfo.cpp
+        src/Platform/MonitorInfo.cpp
         src/Platform/FileHandler.cpp
         src/Platform/WriteQueue.cpp
         src/Persistence/RegistryManager.cpp
@@ -113,6 +114,7 @@ set(SOURCES
         src/Rem_TCP_IP/RemoteTls.cpp
         src/Rem_TCP_IP/RemoteProtocol.cpp
         src/Rem_TCP_IP/RemoteServer.cpp
+        src/Rem_TCP_IP/RemoteBeacon.cpp
         src/Rem_TCP_IP/RemoteExec.cpp
         src/Rem_TCP_IP/RemoteClient.cpp
         src/Rem_TCP_IP/RemoteImageXfer.cpp

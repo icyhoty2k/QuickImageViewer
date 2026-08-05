@@ -67,9 +67,10 @@ namespace UI::AppMenu::Ids {
         ID_DEDICATED_PANEL,       // open the Dedicated panel        (F8)
         ID_REMOTE_PANEL,          // open the Local Server panel     (F9)
         ID_REMOTES_CONSOLE,       // open the Remote Servers console (F10)
-        ID_REMOTES_CONTROL,       // open the Remotes Control panel  (Ctrl+F11)
+        ID_REMOTES_CONTROL,       // open the Mirroring panel       (Ctrl+F11)
         ID_REMOTE_CMD,            // open the Send Command panel     (Ctrl+F10)
         ID_REMOTE_LOG,            // open the RemoteLog panel        (Ctrl+F12)
+        ID_REMOTE_BEACON,         // announce this server on the network, CHECKABLE
         // RemoteActivation submenu — the two mirroring switches, CHECKABLE.
         // They are the only settings in this app with no visible resting state:
         // F11 and F12 report themselves on an overlay that fades, so the only
@@ -88,7 +89,7 @@ namespace UI::AppMenu::Ids {
         ID_REMOTE_STREAM_OUT,     // Alt+Enter        — bytes out
         ID_REMOTE_STREAM_IN,      // Ctrl+Alt+Enter   — bytes in
 
-        ID_REMOTE_CLIENTS,        // open the Server Clients panel   (Ctrl+F9)
+        ID_REMOTE_CLIENTS,        // open the My Clients panel      (Ctrl+F9)
 
         // Contiguous blocks. Each resolves to its Command by offset, so a block
         // never needs one case per member — see CommandForId.

@@ -226,6 +226,17 @@ namespace Constants::Messages {
     constexpr const wchar_t *MONITOR_MOVED_PREFIX = L"Monitor ";
     constexpr const wchar_t *MONITOR_ONLY_ONE = L"Only One Monitor";
 
+    // Network announcement (TCP/IP menu → Announce on network).
+    //
+    // THREE outcomes, not two. Off and announcing are obvious; the third is
+    // "asked for, but nothing is published" — the server is stopped, or bound to
+    // loopback. Reporting that as ON would be a lie the user only discovers when
+    // a phone fails to find them, which is the worst moment to find out.
+    constexpr const wchar_t *BEACON_PREFIX  = L"Network: ";
+    constexpr const wchar_t *BEACON_ON      = L"Announcing";
+    constexpr const wchar_t *BEACON_OFF     = L"Not announcing";
+    constexpr const wchar_t *BEACON_PENDING = L"Will announce";
+
     // Sort order  (Ctrl+Alt+Shift+0/6/7/8/9)  — press once: ascending, press again: descending
     constexpr const wchar_t *SORT_BY_NAME = L"Sort: Name (A→Z)";
     constexpr const wchar_t *SORT_BY_NAME_REV = L"Sort: Name (Z→A)";
@@ -375,13 +386,13 @@ namespace Constants::Messages {
     // operator block is a decision, and the person reading the file later needs
     // to know which of the two they are looking at.
     constexpr const wchar_t *BLACKLIST_REASON_OPERATOR =
-        L"blocked by hand from the Server Clients panel";
+        L"blocked by hand from the My Clients panel";
 
     // A TIMED block, which never reaches the file — this shows in the panel's
     // own list only. Says "kick" rather than "block" because that is the button
     // that produced it and the word the operator will be looking for.
     constexpr const wchar_t *BLACKLIST_REASON_TIMED =
-        L"timed kick from the Server Clients panel";
+        L"timed kick from the My Clients panel";
     // Panel footers reporting WHERE the values on screen came from.
     //
     // Every panel backed by a file says this on open, because a populated panel

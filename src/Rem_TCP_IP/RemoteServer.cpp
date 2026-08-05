@@ -21,6 +21,7 @@
 #include "RemoteExec.h"
 #include "RemoteImageXfer.h" // BuildPreviewJpeg + ReadImageFile — both run on THIS thread
 #include "RemoteLog.h"    // Ctrl+F12 — the inbound half of the wire record
+#include "RemoteBeacon.h" // mDNS announcement — reconciled on every Start/Stop
 
 #include "Platform/Constants.h"
 #include "Platform/ConstantsStrings.h"
@@ -276,6 +277,29 @@ namespace {
         std::lock_guard<std::mutex> lk(g_peerNameMutex);
         auto it = g_peerNames.find(c);
         return it == g_peerNames.end() ? std::wstring() : it->second;
+    }
+
+    // ConnId → what KIND of client it says it is: `win`, `android`, or empty for
+    // one that never said. Shares the name mutex because the two are written by
+    // the same thread at the same moment and read together by the same panel —
+    // a second lock would buy nothing and add an ordering to get wrong.
+    //
+    // A HINT, exactly like the name: peer-chosen, used only to pick a glyph, and
+    // never consulted by anything that decides what a connection may do.
+    std::map<ConnId, AgentInfo> g_peerAgents;
+
+    void SetPeerAgent(ConnId c, const AgentInfo &info) {
+        std::lock_guard<std::mutex> lk(g_peerNameMutex);
+        g_peerAgents[c] = info;
+    }
+    void ForgetPeerAgent(ConnId c) {
+        std::lock_guard<std::mutex> lk(g_peerNameMutex);
+        g_peerAgents.erase(c);
+    }
+    AgentInfo PeerAgentFor(ConnId c) {
+        std::lock_guard<std::mutex> lk(g_peerNameMutex);
+        auto it = g_peerAgents.find(c);
+        return it == g_peerAgents.end() ? AgentInfo{} : it->second;
     }
 
     // ConnId → the FACTS about that connection, for the F9 panel's live list and
@@ -915,6 +939,25 @@ namespace {
                             SendLine(client, MakeOk(name), tls);
                             break;
                         }
+                        case Verb::Agent: {
+                            // Parsed and sanitised by ParseAgent — including the
+                            // closed platform vocabulary — so nothing peer-chosen
+                            // reaches storage unfiltered.
+                            SetPeerAgent(static_cast<ConnId>(client),
+                                         ParseAgent(req.payload));
+
+                            // ANSWERED WITH OUR OWN, which is what makes this a
+                            // greeting rather than a report. The banner already
+                            // told the client who we are in prose; this says the
+                            // same thing in the form its parser reads, so both
+                            // ends can label the other in their lists.
+                            SendLine(client,
+                                     MakeOk(BuildAgent(L"qIV",
+                                                       Constants::APP_VERSION,
+                                                       cfg.name)),
+                                     tls);
+                            break;
+                        }
                         case Verb::Version:
                             SendLine(client, MakeOk(std::wstring(Constants::APP_VERSION) +
                                                     L" protocol " +
@@ -1082,6 +1125,7 @@ namespace {
         UnregisterSendLock(static_cast<ConnId>(client));
         // After the departure line above, which is the last row that wants it.
         ForgetPeerName(static_cast<ConnId>(client));
+        ForgetPeerAgent(static_cast<ConnId>(client));
         // Last of the four, and BEFORE the socket closes: a row the panel can
         // still see is a row Kick can still act on, and acting on it once the
         // descriptor is closed would be a shutdown() against a number the
@@ -1357,6 +1401,13 @@ bool Start(HWND hOwner, std::wstring &errorOut) {
 
     g_listenThread = std::thread(ListenThread);
     NotifyClientsChanged();   // the overlay indicator appears
+
+    // The beacon can only be announced once there is a listener behind it, so it
+    // is reconciled HERE rather than when the setting is read. Refresh decides
+    // for itself whether anything should be published — a beacon with the
+    // setting off, or on a loopback-only bind, is silently nothing.
+    Beacon::Refresh();
+
     errorOut.clear();
     return true;
 }
@@ -1397,6 +1448,12 @@ void Stop() {
         WSACleanup();
         g_wsaUp = false;
     }
+
+    // The listener is gone, so the announcement is now a promise nobody can
+    // keep. Withdrawn here rather than left to expire: a client browsing after a
+    // Stop would otherwise still list this instance and fail on connect, and the
+    // user blames the app rather than the stopped server.
+    Beacon::Refresh();
 }
 
 bool IsRunning() { return g_running.load(std::memory_order_acquire); }
@@ -1428,7 +1485,37 @@ std::vector<ClientInfo> Connections() {
     // a different mutex and holding two of them in an order nothing else agrees
     // on is how a deadlock is built. A name that arrives between the two loops
     // simply shows up on the next refresh.
-    for (ClientInfo &info : out) info.name = PeerNameFor(info.id);
+    for (ClientInfo &info : out) {
+        info.name     = PeerNameFor(info.id);
+        const AgentInfo ag = PeerAgentFor(info.id);
+        info.platform     = ag.platform;
+        info.agentApp     = ag.app;
+        info.agentVersion = ag.version;
+        info.agentOs      = ag.os;
+        info.agentHost    = ag.host;
+        // `hello` still wins for the display name when it was sent — it is the
+        // older path and some clients use only that. The agent's name fills in
+        // for those that greet but never said hello.
+        if (info.name.empty()) info.name = ag.name;
+    }
+
+    // OBSERVING is filled here for the same reason the name is: it needs
+    // g_observerMutex, and taking that while still holding the connection lock
+    // would introduce a second lock order for no gain. One pass over a list that
+    // is a handful of entries.
+    //
+    // Matched on the socket because Observer::sock IS the ConnId — the observer
+    // list needs no identity of its own, and giving it one would create a second
+    // place for a name to go stale.
+    {
+        std::lock_guard<std::mutex> lk(g_observerMutex);
+        for (ClientInfo &info : out) {
+            const SOCKET s = static_cast<SOCKET>(info.id);
+            for (const Observer &o : g_observers) {
+                if (o.sock == s) { info.observing = true; break; }
+            }
+        }
+    }
 
     // OLDEST FIRST, so the list does not reorder under the operator's cursor
     // every time somebody connects. The map is keyed by socket, and socket

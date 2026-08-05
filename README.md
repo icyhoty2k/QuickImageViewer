@@ -8,8 +8,9 @@ Direct2D, WIC and native Win32. One portable EXE under 10 MB — no installer, n
 telemetry, no background service.
 
 Drives other copies of itself over plain TCP, mirrors one screen to many, and has
-**[an Android app](#qiv-remote--the-android-app)** that controls it and moves photos
-between phone and desktop in both directions.
+**[an Android app](#qiv-remote--the-android-app)** that turns any phone or tablet into a
+remote control, a second screen, or a **photo frame your PC drives** — as many of them at
+once as you have devices lying around.
 
 [![Latest release](https://img.shields.io/github/v/release/icyhoty2k/QuickImageViewer?style=for-the-badge&logo=github&label=release&color=2ea44f)](https://github.com/icyhoty2k/QuickImageViewer/releases/latest)
 [![Downloads](https://img.shields.io/github/downloads/icyhoty2k/QuickImageViewer/total?style=for-the-badge&color=1f6feb)](https://github.com/icyhoty2k/QuickImageViewer/releases)
@@ -77,7 +78,7 @@ written to your machine. To remove qIV, delete the file.
 | PNG | `.png` | WIC | 16-bit, alpha |
 | BMP | `.bmp` | WIC | |
 | TIFF | `.tif` `.tiff` | WIC | Multi-page (first frame) |
-| GIF | `.gif` | WIC | Static (first frame) |
+| GIF | `.gif` | WIC | **Animated** — plays with per-frame delays |
 | WebP | `.webp` | WIC | Windows 10+ native codec |
 | HEIF / HEIC | `.heif` `.heic` | WIC | Requires MS HEIF Extensions |
 | AVIF | `.avif` | WIC | Windows 11 native codec |
@@ -118,13 +119,16 @@ written to your machine. To remove qIV, delete the file.
 | Thumbnail strips as file manager | ✅ drag between folders, shell ops | ❌ | ⚠️ in the browser window |
 | Offline GPS geocoding | ✅ embedded, zero network | ❌ | ❌ |
 | **Remote & multi-screen** | | | |
-| **Android companion app** | ✅ **[qIV Remote](#qiv-remote--the-android-app)** — control + live preview | ❌ | ❌ |
+| **Android companion app** | ✅ **[qIV Remote](#qiv-remote--the-android-app)** — control, live preview, photo frame | ❌ | ❌ |
 | Phone ↔ desktop photo transfer | ✅ both ways, originals not re-encodes | ❌ | ❌ |
 | Drive other copies over TCP | ✅ plain-text protocol, self-describing | ❌ | ❌ |
 | Mirror one screen to many | ✅ F11, per-target selection | ❌ | ❌ |
 | Send an image across machines | ✅ `Alt+Enter`, file bytes on the wire | ❌ | ❌ |
 | Scriptable from anything | ✅ `netcat`, shell, home automation | ❌ | ⚠️ local command line only |
-| Kiosk / locked display mode | ✅ CLI flag | ❌ | ⚠️ limited |
+| Kiosk / locked display mode | ✅ CLI flag, ignores every key and click | ❌ | ⚠️ limited |
+| Starts with Windows, unattended | ✅ `-runOnStartup` + kiosk + keep-awake | ❌ | ⚠️ manual |
+| Digital signage / ad loop | ✅ folder in, wall out — no publish step | ❌ | ⚠️ slideshow only |
+| Phones, tablets & TVs as extra screens | ✅ as many as you own, no per-screen fee | ❌ | ❌ |
 | **Trust** | | | |
 | No telemetry / tracking | ✅ zero | ❌ Microsoft telemetry | ✅ |
 | No ads | ✅ | ❌ promoted content | ✅ |
@@ -145,7 +149,7 @@ does not try to replace them.</sub>
 [![Google Play](https://img.shields.io/badge/Google%20Play-coming%20soon-414141?style=for-the-badge&logo=googleplay&logoColor=white)](#)
 [![No account](https://img.shields.io/badge/no%20account-no%20cloud%20·%20no%20analytics-1f6feb?style=for-the-badge)](#a-private-network-and-nothing-else)
 
-**Your phone becomes the viewer's remote — and a second screen you can copy photos to.**
+**Your phone becomes the viewer's remote, a second screen, and a photo frame your PC drives.**
 
 </div>
 
@@ -171,6 +175,61 @@ occupying a single slide. Nothing has to be paused first, and nothing is left be
 Saving to the gallery needs **no storage permission** — the app publishes through
 MediaStore, and the entry stays invisible until the transfer finishes, so a gallery
 scanning mid-transfer can never show you a half-written thumbnail.
+
+### Turn any spare screen into a photo frame
+
+The same connection runs the other way round. Instead of using the phone to drive the PC,
+put it on a stand and let the PC drive **it**.
+
+Open the Fullscreen screen and the device shows whatever the viewer is showing — nothing
+else. No toolbar, no buttons, no chrome. Start a slideshow on the PC and the tablet on the
+shelf follows it, picture for picture, for as long as you leave it there.
+
+| | |
+|:---|:---|
+| **An old tablet becomes a photo frame** | The one in a drawer with a cracked case is a perfectly good display. Prop it up, point it at the PC, start a slideshow. |
+| **A phone becomes a second monitor for photos** | Cull on the big screen, review at arm's length, hand it to someone across the table. |
+| **The PC stays the library** | Your folders, your sort order, your filters, your drives. The screen is a window onto the machine that already has all of it. |
+
+It keeps up **without being asked**. The viewer announces every picture change — including
+the ones a slideshow makes on its own, where no key was pressed and no command was sent —
+and the screen fetches the new image the moment it hears. Nothing polls, nothing lags a
+frame behind.
+
+**It sends nothing back.** The Fullscreen screen has no Next, no Previous, no toolbar, and
+that is deliberate rather than unfinished: a control that could nudge a running
+presentation from a phone in somebody's pocket is a hazard, not a feature. It asks for two
+read-only things and nothing else. Tap anywhere to leave.
+
+What crosses the network is a **preview** — scaled to that screen's size and re-encoded as
+JPEG on the PC before it is sent, not the original file. A 6 MB photo shown on a tablet
+moves as a few hundred kilobytes. That is what makes it comfortable over Wi-Fi, and what
+keeps a frame refreshing all evening from being a bandwidth decision.
+
+**As many screens as you have devices.** Every connected device watches independently, so
+one PC can feed the tablet in the kitchen, the phone in the hallway and the spare monitor
+on the desk at the same time — all following the same library, all updating together. There
+is no per-screen licence, because there is nobody to license it from.
+
+That also makes it **signage and advertising that costs nothing to run**: a shop window, a
+waiting room, a menu board, a studio wall. One PC you already own, screens you already
+have, your own network. No subscription, no cloud account, no per-display fee, and no
+service that can raise its price or shut down and take the wall with it.
+
+And it runs **unattended**, which is the part that decides whether a display is a product
+or a chore. The viewer already has every piece:
+
+| | |
+|:---|:---|
+| **Starts with the machine** | `-runOnStartup`, or the tray toggle. Power comes back after a cut and the wall comes back with it — nobody drives to the shop to click anything. |
+| **Ignores everybody** | Kiosk lock (`-lock`) makes the screen ignore every key and every click, so a passer-by cannot pause your loop or open a panel. The tray is the only way back in. |
+| **Stays awake** | Keep display awake blocks the screensaver and display sleep, and releases the hold the moment the window hides — a viewer sitting in the tray never keeps a machine up. |
+| **Loops by itself** | Slideshow with interval, loop and shuffle, and 21 GPU transitions. Point it at a folder and drop new artwork in — no playlist to rebuild, no re-upload, no publish step. |
+
+Changing what a wall shows is **copying a file into a folder**. That is the whole workflow.
+
+No cloud account, no subscription, no photos uploaded anywhere. The pictures go from your
+PC to your screen across your own network, and stop there.
 
 ### What else it does
 
@@ -270,7 +329,9 @@ through the setup.
 | `J` / `Ctrl+G` | Jump to image by number (type `@` to switch to Find mode) |
 | `Ctrl+F` | Find by filename — wildcard support (`*`, `?`); type `#` to switch to Jump mode |
 | `L` | Reveal current file in Windows Explorer |
-| Horizontal Wheel | Cycle through navigation history folders (one change per 3 notches) |
+| `PageUp` / `PageDown` | Previous / next folder in your history — walks only the **non-starred** rows |
+| `Insert` / `Delete` | Next / previous **favourite** folder — walks only the starred rows |
+| Horizontal Wheel | Cycle through navigation history folders (one change per 3 notches) — unlike the four keys above, this walks **every** row, starred or not |
 | `F2` | Open-file dialog |
 | Drag & Drop | Drop a file or folder onto the window |
 
@@ -409,6 +470,7 @@ All effects are non-destructive and GPU-accelerated via the Direct2D effect grap
 | `F` / `Enter` / `Ctrl+Shift+T` | Toggle borderless fullscreen |
 | `Ctrl+Enter` / `Alt+Enter` / `Ctrl+Alt+Enter` | Send this position / stream this image / fetch its image — see [Remote Control](#remote-control--mirroring) |
 | `Ctrl+T` / `Ctrl+A` | Toggle always-on-top |
+| `Ctrl+M` | Move the window to the **next monitor**, wrapping at the last. Screens are ordered left to right by their desktop position, and the window keeps its relative size and place — so a window sized for a 4K screen does not land half off a 1080p one. The overlay names the monitor it moved to |
 | `Shift+W/A/S/D` | Nudge window 20 px up / left / down / right |
 | `Alt+W/A/S/D` | Snap to top / left / bottom / right half of work area |
 | `Alt+Q/E/Z/C` | Snap to top-left / top-right / bottom-left / bottom-right quarter |
@@ -594,12 +656,29 @@ display in another room. It is plain UTF-8 line protocol over TCP, so a script,
 | Shortcut | Panel / Action |
 |:---|:---|
 | `F9` | **Local Server** — the listener *this* instance runs. Off unless switched on; needs a name and a port |
+| `Ctrl+F9` | **My Clients** — who is connected to *your* listener right now: address, the name and platform each gave, whether it is encrypted, how long it has been on, and whether it is watching. Kick, kick-for-N-minutes, or ban from here |
 | `F10` | **Remote Servers** — the instances this copy can drive. Connect, start/stop, watch, sync |
 | `Ctrl+F10` | **Send Command** — pick any wire command from the list, give it a value, send it |
 | `F11` | **Mirroring on/off** — forward every mirrorable command to the connected targets |
-| `Ctrl+F11` | **Remotes Control** — which connected instances F11 drives, plus Identify and Watch |
+| `Ctrl+F11` | **Mirroring** — which connected servers receive what this instance does, plus Identify and Watch |
 | `F12` | While mirroring, **also execute here** (off = this viewer is a pure remote control) |
 | `Ctrl+F12` | **RemoteLog** — every line that crossed the wire, both directions, with round trips — plus a line each time a client arrives, leaves, drops or is refused, naming its address and port and how long it stayed |
+
+**Announce (beacon)** (first item in the TCP/IP menu, off by default). The server publishes itself over
+mDNS as `_qiv._tcp`, so a phone or another qIV **finds it in a list instead of being told
+an address to type**. That one step — read your PC's LAN address, type it without a typo on
+a phone keyboard, know what a port is — is where most people give up.
+
+It announces **only the instance name and the port**. Never a password, never a path, never
+a file. And discovery is not access: the AllowList, the password challenge and TLS are
+untouched by it, so someone who finds this instance and is not allowed in gets exactly as
+far as someone who guessed the address.
+
+Off by default on purpose — this app's whole posture is that nothing leaves your network
+unasked, and a machine that started advertising itself the moment you enabled the server
+would be a change to that made on your behalf. It also only announces while the server is
+actually **running and reachable**: with the listener stopped, or bound to `127.0.0.1`, the
+menu says *will announce* rather than claiming it did.
 
 F11 and F12 are session-only and always start **off** — a viewer that came back from a
 restart already driving machines you had forgotten about would be the worst kind of
@@ -654,10 +733,10 @@ cannot come back "unknown command".
 
 ```
 $ nc 127.0.0.1 7777
-OK qIV 2.96.0.113 remote v5 [Monitor2]
+OK qIV 3.0.0.0 remote v6 [Monitor2]
 OK
 help
-qIV remote protocol v5
+qIV remote protocol v6
 FORMAT CMD <name>|<takesValue 0|1>|<description>|<value description>
 CMD NextImage|0|next image in the playlist|
 CMD JumpToImage|1|go to a numbered image in the current playlist|image NUMBER, 1-based …

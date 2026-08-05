@@ -36,7 +36,7 @@
 // The division is: F9 is what others connect TO, F10 is what this connects to.
 //
 // WHO is connected right now — and kicking, timed-kicking or banning them —
-// lives in Server Clients (Ctrl+F9, RemoteClientsWnd.h). It was briefly here and
+// lives in My Clients (Ctrl+F9, RemoteClientsWnd.h). It was briefly here and
 // did not belong: this panel is a FORM, opened to change values and save them,
 // and a list that moves while you are typing in the field above it fights that.
 //

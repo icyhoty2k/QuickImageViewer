@@ -169,7 +169,7 @@ class RemoteCmdWnd : public FloatingPanelWnd {
         // One scrollable region. Two of them here (commands, replies) and the
         // arithmetic is identical, so it lives in one place rather than twice —
         // the drawn bar, the clamp, and the drag all read the same fields.
-        // ScrollView moved to UI/CustomControls/ScrollView.h when Server Clients
+        // ScrollView moved to UI/CustomControls/ScrollView.h when My Clients
         // needed the same thing — see the note in that header. Unqualified here
         // because this class is in namespace UI.
         using ScrollView = UI::ScrollView;

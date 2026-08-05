@@ -15,9 +15,9 @@
 
     <!-- SEO Meta Tags -->
     <meta name="description"
-          content="QuickImageViewer(qIV) — free portable image viewer for Windows 10 &amp; 11.Opens HEIC, AVIF, JPEG XL, WebP, SVG, and 18+ formats. Drive other screens over TCP. <10 MB, no ads, no telemetry.">
+          content="QuickImageViewer(qIV) — free portable image viewer for Windows 10 &amp; 11. Opens HEIC, AVIF, JPEG XL, WebP, SVG and 18+ formats. Turn any Android phone or tablet into a remote, a second screen or a photo frame your PC drives. <10 MB, no ads, no telemetry.">
     <meta name="keywords"
-          content="image viewer windows 11, image viewer windows 10, free image viewer windows, heic viewer windows, avif viewer windows, jpeg xl viewer, webp viewer windows, svg viewer windows, openexr viewer, portable image viewer, open source image viewer, gpu accelerated image viewer, fast photo viewer windows, best image viewer windows, quickimageviewer, qiv, remote control image viewer, mirror image viewer screens, digital signage image viewer">
+          content="image viewer windows 11, image viewer windows 10, free image viewer windows, heic viewer windows, avif viewer windows, jpeg xl viewer, webp viewer windows, svg viewer windows, openexr viewer, portable image viewer, open source image viewer, gpu accelerated image viewer, fast photo viewer windows, best image viewer windows, quickimageviewer, qiv, remote control image viewer, mirror image viewer screens, digital signage image viewer, digital photo frame android, turn tablet into photo frame, photo frame from pc, android photo frame app, use old tablet as photo frame, show pc photos on tablet, second screen for photos, phone as pc remote control, slideshow to tablet, wifi photo frame no cloud">
     <meta name="author"
           content="Ivan Hristov Yanev (IcyHoty2k)">
     <meta name="robots"
@@ -41,7 +41,7 @@
     <meta property="og:title"
           content="QuickImageViewer (qIV) — Fast, Free, Portable Image Viewer for Windows">
     <meta property="og:description"
-          content="QuickImageViewer(qIV) — free portable image viewer for Windows 10 &amp; 11.Opens HEIC, AVIF, JPEG XL, WebP, SVG, and 18+ formats. Drive other screens over TCP. <10 MB, no ads, no telemetry.">
+          content="QuickImageViewer(qIV) — free portable image viewer for Windows 10 &amp; 11. Opens HEIC, AVIF, JPEG XL, WebP, SVG and 18+ formats. Turn any Android phone or tablet into a remote, a second screen or a photo frame your PC drives. <10 MB, no ads, no telemetry.">
     <meta property="og:type"
           content="website">
     <meta property="og:url"
@@ -61,7 +61,7 @@
     <meta name="twitter:title"
           content="QuickImageViewer (qIV) — Fast, Free, Portable Image Viewer for Windows">
     <meta name="twitter:description"
-          content="QuickImageViewer(qIV) — free portable image viewer for Windows 10 &amp; 11.Opens HEIC, AVIF, JPEG XL, WebP, SVG, and 18+ formats. Drive other screens over TCP. <10 MB, no ads, no telemetry.">
+          content="QuickImageViewer(qIV) — free portable image viewer for Windows 10 &amp; 11. Opens HEIC, AVIF, JPEG XL, WebP, SVG and 18+ formats. Turn any Android phone or tablet into a remote, a second screen or a photo frame your PC drives. <10 MB, no ads, no telemetry.">
     <meta name="twitter:image"
           content="https://icyhoty2k.github.io/QuickImageViewer/screenshots/less300kb/10.webp">
     <meta name="twitter:image:alt"
@@ -1138,7 +1138,7 @@
                 <td>
                     WIC
                 </td>
-                <td></td>
+                <td><strong>Animated</strong> — plays with per-frame delays</td>
             </tr>
             <tr>
                 <td>
@@ -1803,6 +1803,24 @@
                     in
                     Windows
                     Explorer
+                </td>
+            </tr>
+            <tr>
+                <td>
+                    <code>PageUp</code> / <code>PageDown</code>
+                </td>
+                <td>
+                    Previous / next folder in your history &mdash; walks only the
+                    <strong>non-starred</strong> rows
+                </td>
+            </tr>
+            <tr>
+                <td>
+                    <code>Insert</code> / <code>Delete</code>
+                </td>
+                <td>
+                    Next / previous <strong>favourite</strong> folder &mdash; walks only the
+                    starred rows
                 </td>
             </tr>
             <tr>
@@ -3059,6 +3077,17 @@
                     +
                     all
                     panels)
+                </td>
+            </tr>
+            <tr>
+                <td>
+                    <code>Ctrl+M</code>
+                </td>
+                <td>
+                    Move the window to the <strong>next monitor</strong>, wrapping at the last.
+                    Screens are ordered left to right by their desktop position, and the window
+                    keeps its relative size and place &mdash; so a window sized for a 4K screen
+                    does not land half off a 1080p one. The overlay names the monitor it moved to
                 </td>
             </tr>
             <tr>
@@ -5094,6 +5123,17 @@ D:\Screens\promotionList_qIV_dedicated_Lobby.qpr    promotion folders</code></pr
             </tr>
             <tr>
                 <td>
+                    <kbd>Ctrl+F9</kbd>
+                </td>
+                <td>
+                    <strong>My Clients</strong> &mdash; who is connected to <em>your</em>
+                    listener right now: address, the name and platform each gave, whether it
+                    is encrypted, how long it has been on, and whether it is watching. Kick,
+                    kick-for-N-minutes, or ban from here
+                </td>
+            </tr>
+            <tr>
+                <td>
                     <kbd>F10</kbd>
                 </td>
                 <td>
@@ -5124,8 +5164,8 @@ D:\Screens\promotionList_qIV_dedicated_Lobby.qpr    promotion folders</code></pr
                     <kbd>Ctrl+F11</kbd>
                 </td>
                 <td>
-                    <strong>Remotes Control</strong> &mdash; which connected instances F11
-                    drives, plus Identify and Watch
+                    <strong>Mirroring</strong> &mdash; which connected servers receive what
+                    this instance does, plus Identify and Watch
                 </td>
             </tr>
             <tr>
@@ -5156,6 +5196,33 @@ D:\Screens\promotionList_qIV_dedicated_Lobby.qpr    promotion folders</code></pr
             that came back from a restart already driving machines you had forgotten about would
             be the worst kind of surprise.
         </p>
+
+        <div class="card">
+            <h3>Announce (beacon)</h3>
+            <p>
+                First item in the TCP/IP menu, <strong>off by default</strong>. The server publishes itself
+                over mDNS as <code>_qiv._tcp</code>, so a phone or another qIV <strong>finds it
+                in a list instead of being told an address to type</strong>. That one step
+                &mdash; read your PC's LAN address, type it without a typo on a phone keyboard,
+                know what a port is &mdash; is where most people give up.
+            </p>
+            <p>
+                It announces <strong>only the instance name and the port</strong>. Never a
+                password, never a path, never a file. And discovery is not access: the
+                AllowList, the password challenge and TLS are untouched by it, so someone who
+                finds this instance and is not allowed in gets exactly as far as someone who
+                guessed the address.
+            </p>
+            <p>
+                Off by default on purpose &mdash; this app's whole posture is that nothing
+                leaves your network unasked, and a machine that started advertising itself the
+                moment you enabled the server would be a change to that made on your behalf. It
+                also only announces while the server is actually <strong>running and
+                reachable</strong>: with the listener stopped, or bound to
+                <code>127.0.0.1</code>, the menu says <em>will announce</em> rather than
+                claiming it did.
+            </p>
+        </div>
 
         <h3>
             Putting
@@ -5288,7 +5355,7 @@ D:\Screens\promotionList_qIV_dedicated_Lobby.qpr    promotion folders</code></pr
             describes
             itself</h3>
         <pre><code>$ nc 127.0.0.1 7777
-OK qIV 2.96.0.113 remote v5 [Monitor2]
+OK qIV 3.0.0.0 remote v6 [Monitor2]
 OK
 help
 qIV remote protocol v5
@@ -5459,8 +5526,8 @@ CMD JumpToImage|1|go to a numbered image in the current playlist|image NUMBER, 1
             &mdash;
             the Android app</h2>
         <p class="subtitle">
-            Your phone becomes the viewer's remote &mdash; and a second screen you can copy
-            photos to, in both directions.
+            Your phone becomes the viewer's remote, a second screen, and a photo frame your
+            PC drives.
         </p>
 
         <p>
@@ -5518,6 +5585,113 @@ CMD JumpToImage|1|go to a numbered image in the current playlist|image NUMBER, 1
                 app publishes through MediaStore, and the entry stays invisible until the
                 transfer finishes, so a gallery scanning mid-transfer can never show you a
                 half-written thumbnail.
+            </p>
+        </div>
+
+        <div class="card">
+            <h3>Turn any spare screen into a photo frame</h3>
+            <p>
+                The same connection runs the other way round. Instead of using the phone to
+                drive the PC, put it on a stand and let the PC drive <strong>it</strong>.
+            </p>
+            <p>
+                Open the Fullscreen screen and the device shows whatever the viewer is showing
+                &mdash; nothing else. No toolbar, no buttons, no chrome. Start a slideshow on
+                the PC and the tablet on the shelf follows it, picture for picture, for as long
+                as you leave it there.
+            </p>
+            <table>
+                <tbody>
+                    <tr>
+                        <td><strong>An old tablet becomes a photo frame</strong></td>
+                        <td>The one in a drawer with a cracked case is a perfectly good display.
+                            Prop it up, point it at the PC, start a slideshow.</td>
+                    </tr>
+                    <tr>
+                        <td><strong>A phone becomes a second screen for photos</strong></td>
+                        <td>Cull on the big screen, review at arm's length, hand it to someone
+                            across the table.</td>
+                    </tr>
+                    <tr>
+                        <td><strong>The PC stays the library</strong></td>
+                        <td>Your folders, your sort order, your filters, your drives. The screen
+                            is a window onto the machine that already has all of it.</td>
+                    </tr>
+                </tbody>
+            </table>
+            <p>
+                It keeps up <strong>without being asked</strong>. The viewer announces every
+                picture change &mdash; including the ones a slideshow makes on its own, where no
+                key was pressed and no command was sent &mdash; and the screen fetches the new
+                image the moment it hears. Nothing polls, nothing lags a frame behind.
+            </p>
+            <p>
+                <strong>It sends nothing back.</strong> The Fullscreen screen has no Next, no
+                Previous and no toolbar, and that is deliberate rather than unfinished: a control
+                that could nudge a running presentation from a phone in somebody's pocket is a
+                hazard, not a feature. It asks for two read-only things and nothing else. Tap
+                anywhere to leave.
+            </p>
+            <p>
+                What crosses the network is a <strong>preview</strong> &mdash; scaled to that
+                screen's size and re-encoded as JPEG on the PC before it is sent, not the
+                original file. A 6&nbsp;MB photo shown on a tablet moves as a few hundred
+                kilobytes. That is what makes it comfortable over Wi-Fi, and what keeps a frame
+                refreshing all evening from being a bandwidth decision.
+            </p>
+            <p>
+                <strong>As many screens as you have devices.</strong> Every connected device
+                watches independently, so one PC can feed the tablet in the kitchen, the phone in
+                the hallway and the spare monitor on the desk at the same time &mdash; all
+                following the same library, all updating together. There is no per-screen
+                licence, because there is nobody to license it from.
+            </p>
+            <p>
+                That also makes it <strong>signage and advertising that costs nothing to
+                run</strong>: a shop window, a waiting room, a menu board, a studio wall. One PC
+                you already own, screens you already have, your own network. No subscription, no
+                cloud account, no per-display fee, and no service that can raise its price or
+                shut down and take the wall with it.
+            </p>
+            <p>
+                And it runs <strong>unattended</strong>, which is the part that decides whether a
+                display is a product or a chore. The viewer already has every piece:
+            </p>
+            <table>
+                <tbody>
+                    <tr>
+                        <td><strong>Starts with the machine</strong></td>
+                        <td><code>-runOnStartup</code>, or the tray toggle. Power comes back after
+                            a cut and the wall comes back with it &mdash; nobody drives to the
+                            shop to click anything.</td>
+                    </tr>
+                    <tr>
+                        <td><strong>Ignores everybody</strong></td>
+                        <td>Kiosk lock (<code>-lock</code>) makes the screen ignore every key and
+                            every click, so a passer-by cannot pause your loop or open a panel.
+                            The tray is the only way back in.</td>
+                    </tr>
+                    <tr>
+                        <td><strong>Stays awake</strong></td>
+                        <td>Keep display awake blocks the screensaver and display sleep, and
+                            releases the hold the moment the window hides &mdash; a viewer sitting
+                            in the tray never keeps a machine up.</td>
+                    </tr>
+                    <tr>
+                        <td><strong>Loops by itself</strong></td>
+                        <td>Slideshow with interval, loop and shuffle, and 21 GPU transitions.
+                            Point it at a folder and drop new artwork in &mdash; no playlist to
+                            rebuild, no re-upload, no publish step.</td>
+                    </tr>
+                </tbody>
+            </table>
+            <p>
+                Changing what a wall shows is <strong>copying a file into a folder</strong>. That
+                is the whole workflow.
+            </p>
+            <p>
+                No cloud account, no subscription, no photos uploaded anywhere. The pictures go
+                from your PC to your screen across your own network, and stop there.
             </p>
         </div>
 
@@ -6274,7 +6448,7 @@ CMD JumpToImage|1|go to a numbered image in the current playlist|image NUMBER, 1
             </tr>
             <tr>
                 <td><strong>Android companion app</strong></td>
-                <td>✅ <strong>qIV Remote</strong> — control + live preview</td>
+                <td>✅ <strong>qIV Remote</strong> — control, live preview, photo frame</td>
                 <td>❌</td>
                 <td>❌</td>
             </tr>
@@ -6310,9 +6484,27 @@ CMD JumpToImage|1|go to a numbered image in the current playlist|image NUMBER, 1
             </tr>
             <tr>
                 <td>Kiosk / locked display mode</td>
-                <td>✅ CLI flag</td>
+                <td>✅ CLI flag, ignores every key and click</td>
                 <td>❌</td>
                 <td>⚠️ limited</td>
+            </tr>
+            <tr>
+                <td>Starts with Windows, unattended</td>
+                <td>✅ <code>-runOnStartup</code> + kiosk + keep-awake</td>
+                <td>❌</td>
+                <td>⚠️ manual</td>
+            </tr>
+            <tr>
+                <td>Digital signage / ad loop</td>
+                <td>✅ folder in, wall out — no publish step</td>
+                <td>❌</td>
+                <td>⚠️ slideshow only</td>
+            </tr>
+            <tr>
+                <td>Phones, tablets &amp; TVs as extra screens</td>
+                <td>✅ as many as you own, no per-screen fee</td>
+                <td>❌</td>
+                <td>❌</td>
             </tr>
             <tr>
                 <td colspan="4"><strong>Trust</strong></td>

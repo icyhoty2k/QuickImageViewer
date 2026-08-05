@@ -97,6 +97,7 @@ Command CommandForId(int id) {
         case Id::ID_REMOTES_CONTROL: return Command::MirrorPick;
         case Id::ID_REMOTE_CMD:      return Command::ToggleRemoteCmd;
         case Id::ID_REMOTE_LOG:      return Command::ToggleRemoteLog;
+        case Id::ID_REMOTE_BEACON:   return Command::ToggleRemoteBeacon;
         // Straight to the same commands F11 and F12 resolve to, so the menu and
         // the keys cannot drift apart — the overlay, the mirror gate and the
         // "nothing picked" handling all come free.
@@ -437,11 +438,35 @@ static HMENU BuildRemoteBindingsMenu() {
 static HMENU BuildTcpIpMenu() {
     HMENU m = CreatePopupMenu();
 
+    // TWO ROLES, AND THE LABELS SAY WHICH. This viewer is a SERVER to the things
+    // that dial in (the first pair), and a CLIENT of the servers it dials out to
+    // (the second pair). Naming them for the action instead — "Remote Control"
+    // for a checkbox list — is what made two panels at opposite ends of two
+    // different connections read as views of the same one.
+    // FIRST, above the server it advertises. It is the step that decides whether
+    // anyone can FIND this machine, so it is the first question rather than a
+    // footnote under the panels — and CHECKABLE, because the tick is the only
+    // resting indication that this PC is announcing itself. "Am I visible on the
+    // network" should be answerable by looking, not by trying.
+    //
+    // Shown whether the server is running or not. Greying it while stopped would
+    // make the setting unreachable exactly when somebody is setting the server
+    // up, and the tick means "announce when running", not "announcing now" —
+    // Beacon::Refresh reconciles the two.
+    AppendMenuW(m, MF_STRING | CheckFlag(app.remoteBeacon),
+                Id::ID_REMOTE_BEACON, L"\U0001F5A7 Announce (beacon)");
+
+    AppendMenuW(m, MF_SEPARATOR, 0, nullptr);
+
     AppendMenuW(m, MF_STRING, Id::ID_REMOTE_PANEL,    L"Local Server\tF9");
-    AppendMenuW(m, MF_STRING, Id::ID_REMOTE_CLIENTS,  L"Server Clients\tCtrl+F9");
+    AppendMenuW(m, MF_STRING, Id::ID_REMOTE_CLIENTS,  L"My Clients\tCtrl+F9");
+
     AppendMenuW(m, MF_SEPARATOR, 0, nullptr);
     AppendMenuW(m, MF_STRING, Id::ID_REMOTES_CONSOLE, L"Remote Servers\tF10");
-    AppendMenuW(m, MF_STRING, Id::ID_REMOTES_CONTROL, L"Remote Control\tCtrl+F11");
+    // "Mirroring" rather than "Remote Control": F11 is already the mirroring
+    // key, and this panel picks which servers it reaches. Panel and key now
+    // share a name instead of describing each other.
+    AppendMenuW(m, MF_STRING, Id::ID_REMOTES_CONTROL, L"Mirroring\tCtrl+F11");
     AppendMenuW(m, MF_SEPARATOR, 0, nullptr);
     AppendMenuW(m, MF_STRING, Id::ID_REMOTE_CMD,      L"Remote Commands\tCtrl+F10");
     AppendMenuW(m, MF_STRING, Id::ID_REMOTE_LOG,      L"Server Log\tCtrl+F12");

@@ -563,6 +563,26 @@ bool Client::DoConnectBody(const std::wstring &host, int port,
         RecvLine(s, m_accum, ack, tls);   // consumed so it cannot be read as a reply
     }
 
+    // WHO AND WHAT is at this end, for the other side's client list. Same
+    // contract as hello above: best effort, sent after authentication, reply
+    // consumed so it cannot be mistaken for an answer to something else, and
+    // nothing here depends on it being understood.
+    //
+    // The reply is the server's OWN agent line — this is a greeting, not a
+    // report — and is parsed so a target can be labelled in Mirroring the
+    // same way a client is labelled in My Clients.
+    {
+        SendAll(s, ToUtf8(L"agent " + BuildAgent(L"qIV", Constants::APP_VERSION,
+                                                 SelfAnnounceName())) + "\r\n", tls);
+        std::wstring ack;
+        if (RecvLine(s, m_accum, ack, tls)) {
+            // "OK app=qIV;ver=…" — drop the status word, keep the pairs.
+            const size_t sp = ack.find(L' ');
+            if (sp != std::wstring::npos)
+                m_peerAgent = ParseAgent(ack.substr(sp + 1));
+        }
+    }
+
     m_connected = true;
     errorOut.clear();
     return true;

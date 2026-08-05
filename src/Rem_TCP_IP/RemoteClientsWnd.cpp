@@ -50,7 +50,7 @@ namespace {
     constexpr UINT TIMER_REFRESH    = 1;
     constexpr UINT REFRESH_INTERVAL = 1000;
 
-    // BTN_SERVER opens F9 — the counterpart of the Server Clients button there.
+    // BTN_SERVER opens F9 — the counterpart of the My Clients button there.
     // The two panels are one subject split in half, and the crossing is constant:
     // ban an address here, widen the AllowList there.
     enum ButtonId { BTN_KICK = 1, BTN_TIMED, BTN_BAN, BTN_LIFT, BTN_SERVER };
@@ -71,6 +71,16 @@ namespace {
     }
 
     long long NowTicks() { return static_cast<long long>(GetTickCount64()); }
+
+    // NO DEVICE GLYPH. The platform is known — `agent` carries it and the
+    // description line names it in words — but no icon was settled on, and a
+    // placeholder pictogram is worse than none: it would be the one mark in this
+    // list derived from something the PEER claims rather than something this
+    // machine observed. The scope glyph below is the opposite, which is why it
+    // earns its place.
+
+    // The scope glyph lives in RemoteProtocol now — Servers (F10) shows one too,
+    // and the two must never disagree about what counts as "the LAN".
 }
 
 // =============================================================================
@@ -78,7 +88,7 @@ namespace {
 // =============================================================================
 void RemoteClientsWnd::Init(HINSTANCE hInstance, HWND hParent) {
     const float s = app.dpiScale;
-    InitFloating(hInstance, hParent, L"qIVRemoteClientsWnd", L"Server Clients",
+    InitFloating(hInstance, hParent, L"qIVRemoteClientsWnd", L"My Clients",
                  static_cast<int>(PANEL_W * s), static_cast<int>(PANEL_H * s));
     if (GetHwnd()) {
         SetWindowLongPtrW(GetHwnd(), GWL_EXSTYLE,
@@ -142,11 +152,45 @@ void RemoteClientsWnd::BuildRows() {
             if (ci.sameMachine) value += L", this machine";
             value += L", connected " + Elapsed(now - ci.sinceMs);
 
+            // WATCHING is the difference between a screen and a script.
+            //
+            // Everything else in this row describes a socket. This describes what
+            // the peer is FOR: a client that sent `Observe 1` is being pushed
+            // every action and is showing the pictures, which is a phone on a
+            // wall. One that has not is polling, scripting, or idle.
+            //
+            // It matters when deciding what to kick. Two rows from the same
+            // address tell you nothing; "Kitchen tablet — watching" and a bare
+            // connection tell you which one is the display somebody is looking at.
+            if (ci.observing) value += L", watching";
+
             Row r;
             r.kind  = Kind::Client;
-            r.label = Remote::FormatEndpoint(ci.address, ci.port);
+            // Glyph in front of the ADDRESS, because both describe where the
+            // connection came from and both are this machine's own observation.
+            // The peer-chosen name stays over in the value, where it cannot be
+            // mistaken for identity.
+            r.label = std::wstring(Remote::ScopeIcon(ci.address, ci.sameMachine)) + L"  " +
+                      Remote::FormatEndpoint(ci.address, ci.port);
             r.value = std::move(value);
-            r.desc  = L"Kick closes it. Kick for N also refuses this peer for a "
+            // What the peer said about itself, on the description line rather
+            // than in the row: it is useful when you are deciding what something
+            // is, and noise when you are scanning the list.
+            //
+            // "?" for anything it never told us. A blank reads as "nothing";
+            // a question mark reads as "it did not say", which is the truth.
+            Remote::AgentInfo ag;
+            ag.app      = ci.agentApp;
+            ag.version  = ci.agentVersion;
+            ag.os       = ci.agentOs;
+            ag.host     = ci.agentHost;
+            ag.platform = ci.platform;
+
+            // CLIENT, always, in this panel: every row here reached us through
+            // the listener. Mirroring passes Server for the same reason —
+            // this instance dialled those.
+            r.desc  = Remote::DescribeAgent(ag, Remote::AgentRole::Client) +
+                      L"\r\nKick closes it. Kick for N also refuses this peer for a "
                       L"while. Ban blacklists it permanently.";
             r.item  = static_cast<int>(i);
             m_rows.push_back(std::move(r));
@@ -381,20 +425,20 @@ void RemoteClientsWnd::PopTopmost() {
 
 void RemoteClientsWnd::DialogMessage(const std::wstring &text) {
     PushTopmostOff();
-    ThemedDialog::Message(GetHwnd(), text.c_str(), L"Server Clients");
+    ThemedDialog::Message(GetHwnd(), text.c_str(), L"My Clients");
     PopTopmost();
 }
 
 bool RemoteClientsWnd::DialogConfirm(const std::wstring &text) {
     PushTopmostOff();
-    const bool r = ThemedDialog::Confirm(GetHwnd(), text.c_str(), L"Server Clients");
+    const bool r = ThemedDialog::Confirm(GetHwnd(), text.c_str(), L"My Clients");
     PopTopmost();
     return r;
 }
 
 int RemoteClientsWnd::DialogPromptInt(const wchar_t *label, int cur, int lo, int hi, int def) {
     PushTopmostOff();
-    const int r = ThemedDialog::PromptInt(GetHwnd(), L"Server Clients", label, cur, lo, hi, def);
+    const int r = ThemedDialog::PromptInt(GetHwnd(), L"My Clients", label, cur, lo, hi, def);
     PopTopmost();
     return r;
 }
@@ -615,7 +659,19 @@ LRESULT RemoteClientsWnd::HandlePanelMessage(UINT message, WPARAM wParam, LPARAM
             SelectObject(bb, m_hFontBold);
             SetTextColor(bb, fg);
             RECT tr{pad, static_cast<int>(6 * s), W - pad, static_cast<int>(26 * s)};
-            DrawTextW(bb, L"Server clients — who is connected to this instance's listener",
+            // COUNTS IN THE TITLE, matching Servers and Mirroring. The footer
+            // already reports clients/max, but that line is also where errors and
+            // action results land — a total belongs where it cannot be replaced.
+            int watchingCount = 0;
+            for (const Remote::ClientInfo &c : m_conns)
+                if (c.observing) ++watchingCount;
+
+            const std::wstring clientsTitle =
+                L"\U0001F64B Clients — who connected to this instance   \x00B7   " +
+                std::to_wstring(m_conns.size()) + L" connected, " +
+                std::to_wstring(watchingCount) + L" watching";
+
+            DrawTextW(bb, clientsTitle.c_str(),
                       -1, &tr, DT_LEFT | DT_SINGLELINE);
 
             // ── Buttons ──────────────────────────────────────────────────────

@@ -255,7 +255,7 @@ enum class Command {
     // --- Dedicated instances (src/Dedicated) ---
     ToggleDedicatedPanel,   // F8 — the Dedicated configuration panel
     ToggleRemotePanel,      // F9 — the Local Server panel (this instance's listener)
-    // Ctrl+F9 — Server Clients: who is connected to THIS instance's listener,
+    // Ctrl+F9 — My Clients: who is connected to THIS instance's listener,
     // and kick / timed kick / ban. Split out of the Local Server panel because
     // that one describes the listener's CONFIGURATION, and a live list of peers
     // is not configuration — it changes while you look at it.
@@ -418,6 +418,15 @@ enum class Command {
     ToggleRemoteLog,       // Ctrl+F12 — open/close the RemoteLog panel. LOCAL:
                            // it has no table row, so it is never mirrored — one
                            // keypress must not open a window on every screen.
+    // Announce this instance's Local Server on the network so clients can find
+    // it. LOCAL by design: no table row, therefore never mirrored and not
+    // reachable over the wire.
+    //
+    // Deliberate. A remote client being able to switch on the beacon means one
+    // connection can make this machine advertise itself to the whole network —
+    // a decision about visibility that belongs to the person at the keyboard,
+    // not to whoever got in first. It is one tick in the TCP/IP menu.
+    ToggleRemoteBeacon,
     // The RECORDING switch, and a separate command from the panel that shows it.
     // Payload-carrying (`enablelog 0|1`) rather than a toggle, because it is
     // sent to the other instances: a toggle applied to ends that disagree makes

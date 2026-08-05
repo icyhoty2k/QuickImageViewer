@@ -710,6 +710,166 @@ bool LookupCommand(const std::wstring &name, const CommandEntry *&entryOut) {
     return false;
 }
 
+namespace {
+    // Peer-chosen text, headed for a list and a log. Control characters go
+    // because they corrupt both; the separators go because a value containing
+    // one would split into fields that were never sent. Capped so no single
+    // field can push the rest of a row out of view.
+    std::wstring SanitiseAgentValue(const std::wstring &raw) {
+        std::wstring out;
+        for (wchar_t ch : raw) {
+            if (out.size() >= 48) break;
+            if (ch < 0x20 || ch == 0x7F) continue;
+            if (ch == L';' || ch == L'=') continue;
+            out += ch;
+        }
+        while (!out.empty() && out.back() == L' ') out.pop_back();
+        while (!out.empty() && out.front() == L' ') out.erase(out.begin());
+        return out;
+    }
+}
+
+AgentInfo ParseAgent(const std::wstring &payload) {
+    AgentInfo info;
+
+    size_t pos = 0;
+    while (pos < payload.size()) {
+        size_t semi = payload.find(L';', pos);
+        if (semi == std::wstring::npos) semi = payload.size();
+
+        const std::wstring field = payload.substr(pos, semi - pos);
+        pos = semi + 1;
+
+        const size_t eq = field.find(L'=');
+        if (eq == std::wstring::npos) continue;   // not a pair — ignore, don't fail
+
+        std::wstring key = field.substr(0, eq);
+        while (!key.empty() && key.front() == L' ') key.erase(key.begin());
+        while (!key.empty() && key.back() == L' ')  key.pop_back();
+
+        const std::wstring value = SanitiseAgentValue(field.substr(eq + 1));
+        if (value.empty()) continue;
+
+        // UNKNOWN KEYS FALL THROUGH SILENTLY. That is the extension point: a
+        // later build may send fields this one has never heard of, and the only
+        // correct response is to ignore them.
+        if      (_wcsicmp(key.c_str(), L"app")      == 0) info.app     = value;
+        else if (_wcsicmp(key.c_str(), L"ver")      == 0) info.version = value;
+        else if (_wcsicmp(key.c_str(), L"os")       == 0) info.os      = value;
+        else if (_wcsicmp(key.c_str(), L"host")     == 0) info.host    = value;
+        else if (_wcsicmp(key.c_str(), L"name")     == 0) info.name    = value;
+        else if (_wcsicmp(key.c_str(), L"platform") == 0) {
+            // A CLOSED VOCABULARY, unlike every other field. The others are
+            // labels a person reads; this one picks a glyph, so a value nobody
+            // drew an icon for must become "unknown" rather than a third state.
+            std::wstring token;
+            for (wchar_t ch : value) token += static_cast<wchar_t>(towlower(ch));
+            if (token == L"win" || token == L"android") info.platform = token;
+        }
+    }
+    return info;
+}
+
+std::wstring BuildAgent(const std::wstring &appName, const std::wstring &appVersion,
+                        const std::wstring &instanceName) {
+    std::wstring os = L"Windows";
+    {
+        // The build number is the useful part — "Windows 11" alone does not
+        // distinguish machines that behave differently. RtlGetVersion is used
+        // rather than GetVersionEx because the latter lies without a manifest.
+        OSVERSIONINFOEXW vi = {};
+        vi.dwOSVersionInfoSize = sizeof(vi);
+        using RtlGetVersionFn = LONG(WINAPI *)(PRTL_OSVERSIONINFOEXW);
+        if (HMODULE nt = GetModuleHandleW(L"ntdll.dll")) {
+            if (auto fn = reinterpret_cast<RtlGetVersionFn>(
+                    GetProcAddress(nt, "RtlGetVersion"))) {
+                if (fn(reinterpret_cast<PRTL_OSVERSIONINFOEXW>(&vi)) == 0) {
+                    // 10.0 with a build past 22000 is Windows 11; Microsoft did
+                    // not move the major version.
+                    os = (vi.dwBuildNumber >= 22000) ? L"Windows 11" : L"Windows 10";
+                    os += L" " + std::to_wstring(vi.dwBuildNumber);
+                }
+            }
+        }
+    }
+
+    std::wstring host;
+    {
+        wchar_t buf[MAX_COMPUTERNAME_LENGTH + 1] = {};
+        DWORD len = MAX_COMPUTERNAME_LENGTH + 1;
+        if (GetComputerNameW(buf, &len)) host = buf;
+    }
+
+    std::wstring out = L"app=" + SanitiseAgentValue(appName) +
+                       L";ver=" + SanitiseAgentValue(appVersion) +
+                       L";proto=" + std::to_wstring(Constants::RemoteTcpIp::PROTOCOL_VERSION) +
+                       L";platform=win";
+    // OMITTED WHEN EMPTY, never sent as `os=`. An empty value is not a fact
+    // about this machine, and a reader cannot tell it apart from a field that
+    // was truncated on the way. Absent means unknown, and the panel spells that
+    // as "?" rather than leaving a gap the eye reads as blank.
+    if (!os.empty())           out += L";os="   + SanitiseAgentValue(os);
+    if (!host.empty())         out += L";host=" + SanitiseAgentValue(host);
+    if (!instanceName.empty()) out += L";name=" + SanitiseAgentValue(instanceName);
+    return out;
+}
+
+std::wstring AgentField(const std::wstring &value) {
+    // One place decides what an unknown field looks like, so every panel that
+    // shows one shows the same thing.
+    return value.empty() ? std::wstring(L"?") : value;
+}
+
+const wchar_t *ScopeIcon(const std::wstring &address, bool sameMachine) {
+    if (sameMachine)                                  return L"\U0001F3E0"; // 🏠 this machine
+
+    const std::wstring a = StripAddressBrackets(address);
+
+    if (a.empty())                                    return L"\U0001F3E0";
+    if (a.rfind(L"127.", 0) == 0 || a == L"::1")      return L"\U0001F3E0";
+    if (_wcsicmp(a.c_str(), L"localhost") == 0)       return L"\U0001F3E0";
+
+    // RFC 1918 and the IPv6 equivalents. Anything private is "the LAN".
+    if (a.rfind(L"10.", 0) == 0)                      return L"\U0001F5A7"; // 🖧 LAN
+    if (a.rfind(L"192.168.", 0) == 0)                 return L"\U0001F5A7";
+    if (a.rfind(L"169.254.", 0) == 0)                 return L"\U0001F5A7"; // link-local
+    if (a.rfind(L"fe80", 0) == 0)                     return L"\U0001F5A7"; // IPv6 link-local
+    if (a.rfind(L"fc", 0) == 0 || a.rfind(L"fd", 0) == 0) return L"\U0001F5A7"; // ULA
+
+    // 172.16.0.0 – 172.31.255.255 only. The whole of 172. is NOT private, so the
+    // second octet has to be read rather than the prefix matched — treating all
+    // of it as LAN would hide a genuinely public peer.
+    if (a.rfind(L"172.", 0) == 0) {
+        const size_t dot = a.find(L'.', 4);
+        if (dot != std::wstring::npos) {
+            const int second = _wtoi(a.substr(4, dot - 4).c_str());
+            if (second >= 16 && second <= 31)         return L"\U0001F5A7";
+        }
+    }
+
+    // A NAME rather than a literal — "my-pc", "nas.local". It cannot be resolved
+    // from here without blocking a paint, and guessing wrong in the alarming
+    // direction is worse than saying nothing, so it reads as LAN: a hostname
+    // typed into a local-network viewer is overwhelmingly a local machine.
+    if (a.find_first_not_of(L"0123456789.:abcdefABCDEF") != std::wstring::npos)
+        return L"\U0001F5A7";
+
+    return L"\U0001F310"; // 🌐 public — this connection leaves the network
+}
+
+std::wstring DescribeAgent(const AgentInfo &info, AgentRole role) {
+    // 🙋 someone asking this viewer for something, 📡 something this viewer asks.
+    const std::wstring lead = (role == AgentRole::Client)
+                                  ? L"\U0001F64B Client"
+                                  : L"\U0001F4E1 Server";
+
+    return lead +
+           L"  \x00B7  App "  + AgentField(info.app) +
+           L" "               + AgentField(info.version) +
+           L"  \x00B7  OS "   + AgentField(info.os) +
+           L"  \x00B7  Host " + AgentField(info.host);
+}
+
 bool NameForCommand(Command cmd, std::wstring &nameOut) {
     // First row wins. The table lists the short alias before the canonical enum
     // name for exactly this reason — a mirrored session that a human may be
@@ -858,11 +1018,39 @@ bool IsMirrorable(Command cmd) {
             break;
     }
 
-    // Everything else mirrors — but only if it is on the wire at all. A command
-    // with no table row has no name to send, so reachability is still the outer
-    // bound: this function narrows that set, it never widens it.
-    std::wstring unused;
-    return NameForCommand(cmd, unused);
+    // Everything else mirrors — but only if it is on the wire at all, AND only
+    // if its name alone means something.
+    //
+    // A PAYLOAD-CARRYING COMMAND CANNOT BE MIRRORED. Mirror::Broadcast sends the
+    // name and nothing else — `PushTo(*t, name, {})` — so a row marked
+    // PayloadRule::Required arrives at the target bare and is refused with
+    // ERR_PAYLOAD_REQUIRED. Every such command was therefore a silent no-op on
+    // every mirrored screen, plus a rejected line in their logs.
+    //
+    // It cannot be fixed by sending the payload either, not from here: Broadcast
+    // runs inside ExecuteCommand BEFORE the value exists. SlideshowSetInterval
+    // opens a prompt, and the number the user is about to type has not been typed
+    // yet. Mirroring these is not a missing feature, it is a category error.
+    //
+    // The state they carry still reaches mirrored instances — through Sync, which
+    // sends `interval=`, `zoom=` and the rest as a resolved snapshot, and which is
+    // what the console's Sync All button is for.
+    //
+    // READ FROM THE TABLE, never a hand-written list. There are sixteen Required
+    // rows today; a list written by hand would have named half of them and gone
+    // stale the first time a seventeenth was added. The table is the one place
+    // that already knows.
+    for (size_t i = 0; i < TABLE_COUNT; ++i) {
+        if (TABLE[i].cmd == cmd) {
+            // First row wins, matching NameForCommand — the name that would be
+            // sent and the rule that governs it come from the same row.
+            return TABLE[i].payload != PayloadRule::Required;
+        }
+    }
+
+    // No row at all: not reachable on the wire, so nothing to send. Reachability
+    // is still the outer bound — this function narrows that set, never widens it.
+    return false;
 }
 
 bool IsMirrorableRemote(Command cmd) {
@@ -965,6 +1153,14 @@ RemoteRequest ParseLine(const std::wstring &line) {
     // string on the wire a peer chooses freely about ITSELF.
     if (_wcsicmp(name.c_str(), L"hello") == 0) {
         req.verb    = Verb::Hello;
+        req.payload = payload;
+        req.status  = ParseStatus::Verb;
+        return req;
+    }
+    // Same shape as hello and for the same reason: peer-chosen text about
+    // itself, sanitised where it is parsed rather than trusted here.
+    if (_wcsicmp(name.c_str(), L"agent") == 0) {
+        req.verb    = Verb::Agent;
         req.payload = payload;
         req.status  = ParseStatus::Verb;
         return req;

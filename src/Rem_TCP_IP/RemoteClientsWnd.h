@@ -16,7 +16,7 @@
 #include "RemoteBlacklist.h"   // TimedEntry — the second section
 
 // =============================================================================
-// RemoteClientsWnd (Ctrl+F9, "Server Clients") — WHO is connected to the
+// RemoteClientsWnd (Ctrl+F9, "My Clients") — WHO is connected to the
 // listener this instance runs, and the three ways to get rid of them.
 //
 // SPLIT OUT OF THE LOCAL SERVER PANEL (F9) ON PURPOSE. That panel describes the

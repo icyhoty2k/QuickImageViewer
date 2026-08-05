@@ -413,7 +413,7 @@ namespace Remote::Mirror {
     // Put every connected target's wire log into the given state (`enablelog
     // 1|0`). Sent to ALL of them, not just the mirrored selection: the log
     // describes the session, and a screen left recording because it happened to
-    // be unticked in Remotes Control is a growing file nobody will look at.
+    // be unticked in Mirroring is a growing file nobody will look at.
     //
     // Does NOT touch this instance — the caller sets its own flag, because the
     // caller is the one that owns app.remoteLogEnabled.

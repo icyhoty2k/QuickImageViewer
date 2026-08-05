@@ -267,6 +267,7 @@ namespace Persistence::Registry {
         emitB(R::KIOSK_LOCK,            a.isLocked);
         emitB(R::ALWAYS_ON_TOP,         a.isAlwaysOnTop);
         emitB(R::KEEP_DISPLAY_AWAKE,    a.keepDisplayAwake);
+        emitB(R::REMOTE_BEACON,         a.remoteBeacon);
         emitB(R::WHEEL_INVERT,          a.invertWheelDirection);
         emitB(R::WHEEL_INVERT_H,        a.invertWheelDirectionH);
         emitI(R::VRAM_CACHE_COUNT,      a.vramCacheCount);
@@ -405,6 +406,9 @@ namespace Persistence::Registry {
         a.keepDisplayAwake = readDword(
             Constants::Registry::KEEP_DISPLAY_AWAKE,
             static_cast<DWORD>(Constants::IS_KEEP_DISPLAY_AWAKE)) != 0;
+        a.remoteBeacon = readDword(
+            Constants::Registry::REMOTE_BEACON,
+            static_cast<DWORD>(Constants::IS_REMOTE_BEACON_ENABLED)) != 0;
         a.invertWheelDirection = readDword(
             Constants::Registry::WHEEL_INVERT,
             static_cast<DWORD>(Constants::IS_MOUSE_VERTICAL_REVERSE_SCROLL_DIRECTION)) != 0;

@@ -319,6 +319,15 @@ struct AppState {
     // arming it from anywhere but the UI thread silently does nothing.
     bool keepDisplayAwake = Constants::IS_KEEP_DISPLAY_AWAKE;
 
+    // Announce the Local Server on the network so clients can discover it.
+    //
+    // Persisted like any other toggle, but it does NOT by itself mean a beacon is
+    // live: the announcement only exists while the server is actually listening
+    // and reachable. Advertising a service on a loopback-only bind, or with the
+    // server stopped, would put a name on the network pointing at nothing. See
+    // Remote::Beacon::Refresh, which is what reconciles this flag with reality.
+    bool remoteBeacon = Constants::IS_REMOTE_BEACON_ENABLED;
+
     // Slideshow
     SlideshowState slideshow;
 

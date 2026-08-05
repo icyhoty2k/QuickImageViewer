@@ -69,7 +69,7 @@
 //
 //   WATCH (◉) LIVES IN Ctrl+F11 now, not here. This console answers "which
 //   instances exist, and how do I reach them"; who drives whom — mirroring,
-//   observing, identifying — is the Remotes Control panel's whole subject, and
+//   observing, identifying — is the Mirroring panel's whole subject, and
 //   the eye was the one control here that answered that question instead.
 //
 // -----------------------------------------------------------------------------

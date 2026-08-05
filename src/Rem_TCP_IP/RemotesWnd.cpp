@@ -1341,7 +1341,22 @@ LRESULT RemotesWnd::HandlePanelMessage(UINT message, WPARAM wParam, LPARAM lPara
             SelectObject(bb, m_hFontBold);
             SetTextColor(bb, fg);
             RECT tr{pad, static_cast<int>(6 * s), W - pad, static_cast<int>(26 * s)};
-            DrawTextW(bb, L"Remote Servers — instances this copy can drive", -1, &tr,
+            // COUNTS IN THE TITLE. "Servers" alone does not say whether the list
+            // is empty because nothing is saved or because nothing answered, and
+            // those need opposite actions from the user.
+            int upCount = 0;
+            for (const RowView &rv : m_rows)
+                if (rv.dot == DotState::Up) ++upCount;
+
+            // Named for what it is rather than `title`: a later local by that
+            // name lives in the row loop below, and /W4 is right that one
+            // shadowing the other is a trap waiting for whoever edits next.
+            const std::wstring serversTitle =
+                L"\U0001F4E1 Servers — the instances this copy can connect to   \x00B7   " +
+                std::to_wstring(m_rows.size()) + L" saved, " +
+                std::to_wstring(upCount) + L" connected";
+
+            DrawTextW(bb, serversTitle.c_str(), -1, &tr,
                       DT_LEFT | DT_SINGLELINE);
 
             SelectObject(bb, m_hFontSmall);

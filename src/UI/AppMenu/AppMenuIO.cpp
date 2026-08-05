@@ -204,6 +204,7 @@ void ImportSettings(HWND hWnd) {
         applyBool(Constants::Registry::KIOSK_LOCK,           app.isLocked);
         applyBool(Constants::Registry::ALWAYS_ON_TOP,        app.isAlwaysOnTop);
         applyBool(Constants::Registry::KEEP_DISPLAY_AWAKE,   app.keepDisplayAwake);
+        applyBool(Constants::Registry::REMOTE_BEACON,        app.remoteBeacon);
         applyBool(Constants::Registry::WHEEL_INVERT,         app.invertWheelDirection);
         applyBool(Constants::Registry::WHEEL_INVERT_H,       app.invertWheelDirectionH);
         applyBool(Constants::Registry::START_FULLSCREEN,     app.startInFullscreen);
@@ -451,6 +452,7 @@ void RestoreDefaults(HWND hWnd) {
     app.isLocked                = Constants::IS_KIOSK_LOCK_ENABLED;
     app.isAlwaysOnTop           = Constants::IS_ALWAYS_ON_TOP;
     app.keepDisplayAwake        = Constants::IS_KEEP_DISPLAY_AWAKE;
+    app.remoteBeacon            = Constants::IS_REMOTE_BEACON_ENABLED;
     app.invertWheelDirection    = Constants::IS_MOUSE_VERTICAL_REVERSE_SCROLL_DIRECTION;
     app.invertWheelDirectionH   = Constants::IS_MOUSE_HORIZONTAL_REVERSE_SCROLL_DIRECTION;
     app.vramCacheCount          = Constants::IS_VRAM_CACHE_IMAGES_COUNT;
@@ -507,6 +509,7 @@ void RestoreDefaults(HWND hWnd) {
     Persistence::Registry::SaveSetting(Constants::Registry::KIOSK_LOCK,            static_cast<DWORD>(app.isLocked));
     Persistence::Registry::SaveSetting(Constants::Registry::ALWAYS_ON_TOP,         static_cast<DWORD>(app.isAlwaysOnTop));
     Persistence::Registry::SaveSetting(Constants::Registry::KEEP_DISPLAY_AWAKE,    static_cast<DWORD>(app.keepDisplayAwake));
+    Persistence::Registry::SaveSetting(Constants::Registry::REMOTE_BEACON,         static_cast<DWORD>(app.remoteBeacon));
     Persistence::Registry::SaveSetting(Constants::Registry::WHEEL_INVERT,          static_cast<DWORD>(app.invertWheelDirection));
     Persistence::Registry::SaveSetting(Constants::Registry::WHEEL_INVERT_H,        static_cast<DWORD>(app.invertWheelDirectionH));
     Persistence::Registry::SaveSetting(Constants::Registry::VRAM_CACHE_COUNT,      static_cast<DWORD>(app.vramCacheCount));

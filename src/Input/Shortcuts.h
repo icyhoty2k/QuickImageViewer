@@ -76,7 +76,7 @@ namespace Shortcuts {
     // instance runs and edit its configuration. Its own window for the same
     // reason F8 is: it is a form, not a menu.
     constexpr UINT SC_PANEL_REMOTE_TOGGLE = VK_F9;
-    // Ctrl+F9 — Server Clients (Rem_TCP_IP/RemoteClientsWnd.h): who is connected
+    // Ctrl+F9 — My Clients (Rem_TCP_IP/RemoteClientsWnd.h): who is connected
     // to the listener above, and the buttons to kick, timed-kick or ban them.
     // The modifier form of the key that opens the listener's own panel, matching
     // Ctrl+F10 and Ctrl+F11 — plain key configures a thing, Ctrl inspects it.

@@ -106,9 +106,35 @@ namespace Remote {
         std::wstring address;         // bare peer address — no port, no brackets
         int          port        = 0; // the peer's source port
         std::wstring name;            // from `hello <name>`; empty until sent
+
+        // From `platform <token>`: `win`, `android`, or empty when the client
+        // never said or said something this build does not recognise.
+        //
+        // A HINT FOR AN ICON, never a decision. Peer-chosen like the name, so a
+        // phone may claim `win` — nothing that governs access, capability or
+        // routing may read this field.
+        std::wstring platform;
+
+        // The rest of what `agent` carried. Empty where the peer said nothing;
+        // panels render that as "?" rather than as a gap. All peer-chosen, all
+        // display-only, same rule as `platform` above.
+        std::wstring agentApp;      // "qIV", "qIVRemote"
+        std::wstring agentVersion;  // that app's own version
+        std::wstring agentOs;       // "Windows 11 26200", "Android 14"
+        std::wstring agentHost;     // machine or device name
         long long    sinceMs     = 0; // connected at, GetTickCount64 base
         bool         tls         = false;
         bool         sameMachine = false;
+
+        // Whether this client asked for `Observe 1` — i.e. it is a SCREEN being
+        // pushed events, not just something attached to the port.
+        //
+        // The distinction is the whole point of the flag: a phone can be
+        // connected and watching nothing, and a panel that showed only a
+        // connection count could not tell an operator which of five devices is
+        // actually displaying the pictures. Paired with `name`, this is what
+        // makes a watching screen addressable by a person rather than by socket.
+        bool         observing   = false;
     };
 
     // Snapshot of what is connected right now, ordered oldest first. A snapshot

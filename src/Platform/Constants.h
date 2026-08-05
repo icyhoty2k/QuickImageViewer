@@ -134,6 +134,21 @@ namespace Constants {
     // it in its config so nothing can cover the display.
     constexpr bool IS_ALWAYS_ON_TOP = false;
 
+    // Announce this instance's Local Server on the network, so a phone or another
+    // qIV can FIND it instead of being told an address to type.
+    //
+    // DEFAULTS OFF, and that is not timidity. This app's whole posture is "no
+    // cloud, no account, nothing leaves your network" — a machine that starts
+    // advertising itself the first time somebody enables the server would be a
+    // change to that posture made on the user's behalf. Discovery is opt-in, from
+    // the TCP/IP menu, once.
+    //
+    // DISCOVERY IS NOT ACCESS. The beacon carries the instance name and the port,
+    // never a password and never a file. Everything that decides who may actually
+    // connect — the AllowList, the password, TLS — is untouched by it, and a
+    // beacon nobody may connect to is merely a name on a list.
+    constexpr bool IS_REMOTE_BEACON_ENABLED = false;
+
     // Hold off the screensaver and display sleep while the main window is
     // visible. An unattended screen is useless once Windows blanks it, and no
     // input ever arrives to wake it — least of all with the kiosk lock on.
@@ -1010,7 +1025,18 @@ namespace Constants {
         //         talking to a v5 client stalls at the handshake instead of
         //         guessing, which is the honest outcome — the two builds ship
         //         together.
-        constexpr int PROTOCOL_VERSION = 5;
+        // v6 — 2026-08-06. Adds the `agent` verb: both ends exchange
+        //      `k=v;k=v` describing themselves (app, ver, proto, platform, os,
+        //      host, name) right after authentication, and the server answers
+        //      with its own rather than merely recording the client's.
+        //
+        //      NOT A CLEAN BREAK, unlike v5. `agent` is optional in both
+        //      directions and unknown keys inside it are ignored, so a build
+        //      that never sends one is simply a peer whose details are unknown —
+        //      which is what every peer was before this. The bump exists so the
+        //      banner does not advertise v5 from a build that greets, because a
+        //      client cannot otherwise tell the two apart.
+        constexpr int PROTOCOL_VERSION = 6;
 
         // Hard cap on one received line. A socket must never be allowed to grow
         // a buffer without bound just by never sending a newline.
@@ -1215,6 +1241,7 @@ namespace Constants {
         constexpr const wchar_t *KIOSK_LOCK               = L"qivKioskLock";
         constexpr const wchar_t *ALWAYS_ON_TOP            = L"qivAlwaysOnTop";
         constexpr const wchar_t *KEEP_DISPLAY_AWAKE       = L"qivKeepDisplayAwake";
+        constexpr const wchar_t *REMOTE_BEACON            = L"qivRemoteBeacon";
         // NOTE: the last-image-on-exit value used to live here. It is SESSION
         // state, not a setting — it changes on every close and is meaningless on
         // another machine — and it now has its own file, Constants::Session.

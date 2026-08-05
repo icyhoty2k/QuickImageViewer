@@ -1409,7 +1409,7 @@ void BroadcastEnableLog(bool on) {
     //
     // EVERY connected target, not just the mirrored selection: the log is a
     // diagnostic about the whole session, and a screen left recording because it
-    // happened to be unticked in Remotes Control is a file nobody will think to
+    // happened to be unticked in Mirroring is a file nobody will think to
     // look at, still growing.
     const std::wstring line = on ? L"EnableRemoteLog 1" : L"EnableRemoteLog 0";
     for (std::unique_ptr<Target> &t : g_targets) PushTo(*t, line, {});

@@ -36,6 +36,8 @@
 #include "Rem_TCP_IP/RemoteMirror.h"  // the mirror gate at the top of ExecuteCommand
 #include "Rem_TCP_IP/RemoteLog.h"     // Ctrl+F12 — the recording switch
 #include "Platform/CrashHandler.h" // NoteImage / NoteCommand breadcrumbs
+#include "Platform/MonitorInfo.h"  // the display list, and the names Ctrl+M reports
+#include "Rem_TCP_IP/RemoteBeacon.h" // Announce on network — the TCP/IP menu tick
 #include "Rem_TCP_IP/RemoteInbound.h" // …and the loop cut that makes it safe
 // The Ctrl+F11 selection panel reaches ExecuteCommand through UIManager, which
 // CommandExecuter already includes — nothing extra is needed here.
@@ -99,49 +101,29 @@ static void SnapWindowToZone(HWND hWnd, int zone) {
 // straight across puts a window sized for a 4K screen half off a 1080p one, and
 // two monitors of different resolution is the normal case, not the exotic one.
 // -----------------------------------------------------------------------------
-static BOOL CALLBACK CollectMonitorProc(HMONITOR hMon, HDC, LPRECT, LPARAM lParam) {
-    auto *out = reinterpret_cast<std::vector<MONITORINFO> *>(lParam);
-    MONITORINFO mi = {sizeof(mi)};
-    if (GetMonitorInfo(hMon, &mi)) out->push_back(mi);
-    return TRUE;
-}
-
 // Returns false when there is nowhere to go — a single monitor, or the
 // enumeration failed. The caller reports that rather than doing nothing.
-static bool MoveWindowToNextMonitor(HWND hWnd, int &monitorNumberOut, int &monitorCountOut) {
-    std::vector<MONITORINFO> mons;
-    if (!EnumDisplayMonitors(nullptr, nullptr, CollectMonitorProc,
-                             reinterpret_cast<LPARAM>(&mons)))
-        return false;
+//
+// The list and its ordering come from MonitorInfo so that this and the
+// Statistics panel cannot disagree about which screen is "2 of 3" — they used to
+// carry a sort each.
+static bool MoveWindowToNextMonitor(HWND hWnd, int &monitorNumberOut, int &monitorCountOut,
+                                    std::wstring &monitorNameOut) {
+    const std::vector<MonitorInfo::Entry> mons = MonitorInfo::Enumerate();
+    if (mons.empty()) return false;
 
     monitorCountOut = static_cast<int>(mons.size());
     if (mons.size() < 2) return false;
 
-    std::sort(mons.begin(), mons.end(),
-              [](const MONITORINFO &a, const MONITORINFO &b) {
-                  if (a.rcMonitor.left != b.rcMonitor.left)
-                      return a.rcMonitor.left < b.rcMonitor.left;
-                  return a.rcMonitor.top < b.rcMonitor.top;
-              });
+    const int curIdxSigned = MonitorInfo::IndexOfWindow(hWnd, mons);
+    if (curIdxSigned < 0) return false;
+    const size_t curIdx = static_cast<size_t>(curIdxSigned);
 
-    // Which one the window is on now. Matched by the monitor rect rather than by
-    // HMONITOR, because the handles were not kept — the rects are unique and are
-    // what the sort already ordered by.
-    HMONITOR hCur = MonitorFromWindow(hWnd, MONITOR_DEFAULTTONEAREST);
-    MONITORINFO cur = {sizeof(cur)};
-    if (!GetMonitorInfo(hCur, &cur)) return false;
+    const MonitorInfo::Entry &cur = mons[curIdx];
+    const MonitorInfo::Entry &dst = mons[(curIdx + 1) % mons.size()];
 
-    size_t curIdx = 0;
-    for (size_t i = 0; i < mons.size(); ++i) {
-        if (mons[i].rcMonitor.left == cur.rcMonitor.left &&
-            mons[i].rcMonitor.top  == cur.rcMonitor.top) {
-            curIdx = i;
-            break;
-        }
-    }
-
-    const MONITORINFO &dst = mons[(curIdx + 1) % mons.size()];
     monitorNumberOut = static_cast<int>((curIdx + 1) % mons.size()) + 1; // 1-based, for the message
+    monitorNameOut   = dst.name;
 
     // Fullscreen is a separate case: the window IS the monitor, so it simply
     // becomes the new one. savedWindowRect is left alone — it holds the
@@ -768,10 +750,17 @@ void InputManager::ExecuteCommand(HWND hWnd, Command cmd) {
 
         case Command::MoveToNextMonitor: {
             int monNum = 0, monCount = 0;
-            if (MoveWindowToNextMonitor(hWnd, monNum, monCount)) {
-                g_overlayManager.PostCenterMessage(
-                    hWnd, std::wstring(Constants::Messages::MONITOR_MOVED_PREFIX) +
-                          std::to_wstring(monNum) + L"/" + std::to_wstring(monCount));
+            std::wstring monName;
+            if (MoveWindowToNextMonitor(hWnd, monNum, monCount, monName)) {
+                // NAME FIRST, then the position. "2/3" tells you the window
+                // moved; it does not tell you WHERE, and on a desk where the
+                // screens are not in a row the number is not something anyone
+                // can map to a physical monitor. The name is what a person
+                // recognises, and it is the whole reason for the lookup.
+                std::wstring msg = std::wstring(Constants::Messages::MONITOR_MOVED_PREFIX);
+                if (!monName.empty()) msg += monName + L"  ";
+                msg += std::to_wstring(monNum) + L"/" + std::to_wstring(monCount);
+                g_overlayManager.PostCenterMessage(hWnd, msg);
             } else {
                 g_overlayManager.PostCenterMessage(hWnd, Constants::Messages::MONITOR_ONLY_ONE);
             }
@@ -1080,6 +1069,35 @@ void InputManager::ExecuteCommand(HWND hWnd, Command cmd) {
         case Command::ToggleRemoteLog:
             uiManager.Toggle(uiManager.getRemoteLogWindow());
             break;
+
+        // Announce this instance's Local Server on the network, or stop.
+        //
+        // Saved immediately, like every other persisted toggle — a setting that
+        // survives only until the next launch would be worse than none here,
+        // because the whole value is a screen that is findable tomorrow too.
+        //
+        // Refresh() decides whether anything is actually published. The setting
+        // and the announcement are NOT the same thing: with the server stopped
+        // or bound to loopback this stores the intent and publishes nothing, and
+        // the message says so rather than claiming success.
+        case Command::ToggleRemoteBeacon: {
+            app.remoteBeacon = !app.remoteBeacon;
+            Persistence::Registry::SaveSetting(Constants::Registry::REMOTE_BEACON,
+                                               static_cast<DWORD>(app.remoteBeacon));
+            Remote::Beacon::Refresh();
+
+            std::wstring msg = std::wstring(Constants::Messages::BEACON_PREFIX);
+            if (!app.remoteBeacon) {
+                msg += Constants::Messages::BEACON_OFF;
+            } else {
+                const std::wstring why = Remote::Beacon::InactiveReason();
+                msg += why.empty() ? Constants::Messages::BEACON_ON
+                                   : (std::wstring(Constants::Messages::BEACON_PENDING) +
+                                      L" — " + why);
+            }
+            g_overlayManager.PostCenterMessage(hWnd, msg);
+            break;
+        }
 
         // Ctrl+F10 — type a command and send it to the controlled instances.
         case Command::ToggleRemoteCmd:
@@ -1559,6 +1577,34 @@ void InputManager::ExecuteCommand(HWND hWnd, Command cmd) {
                 g_overlayManager.PostCenterMessage(hWnd,
                     std::wstring(Constants::Messages::SLIDESHOW_INTERVAL_PREFIX) +
                     std::to_wstring(v) + L" ms");
+
+                // MIRRORED HERE, EXPLICITLY, WITH THE VALUE.
+                //
+                // The generic fan-out cannot carry this one. Mirror::Broadcast
+                // sends a bare command name, and it runs BEFORE this case — at
+                // which point the number above has not been typed yet. A mirrored
+                // instance therefore received `SlideshowSetInterval` with no
+                // payload and refused it, so the pace of every mirrored screen
+                // silently stayed at whatever it already was.
+                //
+                // BroadcastLine exists for exactly this — "the payload forms,
+                // which have no bare-Command spelling" — and it is the same
+                // approach the streaming commands take: excluded from the generic
+                // path, then sent explicitly once their arguments are known.
+                //
+                // ALL MIRRORED TARGETS, not just same-machine ones. Unlike a
+                // playlist index, a duration means the same thing everywhere;
+                // there is no content for it to be relative to.
+                //
+                // InboundActive() guards the echo: this command arriving FROM the
+                // wire must not be sent back out, or two instances mirroring each
+                // other would trade the same interval forever.
+                if (app.passCommandToRemote && !Remote::InboundActive() &&
+                    Remote::Mirror::HasLiveTargets()) {
+                    std::wstring wireName;
+                    if (Remote::NameForCommand(Command::SlideshowSetInterval, wireName))
+                        Remote::Mirror::BroadcastLine(wireName + L" " + std::to_wstring(v));
+                }
             }
             break;
         }
@@ -1941,25 +1987,17 @@ std::wstring InputManager::GetCommandValue(HWND hWnd, Command cmd) {
         // Which monitor it landed on, 1-based, in the same left-to-right order
         // the move itself uses — so a caller can tell a wrap from a step.
         case Command::MoveToNextMonitor: {
-            std::vector<MONITORINFO> mons;
-            EnumDisplayMonitors(nullptr, nullptr, CollectMonitorProc,
-                                reinterpret_cast<LPARAM>(&mons));
+            // Reported as "n/total", NOT with the monitor's name: this is the
+            // QueryToggles value a remote client parses, and the names carry
+            // spaces and punctuation that the `Name=value;` framing does not
+            // survive. The name belongs in the on-screen message, which is a
+            // person's to read.
+            const std::vector<MonitorInfo::Entry> mons = MonitorInfo::Enumerate();
             if (mons.empty()) return L"1/1";
-            std::sort(mons.begin(), mons.end(),
-                      [](const MONITORINFO &a, const MONITORINFO &b) {
-                          if (a.rcMonitor.left != b.rcMonitor.left)
-                              return a.rcMonitor.left < b.rcMonitor.left;
-                          return a.rcMonitor.top < b.rcMonitor.top;
-                      });
-            MONITORINFO cur = {sizeof(cur)};
-            if (!GetMonitorInfo(MonitorFromWindow(hWnd, MONITOR_DEFAULTTONEAREST), &cur))
-                return L"1/" + std::to_wstring(mons.size());
-            for (size_t i = 0; i < mons.size(); ++i) {
-                if (mons[i].rcMonitor.left == cur.rcMonitor.left &&
-                    mons[i].rcMonitor.top  == cur.rcMonitor.top)
-                    return std::to_wstring(i + 1) + L"/" + std::to_wstring(mons.size());
-            }
-            return L"1/" + std::to_wstring(mons.size());
+
+            const int idx = MonitorInfo::IndexOfWindow(hWnd, mons);
+            const int shown = (idx < 0) ? 1 : idx + 1;
+            return std::to_wstring(shown) + L"/" + std::to_wstring(mons.size());
         }
         case Command::OpacityUp:
         case Command::OpacityDown:             return std::to_wstring(app.opacity);
