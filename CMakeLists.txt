@@ -252,7 +252,24 @@ target_compile_options(QuickImageViewer PRIVATE
 # binary's layout and size. Only the LTCG form differs between the two.
 target_link_options(QuickImageViewer PRIVATE
         /MANIFEST:NO                         # Prevent default manifest generation
-        $<$<CONFIG:Release>:/DEBUG:NONE>     # DO NOT Generate PDB (exe size remains small)
+        # /DEBUG:FULL, not /DEBUG:NONE — and this does NOT grow the exe.
+        #
+        # A PDB is a separate file. The linker adds only a small debug directory
+        # entry naming it; code generation, optimisation and layout are unchanged,
+        # so the shipped binary is the same one either way. The PDB is simply not
+        # distributed.
+        #
+        # WHY IT IS NEEDED. src/Platform/CrashHandler.cpp writes a minidump when
+        # qIV dies on a user's machine. Without a PDB from the EXACT build that
+        # produced the crash, that dump resolves to nothing but raw addresses —
+        # which is what happened on 2026-08-05, when four dumps from a real crash
+        # could not be read. A dump nobody can symbolise is a file, not evidence.
+        #
+        # KEEP THE PDB WITH EACH RELEASE. It is only usable against the one binary
+        # it was linked with; a PDB from any other build maps to the wrong lines,
+        # silently. The makeRelease flow already archives the Android R8 mapping
+        # for the same reason.
+        $<$<CONFIG:Release>:/DEBUG:FULL>
         $<$<CONFIG:Release>:/INCREMENTAL:NO> # /INCREMENTAL is invalid with /LTCG
         $<$<CONFIG:Release>:/OPT:REF>        # Eliminate unreferenced functions/data
         $<$<CONFIG:Release>:/OPT:ICF>        # Fold identical functions
@@ -309,6 +326,15 @@ target_link_libraries(QuickImageViewer PRIVATE
         ws2_32 ntdll userenv # ws2_32 also carries the Rem_TCP_IP sockets
         bcrypt               # CNG — remote-control password hashing / HMAC
         secur32 crypt32 ncrypt # Schannel TLS + the self-signed server certificate
+
+        # These two were reaching the linker through #pragma comment(lib, ...) in
+        # RendererD2D.cpp and AppCommands.cpp instead of from here, so this file
+        # was not actually the full dependency list it appears to be. Moved so it
+        # is — RemoteCrypto.cpp and RemoteTls.cpp already say in their own
+        # comments that CMake owns library configuration, and the renderer was
+        # the one place still disagreeing.
+        dxguid               # the D3D/DXGI GUIDs RendererD2D references
+        comctl32             # common controls — AppCommands
 )
 
 # 7. Track Manifest Changes

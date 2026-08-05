@@ -11,6 +11,10 @@
 #include <windows.h>
 #include <dbghelp.h>
 
+#include <cstdlib>   // _set_purecall_handler, _set_invalid_parameter_handler
+#include <exception> // std::set_terminate
+#include <new>       // std::set_new_handler
+
 //
 // EVERYTHING BELOW THE FILTER RUNS IN A BROKEN PROCESS.
 //
@@ -171,6 +175,49 @@ namespace Platform::Crash {
             // for WER to add and its second dialog would only be noise.
             return EXCEPTION_EXECUTE_HANDLER;
         }
+
+        // --- The failures that never reach the filter above ------------------
+        //
+        // SetUnhandledExceptionFilter only sees STRUCTURED exceptions that nobody
+        // handled. Several common ways to die are not that, and each terminates
+        // the process through its own path with no dump written. Every hook below
+        // exists to convert one of those into an ordinary access violation, so
+        // the filter runs and a dump lands with a usable stack.
+        //
+        // RaiseException rather than calling the filter directly: it produces a
+        // real EXCEPTION_POINTERS with a genuine context record, so the dump
+        // shows the frames that led here rather than the frames of the reporting
+        // code itself.
+        void CrashWith(DWORD code) {
+            RaiseException(code, EXCEPTION_NONCONTINUABLE, 0, nullptr);
+        }
+
+        // An uncaught C++ exception, or a throw during unwinding. Otherwise
+        // std::terminate calls abort(), which exits without a dump.
+        void OnTerminate() {
+            CrashWith(0xE0000001);
+        }
+
+        // A virtual call on a partially destroyed object. Silent by default.
+        void __cdecl OnPureCall() {
+            CrashWith(0xE0000002);
+        }
+
+        // The CRT's answer to a bad argument — a null format string, an invalid
+        // iterator, a bad file handle. In a release build the default handler
+        // calls abort() with no message and no dump, which is the single most
+        // opaque way this program can die.
+        void __cdecl OnInvalidParameter(const wchar_t *, const wchar_t *,
+                                        const wchar_t *, unsigned int, uintptr_t) {
+            CrashWith(0xE0000003);
+        }
+
+        // Allocation failure. qIV can genuinely reach this — a 40-megapixel
+        // decode or a large GIF — and "operator new threw" with no dump tells
+        // nobody which allocation it was.
+        void OnNewFailed() {
+            CrashWith(0xE0000004);
+        }
     } // namespace
 
     void Install() {
@@ -207,12 +254,37 @@ namespace Platform::Crash {
 
         SetUnhandledExceptionFilter(OnUnhandledException);
 
-        // WHAT THIS STILL DOES NOT CATCH, so nobody assumes it is total:
-        //   * a stack overflow deep enough that the filter has no stack to run on
-        //   * CRT invalid-parameter and pure-virtual calls, which terminate
-        //     through their own handlers
+        // Route the non-SEH death paths into the same filter. Without these, each
+        // one calls abort() and the process disappears with no dump at all — see
+        // the handlers above for what each one covers.
+        std::set_terminate(OnTerminate);
+        _set_purecall_handler(OnPureCall);
+        _set_invalid_parameter_handler(OnInvalidParameter);
+        std::set_new_handler(OnNewFailed);
+
+        // ENOUGH STACK LEFT TO REPORT A STACK OVERFLOW.
+        //
+        // On overflow the guard page is hit and the filter runs on whatever
+        // remains — which by definition is almost nothing, so writing a dump
+        // faults again and the process dies silently. Reserving 64 KB up front
+        // means the handler has room to work in the one case it is least able to
+        // ask for any.
+        ULONG stackBytes = 64 * 1024;
+        SetThreadStackGuarantee(&stackBytes);
+
+        // Suppress Windows Error Reporting's own dialog. Ours has already told
+        // the user where the dump is; a second, less useful box racing it just
+        // makes the crash look worse than it is.
+        SetErrorMode(SEM_FAILCRITICALERRORS | SEM_NOGPFAULTERRORBOX | SEM_NOOPENFILEERRORBOX);
+
+        // STILL NOT CAUGHT, so nobody assumes this is total:
         //   * anything a __try/__except swallows before it reaches here
-        // Each has its own hook. They are worth adding only if a real crash
-        // turns out to be escaping this one.
+        //   * a heap corruption that Windows turns into an immediate
+        //     RtlFailFast — those bypass every user-mode handler by design
+        //   * a hang, which is not a crash and produces nothing at all
+        //
+        // SetThreadStackGuarantee applies per THREAD and is set here for the main
+        // one only. Worker threads that overflow still die quietly; if that ever
+        // turns out to matter, the pools in WorkerThread.h are where to add it.
     }
 } // namespace Platform::Crash

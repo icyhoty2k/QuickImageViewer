@@ -258,6 +258,10 @@ namespace UI {
             L"Zoom in / out — same steps as Up / Down.", sZoom);
         Add(K(SC::SC_ZOOM_RESET),
             L"Reset zoom and pan back to the active view mode's default fit.", sZoom);
+        // Was wired in CommandResolver but listed nowhere, so the only way to
+        // find it was to read the source.
+        Add(K(SC::SC_ZOOM_TO),
+            L"Type an exact zoom percentage.", sZoom);
         Add(L"Ctrl+Wheel",
             L"Zoom in / out centered on the mouse cursor.", sZoom);
         Add(K(SC::SC_APP_HIDE_ALT) + L" / " + K(SC::SC_PAN_LEFT) + L" / " +

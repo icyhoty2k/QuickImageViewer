@@ -13,7 +13,9 @@
 #include <dwmapi.h>
 #include <uxtheme.h>
 #include <commctrl.h>
-#pragma comment(lib, "comctl32.lib")
+// comctl32 is linked from CMakeLists.txt — see the note there. It used to arrive
+// via a #pragma comment(lib) on this line, which is why it was absent from the
+// build file's library list.
 #include <algorithm>
 #include <numeric>
 #include <random>

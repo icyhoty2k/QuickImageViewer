@@ -7,6 +7,9 @@
 // It is distributed WITHOUT ANY WARRANTY. See the LICENSE file for details.
 
 #include <algorithm>
+#include <numeric>    // std::iota — the shuffle order. Was arriving only through
+                      // an MSVC transitive include, so any stricter compiler or
+                      // static-analysis pass reported it as undeclared.
 #include <random>
 
 using std::min;
@@ -36,7 +39,8 @@ extern void UpdateOverlaysForCurrentImage(HWND hWnd);
 #include "Platform/CrashHandler.h"  // installed as the first statement of wWinMain
 #include "../DropTarget.h"
 #include "Platform/FileHandler.h"
-#include "GeoNames.h"
+// GeoNames.h intentionally not included: the geocoding tables are loaded by
+// ExifWnd::Show, the only screen that consumes them.
 #include "UI/ThumbnailPanels/DirWnd.h"
 #include "UI/ThemedDialog.h"
 #include "UI/FloatingPanels/HistoryListWnd.h"
@@ -793,28 +797,11 @@ int WINAPI wWinMain(HINSTANCE hInstance, [[maybe_unused]] HINSTANCE hPrevInstanc
     }
     const unsigned int hc = std::thread::hardware_concurrency();
     app.hardwareThreads = static_cast<int>(hc > 0 ? hc : 1); // Default to 1 if OS returns 0
-    //dynamic thread selection
-    g_decoderWorker.setThreadCount(app.hardwareThreads > 3 ? Constants::VRAM_CACHE_DECODER_THREADS_COUNT : 1);
-    int dirThumbThreads = (app.hardwareThreads >= 8) ? (app.hardwareThreads / 2) : (Constants::VRAM_CACHE_THUMBS_THREADS_COUNT);
-    dirThumbThreads = std::min(dirThumbThreads, 8); // IShellItemImageFactory::GetImage serializes internally; >8 gives no gain
-    g_dirThumbWorker.setThreadCount(std::max(1, dirThumbThreads));
 
-    // Warm up GeoNames data in the background so the first ExifWnd GPS lookup
-    // doesn't stall the IO worker with a 100-500 ms decompress+parse.
-    g_decoderWorker.PushTask([](IWICImagingFactory2 *) {
-        GeoNames::WarmUp();
-    });
-#ifdef _DEBUG
-    // Use the public getter instead of accessing private member m_threads
-    std::wstring debugMsg = L"DecoderThreadPool: Initialized with " +
-                            std::to_wstring(g_decoderWorker.getThreadCount()) +
-                            L" threads.\n" +
-                            L"DecoderThreadPool: Initialized with " +
-                            std::to_wstring(g_dirThumbWorker.getThreadCount()) +
-                            L" threads.\n";
-    OutputDebugStringW(debugMsg.c_str());
-
-#endif
+    // THE WORKER POOLS ARE NOT STARTED HERE. See "STARTUP ORDER" below the
+    // single-instance check — nothing that spawns a thread, allocates a cache or
+    // parses a data file may run before this process knows whether it is going to
+    // exist at all.
 
     CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED | COINIT_DISABLE_OLE1DDE);
 
@@ -866,6 +853,95 @@ int WINAPI wWinMain(HINSTANCE hInstance, [[maybe_unused]] HINSTANCE hPrevInstanc
         return 0;
     }
 
+    // =========================================================================
+    // SINGLE INSTANCE — AS EARLY AS IT CAN POSSIBLY BE
+    //
+    // A launch that is going to hand its file to an already-running copy must do
+    // NOTHING before it finds that out. It used to sit far below this point,
+    // after the thread pools were started and a 100-500 ms GeoNames parse had
+    // been queued — so every "open with qIV" on a running instance spun up a
+    // process that allocated caches, started threads, parsed data files, and then
+    // discovered it should exit. Returning from wWinMain then destroyed the
+    // statics out from under its own still-running threads, which is a crash that
+    // went unnoticed for as long as it existed because it happened in a process
+    // nobody was looking at.
+    //
+    // WHY IT CANNOT MOVE ANY HIGHER:
+    //   * ResolveMutexName reads the .ini's [Instance]Mutex, so the Dedicated
+    //     setup above must have run.
+    //   * -RestoreDefaults must be handled BEFORE this. Otherwise, with a copy
+    //     already running, that flag would be forwarded as a wake-up and the
+    //     settings would never be reset.
+    //
+    // Everything after this point — settings, pools, background threads, the
+    // window — belongs only to the instance that is actually going to run.
+    // =========================================================================
+    bool bypassMutex = (GetAsyncKeyState(VK_SHIFT) & 0x8000) != 0;
+    if (GetEnvironmentVariableW(L"QIV_NEW_INSTANCE", nullptr, 0) > 0) bypassMutex = true;
+
+    // Identity comes from the .ini's [Instance]Mutex when set, otherwise from
+    // the exe's file name — so renaming a copy gives it its own slot and any
+    // number of instances can run side by side.
+    std::wstring mutexName = Dedicated::ResolveMutexName();
+    mutexName += (bypassMutex ? std::to_wstring(GetTickCount()) : L"");
+    HANDLE hMutex = CreateMutexW(NULL, TRUE, mutexName.c_str());
+
+    if (GetLastError() == ERROR_ALREADY_EXISTS) {
+        // Search OUR OWN class, so a relaunch wakes the copy it belongs to and
+        // can never hand the file to a different instance.
+        HWND hExistingWnd = FindWindowW(Dedicated::ResolveWindowClassName().c_str(), nullptr);
+        if (hExistingWnd) {
+            // Allow the background instance to steal focus from this closing instance
+            DWORD existingProcId;
+            GetWindowThreadProcessId(hExistingWnd, &existingProcId);
+            AllowSetForegroundWindow(existingProcId);
+
+            COPYDATASTRUCT cds;
+            if (!firstRawArg.empty()) {
+                // Signal 1: Load new image and wake up
+                cds.dwData = 1;
+                cds.cbData = (DWORD) ((firstRawArg.size() + 1) * sizeof(wchar_t));
+                cds.lpData = (void *) firstRawArg.c_str();
+            } else {
+                // Signal 2: Wake up only (no file passed)
+                cds.dwData = 2;
+                cds.cbData = 0;
+                cds.lpData = nullptr;
+            }
+            SendMessageW(hExistingWnd, WM_COPYDATA, 0, (LPARAM) &cds);
+        }
+
+        // Nothing to stop and nothing to join: no pool has been started and no
+        // background thread exists yet. That is the whole point of the check
+        // living here rather than a hundred lines further down.
+        ReleaseMutex(hMutex);
+        CloseHandle(hMutex);
+        return 0;
+    }
+
+    // =========================================================================
+    // STARTUP ORDER — everything below runs ONLY in the surviving instance.
+    // =========================================================================
+
+    // Thread pools. Moved down from the top of wWinMain: starting threads before
+    // knowing whether this process survives is what made the crash above
+    // possible, and it is wasted work on every forwarded launch besides.
+    g_decoderWorker.setThreadCount(app.hardwareThreads > 3 ? Constants::VRAM_CACHE_DECODER_THREADS_COUNT : 1);
+    int dirThumbThreads = (app.hardwareThreads >= 8) ? (app.hardwareThreads / 2) : (Constants::VRAM_CACHE_THUMBS_THREADS_COUNT);
+    dirThumbThreads = std::min(dirThumbThreads, 8); // IShellItemImageFactory::GetImage serializes internally; >8 gives no gain
+    g_dirThumbWorker.setThreadCount(std::max(1, dirThumbThreads));
+
+#ifdef _DEBUG
+    // Use the public getter instead of accessing private member m_threads
+    std::wstring debugMsg = L"DecoderThreadPool: Initialized with " +
+                            std::to_wstring(g_decoderWorker.getThreadCount()) +
+                            L" threads.\n" +
+                            L"DirThumbWorker: Initialized with " +
+                            std::to_wstring(g_dirThumbWorker.getThreadCount()) +
+                            L" threads.\n";
+    OutputDebugStringW(debugMsg.c_str());
+#endif
+
     // Source of truth for user preferences: the .ini for a dedicated instance,
     // the registry otherwise. LoadAllSettings routes itself.
     Persistence::Registry::LoadAllSettings(app);
@@ -902,49 +978,6 @@ int WINAPI wWinMain(HINSTANCE hInstance, [[maybe_unused]] HINSTANCE hPrevInstanc
     std::thread historyThread([]() {
         UI::LoadFolderHistoryFromDisk();
     });
-
-    // --- SINGLE INSTANCE & RAM RESIDENT LOGIC ---
-    bool bypassMutex = (GetAsyncKeyState(VK_SHIFT) & 0x8000) != 0;
-    if (GetEnvironmentVariableW(L"QIV_NEW_INSTANCE", nullptr, 0) > 0) bypassMutex = true;
-
-    // Identity comes from the .ini's [Instance]Mutex when set, otherwise from
-    // the exe's file name — so renaming a copy gives it its own slot and any
-    // number of instances can run side by side.
-    std::wstring mutexName = Dedicated::ResolveMutexName();
-    mutexName += (bypassMutex ? std::to_wstring(GetTickCount()) : L"");
-    HANDLE hMutex = CreateMutexW(NULL, TRUE, mutexName.c_str());
-
-    if (GetLastError() == ERROR_ALREADY_EXISTS) {
-        // Search OUR OWN class, so a relaunch wakes the copy it belongs to and
-        // can never hand the file to a different instance.
-        HWND hExistingWnd = FindWindowW(Dedicated::ResolveWindowClassName().c_str(), nullptr);
-        if (hExistingWnd) {
-            // Allow the background instance to steal focus from this closing instance
-            DWORD existingProcId;
-            GetWindowThreadProcessId(hExistingWnd, &existingProcId);
-            AllowSetForegroundWindow(existingProcId);
-
-            COPYDATASTRUCT cds;
-            if (!firstRawArg.empty()) {
-                // Signal 1: Load new image and wake up
-                cds.dwData = 1;
-                cds.cbData = (DWORD) ((firstRawArg.size() + 1) * sizeof(wchar_t));
-                cds.lpData = (void *) firstRawArg.c_str();
-            } else {
-                // Signal 2: Wake up only (no file passed)
-                cds.dwData = 2;
-                cds.cbData = 0;
-                cds.lpData = nullptr;
-            }
-            SendMessageW(hExistingWnd, WM_COPYDATA, 0, (LPARAM) &cds);
-        }
-        registryThread.detach();
-        wicThread.detach();
-        historyThread.detach();
-        ReleaseMutex(hMutex);
-        CloseHandle(hMutex);
-        return 0;
-    }
 
     // --- Window Creation ---
     // A dedicated copy registers its OWN class. Cached in AppState because

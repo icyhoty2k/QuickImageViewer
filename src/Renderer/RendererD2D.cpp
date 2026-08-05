@@ -28,13 +28,15 @@
 // resvg C API (static lib)
 #include <resvg.h>
 
-// Link the required import libraries
-#pragma comment(lib, "d3d11.lib")
-#pragma comment(lib, "dxgi.lib")
-#pragma comment(lib, "d2d1.lib")
-#pragma comment(lib, "dwrite.lib")
-#pragma comment(lib, "dxguid.lib")
-#pragma comment(lib, "shell32.lib")
+// NO #pragma comment(lib, ...) HERE.
+//
+// d3d11, dxgi, d2d1, dwrite, dxguid and shell32 are all linked from
+// CMakeLists.txt, which is the single source of truth for dependencies —
+// RemoteCrypto.cpp and RemoteTls.cpp state the same rule in their own headers.
+//
+// Declaring them here as well was not merely redundant: dxguid was reaching the
+// linker ONLY through this file, so the library list in CMake looked complete
+// while quietly depending on a source file nobody would think to check.
 
 // =============================================================================
 //  Initialize
@@ -723,7 +725,9 @@ HRESULT RendererD2D::PreloadBitmap(const std::wstring &filePath, int requestInde
     // Capture device context as a pointer for the task (D2D device contexts are thread-safe)
     Microsoft::WRL::ComPtr<ID2D1Device6> d2dDevice = m_pD2DDevice;
 
-    g_ioWorker.PushTask([filePath, requestIndex, guardIndex, isMain, pathHash, d2dDevice, this]() {
+    // Same contract as the decoder push nested inside: the marker set just above
+    // is cleared by the task, so a rejected push must clear it here.
+    if (!g_ioWorker.PushTask([filePath, requestIndex, guardIndex, isMain, pathHash, d2dDevice, this]() {
         const bool stale = isMain
             ? (app.wantedPathHash.load(std::memory_order_acquire) != pathHash)
             : (app.wantedIndex.load(std::memory_order_acquire)    != guardIndex);
@@ -759,7 +763,11 @@ HRESULT RendererD2D::PreloadBitmap(const std::wstring &filePath, int requestInde
         CloseHandle(hFile);
 
         // Pass the factory as a parameter to the lambda (injected by the thread pool)
-        g_decoderWorker.PushTask([compressedBytes = std::move(compressedBytes), filePath, requestIndex, guardIndex, isMain, pathHash, d2dDevice, this](IWICImagingFactory2 *wicFac) mutable {
+        //
+        // The in-flight marker is cleared INSIDE the task, so a rejected push has to
+        // clear it here instead — otherwise this path would never be requestable
+        // again. See QIV_WORKER_MAX_QUEUED in WorkerThread.h.
+        if (!g_decoderWorker.PushTask([compressedBytes = std::move(compressedBytes), filePath, requestIndex, guardIndex, isMain, pathHash, d2dDevice, this](IWICImagingFactory2 *wicFac) mutable {
             // Release inFlight immediately so a new PreloadBitmap call can be queued
             // while decode is still in progress (e.g. neighbour preload races).
             { std::lock_guard<std::mutex> lock(m_cacheMutex); m_bitmapInFlight.erase(filePath); }
@@ -829,16 +837,39 @@ HRESULT RendererD2D::PreloadBitmap(const std::wstring &filePath, int requestInde
                     std::vector<BYTE> canvas(canvasStride * screenH, 0);
                     std::vector<BYTE> prevCanvas; // for disposal mode 3
 
+                    // HOW MANY FRAMES THIS ANIMATION MAY KEEP.
+                    //
+                    // Derived from the frame size rather than fixed, because the cost
+                    // is per pixel: a 4K animation may keep a fraction of the frames a
+                    // small one can. See GIF_MAX_DECODED_BYTES in Constants.h for why
+                    // a count-based image cache cannot bound this on its own.
+                    //
+                    // At least one frame always survives, so a single enormous frame
+                    // still displays as a still image instead of as nothing.
+                    const size_t gifFrameBytes =
+                        static_cast<size_t>(screenW) * static_cast<size_t>(screenH) * 4u;
+                    const size_t gifFrameBudget = std::max<size_t>(
+                        1u, Constants::GIF_MAX_DECODED_BYTES / std::max<size_t>(1u, gifFrameBytes));
+                    const size_t gifFrameCap =
+                        std::min<size_t>(Constants::GIF_MAX_FRAMES, gifFrameBudget);
+
                     std::vector<Microsoft::WRL::ComPtr<ID2D1Bitmap1>> gifFrames;
                     std::vector<int> gifDelays;
-                    gifFrames.reserve(frameCount);
-                    gifDelays.reserve(frameCount);
+                    // reserve the CAPPED count, not the declared one — a file claiming
+                    // 100k frames would otherwise allocate the vector for all of them
+                    // before a single frame was decoded.
+                    gifFrames.reserve(std::min<size_t>(frameCount, gifFrameCap));
+                    gifDelays.reserve(std::min<size_t>(frameCount, gifFrameCap));
 
                     const D2D1_BITMAP_PROPERTIES1 bmpProps = D2D1::BitmapProperties1(
                         D2D1_BITMAP_OPTIONS_NONE,
                         D2D1::PixelFormat(DXGI_FORMAT_B8G8R8A8_UNORM, D2D1_ALPHA_MODE_PREMULTIPLIED));
 
                     for (UINT fi = 0; fi < frameCount; ++fi) {
+                        // Budget checked BEFORE the work, not after: the point is to
+                        // avoid the allocation, not to notice it afterwards.
+                        if (gifFrames.size() >= gifFrameCap) break;
+
                         if (isMain ? (app.wantedPathHash.load(std::memory_order_acquire) != pathHash)
                                    : (app.wantedIndex.load(std::memory_order_acquire) != guardIndex)) return;
 
@@ -1026,8 +1057,17 @@ HRESULT RendererD2D::PreloadBitmap(const std::wstring &filePath, int requestInde
             } else {
                 PostMessageW(m_hwnd, Constants::WM_QIV_REPAINT, 1, 0);
             }
-        });
-    });
+        })) {
+            // Decoder queue was full, so the task above will never run and will
+            // never clear the marker it was going to clear.
+            std::lock_guard<std::mutex> lock(m_cacheMutex);
+            m_bitmapInFlight.erase(filePath);
+        }
+    })) {
+        // IO queue was full — nothing downstream will run at all.
+        std::lock_guard<std::mutex> lock(m_cacheMutex);
+        m_bitmapInFlight.erase(filePath);
+    }
     return S_OK;
 }
 
@@ -1397,7 +1437,9 @@ HRESULT RendererD2D::PreloadSvgFromBytes(std::vector<BYTE> svgBytes,
     (void) requestIndex;
     const size_t pathHash = std::hash<std::wstring>{}(filePath);
 
-    g_decoderWorker.PushTask(
+    // Rejected push must clear the marker the task would have cleared — see the
+    // note on QIV_WORKER_MAX_QUEUED in WorkerThread.h.
+    if (!g_decoderWorker.PushTask(
         [this, svgBytes = std::move(svgBytes), filePath, pathHash]
         (IWICImagingFactory2 *wicFac) mutable {
             // Release the in-flight marker up front (mirrors PreloadBitmap) so a
@@ -1432,7 +1474,10 @@ HRESULT RendererD2D::PreloadSvgFromBytes(std::vector<BYTE> svgBytes,
             // Finalize on the UI thread only if the user is still on this image.
             if (app.wantedPathHash.load(std::memory_order_acquire) == pathHash)
                 PostMessageW(m_hwnd, Constants::WM_QIV_REPAINT, 0, 0);
-        });
+        })) {
+        std::lock_guard<std::mutex> lock(m_cacheMutex);
+        m_bitmapInFlight.erase(filePath);
+    }
 
     return S_OK;
 }
@@ -1780,7 +1825,10 @@ void RendererD2D::RequestDirThumbnail(const std::wstring &filePath, HWND hPanel)
     const float dpiScale  = app.dpiScale;
     HWND hDir = hPanel;
 
-    g_dirThumbWorker.PushTask([filePath, d2dDev, hDir, thumbW, thumbH, dpiScale, this](IWICImagingFactory2 *wicFac) {
+    // inFlight was inserted above and is cleared inside the task, so a rejected
+    // push has to clear it here — otherwise this tile stays permanently blank,
+    // because the guard at the top of this function would refuse every retry.
+    if (!g_dirThumbWorker.PushTask([filePath, d2dDev, hDir, thumbW, thumbH, dpiScale, this](IWICImagingFactory2 *wicFac) {
         auto releaseInFlight = [&] {
             std::lock_guard<std::mutex> lk(m_dirThumbMutex);
             m_panelThumbCaches[hDir].inFlight.erase(filePath);
@@ -1834,5 +1882,8 @@ void RendererD2D::RequestDirThumbnail(const std::wstring &filePath, HWND hPanel)
             entry.bitmaps.try_emplace(filePath, thumbBitmap);
         }
         PostMessageW(hDir, Constants::WM_QIV_REPAINT, 0, 0);
-    });
+    })) {
+        std::lock_guard<std::mutex> lk(m_dirThumbMutex);
+        m_panelThumbCaches[hDir].inFlight.erase(filePath);
+    }
 }

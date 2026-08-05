@@ -201,6 +201,27 @@ namespace UI {
     void ExifWnd::Show() {
         if (!m_hWnd) return;
 
+        // GEOCODING DATA IS LOADED HERE, not at application startup.
+        //
+        // It is ~150,000 city records plus the admin and country tables — tens of
+        // megabytes held for the whole session, and 100-500 ms to decompress and
+        // parse. This panel is its only consumer, and only for images that carry
+        // GPS coordinates, so paying that at every launch meant most users
+        // financed a feature they never opened. For a viewer whose whole pitch is
+        // a small portable executable, that was the wrong default.
+        //
+        // Opening the panel is the right trigger: it is the earliest moment the
+        // data can possibly be wanted, and the parse overlaps with the user
+        // reading the EXIF rows, so the first GPS row is no slower in practice
+        // than it was with the startup warm-up.
+        //
+        // Cheap to call repeatedly — WarmUp is a std::call_once, and Lookup()
+        // guards itself with the same flag, so correctness never depended on
+        // this running at all.
+        g_decoderWorker.PushTask([](IWICImagingFactory2 *) {
+            GeoNames::WarmUp();
+        });
+
         // Clear stale content immediately so the window shows empty while loading.
         m_rows.clear();
         if (m_thumbBitmap) {
