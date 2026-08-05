@@ -804,18 +804,36 @@ namespace UI {
         float scaledSpacing = Constants::THUMBNAIL_PANEL_THUMB_SPACING * app.dpiScale;
         float scaledMargin = Constants::THUMBNAIL_PANEL_THUMB_MARGIN * app.dpiScale;
 
+        // SLOT COORDINATES ARE CONTENT COORDINATES, NOT SCREEN ONES, and the
+        // margin belongs to exactly one of the two. RebuildGeometry places slot
+        // s at screen position  margin + m_offset + s,  so the slot is fully on
+        // screen when  s >= -m_offset  (its left/top edge is at or past the
+        // margin) and  s + thumb <= -m_offset + surface - 2*margin  (its
+        // right/bottom edge stops a margin short of the far side).
+        //
+        // The visible-start bound used to read -m_offset + scaledMargin, which
+        // added the margin a second time: a thumbnail sitting anywhere in the
+        // first margin-wide band past the edge — fully visible, nothing clipped
+        // — was judged off screen and the strip jumped to snap it. Because the
+        // snap landed it at 2*margin, the test then went quiet, so the jump
+        // showed up once, on the first click, and never repeated.
+        //
+        // The corrections below put the slot exactly on the bound they failed,
+        // which makes a second call with the same selection a no-op.
         if (!vertical) {
             float slotX = static_cast<float>(m_selectedIdx) * (thumbW + scaledSpacing);
-            float visL = -m_offset + scaledMargin;
+            float visL = -m_offset;
             float visR = visL + surfaceW - scaledMargin * 2.0f;
-            if (slotX < visL) m_offset = -(slotX - scaledMargin);
-            else if (slotX + thumbW > visR) m_offset = -(slotX + thumbW - surfaceW + scaledMargin);
+            if (slotX < visL) m_offset = -slotX;
+            else if (slotX + thumbW > visR)
+                m_offset = -(slotX + thumbW - surfaceW + scaledMargin * 2.0f);
         } else {
             float slotY = static_cast<float>(m_selectedIdx) * (thumbH + scaledSpacing);
-            float visT = -m_offset + scaledMargin;
+            float visT = -m_offset;
             float visB = visT + surfaceH - scaledMargin * 2.0f;
-            if (slotY < visT) m_offset = -(slotY - scaledMargin);
-            else if (slotY + thumbH > visB) m_offset = -(slotY + thumbH - surfaceH + scaledMargin);
+            if (slotY < visT) m_offset = -slotY;
+            else if (slotY + thumbH > visB)
+                m_offset = -(slotY + thumbH - surfaceH + scaledMargin * 2.0f);
         }
         InvalidateRect(m_hWnd, nullptr, FALSE);
     }
@@ -850,6 +868,25 @@ namespace UI {
     // fast flick skip the boundary it is supposed to catch.
     void ThumbnailPanelWnd::ScrollByWheel(int delta, bool horizontal) {
         if (delta == 0) return;
+
+        // SCROLLING DISCARDS THE SAVED RESTORE POSITION.
+        //
+        // Only WM_LBUTTONDOWN makes a panel active; the wheel does not. So an
+        // INACTIVE strip can be scrolled, and the first click into it afterwards
+        // used to run the m_justActivated block in WM_LBUTTONDOWN, which resets
+        // m_offset back to m_savedOffset — the position from when this panel was
+        // last active. The thumbnail rects had already been rebuilt for the
+        // scrolled view, so the offset and the rects then disagreed and the click
+        // opened the wrong image.
+        //
+        // That restore exists so that clicking an inactive panel returns it to
+        // where the user left it, which is right when nothing has moved since.
+        // Once the user scrolls, the position they can see IS where they left it,
+        // and there is nothing to restore.
+        //
+        // Clearing the index is enough: the block is guarded on
+        // m_savedSelectedIdx >= 0.
+        m_savedSelectedIdx = -1;
 
         // The accelerator comes from the shared rule, not a local 3.0f — the
         // strips and the list panels boost by the same amount or the modifier
@@ -1222,21 +1259,25 @@ namespace UI {
             case WM_LBUTTONDOWN: {
                 m_justActivated = IsDirPanel() && (&uiManager.getActiveDirWnd() != this);
                 if (IsDirPanel()) uiManager.SetActiveDirWnd(this);
-                // Silently pre-restore saved scroll + selection so that:
-                //  (a) empty-space clicks reload the saved image without a jump, and
-                //  (b) thumbnail clicks produce a movement from the saved position to the
-                //      new one rather than from some stale/wrong position.
-                // We deliberately skip RebuildGeometry and InvalidateRect here:
-                // m_thumbnails[i].rect stays based on the current visible offset so the
-                // hit test in WM_LBUTTONUP still maps click coordinates correctly.
-                // SyncSelectionRectangle (fired by the load) calls RebuildGeometry and
-                // triggers the first paint once the new image is ready.
-                if (m_justActivated && m_savedSelectedIdx >= 0 &&
-                    m_savedSelectedIdx < static_cast<int>(m_thumbnails.size()) &&
-                    m_thumbnails[m_savedSelectedIdx].filePath == m_savedImagePath) {
-                    m_selectedIdx = m_savedSelectedIdx;
-                    m_offset = m_savedOffset;
-                }
+                // NOTHING MAY MOVE m_offset HERE.
+                //
+                // This used to pre-restore the saved scroll position so that a
+                // later empty-space click reloaded the saved image without a
+                // visible jump. It skipped RebuildGeometry on purpose, so that
+                // m_thumbnails[i].rect kept describing the view the user was
+                // actually looking at and the hit test in WM_LBUTTONUP stayed
+                // correct. That only held as long as nothing else rebuilt the
+                // geometry between press and release — and WM_MOUSEMOVE does:
+                // while s_dragging it runs m_offset += delta and UpdateView(),
+                // and UpdateView() rebuilds every rect. One pixel of cursor
+                // drift (far below the 5px s_hasMoved threshold) was enough to
+                // relayout at the restored offset, after which the release
+                // hit-tested against a layout that was never on screen, missed,
+                // and fell into the empty-space branch — which opened the saved
+                // image instead of the clicked one.
+                //
+                // The restore now happens in WM_LBUTTONUP, after the hit test
+                // has already run, and only on the branch that needs it.
 
                 // Check if the click landed on the scrollbar strip.
                 {
@@ -1423,6 +1464,12 @@ namespace UI {
                                 -m_scrollDragStartOffset + delta * scrollMax / scrollPx,
                                 0.0f, scrollMax);
                         m_offset = -newScroll;
+                        // Same rule as the wheel: once the user moves the strip,
+                        // what they can see IS where they left it, so the saved
+                        // restore position is discarded. Only the index is
+                        // cleared — m_savedImagePath still feeds the
+                        // "click empty space to reload this panel's image" path.
+                        m_savedSelectedIdx = -1;
                         RebuildGeometry();
                         InvalidateRect(m_hWnd, nullptr, FALSE);
                     }
@@ -1464,6 +1511,11 @@ namespace UI {
                                       : static_cast<float>(cur.x - s_lastMouse.x);
                     m_offset += delta;
                     s_lastMouse = cur;
+                    // Drag-panning moves the strip too — discard the restore
+                    // position for the same reason as the wheel and the
+                    // scrollbar. Guarded on s_hasMoved so that the sub-threshold
+                    // drift of an ordinary click does not count as a scroll.
+                    if (s_hasMoved) m_savedSelectedIdx = -1;
                     UpdateView();
                 }
                 return 0;
@@ -1502,9 +1554,19 @@ namespace UI {
                         if (hitIdx < 0) {
                             if (m_justActivated && !m_savedImagePath.empty()) {
                                 // Reload the image last viewed in this panel.
-                                // m_offset and m_selectedIdx were already pre-set in
-                                // WM_LBUTTONDOWN, so SyncSelectionRectangle will find the
-                                // saved item in view and the rectangle will not jump.
+                                //
+                                // Restore scroll + selection first, so that
+                                // SyncSelectionRectangle (fired by the load)
+                                // finds the saved item already in view and the
+                                // selection rectangle does not jump. Safe here
+                                // and not in WM_LBUTTONDOWN: the hit test above
+                                // has already run against the visible layout.
+                                if (m_savedSelectedIdx >= 0 &&
+                                    m_savedSelectedIdx < static_cast<int>(m_thumbnails.size()) &&
+                                    m_thumbnails[m_savedSelectedIdx].filePath == m_savedImagePath) {
+                                    m_selectedIdx = m_savedSelectedIdx;
+                                    m_offset = m_savedOffset;
+                                }
                                 auto restoreIt = app.playlistIndexMap.find(m_savedImagePath);
                                 if (restoreIt != app.playlistIndexMap.end())
                                     LoadImageIndex(m_hOwner, restoreIt->second);
@@ -1785,6 +1847,16 @@ namespace UI {
             // -----------------------------------------------------------------
             case WM_DESTROY:
                 if (IsDirPanel()) RevokeDragDrop(m_hWnd);
+                // The renderer's thumbnail cache is keyed by HWND, so an entry
+                // outliving its window would hold GPU bitmaps for the rest of the
+                // process — and Windows RECYCLES handle values, so a later panel
+                // could be handed a predecessor's thumbnails and show a different
+                // folder's pictures.
+                //
+                // Neither happens today: these panels are created once and only
+                // hidden, never destroyed before exit. This is the matching half
+                // of the RevokeDragDrop above, correct if that ever changes.
+                ClearDirThumbnailCache();
                 return 0;
         }
 

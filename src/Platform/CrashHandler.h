@@ -44,4 +44,38 @@ namespace Platform::Crash {
     // installed and the process behaves exactly as it did before.
     void Install();
 
+    // --- Breadcrumbs ---------------------------------------------------------
+    //
+    // A dump says WHERE the process died. It does not say what it was working on,
+    // and for an image viewer that is usually the more useful half: a fault in
+    // the decoder means little until you know it was a 40-megapixel JPEG XL that
+    // nobody else has.
+    //
+    // These record it. The values live in fixed buffers in the module's data
+    // section, which MiniDumpWithDataSegs captures, so they arrive in the dump
+    // with no extra work at crash time — the point at which nothing complicated
+    // can be trusted to run.
+    //
+    // COST, since that is the reason nothing else was added: one bounded string
+    // copy per image change, and one integer store per command. No thread, no
+    // timer, nothing periodic. They are written on events that already happen and
+    // are read only by a debugger, after the fact.
+    //
+    // Deliberately NOT a log. A rolling log means a file handle, buffering and
+    // I/O on paths that must stay fast. This is the last value of each thing,
+    // which is what a post-mortem actually asks for.
+
+    // The image currently being opened or decoded. Truncated if longer than the
+    // buffer; a shortened path still identifies the file.
+    void NoteImage(const wchar_t *path);
+
+    // The command last dispatched, as its Command enum value. An int rather than
+    // a name so the write is a single store on the keystroke path.
+    void NoteCommand(int commandId);
+
+    // Coarse phase — "startup", "decode", "render", "shutdown". Static strings
+    // only: the pointer is stored, not the characters, so the caller must pass a
+    // literal that outlives the process.
+    void NotePhase(const char *phase);
+
 } // namespace Platform::Crash

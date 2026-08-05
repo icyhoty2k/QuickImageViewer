@@ -424,6 +424,32 @@ namespace Constants {
     constexpr const int VRAM_CACHE_DECODER_THREADS_COUNT = 2;
     constexpr int IS_VRAM_CACHE_IMAGES_COUNT = 20;
 
+    // --- IO worker threads -----------------------------------------------------
+    //
+    // ONE NUMBER FOR EVERY DRIVE. qIV used to probe the physical device for a
+    // seek penalty and pick 1 for an HDD, 2 for an SSD. That was dropped, and the
+    // reasoning is worth keeping because it looks like a downgrade and is not:
+    //
+    //   * These threads only READ. The task is CreateFile / GetFileSize /
+    //     ReadFile / CloseHandle, and the bytes then go to the decoder pool.
+    //   * A 5 MB photo reads from NVMe in 1-3 ms and decodes in 30-80 ms. Decode
+    //     is 20-50x the cost, so the IO threads are idle most of the time and
+    //     widening that pipe buys nothing. Four would be no faster than two.
+    //   * The probe opened \\.\PhysicalDriveN, which SPINS UP a sleeping disk —
+    //     noise, wear and power on a drive the user never asked to touch — to
+    //     decide between one thread and two.
+    //   * It was also the most bug-prone code on the startup path: a detached
+    //     thread writing file-scope statics, which is a use-after-free at exit.
+    //
+    // TWO, not one: on an SSD the second thread overlaps one file's open latency
+    // with the previous file's read. On an HDD two threads interleave and cost a
+    // few extra seeks per image — a real but modest loss, and qIV preloads
+    // neighbours anyway, so the head is moving either way.
+    //
+    // Tune here if a measurement ever says otherwise. A folder on a slow HDD with
+    // Next held down is the test that would settle it.
+    constexpr size_t IO_WORKER_THREADS = 2;
+
     // --- Animated GIF budget ---------------------------------------------------
     //
     // Every frame of an animation is uploaded as a full-canvas PBGRA bitmap, so a

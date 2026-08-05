@@ -249,6 +249,12 @@ ThumbnailPanelWnd &getActiveDirWnd();
                                        const std::vector<std::wstring> &playlist,
                                        bool updatePrimaryDirWnd = true);
 
+            // Called after app.fileHandlerDefaultSortOrder or
+            // app.fileHandlerIsReverseSortOrder changes at runtime. Re-sorting
+            // app.playlist alone leaves every panel that owns a list — F6's copy
+            // and each spawned panel's folder — in the old order.
+            void NotifySortOrderChanged();
+
             void RepaintAllPanels();
             void RefreshPanelDirs(const std::wstring &dir1, const std::wstring &dir2);
 

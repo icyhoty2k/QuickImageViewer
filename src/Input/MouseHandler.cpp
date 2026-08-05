@@ -326,6 +326,20 @@ bool MouseHandler::UpdateHoverCursor(HWND hWnd) {
 
     POINT pt;
     GetCursorPos(&pt);
+
+    // ONLY STAMP THE CURSOR WHEN THE POINTER IS ACTUALLY OVER hWnd.
+    //
+    // RendererD2D::Render calls this after every Present, and a frame gets
+    // produced no matter where the pointer sits — including over a thumbnail
+    // strip or a floating panel, which are separate top-level windows that set
+    // their own cursor from their own WM_MOUSEMOVE. Without this check the two
+    // fought: the panel set the arrow on each mouse move, the main window
+    // re-stamped the zoom cursor on each frame, and hovering a spawned panel
+    // made the pointer flick between arrow and zoom for as long as frames kept
+    // coming. GA_ROOT because WindowFromPoint can name a child window.
+    HWND under = WindowFromPoint(pt);
+    if (under != hWnd && GetAncestor(under, GA_ROOT) != hWnd) return false;
+
     ScreenToClient(hWnd, &pt);
 
     if (HitTestOverlayPath(pt)) {

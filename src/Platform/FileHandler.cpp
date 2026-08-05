@@ -17,7 +17,7 @@
 #include <shobjidl.h>
 #include <filesystem>
 #include <numeric>
-#include <mutex>     // guards the drive-type cache, written from a probe thread
+#include "Platform/CrashHandler.h" // NoteImage / NoteCommand breadcrumbs
 #include <ranges>
 #include <shlwapi.h>
 #include <thread>
@@ -26,7 +26,6 @@
 #include <vector>
 #include "UI/UIManager.h"
 #include "WorkerThread.h"
-#include "DriveInfo.h"
 #include "../SvgDecoder.h"
 #include "../UI/FloatingPanels/HistoryListWnd.h"
 // LoadImageIndex is the ONE place every picture change passes through — see the
@@ -43,88 +42,29 @@ void UpdateOverlaysForCurrentImage(HWND hWnd);
 // ---------------------------------------------------------------------------
 // UpdateIoWorkerForPath
 // ---------------------------------------------------------------------------
-// Called on every folder/image open. Compares the new path's volume root
-// against the last known one. Skips detection entirely when browsing within
-// the same volume (the common case). When the volume changes, re-detects
-// the drive type and restarts the IO worker only if the optimal thread count
-// has actually changed (HDD↔NVMe). ClearQueue before Stop so the join is
-// instant — in-flight tasks for the old folder are abandoned safely.
+// Starts the IO pool on first use, at Constants::IO_WORKER_THREADS. Nothing
+// else: the pool is never resized and the drive is never inspected.
+//
+// It used to probe the physical device for a seek penalty and pick 1 thread for
+// an HDD and 2 for an SSD, caching the answer per volume and restarting the pool
+// when the volume changed. All of that is gone — see IO_WORKER_THREADS in
+// Constants.h for the reasoning. In short: these threads only read, reading is
+// 20-50x cheaper than the decode that follows, and the probe spun up sleeping
+// disks to choose between one thread and two.
+//
+// The volume root is still tracked, because it costs one string compare and
+// makes the "nothing to do" case obvious to a reader.
 // ---------------------------------------------------------------------------
 static std::wstring g_lastVolumeRoot;
-static std::unordered_map<std::wstring, size_t> g_driveThreadCache; // volume root → optimal thread count
-
-// DETECTION RUNS OFF THE UI THREAD, and this is why.
-//
-// DriveInfo::GetOptimalIoThreadCount opens \\.\PhysicalDriveN and issues a
-// StorageDeviceSeekPenaltyProperty query. That is 1-10 ms on a warm local drive
-// — and SECONDS on one that has spun down, because asking the question spins it
-// up. It used to run inline here, on the UI thread, the first time an image was
-// opened from each volume: exactly the moment the user is waiting to see a
-// picture, and a plausible cause of "the app froze when I opened a file from my
-// external disk".
-//
-// All it decides is ONE versus TWO IO threads. Blocking a window for seconds to
-// choose that is a bad trade, so the first open of an unknown volume now uses
-// the default and the real answer is fetched in the background. If it turns out
-// to be an HDD, the next folder open on that volume picks up the cached value
-// and resizes the pool through the existing path below — one folder served with
-// two threads instead of one is not something anybody can perceive.
-//
-// The mutex exists because that background thread writes the cache the UI thread
-// reads. g_lastVolumeRoot stays UI-thread-only and is deliberately NOT covered.
-static std::mutex g_driveCacheMutex;
-static std::unordered_set<std::wstring> g_driveDetectInFlight; // no duplicate probes
-
-// The value used until detection answers. Two, matching SSD/NVMe: it is the
-// common case, and guessing two on an HDD costs a little head movement for one
-// folder, whereas guessing one on an NVMe throws away real throughput.
-static constexpr size_t DRIVE_THREADS_DEFAULT = 2;
 
 static void UpdateIoWorkerForPath(const std::wstring &folderPath) {
     wchar_t volRoot[MAX_PATH] = {};
     GetVolumePathNameW(folderPath.c_str(), volRoot, MAX_PATH);
-    std::wstring newRoot(volRoot);
+    const std::wstring newRoot(volRoot);
 
-    size_t optimal = DRIVE_THREADS_DEFAULT;
-    bool   known   = false;
-    {
-        std::lock_guard<std::mutex> lock(g_driveCacheMutex);
-        auto it = g_driveThreadCache.find(newRoot);
-        if (it != g_driveThreadCache.end()) {
-            optimal = it->second;
-            known   = true;
-        } else if (g_driveDetectInFlight.insert(newRoot).second) {
-            // First time this volume has been seen and nothing is probing it:
-            // detached because nothing waits on the result, and the process may
-            // well outlive the answer without ever needing it.
-            std::thread([folderPath, newRoot]() {
-                const size_t detected = DriveInfo::GetOptimalIoThreadCount(folderPath);
-                std::lock_guard<std::mutex> lk(g_driveCacheMutex);
-                g_driveThreadCache[newRoot] = detected;
-                g_driveDetectInFlight.erase(newRoot);
-            }).detach();
-        }
-    }
-    if (!g_ioWorker.IsStarted()) {
-        g_ioWorker.Start(optimal);
-        g_lastVolumeRoot = newRoot;
-        return;
-    }
+    if (!g_ioWorker.IsStarted())
+        g_ioWorker.Start(Constants::IO_WORKER_THREADS);
 
-    // Same volume AND a real answer already in hand — nothing can have changed.
-    //
-    // The `known` half matters: while detection is still in flight, `optimal` is
-    // the default rather than the truth, so returning here would mean the answer
-    // was never applied until the user happened to switch volumes and come back.
-    // Falling through instead lets the check below adopt it on the next open,
-    // which is what makes probing in the background acceptable at all.
-    if (newRoot == g_lastVolumeRoot && known) return;
-
-    if (optimal != static_cast<size_t>(g_ioWorker.getThreadCount())) {
-        g_ioWorker.ClearQueue();
-        g_ioWorker.Stop();
-        g_ioWorker.Start(optimal);
-    }
     g_lastVolumeRoot = newRoot;
 }
 
@@ -351,6 +291,63 @@ static void SortStandalonePlaylist(ScanResult &sr, int sortOrder, bool reverse) 
         case 4: SortPlaylistByDiskOrder(sr.playlist);
             break;
     }
+}
+
+// ---------------------------------------------------------------------------
+// SortScanResultInAppOrder
+// ---------------------------------------------------------------------------
+// Applies the app's CURRENT sort order + reverse flag to a list the caller
+// built itself, keyed off the caller's own size/time maps — app.playlistFileSizes
+// and app.playlistFileTimes describe the folder the viewer is showing, which is
+// not the caller's folder.
+//
+// A PANEL THAT BUILDS ITS OWN FILE LIST MUST CALL THIS. SpawnedDirWnd used a
+// plain std::sort, which is ordinal ("img10" before "img2") while every list the
+// scan produces is natural-ordered by StrCmpLogicalW — and completely different
+// again when the user sorts by date, size or type. The first click in such a
+// panel is not in app.playlistIndexMap, so it goes through OpenSpecificImage,
+// which rescans the folder; the scan comes back app-ordered, the panel adopts it
+// in OnFolderRefreshed, and every thumbnail moves to a different slot. The
+// selection sync then scrolls to wherever the clicked file ended up, which reads
+// as the strip scrolling on its own.
+// ---------------------------------------------------------------------------
+void SortScanResultInAppOrder(ScanResult &sr) {
+    SortStandalonePlaylist(sr, app.fileHandlerDefaultSortOrder,
+                           app.fileHandlerIsReverseSortOrder);
+}
+
+// ---------------------------------------------------------------------------
+// SortPathsInAppOrder
+// ---------------------------------------------------------------------------
+// Same ordering rule for a caller that holds only paths. Date and size are the
+// only two orders that need a key the path itself does not carry, so the stat
+// loop runs for those two and is skipped entirely for name, type and disk
+// order. One stat per file is acceptable here because every caller is a user
+// action — the sort order changed, or a panel rescanned its folder — never a
+// frame path.
+// ---------------------------------------------------------------------------
+void SortPathsInAppOrder(std::vector<std::wstring> &paths) {
+    if (paths.size() < 2) return;
+
+    ScanResult sr;
+    sr.playlist = std::move(paths);
+
+    const int order = app.fileHandlerDefaultSortOrder;
+    if (order == 1 || order == 2) {
+        for (const auto &p: sr.playlist) {
+            std::error_code ec;
+            if (order == 1) {
+                const auto t = fs::last_write_time(fs::path(p), ec);
+                sr.fileTimes[p] = ec ? fs::file_time_type{} : t;
+            } else {
+                const auto s = fs::file_size(fs::path(p), ec);
+                sr.fileSizes[p] = ec ? int64_t{0} : static_cast<int64_t>(s);
+            }
+        }
+    }
+
+    SortScanResultInAppOrder(sr);
+    paths = std::move(sr.playlist);
 }
 
 // Spawns a detached background thread that scans dirPath and posts
@@ -1065,6 +1062,12 @@ void LoadImageIndex(HWND hWnd, int index) {
     // across a folder re-sort, so its in-flight decode is not cancelled when the
     // index changes (fixes the blank-on-startup race after an F2 open).
     app.wantedPathHash.store(std::hash<std::wstring>{}(currentPath), std::memory_order_release);
+
+    // Recorded for a post-mortem: a decoder fault names a function, not a file,
+    // and "which image was it" is the first question. One bounded copy per image
+    // change, next to a hash and a window-title update that already cost more.
+    Platform::Crash::NoteImage(currentPath.c_str());
+
     SetWindowTextW(hWnd, (currentPath.substr(currentPath.find_last_of(L"\\/") + 1) + L" - QuickImageViewer").c_str());
 
     // =========================================================================
@@ -1452,6 +1455,14 @@ void ReSortPlaylistAndRebuildMap(HWND hWnd) {
         if (it != app.playlistIndexMap.end())
             app.currentIndex = it->second;
     }
+
+    // EVERY PANEL THAT KEEPS ITS OWN LIST HAS TO RE-SORT TOO. app.playlist is
+    // only the viewer's sequence; F6 holds a copy and each spawned panel holds
+    // a list for a folder the viewer may not even be showing. Without this they
+    // kept the order they were built with until something rescanned their
+    // folder, so changing the sort order visibly reordered one strip and left
+    // the others alone.
+    uiManager.NotifySortOrderChanged();
 
     // Sync dir panel selection to the new index without reloading the image.
     uiManager.getActiveDirWnd().SyncDirSelectionRectangle();
