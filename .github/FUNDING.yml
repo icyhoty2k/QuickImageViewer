@@ -1,24 +1,25 @@
-# Adds the "Sponsor" button to the repository header.
+# Puts the "Sponsor" button in the repository header.
 #
-# EVERY ENTRY IS COMMENTED OUT ON PURPOSE. GitHub renders the button as soon as
-# this file has a live entry, and an entry that points at an account which has
-# not finished enrolling shows visitors a "not accepting sponsorships" page —
-# worse than no button at all.
+# GitHub Sponsors profile verified live at https://github.com/sponsors/icyhoty2k
+# before this line was enabled. An entry pointing at an account that has not
+# finished enrolling shows visitors a "not accepting sponsorships" page, which is
+# worse than having no button at all — so check the profile loads before adding a
+# platform here.
 #
-# Uncomment ONE line below once that platform is actually set up and live:
-#
-#   github  — needs GitHub Sponsors enrollment: bank details, identity and tax
-#             forms, then approval. The slowest to start, the lowest fees.
-#   ko_fi / buy_me_a_coffee
-#           — live within an hour, no approval wait. Use one of these if you
-#             want a working button before Sponsors clears.
-#   custom  — any URL, e.g. PayPal.me. Accepts up to four.
-#
-# Note: this funds the DESKTOP viewer and this repository. It has nothing to do
-# with the Android app, whose paid features must be bought through Google Play
-# Billing and nowhere else.
+# This funds the DESKTOP viewer and this repository. It has nothing to do with the
+# Android app: anything bought for use inside that app must be bought through
+# Google Play Billing and nowhere else.
 
-# github: icyhoty2k
-# ko_fi: icyhoty2k
+github: icyhoty2k
+ko_fi: ivanhristovyanev
+
+# Ko-fi is listed alongside rather than instead of Sponsors: it reaches people who
+# have no GitHub account, which is nearly everyone who is not a developer. GitHub
+# shows both in the Sponsor dropdown.
+#
+# NOTE the two are not equivalent underneath. GitHub covers the payment processing
+# fees on Sponsors, so that route delivers close to the full amount; Ko-fi payments
+# are ordinary transactions through PayPal or Stripe and carry their fees.
+
 # buy_me_a_coffee: icyhoty2k
 # custom: ["https://icyhoty2k.github.io/QuickImageViewer/"]
