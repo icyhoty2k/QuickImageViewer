@@ -640,3 +640,44 @@ python tools/preprocess_cities.py
 ## License
 
 Licensed under the **[GNU Affero General Public License v3.0 (AGPLv3)](docs/LICENSE)**.
+
+Copyright © 2026 Ivan Hristov Yanev. You are free to use, study, modify and share it.
+If you distribute a modified version — or run one as a network-accessible service —
+you must release your source under the same licence.
+
+### Commercial licensing
+
+AGPLv3 does not suit every use. If you want to build qIV, or its remote-control and
+mirroring subsystem, into a product you do not intend to open-source — digital
+signage, kiosks, retail or museum displays, industrial and medical viewing stations —
+a separate commercial licence is available.
+
+Contact **icyhoty2k@gmail.com**.
+
+### Supporting the project
+
+qIV is written and maintained by one person, in the open, with no telemetry and
+nothing to buy. If it is useful to you, sponsorship keeps it being worked on:
+
+**[GitHub Sponsors](https://github.com/sponsors/icyhoty2k)** — monthly or one-off,
+and GitHub covers the processing fees, so it delivers the most.
+
+**[Ko-fi](https://ko-fi.com/ivanhristovyanev)** — if you would rather not need a
+GitHub account.
+
+#### Sponsors
+
+<!--
+    Sponsors at $25/month, $100/month and $50 one-time are entitled to a listing
+    here. Add them as `- [Name](link)`, businesses first. Ask before listing
+    anyone — some prefer not to be named, and the tier wording promises them the
+    choice.
+-->
+
+No sponsors yet.
+
+### Contributing
+
+Contributions are welcome under the terms in [CONTRIBUTING.md](CONTRIBUTING.md),
+which asks contributors for a licence grant so that the commercial option above
+remains possible. Everything contributed stays AGPLv3 for the public.

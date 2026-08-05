@@ -1,3 +1,11 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// Copyright (C) 2026 Ivan Hristov Yanev
+//
+// This file is part of QuickImageViewer. It is free software: you may
+// redistribute and modify it under the terms of the GNU Affero General Public
+// License version 3 or later, as published by the Free Software Foundation.
+// It is distributed WITHOUT ANY WARRANTY. See the LICENSE file for details.
+
 // winsock2.h MUST come before anything that pulls in windows.h. This project
 // does not define WIN32_LEAN_AND_MEAN, so windows.h drags in the original
 // winsock.h and every socket type is then redefined. RemoteServer.h includes
