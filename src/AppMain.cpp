@@ -288,7 +288,7 @@ LRESULT CALLBACK MainAppWndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM l
         // The listener started, stopped, or gained/lost a client. Repaint the
         // overlay's server indicator — the only thing that shows it.
         case Constants::WM_QIV_REMOTE_CLIENTS:
-            g_overlayManager.UpdateRemoteStatus();
+            g_overlayManager.UpdateRemoteStatus(hWnd);
             InvalidateRect(hWnd, nullptr, FALSE);
             return 0;
 
@@ -315,6 +315,14 @@ LRESULT CALLBACK MainAppWndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM l
 
             if (wParam == TIMER_CENTER_MSG) {
                 g_overlayManager.OnCenterMessageTimer(hWnd);
+                return 0;
+            }
+
+            // The server dot's connect / disconnect blink. It kills its own
+            // timer when the count runs out — nothing ticks between blinks.
+            // Rate and count are OVERLAY_SERVER_BLINK_MS / _COUNT.
+            if (wParam == 1010) {   // OverlayManager::TIMER_SERVER_BLINK
+                g_overlayManager.OnServerBlinkTimer(hWnd);
                 return 0;
             }
 

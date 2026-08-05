@@ -573,7 +573,8 @@ void OverlayManager::UpdateRemoteStatus(HWND hWnd) {
     // known" to a number is not somebody arriving.
     const int now = Remote::IsRunning() ? Remote::ActiveConnections() : -1;
     if (m_lastClientCount >= 0 && now >= 0 && now != m_lastClientCount && hWnd) {
-        m_blinkPhasesLeft = Constants::Messages::OVERLAY_SERVER_BLINK_PHASES;
+        // Two phases per blink — dark, then lit.
+        m_blinkPhasesLeft = Constants::Messages::OVERLAY_SERVER_BLINK_COUNT * 2;
         m_blinkDark       = true;   // start dark so the first change is visible
         KillTimer(hWnd, TIMER_SERVER_BLINK);
         SetTimer(hWnd, TIMER_SERVER_BLINK,

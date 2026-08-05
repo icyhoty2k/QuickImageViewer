@@ -275,9 +275,9 @@ class OverlayManager {
         // the directory watchers. See Constants.h.
         static constexpr UINT_PTR TIMER_SERVER_BLINK = 1010;
 
-        // Phases remaining, counting down to 0 = not blinking. Even values are
-        // the dark phase, so the sequence always ends lit — see
-        // OVERLAY_SERVER_BLINK_PHASES.
+        // Phases remaining, counting down to 0 = not blinking. Two phases make
+        // one blink, so this starts at OVERLAY_SERVER_BLINK_COUNT * 2 and the
+        // even total is what guarantees it ends lit.
         int  m_blinkPhasesLeft = 0;
         bool m_blinkDark       = false;
 

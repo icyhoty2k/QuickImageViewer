@@ -436,13 +436,21 @@ namespace Constants::Messages {
     // overlay glitching rather than as the dot blinking.
     constexpr const wchar_t *OVERLAY_SERVER_DOT_OFF   = L"\U000026AB";
 
-    // Connect / disconnect blink: how long each phase lasts, and how many phases.
+    // Connect / disconnect blink: how long each phase lasts, and how many blinks.
     //
-    // SIX phases is three full blinks — off, on, off, on, off, on — ending ON,
-    // so the indicator always settles into its true colour no matter where the
-    // count landed. An odd number would leave it dark until the next repaint.
-    constexpr int  OVERLAY_SERVER_BLINK_MS     = 180;
-    constexpr int  OVERLAY_SERVER_BLINK_PHASES = 6;
+    // COUNT is blinks, not phases — a blink is dark-then-lit, so the timer runs
+    // twice this many times. Stated the way a person would ask for it, with the
+    // doubling done where the timer is armed rather than baked into the number.
+    //
+    // Ending on the LIT phase falls out of that: an even number of phases always
+    // settles into the true colour, and a dot left dark would read as "the
+    // server stopped".
+    //
+    // 3 blinks at 250 ms is 1.5 seconds — long enough to catch the eye on a
+    // screen nobody is watching, short enough that it is over before anyone
+    // walks to it.
+    constexpr int  OVERLAY_SERVER_BLINK_MS    = 250;
+    constexpr int  OVERLAY_SERVER_BLINK_COUNT = 3;
 
     // F9 status line. The wording matches the overlay dot's two colours, so the
     // panel and the indicator cannot appear to disagree.
