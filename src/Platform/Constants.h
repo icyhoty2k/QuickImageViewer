@@ -1580,6 +1580,17 @@ namespace Constants {
 
 
         constexpr int IS_INTERVAL_MS = 5000; // ms between auto-advances
+
+        // The accepted range for that interval.
+        //
+        // These bounds already existed — written out as bare 100 and 60000 in
+        // four separate places: the keyboard prompt, the numeric settings entry,
+        // the remote SlideshowSetInterval handler and the mirroring Sync
+        // payload. Four copies of a rule is four chances for one of them to
+        // drift, and the remote handler's error message quotes the range to the
+        // client, so a drift there is a protocol answer that lies.
+        constexpr int INTERVAL_MIN_MS = 100;   // below this the advance outruns the decode
+        constexpr int INTERVAL_MAX_MS = 60000; // a minute per slide; longer is not a slideshow
         constexpr bool IS_LOOP = true; // wrap to first image at end
         constexpr bool IS_SHUFFLE = false; // random order
         constexpr int CURSOR_HIDE_MS = 3000; // ms of inactivity before hiding cursor (0 = never)

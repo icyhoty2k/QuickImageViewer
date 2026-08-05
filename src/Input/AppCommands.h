@@ -41,6 +41,25 @@ class AppCommands {
         static void pauseResumeSlideshow(HWND hWnd); // Space: pause / resume
         static void stopSlideshow(HWND hWnd);        // also called from WM_TIMER (end of playlist)
 
+        // THE ONLY SUPPORTED WAY TO CHANGE THE SLIDE INTERVAL.
+        //
+        // Writing app.slideshow.intervalMs on its own does nothing to a running
+        // show. SetTimer is PERIODIC: the timer armed when the slideshow started
+        // keeps firing at the period it was given, and the advance path does not
+        // re-arm it. So a new interval sat in the struct, was saved to the
+        // registry, and changed nothing until the user stopped and restarted —
+        // which is precisely how it was reported from the phone.
+        //
+        // Four sites had the same defect independently: the keyboard/menu
+        // prompt, the numeric settings entry, the remote SlideshowSetInterval
+        // command, and the mirroring Sync payload. They all call this now.
+        //
+        // The caller still owns PERSISTENCE. Not every one of them should write
+        // the registry — a Sync payload is another instance's state arriving,
+        // not this user choosing a value — so saving stays where the intent is
+        // known.
+        static void applySlideshowInterval(HWND hWnd, int ms);
+
         static void RemoveTrayIcon(HWND hWnd);
 
         // File clipboard / shell operations (used by thumbnail panel context menu)

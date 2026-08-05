@@ -557,6 +557,21 @@ void AppCommands::stopSlideshow(HWND hWnd) {
     AddTrayIcon(hWnd);
 }
 
+// Clamped here as well as at every caller, because this is the last place the
+// value passes through before it reaches SetTimer — and a zero or negative
+// period would arm a timer that fires as fast as the message loop allows.
+void AppCommands::applySlideshowInterval(HWND hWnd, int ms) {
+    ms = std::max(Constants::Slideshow::INTERVAL_MIN_MS,
+                  std::min(Constants::Slideshow::INTERVAL_MAX_MS, ms));
+    app.slideshow.intervalMs = ms;
+
+    // A PAUSED show is deliberately left alone. Its timer is already killed,
+    // and resuming arms a fresh one from intervalMs — which is now the new
+    // value. Re-arming here would restart a slideshow the user paused.
+    if (app.slideshow.running && !app.slideshow.paused)
+        SetTimer(hWnd, Constants::Slideshow::TIMER_ID, static_cast<UINT>(ms), nullptr);
+}
+
 void AppCommands::toggleSlideshow(HWND hWnd) {
     if (!app.slideshow.running) {
         // --- Start ---

@@ -15,6 +15,7 @@
 #include "Platform/Constants.h"
 #include "Platform/ConstantsStrings.h"
 #include "Platform/FileHandler.h"
+#include "Input/AppCommands.h"   // applySlideshowInterval — re-arms a running show
 #include "Persistence/RegistryManager.h"
 #include "Overlays/OverlayManager.h"
 #include "Common/FuzzyMatch.h"
@@ -484,10 +485,17 @@ namespace {
         int ms = 0;
         if (!ParseInt(payload, ms))
             return MakeErr(RT::ERR_BAD_PAYLOAD, L"expected milliseconds");
-        if (ms < 100 || ms > 60000)
-            return MakeErr(RT::ERR_BAD_PAYLOAD, L"out of range 100-60000");
+        if (ms < Constants::Slideshow::INTERVAL_MIN_MS
+            || ms > Constants::Slideshow::INTERVAL_MAX_MS)
+            return MakeErr(RT::ERR_BAD_PAYLOAD,
+                           L"out of range "
+                           + std::to_wstring(Constants::Slideshow::INTERVAL_MIN_MS) + L"-"
+                           + std::to_wstring(Constants::Slideshow::INTERVAL_MAX_MS));
 
-        app.slideshow.intervalMs = ms;
+        // Through applySlideshowInterval, which also RE-ARMS a running show.
+        // Writing app.slideshow.intervalMs here directly is what made this
+        // command appear to do nothing until the slideshow was restarted.
+        AppCommands::applySlideshowInterval(hWnd, ms);
         Persistence::Registry::SaveSetting(Constants::Registry::SLIDESHOW_INTERVAL_MS,
                                            static_cast<DWORD>(ms));
         g_overlayManager.PostCenterMessage(
@@ -578,8 +586,14 @@ namespace {
             else if (k == L"overlay") { if (asInt()) app.showOverlayInfoText = (iv != 0); }
             else if (k == L"layout")  { if (asInt() && iv >= 0 && iv < Constants::Overlay::LAYOUT_MODE_COUNT)
                                             app.overlayLayoutMode = iv; }
-            else if (k == L"interval"){ if (asInt() && iv >= 100 && iv <= 60000)
-                                            app.slideshow.intervalMs = iv; }
+            // Through the helper, so a mirrored instance that is ALREADY running
+            // a slideshow adopts the sender's pace immediately. Assigning the
+            // field left it running at its own old interval — the mirror looked
+            // synchronised in every respect except the one thing a slideshow is.
+            else if (k == L"interval"){ if (asInt()
+                                            && iv >= Constants::Slideshow::INTERVAL_MIN_MS
+                                            && iv <= Constants::Slideshow::INTERVAL_MAX_MS)
+                                            AppCommands::applySlideshowInterval(hWnd, iv); }
             else if (k == L"loop")    { if (asInt()) app.slideshow.loop    = (iv != 0); }
             else if (k == L"shuffle") { if (asInt()) app.slideshow.shuffle = (iv != 0); }
             else if (k == L"effects") {

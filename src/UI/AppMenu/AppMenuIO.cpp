@@ -267,7 +267,9 @@ void ImportSettings(HWND hWnd) {
                 static_cast<DWORD>(app.historyMaxDirsSave));
         }
         if (wcscmp(key, Constants::Registry::SLIDESHOW_INTERVAL_MS) == 0) {
-            app.slideshow.intervalMs = std::max(100, std::min(60000, val));
+            // Re-arms a running slideshow rather than only storing the value;
+            // it also does the clamping, so the bounds live in one place now.
+            AppCommands::applySlideshowInterval(hWnd, val);
             Persistence::Registry::SaveSetting(Constants::Registry::SLIDESHOW_INTERVAL_MS,
                 static_cast<DWORD>(app.slideshow.intervalMs));
         }
@@ -463,7 +465,11 @@ void RestoreDefaults(HWND hWnd) {
     app.preloadLookaside        = Constants::IS_PRELOAD_LOOKASIDE_COUNT;
     app.msgCenterDisplayMs      = static_cast<int>(Constants::Overlay::IS_MSG_CENTER_DISPLAY_MS);
     app.historyMaxDirsSave      = Constants::History::IS_HISTORY_MAX_DIRS_TO_SAVE;
-    app.slideshow.intervalMs    = Constants::Slideshow::IS_INTERVAL_MS;
+    // Through the helper like every other interval change: Restore Defaults is
+    // reachable from the tray while a slideshow is running, and a plain
+    // assignment would leave that show pacing itself by the value the user just
+    // discarded.
+    AppCommands::applySlideshowInterval(hWnd, Constants::Slideshow::IS_INTERVAL_MS);
     app.slideshow.loop          = Constants::Slideshow::IS_LOOP;
     app.slideshow.shuffle       = Constants::Slideshow::IS_SHUFFLE;
     app.slideshow.transition.type     = TransitionType::Cut;

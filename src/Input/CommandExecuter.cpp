@@ -1550,7 +1550,10 @@ void InputManager::ExecuteCommand(HWND hWnd, Command cmd) {
                                                 app.slideshow.intervalMs, 100, 60000,
                                                 Constants::Slideshow::IS_INTERVAL_MS);
             if (v >= 0) {
-                app.slideshow.intervalMs = v;
+                // Not a plain assignment: a running slideshow keeps the period
+                // its timer was armed with, so this has to re-arm it. See
+                // AppCommands::applySlideshowInterval.
+                AppCommands::applySlideshowInterval(hWnd, v);
                 Persistence::Registry::SaveSetting(Constants::Registry::SLIDESHOW_INTERVAL_MS,
                                                    static_cast<DWORD>(v));
                 g_overlayManager.PostCenterMessage(hWnd,
