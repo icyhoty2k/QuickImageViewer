@@ -1556,9 +1556,15 @@ void RendererD2D::GetDirThumbCacheStats(int &count, UINT64 &estimatedBytes) {
     count = 0;
     for (auto &[hwnd, panel] : m_panelThumbCaches)
         count += static_cast<int>(panel.bitmaps.size());
-    UINT64 physW = static_cast<UINT64>(Constants::THUMBNAIL_PANEL_THUMB_WIDTH  * app.dpiScale + 0.5f);
-    UINT64 physH = static_cast<UINT64>(Constants::THUMBNAIL_PANEL_THUMB_HEIGHT * app.dpiScale + 0.5f);
-    estimatedBytes = static_cast<UINT64>(count) * physW * physH * 4;
+
+    // MEASURED, not estimated. This used to be count x thumbnail-size-at-current-
+    // DPI, which was an approximation of the right order but wrong in two ways
+    // that matter now: it disagreed with the number the budget is enforced
+    // against, and after a DPI change it charged thumbnails cached at the old
+    // size using the new one. m_thumbTotalBytes is the same value eviction uses,
+    // so what the Stats panel reports and what the cache is allowed to hold are
+    // now the same quantity.
+    estimatedBytes = static_cast<UINT64>(m_thumbTotalBytes);
 }
 
 // =============================================================================
@@ -1575,7 +1581,10 @@ void RendererD2D::ResolveThumbnailBitmaps(const std::vector<UI::Thumbnail> &thum
     std::lock_guard<std::mutex> cacheLock(m_cacheMutex);
     std::lock_guard<std::mutex> dirLock(m_dirThumbMutex);
 
-    const PanelThumbEntry *panelEntry = nullptr;
+    // Non-const: drawing a thumbnail promotes it in the panel's LRU, so this
+    // read path is also the only thing that keeps the eviction order honest.
+    // m_dirThumbMutex is already held above, which is what TouchPanelThumb needs.
+    PanelThumbEntry *panelEntry = nullptr;
     if (hPanel) {
         auto it = m_panelThumbCaches.find(hPanel);
         if (it != m_panelThumbCaches.end())
@@ -1588,8 +1597,14 @@ void RendererD2D::ResolveThumbnailBitmaps(const std::vector<UI::Thumbnail> &thum
 
         if (panelEntry) {
             auto it = panelEntry->bitmaps.find(thumb.filePath);
-            if (it != panelEntry->bitmaps.end() && it->second)
+            if (it != panelEntry->bitmaps.end() && it->second) {
                 r.bitmap = it->second;
+                // Promote on USE, which is what makes the eviction order mean
+                // anything: this runs for the thumbnails actually being drawn, so
+                // what is on screen is by definition the most recent and cannot be
+                // evicted out from under the panel that is showing it.
+                TouchPanelThumb(*panelEntry, thumb.filePath);
+            }
         }
 
         // Fall back to the full-res VRAM cache (covers CacheWnd and already-loaded images).
@@ -1799,7 +1814,67 @@ HRESULT RendererD2D::SaveCurrentImageWithEffects(const std::wstring &outPath) {
 // =============================================================================
 void RendererD2D::ClearDirThumbnailCache(HWND hPanel) {
     std::lock_guard<std::mutex> lock(m_dirThumbMutex);
-    m_panelThumbCaches.erase(hPanel);
+
+    const auto it = m_panelThumbCaches.find(hPanel);
+    if (it == m_panelThumbCaches.end()) return;
+
+    // The shared list holds this panel's entries too, so dropping the panel
+    // without unlinking them would leave dangling (HWND, path) pairs and a byte
+    // total that never comes back down — the budget would then shrink silently
+    // with every folder change until nothing was cached at all.
+    for (const auto &[path, pos] : it->second.lruPos)
+        m_thumbLru.erase(pos);
+
+    m_thumbTotalBytes -= it->second.totalBytes;
+    m_panelThumbCaches.erase(it);
+}
+
+// =============================================================================
+//  EvictPanelThumbs / TouchPanelThumb  —  the byte budget
+//
+//  Caller holds m_dirThumbMutex for both.
+// =============================================================================
+void RendererD2D::EnforceThumbBudget() {
+    // Read per call rather than cached: the budget is a live tray-menu setting,
+    // so lowering it takes effect on the next thumbnail instead of at restart.
+    // Clamped the same way RegistryManager clamps it, so a hand-edited registry
+    // value cannot produce a zero budget that evicts everything on sight.
+    const size_t budget =
+        static_cast<size_t>(std::max(100, std::min(64000, app.dirThumbCacheMB))) *
+        1024u * 1024u;
+
+    // Drops the globally least-recently-DRAWN thumbnail, whichever panel owns it.
+    //
+    // size() > 1 keeps the entry just inserted alive: it went in at the front and
+    // this takes from the back, so a single thumbnail larger than the entire
+    // budget still survives to be drawn once instead of vanishing unseen.
+    while (m_thumbTotalBytes > budget && m_thumbLru.size() > 1) {
+        const auto victim = m_thumbLru.back(); // copy: the node dies on pop_back
+        m_thumbLru.pop_back();
+
+        const auto panelIt = m_panelThumbCaches.find(victim.first);
+        if (panelIt == m_panelThumbCaches.end()) continue; // panel already gone
+
+        PanelThumbEntry &entry = panelIt->second;
+        const auto b = entry.bytes.find(victim.second);
+        if (b != entry.bytes.end()) {
+            m_thumbTotalBytes -= b->second;
+            entry.totalBytes  -= b->second;
+            entry.bytes.erase(b);
+        }
+        entry.lruPos.erase(victim.second);
+        entry.bitmaps.erase(victim.second); // releases the ComPtr, frees the GPU bitmap
+    }
+}
+
+void RendererD2D::TouchPanelThumb(PanelThumbEntry &entry, const std::wstring &path) {
+    const auto it = entry.lruPos.find(path);
+    if (it == entry.lruPos.end()) return;
+    // splice moves the node between positions without reallocating it, so the
+    // iterator stored in lruPos stays valid — the same trick m_lruList uses for
+    // the main image cache. This is what makes "drawn recently" the thing that
+    // survives, across every panel at once.
+    m_thumbLru.splice(m_thumbLru.begin(), m_thumbLru, it->second);
 }
 
 // =============================================================================
@@ -1879,7 +1954,26 @@ void RendererD2D::RequestDirThumbnail(const std::wstring &filePath, HWND hPanel)
             std::lock_guard<std::mutex> lk(m_dirThumbMutex);
             auto &entry = m_panelThumbCaches[hDir];
             entry.inFlight.erase(filePath);
-            entry.bitmaps.try_emplace(filePath, thumbBitmap);
+
+            // try_emplace, so a racing duplicate does not double-count bytes.
+            if (entry.bitmaps.try_emplace(filePath, thumbBitmap).second) {
+                // Measured from what was actually created, not from the requested
+                // size: a shell thumbnail can come back smaller than asked for,
+                // and charging the cache for pixels it never held would evict
+                // early for no reason.
+                const D2D1_SIZE_U px = thumbBitmap->GetPixelSize();
+                const size_t cost = static_cast<size_t>(px.width) *
+                                    static_cast<size_t>(px.height) * 4u;
+
+                entry.bytes[filePath] = cost;
+                entry.totalBytes     += cost;
+                m_thumbTotalBytes    += cost;
+
+                m_thumbLru.push_front({hDir, filePath});
+                entry.lruPos[filePath] = m_thumbLru.begin();
+
+                EnforceThumbBudget();
+            }
         }
         PostMessageW(hDir, Constants::WM_QIV_REPAINT, 0, 0);
     })) {

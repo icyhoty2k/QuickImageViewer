@@ -35,6 +35,7 @@
 #include "Rem_TCP_IP/RemoteProtocol.h" // CommandTable — QueryToggles walks it
 #include "Rem_TCP_IP/RemoteMirror.h"  // the mirror gate at the top of ExecuteCommand
 #include "Rem_TCP_IP/RemoteLog.h"     // Ctrl+F12 — the recording switch
+#include "Platform/CrashHandler.h" // NoteImage / NoteCommand breadcrumbs
 #include "Rem_TCP_IP/RemoteInbound.h" // …and the loop cut that makes it safe
 // The Ctrl+F11 selection panel reaches ExecuteCommand through UIManager, which
 // CommandExecuter already includes — nothing extra is needed here.
@@ -290,6 +291,13 @@ void InputManager::ExecuteCommand(HWND hWnd, Command cmd, const std::wstring &pa
 // behavior regardless of how the action was triggered.
 // =============================================================================
 void InputManager::ExecuteCommand(HWND hWnd, Command cmd) {
+    // One integer store, ahead of everything. Every input path funnels through
+    // here, so a dump taken at any moment names the command that led to it —
+    // and a crash reproduced only by "I pressed something" is otherwise a dead
+    // end. An int rather than a name precisely because this is the keystroke
+    // path: the write must not allocate or format anything.
+    Platform::Crash::NoteCommand(static_cast<int>(cmd));
+
     // =========================================================================
     // THE MIRROR GATE.
     //

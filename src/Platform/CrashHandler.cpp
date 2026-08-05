@@ -13,7 +13,6 @@
 
 #include <cstdlib>   // _set_purecall_handler, _set_invalid_parameter_handler
 #include <exception> // std::set_terminate
-#include <new>       // std::set_new_handler
 
 //
 // EVERYTHING BELOW THE FILTER RUNS IN A BROKEN PROCESS.
@@ -35,6 +34,32 @@
 //
 
 namespace Platform::Crash {
+
+    // ------------------------------------------------------------------------
+    // BREADCRUMBS — see the header.
+    //
+    // NOT in the anonymous namespace and NOT static: the linker must keep them
+    // and give them a name, because their entire purpose is to be found in a
+    // dump. /OPT:REF would be free to discard a file-local buffer that only ever
+    // gets written to, and a discarded breadcrumb is worse than none.
+    //
+    // The names are prefixed and distinctive so they are trivially greppable in
+    // a debugger's symbol list.
+    // ------------------------------------------------------------------------
+    wchar_t     g_qivCrumbImage[MAX_PATH] = L"(none)";
+    volatile int g_qivCrumbCommand        = -1;
+    const char  *g_qivCrumbPhase          = "startup";
+
+    void NoteImage(const wchar_t *path) {
+        if (!path) return;
+        size_t i = 0;
+        while (path[i] && i + 1 < MAX_PATH) { g_qivCrumbImage[i] = path[i]; ++i; }
+        g_qivCrumbImage[i] = L'\0';
+    }
+
+    void NoteCommand(int commandId) { g_qivCrumbCommand = commandId; }
+    void NotePhase(const char *phase) { if (phase) g_qivCrumbPhase = phase; }
+
     namespace {
         using MiniDumpWriteDumpFn = BOOL(WINAPI *)(HANDLE, DWORD, HANDLE,
                                                    MINIDUMP_TYPE,
@@ -103,6 +128,36 @@ namespace Platform::Crash {
             (void) Append(out, cap, n, L".dmp");
         }
 
+        // Writes a dump and returns whether it landed.
+        bool WriteDump(MINIDUMP_EXCEPTION_INFORMATION *mei,
+                       wchar_t *pathOut, size_t pathCap) {
+            if (!g_writeDump) return false;
+
+            BuildDumpPath(pathOut, pathCap);
+
+            const HANDLE file = CreateFileW(pathOut, GENERIC_WRITE, 0, nullptr,
+                                            CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, nullptr);
+            if (file == INVALID_HANDLE_VALUE) return false;
+
+            const MINIDUMP_TYPE type = static_cast<MINIDUMP_TYPE>(
+                MiniDumpNormal |
+                MiniDumpWithThreadInfo |
+                MiniDumpWithUnloadedModules |
+                MiniDumpWithIndirectlyReferencedMemory |
+                MiniDumpWithDataSegs |
+                MiniDumpWithHandleData |
+                MiniDumpWithFullMemoryInfo);
+
+            const bool ok = g_writeDump(GetCurrentProcess(), GetCurrentProcessId(),
+                                        file, type, mei, nullptr, nullptr) != FALSE;
+            CloseHandle(file);
+
+            // An empty or partial file is worse than none: it looks like evidence
+            // and contains nothing.
+            if (!ok) DeleteFileW(pathOut);
+            return ok;
+        }
+
         LONG WINAPI OnUnhandledException(EXCEPTION_POINTERS *info) {
             // CONTINUE_SEARCH rather than swallowing it: if we cannot write a
             // dump we have nothing to add, and Windows Error Reporting may still
@@ -112,40 +167,12 @@ namespace Platform::Crash {
                 return EXCEPTION_CONTINUE_SEARCH;
 
             wchar_t path[MAX_PATH * 2];
-            BuildDumpPath(path, MAX_PATH * 2);
+            MINIDUMP_EXCEPTION_INFORMATION mei;
+            mei.ThreadId          = GetCurrentThreadId();
+            mei.ExceptionPointers = info;
+            mei.ClientPointers    = FALSE;
 
-            const HANDLE file = CreateFileW(path, GENERIC_WRITE, 0, nullptr,
-                                            CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, nullptr);
-            bool written = false;
-
-            if (file != INVALID_HANDLE_VALUE) {
-                MINIDUMP_EXCEPTION_INFORMATION mei;
-                mei.ThreadId          = GetCurrentThreadId();
-                mei.ExceptionPointers = info;
-                mei.ClientPointers    = FALSE;
-
-                // Stacks, thread info, module list, and the memory the crashing
-                // frames point AT — enough to see locals that matter.
-                //
-                // NOT MiniDumpWithFullMemory. qIV routinely holds several
-                // decoded 40-megapixel bitmaps plus a VRAM cache; a full dump
-                // would be gigabytes, which no user will ever upload and many
-                // disks cannot spare. A file nobody can send is the same as no
-                // file at all.
-                const MINIDUMP_TYPE type = static_cast<MINIDUMP_TYPE>(
-                    MiniDumpNormal |
-                    MiniDumpWithThreadInfo |
-                    MiniDumpWithUnloadedModules |
-                    MiniDumpWithIndirectlyReferencedMemory);
-
-                written = g_writeDump(GetCurrentProcess(), GetCurrentProcessId(),
-                                      file, type, &mei, nullptr, nullptr) != FALSE;
-                CloseHandle(file);
-
-                // An empty or partial file is worse than none: it looks like
-                // evidence and contains nothing.
-                if (!written) DeleteFileW(path);
-            }
+            const bool written = WriteDump(&mei, path, MAX_PATH * 2);
 
             wchar_t msg[MAX_PATH * 2 + 512];
             size_t m = 0;
@@ -212,12 +239,22 @@ namespace Platform::Crash {
             CrashWith(0xE0000003);
         }
 
-        // Allocation failure. qIV can genuinely reach this — a 40-megapixel
-        // decode or a large GIF — and "operator new threw" with no dump tells
-        // nobody which allocation it was.
-        void OnNewFailed() {
-            CrashWith(0xE0000004);
-        }
+        // NO std::set_new_handler HERE, and the reason is worth keeping.
+        //
+        // One was installed, to turn an allocation failure into a dump. It is a
+        // REGRESSION: a new_handler that does not return makes operator new stop
+        // throwing, so std::bad_alloc is never raised — and this codebase has
+        // catch(...) blocks that recover from it today. FileHandler's open path
+        // and IniFile's parser both bail out cleanly on a throw; with the handler
+        // installed they would have crashed instead.
+        //
+        // Trading graceful degradation for a crash report is the wrong way round.
+        //
+        // It was also redundant. An allocation failure that nobody catches ends
+        // in std::terminate, and OnTerminate above is already hooked — so an
+        // UNHANDLED bad_alloc still produces a dump, while a handled one still
+        // recovers. That is exactly the behaviour wanted.
+
     } // namespace
 
     void Install() {
@@ -260,7 +297,6 @@ namespace Platform::Crash {
         std::set_terminate(OnTerminate);
         _set_purecall_handler(OnPureCall);
         _set_invalid_parameter_handler(OnInvalidParameter);
-        std::set_new_handler(OnNewFailed);
 
         // ENOUGH STACK LEFT TO REPORT A STACK OVERFLOW.
         //
@@ -283,8 +319,8 @@ namespace Platform::Crash {
         //     RtlFailFast — those bypass every user-mode handler by design
         //   * a hang, which is not a crash and produces nothing at all
         //
-        // SetThreadStackGuarantee applies per THREAD and is set here for the main
-        // one only. Worker threads that overflow still die quietly; if that ever
-        // turns out to matter, the pools in WorkerThread.h are where to add it.
+        // SetThreadStackGuarantee applies per THREAD. The worker pools set their
+        // own in WorkerThread.h, since every crash seen so far has been on one.
     }
+
 } // namespace Platform::Crash

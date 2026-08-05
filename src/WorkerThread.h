@@ -92,6 +92,16 @@ class DecoderThreadPool {
                     // 1. Thread priority optimization
                     // Setting this here ensures the worker threads don't starve the UI thread
                     SetThreadPriority(GetCurrentThread(), THREAD_PRIORITY_BELOW_NORMAL);
+                    // Reserve stack for the crash filter, per thread.
+                    //
+                    // SetThreadStackGuarantee applies to the CALLING thread only, so
+                    // setting it in wWinMain covers the UI thread and nothing else. A
+                    // worker that overflows its stack then faults again inside the
+                    // handler and dies with no dump — and decode recursion on a
+                    // malformed image is exactly how that happens. Every crash seen
+                    // during development so far has been on a worker, not the UI
+                    // thread, which is the argument for spending 64 KB here.
+                    { ULONG guard = 64 * 1024; SetThreadStackGuarantee(&guard); }
                     // 2. COM Init
                     HRESULT hr = CoInitializeEx(nullptr, COINIT_MULTITHREADED);
 
@@ -213,6 +223,16 @@ class IoThreadPool {
             for (size_t i = 0; i < threadCount; ++i) {
                 m_threads.emplace_back([this] {
                     SetThreadPriority(GetCurrentThread(), THREAD_PRIORITY_BELOW_NORMAL);
+                    // Reserve stack for the crash filter, per thread.
+                    //
+                    // SetThreadStackGuarantee applies to the CALLING thread only, so
+                    // setting it in wWinMain covers the UI thread and nothing else. A
+                    // worker that overflows its stack then faults again inside the
+                    // handler and dies with no dump — and decode recursion on a
+                    // malformed image is exactly how that happens. Every crash seen
+                    // during development so far has been on a worker, not the UI
+                    // thread, which is the argument for spending 64 KB here.
+                    { ULONG guard = 64 * 1024; SetThreadStackGuarantee(&guard); }
                     HRESULT hr = CoInitializeEx(nullptr, COINIT_MULTITHREADED);
                     if (FAILED(hr))
                         OutputDebugStringW(L"IoThreadPool: COM init failed\n");

@@ -160,12 +160,62 @@ class RendererD2D final : public IImageRenderer {
         // Per-panel dir-thumbnail cache.
         // Each DirWnd / SpawnedDirWnd owns its own entry keyed by its HWND,
         // so clearing one panel's cache never evicts thumbnails owned by another.
+        //
+        // BOUNDED BY BYTES, not by count — see EvictPanelThumbs.
+        //
+        // This cache had no eviction at all: thumbnails were inserted and only
+        // ever dropped when the whole panel changed folder. Scrolling one panel
+        // through a large folder therefore grew without limit — at 200% DPI a
+        // thumbnail is 256x160x4, about 160 KB, so a 10,000-image folder is
+        // roughly 1.6 GB of GPU memory, times up to five panels.
+        //
+        // app.dirThumbCacheMB existed the whole time — persisted, in the tray
+        // menu, adjustable from 100 to 64000 MB, shown in the Stats panel — and
+        // was read by nothing. Lowering it changed nothing. It is the budget now.
+        //
+        // Byte-exact rather than estimated: the size is known at creation from
+        // the dimensions the thumbnail was actually made at, so DPI changes and
+        // the odd non-standard thumbnail are accounted correctly.
         struct PanelThumbEntry {
             std::unordered_map<std::wstring, Microsoft::WRL::ComPtr<ID2D1Bitmap1>> bitmaps;
             std::unordered_set<std::wstring> inFlight;
+
+            // Position of each of this panel's thumbnails in the GLOBAL lru list
+            // below, plus what each one costs. The ordering itself is not kept
+            // here — see m_thumbLru for why.
+            std::unordered_map<std::wstring, std::list<std::pair<HWND, std::wstring>>::iterator> lruPos;
+            std::unordered_map<std::wstring, size_t> bytes;
+            size_t totalBytes = 0; // this panel's share, for reporting
         };
         std::unordered_map<HWND, PanelThumbEntry> m_panelThumbCaches;
         std::mutex m_dirThumbMutex;
+
+        // ONE LRU ACROSS ALL PANELS, most-recently-drawn at the FRONT.
+        //
+        // The budget is a single number the user sets, so it has to be enforced
+        // against a single total. The obvious alternative — give each panel
+        // budget/N — is wrong twice over: hiding a panel does not clear its
+        // cache, so an unwatched strip would still reserve its share; and panels
+        // open and close constantly, so every change would evict everyone else
+        // down and then hand the space back, churning for nothing.
+        //
+        // A shared list needs no divisor and no panel count. Thumbnails are
+        // promoted when they are DRAWN, so a panel nobody is looking at simply
+        // stops being touched and drifts to the back, where it is evicted first.
+        // The strips in front of the user keep their thumbnails because they are
+        // the ones being used. That is the behaviour a shared budget should have,
+        // and it falls out of the ordering instead of being computed.
+        std::list<std::pair<HWND, std::wstring>> m_thumbLru;
+        size_t m_thumbTotalBytes = 0;
+
+        // Drops least-recently-used thumbnails until EVERY panel is inside its
+        // share of app.dirThumbCacheMB. The budget is shared between the five
+        // strips, not granted to each — see the definition.
+        // Caller must already hold m_dirThumbMutex.
+        void EnforceThumbBudget();
+
+        // Marks a thumbnail as just-used. Caller must hold m_dirThumbMutex.
+        void TouchPanelThumb(PanelThumbEntry &entry, const std::wstring &path);
 
         // Cache
         struct CachedBitmap {

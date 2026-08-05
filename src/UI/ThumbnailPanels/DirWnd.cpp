@@ -141,6 +141,14 @@ namespace UI {
             m_dirPlaylist.push_back(std::filesystem::canonical(entry.path()).wstring());
         }
         RecordDirScanCount(m_dirPlaylist.size());
+
+        // directory_iterator hands files back in whatever order the filesystem
+        // stores them — NTFS happens to be name-ordered, which is why this went
+        // unnoticed, but that is not a guarantee and it is never the user's
+        // chosen order. Same rule as SpawnedDirWnd::LoadFolder: a self-built
+        // list carries the app's order, or it disagrees with every other view
+        // of the same folder the moment a background scan lands.
+        SortPathsInAppOrder(m_dirPlaylist);
     }
 
     // -------------------------------------------------------------------------

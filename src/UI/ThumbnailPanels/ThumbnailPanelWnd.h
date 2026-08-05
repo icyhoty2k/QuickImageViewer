@@ -140,6 +140,12 @@ namespace UI {
             virtual void OnFolderRefreshed(const std::wstring & /*dir*/,
                                            const std::vector<std::wstring> & /*playlist*/) {}
 
+            // Called by UIManager::NotifySortOrderChanged on every panel that
+            // holds a list of its own, after app.fileHandlerDefaultSortOrder or
+            // app.fileHandlerIsReverseSortOrder changed at runtime. Default:
+            // no-op (CacheWnd orders by cache recency, not by the file sort).
+            virtual void OnSortOrderChanged() {}
+
             // Re-read the panel's folder from disk if it matches `dir`.
             // Called after a cut/paste so the strip reflects reality immediately,
             // without waiting for the dir watcher (which only watches one dir).

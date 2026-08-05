@@ -108,6 +108,19 @@ void ReclampLockedViewport(HWND hWnd);
 // Takes ownership of result and deletes it.
 void HandleScanComplete(HWND hWnd, ScanResult *result);
 
+// Sorts a caller-built list with app.fileHandlerDefaultSortOrder +
+// app.fileHandlerIsReverseSortOrder, using sr's OWN fileSizes/fileTimes maps.
+// Every panel that enumerates a folder itself must call this, or its order
+// disagrees with the background scan's and the list visibly reshuffles the
+// moment a scan result arrives.
+void SortScanResultInAppOrder(ScanResult &sr);
+
+// Same rule for a bare path list, for callers that hold no size/time maps —
+// reads the two keys off disk only when the current sort order actually needs
+// them. Meant for user-triggered events (sort order changed, folder rescan),
+// not for anything on a frame path.
+void SortPathsInAppOrder(std::vector<std::wstring> &paths);
+
 // True while a background directory scan is in progress.
 // Read on the UI thread to show/hide the wait cursor.
 extern std::atomic<bool> g_scanInProgress;
