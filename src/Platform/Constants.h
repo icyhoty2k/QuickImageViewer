@@ -423,6 +423,22 @@ namespace Constants {
     constexpr const int VRAM_CACHE_THUMBS_THREADS_COUNT = 4; // fallback if processor has less than 8 thread otherwise dynamic thread count / 2
     constexpr const int VRAM_CACHE_DECODER_THREADS_COUNT = 2;
     constexpr int IS_VRAM_CACHE_IMAGES_COUNT = 20;
+
+    // --- Animated GIF budget ---------------------------------------------------
+    //
+    // Every frame of an animation is uploaded as a full-canvas PBGRA bitmap, so a
+    // frame costs width × height × 4 bytes of VRAM regardless of how little of it
+    // actually changed. A 1080p frame is ~8 MB; a 500-frame animation is therefore
+    // about 4 GB, and the image cache above counts IMAGES, not bytes — so a single
+    // pathological GIF can exhaust VRAM while the cache believes it is holding one
+    // entry out of twenty.
+    //
+    // Reaching either limit TRUNCATES the animation: it loops over the frames that
+    // were decoded rather than refusing to show the file. A partial animation is a
+    // far better outcome than a failed allocation, and for the files this actually
+    // catches — multi-thousand-frame novelty GIFs — nobody watches to the end.
+    constexpr size_t GIF_MAX_DECODED_BYTES = 256ull * 1024 * 1024; // 256 MB of frames
+    constexpr size_t GIF_MAX_FRAMES        = 600;                  // second, cheaper guard
     // VRAM budget for the dir-panel thumbnail cache.
     // Each entry is CACHE_THUMB_WIDTH * CACHE_THUMB_HEIGHT * 4 bytes ≈ 37 KB
     // after scaling.  512 MB holds ~14 000 thumbnails — far more than any
