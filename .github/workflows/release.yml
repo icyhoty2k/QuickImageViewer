@@ -147,8 +147,13 @@ jobs:
         run: |
           set -euo pipefail
 
-          git config user.name  "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
+          # Commit as the repository owner, NOT as github-actions[bot]. A bot
+          # author is listed in the repository's Contributors sidebar, which
+          # makes a one-person project look like it has an automation team
+          # working on it. The commits are still plainly marked [skip ci] and
+          # say what they are; only the name on them changes.
+          git config user.name  "icyhoty2k"
+          git config user.email "icyhoty2k@gmail.com"
 
           if git diff --quiet docs/pad.xml docs/index.html; then
             echo "Nothing changed — the metadata already matches $TAG."

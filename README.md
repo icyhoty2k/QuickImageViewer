@@ -7,11 +7,16 @@
 Direct2D, WIC and native Win32. One portable EXE under 10 MB — no installer, no
 telemetry, no background service.
 
+Drives other copies of itself over plain TCP, mirrors one screen to many, and has
+**[an Android app](#qiv-remote--the-android-app)** that controls it and moves photos
+between phone and desktop in both directions.
+
 [![Latest release](https://img.shields.io/github/v/release/icyhoty2k/QuickImageViewer?style=for-the-badge&logo=github&label=release&color=2ea44f)](https://github.com/icyhoty2k/QuickImageViewer/releases/latest)
 [![Downloads](https://img.shields.io/github/downloads/icyhoty2k/QuickImageViewer/total?style=for-the-badge&color=1f6feb)](https://github.com/icyhoty2k/QuickImageViewer/releases)
 [![Windows 10 | 11](https://img.shields.io/badge/Windows-10%20%7C%2011-0078D6?style=for-the-badge&logo=windows&logoColor=white)](#download)
 [![Licence AGPLv3](https://img.shields.io/badge/licence-AGPLv3-d29922?style=for-the-badge)](LICENSE)
 [![Stars](https://img.shields.io/github/stars/icyhoty2k/QuickImageViewer?style=for-the-badge&color=8957e5)](https://github.com/icyhoty2k/QuickImageViewer/stargazers)
+[![Android companion app](https://img.shields.io/badge/companion%20app-Android-3DDC84?style=for-the-badge&logo=android&logoColor=white)](#qiv-remote--the-android-app)
 
 <br>
 
@@ -26,10 +31,10 @@ telemetry, no background service.
 <details>
 <summary><b>Contents</b> — this README is long; jump straight to what you need</summary>
 
-- [Preview](#preview) · [Download](#download) · [Format Support](#format-support) · [How qIV Compares](#how-qiv-compares)
+- [Preview](#preview) · [Download](#download) · [Format Support](#format-support) · [How qIV Compares](#how-qiv-compares) · **[qIV Remote for Android](#qiv-remote--the-android-app)**
 - **Features** — [Performance](#performance) · [Navigation](#navigation) · [Sorting](#sorting) · [UI Panels](#ui-panels) · [Offline Reverse Geocoding](#offline-reverse-geocoding) · [Thumbnail Strips](#thumbnail-strips) · [File Management](#file-management-on-thumbnail-strips) · [History Panel](#history-panel) · [Slideshow](#slideshow) · [Color Effects](#color-effects) · [Overlay System](#overlay-system) · [Window & Chrome](#window--chrome) · [Mouse Shortcuts](#mouse-shortcuts)
-- [System Tray](#system-tray) · [Architecture](#architecture) · [Build](#build) · [Reporting a Crash](#reporting-a-crash)
-- [Support the project](#support-the-project) · [License](#license) · [Contributing](#contributing)
+- [System Tray](#system-tray) · [Remote Control & Mirroring](#remote-control--mirroring) · [Architecture](#architecture) · [Build](#build) · [Reporting a Crash](#reporting-a-crash)
+- [Found a bug? Want something added?](#found-a-bug-want-something-added) · [Support the project](#support-the-project) · [License](#license) · [Contributing](#contributing)
 
 </details>
 
@@ -94,21 +99,153 @@ written to your machine. To remove qIV, delete the file.
 
 | Feature | qIV | Windows Photos | IrfanView |
 |:---|:---:|:---:|:---:|
+| **Speed & footprint** | | | |
 | GPU VRAM bitmap cache | ✅ Direct2D | ❌ | ❌ |
 | Instant image switching | ✅ pre-decoded neighbours | ⚠️ visible load delay | ⚠️ visible load delay |
+| Portable — no installer | ✅ 9 MB single EXE | ❌ UWP / Store | ✅ |
+| No background services | ✅ process exits cleanly | ❌ always-on UWP runtime | ✅ |
+| **Formats** | | | |
 | HEIC / AVIF / JPEG XL | ✅ native + codec | ✅ | ⚠️ plugin required |
 | SVG / OpenEXR / HDR | ✅ built-in | ❌ | ⚠️ plugin required |
+| Batch convert & rename | ❌ | ❌ | ✅ |
+| Plugin ecosystem | ❌ codecs built in instead | ❌ | ✅ |
+| **Viewing & editing** | | | |
+| Non-destructive GPU effects | ✅ full D2D effect graph | ⚠️ basic adjustments | ⚠️ CPU, applied to the buffer |
+| Crop / paint / resize editing | ❌ effects only, `Ctrl+S` bakes | ✅ | ✅ |
+| Configurable info overlays | ✅ 9 independent slots | ❌ | ⚠️ slideshow captions |
+| Slideshow transitions | ✅ 21, GPU | ⚠️ basic | ✅ |
+| Floating thumbnail panels | ✅ up to 6 simultaneous | ❌ | ⚠️ separate browser window |
+| Thumbnail strips as file manager | ✅ drag between folders, shell ops | ❌ | ⚠️ in the browser window |
 | Offline GPS geocoding | ✅ embedded, zero network | ❌ | ❌ |
-| Floating thumbnail panels | ✅ up to 6 simultaneous | ❌ | ❌ |
-| Per-monitor DPI V2 | ✅ | ✅ | ⚠️ partial |
-| Portable — no installer | ✅ 9 MB single EXE | ❌ UWP / Store | ✅ |
-| No telemetry / tracking | ✅ zero | ❌ Microsoft telemetry | ✅ |
-| No ads | ✅ | ❌ promoted content | ✅ |
-| No background services | ✅ process exits cleanly | ❌ always-on UWP runtime | ✅ |
-| Open source | ✅ AGPLv3 | ❌ | ❌ |
-| Kiosk / locked display mode | ✅ CLI flag | ❌ | ⚠️ limited |
+| **Remote & multi-screen** | | | |
+| **Android companion app** | ✅ **[qIV Remote](#qiv-remote--the-android-app)** — control + live preview | ❌ | ❌ |
+| Phone ↔ desktop photo transfer | ✅ both ways, originals not re-encodes | ❌ | ❌ |
 | Drive other copies over TCP | ✅ plain-text protocol, self-describing | ❌ | ❌ |
 | Mirror one screen to many | ✅ F11, per-target selection | ❌ | ❌ |
+| Send an image across machines | ✅ `Alt+Enter`, file bytes on the wire | ❌ | ❌ |
+| Scriptable from anything | ✅ `netcat`, shell, home automation | ❌ | ⚠️ local command line only |
+| Kiosk / locked display mode | ✅ CLI flag | ❌ | ⚠️ limited |
+| **Trust** | | | |
+| No telemetry / tracking | ✅ zero | ❌ Microsoft telemetry | ✅ |
+| No ads | ✅ | ❌ promoted content | ✅ |
+| Open source | ✅ AGPLv3 | ❌ | ❌ |
+| Per-monitor DPI V2 | ✅ | ✅ | ⚠️ partial |
+
+<sub>✅ built in · ⚠️ partial, or needs a plugin or a separate window · ❌ not available.
+IrfanView wins the rows it wins — batch work and real editing are what it is for, and qIV
+does not try to replace them.</sub>
+
+---
+
+## qIV Remote — the Android app
+
+<div align="center">
+
+[![Android](https://img.shields.io/badge/Android-13%2B-3DDC84?style=for-the-badge&logo=android&logoColor=white)](#requirements)
+[![Google Play](https://img.shields.io/badge/Google%20Play-coming%20soon-414141?style=for-the-badge&logo=googleplay&logoColor=white)](#)
+[![No account](https://img.shields.io/badge/no%20account-no%20cloud%20·%20no%20analytics-1f6feb?style=for-the-badge)](#a-private-network-and-nothing-else)
+
+**Your phone becomes the viewer's remote — and a second screen you can copy photos to.**
+
+</div>
+
+Point it at your PC over your own network and drive qIV from the sofa, the far side of a
+meeting room, or anywhere the keyboard is not. It is a real protocol client, not screen
+sharing: it speaks the same verbs `netcat` does, so it stays in step with the desktop
+instead of streaming pixels at it.
+
+### Photos travel both ways
+
+This is the part a remote control usually cannot do at all.
+
+| Direction | What travels | Why it is built that way |
+|:---|:---|:---|
+| **Desktop → phone** — live preview | The current picture, scaled and re-encoded as JPEG **before it leaves the PC** | 25–40× fewer bytes than the original, and a far smaller decode on the phone |
+| **Desktop → phone** — Save | The **original file**, byte for byte, into `Pictures/qIVRemote` in your gallery | Save asks for the original *separately* rather than keeping the preview — a re-encoded JPEG is not the file you meant to keep |
+| **Phone → desktop** — push | Your photo's own bytes, base64 in chunks | Works to a PC that has never seen the photo and cannot read your phone's storage |
+
+A pushed photo appears on the desktop **once**, over whatever is up. It changes no folder,
+no sort order, no playlist position, and a running slideshow keeps running with it
+occupying a single slide. Nothing has to be paused first, and nothing is left behind.
+
+Saving to the gallery needs **no storage permission** — the app publishes through
+MediaStore, and the entry stays invisible until the transfer finishes, so a gallery
+scanning mid-transfer can never show you a half-written thumbnail.
+
+### What else it does
+
+<table>
+<tr>
+<td width="50%" valign="top">
+
+**Drive the viewer**
+
+Next / previous, first / last. Slideshow with its interval, pause, loop and shuffle.
+Zoom, rotate, flip. All five view modes. Colour effects. Fullscreen, always-on-top,
+panels and the on-image overlay.
+
+**Jump anywhere**
+
+The viewer's folder history comes down to the phone — tap a folder and the desktop goes
+there.
+
+</td>
+<td width="50%" valign="top">
+
+**Presentation mode**
+
+The current picture and two large next/previous buttons, sized to press without looking.
+Built for talking to a room rather than staring at a phone.
+
+**Follow the desktop**
+
+Bind the connection and the preview keeps itself up to date — when someone changes the
+picture at the PC, your phone shows it.
+
+</td>
+</tr>
+<tr>
+<td valign="top">
+
+**As many PCs as you like**
+
+Each saved machine keeps its own address, port and optional password. Tap one to connect.
+
+</td>
+<td valign="top">
+
+**Demo mode**
+
+Every screen runs against a viewer that does not exist, so you can see the whole app
+before installing anything or opening a port.
+
+</td>
+</tr>
+</table>
+
+### A private network, and nothing else
+
+The app talks only to the computer whose address you type. There is **no account, no
+cloud, no analytics, no advertising**, and nothing is ever sent to the developer — there
+is no back end to send it to.
+
+When your PC requires a password it is verified by challenge–response, so **the password
+itself never crosses the network**. Off the loopback the connection is TLS with a pinned
+certificate, and qIV's own AllowList (`F9`) still decides who may connect at all.
+Passwords you choose to save stay in app-private storage on the phone.
+
+### Requirements
+
+It is a companion app and does nothing on its own — the same way a TV remote does nothing
+without the TV. You need **QuickImageViewer running on a Windows PC with its Local Server
+enabled** (`F9` in qIV), and the phone on the same network. The app's About screen walks
+through the setup.
+
+<div align="center">
+
+*Coming to Google Play. Until then, the desktop side is ready and waiting on `F9`.*
+
+</div>
 
 ---
 
@@ -509,6 +646,10 @@ cannot come back "unknown command".
 - **Session log** — every line sent and every answer, numbered, newest first, with the
   instance that answered and its round trip
 
+> **The phone client has its own section** — see
+> [qIV Remote for Android](#qiv-remote--the-android-app), which speaks exactly the
+> protocol described here.
+
 ### The protocol describes itself
 
 ```
@@ -707,6 +848,30 @@ mystery, because it contains the exact stack qIV died on.
 It holds a snapshot of the program's internal state — open file paths and window
 titles among them — and **not** the contents of your images. If a path in it is
 sensitive, say so in the issue instead of attaching the file.
+
+---
+
+## Found a bug? Want something added?
+
+<div align="center">
+
+[![Report a bug](https://img.shields.io/badge/%F0%9F%90%9B%20Report%20a%20bug-open%20an%20issue-d1242f?style=for-the-badge&labelColor=a40e26)](https://github.com/icyhoty2k/QuickImageViewer/issues/new?template=bug_report.yml)
+[![Request a feature](https://img.shields.io/badge/%E2%9C%A8%20Request%20a%20feature-tell%20me%20about%20it-8957e5?style=for-the-badge&labelColor=6639ba)](https://github.com/icyhoty2k/QuickImageViewer/issues/new?template=feature_request.yml)
+[![Android app issue](https://img.shields.io/badge/%F0%9F%93%B1%20qIV%20Remote-Android%20issues-3DDC84?style=for-the-badge&labelColor=2a9d63)](https://github.com/icyhoty2k/QuickImageViewer/issues/new?template=android_remote.yml)
+
+</div>
+
+Small requests count — a missing keyboard shortcut is as valid as a whole panel. The
+forms ask for a few details up front because "it crashed" and "it crashed when I opened
+a 400 MB TIFF from a network drive" are different amounts of work to act on.
+
+**Issues for the Android app belong here too**, alongside the viewer it talks to —
+almost every question about one involves the other.
+
+**Security issues get a private channel.** qIV can listen on a network port, so anything
+touching authentication, TLS or the AllowList should go through
+[a security advisory](https://github.com/icyhoty2k/QuickImageViewer/security/advisories/new)
+rather than a public issue.
 
 ---
 

@@ -243,6 +243,55 @@
             });
         });
     </script>
+    <script>
+        // Total downloads, appended to the version line above.
+        //
+        // The number is the sum of download_count over every asset of every
+        // release — GitHub does not count source-code archives, so this is
+        // real downloads of the EXE and nothing else.
+        //
+        // NO NEW EXPOSURE: this page is served BY GitHub, so a visitor's
+        // address is already known to them before this call is made. It is the
+        // only third-party request on the page besides the font stylesheet.
+        //
+        // Cached in sessionStorage for the tab's lifetime: unauthenticated API
+        // calls are limited to 60 per hour per address, and a visitor who
+        // reloads a few times should not spend that budget or see the field
+        // flicker. Every failure path is silent — a missing count is invisible,
+        // an error message where a number should be is not.
+        document.addEventListener("DOMContentLoaded", function () {
+            const target = document.getElementById('version-info');
+            if (!target) return;
+
+            function show(total) {
+                target.innerText += ` • Downloads: ${total.toLocaleString()}`;
+            }
+
+            const cached = sessionStorage.getItem('qivDownloads');
+            if (cached !== null) {
+                show(parseInt(cached, 10));
+                return;
+            }
+
+            fetch('https://api.github.com/repos/icyhoty2k/QuickImageViewer/releases')
+                .then(function (r) { return r.ok ? r.json() : null; })
+                .then(function (releases) {
+                    if (!Array.isArray(releases)) return;
+                    let total = 0;
+                    for (const rel of releases) {
+                        if (!Array.isArray(rel.assets)) continue;
+                        for (const asset of rel.assets) {
+                            total += asset.download_count || 0;
+                        }
+                    }
+                    if (total > 0) {
+                        sessionStorage.setItem('qivDownloads', String(total));
+                        show(total);
+                    }
+                })
+                .catch(function () { /* offline, rate-limited, or blocked — show nothing */ });
+        });
+    </script>
     <!-- Google Fonts — display=swap avoids render-blocking (Core Web Vitals) -->
     <link rel="preconnect"
           href="https://fonts.googleapis.com">
@@ -643,6 +692,7 @@
             <span class="badge">Direct2D GPU Cache</span>
             <span class="badge">Portable App</span>
             <span class="badge">17+ Formats</span>
+            <span class="badge">Android Remote App</span>
         </div>
 
         <a href="https://github.com/icyhoty2k/QuickImageViewer/releases/latest"
@@ -5014,45 +5064,12 @@ D:\Screens\promotionList_qIV_dedicated_Lobby.qpr    promotion folders</code></pr
             script, <code>netcat</code>, a home-automation system or a phone app are all
             first-class clients.
         </p>
+        <p>
+            The phone app has its own section &mdash;
+            <a href="#android">qIV Remote for Android</a>, which speaks exactly the protocol
+            described here.
+        </p>
 
-        <div class="card">
-            <h3>qIV Remote for Android</h3>
-            <p>
-                The phone client, built against this protocol. Next / previous, first / last,
-                slideshow with its interval, zoom, rotate and flip, the five view modes, the
-                colour effects, fullscreen and always-on-top &mdash; plus a live preview of
-                whatever the desktop is showing, pulled down scaled rather than at full size.
-            </p>
-            <p>
-                It also pushes the other way: pick a photo on the phone and it appears on the
-                desktop as a one-shot, over the top of whatever is up, without disturbing the
-                folder or a running slideshow.
-            </p>
-            <p>
-                Same security model as any other client &mdash; TLS with a pinned certificate
-                off the loopback, password authentication, and the AllowList in
-                <kbd>F9</kbd> still decides who may connect at all. Turn on Local Server there
-                first; the app walks through it on its About screen.
-            </p>
-            <p>
-                Not sure it is for you? The app has a <strong>demo mode</strong> that runs
-                every screen against a viewer that does not exist, so you can see the whole
-                thing before installing anything or opening a port.
-            </p>
-            <p>
-                <em>Coming to Google Play.</em>
-            </p>
-            <!--
-                ON PUBLISH: replace the line above with the button below. It is left
-                commented rather than live because the store URL 404s until the listing is
-                approved, and a download button that goes nowhere is worse than no button.
-
-                The id is the app's applicationId and will not change:
-
-                <a href="https://play.google.com/store/apps/details?id=net.icyhoty2k.qivremote"
-                   class="cta-button">Get qIV Remote on Google Play</a>
-            -->
-        </div>
 
         <table>
             <thead>
@@ -5433,6 +5450,145 @@ CMD JumpToImage|1|go to a numbered image in the current playlist|image NUMBER, 1
             meaningful again with stable addresses, and the listener stops being reachable by
             anyone who scans the port.
         </p>
+    </section>
+
+    <section
+            id="android">
+        <h2>
+            qIV Remote
+            &mdash;
+            the Android app</h2>
+        <p class="subtitle">
+            Your phone becomes the viewer's remote &mdash; and a second screen you can copy
+            photos to, in both directions.
+        </p>
+
+        <p>
+            Point it at your PC over your own network and drive qIV from the sofa, the far side
+            of a meeting room, or anywhere the keyboard is not. It is a real client of the
+            protocol above, not screen sharing: it speaks the same verbs <code>netcat</code>
+            does, so it stays in step with the desktop instead of streaming pixels at it.
+        </p>
+
+        <div class="card">
+            <h3>Photos travel both ways</h3>
+            <p>
+                This is the part a remote control usually cannot do at all.
+            </p>
+            <table>
+                <thead>
+                    <tr>
+                        <th>Direction</th>
+                        <th>What travels</th>
+                        <th>Why it is built that way</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td><strong>Desktop &rarr; phone</strong><br>live preview</td>
+                        <td>The current picture, scaled and re-encoded as JPEG <em>before it
+                            leaves the PC</em></td>
+                        <td>25&ndash;40&times; fewer bytes than the original, and a far smaller
+                            decode on the phone</td>
+                    </tr>
+                    <tr>
+                        <td><strong>Desktop &rarr; phone</strong><br>Save</td>
+                        <td>The <strong>original file</strong>, byte for byte, into
+                            <code>Pictures/qIVRemote</code> in your gallery</td>
+                        <td>Save asks for the original <em>separately</em> rather than keeping
+                            the preview &mdash; a re-encoded JPEG is not the file you meant to
+                            keep</td>
+                    </tr>
+                    <tr>
+                        <td><strong>Phone &rarr; desktop</strong><br>push</td>
+                        <td>Your photo's own bytes, base64 in chunks</td>
+                        <td>Works to a PC that has never seen the photo and cannot read your
+                            phone's storage</td>
+                    </tr>
+                </tbody>
+            </table>
+            <p>
+                A pushed photo appears on the desktop <strong>once</strong>, over whatever is up.
+                It changes no folder, no sort order, no playlist position, and a running
+                slideshow keeps running with it occupying a single slide. Nothing has to be
+                paused first, and nothing is left behind.
+            </p>
+            <p>
+                Saving to the gallery needs <strong>no storage permission</strong> &mdash; the
+                app publishes through MediaStore, and the entry stays invisible until the
+                transfer finishes, so a gallery scanning mid-transfer can never show you a
+                half-written thumbnail.
+            </p>
+        </div>
+
+        <div class="card">
+            <h3>What else it does</h3>
+            <p>
+                <strong>Drive the viewer.</strong> Next / previous, first / last. Slideshow with
+                its interval, pause, loop and shuffle. Zoom, rotate, flip. All five view modes.
+                Colour effects. Fullscreen, always-on-top, panels and the on-image overlay.
+            </p>
+            <p>
+                <strong>Jump anywhere.</strong> The viewer's folder history comes down to the
+                phone &mdash; tap a folder and the desktop goes there.
+            </p>
+            <p>
+                <strong>Presentation mode.</strong> The current picture and two large
+                next/previous buttons, sized to press without looking. Built for talking to a
+                room rather than staring at a phone.
+            </p>
+            <p>
+                <strong>Follow the desktop.</strong> Bind the connection and the preview keeps
+                itself up to date &mdash; when someone changes the picture at the PC, your phone
+                shows it.
+            </p>
+            <p>
+                <strong>As many PCs as you like.</strong> Each saved machine keeps its own
+                address, port and optional password. Tap one to connect.
+            </p>
+            <p>
+                <strong>Demo mode.</strong> Every screen runs against a viewer that does not
+                exist, so you can see the whole app before installing anything or opening a port.
+            </p>
+        </div>
+
+        <div class="card">
+            <h3>A private network, and nothing else</h3>
+            <p>
+                The app talks only to the computer whose address you type. There is <strong>no
+                account, no cloud, no analytics, no advertising</strong>, and nothing is ever
+                sent to the developer &mdash; there is no back end to send it to.
+            </p>
+            <p>
+                When your PC requires a password it is verified by challenge&ndash;response, so
+                <strong>the password itself never crosses the network</strong>. Off the loopback
+                the connection is TLS with a pinned certificate, and qIV's own AllowList
+                (<kbd>F9</kbd>) still decides who may connect at all. Passwords you choose to
+                save stay in app-private storage on the phone.
+            </p>
+        </div>
+
+        <p>
+            <strong>Requirements.</strong> It is a companion app and does nothing on its own
+            &mdash; the same way a TV remote does nothing without the TV. You need
+            QuickImageViewer running on a Windows PC with its Local Server enabled
+            (<kbd>F9</kbd>), and the phone on the same network. The app's About screen walks
+            through the setup.
+        </p>
+        <p>
+            <em>Coming to Google Play. Until then, the desktop side is ready and waiting on
+            <kbd>F9</kbd>.</em>
+        </p>
+        <!--
+            ON PUBLISH: replace the line above with the button below. It is left commented
+            rather than live because the store URL 404s until the listing is approved, and a
+            download button that goes nowhere is worse than no button.
+
+            The id is the app's applicationId and will not change:
+
+            <a href="https://play.google.com/store/apps/details?id=net.icyhoty2k.qivremote"
+               class="cta-button">Get qIV Remote on Google Play</a>
+        -->
     </section>
 
     <section
@@ -6015,298 +6171,183 @@ CMD JumpToImage|1|go to a numbered image in the current playlist|image NUMBER, 1
             </thead>
             <tbody>
             <tr>
-                <td>
-                    GPU
-                    VRAM
-                    bitmap
-                    cache
-                </td>
-                <td>
-                    ✅
-                    Direct2D
-                </td>
-                <td>
-                    ❌
-                </td>
-                <td>
-                    ❌
-                </td>
+                <td colspan="4"><strong>Speed &amp; footprint</strong></td>
             </tr>
             <tr>
-                <td>
-                    Instant
-                    image
-                    switching
-                </td>
-                <td>
-                    ✅
-                    pre-decoded
-                    neighbours
-                </td>
-                <td>
-                    ⚠️
-                    visible
-                    load
-                    delay
-                </td>
-                <td>
-                    ⚠️
-                    visible
-                    load
-                    delay
-                </td>
+                <td>GPU VRAM bitmap cache</td>
+                <td>✅ Direct2D</td>
+                <td>❌</td>
+                <td>❌</td>
             </tr>
             <tr>
-                <td>
-                    HEIC
-                    /
-                    AVIF
-                    /
-                    JPEG
-                    XL
-                </td>
-                <td>
-                    ✅
-                    native
-                    +
-                    codec
-                </td>
-                <td>
-                    ✅
-                </td>
-                <td>
-                    ⚠️
-                    plugin
-                    required
-                </td>
+                <td>Instant image switching</td>
+                <td>✅ pre-decoded neighbours</td>
+                <td>⚠️ visible load delay</td>
+                <td>⚠️ visible load delay</td>
             </tr>
             <tr>
-                <td>
-                    SVG
-                    /
-                    OpenEXR
-                    /
-                    HDR
-                </td>
-                <td>
-                    ✅
-                    built-in
-                </td>
-                <td>
-                    ❌
-                </td>
-                <td>
-                    ⚠️
-                    plugin
-                    required
-                </td>
+                <td>Portable — no installer</td>
+                <td>✅ 9 MB single EXE</td>
+                <td>❌ UWP / Store</td>
+                <td>✅</td>
             </tr>
             <tr>
-                <td>
-                    Offline
-                    GPS
-                    geocoding
-                </td>
-                <td>
-                    ✅
-                    embedded,
-                    zero
-                    network
-                </td>
-                <td>
-                    ❌
-                </td>
-                <td>
-                    ❌
-                </td>
+                <td>No background services</td>
+                <td>✅ process exits cleanly</td>
+                <td>❌ always-on UWP runtime</td>
+                <td>✅</td>
             </tr>
             <tr>
-                <td>
-                    Floating
-                    thumbnail
-                    panels
-                </td>
-                <td>
-                    ✅
-                    up
-                    to
-                    6
-                    simultaneous
-                </td>
-                <td>
-                    ❌
-                </td>
-                <td>
-                    ❌
-                </td>
+                <td colspan="4"><strong>Formats</strong></td>
             </tr>
             <tr>
-                <td>
-                    Per-monitor
-                    DPI
-                    V2
-                </td>
-                <td>
-                    ✅
-                </td>
-                <td>
-                    ✅
-                </td>
-                <td>
-                    ⚠️
-                    partial
-                </td>
+                <td>HEIC / AVIF / JPEG XL</td>
+                <td>✅ native + codec</td>
+                <td>✅</td>
+                <td>⚠️ plugin required</td>
             </tr>
             <tr>
-                <td>
-                    Portable
-                    —
-                    no
-                    installer
-                </td>
-                <td>
-                    ✅
-                    7
-                    MB
-                    single
-                    EXE
-                </td>
-                <td>
-                    ❌
-                    UWP
-                    /
-                    Store
-                </td>
-                <td>
-                    ✅
-                </td>
+                <td>SVG / OpenEXR / HDR</td>
+                <td>✅ built-in</td>
+                <td>❌</td>
+                <td>⚠️ plugin required</td>
             </tr>
             <tr>
-                <td>
-                    No
-                    telemetry
-                    /
-                    tracking
-                </td>
-                <td>
-                    ✅
-                    zero
-                </td>
-                <td>
-                    ❌
-                    Microsoft
-                    telemetry
-                </td>
-                <td>
-                    ✅
-                </td>
+                <td>Batch convert &amp; rename</td>
+                <td>❌</td>
+                <td>❌</td>
+                <td>✅</td>
             </tr>
             <tr>
-                <td>
-                    No
-                    ads
-                </td>
-                <td>
-                    ✅
-                </td>
-                <td>
-                    ❌
-                    promoted
-                    content
-                </td>
-                <td>
-                    ✅
-                </td>
+                <td>Plugin ecosystem</td>
+                <td>❌ codecs built in instead</td>
+                <td>❌</td>
+                <td>✅</td>
             </tr>
             <tr>
-                <td>
-                    No
-                    background
-                    services
-                </td>
-                <td>
-                    ✅
-                    process
-                    exits
-                    cleanly
-                </td>
-                <td>
-                    ❌
-                    always-on
-                    UWP
-                    runtime
-                </td>
-                <td>
-                    ✅
-                </td>
+                <td colspan="4"><strong>Viewing &amp; editing</strong></td>
             </tr>
             <tr>
-                <td>
-                    Open
-                    source
-                </td>
-                <td>
-                    ✅
-                    AGPLv3
-                </td>
-                <td>
-                    ❌
-                </td>
-                <td>
-                    ❌
-                </td>
+                <td>Non-destructive GPU effects</td>
+                <td>✅ full D2D effect graph</td>
+                <td>⚠️ basic adjustments</td>
+                <td>⚠️ CPU, applied to the buffer</td>
             </tr>
             <tr>
-                <td>
-                    Kiosk
-                    /
-                    locked
-                    display
-                    mode
-                </td>
-                <td>
-                    ✅
-                    CLI
-                    flag
-                </td>
-                <td>
-                    ❌
-                </td>
-                <td>
-                    ⚠️
-                    limited
-                </td>
+                <td>Crop / paint / resize editing</td>
+                <td>❌ effects only, <code>Ctrl+S</code> bakes</td>
+                <td>✅</td>
+                <td>✅</td>
             </tr>
             <tr>
-                <td>
-                    Drive other copies over TCP
-                </td>
-                <td>
-                    ✅ plain-text protocol, self-describing
-                </td>
-                <td>
-                    ❌
-                </td>
-                <td>
-                    ❌
-                </td>
+                <td>Configurable info overlays</td>
+                <td>✅ 9 independent slots</td>
+                <td>❌</td>
+                <td>⚠️ slideshow captions</td>
             </tr>
             <tr>
-                <td>
-                    Mirror one screen to many
-                </td>
-                <td>
-                    ✅ F11, per-target selection
-                </td>
-                <td>
-                    ❌
-                </td>
-                <td>
-                    ❌
-                </td>
+                <td>Slideshow transitions</td>
+                <td>✅ 21, GPU</td>
+                <td>⚠️ basic</td>
+                <td>✅</td>
+            </tr>
+            <tr>
+                <td>Floating thumbnail panels</td>
+                <td>✅ up to 6 simultaneous</td>
+                <td>❌</td>
+                <td>⚠️ separate browser window</td>
+            </tr>
+            <tr>
+                <td>Thumbnail strips as file manager</td>
+                <td>✅ drag between folders, shell ops</td>
+                <td>❌</td>
+                <td>⚠️ in the browser window</td>
+            </tr>
+            <tr>
+                <td>Offline GPS geocoding</td>
+                <td>✅ embedded, zero network</td>
+                <td>❌</td>
+                <td>❌</td>
+            </tr>
+            <tr>
+                <td colspan="4"><strong>Remote &amp; multi-screen</strong></td>
+            </tr>
+            <tr>
+                <td><strong>Android companion app</strong></td>
+                <td>✅ <strong>qIV Remote</strong> — control + live preview</td>
+                <td>❌</td>
+                <td>❌</td>
+            </tr>
+            <tr>
+                <td>Phone ↔ desktop photo transfer</td>
+                <td>✅ both ways, originals not re-encodes</td>
+                <td>❌</td>
+                <td>❌</td>
+            </tr>
+            <tr>
+                <td>Drive other copies over TCP</td>
+                <td>✅ plain-text protocol, self-describing</td>
+                <td>❌</td>
+                <td>❌</td>
+            </tr>
+            <tr>
+                <td>Mirror one screen to many</td>
+                <td>✅ F11, per-target selection</td>
+                <td>❌</td>
+                <td>❌</td>
+            </tr>
+            <tr>
+                <td>Send an image across machines</td>
+                <td>✅ <code>Alt+Enter</code>, file bytes on the wire</td>
+                <td>❌</td>
+                <td>❌</td>
+            </tr>
+            <tr>
+                <td>Scriptable from anything</td>
+                <td>✅ <code>netcat</code>, shell, home automation</td>
+                <td>❌</td>
+                <td>⚠️ local command line only</td>
+            </tr>
+            <tr>
+                <td>Kiosk / locked display mode</td>
+                <td>✅ CLI flag</td>
+                <td>❌</td>
+                <td>⚠️ limited</td>
+            </tr>
+            <tr>
+                <td colspan="4"><strong>Trust</strong></td>
+            </tr>
+            <tr>
+                <td>No telemetry / tracking</td>
+                <td>✅ zero</td>
+                <td>❌ Microsoft telemetry</td>
+                <td>✅</td>
+            </tr>
+            <tr>
+                <td>No ads</td>
+                <td>✅</td>
+                <td>❌ promoted content</td>
+                <td>✅</td>
+            </tr>
+            <tr>
+                <td>Open source</td>
+                <td>✅ AGPLv3</td>
+                <td>❌</td>
+                <td>❌</td>
+            </tr>
+            <tr>
+                <td>Per-monitor DPI V2</td>
+                <td>✅</td>
+                <td>✅</td>
+                <td>⚠️ partial</td>
             </tr>
             </tbody>
         </table>
+        <p class="subtitle">
+            ✅ built in &middot; ⚠️ partial, or needs a plugin or a separate window &middot; ❌ not available.
+            IrfanView wins the rows it wins &mdash; batch work and real editing are what it is
+            for, and qIV does not try to replace them.
+        </p>
     </section>
 
     <section
@@ -6784,6 +6825,48 @@ CMD JumpToImage|1|go to a numbered image in the current playlist|image NUMBER, 1
     </section>
 
     <section
+            id="feedback">
+        <h2>
+            Found a bug?
+            Want something added?</h2>
+        <p>
+            Small requests count &mdash; a missing keyboard shortcut is as valid a request
+            as a whole panel. The forms ask for a few details up front, because "it crashed"
+            and "it crashed opening a 400&nbsp;MB TIFF from a network drive" are different
+            amounts of work to act on.
+        </p>
+        <p>
+            <a href="https://github.com/icyhoty2k/QuickImageViewer/issues/new?template=bug_report.yml"
+               class="cta-button">Report a bug</a>
+            <a href="https://github.com/icyhoty2k/QuickImageViewer/issues/new?template=feature_request.yml"
+               class="cta-button">Request a feature</a>
+        </p>
+        <div class="card">
+            <h3>Issues for the Android app belong here too</h3>
+            <p>
+                qIV Remote is developed separately, but its issues live alongside the viewer
+                it talks to &mdash; almost every question about one involves the other. There
+                is <a href="https://github.com/icyhoty2k/QuickImageViewer/issues/new?template=android_remote.yml">a
+                form for it</a>, and it starts with the three things that cause nearly every
+                connection problem: Local Server switched off, the phone missing from the
+                AllowList, or the two devices being on different networks.
+            </p>
+        </div>
+        <p>
+            <strong>Security issues get a private channel.</strong> qIV can listen on a
+            network port, so anything touching authentication, TLS or the AllowList belongs in
+            <a href="https://github.com/icyhoty2k/QuickImageViewer/security/advisories/new">a
+            security advisory</a> rather than a public issue.
+        </p>
+        <p>
+            <strong>If it crashed</strong>, there is a <code>.dmp</code> file next to
+            <code>QuickImageViewer.exe</code>. Attaching it turns a mystery into a stack
+            trace. It holds open file paths and window titles &mdash; not the contents of your
+            images &mdash; and nothing is ever sent anywhere on its own.
+        </p>
+    </section>
+
+    <section
             id="build">
         <h2>
             Architecture
@@ -7045,6 +7128,12 @@ cmake --build . --config Release</code></pre>
                 Repository</a>
             •
             <a href="https://github.com/icyhoty2k/QuickImageViewer/releases">Releases</a>
+            •
+            <a href="https://github.com/icyhoty2k/QuickImageViewer/issues/new?template=bug_report.yml">Report
+                a bug</a>
+            •
+            <a href="https://github.com/icyhoty2k/QuickImageViewer/issues/new?template=feature_request.yml">Request
+                a feature</a>
             •
             <a href="https://github.com/sponsors/icyhoty2k">Sponsor</a>
             •

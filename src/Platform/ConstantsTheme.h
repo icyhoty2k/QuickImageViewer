@@ -397,5 +397,6 @@ namespace ThemeIcons {
     constexpr const wchar_t* ICON_SECTION_BELL       = L"\U0001F514";     // 🔔
     constexpr const wchar_t* ICON_SECTION_DESKTOP    = L"\U0001F5A5\xFE0F";// 🖥️
     constexpr const wchar_t* ICON_SECTION_KEYBOARD   = L"\x2328\xFE0F";   // ⌨️
+    constexpr const wchar_t* ICON_SECTION_ANTENNA    = L"\U0001F4E1";     // 📡
     }
 } 
