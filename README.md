@@ -635,6 +635,38 @@ For offline geocoding, generate the GeoNames binary resources before building:
 python tools/preprocess_cities.py
 ```
 
+### Tests
+
+```bash
+ctest --output-on-failure          # from the build directory
+```
+
+Unit tests live in `test/qivTests.cpp` and build as a separate `qivTests` target
+(`-DQIV_BUILD_TESTS=OFF` disables it). They cover the pure logic — Base64 wire
+encoding, the zoom storage round trip, and the Find dialog's wildcard and fuzzy
+matching — plus benchmarks for the Base64 and Find paths. Run `qivTests -v` to list
+every check by name.
+
+---
+
+## Reporting a Crash
+
+If qIV closes unexpectedly it writes a crash report next to the executable:
+
+```
+QuickImageViewer_crash_YYYYMMDD_HHMMSS_<pid>.dmp
+```
+
+**Nothing is sent anywhere.** qIV has no telemetry and makes no network call of its
+own — the file is written to your disk and stays there. Attaching it to an
+[issue](https://github.com/icyhoty2k/QuickImageViewer/issues) is entirely your
+choice, and it is the difference between a bug that gets fixed and one that stays a
+mystery, because it contains the exact stack qIV died on.
+
+It holds a snapshot of the program's internal state — open file paths and window
+titles among them — and **not** the contents of your images. If a path in it is
+sensitive, say so in the issue instead of attaching the file.
+
 ---
 
 ## License

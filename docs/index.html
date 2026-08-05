@@ -6336,6 +6336,31 @@ CMD JumpToImage|1|go to a numbered image in the current playlist|image NUMBER, 1
 
         <details>
             <summary>
+                qIV crashed. What do I do?
+            </summary>
+            <p>
+                qIV writes a crash report next to its own executable, named
+                <code>QuickImageViewer_crash_&lt;date&gt;_&lt;time&gt;_&lt;pid&gt;.dmp</code>, and
+                tells you where it put it.
+            </p>
+            <p>
+                <strong>Nothing is sent anywhere.</strong> qIV has no telemetry and makes no
+                network call of its own, so that file is written to your disk and stays there.
+                Attaching it to an
+                <a href="https://github.com/icyhoty2k/QuickImageViewer/issues">issue</a> is
+                entirely your choice &mdash; but it is the difference between a bug that gets
+                fixed and one that stays a mystery, because it records the exact point the
+                program failed.
+            </p>
+            <p>
+                The file contains a snapshot of qIV's internal state, including open file paths
+                and window titles. It does <em>not</em> contain your images. If a path in it is
+                sensitive, describe the problem in the issue rather than attaching the file.
+            </p>
+        </details>
+
+        <details>
+            <summary>
                 Is
                 QuickImageViewer
                 free?

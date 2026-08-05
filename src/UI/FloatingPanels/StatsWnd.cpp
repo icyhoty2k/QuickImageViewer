@@ -17,6 +17,12 @@
 #include "../../WorkerThread.h"
 #include "../../Renderer/IRenderer.h"
 #include "../../ImageLoadStats.h"
+#include "../../Rem_TCP_IP/RemoteServer.h"   // listener state for the REMOTE CONTROL section
+#include "../../Rem_TCP_IP/RemoteMirror.h"   // target counts for the same
+#include "../../Rem_TCP_IP/RemoteSettings.h" // configured port / AllowList / password
+#include "../../Rem_TCP_IP/RemoteLog.h"      // wire-log recording state
+
+#include <tlhelp32.h> // the real OS thread count — see the THREADS section
 #include "HistoryListWnd.h"
 #include "../ThumbnailPanels/DirWnd.h"
 #include <algorithm>
@@ -678,6 +684,112 @@ namespace UI {
                 y += sgap;
 
                 // ═════════════════════════════════════════════════════════════════════
+                // Section 4b — Remote control
+                //
+                // The remote subsystem is roughly a fifth of the program and had no
+                // presence on this panel at all, so "is my phone actually connected?"
+                // — the question a user asks first — had no answer anywhere in the UI
+                // except by opening F9 and counting rows.
+                //
+                // Every value below is an atomic load or a short list walk, audited on
+                // 2026-08-05 as costing nothing on the keystroke path. This panel
+                // repaints on a timer, not per frame, so even the list walks are free
+                // here.
+                // ═════════════════════════════════════════════════════════════════════
+                {
+                    const COLORREF clrTeal =
+                        Constants::Theme::ThemedColor(0.30f, 0.85f, 0.85f, app.themeFactor);
+                    section(L"  REMOTE CONTROL", clrTeal);
+
+                    const bool serving = Remote::IsRunning();
+
+                    // Colour carries the state: a listener that is open is a thing the
+                    // user should be able to see at a glance, because it is the one
+                    // setting here with a security meaning.
+                    row2(L"Local server", serving ? L"Running" : L"Stopped",
+                         serving ? clrGreen : clrDim, true);
+
+                    if (serving) {
+                        const std::wstring ep = Remote::BoundEndpoint();
+                        if (!ep.empty()) row2(L"  Listening on", ep.c_str(), clrValue);
+
+                        row2(L"  Encryption",
+                             Remote::IsEncrypted() ? L"TLS" : L"Plaintext (loopback)",
+                             Remote::IsEncrypted() ? clrGreen : clrOrange);
+
+                        wchar_t buf[32];
+                        swprintf_s(buf, L"%d", Remote::ActiveConnections());
+                        row2(L"  Clients connected", buf, clrValue);
+
+                        // Observers are the clients being PUSHED events, which is what
+                        // a phone's live preview uses. Distinct from "connected": a
+                        // client can be attached and watching nothing.
+                        row2(L"  Watching (observe)",
+                             Remote::HasObservers() ? L"Yes" : L"No",
+                             Remote::HasObservers() ? clrGreen : clrDim);
+                    }
+
+                    // CONFIGURED values, shown whether or not the listener is up —
+                    // "why will it not start" is asked with the server stopped, and
+                    // a panel that hides its settings until it works is no help then.
+                    {
+                        // Remote::Settings is the STRUCT; the accessors live directly
+                        // in namespace Remote, not in a namespace of that name.
+                        const Remote::Settings &cfg = Remote::Config();
+
+                        if (!cfg.name.empty())
+                            row2(L"  Instance name", cfg.name.c_str(), clrValue);
+
+                        wchar_t buf[64];
+                        swprintf_s(buf, L"%d", cfg.port);
+                        row2(L"  Configured port", buf, clrValue);
+
+                        swprintf_s(buf, L"%d", cfg.maxConnections);
+                        row2(L"  Max connections", buf, clrValue);
+
+                        // A password is the ONLY thing standing between the AllowList
+                        // and someone who can reach the port, so its absence is worth
+                        // colouring rather than merely stating.
+                        const bool hasPw = !cfg.passwordHash.empty();
+                        row2(L"  Password", hasPw ? L"Set" : L"NOT SET",
+                             hasPw ? clrGreen : clrOrange);
+
+                        // An empty AllowList and a "*" entry are very different from a
+                        // named list, and both are easy to leave behind after testing.
+                        swprintf_s(buf, L"%zu entr%s", cfg.allowList.size(),
+                                   cfg.allowList.size() == 1 ? L"y" : L"ies");
+                        bool wildcard = false;
+                        for (const std::wstring &a : cfg.allowList)
+                            if (a == L"*") wildcard = true;
+                        row2(L"  AllowList",
+                             cfg.allowList.empty() ? L"Empty" : (wildcard ? L"* (any address)" : buf),
+                             wildcard ? clrOrange : (cfg.allowList.empty() ? clrDim : clrValue));
+
+                        row2(L"  Autostart", cfg.autostart ? L"On" : L"Off",
+                             cfg.autostart ? clrValue : clrDim);
+                    }
+
+                    const int targets  = Remote::Mirror::ConnectedCount();
+                    const int mirrored = Remote::Mirror::MirroredLiveCount();
+                    const int declared = Remote::Mirror::TargetCount();
+                    wchar_t tbuf[80];
+                    swprintf_s(tbuf, L"%d connected   %d mirrored   (%d saved)",
+                               targets, mirrored, declared);
+                    row2(L"Driving others", declared > 0 ? tbuf : L"None saved",
+                         targets > 0 ? clrValue : clrDim, true);
+
+                    row2(L"  Mirror session", Remote::Mirror::SessionActive() ? L"Active" : L"Idle",
+                         Remote::Mirror::SessionActive() ? clrGreen : clrDim);
+
+                    // Off by default and cheap to forget about, but it writes a row
+                    // per command while on.
+                    row2(L"  Wire log (Ctrl+F12)", Remote::Log::IsEnabled() ? L"Recording" : L"Off",
+                         Remote::Log::IsEnabled() ? clrOrange : clrDim);
+                }
+
+                y += sgap;
+
+                // ═════════════════════════════════════════════════════════════════════
                 // Section 5 — Threads & Memory
                 // ═════════════════════════════════════════════════════════════════════
                 const COLORREF clrPurple = Constants::Theme::ThemedColor(0.80f, 0.50f, 1.0f, app.themeFactor);
@@ -687,7 +799,48 @@ namespace UI {
                     int totalThreads = 1 + m_ioThreads + m_wicThreads + m_dirThumbThreads + m_writeQueueThreads + m_dirWatcherThreads;
                     wchar_t buf[32];
                     swprintf_s(buf, L"%d", totalThreads);
-                    row2(L"Total app threads", buf, clrValue, true);
+                    row2(L"Accounted threads", buf, clrValue, true);
+                }
+
+                // THE REAL NUMBER, asked of the OS rather than added up from the
+                // pools this panel knows about.
+                //
+                // The hand-counted total above misses everything nobody remembered to
+                // register: one socket thread per remote client, one sender thread per
+                // mirror target, and whatever the CRT, COM, WIC and the D3D/DXGI
+                // runtime start on their own — which is most of them. Reporting the
+                // sum of known pools as "total" was simply wrong, and wrong in the
+                // direction that hides a leak.
+                //
+                // A snapshot walks every thread on the system, so this belongs on a
+                // timer-driven panel and nowhere near a hot path.
+                {
+                    int osThreads = 0;
+                    const HANDLE snap = CreateToolhelp32Snapshot(TH32CS_SNAPTHREAD, 0);
+                    if (snap != INVALID_HANDLE_VALUE) {
+                        THREADENTRY32 te{};
+                        te.dwSize = sizeof(te);
+                        const DWORD self = GetCurrentProcessId();
+                        if (Thread32First(snap, &te)) {
+                            do {
+                                if (te.th32OwnerProcessID == self) ++osThreads;
+                            } while (Thread32Next(snap, &te));
+                        }
+                        CloseHandle(snap);
+                    }
+                    wchar_t buf[64];
+                    swprintf_s(buf, L"%d  (OS count)", osThreads);
+                    row2(L"Live OS threads", buf, osThreads > 0 ? clrGreen : clrDim, true);
+                }
+                {
+                    // The two pools that grow with what is CONNECTED rather than with
+                    // the machine, so they are the ones that explain a number moving
+                    // while nothing else changed.
+                    wchar_t buf[64];
+                    swprintf_s(buf, L"%d client + %d mirror sender",
+                               Remote::IsRunning() ? Remote::ActiveConnections() : 0,
+                               Remote::Mirror::ConnectedCount());
+                    row2(L"  Remote threads", buf, clrValue);
                 }
                 {
                     wchar_t buf[32];
@@ -844,7 +997,35 @@ namespace UI {
                 // ═════════════════════════════════════════════════════════════════════
                 // Section 8 — Registry
                 // ═════════════════════════════════════════════════════════════════════
-                section(L"  REGISTRY", clrPurple);
+                section(L"  CONFIGURATION", clrPurple);
+
+                // WHICH STORE IS AUTHORITATIVE — the first thing to establish, because
+                // every path below is only meaningful once you know whether this copy
+                // is reading it. A dedicated instance keeps its settings in an INI
+                // beside the exe and does not touch the keys listed underneath; a
+                // normal one is the other way round. Showing the registry paths with
+                // no indication of which mode is running let a dedicated instance look
+                // as though it were ignoring settings that it was never reading.
+                {
+                    const bool dedicated = Dedicated::IsDedicatedFlag();
+                    row2(L"Settings store",
+                         dedicated ? L"INI file beside the exe  (dedicated instance)"
+                                   : L"Registry  (HKCU)",
+                         dedicated ? clrOrange : clrValue, true);
+                }
+
+                // The remote subsystem keeps its OWN file, separate from both of the
+                // above, so "where does the server read its port from" has a third
+                // answer that is easy to miss.
+                {
+                    const bool ini = Remote::IniExists();
+                    row2(L"Remote server config",
+                         ini ? (Remote::SectionExists()
+                                    ? L"qivLocalServer.ini"
+                                    : L"qivLocalServer.ini  (no section — defaults in use)")
+                             : L"Not present — built-in defaults",
+                         ini ? clrValue : clrDim);
+                }
 
                 // App preferences key
                 {

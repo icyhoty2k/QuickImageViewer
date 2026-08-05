@@ -17,6 +17,7 @@
 #include <shobjidl.h>
 #include <filesystem>
 #include <numeric>
+#include <mutex>     // guards the drive-type cache, written from a probe thread
 #include <ranges>
 #include <shlwapi.h>
 #include <thread>
@@ -52,27 +53,72 @@ void UpdateOverlaysForCurrentImage(HWND hWnd);
 static std::wstring g_lastVolumeRoot;
 static std::unordered_map<std::wstring, size_t> g_driveThreadCache; // volume root → optimal thread count
 
+// DETECTION RUNS OFF THE UI THREAD, and this is why.
+//
+// DriveInfo::GetOptimalIoThreadCount opens \\.\PhysicalDriveN and issues a
+// StorageDeviceSeekPenaltyProperty query. That is 1-10 ms on a warm local drive
+// — and SECONDS on one that has spun down, because asking the question spins it
+// up. It used to run inline here, on the UI thread, the first time an image was
+// opened from each volume: exactly the moment the user is waiting to see a
+// picture, and a plausible cause of "the app froze when I opened a file from my
+// external disk".
+//
+// All it decides is ONE versus TWO IO threads. Blocking a window for seconds to
+// choose that is a bad trade, so the first open of an unknown volume now uses
+// the default and the real answer is fetched in the background. If it turns out
+// to be an HDD, the next folder open on that volume picks up the cached value
+// and resizes the pool through the existing path below — one folder served with
+// two threads instead of one is not something anybody can perceive.
+//
+// The mutex exists because that background thread writes the cache the UI thread
+// reads. g_lastVolumeRoot stays UI-thread-only and is deliberately NOT covered.
+static std::mutex g_driveCacheMutex;
+static std::unordered_set<std::wstring> g_driveDetectInFlight; // no duplicate probes
+
+// The value used until detection answers. Two, matching SSD/NVMe: it is the
+// common case, and guessing two on an HDD costs a little head movement for one
+// folder, whereas guessing one on an NVMe throws away real throughput.
+static constexpr size_t DRIVE_THREADS_DEFAULT = 2;
+
 static void UpdateIoWorkerForPath(const std::wstring &folderPath) {
     wchar_t volRoot[MAX_PATH] = {};
     GetVolumePathNameW(folderPath.c_str(), volRoot, MAX_PATH);
     std::wstring newRoot(volRoot);
 
-    // Look up cached result; detect only on first visit to each volume
-    auto it = g_driveThreadCache.find(newRoot);
-    if (it == g_driveThreadCache.end()) {
-        size_t optimal = DriveInfo::GetOptimalIoThreadCount(folderPath);
-        g_driveThreadCache[newRoot] = optimal;
-        it = g_driveThreadCache.find(newRoot);
+    size_t optimal = DRIVE_THREADS_DEFAULT;
+    bool   known   = false;
+    {
+        std::lock_guard<std::mutex> lock(g_driveCacheMutex);
+        auto it = g_driveThreadCache.find(newRoot);
+        if (it != g_driveThreadCache.end()) {
+            optimal = it->second;
+            known   = true;
+        } else if (g_driveDetectInFlight.insert(newRoot).second) {
+            // First time this volume has been seen and nothing is probing it:
+            // detached because nothing waits on the result, and the process may
+            // well outlive the answer without ever needing it.
+            std::thread([folderPath, newRoot]() {
+                const size_t detected = DriveInfo::GetOptimalIoThreadCount(folderPath);
+                std::lock_guard<std::mutex> lk(g_driveCacheMutex);
+                g_driveThreadCache[newRoot] = detected;
+                g_driveDetectInFlight.erase(newRoot);
+            }).detach();
+        }
     }
-    size_t optimal = it->second;
-
     if (!g_ioWorker.IsStarted()) {
         g_ioWorker.Start(optimal);
         g_lastVolumeRoot = newRoot;
         return;
     }
 
-    if (newRoot == g_lastVolumeRoot) return; // same volume, nothing to do
+    // Same volume AND a real answer already in hand — nothing can have changed.
+    //
+    // The `known` half matters: while detection is still in flight, `optimal` is
+    // the default rather than the truth, so returning here would mean the answer
+    // was never applied until the user happened to switch volumes and come back.
+    // Falling through instead lets the check below adopt it on the next open,
+    // which is what makes probing in the background acceptable at all.
+    if (newRoot == g_lastVolumeRoot && known) return;
 
     if (optimal != static_cast<size_t>(g_ioWorker.getThreadCount())) {
         g_ioWorker.ClearQueue();

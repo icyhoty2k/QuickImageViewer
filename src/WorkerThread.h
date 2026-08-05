@@ -21,6 +21,27 @@
 #include <vector>
 
 
+// A CEILING ON QUEUED WORK, not a throttle. Shared by both pools below.
+//
+// Neither queue was bounded, so rapid navigation, a folder change or a large
+// thumbnail sweep could accumulate std::function objects without limit.
+// Cancellation happens at a higher level and stops the WORK, but the queued
+// closures stay allocated until something pops them.
+//
+// Set far above any legitimate burst — a visible thumbnail range is tens of
+// items, not thousands — so it never fires in normal use. It exists to bound the
+// pathological case, and 16k closures is a couple of megabytes.
+//
+// WHY REJECTION IS REPORTED RATHER THAN THE TASK SILENTLY DROPPED. Callers mark
+// work as in-flight BEFORE pushing (RendererD2D's m_bitmapInFlight, and the
+// per-panel inFlight sets) and clear that mark INSIDE the task. A dropped task
+// would leave the mark set forever, so the image or thumbnail it guards could
+// never be requested again — a permanently blank tile, which is worse than the
+// unbounded queue this replaces. PushTask therefore returns bool, and any caller
+// holding such bookkeeping must undo it when the answer is false.
+inline constexpr size_t QIV_WORKER_MAX_QUEUED = 16384;
+
+
 class DecoderThreadPool {
     public:
         DecoderThreadPool() : m_running(true) {}
@@ -36,13 +57,18 @@ class DecoderThreadPool {
             }
         }
 
-        void PushTask(std::function<void(IWICImagingFactory2 *)> task) {
+        // Returns FALSE when the task was not queued — pool stopped, or the queue
+        // is at capacity. See MAX_QUEUED in DecoderThreadPool for why the ceiling
+        // exists and why rejection is reported instead of dropping silently.
+        bool PushTask(std::function<void(IWICImagingFactory2 *)> task) {
             {
                 std::lock_guard<std::mutex> lock(m_queueMutex);
-                if (!m_running) return;
+                if (!m_running) return false;
+                if (m_queue.size() >= QIV_WORKER_MAX_QUEUED) return false;
                 m_queue.push(std::move(task));
             }
             m_cv.notify_one();
+            return true;
         }
 
         void ClearQueue() {
@@ -101,6 +127,21 @@ class DecoderThreadPool {
         int getThreadCount() {
             return static_cast<int>(m_threads.size());
         }
+
+        // NO PUBLIC Shutdown() — deliberately.
+        //
+        // One existed briefly, to let a duplicate instance stop this pool before
+        // returning from wWinMain: the GeoNames warm-up queued at startup was
+        // still parsing into a file-scope unordered_map when the CRT destroyed
+        // it, and joining first was the obvious patch.
+        //
+        // The real fix was to stop starting the pool at all in a process that is
+        // about to exit — the single-instance check now runs before anything here
+        // is touched (see AppMain.cpp). With no threads started there is nothing
+        // to shut down, so the method became dead code and was removed rather
+        // than left as an invitation to reintroduce the ordering it papered over.
+        //
+        // The destructor still joins, which is correct for the surviving instance.
 
         size_t PendingTaskCount() {
             std::lock_guard<std::mutex> lock(m_queueMutex);
@@ -209,13 +250,17 @@ class IoThreadPool {
             m_threads.clear();
         }
 
-        void PushTask(std::function<void()> task) {
+        // Returns FALSE when the task was not queued. Callers holding in-flight
+        // bookkeeping MUST undo it on false — see QIV_WORKER_MAX_QUEUED.
+        bool PushTask(std::function<void()> task) {
             {
                 std::lock_guard<std::mutex> lock(m_queueMutex);
                 // Accept tasks even before Start() — they drain once threads are up
+                if (m_queue.size() >= QIV_WORKER_MAX_QUEUED) return false;
                 m_queue.push(std::move(task));
             }
             m_cv.notify_one();
+            return true;
         }
 
         void ClearQueue() {
