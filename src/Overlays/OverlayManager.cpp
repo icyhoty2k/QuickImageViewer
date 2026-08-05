@@ -546,9 +546,14 @@ std::wstring OverlayManager::BuildTopRightText() const {
     if (!Remote::IsRunning()) return zoom;
 
     // Green = encrypted, orange = plaintext loopback. See the constants.
-    const std::wstring dot = Remote::IsEncrypted()
-                                 ? Constants::Messages::OVERLAY_SERVER_DOT_TLS
-                                 : Constants::Messages::OVERLAY_SERVER_DOT_PLAIN;
+    //
+    // The dark phase of a blink replaces the colour but not the width, so the
+    // count and zoom beside it stay put — see OVERLAY_SERVER_DOT_OFF.
+    const std::wstring dot =
+        m_blinkDark ? Constants::Messages::OVERLAY_SERVER_DOT_OFF
+                    : (Remote::IsEncrypted()
+                           ? Constants::Messages::OVERLAY_SERVER_DOT_TLS
+                           : Constants::Messages::OVERLAY_SERVER_DOT_PLAIN);
 
     // COMPACT shows the dot alone — the slot's compact state means "the least
     // that still carries the information", and for a server that is "it is up,
@@ -559,11 +564,52 @@ std::wstring OverlayManager::BuildTopRightText() const {
            std::to_wstring(Remote::Config().maxConnections) + L"  " + zoom;
 }
 
-void OverlayManager::UpdateRemoteStatus() {
+void OverlayManager::UpdateRemoteStatus(HWND hWnd) {
+    // ONLY A CHANGE IN THE COUNT BLINKS, not every call. This is also reached
+    // when the listener starts or stops, and a viewer that blinked at its own
+    // startup would do it on every launch with autostart on.
+    //
+    // The first observation only records the baseline: going from "not yet
+    // known" to a number is not somebody arriving.
+    const int now = Remote::IsRunning() ? Remote::ActiveConnections() : -1;
+    if (m_lastClientCount >= 0 && now >= 0 && now != m_lastClientCount && hWnd) {
+        m_blinkPhasesLeft = Constants::Messages::OVERLAY_SERVER_BLINK_PHASES;
+        m_blinkDark       = true;   // start dark so the first change is visible
+        KillTimer(hWnd, TIMER_SERVER_BLINK);
+        SetTimer(hWnd, TIMER_SERVER_BLINK,
+                 static_cast<UINT>(Constants::Messages::OVERLAY_SERVER_BLINK_MS), nullptr);
+    }
+    m_lastClientCount = now;
+
     slotTopRight.UpdateText(BuildTopRightText());
     // Summary mode folds TOP_RIGHT into TOP_LEFT's second line.
     if (app.overlayLayoutMode == 2)
         RebuildTopLeft();
+}
+
+void OverlayManager::OnServerBlinkTimer(HWND hWnd) {
+    if (m_blinkPhasesLeft > 0) --m_blinkPhasesLeft;
+
+    if (m_blinkPhasesLeft <= 0) {
+        // ALWAYS SETTLE LIT. Whatever happened to the count, the indicator must
+        // end showing the true colour rather than the dark phase — a dot left
+        // black would read as "the server stopped".
+        m_blinkPhasesLeft = 0;
+        m_blinkDark       = false;
+        KillTimer(hWnd, TIMER_SERVER_BLINK);
+    } else {
+        m_blinkDark = !m_blinkDark;
+    }
+
+    slotTopRight.UpdateText(BuildTopRightText());
+    if (app.overlayLayoutMode == 2)
+        RebuildTopLeft();
+
+    // ONLY THE OVERLAY. This does not touch the image, the playlist or the
+    // renderer's state — it swaps one glyph in a text slot and asks for a
+    // repaint, which is the same thing a zoom change already does several times
+    // a second while the wheel is turning.
+    InvalidateRect(hWnd, nullptr, FALSE);
 }
 
 void OverlayManager::UpdateInfo(int index, int total, const std::wstring &filename) {

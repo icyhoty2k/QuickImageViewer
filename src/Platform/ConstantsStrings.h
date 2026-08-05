@@ -428,6 +428,22 @@ namespace Constants::Messages {
     constexpr const wchar_t *OVERLAY_SERVER_DOT_TLS   = L"\U0001F7E2";
     constexpr const wchar_t *OVERLAY_SERVER_DOT_PLAIN = L"\U0001F7E0";
 
+    // The dark phase of the connect / disconnect blink.
+    //
+    // A GLYPH RATHER THAN AN EMPTY STRING, and the same emoji class as the two
+    // above so it measures the same width. Blanking it would make the count and
+    // the zoom beside it jump left and back three times, which reads as the
+    // overlay glitching rather than as the dot blinking.
+    constexpr const wchar_t *OVERLAY_SERVER_DOT_OFF   = L"\U000026AB";
+
+    // Connect / disconnect blink: how long each phase lasts, and how many phases.
+    //
+    // SIX phases is three full blinks — off, on, off, on, off, on — ending ON,
+    // so the indicator always settles into its true colour no matter where the
+    // count landed. An odd number would leave it dark until the next repaint.
+    constexpr int  OVERLAY_SERVER_BLINK_MS     = 180;
+    constexpr int  OVERLAY_SERVER_BLINK_PHASES = 6;
+
     // F9 status line. The wording matches the overlay dot's two colours, so the
     // panel and the indicator cannot appear to disagree.
     constexpr const wchar_t *REMOTE_STATUS_TLS   = L"· TLS for remote clients";

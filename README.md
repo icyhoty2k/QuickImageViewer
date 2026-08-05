@@ -733,7 +733,7 @@ cannot come back "unknown command".
 
 ```
 $ nc 127.0.0.1 7777
-OK qIV 3.0.0.0 remote v6 [Monitor2]
+OK qIV 2.190.0.235 remote v6 [Monitor2]
 OK
 help
 qIV remote protocol v6

@@ -113,7 +113,14 @@ class OverlayManager {
         // Repaints TOP_RIGHT's server indicator. Called from the
         // WM_QIV_REMOTE_CLIENTS handler — the listener starting, stopping, or
         // gaining/losing a client.
-        void UpdateRemoteStatus();
+        //
+        // Takes the window because a CHANGE in the client count starts the blink
+        // timer, and only a real arrival or departure does: the listener merely
+        // starting is not somebody connecting.
+        void UpdateRemoteStatus(HWND hWnd);
+
+        // One blink phase. Called from WM_TIMER for TIMER_SERVER_BLINK.
+        void OnServerBlinkTimer(HWND hWnd);
 
         // BOT_RIGHT  — pixel dimensions + file size in bytes
         void UpdateDims(int imgW, int imgH, int64_t fileSizeBytes);
@@ -258,6 +265,28 @@ class OverlayManager {
         static constexpr UINT_PTR TIMER_CENTER_MSG = 1002;
         bool m_centerMsgActive = false; // true while the auto-hide timer is running
         MsgSeverity m_centerMsgSeverity = MsgSeverity::Normal; // colour of the live message
+
+        // ── Server-dot blink ────────────────────────────────────────────────
+        // The indicator blinks three times when a client ARRIVES or LEAVES, so
+        // a change is noticeable on a screen nobody is staring at. The count
+        // beside it already says what happened; this is what makes anyone look.
+        //
+        // 1010 — 1002 is the centre message, 1003-1006 the slideshow, 1008-1009
+        // the directory watchers. See Constants.h.
+        static constexpr UINT_PTR TIMER_SERVER_BLINK = 1010;
+
+        // Phases remaining, counting down to 0 = not blinking. Even values are
+        // the dark phase, so the sequence always ends lit — see
+        // OVERLAY_SERVER_BLINK_PHASES.
+        int  m_blinkPhasesLeft = 0;
+        bool m_blinkDark       = false;
+
+        // What the client count was last time the indicator was rebuilt.
+        //
+        // -1 MEANS "NOT YET KNOWN", and that is what stops the viewer blinking
+        // at itself on startup: the listener coming up is not somebody arriving,
+        // and a blink there would fire on every launch with autostart on.
+        int  m_lastClientCount = -1;
 
         // ── Helpers ──────────────────────────────────────────────────────────
         // Rebuilds both slot bitmasks from m_slots into AppState and saves them.
