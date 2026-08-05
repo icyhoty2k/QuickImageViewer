@@ -315,33 +315,17 @@ namespace {
         return {};
     }
 
-    std::wstring DoSendDisplayedImage() {
-        // What is ON SCREEN, which is not always a playlist entry: if this viewer
-        // is itself showing a streamed or interjected picture, that is the honest
-        // answer to "what are you displaying".
-        std::wstring path;
-        if (app.interject.showing && !app.interject.path.empty())
-            path = app.interject.path;
-        else if (app.currentIndex >= 0 &&
-                 app.currentIndex < static_cast<int>(app.playlist.size()))
-            path = app.playlist[app.currentIndex];
-
-        // The OK line's shape is part of the protocol — "<bytes>;<name>" after the
-        // '=' — because a client reads the size to check what it received and the
-        // name to know what it is decoding. Spelled the same in both branches.
-        if (path.empty())
-            return MakeOk(L"SendDisplayedImage=0;");  // showing nothing: an answer
-
-        std::vector<unsigned char> bytes;
-        std::wstring err;
-        if (!Xfer::ReadImageFile(path, bytes, err))
-            return MakeErr(RT::ERR_BAD_PAYLOAD, err);
-
-        const std::wstring name = fs::path(path).filename().wstring();
-        return Xfer::BuildDataReplyBody(bytes) +
-               MakeOk(L"SendDisplayedImage=" + std::to_wstring(bytes.size()) +
-                      L";" + name);
-    }
+    // DoSendDisplayedImage USED TO LIVE HERE and is deliberately gone.
+    //
+    // It read the whole displayed file and base64-encoded it on the UI thread,
+    // which is where this dispatch runs. That body now lives in ClientThread
+    // (RemoteServer.cpp), reached through ORIGINAL_PATH_MARKER, so the bytes are
+    // produced on the socket thread instead. The path selection it did by hand
+    // is what DisplayedPath() above already returns, identically.
+    //
+    // Left as a note rather than deleted silently: a future reader looking for
+    // the handler should find out where it went, not conclude the command is
+    // unimplemented.
 
     // --- find <query> -------------------------------------------------------
     // Mirrors FindWnd's matching rules: a query containing * or ? is a wildcard
@@ -796,8 +780,12 @@ bool ExecutePayload(HWND hWnd, Command cmd, const std::wstring &payload,
         case Command::StreamImageShow:
             replyOut = DoStreamShow(hWnd);
             return true;
+        // TWO-STAGE, exactly like SendDisplayedPreview below — and for a stronger
+        // reason, because the ORIGINAL file is larger than any preview built from
+        // it. Reading it and base64-encoding it here would hold the UI thread for
+        // as long as that takes, which on a large photo is long enough to see.
         case Command::SendDisplayedImage:
-            replyOut = DoSendDisplayedImage();
+            replyOut = std::wstring(ORIGINAL_PATH_MARKER) + DisplayedPath();
             return true;
 
         // TWO-STAGE, and this is only the first half.

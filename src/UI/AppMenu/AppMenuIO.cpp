@@ -310,6 +310,30 @@ void ImportSettings(HWND hWnd) {
             Persistence::Registry::SaveSetting(Constants::Registry::OVERLAY_FONT_FAMILY,
                 static_cast<DWORD>(app.overlayFontFamily));
         }
+        // BOTH OF THESE WERE MISSING. ForEachSetting has emitted them for a
+        // while, so they were written to every exported file and then silently
+        // dropped on the way back in — an import that looked like it worked and
+        // quietly reverted two settings to whatever the machine already had.
+        //
+        // The clamps deliberately match RegistryManager::LoadAllSettings. Import
+        // writes straight to the registry, so a bound that is looser here would
+        // persist a value the loader then has to fix on every launch.
+        if (wcscmp(key, Constants::Registry::INPUTBOX_CARET_STYLE) == 0) {
+            app.caretStyle = std::max(0, std::min(1, val));
+            Persistence::Registry::SaveSetting(Constants::Registry::INPUTBOX_CARET_STYLE,
+                static_cast<DWORD>(app.caretStyle));
+        }
+        // Stored as an integer percent, not as the float it becomes — the file
+        // holds what toZoomInt produced, so it is clamped in that same integer
+        // domain before being converted back.
+        if (wcscmp(key, Constants::Registry::ZOOM_CLICK_MULT) == 0) {
+            const int raw = std::max(Converters::toZoomInt(Constants::ZOOM_CLICK_MIN),
+                            std::min(Converters::toZoomInt(Constants::ZOOM_CLICK_MAX), val));
+            app.zoomClickMultiplier = Converters::toZoomFloat(raw);
+            Persistence::Registry::SaveSetting(Constants::Registry::ZOOM_CLICK_MULT,
+                static_cast<DWORD>(raw));
+        }
+
         if (wcscmp(key, Constants::Registry::OVERLAY_LAYOUT_MODE) == 0) {
             app.overlayLayoutMode = std::max(0, std::min(
                 Constants::Overlay::LAYOUT_MODE_COUNT - 1, val));

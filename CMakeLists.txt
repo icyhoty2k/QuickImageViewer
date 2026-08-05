@@ -140,6 +140,7 @@ set(SOURCES
         src/GeoNames.cpp
         src/UI/ThemedDialog.cpp
         src/UI/ThemedTooltip.cpp
+        src/Platform/CrashHandler.cpp
         libs/lib/tinyexr/include/miniz.c
         src/Common/Converters.cpp
 )
@@ -189,6 +190,24 @@ target_compile_definitions(QuickImageViewer PRIVATE
         $<$<CONFIG:Release>:NDEBUG>
         OPJ_STATIC
 )
+
+# DO NOT add MINIZ_NO_STDIO here. It was tried in order to compile miniz's
+# file-based zip functions out of the build — qIV calls only the in-memory ones,
+# so on paper nothing was lost — and settings IMPORT crashed at runtime rather
+# than failing to build.
+#
+# The likely mechanism is the one that makes this flag dangerous at all: it
+# changes what miniz.h declares, miniz.h is included by three C++ translation
+# units as well as by miniz.c, and any object file left over from a previous
+# configuration then disagrees with the rest about the library it was compiled
+# against. A mismatch of that kind does not produce a compiler error; it
+# produces a crash somewhere else entirely.
+#
+# If it is ever revisited, it must be from a CLEAN build directory, and settings
+# export and import must both be exercised before it is trusted. The CodeQL
+# finding it was meant to silence — a time-of-check time-of-use race in
+# mz_zip_add_mem_to_archive_file_in_place_v2 — is not reachable from qIV, so
+# there is nothing here worth a second crash.
 
 # 2. Compile Options
 #
@@ -310,3 +329,40 @@ add_custom_command(
         COMMAND ${CMAKE_COMMAND} -E echo "--------------------------------------------------------"
         VERBATIM
 )
+
+# =============================================================================
+# Unit tests — a SECOND, tiny target. `ctest` in the build directory runs it.
+#
+# Separate executable rather than a flag on the main one: the viewer is a WIN32
+# subsystem app with a wWinMain and a global AppState, and a test binary needs
+# neither. Linking only the translation units under test also keeps the suite
+# honest — if a test needs half the program to link, that is the design telling
+# you the thing under test is not a unit.
+#
+# ON by default, because a suite nobody runs catches nothing. It compiles two
+# small files and adds well under a second to a build. Turn it off with
+# -DQIV_BUILD_TESTS=OFF if it is ever in the way.
+# =============================================================================
+option(QIV_BUILD_TESTS "Build the qIV unit tests" ON)
+
+if (QIV_BUILD_TESTS)
+    enable_testing()
+
+    add_executable(qivTests
+            test/qivTests.cpp
+            src/Common/Converters.cpp   # the only .cpp the tests need; the rest are header-only
+    )
+
+    target_include_directories(qivTests PRIVATE
+            ${CMAKE_CURRENT_SOURCE_DIR}/src
+            ${CMAKE_CURRENT_SOURCE_DIR}/src/Common
+    )
+
+    # NO precompiled header, and no /FI pch.h. The main target force-includes
+    # pch.h, which pulls in the whole Win32 and Direct2D surface; the tests need
+    # none of it and would then fail to build for reasons that have nothing to do
+    # with what they are testing.
+    target_compile_definitions(qivTests PRIVATE NOMINMAX UNICODE _UNICODE)
+
+    add_test(NAME qivTests COMMAND qivTests)
+endif ()

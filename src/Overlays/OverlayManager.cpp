@@ -116,10 +116,17 @@ void OverlayManager::UpdateTextFormat() {
     const wchar_t *family =
             Constants::Overlay::OVERLAY_FONT_FAMILIES[app.overlayFontFamily];
 
-    if (m_pTextFormat) {
-        m_pTextFormat->Release();
-        m_pTextFormat = nullptr;
-    }
+    // Reset(), NOT a manual Release() followed by clearing the pointer.
+    //
+    // m_pTextFormat is a ComPtr and already owns its reference, so releasing by
+    // hand dropped the count to zero and destroyed the object — and the
+    // assignment on the next line then released the freed one a second time.
+    // The crash landed in ComPtr::InternalRelease, several frames from anything
+    // that looked related, which is why this survived so long: the only caller
+    // that reaches it twice in one session is a settings import.
+    //
+    // Matches how m_fmtCenter5 is cleared a few lines below.
+    m_pTextFormat.Reset();
 
     HRESULT hr = m_pDWriteFactory->CreateTextFormat(
             family, nullptr,
