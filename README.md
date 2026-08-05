@@ -1,8 +1,37 @@
-# QuickImageViewer (qIV)
+<div align="center">
 
-**A fast, GPU-accelerated image viewer for Windows.**  
-Built on Direct2D, WIC, and native Win32 APIs. Single EXE, no installer(portable), no telemetry, sub-10 MB .
+# QuickImageViewer&nbsp;<sub>(qIV)</sub>
 
+**A fast, GPU-accelerated image viewer for Windows.**
+
+Direct2D, WIC and native Win32. One portable EXE under 10 MB — no installer, no
+telemetry, no background service.
+
+[![Latest release](https://img.shields.io/github/v/release/icyhoty2k/QuickImageViewer?style=for-the-badge&logo=github&label=release&color=2ea44f)](https://github.com/icyhoty2k/QuickImageViewer/releases/latest)
+[![Downloads](https://img.shields.io/github/downloads/icyhoty2k/QuickImageViewer/total?style=for-the-badge&color=1f6feb)](https://github.com/icyhoty2k/QuickImageViewer/releases)
+[![Windows 10 | 11](https://img.shields.io/badge/Windows-10%20%7C%2011-0078D6?style=for-the-badge&logo=windows&logoColor=white)](#download)
+[![Licence AGPLv3](https://img.shields.io/badge/licence-AGPLv3-d29922?style=for-the-badge)](LICENSE)
+[![Stars](https://img.shields.io/github/stars/icyhoty2k/QuickImageViewer?style=for-the-badge&color=8957e5)](https://github.com/icyhoty2k/QuickImageViewer/stargazers)
+
+<br>
+
+[![Download qIV](https://img.shields.io/badge/%E2%AC%87%20Download%20qIV-latest%20release-2ea44f?style=for-the-badge&labelColor=1a7f37)](https://github.com/icyhoty2k/QuickImageViewer/releases/latest)
+[![Sponsor](https://img.shields.io/badge/%E2%99%A5%20Sponsor-GitHub%20Sponsors-EA4AAA?style=for-the-badge&labelColor=bf3a8c)](https://github.com/sponsors/icyhoty2k)
+[![Ko-fi](https://img.shields.io/badge/%E2%98%95%20Ko--fi-buy%20a%20coffee-FF5E5B?style=for-the-badge&labelColor=c94340)](https://ko-fi.com/ivanhristovyanev)
+
+</div>
+
+---
+
+<details>
+<summary><b>Contents</b> — this README is long; jump straight to what you need</summary>
+
+- [Preview](#preview) · [Download](#download) · [Format Support](#format-support) · [How qIV Compares](#how-qiv-compares)
+- **Features** — [Performance](#performance) · [Navigation](#navigation) · [Sorting](#sorting) · [UI Panels](#ui-panels) · [Offline Reverse Geocoding](#offline-reverse-geocoding) · [Thumbnail Strips](#thumbnail-strips) · [File Management](#file-management-on-thumbnail-strips) · [History Panel](#history-panel) · [Slideshow](#slideshow) · [Color Effects](#color-effects) · [Overlay System](#overlay-system) · [Window & Chrome](#window--chrome) · [Mouse Shortcuts](#mouse-shortcuts)
+- [System Tray](#system-tray) · [Architecture](#architecture) · [Build](#build) · [Reporting a Crash](#reporting-a-crash)
+- [Support the project](#support-the-project) · [License](#license) · [Contributing](#contributing)
+
+</details>
 
 ---
 
@@ -10,16 +39,28 @@ Built on Direct2D, WIC, and native Win32 APIs. Single EXE, no installer(portable
 
 | | |
 |:---:|:---:|
-| ![Main interface with thumbnail strips and info overlays](docs/screenshots/2026-07-15_045800.png)<br>**Main interface** — thumbnail strips and info overlays | ![Built-in help window — full shortcut reference](docs/screenshots/2026-07-15_045053.png)<br>**Help window** (F1) — full shortcut reference |
-| ![Folder History panel with favorites](docs/screenshots/2026-07-15_045155.png)<br>**Folder History** panel with favorites | ![EXIF / Image Info panel with offline GPS geocoding](docs/screenshots/2026-07-15_045342.png)<br>**EXIF / Image Info** panel — offline GPS geocoding |
-| ![Dual thumbnail strips — VRAM cache and current directory](docs/screenshots/2026-07-15_045130.png)<br>**Dual thumbnail strips** — VRAM cache (top) and current directory (bottom) | ![Four floating directory strips around the viewer](docs/screenshots/2026-07-15_045219.png)<br>**Four floating directory strips** around the viewer + History panel |
-| ![Browsing a 4K wallpaper folder with the directory strip](docs/screenshots/2026-07-15_045311.png)<br>**Directory strip** — browsing a 4K wallpaper folder | ![Statistics panel — codec, cache and playlist info](docs/screenshots/2026-07-15_045440.png)<br>**Statistics panel** — codec, cache and playlist info |
-| ![Jump-to-image dialog](docs/screenshots/2026-07-15_045359.png)<br>**Jump-to** dialog — go straight to any image number | ![Find dialog — filename search with wildcards](docs/screenshots/2026-07-15_045413.png)<br>**Find** dialog — filename search with `*` and `?` wildcards |
+| ![Main interface with thumbnail strips and info overlays](docs/screenshots/less300kb/10.webp)<br>**Main interface** — thumbnail strips and info overlays | ![Built-in help window — full shortcut reference](docs/screenshots/less300kb/1.webp)<br>**Help window** (F1) — full shortcut reference |
+| ![Folder History panel with favorites](docs/screenshots/less300kb/3.webp)<br>**Folder History** panel with favorites | ![EXIF / Image Info panel with offline GPS geocoding](docs/screenshots/less300kb/6.webp)<br>**EXIF / Image Info** panel — offline GPS geocoding |
+| ![Dual thumbnail strips — VRAM cache and current directory](docs/screenshots/less300kb/2.webp)<br>**Dual thumbnail strips** — VRAM cache (top) and current directory (bottom) | ![Four floating directory strips around the viewer](docs/screenshots/less300kb/4.webp)<br>**Four floating directory strips** around the viewer + History panel |
+| ![Browsing a 4K wallpaper folder with the directory strip](docs/screenshots/less300kb/5.webp)<br>**Directory strip** — browsing a 4K wallpaper folder | ![Statistics panel — codec, cache and playlist info](docs/screenshots/less300kb/9.webp)<br>**Statistics panel** — codec, cache and playlist info |
+| ![Jump-to-image dialog](docs/screenshots/less300kb/7.webp)<br>**Jump-to** dialog — go straight to any image number | ![Find dialog — filename search with wildcards](docs/screenshots/less300kb/8.webp)<br>**Find** dialog — filename search with `*` and `?` wildcards |
+
+<sub>Shown at 70% scale in WebP. The full-resolution PNGs are in
+[`docs/screenshots/`](docs/screenshots).</sub>
+
 ---
 
 ## Download
 
-**[→ Latest Release](https://github.com/icyhoty2k/QuickImageViewer/releases/latest)**
+<div align="center">
+
+[![Download the latest release](https://img.shields.io/badge/%E2%AC%87%20Download-QuickImageViewer.exe-2ea44f?style=for-the-badge&labelColor=1a7f37)](https://github.com/icyhoty2k/QuickImageViewer/releases/latest)
+
+</div>
+
+One executable. Unblock it if SmartScreen asks, put it anywhere, run it — settings live
+in the registry (or an `.ini` beside the EXE with `-config`), and nothing else is
+written to your machine. To remove qIV, delete the file.
 
 ---
 
@@ -60,7 +101,7 @@ Built on Direct2D, WIC, and native Win32 APIs. Single EXE, no installer(portable
 | Offline GPS geocoding | ✅ embedded, zero network | ❌ | ❌ |
 | Floating thumbnail panels | ✅ up to 6 simultaneous | ❌ | ❌ |
 | Per-monitor DPI V2 | ✅ | ✅ | ⚠️ partial |
-| Portable — no installer | ✅  MB single EXE | ❌ UWP / Store | ✅ |
+| Portable — no installer | ✅ 9 MB single EXE | ❌ UWP / Store | ✅ |
 | No telemetry / tracking | ✅ zero | ❌ Microsoft telemetry | ✅ |
 | No ads | ✅ | ❌ promoted content | ✅ |
 | No background services | ✅ process exits cleanly | ❌ always-on UWP runtime | ✅ |
@@ -103,7 +144,7 @@ Built on Direct2D, WIC, and native Win32 APIs. Single EXE, no installer(portable
 | `Ctrl+Alt+Shift+0` | By name (natural / Explorer order) — press again to reverse |
 | `Ctrl+Alt+Shift+9` | By date modified — press again to flip newest ↔ oldest |
 | `Ctrl+Alt+Shift+8` | By file size — press again to flip largest ↔ smallest |
-| `Ctrl+Alt+Shift+` | By extension — press again to reverse |
+| `Ctrl+Alt+Shift+7` | By extension — press again to reverse |
 | `Ctrl+Alt+Shift+6` | By physical disk order (fastest for HDDs) |
 
 ### UI Panels
@@ -123,9 +164,9 @@ GPS coordinates in EXIF are resolved to full location data with **zero network c
 
 | Data | Source | Entries | Shows |
 |:---|:---|:---|:---|
-| Cities | GeoNames cities1000 | 10,38 | City name, timezone |
+| Cities | GeoNames cities1000 | 170,387 | City name, timezone |
 | Admin1 | admin1CodesASCII | 3,865 | State / Province |
-| Admin2 | admin2Codes | 4,549 | District / County |
+| Admin2 | admin2Codes | 47,549 | District / County |
 | Country | countryInfo | 252 | Country, Capital, Continent, Currency, Phone prefix |
 
 Example output in the EXIF panel for a photo taken in Paris:
@@ -213,7 +254,7 @@ All effects are non-destructive and GPU-accelerated via the Direct2D effect grap
 ```
 [Ctrl+1] Top Left    [Ctrl+2] Top Center    [Ctrl+3] Top Right
 [Ctrl+4] Mid Left    [Ctrl+5] Center        [Ctrl+6] Mid Right
-[Ctrl+] Bot Left    [Ctrl+8] Bot Center    [Ctrl+9] Bot Right
+[Ctrl+7] Bot Left    [Ctrl+8] Bot Center    [Ctrl+9] Bot Right
 ```
 
 | Shortcut | Action |
@@ -671,7 +712,7 @@ sensitive, say so in the issue instead of attaching the file.
 
 ## License
 
-Licensed under the **[GNU Affero General Public License v3.0 (AGPLv3)](docs/LICENSE)**.
+Licensed under the **[GNU Affero General Public License v3.0 (AGPLv3)](LICENSE)**.
 
 Copyright © 2026 Ivan Hristov Yanev. You are free to use, study, modify and share it.
 If you distribute a modified version — or run one as a network-accessible service —
@@ -686,18 +727,55 @@ a separate commercial licence is available.
 
 Contact **icyhoty2k@gmail.com**.
 
-### Supporting the project
+---
 
-qIV is written and maintained by one person, in the open, with no telemetry and
-nothing to buy. If it is useful to you, sponsorship keeps it being worked on:
+## Contributing
 
-**[GitHub Sponsors](https://github.com/sponsors/icyhoty2k)** — monthly or one-off,
-and GitHub covers the processing fees, so it delivers the most.
+Contributions are welcome under the terms in [CONTRIBUTING.md](CONTRIBUTING.md),
+which asks contributors for a licence grant so that the commercial option above
+remains possible. Everything contributed stays AGPLv3 for the public.
 
-**[Ko-fi](https://ko-fi.com/ivanhristovyanev)** — if you would rather not need a
-GitHub account.
+---
 
-#### Sponsors
+## Support the project
+
+<div align="center">
+
+**qIV is one person's work, in the open — no ads, no telemetry, nothing to buy.**
+
+There is no paid tier and no feature behind a wall. Sponsorship is simply what buys
+the time to keep building it.
+
+[![Sponsor on GitHub](https://img.shields.io/badge/%E2%99%A5%20Sponsor%20on%20GitHub-monthly%20or%20one--off-EA4AAA?style=for-the-badge&labelColor=bf3a8c)](https://github.com/sponsors/icyhoty2k)
+[![Buy me a coffee on Ko-fi](https://img.shields.io/badge/%E2%98%95%20Ko--fi-no%20account%20needed-FF5E5B?style=for-the-badge&labelColor=c94340)](https://ko-fi.com/ivanhristovyanev)
+
+<table>
+<tr>
+<td width="50%" valign="top">
+
+**[GitHub Sponsors →](https://github.com/sponsors/icyhoty2k)**
+
+Monthly or one-off. GitHub covers the processing fees, so nearly the whole
+amount arrives — this is the route that delivers most.
+
+</td>
+<td width="50%" valign="top">
+
+**[Ko-fi →](https://ko-fi.com/ivanhristovyanev)**
+
+No GitHub account required. Ordinary card or PayPal checkout, which does carry
+the usual processing fees.
+
+</td>
+</tr>
+</table>
+
+Not in a position to sponsor? A ⭐, a bug report with a crash dump attached, or
+telling someone about qIV all help more than they look like they do.
+
+</div>
+
+### Sponsors
 
 <!--
     Sponsors at $25/month, $100/month and $50 one-time are entitled to a listing
@@ -706,10 +784,8 @@ GitHub account.
     choice.
 -->
 
-No sponsors yet.
+<div align="center">
 
-### Contributing
+*No sponsors yet — this space is reserved for the first.*
 
-Contributions are welcome under the terms in [CONTRIBUTING.md](CONTRIBUTING.md),
-which asks contributors for a licence grant so that the commercial option above
-remains possible. Everything contributed stays AGPLv3 for the public.
+</div>
