@@ -1,3 +1,11 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// Copyright (C) 2026 Ivan Hristov Yanev
+//
+// This file is part of QuickImageViewer. It is free software: you may
+// redistribute and modify it under the terms of the GNU Affero General Public
+// License version 3 or later, as published by the Free Software Foundation.
+// It is distributed WITHOUT ANY WARRANTY. See the LICENSE file for details.
+
 #pragma once
 #include <windows.h>
 #include <string>
@@ -161,7 +169,7 @@ class RemoteCmdWnd : public FloatingPanelWnd {
         // One scrollable region. Two of them here (commands, replies) and the
         // arithmetic is identical, so it lives in one place rather than twice —
         // the drawn bar, the clamp, and the drag all read the same fields.
-        // ScrollView moved to UI/CustomControls/ScrollView.h when Server Clients
+        // ScrollView moved to UI/CustomControls/ScrollView.h when My Clients
         // needed the same thing — see the note in that header. Unqualified here
         // because this class is in namespace UI.
         using ScrollView = UI::ScrollView;

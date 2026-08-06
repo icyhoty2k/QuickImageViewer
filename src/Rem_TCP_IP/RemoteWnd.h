@@ -1,3 +1,11 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// Copyright (C) 2026 Ivan Hristov Yanev
+//
+// This file is part of QuickImageViewer. It is free software: you may
+// redistribute and modify it under the terms of the GNU Affero General Public
+// License version 3 or later, as published by the Free Software Foundation.
+// It is distributed WITHOUT ANY WARRANTY. See the LICENSE file for details.
+
 #pragma once
 #include <windows.h>
 #include <string>
@@ -28,7 +36,7 @@
 // The division is: F9 is what others connect TO, F10 is what this connects to.
 //
 // WHO is connected right now — and kicking, timed-kicking or banning them —
-// lives in Server Clients (Ctrl+F9, RemoteClientsWnd.h). It was briefly here and
+// lives in My Clients (Ctrl+F9, RemoteClientsWnd.h). It was briefly here and
 // did not belong: this panel is a FORM, opened to change values and save them,
 // and a list that moves while you are typing in the field above it fights that.
 //

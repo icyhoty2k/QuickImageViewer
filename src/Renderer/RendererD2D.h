@@ -1,3 +1,11 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// Copyright (C) 2026 Ivan Hristov Yanev
+//
+// This file is part of QuickImageViewer. It is free software: you may
+// redistribute and modify it under the terms of the GNU Affero General Public
+// License version 3 or later, as published by the Free Software Foundation.
+// It is distributed WITHOUT ANY WARRANTY. See the LICENSE file for details.
+
 #pragma once
 
 #include "IRenderer.h"
@@ -152,12 +160,62 @@ class RendererD2D final : public IImageRenderer {
         // Per-panel dir-thumbnail cache.
         // Each DirWnd / SpawnedDirWnd owns its own entry keyed by its HWND,
         // so clearing one panel's cache never evicts thumbnails owned by another.
+        //
+        // BOUNDED BY BYTES, not by count — see EvictPanelThumbs.
+        //
+        // This cache had no eviction at all: thumbnails were inserted and only
+        // ever dropped when the whole panel changed folder. Scrolling one panel
+        // through a large folder therefore grew without limit — at 200% DPI a
+        // thumbnail is 256x160x4, about 160 KB, so a 10,000-image folder is
+        // roughly 1.6 GB of GPU memory, times up to five panels.
+        //
+        // app.dirThumbCacheMB existed the whole time — persisted, in the tray
+        // menu, adjustable from 100 to 64000 MB, shown in the Stats panel — and
+        // was read by nothing. Lowering it changed nothing. It is the budget now.
+        //
+        // Byte-exact rather than estimated: the size is known at creation from
+        // the dimensions the thumbnail was actually made at, so DPI changes and
+        // the odd non-standard thumbnail are accounted correctly.
         struct PanelThumbEntry {
             std::unordered_map<std::wstring, Microsoft::WRL::ComPtr<ID2D1Bitmap1>> bitmaps;
             std::unordered_set<std::wstring> inFlight;
+
+            // Position of each of this panel's thumbnails in the GLOBAL lru list
+            // below, plus what each one costs. The ordering itself is not kept
+            // here — see m_thumbLru for why.
+            std::unordered_map<std::wstring, std::list<std::pair<HWND, std::wstring>>::iterator> lruPos;
+            std::unordered_map<std::wstring, size_t> bytes;
+            size_t totalBytes = 0; // this panel's share, for reporting
         };
         std::unordered_map<HWND, PanelThumbEntry> m_panelThumbCaches;
         std::mutex m_dirThumbMutex;
+
+        // ONE LRU ACROSS ALL PANELS, most-recently-drawn at the FRONT.
+        //
+        // The budget is a single number the user sets, so it has to be enforced
+        // against a single total. The obvious alternative — give each panel
+        // budget/N — is wrong twice over: hiding a panel does not clear its
+        // cache, so an unwatched strip would still reserve its share; and panels
+        // open and close constantly, so every change would evict everyone else
+        // down and then hand the space back, churning for nothing.
+        //
+        // A shared list needs no divisor and no panel count. Thumbnails are
+        // promoted when they are DRAWN, so a panel nobody is looking at simply
+        // stops being touched and drifts to the back, where it is evicted first.
+        // The strips in front of the user keep their thumbnails because they are
+        // the ones being used. That is the behaviour a shared budget should have,
+        // and it falls out of the ordering instead of being computed.
+        std::list<std::pair<HWND, std::wstring>> m_thumbLru;
+        size_t m_thumbTotalBytes = 0;
+
+        // Drops least-recently-used thumbnails until EVERY panel is inside its
+        // share of app.dirThumbCacheMB. The budget is shared between the five
+        // strips, not granted to each — see the definition.
+        // Caller must already hold m_dirThumbMutex.
+        void EnforceThumbBudget();
+
+        // Marks a thumbnail as just-used. Caller must hold m_dirThumbMutex.
+        void TouchPanelThumb(PanelThumbEntry &entry, const std::wstring &path);
 
         // Cache
         struct CachedBitmap {
@@ -197,7 +255,77 @@ class RendererD2D final : public IImageRenderer {
         Microsoft::WRL::ComPtr<ID2D1SolidColorBrush> m_pLinkBrush;            // Constants::Links — clickable path
         Microsoft::WRL::ComPtr<IDWriteTextFormat>     m_pFolderOverlayFormat;  // created lazily, cached forever
         Microsoft::WRL::ComPtr<IDWriteTextLayout>     m_pFolderDeletedLayout;
-        std::wstring                                  m_lastFolderOverlayKey;  // state + path, drives lazy rebuild
+        // What the cached layout was built FROM. Stored as the two parts rather
+        // than as one composite key string: the key used to be rebuilt by
+        // concatenation on every frame purely to compare it, which is a heap
+        // allocation per frame for a value that changes only when the user lands
+        // in a different folder. Two plain comparisons cost nothing.
+        //
+        // The path is the ONLY variable in this placeholder. The format, both
+        // brushes and the link styling are created once and cached forever.
+        // Recomputes app.folderOverlayPathRect — the clickable region of the
+        // second line — from the CURRENT layout geometry.
+        //
+        // Separate from building the layout because the two go stale for
+        // different reasons. The layout depends on the text; the rect also
+        // depends on the window size, and a resize re-flows the cached layout
+        // without rebuilding it. Computed in one place so the two cannot
+        // disagree about where that line ended up.
+        void UpdateFolderOverlayPathRect();
+
+    public:
+        // Did the decoder try this file and give up?
+        //
+        // The worker abandons a file it cannot read with a bare `return` from
+        // any of a dozen places — no bitmap, no message, nothing. That is
+        // correct for a stale request, but for a file that is genuinely
+        // undecodable it left the UI waiting forever for a decode that had
+        // already failed, which is what a .txt renamed to .jpg produced: a
+        // permanently black window.
+        //
+        // Recorded per path so the UI can say so instead. Cleared when the file
+        // is asked for again, since the file on disk may have been replaced.
+        bool DecodeFailed(const std::wstring &path) const override;
+
+    private:
+        void NoteDecodeFailure(const std::wstring &path);
+
+        mutable std::mutex                m_failedMutex;
+        std::unordered_set<std::wstring>  m_failedPaths;
+
+        // Heading and last line for the current state, in one place each, so the
+        // layout text, the character offsets and the hit-testing cannot disagree
+        // about how long line 1 is or what line 3 says.
+        static const wchar_t        *FolderOverlayHeader();
+        static const std::wstring   &FolderOverlayLastLine();
+
+        // The placeholder's three lines, composed once, with the character
+        // ranges of the two clickable spans.
+        //
+        // ONE function so the drawn text and the click targets cannot drift
+        // apart. They are computed from the same offsets in the same pass: any
+        // other arrangement means a change to the wording silently moves the
+        // link somewhere the text no longer is, and nothing reports it because
+        // both halves still look correct on their own.
+        //
+        // The keyboard hints are deliberately outside both ranges — they say
+        // which key does this, they are not a target themselves.
+        struct FolderOverlayText {
+            std::wstring text;
+            UINT32       actionStart = 0, actionLen = 0; // line 2, the F2 prompt
+            UINT32       pathStart   = 0, pathLen   = 0; // line 3, folder or file
+        };
+        static FolderOverlayText BuildFolderOverlayText();
+
+        std::wstring                                  m_lastFolderOverlayPath;   // the LAST LINE it was built from
+        // AppState::FolderOverlayState as an int, deliberately.
+        //
+        // This header is included by half the UI, and AppState.h is one of the
+        // heaviest in the project — naming the enum here would pull it into
+        // every one of those translation units to store four bits of cache key.
+        // -1 is "nothing cached yet"; it matches no enumerator.
+        int                                           m_lastFolderOverlayState   = -1;
+        bool                                          m_lastFolderOverlayValid   = false;
 
         // SVG: active D2D SVG document (legacy path, never set by resvg;
         // resvg-rasterized SVGs go into m_bitmapCache as bitmaps instead)

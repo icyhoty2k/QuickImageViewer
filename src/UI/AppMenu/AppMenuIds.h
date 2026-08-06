@@ -1,3 +1,11 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// Copyright (C) 2026 Ivan Hristov Yanev
+//
+// This file is part of QuickImageViewer. It is free software: you may
+// redistribute and modify it under the terms of the GNU Affero General Public
+// License version 3 or later, as published by the Free Software Foundation.
+// It is distributed WITHOUT ANY WARRANTY. See the LICENSE file for details.
+
 #pragma once
 #include <windows.h>
 #include "Platform/Constants.h"
@@ -59,9 +67,13 @@ namespace UI::AppMenu::Ids {
         ID_DEDICATED_PANEL,       // open the Dedicated panel        (F8)
         ID_REMOTE_PANEL,          // open the Local Server panel     (F9)
         ID_REMOTES_CONSOLE,       // open the Remote Servers console (F10)
-        ID_REMOTES_CONTROL,       // open the Remotes Control panel  (Ctrl+F11)
+        ID_REMOTES_CONTROL,       // open the Mirroring panel       (Ctrl+F11)
         ID_REMOTE_CMD,            // open the Send Command panel     (Ctrl+F10)
         ID_REMOTE_LOG,            // open the RemoteLog panel        (Ctrl+F12)
+        ID_REMOTE_BEACON,         // announce this server on the network, CHECKABLE
+        ID_REMOTE_LOG_FILE,       // write the TCP/IP wire log to logs\, CHECKABLE
+        ID_APP_LOG_FILE,          // write the General app log to logs\, CHECKABLE
+        ID_OPEN_LOG_DIR,          // open logs\ in Explorer
         // RemoteActivation submenu — the two mirroring switches, CHECKABLE.
         // They are the only settings in this app with no visible resting state:
         // F11 and F12 report themselves on an overlay that fades, so the only
@@ -80,7 +92,7 @@ namespace UI::AppMenu::Ids {
         ID_REMOTE_STREAM_OUT,     // Alt+Enter        — bytes out
         ID_REMOTE_STREAM_IN,      // Ctrl+Alt+Enter   — bytes in
 
-        ID_REMOTE_CLIENTS,        // open the Server Clients panel   (Ctrl+F9)
+        ID_REMOTE_CLIENTS,        // open the My Clients panel      (Ctrl+F9)
 
         // Contiguous blocks. Each resolves to its Command by offset, so a block
         // never needs one case per member — see CommandForId.
@@ -181,6 +193,7 @@ namespace UI::AppMenu::Ids {
         SET_KEEP_AWAKE       = 66,
         // Moved off 67, which the overlay "Off" band also claimed.
         SET_LOCK_VIEWPORT    = 18,
+        SET_REMEMBER_WIN_POS = 19,
 
         // "Location = Registry / File". Reports where settings actually live
         // and opens it — regedit at the key, or Explorer with the .ini selected.
@@ -239,6 +252,10 @@ namespace UI::AppMenu::Ids {
                   "the overlay band overlaps a scalar settings id");
     static_assert(SET_LOCK_VIEWPORT < SET_OVERLAY_BASE,
                   "Lock Viewport fell back into the overlay band");
+    static_assert(SET_REMEMBER_WIN_POS < SET_OVERLAY_BASE,
+                  "Remember Window Position fell back into the overlay band");
+    static_assert(SET_REMEMBER_WIN_POS != SET_LOCK_VIEWPORT,
+                  "Remember Window Position reused an occupied settings id");
 
     // The three slot runs must be adjacent and nine wide: the decoder recovers
     // the slot with (id - OFF_BASE) % 9 and the state with (id - OFF_BASE) / 9,

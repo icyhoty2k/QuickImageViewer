@@ -1,3 +1,11 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// Copyright (C) 2026 Ivan Hristov Yanev
+//
+// This file is part of QuickImageViewer. It is free software: you may
+// redistribute and modify it under the terms of the GNU Affero General Public
+// License version 3 or later, as published by the Free Software Foundation.
+// It is distributed WITHOUT ANY WARRANTY. See the LICENSE file for details.
+
 #pragma once
 
 #include "IRenderer.h"
@@ -49,4 +57,23 @@ class RendererGDI final : public IImageRenderer {
         HBITMAP m_backBitmap = nullptr;
         HBITMAP m_backBitmapOld = nullptr;
         HBRUSH m_backgroundBrush = nullptr;
+
+        // The "no image" placeholder, built once and kept.
+        //
+        // It is not a one-off: an empty folder stays empty while the user looks
+        // at it, so this is redrawn on every paint — resize, move, uncover,
+        // panel toggle. Creating a font and composing the string each time is
+        // work repeated for an unchanging result, and CreateFontW is the
+        // expensive half of it.
+        //
+        // The string is keyed on the path it was built from, so it rebuilds when
+        // the user lands somewhere else and not otherwise. Mirrors what the D2D
+        // path already does with its cached DWrite layout.
+        HFONT        m_placeholderFont = nullptr;
+        std::wstring m_placeholderText;
+        std::wstring m_placeholderKey;   // the LAST LINE it was built from
+        // AppState::FolderOverlayState as an int — see RendererD2D.h for why
+        // this header does not name the enum. -1 = nothing cached yet.
+        int          m_placeholderState = -1;
+        bool         m_placeholderKeyValid = false;
 };

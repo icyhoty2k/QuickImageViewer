@@ -1,3 +1,11 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// Copyright (C) 2026 Ivan Hristov Yanev
+//
+// This file is part of QuickImageViewer. It is free software: you may
+// redistribute and modify it under the terms of the GNU Affero General Public
+// License version 3 or later, as published by the Free Software Foundation.
+// It is distributed WITHOUT ANY WARRANTY. See the LICENSE file for details.
+
 #pragma once
 #include <windows.h>
 #include <dwmapi.h>
@@ -389,5 +397,6 @@ namespace ThemeIcons {
     constexpr const wchar_t* ICON_SECTION_BELL       = L"\U0001F514";     // 🔔
     constexpr const wchar_t* ICON_SECTION_DESKTOP    = L"\U0001F5A5\xFE0F";// 🖥️
     constexpr const wchar_t* ICON_SECTION_KEYBOARD   = L"\x2328\xFE0F";   // ⌨️
+    constexpr const wchar_t* ICON_SECTION_ANTENNA    = L"\U0001F4E1";     // 📡
     }
 } 

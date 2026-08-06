@@ -1,0 +1,107 @@
+name: Bug report
+description: Something in the desktop viewer does not work, or works wrongly
+title: "[Bug] "
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for taking the time. The two fields that decide whether a bug gets
+        fixed are **what you did** and **what happened instead** — everything else
+        below is a bonus.
+
+        **If qIV crashed**, there is a `.dmp` file next to `QuickImageViewer.exe`
+        named `QuickImageViewer_crash_<date>_<time>_<pid>.dmp`. Attaching it turns a
+        mystery into a stack trace. It holds open file paths and window titles, and
+        **not** the contents of your images — if a path in it is sensitive, say so
+        here instead of attaching the file.
+
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened
+      description: What did you see? If there was an error message, quote it exactly.
+      placeholder: Clicking a thumbnail in the left strip opened a different image.
+    validations:
+      required: true
+
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      description: The shortest sequence you can find that shows the problem.
+      placeholder: |
+        1. Open a folder with F2
+        2. Press F6 to open the directory strip
+        3. Scroll the strip with the wheel
+        4. Click any thumbnail
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: What you expected instead
+    validations:
+      required: true
+
+  - type: input
+    id: version
+    attributes:
+      label: qIV version
+      description: >
+        Bottom of the tray menu, or the title bar. If you build from source, the
+        commit is just as good.
+      placeholder: "2.180.0.230"
+    validations:
+      required: true
+
+  - type: dropdown
+    id: windows
+    attributes:
+      label: Windows version
+      options:
+        - Windows 11
+        - Windows 10
+        - Windows Server
+        - Other / not sure
+    validations:
+      required: true
+
+  - type: input
+    id: gpu
+    attributes:
+      label: Graphics card
+      description: >
+        Only matters for rendering, colour or thumbnail problems — skip it otherwise.
+      placeholder: "NVIDIA RTX 3060, driver 566.36"
+
+  - type: checkboxes
+    id: area
+    attributes:
+      label: Which part of qIV
+      description: Tick anything involved. Guessing is fine.
+      options:
+        - label: Viewing, zoom, pan or colour effects
+        - label: Thumbnail strips or the directory panels
+        - label: History, Find, Jump-to or another floating panel
+        - label: Slideshow
+        - label: Remote control, mirroring or the Local Server
+        - label: Dedicated screen or kiosk mode
+        - label: Settings, the tray menu, or import/export
+        - label: Crash on startup or on exit
+
+  - type: textarea
+    id: files
+    attributes:
+      label: Image files involved
+      description: >
+        Format, rough size and pixel dimensions if the problem is tied to particular
+        images. A sample file helps more than a description, if you can share one.
+      placeholder: "12 MB JPEG, 8000x6000, straight off a Canon R6"
+
+  - type: textarea
+    id: extra
+    attributes:
+      label: Anything else
+      description: Screenshots, a crash dump, or the fact that it started after an update.

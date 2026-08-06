@@ -1,3 +1,11 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// Copyright (C) 2026 Ivan Hristov Yanev
+//
+// This file is part of QuickImageViewer. It is free software: you may
+// redistribute and modify it under the terms of the GNU Affero General Public
+// License version 3 or later, as published by the Free Software Foundation.
+// It is distributed WITHOUT ANY WARRANTY. See the LICENSE file for details.
+
 #include "MirrorPickerWnd.h"
 #include "RemoteMirror.h"
 #include "RemoteProtocol.h" // FormatEndpoint — brackets IPv6 literals for display
@@ -60,7 +68,7 @@ namespace {
 // =============================================================================
 void MirrorPickerWnd::Init(HINSTANCE hInstance, HWND hParent) {
     const float s = app.dpiScale;
-    InitFloating(hInstance, hParent, L"qIVMirrorPickerWnd", L"Remotes Control",
+    InitFloating(hInstance, hParent, L"qIVMirrorPickerWnd", L"Mirroring",
                  static_cast<int>(PANEL_W * s), static_cast<int>(PANEL_H * s));
     if (GetHwnd()) {
         SetWindowLongPtrW(GetHwnd(), GWL_EXSTYLE,
@@ -420,8 +428,22 @@ LRESULT MirrorPickerWnd::HandlePanelMessage(UINT message, WPARAM wParam, LPARAM 
             SelectObject(bb, m_hFontBold);
             SetTextColor(bb, fg);
             RECT tr{pad, static_cast<int>(6 * s), W - pad, static_cast<int>(26 * s)};
-            DrawTextW(bb, L"Remotes Control — which instances F11 drives, and which drive this one",
-                      -1, &tr,
+            // "and which drive this one" was dropped: that is Ctrl+F9's subject,
+            // and naming it here is what made these two panels read as overlapping
+            // views of one thing when they are opposite ends of two.
+            // COUNTS IN THE TITLE. This list is connected instances only, so its
+            // size IS the connected count — and the ticked number is the one that
+            // decides whether a keystroke goes anywhere at all.
+            int tickedCount = 0;
+            for (const RowView &rv : m_rows)
+                if (rv.mirroring) ++tickedCount;
+
+            const std::wstring title =
+                L"\U0001F4E1 Mirroring — which servers receive what this instance does   ·   " +
+                std::to_wstring(m_rows.size()) + L" connected, " +
+                std::to_wstring(tickedCount) + L" ticked";
+
+            DrawTextW(bb, title.c_str(), -1, &tr,
                       DT_LEFT | DT_SINGLELINE);
 
             SelectObject(bb, m_hFontSmall);

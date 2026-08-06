@@ -1,3 +1,11 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// Copyright (C) 2026 Ivan Hristov Yanev
+//
+// This file is part of QuickImageViewer. It is free software: you may
+// redistribute and modify it under the terms of the GNU Affero General Public
+// License version 3 or later, as published by the Free Software Foundation.
+// It is distributed WITHOUT ANY WARRANTY. See the LICENSE file for details.
+
 #pragma once
 #include <windows.h>
 #include <string>
@@ -74,5 +82,21 @@ namespace Remote {
     // Distinctive on purpose: if this ever reached a client it would mean the
     // dispatch broke, and it should be obvious rather than look like an answer.
     constexpr const wchar_t *PREVIEW_PATH_MARKER = L"\x01qIV-preview-path\x01";
+
+    // The same trick for the ORIGINAL file, and for the same reason.
+    //
+    // SendDisplayedImage used to be answered inline on the UI thread: the whole
+    // file was read into memory and base64-encoded there. A 10 MB photo is
+    // roughly 13 million characters of base64 — 26 MB as wchar_t — built while
+    // the viewer could not paint. Preview had been moved off the UI thread for
+    // exactly this reason; the original, which is BIGGER, had been left behind.
+    //
+    // It is the command a phone sends when the user saves the displayed picture,
+    // so the freeze landed on an ordinary action rather than a rare one.
+    //
+    // The reply bytes are unchanged — same "<bytes>;<name>" shape, same DATA
+    // body. Only the thread that builds them is different, so no client needs to
+    // know this happened.
+    constexpr const wchar_t *ORIGINAL_PATH_MARKER = L"\x01qIV-original-path\x01";
 
 } // namespace Remote

@@ -1,3 +1,11 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// Copyright (C) 2026 Ivan Hristov Yanev
+//
+// This file is part of QuickImageViewer. It is free software: you may
+// redistribute and modify it under the terms of the GNU Affero General Public
+// License version 3 or later, as published by the Free Software Foundation.
+// It is distributed WITHOUT ANY WARRANTY. See the LICENSE file for details.
+
 #include "RendererD2D.h"
 #include "../Overlays/OverlayManager.h"
 #include "../AppState.h"
@@ -20,13 +28,15 @@
 // resvg C API (static lib)
 #include <resvg.h>
 
-// Link the required import libraries
-#pragma comment(lib, "d3d11.lib")
-#pragma comment(lib, "dxgi.lib")
-#pragma comment(lib, "d2d1.lib")
-#pragma comment(lib, "dwrite.lib")
-#pragma comment(lib, "dxguid.lib")
-#pragma comment(lib, "shell32.lib")
+// NO #pragma comment(lib, ...) HERE.
+//
+// d3d11, dxgi, d2d1, dwrite, dxguid and shell32 are all linked from
+// CMakeLists.txt, which is the single source of truth for dependencies —
+// RemoteCrypto.cpp and RemoteTls.cpp state the same rule in their own headers.
+//
+// Declaring them here as well was not merely redundant: dxguid was reaching the
+// linker ONLY through this file, so the library list in CMake looked complete
+// while quietly depending on a source file nobody would think to check.
 
 // =============================================================================
 //  Initialize
@@ -534,7 +544,11 @@ void RendererD2D::DiscardDeviceResources() {
     // The overlay layout carries a drawing effect referencing m_pLinkBrush
     // (device-bound) — drop it so it rebuilds cleanly on the new device.
     m_pFolderDeletedLayout.Reset();
-    m_lastFolderOverlayKey.clear();
+    // Mark the cache empty rather than clearing the path: an empty path is a
+    // legitimate value here (a first run names no folder), so "no path" cannot
+    // double as "nothing cached" without the placeholder failing to rebuild
+    // after device loss in exactly that case.
+    m_lastFolderOverlayValid = false;
     m_pBackBufferBitmap.Reset();
     m_pBitmap.Reset();
     m_bitmapCache.clear();
@@ -563,6 +577,115 @@ void RendererD2D::DiscardDeviceResources() {
 // =============================================================================
 //  Resize
 // =============================================================================
+// Hit-tests the path line (the second line) so MouseHandler can make it
+// clickable. The layout is drawn at (0,0), so its metrics are client coords.
+// The heading for the current state. One place, so the layout, the character
+// offsets and the hit-testing can never disagree about how long line 1 is.
+const wchar_t *RendererD2D::FolderOverlayHeader() {
+    switch (app.folderOverlay) {
+        case AppState::FolderOverlayState::Missing:
+            return Constants::Messages::EMPTY_DIR_MISSING;
+        case AppState::FolderOverlayState::Unsupported:
+            return Constants::Messages::FORMAT_UNSUPPORTED;
+        default:
+            return Constants::Messages::EMPTY_DIR_NO_IMAGES;
+    }
+}
+
+// What line 3 shows: the detail when there is one, the path otherwise.
+const std::wstring &RendererD2D::FolderOverlayLastLine() {
+    return app.folderOverlayDetail.empty() ? app.folderOverlayPath
+                                           : app.folderOverlayDetail;
+}
+
+void RendererD2D::NoteDecodeFailure(const std::wstring &path) {
+    {
+        std::lock_guard<std::mutex> lock(m_failedMutex);
+        m_failedPaths.insert(path);
+    }
+    // Wake the UI thread. It probes the cache, finds nothing, asks this, and
+    // shows the placeholder — otherwise it would sit waiting for a decode that
+    // has already given up.
+    if (m_hwnd) PostMessageW(m_hwnd, Constants::WM_QIV_REPAINT, 0, 0);
+}
+
+bool RendererD2D::DecodeFailed(const std::wstring &path) const {
+    std::lock_guard<std::mutex> lock(m_failedMutex);
+    return m_failedPaths.find(path) != m_failedPaths.end();
+}
+
+RendererD2D::FolderOverlayText RendererD2D::BuildFolderOverlayText() {
+    namespace M = Constants::Messages;
+    FolderOverlayText out;
+
+    // Line 1 — the heading. Not clickable.
+    out.text = FolderOverlayHeader();
+
+    // Line 2 — the prompt, then its key hint. Always present: it is the way out
+    // of every state this placeholder reports, including the one with no folder
+    // to name.
+    out.text += L"\n";
+    out.actionStart = static_cast<UINT32>(out.text.size());
+    out.text += M::OVERLAY_OPEN_PROMPT;
+    out.actionLen = static_cast<UINT32>(out.text.size()) - out.actionStart;
+    out.text += M::OVERLAY_OPEN_PROMPT_HINT;
+
+    // Line 3 — the folder or file, then its key hint. Skipped entirely when
+    // there is nothing to name, rather than left as a blank line.
+    const std::wstring &last = FolderOverlayLastLine();
+    if (!last.empty()) {
+        out.text += L"\n";
+        out.pathStart = static_cast<UINT32>(out.text.size());
+        out.text += last;
+        out.pathLen = static_cast<UINT32>(out.text.size()) - out.pathStart;
+        out.text += M::OVERLAY_PATH_HINT;
+    }
+
+    return out;
+}
+
+// Unions the runs a text range occupies. A long path wraps, so the range comes
+// back as several runs — trusting the first would leave only its top line
+// clickable.
+static bool RangeToRect(IDWriteTextLayout *layout, UINT32 start, UINT32 len,
+                        D2D1_RECT_F &out) {
+    if (!layout || len == 0) return false;
+
+    DWRITE_HIT_TEST_METRICS htm[8];
+    UINT32 count = 0;
+    if (FAILED(layout->HitTestTextRange(start, len, 0.0f, 0.0f, htm, 8, &count)) || count == 0)
+        return false;
+
+    D2D1_RECT_F r = D2D1::RectF(htm[0].left, htm[0].top,
+                                htm[0].left + htm[0].width,
+                                htm[0].top + htm[0].height);
+    for (UINT32 i = 1; i < count; ++i) {
+        r.left   = std::min(r.left,   htm[i].left);
+        r.top    = std::min(r.top,    htm[i].top);
+        r.right  = std::max(r.right,  htm[i].left + htm[i].width);
+        r.bottom = std::max(r.bottom, htm[i].top  + htm[i].height);
+    }
+    out = r;
+    return true;
+}
+
+// Hit-tests BOTH clickable lines. The layout is drawn at (0,0), so its metrics
+// are already client coordinates.
+void RendererD2D::UpdateFolderOverlayPathRect() {
+    app.folderOverlayActionRect = {};
+    app.folderOverlayPathRect   = {};
+    if (!m_pFolderDeletedLayout) return;
+
+    // Same composition the layout was built from, so the ranges match what is
+    // actually on screen.
+    const FolderOverlayText t = BuildFolderOverlayText();
+
+    (void) RangeToRect(m_pFolderDeletedLayout.Get(), t.actionStart, t.actionLen,
+                       app.folderOverlayActionRect);
+    (void) RangeToRect(m_pFolderDeletedLayout.Get(), t.pathStart, t.pathLen,
+                       app.folderOverlayPathRect);
+}
+
 void RendererD2D::Resize(UINT width, UINT height) {
     if (!m_pSwapChain || !m_pDeviceContext) return;
 
@@ -576,6 +699,11 @@ void RendererD2D::Resize(UINT width, UINT height) {
         if (m_pFolderDeletedLayout) {
             (void) m_pFolderDeletedLayout->SetMaxWidth(static_cast<float>(width));
             (void) m_pFolderDeletedLayout->SetMaxHeight(static_cast<float>(height));
+            // The text is centred, so re-flowing it MOVES the path line. The
+            // clickable region has to follow it: without this the link keeps the
+            // coordinates it had before the resize and the user clicks a spot
+            // where the path no longer is.
+            UpdateFolderOverlayPathRect();
         }
         g_overlayManager.OnResize(static_cast<float>(width), static_cast<float>(height));
     }
@@ -715,7 +843,9 @@ HRESULT RendererD2D::PreloadBitmap(const std::wstring &filePath, int requestInde
     // Capture device context as a pointer for the task (D2D device contexts are thread-safe)
     Microsoft::WRL::ComPtr<ID2D1Device6> d2dDevice = m_pD2DDevice;
 
-    g_ioWorker.PushTask([filePath, requestIndex, guardIndex, isMain, pathHash, d2dDevice, this]() {
+    // Same contract as the decoder push nested inside: the marker set just above
+    // is cleared by the task, so a rejected push must clear it here.
+    if (!g_ioWorker.PushTask([filePath, requestIndex, guardIndex, isMain, pathHash, d2dDevice, this]() {
         const bool stale = isMain
             ? (app.wantedPathHash.load(std::memory_order_acquire) != pathHash)
             : (app.wantedIndex.load(std::memory_order_acquire)    != guardIndex);
@@ -751,7 +881,11 @@ HRESULT RendererD2D::PreloadBitmap(const std::wstring &filePath, int requestInde
         CloseHandle(hFile);
 
         // Pass the factory as a parameter to the lambda (injected by the thread pool)
-        g_decoderWorker.PushTask([compressedBytes = std::move(compressedBytes), filePath, requestIndex, guardIndex, isMain, pathHash, d2dDevice, this](IWICImagingFactory2 *wicFac) mutable {
+        //
+        // The in-flight marker is cleared INSIDE the task, so a rejected push has to
+        // clear it here instead — otherwise this path would never be requestable
+        // again. See QIV_WORKER_MAX_QUEUED in WorkerThread.h.
+        if (!g_decoderWorker.PushTask([compressedBytes = std::move(compressedBytes), filePath, requestIndex, guardIndex, isMain, pathHash, d2dDevice, this](IWICImagingFactory2 *wicFac) mutable {
             // Release inFlight immediately so a new PreloadBitmap call can be queued
             // while decode is still in progress (e.g. neighbour preload races).
             { std::lock_guard<std::mutex> lock(m_cacheMutex); m_bitmapInFlight.erase(filePath); }
@@ -760,6 +894,22 @@ HRESULT RendererD2D::PreloadBitmap(const std::wstring &filePath, int requestInde
                 ? (app.wantedPathHash.load(std::memory_order_acquire) != pathHash)
                 : (app.wantedIndex.load(std::memory_order_acquire)    != guardIndex);
             if (stale) return;
+
+            // ONE guard for the dozen bare `return`s below. Each of them is a
+            // decode that failed, and adding a report to every one would be a
+            // list to keep in step with the code forever; a destructor cannot be
+            // forgotten when a new failure path is added.
+            //
+            // Declared AFTER the stale check on purpose: abandoning a request
+            // the user has already navigated away from is not a failure, and
+            // reporting it would blame a perfectly good file.
+            bool decodeOk = false;
+            struct FailureReporter {
+                RendererD2D        *self;
+                const std::wstring &path;
+                const bool         &ok;
+                ~FailureReporter() { if (!ok) self->NoteDecodeFailure(path); }
+            } failureReporter{this, filePath, decodeOk};
 
             Microsoft::WRL::ComPtr<ID2D1DeviceContext> taskCtx;
             if (FAILED(d2dDevice->CreateDeviceContext(D2D1_DEVICE_CONTEXT_OPTIONS_NONE, taskCtx.GetAddressOf()))) return;
@@ -821,16 +971,39 @@ HRESULT RendererD2D::PreloadBitmap(const std::wstring &filePath, int requestInde
                     std::vector<BYTE> canvas(canvasStride * screenH, 0);
                     std::vector<BYTE> prevCanvas; // for disposal mode 3
 
+                    // HOW MANY FRAMES THIS ANIMATION MAY KEEP.
+                    //
+                    // Derived from the frame size rather than fixed, because the cost
+                    // is per pixel: a 4K animation may keep a fraction of the frames a
+                    // small one can. See GIF_MAX_DECODED_BYTES in Constants.h for why
+                    // a count-based image cache cannot bound this on its own.
+                    //
+                    // At least one frame always survives, so a single enormous frame
+                    // still displays as a still image instead of as nothing.
+                    const size_t gifFrameBytes =
+                        static_cast<size_t>(screenW) * static_cast<size_t>(screenH) * 4u;
+                    const size_t gifFrameBudget = std::max<size_t>(
+                        1u, Constants::GIF_MAX_DECODED_BYTES / std::max<size_t>(1u, gifFrameBytes));
+                    const size_t gifFrameCap =
+                        std::min<size_t>(Constants::GIF_MAX_FRAMES, gifFrameBudget);
+
                     std::vector<Microsoft::WRL::ComPtr<ID2D1Bitmap1>> gifFrames;
                     std::vector<int> gifDelays;
-                    gifFrames.reserve(frameCount);
-                    gifDelays.reserve(frameCount);
+                    // reserve the CAPPED count, not the declared one — a file claiming
+                    // 100k frames would otherwise allocate the vector for all of them
+                    // before a single frame was decoded.
+                    gifFrames.reserve(std::min<size_t>(frameCount, gifFrameCap));
+                    gifDelays.reserve(std::min<size_t>(frameCount, gifFrameCap));
 
                     const D2D1_BITMAP_PROPERTIES1 bmpProps = D2D1::BitmapProperties1(
                         D2D1_BITMAP_OPTIONS_NONE,
                         D2D1::PixelFormat(DXGI_FORMAT_B8G8R8A8_UNORM, D2D1_ALPHA_MODE_PREMULTIPLIED));
 
                     for (UINT fi = 0; fi < frameCount; ++fi) {
+                        // Budget checked BEFORE the work, not after: the point is to
+                        // avoid the allocation, not to notice it afterwards.
+                        if (gifFrames.size() >= gifFrameCap) break;
+
                         if (isMain ? (app.wantedPathHash.load(std::memory_order_acquire) != pathHash)
                                    : (app.wantedIndex.load(std::memory_order_acquire) != guardIndex)) return;
 
@@ -1008,6 +1181,17 @@ HRESULT RendererD2D::PreloadBitmap(const std::wstring &filePath, int requestInde
             const bool isCurrent = isMain
                 ? (app.wantedPathHash.load(std::memory_order_acquire) == pathHash)
                 : (app.wantedIndex.load(std::memory_order_acquire)    == requestIndex);
+            // A bitmap exists and is cached — everything past here is bookkeeping,
+            // so this is the point the decode counts as having succeeded.
+            decodeOk = true;
+            {
+                // A file that decodes now clears any earlier failure: it may have
+                // been replaced on disk since, and a stale entry would keep the
+                // placeholder up over a picture that is on screen.
+                std::lock_guard<std::mutex> lock(m_failedMutex);
+                m_failedPaths.erase(filePath);
+            }
+
             if (isCurrent) {
                 long long start = ImageLoadStats::g_loadStartUs.load(std::memory_order_relaxed);
                 if (start > 0) {
@@ -1018,8 +1202,17 @@ HRESULT RendererD2D::PreloadBitmap(const std::wstring &filePath, int requestInde
             } else {
                 PostMessageW(m_hwnd, Constants::WM_QIV_REPAINT, 1, 0);
             }
-        });
-    });
+        })) {
+            // Decoder queue was full, so the task above will never run and will
+            // never clear the marker it was going to clear.
+            std::lock_guard<std::mutex> lock(m_cacheMutex);
+            m_bitmapInFlight.erase(filePath);
+        }
+    })) {
+        // IO queue was full — nothing downstream will run at all.
+        std::lock_guard<std::mutex> lock(m_cacheMutex);
+        m_bitmapInFlight.erase(filePath);
+    }
     return S_OK;
 }
 
@@ -1147,6 +1340,28 @@ HRESULT RendererD2D::Render() {
         g_overlayManager.RenderAll(m_pDeviceContext.Get());
     }//! BITMAP DRAW END
 
+    // LAST-DITCH GUARD, at the place that actually knows there is nothing to
+    // draw. Everything above has run and neither branch produced pixels: no SVG,
+    // no bitmap, and no playlist to have produced one. Whatever went wrong
+    // upstream — a resume that came back empty, a chooser dismissed, a scan that
+    // never reported — the result was a black rectangle with no text and nothing
+    // to click, indistinguishable from a broken renderer.
+    //
+    // Deliberately conditioned on an EMPTY PLAYLIST, not merely on a null
+    // bitmap. A non-empty playlist with no bitmap yet is the normal state for a
+    // few milliseconds during a load, and reacting to that would flash "No
+    // Images" over every image that takes a moment to decode.
+    //
+    // Sets the existing overlay rather than drawing its own text, so there is
+    // one placeholder in the app: same two lines, same clickable path, and the
+    // ordinary load path clears it again by setting FolderOverlayState::None.
+    if (!m_pActiveSvg && !m_pBitmap && app.playlist.empty() &&
+        app.folderOverlay == AppState::FolderOverlayState::None) {
+        app.folderOverlay = AppState::FolderOverlayState::Empty;
+        // folderOverlayPath is left as-is: whatever the last known folder was
+        // stays the clickable line, and an empty one simply draws the heading.
+    }
+
     // Persistent overlay: "Directory Missing" (red) or "No Images" (normal).
     // Shown on a black viewport; stays until the user opens a new folder.
     // Format + layout are DWrite objects — created once and cached; they survive
@@ -1164,16 +1379,31 @@ HRESULT RendererD2D::Render() {
         }
 
         const bool isMissing = (app.folderOverlay == AppState::FolderOverlayState::Missing);
-        // Composite cache key — layout must rebuild when state or path changes.
-        std::wstring key = (isMissing ? L"M:" : L"E:") + app.folderOverlayPath;
 
-        if (m_pFolderOverlayFormat &&
-            (m_lastFolderOverlayKey != key || !m_pFolderDeletedLayout)) {
+        // Rebuild only when what it is built FROM has changed. Compared in
+        // place — no key string is composed here, because this runs on every
+        // frame the placeholder is visible and the answer is almost always "no
+        // change".
+        // Compared against the STATE, not just "is it missing": Unsupported and
+        // Empty share a colour but not a heading, so a change between them has
+        // to rebuild.
+        const int stateNow = static_cast<int>(app.folderOverlay);
+        const bool stale = !m_lastFolderOverlayValid ||
+                           m_lastFolderOverlayState != stateNow ||
+                           m_lastFolderOverlayPath != FolderOverlayLastLine() ||
+                           !m_pFolderDeletedLayout;
+
+        if (m_pFolderOverlayFormat && stale) {
             m_pFolderDeletedLayout.Reset();
-            m_lastFolderOverlayKey = key;
-            const wchar_t *header = isMissing ? Constants::Messages::EMPTY_DIR_MISSING
-                                              : Constants::Messages::EMPTY_DIR_NO_IMAGES;
-            std::wstring msg = std::wstring(header) + L"\n" + app.folderOverlayPath;
+            m_lastFolderOverlayPath  = FolderOverlayLastLine();
+            m_lastFolderOverlayState = stateNow;
+            m_lastFolderOverlayValid = true;
+            // Three lines: heading, the constant prompt, then the folder or
+            // file — each clickable line followed by its key hint. Lines 1 and 2
+            // never change; only the third does, which is why the whole thing is
+            // built once and kept.
+            const FolderOverlayText composed = BuildFolderOverlayText();
+            const std::wstring &msg = composed.text;
             const D2D1_SIZE_F sz = m_pDeviceContext->GetSize();
             m_pDWriteFactory->CreateTextLayout(
                 msg.c_str(), static_cast<UINT32>(msg.size()),
@@ -1184,16 +1414,21 @@ HRESULT RendererD2D::Render() {
                 m_pFolderDeletedLayout->SetParagraphAlignment(DWRITE_PARAGRAPH_ALIGNMENT_CENTER);
                 m_pFolderDeletedLayout->SetWordWrapping(DWRITE_WORD_WRAPPING_EMERGENCY_BREAK);
 
-                // Style the path line as an app-standard clickable link
-                // (color + underline come from Constants::Links).
-                DWRITE_TEXT_RANGE linkRange = {
-                    static_cast<UINT32>(wcslen(header)) + 1, // +1 = '\n'
-                    static_cast<UINT32>(app.folderOverlayPath.size())
+                // BOTH clickable lines get the app-standard link styling
+                // (colour + underline from Constants::Links) — a line that acts
+                // like a link has to look like one, or nobody discovers it. The
+                // key hints sit outside these ranges and stay plain.
+                auto styleAsLink = [&](UINT32 start, UINT32 length) {
+                    if (length == 0) return;
+                    const DWRITE_TEXT_RANGE range = {start, length};
+                    if (m_pLinkBrush)
+                        m_pFolderDeletedLayout->SetDrawingEffect(m_pLinkBrush.Get(), range);
+                    if (Constants::Links::UNDERLINE)
+                        m_pFolderDeletedLayout->SetUnderline(TRUE, range);
                 };
-                if (m_pLinkBrush)
-                    m_pFolderDeletedLayout->SetDrawingEffect(m_pLinkBrush.Get(), linkRange);
-                if (Constants::Links::UNDERLINE)
-                    m_pFolderDeletedLayout->SetUnderline(TRUE, linkRange);
+
+                styleAsLink(composed.actionStart, composed.actionLen); // line 2
+                styleAsLink(composed.pathStart,   composed.pathLen);   // line 3
             }
         }
 
@@ -1205,29 +1440,7 @@ HRESULT RendererD2D::Render() {
                 m_pFolderDeletedLayout.Get(),
                 brush);
 
-            // Hit-test the path line (second line) so MouseHandler can make it
-            // clickable — layout is drawn at (0,0), so metrics are client coords.
-            const wchar_t *header = isMissing ? Constants::Messages::EMPTY_DIR_MISSING
-                                              : Constants::Messages::EMPTY_DIR_NO_IMAGES;
-            const UINT32 pathStart = static_cast<UINT32>(wcslen(header)) + 1; // +1 = '\n'
-            const UINT32 pathLen   = static_cast<UINT32>(app.folderOverlayPath.size());
-            DWRITE_HIT_TEST_METRICS htm[8];
-            UINT32 htmCount = 0;
-            if (pathLen > 0 &&
-                SUCCEEDED(m_pFolderDeletedLayout->HitTestTextRange(
-                    pathStart, pathLen, 0.0f, 0.0f, htm, 8, &htmCount)) &&
-                htmCount > 0) {
-                D2D1_RECT_F r = D2D1::RectF(htm[0].left, htm[0].top,
-                                            htm[0].left + htm[0].width,
-                                            htm[0].top + htm[0].height);
-                for (UINT32 i = 1; i < htmCount; ++i) {
-                    r.left   = std::min(r.left,   htm[i].left);
-                    r.top    = std::min(r.top,    htm[i].top);
-                    r.right  = std::max(r.right,  htm[i].left + htm[i].width);
-                    r.bottom = std::max(r.bottom, htm[i].top  + htm[i].height);
-                }
-                app.folderOverlayPathRect = r;
-            }
+            UpdateFolderOverlayPathRect();
         }
     }
 
@@ -1389,7 +1602,9 @@ HRESULT RendererD2D::PreloadSvgFromBytes(std::vector<BYTE> svgBytes,
     (void) requestIndex;
     const size_t pathHash = std::hash<std::wstring>{}(filePath);
 
-    g_decoderWorker.PushTask(
+    // Rejected push must clear the marker the task would have cleared — see the
+    // note on QIV_WORKER_MAX_QUEUED in WorkerThread.h.
+    if (!g_decoderWorker.PushTask(
         [this, svgBytes = std::move(svgBytes), filePath, pathHash]
         (IWICImagingFactory2 *wicFac) mutable {
             // Release the in-flight marker up front (mirrors PreloadBitmap) so a
@@ -1424,7 +1639,10 @@ HRESULT RendererD2D::PreloadSvgFromBytes(std::vector<BYTE> svgBytes,
             // Finalize on the UI thread only if the user is still on this image.
             if (app.wantedPathHash.load(std::memory_order_acquire) == pathHash)
                 PostMessageW(m_hwnd, Constants::WM_QIV_REPAINT, 0, 0);
-        });
+        })) {
+        std::lock_guard<std::mutex> lock(m_cacheMutex);
+        m_bitmapInFlight.erase(filePath);
+    }
 
     return S_OK;
 }
@@ -1503,9 +1721,15 @@ void RendererD2D::GetDirThumbCacheStats(int &count, UINT64 &estimatedBytes) {
     count = 0;
     for (auto &[hwnd, panel] : m_panelThumbCaches)
         count += static_cast<int>(panel.bitmaps.size());
-    UINT64 physW = static_cast<UINT64>(Constants::THUMBNAIL_PANEL_THUMB_WIDTH  * app.dpiScale + 0.5f);
-    UINT64 physH = static_cast<UINT64>(Constants::THUMBNAIL_PANEL_THUMB_HEIGHT * app.dpiScale + 0.5f);
-    estimatedBytes = static_cast<UINT64>(count) * physW * physH * 4;
+
+    // MEASURED, not estimated. This used to be count x thumbnail-size-at-current-
+    // DPI, which was an approximation of the right order but wrong in two ways
+    // that matter now: it disagreed with the number the budget is enforced
+    // against, and after a DPI change it charged thumbnails cached at the old
+    // size using the new one. m_thumbTotalBytes is the same value eviction uses,
+    // so what the Stats panel reports and what the cache is allowed to hold are
+    // now the same quantity.
+    estimatedBytes = static_cast<UINT64>(m_thumbTotalBytes);
 }
 
 // =============================================================================
@@ -1522,7 +1746,10 @@ void RendererD2D::ResolveThumbnailBitmaps(const std::vector<UI::Thumbnail> &thum
     std::lock_guard<std::mutex> cacheLock(m_cacheMutex);
     std::lock_guard<std::mutex> dirLock(m_dirThumbMutex);
 
-    const PanelThumbEntry *panelEntry = nullptr;
+    // Non-const: drawing a thumbnail promotes it in the panel's LRU, so this
+    // read path is also the only thing that keeps the eviction order honest.
+    // m_dirThumbMutex is already held above, which is what TouchPanelThumb needs.
+    PanelThumbEntry *panelEntry = nullptr;
     if (hPanel) {
         auto it = m_panelThumbCaches.find(hPanel);
         if (it != m_panelThumbCaches.end())
@@ -1535,8 +1762,14 @@ void RendererD2D::ResolveThumbnailBitmaps(const std::vector<UI::Thumbnail> &thum
 
         if (panelEntry) {
             auto it = panelEntry->bitmaps.find(thumb.filePath);
-            if (it != panelEntry->bitmaps.end() && it->second)
+            if (it != panelEntry->bitmaps.end() && it->second) {
                 r.bitmap = it->second;
+                // Promote on USE, which is what makes the eviction order mean
+                // anything: this runs for the thumbnails actually being drawn, so
+                // what is on screen is by definition the most recent and cannot be
+                // evicted out from under the panel that is showing it.
+                TouchPanelThumb(*panelEntry, thumb.filePath);
+            }
         }
 
         // Fall back to the full-res VRAM cache (covers CacheWnd and already-loaded images).
@@ -1746,7 +1979,67 @@ HRESULT RendererD2D::SaveCurrentImageWithEffects(const std::wstring &outPath) {
 // =============================================================================
 void RendererD2D::ClearDirThumbnailCache(HWND hPanel) {
     std::lock_guard<std::mutex> lock(m_dirThumbMutex);
-    m_panelThumbCaches.erase(hPanel);
+
+    const auto it = m_panelThumbCaches.find(hPanel);
+    if (it == m_panelThumbCaches.end()) return;
+
+    // The shared list holds this panel's entries too, so dropping the panel
+    // without unlinking them would leave dangling (HWND, path) pairs and a byte
+    // total that never comes back down — the budget would then shrink silently
+    // with every folder change until nothing was cached at all.
+    for (const auto &[path, pos] : it->second.lruPos)
+        m_thumbLru.erase(pos);
+
+    m_thumbTotalBytes -= it->second.totalBytes;
+    m_panelThumbCaches.erase(it);
+}
+
+// =============================================================================
+//  EvictPanelThumbs / TouchPanelThumb  —  the byte budget
+//
+//  Caller holds m_dirThumbMutex for both.
+// =============================================================================
+void RendererD2D::EnforceThumbBudget() {
+    // Read per call rather than cached: the budget is a live tray-menu setting,
+    // so lowering it takes effect on the next thumbnail instead of at restart.
+    // Clamped the same way RegistryManager clamps it, so a hand-edited registry
+    // value cannot produce a zero budget that evicts everything on sight.
+    const size_t budget =
+        static_cast<size_t>(std::max(100, std::min(64000, app.dirThumbCacheMB))) *
+        1024u * 1024u;
+
+    // Drops the globally least-recently-DRAWN thumbnail, whichever panel owns it.
+    //
+    // size() > 1 keeps the entry just inserted alive: it went in at the front and
+    // this takes from the back, so a single thumbnail larger than the entire
+    // budget still survives to be drawn once instead of vanishing unseen.
+    while (m_thumbTotalBytes > budget && m_thumbLru.size() > 1) {
+        const auto victim = m_thumbLru.back(); // copy: the node dies on pop_back
+        m_thumbLru.pop_back();
+
+        const auto panelIt = m_panelThumbCaches.find(victim.first);
+        if (panelIt == m_panelThumbCaches.end()) continue; // panel already gone
+
+        PanelThumbEntry &entry = panelIt->second;
+        const auto b = entry.bytes.find(victim.second);
+        if (b != entry.bytes.end()) {
+            m_thumbTotalBytes -= b->second;
+            entry.totalBytes  -= b->second;
+            entry.bytes.erase(b);
+        }
+        entry.lruPos.erase(victim.second);
+        entry.bitmaps.erase(victim.second); // releases the ComPtr, frees the GPU bitmap
+    }
+}
+
+void RendererD2D::TouchPanelThumb(PanelThumbEntry &entry, const std::wstring &path) {
+    const auto it = entry.lruPos.find(path);
+    if (it == entry.lruPos.end()) return;
+    // splice moves the node between positions without reallocating it, so the
+    // iterator stored in lruPos stays valid — the same trick m_lruList uses for
+    // the main image cache. This is what makes "drawn recently" the thing that
+    // survives, across every panel at once.
+    m_thumbLru.splice(m_thumbLru.begin(), m_thumbLru, it->second);
 }
 
 // =============================================================================
@@ -1772,7 +2065,10 @@ void RendererD2D::RequestDirThumbnail(const std::wstring &filePath, HWND hPanel)
     const float dpiScale  = app.dpiScale;
     HWND hDir = hPanel;
 
-    g_dirThumbWorker.PushTask([filePath, d2dDev, hDir, thumbW, thumbH, dpiScale, this](IWICImagingFactory2 *wicFac) {
+    // inFlight was inserted above and is cleared inside the task, so a rejected
+    // push has to clear it here — otherwise this tile stays permanently blank,
+    // because the guard at the top of this function would refuse every retry.
+    if (!g_dirThumbWorker.PushTask([filePath, d2dDev, hDir, thumbW, thumbH, dpiScale, this](IWICImagingFactory2 *wicFac) {
         auto releaseInFlight = [&] {
             std::lock_guard<std::mutex> lk(m_dirThumbMutex);
             m_panelThumbCaches[hDir].inFlight.erase(filePath);
@@ -1823,8 +2119,30 @@ void RendererD2D::RequestDirThumbnail(const std::wstring &filePath, HWND hPanel)
             std::lock_guard<std::mutex> lk(m_dirThumbMutex);
             auto &entry = m_panelThumbCaches[hDir];
             entry.inFlight.erase(filePath);
-            entry.bitmaps.try_emplace(filePath, thumbBitmap);
+
+            // try_emplace, so a racing duplicate does not double-count bytes.
+            if (entry.bitmaps.try_emplace(filePath, thumbBitmap).second) {
+                // Measured from what was actually created, not from the requested
+                // size: a shell thumbnail can come back smaller than asked for,
+                // and charging the cache for pixels it never held would evict
+                // early for no reason.
+                const D2D1_SIZE_U px = thumbBitmap->GetPixelSize();
+                const size_t cost = static_cast<size_t>(px.width) *
+                                    static_cast<size_t>(px.height) * 4u;
+
+                entry.bytes[filePath] = cost;
+                entry.totalBytes     += cost;
+                m_thumbTotalBytes    += cost;
+
+                m_thumbLru.push_front({hDir, filePath});
+                entry.lruPos[filePath] = m_thumbLru.begin();
+
+                EnforceThumbBudget();
+            }
         }
         PostMessageW(hDir, Constants::WM_QIV_REPAINT, 0, 0);
-    });
+    })) {
+        std::lock_guard<std::mutex> lk(m_dirThumbMutex);
+        m_panelThumbCaches[hDir].inFlight.erase(filePath);
+    }
 }

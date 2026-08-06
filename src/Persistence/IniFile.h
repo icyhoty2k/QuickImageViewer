@@ -1,3 +1,11 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// Copyright (C) 2026 Ivan Hristov Yanev
+//
+// This file is part of QuickImageViewer. It is free software: you may
+// redistribute and modify it under the terms of the GNU Affero General Public
+// License version 3 or later, as published by the Free Software Foundation.
+// It is distributed WITHOUT ANY WARRANTY. See the LICENSE file for details.
+
 #pragma once
 #include <windows.h>
 #include <string>
@@ -87,6 +95,17 @@ namespace Persistence::Ini {
     // Stored as decimal TEXT rather than through GetPrivateProfileInt, so the
     // file stays hand-editable and a malformed value is distinguishable from a
     // legitimate zero.
+    // Removes the key outright, rather than leaving it with an empty value.
+    //
+    // WriteString with L"" writes `Key=`, which is NOT the same thing: it leaves
+    // a line behind in a file the user is invited to read, and every reader then
+    // has to treat "present but blank" and "absent" as the same case. Deleting
+    // is what the caller almost always means when it clears a value.
+    //
+    // Does nothing when the file or the key is already gone.
+    void DeleteKey(const std::wstring &path, const wchar_t *section,
+                   const wchar_t *key);
+
     DWORD ReadDword(const std::wstring &path, const wchar_t *section,
                     const wchar_t *key, DWORD defaultValue);
     void  WriteDword(const std::wstring &path, const wchar_t *section,

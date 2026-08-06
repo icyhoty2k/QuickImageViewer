@@ -1,3 +1,11 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// Copyright (C) 2026 Ivan Hristov Yanev
+//
+// This file is part of QuickImageViewer. It is free software: you may
+// redistribute and modify it under the terms of the GNU Affero General Public
+// License version 3 or later, as published by the Free Software Foundation.
+// It is distributed WITHOUT ANY WARRANTY. See the LICENSE file for details.
+
 #pragma once
 
 #include <windows.h>
@@ -131,6 +139,12 @@ namespace UI {
             // Default: no-op (HelpWnd, JumpToWnd, etc. ignore this).
             virtual void OnFolderRefreshed(const std::wstring & /*dir*/,
                                            const std::vector<std::wstring> & /*playlist*/) {}
+
+            // Called by UIManager::NotifySortOrderChanged on every panel that
+            // holds a list of its own, after app.fileHandlerDefaultSortOrder or
+            // app.fileHandlerIsReverseSortOrder changed at runtime. Default:
+            // no-op (CacheWnd orders by cache recency, not by the file sort).
+            virtual void OnSortOrderChanged() {}
 
             // Re-read the panel's folder from disk if it matches `dir`.
             // Called after a cut/paste so the strip reflects reality immediately,

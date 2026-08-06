@@ -1,3 +1,11 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// Copyright (C) 2026 Ivan Hristov Yanev
+//
+// This file is part of QuickImageViewer. It is free software: you may
+// redistribute and modify it under the terms of the GNU Affero General Public
+// License version 3 or later, as published by the Free Software Foundation.
+// It is distributed WITHOUT ANY WARRANTY. See the LICENSE file for details.
+
 #include "RemoteBlacklist.h"
 
 #include "RemoteSettings.h"          // AddressMatches / LooksLikeAddress — one rule
@@ -6,6 +14,7 @@
 
 #include <windows.h>
 
+#include <cstring>   // memcpy — reading the UTF-16 payload without aliasing it
 #include <cwctype>
 #include <mutex>
 
@@ -63,7 +72,18 @@ namespace {
             static_cast<unsigned char>(bytes[0]) == 0xFF &&
             static_cast<unsigned char>(bytes[1]) == 0xFE) {
             const size_t chars = (bytes.size() - 2) / sizeof(wchar_t);
-            return std::wstring(reinterpret_cast<const wchar_t *>(bytes.data() + 2), chars);
+
+            // COPIED, not aliased. Reading the char buffer through a wchar_t*
+            // is undefined behaviour: nothing guarantees that `data() + 2` meets
+            // wchar_t's alignment, and the standard does not care that x86
+            // tolerates unaligned 16-bit loads in practice.
+            //
+            // It costs nothing to do properly — the wstring constructor this
+            // replaces copied the same bytes anyway.
+            std::wstring out(chars, L'\0');
+            if (chars > 0)
+                std::memcpy(out.data(), bytes.data() + 2, chars * sizeof(wchar_t));
+            return out;
         }
 
         size_t offset = 0;

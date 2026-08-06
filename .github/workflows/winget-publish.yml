@@ -114,15 +114,99 @@ jobs:
       #
       # Needs WINGET_TOKEN (the token that owns the fork), not GITHUB_TOKEN,
       # which has no access to another repository at all.
+      #
+      # AND THAT TOKEN NEEDS THE workflow SCOPE, which is not obvious until the
+      # day it matters. Microsoft's repository edits its own .github/workflows
+      # from time to time; syncing those commits into the fork is a push of
+      # workflow files, and GitHub refuses that for a token without the scope.
+      # Nothing here changes when it happens — the run simply starts failing at
+      # this step with a message about scopes that reads like a local gh problem
+      # and suggests `gh auth refresh`, which does nothing in Actions.
+      #
+      # The output is therefore captured and translated rather than left raw.
       # ---------------------------------------------------------------------
+      # ---------------------------------------------------------------------
+      # 3a. Say what the token actually IS before using it.
+      #
+      # "The secret was updated" and "the secret holds a token that can push
+      # workflow files" are not the same statement, and the failure downstream
+      # cannot tell them apart. A classic token reports its scopes in the
+      # X-OAuth-Scopes response header, so the answer is one API call.
+      #
+      # NOTHING SECRET IS PRINTED: an account login and a list of scope names,
+      # both of which are public facts about a token, never the token.
+      # ---------------------------------------------------------------------
+      - name: Check the token before using it
+        env:
+          GH_TOKEN: ${{ secrets.WINGET_TOKEN }}
+        run: |
+          set -euo pipefail
+
+          WHO="$(gh api user -q .login 2>/dev/null || true)"
+          SCOPES="$(gh api -i user 2>/dev/null \
+                      | tr -d '\r' \
+                      | grep -i '^x-oauth-scopes:' \
+                      | cut -d: -f2- \
+                      | sed 's/^ *//' || true)"
+
+          echo "Token belongs to: ${WHO:-<the call failed — token invalid or expired>}"
+
+          if [ -z "$SCOPES" ]; then
+            # Fine-grained tokens report no scopes at all. Not an error in
+            # itself, so this only says so rather than stopping.
+            echo "Token scopes: none reported, so this is a fine-grained token."
+            echo "It needs Workflows AND Contents at Read and write on icyhoty2k/winget-pkgs."
+          else
+            echo "Token scopes: $SCOPES"
+            # The header is comma-SPACE separated, so the spaces come out before
+            # matching or every scope but the first fails to match.
+            case ",$(printf '%s' "$SCOPES" | tr -d ' ')," in
+              *,workflow,*) echo "The workflow scope is present." ;;
+              *)
+                MSG="The WINGET_TOKEN secret holds a classic token WITHOUT the workflow scope."
+                MSG="$MSG It reports: $SCOPES."
+                MSG="$MSG The token was not replaced, or the replacement was generated"
+                MSG="$MSG without the workflow box ticked, or it belongs to ${WHO:-another account}."
+                echo "::error::$MSG"
+                exit 1
+                ;;
+            esac
+          fi
+
       - name: Sync winget-pkgs fork with upstream
         env:
           GH_TOKEN: ${{ secrets.WINGET_TOKEN }}
         run: |
           set -euo pipefail
-          gh repo sync icyhoty2k/winget-pkgs \
-            --source microsoft/winget-pkgs \
-            --force
+
+          # Assignment inside `if` so a failure lands below instead of tripping
+          # set -e — the whole point is to say something useful about it first.
+          if OUT="$(gh repo sync icyhoty2k/winget-pkgs \
+                      --source microsoft/winget-pkgs \
+                      --force 2>&1)"; then
+            printf '%s\n' "$OUT"
+            exit 0
+          fi
+
+          printf '%s\n' "$OUT"
+
+          # Built up rather than written as one long line, because an ::error::
+          # annotation has to be a single line and a backslash-continued string
+          # inside a YAML block scalar is a trap: the indentation of the
+          # continuation ends up inside the message.
+          if printf '%s' "$OUT" | grep -qi 'scope'; then
+            MSG="WINGET_TOKEN cannot merge upstream workflow files."
+            MSG="$MSG Microsoft's repository has changed .github/workflows since"
+            MSG="$MSG this fork last synced, and pushing that needs the workflow scope."
+            MSG="$MSG Fix: new classic PAT at"
+            MSG="$MSG https://github.com/settings/tokens/new?scopes=repo,workflow"
+            MSG="$MSG then replace the WINGET_TOKEN secret and re-run this job."
+            MSG="$MSG Fine-grained equivalent: Workflows and Contents both"
+            MSG="$MSG Read and write on icyhoty2k/winget-pkgs."
+            echo "::error::$MSG"
+          fi
+
+          exit 1
 
       # ---------------------------------------------------------------------
       # 4. Publish.

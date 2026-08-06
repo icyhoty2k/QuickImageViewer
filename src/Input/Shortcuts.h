@@ -1,3 +1,11 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// Copyright (C) 2026 Ivan Hristov Yanev
+//
+// This file is part of QuickImageViewer. It is free software: you may
+// redistribute and modify it under the terms of the GNU Affero General Public
+// License version 3 or later, as published by the Free Software Foundation.
+// It is distributed WITHOUT ANY WARRANTY. See the LICENSE file for details.
+
 #pragma once
 //
 // Shortcuts.h  —  Single source of truth for all keyboard shortcuts in QIV.
@@ -68,7 +76,7 @@ namespace Shortcuts {
     // instance runs and edit its configuration. Its own window for the same
     // reason F8 is: it is a form, not a menu.
     constexpr UINT SC_PANEL_REMOTE_TOGGLE = VK_F9;
-    // Ctrl+F9 — Server Clients (Rem_TCP_IP/RemoteClientsWnd.h): who is connected
+    // Ctrl+F9 — My Clients (Rem_TCP_IP/RemoteClientsWnd.h): who is connected
     // to the listener above, and the buttons to kick, timed-kick or ban them.
     // The modifier form of the key that opens the listener's own panel, matching
     // Ctrl+F10 and Ctrl+F11 — plain key configures a thing, Ctrl inspects it.

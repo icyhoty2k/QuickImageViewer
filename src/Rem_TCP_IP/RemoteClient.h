@@ -1,8 +1,22 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// Copyright (C) 2026 Ivan Hristov Yanev
+//
+// This file is part of QuickImageViewer. It is free software: you may
+// redistribute and modify it under the terms of the GNU Affero General Public
+// License version 3 or later, as published by the Free Software Foundation.
+// It is distributed WITHOUT ANY WARRANTY. See the LICENSE file for details.
+
 #pragma once
 #include <windows.h>
 #include <memory>
 #include <string>
 #include <vector>
+
+// AgentInfo is held BY VALUE below, so the definition has to be here rather than
+// forward declared. Safe to include: RemoteProtocol.h pulls windows.h and
+// Input/Command.h and no winsock header, so it cannot disturb the winsock2.h
+// ordering the .cpp files in this folder depend on.
+#include "RemoteProtocol.h"
 
 // =============================================================================
 // RemoteClient — the "connect to another instance" half.
@@ -179,6 +193,12 @@ namespace Remote {
         UINT_PTR     m_sock = static_cast<UINT_PTR>(~0ull); // INVALID_SOCKET
         std::string  m_accum;                                // partial line buffer
         std::wstring m_banner;
+
+        // What the SERVER said about itself, from its reply to our `agent` line.
+        // Empty against a server that does not answer it. Display only — same
+        // rule as every other peer-supplied field: it labels a row, it never
+        // decides anything.
+        AgentInfo    m_peerAgent;
         int          m_peerProtocol = 0;   // 0 = the banner did not say
         bool         m_connected = false;
     };

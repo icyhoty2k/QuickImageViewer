@@ -1,8 +1,43 @@
-# QuickImageViewer (qIV)
+<div align="center">
 
-**A fast, GPU-accelerated image viewer for Windows.**  
-Built on Direct2D, WIC, and native Win32 APIs. Single EXE, no installer(portable), no telemetry, sub-10 MB .
+# QuickImageViewer&nbsp;<sub>(qIV)</sub>
 
+**A fast, GPU-accelerated image viewer for Windows.**
+
+Direct2D, WIC and native Win32. One portable EXE under 10 MB — no installer, no
+telemetry, no background service.
+
+Drives other copies of itself over plain TCP, mirrors one screen to many, and has
+**[an Android app](#qiv-remote--the-android-app)** that turns any phone or tablet into a
+remote control, a second screen, or a **photo frame your PC drives** — as many of them at
+once as you have devices lying around.
+
+[![Latest release](https://img.shields.io/github/v/release/icyhoty2k/QuickImageViewer?style=for-the-badge&logo=github&label=release&color=2ea44f)](https://github.com/icyhoty2k/QuickImageViewer/releases/latest)
+[![Downloads](https://img.shields.io/github/downloads/icyhoty2k/QuickImageViewer/total?style=for-the-badge&color=1f6feb)](https://github.com/icyhoty2k/QuickImageViewer/releases)
+[![Windows 10 | 11](https://img.shields.io/badge/Windows-10%20%7C%2011-0078D6?style=for-the-badge&logo=windows&logoColor=white)](#download)
+[![Licence AGPLv3](https://img.shields.io/badge/licence-AGPLv3-d29922?style=for-the-badge)](LICENSE)
+[![Stars](https://img.shields.io/github/stars/icyhoty2k/QuickImageViewer?style=for-the-badge&color=8957e5)](https://github.com/icyhoty2k/QuickImageViewer/stargazers)
+[![Android companion app](https://img.shields.io/badge/companion%20app-Android-3DDC84?style=for-the-badge&logo=android&logoColor=white)](#qiv-remote--the-android-app)
+
+<br>
+
+[![Download qIV](https://img.shields.io/badge/%E2%AC%87%20Download%20qIV-latest%20release-2ea44f?style=for-the-badge&labelColor=1a7f37)](https://github.com/icyhoty2k/QuickImageViewer/releases/latest)
+[![Sponsor](https://img.shields.io/badge/%E2%99%A5%20Sponsor-GitHub%20Sponsors-EA4AAA?style=for-the-badge&labelColor=bf3a8c)](https://github.com/sponsors/icyhoty2k)
+[![Ko-fi](https://img.shields.io/badge/%E2%98%95%20Ko--fi-buy%20a%20coffee-FF5E5B?style=for-the-badge&labelColor=c94340)](https://ko-fi.com/ivanhristovyanev)
+
+</div>
+
+---
+
+<details>
+<summary><b>Contents</b> — this README is long; jump straight to what you need</summary>
+
+- [Preview](#preview) · [Download](#download) · [Format Support](#format-support) · [How qIV Compares](#how-qiv-compares) · **[qIV Remote for Android](#qiv-remote--the-android-app)**
+- **Features** — [Performance](#performance) · [Navigation](#navigation) · [Sorting](#sorting) · [UI Panels](#ui-panels) · [Offline Reverse Geocoding](#offline-reverse-geocoding) · [Thumbnail Strips](#thumbnail-strips) · [File Management](#file-management-on-thumbnail-strips) · [History Panel](#history-panel) · [Slideshow](#slideshow) · [Color Effects](#color-effects) · [Overlay System](#overlay-system) · [Window & Chrome](#window--chrome) · [Mouse Shortcuts](#mouse-shortcuts)
+- [System Tray](#system-tray) · [Remote Control & Mirroring](#remote-control--mirroring) · [Architecture](#architecture) · [Build](#build) · [Reporting a Crash](#reporting-a-crash)
+- [Found a bug? Want something added?](#found-a-bug-want-something-added) · [Support the project](#support-the-project) · [License](#license) · [Contributing](#contributing)
+
+</details>
 
 ---
 
@@ -10,16 +45,29 @@ Built on Direct2D, WIC, and native Win32 APIs. Single EXE, no installer(portable
 
 | | |
 |:---:|:---:|
-| ![Main interface with thumbnail strips and info overlays](docs/screenshots/2026-07-15_045800.png)<br>**Main interface** — thumbnail strips and info overlays | ![Built-in help window — full shortcut reference](docs/screenshots/2026-07-15_045053.png)<br>**Help window** (F1) — full shortcut reference |
-| ![Folder History panel with favorites](docs/screenshots/2026-07-15_045155.png)<br>**Folder History** panel with favorites | ![EXIF / Image Info panel with offline GPS geocoding](docs/screenshots/2026-07-15_045342.png)<br>**EXIF / Image Info** panel — offline GPS geocoding |
-| ![Dual thumbnail strips — VRAM cache and current directory](docs/screenshots/2026-07-15_045130.png)<br>**Dual thumbnail strips** — VRAM cache (top) and current directory (bottom) | ![Four floating directory strips around the viewer](docs/screenshots/2026-07-15_045219.png)<br>**Four floating directory strips** around the viewer + History panel |
-| ![Browsing a 4K wallpaper folder with the directory strip](docs/screenshots/2026-07-15_045311.png)<br>**Directory strip** — browsing a 4K wallpaper folder | ![Statistics panel — codec, cache and playlist info](docs/screenshots/2026-07-15_045440.png)<br>**Statistics panel** — codec, cache and playlist info |
-| ![Jump-to-image dialog](docs/screenshots/2026-07-15_045359.png)<br>**Jump-to** dialog — go straight to any image number | ![Find dialog — filename search with wildcards](docs/screenshots/2026-07-15_045413.png)<br>**Find** dialog — filename search with `*` and `?` wildcards |
+| ![Main interface with thumbnail strips and info overlays](docs/screenshots/less300kb/10.webp)<br>**Main interface** — thumbnail strips and info overlays | ![Built-in help window — full shortcut reference](docs/screenshots/less300kb/1.webp)<br>**Help window** (F1) — full shortcut reference |
+| ![Folder History panel with favorites](docs/screenshots/less300kb/3.webp)<br>**Folder History** panel with favorites | ![EXIF / Image Info panel with offline GPS geocoding](docs/screenshots/less300kb/6.webp)<br>**EXIF / Image Info** panel — offline GPS geocoding |
+| ![Dual thumbnail strips — VRAM cache and current directory](docs/screenshots/less300kb/2.webp)<br>**Dual thumbnail strips** — VRAM cache (top) and current directory (bottom) | ![Four floating directory strips around the viewer](docs/screenshots/less300kb/4.webp)<br>**Four floating directory strips** around the viewer + History panel |
+| ![Browsing a 4K wallpaper folder with the directory strip](docs/screenshots/less300kb/5.webp)<br>**Directory strip** — browsing a 4K wallpaper folder | ![Statistics panel — codec, cache and playlist info](docs/screenshots/less300kb/9.webp)<br>**Statistics panel** — codec, cache and playlist info |
+| ![Jump-to-image dialog](docs/screenshots/less300kb/7.webp)<br>**Jump-to** dialog — go straight to any image number | ![Find dialog — filename search with wildcards](docs/screenshots/less300kb/8.webp)<br>**Find** dialog — filename search with `*` and `?` wildcards |
+
+<sub>Shown at 70% scale in WebP. The full-resolution PNGs are in
+[`docs/screenshots/`](docs/screenshots).</sub>
+
 ---
 
 ## Download
 
-**[→ Latest Release](https://github.com/icyhoty2k/QuickImageViewer/releases/latest)**
+<div align="center">
+
+[![Download the latest release](https://img.shields.io/badge/%E2%AC%87%20Download-QuickImageViewer.exe-2ea44f?style=for-the-badge&labelColor=1a7f37)](https://github.com/icyhoty2k/QuickImageViewer/releases/latest)
+
+</div>
+
+One executable, and **no Visual C++ Redistributable to install** — the C runtime is
+linked in. Unblock it if SmartScreen asks, put it anywhere, run it — settings live
+in the registry (or an `.ini` beside the EXE with `-config`), and nothing else is
+written to your machine unless you switch logging on. To remove qIV, delete the file.
 
 ---
 
@@ -31,7 +79,7 @@ Built on Direct2D, WIC, and native Win32 APIs. Single EXE, no installer(portable
 | PNG | `.png` | WIC | 16-bit, alpha |
 | BMP | `.bmp` | WIC | |
 | TIFF | `.tif` `.tiff` | WIC | Multi-page (first frame) |
-| GIF | `.gif` | WIC | Static (first frame) |
+| GIF | `.gif` | WIC | **Animated** — plays with per-frame delays |
 | WebP | `.webp` | WIC | Windows 10+ native codec |
 | HEIF / HEIC | `.heif` `.heic` | WIC | Requires MS HEIF Extensions |
 | AVIF | `.avif` | WIC | Windows 11 native codec |
@@ -53,21 +101,211 @@ Built on Direct2D, WIC, and native Win32 APIs. Single EXE, no installer(portable
 
 | Feature | qIV | Windows Photos | IrfanView |
 |:---|:---:|:---:|:---:|
+| **Speed & footprint** | | | |
 | GPU VRAM bitmap cache | ✅ Direct2D | ❌ | ❌ |
 | Instant image switching | ✅ pre-decoded neighbours | ⚠️ visible load delay | ⚠️ visible load delay |
+| Portable — no installer | ✅ 9 MB single EXE | ❌ UWP / Store | ✅ |
+| No background services | ✅ process exits cleanly | ❌ always-on UWP runtime | ✅ |
+| **Formats** | | | |
 | HEIC / AVIF / JPEG XL | ✅ native + codec | ✅ | ⚠️ plugin required |
 | SVG / OpenEXR / HDR | ✅ built-in | ❌ | ⚠️ plugin required |
+| Batch convert & rename | ❌ | ❌ | ✅ |
+| Plugin ecosystem | ❌ codecs built in instead | ❌ | ✅ |
+| **Viewing & editing** | | | |
+| Non-destructive GPU effects | ✅ full D2D effect graph | ⚠️ basic adjustments | ⚠️ CPU, applied to the buffer |
+| Crop / paint / resize editing | ❌ effects only, `Ctrl+S` bakes | ✅ | ✅ |
+| Configurable info overlays | ✅ 9 independent slots | ❌ | ⚠️ slideshow captions |
+| Slideshow transitions | ✅ 21, GPU | ⚠️ basic | ✅ |
+| Floating thumbnail panels | ✅ up to 6 simultaneous | ❌ | ⚠️ separate browser window |
+| Thumbnail strips as file manager | ✅ drag between folders, shell ops | ❌ | ⚠️ in the browser window |
 | Offline GPS geocoding | ✅ embedded, zero network | ❌ | ❌ |
-| Floating thumbnail panels | ✅ up to 6 simultaneous | ❌ | ❌ |
-| Per-monitor DPI V2 | ✅ | ✅ | ⚠️ partial |
-| Portable — no installer | ✅  MB single EXE | ❌ UWP / Store | ✅ |
-| No telemetry / tracking | ✅ zero | ❌ Microsoft telemetry | ✅ |
-| No ads | ✅ | ❌ promoted content | ✅ |
-| No background services | ✅ process exits cleanly | ❌ always-on UWP runtime | ✅ |
-| Open source | ✅ AGPLv3 | ❌ | ❌ |
-| Kiosk / locked display mode | ✅ CLI flag | ❌ | ⚠️ limited |
+| **Remote & multi-screen** | | | |
+| **Android companion app** | ✅ **[qIV Remote](#qiv-remote--the-android-app)** — control, live preview, photo frame | ❌ | ❌ |
+| Phone ↔ desktop photo transfer | ✅ both ways, originals not re-encodes | ❌ | ❌ |
 | Drive other copies over TCP | ✅ plain-text protocol, self-describing | ❌ | ❌ |
 | Mirror one screen to many | ✅ F11, per-target selection | ❌ | ❌ |
+| Send an image across machines | ✅ `Alt+Enter`, file bytes on the wire | ❌ | ❌ |
+| Scriptable from anything | ✅ `netcat`, shell, home automation | ❌ | ⚠️ local command line only |
+| Kiosk / locked display mode | ✅ CLI flag, ignores every key and click | ❌ | ⚠️ limited |
+| Starts with Windows, unattended | ✅ `-runOnStartup` + kiosk + keep-awake | ❌ | ⚠️ manual |
+| Digital signage / ad loop | ✅ folder in, wall out — no publish step | ❌ | ⚠️ slideshow only |
+| Phones, tablets & TVs as extra screens | ✅ as many as you own, no per-screen fee | ❌ | ❌ |
+| **Trust** | | | |
+| No telemetry / tracking | ✅ zero | ❌ Microsoft telemetry | ✅ |
+| No ads | ✅ | ❌ promoted content | ✅ |
+| Open source | ✅ AGPLv3 | ❌ | ❌ |
+| Per-monitor DPI V2 | ✅ | ✅ | ⚠️ partial |
+
+<sub>✅ built in · ⚠️ partial, or needs a plugin or a separate window · ❌ not available.
+IrfanView wins the rows it wins — batch work and real editing are what it is for, and qIV
+does not try to replace them.</sub>
+
+---
+
+## qIV Remote — the Android app
+
+<div align="center">
+
+[![Android](https://img.shields.io/badge/Android-13%2B-3DDC84?style=for-the-badge&logo=android&logoColor=white)](#requirements)
+[![Google Play](https://img.shields.io/badge/Google%20Play-coming%20soon-414141?style=for-the-badge&logo=googleplay&logoColor=white)](#)
+[![No account](https://img.shields.io/badge/no%20account-no%20cloud%20·%20no%20analytics-1f6feb?style=for-the-badge)](#a-private-network-and-nothing-else)
+
+**Your phone becomes the viewer's remote, a second screen, and a photo frame your PC drives.**
+
+</div>
+
+Point it at your PC over your own network and drive qIV from the sofa, the far side of a
+meeting room, or anywhere the keyboard is not. It is a real protocol client, not screen
+sharing: it speaks the same verbs `netcat` does, so it stays in step with the desktop
+instead of streaming pixels at it.
+
+### Photos travel both ways
+
+This is the part a remote control usually cannot do at all.
+
+| Direction | What travels | Why it is built that way |
+|:---|:---|:---|
+| **Desktop → phone** — live preview | The current picture, scaled and re-encoded as JPEG **before it leaves the PC** | 25–40× fewer bytes than the original, and a far smaller decode on the phone |
+| **Desktop → phone** — Save | The **original file**, byte for byte, into `Pictures/qIVRemote` in your gallery | Save asks for the original *separately* rather than keeping the preview — a re-encoded JPEG is not the file you meant to keep |
+| **Phone → desktop** — push | Your photo's own bytes, base64 in chunks | Works to a PC that has never seen the photo and cannot read your phone's storage |
+
+A pushed photo appears on the desktop **once**, over whatever is up. It changes no folder,
+no sort order, no playlist position, and a running slideshow keeps running with it
+occupying a single slide. Nothing has to be paused first, and nothing is left behind.
+
+Saving to the gallery needs **no storage permission** — the app publishes through
+MediaStore, and the entry stays invisible until the transfer finishes, so a gallery
+scanning mid-transfer can never show you a half-written thumbnail.
+
+### Turn any spare screen into a photo frame
+
+The same connection runs the other way round. Instead of using the phone to drive the PC,
+put it on a stand and let the PC drive **it**.
+
+Open the Fullscreen screen and the device shows whatever the viewer is showing — nothing
+else. No toolbar, no buttons, no chrome. Start a slideshow on the PC and the tablet on the
+shelf follows it, picture for picture, for as long as you leave it there.
+
+| | |
+|:---|:---|
+| **An old tablet becomes a photo frame** | The one in a drawer with a cracked case is a perfectly good display. Prop it up, point it at the PC, start a slideshow. |
+| **A phone becomes a second monitor for photos** | Cull on the big screen, review at arm's length, hand it to someone across the table. |
+| **The PC stays the library** | Your folders, your sort order, your filters, your drives. The screen is a window onto the machine that already has all of it. |
+
+It keeps up **without being asked**. The viewer announces every picture change — including
+the ones a slideshow makes on its own, where no key was pressed and no command was sent —
+and the screen fetches the new image the moment it hears. Nothing polls, nothing lags a
+frame behind.
+
+**It sends nothing back.** The Fullscreen screen has no Next, no Previous, no toolbar, and
+that is deliberate rather than unfinished: a control that could nudge a running
+presentation from a phone in somebody's pocket is a hazard, not a feature. It asks for two
+read-only things and nothing else. Tap anywhere to leave.
+
+What crosses the network is a **preview** — scaled to that screen's size and re-encoded as
+JPEG on the PC before it is sent, not the original file. A 6 MB photo shown on a tablet
+moves as a few hundred kilobytes. That is what makes it comfortable over Wi-Fi, and what
+keeps a frame refreshing all evening from being a bandwidth decision.
+
+**As many screens as you have devices.** Every connected device watches independently, so
+one PC can feed the tablet in the kitchen, the phone in the hallway and the spare monitor
+on the desk at the same time — all following the same library, all updating together. There
+is no per-screen licence, because there is nobody to license it from.
+
+That also makes it **signage and advertising that costs nothing to run**: a shop window, a
+waiting room, a menu board, a studio wall. One PC you already own, screens you already
+have, your own network. No subscription, no cloud account, no per-display fee, and no
+service that can raise its price or shut down and take the wall with it.
+
+And it runs **unattended**, which is the part that decides whether a display is a product
+or a chore. The viewer already has every piece:
+
+| | |
+|:---|:---|
+| **Starts with the machine** | `-runOnStartup`, or the tray toggle. Power comes back after a cut and the wall comes back with it — nobody drives to the shop to click anything. |
+| **Ignores everybody** | Kiosk lock (`-lock`) makes the screen ignore every key and every click, so a passer-by cannot pause your loop or open a panel. The tray is the only way back in. |
+| **Stays awake** | Keep display awake blocks the screensaver and display sleep, and releases the hold the moment the window hides — a viewer sitting in the tray never keeps a machine up. |
+| **Loops by itself** | Slideshow with interval, loop and shuffle, and 21 GPU transitions. Point it at a folder and drop new artwork in — no playlist to rebuild, no re-upload, no publish step. |
+
+Changing what a wall shows is **copying a file into a folder**. That is the whole workflow.
+
+No cloud account, no subscription, no photos uploaded anywhere. The pictures go from your
+PC to your screen across your own network, and stop there.
+
+### What else it does
+
+<table>
+<tr>
+<td width="50%" valign="top">
+
+**Drive the viewer**
+
+Next / previous, first / last. Slideshow with its interval, pause, loop and shuffle.
+Zoom, rotate, flip. All five view modes. Colour effects. Fullscreen, always-on-top,
+panels and the on-image overlay.
+
+**Jump anywhere**
+
+The viewer's folder history comes down to the phone — tap a folder and the desktop goes
+there.
+
+</td>
+<td width="50%" valign="top">
+
+**Presentation mode**
+
+The current picture and two large next/previous buttons, sized to press without looking.
+Built for talking to a room rather than staring at a phone.
+
+**Follow the desktop**
+
+Bind the connection and the preview keeps itself up to date — when someone changes the
+picture at the PC, your phone shows it.
+
+</td>
+</tr>
+<tr>
+<td valign="top">
+
+**As many PCs as you like**
+
+Each saved machine keeps its own address, port and optional password. Tap one to connect.
+
+</td>
+<td valign="top">
+
+**Demo mode**
+
+Every screen runs against a viewer that does not exist, so you can see the whole app
+before installing anything or opening a port.
+
+</td>
+</tr>
+</table>
+
+### A private network, and nothing else
+
+The app talks only to the computer whose address you type. There is **no account, no
+cloud, no analytics, no advertising**, and nothing is ever sent to the developer — there
+is no back end to send it to.
+
+When your PC requires a password it is verified by challenge–response, so **the password
+itself never crosses the network**. Off the loopback the connection is TLS with a pinned
+certificate, and qIV's own AllowList (`F9`) still decides who may connect at all.
+Passwords you choose to save stay in app-private storage on the phone.
+
+### Requirements
+
+It is a companion app and does nothing on its own — the same way a TV remote does nothing
+without the TV. You need **QuickImageViewer running on a Windows PC with its Local Server
+enabled** (`F9` in qIV), and the phone on the same network. The app's About screen walks
+through the setup.
+
+<div align="center">
+
+*Coming to Google Play. Until then, the desktop side is ready and waiting on `F9`.*
+
+</div>
 
 ---
 
@@ -92,9 +330,26 @@ Built on Direct2D, WIC, and native Win32 APIs. Single EXE, no installer(portable
 | `J` / `Ctrl+G` | Jump to image by number (type `@` to switch to Find mode) |
 | `Ctrl+F` | Find by filename — wildcard support (`*`, `?`); type `#` to switch to Jump mode |
 | `L` | Reveal current file in Windows Explorer |
-| Horizontal Wheel | Cycle through navigation history folders (one change per 3 notches) |
+| `PageUp` / `PageDown` | Previous / next folder in your history — walks only the **non-starred** rows |
+| `Insert` / `Delete` | Next / previous **favourite** folder — walks only the starred rows |
+| Horizontal Wheel | Cycle through navigation history folders (one change per 3 notches) — unlike the four keys above, this walks **every** row, starred or not |
 | `F2` | Open-file dialog |
 | Drag & Drop | Drop a file or folder onto the window |
+
+### Zoom, Pan & View Modes
+
+| Shortcut | Action |
+|:---|:---|
+| `↑` / `↓` | Zoom in / out, ×1.1 per step |
+| Numpad `+` / `-` | Zoom in / out — same steps as `↑` / `↓` |
+| Numpad `*` | Reset zoom and pan to the active view mode's default fit |
+| `0` | Open the Zoom panel and type an exact percentage |
+| `W` / `A` / `S` / `D` | Pan the viewport when the image is larger than the window — 30 px per press, DPI-scaled |
+| `1` – `5` | View mode: **1** Fit to view (keeps aspect) · **2** Fit to width · **3** Fit to height · **4** Fill window · **5** Original size, 1:1 pixels |
+| `Y` | **Lock Viewport** — carry zoom and pan to the next image instead of resetting, so flipping through same-framed shots holds the same detail at the same magnification. Rotation and flips still reset, because each file's EXIF orientation tag owns those |
+
+`W`/`A`/`S`/`D` pan on their own, move the window with `Shift`, and `Ctrl+W` / `Ctrl+S`
+keep their usual meanings (hide the app, save the edited image).
 
 ### Sorting
 
@@ -103,7 +358,7 @@ Built on Direct2D, WIC, and native Win32 APIs. Single EXE, no installer(portable
 | `Ctrl+Alt+Shift+0` | By name (natural / Explorer order) — press again to reverse |
 | `Ctrl+Alt+Shift+9` | By date modified — press again to flip newest ↔ oldest |
 | `Ctrl+Alt+Shift+8` | By file size — press again to flip largest ↔ smallest |
-| `Ctrl+Alt+Shift+` | By extension — press again to reverse |
+| `Ctrl+Alt+Shift+7` | By extension — press again to reverse |
 | `Ctrl+Alt+Shift+6` | By physical disk order (fastest for HDDs) |
 
 ### UI Panels
@@ -113,7 +368,7 @@ Built on Direct2D, WIC, and native Win32 APIs. Single EXE, no installer(portable
 | Help | `F1` | Full shortcut & CLI reference — 2-column, double-buffered, DPI-aware. `Ctrl+E` exports to Desktop as UTF-8 text. |
 | EXIF / Info | `M` | Full metadata: camera, exposure, GPS with offline geocoding, embedded preview thumbnail |
 | Statistics | `K` | Decode time, codec, file details and cache info for the current image |
-| Directory | `F6` / `F`  *(or Right Shift)* | All images in current folder; syncs selection with viewer / moves panel to next screen edge |
+| Directory | `F6` *(or Right Shift)* / `F7` | All images in current folder; syncs selection with viewer / moves panel to next screen edge |
 | Cache | `F3` / `F4` | Live GPU cache occupancy, thumbnails of preloaded images / moves panel |
 | Reload | `F5` | Refresh / reload the current directory from disk |
 | History | `Tab` | Recent folders with favorites — `Shift+Enter` spawns a DirWnd without leaving current folder |
@@ -123,9 +378,9 @@ GPS coordinates in EXIF are resolved to full location data with **zero network c
 
 | Data | Source | Entries | Shows |
 |:---|:---|:---|:---|
-| Cities | GeoNames cities1000 | 10,38 | City name, timezone |
+| Cities | GeoNames cities1000 | 170,387 | City name, timezone |
 | Admin1 | admin1CodesASCII | 3,865 | State / Province |
-| Admin2 | admin2Codes | 4,549 | District / County |
+| Admin2 | admin2Codes | 47,549 | District / County |
 | Country | countryInfo | 252 | Country, Capital, Continent, Currency, Phone prefix |
 
 Example output in the EXIF panel for a photo taken in Paris:
@@ -168,11 +423,13 @@ Directory strips double as a lightweight file manager:
 |:---|:---|
 | `Tab` | Toggle History panel |
 | `Ctrl+Tab` | Toggle full (uncapped) view and refresh the folder snapshot |
+| *type anything* | Filter the list — fuzzy by default, wildcards (`*`, `?`) when the query contains one. Matched characters are highlighted in the row |
+| `Esc` / `✕` | Clear the filter (`Esc` closes the panel when the filter is already empty) |
 | `Enter` | Open hovered folder in main viewer |
 | `Shift+Enter` | Spawn / hide a floating DirWnd for the hovered folder (toggle) |
 | `MMB click` on a row | Spawn / hide a floating DirWnd for the hovered folder (panel stays open) |
-| `Space` | Toggle favorite on hovered entry |
-| `Delete` | Delete hovered entry (`Ctrl+Z` restores last deleted) |
+| `Space` | Toggle favorite on hovered entry (types a space once the filter has text) |
+| `Ctrl+Delete` | Delete hovered entry (`Ctrl+Z` restores last deleted) |
 | `Ctrl+Shift+Delete` | Clear all history, keep favorites |
 | `Ctrl+Alt+Shift+Delete` | Clear all favorites, keep history |
 
@@ -213,16 +470,49 @@ All effects are non-destructive and GPU-accelerated via the Direct2D effect grap
 ```
 [Ctrl+1] Top Left    [Ctrl+2] Top Center    [Ctrl+3] Top Right
 [Ctrl+4] Mid Left    [Ctrl+5] Center        [Ctrl+6] Mid Right
-[Ctrl+] Bot Left    [Ctrl+8] Bot Center    [Ctrl+9] Bot Right
+[Ctrl+7] Bot Left    [Ctrl+8] Bot Center    [Ctrl+9] Bot Right
 ```
+
+What each slot carries: **1** index + filename · **3** zoom % · **5** centre message
+area · **7** active effects + folder name · **9** dimensions + file size. Slots **2**,
+**4**, **6** and **8** show the thumbnail-strip selection count for the panel on that
+edge.
 
 | Shortcut | Action |
 |:---|:---|
 | `N` / `I` / `Ctrl+0` | Master toggle — show / hide all slots |
-| `Ctrl+1` – `Ctrl+9` | Toggle individual slots |
-| `Ctrl+Shift+1` – `Ctrl+Shift+9` | Toggle compact mode per slot (1 line instead of 2) |
+| `Ctrl+1` – `Ctrl+9` | Walk one slot through **Compact → Full → Off** — compact is one line instead of two. `Ctrl+5` (centre messages) has no compact form, so it cycles On → Off |
 | `O` | Cycle overlay layout: Grid → Stacked → Summary |
 | `P` | Toggle semi-transparent background behind overlay text |
+
+Appearance is set from the tray menu's **Overlays** submenu rather than by shortcut:
+
+| Item | Effect |
+|:---|:---|
+| Layout | Grid / Stacked / Summary — the same three `O` cycles through |
+| Font | Typeface used by every overlay slot |
+| Font Size | Point size, shown in the label |
+| Font Color… | Colour picker for overlay text |
+| Message Duration | How long a centre-screen message stays up, in milliseconds |
+
+The nine slots are listed there too, each named for what it carries — Top Left
+(Index / File), Top Right (Zoom), Mid Center (Messages), Bot Left (Effects), Bot Right
+(Dimensions), and the four Panel Selection slots. Each opens a **three-state radio
+group — Compact / Full / Off**, the same cycle its `Ctrl+N` key walks. Mid Center is
+always single-line, so it offers only On / Off. **Bot Left** carries two extra toggles
+above its radio group, because they decide whether there is anything to format:
+**Effects** (the active colour-effect list) and **Folder Name** (the containing folder
+beside the file name).
+
+### Application Lifecycle
+
+| Shortcut | Action |
+|:---|:---|
+| `Esc` / `Ctrl+W` | Hide to the system tray — the process stays resident so the next open is instant. Extra running instances are closed |
+| `Ctrl+Q` | **Hard quit** — fully removes the process from memory |
+| `Ctrl+N` | Open a new independent qIV window |
+| `Shift+Delete` | Reset everything — window layout and all effects return to defaults (same as `Alt+X`) |
+| `Ctrl+C` | Copy the current image to the clipboard |
 
 ### Window & Chrome
 
@@ -231,6 +521,7 @@ All effects are non-destructive and GPU-accelerated via the Direct2D effect grap
 | `F` / `Enter` / `Ctrl+Shift+T` | Toggle borderless fullscreen |
 | `Ctrl+Enter` / `Alt+Enter` / `Ctrl+Alt+Enter` | Send this position / stream this image / fetch its image — see [Remote Control](#remote-control--mirroring) |
 | `Ctrl+T` / `Ctrl+A` | Toggle always-on-top |
+| `Ctrl+M` | Move the window to the **next monitor**, wrapping at the last. Screens are ordered left to right by their desktop position, and the window keeps its relative size and place — so a window sized for a 4K screen does not land half off a 1080p one. The overlay names the monitor it moved to |
 | `Shift+W/A/S/D` | Nudge window 20 px up / left / down / right |
 | `Alt+W/A/S/D` | Snap to top / left / bottom / right half of work area |
 | `Alt+Q/E/Z/C` | Snap to top-left / top-right / bottom-left / bottom-right quarter |
@@ -340,6 +631,32 @@ Choose sort order: **Name** / **Date Modified** / **Size** / **Type** / **Disk O
 | Backup History & Favorites | Export history and favorites to a `.zip` archive (file-save dialog) |
 | Restore History & Favorites | Restore from a previously created backup — confirmation required |
 
+### Logging submenu
+
+Both logs are **off by default** and survive a restart once switched on — which is the
+point of them. A screen that misbehaves at four in the morning is exactly the one nobody
+was watching, so the setting is persisted rather than something you must remember to
+enable first.
+
+| Item | Effect |
+|:---|:---|
+| General Log | What qIV itself did — started, closed, and whether the previous run ended abnormally (with the crash dump's filename when there is one) |
+| TCP/IP Log | Every line exchanged with a remote client — the same traffic the Server Log panel shows (`Ctrl+F12`), written to disk as well |
+| Open Log Folder | Opens `logs\` in Explorer |
+
+Files land in `logs\general\` and `logs\network\` beside the EXE, named
+`QuickImageViewer_General_<timestamp>.log` and `QuickImageViewer_Tcp_IP_<timestamp>.log`,
+rotating every 5000 lines. Switching a log off and on again continues the newest file
+rather than starting a fresh one.
+
+The format is the standard `time [thread] LEVEL message` layout, so
+[LogViewPlus](https://www.logviewplus.com/), lnav and similar tools parse it with no
+configuration — and a rotated TCP/IP file opens straight back in the Server Log panel
+with `Ctrl+O`.
+
+Writing happens on a thread of its own. A slow disk cannot stall the viewer, and with a
+log switched off the cost at each record point is a single atomic read.
+
 ### Dedicated Screens
 
 Press `F8` for the Dedicated panel. A **dedicated screen** is a separate copy of qIV with its own settings file beside it — normally parked fullscreen on one monitor running a slideshow. Any number can run at once, alongside the main app, sharing nothing.
@@ -416,12 +733,29 @@ display in another room. It is plain UTF-8 line protocol over TCP, so a script,
 | Shortcut | Panel / Action |
 |:---|:---|
 | `F9` | **Local Server** — the listener *this* instance runs. Off unless switched on; needs a name and a port |
+| `Ctrl+F9` | **My Clients** — who is connected to *your* listener right now: address, the name and platform each gave, whether it is encrypted, how long it has been on, and whether it is watching. Kick, kick-for-N-minutes, or ban from here |
 | `F10` | **Remote Servers** — the instances this copy can drive. Connect, start/stop, watch, sync |
 | `Ctrl+F10` | **Send Command** — pick any wire command from the list, give it a value, send it |
 | `F11` | **Mirroring on/off** — forward every mirrorable command to the connected targets |
-| `Ctrl+F11` | **Remotes Control** — which connected instances F11 drives, plus Identify and Watch |
+| `Ctrl+F11` | **Mirroring** — which connected servers receive what this instance does, plus Identify and Watch |
 | `F12` | While mirroring, **also execute here** (off = this viewer is a pure remote control) |
 | `Ctrl+F12` | **RemoteLog** — every line that crossed the wire, both directions, with round trips — plus a line each time a client arrives, leaves, drops or is refused, naming its address and port and how long it stayed |
+
+**Announce (beacon)** (first item in the TCP/IP menu, off by default). The server publishes itself over
+mDNS as `_qiv._tcp`, so a phone or another qIV **finds it in a list instead of being told
+an address to type**. That one step — read your PC's LAN address, type it without a typo on
+a phone keyboard, know what a port is — is where most people give up.
+
+It announces **only the instance name and the port**. Never a password, never a path, never
+a file. And discovery is not access: the AllowList, the password challenge and TLS are
+untouched by it, so someone who finds this instance and is not allowed in gets exactly as
+far as someone who guessed the address.
+
+Off by default on purpose — this app's whole posture is that nothing leaves your network
+unasked, and a machine that started advertising itself the moment you enabled the server
+would be a change to that made on your behalf. It also only announces while the server is
+actually **running and reachable**: with the listener stopped, or bound to `127.0.0.1`, the
+menu says *will announce* rather than claiming it did.
 
 F11 and F12 are session-only and always start **off** — a viewer that came back from a
 restart already driving machines you had forgotten about would be the worst kind of
@@ -468,14 +802,18 @@ cannot come back "unknown command".
 - **Session log** — every line sent and every answer, numbered, newest first, with the
   instance that answered and its round trip
 
+> **The phone client has its own section** — see
+> [qIV Remote for Android](#qiv-remote--the-android-app), which speaks exactly the
+> protocol described here.
+
 ### The protocol describes itself
 
 ```
 $ nc 127.0.0.1 7777
-OK qIV 2.96.0.113 remote v5 [Monitor2]
+OK qIV 2.190.0.235 remote v6 [Monitor2]
 OK
 help
-qIV remote protocol v5
+qIV remote protocol v6
 FORMAT CMD <name>|<takesValue 0|1>|<description>|<value description>
 CMD NextImage|0|next image in the playlist|
 CMD JumpToImage|1|go to a numbered image in the current playlist|image NUMBER, 1-based …
@@ -612,7 +950,7 @@ qIV_dedicated_Lobby.exe -dedicated -config "D:\Screens\qIV_dedicated_Lobby.ini"
 | [resvg](https://github.com/RazrFalcon/resvg) | SVG rasterizer (Rust static lib) |
 | [OpenJPEG](https://github.com/uclouvain/openjpeg) | JPEG 2000 decoder |
 | [tinyexr](https://github.com/syoyo/tinyexr) | OpenEXR decoder |
-| [miniz](https://github.com/richgel999/miniz) | zlib compression for embedded GeoNames data |
+| [miniz](https://github.com/richgel999/miniz) | zlib — embedded GeoNames data, EXR scanlines, and the Backup archive |
 
 ---
 
@@ -635,8 +973,140 @@ For offline geocoding, generate the GeoNames binary resources before building:
 python tools/preprocess_cities.py
 ```
 
+### Tests
+
+```bash
+ctest --output-on-failure          # from the build directory
+```
+
+Unit tests live in `test/qivTests.cpp` and build as a separate `qivTests` target
+(`-DQIV_BUILD_TESTS=OFF` disables it). They cover the pure logic — Base64 wire
+encoding, the zoom storage round trip, and the Find dialog's wildcard and fuzzy
+matching — plus benchmarks for the Base64 and Find paths. Run `qivTests -v` to list
+every check by name.
+
+---
+
+## Reporting a Crash
+
+If qIV closes unexpectedly it writes a crash report next to the executable:
+
+```
+QuickImageViewer_crash_YYYYMMDD_HHMMSS_<pid>.dmp
+```
+
+**Nothing is sent anywhere.** qIV has no telemetry and makes no network call of its
+own — the file is written to your disk and stays there. Attaching it to an
+[issue](https://github.com/icyhoty2k/QuickImageViewer/issues) is entirely your
+choice, and it is the difference between a bug that gets fixed and one that stays a
+mystery, because it contains the exact stack qIV died on.
+
+It holds a snapshot of the program's internal state — open file paths and window
+titles among them — and **not** the contents of your images. If a path in it is
+sensitive, say so in the issue instead of attaching the file.
+
+---
+
+## Found a bug? Want something added?
+
+<div align="center">
+
+[![Report a bug](https://img.shields.io/badge/%F0%9F%90%9B%20Report%20a%20bug-open%20an%20issue-d1242f?style=for-the-badge&labelColor=a40e26)](https://github.com/icyhoty2k/QuickImageViewer/issues/new?template=bug_report.yml)
+[![Request a feature](https://img.shields.io/badge/%E2%9C%A8%20Request%20a%20feature-tell%20me%20about%20it-8957e5?style=for-the-badge&labelColor=6639ba)](https://github.com/icyhoty2k/QuickImageViewer/issues/new?template=feature_request.yml)
+[![Android app issue](https://img.shields.io/badge/%F0%9F%93%B1%20qIV%20Remote-Android%20issues-3DDC84?style=for-the-badge&labelColor=2a9d63)](https://github.com/icyhoty2k/QuickImageViewer/issues/new?template=android_remote.yml)
+
+</div>
+
+Small requests count — a missing keyboard shortcut is as valid as a whole panel. The
+forms ask for a few details up front because "it crashed" and "it crashed when I opened
+a 400 MB TIFF from a network drive" are different amounts of work to act on.
+
+**Issues for the Android app belong here too**, alongside the viewer it talks to —
+almost every question about one involves the other.
+
+**Security issues get a private channel.** qIV can listen on a network port, so anything
+touching authentication, TLS or the AllowList should go through
+[a security advisory](https://github.com/icyhoty2k/QuickImageViewer/security/advisories/new)
+rather than a public issue.
+
 ---
 
 ## License
 
-Licensed under the **[GNU Affero General Public License v3.0 (AGPLv3)](docs/LICENSE)**.
+Licensed under the **[GNU Affero General Public License v3.0 (AGPLv3)](LICENSE)**.
+
+Copyright © 2026 Ivan Hristov Yanev. You are free to use, study, modify and share it.
+If you distribute a modified version — or run one as a network-accessible service —
+you must release your source under the same licence.
+
+### Commercial licensing
+
+AGPLv3 does not suit every use. If you want to build qIV, or its remote-control and
+mirroring subsystem, into a product you do not intend to open-source — digital
+signage, kiosks, retail or museum displays, industrial and medical viewing stations —
+a separate commercial licence is available.
+
+Contact **icyhoty2k@gmail.com**.
+
+---
+
+## Contributing
+
+Contributions are welcome under the terms in [CONTRIBUTING.md](CONTRIBUTING.md),
+which asks contributors for a licence grant so that the commercial option above
+remains possible. Everything contributed stays AGPLv3 for the public.
+
+---
+
+## Support the project
+
+<div align="center">
+
+**qIV is one person's work, in the open — no ads, no telemetry, nothing to buy.**
+
+There is no paid tier and no feature behind a wall. Sponsorship is simply what buys
+the time to keep building it.
+
+[![Sponsor on GitHub](https://img.shields.io/badge/%E2%99%A5%20Sponsor%20on%20GitHub-monthly%20or%20one--off-EA4AAA?style=for-the-badge&labelColor=bf3a8c)](https://github.com/sponsors/icyhoty2k)
+[![Buy me a coffee on Ko-fi](https://img.shields.io/badge/%E2%98%95%20Ko--fi-no%20account%20needed-FF5E5B?style=for-the-badge&labelColor=c94340)](https://ko-fi.com/ivanhristovyanev)
+
+<table>
+<tr>
+<td width="50%" valign="top">
+
+**[GitHub Sponsors →](https://github.com/sponsors/icyhoty2k)**
+
+Monthly or one-off. GitHub covers the processing fees, so nearly the whole
+amount arrives — this is the route that delivers most.
+
+</td>
+<td width="50%" valign="top">
+
+**[Ko-fi →](https://ko-fi.com/ivanhristovyanev)**
+
+No GitHub account required. Ordinary card or PayPal checkout, which does carry
+the usual processing fees.
+
+</td>
+</tr>
+</table>
+
+Not in a position to sponsor? A ⭐, a bug report with a crash dump attached, or
+telling someone about qIV all help more than they look like they do.
+
+</div>
+
+### Sponsors
+
+<!--
+    Sponsors at $25/month, $100/month and $50 one-time are entitled to a listing
+    here. Add them as `- [Name](link)`, businesses first. Ask before listing
+    anyone — some prefer not to be named, and the tier wording promises them the
+    choice.
+-->
+
+<div align="center">
+
+*No sponsors yet — this space is reserved for the first.*
+
+</div>

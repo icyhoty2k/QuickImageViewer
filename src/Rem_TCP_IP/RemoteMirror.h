@@ -1,3 +1,11 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// Copyright (C) 2026 Ivan Hristov Yanev
+//
+// This file is part of QuickImageViewer. It is free software: you may
+// redistribute and modify it under the terms of the GNU Affero General Public
+// License version 3 or later, as published by the Free Software Foundation.
+// It is distributed WITHOUT ANY WARRANTY. See the LICENSE file for details.
+
 #pragma once
 #include <windows.h>
 #include <string>
@@ -405,7 +413,7 @@ namespace Remote::Mirror {
     // Put every connected target's wire log into the given state (`enablelog
     // 1|0`). Sent to ALL of them, not just the mirrored selection: the log
     // describes the session, and a screen left recording because it happened to
-    // be unticked in Remotes Control is a growing file nobody will look at.
+    // be unticked in Mirroring is a growing file nobody will look at.
     //
     // Does NOT touch this instance — the caller sets its own flag, because the
     // caller is the one that owns app.remoteLogEnabled.

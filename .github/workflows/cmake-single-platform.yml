@@ -17,6 +17,15 @@ on:
 env:
   BUILD_TYPE: Release
 
+# Least privilege for GITHUB_TOKEN. Without this block the token inherits the
+# repository default, which has historically included WRITE access — so any of
+# the third-party actions below could push to this repository.
+#
+# This job only reads the source and uploads an artifact, and artifact upload
+# uses the runner's own token rather than this one, so read is all it needs.
+permissions:
+  contents: read
+
 jobs:
   build:
     runs-on: windows-latest

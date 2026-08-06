@@ -49,3 +49,10 @@ codemap.md
 .zed/
 .mcp.json
 mcp-scripts/
+
+# Crash dumps written by src/Platform/CrashHandler.cpp, next to the exe.
+#
+# NEVER COMMIT ONE. A minidump is a snapshot of process memory: open file paths,
+# window titles, whatever happened to be in the crashing frames. Harmless on the
+# machine that made it, permanent and public the moment it lands in this repo.
+*.dmp

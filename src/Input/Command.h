@@ -1,3 +1,11 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// Copyright (C) 2026 Ivan Hristov Yanev
+//
+// This file is part of QuickImageViewer. It is free software: you may
+// redistribute and modify it under the terms of the GNU Affero General Public
+// License version 3 or later, as published by the Free Software Foundation.
+// It is distributed WITHOUT ANY WARRANTY. See the LICENSE file for details.
+
 #pragma once
 #include <windows.h>
 #include <string>
@@ -69,6 +77,20 @@ enum class Command {
     ToggleCache,
     ClearCache,
     ToggleDir,
+    // F4 / F7 — move a strip to the next free screen edge.
+    //
+    // These used to be handled ONLY by the panel's own WM_KEYDOWN, so they
+    // worked when the strip had focus and did nothing from the main window —
+    // while HelpWnd advertised them without saying so. Their toggle siblings
+    // (F3 / F6) were global all along, and there is no reason for the pair to
+    // differ: F4 names the cache strip and F7 the directory strip, so neither
+    // needs a focused panel to say which one it means.
+    //
+    // The panels still handle their own key as well, which is what lets a
+    // focused strip move itself without the keystroke leaving it. That is the
+    // same arrangement the toggles already had.
+    MoveCacheWnd,
+    MoveDirWnd,
     ToggleHistory,
     ToggleHistoryFull,
     // Master toggle  (I / Ctrl+0)
@@ -247,7 +269,7 @@ enum class Command {
     // --- Dedicated instances (src/Dedicated) ---
     ToggleDedicatedPanel,   // F8 — the Dedicated configuration panel
     ToggleRemotePanel,      // F9 — the Local Server panel (this instance's listener)
-    // Ctrl+F9 — Server Clients: who is connected to THIS instance's listener,
+    // Ctrl+F9 — My Clients: who is connected to THIS instance's listener,
     // and kick / timed kick / ban. Split out of the Local Server panel because
     // that one describes the listener's CONFIGURATION, and a live list of peers
     // is not configuration — it changes while you look at it.
@@ -410,6 +432,34 @@ enum class Command {
     ToggleRemoteLog,       // Ctrl+F12 — open/close the RemoteLog panel. LOCAL:
                            // it has no table row, so it is never mirrored — one
                            // keypress must not open a window on every screen.
+    // Announce this instance's Local Server on the network so clients can find
+    // it. LOCAL by design: no table row, therefore never mirrored and not
+    // reachable over the wire.
+    //
+    // Deliberate. A remote client being able to switch on the beacon means one
+    // connection can make this machine advertise itself to the whole network —
+    // a decision about visibility that belongs to the person at the keyboard,
+    // not to whoever got in first. It is one tick in the TCP/IP menu.
+    ToggleRemoteBeacon,
+    // Write the wire log to rotating files under logs\. LOCAL by design, for
+    // the same reason as the beacon above and a sharper one: a remote client
+    // able to switch this on could make the machine write to its disk
+    // indefinitely, which is a decision about somebody else's storage. It is
+    // one tick in the TCP/IP menu.
+    //
+    // Separate from EnableRemoteLog below, which is the RECORDING switch. That
+    // one decides whether exchanges are captured at all; this one decides
+    // whether captured exchanges also reach a file. Nothing is written while
+    // recording is off, and the toggle says so rather than leaving an empty
+    // file behind.
+    ToggleRemoteLogFile,
+    // The General log — what this instance did. LOCAL for the same reason as the
+    // one above: a remote client that could switch it on would be deciding to
+    // write to somebody else's disk indefinitely.
+    ToggleGeneralLog,
+    // Open logs\ in Explorer. LOCAL, and firmly so: a remote client able to
+    // open a shell window on somebody else's desktop is not a logging feature.
+    OpenLogFolder,
     // The RECORDING switch, and a separate command from the panel that shows it.
     // Payload-carrying (`enablelog 0|1`) rather than a toggle, because it is
     // sent to the other instances: a toggle applied to ends that disagree makes

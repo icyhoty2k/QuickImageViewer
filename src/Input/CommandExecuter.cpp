@@ -1,3 +1,11 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// Copyright (C) 2026 Ivan Hristov Yanev
+//
+// This file is part of QuickImageViewer. It is free software: you may
+// redistribute and modify it under the terms of the GNU Affero General Public
+// License version 3 or later, as published by the Free Software Foundation.
+// It is distributed WITHOUT ANY WARRANTY. See the LICENSE file for details.
+
 #include "Command.h"
 #include "../AppState.h"
 #include "../Overlays/OverlayManager.h"
@@ -27,6 +35,11 @@
 #include "Rem_TCP_IP/RemoteProtocol.h" // CommandTable — QueryToggles walks it
 #include "Rem_TCP_IP/RemoteMirror.h"  // the mirror gate at the top of ExecuteCommand
 #include "Rem_TCP_IP/RemoteLog.h"     // Ctrl+F12 — the recording switch
+#include "Platform/AppLog.h"       // the General log — this instance's own record
+#include "Persistence/IniFile.h"   // PathBesideExe — the logs\ folder Explorer opens
+#include "Platform/CrashHandler.h" // NoteImage / NoteCommand breadcrumbs
+#include "Platform/MonitorInfo.h"  // the display list, and the names Ctrl+M reports
+#include "Rem_TCP_IP/RemoteBeacon.h" // Announce on network — the TCP/IP menu tick
 #include "Rem_TCP_IP/RemoteInbound.h" // …and the loop cut that makes it safe
 // The Ctrl+F11 selection panel reaches ExecuteCommand through UIManager, which
 // CommandExecuter already includes — nothing extra is needed here.
@@ -90,49 +103,29 @@ static void SnapWindowToZone(HWND hWnd, int zone) {
 // straight across puts a window sized for a 4K screen half off a 1080p one, and
 // two monitors of different resolution is the normal case, not the exotic one.
 // -----------------------------------------------------------------------------
-static BOOL CALLBACK CollectMonitorProc(HMONITOR hMon, HDC, LPRECT, LPARAM lParam) {
-    auto *out = reinterpret_cast<std::vector<MONITORINFO> *>(lParam);
-    MONITORINFO mi = {sizeof(mi)};
-    if (GetMonitorInfo(hMon, &mi)) out->push_back(mi);
-    return TRUE;
-}
-
 // Returns false when there is nowhere to go — a single monitor, or the
 // enumeration failed. The caller reports that rather than doing nothing.
-static bool MoveWindowToNextMonitor(HWND hWnd, int &monitorNumberOut, int &monitorCountOut) {
-    std::vector<MONITORINFO> mons;
-    if (!EnumDisplayMonitors(nullptr, nullptr, CollectMonitorProc,
-                             reinterpret_cast<LPARAM>(&mons)))
-        return false;
+//
+// The list and its ordering come from MonitorInfo so that this and the
+// Statistics panel cannot disagree about which screen is "2 of 3" — they used to
+// carry a sort each.
+static bool MoveWindowToNextMonitor(HWND hWnd, int &monitorNumberOut, int &monitorCountOut,
+                                    std::wstring &monitorNameOut) {
+    const std::vector<MonitorInfo::Entry> mons = MonitorInfo::Enumerate();
+    if (mons.empty()) return false;
 
     monitorCountOut = static_cast<int>(mons.size());
     if (mons.size() < 2) return false;
 
-    std::sort(mons.begin(), mons.end(),
-              [](const MONITORINFO &a, const MONITORINFO &b) {
-                  if (a.rcMonitor.left != b.rcMonitor.left)
-                      return a.rcMonitor.left < b.rcMonitor.left;
-                  return a.rcMonitor.top < b.rcMonitor.top;
-              });
+    const int curIdxSigned = MonitorInfo::IndexOfWindow(hWnd, mons);
+    if (curIdxSigned < 0) return false;
+    const size_t curIdx = static_cast<size_t>(curIdxSigned);
 
-    // Which one the window is on now. Matched by the monitor rect rather than by
-    // HMONITOR, because the handles were not kept — the rects are unique and are
-    // what the sort already ordered by.
-    HMONITOR hCur = MonitorFromWindow(hWnd, MONITOR_DEFAULTTONEAREST);
-    MONITORINFO cur = {sizeof(cur)};
-    if (!GetMonitorInfo(hCur, &cur)) return false;
+    const MonitorInfo::Entry &cur = mons[curIdx];
+    const MonitorInfo::Entry &dst = mons[(curIdx + 1) % mons.size()];
 
-    size_t curIdx = 0;
-    for (size_t i = 0; i < mons.size(); ++i) {
-        if (mons[i].rcMonitor.left == cur.rcMonitor.left &&
-            mons[i].rcMonitor.top  == cur.rcMonitor.top) {
-            curIdx = i;
-            break;
-        }
-    }
-
-    const MONITORINFO &dst = mons[(curIdx + 1) % mons.size()];
     monitorNumberOut = static_cast<int>((curIdx + 1) % mons.size()) + 1; // 1-based, for the message
+    monitorNameOut   = dst.name;
 
     // Fullscreen is a separate case: the window IS the monitor, so it simply
     // becomes the new one. savedWindowRect is left alone — it holds the
@@ -282,6 +275,13 @@ void InputManager::ExecuteCommand(HWND hWnd, Command cmd, const std::wstring &pa
 // behavior regardless of how the action was triggered.
 // =============================================================================
 void InputManager::ExecuteCommand(HWND hWnd, Command cmd) {
+    // One integer store, ahead of everything. Every input path funnels through
+    // here, so a dump taken at any moment names the command that led to it —
+    // and a crash reproduced only by "I pressed something" is otherwise a dead
+    // end. An int rather than a name precisely because this is the keystroke
+    // path: the write must not allocate or format anything.
+    Platform::Crash::NoteCommand(static_cast<int>(cmd));
+
     // =========================================================================
     // THE MIRROR GATE.
     //
@@ -524,6 +524,14 @@ void InputManager::ExecuteCommand(HWND hWnd, Command cmd) {
             break;
 
         case Command::ZoomTo: {
+            // Show(), NOT ToggleZoomWindow() — deliberate, do not "fix" this.
+            // The panel's key is a DIGIT, and the panel routes every key into its
+            // input box, so once it has focus '0' is typed as part of the
+            // percentage and never reaches the resolver. A toggle branch here is
+            // unreachable while the panel is open, and would only fire in the odd
+            // case of the panel visible but unfocused — hiding it exactly when the
+            // user pressed the key to get at it. Jump-to and Find can toggle
+            // because J and Ctrl+F are not characters their input boxes want.
             uiManager.getZoomWindow().Show();
             break;
         }
@@ -641,6 +649,38 @@ void InputManager::ExecuteCommand(HWND hWnd, Command cmd) {
 
             break;
 
+        // F4 / F7 — move a strip to the next free screen edge.
+        //
+        // ONLY WHEN IT IS ALREADY VISIBLE. These getters construct the panel on
+        // first use, so an unguarded call would make F4 with no cache strip open
+        // create one and immediately move it — a key that is supposed to
+        // rearrange something producing something instead.
+        //
+        // There is ONE cache strip, so F4 has no subject to choose.
+        case Command::MoveCacheWnd:
+            if (uiManager.getCacheWindow().IsVisible())
+                uiManager.getCacheWindow().MoveCacheWindow();
+            break;
+
+        // There are FIVE directory strips — the F6 one plus the spawned pool —
+        // so F7 has to pick, and it picks the way everything else already does:
+        // getActiveDirWnd(), which is the tracked active strip when it is
+        // visible, then the F6 one, then the first visible spawned one. Moving
+        // the F6 strip unconditionally would move a panel the user is not
+        // working in while the one they ARE working in stays put.
+        //
+        // Known side effect, and the same one FileCopySelection above accepts:
+        // with NO strip visible, getActiveDirWnd() falls through to
+        // getDirWindow(), which constructs the F6 panel. The IsPanelVisible()
+        // guard then declines to move it, so nothing is shown — but the window
+        // now exists. Consistency with the established accessor is worth more
+        // than a bespoke pre-check that would have to duplicate its rules.
+        case Command::MoveDirWnd: {
+            UI::ThumbnailPanelWnd &dir = uiManager.getActiveDirWnd();
+            if (dir.IsPanelVisible()) dir.MovePanel();
+            break;
+        }
+
         case Command::ToggleDir: {
             UI::DirWnd &dirWnd = uiManager.getDirWindow();
             const bool dirWasVisible = dirWnd.IsVisible();
@@ -752,10 +792,17 @@ void InputManager::ExecuteCommand(HWND hWnd, Command cmd) {
 
         case Command::MoveToNextMonitor: {
             int monNum = 0, monCount = 0;
-            if (MoveWindowToNextMonitor(hWnd, monNum, monCount)) {
-                g_overlayManager.PostCenterMessage(
-                    hWnd, std::wstring(Constants::Messages::MONITOR_MOVED_PREFIX) +
-                          std::to_wstring(monNum) + L"/" + std::to_wstring(monCount));
+            std::wstring monName;
+            if (MoveWindowToNextMonitor(hWnd, monNum, monCount, monName)) {
+                // NAME FIRST, then the position. "2/3" tells you the window
+                // moved; it does not tell you WHERE, and on a desk where the
+                // screens are not in a row the number is not something anyone
+                // can map to a physical monitor. The name is what a person
+                // recognises, and it is the whole reason for the lookup.
+                std::wstring msg = std::wstring(Constants::Messages::MONITOR_MOVED_PREFIX);
+                if (!monName.empty()) msg += monName + L"  ";
+                msg += std::to_wstring(monNum) + L"/" + std::to_wstring(monCount);
+                g_overlayManager.PostCenterMessage(hWnd, msg);
             } else {
                 g_overlayManager.PostCenterMessage(hWnd, Constants::Messages::MONITOR_ONLY_ONE);
             }
@@ -858,6 +905,11 @@ void InputManager::ExecuteCommand(HWND hWnd, Command cmd) {
             app.effectPreviewEnabled = !app.effectPreviewEnabled;
             app.UpdateRendererColorEffects(hWnd);
             g_overlayManager.UpdateEffects();
+            // Says which way it went. Without this the key changed the picture
+            // and reported nothing — the only toggle in the app that did.
+            g_overlayManager.PostCenterMessage(hWnd,
+                app.effectPreviewEnabled ? Constants::Messages::EFFECT_PREVIEW_ON
+                                         : Constants::Messages::EFFECT_PREVIEW_OFF);
             break;
 
         // Each toggle records itself in app.activeEffectsList FIRST, so a newly
@@ -1064,6 +1116,105 @@ void InputManager::ExecuteCommand(HWND hWnd, Command cmd) {
         case Command::ToggleRemoteLog:
             uiManager.Toggle(uiManager.getRemoteLogWindow());
             break;
+
+        // Announce this instance's Local Server on the network, or stop.
+        //
+        // Saved immediately, like every other persisted toggle — a setting that
+        // survives only until the next launch would be worse than none here,
+        // because the whole value is a screen that is findable tomorrow too.
+        //
+        // Refresh() decides whether anything is actually published. The setting
+        // and the announcement are NOT the same thing: with the server stopped
+        // or bound to loopback this stores the intent and publishes nothing, and
+        // the message says so rather than claiming success.
+        case Command::ToggleRemoteBeacon: {
+            app.remoteBeacon = !app.remoteBeacon;
+            Persistence::Registry::SaveSetting(Constants::Registry::REMOTE_BEACON,
+                                               static_cast<DWORD>(app.remoteBeacon));
+            Remote::Beacon::Refresh();
+
+            std::wstring msg = std::wstring(Constants::Messages::BEACON_PREFIX);
+            if (!app.remoteBeacon) {
+                msg += Constants::Messages::BEACON_OFF;
+            } else {
+                const std::wstring why = Remote::Beacon::InactiveReason();
+                msg += why.empty() ? Constants::Messages::BEACON_ON
+                                   : (std::wstring(Constants::Messages::BEACON_PENDING) +
+                                      L" — " + why);
+            }
+            g_overlayManager.PostCenterMessage(hWnd, msg);
+            break;
+        }
+
+        // Also write the wire log to rotating files under logs\.
+        //
+        // SAYS WHERE IT IS WRITING, and says when it will not be. Turning this
+        // on with recording off produces a file with nothing in it — Add is
+        // never called, so nothing reaches the sink — and a logger that fails
+        // silently is worse than one that is off. The two switches stay
+        // independent, as every other setting is; only the message joins them.
+        case Command::ToggleRemoteLogFile: {
+            app.remoteLogToFile = !app.remoteLogToFile;
+            Persistence::Registry::SaveSetting(Constants::Registry::REMOTE_LOG_FILE,
+                                               static_cast<DWORD>(app.remoteLogToFile));
+            Remote::Log::SetFileLogging(app.remoteLogToFile);
+
+            std::wstring msg;
+            if (!app.remoteLogToFile) {
+                msg = Constants::Messages::LOG_FILE_OFF;
+            } else {
+                msg = std::wstring(Constants::Messages::LOG_FILE_ON) + L" — " +
+                      Remote::Log::LogDirectory();
+                // NOTHING ABOUT THE RECORDING SWITCH. The file sink captures
+                // whether or not the panel is recording — see Log::IsCapturing —
+                // so the only thing left to explain is why the folder is empty
+                // until a client says something.
+                msg += std::wstring(L"\n") + Constants::Messages::LOG_FILE_WAITING;
+            }
+            g_overlayManager.PostCenterMessage(hWnd, msg);
+            break;
+        }
+
+        // The General log — this instance's own record of what it did.
+        case Command::ToggleGeneralLog: {
+            app.generalLog = !app.generalLog;
+            Persistence::Registry::SaveSetting(Constants::Registry::GENERAL_LOG,
+                                               static_cast<DWORD>(app.generalLog));
+            AppLog::SetEnabled(app.generalLog);
+
+            // WRITTEN AS THE FIRST LINE OF THE FILE, before the message says it
+            // is on. Somebody who switches this on wants to see that it works,
+            // and an empty folder is the same sight as a broken setting.
+            if (app.generalLog)
+                AppLog::Info(AppLog::COMP_SETTINGS, L"General log switched on");
+
+            std::wstring msg = app.generalLog
+                                   ? std::wstring(Constants::Messages::GENERAL_LOG_ON) +
+                                         L" — " + AppLog::LogDirectory()
+                                   : std::wstring(Constants::Messages::GENERAL_LOG_OFF);
+            g_overlayManager.PostCenterMessage(hWnd, msg);
+            break;
+        }
+
+        // Show me the logs.
+        case Command::OpenLogFolder: {
+            const std::wstring dir =
+                Persistence::Ini::PathBesideExe(Constants::Logging::DIR_NAME);
+
+            // CREATED IF MISSING, rather than refusing. Somebody asking to see
+            // the folder before either log has ever run would otherwise get an
+            // Explorer error, which reads as a broken feature rather than as
+            // "nothing has been written yet". An empty folder answers honestly.
+            //
+            // Only the one level: the per-log subfolders are made by the writer
+            // that owns them, and creating them here would put two empty
+            // directories in front of somebody who has switched nothing on.
+            if (!dir.empty()) {
+                CreateDirectoryW(dir.c_str(), nullptr);
+                ShellExecuteW(nullptr, L"open", dir.c_str(), nullptr, nullptr, SW_SHOW);
+            }
+            break;
+        }
 
         // Ctrl+F10 — type a command and send it to the controlled instances.
         case Command::ToggleRemoteCmd:
@@ -1534,12 +1685,43 @@ void InputManager::ExecuteCommand(HWND hWnd, Command cmd) {
                                                 app.slideshow.intervalMs, 100, 60000,
                                                 Constants::Slideshow::IS_INTERVAL_MS);
             if (v >= 0) {
-                app.slideshow.intervalMs = v;
+                // Not a plain assignment: a running slideshow keeps the period
+                // its timer was armed with, so this has to re-arm it. See
+                // AppCommands::applySlideshowInterval.
+                AppCommands::applySlideshowInterval(hWnd, v);
                 Persistence::Registry::SaveSetting(Constants::Registry::SLIDESHOW_INTERVAL_MS,
                                                    static_cast<DWORD>(v));
                 g_overlayManager.PostCenterMessage(hWnd,
                     std::wstring(Constants::Messages::SLIDESHOW_INTERVAL_PREFIX) +
                     std::to_wstring(v) + L" ms");
+
+                // MIRRORED HERE, EXPLICITLY, WITH THE VALUE.
+                //
+                // The generic fan-out cannot carry this one. Mirror::Broadcast
+                // sends a bare command name, and it runs BEFORE this case — at
+                // which point the number above has not been typed yet. A mirrored
+                // instance therefore received `SlideshowSetInterval` with no
+                // payload and refused it, so the pace of every mirrored screen
+                // silently stayed at whatever it already was.
+                //
+                // BroadcastLine exists for exactly this — "the payload forms,
+                // which have no bare-Command spelling" — and it is the same
+                // approach the streaming commands take: excluded from the generic
+                // path, then sent explicitly once their arguments are known.
+                //
+                // ALL MIRRORED TARGETS, not just same-machine ones. Unlike a
+                // playlist index, a duration means the same thing everywhere;
+                // there is no content for it to be relative to.
+                //
+                // InboundActive() guards the echo: this command arriving FROM the
+                // wire must not be sent back out, or two instances mirroring each
+                // other would trade the same interval forever.
+                if (app.passCommandToRemote && !Remote::InboundActive() &&
+                    Remote::Mirror::HasLiveTargets()) {
+                    std::wstring wireName;
+                    if (Remote::NameForCommand(Command::SlideshowSetInterval, wireName))
+                        Remote::Mirror::BroadcastLine(wireName + L" " + std::to_wstring(v));
+                }
             }
             break;
         }
@@ -1922,25 +2104,17 @@ std::wstring InputManager::GetCommandValue(HWND hWnd, Command cmd) {
         // Which monitor it landed on, 1-based, in the same left-to-right order
         // the move itself uses — so a caller can tell a wrap from a step.
         case Command::MoveToNextMonitor: {
-            std::vector<MONITORINFO> mons;
-            EnumDisplayMonitors(nullptr, nullptr, CollectMonitorProc,
-                                reinterpret_cast<LPARAM>(&mons));
+            // Reported as "n/total", NOT with the monitor's name: this is the
+            // QueryToggles value a remote client parses, and the names carry
+            // spaces and punctuation that the `Name=value;` framing does not
+            // survive. The name belongs in the on-screen message, which is a
+            // person's to read.
+            const std::vector<MonitorInfo::Entry> mons = MonitorInfo::Enumerate();
             if (mons.empty()) return L"1/1";
-            std::sort(mons.begin(), mons.end(),
-                      [](const MONITORINFO &a, const MONITORINFO &b) {
-                          if (a.rcMonitor.left != b.rcMonitor.left)
-                              return a.rcMonitor.left < b.rcMonitor.left;
-                          return a.rcMonitor.top < b.rcMonitor.top;
-                      });
-            MONITORINFO cur = {sizeof(cur)};
-            if (!GetMonitorInfo(MonitorFromWindow(hWnd, MONITOR_DEFAULTTONEAREST), &cur))
-                return L"1/" + std::to_wstring(mons.size());
-            for (size_t i = 0; i < mons.size(); ++i) {
-                if (mons[i].rcMonitor.left == cur.rcMonitor.left &&
-                    mons[i].rcMonitor.top  == cur.rcMonitor.top)
-                    return std::to_wstring(i + 1) + L"/" + std::to_wstring(mons.size());
-            }
-            return L"1/" + std::to_wstring(mons.size());
+
+            const int idx = MonitorInfo::IndexOfWindow(hWnd, mons);
+            const int shown = (idx < 0) ? 1 : idx + 1;
+            return std::to_wstring(shown) + L"/" + std::to_wstring(mons.size());
         }
         case Command::OpacityUp:
         case Command::OpacityDown:             return std::to_wstring(app.opacity);
@@ -1992,6 +2166,8 @@ std::wstring InputManager::GetCommandValue(HWND hWnd, Command cmd) {
         // The RECORDING state, not the panel's. This is the value a driving
         // instance reads back to confirm `enablelog 1` actually took.
         case Command::EnableRemoteLog: return OnOff(app.remoteLogEnabled);
+        case Command::ToggleRemoteLogFile: return OnOff(app.remoteLogToFile);
+        case Command::ToggleGeneralLog:    return OnOff(app.generalLog);
         case Command::MirrorLocalToggle: return OnOff(app.resendCommandToCaller);
 
         // The read-only one. Everything a driving instance needs in order to

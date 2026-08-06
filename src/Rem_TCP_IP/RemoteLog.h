@@ -1,3 +1,11 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// Copyright (C) 2026 Ivan Hristov Yanev
+//
+// This file is part of QuickImageViewer. It is free software: you may
+// redistribute and modify it under the terms of the GNU Affero General Public
+// License version 3 or later, as published by the Free Software Foundation.
+// It is distributed WITHOUT ANY WARRANTY. See the LICENSE file for details.
+
 #pragma once
 #include <string>
 #include <vector>
@@ -70,6 +78,13 @@ namespace Remote::Log {
         // microseconds. -1 when it was never measured.
         long long deltaUs = -1;
 
+        // The OS thread that recorded it. Written to the file as the [thread]
+        // column every standard log layout carries, and it earns its place here:
+        // one socket thread per connection means the thread id is the cheapest
+        // honest answer to "which conversation is this row part of" when two
+        // peers are talking at once and their rows interleave.
+        unsigned long threadId = 0;
+
         Direction    dir = Direction::Out;
         std::wstring sender;    // who issued the command
         std::wstring command;   // the line as it went on the wire
@@ -89,12 +104,24 @@ namespace Remote::Log {
     // a socket-fed UI callback, and a socket thread may not read `app` at all.
     // The UI-thread bool and this atomic are flipped together — see AppState.h.
     //
-    // CHECK IsEnabled() BEFORE BUILDING THE ARGUMENTS, not just before calling
+    // CHECK IsCapturing() BEFORE BUILDING THE ARGUMENTS, not just before calling
     // Add. Add's own guard cannot stop a caller that has already concatenated
     // four strings to pass to it; the whole point of the switch is that a viewer
     // with logging off allocates nothing on the mirror path.
     void SetEnabled(bool on);
     bool IsEnabled();
+
+    // IS ANYTHING LISTENING — the panel's store, the file, or both. THIS is the
+    // gate every record point must use, and IsEnabled() is not.
+    //
+    // The two switches are independent: the file sink records whether or not the
+    // in-memory store is recording, because the reason to write a file is that
+    // you want a durable record, and having to remember a second switch to get
+    // one is how you come back to an empty folder. A record point that asked
+    // IsEnabled() would therefore go silent exactly when only the file was on —
+    // and a log with invisible holes is worse than no log, because it is
+    // believed.
+    bool IsCapturing();
 
     // Record one exchange. Safe from any thread. Never throws, never blocks on
     // anything but the store's own mutex.
@@ -108,6 +135,49 @@ namespace Remote::Log {
     // A copy, under the lock. The panel sorts and filters its own copy, so the
     // producers are never held up by a repaint.
     std::vector<Entry> Snapshot();
+
+    // --- The file sink ---------------------------------------------------------
+    //
+    // A SECOND destination for the same entries, persisted across restarts
+    // (Constants::IS_TCP_IP_LOG) where the recording switch above is
+    // session-only. The store answers "what just happened" and dies with the
+    // process; a file answers "what happened before the crash, on the machine in
+    // the other room" — and that is never a question you can switch on in advance.
+    //
+    // ON A THREAD OF ITS OWN, and this is not an optimisation.
+    //
+    // Add() is called from socket threads, from mirror sender threads, and — via
+    // EmitToObservers — FROM THE UI THREAD. Writing to disk inside Add would put
+    // a file write on the message pump: a slow disk, a network share, an
+    // antivirus scan, and the viewer stops repainting. So Add only formats a row
+    // and hands it to a queue, and one writer thread owns the file and does every
+    // CreateFile, WriteFile and rotation.
+    //
+    // The queue is BOUNDED. A producer never blocks and never waits on the disk:
+    // if the writer falls behind, the oldest queued rows are dropped and the file
+    // records how many, because a diagnostic that stalls the thing it is
+    // diagnosing has changed the problem it was meant to observe.
+    //
+    // Nothing is written while recording is off — Add is not called at all — so
+    // the two switches are independent and the menu says so when they disagree.
+    void SetFileLogging(bool on);
+    bool FileLoggingIsOn();
+
+    // The file being written right now, empty when the sink is off or has not
+    // opened one yet. For the overlay message and the panel's status line: a
+    // logger that will not say where it is writing is one you have to go looking
+    // for.
+    std::wstring CurrentFilePath();
+
+    // "<exe folder>\logs" — where rotated files land. Returned whether or not it
+    // exists yet, so a caller can name it in a message before anything is written.
+    std::wstring LogDirectory();
+
+    // Drains what is queued and closes the file. Called once as the app shuts
+    // down: the writer thread is joined here rather than detached, because a
+    // detached thread holding a file handle while the process exits is how a log
+    // loses its last few rows — the ones written just before whatever went wrong.
+    void ShutdownFileLogging();
 
     // --- This instance's name -------------------------------------------------
     //

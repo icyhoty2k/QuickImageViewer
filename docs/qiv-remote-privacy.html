@@ -1,0 +1,259 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport"
+          content="width=device-width, initial-scale=1.0">
+    <title>
+        qIV Remote — Privacy Policy</title>
+
+    <meta name="description"
+          content="Privacy policy for qIV Remote, the Android companion app for QuickImageViewer. No accounts, no analytics, no advertising, no data sent to the developer.">
+    <meta name="robots"
+          content="index, follow">
+    <link rel="canonical"
+          href="https://icyhoty2k.github.io/QuickImageViewer/qiv-remote-privacy.html">
+
+    <link rel="icon"
+          type="image/svg+xml"
+          href="favicon.svg">
+    <link rel="icon"
+          type="image/x-icon"
+          href="favicon.ico">
+    <meta name="theme-color"
+          content="#0f172a">
+
+    <style>
+        :root {
+            --bg-color: #0f172a;
+            --surface-color: #1e293b;
+            --text-main: #f8fafc;
+            --text-muted: #94a3b8;
+            --accent-primary: #38bdf8;
+            --accent-hover: #0284c7;
+            --border-color: #334155;
+            --code-bg: #0b1120;
+        }
+
+        body {
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+            background-color: var(--bg-color);
+            color: var(--text-main);
+            line-height: 1.65;
+            margin: 0;
+            padding: 0;
+            -webkit-font-smoothing: antialiased;
+        }
+
+        .container {
+            max-width: 820px;
+            margin: 0 auto;
+            padding: 48px 24px 80px;
+        }
+
+        h1 {
+            font-size: 2rem;
+            margin-bottom: 4px;
+        }
+
+        h2 {
+            font-size: 1.25rem;
+            margin-top: 40px;
+            padding-top: 24px;
+            border-top: 1px solid var(--border-color);
+        }
+
+        .meta {
+            color: var(--text-muted);
+            font-size: 0.9rem;
+            margin-top: 0;
+        }
+
+        a {
+            color: var(--accent-primary);
+        }
+
+        a:hover {
+            color: var(--accent-hover);
+        }
+
+        code, kbd {
+            background: var(--code-bg);
+            border: 1px solid var(--border-color);
+            border-radius: 4px;
+            padding: 1px 6px;
+            font-size: 0.9em;
+        }
+
+        ul {
+            padding-left: 22px;
+        }
+
+        li {
+            margin-bottom: 8px;
+        }
+
+        .callout {
+            background: var(--surface-color);
+            border: 1px solid var(--border-color);
+            border-radius: 10px;
+            padding: 18px 20px;
+            margin: 24px 0;
+        }
+
+        footer {
+            margin-top: 56px;
+            padding-top: 24px;
+            border-top: 1px solid var(--border-color);
+            color: var(--text-muted);
+            font-size: 0.9rem;
+        }
+    </style>
+</head>
+<body>
+<div class="container">
+
+    <h1>qIV Remote — Privacy Policy</h1>
+    <p class="meta">
+        Applies to the Android application <code>net.icyhoty2k.qivremote</code>.<br>
+        Last updated: 5 August 2026.
+    </p>
+
+    <div class="callout">
+        <strong>The short version.</strong> qIV Remote has no accounts, no analytics, no
+        advertising and no telemetry. It collects nothing, and it sends nothing to the
+        developer or to any third party. It talks only to the computers you enter yourself,
+        on your own network.
+    </div>
+
+    <h2>What the app stores, and where</h2>
+    <p>
+        Everything the app keeps stays in its private storage on your device. None of it is
+        transmitted anywhere except to the servers you configure.
+    </p>
+    <ul>
+        <li>
+            <strong>Server profiles</strong> — the name, address and port you typed for each
+            computer running QuickImageViewer.
+        </li>
+        <li>
+            <strong>Passwords</strong> — only when you switch on "Save password" for a
+            profile. When that switch is off, the password is held in memory for the session
+            and written to storage as an empty value.
+        </li>
+        <li>
+            <strong>Certificate fingerprints</strong> — the identity of each server you have
+            accepted, so the app can detect if it later changes. A fingerprint identifies a
+            server; it does not authenticate to one and it is not a secret.
+        </li>
+        <li>
+            <strong>Preferences</strong> — your app settings: theme, screen-on and vibration
+            behaviour, preview size and quality, the streaming options, which remote screen
+            opens by default, and the device name the app announces to a server.
+        </li>
+    </ul>
+    <p>
+        Uninstalling the app removes all of it. If you have Android's own backup enabled,
+        these files may be included in your personal device backup, which is handled by
+        Google under your own account and its settings, not by this app.
+    </p>
+
+    <h2>What leaves your device</h2>
+    <p>
+        The app declares a single Android permission, <code>INTERNET</code>, and uses it for
+        one purpose: opening a TCP connection to an address you entered. It performs no other
+        network activity of any kind.
+    </p>
+    <p>
+        Over that connection, and only to that server, the app sends:
+    </p>
+    <ul>
+        <li>the commands you press — next image, zoom, slideshow, and so on;</li>
+        <li>the password for that server, if the server requires one;</li>
+        <li>
+            the <strong>device name</strong>, so the receiving computer can show which phone
+            is connected. If you have not set one in Settings, the app falls back to the name
+            your phone already carries on the network (Android's own device name), then to the
+            model. <strong>That default may contain your own name if you gave your phone
+            one</strong> — it is shown to you in Settings and you can replace it with anything
+            you like at any time;
+        </li>
+        <li>
+            <strong>an image you explicitly pick</strong>, when you use the Stream screen to
+            push a photo to the desktop. Nothing is sent until you choose a file, and only
+            that file is sent.
+        </li>
+    </ul>
+    <p>
+        In the other direction, the desktop sends back the picture it is currently displaying,
+        when you ask for it. That image is held for display, and written to your phone's
+        storage only if you press Save.
+    </p>
+
+    <h2>Demo mode</h2>
+    <p>
+        The app includes a demo mode for evaluating it without a computer running
+        QuickImageViewer. Demo mode opens no network connection at all — no address is
+        resolved and no data is transmitted. Everything shown is generated inside the app.
+    </p>
+
+    <h2>Security of the connection</h2>
+    <p>
+        Connections to anything other than the loopback address are encrypted with TLS, and
+        the server's certificate is <em>pinned</em>: the app refuses to connect to a
+        certificate it has not been shown and told to trust, and warns you if a previously
+        accepted one changes. The password is never sent in the clear.
+    </p>
+    <p>
+        The connection is between your phone and your computer. It does not pass through any
+        server operated by the developer, because there is no such server.
+    </p>
+
+    <h2>Analytics, advertising and tracking</h2>
+    <p>
+        There are none. The app contains no analytics SDK, no advertising SDK, no crash
+        reporting service and no tracking identifiers. It does not use the Android
+        Advertising ID and does not declare the permission that would allow it to.
+    </p>
+
+    <h2>Purchases</h2>
+    <p>
+        If a paid feature is offered inside the app, the purchase is processed entirely by
+        Google Play Billing. Payment details are handled by Google and are never seen by, sent
+        to, or stored by this app or its developer. The app receives only the fact that an
+        entitlement is or is not owned.
+    </p>
+
+    <h2>Children</h2>
+    <p>
+        qIV Remote is a utility for controlling desktop software and is not directed to
+        children. It collects no personal information from anyone, including children.
+    </p>
+
+    <h2>Your rights</h2>
+    <p>
+        Because no personal data is collected or transmitted to the developer, there is
+        nothing held about you to access, correct, export or delete. Data stored on your own
+        device is removed by clearing the app's storage or uninstalling it.
+    </p>
+
+    <h2>Changes to this policy</h2>
+    <p>
+        If the app's behaviour changes in a way that affects this policy — for example if a
+        feature is added that transmits something new — this page is updated and the date at
+        the top changes with it.
+    </p>
+
+    <h2>Contact</h2>
+    <p>
+        Questions about this policy:
+        <a href="mailto:icyhoty2k@gmail.com">icyhoty2k@gmail.com</a>
+    </p>
+
+    <footer>
+        <a href="./">&larr; QuickImageViewer home</a>
+    </footer>
+
+</div>
+</body>
+</html>

@@ -1,3 +1,11 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// Copyright (C) 2026 Ivan Hristov Yanev
+//
+// This file is part of QuickImageViewer. It is free software: you may
+// redistribute and modify it under the terms of the GNU Affero General Public
+// License version 3 or later, as published by the Free Software Foundation.
+// It is distributed WITHOUT ANY WARRANTY. See the LICENSE file for details.
+
 #pragma once
 #include <windows.h>
 #include <string>
@@ -111,7 +119,131 @@ namespace Remote {
         // The payload is a LABEL, never a credential. It is chosen by the peer,
         // so nothing may be decided by it — see how the server stores it.
         Hello,
+        // "agent k=v;k=v;…" — who and what is at the other end.
+        //
+        //   agent app=qIV;ver=2.96.0.113;proto=5;platform=win;os=Windows 11;host=PCHOME
+        //
+        // SENT BY BOTH SIDES, once, immediately after authentication. The server
+        // has always introduced itself in the banner; this is the client saying
+        // the same kind of thing back, in a form that parses.
+        //
+        // KEY=VALUE, SEMICOLON-SEPARATED, because that is what this protocol
+        // already speaks — QueryToggles and sync both answer in exactly this
+        // shape. A new grammar for one message would be a second thing to write
+        // a parser for.
+        //
+        // UNKNOWN KEYS ARE IGNORED, not refused. That is what lets a field be
+        // added later without either end needing to know about it first.
+        //
+        // EVERY VALUE IS PEER-CHOSEN, therefore every value is a HINT. A phone
+        // may claim `platform=win` and any client may claim any hostname. These
+        // fields exist to label a row in a list. Nothing about access,
+        // capability or routing may be decided from them — the AllowList, the
+        // password and TLS are what govern this connection, and none of them
+        // read this.
+        Agent,
+        // "bye" — the client is closing on purpose.
+        //
+        // WHY THIS HAS TO EXIST. A clean TCP close, a reset, a phone going out
+        // of Wi-Fi range and a crashed client all arrive here as the same thing:
+        // a failed read. The socket layer cannot tell them apart, so without a
+        // word from the client there is no way to know whether a departure was
+        // deliberate.
+        //
+        // Optional, and everything still works without it — a client that never
+        // says it simply departs as "closed by peer", which is what every client
+        // did before. It exists so the overlay can show a normal disconnect
+        // differently from a screen that vanished, because on a wall those mean
+        // opposite things: one is somebody finishing, the other is something to
+        // go and look at.
+        //
+        // Carries no payload and grants nothing. The server answers, then the
+        // client closes.
+        Bye,
     };
+
+    // The parsed contents of an `agent` line. Every field is optional and empty
+    // when absent — a peer that sends none is simply a peer that said nothing,
+    // which is a normal state and not an error.
+    struct AgentInfo {
+        std::wstring app;       // "qIV", "qIVRemote"
+        std::wstring version;   // the app's own version
+        std::wstring platform;  // "win", "android" — anything else is dropped
+        std::wstring os;        // "Windows 11 26200", "Android 14"
+        std::wstring host;      // machine or device name
+
+        // The name the USER gave this instance — the server's configured Name on
+        // the desktop, the one typed in Settings on the phone. Distinct from
+        // `host`: that is what the machine calls itself, this is what a person
+        // decided to call it, and on a wall of screens only the second is useful.
+        //
+        // Also carried by `hello`, which predates this and still works. A client
+        // may send either or both; the server keeps the last one it was told.
+        std::wstring name;
+    };
+
+    // Parses an `agent` payload. Sanitising is part of parsing rather than a
+    // step a caller might forget: values are peer-chosen text that ends up in a
+    // list and a log, so control characters and the separators themselves are
+    // stripped here, once, for every field.
+    AgentInfo ParseAgent(const std::wstring &payload);
+
+    // Builds this instance's own agent line payload. One place, so the two ends
+    // of this program cannot describe themselves differently.
+    //
+    // `instanceName` is the user's name for this instance — the server's
+    // configured Name. EMPTY FIELDS ARE OMITTED rather than sent blank: `os=`
+    // with nothing after it is not a fact, and a reader cannot tell it from a
+    // value lost on the way. Absent means unknown.
+    std::wstring BuildAgent(const std::wstring &appName, const std::wstring &appVersion,
+                            const std::wstring &instanceName);
+
+    // A field as it should APPEAR — the value, or "?" when it is unknown.
+    //
+    // The wire omits; the screen shows a question mark. Those are different jobs
+    // and doing them in one place each is what stops a panel drawing a blank gap
+    // that reads as "nothing" when it means "not told".
+    std::wstring AgentField(const std::wstring &value);
+
+    // WHAT THE PEER IS to this instance.
+    //
+    // Named for the peer's role rather than for the direction of the socket,
+    // because that is the question a person is actually asking. "Inbound" is a
+    // fact about a TCP connection; "Client" is what the thing on the other end
+    // IS — something using this viewer's listener. Ctrl+F9 lists clients,
+    // Ctrl+F11 lists servers, and the word in the row should be the word in the
+    // panel's own title.
+    //
+    // NOT A FIELD OF AgentInfo, and the distinction matters. Everything in that
+    // struct is what the PEER SAID about itself; this is what THIS MACHINE
+    // KNOWS, because it either accepted the connection or made it. A peer cannot
+    // be wrong about this and cannot lie about it, so it does not belong in the
+    // same container as the things it chooses.
+    enum class AgentRole {
+        Client,   // it dialled us — something using our listener      (Ctrl+F9)
+        Server,   // we dialled it — a listener this instance drives   (Ctrl+F11)
+    };
+
+    // One line describing a peer, for any panel that shows one:
+    //
+    //   🙋 Client  ·  App qIVRemote 1.0.0  ·  OS Android 14  ·  Host Pixel 8
+    //   📡 Server  ·  App qIV 2.96.0.113  ·  OS Windows 11 26200  ·  Host PCHOME
+    //
+    // SHARED BY BOTH DIRECTIONS ON PURPOSE. My Clients (Ctrl+F9) lists the
+    // connections that came in; Mirroring (Ctrl+F11) lists the ones this
+    // instance dialled out. They are different lists of different things, but a
+    // peer is described the same way in both — and two panels formatting the
+    // same struct by hand is exactly how one of them ends up saying "unknown"
+    // where the other says "?".
+    //
+    // The ROLE leads the line because it is the one part that is certain.
+    // Everything after it is hearsay, and reading it in that order is the point.
+    //
+    // The WORD carries the meaning; the glyph is decoration beside it. That is
+    // the opposite of the scope column in My Clients, where the glyph IS the
+    // information — worth knowing, because it means this pair can be swapped for
+    // taste without anything becoming unreadable.
+    std::wstring DescribeAgent(const AgentInfo &info, AgentRole role);
 
     struct RemoteRequest {
         Command      cmd     = Command::None;
@@ -259,5 +391,27 @@ namespace Remote {
     // "[fe80::1]" back out of a panel into a host field connects rather than
     // failing to resolve. A no-op on everything else.
     std::wstring StripAddressBrackets(const std::wstring &host);
+
+    // HOW FAR AWAY an address is, as one glyph: 🏠 this machine, 🖧 your LAN,
+    // 🌐 somewhere public.
+    //
+    // SHARED BY EVERY PANEL THAT LISTS A PEER — My Clients (Ctrl+F9) and Servers
+    // (F10) both show one, and they must agree. It began as a private helper in
+    // one of them, which is exactly how this codebase ended up with three copies
+    // of the monitor enumeration.
+    //
+    // READ FROM THE ADDRESS, never from anything the peer said about itself.
+    // That is what makes it trustworthy at a glance: a peer chooses its `hello`
+    // name and its `agent` fields, but it cannot choose the address the socket
+    // reports — and for an outbound server, the address is one the user typed.
+    //
+    // The third case is the one that earns the glyph. A public address means
+    // this connection leaves the network, which is either deliberate
+    // port-forwarding or something the operator very much wants to notice.
+    //
+    // `sameMachine` short-circuits it where the caller already knows — the
+    // server records it per connection, and a hostname that resolves to loopback
+    // is not something this function can see for itself.
+    const wchar_t *ScopeIcon(const std::wstring &address, bool sameMachine = false);
 
 } // namespace Remote

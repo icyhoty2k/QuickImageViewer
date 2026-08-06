@@ -1,3 +1,11 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// Copyright (C) 2026 Ivan Hristov Yanev
+//
+// This file is part of QuickImageViewer. It is free software: you may
+// redistribute and modify it under the terms of the GNU Affero General Public
+// License version 3 or later, as published by the Free Software Foundation.
+// It is distributed WITHOUT ANY WARRANTY. See the LICENSE file for details.
+
 #pragma once
 #include <windows.h>
 #include <string>
@@ -61,7 +69,7 @@
 //
 //   WATCH (◉) LIVES IN Ctrl+F11 now, not here. This console answers "which
 //   instances exist, and how do I reach them"; who drives whom — mirroring,
-//   observing, identifying — is the Remotes Control panel's whole subject, and
+//   observing, identifying — is the Mirroring panel's whole subject, and
 //   the eye was the one control here that answered that question instead.
 //
 // -----------------------------------------------------------------------------

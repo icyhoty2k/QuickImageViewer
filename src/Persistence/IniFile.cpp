@@ -1,3 +1,11 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// Copyright (C) 2026 Ivan Hristov Yanev
+//
+// This file is part of QuickImageViewer. It is free software: you may
+// redistribute and modify it under the terms of the GNU Affero General Public
+// License version 3 or later, as published by the Free Software Foundation.
+// It is distributed WITHOUT ANY WARRANTY. See the LICENSE file for details.
+
 #include "IniFile.h"
 
 #include "Platform/Constants.h"
@@ -175,6 +183,14 @@ void WriteString(const std::wstring &path, const wchar_t *section,
     if (path.empty()) return;
     CreateWithHeaderIfMissing(path, headerComment);
     WritePrivateProfileStringW(section, key, value.c_str(), path.c_str());
+}
+
+void DeleteKey(const std::wstring &path, const wchar_t *section, const wchar_t *key) {
+    if (path.empty() || !section || !key) return;
+    // No CreateWithHeaderIfMissing: there is nothing to delete from a file that
+    // does not exist, and creating one to remove a key from it would be absurd.
+    // A null value is what tells the API to remove the key rather than blank it.
+    WritePrivateProfileStringW(section, key, nullptr, path.c_str());
 }
 
 DWORD ReadDword(const std::wstring &path, const wchar_t *section,

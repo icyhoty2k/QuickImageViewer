@@ -1,3 +1,11 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// Copyright (C) 2026 Ivan Hristov Yanev
+//
+// This file is part of QuickImageViewer. It is free software: you may
+// redistribute and modify it under the terms of the GNU Affero General Public
+// License version 3 or later, as published by the Free Software Foundation.
+// It is distributed WITHOUT ANY WARRANTY. See the LICENSE file for details.
+
 #include "RemoteLog.h"
 
 // windows.h FIRST. Constants.h uses COLORREF, BYTE, DWORD, UINT and WM_USER at
@@ -6,6 +14,8 @@
 #include <windows.h>
 
 #include "Platform/Constants.h"   // REMOTE_LOG_DEFAULT — the one place off is decided
+#include "Persistence/IniFile.h"        // PathBesideExe — the logs\ folder
+#include "Persistence/RotatingLogFile.h" // the writer thread, shared with the app log
 
 #include <algorithm>
 #include <atomic>
@@ -40,27 +50,25 @@ namespace {
     std::atomic<HWND> g_notifyWnd{nullptr};
     std::atomic<bool> g_notifyPending{false};
 
-    // The file's own version marker. A loader that meets a header it does not
-    // know refuses rather than guessing at the column order — a log read back
-    // with the sender and receiver swapped is worse than no log.
-    // v1 wrote magic, version and every column name on one long line, then rows
-    // whose first two fields were a raw FILETIME and a raw microsecond count. It
-    // parsed perfectly and read terribly — "134302577811182526" and "85783695"
-    // are the two facts a person most wants out of a log, written in the two
-    // forms a person cannot use, and nothing in the file said which machine it
-    // came from.
+    // The file's own version marker. ONE format is supported — a file whose
+    // version does not match is refused rather than guessed at, because a log
+    // read back with the sender and receiver swapped is worse than no log.
     //
-    // v2 loses NO precision: the raw pair is still on every row, moved to the
-    // END where only the loader looks. What changed is what the eye lands on
-    // first, and a preamble that names the instance, its listener and the time
-    // the file was written.
+    // No older version is accepted. These files are a diagnostic written and
+    // read within one build; carrying readers for formats nobody has would be
+    // dead code that can only rot.
+    //
+    // Everything in a row is written to be READ. The one raw value is deltaUs,
+    // which is a measurement rather than a restatement of something already on
+    // the line — the timestamp, and the gap beside it, are the loader's source
+    // for the rest.
     constexpr const wchar_t *FILE_MAGIC = L"#qIV-remote-log";
-    constexpr int            FILE_VERSION = 2;
+    constexpr int            FILE_VERSION = 3;
 
-    // Still recognised on load. Reading somebody's old export must keep working
-    // — the format changed for the writer's benefit, not the reader's.
-    constexpr const wchar_t *FILE_HEADER_V1 =
-        L"#qIV-remote-log\t1\tseq\twhenFt\tdeltaUs\tdir\tsender\tcommand\treceiver\tresponse";
+    // Pipe-separated fields in a data row, counting the "<time> [<thread>]
+    // <LEVEL> <dir>" prefix as the first:
+    //   prefix | from | to | line | result | elapsed | #seq
+    constexpr size_t FILE_COLUMNS = 7;
 
     // Date AND time. FormatTime is the panel's form and omits the date, which is
     // right for a live column and wrong for a file that can span midnight.
@@ -80,6 +88,29 @@ namespace {
         return b;
     }
 
+    // The inverse of FormatStamp: "2026-08-06 04:52:38.825" back to the FILETIME
+    // it was rendered from. Local time in, UTC out, mirroring FormatStamp
+    // exactly — the two are only ever correct as a pair.
+    //
+    // 0 for anything that is not a stamp, which is what "—" becomes. That is the
+    // same value an unset time already had, so a row that never carried one
+    // reloads as one that still does not.
+    long long ParseStamp(const std::wstring &s) {
+        SYSTEMTIME st{};
+        unsigned   ms = 0;
+        if (swscanf_s(s.c_str(), L"%hu-%hu-%hu %hu:%hu:%hu.%u",
+                      &st.wYear, &st.wMonth, &st.wDay,
+                      &st.wHour, &st.wMinute, &st.wSecond, &ms) != 7)
+            return 0;
+        st.wMilliseconds = static_cast<WORD>(ms);
+
+        FILETIME local{};
+        if (!SystemTimeToFileTime(&st, &local)) return 0;
+        FILETIME utc{};
+        if (!LocalFileTimeToFileTime(&local, &utc)) return 0;
+        return (static_cast<long long>(utc.dwHighDateTime) << 32) | utc.dwLowDateTime;
+    }
+
     long long NowFt() {
         FILETIME ft{};
         GetSystemTimeAsFileTime(&ft);
@@ -90,10 +121,16 @@ namespace {
     // split into a row that never happened. Replaced rather than escaped: this
     // is a log to read, and an escape sequence in a response column is harder to
     // read than the space it stands in for.
+    // '|' goes too, and for the same reason the others do: it is the field
+    // separator inside the message column, so a wire line carrying one would
+    // split into a row that never happened. Replaced with '/' rather than
+    // escaped — this is a log to read, and an escape sequence is harder to read
+    // than the character it stands in for.
     std::wstring Flatten(const std::wstring &s) {
         std::wstring out = s;
         for (wchar_t &c : out)
             if (c == L'\t' || c == L'\r' || c == L'\n') c = L' ';
+            else if (c == L'|') c = L'/';
         return out;
     }
 
@@ -120,7 +157,8 @@ namespace {
 
     // Splits on tabs WITHOUT collapsing empties: an empty response is a real
     // value (a command that answered with a bare OK), and dropping it would
-    // shift every column after it.
+    // shift every column after it. Used for the preamble, whose lines are still
+    // "# key<TAB>value".
     std::vector<std::wstring> SplitTabs(const std::wstring &line) {
         std::vector<std::wstring> out;
         size_t start = 0;
@@ -133,8 +171,198 @@ namespace {
         return out;
     }
 
+    // The data rows' separator. Same rule about empty fields, and safe because
+    // Flatten has already removed '|' from everything a peer can influence.
+    std::vector<std::wstring> SplitPipes(const std::wstring &line) {
+        std::vector<std::wstring> out;
+        size_t start = 0;
+        for (;;) {
+            const size_t bar = line.find(L" | ", start);
+            if (bar == std::wstring::npos) { out.push_back(line.substr(start)); break; }
+            out.push_back(line.substr(start, bar - start));
+            start = bar + 3;
+        }
+        return out;
+    }
+
+    // "1.8 ms" / "428 µs" / "2.30 s" / "14h 02m" back to microseconds, and -1
+    // for the "—" FormatDelta writes when nothing was measured.
+    //
+    // LOSSY BY DESIGN, and that is the trade this format makes: the file carries
+    // what a person reads, so a reloaded elapsed is the rounded value that was
+    // on screen rather than the raw measurement. The panel renders it through
+    // FormatDelta again, so what you see after a reload is identical to what you
+    // saw before one.
+    long long ParseDelta(const std::wstring &s) {
+        double v = 0;
+        if (swscanf_s(s.c_str(), L"%lf", &v) != 1) return -1;
+
+        if (s.find(L"µs") != std::wstring::npos) return static_cast<long long>(v);
+        if (s.find(L"ms") != std::wstring::npos) return static_cast<long long>(v * 1000.0);
+        if (s.find(L'h')  != std::wstring::npos) {
+            double m = 0;
+            swscanf_s(s.c_str(), L"%lfh %lfm", &v, &m);
+            return static_cast<long long>((v * 3600.0 + m * 60.0) * 1000000.0);
+        }
+        if (s.find(L'm')  != std::wstring::npos) {
+            double sec = 0;
+            swscanf_s(s.c_str(), L"%lfm %lfs", &v, &sec);
+            return static_cast<long long>((v * 60.0 + sec) * 1000000.0);
+        }
+        if (s.find(L's')  != std::wstring::npos) return static_cast<long long>(v * 1000000.0);
+        return -1;
+    }
+
     long long ToLL(const std::wstring &s) {
         return _wcstoi64(s.c_str(), nullptr, 10);
+    }
+
+    // =========================================================================
+    // The file sink
+    // =========================================================================
+    // Separate from g_enabled, and outside every mutex, for the same reason: a
+    // producer decides whether to queue a row on one relaxed load.
+    std::atomic<bool> g_fileOn{false};
+
+    // The writer. One thread, owned entirely by this object — see
+    // Persistence/RotatingLogFile.h for why the disk is never touched on a
+    // caller's thread.
+    Persistence::RotatingLogFile g_file;
+
+    // WARN for a refusal, ERROR for a connection that ended badly, INFO for
+    // everything else.
+    //
+    // A level column is the first thing a log viewer colours and the first thing
+    // it filters on, so writing INFO on every row would throw away the one
+    // feature that makes a wall of rows navigable. Derived rather than passed
+    // in: every producer already says what happened in the text, and asking
+    // seventeen record points each to classify themselves is seventeen chances
+    // to disagree.
+    Persistence::LogLevel LevelFor(const Entry &e) {
+        // BOTH FIELDS, and that is the point of this function.
+        //
+        // A reply carries its text in `response` ("ERR 403 …"), but a CONNECTION
+        // row carries it in `command` — "(refused — blacklisted)" with a
+        // response of merely "(connection)". Reading only the response, as this
+        // first did, classified every refusal as INFO: a bot hammering the port
+        // all night produced a log in which filtering for WARN showed nothing,
+        // which is precisely the case the level column exists to surface.
+        auto has = [&](const wchar_t *needle) {
+            return e.command.find(needle) != std::wstring::npos ||
+                   e.response.find(needle) != std::wstring::npos;
+        };
+
+        // ERROR — somebody was BLOCKED, or blocked themselves. These are the
+        // rows worth waking up for: a blacklist hit means an address is already
+        // known bad, and a ban is this machine deciding so.
+        if (has(L"blacklisted") || has(L"blocked") || has(L"banned"))
+            return Persistence::LogLevel::Error;
+
+        // WARN — refused, dropped, or ended in a way nobody asked for. A single
+        // one is ordinary; a column of them is an attack or a broken screen, and
+        // either way it is the pattern that carries the meaning.
+        if (e.response.rfind(L"ERR", 0) == 0 ||
+            has(L"refused") || has(L"dropped") ||
+            has(L"authentication failed") || has(L"ABRUPTLY"))
+            return Persistence::LogLevel::Warn;
+
+        return Persistence::LogLevel::Info;
+    }
+
+    // ONE ROW, in the layout every standard log viewer already understands:
+    //
+    //   <time> [<thread>] <LEVEL> <message>
+    //
+    // That is the log4j/log4net shape, which is what LogViewPlus, lnav and the
+    // rest parse out of the box — four columns, sortable and filterable, with no
+    // per-file configuration. Everything specific to wire traffic lives inside
+    // the message, because a viewer that does not know this program still has to
+    // be able to show the row.
+    //
+    // The message is PIPE-DELIMITED so it can be parsed straight back for Ctrl+O
+    // — see Flatten, which removes '|' from every peer-controlled field for
+    // exactly the reason it already removed tabs.
+    //
+    // Shared by SaveTo and by the file sink so the two cannot drift: a rotated
+    // file and a hand-saved one are the same format, and Ctrl+O opens either.
+    //
+    // NO TIME-SINCE-PREVIOUS FIELD. It was here briefly and came out again: a
+    // log viewer derives it from two adjacent timestamps far better than this
+    // can — it recomputes after a sort or a filter, which a stored value cannot.
+    // Writing it would be shipping a cached subtraction that goes wrong the
+    // moment the rows are reordered.
+    std::wstring FormatRow(const Entry &e) {
+        // The message: everything specific to wire traffic, which the shared
+        // layout knows nothing about and does not need to.
+        std::wstring m;
+        m += (e.dir == Direction::Out) ? L"OUT" : L"IN";
+        m += L" | ";  m += Flatten(e.sender);
+        m += L" | ";  m += Flatten(e.receiver);
+        m += L" | ";  m += Flatten(e.command);
+        m += L" | ";  m += Flatten(e.response);
+        m += L" | ";  m += FormatDelta(e.deltaUs);
+        m += L" | #"; m += std::to_wstring(e.seq);
+
+        return Persistence::BuildLogLine(FormatStamp(e.whenFt), e.threadId,
+                                         LevelFor(e), m);
+    }
+
+    std::wstring ComputerName() {
+        wchar_t  name[MAX_COMPUTERNAME_LENGTH + 1] = {};
+        DWORD    n = MAX_COMPUTERNAME_LENGTH + 1;
+        if (!GetComputerNameW(name, &n)) return L"(unknown)";
+        return name;
+    }
+
+    // THE HEADER ON EVERY FILE, including each one a rotation opens.
+    //
+    // A rotated file is found months later, on its own, by someone who no longer
+    // remembers the session — so it has to answer "what wrote this, which
+    // machine, which build, and when" without reference to anything else. It
+    // begins with the magic and version LoadFrom expects, and every other line
+    // starts with '#', which that loader skips: the preamble can grow without
+    // touching the parser, and the file still opens in Ctrl+F12.
+    //
+    // Runs ON THE WRITER THREAD. SelfName and SelfEndpoint take the store's
+    // mutex and nothing else, and the writer holds no lock when this is called.
+    std::wstring FilePreamble() {
+        namespace RT = Constants::RemoteTcpIp;
+
+        // WRAPPED BY HAND at roughly 78 columns, and that is not fussiness.
+        // These files are opened in Notepad and in the Ctrl+F12 panel, neither
+        // of which reflows: a 140-character note becomes one wrapped line that
+        // looks like the writer emitted a broken record, which is exactly the
+        // doubt a diagnostic must not create about itself. Every line below is
+        // its own '#' row, and the loader skips all of them, so splitting a
+        // sentence across two costs nothing.
+        std::wstring h = std::wstring(FILE_MAGIC) + L'\t' +
+                         std::to_wstring(FILE_VERSION) + L"\r\n";
+        h += L"# log\tTCP/IP wire traffic\r\n";
+        h += L"# instance\t"  + Flatten(SelfName()) + L"\r\n";
+        h += L"# listening\t" + Flatten(SelfEndpoint()) + L"\r\n";
+        h += L"# machine\t"   + Flatten(ComputerName()) + L"\r\n";
+        h += L"# app\t"       + std::wstring(Constants::APP_NAME) + L" " +
+                                std::wstring(Constants::APP_VERSION) + L"\r\n";
+        h += L"# protocol\tv" + std::to_wstring(RT::PROTOCOL_VERSION) + L"\r\n";
+        h += L"# started\t"   + FormatStamp(NowFt()) + L"\r\n";
+        h += L"# rotation\t"  + std::to_wstring(Constants::Logging::MAX_ROWS) +
+                                L" rows per file\r\n";
+        h += L"#\r\n";
+        h += L"# format\ttime [thread] LEVEL message\r\n";
+        h += L"# message\tdir | from | to | line | result | elapsed | #seq\r\n";
+        h += L"#\r\n";
+        h += L"# note\telapsed is what THAT exchange cost. Time since the\r\n";
+        h += L"# note\tprevious row is not written — a log viewer derives it\r\n";
+        h += L"# note\tfrom the timestamps, and recomputes it after a sort.\r\n";
+        h += L"#\r\n";
+        h += L"# note\tfrom/to name a PEER as address:port, and this instance\r\n";
+        h += L"# note\tby its name. A row with this instance's own name on\r\n";
+        h += L"# note\tboth sides never happens.\r\n";
+        h += L"#\r\n";
+        h += L"# note\thandshake lines are redacted at capture. No password\r\n";
+        h += L"# note\tor HMAC ever reaches this file.\r\n";
+        h += L"#\r\n";
+        return h;
     }
 
     std::wstring LastErrorSentence(const wchar_t *what, const std::wstring &path) {
@@ -155,10 +383,15 @@ void Add(Direction dir,
          const std::wstring &receiver,
          const std::wstring &response,
          long long deltaUs) {
-    // The second half of the switch. Callers check IsEnabled() first so they
+    // TWO DESTINATIONS, decided independently and read once each so the rest of
+    // this function cannot see them change underneath it.
+    //
+    // The second half of the switch. Callers check IsCapturing() first so they
     // build nothing; this catches the ones that did not, and the race between
     // the two checks is harmless — one extra entry either side of a flip.
-    if (!g_enabled.load(std::memory_order_relaxed)) return;
+    const bool toStore = g_enabled.load(std::memory_order_relaxed);
+    const bool toFile  = g_fileOn.load(std::memory_order_relaxed);
+    if (!toStore && !toFile) return;
 
     FILETIME ft{};
     GetSystemTimeAsFileTime(&ft);
@@ -201,6 +434,10 @@ void Add(Direction dir,
     };
 
     Entry e;
+    // Taken HERE, on the thread that actually recorded the exchange — the writer
+    // thread that puts it in the file is a different one, and asking it would
+    // stamp every row with the same useless number.
+    e.threadId = GetCurrentThreadId();
     e.whenFt   = (static_cast<long long>(ft.dwHighDateTime) << 32) | ft.dwLowDateTime;
     e.deltaUs  = deltaUs;
     e.dir      = dir;
@@ -209,18 +446,48 @@ void Add(Direction dir,
     e.receiver = receiver;
     e.response = clip(response);
 
+    // The row for the file, built while the entry is still in hand. Formatted
+    // HERE rather than on the writer thread so the queue holds finished text: a
+    // writer that had to reach back into the store for fields would be reading
+    // a deque the producers are still trimming.
     {
         std::lock_guard<std::mutex> lk(g_mutex);
+        // NUMBERED WHETHER OR NOT IT IS KEPT, and the counter is shared by both
+        // destinations. A file written while the panel is not recording still
+        // gets consecutive sequence numbers, and switching the panel on
+        // mid-session does not restart them — one number never means two
+        // different exchanges, wherever they were written.
         e.seq = g_nextSeq++;
-        g_entries.push_back(std::move(e));
-        // Trimmed from the FRONT, so what is kept is always the most recent
-        // window.
-        while (g_entries.size() > CAPACITY) g_entries.pop_front();
+
+        // FORMATTED AND QUEUED WITHOUT LETTING GO OF THIS LOCK.
+        //
+        // Formatting here and queuing after releasing would let two producer
+        // threads take their numbers in one order and reach the queue in the
+        // other, putting seq 5 in the file above seq 4. A log whose rows are not
+        // in the order they happened is a log that has to be sorted before it
+        // can be believed.
+        //
+        // Safe: Write does nothing but push onto a deque and signal, and the
+        // writer thread never holds ITS mutex while taking this one — it swaps
+        // the queue out, releases, and only then formats a header. So the order
+        // is always store-lock then writer-lock, and never the reverse.
+        if (toFile) g_file.Write(FormatRow(e));
+
+        if (toStore) {
+            g_entries.push_back(std::move(e));
+            // Trimmed from the FRONT, so what is kept is always the most recent
+            // window.
+            while (g_entries.size() > CAPACITY) g_entries.pop_front();
+        }
     }
 
     // OUTSIDE the lock. PostMessage does not block, but holding a mutex across
     // any call into USER32 from a socket thread is how a deadlock gets written.
-    NotifyChanged();
+    //
+    // Only when something was STORED: the panel paints the deque, so a row that
+    // went to the file alone gives it nothing new to draw, and posting anyway
+    // would wake the UI thread once per exchange to rebuild an unchanged list.
+    if (toStore) NotifyChanged();
 }
 
 void NotifyChanged() {
@@ -253,6 +520,59 @@ size_t Count() {
 
 void SetEnabled(bool on) { g_enabled.store(on, std::memory_order_relaxed); }
 bool IsEnabled()         { return g_enabled.load(std::memory_order_relaxed); }
+
+// Two relaxed loads on the keystroke path, which is the same cost the single
+// load used to be for any purpose that matters. Ordered cheap-first only by
+// habit; both are plain atomics and neither can block.
+bool IsCapturing() {
+    return g_enabled.load(std::memory_order_relaxed) ||
+           g_fileOn.load(std::memory_order_relaxed);
+}
+
+// =============================================================================
+// The file sink
+// =============================================================================
+std::wstring LogDirectory() {
+    // "<exe folder>\logs\network". Resolved every call rather than cached: it is
+    // asked for by a menu handler and a status line, never on the recording
+    // path, and a static here would be one more thing initialised before main
+    // for no gain.
+    return Persistence::Ini::PathBesideExe(Constants::Logging::DIR_NAME) +
+           L"\\" + Constants::Logging::SUBDIR_NETWORK;
+}
+
+void SetFileLogging(bool on) {
+    if (on == g_fileOn.load(std::memory_order_relaxed)) return;
+
+    if (!on) {
+        // FLAG DOWN FIRST, so nothing new is queued while the drain runs, and
+        // Stop then writes out what is already waiting before closing.
+        g_fileOn.store(false, std::memory_order_relaxed);
+        g_file.Stop();
+        return;
+    }
+
+    Persistence::RotatingLogFile::Config cfg;
+    cfg.dir      = LogDirectory();
+    cfg.baseName = std::wstring(Constants::APP_NAME) + L"_" +
+                   Constants::Logging::KIND_TCP_IP;
+    cfg.ext      = Constants::Logging::EXT;
+    cfg.maxRows  = Constants::Logging::MAX_ROWS;
+    cfg.header   = &FilePreamble;
+
+    g_file.Start(cfg);
+    // LAST, so the writer is running before the first producer can queue to it.
+    g_fileOn.store(true, std::memory_order_relaxed);
+}
+
+bool FileLoggingIsOn() { return g_fileOn.load(std::memory_order_relaxed); }
+
+std::wstring CurrentFilePath() { return g_file.CurrentPath(); }
+
+void ShutdownFileLogging() {
+    g_fileOn.store(false, std::memory_order_relaxed);
+    g_file.Stop();
+}
 
 void SetNotifyWindow(HWND hwnd) {
     g_notifyWnd.store(hwnd, std::memory_order_release);
@@ -363,27 +683,20 @@ bool SaveTo(const std::wstring &path, std::wstring &errorOut) {
     text += L"# listening\t" + Flatten(SelfEndpoint()) + L"\r\n";
     text += L"# saved\t"     + FormatStamp(NowFt()) + L"\r\n";
     text += L"# rows\t"      + std::to_wstring(rows.size()) + L"\r\n";
-    text += L"# note\ttime and elapsed are written to be read; whenFt and deltaUs "
-            L"at the end of each row are the exact values this file reloads from\r\n";
-    text += L"# note\tfrom/to name a PEER as address:port and this instance by its "
-            L"name — a row with this instance's own name on both sides never happens\r\n";
-    text += L"# columns\tseq\ttime\telapsed\tdir\tfrom\tline\tto\tresult\twhenFt\tdeltaUs\r\n";
+    text += L"# format\ttime [thread] LEVEL message\r\n";
+    text += L"# message\tdir | from | to | line | result | elapsed | #seq\r\n";
+    text += L"#\r\n";
+    text += L"# note\tfrom/to name a PEER as address:port, and this instance\r\n";
+    text += L"# note\tby its name. A row with this instance's own name on\r\n";
+    text += L"# note\tboth sides never happens.\r\n";
+    text += L"#\r\n";
 
+    // THE SAME FormatRow THE FILE SINK USES. One definition, so a file this
+    // saves and a file the rotation writes are the same format — which is what
+    // lets Ctrl+O open either of them.
+    //
     for (const Entry &e : rows) {
-        text += std::to_wstring(e.seq);         text += L'\t';
-        // Readable first — this is the half a person reads.
-        text += FormatStamp(e.whenFt);          text += L'\t';
-        text += FormatDelta(e.deltaUs);         text += L'\t';
-        text += (e.dir == Direction::Out) ? L"OUT" : L"IN";
-        text += L'\t';
-        text += Flatten(e.sender);              text += L'\t';
-        text += Flatten(e.command);             text += L'\t';
-        text += Flatten(e.receiver);            text += L'\t';
-        text += Flatten(e.response);            text += L'\t';
-        // Exact last — this is the half the loader reads. Keeping both is the
-        // whole reason nothing had to be traded away for legibility.
-        text += std::to_wstring(e.whenFt);      text += L'\t';
-        text += std::to_wstring(e.deltaUs);
+        text += FormatRow(e);
         text += L"\r\n";
     }
 
@@ -446,7 +759,6 @@ bool LoadFrom(const std::wstring &path, std::wstring &errorOut) {
 
     std::vector<Entry> loaded;
     bool headerSeen = false;
-    int  version    = 0;
 
     size_t start = 0;
     while (start <= text.size()) {
@@ -458,24 +770,18 @@ bool LoadFrom(const std::wstring &path, std::wstring &errorOut) {
         if (line.empty()) { if (start > text.size()) break; continue; }
 
         if (!headerSeen) {
-            // v1 is matched WHOLE, because its version and its column names were
-            // one inseparable line. v2 needs only the magic and a number, which
-            // is what lets its preamble grow later without breaking this.
-            if (line == FILE_HEADER_V1) {
-                version = 1;
-            } else {
-                const std::vector<std::wstring> header = SplitTabs(line);
-                if (header.size() < 2 || header[0] != FILE_MAGIC) {
-                    errorOut = L"That is not a qIV remote log.\r\n\r\nThe first line "
-                               L"must be the header qIV writes when it saves one.";
-                    return false;
-                }
-                version = static_cast<int>(ToLL(header[1]));
-                if (version != FILE_VERSION) {
-                    errorOut = L"That log was written by a different version of qIV "
-                               L"and this build cannot read its columns.";
-                    return false;
-                }
+            // Magic and a number, nothing more — which is what lets the preamble
+            // below it grow without ever touching this check.
+            const std::vector<std::wstring> header = SplitTabs(line);
+            if (header.size() < 2 || header[0] != FILE_MAGIC) {
+                errorOut = L"That is not a qIV remote log.\r\n\r\nThe first line "
+                           L"must be the header qIV writes when it saves one.";
+                return false;
+            }
+            if (ToLL(header[1]) != FILE_VERSION) {
+                errorOut = L"That log was written by a different version of qIV "
+                           L"and this build cannot read its columns.";
+                return false;
             }
             headerSeen = true;
             continue;
@@ -485,34 +791,34 @@ bool LoadFrom(const std::wstring &path, std::wstring &errorOut) {
         // always begins with its sequence number, so '#' can never start one.
         if (line[0] == L'#') continue;
 
-        const std::vector<std::wstring> f = SplitTabs(line);
+        const std::vector<std::wstring> f = SplitPipes(line);
+        if (f.size() < FILE_COLUMNS) continue; // a truncated tail line, not a failure
 
+        // f[0] is the shared prefix plus the first word of the message:
+        // "<time> [<thread>] <LEVEL> <IN|OUT>". The level is NOT read back — it
+        // is derived from the response by LevelFor, and a second stored copy is
+        // just something that can come to disagree with the first.
         Entry e;
-        if (version == 1) {
-            if (f.size() < 8) continue; // a truncated tail line, not a failure
-            e.seq      = ToLL(f[0]);
-            e.whenFt   = ToLL(f[1]);
-            e.deltaUs  = ToLL(f[2]);
-            e.dir      = (f[3] == L"IN") ? Direction::In : Direction::Out;
-            e.sender   = f[4];
-            e.command  = f[5];
-            e.receiver = f[6];
-            e.response = f[7];
-        } else {
-            if (f.size() < 10) continue;
-            e.seq      = ToLL(f[0]);
-            // f[1] and f[2] are the READABLE time and elapsed. Deliberately not
-            // parsed: they are a rendering of the exact pair at the end, and
-            // reading them back would turn a display rounding into the stored
-            // value.
-            e.dir      = (f[3] == L"IN") ? Direction::In : Direction::Out;
-            e.sender   = f[4];
-            e.command  = f[5];
-            e.receiver = f[6];
-            e.response = f[7];
-            e.whenFt   = ToLL(f[8]);
-            e.deltaUs  = ToLL(f[9]);
-        }
+        e.whenFt = ParseStamp(f[0]);
+
+        const size_t open = f[0].find(L'[');
+        if (open != std::wstring::npos)
+            e.threadId = static_cast<unsigned long>(ToLL(f[0].substr(open + 1)));
+
+        // The direction is the last whitespace-separated token of that field.
+        // Reliable because both the level and IN/OUT are fixed words this
+        // program writes — nothing peer-controlled reaches here.
+        const size_t sp = f[0].find_last_of(L' ');
+        e.dir = (sp != std::wstring::npos && f[0].substr(sp + 1) == L"IN")
+                    ? Direction::In
+                    : Direction::Out;
+
+        e.sender   = f[1];
+        e.receiver = f[2];
+        e.command  = f[3];
+        e.response = f[4];
+        e.deltaUs  = ParseDelta(f[5]);
+        e.seq      = ToLL(f[6].substr(f[6].find(L'#') + 1));
         loaded.push_back(std::move(e));
     }
 

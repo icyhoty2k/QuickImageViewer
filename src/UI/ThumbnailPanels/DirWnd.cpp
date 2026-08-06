@@ -1,3 +1,11 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// Copyright (C) 2026 Ivan Hristov Yanev
+//
+// This file is part of QuickImageViewer. It is free software: you may
+// redistribute and modify it under the terms of the GNU Affero General Public
+// License version 3 or later, as published by the Free Software Foundation.
+// It is distributed WITHOUT ANY WARRANTY. See the LICENSE file for details.
+
 #include "DirWnd.h"
 #include "../../AppState.h"
 #include "../../Input/Shortcuts.h"
@@ -133,6 +141,14 @@ namespace UI {
             m_dirPlaylist.push_back(std::filesystem::canonical(entry.path()).wstring());
         }
         RecordDirScanCount(m_dirPlaylist.size());
+
+        // directory_iterator hands files back in whatever order the filesystem
+        // stores them — NTFS happens to be name-ordered, which is why this went
+        // unnoticed, but that is not a guarantee and it is never the user's
+        // chosen order. Same rule as SpawnedDirWnd::LoadFolder: a self-built
+        // list carries the app's order, or it disagrees with every other view
+        // of the same folder the moment a background scan lands.
+        SortPathsInAppOrder(m_dirPlaylist);
     }
 
     // -------------------------------------------------------------------------
