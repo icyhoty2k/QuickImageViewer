@@ -601,6 +601,18 @@ void HandleScanComplete(HWND hWnd, ScanResult *result) {
     }
 }
 
+// Cancelling this chooser never quits the application.
+//
+// It used to: PostQuitMessage(0) whenever the dialog closed with an empty
+// playlist, from the days when an empty playlist meant a black window and
+// there was nothing to stay open FOR. That is no longer true — the caller at
+// startup turns on the Missing/Empty overlay right after this returns, and F2
+// reaches this same function from a window that is already showing it. Both
+// leave the user looking at a heading, a prompt and a clickable path.
+//
+// Keeping the quit made it strictly harmful in both: at startup it posted
+// WM_QUIT that the loop pulled before the overlay was ever painted, and from
+// F2 in an empty folder it closed the application on Cancel.
 void OpenInitialImage(HWND hWnd) {
     app.isDialogVisible = true;
 
@@ -653,7 +665,6 @@ void OpenInitialImage(HWND hWnd) {
     if (FAILED(CoCreateInstance(CLSID_FileOpenDialog, nullptr,
                                 CLSCTX_INPROC_SERVER, IID_PPV_ARGS(&pfd)))) {
         app.isDialogVisible = false;
-        if (app.playlist.empty()) PostQuitMessage(0);
         return;
     }
 
@@ -717,9 +728,9 @@ void OpenInitialImage(HWND hWnd) {
         return;
     }
 
+    // Cancelled — nothing to open, and nothing to do about it.
     if (FAILED(hr)) {
         pfd->Release();
-        if (app.playlist.empty()) PostQuitMessage(0);
         return;
     }
 
@@ -738,8 +749,8 @@ void OpenInitialImage(HWND hWnd) {
     }
     pfd->Release();
 
+    // Closed with OK but no selection — same as a cancel.
     if (filePath.empty()) {
-        if (app.playlist.empty()) PostQuitMessage(0);
         return;
     }
 

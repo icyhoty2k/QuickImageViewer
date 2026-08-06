@@ -469,6 +469,14 @@ void InputManager::ExecuteCommand(HWND hWnd, Command cmd) {
                     SHOpenFolderAndSelectItems(pidl, 0, nullptr, 0);
                     ILFree(pidl);
                 }
+            } else {
+                // No current image — but the blank-screen placeholder may be up
+                // and naming a folder, and it advertises L as the way to open
+                // it. Without this the key does nothing on the one screen that
+                // tells the user to press it, while clicking the same line
+                // works: the mouse path had this fallback and the keyboard did
+                // not. Both go through the same call now.
+                AppCommands::OpenOverlayFolderInExplorer(hWnd);
             }
             break;
 

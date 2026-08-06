@@ -377,8 +377,8 @@ struct AppState {
     // Client-area rects of the two clickable lines, written by the renderer
     // whenever the layout is built or re-flowed and hit-tested by MouseHandler.
     // A zero rect means that line is not clickable.
-    //   Action = line 2, the constant "Open a file or folder…" prompt (F2).
-    //   Path   = line 3, the folder or file, opened in Explorer.
+    //   Path   = the folder or file, opened in Explorer. Covers its (L) hint.
+    //   Action = the constant "Open a file or folder" prompt. Covers its (F2).
     D2D1_RECT_F folderOverlayActionRect = {};
     D2D1_RECT_F folderOverlayPathRect = {};
 

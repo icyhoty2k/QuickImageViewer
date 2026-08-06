@@ -71,20 +71,6 @@ namespace {
         return PointInRect(pt, app.folderOverlayActionRect);
     }
 
-    // Open the overlay path in Explorer. If the directory itself is gone
-    // (Missing state), walk up to the nearest parent that still exists.
-    void OpenOverlayPathInExplorer(HWND hWnd) {
-        fs::path p(app.folderOverlayPath);
-        std::error_code ec;
-        while (!p.empty() && (!fs::is_directory(p, ec) || ec)) {
-            fs::path parent = p.parent_path();
-            if (parent == p) break; // reached the root
-            p = parent;
-            ec.clear();
-        }
-        if (fs::is_directory(p, ec) && !ec)
-            ShellExecuteW(hWnd, L"open", p.c_str(), nullptr, nullptr, SW_SHOWNORMAL);
-    }
 }
 
 void MouseHandler::HandleButtonDown(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) {
@@ -107,9 +93,10 @@ void MouseHandler::HandleButtonDown(HWND hWnd, UINT message, WPARAM wParam, LPAR
             InputManager::ExecuteCommand(hWnd, Command::OpenFile);
             return;
         }
-        // Line 3 — reveal the folder, the same thing L does.
+        // Line 2 — reveal the folder, the same thing L does. Literally the same
+        // call, so the two cannot drift.
         if (HitTestOverlayPath(pt)) {
-            OpenOverlayPathInExplorer(hWnd);
+            AppCommands::OpenOverlayFolderInExplorer(hWnd);
             return;
         }
     }
@@ -369,8 +356,12 @@ bool MouseHandler::UpdateHoverCursor(HWND hWnd) {
 
     // Either clickable line of the placeholder shows the hand — a link that
     // does not change the cursor is one most people never try.
+    //
+    // CURR_CLICK (IDC_HAND, the pointing finger), not CURR_GRAB: the grab hand
+    // is the app's PANNING cursor and means "drag this", which is the wrong
+    // promise on a link that opens a dialog.
     if (HitTestOverlayAction(pt) || HitTestOverlayPath(pt)) {
-        SetCursor(Constants::Cursors::CURR_GRAB);
+        SetCursor(Constants::Cursors::CURR_CLICK);
         return true;
     }
 

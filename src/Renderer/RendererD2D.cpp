@@ -497,6 +497,20 @@ HRESULT RendererD2D::CreateDeviceResources() {
         &m_pLinkBrush);
     if (FAILED(hr)) return hr;
 
+    hr = m_pDeviceContext->CreateSolidColorBrush(
+        D2D1::ColorF(Constants::Theme::Renderer::PLACEHOLDER_R,
+                     Constants::Theme::Renderer::PLACEHOLDER_G,
+                     Constants::Theme::Renderer::PLACEHOLDER_B),
+        &m_pPlaceholderBrush);
+    if (FAILED(hr)) return hr;
+
+    hr = m_pDeviceContext->CreateSolidColorBrush(
+        D2D1::ColorF(Constants::Theme::Renderer::PLACEHOLDER_DIM_R,
+                     Constants::Theme::Renderer::PLACEHOLDER_DIM_G,
+                     Constants::Theme::Renderer::PLACEHOLDER_DIM_B),
+        &m_pPlaceholderDimBrush);
+    if (FAILED(hr)) return hr;
+
     // Effect nodes are NOT created here. EnsureExtraEffects() builds the whole
     // set on first use, so the common "view an image, no effects" session never
     // allocates any of them. UpdateColorEffects() just parks the display node
@@ -541,8 +555,11 @@ void RendererD2D::DiscardDeviceResources() {
     m_pTextBrush.Reset();
     m_pFolderDeletedBrush.Reset();
     m_pLinkBrush.Reset();
-    // The overlay layout carries a drawing effect referencing m_pLinkBrush
-    // (device-bound) — drop it so it rebuilds cleanly on the new device.
+    m_pPlaceholderBrush.Reset();
+    m_pPlaceholderDimBrush.Reset();
+    // The overlay layout carries drawing effects referencing m_pLinkBrush and
+    // m_pPlaceholderDimBrush (device-bound) — drop it so it rebuilds cleanly on
+    // the new device.
     m_pFolderDeletedLayout.Reset();
     // Mark the cache empty rather than clearing the path: an empty path is a
     // legitimate value here (a first run names no folder), so "no path" cannot
@@ -592,7 +609,26 @@ const wchar_t *RendererD2D::FolderOverlayHeader() {
     }
 }
 
-// What line 3 shows: the detail when there is one, the path otherwise.
+// The glyph that opens the heading line, chosen by the same switch that chooses
+// the heading itself so the two cannot disagree about the state.
+//
+// Informational for the empty folder — that is a normal thing to open, not a
+// failure — and a warning for the two that really are one. Missing returns
+// nothing because EMPTY_DIR_MISSING already opens with its own ⚠: the constant
+// is shared with the thumbnail panels, which need it there too, and prepending
+// a second one here would double it.
+const wchar_t *RendererD2D::FolderOverlayHeaderIcon() {
+    switch (app.folderOverlay) {
+        case AppState::FolderOverlayState::Missing:
+            return L"";
+        case AppState::FolderOverlayState::Unsupported:
+            return Constants::ThemeIcons::ICON_WARNING;
+        default:
+            return Constants::ThemeIcons::ICON_INFO;
+    }
+}
+
+// What the last line shows: the detail when there is one, the path otherwise.
 const std::wstring &RendererD2D::FolderOverlayLastLine() {
     return app.folderOverlayDetail.empty() ? app.folderOverlayPath
                                            : app.folderOverlayDetail;
@@ -618,28 +654,83 @@ RendererD2D::FolderOverlayText RendererD2D::BuildFolderOverlayText() {
     namespace M = Constants::Messages;
     FolderOverlayText out;
 
-    // Line 1 — the heading. Not clickable.
-    out.text = FolderOverlayHeader();
+    // Line 1 — the heading. Not clickable, and it carries no key hint.
+    //
+    // The heading constants are shared with the thumbnail panels, where they
+    // INTRODUCE the line under them and so end in ':'. Here the line under is
+    // labelled "currentDir:" already, and a colon on both reads as a typo. Trimmed rather than duplicated into an overlay-only copy
+    // of each heading, which would drift the moment either wording changed.
+    std::wstring heading = FolderOverlayHeader();
+    while (!heading.empty() && (heading.back() == L':' || heading.back() == L' '))
+        heading.pop_back();
 
-    // Line 2 — the prompt, then its key hint. Always present: it is the way out
-    // of every state this placeholder reports, including the one with no folder
-    // to name.
-    out.text += L"\n";
-    out.actionStart = static_cast<UINT32>(out.text.size());
-    out.text += M::OVERLAY_OPEN_PROMPT;
-    out.actionLen = static_cast<UINT32>(out.text.size()) - out.actionStart;
-    out.text += M::OVERLAY_OPEN_PROMPT_HINT;
+    const wchar_t *headingIcon = FolderOverlayHeaderIcon();
+    out.text = L"";
+    if (*headingIcon) {
+        out.text += headingIcon;
+        out.text += L" ";
+    }
+    out.text += heading;
 
-    // Line 3 — the folder or file, then its key hint. Skipped entirely when
-    // there is nothing to name, rather than left as a blank line.
+    // Appends a key hint and reports the range of the hint ITSELF, skipping the
+    // spaces it opens with. The spaces are part of the constant so the gap
+    // travels with the hint, but underlining them would weld the hint to the
+    // words in front of it.
+    auto appendHint = [&out](const wchar_t *hint, UINT32 &start, UINT32 &len) {
+        const size_t at = out.text.size();
+        out.text += hint;
+
+        size_t g = at;
+        while (g < out.text.size() && out.text[g] == L' ') ++g;
+
+        start = static_cast<UINT32>(g);
+        len   = static_cast<UINT32>(out.text.size() - g);
+    };
+
+    // Line 2 — the folder or file, then its key hint. WHERE YOU ARE comes
+    // before WHAT TO DO: the heading above says something is wrong with this
+    // folder, and the next thing the user wants is which folder that was.
+    // Skipped entirely when there is nothing to name, rather than left as a
+    // blank line — the prompt below then moves up into its place.
     const std::wstring &last = FolderOverlayLastLine();
     if (!last.empty()) {
         out.text += L"\n";
+
+        // A location pin, not a folder: this line names the folder you are
+        // ALREADY in, and the same glyph as the prompt below would read as one
+        // repeated thing rather than two different ones. The icon is outside
+        // the link range — it marks the line, it is not part of the target.
+        out.text += Constants::ThemeIcons::ICON_LOCATION;
+        out.text += L" ";
+
         out.pathStart = static_cast<UINT32>(out.text.size());
         out.text += last;
         out.pathLen = static_cast<UINT32>(out.text.size()) - out.pathStart;
-        out.text += M::OVERLAY_PATH_HINT;
+        appendHint(M::OVERLAY_PATH_HINT, out.pathHintStart, out.pathHintLen);
     }
+
+    // Line 3 — the prompt, then its key hint. Always present: it is the way out
+    // of every state this placeholder reports, including the one with no folder
+    // to name. Last of the three because it is the ACTION — it reads as the
+    // conclusion of the two lines above it.
+    out.text += L"\n";
+    out.text += Constants::ThemeIcons::ICON_FOLDER_OPEN;
+    out.text += L" ";
+
+    out.actionStart = static_cast<UINT32>(out.text.size());
+    out.text += M::OVERLAY_OPEN_PROMPT;
+    out.actionLen = static_cast<UINT32>(out.text.size()) - out.actionStart;
+    appendHint(M::OVERLAY_OPEN_PROMPT_HINT, out.actionHintStart, out.actionHintLen);
+
+    // Last line — the version. At the bottom, dimmed and shrunk by the caller:
+    // it is here to be READ BACK off a screenshot in a bug report, not to be
+    // read now, and at the top in full size it was the first thing the eye
+    // landed on for no benefit to the person looking at it.
+    out.text += L"\n";
+    out.versionStart = static_cast<UINT32>(out.text.size());
+    out.text += M::OVERLAY_APP_LINE;
+    out.text += Constants::APP_VERSION;
+    out.versionLen = static_cast<UINT32>(out.text.size()) - out.versionStart;
 
     return out;
 }
@@ -680,9 +771,19 @@ void RendererD2D::UpdateFolderOverlayPathRect() {
     // actually on screen.
     const FolderOverlayText t = BuildFolderOverlayText();
 
-    (void) RangeToRect(m_pFolderDeletedLayout.Get(), t.actionStart, t.actionLen,
+    // From the first word THROUGH the key hint, gap included. The hint is part
+    // of the target, and a click region with a hole where the three spaces sit
+    // is worse than one that is slightly generous.
+    auto spanTo = [](UINT32 start, UINT32 hintStart, UINT32 hintLen) -> UINT32 {
+        if (hintLen == 0) return 0;
+        return (hintStart + hintLen) - start;
+    };
+
+    (void) RangeToRect(m_pFolderDeletedLayout.Get(), t.actionStart,
+                       spanTo(t.actionStart, t.actionHintStart, t.actionHintLen),
                        app.folderOverlayActionRect);
-    (void) RangeToRect(m_pFolderDeletedLayout.Get(), t.pathStart, t.pathLen,
+    (void) RangeToRect(m_pFolderDeletedLayout.Get(), t.pathStart,
+                       spanTo(t.pathStart, t.pathHintStart, t.pathHintLen),
                        app.folderOverlayPathRect);
 }
 
@@ -1398,10 +1499,10 @@ HRESULT RendererD2D::Render() {
             m_lastFolderOverlayPath  = FolderOverlayLastLine();
             m_lastFolderOverlayState = stateNow;
             m_lastFolderOverlayValid = true;
-            // Three lines: heading, the constant prompt, then the folder or
-            // file — each clickable line followed by its key hint. Lines 1 and 2
-            // never change; only the third does, which is why the whole thing is
-            // built once and kept.
+            // Four lines: heading, the folder or file, the constant prompt,
+            // then the version — the two middle ones clickable, each followed
+            // by its key hint. Only the folder line ever changes, which is why
+            // the whole thing is built once and kept.
             const FolderOverlayText composed = BuildFolderOverlayText();
             const std::wstring &msg = composed.text;
             const D2D1_SIZE_F sz = m_pDeviceContext->GetSize();
@@ -1416,8 +1517,11 @@ HRESULT RendererD2D::Render() {
 
                 // BOTH clickable lines get the app-standard link styling
                 // (colour + underline from Constants::Links) — a line that acts
-                // like a link has to look like one, or nobody discovers it. The
-                // key hints sit outside these ranges and stay plain.
+                // like a link has to look like one, or nobody discovers it.
+                // The key hint is styled as part of its line's link: it is
+                // clickable too, so it has to read as clickable. Applied as a
+                // separate range only so the gap in front of it stays plain
+                // rather than underlining into one long rule.
                 auto styleAsLink = [&](UINT32 start, UINT32 length) {
                     if (length == 0) return;
                     const DWRITE_TEXT_RANGE range = {start, length};
@@ -1427,18 +1531,44 @@ HRESULT RendererD2D::Render() {
                         m_pFolderDeletedLayout->SetUnderline(TRUE, range);
                 };
 
-                styleAsLink(composed.actionStart, composed.actionLen); // line 2
-                styleAsLink(composed.pathStart,   composed.pathLen);   // line 3
+                styleAsLink(composed.pathStart,       composed.pathLen);       // line 2
+                styleAsLink(composed.pathHintStart,   composed.pathHintLen);
+                styleAsLink(composed.actionStart,     composed.actionLen);     // line 3
+                styleAsLink(composed.actionHintStart, composed.actionHintLen);
+
+                // The version line: dimmer and smaller than everything above
+                // it. Both applied as ranges on the one cached layout, so the
+                // line still participates in the same centring and the same
+                // vertical block.
+                if (composed.versionLen > 0) {
+                    const DWRITE_TEXT_RANGE ver = {composed.versionStart, composed.versionLen};
+                    if (m_pPlaceholderDimBrush)
+                        m_pFolderDeletedLayout->SetDrawingEffect(m_pPlaceholderDimBrush.Get(), ver);
+                    m_pFolderDeletedLayout->SetFontSize(
+                        Constants::Overlay::MSG_CENTER_FONT_SIZE * app.dpiScale *
+                        Constants::Theme::Renderer::PLACEHOLDER_VERSION_FONT_SCALE,
+                        ver);
+                }
             }
         }
 
         if (m_pFolderDeletedLayout) {
+            // The placeholder's own brush, not m_pTextBrush: that one is the
+            // overlay manager's debug green, which is for diagnostics rather
+            // than for a screen the user is meant to read.
             ID2D1SolidColorBrush *brush = isMissing ? m_pFolderDeletedBrush.Get()
-                                                    : m_pTextBrush.Get();
+                                                    : m_pPlaceholderBrush.Get();
+            // ENABLE_COLOR_FONT so the emoji come out as Segoe UI Emoji draws
+            // them — in their own colours, ignoring the brush. Without it every
+            // glyph is filled with `brush` and the icons arrive the same green
+            // as the text, which is not what an emoji is for. Only the colour
+            // layers of colour glyphs are affected; the words still take the
+            // brush, and the link ranges still take theirs.
             m_pDeviceContext->DrawTextLayout(
                 D2D1::Point2F(0.0f, 0.0f),
                 m_pFolderDeletedLayout.Get(),
-                brush);
+                brush,
+                D2D1_DRAW_TEXT_OPTIONS_ENABLE_COLOR_FONT);
 
             UpdateFolderOverlayPathRect();
         }

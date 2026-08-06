@@ -77,12 +77,26 @@ namespace Constants::Messages {
     // is built into the cached layout once and never rebuilt; clicking it opens
     // the same chooser F2 does, which is the way OUT of every state this
     // placeholder reports.
-    constexpr const wchar_t *OVERLAY_OPEN_PROMPT = L"Open a file or folder…";
+    //
+    // No trailing ellipsis. The usual menu convention — "…" means this opens a
+    // dialog — reads as TRUNCATION here, because the line sits directly above a
+    // long path that really can wrap and really can look cut off.
+    constexpr const wchar_t *OVERLAY_OPEN_PROMPT = L"Open a file or folder";
     // Keyboard equivalents, appended after each clickable line and left OUTSIDE
     // the link styling — the hint tells you the key, it is not itself a target.
     // Someone who reads them once stops needing the mouse here at all.
     constexpr const wchar_t *OVERLAY_OPEN_PROMPT_HINT = L"   (F2)";
     constexpr const wchar_t *OVERLAY_PATH_HINT        = L"   (L)";
+    // Line 1 of the placeholder, on its own above the heading: "qiv v2.201.0.272".
+    //
+    // A line of its own rather than sharing one with the heading: this screen is
+    // the one that gets photographed and pasted into a bug report, and it is
+    // exactly the state where there is no image window whose title bar could
+    // carry the version. On its own line it survives a crop.
+    // The full product name, not the short "qIV": the one person who reads this
+    // line is reading it off a screenshot in a bug report, and it has to name
+    // the application to someone who may only know it by its full name.
+    constexpr const wchar_t *OVERLAY_APP_LINE = L"Quick Image Viewer v";
     // Placeholder shown in CacheWnd when the VRAM thumbnail cache is empty
     constexpr const wchar_t *EMPTY_CACHE = L"Thumbnail Cache Empty";
 

@@ -199,30 +199,70 @@ HRESULT RendererGDI::Render() {
             m_placeholderState    = stateNow;
             m_placeholderKeyValid = true;
 
-            // Same three lines as the D2D path, minus the links: this renderer
+            // Same four lines as the D2D path, minus the links: this renderer
             // has no hit-testing to attach them to, so the key hints carry the
             // whole message about what to do next.
+            //
+            // Also minus the invisible pads that centre lines 3 and 4 there.
+            // DrawTextW paints the whole block in one colour, so a pad here
+            // would be readable text; the trailing hints leave those two lines
+            // slightly left of the heading, which is a fair trade in a renderer
+            // that only runs when Direct2D failed to initialise at all.
+            // Heading and its glyph from one switch, same as the D2D path.
+            // Missing gets none: EMPTY_DIR_MISSING already opens with its own ⚠.
+            std::wstring heading;
+            const wchar_t *headingIcon = L"";
             switch (app.folderOverlay) {
                 case AppState::FolderOverlayState::Missing:
-                    m_placeholderText = Constants::Messages::EMPTY_DIR_MISSING; break;
+                    heading = Constants::Messages::EMPTY_DIR_MISSING;
+                    break;
                 case AppState::FolderOverlayState::Unsupported:
-                    m_placeholderText = Constants::Messages::FORMAT_UNSUPPORTED; break;
+                    heading     = Constants::Messages::FORMAT_UNSUPPORTED;
+                    headingIcon = Constants::ThemeIcons::ICON_WARNING;
+                    break;
                 default:
-                    m_placeholderText = Constants::Messages::EMPTY_DIR_NO_IMAGES; break;
+                    heading     = Constants::Messages::EMPTY_DIR_NO_IMAGES;
+                    headingIcon = Constants::ThemeIcons::ICON_INFO;
+                    break;
             }
+            // Trailing ':' trimmed for the same reason as the D2D path: the
+            // folder line follows it, not the line it used to introduce.
+            while (!heading.empty() && (heading.back() == L':' || heading.back() == L' '))
+                heading.pop_back();
 
-            m_placeholderText += L"\n";
-            m_placeholderText += Constants::Messages::OVERLAY_OPEN_PROMPT;
-            m_placeholderText += Constants::Messages::OVERLAY_OPEN_PROMPT_HINT;
+            m_placeholderText = L"";
+            if (*headingIcon) {
+                m_placeholderText += headingIcon;
+                m_placeholderText += L" ";
+            }
+            m_placeholderText += heading;
 
+            // Where you are, then what to do — same order as the D2D path.
             const std::wstring &last = app.folderOverlayDetail.empty()
                                            ? app.folderOverlayPath
                                            : app.folderOverlayDetail;
             if (!last.empty()) {
                 m_placeholderText += L"\n";
+                m_placeholderText += Constants::ThemeIcons::ICON_LOCATION;
+                m_placeholderText += L" ";
                 m_placeholderText += last;
                 m_placeholderText += Constants::Messages::OVERLAY_PATH_HINT;
             }
+
+            m_placeholderText += L"\n";
+            m_placeholderText += Constants::ThemeIcons::ICON_FOLDER_OPEN;
+            m_placeholderText += L" ";
+            m_placeholderText += Constants::Messages::OVERLAY_OPEN_PROMPT;
+            m_placeholderText += Constants::Messages::OVERLAY_OPEN_PROMPT_HINT;
+
+            // The version goes last here too. It does NOT get the smaller,
+            // dimmer treatment the D2D path gives it: DrawTextW paints the
+            // whole block in one font and one colour, and splitting this into a
+            // second call for one line is not worth it in a renderer that only
+            // runs when Direct2D failed to initialise.
+            m_placeholderText += L"\n";
+            m_placeholderText += Constants::Messages::OVERLAY_APP_LINE;
+            m_placeholderText += Constants::APP_VERSION;
         }
 
         if (!m_placeholderFont) {
@@ -235,10 +275,12 @@ HRESULT RendererGDI::Render() {
         if (m_placeholderFont) {
             HFONT hOldFont = static_cast<HFONT>(SelectObject(m_backDC, m_placeholderFont));
             SetBkMode(m_backDC, TRANSPARENT);
+            // The placeholder's own colour, not the debug green: same reasoning
+            // as the D2D path — this is a screen the user reads.
             SetTextColor(m_backDC, Constants::Theme::Color(
-                    Constants::Theme::Renderer::TEXT_DEBUG_R,
-                    Constants::Theme::Renderer::TEXT_DEBUG_G,
-                    Constants::Theme::Renderer::TEXT_DEBUG_B));
+                    Constants::Theme::Renderer::PLACEHOLDER_R,
+                    Constants::Theme::Renderer::PLACEHOLDER_G,
+                    Constants::Theme::Renderer::PLACEHOLDER_B));
 
             // DT_VCENTER is ignored for anything but DT_SINGLELINE, so the
             // block is measured with DT_CALCRECT and then placed by hand —

@@ -253,6 +253,10 @@ class RendererD2D final : public IImageRenderer {
         // device loss and resize — only the brush is device-dependent.
         Microsoft::WRL::ComPtr<ID2D1SolidColorBrush> m_pFolderDeletedBrush;   // red — Missing state
         Microsoft::WRL::ComPtr<ID2D1SolidColorBrush> m_pLinkBrush;            // Constants::Links — clickable path
+        // The placeholder's own two colours: the message, and the version line
+        // under it. m_pTextBrush is left alone — it is the overlay manager's.
+        Microsoft::WRL::ComPtr<ID2D1SolidColorBrush> m_pPlaceholderBrush;
+        Microsoft::WRL::ComPtr<ID2D1SolidColorBrush> m_pPlaceholderDimBrush;
         Microsoft::WRL::ComPtr<IDWriteTextFormat>     m_pFolderOverlayFormat;  // created lazily, cached forever
         Microsoft::WRL::ComPtr<IDWriteTextLayout>     m_pFolderDeletedLayout;
         // What the cached layout was built FROM. Stored as the two parts rather
@@ -295,12 +299,13 @@ class RendererD2D final : public IImageRenderer {
 
         // Heading and last line for the current state, in one place each, so the
         // layout text, the character offsets and the hit-testing cannot disagree
-        // about how long line 1 is or what line 3 says.
+        // about how long the heading is or what the last line says.
         static const wchar_t        *FolderOverlayHeader();
+        static const wchar_t        *FolderOverlayHeaderIcon();
         static const std::wstring   &FolderOverlayLastLine();
 
-        // The placeholder's three lines, composed once, with the character
-        // ranges of the two clickable spans.
+        // The placeholder's four lines — heading, open prompt, path, version —
+        // composed once, with the character ranges of the two clickable spans.
         //
         // ONE function so the drawn text and the click targets cannot drift
         // apart. They are computed from the same offsets in the same pass: any
@@ -308,12 +313,22 @@ class RendererD2D final : public IImageRenderer {
         // link somewhere the text no longer is, and nothing reports it because
         // both halves still look correct on their own.
         //
-        // The keyboard hints are deliberately outside both ranges — they say
-        // which key does this, they are not a target themselves.
+        // The key hint at the end of a line is part of that line's target: the
+        // whole thing, words and hint, is one link. So each line centres on its
+        // full content, which is what DWrite does on its own — there is nothing
+        // to compensate for and no padding anywhere in here.
+        //
+        // The hint carries its own range only so the three spaces between it
+        // and the words can be left un-underlined. The click region spans from
+        // the words through the hint, gap included, because a target with a
+        // hole in the middle of it is worse than a slightly generous one.
         struct FolderOverlayText {
             std::wstring text;
-            UINT32       actionStart = 0, actionLen = 0; // line 2, the F2 prompt
-            UINT32       pathStart   = 0, pathLen   = 0; // line 3, folder or file
+            UINT32       pathStart       = 0, pathLen       = 0; // line 2, folder or file
+            UINT32       pathHintStart   = 0, pathHintLen   = 0; // line 2, "(L)"
+            UINT32       actionStart     = 0, actionLen     = 0; // line 3, the prompt
+            UINT32       actionHintStart = 0, actionHintLen = 0; // line 3, "(F2)"
+            UINT32       versionStart    = 0, versionLen    = 0; // last line, dimmed and shrunk
         };
         static FolderOverlayText BuildFolderOverlayText();
 

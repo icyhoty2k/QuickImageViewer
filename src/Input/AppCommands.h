@@ -62,6 +62,18 @@ class AppCommands {
 
         static void RemoveTrayIcon(HWND hWnd);
 
+        // Opens the folder named by the blank-screen placeholder in Explorer,
+        // walking up to the nearest parent that still exists when the folder
+        // itself is gone (the Missing state).
+        //
+        // Shared because the placeholder offers TWO ways to do it — clicking
+        // the line and pressing L — and they have to behave identically. The
+        // keyboard path in particular cannot go through the normal
+        // ShowInExplorer command: that one selects the CURRENT IMAGE, and while
+        // this placeholder is up there is no current image by definition.
+        // Returns false when there is nothing to open.
+        static bool OpenOverlayFolderInExplorer(HWND hWnd);
+
         // File clipboard / shell operations (used by thumbnail panel context menu)
         static void CopyFileToClipboard(HWND hWnd, const std::wstring &path, bool cut = false);
         static void CopyFilesToClipboard(HWND hWnd, const std::vector<std::wstring> &paths, bool cut = false);
