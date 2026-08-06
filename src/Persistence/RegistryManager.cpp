@@ -268,6 +268,8 @@ namespace Persistence::Registry {
         emitB(R::ALWAYS_ON_TOP,         a.isAlwaysOnTop);
         emitB(R::KEEP_DISPLAY_AWAKE,    a.keepDisplayAwake);
         emitB(R::REMOTE_BEACON,         a.remoteBeacon);
+        emitB(R::REMOTE_LOG_FILE,       a.remoteLogToFile);
+        emitB(R::GENERAL_LOG,           a.generalLog);
         emitB(R::WHEEL_INVERT,          a.invertWheelDirection);
         emitB(R::WHEEL_INVERT_H,        a.invertWheelDirectionH);
         emitI(R::VRAM_CACHE_COUNT,      a.vramCacheCount);
@@ -409,6 +411,12 @@ namespace Persistence::Registry {
         a.remoteBeacon = readDword(
             Constants::Registry::REMOTE_BEACON,
             static_cast<DWORD>(Constants::IS_REMOTE_BEACON_ENABLED)) != 0;
+        a.remoteLogToFile = readDword(
+            Constants::Registry::REMOTE_LOG_FILE,
+            static_cast<DWORD>(Constants::IS_TCP_IP_LOG)) != 0;
+        a.generalLog = readDword(
+            Constants::Registry::GENERAL_LOG,
+            static_cast<DWORD>(Constants::IS_GENERAL_LOG)) != 0;
         a.invertWheelDirection = readDword(
             Constants::Registry::WHEEL_INVERT,
             static_cast<DWORD>(Constants::IS_MOUSE_VERTICAL_REVERSE_SCROLL_DIRECTION)) != 0;

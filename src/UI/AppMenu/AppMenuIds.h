@@ -71,6 +71,9 @@ namespace UI::AppMenu::Ids {
         ID_REMOTE_CMD,            // open the Send Command panel     (Ctrl+F10)
         ID_REMOTE_LOG,            // open the RemoteLog panel        (Ctrl+F12)
         ID_REMOTE_BEACON,         // announce this server on the network, CHECKABLE
+        ID_REMOTE_LOG_FILE,       // write the TCP/IP wire log to logs\, CHECKABLE
+        ID_APP_LOG_FILE,          // write the General app log to logs\, CHECKABLE
+        ID_OPEN_LOG_DIR,          // open logs\ in Explorer
         // RemoteActivation submenu — the two mirroring switches, CHECKABLE.
         // They are the only settings in this app with no visible resting state:
         // F11 and F12 report themselves on an overlay that fades, so the only

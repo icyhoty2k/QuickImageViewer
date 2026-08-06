@@ -237,6 +237,20 @@ namespace Constants::Messages {
     constexpr const wchar_t *BEACON_OFF     = L"Not announcing";
     constexpr const wchar_t *BEACON_PENDING = L"Will announce";
 
+    // Server Log to file (TCP/IP menu). The folder is appended to the ON line,
+    // because "it is logging somewhere" is not an answer anybody can act on.
+    //
+    constexpr const wchar_t *GENERAL_LOG_ON  = L"General log: ON";
+    constexpr const wchar_t *GENERAL_LOG_OFF = L"General log: OFF";
+
+    constexpr const wchar_t *LOG_FILE_ON  = L"Server log to file: ON";
+    constexpr const wchar_t *LOG_FILE_OFF = L"Server log to file: OFF";
+    // Said on the ON line, because the folder appears immediately and the FILE
+    // does not — and "the folder is empty" reads as a broken setting unless
+    // something explains that a file is written when there is something to write.
+    constexpr const wchar_t *LOG_FILE_WAITING =
+        L"A file is written on the first exchange with a client.";
+
     // Sort order  (Ctrl+Alt+Shift+0/6/7/8/9)  — press once: ascending, press again: descending
     constexpr const wchar_t *SORT_BY_NAME = L"Sort: Name (A→Z)";
     constexpr const wchar_t *SORT_BY_NAME_REV = L"Sort: Name (Z→A)";

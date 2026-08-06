@@ -149,6 +149,94 @@ namespace Constants {
     // beacon nobody may connect to is merely a name on a list.
     constexpr bool IS_REMOTE_BEACON_ENABLED = false;
 
+    // --- The two log files (main menu → Logging) -----------------------------
+    //
+    // BOTH OFF, both PERSISTED, both written by the same rotating writer into
+    // the same logs\ folder — see Constants::Logging and
+    // Persistence/RotatingLogFile.h.
+    //
+    // Persisting them is the whole point, and it is what separates these from
+    // the Ctrl+F12 panel's in-memory recording switch
+    // (RemoteTcpIp::REMOTE_LOG_DEFAULT), which is deliberately session-only. The
+    // panel's store is a 20000-entry ring in RAM: it answers "what just
+    // happened" and is gone at exit. A file answers "what happened at 04:14 last
+    // Tuesday, on the machine in the other room, before the crash" — and the
+    // moment you most need that is the moment you did not think to switch
+    // anything on. So these survive a restart: set one on the machine that
+    // misbehaves and walk away.
+    //
+    // Off by default all the same. A log that is always on is a cost every
+    // session pays for the benefit of the one that needed it, and here the cost
+    // is somebody's disk rather than a few megabytes of RAM.
+
+    // Everything that is NOT wire traffic — this program talking about itself.
+    constexpr bool IS_GENERAL_LOG = false;
+
+    // The TCP/IP wire log: the same exchanges the Ctrl+F12 panel shows, written
+    // to disk as well.
+    //
+    // INDEPENDENT of the panel's recording switch — see Remote::Log::IsCapturing.
+    // Ticking this captures to the file whether or not the panel is recording,
+    // because the reason to ask for a file is that you want a durable record,
+    // and having to remember a second switch to get one is how you come back to
+    // an empty folder.
+    //
+    // TWO FILES rather than one merged stream, because they answer different
+    // questions and are read differently. The wire log is a transcript between
+    // two machines, read line by line; the General log is read by scanning for
+    // the moment something went wrong. Interleaved, a wall of base64 chunk rows
+    // would bury the one line that mattered.
+    constexpr bool IS_TCP_IP_LOG = false;
+
+    // =========================================================================
+    // LOG FILES — shared by both logs (Persistence/RotatingLogFile.h)
+    // =========================================================================
+    namespace Logging {
+        // A SUBFOLDER, not the exe's own directory. Rotating logs produce an
+        // unbounded number of files, and dropping those beside the exe turns
+        // the install folder into something you have to read carefully before
+        // deleting anything. One folder is one thing to delete.
+        constexpr const wchar_t *DIR_NAME = L"logs";
+
+        // ONE FOLDER PER LOG, under it: logs\general and logs\network.
+        //
+        // The two rotate independently and at different rates — a busy wall of
+        // screens fills the network log while the general one records a handful
+        // of lines a day — so a single folder would interleave two unrelated
+        // series and make "the newest file" ambiguous to the eye. Separate
+        // folders also mean you can delete one stream's history without reading
+        // filenames carefully.
+        constexpr const wchar_t *SUBDIR_GENERAL = L"general";
+        constexpr const wchar_t *SUBDIR_NETWORK = L"network";
+
+        // "QuickImageViewer_Tcp_IP_20260806_041418.log"
+        // "QuickImageViewer_General_20260806_041418.log"
+        //
+        // App name first so the folder groups by program, the KIND second so the
+        // two streams never have to be told apart by opening them, and the
+        // timestamp last so a plain alphabetical sort is chronological within a
+        // kind. Which INSTANCE wrote it is in the header, not the name — an
+        // instance name is user-chosen and may contain anything a file name may
+        // not.
+        constexpr const wchar_t *KIND_TCP_IP = L"Tcp_IP";
+        constexpr const wchar_t *KIND_GENERAL = L"General";
+        constexpr const wchar_t *EXT          = L".log";
+
+        // ROWS PER FILE, after which the next row opens a new one. Both logs use
+        // it — a rotation rule that differed between them would be one more
+        // thing to remember while reading a folder full of both.
+        //
+        // Small on purpose. These files are read by opening them — in the
+        // Ctrl+F12 panel, in Notepad, in Excel — and one that takes a visible
+        // moment to open is one nobody opens twice. 5000 rows is a few hundred
+        // KB; a wall of screens under load simply rotates more often, which is
+        // the correct answer rather than a problem.
+        //
+        // Counted in DATA rows. The preamble is not counted, so every file holds
+        // the same number of records however the header grows.
+        constexpr int MAX_ROWS = 5000;
+    }
+
     // Hold off the screensaver and display sleep while the main window is
     // visible. An unattended screen is useless once Windows blanks it, and no
     // input ever arrives to wake it — least of all with the kiosk lock on.
@@ -784,6 +872,7 @@ namespace Constants {
         // something you do WHILE looking at a problem, and a viewer that came
         // back from a restart still logging would be recording for nobody.
         constexpr bool REMOTE_LOG_DEFAULT = false;
+
         // Loopback: reachable only from this machine, and Windows Firewall never
         // prompts. A wall screen opts into 0.0.0.0 (every interface) knowingly.
         //
@@ -1271,6 +1360,8 @@ namespace Constants {
         constexpr const wchar_t *ALWAYS_ON_TOP            = L"qivAlwaysOnTop";
         constexpr const wchar_t *KEEP_DISPLAY_AWAKE       = L"qivKeepDisplayAwake";
         constexpr const wchar_t *REMOTE_BEACON            = L"qivRemoteBeacon";
+        constexpr const wchar_t *REMOTE_LOG_FILE          = L"qivRemoteLogToFile";
+        constexpr const wchar_t *GENERAL_LOG              = L"qivGeneralLog";
         // NOTE: the last-image-on-exit value used to live here. It is SESSION
         // state, not a setting — it changes on every close and is meaningless on
         // another machine — and it now has its own file, Constants::Session.
@@ -1303,6 +1394,26 @@ namespace Constants {
         // Full path of the image on screen at the last exit, reopened on the
         // next launch so the app resumes where it was left instead of prompting.
         constexpr const wchar_t *KEY_LAST_IMAGE = L"LastImage";
+
+        // "1" from the moment a launch is under way until a clean exit clears
+        // it. Finding it still set at startup means the PREVIOUS run never
+        // reached its exit path — killed, power lost, or crashed.
+        //
+        // This is the whole abnormal-shutdown mechanism, and it has to be a
+        // leftover rather than a written record: a process that dies suddenly
+        // gets no chance to report it, so the only thing that can testify is
+        // something it failed to clean up.
+        constexpr const wchar_t *KEY_RUNNING = L"Running";
+
+        // Full path of the minidump the crash handler managed to write, read
+        // and cleared on the next launch.
+        //
+        // Recorded HERE rather than logged from the handler on purpose. That
+        // code runs in a process that has already failed — a heap that may be
+        // corrupt, a writer thread that may be dead — and one
+        // WritePrivateProfileString is far less than it already does. The
+        // logging happens next launch, where everything is healthy.
+        constexpr const wchar_t *KEY_CRASH_DUMP = L"CrashDump";
     }
 
     namespace SettingsFile {

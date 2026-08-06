@@ -58,6 +58,8 @@ extern void UpdateOverlaysForCurrentImage(HWND hWnd);
 #include "Rem_TCP_IP/RemoteServer.h"     // WM_QIV_REMOTE_COMMAND execution + shutdown
 #include "Rem_TCP_IP/RemoteMirror.h"     // the driving half — targets + sender threads
 #include "Rem_TCP_IP/RemoteBeacon.h"     // withdraw the network announcement on exit
+#include "Rem_TCP_IP/RemoteLog.h"        // the wire log's file sink — applied at startup, drained at exit
+#include "Platform/AppLog.h"             // the General log — lifecycle lines live here
 #include "Rem_TCP_IP/RemoteInbound.h"    // InboundGuard — the loop cut
 #include "Rem_TCP_IP/RemoteExec.h"       // BuildSyncPayload for the desync repair
 #include "Rem_TCP_IP/RemotesFile.h"      // qivRemoteServers.ini — the saved target list
@@ -100,6 +102,15 @@ DecoderThreadPool g_decoderWorker;
 // Dedicated worker for DirWnd thumbnail decoding.
 // Kept separate so LoadImageIndex's ClearQueue() never wipes dir thumb tasks.
 DecoderThreadPool g_dirThumbWorker;
+
+// Did THIS run set the "running" mark in qivSession.ini?
+//
+// Only set when the General log is on, because the mark exists solely to be
+// reported into that log — see the note where it is written. Remembered rather
+// than re-tested at exit: the log can be switched off mid-session, and clearing
+// a mark this run did not set, or leaving one it did, would each fake the
+// opposite answer next launch.
+static bool g_markedRunning = false;
 
 
 // Shift+Delete (Shortcuts::SC_APP_RESET_DEFAULTS) — restore default application
@@ -756,7 +767,29 @@ LRESULT CALLBACK MainAppWndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM l
             // thread can post WM_QIV_REMOTE_COMMAND to an HWND that is on its
             // way out — that message would never be handled and the poster
             // would block for the full reply timeout.
+            // RECORDED BEFORE ANY TEARDOWN, so this line exists even if
+            // something below it throws or hangs. Its presence in the file is
+            // what makes a CLEAN exit distinguishable from a killed process —
+            // a log that simply stops means the second one.
+            AppLog::Info(AppLog::COMP_SHUTDOWN, L"closing normally");
+
+            // THE MARK COMES OFF ONLY HERE, on the one path that means a clean
+            // exit. Everything that skips this point — killed, power lost,
+            // crashed — leaves it set, and the next launch reports it. That is
+            // the entire abnormal-shutdown mechanism: a process that dies
+            // suddenly cannot report itself, so what testifies is the thing it
+            // failed to clean up.
+            //
+            // Guarded, so a run that never set one does not pay an .ini rewrite
+            // to clear something that was not there.
+            if (g_markedRunning) Persistence::Session::MarkRunning(false);
+
             Remote::Stop();
+            // Drains the queue and JOINS the writer, so the rows recorded in
+            // the last moments — which are the ones worth having — reach the
+            // file rather than dying with the process.
+            Remote::Log::ShutdownFileLogging();
+            AppLog::Shutdown();
             // Same reasoning for the driving half: every sender thread must be
             // joined before the HWND it posts results to stops existing.
             Remote::Mirror::Shutdown();
@@ -801,10 +834,8 @@ int WINAPI wWinMain(HINSTANCE hInstance, [[maybe_unused]] HINSTANCE hPrevInstanc
         return 1;
     }
 
-    // 1. Initialize OLE
-    if (FAILED(OleInitialize(nullptr))) return 0;
-    // Enable process-wide dark standard controls for the tray menu
-
+    // COM IS NOT INITIALISED HERE. It moved below the single-instance check —
+    // see the note there. Nothing between this point and that check touches COM.
 
     // Set DPI awareness
     typedef BOOL (WINAPI *SETDPI)(DPI_AWARENESS_CONTEXT);
@@ -820,8 +851,6 @@ int WINAPI wWinMain(HINSTANCE hInstance, [[maybe_unused]] HINSTANCE hPrevInstanc
     // single-instance check — nothing that spawns a thread, allocates a cache or
     // parses a data file may run before this process knows whether it is going to
     // exist at all.
-
-    CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED | COINIT_DISABLE_OLE1DDE);
 
     // --- COMMAND LINE PARSING (before registry — args are highest priority) ---
     int argc;
@@ -941,6 +970,24 @@ int WINAPI wWinMain(HINSTANCE hInstance, [[maybe_unused]] HINSTANCE hPrevInstanc
     // STARTUP ORDER — everything below runs ONLY in the surviving instance.
     // =========================================================================
 
+    // COM, AS LATE AS IT CAN BE — and this is the same argument as the thread
+    // pools below, applied to something that looks free and is not.
+    //
+    // A forwarded launch — "open with qIV" while a copy is already running — is
+    // the most common way this program is started, and it never touches COM: it
+    // parses a command line, reads an .ini, takes a mutex, finds a window and
+    // sends WM_COPYDATA. Initialising an apartment for that process was work
+    // done purely to be torn down again a few hundred microseconds later, on the
+    // exact path a user is watching.
+    //
+    // VERIFIED SAFE, not assumed: nothing between the top of wWinMain and the
+    // check above uses COM. Dedicated's only CoCreateInstance is in
+    // CreateInstanceShortcut, which the F8 panel calls and startup does not.
+    // DPI awareness stays where it was — it is not COM, and it must be set
+    // before any window exists.
+    if (FAILED(OleInitialize(nullptr))) return 0;
+    CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED | COINIT_DISABLE_OLE1DDE);
+
     // Thread pools. Moved down from the top of wWinMain: starting threads before
     // knowing whether this process survives is what made the crash above
     // possible, and it is wasted work on every forwarded launch besides.
@@ -963,6 +1010,58 @@ int WINAPI wWinMain(HINSTANCE hInstance, [[maybe_unused]] HINSTANCE hPrevInstanc
     // Source of truth for user preferences: the .ini for a dedicated instance,
     // the registry otherwise. LoadAllSettings routes itself.
     Persistence::Registry::LoadAllSettings(app);
+
+    // The file sink is PERSISTED, so it has to be applied here rather than only
+    // when the menu item is clicked — the whole point of persisting it is that a
+    // machine which misbehaves comes back logging without anybody being present
+    // to switch it on. Opens no file by itself; the first recorded exchange does.
+    Remote::Log::SetFileLogging(app.remoteLogToFile);
+
+    // The General log, and the FIRST thing it records.
+    //
+    // Started here, immediately after the settings that decide it — everything
+    // before this point is too early to have anything worth saying, and
+    // everything after it is something a dedicated screen might fail at.
+    AppLog::SetEnabled(app.generalLog);
+
+    // ONLY WHEN THE LOG IS ON — and this is a startup-cost decision, not a
+    // correctness one.
+    //
+    // Reading and writing the marker is three .ini operations, and
+    // WritePrivateProfileString rewrites the whole file for one key. Doing that
+    // on every launch to record something nobody will read is a cost the DEFAULT
+    // configuration would pay forever for no benefit. With the log off there is
+    // nowhere to report a crash to, so there is nothing to detect.
+    //
+    // The mark is cleared at exit only if it was set here, so turning the log
+    // off mid-session cannot leave one behind and fake a crash next launch.
+    if (AppLog::IsEnabled()) {
+        // READ BEFORE THE MARK IS RESET, or the evidence is destroyed by the run
+        // that was supposed to report it.
+        const Persistence::Session::PreviousRun previous =
+            Persistence::Session::TakePreviousRun();
+        Persistence::Session::MarkRunning(true);
+        g_markedRunning = true;
+
+        std::wstring line = std::wstring(Constants::APP_NAME) + L" " +
+                            Constants::APP_VERSION + L" starting";
+        if (app.isDedicated) line += L" (dedicated instance)";
+        AppLog::Info(AppLog::COMP_STARTUP, line);
+
+        // THE PREVIOUS RUN'S OBITUARY, written by the one process able to
+        // deliver it. A dump means an exception the handler caught; no dump
+        // means killed, powered off, or a failure so complete that nothing ran
+        // — and that difference is most of the diagnosis.
+        if (previous.crashed) {
+            if (!previous.dumpPath.empty())
+                AppLog::Error(AppLog::COMP_CRASH,
+                              L"the previous run CRASHED — minidump: " + previous.dumpPath);
+            else
+                AppLog::Error(AppLog::COMP_CRASH,
+                              L"the previous run ended ABNORMALLY and wrote no dump "
+                              L"— killed, power lost, or stopped by the debugger");
+        }
+    }
 
     // Command-line overrides: args beat registry values.
     if (earlyArgs.runOnStartup) app.isEnableRunOnStartup = true;

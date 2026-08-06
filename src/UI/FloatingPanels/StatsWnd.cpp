@@ -808,8 +808,24 @@ namespace UI {
 
                     // Off by default and cheap to forget about, but it writes a row
                     // per command while on.
-                    row2(L"  Wire log (Ctrl+F12)", Remote::Log::IsEnabled() ? L"Recording" : L"Off",
-                         Remote::Log::IsEnabled() ? clrOrange : clrDim);
+                    //
+                    // BOTH DESTINATIONS, because they are independent switches and
+                    // either one alone means work is happening. Reporting only the
+                    // panel's recording state said "Off" while a file was being
+                    // written to disk — the one line here whose whole job is to
+                    // stop a diagnostic being left on and forgotten.
+                    {
+                        const bool rec  = Remote::Log::IsEnabled();
+                        const bool file = Remote::Log::FileLoggingIsOn();
+
+                        const wchar_t *what = L"Off";
+                        if (rec && file) what = L"Recording + file";
+                        else if (rec)    what = L"Recording";
+                        else if (file)   what = L"To file";
+
+                        row2(L"  Wire log (Ctrl+F12)", what,
+                             (rec || file) ? clrOrange : clrDim);
+                    }
                 }
 
                 y += sgap;

@@ -55,4 +55,40 @@ void SaveLastImage(const std::wstring &fullPath) {
     Ini::TouchUpdatedStamp(Path());
 }
 
+// =============================================================================
+// Did the last run end properly?
+// =============================================================================
+PreviousRun TakePreviousRun() {
+    PreviousRun out;
+    out.crashed  = Ini::ReadString(Path(), CS::SECTION, CS::KEY_RUNNING) == L"1";
+    out.dumpPath = Ini::ReadString(Path(), CS::SECTION, CS::KEY_CRASH_DUMP);
+
+    // CLEARED as they are read, so one abnormal exit is reported once. Leaving
+    // them would make every launch after a single crash claim a fresh one, and
+    // a log that cries wolf is one nobody reads.
+    if (!out.dumpPath.empty())
+        Ini::WriteString(Path(), CS::SECTION, CS::KEY_CRASH_DUMP, L"", CS::FILE_HEADER);
+
+    return out;
+}
+
+void MarkRunning(bool running) {
+    // "1" while a run is under way; the key is REMOVED rather than set to "0" on
+    // a clean exit. An absent key and a zero mean the same thing to the reader,
+    // and an absent one leaves a tidy file — which matters for something a user
+    // is invited to open and delete.
+    Ini::WriteString(Path(), CS::SECTION, CS::KEY_RUNNING,
+                     running ? L"1" : L"", CS::FILE_HEADER);
+}
+
+void RecordCrashDump(const wchar_t *dumpPath) {
+    // ONE .ini WRITE AND NOTHING ELSE. Called from the unhandled-exception
+    // filter, where the heap may be corrupt and any allocation is a gamble —
+    // this is far less than the minidump write it sits beside, and the reporting
+    // it enables happens next launch where everything is healthy.
+    if (!dumpPath || !*dumpPath) return;
+    Ini::WriteString(Path(), CS::SECTION, CS::KEY_CRASH_DUMP, dumpPath,
+                     CS::FILE_HEADER);
+}
+
 } // namespace Persistence::Session

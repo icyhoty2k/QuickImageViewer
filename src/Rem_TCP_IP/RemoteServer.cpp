@@ -169,6 +169,22 @@ namespace {
                            std::wstring(Constants::Messages::BLACKLIST_REASON_AUTH_PREFIX) +
                                std::to_wstring(RT::AUTH_MAX_FAILURES) +
                                Constants::Messages::BLACKLIST_REASON_AUTH_SUFFIX);
+
+            // THE MOMENT AN ADDRESS BANS ITSELF, which had no record at all.
+            //
+            // The individual wrong passwords were each logged as an ERR reply,
+            // but the threshold being crossed — the one line that says this
+            // machine has started refusing somebody permanently — was invisible.
+            // That is the event you look for after finding a screen unreachable,
+            // and reconstructing it by counting earlier failures is work the log
+            // should have done.
+            //
+            // The word "blacklisted" is what LevelFor keys on for ERROR; see the
+            // note there before rewording this.
+            if (Log::IsCapturing())
+                Log::Add(Log::Direction::In, key,
+                         L"(blacklisted — too many failed authentications)",
+                         Log::SelfLabel(), L"(security)", -1);
         }
     }
 
@@ -488,7 +504,7 @@ namespace {
     // UI thread at all, so instrumenting the command path alone left a log with
     // invisible holes in it.
     bool SendLine(SOCKET s, const std::wstring &line, Tls::Session *tls = nullptr) {
-        if (Log::IsEnabled()) {
+        if (Log::IsCapturing()) {
             // Delta is the time since the line being answered arrived — the
             // handling cost of this instance, which is the number that says
             // whether it is the reason a wall of screens is lagging.
@@ -521,7 +537,7 @@ namespace {
                 accum.erase(0, nl + 1);
                 if (!raw.empty() && raw.back() == '\r') raw.pop_back();
                 lineOut = FromUtf8(raw.data(), raw.size());
-                if (Log::IsEnabled() && !lineOut.empty()) {
+                if (Log::IsCapturing() && !lineOut.empty()) {
                     t_inboundAtUs = NowUs();
                     Log::Add(Log::Direction::In, PeerLabel(s), RedactForLog(lineOut),
                              Log::SelfLabel(), L"(awaiting reply)", -1);
@@ -900,7 +916,7 @@ namespace {
         // out. The peer address is the whole input to the decision, so the log
         // has to name it — "which address did you actually see me as" is the
         // question that cannot be answered from the client side.
-        if (Log::IsEnabled())
+        if (Log::IsCapturing())
             Log::Add(Log::Direction::In, who,
                      std::wstring(Tls::RequiredForAddress(peer)
                                       ? L"(accepted — expecting TLS"
@@ -924,7 +940,7 @@ namespace {
                 // Recorded LOCALLY all the same — this is the single most
                 // confusing failure the remote has, because both ends simply
                 // wait, and the owner of the machine is not the attacker.
-                if (Log::IsEnabled())
+                if (Log::IsCapturing())
                     Log::Add(Log::Direction::In, who, L"(dropped — TLS handshake failed)",
                              Log::SelfLabel(), L"(connection)", NowUs() - startedUs);
                 UnregisterLiveConn(static_cast<ConnId>(client));
@@ -1270,7 +1286,7 @@ namespace {
                 departure = L"(disconnected — ABRUPTLY, no goodbye)";
         }
 
-        if (Log::IsEnabled())
+        if (Log::IsCapturing())
             // HOW LONG IT LASTED goes in the Δ column, which is otherwise "—" on
             // a connection row. On a command row that column is a round trip; on
             // this one it is the session, and the two are never confused because
@@ -1356,7 +1372,7 @@ namespace {
                 // all — the one category of arrival the owner of an exposed
                 // listener most wants to see. The store is a fixed-size ring, so
                 // a scanner hammering the port rotates it rather than growing it.
-                if (Log::IsEnabled())
+                if (Log::IsCapturing())
                     Log::Add(Log::Direction::In, who, L"(refused — blacklisted)",
                              Log::SelfLabel(), L"(connection)", -1);
                 closesocket(client);
@@ -1374,7 +1390,7 @@ namespace {
                 // empty list is a server nobody configured, a non-match is a
                 // rule that does not cover the address shown right here — and
                 // that address is the answer to "what should I have typed".
-                if (Log::IsEnabled())
+                if (Log::IsCapturing())
                     Log::Add(Log::Direction::In, who,
                              cfg.allowList.empty() ? L"(refused — AllowList empty)"
                                                    : L"(refused — not on the AllowList)",
@@ -1395,7 +1411,7 @@ namespace {
             // served. The cap is not a security boundary, and a silent close is
             // honest enough.
             if (g_activeClients.load(std::memory_order_acquire) >= cfg.maxConnections) {
-                if (Log::IsEnabled())
+                if (Log::IsCapturing())
                     Log::Add(Log::Direction::In, who, L"(refused — connection limit reached)",
                              Log::SelfLabel(), L"(connection)", -1);
                 if (!Tls::RequiredForAddress(peer))
@@ -1787,7 +1803,7 @@ bool KickConnection(ConnId id) {
     // landed yet and an eject that never happened looked identical: an empty
     // log. That ambiguity is what made this bug hard to see. The departure row
     // still follows; this one says the order was given.
-    if (Log::IsEnabled())
+    if (Log::IsCapturing())
         Log::Add(Log::Direction::Out, Log::SelfLabel(),
                  L"(ejecting — closing this connection)",
                  NamedLabel(id, ConnLabel(address, port)), L"(connection)", -1);
@@ -1811,6 +1827,17 @@ bool TimedKickConnection(ConnId id, int minutes, std::wstring &scopeOut) {
     // kick that admits the peer it just ejected is worse than none: it looks
     // like it worked.
     Blacklist::AddTimed(scopeOut, minutes, Constants::Messages::BLACKLIST_REASON_TIMED);
+
+    // The BLOCK, which is a different fact from the eject KickConnection logs
+    // below it. One closes a socket; this one refuses the address for a while,
+    // outlives the connection, and is the half somebody reading the log later
+    // needs in order to explain why a screen could not get back in.
+    if (Log::IsCapturing())
+        Log::Add(Log::Direction::Out, Log::SelfLabel(),
+                 L"(blocked " + scopeOut + L" for " + std::to_wstring(minutes) +
+                     L" min — operator)",
+                 ConnLabel(address, 0), L"(security)", -1);
+
     KickConnection(id);
     return true;
 }
@@ -1833,6 +1860,15 @@ bool BanConnection(ConnId id, std::wstring &scopeOut) {
     // it was aimed at. Written before the connection is torn down, that race
     // does not exist.
     Blacklist::Add(scopeOut, Constants::Messages::BLACKLIST_REASON_OPERATOR);
+
+    // A PERMANENT block, written to a file that survives restarts. The most
+    // consequential thing this panel can do, and until now the log recorded only
+    // the socket closing — which looks identical to an ordinary kick.
+    if (Log::IsCapturing())
+        Log::Add(Log::Direction::Out, Log::SelfLabel(),
+                 L"(banned " + scopeOut + L" permanently — operator)",
+                 ConnLabel(address, 0), L"(security)", -1);
+
     KickConnection(id);
     return true;
 }
@@ -2020,7 +2056,7 @@ void EmitToObservers(const std::wstring &line, ConnId except, bool positional) {
         // instance pushes to a watcher would be missing from the log. The result
         // is reported honestly: a dropped event is exactly the thing you would
         // open the log to discover.
-        if (Log::IsEnabled())
+        if (Log::IsCapturing())
             Log::Add(Log::Direction::Out, Log::SelfLabel(),
                      std::wstring(RT::RESP_EVENT) + L" " + line, PeerLabel(s),
                      sent == static_cast<int>(bytes.size()) ? L"(pushed)"

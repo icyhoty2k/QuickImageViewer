@@ -270,6 +270,23 @@ struct AppState {
     // the UI thread to read, exactly like every other toggle.
     bool remoteLogEnabled = Constants::RemoteTcpIp::REMOTE_LOG_DEFAULT;
 
+    // Also write the wire log to rotating files under logs\ beside the exe.
+    //
+    // PERSISTED, unlike the recording switch directly above — see
+    // Constants::IS_TCP_IP_LOG for why the two differ. Same UI-thread-copy
+    // arrangement: the value the writer actually reads is an atomic inside
+    // Remote::Log, flipped in the same breath as this one.
+    bool remoteLogToFile = Constants::IS_TCP_IP_LOG;
+
+    // The General log — what this instance did, as opposed to what it said on
+    // the wire. Same arrangement as the field above in every respect; the value
+    // the writer reads is an atomic inside AppLog, flipped alongside this one.
+    //
+    // It exists mainly for a DEDICATED instance: started with Windows, showing a
+    // locked fullscreen slideshow on one monitor, with nobody in front of it and
+    // no panel to look at. See Platform/AppLog.h.
+    bool generalLog = Constants::IS_GENERAL_LOG;
+
     // --- One-shot INTERJECTED image -------------------------------------------
     //
     // On the wire this arrives either as `ShowImageOnce <path>` (one machine) or

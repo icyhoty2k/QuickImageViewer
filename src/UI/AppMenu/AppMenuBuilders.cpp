@@ -98,6 +98,9 @@ Command CommandForId(int id) {
         case Id::ID_REMOTE_CMD:      return Command::ToggleRemoteCmd;
         case Id::ID_REMOTE_LOG:      return Command::ToggleRemoteLog;
         case Id::ID_REMOTE_BEACON:   return Command::ToggleRemoteBeacon;
+        case Id::ID_REMOTE_LOG_FILE: return Command::ToggleRemoteLogFile;
+        case Id::ID_APP_LOG_FILE:    return Command::ToggleGeneralLog;
+        case Id::ID_OPEN_LOG_DIR:    return Command::OpenLogFolder;
         // Straight to the same commands F11 and F12 resolve to, so the menu and
         // the keys cannot drift apart — the overlay, the mirror gate and the
         // "nothing picked" handling all come free.
@@ -429,6 +432,56 @@ static HMENU BuildRemoteBindingsMenu() {
     return m;
 }
 
+// The log FILES, both of them, in one place.
+//
+// Its own submenu rather than two loose ticks, because there is now more than
+// one log and they share everything that matters — the same logs\ folder, the
+// same rotation, the same writer. A row here means "this stream also goes to
+// disk"; nothing here opens a panel or changes what is captured in memory.
+//
+// The two are deliberately separate switches. They answer different questions
+// and are wanted at different times: the wire log is a transcript between
+// machines, the General log is this program talking about itself. Someone
+// chasing a connection fault wants the first and would have the second bury it.
+static HMENU BuildLoggingMenu() {
+    HMENU m = CreatePopupMenu();
+
+    // Both files land in logs\ beside the exe, named
+    // "<app>_General_<stamp>.log" and "<app>_Tcp_IP_<stamp>.log", rotating at
+    // Constants::Logging::MAX_ROWS rows.
+    //
+    // NO ICONS. Every row here is the same kind of thing — one log, on or off —
+    // and a glyph in front of each would decorate rather than distinguish. The
+    // tick is the whole signal.
+    //
+    // CHECKABLE, and the tick is the only resting indication either one is
+    // running: a log left on writes to disk for as long as the app does, and a
+    // setting that persists across restarts must be answerable by looking.
+    //
+    // GENERAL FIRST — it is the one that concerns the whole application, and the
+    // wire log is the specialised case underneath it.
+    AppendMenuW(m, MF_STRING | CheckFlag(app.generalLog),
+                Id::ID_APP_LOG_FILE, L"General Log");
+
+    // Independent of the Ctrl+F12 panel's Recording button. Ticking this
+    // captures to the file whether or not the panel is recording — see
+    // Remote::Log::IsCapturing.
+    AppendMenuW(m, MF_STRING | CheckFlag(app.remoteLogToFile),
+                Id::ID_REMOTE_LOG_FILE, L"TCP/IP Log");
+
+    // LAST, and below a separator, because it is the only row here that is not
+    // a switch — it does something once rather than changing what the app does
+    // from now on. Mixing an action in among the ticks is how a menu stops
+    // reading as a set of states.
+    //
+    // It opens the PARENT, logs\, not either subfolder: the question behind
+    // "show me the logs" is usually which of the two has anything in it.
+    AppendMenuW(m, MF_SEPARATOR, 0, nullptr);
+    AppendMenuW(m, MF_STRING, Id::ID_OPEN_LOG_DIR, L"Open Log Folder");
+
+    return m;
+}
+
 // Everything TCP/IP, in one place. The main menu used to carry six of these as
 // top-level rows plus a submenu, which is most of what made it long — and they
 // are one subject that most users never touch at all.
@@ -538,6 +591,12 @@ HMENU Build(HWND hWnd) {
     AppendMenuW(m, MF_POPUP, reinterpret_cast<UINT_PTR>(BuildSettingsMenu()),  L"Settings");
     AppendMenuW(m, MF_POPUP, reinterpret_cast<UINT_PTR>(BuildOverlaysMenu()),  L"Overlays");
     AppendMenuW(m, MF_POPUP, reinterpret_cast<UINT_PTR>(BuildBackupMenu()),    L"Backup");
+    // With the other configuration submenus rather than under TCP/IP: only one
+    // of the two logs is about the network, and the General one is the whole
+    // application talking about itself. Below Backup because both are about what
+    // the app writes to disk beside itself, and neither is part of viewing an
+    // image.
+    AppendMenuW(m, MF_POPUP, reinterpret_cast<UINT_PTR>(BuildLoggingMenu()),   L"Logging");
     AppendMenuW(m, MF_SEPARATOR, 0, nullptr);
     // Only meaningful from the tray, when the window is not on screen.
     if (!IsWindowVisible(hWnd))

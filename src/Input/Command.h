@@ -427,6 +427,25 @@ enum class Command {
     // a decision about visibility that belongs to the person at the keyboard,
     // not to whoever got in first. It is one tick in the TCP/IP menu.
     ToggleRemoteBeacon,
+    // Write the wire log to rotating files under logs\. LOCAL by design, for
+    // the same reason as the beacon above and a sharper one: a remote client
+    // able to switch this on could make the machine write to its disk
+    // indefinitely, which is a decision about somebody else's storage. It is
+    // one tick in the TCP/IP menu.
+    //
+    // Separate from EnableRemoteLog below, which is the RECORDING switch. That
+    // one decides whether exchanges are captured at all; this one decides
+    // whether captured exchanges also reach a file. Nothing is written while
+    // recording is off, and the toggle says so rather than leaving an empty
+    // file behind.
+    ToggleRemoteLogFile,
+    // The General log — what this instance did. LOCAL for the same reason as the
+    // one above: a remote client that could switch it on would be deciding to
+    // write to somebody else's disk indefinitely.
+    ToggleGeneralLog,
+    // Open logs\ in Explorer. LOCAL, and firmly so: a remote client able to
+    // open a shell window on somebody else's desktop is not a logging feature.
+    OpenLogFolder,
     // The RECORDING switch, and a separate command from the panel that shows it.
     // Payload-carrying (`enablelog 0|1`) rather than a toggle, because it is
     // sent to the other instances: a toggle applied to ends that disagree makes

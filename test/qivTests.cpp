@@ -38,9 +38,15 @@
 // it testable, and it is the first thing worth doing after this.
 //
 
+// windows.h FIRST: Constants.h, which the log headers pull in, uses DWORD and
+// COLORREF at namespace scope without including it itself.
+#include <windows.h>
+
 #include "Common/Base64.h"
 #include "Common/Converters.h"
 #include "Common/FuzzyMatch.h"
+#include "Persistence/RotatingLogFile.h"
+#include "Rem_TCP_IP/RemoteLog.h"
 
 #include <chrono>
 #include <cmath>
@@ -363,6 +369,288 @@ namespace {
     }
 } // namespace
 
+// ── Logging ─────────────────────────────────────────────────────────────────
+//
+// The only tests here that touch the disk, and they earn it: rotation and
+// continuation are FILE-SYSTEM behaviour, and both fail silently. A rotation
+// that never fires produces one enormous file nobody notices until it will not
+// open; a continuation that never fires produces a folder of three-line stubs.
+// Neither shows up in a build, and neither is visible from a code review.
+//
+// Everything runs in a fresh directory under %TEMP% and is deleted afterwards,
+// so the suite leaves nothing behind and cannot collide with a real logs\.
+
+namespace {
+
+    std::wstring MakeTempDir() {
+        wchar_t base[MAX_PATH] = {};
+        GetTempPathW(MAX_PATH, base);
+
+        // Process id AND tick count: two runs of the suite in the same second,
+        // which is what a CI matrix does, must not share a directory.
+        std::wstring d = std::wstring(base) + L"qivTests_" +
+                         std::to_wstring(GetCurrentProcessId()) + L"_" +
+                         std::to_wstring(GetTickCount64());
+        CreateDirectoryW(d.c_str(), nullptr);
+        return d;
+    }
+
+    void RemoveTempDir(const std::wstring &dir) {
+        WIN32_FIND_DATAW fd{};
+        HANDLE find = FindFirstFileW((dir + L"\\*").c_str(), &fd);
+        if (find != INVALID_HANDLE_VALUE) {
+            do {
+                if (fd.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) continue;
+                DeleteFileW((dir + L"\\" + fd.cFileName).c_str());
+            } while (FindNextFileW(find, &fd));
+            FindClose(find);
+        }
+        RemoveDirectoryW(dir.c_str());
+    }
+
+    int CountFiles(const std::wstring &dir, const std::wstring &pattern) {
+        WIN32_FIND_DATAW fd{};
+        HANDLE find = FindFirstFileW((dir + L"\\" + pattern).c_str(), &fd);
+        if (find == INVALID_HANDLE_VALUE) return 0;
+        int n = 0;
+        do {
+            if (!(fd.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY)) ++n;
+        } while (FindNextFileW(find, &fd));
+        FindClose(find);
+        return n;
+    }
+
+    std::string ReadWhole(const std::wstring &path) {
+        HANDLE h = CreateFileW(path.c_str(), GENERIC_READ, FILE_SHARE_READ | FILE_SHARE_WRITE,
+                               nullptr, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, nullptr);
+        if (h == INVALID_HANDLE_VALUE) return {};
+        LARGE_INTEGER size{};
+        GetFileSizeEx(h, &size);
+        std::string raw(static_cast<size_t>(size.QuadPart), '\0');
+        DWORD read = 0;
+        if (!raw.empty()) ReadFile(h, raw.data(), static_cast<DWORD>(raw.size()), &read, nullptr);
+        CloseHandle(h);
+        raw.resize(read);
+        return raw;
+    }
+
+    // Data rows only — the same rule the component itself counts by, so a test
+    // that disagrees with it is testing the wrong number.
+    int DataRowsIn(const std::string &text) {
+        int  rows        = 0;
+        bool atLineStart = true;
+        for (const char c : text) {
+            if (c == '\n')    { atLineStart = true; continue; }
+            if (c == '\r')    continue;
+            if (!atLineStart) continue;
+            atLineStart = false;
+            if (c != '#') ++rows;
+        }
+        return rows;
+    }
+
+    bool Contains(const std::string &haystack, const char *needle) {
+        return haystack.find(needle) != std::string::npos;
+    }
+
+    std::wstring TestPreamble() { return L"# unit test header\r\n"; }
+
+    void TestLogLayout() {
+        using Persistence::LogLevel;
+
+        NOTE("level names are padded to five, so the message column lines up");
+        // A viewer splitting on whitespace does not care, but a person reading
+        // the raw file does — a ragged left edge reads as noise.
+        CHECK(std::wstring(Persistence::LogLevelName(LogLevel::Info))  == L"INFO ");
+        CHECK(std::wstring(Persistence::LogLevelName(LogLevel::Warn))  == L"WARN ");
+        CHECK(std::wstring(Persistence::LogLevelName(LogLevel::Error)) == L"ERROR");
+        CHECK(std::wstring(Persistence::LogLevelName(LogLevel::Trace)) == L"TRACE");
+
+        NOTE("BuildLogLine emits time [thread] LEVEL message, in that order");
+        // The shape every general-purpose log viewer parses without being
+        // configured. Both logs go through this one function precisely so a
+        // viewer set up for one file works on the other.
+        const std::wstring line =
+            Persistence::BuildLogLine(L"2026-08-06 04:52:39.735", 7412,
+                                      LogLevel::Info, L"startup | hello");
+        CHECK(line == L"2026-08-06 04:52:39.735 [7412] INFO  startup | hello");
+    }
+
+    void TestLogRotation() {
+        const std::wstring dir = MakeTempDir();
+
+        Persistence::RotatingLogFile::Config cfg;
+        cfg.dir      = dir;
+        cfg.baseName = L"unit";
+        cfg.ext      = L".log";
+        cfg.maxRows  = 5;
+        cfg.header   = &TestPreamble;
+
+        NOTE("first write creates the folder's first file, header and all");
+        {
+            Persistence::RotatingLogFile f;
+            f.Start(cfg);
+            for (int i = 0; i < 3; ++i) f.Write(L"row " + std::to_wstring(i));
+            f.Stop();   // drains and joins, so the file is complete below
+        }
+        CHECK(CountFiles(dir, L"unit_*.log") == 1);
+
+        NOTE("stop then start CONTINUES that file rather than opening a new one");
+        // The bug this exists for: a menu toggle is one click and easy to do
+        // twice, and a fresh file per toggle makes "5000 rows per file" mean
+        // nothing.
+        {
+            Persistence::RotatingLogFile f;
+            f.Start(cfg);
+            f.Write(L"row 3");
+            f.Stop();
+        }
+        CHECK(CountFiles(dir, L"unit_*.log") == 1);
+
+        NOTE("the resumed marker records the seam between two runs");
+        // Rows either side came from different runs. A reader who cannot see
+        // that reads one continuous session that never happened.
+        std::wstring only;
+        {
+            WIN32_FIND_DATAW fd{};
+            HANDLE find = FindFirstFileW((dir + L"\\unit_*.log").c_str(), &fd);
+            if (find != INVALID_HANDLE_VALUE) { only = dir + L"\\" + fd.cFileName; FindClose(find); }
+        }
+        const std::string body = ReadWhole(only);
+        CHECK(Contains(body, "# resumed"));
+
+        NOTE("the preamble is not counted against the rotation limit");
+        // Four data rows so far, and the header lines must not have eaten any of
+        // the five — otherwise a growing header silently shortens every file.
+        CHECK(DataRowsIn(body) == 4);
+
+        NOTE("passing maxRows rotates, and the new file starts empty of rows");
+        {
+            Persistence::RotatingLogFile f;
+            f.Start(cfg);
+            f.Write(L"row 4");   // fills the adopted file to 5
+            f.Write(L"row 5");   // rotates
+            f.Write(L"row 6");
+            f.Stop();
+        }
+        CHECK(CountFiles(dir, L"unit_*.log") == 2);
+
+        NOTE("a full newest file is never adopted — a new one is started");
+        {
+            Persistence::RotatingLogFile f;
+            f.Start(cfg);
+            for (int i = 0; i < 4; ++i) f.Write(L"more " + std::to_wstring(i));
+            f.Stop();
+        }
+        // The second file held 2 rows; adopting it and adding 4 gives 6, which
+        // passes 5 and rotates once. Two files before, one more after.
+        CHECK(CountFiles(dir, L"unit_*.log") == 3);
+
+        NOTE("writing while stopped is a no-op, not a crash");
+        // Every producer calls Write without knowing whether logging is on.
+        {
+            Persistence::RotatingLogFile f;
+            f.Write(L"nobody is listening");
+            CHECK(!f.IsRunning());
+            CHECK(f.CurrentPath().empty());
+        }
+
+        RemoveTempDir(dir);
+    }
+
+    void TestWireLogRoundTrip() {
+        namespace RL = Remote::Log;
+
+        const std::wstring dir  = MakeTempDir();
+        const std::wstring file = dir + L"\\roundtrip.log";
+
+        RL::Clear();
+        RL::SetEnabled(true);
+
+        // Deltas under a millisecond survive exactly; the format writes what a
+        // person reads, so anything larger comes back rounded. These are chosen
+        // to make the round trip exact rather than to hide that.
+        RL::Add(RL::Direction::In,  L"peer 192.168.0.84:34659", L"Observe 1",
+                L"qIV 0.0.0.0:8770", L"OK observing", 428);
+        RL::Add(RL::Direction::Out, L"qIV 0.0.0.0:8770", L"(reply)",
+                L"peer 192.168.0.84:34659", L"OK", 26);
+        // -1 is "never measured", which renders as an em dash and must come back
+        // as -1 rather than as zero.
+        RL::Add(RL::Direction::In,  L"peer", L"hello someone", L"qIV", L"", -1);
+
+        const std::vector<RL::Entry> before = RL::Snapshot();
+        CHECK(before.size() == 3);
+
+        std::wstring err;
+        NOTE("a saved log writes without error");
+        CHECK(RL::SaveTo(file, err));
+
+        RL::Clear();
+        CHECK(RL::Count() == 0);
+
+        NOTE("and loads back — the writer and the reader agree on the columns");
+        // The check that matters. FormatRow and LoadFrom are edited together and
+        // drift silently: a field added on one side shifts every index on the
+        // other, and the symptom is a log that reads back with the sender and
+        // the response swapped.
+        CHECK(RL::LoadFrom(file, err));
+
+        const std::vector<RL::Entry> after = RL::Snapshot();
+        CHECK(after.size() == before.size());
+
+        if (after.size() == before.size()) {
+            for (size_t i = 0; i < before.size(); ++i) {
+                NOTE("every text field survives the round trip in its own column");
+                CHECK(after[i].seq      == before[i].seq);
+                CHECK(after[i].sender   == before[i].sender);
+                CHECK(after[i].command  == before[i].command);
+                CHECK(after[i].receiver == before[i].receiver);
+                CHECK(after[i].response == before[i].response);
+                CHECK(after[i].dir      == before[i].dir);
+
+                NOTE("sub-millisecond deltas are exact; -1 stays -1");
+                CHECK(after[i].deltaUs  == before[i].deltaUs);
+
+                NOTE("timestamps survive to the millisecond the file records");
+                // The raw FILETIME is no longer written — the readable stamp is
+                // the source — so equality is to the millisecond, which is all
+                // the panel has ever displayed.
+                CHECK(after[i].whenFt / 10000 == before[i].whenFt / 10000);
+            }
+        }
+
+        NOTE("a pipe in a wire line cannot split the row it is written on");
+        // '|' separates the fields inside the message, so a peer sending one
+        // would otherwise forge a column boundary. Flattened to '/' at capture,
+        // exactly as tabs and newlines already were.
+        RL::Clear();
+        RL::Add(RL::Direction::In, L"peer", L"say a|b|c", L"qIV", L"OK", 5);
+        CHECK(RL::SaveTo(file, err));
+        RL::Clear();
+        CHECK(RL::LoadFrom(file, err));
+        const std::vector<RL::Entry> piped = RL::Snapshot();
+        CHECK(piped.size() == 1);
+        if (piped.size() == 1) CHECK(piped[0].command == L"say a/b/c");
+
+        NOTE("a file that is not a qIV log is refused, not half-read");
+        {
+            HANDLE h = CreateFileW((dir + L"\\junk.log").c_str(), GENERIC_WRITE, 0, nullptr,
+                                   CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, nullptr);
+            const char *junk = "this is not a log\r\n";
+            DWORD written = 0;
+            WriteFile(h, junk, static_cast<DWORD>(strlen(junk)), &written, nullptr);
+            CloseHandle(h);
+        }
+        CHECK(!RL::LoadFrom(dir + L"\\junk.log", err));
+        CHECK(!err.empty());
+
+        RL::SetEnabled(false);
+        RL::Clear();
+        RemoveTempDir(dir);
+    }
+
+} // namespace
+
 int main(int argc, char **argv) {
     for (int i = 1; i < argc; ++i) {
         const char *a = argv[i];
@@ -386,6 +674,18 @@ int main(int argc, char **argv) {
 
     BeginGroup("FuzzyMatch - Find subsequence scoring");
     TestFuzzy();
+    EndGroup();
+
+    BeginGroup("Log layout - the shared line shape");
+    TestLogLayout();
+    EndGroup();
+
+    BeginGroup("Log files - rotation and continuation");
+    TestLogRotation();
+    EndGroup();
+
+    BeginGroup("Wire log - save/load round trip");
+    TestWireLogRoundTrip();
     EndGroup();
 
     // Prints timings, so it always breaks the column layout. Last, and after a

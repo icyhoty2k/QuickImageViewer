@@ -54,7 +54,7 @@ namespace {
     // receive can bypass it. All three short-circuit before building anything
     // when recording is off.
     long long LogNowUs() {
-        if (!Log::IsEnabled()) return 0;
+        if (!Log::IsCapturing()) return 0;
         LARGE_INTEGER f, c;
         QueryPerformanceFrequency(&f);
         QueryPerformanceCounter(&c);
@@ -70,7 +70,7 @@ namespace {
     // One unsolicited line from the far end. No delta: nothing was asked, so
     // there is no interval to report and a number would be invented.
     void LogInbound(const std::wstring &peer, const std::wstring &line) {
-        if (!Log::IsEnabled() || line.empty()) return;
+        if (!Log::IsCapturing() || line.empty()) return;
         Log::Add(Log::Direction::In, LogPeer(peer), line,
                  Log::SelfLabel(), L"(unsolicited)", -1);
     }
@@ -603,7 +603,7 @@ bool Client::DoConnect(const std::wstring &host, int port,
     //
     // The label may not be set yet on the very first attempt, so the address is
     // used — it is what was dialled, which is the useful thing here anyway.
-    if (Log::IsEnabled()) {
+    if (Log::IsCapturing()) {
         const std::wstring endpoint = FormatEndpoint(host, port);
         const std::wstring peer     = m_peerLabel.empty() ? endpoint : m_peerLabel;
         Log::Add(Log::Direction::Out, Log::SelfLabel(),
@@ -623,7 +623,7 @@ bool Client::Send(const std::wstring &commandLine,
     // here, and only one of them used to be logged.
     const long long t0 = LogNowUs();
     const auto record = [&](const std::wstring &response) {
-        if (!Log::IsEnabled()) return;
+        if (!Log::IsCapturing()) return;
         Log::Add(Log::Direction::Out, Log::SelfLabel(), commandLine,
                  LogPeer(m_peerLabel), response, LogNowUs() - t0);
     };
@@ -663,7 +663,7 @@ bool Client::Send(const std::wstring &commandLine,
             // An EVENT is a line the WATCHED instance sent us of its own accord.
             // Its own entry, in the IN direction — it is not our reply and it
             // did not take us any time, so a delta would be a fiction.
-            if (Log::IsEnabled())
+            if (Log::IsCapturing())
                 Log::Add(Log::Direction::In, LogPeer(m_peerLabel), line,
                          Log::SelfLabel(), L"(unsolicited)", -1);
         } else {

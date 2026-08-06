@@ -35,6 +35,8 @@
 #include "Rem_TCP_IP/RemoteProtocol.h" // CommandTable — QueryToggles walks it
 #include "Rem_TCP_IP/RemoteMirror.h"  // the mirror gate at the top of ExecuteCommand
 #include "Rem_TCP_IP/RemoteLog.h"     // Ctrl+F12 — the recording switch
+#include "Platform/AppLog.h"       // the General log — this instance's own record
+#include "Persistence/IniFile.h"   // PathBesideExe — the logs\ folder Explorer opens
 #include "Platform/CrashHandler.h" // NoteImage / NoteCommand breadcrumbs
 #include "Platform/MonitorInfo.h"  // the display list, and the names Ctrl+M reports
 #include "Rem_TCP_IP/RemoteBeacon.h" // Announce on network — the TCP/IP menu tick
@@ -1099,6 +1101,76 @@ void InputManager::ExecuteCommand(HWND hWnd, Command cmd) {
             break;
         }
 
+        // Also write the wire log to rotating files under logs\.
+        //
+        // SAYS WHERE IT IS WRITING, and says when it will not be. Turning this
+        // on with recording off produces a file with nothing in it — Add is
+        // never called, so nothing reaches the sink — and a logger that fails
+        // silently is worse than one that is off. The two switches stay
+        // independent, as every other setting is; only the message joins them.
+        case Command::ToggleRemoteLogFile: {
+            app.remoteLogToFile = !app.remoteLogToFile;
+            Persistence::Registry::SaveSetting(Constants::Registry::REMOTE_LOG_FILE,
+                                               static_cast<DWORD>(app.remoteLogToFile));
+            Remote::Log::SetFileLogging(app.remoteLogToFile);
+
+            std::wstring msg;
+            if (!app.remoteLogToFile) {
+                msg = Constants::Messages::LOG_FILE_OFF;
+            } else {
+                msg = std::wstring(Constants::Messages::LOG_FILE_ON) + L" — " +
+                      Remote::Log::LogDirectory();
+                // NOTHING ABOUT THE RECORDING SWITCH. The file sink captures
+                // whether or not the panel is recording — see Log::IsCapturing —
+                // so the only thing left to explain is why the folder is empty
+                // until a client says something.
+                msg += std::wstring(L"\n") + Constants::Messages::LOG_FILE_WAITING;
+            }
+            g_overlayManager.PostCenterMessage(hWnd, msg);
+            break;
+        }
+
+        // The General log — this instance's own record of what it did.
+        case Command::ToggleGeneralLog: {
+            app.generalLog = !app.generalLog;
+            Persistence::Registry::SaveSetting(Constants::Registry::GENERAL_LOG,
+                                               static_cast<DWORD>(app.generalLog));
+            AppLog::SetEnabled(app.generalLog);
+
+            // WRITTEN AS THE FIRST LINE OF THE FILE, before the message says it
+            // is on. Somebody who switches this on wants to see that it works,
+            // and an empty folder is the same sight as a broken setting.
+            if (app.generalLog)
+                AppLog::Info(AppLog::COMP_SETTINGS, L"General log switched on");
+
+            std::wstring msg = app.generalLog
+                                   ? std::wstring(Constants::Messages::GENERAL_LOG_ON) +
+                                         L" — " + AppLog::LogDirectory()
+                                   : std::wstring(Constants::Messages::GENERAL_LOG_OFF);
+            g_overlayManager.PostCenterMessage(hWnd, msg);
+            break;
+        }
+
+        // Show me the logs.
+        case Command::OpenLogFolder: {
+            const std::wstring dir =
+                Persistence::Ini::PathBesideExe(Constants::Logging::DIR_NAME);
+
+            // CREATED IF MISSING, rather than refusing. Somebody asking to see
+            // the folder before either log has ever run would otherwise get an
+            // Explorer error, which reads as a broken feature rather than as
+            // "nothing has been written yet". An empty folder answers honestly.
+            //
+            // Only the one level: the per-log subfolders are made by the writer
+            // that owns them, and creating them here would put two empty
+            // directories in front of somebody who has switched nothing on.
+            if (!dir.empty()) {
+                CreateDirectoryW(dir.c_str(), nullptr);
+                ShellExecuteW(nullptr, L"open", dir.c_str(), nullptr, nullptr, SW_SHOW);
+            }
+            break;
+        }
+
         // Ctrl+F10 — type a command and send it to the controlled instances.
         case Command::ToggleRemoteCmd:
             uiManager.Toggle(uiManager.getRemoteCmdWindow());
@@ -2049,6 +2121,8 @@ std::wstring InputManager::GetCommandValue(HWND hWnd, Command cmd) {
         // The RECORDING state, not the panel's. This is the value a driving
         // instance reads back to confirm `enablelog 1` actually took.
         case Command::EnableRemoteLog: return OnOff(app.remoteLogEnabled);
+        case Command::ToggleRemoteLogFile: return OnOff(app.remoteLogToFile);
+        case Command::ToggleGeneralLog:    return OnOff(app.generalLog);
         case Command::MirrorLocalToggle: return OnOff(app.resendCommandToCaller);
 
         // The read-only one. Everything a driving instance needs in order to

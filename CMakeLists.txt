@@ -11,7 +11,22 @@ set(CMAKE_CXX_EXTENSIONS OFF)
 set(CMAKE_CXX_SCAN_FOR_MODULES OFF)
 
 # --- Custom Option for Static MSVC Runtime ---
-option(QIV_STATIC_RUNTIME "Statically link the MSVC C/C++ runtime (/MT instead of /MD)" OFF)
+option(QIV_STATIC_RUNTIME "Statically link the MSVC C/C++ runtime (/MT instead of /MD)" ON)
+
+# TEMPORARY — remove these two lines when the /MT experiment is finished.
+#
+# option() only supplies a DEFAULT, and only on the first configure; an existing
+# CMakeCache.txt already holding OFF would ignore the flip above and the build
+# would quietly stay on /MD. FORCE overrides the cached value so pressing Build
+# actually tests what it appears to test.
+#
+# What this is testing: /MT removes msvcp140.dll, vcruntime140.dll and
+# vcruntime140_1.dll from every launch, and removes the VC++ redistributable as
+# a dependency. EXPECTED TO FAIL with LNK2038 (RuntimeLibrary mismatch) against
+# the prebuilt resvg.lib / openjp2.lib under libs/, which were compiled for the
+# dynamic CRT. If it does, revert: the fix is rebuilding those two, which is not
+# worth ~1 ms.
+set(QIV_STATIC_RUNTIME ON CACHE BOOL "Statically link the MSVC C/C++ runtime" FORCE)
 
 # --- Fast edit-build-run iteration ---------------------------------------
 # The link, not the compile, is what a rebuild-to-test loop actually pays for
@@ -87,6 +102,8 @@ set(SOURCES
         src/Persistence/RegistryManager.cpp
         src/UI/LinkText.cpp
         src/Persistence/IniFile.cpp
+        src/Persistence/RotatingLogFile.cpp
+        src/Platform/AppLog.cpp
         src/Persistence/SessionFile.cpp
         src/Renderer/RendererGDI.cpp
         src/Renderer/RendererD2D.cpp
@@ -275,7 +292,43 @@ target_link_options(QuickImageViewer PRIVATE
         $<$<CONFIG:Release>:/INCREMENTAL:NO> # /INCREMENTAL is invalid with /LTCG
         $<$<CONFIG:Release>:/OPT:REF>        # Eliminate unreferenced functions/data
         $<$<CONFIG:Release>:/OPT:ICF>        # Fold identical functions
+
+        # --- DELAY-LOADED, and this is a STARTUP optimisation ----------------
+        #
+        # These six are statically imported, so the Windows loader maps every one
+        # of them — and their dependency chains — before wWinMain runs. The
+        # graphics and imaging stack is the expensive part of that.
+        #
+        # THE PATH THIS IS FOR: "open with qIV" while a copy is already running.
+        # That launch parses a command line, reads an .ini, takes a mutex, finds a
+        # window, sends WM_COPYDATA and exits. It draws nothing, decodes nothing
+        # and opens no dialog — so mapping Direct2D, D3D11, DXGI, DirectWrite and
+        # WIC for it is pure loader work on the one path a user is watching. It is
+        # also the most common way this program is started.
+        #
+        # The surviving instance pays the same cost, only later and at first use,
+        # where it overlaps window creation instead of preceding it.
+        #
+        # SAFE because all six are OS components present on every supported
+        # Windows, and because a delay-load only changes WHEN a missing DLL is
+        # reported: at first call rather than at launch. Nothing here is optional
+        # or redistributable.
+        #
+        # Do NOT add ws2_32, bcrypt, secur32, crypt32 or ncrypt to this list
+        # without checking Rem_TCP_IP first — the listener can be started by
+        # autostart before the window is up, and a delay-load fault on a socket
+        # thread is a far worse failure than the microseconds it would save.
+        $<$<CONFIG:Release>:/DELAYLOAD:d2d1.dll>
+        $<$<CONFIG:Release>:/DELAYLOAD:d3d11.dll>
+        $<$<CONFIG:Release>:/DELAYLOAD:dxgi.dll>
+        $<$<CONFIG:Release>:/DELAYLOAD:dwrite.dll>
+        $<$<CONFIG:Release>:/DELAYLOAD:windowscodecs.dll>
+        $<$<CONFIG:Release>:/DELAYLOAD:comdlg32.dll>
 )
+
+# The helper that resolves a delay-loaded import on its first call. Required by
+# /DELAYLOAD above; without it the link fails on __delayLoadHelper2.
+target_link_libraries(QuickImageViewer PRIVATE delayimp)
 
 if (QIV_FAST_ITERATE)
     # Reoptimize only the modules the edit touched. Whole-program optimization
@@ -379,6 +432,14 @@ if (QIV_BUILD_TESTS)
     add_executable(qivTests
             test/qivTests.cpp
             src/Common/Converters.cpp   # the only .cpp the tests need; the rest are header-only
+            # The logging trio. They link here because none of them reaches into
+            # AppState, a window or a socket — RemoteLog needs only IniFile (for
+            # the folder beside the exe) and RotatingLogFile (for the writer).
+            # Rotation and format round-tripping are exactly the kind of thing
+            # that breaks without any visible symptom.
+            src/Persistence/IniFile.cpp
+            src/Persistence/RotatingLogFile.cpp
+            src/Rem_TCP_IP/RemoteLog.cpp
     )
 
     target_include_directories(qivTests PRIVATE

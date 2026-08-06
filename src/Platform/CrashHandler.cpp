@@ -14,6 +14,10 @@
 #include <cstdlib>   // _set_purecall_handler, _set_invalid_parameter_handler
 #include <exception> // std::set_terminate
 
+// One .ini write from the failing process, read back and logged next launch —
+// see the note at the call site.
+#include "Persistence/SessionFile.h"
+
 //
 // EVERYTHING BELOW THE FILTER RUNS IN A BROKEN PROCESS.
 //
@@ -173,6 +177,16 @@ namespace Platform::Crash {
             mei.ClientPointers    = FALSE;
 
             const bool written = WriteDump(&mei, path, MAX_PATH * 2);
+
+            // HANDED TO THE NEXT LAUNCH, not logged here.
+            //
+            // The General log would be the obvious place, and it is the wrong
+            // one: this runs in a process that has already failed, and reaching
+            // into a logger means a mutex, string allocation and a writer thread
+            // that may already be dead. One .ini write is far less than the
+            // minidump just written beside it, and startup — where the heap is
+            // sound — turns it into a proper ERROR line naming this file.
+            if (written) Persistence::Session::RecordCrashDump(path);
 
             wchar_t msg[MAX_PATH * 2 + 512];
             size_t m = 0;

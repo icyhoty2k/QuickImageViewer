@@ -42,4 +42,37 @@ namespace Persistence::Session {
     // writing a blank, so a cleared session leaves nothing behind to puzzle over.
     void SaveLastImage(const std::wstring &fullPath);
 
+    // --- Did the last run end properly? --------------------------------------
+    //
+    // A LEFTOVER, not a report. A process that is killed, loses power or dies in
+    // a way no handler catches gets no opportunity to say so — so the only thing
+    // that can testify is a mark it failed to clear. MarkRunning(true) at
+    // startup, MarkRunning(false) on the clean exit path, and a mark still
+    // present next launch means the run in between never reached that path.
+    //
+    // Deliberately NOT a settings value: it changes twice per run, means nothing
+    // on another machine, and has no business in an exported settings file.
+
+    // What the PREVIOUS run left behind. Read once at startup, before
+    // MarkRunning(true) overwrites it.
+    struct PreviousRun {
+        // The mark was still set — the last run did not reach its exit path.
+        bool crashed = false;
+        // Full path of the minidump the crash handler wrote, when there is one.
+        // Empty for a kill or a power loss, which produce no dump at all — and
+        // that difference is itself the diagnosis.
+        std::wstring dumpPath;
+    };
+
+    // Reads the two keys and CLEARS them, so one abnormal exit is reported once
+    // rather than on every launch until something overwrites it.
+    PreviousRun TakePreviousRun();
+
+    void MarkRunning(bool running);
+
+    // Called from the crash handler, which is why it takes a raw pointer and
+    // does nothing but one .ini write: that code runs in a process that has
+    // already failed and must allocate as little as it can get away with.
+    void RecordCrashDump(const wchar_t *dumpPath);
+
 } // namespace Persistence::Session
