@@ -793,17 +793,33 @@ void RemotesWnd::DoPollAll() {
 
 void RemotesWnd::DoRemoveTarget(int row) {
     if (row < 0 || row >= static_cast<int>(m_rows.size())) return;
-    const RowView &r = m_rows[row];
 
-    if (!DialogConfirm(L"Remove " + r.name + L" (" + Remote::FormatEndpoint(r.host, r.port) +
+    // COPIED, NOT REFERENCED — the same use-after-free that crashed
+    // RemoteClientsWnd::DoKick on 2026-08-06.
+    //
+    // DialogConfirm runs a modal message loop, so this window keeps receiving
+    // messages while the box is up, and TWO of them rebuild m_rows:
+    // WM_QIV_REMOTE_TARGETS_CHANGED when a target connects or drops, and
+    // TIMER_PENDING, which several actions here arm. A pending timer is
+    // GUARANTEED to fire during the wait, so this was more reachable than the
+    // crash that was actually observed.
+    //
+    // The row reference would then point into a freed buffer, and `r.id` below
+    // — used to decide what to remove — would be read out of it.
+    const auto id        = m_rows[row].id;
+    const std::wstring name = m_rows[row].name;
+    const std::wstring host = m_rows[row].host;
+    const int          port = m_rows[row].port;
+
+    if (!DialogConfirm(L"Remove " + name + L" (" + Remote::FormatEndpoint(host, port) +
                        L") from the list?\r\n\r\n"
                        L"The instance itself is not affected.",
                        L"Remote Servers"))
         return;
 
-    const bool wasEditing = (r.id == m_editingRowId);
+    const bool wasEditing = (id == m_editingRowId);
 
-    Remote::Mirror::RemoveTarget(r.id);
+    Remote::Mirror::RemoveTarget(id);
     Rebuild();
     PersistRows();
 
