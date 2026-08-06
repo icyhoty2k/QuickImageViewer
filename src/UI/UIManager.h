@@ -1,3 +1,11 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// Copyright (C) 2026 Ivan Hristov Yanev
+//
+// This file is part of QuickImageViewer. It is free software: you may
+// redistribute and modify it under the terms of the GNU Affero General Public
+// License version 3 or later, as published by the Free Software Foundation.
+// It is distributed WITHOUT ANY WARRANTY. See the LICENSE file for details.
+
 #pragma once
 #include <windows.h>
 #include <array>
@@ -14,7 +22,6 @@
 #include "FloatingPanels/ZoomWnd.h"
 #include "FloatingPanels/FindWnd.h"
 #include "FloatingPanels/StatsWnd.h"
-#include "FloatingPanels/ZoomWnd.h"
 #include "Dedicated/DedicatedWnd.h"
 #include "Rem_TCP_IP/RemoteWnd.h"
 #include "Rem_TCP_IP/RemoteClientsWnd.h"
@@ -188,7 +195,7 @@ ThumbnailPanelWnd &getActiveDirWnd();
             FindWnd         &getFindWindow();
             void             ToggleJumpToWindow();   // hides FindWnd if visible, then toggles JumpToWnd
             void             ToggleFindWindow();     // hides JumpToWnd if visible, then toggles FindWnd
-            void             ToggleZoomWindow();     // toggles ZoomWnd
+            void             ToggleZoomWindow();     // NOT wired to a key — see ZoomTo in CommandExecuter.cpp
             StatsWnd        &getStatsWindow();
             DedicatedWnd    &getDedicatedWindow();
             RemoteWnd       &getRemoteWindow();
@@ -241,12 +248,19 @@ ThumbnailPanelWnd &getActiveDirWnd();
                                        const std::vector<std::wstring> &playlist,
                                        bool updatePrimaryDirWnd = true);
 
+            // Called after app.fileHandlerDefaultSortOrder or
+            // app.fileHandlerIsReverseSortOrder changes at runtime. Re-sorting
+            // app.playlist alone leaves every panel that owns a list — F6's copy
+            // and each spawned panel's folder — in the old order.
+            void NotifySortOrderChanged();
+
             void RepaintAllPanels();
             void RefreshPanelDirs(const std::wstring &dir1, const std::wstring &dir2);
 
             // Update DWM title-bar theme and repaint all floating panel windows.
             // Call whenever app.isDarkThemed or app.themeFactor changes.
             void NotifyThemeChanged();
+            void NotifyCornerChanged();
 
         private:
             HelpWnd        helpWnd;

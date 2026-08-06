@@ -1,0 +1,80 @@
+name: qIV Remote (Android) — bug or request
+description: Something wrong with the phone app, or something it should do
+title: "[Android] "
+labels: ["android", "qiv-remote"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        The Android app is developed in a separate repository, but **this is the right
+        place to report it** — issues for the app live here alongside the viewer it
+        talks to, because almost every question about one involves the other.
+
+        **Connection problems are the common case, and usually the same three things:**
+        Local Server is off (`F9` in qIV on the PC), the phone's address is not in the
+        AllowList, or the two devices are on different networks — phone on mobile data,
+        or a guest Wi-Fi that blocks device-to-device traffic. Worth checking those
+        before writing, and worth mentioning that you did.
+
+  - type: dropdown
+    id: kind
+    attributes:
+      label: Is this a bug or a request?
+      options:
+        - Bug — something does not work
+        - Feature request
+    validations:
+      required: true
+
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened, or what would you like it to do
+      description: If there was an error message on the phone, quote it exactly.
+    validations:
+      required: true
+
+  - type: dropdown
+    id: area
+    attributes:
+      label: Which part of the app
+      options:
+        - Connecting to a PC / server list
+        - Driving the viewer (navigation, slideshow, zoom, effects)
+        - Live preview of the desktop
+        - Saving a picture to the phone's gallery
+        - Sending a photo from the phone to the desktop
+        - Presentation mode
+        - Demo mode
+        - Settings, theme, or something else
+    validations:
+      required: true
+
+  - type: input
+    id: app-version
+    attributes:
+      label: App version
+      description: Shown on the app's About screen.
+      placeholder: "1.5.0.0"
+
+  - type: input
+    id: qiv-version
+    attributes:
+      label: qIV version on the PC
+      placeholder: "2.180.0.230"
+
+  - type: input
+    id: phone
+    attributes:
+      label: Phone and Android version
+      placeholder: "Pixel 7, Android 15"
+
+  - type: checkboxes
+    id: checked
+    attributes:
+      label: For connection problems
+      options:
+        - label: Local Server is switched on in qIV (`F9`) and shows a name and port
+        - label: The phone's address is covered by the AllowList
+        - label: Phone and PC are on the same network (not mobile data, not a guest network)
+        - label: Demo mode works — so the app itself runs

@@ -1,3 +1,11 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// Copyright (C) 2026 Ivan Hristov Yanev
+//
+// This file is part of QuickImageViewer. It is free software: you may
+// redistribute and modify it under the terms of the GNU Affero General Public
+// License version 3 or later, as published by the Free Software Foundation.
+// It is distributed WITHOUT ANY WARRANTY. See the LICENSE file for details.
+
 // winsock2.h before anything that pulls windows.h — see the note in
 // RemoteServer.cpp. RemoteClient.h includes windows.h.
 #include <winsock2.h>
@@ -1401,7 +1409,7 @@ void BroadcastEnableLog(bool on) {
     //
     // EVERY connected target, not just the mirrored selection: the log is a
     // diagnostic about the whole session, and a screen left recording because it
-    // happened to be unticked in Remotes Control is a file nobody will think to
+    // happened to be unticked in Mirroring is a file nobody will think to
     // look at, still growing.
     const std::wstring line = on ? L"EnableRemoteLog 1" : L"EnableRemoteLog 0";
     for (std::unique_ptr<Target> &t : g_targets) PushTo(*t, line, {});

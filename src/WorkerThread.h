@@ -1,3 +1,11 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// Copyright (C) 2026 Ivan Hristov Yanev
+//
+// This file is part of QuickImageViewer. It is free software: you may
+// redistribute and modify it under the terms of the GNU Affero General Public
+// License version 3 or later, as published by the Free Software Foundation.
+// It is distributed WITHOUT ANY WARRANTY. See the LICENSE file for details.
+
 #pragma once
 
 #include <windows.h>
@@ -11,6 +19,27 @@
 #include <functional>
 #include <atomic>
 #include <vector>
+
+
+// A CEILING ON QUEUED WORK, not a throttle. Shared by both pools below.
+//
+// Neither queue was bounded, so rapid navigation, a folder change or a large
+// thumbnail sweep could accumulate std::function objects without limit.
+// Cancellation happens at a higher level and stops the WORK, but the queued
+// closures stay allocated until something pops them.
+//
+// Set far above any legitimate burst — a visible thumbnail range is tens of
+// items, not thousands — so it never fires in normal use. It exists to bound the
+// pathological case, and 16k closures is a couple of megabytes.
+//
+// WHY REJECTION IS REPORTED RATHER THAN THE TASK SILENTLY DROPPED. Callers mark
+// work as in-flight BEFORE pushing (RendererD2D's m_bitmapInFlight, and the
+// per-panel inFlight sets) and clear that mark INSIDE the task. A dropped task
+// would leave the mark set forever, so the image or thumbnail it guards could
+// never be requested again — a permanently blank tile, which is worse than the
+// unbounded queue this replaces. PushTask therefore returns bool, and any caller
+// holding such bookkeeping must undo it when the answer is false.
+inline constexpr size_t QIV_WORKER_MAX_QUEUED = 16384;
 
 
 class DecoderThreadPool {
@@ -28,13 +57,18 @@ class DecoderThreadPool {
             }
         }
 
-        void PushTask(std::function<void(IWICImagingFactory2 *)> task) {
+        // Returns FALSE when the task was not queued — pool stopped, or the queue
+        // is at capacity. See MAX_QUEUED in DecoderThreadPool for why the ceiling
+        // exists and why rejection is reported instead of dropping silently.
+        bool PushTask(std::function<void(IWICImagingFactory2 *)> task) {
             {
                 std::lock_guard<std::mutex> lock(m_queueMutex);
-                if (!m_running) return;
+                if (!m_running) return false;
+                if (m_queue.size() >= QIV_WORKER_MAX_QUEUED) return false;
                 m_queue.push(std::move(task));
             }
             m_cv.notify_one();
+            return true;
         }
 
         void ClearQueue() {
@@ -58,6 +92,16 @@ class DecoderThreadPool {
                     // 1. Thread priority optimization
                     // Setting this here ensures the worker threads don't starve the UI thread
                     SetThreadPriority(GetCurrentThread(), THREAD_PRIORITY_BELOW_NORMAL);
+                    // Reserve stack for the crash filter, per thread.
+                    //
+                    // SetThreadStackGuarantee applies to the CALLING thread only, so
+                    // setting it in wWinMain covers the UI thread and nothing else. A
+                    // worker that overflows its stack then faults again inside the
+                    // handler and dies with no dump — and decode recursion on a
+                    // malformed image is exactly how that happens. Every crash seen
+                    // during development so far has been on a worker, not the UI
+                    // thread, which is the argument for spending 64 KB here.
+                    { ULONG guard = 64 * 1024; SetThreadStackGuarantee(&guard); }
                     // 2. COM Init
                     HRESULT hr = CoInitializeEx(nullptr, COINIT_MULTITHREADED);
 
@@ -93,6 +137,21 @@ class DecoderThreadPool {
         int getThreadCount() {
             return static_cast<int>(m_threads.size());
         }
+
+        // NO PUBLIC Shutdown() — deliberately.
+        //
+        // One existed briefly, to let a duplicate instance stop this pool before
+        // returning from wWinMain: the GeoNames warm-up queued at startup was
+        // still parsing into a file-scope unordered_map when the CRT destroyed
+        // it, and joining first was the obvious patch.
+        //
+        // The real fix was to stop starting the pool at all in a process that is
+        // about to exit — the single-instance check now runs before anything here
+        // is touched (see AppMain.cpp). With no threads started there is nothing
+        // to shut down, so the method became dead code and was removed rather
+        // than left as an invitation to reintroduce the ordering it papered over.
+        //
+        // The destructor still joins, which is correct for the surviving instance.
 
         size_t PendingTaskCount() {
             std::lock_guard<std::mutex> lock(m_queueMutex);
@@ -164,6 +223,16 @@ class IoThreadPool {
             for (size_t i = 0; i < threadCount; ++i) {
                 m_threads.emplace_back([this] {
                     SetThreadPriority(GetCurrentThread(), THREAD_PRIORITY_BELOW_NORMAL);
+                    // Reserve stack for the crash filter, per thread.
+                    //
+                    // SetThreadStackGuarantee applies to the CALLING thread only, so
+                    // setting it in wWinMain covers the UI thread and nothing else. A
+                    // worker that overflows its stack then faults again inside the
+                    // handler and dies with no dump — and decode recursion on a
+                    // malformed image is exactly how that happens. Every crash seen
+                    // during development so far has been on a worker, not the UI
+                    // thread, which is the argument for spending 64 KB here.
+                    { ULONG guard = 64 * 1024; SetThreadStackGuarantee(&guard); }
                     HRESULT hr = CoInitializeEx(nullptr, COINIT_MULTITHREADED);
                     if (FAILED(hr))
                         OutputDebugStringW(L"IoThreadPool: COM init failed\n");
@@ -201,13 +270,17 @@ class IoThreadPool {
             m_threads.clear();
         }
 
-        void PushTask(std::function<void()> task) {
+        // Returns FALSE when the task was not queued. Callers holding in-flight
+        // bookkeeping MUST undo it on false — see QIV_WORKER_MAX_QUEUED.
+        bool PushTask(std::function<void()> task) {
             {
                 std::lock_guard<std::mutex> lock(m_queueMutex);
                 // Accept tasks even before Start() — they drain once threads are up
+                if (m_queue.size() >= QIV_WORKER_MAX_QUEUED) return false;
                 m_queue.push(std::move(task));
             }
             m_cv.notify_one();
+            return true;
         }
 
         void ClearQueue() {

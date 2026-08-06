@@ -1,3 +1,11 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// Copyright (C) 2026 Ivan Hristov Yanev
+//
+// This file is part of QuickImageViewer. It is free software: you may
+// redistribute and modify it under the terms of the GNU Affero General Public
+// License version 3 or later, as published by the Free Software Foundation.
+// It is distributed WITHOUT ANY WARRANTY. See the LICENSE file for details.
+
 #include "RemotesWnd.h"
 #include "RemoteMirror.h"
 #include "RemotesFile.h"
@@ -785,17 +793,33 @@ void RemotesWnd::DoPollAll() {
 
 void RemotesWnd::DoRemoveTarget(int row) {
     if (row < 0 || row >= static_cast<int>(m_rows.size())) return;
-    const RowView &r = m_rows[row];
 
-    if (!DialogConfirm(L"Remove " + r.name + L" (" + Remote::FormatEndpoint(r.host, r.port) +
+    // COPIED, NOT REFERENCED — the same use-after-free that crashed
+    // RemoteClientsWnd::DoKick on 2026-08-06.
+    //
+    // DialogConfirm runs a modal message loop, so this window keeps receiving
+    // messages while the box is up, and TWO of them rebuild m_rows:
+    // WM_QIV_REMOTE_TARGETS_CHANGED when a target connects or drops, and
+    // TIMER_PENDING, which several actions here arm. A pending timer is
+    // GUARANTEED to fire during the wait, so this was more reachable than the
+    // crash that was actually observed.
+    //
+    // The row reference would then point into a freed buffer, and `r.id` below
+    // — used to decide what to remove — would be read out of it.
+    const auto id        = m_rows[row].id;
+    const std::wstring name = m_rows[row].name;
+    const std::wstring host = m_rows[row].host;
+    const int          port = m_rows[row].port;
+
+    if (!DialogConfirm(L"Remove " + name + L" (" + Remote::FormatEndpoint(host, port) +
                        L") from the list?\r\n\r\n"
                        L"The instance itself is not affected.",
                        L"Remote Servers"))
         return;
 
-    const bool wasEditing = (r.id == m_editingRowId);
+    const bool wasEditing = (id == m_editingRowId);
 
-    Remote::Mirror::RemoveTarget(r.id);
+    Remote::Mirror::RemoveTarget(id);
     Rebuild();
     PersistRows();
 
@@ -1333,7 +1357,22 @@ LRESULT RemotesWnd::HandlePanelMessage(UINT message, WPARAM wParam, LPARAM lPara
             SelectObject(bb, m_hFontBold);
             SetTextColor(bb, fg);
             RECT tr{pad, static_cast<int>(6 * s), W - pad, static_cast<int>(26 * s)};
-            DrawTextW(bb, L"Remote Servers — instances this copy can drive", -1, &tr,
+            // COUNTS IN THE TITLE. "Servers" alone does not say whether the list
+            // is empty because nothing is saved or because nothing answered, and
+            // those need opposite actions from the user.
+            int upCount = 0;
+            for (const RowView &rv : m_rows)
+                if (rv.dot == DotState::Up) ++upCount;
+
+            // Named for what it is rather than `title`: a later local by that
+            // name lives in the row loop below, and /W4 is right that one
+            // shadowing the other is a trap waiting for whoever edits next.
+            const std::wstring serversTitle =
+                L"\U0001F4E1 Servers — the instances this copy can connect to   \x00B7   " +
+                std::to_wstring(m_rows.size()) + L" saved, " +
+                std::to_wstring(upCount) + L" connected";
+
+            DrawTextW(bb, serversTitle.c_str(), -1, &tr,
                       DT_LEFT | DT_SINGLELINE);
 
             SelectObject(bb, m_hFontSmall);

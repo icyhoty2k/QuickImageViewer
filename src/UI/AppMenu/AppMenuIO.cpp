@@ -1,3 +1,11 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// Copyright (C) 2026 Ivan Hristov Yanev
+//
+// This file is part of QuickImageViewer. It is free software: you may
+// redistribute and modify it under the terms of the GNU Affero General Public
+// License version 3 or later, as published by the Free Software Foundation.
+// It is distributed WITHOUT ANY WARRANTY. See the LICENSE file for details.
+
 #include "AppMenu.h"
 #include "AppMenuIds.h"
 #include "AppMenuInternal.h"
@@ -8,6 +16,8 @@
 #include "Overlays/OverlayManager.h"
 #include "Persistence/HistoryFoldersManager.h"
 #include "Persistence/RegistryManager.h"
+#include "Rem_TCP_IP/RemoteLog.h"   // the file sink has to be told what an import changed
+#include "Platform/AppLog.h"        // and so does the General one
 #include "Platform/Constants.h"
 #include "Platform/ConstantsStrings.h"
 #include "Platform/FileHandler.h"
@@ -186,16 +196,21 @@ void ImportSettings(HWND hWnd) {
         applyBool(Constants::Registry::RUN_ON_STARTUP,       app.isEnableRunOnStartup);
         applyBool(Constants::Registry::THUMBNAIL_EFFECTS,    app.thumbnailEffectsEnabled);
         applyBool(Constants::Registry::LOCK_VIEWPORT,        app.lockViewport);
+        applyBool(Constants::Registry::REMEMBER_WINDOW_POS,  app.rememberWindowPosition);
         applyBool(Constants::Registry::HISTORY_FULL_MODE,    app.historyFullModeEnabled);
         applyBool(Constants::Registry::OVERLAY_VISIBLE,      app.showOverlayInfoText);
         applyBool(Constants::Registry::OPEN_DIRWND_ON_START, app.openDirWndOnStart);
         applyBool(Constants::Registry::OVERLAY_SHOW_BG,      app.overlayShowBackground);
         applyBool(Constants::Registry::OVERLAY_SHOW_DIR_NAME, app.overlayShowDirName);
+        applyBool(Constants::Registry::OVERLAY_SHOW_EFFECTS,  app.overlayShowEffectsList);
         applyBool(Constants::Registry::SWAP_MOUSE_BUTTONS,   app.swapMouseButtons);
         applyBool(Constants::Registry::CONTEXT_MENU_ENABLED, app.contextMenuEnabled);
         applyBool(Constants::Registry::KIOSK_LOCK,           app.isLocked);
         applyBool(Constants::Registry::ALWAYS_ON_TOP,        app.isAlwaysOnTop);
         applyBool(Constants::Registry::KEEP_DISPLAY_AWAKE,   app.keepDisplayAwake);
+        applyBool(Constants::Registry::REMOTE_BEACON,        app.remoteBeacon);
+        applyBool(Constants::Registry::REMOTE_LOG_FILE,      app.remoteLogToFile);
+        applyBool(Constants::Registry::GENERAL_LOG,          app.generalLog);
         applyBool(Constants::Registry::WHEEL_INVERT,         app.invertWheelDirection);
         applyBool(Constants::Registry::WHEEL_INVERT_H,       app.invertWheelDirectionH);
         applyBool(Constants::Registry::START_FULLSCREEN,     app.startInFullscreen);
@@ -259,7 +274,9 @@ void ImportSettings(HWND hWnd) {
                 static_cast<DWORD>(app.historyMaxDirsSave));
         }
         if (wcscmp(key, Constants::Registry::SLIDESHOW_INTERVAL_MS) == 0) {
-            app.slideshow.intervalMs = std::max(100, std::min(60000, val));
+            // Re-arms a running slideshow rather than only storing the value;
+            // it also does the clamping, so the bounds live in one place now.
+            AppCommands::applySlideshowInterval(hWnd, val);
             Persistence::Registry::SaveSetting(Constants::Registry::SLIDESHOW_INTERVAL_MS,
                 static_cast<DWORD>(app.slideshow.intervalMs));
         }
@@ -302,6 +319,30 @@ void ImportSettings(HWND hWnd) {
             Persistence::Registry::SaveSetting(Constants::Registry::OVERLAY_FONT_FAMILY,
                 static_cast<DWORD>(app.overlayFontFamily));
         }
+        // BOTH OF THESE WERE MISSING. ForEachSetting has emitted them for a
+        // while, so they were written to every exported file and then silently
+        // dropped on the way back in — an import that looked like it worked and
+        // quietly reverted two settings to whatever the machine already had.
+        //
+        // The clamps deliberately match RegistryManager::LoadAllSettings. Import
+        // writes straight to the registry, so a bound that is looser here would
+        // persist a value the loader then has to fix on every launch.
+        if (wcscmp(key, Constants::Registry::INPUTBOX_CARET_STYLE) == 0) {
+            app.caretStyle = std::max(0, std::min(1, val));
+            Persistence::Registry::SaveSetting(Constants::Registry::INPUTBOX_CARET_STYLE,
+                static_cast<DWORD>(app.caretStyle));
+        }
+        // Stored as an integer percent, not as the float it becomes — the file
+        // holds what toZoomInt produced, so it is clamped in that same integer
+        // domain before being converted back.
+        if (wcscmp(key, Constants::Registry::ZOOM_CLICK_MULT) == 0) {
+            const int raw = std::max(Converters::toZoomInt(Constants::ZOOM_CLICK_MIN),
+                            std::min(Converters::toZoomInt(Constants::ZOOM_CLICK_MAX), val));
+            app.zoomClickMultiplier = Converters::toZoomFloat(raw);
+            Persistence::Registry::SaveSetting(Constants::Registry::ZOOM_CLICK_MULT,
+                static_cast<DWORD>(raw));
+        }
+
         if (wcscmp(key, Constants::Registry::OVERLAY_LAYOUT_MODE) == 0) {
             app.overlayLayoutMode = std::max(0, std::min(
                 Constants::Overlay::LAYOUT_MODE_COUNT - 1, val));
@@ -363,6 +404,11 @@ void ImportSettings(HWND hWnd) {
 
     // Apply side effects
     Persistence::Registry::EnableRunOnStartup(app.isEnableRunOnStartup);
+    // An imported value is only a number in AppState until the sink is told —
+    // importing a file with this on and having nothing written would be exactly
+    // the silent half-application this block exists to prevent.
+    Remote::Log::SetFileLogging(app.remoteLogToFile);
+    AppLog::SetEnabled(app.generalLog);
     g_overlayManager.SetAllVisible(app.showOverlayInfoText);
     // Per-slot state and layout mode live inside OverlayManager, so the
     // reloaded AppState has to be pushed in — LoadAllSettings only fills
@@ -398,6 +444,7 @@ void RestoreDefaults(HWND hWnd) {
     app.isEnableRunOnStartup    = Constants::IS_ENABLE_RUN_ON_STARTUP;
     app.thumbnailEffectsEnabled = Constants::ThumbnailPanel::ThumbnailEffects::EFFECTS_MASTER_ENABLED;
     app.lockViewport            = Constants::IS_LOCK_VIEWPORT;
+    app.rememberWindowPosition  = Constants::IS_REMEMBER_WINDOW_POSITION;
     app.historyFullModeEnabled  = Constants::History::HISTORY_SHOW_FULL_HISTORY;
     app.showOverlayInfoText     = Constants::Overlay::DEFAULT_SHOW_OVERLAY;
     app.openDirWndOnStart       = Constants::IS_OPEN_DIRWND_ON_START;
@@ -417,6 +464,9 @@ void RestoreDefaults(HWND hWnd) {
     app.isLocked                = Constants::IS_KIOSK_LOCK_ENABLED;
     app.isAlwaysOnTop           = Constants::IS_ALWAYS_ON_TOP;
     app.keepDisplayAwake        = Constants::IS_KEEP_DISPLAY_AWAKE;
+    app.remoteBeacon            = Constants::IS_REMOTE_BEACON_ENABLED;
+    app.remoteLogToFile         = Constants::IS_TCP_IP_LOG;
+    app.generalLog              = Constants::IS_GENERAL_LOG;
     app.invertWheelDirection    = Constants::IS_MOUSE_VERTICAL_REVERSE_SCROLL_DIRECTION;
     app.invertWheelDirectionH   = Constants::IS_MOUSE_HORIZONTAL_REVERSE_SCROLL_DIRECTION;
     app.vramCacheCount          = Constants::IS_VRAM_CACHE_IMAGES_COUNT;
@@ -431,7 +481,11 @@ void RestoreDefaults(HWND hWnd) {
     app.preloadLookaside        = Constants::IS_PRELOAD_LOOKASIDE_COUNT;
     app.msgCenterDisplayMs      = static_cast<int>(Constants::Overlay::IS_MSG_CENTER_DISPLAY_MS);
     app.historyMaxDirsSave      = Constants::History::IS_HISTORY_MAX_DIRS_TO_SAVE;
-    app.slideshow.intervalMs    = Constants::Slideshow::IS_INTERVAL_MS;
+    // Through the helper like every other interval change: Restore Defaults is
+    // reachable from the tray while a slideshow is running, and a plain
+    // assignment would leave that show pacing itself by the value the user just
+    // discarded.
+    AppCommands::applySlideshowInterval(hWnd, Constants::Slideshow::IS_INTERVAL_MS);
     app.slideshow.loop          = Constants::Slideshow::IS_LOOP;
     app.slideshow.shuffle       = Constants::Slideshow::IS_SHUFFLE;
     app.slideshow.transition.type     = TransitionType::Cut;
@@ -451,6 +505,7 @@ void RestoreDefaults(HWND hWnd) {
     Persistence::Registry::SaveSetting(Constants::Registry::RUN_ON_STARTUP,        static_cast<DWORD>(app.isEnableRunOnStartup));
     Persistence::Registry::SaveSetting(Constants::Registry::THUMBNAIL_EFFECTS,     static_cast<DWORD>(app.thumbnailEffectsEnabled));
     Persistence::Registry::SaveSetting(Constants::Registry::LOCK_VIEWPORT,         static_cast<DWORD>(app.lockViewport));
+    Persistence::Registry::SaveSetting(Constants::Registry::REMEMBER_WINDOW_POS,   static_cast<DWORD>(app.rememberWindowPosition));
     Persistence::Registry::SaveSetting(Constants::Registry::HISTORY_FULL_MODE,     static_cast<DWORD>(app.historyFullModeEnabled));
     Persistence::Registry::SaveSetting(Constants::Registry::OVERLAY_VISIBLE,       static_cast<DWORD>(app.showOverlayInfoText));
     Persistence::Registry::SaveSetting(Constants::Registry::OPEN_DIRWND_ON_START,  static_cast<DWORD>(app.openDirWndOnStart));
@@ -459,6 +514,7 @@ void RestoreDefaults(HWND hWnd) {
     Persistence::Registry::SaveSetting(Constants::Registry::OVERLAY_SLOT_VISIBLE,  static_cast<DWORD>(app.overlaySlotVisibleMask));
     Persistence::Registry::SaveSetting(Constants::Registry::OVERLAY_SLOT_COMPACT,  static_cast<DWORD>(app.overlaySlotCompactMask));
     Persistence::Registry::SaveSetting(Constants::Registry::OVERLAY_SHOW_DIR_NAME, static_cast<DWORD>(app.overlayShowDirName));
+    Persistence::Registry::SaveSetting(Constants::Registry::OVERLAY_SHOW_EFFECTS,  static_cast<DWORD>(app.overlayShowEffectsList));
     Persistence::Registry::SaveSetting(Constants::Registry::OVERLAY_FONT_SIZE,     static_cast<DWORD>(app.overlayFontSize));
     Persistence::Registry::SaveSetting(Constants::Registry::OVERLAY_FONT_COLOR,    static_cast<DWORD>(app.overlayFontColor));
     Persistence::Registry::SaveSetting(Constants::Registry::OVERLAY_FONT_FAMILY,   static_cast<DWORD>(app.overlayFontFamily));
@@ -469,6 +525,9 @@ void RestoreDefaults(HWND hWnd) {
     Persistence::Registry::SaveSetting(Constants::Registry::KIOSK_LOCK,            static_cast<DWORD>(app.isLocked));
     Persistence::Registry::SaveSetting(Constants::Registry::ALWAYS_ON_TOP,         static_cast<DWORD>(app.isAlwaysOnTop));
     Persistence::Registry::SaveSetting(Constants::Registry::KEEP_DISPLAY_AWAKE,    static_cast<DWORD>(app.keepDisplayAwake));
+    Persistence::Registry::SaveSetting(Constants::Registry::REMOTE_BEACON,         static_cast<DWORD>(app.remoteBeacon));
+    Persistence::Registry::SaveSetting(Constants::Registry::REMOTE_LOG_FILE,       static_cast<DWORD>(app.remoteLogToFile));
+    Persistence::Registry::SaveSetting(Constants::Registry::GENERAL_LOG,           static_cast<DWORD>(app.generalLog));
     Persistence::Registry::SaveSetting(Constants::Registry::WHEEL_INVERT,          static_cast<DWORD>(app.invertWheelDirection));
     Persistence::Registry::SaveSetting(Constants::Registry::WHEEL_INVERT_H,        static_cast<DWORD>(app.invertWheelDirectionH));
     Persistence::Registry::SaveSetting(Constants::Registry::VRAM_CACHE_COUNT,      static_cast<DWORD>(app.vramCacheCount));

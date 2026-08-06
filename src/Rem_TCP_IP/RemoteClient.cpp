@@ -1,3 +1,11 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// Copyright (C) 2026 Ivan Hristov Yanev
+//
+// This file is part of QuickImageViewer. It is free software: you may
+// redistribute and modify it under the terms of the GNU Affero General Public
+// License version 3 or later, as published by the Free Software Foundation.
+// It is distributed WITHOUT ANY WARRANTY. See the LICENSE file for details.
+
 // winsock2.h before anything that pulls windows.h — see the note in
 // RemoteServer.cpp. RemoteClient.h includes windows.h.
 #include <winsock2.h>
@@ -46,7 +54,7 @@ namespace {
     // receive can bypass it. All three short-circuit before building anything
     // when recording is off.
     long long LogNowUs() {
-        if (!Log::IsEnabled()) return 0;
+        if (!Log::IsCapturing()) return 0;
         LARGE_INTEGER f, c;
         QueryPerformanceFrequency(&f);
         QueryPerformanceCounter(&c);
@@ -62,7 +70,7 @@ namespace {
     // One unsolicited line from the far end. No delta: nothing was asked, so
     // there is no interval to report and a number would be invented.
     void LogInbound(const std::wstring &peer, const std::wstring &line) {
-        if (!Log::IsEnabled() || line.empty()) return;
+        if (!Log::IsCapturing() || line.empty()) return;
         Log::Add(Log::Direction::In, LogPeer(peer), line,
                  Log::SelfLabel(), L"(unsolicited)", -1);
     }
@@ -555,6 +563,26 @@ bool Client::DoConnectBody(const std::wstring &host, int port,
         RecvLine(s, m_accum, ack, tls);   // consumed so it cannot be read as a reply
     }
 
+    // WHO AND WHAT is at this end, for the other side's client list. Same
+    // contract as hello above: best effort, sent after authentication, reply
+    // consumed so it cannot be mistaken for an answer to something else, and
+    // nothing here depends on it being understood.
+    //
+    // The reply is the server's OWN agent line — this is a greeting, not a
+    // report — and is parsed so a target can be labelled in Mirroring the
+    // same way a client is labelled in My Clients.
+    {
+        SendAll(s, ToUtf8(L"agent " + BuildAgent(L"qIV", Constants::APP_VERSION,
+                                                 SelfAnnounceName())) + "\r\n", tls);
+        std::wstring ack;
+        if (RecvLine(s, m_accum, ack, tls)) {
+            // "OK app=qIV;ver=…" — drop the status word, keep the pairs.
+            const size_t sp = ack.find(L' ');
+            if (sp != std::wstring::npos)
+                m_peerAgent = ParseAgent(ack.substr(sp + 1));
+        }
+    }
+
     m_connected = true;
     errorOut.clear();
     return true;
@@ -575,7 +603,7 @@ bool Client::DoConnect(const std::wstring &host, int port,
     //
     // The label may not be set yet on the very first attempt, so the address is
     // used — it is what was dialled, which is the useful thing here anyway.
-    if (Log::IsEnabled()) {
+    if (Log::IsCapturing()) {
         const std::wstring endpoint = FormatEndpoint(host, port);
         const std::wstring peer     = m_peerLabel.empty() ? endpoint : m_peerLabel;
         Log::Add(Log::Direction::Out, Log::SelfLabel(),
@@ -595,7 +623,7 @@ bool Client::Send(const std::wstring &commandLine,
     // here, and only one of them used to be logged.
     const long long t0 = LogNowUs();
     const auto record = [&](const std::wstring &response) {
-        if (!Log::IsEnabled()) return;
+        if (!Log::IsCapturing()) return;
         Log::Add(Log::Direction::Out, Log::SelfLabel(), commandLine,
                  LogPeer(m_peerLabel), response, LogNowUs() - t0);
     };
@@ -635,7 +663,7 @@ bool Client::Send(const std::wstring &commandLine,
             // An EVENT is a line the WATCHED instance sent us of its own accord.
             // Its own entry, in the IN direction — it is not our reply and it
             // did not take us any time, so a delta would be a fiction.
-            if (Log::IsEnabled())
+            if (Log::IsCapturing())
                 Log::Add(Log::Direction::In, LogPeer(m_peerLabel), line,
                          Log::SelfLabel(), L"(unsolicited)", -1);
         } else {

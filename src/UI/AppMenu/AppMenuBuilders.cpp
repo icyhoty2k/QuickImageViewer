@@ -1,3 +1,11 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// Copyright (C) 2026 Ivan Hristov Yanev
+//
+// This file is part of QuickImageViewer. It is free software: you may
+// redistribute and modify it under the terms of the GNU Affero General Public
+// License version 3 or later, as published by the Free Software Foundation.
+// It is distributed WITHOUT ANY WARRANTY. See the LICENSE file for details.
+
 #include "AppMenu.h"
 #include "AppMenuIds.h"
 #include "AppMenuInternal.h"
@@ -89,6 +97,10 @@ Command CommandForId(int id) {
         case Id::ID_REMOTES_CONTROL: return Command::MirrorPick;
         case Id::ID_REMOTE_CMD:      return Command::ToggleRemoteCmd;
         case Id::ID_REMOTE_LOG:      return Command::ToggleRemoteLog;
+        case Id::ID_REMOTE_BEACON:   return Command::ToggleRemoteBeacon;
+        case Id::ID_REMOTE_LOG_FILE: return Command::ToggleRemoteLogFile;
+        case Id::ID_APP_LOG_FILE:    return Command::ToggleGeneralLog;
+        case Id::ID_OPEN_LOG_DIR:    return Command::OpenLogFolder;
         // Straight to the same commands F11 and F12 resolve to, so the menu and
         // the keys cannot drift apart — the overlay, the mirror gate and the
         // "nothing picked" handling all come free.
@@ -207,6 +219,7 @@ static HMENU BuildSettingsMenu() {
     AppendMenuW(m, MF_STRING | CheckFlag(app.isEnableRunOnStartup),    Id::SET_RUN_ON_STARTUP, L"Run on Startup");
     AppendMenuW(m, MF_STRING | CheckFlag(app.thumbnailEffectsEnabled), Id::SET_THUMB_EFFECTS,  L"Thumbnail Effects");
     AppendMenuW(m, MF_STRING | CheckFlag(app.lockViewport),            Id::SET_LOCK_VIEWPORT,  L"Lock Viewport (keep zoom/pan)\tY");
+    AppendMenuW(m, MF_STRING | CheckFlag(app.rememberWindowPosition),  Id::SET_REMEMBER_WIN_POS, L"Remember Window Position");
     AppendMenuW(m, MF_STRING | CheckFlag(app.historyFullModeEnabled),  Id::SET_HISTORY_FULL,   L"History: Open Full List");
     AppendMenuW(m, MF_STRING | CheckFlag(app.openDirWndOnStart),       Id::SET_OPEN_DIRWND,    L"Open Thumbnail Strip on Start");
     AppendMenuW(m, MF_STRING | CheckFlag(app.swapMouseButtons),        Id::SET_SWAP_MOUSE,     L"Swap Mouse Buttons");
@@ -420,6 +433,56 @@ static HMENU BuildRemoteBindingsMenu() {
     return m;
 }
 
+// The log FILES, both of them, in one place.
+//
+// Its own submenu rather than two loose ticks, because there is now more than
+// one log and they share everything that matters — the same logs\ folder, the
+// same rotation, the same writer. A row here means "this stream also goes to
+// disk"; nothing here opens a panel or changes what is captured in memory.
+//
+// The two are deliberately separate switches. They answer different questions
+// and are wanted at different times: the wire log is a transcript between
+// machines, the General log is this program talking about itself. Someone
+// chasing a connection fault wants the first and would have the second bury it.
+static HMENU BuildLoggingMenu() {
+    HMENU m = CreatePopupMenu();
+
+    // Both files land in logs\ beside the exe, named
+    // "<app>_General_<stamp>.log" and "<app>_Tcp_IP_<stamp>.log", rotating at
+    // Constants::Logging::MAX_ROWS rows.
+    //
+    // NO ICONS. Every row here is the same kind of thing — one log, on or off —
+    // and a glyph in front of each would decorate rather than distinguish. The
+    // tick is the whole signal.
+    //
+    // CHECKABLE, and the tick is the only resting indication either one is
+    // running: a log left on writes to disk for as long as the app does, and a
+    // setting that persists across restarts must be answerable by looking.
+    //
+    // GENERAL FIRST — it is the one that concerns the whole application, and the
+    // wire log is the specialised case underneath it.
+    AppendMenuW(m, MF_STRING | CheckFlag(app.generalLog),
+                Id::ID_APP_LOG_FILE, L"General Log");
+
+    // Independent of the Ctrl+F12 panel's Recording button. Ticking this
+    // captures to the file whether or not the panel is recording — see
+    // Remote::Log::IsCapturing.
+    AppendMenuW(m, MF_STRING | CheckFlag(app.remoteLogToFile),
+                Id::ID_REMOTE_LOG_FILE, L"TCP/IP Log");
+
+    // LAST, and below a separator, because it is the only row here that is not
+    // a switch — it does something once rather than changing what the app does
+    // from now on. Mixing an action in among the ticks is how a menu stops
+    // reading as a set of states.
+    //
+    // It opens the PARENT, logs\, not either subfolder: the question behind
+    // "show me the logs" is usually which of the two has anything in it.
+    AppendMenuW(m, MF_SEPARATOR, 0, nullptr);
+    AppendMenuW(m, MF_STRING, Id::ID_OPEN_LOG_DIR, L"Open Log Folder");
+
+    return m;
+}
+
 // Everything TCP/IP, in one place. The main menu used to carry six of these as
 // top-level rows plus a submenu, which is most of what made it long — and they
 // are one subject that most users never touch at all.
@@ -429,11 +492,35 @@ static HMENU BuildRemoteBindingsMenu() {
 static HMENU BuildTcpIpMenu() {
     HMENU m = CreatePopupMenu();
 
+    // TWO ROLES, AND THE LABELS SAY WHICH. This viewer is a SERVER to the things
+    // that dial in (the first pair), and a CLIENT of the servers it dials out to
+    // (the second pair). Naming them for the action instead — "Remote Control"
+    // for a checkbox list — is what made two panels at opposite ends of two
+    // different connections read as views of the same one.
+    // FIRST, above the server it advertises. It is the step that decides whether
+    // anyone can FIND this machine, so it is the first question rather than a
+    // footnote under the panels — and CHECKABLE, because the tick is the only
+    // resting indication that this PC is announcing itself. "Am I visible on the
+    // network" should be answerable by looking, not by trying.
+    //
+    // Shown whether the server is running or not. Greying it while stopped would
+    // make the setting unreachable exactly when somebody is setting the server
+    // up, and the tick means "announce when running", not "announcing now" —
+    // Beacon::Refresh reconciles the two.
+    AppendMenuW(m, MF_STRING | CheckFlag(app.remoteBeacon),
+                Id::ID_REMOTE_BEACON, L"\U0001F5A7 Announce (beacon)");
+
+    AppendMenuW(m, MF_SEPARATOR, 0, nullptr);
+
     AppendMenuW(m, MF_STRING, Id::ID_REMOTE_PANEL,    L"Local Server\tF9");
-    AppendMenuW(m, MF_STRING, Id::ID_REMOTE_CLIENTS,  L"Server Clients\tCtrl+F9");
+    AppendMenuW(m, MF_STRING, Id::ID_REMOTE_CLIENTS,  L"My Clients\tCtrl+F9");
+
     AppendMenuW(m, MF_SEPARATOR, 0, nullptr);
     AppendMenuW(m, MF_STRING, Id::ID_REMOTES_CONSOLE, L"Remote Servers\tF10");
-    AppendMenuW(m, MF_STRING, Id::ID_REMOTES_CONTROL, L"Remote Control\tCtrl+F11");
+    // "Mirroring" rather than "Remote Control": F11 is already the mirroring
+    // key, and this panel picks which servers it reaches. Panel and key now
+    // share a name instead of describing each other.
+    AppendMenuW(m, MF_STRING, Id::ID_REMOTES_CONTROL, L"Mirroring\tCtrl+F11");
     AppendMenuW(m, MF_SEPARATOR, 0, nullptr);
     AppendMenuW(m, MF_STRING, Id::ID_REMOTE_CMD,      L"Remote Commands\tCtrl+F10");
     AppendMenuW(m, MF_STRING, Id::ID_REMOTE_LOG,      L"Server Log\tCtrl+F12");
@@ -505,6 +592,12 @@ HMENU Build(HWND hWnd) {
     AppendMenuW(m, MF_POPUP, reinterpret_cast<UINT_PTR>(BuildSettingsMenu()),  L"Settings");
     AppendMenuW(m, MF_POPUP, reinterpret_cast<UINT_PTR>(BuildOverlaysMenu()),  L"Overlays");
     AppendMenuW(m, MF_POPUP, reinterpret_cast<UINT_PTR>(BuildBackupMenu()),    L"Backup");
+    // With the other configuration submenus rather than under TCP/IP: only one
+    // of the two logs is about the network, and the General one is the whole
+    // application talking about itself. Below Backup because both are about what
+    // the app writes to disk beside itself, and neither is part of viewing an
+    // image.
+    AppendMenuW(m, MF_POPUP, reinterpret_cast<UINT_PTR>(BuildLoggingMenu()),   L"Logging");
     AppendMenuW(m, MF_SEPARATOR, 0, nullptr);
     // Only meaningful from the tray, when the window is not on screen.
     if (!IsWindowVisible(hWnd))

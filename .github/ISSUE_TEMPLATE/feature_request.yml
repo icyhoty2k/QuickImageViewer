@@ -1,0 +1,69 @@
+name: Feature request
+description: Suggest something qIV should be able to do
+title: "[Feature] "
+labels: ["enhancement"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Ideas are welcome, including small ones — a keyboard shortcut that is missing
+        is as valid a request as a whole panel.
+
+        One thing worth knowing before you write: qIV is deliberately **a viewer**,
+        not an editor. Cropping, painting, batch conversion and format conversion are
+        what IrfanView and XnView are for, and requests to grow into that space are
+        usually declined — not because they are bad ideas, but because they are
+        somebody else's program.
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: What are you trying to do?
+      description: >
+        Describe the situation, not the solution. "I review 500 photos a session and
+        lose my place when I switch folders" tells me more than "add bookmarks".
+    validations:
+      required: true
+
+  - type: textarea
+    id: idea
+    attributes:
+      label: What would you like qIV to do?
+      description: If you have a shape in mind — a key, a panel, a menu item — say so.
+    validations:
+      required: true
+
+  - type: textarea
+    id: workaround
+    attributes:
+      label: How do you handle it today?
+      description: >
+        Another program, a manual routine, or simply putting up with it. This is
+        genuinely useful — it shows how much the gap costs you.
+
+  - type: dropdown
+    id: area
+    attributes:
+      label: Which part of qIV
+      options:
+        - Viewing, zoom, navigation
+        - Thumbnail strips and panels
+        - Slideshow
+        - Colour effects
+        - Remote control / mirroring
+        - qIV Remote (the Android app)
+        - Dedicated screens / kiosk / command line
+        - Settings and persistence
+        - Something else
+    validations:
+      required: true
+
+  - type: checkboxes
+    id: checked
+    attributes:
+      label: Before submitting
+      options:
+        - label: I checked the built-in help (`F1`) and it does not already do this
+          required: true
+        - label: I searched existing issues for the same request
+          required: true

@@ -1,3 +1,11 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// Copyright (C) 2026 Ivan Hristov Yanev
+//
+// This file is part of QuickImageViewer. It is free software: you may
+// redistribute and modify it under the terms of the GNU Affero General Public
+// License version 3 or later, as published by the Free Software Foundation.
+// It is distributed WITHOUT ANY WARRANTY. See the LICENSE file for details.
+
 #include "RemoteWnd.h"
 #include "RemoteSettings.h"
 #include "RemoteTls.h"   // ServerFingerprint — the value a client pins
@@ -15,7 +23,7 @@
 // guard has already fired by the time it is reached, so there is no cycle. Same
 // note as RemoteLogWnd.cpp and RemoteCmdWnd.cpp, which reach across for the same
 // reason — their buttons open each other too.
-#include "UI/UIManager.h"  // the Server Clients button opens Ctrl+F9
+#include "UI/UIManager.h"  // the My Clients button opens Ctrl+F9
 #include "UI/LinkText.h" // Draw / MeasureIn / CopyToClipboard
 #include "UI/GdiPool.h" // brushes and pens are pooled — never DeleteObject them
 
@@ -49,7 +57,7 @@ namespace {
 
     // BTN_CLIENTS opens Ctrl+F9 and BTN_LOG opens Ctrl+F12. The three panels are
     // one subject in three views — this one is the listener's configuration,
-    // Server Clients is who is on it, Server Log is what they said — and the
+    // My Clients is who is on it, Server Log is what they said — and the
     // crossing is constant: change the AllowList here, watch who it lets in
     // there, read why one was refused in the log.
     enum ButtonId { BTN_START = 1, BTN_STOP, BTN_SAVE, BTN_CLIENTS, BTN_LOG };
@@ -202,7 +210,7 @@ void RemoteWnd::BuildRows() {
     add(Kind::Number, L"Max connections", std::to_wstring(c.maxConnections),
         L"Simultaneous clients, 1-99. Further callers are told the limit was reached.", R_MAXCONN);
 
-    // NO CONNECTION LIST HERE. Who is connected lives in Server Clients
+    // NO CONNECTION LIST HERE. Who is connected lives in My Clients
     // (Ctrl+F9) — this panel is the listener's CONFIGURATION, a form you open,
     // change and save, and a live list that moves while you type in it belongs
     // to a different kind of window. See RemoteClientsWnd.h.
@@ -215,7 +223,7 @@ void RemoteWnd::BuildRows() {
     // Both enabled even when stopped: the client panel is where timed blocks are
     // listed and lifted, and the log holds what happened BEFORE the listener was
     // stopped — which is usually why it was.
-    m_buttons.push_back({L"Server Clients", BTN_CLIENTS, {}, true,    0});
+    m_buttons.push_back({L"My Clients", BTN_CLIENTS, {}, true,    0});
     m_buttons.push_back({L"Server Log",     BTN_LOG,     {}, true,    0});
 }
 

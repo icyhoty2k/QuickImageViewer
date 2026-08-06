@@ -1,3 +1,11 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// Copyright (C) 2026 Ivan Hristov Yanev
+//
+// This file is part of QuickImageViewer. It is free software: you may
+// redistribute and modify it under the terms of the GNU Affero General Public
+// License version 3 or later, as published by the Free Software Foundation.
+// It is distributed WITHOUT ANY WARRANTY. See the LICENSE file for details.
+
 #pragma once
 #include <windows.h>
 #include <string>
@@ -98,6 +106,11 @@ DWORD ReadDword(const wchar_t *valueName, DWORD defaultValue);
 // String values (paths and similar).
 void         WriteString(const wchar_t *valueName, const std::wstring &value);
 std::wstring ReadString(const wchar_t *valueName);
+
+// Removes a value from [Settings] outright — used to drop keys that older
+// builds wrote and nothing reads any more. Writing an empty string would leave
+// the dead line visible in a file the user is invited to open.
+void         DeleteValue(const wchar_t *valueName);
 
 // --- Arbitrary section access ----------------------------------------------
 // The four functions above are [Settings]-only, and the [Instance] block has its

@@ -1,3 +1,11 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// Copyright (C) 2026 Ivan Hristov Yanev
+//
+// This file is part of QuickImageViewer. It is free software: you may
+// redistribute and modify it under the terms of the GNU Affero General Public
+// License version 3 or later, as published by the Free Software Foundation.
+// It is distributed WITHOUT ANY WARRANTY. See the LICENSE file for details.
+
 #pragma once
 
 // Version and product identity — FILE_DESC, PROD_NAME, COPYRIGHT, and the
@@ -33,6 +41,13 @@ namespace Constants {
     // Never default this ON — a locked viewport on a fresh install looks like the
     // app failed to fit the image.
     constexpr bool IS_LOCK_VIEWPORT = false;
+
+    // Reopen the main window where it was at the last exit, at the size it was.
+    // OFF by default on purpose: the standard launch centres a correctly sized
+    // window on the current monitor, which is right for someone who has never
+    // heard of the setting. A remembered rect can also name a monitor that is no
+    // longer attached, so the restore is validated before it is used.
+    constexpr bool IS_REMEMBER_WINDOW_POSITION = false;
     // Prefix applied to every registry value name and every data file name
     // when the app is running in dedicated (-dedicated) mode.
     // Guarantees that a dedicated instance and a normal instance never share
@@ -111,6 +126,22 @@ namespace Constants {
     constexpr int IS_BASE_WIDTH  = 1200;
     constexpr int IS_BASE_HEIGHT = 800;
 
+    // The window sizes the app is willing to accept, from any source — the
+    // Window Width / Height prompts and the remembered placement both use these
+    // rather than repeating the numbers.
+    constexpr int WINDOW_SIZE_MIN = 240;
+    constexpr int WINDOW_SIZE_MAX = 16000;
+
+    // How much of a restored window has to land inside a monitor's WORK area
+    // before it is considered reachable.
+    //
+    // "Touches a monitor" is not enough: a window one pixel on screen satisfies
+    // that and cannot be grabbed, moved or closed with the mouse. This is about
+    // the size of a title bar and a couple of buttons, which is the smallest
+    // patch a user can actually take hold of to fix the rest.
+    constexpr int WINDOW_MIN_VISIBLE_W = 160;
+    constexpr int WINDOW_MIN_VISIBLE_H = 48;
+
     constexpr bool IS_SWAP_MOUSE_BUTTONS = true;
     constexpr bool IS_CONTEXT_MENU_ENABLED = true; // main-window right-click context menu on/off
 
@@ -125,6 +156,109 @@ namespace Constants {
     // Window stays above all others. Ctrl+T toggles it; a dedicated screen sets
     // it in its config so nothing can cover the display.
     constexpr bool IS_ALWAYS_ON_TOP = false;
+
+    // Announce this instance's Local Server on the network, so a phone or another
+    // qIV can FIND it instead of being told an address to type.
+    //
+    // DEFAULTS OFF, and that is not timidity. This app's whole posture is "no
+    // cloud, no account, nothing leaves your network" — a machine that starts
+    // advertising itself the first time somebody enables the server would be a
+    // change to that posture made on the user's behalf. Discovery is opt-in, from
+    // the TCP/IP menu, once.
+    //
+    // DISCOVERY IS NOT ACCESS. The beacon carries the instance name and the port,
+    // never a password and never a file. Everything that decides who may actually
+    // connect — the AllowList, the password, TLS — is untouched by it, and a
+    // beacon nobody may connect to is merely a name on a list.
+    constexpr bool IS_REMOTE_BEACON_ENABLED = false;
+
+    // --- The two log files (main menu → Logging) -----------------------------
+    //
+    // BOTH OFF, both PERSISTED, both written by the same rotating writer into
+    // the same logs\ folder — see Constants::Logging and
+    // Persistence/RotatingLogFile.h.
+    //
+    // Persisting them is the whole point, and it is what separates these from
+    // the Ctrl+F12 panel's in-memory recording switch
+    // (RemoteTcpIp::REMOTE_LOG_DEFAULT), which is deliberately session-only. The
+    // panel's store is a 20000-entry ring in RAM: it answers "what just
+    // happened" and is gone at exit. A file answers "what happened at 04:14 last
+    // Tuesday, on the machine in the other room, before the crash" — and the
+    // moment you most need that is the moment you did not think to switch
+    // anything on. So these survive a restart: set one on the machine that
+    // misbehaves and walk away.
+    //
+    // Off by default all the same. A log that is always on is a cost every
+    // session pays for the benefit of the one that needed it, and here the cost
+    // is somebody's disk rather than a few megabytes of RAM.
+
+    // Everything that is NOT wire traffic — this program talking about itself.
+    constexpr bool IS_GENERAL_LOG = false;
+
+    // The TCP/IP wire log: the same exchanges the Ctrl+F12 panel shows, written
+    // to disk as well.
+    //
+    // INDEPENDENT of the panel's recording switch — see Remote::Log::IsCapturing.
+    // Ticking this captures to the file whether or not the panel is recording,
+    // because the reason to ask for a file is that you want a durable record,
+    // and having to remember a second switch to get one is how you come back to
+    // an empty folder.
+    //
+    // TWO FILES rather than one merged stream, because they answer different
+    // questions and are read differently. The wire log is a transcript between
+    // two machines, read line by line; the General log is read by scanning for
+    // the moment something went wrong. Interleaved, a wall of base64 chunk rows
+    // would bury the one line that mattered.
+    constexpr bool IS_TCP_IP_LOG = false;
+
+    // =========================================================================
+    // LOG FILES — shared by both logs (Persistence/RotatingLogFile.h)
+    // =========================================================================
+    namespace Logging {
+        // A SUBFOLDER, not the exe's own directory. Rotating logs produce an
+        // unbounded number of files, and dropping those beside the exe turns
+        // the install folder into something you have to read carefully before
+        // deleting anything. One folder is one thing to delete.
+        constexpr const wchar_t *DIR_NAME = L"logs";
+
+        // ONE FOLDER PER LOG, under it: logs\general and logs\network.
+        //
+        // The two rotate independently and at different rates — a busy wall of
+        // screens fills the network log while the general one records a handful
+        // of lines a day — so a single folder would interleave two unrelated
+        // series and make "the newest file" ambiguous to the eye. Separate
+        // folders also mean you can delete one stream's history without reading
+        // filenames carefully.
+        constexpr const wchar_t *SUBDIR_GENERAL = L"general";
+        constexpr const wchar_t *SUBDIR_NETWORK = L"network";
+
+        // "QuickImageViewer_Tcp_IP_20260806_041418.log"
+        // "QuickImageViewer_General_20260806_041418.log"
+        //
+        // App name first so the folder groups by program, the KIND second so the
+        // two streams never have to be told apart by opening them, and the
+        // timestamp last so a plain alphabetical sort is chronological within a
+        // kind. Which INSTANCE wrote it is in the header, not the name — an
+        // instance name is user-chosen and may contain anything a file name may
+        // not.
+        constexpr const wchar_t *KIND_TCP_IP = L"Tcp_IP";
+        constexpr const wchar_t *KIND_GENERAL = L"General";
+        constexpr const wchar_t *EXT          = L".log";
+
+        // ROWS PER FILE, after which the next row opens a new one. Both logs use
+        // it — a rotation rule that differed between them would be one more
+        // thing to remember while reading a folder full of both.
+        //
+        // Small on purpose. These files are read by opening them — in the
+        // Ctrl+F12 panel, in Notepad, in Excel — and one that takes a visible
+        // moment to open is one nobody opens twice. 5000 rows is a few hundred
+        // KB; a wall of screens under load simply rotates more often, which is
+        // the correct answer rather than a problem.
+        //
+        // Counted in DATA rows. The preamble is not counted, so every file holds
+        // the same number of records however the header grows.
+        constexpr int MAX_ROWS = 5000;
+    }
 
     // Hold off the screensaver and display sleep while the main window is
     // visible. An unattended screen is useless once Windows blanks it, and no
@@ -415,6 +549,48 @@ namespace Constants {
     constexpr const int VRAM_CACHE_THUMBS_THREADS_COUNT = 4; // fallback if processor has less than 8 thread otherwise dynamic thread count / 2
     constexpr const int VRAM_CACHE_DECODER_THREADS_COUNT = 2;
     constexpr int IS_VRAM_CACHE_IMAGES_COUNT = 20;
+
+    // --- IO worker threads -----------------------------------------------------
+    //
+    // ONE NUMBER FOR EVERY DRIVE. qIV used to probe the physical device for a
+    // seek penalty and pick 1 for an HDD, 2 for an SSD. That was dropped, and the
+    // reasoning is worth keeping because it looks like a downgrade and is not:
+    //
+    //   * These threads only READ. The task is CreateFile / GetFileSize /
+    //     ReadFile / CloseHandle, and the bytes then go to the decoder pool.
+    //   * A 5 MB photo reads from NVMe in 1-3 ms and decodes in 30-80 ms. Decode
+    //     is 20-50x the cost, so the IO threads are idle most of the time and
+    //     widening that pipe buys nothing. Four would be no faster than two.
+    //   * The probe opened \\.\PhysicalDriveN, which SPINS UP a sleeping disk —
+    //     noise, wear and power on a drive the user never asked to touch — to
+    //     decide between one thread and two.
+    //   * It was also the most bug-prone code on the startup path: a detached
+    //     thread writing file-scope statics, which is a use-after-free at exit.
+    //
+    // TWO, not one: on an SSD the second thread overlaps one file's open latency
+    // with the previous file's read. On an HDD two threads interleave and cost a
+    // few extra seeks per image — a real but modest loss, and qIV preloads
+    // neighbours anyway, so the head is moving either way.
+    //
+    // Tune here if a measurement ever says otherwise. A folder on a slow HDD with
+    // Next held down is the test that would settle it.
+    constexpr size_t IO_WORKER_THREADS = 2;
+
+    // --- Animated GIF budget ---------------------------------------------------
+    //
+    // Every frame of an animation is uploaded as a full-canvas PBGRA bitmap, so a
+    // frame costs width × height × 4 bytes of VRAM regardless of how little of it
+    // actually changed. A 1080p frame is ~8 MB; a 500-frame animation is therefore
+    // about 4 GB, and the image cache above counts IMAGES, not bytes — so a single
+    // pathological GIF can exhaust VRAM while the cache believes it is holding one
+    // entry out of twenty.
+    //
+    // Reaching either limit TRUNCATES the animation: it loops over the frames that
+    // were decoded rather than refusing to show the file. A partial animation is a
+    // far better outcome than a failed allocation, and for the files this actually
+    // catches — multi-thousand-frame novelty GIFs — nobody watches to the end.
+    constexpr size_t GIF_MAX_DECODED_BYTES = 256ull * 1024 * 1024; // 256 MB of frames
+    constexpr size_t GIF_MAX_FRAMES        = 600;                  // second, cheaper guard
     // VRAM budget for the dir-panel thumbnail cache.
     // Each entry is CACHE_THUMB_WIDTH * CACHE_THUMB_HEIGHT * 4 bytes ≈ 37 KB
     // after scaling.  512 MB holds ~14 000 thumbnails — far more than any
@@ -545,6 +721,35 @@ namespace Constants {
     // Full design record: docs/REMOTE_TCP_IP_SPEC.md
     // =========================================================================
     namespace RemoteTcpIp {
+        // What just happened to the client list, carried in WM_QIV_REMOTE_CLIENTS'
+        // wParam so the overlay can colour its blink by the event.
+        //
+        // ONLY THE SOCKET THREAD KNOWS THIS. By the time the UI thread handles
+        // the message the connection is gone, and the count alone cannot say
+        // whether a client meant to leave — which is the entire distinction
+        // between "somebody finished" and "a screen vanished".
+        enum class ClientEvent : unsigned {
+            Other = 0,   // the listener started or stopped — not an arrival
+            Joined,      // a client authenticated and is on the list
+            LeftClean,   // it sent `bye` first
+            LeftAbrupt,  // the socket ended without one: reset, crash, out of range
+            Ejected,     // WE ended it — kicked, timed-kicked or banned
+        };
+
+        // How long an authenticated connection's read waits before waking to
+        // re-check whether it has been kicked or the server is stopping.
+        //
+        // NOT A DEADLINE. Expiry means "nothing arrived", never "disconnect" —
+        // an idle mirrored screen may sit for minutes and must not be dropped.
+        // It exists only because Windows will not reliably wake a recv that is
+        // already blocked when another thread shuts the socket down, so an
+        // ejected client would otherwise stay connected indefinitely.
+        //
+        // A second is well under any human's patience for a Kick to take effect,
+        // and one immediately-returning syscall per connection per second is
+        // cheaper than the TCP keepalive already running on the same socket.
+        constexpr int IDLE_POLL_MS = 1000;
+
         // --- The listener's own file ---
         //
         // ITS OWN FILE, not a section of the instance .ini, for the reason set
@@ -690,6 +895,7 @@ namespace Constants {
         // something you do WHILE looking at a problem, and a viewer that came
         // back from a restart still logging would be recording for nobody.
         constexpr bool REMOTE_LOG_DEFAULT = false;
+
         // Loopback: reachable only from this machine, and Windows Firewall never
         // prompts. A wall screen opts into 0.0.0.0 (every interface) knowingly.
         //
@@ -960,7 +1166,18 @@ namespace Constants {
         //         talking to a v5 client stalls at the handshake instead of
         //         guessing, which is the honest outcome — the two builds ship
         //         together.
-        constexpr int PROTOCOL_VERSION = 5;
+        // v6 — 2026-08-06. Adds the `agent` verb: both ends exchange
+        //      `k=v;k=v` describing themselves (app, ver, proto, platform, os,
+        //      host, name) right after authentication, and the server answers
+        //      with its own rather than merely recording the client's.
+        //
+        //      NOT A CLEAN BREAK, unlike v5. `agent` is optional in both
+        //      directions and unknown keys inside it are ignored, so a build
+        //      that never sends one is simply a peer whose details are unknown —
+        //      which is what every peer was before this. The bump exists so the
+        //      banner does not advertise v5 from a build that greets, because a
+        //      client cannot otherwise tell the two apart.
+        constexpr int PROTOCOL_VERSION = 6;
 
         // Hard cap on one received line. A socket must never be allowed to grow
         // a buffer without bound just by never sending a newline.
@@ -1088,8 +1305,31 @@ namespace Constants {
 
         // Base path for application-specific user preferences (HKEY_CURRENT_USER)
         constexpr const wchar_t *ROOT_KEY = L"Software\\QuickImageViewer";
-        // Path string to the last directory accessed by the user
-        constexpr const wchar_t *LAST_FOLDER = L"LastFolder";
+
+        // Every persisted VALUE NAME below begins with this.
+        //
+        // It is what keeps qIV's values identifiable — in HKCU\Software\
+        // QuickImageViewer, and in the [Settings] section of a portable copy's
+        // .ini, where they sit beside keys the user may have added themselves.
+        // An unprefixed value is invisible to any sweep that goes looking for
+        // ours: "LastFolder" shipped without it, outlived the code that wrote
+        // it, and was later read back in an exported .reg and taken for live
+        // state.
+        //
+        // The names below still spell the prefix out IN FULL rather than
+        // concatenating this constant. Composing them would mean that searching
+        // the source for "qivLockViewport" — the string you actually see in
+        // regedit — finds nothing, which costs more than the duplication saves.
+        // The rule is enforced instead: qivTests checks every declared value
+        // name against this constant, so the two cannot drift.
+        constexpr const wchar_t *VALUE_PREFIX = L"qiv";
+        // (LAST_FOLDER lived here. It held the folder the open-file dialog
+        //  should start in, written ONLY when a file was picked through that
+        //  dialog — so any other way of reaching a folder left it stale. It
+        //  answered the same question as Session::KEY_LAST_FOLDER and answered
+        //  it worse, so the dialog now uses the folder on screen, falling back
+        //  to the session's. The old value is deleted at startup; see
+        //  Session::REG_OBSOLETE_LAST_FOLDER.)
 
         // --- Settings (Stored under ROOT_KEY) ---
         // --- System Integration (Open With & Startup) ---
@@ -1130,11 +1370,13 @@ namespace Constants {
         constexpr const wchar_t *OVERLAY_SLOT_VISIBLE = L"qivOverlaySlotVisible"; // bitmask, bit N = slot N
         constexpr const wchar_t *OVERLAY_SLOT_COMPACT = L"qivOverlaySlotCompact"; // bitmask, bit N = slot N
         constexpr const wchar_t *OVERLAY_SHOW_DIR_NAME = L"qivOverlayShowDirName";
+        constexpr const wchar_t *OVERLAY_SHOW_EFFECTS  = L"qivOverlayShowEffects";
         constexpr const wchar_t *OVERLAY_FONT_SIZE     = L"qivOverlayFontSize";
         constexpr const wchar_t *OVERLAY_FONT_COLOR    = L"qivOverlayFontColor";
         constexpr const wchar_t *OVERLAY_FONT_FAMILY   = L"qivOverlayFontFamily"; // index into OVERLAY_FONT_FAMILIES
         constexpr const wchar_t *OPEN_DIRWND_ON_START = L"qivOpenDirWndOnStart";
         constexpr const wchar_t *LOCK_VIEWPORT = L"qivLockViewport";
+        constexpr const wchar_t *REMEMBER_WINDOW_POS = L"qivRememberWindowPos";
         constexpr const wchar_t *SWAP_MOUSE_BUTTONS = L"qivSwapMouseButtons";
         constexpr const wchar_t *WHEEL_INVERT   = L"qivWheelInvert";
         constexpr const wchar_t *WHEEL_INVERT_H = L"qivWheelInvertH";
@@ -1165,6 +1407,9 @@ namespace Constants {
         constexpr const wchar_t *KIOSK_LOCK               = L"qivKioskLock";
         constexpr const wchar_t *ALWAYS_ON_TOP            = L"qivAlwaysOnTop";
         constexpr const wchar_t *KEEP_DISPLAY_AWAKE       = L"qivKeepDisplayAwake";
+        constexpr const wchar_t *REMOTE_BEACON            = L"qivRemoteBeacon";
+        constexpr const wchar_t *REMOTE_LOG_FILE          = L"qivRemoteLogToFile";
+        constexpr const wchar_t *GENERAL_LOG              = L"qivGeneralLog";
         // NOTE: the last-image-on-exit value used to live here. It is SESSION
         // state, not a setting — it changes on every close and is meaningless on
         // another machine — and it now has its own file, Constants::Session.
@@ -1191,12 +1436,89 @@ namespace Constants {
     namespace Session {
         constexpr const wchar_t *FILE_NAME = L"qivSession.ini";
         constexpr const wchar_t *FILE_HEADER =
-            L"Session state (last image viewed). Safe to delete.";
+            L"Session state (last image and folder viewed). Safe to delete.";
         constexpr const wchar_t *SECTION    = L"Session";
 
         // Full path of the image on screen at the last exit, reopened on the
         // next launch so the app resumes where it was left instead of prompting.
-        constexpr const wchar_t *KEY_LAST_IMAGE = L"LastImage";
+        constexpr const wchar_t *KEY_LAST_IMAGE = L"LastImagePath";
+
+        // The folder that was open at the last exit. Not redundant with
+        // KEY_LAST_IMAGE: the image key is only written when an image is
+        // actually loaded, so an empty folder, or one whose images all failed
+        // to decode, records nothing at all. It is also the fallback when the
+        // remembered image has since been deleted or renamed while its folder
+        // is still there — the folder history normally covers that, but a user
+        // who has turned history off has nothing else to resume from.
+        constexpr const wchar_t *KEY_LAST_FOLDER = L"LastFolderPath";
+
+        // Main window placement at the last exit, as "x,y,width,height".
+        // Written and honoured only while Constants::Registry::REMEMBER_WINDOW_POS
+        // is on, so the default launch keeps its centred-on-monitor behaviour.
+        constexpr const wchar_t *KEY_WINDOW_RECT = L"WindowRect";
+
+        // The display device the window was on, e.g. "\\.\DISPLAY2".
+        //
+        // The rect above already names a monitor IMPLICITLY, because its
+        // coordinates are virtual-desktop coordinates: restoring x=2560 lands on
+        // whatever screen occupies that column. That is right until the screens
+        // are REARRANGED — the same monitor moved to the other side of the
+        // primary leaves the old coordinates pointing at a different display, or
+        // at nothing. Recording which device it actually was lets the restore
+        // put the window back on that screen instead of that spot.
+        constexpr const wchar_t *KEY_WINDOW_MONITOR = L"WindowMonitor";
+
+        // -------------------------------------------------------------------
+        // The same values as REGISTRY value names.
+        //
+        // Session state follows the settings store: a copy configured through a
+        // settings .ini keeps its session in qivSession.ini, a copy configured
+        // through the registry keeps it in the registry. Spelled out in full
+        // rather than composed at runtime — RecordCrashDump runs inside the
+        // unhandled-exception filter, where building a string is a gamble.
+        // -------------------------------------------------------------------
+        constexpr const wchar_t *REG_LAST_IMAGE  = L"qivSessionLastImagePath";
+        constexpr const wchar_t *REG_LAST_FOLDER = L"qivSessionLastFolderPath";
+        constexpr const wchar_t *REG_RUNNING     = L"qivSessionRunning";
+        constexpr const wchar_t *REG_CRASH_DUMP  = L"qivSessionCrashDump";
+        constexpr const wchar_t *REG_WINDOW_RECT    = L"qivSessionWindowRect";
+        constexpr const wchar_t *REG_WINDOW_MONITOR = L"qivSessionWindowMonitor";
+
+        // --- Obsolete, removed at startup ---------------------------------
+        //
+        // qivLastImage is where the resume position lived BEFORE it moved into
+        // the session store. Nothing has written or read it since, so every
+        // registry that has one is carrying a stale path from an old build —
+        // often pointing at a drive the user has not looked at in months.
+        //
+        // Left alone it is harmless but misleading: it looks like live state
+        // when read in an export, which is exactly how it was mistaken for one.
+        constexpr const wchar_t *REG_OBSOLETE_LAST_IMAGE = L"qivLastImage";
+
+        // LastFolder held the open-file dialog's starting folder. The dialog now
+        // uses the folder on screen and falls back to KEY_LAST_FOLDER, so this
+        // is dead too. Unprefixed, because it predates the qiv convention.
+        constexpr const wchar_t *REG_OBSOLETE_LAST_FOLDER = L"LastFolder";
+
+        // "1" from the moment a launch is under way until a clean exit clears
+        // it. Finding it still set at startup means the PREVIOUS run never
+        // reached its exit path — killed, power lost, or crashed.
+        //
+        // This is the whole abnormal-shutdown mechanism, and it has to be a
+        // leftover rather than a written record: a process that dies suddenly
+        // gets no chance to report it, so the only thing that can testify is
+        // something it failed to clean up.
+        constexpr const wchar_t *KEY_RUNNING = L"Running";
+
+        // Full path of the minidump the crash handler managed to write, read
+        // and cleared on the next launch.
+        //
+        // Recorded HERE rather than logged from the handler on purpose. That
+        // code runs in a process that has already failed — a heap that may be
+        // corrupt, a writer thread that may be dead — and one
+        // WritePrivateProfileString is far less than it already does. The
+        // logging happens next launch, where everything is healthy.
+        constexpr const wchar_t *KEY_CRASH_DUMP = L"CrashDump";
     }
 
     namespace SettingsFile {
@@ -1530,6 +1852,17 @@ namespace Constants {
 
 
         constexpr int IS_INTERVAL_MS = 5000; // ms between auto-advances
+
+        // The accepted range for that interval.
+        //
+        // These bounds already existed — written out as bare 100 and 60000 in
+        // four separate places: the keyboard prompt, the numeric settings entry,
+        // the remote SlideshowSetInterval handler and the mirroring Sync
+        // payload. Four copies of a rule is four chances for one of them to
+        // drift, and the remote handler's error message quotes the range to the
+        // client, so a drift there is a protocol answer that lies.
+        constexpr int INTERVAL_MIN_MS = 100;   // below this the advance outruns the decode
+        constexpr int INTERVAL_MAX_MS = 60000; // a minute per slide; longer is not a slideshow
         constexpr bool IS_LOOP = true; // wrap to first image at end
         constexpr bool IS_SHUFFLE = false; // random order
         constexpr int CURSOR_HIDE_MS = 3000; // ms of inactivity before hiding cursor (0 = never)

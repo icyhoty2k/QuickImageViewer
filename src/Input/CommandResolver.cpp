@@ -1,3 +1,11 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// Copyright (C) 2026 Ivan Hristov Yanev
+//
+// This file is part of QuickImageViewer. It is free software: you may
+// redistribute and modify it under the terms of the GNU Affero General Public
+// License version 3 or later, as published by the Free Software Foundation.
+// It is distributed WITHOUT ANY WARRANTY. See the LICENSE file for details.
+
 #include "Command.h"
 #include "Shortcuts.h"
 #include "AppState.h"
@@ -218,6 +226,11 @@ Command InputManager::ResolveKeyboardKeys(UINT key, LPARAM lParam) {
             if (!ctrl && !alt && !shift) return Command::ToggleCache;
             break;
         case Shortcuts::SC_PANEL_DIR_TOGGLE: return Command::ToggleDir;
+        // F4 / F7 — the move siblings of F3 / F6. Resolved here so every
+        // documented key has exactly one owner; the panels keep their own
+        // handler for the focused case, exactly as they do for the toggles.
+        case Shortcuts::SC_PANEL_CACHE_MOVE: return Command::MoveCacheWnd;
+        case Shortcuts::SC_PANEL_DIR_MOVE:   return Command::MoveDirWnd;
         case Shortcuts::SC_PANEL_DEDICATED_TOGGLE: return Command::ToggleDedicatedPanel;
         // Same shape as the three keys below: plain key = the panel about the
         // subject, Ctrl form = the live view of it.

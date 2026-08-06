@@ -15,9 +15,9 @@
 
     <!-- SEO Meta Tags -->
     <meta name="description"
-          content="QuickImageViewer(qIV) — free portable image viewer for Windows 10 &amp; 11.Opens HEIC, AVIF, JPEG XL, WebP, SVG, and 18+ formats. Drive other screens over TCP. <10 MB, no ads, no telemetry.">
+          content="QuickImageViewer(qIV) — free portable image viewer for Windows 10 &amp; 11. Opens HEIC, AVIF, JPEG XL, WebP, SVG and 18+ formats. Turn any Android phone or tablet into a remote, a second screen or a photo frame your PC drives. <10 MB, no ads, no telemetry.">
     <meta name="keywords"
-          content="image viewer windows 11, image viewer windows 10, free image viewer windows, heic viewer windows, avif viewer windows, jpeg xl viewer, webp viewer windows, svg viewer windows, openexr viewer, portable image viewer, open source image viewer, gpu accelerated image viewer, fast photo viewer windows, best image viewer windows, quickimageviewer, qiv, remote control image viewer, mirror image viewer screens, digital signage image viewer">
+          content="image viewer windows 11, image viewer windows 10, free image viewer windows, heic viewer windows, avif viewer windows, jpeg xl viewer, webp viewer windows, svg viewer windows, openexr viewer, portable image viewer, open source image viewer, gpu accelerated image viewer, fast photo viewer windows, best image viewer windows, quickimageviewer, qiv, remote control image viewer, mirror image viewer screens, digital signage image viewer, digital photo frame android, turn tablet into photo frame, photo frame from pc, android photo frame app, use old tablet as photo frame, show pc photos on tablet, second screen for photos, phone as pc remote control, slideshow to tablet, wifi photo frame no cloud">
     <meta name="author"
           content="Ivan Hristov Yanev (IcyHoty2k)">
     <meta name="robots"
@@ -41,13 +41,13 @@
     <meta property="og:title"
           content="QuickImageViewer (qIV) — Fast, Free, Portable Image Viewer for Windows">
     <meta property="og:description"
-          content="QuickImageViewer(qIV) — free portable image viewer for Windows 10 &amp; 11.Opens HEIC, AVIF, JPEG XL, WebP, SVG, and 18+ formats. Drive other screens over TCP. <10 MB, no ads, no telemetry.">
+          content="QuickImageViewer(qIV) — free portable image viewer for Windows 10 &amp; 11. Opens HEIC, AVIF, JPEG XL, WebP, SVG and 18+ formats. Turn any Android phone or tablet into a remote, a second screen or a photo frame your PC drives. <10 MB, no ads, no telemetry.">
     <meta property="og:type"
           content="website">
     <meta property="og:url"
           content="https://icyhoty2k.github.io/QuickImageViewer/">
     <meta property="og:image"
-          content="https://icyhoty2k.github.io/QuickImageViewer/screenshots/2026-07-15_045800.png">
+          content="https://icyhoty2k.github.io/QuickImageViewer/screenshots/less300kb/10.webp">
     <meta property="og:image:alt"
           content="QuickImageViewer showing a photo with GPU color effects and thumbnail strip">
     <meta property="og:site_name"
@@ -61,9 +61,9 @@
     <meta name="twitter:title"
           content="QuickImageViewer (qIV) — Fast, Free, Portable Image Viewer for Windows">
     <meta name="twitter:description"
-          content="QuickImageViewer(qIV) — free portable image viewer for Windows 10 &amp; 11.Opens HEIC, AVIF, JPEG XL, WebP, SVG, and 18+ formats. Drive other screens over TCP. <10 MB, no ads, no telemetry.">
+          content="QuickImageViewer(qIV) — free portable image viewer for Windows 10 &amp; 11. Opens HEIC, AVIF, JPEG XL, WebP, SVG and 18+ formats. Turn any Android phone or tablet into a remote, a second screen or a photo frame your PC drives. <10 MB, no ads, no telemetry.">
     <meta name="twitter:image"
-          content="https://icyhoty2k.github.io/QuickImageViewer/screenshots/2026-07-15_045800.png">
+          content="https://icyhoty2k.github.io/QuickImageViewer/screenshots/less300kb/10.webp">
     <meta name="twitter:image:alt"
           content="QuickImageViewer showing a photo with GPU color effects and thumbnail strip">
 
@@ -98,18 +98,18 @@
             },
             "downloadUrl": "https://github.com/icyhoty2k/QuickImageViewer/releases/latest",
             "installUrl": "https://github.com/icyhoty2k/QuickImageViewer/releases/latest",
-            "softwareRequirements": "Windows 10 or newer",
+            "softwareRequirements": "Windows 10 or newer. No Visual C++ Redistributable required — the C runtime is linked into the executable.",
             "processorRequirements": "x64",
             "memoryRequirements": "512 MB RAM",
             "storageRequirements": "sub-10 MB",
-            "fileSize": "9,210.00 KB",
-            "softwareVersion": "2.162.0.198",
-            "datePublished": "2026-08-04",
-            "dateModified": "2026-08-04",
+            "fileSize": "9,768.50 KB",
+            "softwareVersion": "2.201.0.270",
+            "datePublished": "2026-08-06",
+            "dateModified": "2026-08-06",
             "license": "https://www.gnu.org/licenses/agpl-3.0.html",
             "releaseNotes": "https://github.com/icyhoty2k/QuickImageViewer/releases",
             "screenshot": [
-                "https://icyhoty2k.github.io/QuickImageViewer/screenshots/2026-07-15_045800.png",
+                "https://icyhoty2k.github.io/QuickImageViewer/screenshots/less300kb/10.webp",
                 "https://icyhoty2k.github.io/QuickImageViewer/screenshots/2026-07-15_045053.png",
                 "https://icyhoty2k.github.io/QuickImageViewer/screenshots/2026-07-15_045219.png"
             ],
@@ -152,7 +152,7 @@
                     "name": "Does QuickImageViewer need to be installed?",
                     "acceptedAnswer": {
                         "@type": "Answer",
-                        "text": "No. It is a single portable sub-10 MB executable. Download it and run it — no installer, no registry pollution, no background services."
+                        "text": "No. It is a single portable sub-10 MB executable. Download it and run it — no installer, no registry pollution, no background services, and no Visual C++ Redistributable to install first."
                     }
                 },
                 {
@@ -241,6 +241,55 @@
                     // Silently ignore scripts that aren't JSON
                 }
             });
+        });
+    </script>
+    <script>
+        // Total downloads, appended to the version line above.
+        //
+        // The number is the sum of download_count over every asset of every
+        // release — GitHub does not count source-code archives, so this is
+        // real downloads of the EXE and nothing else.
+        //
+        // NO NEW EXPOSURE: this page is served BY GitHub, so a visitor's
+        // address is already known to them before this call is made. It is the
+        // only third-party request on the page besides the font stylesheet.
+        //
+        // Cached in sessionStorage for the tab's lifetime: unauthenticated API
+        // calls are limited to 60 per hour per address, and a visitor who
+        // reloads a few times should not spend that budget or see the field
+        // flicker. Every failure path is silent — a missing count is invisible,
+        // an error message where a number should be is not.
+        document.addEventListener("DOMContentLoaded", function () {
+            const target = document.getElementById('version-info');
+            if (!target) return;
+
+            function show(total) {
+                target.innerText += ` • Downloads: ${total.toLocaleString()}`;
+            }
+
+            const cached = sessionStorage.getItem('qivDownloads');
+            if (cached !== null) {
+                show(parseInt(cached, 10));
+                return;
+            }
+
+            fetch('https://api.github.com/repos/icyhoty2k/QuickImageViewer/releases')
+                .then(function (r) { return r.ok ? r.json() : null; })
+                .then(function (releases) {
+                    if (!Array.isArray(releases)) return;
+                    let total = 0;
+                    for (const rel of releases) {
+                        if (!Array.isArray(rel.assets)) continue;
+                        for (const asset of rel.assets) {
+                            total += asset.download_count || 0;
+                        }
+                    }
+                    if (total > 0) {
+                        sessionStorage.setItem('qivDownloads', String(total));
+                        show(total);
+                    }
+                })
+                .catch(function () { /* offline, rate-limited, or blocked — show nothing */ });
         });
     </script>
     <!-- Google Fonts — display=swap avoids render-blocking (Core Web Vitals) -->
@@ -643,6 +692,7 @@
             <span class="badge">Direct2D GPU Cache</span>
             <span class="badge">Portable App</span>
             <span class="badge">17+ Formats</span>
+            <span class="badge">Android Remote App</span>
         </div>
 
         <a href="https://github.com/icyhoty2k/QuickImageViewer/releases/latest"
@@ -671,7 +721,7 @@
                     &#10094;
                 </button>
                 <img id="shotImg"
-                     src="https://icyhoty2k.github.io/QuickImageViewer/screenshots/2026-07-15_045800.png"
+                     src="https://icyhoty2k.github.io/QuickImageViewer/screenshots/less300kb/10.webp"
                      alt="QuickImageViewer main interface showing an image with thumbnail strips and info overlays on Windows 11">
                 <button class="carousel-btn next"
                         id="shotNext"
@@ -1088,7 +1138,7 @@
                 <td>
                     WIC
                 </td>
-                <td></td>
+                <td><strong>Animated</strong> — plays with per-frame delays</td>
             </tr>
             <tr>
                 <td>
@@ -1757,6 +1807,24 @@
             </tr>
             <tr>
                 <td>
+                    <code>PageUp</code> / <code>PageDown</code>
+                </td>
+                <td>
+                    Previous / next folder in your history &mdash; walks only the
+                    <strong>non-starred</strong> rows
+                </td>
+            </tr>
+            <tr>
+                <td>
+                    <code>Insert</code> / <code>Delete</code>
+                </td>
+                <td>
+                    Next / previous <strong>favourite</strong> folder &mdash; walks only the
+                    starred rows
+                </td>
+            </tr>
+            <tr>
+                <td>
                     Horizontal
                     Wheel
                 </td>
@@ -1928,6 +1996,69 @@
                     Original
                     1:1
                     pixels
+                </td>
+            </tr>
+            <tr>
+                <td>
+                    <code>0</code>
+                </td>
+                <td>
+                    Open
+                    the
+                    Zoom
+                    panel
+                    and
+                    type
+                    an
+                    exact
+                    percentage
+                </td>
+            </tr>
+            <tr>
+                <td>
+                    <code>Y</code>
+                </td>
+                <td>
+                    <strong>Lock
+                    Viewport</strong>
+                    &mdash;
+                    carry
+                    zoom
+                    and
+                    pan
+                    to
+                    the
+                    next
+                    image
+                    instead
+                    of
+                    resetting,
+                    so
+                    flipping
+                    through
+                    same-framed
+                    shots
+                    holds
+                    the
+                    same
+                    detail
+                    at
+                    the
+                    same
+                    magnification.
+                    Rotation
+                    and
+                    flips
+                    still
+                    reset,
+                    because
+                    each
+                    file's
+                    EXIF
+                    orientation
+                    tag
+                    owns
+                    those
                 </td>
             </tr>
             </tbody>
@@ -2378,6 +2509,57 @@
             </tr>
             <tr>
                 <td>
+                    <em>type anything</em>
+                </td>
+                <td>
+                    Filter
+                    the
+                    list
+                    &mdash;
+                    fuzzy
+                    by
+                    default,
+                    wildcards
+                    (<code>*</code>,
+                    <code>?</code>)
+                    when
+                    the
+                    query
+                    contains
+                    one.
+                    Matched
+                    characters
+                    are
+                    highlighted
+                    in
+                    the
+                    row
+                </td>
+            </tr>
+            <tr>
+                <td>
+                    <code>Esc</code>
+                    /
+                    <code>&#10005;</code>
+                </td>
+                <td>
+                    Clear
+                    the
+                    filter
+                    (<code>Esc</code>
+                    closes
+                    the
+                    panel
+                    when
+                    the
+                    filter
+                    is
+                    already
+                    empty)
+                </td>
+            </tr>
+            <tr>
+                <td>
                     <code>Space</code>
                 </td>
                 <td>
@@ -2386,11 +2568,19 @@
                     on
                     hovered
                     entry
+                    (types
+                    a
+                    space
+                    once
+                    the
+                    filter
+                    has
+                    text)
                 </td>
             </tr>
             <tr>
                 <td>
-                    <code>Delete</code>
+                    <code>Ctrl+Delete</code>
                 </td>
                 <td>
                     Delete
@@ -2780,13 +2970,41 @@
                     <code>Ctrl+9</code>
                 </td>
                 <td>
-                    Toggle
-                    individual
-                    slots
-                    (1
+                    Walk
+                    one
+                    slot
+                    through
+                    <strong>Compact
+                    &rarr;
+                    Full
+                    &rarr;
+                    Off</strong>
+                    &mdash;
+                    compact
+                    is
+                    one
+                    line
+                    instead
+                    of
+                    two.
+                    <code>Ctrl+5</code>
+                    (center
+                    messages)
+                    has
+                    no
+                    compact
+                    form,
+                    so
+                    it
+                    cycles
+                    On
+                    &rarr;
+                    Off.
+                    Slots:
+                    1
                     index+filename
                     •
-                    2
+                    3
                     zoom
                     %
                     •
@@ -2797,28 +3015,28 @@
                     7
                     active
                     effects
+                    +
+                    folder
+                    name
                     •
                     9
-                    dimensions+size)
-                </td>
-            </tr>
-            <tr>
-                <td>
-                    <code>Ctrl+Alt+1</code>
-                    –
-                    <code>Ctrl+Alt+9</code>
-                </td>
-                <td>
-                    Toggle
-                    compact
-                    mode
-                    per
-                    slot
-                    (1
-                    line
-                    instead
-                    of
-                    2)
+                    dimensions+size.
+                    Slots
+                    2,
+                    4,
+                    6,
+                    8
+                    show
+                    the
+                    thumbnail-strip
+                    selection
+                    count
+                    for
+                    the
+                    panel
+                    on
+                    that
+                    edge
                 </td>
             </tr>
             <tr>
@@ -2851,6 +3069,126 @@
             </tr>
             </tbody>
         </table>
+        <p>
+            Appearance
+            is
+            set
+            from
+            the
+            tray
+            menu's
+            <strong>Overlays</strong>
+            submenu
+            rather
+            than
+            by
+            shortcut:
+            <strong>Layout</strong>
+            (the
+            same
+            Grid
+            /
+            Stacked
+            /
+            Summary
+            that
+            <code>O</code>
+            cycles),
+            <strong>Font</strong>
+            and
+            <strong>Font
+            Size</strong>
+            and
+            <strong>Font
+            Color</strong>
+            for
+            every
+            slot,
+            and
+            <strong>Message
+            Duration</strong>
+            in
+            milliseconds.
+            The
+            nine
+            slots
+            are
+            listed
+            there
+            too,
+            each
+            named
+            for
+            what
+            it
+            carries,
+            and
+            each
+            opens
+            a
+            <strong>three-state
+            radio
+            group
+            &mdash;
+            Compact
+            /
+            Full
+            /
+            Off</strong>,
+            the
+            same
+            cycle
+            its
+            <code>Ctrl+N</code>
+            key
+            walks.
+            Mid
+            Center
+            is
+            always
+            single-line,
+            so
+            it
+            offers
+            only
+            On
+            /
+            Off.
+            <strong>Bot
+            Left</strong>
+            carries
+            two
+            extra
+            toggles
+            above
+            its
+            radio
+            group,
+            because
+            they
+            decide
+            whether
+            there
+            is
+            anything
+            to
+            format:
+            <strong>Effects</strong>
+            (the
+            active
+            colour-effect
+            list)
+            and
+            <strong>Folder
+            Name</strong>
+            (the
+            containing
+            folder
+            beside
+            the
+            file
+            name).
+        </p>
 
         <h3>
             Sorting</h3>
@@ -3009,6 +3347,17 @@
                     +
                     all
                     panels)
+                </td>
+            </tr>
+            <tr>
+                <td>
+                    <code>Ctrl+M</code>
+                </td>
+                <td>
+                    Move the window to the <strong>next monitor</strong>, wrapping at the last.
+                    Screens are ordered left to right by their desktop position, and the window
+                    keeps its relative size and place &mdash; so a window sized for a 4K screen
+                    does not land half off a 1080p one. The overlay names the monitor it moved to
                 </td>
             </tr>
             <tr>
@@ -4150,8 +4499,230 @@
                     backup
                 </td>
             </tr>
+            <tr>
+                <td>
+                    Logging
+                </td>
+                <td>
+                    <strong>General
+                    Log</strong>
+                    &mdash;
+                    what
+                    qIV
+                    itself
+                    did:
+                    started,
+                    closed,
+                    and
+                    whether
+                    the
+                    previous
+                    run
+                    ended
+                    abnormally
+                    (with
+                    the
+                    crash
+                    dump's
+                    filename
+                    when
+                    there
+                    is
+                    one).
+                    <strong>TCP/IP
+                    Log</strong>
+                    &mdash;
+                    every
+                    line
+                    exchanged
+                    with
+                    a
+                    remote
+                    client,
+                    the
+                    same
+                    traffic
+                    the
+                    Server
+                    Log
+                    panel
+                    shows
+                    (<code>Ctrl+F12</code>),
+                    written
+                    to
+                    disk
+                    as
+                    well.
+                    <strong>Open
+                    Log
+                    Folder</strong>
+                    opens
+                    <code>logs\</code>
+                    in
+                    Explorer
+                </td>
+            </tr>
             </tbody>
         </table>
+        <p>
+            Both
+            logs
+            are
+            <strong>off
+            by
+            default</strong>
+            and
+            survive
+            a
+            restart
+            once
+            switched
+            on
+            &mdash;
+            which
+            is
+            the
+            point
+            of
+            them.
+            A
+            screen
+            that
+            misbehaves
+            at
+            four
+            in
+            the
+            morning
+            is
+            exactly
+            the
+            one
+            nobody
+            was
+            watching,
+            so
+            the
+            setting
+            is
+            persisted
+            rather
+            than
+            something
+            you
+            must
+            remember
+            to
+            enable
+            first.
+        </p>
+        <p>
+            Files
+            land
+            in
+            <code>logs\general\</code>
+            and
+            <code>logs\network\</code>
+            beside
+            the
+            EXE,
+            named
+            <code>QuickImageViewer_General_&lt;timestamp&gt;.log</code>
+            and
+            <code>QuickImageViewer_Tcp_IP_&lt;timestamp&gt;.log</code>,
+            rotating
+            every
+            5000
+            lines.
+            Switching
+            a
+            log
+            off
+            and
+            on
+            again
+            continues
+            the
+            newest
+            file
+            rather
+            than
+            starting
+            a
+            fresh
+            one.
+        </p>
+        <p>
+            The
+            format
+            is
+            the
+            standard
+            <code>time [thread] LEVEL message</code>
+            layout,
+            so
+            <a
+                    href="https://www.logviewplus.com/"
+                    target="_blank"
+                    rel="noopener">LogViewPlus</a>,
+            lnav
+            and
+            similar
+            tools
+            parse
+            it
+            with
+            no
+            configuration
+            &mdash;
+            and
+            a
+            rotated
+            TCP/IP
+            file
+            opens
+            straight
+            back
+            in
+            the
+            Server
+            Log
+            panel
+            with
+            <code>Ctrl+O</code>.
+            Writing
+            happens
+            on
+            a
+            thread
+            of
+            its
+            own:
+            a
+            slow
+            disk
+            cannot
+            stall
+            the
+            viewer,
+            and
+            with
+            a
+            log
+            switched
+            off
+            the
+            cost
+            at
+            each
+            record
+            point
+            is
+            a
+            single
+            atomic
+            read.
+        </p>
     </section>
 
     <section
@@ -5014,6 +5585,12 @@ D:\Screens\promotionList_qIV_dedicated_Lobby.qpr    promotion folders</code></pr
             script, <code>netcat</code>, a home-automation system or a phone app are all
             first-class clients.
         </p>
+        <p>
+            The phone app has its own section &mdash;
+            <a href="#android">qIV Remote for Android</a>, which speaks exactly the protocol
+            described here.
+        </p>
+
 
         <table>
             <thead>
@@ -5034,6 +5611,17 @@ D:\Screens\promotionList_qIV_dedicated_Lobby.qpr    promotion folders</code></pr
                 <td>
                     <strong>Local Server</strong> &mdash; the listener <em>this</em> instance
                     runs. Off unless switched on; needs a name and a port
+                </td>
+            </tr>
+            <tr>
+                <td>
+                    <kbd>Ctrl+F9</kbd>
+                </td>
+                <td>
+                    <strong>My Clients</strong> &mdash; who is connected to <em>your</em>
+                    listener right now: address, the name and platform each gave, whether it
+                    is encrypted, how long it has been on, and whether it is watching. Kick,
+                    kick-for-N-minutes, or ban from here
                 </td>
             </tr>
             <tr>
@@ -5068,8 +5656,8 @@ D:\Screens\promotionList_qIV_dedicated_Lobby.qpr    promotion folders</code></pr
                     <kbd>Ctrl+F11</kbd>
                 </td>
                 <td>
-                    <strong>Remotes Control</strong> &mdash; which connected instances F11
-                    drives, plus Identify and Watch
+                    <strong>Mirroring</strong> &mdash; which connected servers receive what
+                    this instance does, plus Identify and Watch
                 </td>
             </tr>
             <tr>
@@ -5100,6 +5688,33 @@ D:\Screens\promotionList_qIV_dedicated_Lobby.qpr    promotion folders</code></pr
             that came back from a restart already driving machines you had forgotten about would
             be the worst kind of surprise.
         </p>
+
+        <div class="card">
+            <h3>Announce (beacon)</h3>
+            <p>
+                First item in the TCP/IP menu, <strong>off by default</strong>. The server publishes itself
+                over mDNS as <code>_qiv._tcp</code>, so a phone or another qIV <strong>finds it
+                in a list instead of being told an address to type</strong>. That one step
+                &mdash; read your PC's LAN address, type it without a typo on a phone keyboard,
+                know what a port is &mdash; is where most people give up.
+            </p>
+            <p>
+                It announces <strong>only the instance name and the port</strong>. Never a
+                password, never a path, never a file. And discovery is not access: the
+                AllowList, the password challenge and TLS are untouched by it, so someone who
+                finds this instance and is not allowed in gets exactly as far as someone who
+                guessed the address.
+            </p>
+            <p>
+                Off by default on purpose &mdash; this app's whole posture is that nothing
+                leaves your network unasked, and a machine that started advertising itself the
+                moment you enabled the server would be a change to that made on your behalf. It
+                also only announces while the server is actually <strong>running and
+                reachable</strong>: with the listener stopped, or bound to
+                <code>127.0.0.1</code>, the menu says <em>will announce</em> rather than
+                claiming it did.
+            </p>
+        </div>
 
         <h3>
             Putting
@@ -5232,10 +5847,10 @@ D:\Screens\promotionList_qIV_dedicated_Lobby.qpr    promotion folders</code></pr
             describes
             itself</h3>
         <pre><code>$ nc 127.0.0.1 7777
-OK qIV 2.96.0.113 remote v5 [Monitor2]
+OK qIV 2.190.0.235 remote v6 [Monitor2]
 OK
 help
-qIV remote protocol v5
+qIV remote protocol v6
 FORMAT CMD &lt;name&gt;|&lt;takesValue 0|1&gt;|&lt;description&gt;|&lt;value description&gt;
 CMD NextImage|0|next image in the playlist|
 CMD JumpToImage|1|go to a numbered image in the current playlist|image NUMBER, 1-based …
@@ -5394,6 +6009,252 @@ CMD JumpToImage|1|go to a numbered image in the current playlist|image NUMBER, 1
             meaningful again with stable addresses, and the listener stops being reachable by
             anyone who scans the port.
         </p>
+    </section>
+
+    <section
+            id="android">
+        <h2>
+            qIV Remote
+            &mdash;
+            the Android app</h2>
+        <p class="subtitle">
+            Your phone becomes the viewer's remote, a second screen, and a photo frame your
+            PC drives.
+        </p>
+
+        <p>
+            Point it at your PC over your own network and drive qIV from the sofa, the far side
+            of a meeting room, or anywhere the keyboard is not. It is a real client of the
+            protocol above, not screen sharing: it speaks the same verbs <code>netcat</code>
+            does, so it stays in step with the desktop instead of streaming pixels at it.
+        </p>
+
+        <div class="card">
+            <h3>Photos travel both ways</h3>
+            <p>
+                This is the part a remote control usually cannot do at all.
+            </p>
+            <table>
+                <thead>
+                    <tr>
+                        <th>Direction</th>
+                        <th>What travels</th>
+                        <th>Why it is built that way</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td><strong>Desktop &rarr; phone</strong><br>live preview</td>
+                        <td>The current picture, scaled and re-encoded as JPEG <em>before it
+                            leaves the PC</em></td>
+                        <td>25&ndash;40&times; fewer bytes than the original, and a far smaller
+                            decode on the phone</td>
+                    </tr>
+                    <tr>
+                        <td><strong>Desktop &rarr; phone</strong><br>Save</td>
+                        <td>The <strong>original file</strong>, byte for byte, into
+                            <code>Pictures/qIVRemote</code> in your gallery</td>
+                        <td>Save asks for the original <em>separately</em> rather than keeping
+                            the preview &mdash; a re-encoded JPEG is not the file you meant to
+                            keep</td>
+                    </tr>
+                    <tr>
+                        <td><strong>Phone &rarr; desktop</strong><br>push</td>
+                        <td>Your photo's own bytes, base64 in chunks</td>
+                        <td>Works to a PC that has never seen the photo and cannot read your
+                            phone's storage</td>
+                    </tr>
+                </tbody>
+            </table>
+            <p>
+                A pushed photo appears on the desktop <strong>once</strong>, over whatever is up.
+                It changes no folder, no sort order, no playlist position, and a running
+                slideshow keeps running with it occupying a single slide. Nothing has to be
+                paused first, and nothing is left behind.
+            </p>
+            <p>
+                Saving to the gallery needs <strong>no storage permission</strong> &mdash; the
+                app publishes through MediaStore, and the entry stays invisible until the
+                transfer finishes, so a gallery scanning mid-transfer can never show you a
+                half-written thumbnail.
+            </p>
+        </div>
+
+        <div class="card">
+            <h3>Turn any spare screen into a photo frame</h3>
+            <p>
+                The same connection runs the other way round. Instead of using the phone to
+                drive the PC, put it on a stand and let the PC drive <strong>it</strong>.
+            </p>
+            <p>
+                Open the Fullscreen screen and the device shows whatever the viewer is showing
+                &mdash; nothing else. No toolbar, no buttons, no chrome. Start a slideshow on
+                the PC and the tablet on the shelf follows it, picture for picture, for as long
+                as you leave it there.
+            </p>
+            <table>
+                <tbody>
+                    <tr>
+                        <td><strong>An old tablet becomes a photo frame</strong></td>
+                        <td>The one in a drawer with a cracked case is a perfectly good display.
+                            Prop it up, point it at the PC, start a slideshow.</td>
+                    </tr>
+                    <tr>
+                        <td><strong>A phone becomes a second screen for photos</strong></td>
+                        <td>Cull on the big screen, review at arm's length, hand it to someone
+                            across the table.</td>
+                    </tr>
+                    <tr>
+                        <td><strong>The PC stays the library</strong></td>
+                        <td>Your folders, your sort order, your filters, your drives. The screen
+                            is a window onto the machine that already has all of it.</td>
+                    </tr>
+                </tbody>
+            </table>
+            <p>
+                It keeps up <strong>without being asked</strong>. The viewer announces every
+                picture change &mdash; including the ones a slideshow makes on its own, where no
+                key was pressed and no command was sent &mdash; and the screen fetches the new
+                image the moment it hears. Nothing polls, nothing lags a frame behind.
+            </p>
+            <p>
+                <strong>It sends nothing back.</strong> The Fullscreen screen has no Next, no
+                Previous and no toolbar, and that is deliberate rather than unfinished: a control
+                that could nudge a running presentation from a phone in somebody's pocket is a
+                hazard, not a feature. It asks for two read-only things and nothing else. Tap
+                anywhere to leave.
+            </p>
+            <p>
+                What crosses the network is a <strong>preview</strong> &mdash; scaled to that
+                screen's size and re-encoded as JPEG on the PC before it is sent, not the
+                original file. A 6&nbsp;MB photo shown on a tablet moves as a few hundred
+                kilobytes. That is what makes it comfortable over Wi-Fi, and what keeps a frame
+                refreshing all evening from being a bandwidth decision.
+            </p>
+            <p>
+                <strong>As many screens as you have devices.</strong> Every connected device
+                watches independently, so one PC can feed the tablet in the kitchen, the phone in
+                the hallway and the spare monitor on the desk at the same time &mdash; all
+                following the same library, all updating together. There is no per-screen
+                licence, because there is nobody to license it from.
+            </p>
+            <p>
+                That also makes it <strong>signage and advertising that costs nothing to
+                run</strong>: a shop window, a waiting room, a menu board, a studio wall. One PC
+                you already own, screens you already have, your own network. No subscription, no
+                cloud account, no per-display fee, and no service that can raise its price or
+                shut down and take the wall with it.
+            </p>
+            <p>
+                And it runs <strong>unattended</strong>, which is the part that decides whether a
+                display is a product or a chore. The viewer already has every piece:
+            </p>
+            <table>
+                <tbody>
+                    <tr>
+                        <td><strong>Starts with the machine</strong></td>
+                        <td><code>-runOnStartup</code>, or the tray toggle. Power comes back after
+                            a cut and the wall comes back with it &mdash; nobody drives to the
+                            shop to click anything.</td>
+                    </tr>
+                    <tr>
+                        <td><strong>Ignores everybody</strong></td>
+                        <td>Kiosk lock (<code>-lock</code>) makes the screen ignore every key and
+                            every click, so a passer-by cannot pause your loop or open a panel.
+                            The tray is the only way back in.</td>
+                    </tr>
+                    <tr>
+                        <td><strong>Stays awake</strong></td>
+                        <td>Keep display awake blocks the screensaver and display sleep, and
+                            releases the hold the moment the window hides &mdash; a viewer sitting
+                            in the tray never keeps a machine up.</td>
+                    </tr>
+                    <tr>
+                        <td><strong>Loops by itself</strong></td>
+                        <td>Slideshow with interval, loop and shuffle, and 21 GPU transitions.
+                            Point it at a folder and drop new artwork in &mdash; no playlist to
+                            rebuild, no re-upload, no publish step.</td>
+                    </tr>
+                </tbody>
+            </table>
+            <p>
+                Changing what a wall shows is <strong>copying a file into a folder</strong>. That
+                is the whole workflow.
+            </p>
+            <p>
+                No cloud account, no subscription, no photos uploaded anywhere. The pictures go
+                from your PC to your screen across your own network, and stop there.
+            </p>
+        </div>
+
+        <div class="card">
+            <h3>What else it does</h3>
+            <p>
+                <strong>Drive the viewer.</strong> Next / previous, first / last. Slideshow with
+                its interval, pause, loop and shuffle. Zoom, rotate, flip. All five view modes.
+                Colour effects. Fullscreen, always-on-top, panels and the on-image overlay.
+            </p>
+            <p>
+                <strong>Jump anywhere.</strong> The viewer's folder history comes down to the
+                phone &mdash; tap a folder and the desktop goes there.
+            </p>
+            <p>
+                <strong>Presentation mode.</strong> The current picture and two large
+                next/previous buttons, sized to press without looking. Built for talking to a
+                room rather than staring at a phone.
+            </p>
+            <p>
+                <strong>Follow the desktop.</strong> Bind the connection and the preview keeps
+                itself up to date &mdash; when someone changes the picture at the PC, your phone
+                shows it.
+            </p>
+            <p>
+                <strong>As many PCs as you like.</strong> Each saved machine keeps its own
+                address, port and optional password. Tap one to connect.
+            </p>
+            <p>
+                <strong>Demo mode.</strong> Every screen runs against a viewer that does not
+                exist, so you can see the whole app before installing anything or opening a port.
+            </p>
+        </div>
+
+        <div class="card">
+            <h3>A private network, and nothing else</h3>
+            <p>
+                The app talks only to the computer whose address you type. There is <strong>no
+                account, no cloud, no analytics, no advertising</strong>, and nothing is ever
+                sent to the developer &mdash; there is no back end to send it to.
+            </p>
+            <p>
+                When your PC requires a password it is verified by challenge&ndash;response, so
+                <strong>the password itself never crosses the network</strong>. Off the loopback
+                the connection is TLS with a pinned certificate, and qIV's own AllowList
+                (<kbd>F9</kbd>) still decides who may connect at all. Passwords you choose to
+                save stay in app-private storage on the phone.
+            </p>
+        </div>
+
+        <p>
+            <strong>Requirements.</strong> It is a companion app and does nothing on its own
+            &mdash; the same way a TV remote does nothing without the TV. You need
+            QuickImageViewer running on a Windows PC with its Local Server enabled
+            (<kbd>F9</kbd>), and the phone on the same network. The app's About screen walks
+            through the setup.
+        </p>
+        <p>
+            <em>Coming to Google Play. Until then, the desktop side is ready and waiting on
+            <kbd>F9</kbd>.</em>
+        </p>
+        <!--
+            ON PUBLISH: replace the line above with the button below. It is left commented
+            rather than live because the store URL 404s until the listing is approved, and a
+            download button that goes nowhere is worse than no button.
+
+            The id is the app's applicationId and will not change:
+
+            <a href="https://play.google.com/store/apps/details?id=net.icyhoty2k.qivremote"
+               class="cta-button">Get qIV Remote on Google Play</a>
+        -->
     </section>
 
     <section
@@ -5976,298 +6837,201 @@ CMD JumpToImage|1|go to a numbered image in the current playlist|image NUMBER, 1
             </thead>
             <tbody>
             <tr>
-                <td>
-                    GPU
-                    VRAM
-                    bitmap
-                    cache
-                </td>
-                <td>
-                    ✅
-                    Direct2D
-                </td>
-                <td>
-                    ❌
-                </td>
-                <td>
-                    ❌
-                </td>
+                <td colspan="4"><strong>Speed &amp; footprint</strong></td>
             </tr>
             <tr>
-                <td>
-                    Instant
-                    image
-                    switching
-                </td>
-                <td>
-                    ✅
-                    pre-decoded
-                    neighbours
-                </td>
-                <td>
-                    ⚠️
-                    visible
-                    load
-                    delay
-                </td>
-                <td>
-                    ⚠️
-                    visible
-                    load
-                    delay
-                </td>
+                <td>GPU VRAM bitmap cache</td>
+                <td>✅ Direct2D</td>
+                <td>❌</td>
+                <td>❌</td>
             </tr>
             <tr>
-                <td>
-                    HEIC
-                    /
-                    AVIF
-                    /
-                    JPEG
-                    XL
-                </td>
-                <td>
-                    ✅
-                    native
-                    +
-                    codec
-                </td>
-                <td>
-                    ✅
-                </td>
-                <td>
-                    ⚠️
-                    plugin
-                    required
-                </td>
+                <td>Instant image switching</td>
+                <td>✅ pre-decoded neighbours</td>
+                <td>⚠️ visible load delay</td>
+                <td>⚠️ visible load delay</td>
             </tr>
             <tr>
-                <td>
-                    SVG
-                    /
-                    OpenEXR
-                    /
-                    HDR
-                </td>
-                <td>
-                    ✅
-                    built-in
-                </td>
-                <td>
-                    ❌
-                </td>
-                <td>
-                    ⚠️
-                    plugin
-                    required
-                </td>
+                <td>Portable — no installer</td>
+                <td>✅ 9 MB single EXE</td>
+                <td>❌ UWP / Store</td>
+                <td>✅</td>
             </tr>
             <tr>
-                <td>
-                    Offline
-                    GPS
-                    geocoding
-                </td>
-                <td>
-                    ✅
-                    embedded,
-                    zero
-                    network
-                </td>
-                <td>
-                    ❌
-                </td>
-                <td>
-                    ❌
-                </td>
+                <td>No background services</td>
+                <td>✅ process exits cleanly</td>
+                <td>❌ always-on UWP runtime</td>
+                <td>✅</td>
             </tr>
             <tr>
-                <td>
-                    Floating
-                    thumbnail
-                    panels
-                </td>
-                <td>
-                    ✅
-                    up
-                    to
-                    6
-                    simultaneous
-                </td>
-                <td>
-                    ❌
-                </td>
-                <td>
-                    ❌
-                </td>
+                <td colspan="4"><strong>Formats</strong></td>
             </tr>
             <tr>
-                <td>
-                    Per-monitor
-                    DPI
-                    V2
-                </td>
-                <td>
-                    ✅
-                </td>
-                <td>
-                    ✅
-                </td>
-                <td>
-                    ⚠️
-                    partial
-                </td>
+                <td>HEIC / AVIF / JPEG XL</td>
+                <td>✅ native + codec</td>
+                <td>✅</td>
+                <td>⚠️ plugin required</td>
             </tr>
             <tr>
-                <td>
-                    Portable
-                    —
-                    no
-                    installer
-                </td>
-                <td>
-                    ✅
-                    7
-                    MB
-                    single
-                    EXE
-                </td>
-                <td>
-                    ❌
-                    UWP
-                    /
-                    Store
-                </td>
-                <td>
-                    ✅
-                </td>
+                <td>SVG / OpenEXR / HDR</td>
+                <td>✅ built-in</td>
+                <td>❌</td>
+                <td>⚠️ plugin required</td>
             </tr>
             <tr>
-                <td>
-                    No
-                    telemetry
-                    /
-                    tracking
-                </td>
-                <td>
-                    ✅
-                    zero
-                </td>
-                <td>
-                    ❌
-                    Microsoft
-                    telemetry
-                </td>
-                <td>
-                    ✅
-                </td>
+                <td>Batch convert &amp; rename</td>
+                <td>❌</td>
+                <td>❌</td>
+                <td>✅</td>
             </tr>
             <tr>
-                <td>
-                    No
-                    ads
-                </td>
-                <td>
-                    ✅
-                </td>
-                <td>
-                    ❌
-                    promoted
-                    content
-                </td>
-                <td>
-                    ✅
-                </td>
+                <td>Plugin ecosystem</td>
+                <td>❌ codecs built in instead</td>
+                <td>❌</td>
+                <td>✅</td>
             </tr>
             <tr>
-                <td>
-                    No
-                    background
-                    services
-                </td>
-                <td>
-                    ✅
-                    process
-                    exits
-                    cleanly
-                </td>
-                <td>
-                    ❌
-                    always-on
-                    UWP
-                    runtime
-                </td>
-                <td>
-                    ✅
-                </td>
+                <td colspan="4"><strong>Viewing &amp; editing</strong></td>
             </tr>
             <tr>
-                <td>
-                    Open
-                    source
-                </td>
-                <td>
-                    ✅
-                    AGPLv3
-                </td>
-                <td>
-                    ❌
-                </td>
-                <td>
-                    ❌
-                </td>
+                <td>Non-destructive GPU effects</td>
+                <td>✅ full D2D effect graph</td>
+                <td>⚠️ basic adjustments</td>
+                <td>⚠️ CPU, applied to the buffer</td>
             </tr>
             <tr>
-                <td>
-                    Kiosk
-                    /
-                    locked
-                    display
-                    mode
-                </td>
-                <td>
-                    ✅
-                    CLI
-                    flag
-                </td>
-                <td>
-                    ❌
-                </td>
-                <td>
-                    ⚠️
-                    limited
-                </td>
+                <td>Crop / paint / resize editing</td>
+                <td>❌ effects only, <code>Ctrl+S</code> bakes</td>
+                <td>✅</td>
+                <td>✅</td>
             </tr>
             <tr>
-                <td>
-                    Drive other copies over TCP
-                </td>
-                <td>
-                    ✅ plain-text protocol, self-describing
-                </td>
-                <td>
-                    ❌
-                </td>
-                <td>
-                    ❌
-                </td>
+                <td>Configurable info overlays</td>
+                <td>✅ 9 independent slots</td>
+                <td>❌</td>
+                <td>⚠️ slideshow captions</td>
             </tr>
             <tr>
-                <td>
-                    Mirror one screen to many
-                </td>
-                <td>
-                    ✅ F11, per-target selection
-                </td>
-                <td>
-                    ❌
-                </td>
-                <td>
-                    ❌
-                </td>
+                <td>Slideshow transitions</td>
+                <td>✅ 21, GPU</td>
+                <td>⚠️ basic</td>
+                <td>✅</td>
+            </tr>
+            <tr>
+                <td>Floating thumbnail panels</td>
+                <td>✅ up to 6 simultaneous</td>
+                <td>❌</td>
+                <td>⚠️ separate browser window</td>
+            </tr>
+            <tr>
+                <td>Thumbnail strips as file manager</td>
+                <td>✅ drag between folders, shell ops</td>
+                <td>❌</td>
+                <td>⚠️ in the browser window</td>
+            </tr>
+            <tr>
+                <td>Offline GPS geocoding</td>
+                <td>✅ embedded, zero network</td>
+                <td>❌</td>
+                <td>❌</td>
+            </tr>
+            <tr>
+                <td colspan="4"><strong>Remote &amp; multi-screen</strong></td>
+            </tr>
+            <tr>
+                <td><strong>Android companion app</strong></td>
+                <td>✅ <strong>qIV Remote</strong> — control, live preview, photo frame</td>
+                <td>❌</td>
+                <td>❌</td>
+            </tr>
+            <tr>
+                <td>Phone ↔ desktop photo transfer</td>
+                <td>✅ both ways, originals not re-encodes</td>
+                <td>❌</td>
+                <td>❌</td>
+            </tr>
+            <tr>
+                <td>Drive other copies over TCP</td>
+                <td>✅ plain-text protocol, self-describing</td>
+                <td>❌</td>
+                <td>❌</td>
+            </tr>
+            <tr>
+                <td>Mirror one screen to many</td>
+                <td>✅ F11, per-target selection</td>
+                <td>❌</td>
+                <td>❌</td>
+            </tr>
+            <tr>
+                <td>Send an image across machines</td>
+                <td>✅ <code>Alt+Enter</code>, file bytes on the wire</td>
+                <td>❌</td>
+                <td>❌</td>
+            </tr>
+            <tr>
+                <td>Scriptable from anything</td>
+                <td>✅ <code>netcat</code>, shell, home automation</td>
+                <td>❌</td>
+                <td>⚠️ local command line only</td>
+            </tr>
+            <tr>
+                <td>Kiosk / locked display mode</td>
+                <td>✅ CLI flag, ignores every key and click</td>
+                <td>❌</td>
+                <td>⚠️ limited</td>
+            </tr>
+            <tr>
+                <td>Starts with Windows, unattended</td>
+                <td>✅ <code>-runOnStartup</code> + kiosk + keep-awake</td>
+                <td>❌</td>
+                <td>⚠️ manual</td>
+            </tr>
+            <tr>
+                <td>Digital signage / ad loop</td>
+                <td>✅ folder in, wall out — no publish step</td>
+                <td>❌</td>
+                <td>⚠️ slideshow only</td>
+            </tr>
+            <tr>
+                <td>Phones, tablets &amp; TVs as extra screens</td>
+                <td>✅ as many as you own, no per-screen fee</td>
+                <td>❌</td>
+                <td>❌</td>
+            </tr>
+            <tr>
+                <td colspan="4"><strong>Trust</strong></td>
+            </tr>
+            <tr>
+                <td>No telemetry / tracking</td>
+                <td>✅ zero</td>
+                <td>❌ Microsoft telemetry</td>
+                <td>✅</td>
+            </tr>
+            <tr>
+                <td>No ads</td>
+                <td>✅</td>
+                <td>❌ promoted content</td>
+                <td>✅</td>
+            </tr>
+            <tr>
+                <td>Open source</td>
+                <td>✅ AGPLv3</td>
+                <td>❌</td>
+                <td>❌</td>
+            </tr>
+            <tr>
+                <td>Per-monitor DPI V2</td>
+                <td>✅</td>
+                <td>✅</td>
+                <td>⚠️ partial</td>
             </tr>
             </tbody>
         </table>
+        <p class="subtitle">
+            ✅ built in &middot; ⚠️ partial, or needs a plugin or a separate window &middot; ❌ not available.
+            IrfanView wins the rows it wins &mdash; batch work and real editing are what it is
+            for, and qIV does not try to replace them.
+        </p>
     </section>
 
     <section
@@ -6292,6 +7056,31 @@ CMD JumpToImage|1|go to a numbered image in the current playlist|image NUMBER, 1
                 different machine works too: <kbd>Alt+Enter</kbd> streams the image's own bytes,
                 so nothing depends on the far end being able to read your disk. See
                 <a href="#remote">Remote Control &amp; Mirroring</a>.
+            </p>
+        </details>
+
+        <details>
+            <summary>
+                qIV crashed. What do I do?
+            </summary>
+            <p>
+                qIV writes a crash report next to its own executable, named
+                <code>QuickImageViewer_crash_&lt;date&gt;_&lt;time&gt;_&lt;pid&gt;.dmp</code>, and
+                tells you where it put it.
+            </p>
+            <p>
+                <strong>Nothing is sent anywhere.</strong> qIV has no telemetry and makes no
+                network call of its own, so that file is written to your disk and stays there.
+                Attaching it to an
+                <a href="https://github.com/icyhoty2k/QuickImageViewer/issues">issue</a> is
+                entirely your choice &mdash; but it is the difference between a bug that gets
+                fixed and one that stays a mystery, because it records the exact point the
+                program failed.
+            </p>
+            <p>
+                The file contains a snapshot of qIV's internal state, including open file paths
+                and window titles. It does <em>not</em> contain your images. If a path in it is
+                sensitive, describe the problem in the issue rather than attaching the file.
             </p>
         </details>
 
@@ -6720,6 +7509,48 @@ CMD JumpToImage|1|go to a numbered image in the current playlist|image NUMBER, 1
     </section>
 
     <section
+            id="feedback">
+        <h2>
+            Found a bug?
+            Want something added?</h2>
+        <p>
+            Small requests count &mdash; a missing keyboard shortcut is as valid a request
+            as a whole panel. The forms ask for a few details up front, because "it crashed"
+            and "it crashed opening a 400&nbsp;MB TIFF from a network drive" are different
+            amounts of work to act on.
+        </p>
+        <p>
+            <a href="https://github.com/icyhoty2k/QuickImageViewer/issues/new?template=bug_report.yml"
+               class="cta-button">Report a bug</a>
+            <a href="https://github.com/icyhoty2k/QuickImageViewer/issues/new?template=feature_request.yml"
+               class="cta-button">Request a feature</a>
+        </p>
+        <div class="card">
+            <h3>Issues for the Android app belong here too</h3>
+            <p>
+                qIV Remote is developed separately, but its issues live alongside the viewer
+                it talks to &mdash; almost every question about one involves the other. There
+                is <a href="https://github.com/icyhoty2k/QuickImageViewer/issues/new?template=android_remote.yml">a
+                form for it</a>, and it starts with the three things that cause nearly every
+                connection problem: Local Server switched off, the phone missing from the
+                AllowList, or the two devices being on different networks.
+            </p>
+        </div>
+        <p>
+            <strong>Security issues get a private channel.</strong> qIV can listen on a
+            network port, so anything touching authentication, TLS or the AllowList belongs in
+            <a href="https://github.com/icyhoty2k/QuickImageViewer/security/advisories/new">a
+            security advisory</a> rather than a public issue.
+        </p>
+        <p>
+            <strong>If it crashed</strong>, there is a <code>.dmp</code> file next to
+            <code>QuickImageViewer.exe</code>. Attaching it turns a mystery into a stack
+            trace. It holds open file paths and window titles &mdash; not the contents of your
+            images &mdash; and nothing is ever sent anywhere on its own.
+        </p>
+    </section>
+
+    <section
             id="build">
         <h2>
             Architecture
@@ -6981,6 +7812,37 @@ cmake --build . --config Release</code></pre>
                 Repository</a>
             •
             <a href="https://github.com/icyhoty2k/QuickImageViewer/releases">Releases</a>
+            •
+            <a href="https://github.com/icyhoty2k/QuickImageViewer/issues/new?template=bug_report.yml">Report
+                a bug</a>
+            •
+            <a href="https://github.com/icyhoty2k/QuickImageViewer/issues/new?template=feature_request.yml">Request
+                a feature</a>
+            •
+            <a href="https://github.com/sponsors/icyhoty2k">Sponsor</a>
+            •
+            <a href="https://ko-fi.com/ivanhristovyanev">Ko-fi</a>
+        </p>
+        <!--
+            BUSINESS SPONSORS GO HERE. The $100/month tier promises a name or logo
+            "on the project website", and this is the spot — a line of links above
+            the funding sentence below.
+
+            Left as a comment rather than an empty heading on purpose: a section
+            headed "Sponsors" with nothing under it advertises that nobody
+            sponsors this project, which is the opposite of what it is for. Turn
+            it into real markup when the first one arrives.
+
+            Ask before listing anyone. The tier wording promises them the choice.
+        -->
+
+        <p>
+            qIV is free, has no advertising and collects nothing.
+            <a href="https://github.com/sponsors/icyhoty2k">Sponsorship</a>
+            is what keeps it being worked on.
+            Building it into a closed product?
+            <a href="mailto:icyhoty2k@gmail.com">Commercial licensing</a>
+            is available.
         </p>
     </div>
 </footer>

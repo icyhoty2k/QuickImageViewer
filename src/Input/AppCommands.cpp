@@ -1,3 +1,11 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// Copyright (C) 2026 Ivan Hristov Yanev
+//
+// This file is part of QuickImageViewer. It is free software: you may
+// redistribute and modify it under the terms of the GNU Affero General Public
+// License version 3 or later, as published by the Free Software Foundation.
+// It is distributed WITHOUT ANY WARRANTY. See the LICENSE file for details.
+
 // file: AppCommands.cpp
 // header: AppCommands.h
 #include "AppCommands.h"
@@ -5,7 +13,9 @@
 #include <dwmapi.h>
 #include <uxtheme.h>
 #include <commctrl.h>
-#pragma comment(lib, "comctl32.lib")
+// comctl32 is linked from CMakeLists.txt — see the note there. It used to arrive
+// via a #pragma comment(lib) on this line, which is why it was absent from the
+// build file's library list.
 #include <algorithm>
 #include <numeric>
 #include <random>
@@ -453,6 +463,11 @@ void AppCommands::changeAppCornerPreference(HWND hWnd, DWORD cornerStyle) {
         DwmSetWindowAttribute(hWnd, Constants::DWMWA_WINDOW_CORNER_PREFERENCES, &app.cornerPreference, sizeof(app.cornerPreference));
         SetWindowPos(hWnd, nullptr, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | SWP_FRAMECHANGED);
     }
+
+    // The attribute is per-window: without this, every panel already on screen
+    // keeps the corners it was created with, and the toggle appears to work only
+    // on the main window until each panel is closed and reopened.
+    uiManager.NotifyCornerChanged();
 }
 
 void AppCommands::changeAppThemeToDarkMode(HWND hWnd, bool isDarkThemed) {
@@ -545,6 +560,21 @@ void AppCommands::stopSlideshow(HWND hWnd) {
     app.slideshow.shuffleOrder.clear();
     app.slideshow.shufflePos = 0;
     AddTrayIcon(hWnd);
+}
+
+// Clamped here as well as at every caller, because this is the last place the
+// value passes through before it reaches SetTimer — and a zero or negative
+// period would arm a timer that fires as fast as the message loop allows.
+void AppCommands::applySlideshowInterval(HWND hWnd, int ms) {
+    ms = std::max(Constants::Slideshow::INTERVAL_MIN_MS,
+                  std::min(Constants::Slideshow::INTERVAL_MAX_MS, ms));
+    app.slideshow.intervalMs = ms;
+
+    // A PAUSED show is deliberately left alone. Its timer is already killed,
+    // and resuming arms a fresh one from intervalMs — which is now the new
+    // value. Re-arming here would restart a slideshow the user paused.
+    if (app.slideshow.running && !app.slideshow.paused)
+        SetTimer(hWnd, Constants::Slideshow::TIMER_ID, static_cast<UINT>(ms), nullptr);
 }
 
 void AppCommands::toggleSlideshow(HWND hWnd) {

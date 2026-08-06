@@ -1,3 +1,11 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// Copyright (C) 2026 Ivan Hristov Yanev
+//
+// This file is part of QuickImageViewer. It is free software: you may
+// redistribute and modify it under the terms of the GNU Affero General Public
+// License version 3 or later, as published by the Free Software Foundation.
+// It is distributed WITHOUT ANY WARRANTY. See the LICENSE file for details.
+
 #include "HelpWnd.h"
 #include "UI/GdiPool.h" // pooled brushes and pens — never DeleteObject them
 #include "UI/CustomControls/ScrollView.h" // WheelDeltaToPixels — the one wheel rule
@@ -250,6 +258,10 @@ namespace UI {
             L"Zoom in / out — same steps as Up / Down.", sZoom);
         Add(K(SC::SC_ZOOM_RESET),
             L"Reset zoom and pan back to the active view mode's default fit.", sZoom);
+        // Was wired in CommandResolver but listed nowhere, so the only way to
+        // find it was to read the source.
+        Add(K(SC::SC_ZOOM_TO),
+            L"Type an exact zoom percentage.", sZoom);
         Add(L"Ctrl+Wheel",
             L"Zoom in / out centered on the mouse cursor.", sZoom);
         Add(K(SC::SC_APP_HIDE_ALT) + L" / " + K(SC::SC_PAN_LEFT) + L" / " +
@@ -344,7 +356,13 @@ namespace UI {
             L"End. " + Ctrl('E') + L" exports the full help to a text file on the Desktop.", sPanels);
         Add(K(SC::SC_SHOW_INFO),
             L"Toggle the Image Info panel — full EXIF metadata (camera, lens, exposure, GPS) "
-            L"including the embedded preview thumbnail.", sPanels);
+            L"including the embedded preview thumbnail.\r\n"
+            L"GPS IS RESOLVED OFFLINE, with no network call of any kind. The GeoNames data "
+            L"— 170,387 cities, 3,865 states and provinces, 47,549 districts and 252 "
+            L"countries — is zlib-compressed inside the executable, so a photo's "
+            L"coordinates become a city, district, state, country, capital, continent, "
+            L"currency, phone prefix and timezone with nothing leaving this machine and "
+            L"nothing to configure. It works with the network cable out.", sPanels);
         Add(K(SC::SC_TOGGLE_STATS),
             L"Toggle the Statistics panel — decode time, codec used, file details and "
             L"cache information for the current image.", sPanels);
@@ -425,6 +443,12 @@ namespace UI {
         Add(Ctrl(SC::SC_PANEL_HISTORY_TOGGLE),
             L"Toggle the full (uncapped) history view and refresh the folder snapshot used "
             L"by horizontal-wheel navigation.", sHist);
+        Add(L"Type anything",
+            L"Filters the list as you type — fuzzy by default, wildcard when the query "
+            L"contains * or ?, the same matcher Find and this Help panel use. Matched "
+            L"characters are highlighted inside each row. Escape clears the filter; when "
+            L"it is already empty, Escape closes the panel. Space toggles a favorite while "
+            L"the filter is empty and types a space once it is not.", sHist);
         Add(K(SC::HISTORY_OPEN_IN_DIR_WND),
             L"Open the hovered folder in the main viewer.", sHist);
         Add(Shift(SC::HISTORY_OPEN_IN_DIR_WND),
@@ -561,6 +585,15 @@ namespace UI {
             L"promotions folders, promotion pacing, monitor and slideshow options — then "
             L"generate a shortcut for it. Drop that shortcut in shell:startup and the "
             L"screen starts itself.", sApp);
+        // Remote lived under APPLICATION & APPEARANCE, which is where it landed when it
+        // was two keys and a panel. It is now a third of this file — a listener, an
+        // outbound side, mirroring, a wire log, a restricted mode and a phone client —
+        // and none of that is appearance. Its own section, so a reader looking for it
+        // finds a heading rather than scrolling past theme brightness.
+        const int sRemote = Sec(Constants::ThemeIcons::ICON_SECTION_ANTENNA,
+                                L"REMOTE CONTROL & MIRRORING",
+                                L"Drive other screens, and the phone app");
+
         Add(K(SC::SC_PANEL_REMOTE_TOGGLE),
             L"Open the Local Server panel — the listener THIS instance runs, and nothing "
             L"else. qIV can listen on a TCP port and be driven over the network — next, "
@@ -602,9 +635,9 @@ namespace UI {
             L"dropped.\r\n"
             L"What this instance connects OUT to lives in Remote Servers (F10). "
             L"F9 is what others connect to; F10 is what this connects to.\r\n"
-            L"WHO is connected right now is Ctrl+F9, not here.", sApp);
+            L"WHO is connected right now is Ctrl+F9, not here.", sRemote);
         Add(Ctrl(SC::SC_PANEL_REMOTE_TOGGLE),
-            L"Server Clients — every peer currently connected to the listener above, with "
+            L"My Clients — every peer currently connected to the listener above, with "
             L"its address, the name it gave itself, whether it is encrypted, and how long "
             L"it has been on. The list refreshes itself while the panel is open.\r\n"
             L"THREE WAYS TO GET RID OF ONE, and the middle one is the useful one:\r\n"
@@ -620,7 +653,7 @@ namespace UI {
             L"and the panel says so before it does it — blocking one IPv6 address is "
             L"close to useless, since the peer has billions of others in the same prefix.\r\n"
             L"None of this is reachable over the wire: a connected client cannot kick or "
-            L"ban anything, including you.", sApp);
+            L"ban anything, including you.", sRemote);
         Add(K(SC::SC_PANEL_REMOTES_CONSOLE),
             L"Open Remote Servers — everything about the instances this copy can drive.\r\n"
             L"Top: address, port, password, name and optional exe. Connect && Save proves the "
@@ -644,7 +677,7 @@ namespace UI {
             L"could quietly repoint a working remote at nothing. Esc backs out one step at "
             L"a time: out of a field, then out of edit mode, then closes the panel.\r\n"
             L"Connect all / Disconnect all act on every row, F5 polls them, and Sync all "
-            L"pushes this viewer's view and effect state to all of them at once.", sApp);
+            L"pushes this viewer's view and effect state to all of them at once.", sRemote);
         Add(L"CTRL+F10",
             L"Remote Commands — type a command and send it to the instances YOU TICK in this "
             L"panel's own SEND TO box, which lists everything currently connected with a "
@@ -684,7 +717,7 @@ namespace UI {
             L"viewer — off by "
             L"default, since the usual reason to type a command here is to do something to "
             L"the other screens. The LOG button beside Clear jumps to the Ctrl+F12 wire "
-            L"log, which carries the matching button back.", sApp);
+            L"log, which carries the matching button back.", sRemote);
         Add(K(SC::SC_MIRROR_TOGGLE),
             L"MIRRORING on/off. While on, every command you give here is also sent to the "
             L"instances listed in Remote Servers (F10) — navigation, zoom, effects, "
@@ -700,7 +733,7 @@ namespace UI {
             L"screen each time mirroring goes on. Everything connected is driven to begin "
             L"with; if you have unticked all of them, F11 says so instead of switching on "
             L"and forwarding to nobody.\r\n"
-            L"CTRL+F11 opens Remotes Control: one row per CONNECTED instance, with three "
+            L"CTRL+F11 opens Mirroring: one row per CONNECTED instance, with three "
             L"controls each, in the order you ask them — IDENTIFY makes that screen say "
             L"its own name so you can tell two identical viewers apart; the CONTROL tick "
             L"says whether F11 drives it; and WATCH is the other direction, where that "
@@ -715,7 +748,7 @@ namespace UI {
             L"instances, the same push as Sync all in Remote Servers. Rows that are "
             L"listed but not connected do not appear — connect them in F10 first. The "
             L"selection lasts for this session only and is echoed in the Remote Servers "
-            L"header.", sApp);
+            L"header.", sRemote);
         Add(Ctrl(SC::SC_REMOTE_SEND_POSITION),
             L"SEND THIS POSITION to the instances under Control (the ticked rows in "
             L"Ctrl+F11). Prepare a picture here, press it, and those screens show that "
@@ -733,7 +766,7 @@ namespace UI {
             L"Same-machine instances only: a folder path and an image number are both "
             L"meaningless against another machine's files, and ticked rows elsewhere are "
             L"reported as skipped rather than silently left out. Independent of F11 — "
-            L"mirroring can be off. Plain Enter is still fullscreen.", sApp);
+            L"mirroring can be off. Plain Enter is still fullscreen.", sRemote);
         Add(Alt(SC::SC_REMOTE_STREAM_IMAGE_OUT),
             L"STREAM THIS IMAGE to the instances under Control, shown ONCE — and change "
             L"nothing else about them. No folder, no sort order, no playlist position: the "
@@ -752,7 +785,7 @@ namespace UI {
             L"enters that instance's playlist, and both the received file and its cache "
             L"entry are thrown away rather than left sitting in memory.\r\n"
             L"CTRL+Enter is the other depth of the same act: that one MOVES the far end to "
-            L"your picture and it stays there. Plain Enter is still fullscreen.", sApp);
+            L"your picture and it stays there. Plain Enter is still fullscreen.", sRemote);
         Add(CtrlAlt(SC::SC_REMOTE_STREAM_IMAGE_IN),
             L"ASK FOR THE IMAGE another instance is displaying, and show it here — once. "
             L"The same transfer as Alt+Enter, inbound: that instance reads whatever is on "
@@ -769,7 +802,7 @@ namespace UI {
             L"advert it appears IMMEDIATELY, without waiting for a slide boundary, because "
             L"you asked for it at this keyboard.\r\n"
             L"All three of these — and the wire commands behind them — are in the Ctrl+F10 "
-            L"Remote Commands list, which is where to test them by hand.", sApp);
+            L"Remote Commands list, which is where to test them by hand.", sRemote);
         Add(CtrlShift(SC::SC_REMOTE_PUSH_IMAGE_ALL),
             L"The Ctrl+Enter push, WIDENED: send this folder, sort order and position to "
             L"EVERY connected instance rather than only the ones ticked under Control "
@@ -779,7 +812,7 @@ namespace UI {
             L"reason Ctrl+Enter is — a folder path and an image number are read against "
             L"the far end's own disk, and choosing more targets cannot change that. "
             L"Instances on other machines are skipped and counted, and the overlay says "
-            L"how many.", sApp);
+            L"how many.", sRemote);
         Add(L"CTRL+F12",
             L"Server Log — every line that crossed the wire, both directions, in one list: "
             L"number, who sent it, the command, who received it, the reply, the time, and "
@@ -825,7 +858,7 @@ namespace UI {
             L"text lives. Previous / Next step through the list in whatever order it is "
             L"currently sorted, and the list's selection follows along, so closing the "
             L"window leaves you where you finished reading. Copy puts the whole entry on "
-            L"the clipboard.", sApp);
+            L"the clipboard.", sRemote);
         Add(L"While connected",
             L"A connection — driving another instance, or being driven by one — puts the "
             L"viewer into a restricted mode, and leaves it when the last connection drops.\r\n"
@@ -837,7 +870,7 @@ namespace UI {
             L"screen. Copy to clipboard still works: it reads a file and writes nothing.\r\n"
             L"Connecting while already sorted by disk order switches you to sort by Name.\r\n"
             L"Delete, move, paste and save are additionally NEVER reachable over the network, "
-            L"whatever the password or allow-list says.", sApp);
+            L"whatever the password or allow-list says.", sRemote);
         Add(L"Driving another machine",
             L"An instance on the SAME computer is mirrored exactly — it shares the folder, so "
             L"image numbers mean the same picture on both. An instance on ANOTHER computer "
@@ -851,11 +884,61 @@ namespace UI {
             L"end decodes what it receives, and nothing about the transfer depends on it "
             L"being able to read your disk. Both ends must be recent enough to know the "
             L"streaming commands (remote protocol v2) — an older one is refused with a "
-            L"message that says so rather than being left to fail.", sApp);
+            L"message that says so rather than being left to fail.", sRemote);
         Add(K(SC::SC_MIRROR_LOCAL_TOGGLE),
             L"While mirroring, also execute the command HERE. Off (the default) makes this "
             L"viewer a pure remote control: it drives the other screens and its own display "
-            L"stays where it is. Has no effect while mirroring is off. Always OFF at startup.", sApp);
+            L"stays where it is. Has no effect while mirroring is off. Always OFF at startup.", sRemote);
+        Add(L"qIV Remote (Android)",
+            L"THE PHONE CLIENT, and the reason F9 is worth switching on even if you never "
+            L"drive a second PC. It speaks this same protocol — the verbs listed by `help` "
+            L"— so it is a real client rather than a screen share.\r\n"
+            L"IT DRIVES THE VIEWER: next / previous, first / last, slideshow with its "
+            L"interval, pause, loop and shuffle, zoom, rotate, flip, all five view modes, "
+            L"the colour effects, fullscreen, always-on-top, panels and the overlay. This "
+            L"viewer's folder history goes down to the phone too, so a folder here is one "
+            L"tap away there.\r\n"
+            L"PICTURES TRAVEL BOTH WAYS, which is the part a remote control usually cannot "
+            L"do at all. The phone's live preview asks for the displayed image SCALED and "
+            L"re-encoded before it leaves this machine — 25-40x fewer bytes than the "
+            L"original. Save asks for the ORIGINAL FILE separately and writes it into the "
+            L"phone's gallery, because a re-encoded preview is not the file anyone meant to "
+            L"keep. Pushing the other way sends the phone photo's own bytes here, and it is "
+            L"shown ONCE, over whatever is up: no folder change, no sort order change, no "
+            L"playlist move, and a running slideshow carries on with it occupying a single "
+            L"slide.\r\n"
+            L"PRESENTATION MODE is the picture and two large next/previous buttons, sized "
+            L"to press without looking. Bind the connection and the preview follows this "
+            L"viewer by itself — change the picture here, it appears there.\r\n"
+            L"SAME RULES AS ANY OTHER CLIENT. TLS with the pinned certificate off "
+            L"loopback, the password answered by challenge-response so it never crosses "
+            L"the wire, and the AllowList above still decides who may connect at all. Turn "
+            L"Local Server on here first; the app's About screen walks through it, and its "
+            L"demo mode runs every screen against a viewer that does not exist if you want "
+            L"to look before opening a port.", sRemote);
+        Add(L"If qIV crashes",
+            L"A crash writes a dump file NEXT TO THE EXECUTABLE, named "
+            L"QuickImageViewer_crash_<date>_<time>_<pid>.dmp.\r\n"
+            L"NOTHING IS SENT ANYWHERE. qIV has no telemetry and makes no network call of "
+            L"its own — the file is written to your disk and stays there. Attaching it to "
+            L"a GitHub issue is entirely your choice, and it is the difference between a "
+            L"bug that gets fixed and one that stays a mystery, because it holds the exact "
+            L"stack the process died on.\r\n"
+            L"WHAT IS IN IT: a snapshot of the program's internal state, including open "
+            L"file paths and window titles — and NOT the contents of your images. If a "
+            L"path in it is sensitive, say so in the issue instead of attaching the file.", sApp);
+        Add(L"Supporting qIV",
+            L"qIV is one person's work, given away complete: no advertising, no telemetry, "
+            L"no paid tier and no feature held back.\r\n"
+            L"If it earns a place in your day, sponsorship is what buys the time to keep "
+            L"building it — github.com/sponsors/icyhoty2k, or ko-fi.com/ivanhristovyanev "
+            L"if you would rather not need a GitHub account. A star on the repository, a "
+            L"bug report with a dump attached, or telling someone about it all help more "
+            L"than they look like they do.\r\n"
+            L"THE LICENCE IS AGPLv3: use it, study it, change it, share it. Building qIV "
+            L"or its remote subsystem into a product you do not intend to open-source — "
+            L"signage, kiosks, retail or museum displays, industrial or medical stations — "
+            L"is what the separate commercial licence is for. icyhoty2k@gmail.com.", sApp);
         Add(K(SC::SC_TOGGLE_ALL_PANELS),
             L"Toggle all panels: closes every floating panel and directory strip if any is "
             L"open, otherwise restores exactly the set the last close hid. Main viewer stays.", sApp);
@@ -899,6 +982,15 @@ namespace UI {
             L"the list is capped at the History Max Dirs value.", sTray);
         Add(L"Settings › Info Overlays",
             L"Show / hide all nine overlay text slots at once.", sTray);
+        Add(L"Overlays › Font / Font Size / Font Color…",
+            L"Typeface, point size and colour for every overlay slot. Font Color opens "
+            L"the standard colour picker; the size is shown in its own label. All three "
+            L"are persisted, so a wall of screens can be made readable from across a "
+            L"room once and left alone.", sTray);
+        Add(L"Overlays › Layout / Message Duration",
+            L"Layout picks Grid, Stacked or Summary — the same three O cycles through. "
+            L"Message Duration is how long a centre-screen message stays up, in "
+            L"milliseconds.", sTray);
         Add(L"Settings › Open Thumbnail Strip on Start",
             L"Automatically open the directory thumbnail strip on every launch.", sTray);
         Add(L"Settings › Overlay Background",
@@ -958,6 +1050,22 @@ namespace UI {
         Add(L"Backup › Restore History && Favorites",
             L"Restore from a previously created ZIP backup after a confirmation dialog. "
             L"Overwrites current history and favorites in memory and on disk.", sTray);
+        Add(L"Logging › General Log",
+            L"Record what qIV itself did — started, closed, and whether the previous run "
+            L"ended abnormally, naming the crash dump when there is one. Off by default "
+            L"and remembered across restarts, because the screen that misbehaves at four "
+            L"in the morning is the one nobody was watching.", sTray);
+        Add(L"Logging › TCP/IP Log",
+            L"Write every line exchanged with a remote client to disk — the same traffic "
+            L"the Server Log panel shows (Ctrl+F12). Independent of that panel's Recording "
+            L"button: this captures whether or not the panel is recording.", sTray);
+        Add(L"Logging › Open Log Folder",
+            L"Open logs\\ in Explorer. Files land in logs\\general\\ and logs\\network\\ "
+            L"beside the EXE, rotate every 5000 lines, and use the standard "
+            L"time [thread] LEVEL message layout that LogViewPlus and lnav read without "
+            L"configuration. A rotated TCP/IP file reopens in the Server Log panel with "
+            L"Ctrl+O. Writing runs on its own thread, so a slow disk never stalls the "
+            L"viewer.", sTray);
 
         // ---------------------------------------------------------------
         const int sDed = Sec(Constants::ThemeIcons::ICON_SECTION_DESKTOP, L"DEDICATED SCREENS",

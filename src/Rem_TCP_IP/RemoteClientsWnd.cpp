@@ -1,3 +1,11 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// Copyright (C) 2026 Ivan Hristov Yanev
+//
+// This file is part of QuickImageViewer. It is free software: you may
+// redistribute and modify it under the terms of the GNU Affero General Public
+// License version 3 or later, as published by the Free Software Foundation.
+// It is distributed WITHOUT ANY WARRANTY. See the LICENSE file for details.
+
 #include "RemoteClientsWnd.h"
 #include "RemoteSettings.h"   // BlockScope — what a ban or a timed kick writes
 #include "RemoteProtocol.h"   // FormatEndpoint — brackets IPv6 literals
@@ -42,7 +50,7 @@ namespace {
     constexpr UINT TIMER_REFRESH    = 1;
     constexpr UINT REFRESH_INTERVAL = 1000;
 
-    // BTN_SERVER opens F9 — the counterpart of the Server Clients button there.
+    // BTN_SERVER opens F9 — the counterpart of the My Clients button there.
     // The two panels are one subject split in half, and the crossing is constant:
     // ban an address here, widen the AllowList there.
     enum ButtonId { BTN_KICK = 1, BTN_TIMED, BTN_BAN, BTN_LIFT, BTN_SERVER };
@@ -63,6 +71,16 @@ namespace {
     }
 
     long long NowTicks() { return static_cast<long long>(GetTickCount64()); }
+
+    // NO DEVICE GLYPH. The platform is known — `agent` carries it and the
+    // description line names it in words — but no icon was settled on, and a
+    // placeholder pictogram is worse than none: it would be the one mark in this
+    // list derived from something the PEER claims rather than something this
+    // machine observed. The scope glyph below is the opposite, which is why it
+    // earns its place.
+
+    // The scope glyph lives in RemoteProtocol now — Servers (F10) shows one too,
+    // and the two must never disagree about what counts as "the LAN".
 }
 
 // =============================================================================
@@ -70,7 +88,7 @@ namespace {
 // =============================================================================
 void RemoteClientsWnd::Init(HINSTANCE hInstance, HWND hParent) {
     const float s = app.dpiScale;
-    InitFloating(hInstance, hParent, L"qIVRemoteClientsWnd", L"Server Clients",
+    InitFloating(hInstance, hParent, L"qIVRemoteClientsWnd", L"My Clients",
                  static_cast<int>(PANEL_W * s), static_cast<int>(PANEL_H * s));
     if (GetHwnd()) {
         SetWindowLongPtrW(GetHwnd(), GWL_EXSTYLE,
@@ -134,11 +152,45 @@ void RemoteClientsWnd::BuildRows() {
             if (ci.sameMachine) value += L", this machine";
             value += L", connected " + Elapsed(now - ci.sinceMs);
 
+            // WATCHING is the difference between a screen and a script.
+            //
+            // Everything else in this row describes a socket. This describes what
+            // the peer is FOR: a client that sent `Observe 1` is being pushed
+            // every action and is showing the pictures, which is a phone on a
+            // wall. One that has not is polling, scripting, or idle.
+            //
+            // It matters when deciding what to kick. Two rows from the same
+            // address tell you nothing; "Kitchen tablet — watching" and a bare
+            // connection tell you which one is the display somebody is looking at.
+            if (ci.observing) value += L", watching";
+
             Row r;
             r.kind  = Kind::Client;
-            r.label = Remote::FormatEndpoint(ci.address, ci.port);
+            // Glyph in front of the ADDRESS, because both describe where the
+            // connection came from and both are this machine's own observation.
+            // The peer-chosen name stays over in the value, where it cannot be
+            // mistaken for identity.
+            r.label = std::wstring(Remote::ScopeIcon(ci.address, ci.sameMachine)) + L"  " +
+                      Remote::FormatEndpoint(ci.address, ci.port);
             r.value = std::move(value);
-            r.desc  = L"Kick closes it. Kick for N also refuses this peer for a "
+            // What the peer said about itself, on the description line rather
+            // than in the row: it is useful when you are deciding what something
+            // is, and noise when you are scanning the list.
+            //
+            // "?" for anything it never told us. A blank reads as "nothing";
+            // a question mark reads as "it did not say", which is the truth.
+            Remote::AgentInfo ag;
+            ag.app      = ci.agentApp;
+            ag.version  = ci.agentVersion;
+            ag.os       = ci.agentOs;
+            ag.host     = ci.agentHost;
+            ag.platform = ci.platform;
+
+            // CLIENT, always, in this panel: every row here reached us through
+            // the listener. Mirroring passes Server for the same reason —
+            // this instance dialled those.
+            r.desc  = Remote::DescribeAgent(ag, Remote::AgentRole::Client) +
+                      L"\r\nKick closes it. Kick for N also refuses this peer for a "
                       L"while. Ban blacklists it permanently.";
             r.item  = static_cast<int>(i);
             m_rows.push_back(std::move(r));
@@ -263,11 +315,27 @@ std::wstring RemoteClientsWnd::StatusLine() const {
 // =============================================================================
 // Actions
 // =============================================================================
+// EVERYTHING THE ACTION NEEDS IS COPIED OUT OF m_conns BEFORE THE DIALOG, and
+// all three of these functions do it for the same reason.
+//
+// They used to hold `const ClientInfo &ci = m_conns[idx]` across the confirm
+// box. A dialog runs a MODAL MESSAGE LOOP, so WM_QIV_REMOTE_CLIENTS is
+// delivered while it is open — and that reaches BuildRows, which reassigns
+// m_conns and frees the buffer the reference points into. Reading ci.id after
+// the user pressed Yes was then a use-after-free, and it crashed exactly that
+// way: a kick landing made the previous connection's departure arrive while the
+// next confirm box was up.
+//
+// A ConnId copied out early can go stale — the connection may end while the
+// question is on screen — but stale is the case these functions already handle
+// and report ("that connection had already closed"). Dangling is not.
 void RemoteClientsWnd::DoKick() {
     const int idx = SelectedClient();
     if (idx < 0) return;
-    const Remote::ClientInfo &ci = m_conns[static_cast<size_t>(idx)];
-    const std::wstring where = Remote::FormatEndpoint(ci.address, ci.port);
+    const Remote::ConnId id      = m_conns[static_cast<size_t>(idx)].id;
+    const std::wstring   address = m_conns[static_cast<size_t>(idx)].address;
+    const int            port    = m_conns[static_cast<size_t>(idx)].port;
+    const std::wstring   where   = Remote::FormatEndpoint(address, port);
 
     if (!DialogConfirm(L"Close the connection from " + where + L"?\r\n\r\n"
                        L"This does not block the address — the same client may "
@@ -277,7 +345,7 @@ void RemoteClientsWnd::DoKick() {
     // False means it ended on its own between the last refresh and the button
     // press. Said out loud rather than ignored: the row vanishing a second later
     // would otherwise look like the kick worked.
-    m_lastResult = Remote::KickConnection(ci.id)
+    m_lastResult = Remote::KickConnection(id)
                        ? L"Kicked " + where
                        : L"That connection had already closed.";
     BuildRows();
@@ -287,8 +355,11 @@ void RemoteClientsWnd::DoKick() {
 void RemoteClientsWnd::DoTimedKick() {
     const int idx = SelectedClient();
     if (idx < 0) return;
-    const Remote::ClientInfo &ci = m_conns[static_cast<size_t>(idx)];
-    const std::wstring where = Remote::FormatEndpoint(ci.address, ci.port);
+    // Copied, not referenced — see DoKick.
+    const Remote::ConnId id      = m_conns[static_cast<size_t>(idx)].id;
+    const std::wstring   address = m_conns[static_cast<size_t>(idx)].address;
+    const int            port    = m_conns[static_cast<size_t>(idx)].port;
+    const std::wstring   where   = Remote::FormatEndpoint(address, port);
 
     const int minutes = DialogPromptInt(L"Refuse this peer for how many minutes?",
                                         RT::TIMED_BLOCK_DEFAULT_MIN,
@@ -298,7 +369,7 @@ void RemoteClientsWnd::DoTimedKick() {
     if (minutes <= 0) return;   // cancelled
 
     std::wstring written;
-    if (!Remote::TimedKickConnection(ci.id, minutes, written)) {
+    if (!Remote::TimedKickConnection(id, minutes, written)) {
         m_lastResult = L"That connection had already closed — nothing was blocked.";
     } else {
         m_lastResult = L"Kicked " + where + L" — " + written + L" refused for " +
@@ -306,7 +377,7 @@ void RemoteClientsWnd::DoTimedKick() {
         // Named when it is WIDER than the row, because a /64 is not what the
         // list showed and blocking one silently would be the panel doing
         // something broader than it appeared to offer.
-        if (written != ci.address)
+        if (written != address)
             m_lastResult += L" (the whole /64)";
     }
     BuildRows();
@@ -316,18 +387,20 @@ void RemoteClientsWnd::DoTimedKick() {
 void RemoteClientsWnd::DoBan() {
     const int idx = SelectedClient();
     if (idx < 0) return;
-    const Remote::ClientInfo &ci = m_conns[static_cast<size_t>(idx)];
+    // Copied, not referenced — see DoKick.
+    const Remote::ConnId id      = m_conns[static_cast<size_t>(idx)].id;
+    const std::wstring   address = m_conns[static_cast<size_t>(idx)].address;
 
     // WHAT WILL ACTUALLY BE WRITTEN, computed before the question is asked. For
     // IPv6 that is a /64 rather than the address on the row.
-    const std::wstring scope = Remote::BlockScope(ci.address);
-    const bool         wider = (scope != ci.address);
+    const std::wstring scope = Remote::BlockScope(address);
+    const bool         wider = (scope != address);
 
     std::wstring text = L"Block " + scope + L" permanently and close this "
                         L"connection?\r\n\r\n";
     if (wider)
         text += L"That is the whole /64 this client's address belongs to, not "
-                L"just " + ci.address + L". A single IPv6 address is not worth "
+                L"just " + address + L". A single IPv6 address is not worth "
                 L"blocking — the peer has billions of others in that same "
                 L"prefix.\r\n\r\n";
     text += L"Written to qivRemoteServerBlacklist.ini and survives a restart. "
@@ -337,7 +410,7 @@ void RemoteClientsWnd::DoBan() {
     if (!DialogConfirm(text)) return;
 
     std::wstring written;
-    m_lastResult = Remote::BanConnection(ci.id, written)
+    m_lastResult = Remote::BanConnection(id, written)
                        ? L"Blocked " + written + L" permanently"
                        : L"That connection had already closed — nothing was blocked.";
     BuildRows();
@@ -373,20 +446,20 @@ void RemoteClientsWnd::PopTopmost() {
 
 void RemoteClientsWnd::DialogMessage(const std::wstring &text) {
     PushTopmostOff();
-    ThemedDialog::Message(GetHwnd(), text.c_str(), L"Server Clients");
+    ThemedDialog::Message(GetHwnd(), text.c_str(), L"My Clients");
     PopTopmost();
 }
 
 bool RemoteClientsWnd::DialogConfirm(const std::wstring &text) {
     PushTopmostOff();
-    const bool r = ThemedDialog::Confirm(GetHwnd(), text.c_str(), L"Server Clients");
+    const bool r = ThemedDialog::Confirm(GetHwnd(), text.c_str(), L"My Clients");
     PopTopmost();
     return r;
 }
 
 int RemoteClientsWnd::DialogPromptInt(const wchar_t *label, int cur, int lo, int hi, int def) {
     PushTopmostOff();
-    const int r = ThemedDialog::PromptInt(GetHwnd(), L"Server Clients", label, cur, lo, hi, def);
+    const int r = ThemedDialog::PromptInt(GetHwnd(), L"My Clients", label, cur, lo, hi, def);
     PopTopmost();
     return r;
 }
@@ -607,7 +680,19 @@ LRESULT RemoteClientsWnd::HandlePanelMessage(UINT message, WPARAM wParam, LPARAM
             SelectObject(bb, m_hFontBold);
             SetTextColor(bb, fg);
             RECT tr{pad, static_cast<int>(6 * s), W - pad, static_cast<int>(26 * s)};
-            DrawTextW(bb, L"Server clients — who is connected to this instance's listener",
+            // COUNTS IN THE TITLE, matching Servers and Mirroring. The footer
+            // already reports clients/max, but that line is also where errors and
+            // action results land — a total belongs where it cannot be replaced.
+            int watchingCount = 0;
+            for (const Remote::ClientInfo &c : m_conns)
+                if (c.observing) ++watchingCount;
+
+            const std::wstring clientsTitle =
+                L"\U0001F64B Clients — who connected to this instance   \x00B7   " +
+                std::to_wstring(m_conns.size()) + L" connected, " +
+                std::to_wstring(watchingCount) + L" watching";
+
+            DrawTextW(bb, clientsTitle.c_str(),
                       -1, &tr, DT_LEFT | DT_SINGLELINE);
 
             // ── Buttons ──────────────────────────────────────────────────────

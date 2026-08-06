@@ -1,3 +1,11 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// Copyright (C) 2026 Ivan Hristov Yanev
+//
+// This file is part of QuickImageViewer. It is free software: you may
+// redistribute and modify it under the terms of the GNU Affero General Public
+// License version 3 or later, as published by the Free Software Foundation.
+// It is distributed WITHOUT ANY WARRANTY. See the LICENSE file for details.
+
 #pragma once
 
 #include <windows.h>
@@ -141,4 +149,13 @@ class IImageRenderer {
         // Advances to next frame; returns the new current frame's delay.
         virtual int  AdvanceGifFrame() { return 0; }
         virtual void ResetGifAnimation() {}
+
+        // Has the decoder already tried this file and given up? Lets the UI
+        // stop waiting for a decode that failed and say so instead — a file
+        // whose extension promises an image the data is not (a .txt renamed to
+        // .jpg) or a supported format whose bytes are damaged.
+        //
+        // Defaults to false: a renderer that does not track this simply never
+        // reports a failure, which is the behaviour every caller had before.
+        virtual bool DecodeFailed(const std::wstring & /*path*/) const { return false; }
 };

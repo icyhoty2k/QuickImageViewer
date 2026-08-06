@@ -1,3 +1,11 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// Copyright (C) 2026 Ivan Hristov Yanev
+//
+// This file is part of QuickImageViewer. It is free software: you may
+// redistribute and modify it under the terms of the GNU Affero General Public
+// License version 3 or later, as published by the Free Software Foundation.
+// It is distributed WITHOUT ANY WARRANTY. See the LICENSE file for details.
+
 #pragma once
 #include "TextOverlay.h"
 #include <string>
@@ -105,7 +113,20 @@ class OverlayManager {
         // Repaints TOP_RIGHT's server indicator. Called from the
         // WM_QIV_REMOTE_CLIENTS handler — the listener starting, stopping, or
         // gaining/losing a client.
-        void UpdateRemoteStatus();
+        //
+        // Takes the window because a CHANGE in the client count starts the blink
+        // timer, and only a real arrival or departure does: the listener merely
+        // starting is not somebody connecting.
+        void UpdateRemoteStatus(HWND hWnd,
+                                Constants::RemoteTcpIp::ClientEvent event =
+                                    Constants::RemoteTcpIp::ClientEvent::Other);
+
+        // One blink phase. Called from WM_TIMER for TIMER_SERVER_BLINK.
+        void OnServerBlinkTimer(HWND hWnd);
+
+        // Redraws TOP_RIGHT's text without any blink logic — for changes that
+        // are not a connection: a compact toggle, a layout switch, a blink phase.
+        void RefreshRemoteIndicator();
 
         // BOT_RIGHT  — pixel dimensions + file size in bytes
         void UpdateDims(int imgW, int imgH, int64_t fileSizeBytes);
@@ -250,6 +271,32 @@ class OverlayManager {
         static constexpr UINT_PTR TIMER_CENTER_MSG = 1002;
         bool m_centerMsgActive = false; // true while the auto-hide timer is running
         MsgSeverity m_centerMsgSeverity = MsgSeverity::Normal; // colour of the live message
+
+        // ── Server-dot blink ────────────────────────────────────────────────
+        // The indicator blinks three times when a client ARRIVES or LEAVES, so
+        // a change is noticeable on a screen nobody is staring at. The count
+        // beside it already says what happened; this is what makes anyone look.
+        //
+        // 1010 — 1002 is the centre message, 1003-1006 the slideshow, 1008-1009
+        // the directory watchers. See Constants.h.
+        static constexpr UINT_PTR TIMER_SERVER_BLINK = 1010;
+
+        // Phases remaining, counting down to 0 = not blinking. Two phases make
+        // one blink, so this starts at OVERLAY_SERVER_BLINK_COUNT * 2 and the
+        // even total is what guarantees it ends lit.
+        int  m_blinkPhasesLeft = 0;
+        bool m_blinkDark       = false;
+
+        // WHAT happened, deciding the lit phase's colour. Only meaningful while
+        // m_blinkPhasesLeft > 0. Comes from the socket thread via wParam — the
+        // UI thread cannot work it out for itself, see ClientEvent.
+        Constants::RemoteTcpIp::ClientEvent m_blinkEvent =
+            Constants::RemoteTcpIp::ClientEvent::Other;
+
+        // No client-count baseline is kept. Comparing counts was the first
+        // design and it could not survive two clients leaving between repaints,
+        // nor say WHY any of them left — the socket thread sends the reason with
+        // the message instead. See ClientEvent.
 
         // ── Helpers ──────────────────────────────────────────────────────────
         // Rebuilds both slot bitmasks from m_slots into AppState and saves them.

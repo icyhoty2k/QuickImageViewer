@@ -1,4 +1,16 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// Copyright (C) 2026 Ivan Hristov Yanev
+//
+// This file is part of QuickImageViewer. It is free software: you may
+// redistribute and modify it under the terms of the GNU Affero General Public
+// License version 3 or later, as published by the Free Software Foundation.
+// It is distributed WITHOUT ANY WARRANTY. See the LICENSE file for details.
+
 #include <algorithm>
+#include <filesystem> // parent_path() of the open playlist — the exit-path folder record
+#include <numeric>    // std::iota — the shuffle order. Was arriving only through
+                      // an MSVC transitive include, so any stricter compiler or
+                      // static-analysis pass reported it as undeclared.
 #include <random>
 
 using std::min;
@@ -25,9 +37,11 @@ extern void UpdateOverlaysForCurrentImage(HWND hWnd);
 #include "WorkerThread.h"
 #include "Platform/Constants.h"
 #include "Platform/ConstantsStrings.h"
+#include "Platform/CrashHandler.h"  // installed as the first statement of wWinMain
 #include "../DropTarget.h"
 #include "Platform/FileHandler.h"
-#include "GeoNames.h"
+// GeoNames.h intentionally not included: the geocoding tables are loaded by
+// ExifWnd::Show, the only screen that consumes them.
 #include "UI/ThumbnailPanels/DirWnd.h"
 #include "UI/ThemedDialog.h"
 #include "UI/FloatingPanels/HistoryListWnd.h"
@@ -44,6 +58,9 @@ extern void UpdateOverlaysForCurrentImage(HWND hWnd);
 #include "Rem_TCP_IP/RemoteSettings.h"   // Remote::Config — is the listener enabled?
 #include "Rem_TCP_IP/RemoteServer.h"     // WM_QIV_REMOTE_COMMAND execution + shutdown
 #include "Rem_TCP_IP/RemoteMirror.h"     // the driving half — targets + sender threads
+#include "Rem_TCP_IP/RemoteBeacon.h"     // withdraw the network announcement on exit
+#include "Rem_TCP_IP/RemoteLog.h"        // the wire log's file sink — applied at startup, drained at exit
+#include "Platform/AppLog.h"             // the General log — lifecycle lines live here
 #include "Rem_TCP_IP/RemoteInbound.h"    // InboundGuard — the loop cut
 #include "Rem_TCP_IP/RemoteExec.h"       // BuildSyncPayload for the desync repair
 #include "Rem_TCP_IP/RemotesFile.h"      // qivRemoteServers.ini — the saved target list
@@ -87,6 +104,15 @@ DecoderThreadPool g_decoderWorker;
 // Kept separate so LoadImageIndex's ClearQueue() never wipes dir thumb tasks.
 DecoderThreadPool g_dirThumbWorker;
 
+// Did THIS run set the "running" mark in qivSession.ini?
+//
+// Only set when the General log is on, because the mark exists solely to be
+// reported into that log — see the note where it is written. Remembered rather
+// than re-tested at exit: the log can be switched off mid-session, and clearing
+// a mark this run did not set, or leaving one it did, would each fake the
+// opposite answer next launch.
+static bool g_markedRunning = false;
+
 
 // Shift+Delete (Shortcuts::SC_APP_RESET_DEFAULTS) — restore default application
 // state: window size/position centered on the current monitor, zoom/pan/
@@ -124,6 +150,29 @@ LRESULT CALLBACK MainAppWndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM l
             const LRESULT r = DefWindowProcW(hWnd, message, wParam, lParam);
             AppCommands::ApplyDisplayAwake(hWnd);
             return r;
+        }
+
+        // A monitor was unplugged, or the arrangement/resolution changed. The
+        // window can be left somewhere the mouse can no longer reach — the one
+        // way a placement goes bad WHILE the app is running rather than between
+        // launches, and the user cannot drag it back because there is nothing
+        // left to grab.
+        //
+        // Only the unreachable case is touched. A window that is merely on a
+        // different monitor than before, or partly off an edge, is left exactly
+        // where it is: moving a window the user can still see and grab would be
+        // the app fighting them.
+        case WM_DISPLAYCHANGE: {
+            RECT rc{};
+            if (GetWindowRect(hWnd, &rc)) {
+                if (!IsUsableWindowRect(rc.left, rc.top,
+                                        rc.right - rc.left, rc.bottom - rc.top)) {
+                    app.ResetWindowGeometry(hWnd);
+                    g_overlayManager.PostCenterMessage(hWnd,
+                        Constants::Messages::WINDOW_RECOVERED);
+                }
+            }
+            return 0;
         }
 
         case WM_DPICHANGED: {
@@ -273,8 +322,12 @@ LRESULT CALLBACK MainAppWndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM l
 
         // The listener started, stopped, or gained/lost a client. Repaint the
         // overlay's server indicator — the only thing that shows it.
+        // wParam carries WHY the list changed — see ClientEvent. The socket
+        // thread is the only place that knows, so it travels with the message
+        // rather than being guessed at from the count.
         case Constants::WM_QIV_REMOTE_CLIENTS:
-            g_overlayManager.UpdateRemoteStatus();
+            g_overlayManager.UpdateRemoteStatus(
+                hWnd, static_cast<Constants::RemoteTcpIp::ClientEvent>(wParam));
             InvalidateRect(hWnd, nullptr, FALSE);
             return 0;
 
@@ -301,6 +354,14 @@ LRESULT CALLBACK MainAppWndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM l
 
             if (wParam == TIMER_CENTER_MSG) {
                 g_overlayManager.OnCenterMessageTimer(hWnd);
+                return 0;
+            }
+
+            // The server dot's connect / disconnect blink. It kills its own
+            // timer when the count runs out — nothing ticks between blinks.
+            // Rate and count are OVERLAY_SERVER_BLINK_MS / _COUNT.
+            if (wParam == 1010) {   // OverlayManager::TIMER_SERVER_BLINK
+                g_overlayManager.OnServerBlinkTimer(hWnd);
                 return 0;
             }
 
@@ -644,6 +705,31 @@ LRESULT CALLBACK MainAppWndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM l
                     if (app.renderer->IsAnimatedGif())
                         SetTimer(hWnd, Constants::Slideshow::GIF_TIMER_ID,
                                  app.renderer->GetCurrentGifDelay(), nullptr);
+                } else if (app.renderer->DecodeFailed(currentPath)) {
+                    // The probe found nothing AND the decoder has already given
+                    // up on this file — so this is not "still decoding", it is
+                    // never going to decode. A .txt renamed to .jpg gets this
+                    // far because the playlist is built from extensions, and so
+                    // does a supported format whose bytes are damaged.
+                    //
+                    // Say which file and which extension was refused, rather
+                    // than leaving the black rectangle that used to be the whole
+                    // report. The path stays the real one so the last line still
+                    // opens the containing folder.
+                    const std::filesystem::path p(currentPath);
+                    std::wstring detail = p.parent_path().filename().wstring();
+                    if (!detail.empty()) detail += L"  \\  ";
+                    detail += p.filename().wstring();
+                    const std::wstring ext = p.extension().wstring();
+                    if (!ext.empty()) {
+                        detail += L"  \\  ";
+                        detail += ext;
+                    }
+
+                    app.folderOverlay       = AppState::FolderOverlayState::Unsupported;
+                    app.folderOverlayPath   = currentPath;
+                    app.folderOverlayDetail = detail;
+                    InvalidateRect(hWnd, nullptr, FALSE);
                 }
             }
             return 0;
@@ -730,10 +816,37 @@ LRESULT CALLBACK MainAppWndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM l
             // thread can post WM_QIV_REMOTE_COMMAND to an HWND that is on its
             // way out — that message would never be handled and the poster
             // would block for the full reply timeout.
+            // RECORDED BEFORE ANY TEARDOWN, so this line exists even if
+            // something below it throws or hangs. Its presence in the file is
+            // what makes a CLEAN exit distinguishable from a killed process —
+            // a log that simply stops means the second one.
+            AppLog::Info(AppLog::COMP_SHUTDOWN, L"closing normally");
+
+            // THE MARK COMES OFF ONLY HERE, on the one path that means a clean
+            // exit. Everything that skips this point — killed, power lost,
+            // crashed — leaves it set, and the next launch reports it. That is
+            // the entire abnormal-shutdown mechanism: a process that dies
+            // suddenly cannot report itself, so what testifies is the thing it
+            // failed to clean up.
+            //
+            // Guarded, so a run that never set one does not pay an .ini rewrite
+            // to clear something that was not there.
+            if (g_markedRunning) Persistence::Session::MarkRunning(false);
+
             Remote::Stop();
+            // Drains the queue and JOINS the writer, so the rows recorded in
+            // the last moments — which are the ones worth having — reach the
+            // file rather than dying with the process.
+            Remote::Log::ShutdownFileLogging();
+            AppLog::Shutdown();
             // Same reasoning for the driving half: every sender thread must be
             // joined before the HWND it posts results to stops existing.
             Remote::Mirror::Shutdown();
+            // Remote::Stop above already withdraws the announcement through
+            // Refresh; this frees the instance outright. Belt to that brace, and
+            // it matters more than most teardown: a service record left behind
+            // makes this machine visible on the network after it has quit.
+            Remote::Beacon::Shutdown();
             PostQuitMessage(0);
             return 0;
     }
@@ -754,6 +867,11 @@ static bool HasAVX2Support() {
 }
 
 int WINAPI wWinMain(HINSTANCE hInstance, [[maybe_unused]] HINSTANCE hPrevInstance, [[maybe_unused]] PWSTR pCmdLine, int nCmdShow) {
+    // FIRST STATEMENT IN THE PROGRAM, before the CPU check and before OLE.
+    // Anything that runs ahead of this crashes invisibly, which is the state
+    // qIV was in until now — see CrashHandler.h.
+    Platform::Crash::Install();
+
     if (!HasAVX2Support()) {
         TaskDialog(nullptr, nullptr,
                    L"QuickImageViewer — CPU not supported",
@@ -765,10 +883,8 @@ int WINAPI wWinMain(HINSTANCE hInstance, [[maybe_unused]] HINSTANCE hPrevInstanc
         return 1;
     }
 
-    // 1. Initialize OLE
-    if (FAILED(OleInitialize(nullptr))) return 0;
-    // Enable process-wide dark standard controls for the tray menu
-
+    // COM IS NOT INITIALISED HERE. It moved below the single-instance check —
+    // see the note there. Nothing between this point and that check touches COM.
 
     // Set DPI awareness
     typedef BOOL (WINAPI *SETDPI)(DPI_AWARENESS_CONTEXT);
@@ -779,30 +895,11 @@ int WINAPI wWinMain(HINSTANCE hInstance, [[maybe_unused]] HINSTANCE hPrevInstanc
     }
     const unsigned int hc = std::thread::hardware_concurrency();
     app.hardwareThreads = static_cast<int>(hc > 0 ? hc : 1); // Default to 1 if OS returns 0
-    //dynamic thread selection
-    g_decoderWorker.setThreadCount(app.hardwareThreads > 3 ? Constants::VRAM_CACHE_DECODER_THREADS_COUNT : 1);
-    int dirThumbThreads = (app.hardwareThreads >= 8) ? (app.hardwareThreads / 2) : (Constants::VRAM_CACHE_THUMBS_THREADS_COUNT);
-    dirThumbThreads = std::min(dirThumbThreads, 8); // IShellItemImageFactory::GetImage serializes internally; >8 gives no gain
-    g_dirThumbWorker.setThreadCount(std::max(1, dirThumbThreads));
 
-    // Warm up GeoNames data in the background so the first ExifWnd GPS lookup
-    // doesn't stall the IO worker with a 100-500 ms decompress+parse.
-    g_decoderWorker.PushTask([](IWICImagingFactory2 *) {
-        GeoNames::WarmUp();
-    });
-#ifdef _DEBUG
-    // Use the public getter instead of accessing private member m_threads
-    std::wstring debugMsg = L"DecoderThreadPool: Initialized with " +
-                            std::to_wstring(g_decoderWorker.getThreadCount()) +
-                            L" threads.\n" +
-                            L"DecoderThreadPool: Initialized with " +
-                            std::to_wstring(g_dirThumbWorker.getThreadCount()) +
-                            L" threads.\n";
-    OutputDebugStringW(debugMsg.c_str());
-
-#endif
-
-    CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED | COINIT_DISABLE_OLE1DDE);
+    // THE WORKER POOLS ARE NOT STARTED HERE. See "STARTUP ORDER" below the
+    // single-instance check — nothing that spawns a thread, allocates a cache or
+    // parses a data file may run before this process knows whether it is going to
+    // exist at all.
 
     // --- COMMAND LINE PARSING (before registry — args are highest priority) ---
     int argc;
@@ -852,44 +949,29 @@ int WINAPI wWinMain(HINSTANCE hInstance, [[maybe_unused]] HINSTANCE hPrevInstanc
         return 0;
     }
 
-    // Source of truth for user preferences: the .ini for a dedicated instance,
-    // the registry otherwise. LoadAllSettings routes itself.
-    Persistence::Registry::LoadAllSettings(app);
-
-    // Command-line overrides: args beat registry values.
-    if (earlyArgs.runOnStartup) app.isEnableRunOnStartup = true;
-
-    // Capture by value — background threads must not read app fields that could change.
-    const bool bgDedicated          = app.isDedicated;
-    const bool bgEnableRunOnStartup = app.isEnableRunOnStartup;
-
-    // --- Parallel startup work — runs while window creation + renderer init proceed ---
-
-    // Registry maintenance: open-with registration + startup entry (every launch, ~2-4 ms).
-    std::thread registryThread([bgDedicated, bgEnableRunOnStartup]() {
-        if (!bgDedicated)
-            Persistence::Registry::RegisterAppForOpenWith();
-        Persistence::Registry::EnableRunOnStartup(bgEnableRunOnStartup);
-    });
-
-    // WIC imaging factory: loads windowscodecs.dll cold (5-15 ms), warm ~0 ms.
-    // IWICImagingFactory2 implements the free-threaded marshaler — safe to create
-    // in an MTA thread and use on the main STA thread after join().
-    std::atomic<bool> wicOk{false};
-    std::thread wicThread([&wicOk]() {
-        CoInitializeEx(nullptr, COINIT_MULTITHREADED);
-        wicOk = SUCCEEDED(CoCreateInstance(CLSID_WICImagingFactory, nullptr,
-                                           CLSCTX_INPROC_SERVER,
-                                           IID_PPV_ARGS(&app.wicFactory)));
-        CoUninitialize();
-    });
-
-    // History + favorites from disk: cold HDD 1-10 ms, warm NVMe ~0 ms.
-    std::thread historyThread([]() {
-        UI::LoadFolderHistoryFromDisk();
-    });
-
-    // --- SINGLE INSTANCE & RAM RESIDENT LOGIC ---
+    // =========================================================================
+    // SINGLE INSTANCE — AS EARLY AS IT CAN POSSIBLY BE
+    //
+    // A launch that is going to hand its file to an already-running copy must do
+    // NOTHING before it finds that out. It used to sit far below this point,
+    // after the thread pools were started and a 100-500 ms GeoNames parse had
+    // been queued — so every "open with qIV" on a running instance spun up a
+    // process that allocated caches, started threads, parsed data files, and then
+    // discovered it should exit. Returning from wWinMain then destroyed the
+    // statics out from under its own still-running threads, which is a crash that
+    // went unnoticed for as long as it existed because it happened in a process
+    // nobody was looking at.
+    //
+    // WHY IT CANNOT MOVE ANY HIGHER:
+    //   * ResolveMutexName reads the .ini's [Instance]Mutex, so the Dedicated
+    //     setup above must have run.
+    //   * -RestoreDefaults must be handled BEFORE this. Otherwise, with a copy
+    //     already running, that flag would be forwarded as a wake-up and the
+    //     settings would never be reset.
+    //
+    // Everything after this point — settings, pools, background threads, the
+    // window — belongs only to the instance that is actually going to run.
+    // =========================================================================
     bool bypassMutex = (GetAsyncKeyState(VK_SHIFT) & 0x8000) != 0;
     if (GetEnvironmentVariableW(L"QIV_NEW_INSTANCE", nullptr, 0) > 0) bypassMutex = true;
 
@@ -924,13 +1006,150 @@ int WINAPI wWinMain(HINSTANCE hInstance, [[maybe_unused]] HINSTANCE hPrevInstanc
             }
             SendMessageW(hExistingWnd, WM_COPYDATA, 0, (LPARAM) &cds);
         }
-        registryThread.detach();
-        wicThread.detach();
-        historyThread.detach();
+
+        // Nothing to stop and nothing to join: no pool has been started and no
+        // background thread exists yet. That is the whole point of the check
+        // living here rather than a hundred lines further down.
         ReleaseMutex(hMutex);
         CloseHandle(hMutex);
         return 0;
     }
+
+    // =========================================================================
+    // STARTUP ORDER — everything below runs ONLY in the surviving instance.
+    // =========================================================================
+
+    // COM, AS LATE AS IT CAN BE — and this is the same argument as the thread
+    // pools below, applied to something that looks free and is not.
+    //
+    // A forwarded launch — "open with qIV" while a copy is already running — is
+    // the most common way this program is started, and it never touches COM: it
+    // parses a command line, reads an .ini, takes a mutex, finds a window and
+    // sends WM_COPYDATA. Initialising an apartment for that process was work
+    // done purely to be torn down again a few hundred microseconds later, on the
+    // exact path a user is watching.
+    //
+    // VERIFIED SAFE, not assumed: nothing between the top of wWinMain and the
+    // check above uses COM. Dedicated's only CoCreateInstance is in
+    // CreateInstanceShortcut, which the F8 panel calls and startup does not.
+    // DPI awareness stays where it was — it is not COM, and it must be set
+    // before any window exists.
+    if (FAILED(OleInitialize(nullptr))) return 0;
+    CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED | COINIT_DISABLE_OLE1DDE);
+
+    // Thread pools. Moved down from the top of wWinMain: starting threads before
+    // knowing whether this process survives is what made the crash above
+    // possible, and it is wasted work on every forwarded launch besides.
+    g_decoderWorker.setThreadCount(app.hardwareThreads > 3 ? Constants::VRAM_CACHE_DECODER_THREADS_COUNT : 1);
+    int dirThumbThreads = (app.hardwareThreads >= 8) ? (app.hardwareThreads / 2) : (Constants::VRAM_CACHE_THUMBS_THREADS_COUNT);
+    dirThumbThreads = std::min(dirThumbThreads, 8); // IShellItemImageFactory::GetImage serializes internally; >8 gives no gain
+    g_dirThumbWorker.setThreadCount(std::max(1, dirThumbThreads));
+
+#ifdef _DEBUG
+    // Use the public getter instead of accessing private member m_threads
+    std::wstring debugMsg = L"DecoderThreadPool: Initialized with " +
+                            std::to_wstring(g_decoderWorker.getThreadCount()) +
+                            L" threads.\n" +
+                            L"DirThumbWorker: Initialized with " +
+                            std::to_wstring(g_dirThumbWorker.getThreadCount()) +
+                            L" threads.\n";
+    OutputDebugStringW(debugMsg.c_str());
+#endif
+
+    // Source of truth for user preferences: the .ini for a dedicated instance,
+    // the registry otherwise. LoadAllSettings routes itself.
+    Persistence::Registry::LoadAllSettings(app);
+
+    // The file sink is PERSISTED, so it has to be applied here rather than only
+    // when the menu item is clicked — the whole point of persisting it is that a
+    // machine which misbehaves comes back logging without anybody being present
+    // to switch it on. Opens no file by itself; the first recorded exchange does.
+    Remote::Log::SetFileLogging(app.remoteLogToFile);
+
+    // The General log, and the FIRST thing it records.
+    //
+    // Started here, immediately after the settings that decide it — everything
+    // before this point is too early to have anything worth saying, and
+    // everything after it is something a dedicated screen might fail at.
+    AppLog::SetEnabled(app.generalLog);
+
+    // ONLY WHEN THE LOG IS ON — and this is a startup-cost decision, not a
+    // correctness one.
+    //
+    // Reading and writing the marker is three .ini operations, and
+    // WritePrivateProfileString rewrites the whole file for one key. Doing that
+    // on every launch to record something nobody will read is a cost the DEFAULT
+    // configuration would pay forever for no benefit. With the log off there is
+    // nowhere to report a crash to, so there is nothing to detect.
+    //
+    // The mark is cleared at exit only if it was set here, so turning the log
+    // off mid-session cannot leave one behind and fake a crash next launch.
+    // Drop values older builds left behind. Deliberately OUTSIDE the log check
+    // below: the cleanup has nothing to do with logging, and gating it there
+    // would leave the stale value in place forever for the majority of users,
+    // who never switch logging on.
+    Persistence::Session::RemoveObsoleteValues();
+
+    if (AppLog::IsEnabled()) {
+        // READ BEFORE THE MARK IS RESET, or the evidence is destroyed by the run
+        // that was supposed to report it.
+        const Persistence::Session::PreviousRun previous =
+            Persistence::Session::TakePreviousRun();
+        Persistence::Session::MarkRunning(true);
+        g_markedRunning = true;
+
+        std::wstring line = std::wstring(Constants::APP_NAME) + L" " +
+                            Constants::APP_VERSION + L" starting";
+        if (app.isDedicated) line += L" (dedicated instance)";
+        AppLog::Info(AppLog::COMP_STARTUP, line);
+
+        // THE PREVIOUS RUN'S OBITUARY, written by the one process able to
+        // deliver it. A dump means an exception the handler caught; no dump
+        // means killed, powered off, or a failure so complete that nothing ran
+        // — and that difference is most of the diagnosis.
+        if (previous.crashed) {
+            if (!previous.dumpPath.empty())
+                AppLog::Error(AppLog::COMP_CRASH,
+                              L"the previous run CRASHED — minidump: " + previous.dumpPath);
+            else
+                AppLog::Error(AppLog::COMP_CRASH,
+                              L"the previous run ended ABNORMALLY and wrote no dump "
+                              L"— killed, power lost, or stopped by the debugger");
+        }
+    }
+
+    // Command-line overrides: args beat registry values.
+    if (earlyArgs.runOnStartup) app.isEnableRunOnStartup = true;
+
+    // Capture by value — background threads must not read app fields that could change.
+    const bool bgDedicated          = app.isDedicated;
+    const bool bgEnableRunOnStartup = app.isEnableRunOnStartup;
+
+    // --- Parallel startup work — runs while window creation + renderer init proceed ---
+
+    // Registry maintenance: open-with registration + startup entry (every launch, ~2-4 ms).
+    std::thread registryThread([bgDedicated, bgEnableRunOnStartup]() {
+        if (!bgDedicated)
+            Persistence::Registry::RegisterAppForOpenWith();
+        Persistence::Registry::EnableRunOnStartup(bgEnableRunOnStartup);
+    });
+
+    // WIC imaging factory: loads windowscodecs.dll cold (5-15 ms), warm ~0 ms.
+    // IWICImagingFactory2 implements the free-threaded marshaler — safe to create
+    // in an MTA thread and use on the main STA thread after join().
+    std::atomic<bool> wicOk{false};
+    std::thread wicThread([&wicOk]() {
+        CoInitializeEx(nullptr, COINIT_MULTITHREADED);
+        wicOk = SUCCEEDED(CoCreateInstance(CLSID_WICImagingFactory, nullptr,
+                                           CLSCTX_INPROC_SERVER,
+                                           IID_PPV_ARGS(&app.wicFactory)));
+        CoUninitialize();
+    });
+
+    // History + favorites from disk: cold HDD 1-10 ms, warm NVMe ~0 ms.
+    std::thread historyThread([]() {
+        UI::LoadFolderHistoryFromDisk();
+    });
 
     // --- Window Creation ---
     // A dedicated copy registers its OWN class. Cached in AppState because
@@ -1096,9 +1315,57 @@ int WINAPI wWinMain(HINSTANCE hInstance, [[maybe_unused]] HINSTANCE hPrevInstanc
     //
     // Skipped for a dedicated instance: it always starts from its configured
     // folder, so a resume position would only be noise.
-    if (!Dedicated::IsDedicatedFlag() && app.currentIndex >= 0 &&
-        app.currentIndex < static_cast<int>(app.playlist.size()))
-        Persistence::Session::SaveLastImage(app.playlist[app.currentIndex]);
+    if (!Dedicated::IsDedicatedFlag()) {
+        if (app.currentIndex >= 0 && app.currentIndex < static_cast<int>(app.playlist.size()))
+            Persistence::Session::SaveLastImage(app.playlist[app.currentIndex]);
+
+        // The folder is recorded separately, and on its own condition. An empty
+        // folder — or one whose images all failed to decode — leaves currentIndex
+        // at -1, so the branch above writes nothing and the next launch would fall
+        // through to the folder history, which a user who turned history off does
+        // not have. The playlist's first entry is the cheapest handle on the open
+        // folder; there is no current-directory member to read.
+        if (!app.playlist.empty()) {
+            const std::filesystem::path parent =
+                    std::filesystem::path(app.playlist[0]).parent_path();
+            if (!parent.empty())
+                Persistence::Session::SaveLastFolder(parent.wstring());
+        }
+
+        // Window placement, when the user asked for it to be remembered.
+        // GetWindowPlacement rather than GetWindowRect: the rect wanted is the
+        // RESTORED one, so closing while maximised or minimised still records
+        // the size the window returns to rather than a full-screen rect or the
+        // (-32000, -32000) a minimised window reports.
+        if (app.rememberWindowPosition) {
+            WINDOWPLACEMENT wp{};
+            wp.length = sizeof(wp);
+            if (GetWindowPlacement(hWnd, &wp)) {
+                const RECT &r = wp.rcNormalPosition;
+                const int x = r.left, y = r.top;
+                const int w = r.right - r.left, h = r.bottom - r.top;
+
+                // Checked on the way OUT as well as on the way in. If something
+                // has already gone wrong with the window — driven off screen,
+                // sized to nothing — writing that down would hand the same
+                // broken state to the next launch. Declining to save leaves the
+                // last good placement in the store, which is the better answer
+                // than either saving rubbish or clearing it.
+                if (IsUsableWindowRect(x, y, w, h)) {
+                    Persistence::Session::SaveWindowRect(x, y, w, h);
+
+                    // Which screen that was, by device name. Saved from the
+                    // window rather than from the rect so a maximised window
+                    // still records the display it was maximised on.
+                    MONITORINFOEXW mi{};
+                    mi.cbSize = sizeof(mi);
+                    HMONITOR mon = MonitorFromWindow(hWnd, MONITOR_DEFAULTTONEAREST);
+                    if (mon && GetMonitorInfoW(mon, &mi))
+                        Persistence::Session::SaveWindowMonitor(mi.szDevice);
+                }
+            }
+        }
+    }
 
     g_writeQueue.Flush(); // drain all pending registry + file writes before teardown
     app.renderer.reset();

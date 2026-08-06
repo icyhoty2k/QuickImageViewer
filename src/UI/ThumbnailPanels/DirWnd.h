@@ -1,3 +1,11 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// Copyright (C) 2026 Ivan Hristov Yanev
+//
+// This file is part of QuickImageViewer. It is free software: you may
+// redistribute and modify it under the terms of the GNU Affero General Public
+// License version 3 or later, as published by the Free Software Foundation.
+// It is distributed WITHOUT ANY WARRANTY. See the LICENSE file for details.
+
 #pragma once
 
 #include <windows.h>
@@ -41,6 +49,21 @@ namespace UI {
 
             void SyncDirSelectionRectangle() {
                 ThumbnailPanelWnd::SyncSelectionRectangle();
+            }
+
+            // Public because UIManager calls it on the concrete F6 instance when
+            // that instance is hidden and therefore in no layout slot.
+            //
+            // F6 holds a COPY of the viewer's playlist (or its own folder, when
+            // F5 navigated it), so re-sorting app.playlist never reaches it. An
+            // empty list needs nothing — GetSourceItems refills it from the
+            // already-sorted app.playlist on next use.
+            void OnSortOrderChanged() override {
+                if (m_dirPlaylist.empty()) return;
+                SortPathsInAppOrder(m_dirPlaylist);
+                m_sourceDirty = true;
+                UpdateView();
+                SyncSelectionRectangle();
             }
 
             void UpdateDirView() {
@@ -191,6 +214,21 @@ namespace UI {
                 m_folderPath = folderPath;
                 m_localPlaylist.clear();
                 m_thumbnails.clear(); // force full rebuild; recycled panel may have stale thumbnails
+
+                // AND the renderer's GPU cache for this panel, which m_thumbnails
+                // above does not touch.
+                //
+                // These panels come from a pool of four and are RECYCLED: spawning
+                // one picks the first hidden instance and retargets it here, under
+                // the same HWND. The renderer keys its thumbnail cache by HWND, so
+                // without this the previous folder's bitmaps stay resident —
+                // unreachable, since lookup only ever asks for paths in the
+                // current list, but still holding GPU memory.
+                //
+                // FileHandler already clears on its own folder-change paths. The
+                // spawn path from HistoryListWnd did not, which is the one that
+                // retargets a panel most often.
+                ClearDirThumbnailCache();
                 namespace fs = std::filesystem;
                 fs::path dir(folderPath);
                 // Non-throwing filesystem calls only — this runs on the UI thread
@@ -199,6 +237,13 @@ namespace UI {
                 std::error_code ec;
                 if (!fs::is_directory(dir, ec) || ec)
                     return;
+
+                // Collected into a ScanResult so the list can be handed to the
+                // one sorter the background scan also uses. Size and time come
+                // straight off the directory_entry, which cached them during
+                // enumeration on Windows — no extra syscall — and the date and
+                // size sort orders need them.
+                ScanResult sr;
                 for (auto it = fs::directory_iterator(
                              dir, fs::directory_options::skip_permission_denied, ec);
                      !ec && it != fs::directory_iterator(); it.increment(ec)) {
@@ -212,9 +257,25 @@ namespace UI {
                         ec.clear();
                         canon = it->path();
                     }
-                    m_localPlaylist.push_back(canon.wstring());
+                    std::wstring canonStr = canon.wstring();
+
+                    std::error_code entryEc;
+                    const auto sz = it->file_size(entryEc);
+                    sr.fileSizes[canonStr] = entryEc ? int64_t{0} : static_cast<int64_t>(sz);
+                    entryEc.clear();
+                    const auto tm = it->last_write_time(entryEc);
+                    sr.fileTimes[canonStr] = entryEc ? fs::file_time_type{} : tm;
+
+                    sr.playlist.push_back(std::move(canonStr));
                 }
-                std::sort(m_localPlaylist.begin(), m_localPlaylist.end());
+
+                // NOT std::sort. Ordinal order puts "img10" before "img2" and
+                // ignores the user's date/size/type choice entirely, so this
+                // panel disagreed with the background scan of the same folder.
+                // The first click here triggers such a scan, the panel adopts
+                // its result, and every thumbnail jumped to a new slot.
+                SortScanResultInAppOrder(sr);
+                m_localPlaylist = std::move(sr.playlist);
 
                 // Watch for changes; posts to m_hWnd so this panel's
                 // HandleMessage handles reload locally without touching app.playlist.
@@ -232,6 +293,16 @@ namespace UI {
 
             bool HasOwnPlaylist() const override {
                 return true;
+            }
+
+            // Overrides DirWnd's version — the list to re-sort is the local one,
+            // and this panel's folder is usually not the folder the viewer shows.
+            void OnSortOrderChanged() override {
+                if (m_localPlaylist.empty()) return;
+                SortPathsInAppOrder(m_localPlaylist);
+                m_sourceDirty = true;
+                UpdateView();
+                SyncSelectionRectangle();
             }
 
             // Only sync when the scanned dir matches this panel's folder.

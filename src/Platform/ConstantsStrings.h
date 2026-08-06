@@ -1,3 +1,11 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// Copyright (C) 2026 Ivan Hristov Yanev
+//
+// This file is part of QuickImageViewer. It is free software: you may
+// redistribute and modify it under the terms of the GNU Affero General Public
+// License version 3 or later, as published by the Free Software Foundation.
+// It is distributed WITHOUT ANY WARRANTY. See the LICENSE file for details.
+
 #pragma once
 
 #include "ConstantsTheme.h"
@@ -34,6 +42,13 @@ namespace Constants::Messages {
     constexpr const wchar_t *INFO_PANELS_OFF = L"Info Panels" STR_STATE_OFF;
 
     // Overlay background toggle (P)
+    // ` (grave) — bypasses the whole effect chain without discarding it, so the
+    // user can compare edited against original. It was the ONLY toggle in the
+    // app that changed the picture and said nothing, which made a mis-hit on a
+    // key next to 1 look like the image had been damaged.
+    constexpr const wchar_t *EFFECT_PREVIEW_ON  = L"Effects" STR_STATE_ON;
+    constexpr const wchar_t *EFFECT_PREVIEW_OFF = L"Effects" STR_STATE_OFF;
+
     constexpr const wchar_t *OVERLAY_BG_ON = L"Overlay BG" STR_STATE_ON;
     constexpr const wchar_t *OVERLAY_BG_OFF = L"Overlay BG" STR_STATE_OFF;
 
@@ -55,6 +70,19 @@ namespace Constants::Messages {
     constexpr const wchar_t *EMPTY_DIR_NO_IMAGES = L"No Images:";
     // Placeholder shown when the directory itself has been deleted
     constexpr const wchar_t *EMPTY_DIR_MISSING = L"⚠  Directory Missing";
+    // Heading shown when the file is there but nothing can decode it — an
+    // unknown format, or a known one this build was not compiled with.
+    constexpr const wchar_t *FORMAT_UNSUPPORTED = L"Format not supported:";
+    // Line 2 of the placeholder, on every one of its states. A constant, so it
+    // is built into the cached layout once and never rebuilt; clicking it opens
+    // the same chooser F2 does, which is the way OUT of every state this
+    // placeholder reports.
+    constexpr const wchar_t *OVERLAY_OPEN_PROMPT = L"Open a file or folder…";
+    // Keyboard equivalents, appended after each clickable line and left OUTSIDE
+    // the link styling — the hint tells you the key, it is not itself a target.
+    // Someone who reads them once stops needing the mouse here at all.
+    constexpr const wchar_t *OVERLAY_OPEN_PROMPT_HINT = L"   (F2)";
+    constexpr const wchar_t *OVERLAY_PATH_HINT        = L"   (L)";
     // Placeholder shown in CacheWnd when the VRAM thumbnail cache is empty
     constexpr const wchar_t *EMPTY_CACHE = L"Thumbnail Cache Empty";
 
@@ -218,6 +246,31 @@ namespace Constants::Messages {
     constexpr const wchar_t *MONITOR_MOVED_PREFIX = L"Monitor ";
     constexpr const wchar_t *MONITOR_ONLY_ONE = L"Only One Monitor";
 
+    // Network announcement (TCP/IP menu → Announce on network).
+    //
+    // THREE outcomes, not two. Off and announcing are obvious; the third is
+    // "asked for, but nothing is published" — the server is stopped, or bound to
+    // loopback. Reporting that as ON would be a lie the user only discovers when
+    // a phone fails to find them, which is the worst moment to find out.
+    constexpr const wchar_t *BEACON_PREFIX  = L"Network: ";
+    constexpr const wchar_t *BEACON_ON      = L"Announcing";
+    constexpr const wchar_t *BEACON_OFF     = L"Not announcing";
+    constexpr const wchar_t *BEACON_PENDING = L"Will announce";
+
+    // Server Log to file (TCP/IP menu). The folder is appended to the ON line,
+    // because "it is logging somewhere" is not an answer anybody can act on.
+    //
+    constexpr const wchar_t *GENERAL_LOG_ON  = L"General log: ON";
+    constexpr const wchar_t *GENERAL_LOG_OFF = L"General log: OFF";
+
+    constexpr const wchar_t *LOG_FILE_ON  = L"Server log to file: ON";
+    constexpr const wchar_t *LOG_FILE_OFF = L"Server log to file: OFF";
+    // Said on the ON line, because the folder appears immediately and the FILE
+    // does not — and "the folder is empty" reads as a broken setting unless
+    // something explains that a file is written when there is something to write.
+    constexpr const wchar_t *LOG_FILE_WAITING =
+        L"A file is written on the first exchange with a client.";
+
     // Sort order  (Ctrl+Alt+Shift+0/6/7/8/9)  — press once: ascending, press again: descending
     constexpr const wchar_t *SORT_BY_NAME = L"Sort: Name (A→Z)";
     constexpr const wchar_t *SORT_BY_NAME_REV = L"Sort: Name (Z→A)";
@@ -367,13 +420,13 @@ namespace Constants::Messages {
     // operator block is a decision, and the person reading the file later needs
     // to know which of the two they are looking at.
     constexpr const wchar_t *BLACKLIST_REASON_OPERATOR =
-        L"blocked by hand from the Server Clients panel";
+        L"blocked by hand from the My Clients panel";
 
     // A TIMED block, which never reaches the file — this shows in the panel's
     // own list only. Says "kick" rather than "block" because that is the button
     // that produced it and the word the operator will be looking for.
     constexpr const wchar_t *BLACKLIST_REASON_TIMED =
-        L"timed kick from the Server Clients panel";
+        L"timed kick from the My Clients panel";
     // Panel footers reporting WHERE the values on screen came from.
     //
     // Every panel backed by a file says this on open, because a populated panel
@@ -408,6 +461,52 @@ namespace Constants::Messages {
     // setup most people run.
     constexpr const wchar_t *OVERLAY_SERVER_DOT_TLS   = L"\U0001F7E2";
     constexpr const wchar_t *OVERLAY_SERVER_DOT_PLAIN = L"\U0001F7E0";
+
+    // The dark phase of the connect / disconnect blink.
+    //
+    // A GLYPH RATHER THAN AN EMPTY STRING, and the same emoji class as the two
+    // above so it measures the same width. Blanking it would make the count and
+    // the zoom beside it jump left and back three times, which reads as the
+    // overlay glitching rather than as the dot blinking.
+    constexpr const wchar_t *OVERLAY_SERVER_DOT_OFF   = L"\U000026AB";
+
+    // The LIT phase, coloured by WHAT happened. Four outcomes, because they mean
+    // four different things to whoever sees them from across a room:
+    //
+    //   green   somebody arrived
+    //   white   somebody left normally — they said goodbye, nothing is wrong.
+    //           Absence rather than alarm: the screen went quiet
+    //   red     somebody VANISHED — no goodbye: a crash, a reset, a phone out of
+    //           range, a cable pulled. The only one worth walking over for
+    //   yellow  we ejected them — kicked or banned from this machine
+    //
+    // The red/blue split is the whole point. Without it a tidy disconnect and a
+    // dead screen look identical, so either every departure is alarming or none
+    // is — and both make the indicator useless.
+    //
+    // Yellow for an eject because it was DELIBERATE and done here. Showing the
+    // operator red for the thing they just did themselves would teach them to
+    // ignore red.
+    constexpr const wchar_t *OVERLAY_SERVER_DOT_JOIN   = L"\U0001F7E2"; // 🟢
+    constexpr const wchar_t *OVERLAY_SERVER_DOT_LEFT   = L"\U000026AA"; // ⚪
+    constexpr const wchar_t *OVERLAY_SERVER_DOT_LOST   = L"\U0001F534"; // 🔴
+    constexpr const wchar_t *OVERLAY_SERVER_DOT_KICKED = L"\U0001F7E1"; // 🟡
+
+    // Connect / disconnect blink: how long each phase lasts, and how many blinks.
+    //
+    // COUNT is blinks, not phases — a blink is dark-then-lit, so the timer runs
+    // twice this many times. Stated the way a person would ask for it, with the
+    // doubling done where the timer is armed rather than baked into the number.
+    //
+    // Ending on the LIT phase falls out of that: an even number of phases always
+    // settles into the true colour, and a dot left dark would read as "the
+    // server stopped".
+    //
+    // 3 blinks at 250 ms is 1.5 seconds — long enough to catch the eye on a
+    // screen nobody is watching, short enough that it is over before anyone
+    // walks to it.
+    constexpr int  OVERLAY_SERVER_BLINK_MS    = 300;
+    constexpr int  OVERLAY_SERVER_BLINK_COUNT = 3;
 
     // F9 status line. The wording matches the overlay dot's two colours, so the
     // panel and the indicator cannot appear to disagree.
@@ -482,6 +581,9 @@ namespace Constants::Messages {
 
     // Viewport lock (Y) — zoom + pan carried across image changes
     constexpr const wchar_t *VIEWPORT_LOCK_ON  = L"Viewport Lock" STR_STATE_ON;
+    constexpr const wchar_t *WINDOW_RECOVERED = L"Window was off screen — reset to default size and position";
+    constexpr const wchar_t *REMEMBER_WIN_POS_ON  = L"Remember Window Position" STR_STATE_ON;
+    constexpr const wchar_t *REMEMBER_WIN_POS_OFF = L"Remember Window Position" STR_STATE_OFF;
     constexpr const wchar_t *VIEWPORT_LOCK_OFF = L"Viewport Lock" STR_STATE_OFF;
 
     // Thumbnail strip visual effects

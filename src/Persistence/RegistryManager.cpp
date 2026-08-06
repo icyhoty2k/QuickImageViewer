@@ -1,3 +1,11 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// Copyright (C) 2026 Ivan Hristov Yanev
+//
+// This file is part of QuickImageViewer. It is free software: you may
+// redistribute and modify it under the terms of the GNU Affero General Public
+// License version 3 or later, as published by the Free Software Foundation.
+// It is distributed WITHOUT ANY WARRANTY. See the LICENSE file for details.
+
 #include "RegistryManager.h"
 #include <windows.h>
 #include <string>
@@ -241,6 +249,7 @@ namespace Persistence::Registry {
         emitB(R::RUN_ON_STARTUP,        a.isEnableRunOnStartup);
         emitB(R::THUMBNAIL_EFFECTS,     a.thumbnailEffectsEnabled);
         emitB(R::LOCK_VIEWPORT,         a.lockViewport);
+        emitB(R::REMEMBER_WINDOW_POS,   a.rememberWindowPosition);
         emitB(R::HISTORY_FULL_MODE,     a.historyFullModeEnabled);
         emitB(R::OVERLAY_VISIBLE,       a.showOverlayInfoText);
         emitB(R::OPEN_DIRWND_ON_START,  a.openDirWndOnStart);
@@ -249,6 +258,7 @@ namespace Persistence::Registry {
         emit (R::OVERLAY_SLOT_VISIBLE,  a.overlaySlotVisibleMask);
         emit (R::OVERLAY_SLOT_COMPACT,  a.overlaySlotCompactMask);
         emitB(R::OVERLAY_SHOW_DIR_NAME, a.overlayShowDirName);
+        emitB(R::OVERLAY_SHOW_EFFECTS,  a.overlayShowEffectsList);
         emitI(R::OVERLAY_FONT_SIZE,     a.overlayFontSize);
         emit (R::OVERLAY_FONT_COLOR,    static_cast<DWORD>(a.overlayFontColor));
         emitI(R::OVERLAY_FONT_FAMILY,   a.overlayFontFamily);
@@ -259,6 +269,9 @@ namespace Persistence::Registry {
         emitB(R::KIOSK_LOCK,            a.isLocked);
         emitB(R::ALWAYS_ON_TOP,         a.isAlwaysOnTop);
         emitB(R::KEEP_DISPLAY_AWAKE,    a.keepDisplayAwake);
+        emitB(R::REMOTE_BEACON,         a.remoteBeacon);
+        emitB(R::REMOTE_LOG_FILE,       a.remoteLogToFile);
+        emitB(R::GENERAL_LOG,           a.generalLog);
         emitB(R::WHEEL_INVERT,          a.invertWheelDirection);
         emitB(R::WHEEL_INVERT_H,        a.invertWheelDirectionH);
         emitI(R::VRAM_CACHE_COUNT,      a.vramCacheCount);
@@ -328,6 +341,9 @@ namespace Persistence::Registry {
         a.lockViewport = readDword(
             Constants::Registry::LOCK_VIEWPORT,
             static_cast<DWORD>(Constants::IS_LOCK_VIEWPORT)) != 0;
+        a.rememberWindowPosition = readDword(
+            Constants::Registry::REMEMBER_WINDOW_POS,
+            static_cast<DWORD>(Constants::IS_REMEMBER_WINDOW_POSITION)) != 0;
         a.historyFullModeEnabled = readDword(
             Constants::Registry::HISTORY_FULL_MODE,
             static_cast<DWORD>(Constants::History::HISTORY_SHOW_FULL_HISTORY)) != 0;
@@ -358,6 +374,9 @@ namespace Persistence::Registry {
         a.overlayShowDirName = readDword(
             Constants::Registry::OVERLAY_SHOW_DIR_NAME,
             static_cast<DWORD>(Constants::Overlay::SHOW_DIR_NAME)) != 0;
+        a.overlayShowEffectsList = readDword(
+            Constants::Registry::OVERLAY_SHOW_EFFECTS,
+            static_cast<DWORD>(Constants::Overlay::SHOW_EFFECTS_LIST)) != 0;
         a.overlayFontSize = std::max(Constants::Overlay::OVERLAY_FONT_SIZE_MIN,
             std::min(Constants::Overlay::OVERLAY_FONT_SIZE_MAX,
                 static_cast<int>(readDword(Constants::Registry::OVERLAY_FONT_SIZE,
@@ -397,6 +416,15 @@ namespace Persistence::Registry {
         a.keepDisplayAwake = readDword(
             Constants::Registry::KEEP_DISPLAY_AWAKE,
             static_cast<DWORD>(Constants::IS_KEEP_DISPLAY_AWAKE)) != 0;
+        a.remoteBeacon = readDword(
+            Constants::Registry::REMOTE_BEACON,
+            static_cast<DWORD>(Constants::IS_REMOTE_BEACON_ENABLED)) != 0;
+        a.remoteLogToFile = readDword(
+            Constants::Registry::REMOTE_LOG_FILE,
+            static_cast<DWORD>(Constants::IS_TCP_IP_LOG)) != 0;
+        a.generalLog = readDword(
+            Constants::Registry::GENERAL_LOG,
+            static_cast<DWORD>(Constants::IS_GENERAL_LOG)) != 0;
         a.invertWheelDirection = readDword(
             Constants::Registry::WHEEL_INVERT,
             static_cast<DWORD>(Constants::IS_MOUSE_VERTICAL_REVERSE_SCROLL_DIRECTION)) != 0;

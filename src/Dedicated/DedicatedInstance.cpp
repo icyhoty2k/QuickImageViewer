@@ -1,7 +1,16 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// Copyright (C) 2026 Ivan Hristov Yanev
+//
+// This file is part of QuickImageViewer. It is free software: you may
+// redistribute and modify it under the terms of the GNU Affero General Public
+// License version 3 or later, as published by the Free Software Foundation.
+// It is distributed WITHOUT ANY WARRANTY. See the LICENSE file for details.
+
 #include "DedicatedInstance.h"
 #include "DedicatedSettings.h"           // the .ini this instance persists into
 #include "DedicatedLists.h"              // promotion folders come from the list file
 #include "AppState.h"                    // app.isDedicated (legacy identity route)
+#include "Persistence/IniFile.h"         // CreateWithTextIfMissing — the one BOM writer
 #include "Persistence/RegistryManager.h" // GetExePathW
 #include "Platform/Constants.h"
 #include "Renderer/IRenderer.h"          // path-keyed cache probe / preload
@@ -257,18 +266,14 @@ namespace {
     // A new file must start as UTF-16LE or the profile API silently writes ANSI
     // and mangles non-ASCII folder paths.
     void CreateIniIfMissing(const std::wstring &ini) {
-        HANDLE h = CreateFileW(ini.c_str(), GENERIC_WRITE, FILE_SHARE_READ, nullptr,
-                               CREATE_NEW, FILE_ATTRIBUTE_NORMAL, nullptr);
-        if (h == INVALID_HANDLE_VALUE) return;
+        // Text only — Ini::CreateWithTextIfMissing owns the BOM and the
+        // create-if-absent. See DedicatedSettings::CreateWithHeaderIfMissing.
         std::wstring head;
-        head += static_cast<wchar_t>(0xFEFF);
         head += L"; QuickImageViewer - dedicated instance settings\r\n";
         head += L"; This instance never reads or writes the registry.\r\n\r\n";
         head += L"[Instance]\r\nName=\r\nDescription=\r\nVersion=\r\nDedicated=\r\nMutex=\r\n\r\n";
         head += L"[Settings]\r\n";
-        DWORD w = 0;
-        WriteFile(h, head.data(), static_cast<DWORD>(head.size() * sizeof(wchar_t)), &w, nullptr);
-        CloseHandle(h);
+        Persistence::Ini::CreateWithTextIfMissing(ini, head);
     }
 
     constexpr const wchar_t *SEC_INSTANCE = L"Instance";

@@ -1,3 +1,11 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// Copyright (C) 2026 Ivan Hristov Yanev
+//
+// This file is part of QuickImageViewer. It is free software: you may
+// redistribute and modify it under the terms of the GNU Affero General Public
+// License version 3 or later, as published by the Free Software Foundation.
+// It is distributed WITHOUT ANY WARRANTY. See the LICENSE file for details.
+
 // winsock2.h MUST come before anything that pulls in windows.h. This project
 // does not define WIN32_LEAN_AND_MEAN, so windows.h drags in the original
 // winsock.h and every socket type is then redefined. RemoteServer.h includes
@@ -11,8 +19,9 @@
 #include "RemoteTls.h"         // Schannel — mandatory on any non-loopback bind
 #include "RemoteCrypto.h"
 #include "RemoteExec.h"
-#include "RemoteImageXfer.h" // BuildPreviewJpeg — runs on THIS thread
+#include "RemoteImageXfer.h" // BuildPreviewJpeg + ReadImageFile — both run on THIS thread
 #include "RemoteLog.h"    // Ctrl+F12 — the inbound half of the wire record
+#include "RemoteBeacon.h" // mDNS announcement — reconciled on every Start/Stop
 
 #include "Platform/Constants.h"
 #include "Platform/ConstantsStrings.h"
@@ -20,6 +29,7 @@
 
 #include <algorithm>
 #include <map>      // the failed-authentication table, keyed by peer address
+#include <set>      // connections this instance ejected, pending their thread noticing
 #include <memory>   // shared_ptr — the per-connection send lock outlives its thread
 #include <mutex>
 #include <thread>
@@ -159,6 +169,22 @@ namespace {
                            std::wstring(Constants::Messages::BLACKLIST_REASON_AUTH_PREFIX) +
                                std::to_wstring(RT::AUTH_MAX_FAILURES) +
                                Constants::Messages::BLACKLIST_REASON_AUTH_SUFFIX);
+
+            // THE MOMENT AN ADDRESS BANS ITSELF, which had no record at all.
+            //
+            // The individual wrong passwords were each logged as an ERR reply,
+            // but the threshold being crossed — the one line that says this
+            // machine has started refusing somebody permanently — was invisible.
+            // That is the event you look for after finding a screen unreachable,
+            // and reconstructing it by counting earlier failures is work the log
+            // should have done.
+            //
+            // The word "blacklisted" is what LevelFor keys on for ERROR; see the
+            // note there before rewording this.
+            if (Log::IsCapturing())
+                Log::Add(Log::Direction::In, key,
+                         L"(blacklisted — too many failed authentications)",
+                         Log::SelfLabel(), L"(security)", -1);
         }
     }
 
@@ -270,6 +296,29 @@ namespace {
         return it == g_peerNames.end() ? std::wstring() : it->second;
     }
 
+    // ConnId → what KIND of client it says it is: `win`, `android`, or empty for
+    // one that never said. Shares the name mutex because the two are written by
+    // the same thread at the same moment and read together by the same panel —
+    // a second lock would buy nothing and add an ordering to get wrong.
+    //
+    // A HINT, exactly like the name: peer-chosen, used only to pick a glyph, and
+    // never consulted by anything that decides what a connection may do.
+    std::map<ConnId, AgentInfo> g_peerAgents;
+
+    void SetPeerAgent(ConnId c, const AgentInfo &info) {
+        std::lock_guard<std::mutex> lk(g_peerNameMutex);
+        g_peerAgents[c] = info;
+    }
+    void ForgetPeerAgent(ConnId c) {
+        std::lock_guard<std::mutex> lk(g_peerNameMutex);
+        g_peerAgents.erase(c);
+    }
+    AgentInfo PeerAgentFor(ConnId c) {
+        std::lock_guard<std::mutex> lk(g_peerNameMutex);
+        auto it = g_peerAgents.find(c);
+        return it == g_peerAgents.end() ? AgentInfo{} : it->second;
+    }
+
     // ConnId → the FACTS about that connection, for the F9 panel's live list and
     // for Kick/Ban to act on a row the operator can actually see.
     //
@@ -292,6 +341,41 @@ namespace {
     std::map<ConnId, LiveConn> g_liveConns;
     std::mutex                 g_liveConnMutex;
 
+
+    // Connections THIS instance ended — kicked, timed-kicked or banned.
+    //
+    // A kick is a shutdown() and a cancelled I/O, which the client thread meets
+    // as a failed read or a failed write: identical to a crash or a cable being
+    // pulled. Without this set, ejecting somebody would blink the same colour as
+    // a screen dying on its own, and the operator would be alarmed by the thing
+    // they just did themselves.
+    //
+    // The client thread erases its own entry on the way out, so this never grows
+    // beyond the connections currently being ejected.
+    std::set<ConnId> g_ejected;
+    std::mutex       g_ejectedMutex;
+
+    void MarkEjected(ConnId id) {
+        std::lock_guard<std::mutex> lk(g_ejectedMutex);
+        g_ejected.insert(id);
+    }
+    bool TakeEjected(ConnId id) {
+        std::lock_guard<std::mutex> lk(g_ejectedMutex);
+        return g_ejected.erase(id) > 0;
+    }
+    // Peek, for the read loop — it has to keep the mark for the departure
+    // classification at the end of the thread, which is what TakeEjected clears.
+    bool IsEjected(ConnId id) {
+        std::lock_guard<std::mutex> lk(g_ejectedMutex);
+        return g_ejected.count(id) > 0;
+    }
+    // Erase without reporting — for the connection teardown path, which
+    // clears the mark whether or not an ejection was the reason it ended.
+    void DropEjected(ConnId id) {
+        std::lock_guard<std::mutex> lk(g_ejectedMutex);
+        g_ejected.erase(id);
+    }
+
     void RegisterLiveConn(ConnId c, const LiveConn &info) {
         std::lock_guard<std::mutex> lk(g_liveConnMutex);
         g_liveConns[c] = info;
@@ -299,6 +383,14 @@ namespace {
     void UnregisterLiveConn(ConnId c) {
         std::lock_guard<std::mutex> lk(g_liveConnMutex);
         g_liveConns.erase(c);
+        // The ejected mark dies with the connection, WHATEVER ended it.
+        //
+        // A ConnId is a socket number and the system reuses them. An orphaned
+        // mark — one set after its thread already cleared its own — would eject
+        // the next connection handed that number, instantly and for no reason
+        // anybody could see. Clearing it at both ends of the connection's life
+        // means a mark can only ever apply to the connection it was set for.
+        DropEjected(c);
     }
 
     void RegisterSendLock(ConnId c) {
@@ -331,8 +423,15 @@ namespace {
     // Tell the UI thread the client count (or the running state) changed, so the
     // overlay's server indicator repaints. Posted, never sent: this is called
     // from socket threads and from Stop(), and none of them may block on the UI.
-    void NotifyClientsChanged() {
-        if (g_owner) PostMessageW(g_owner, Constants::WM_QIV_REMOTE_CLIENTS, 0, 0);
+    // `kind` rides in wParam: the overlay colours its blink by it, and only this
+    // thread knows which happened. Reconstructing it on the UI side is not
+    // possible — by the time the message is handled the socket is gone and the
+    // count alone cannot say whether the client meant to leave.
+    void NotifyClientsChanged(Constants::RemoteTcpIp::ClientEvent kind =
+                                  Constants::RemoteTcpIp::ClientEvent::Other) {
+        if (g_owner)
+            PostMessageW(g_owner, Constants::WM_QIV_REMOTE_CLIENTS,
+                         static_cast<WPARAM>(kind), 0);
     }
 
     void SetEndpoint(const std::wstring &s) {
@@ -405,7 +504,7 @@ namespace {
     // UI thread at all, so instrumenting the command path alone left a log with
     // invisible holes in it.
     bool SendLine(SOCKET s, const std::wstring &line, Tls::Session *tls = nullptr) {
-        if (Log::IsEnabled()) {
+        if (Log::IsCapturing()) {
             // Delta is the time since the line being answered arrived — the
             // handling cost of this instance, which is the number that says
             // whether it is the reason a wall of screens is lagging.
@@ -420,8 +519,17 @@ namespace {
     // Reads one \n-terminated line. Returns false on disconnect, error, or a
     // line that exceeds MAX_LINE_LEN — an unbounded line is the one input a
     // peer fully controls, so the connection is dropped rather than buffered.
+    // `timedOut` distinguishes "nothing arrived yet" from "this connection is
+    // over", which the return value alone cannot.
+    //
+    // WHY IT HAS TO EXIST. After authentication the read is bounded rather than
+    // infinite, so the loop can wake and re-check whether this connection has
+    // been kicked. Without the distinction every expiry would look like a
+    // disconnect and every idle client would be dropped a second after
+    // connecting — which is precisely why the timeout used to be removed.
     bool RecvLine(SOCKET s, std::string &accum, std::wstring &lineOut,
-                  Tls::Session *tls = nullptr) {
+                  Tls::Session *tls = nullptr, bool *timedOut = nullptr) {
+        if (timedOut) *timedOut = false;
         for (;;) {
             const size_t nl = accum.find('\n');
             if (nl != std::string::npos) {
@@ -429,7 +537,7 @@ namespace {
                 accum.erase(0, nl + 1);
                 if (!raw.empty() && raw.back() == '\r') raw.pop_back();
                 lineOut = FromUtf8(raw.data(), raw.size());
-                if (Log::IsEnabled() && !lineOut.empty()) {
+                if (Log::IsCapturing() && !lineOut.empty()) {
                     t_inboundAtUs = NowUs();
                     Log::Add(Log::Direction::In, PeerLabel(s), RedactForLog(lineOut),
                              Log::SelfLabel(), L"(awaiting reply)", -1);
@@ -443,13 +551,26 @@ namespace {
             // `accum` still holds the LINE remainder on top of that, so a reply
             // that arrives in one record but spans two lines still works.
             if (tls) {
-                if (!tls->Recv(s, accum)) return false;
+                if (!tls->Recv(s, accum)) {
+                    // The session's own recv failed. WSAETIMEDOUT means the
+                    // bounded wait expired rather than the peer going away —
+                    // read from the same thread that made the call, so nothing
+                    // else can have overwritten it.
+                    if (timedOut && WSAGetLastError() == WSAETIMEDOUT) *timedOut = true;
+                    return false;
+                }
                 continue;
             }
 
             char buf[1024];
             const int n = recv(s, buf, sizeof(buf), 0);
-            if (n <= 0) return false;
+            if (n <= 0) {
+                // n == 0 is a GRACEFUL CLOSE and never a timeout — only a
+                // negative return carries an error code worth reading.
+                if (timedOut && n < 0 && WSAGetLastError() == WSAETIMEDOUT)
+                    *timedOut = true;
+                return false;
+            }
             accum.append(buf, static_cast<size_t>(n));
         }
     }
@@ -708,6 +829,11 @@ namespace {
         // and telling them apart is the whole reason to look.
         const wchar_t *departure = L"(disconnected)";
 
+        // Set only by the `bye` verb. Everything else — a reset, a crash, a phone
+        // leaving Wi-Fi, a cable pulled — reaches the same failed read, so the
+        // ABSENCE of this is what "abrupt" means. It cannot be inferred later.
+        bool saidGoodbye = false;
+
         // WIC is COM, and SendDisplayedPreview decodes on THIS thread. MTA
         // rather than STA: nothing here pumps a message loop, and an STA
         // apartment without one deadlocks the moment a proxy is needed.
@@ -790,7 +916,7 @@ namespace {
         // out. The peer address is the whole input to the decision, so the log
         // has to name it — "which address did you actually see me as" is the
         // question that cannot be answered from the client side.
-        if (Log::IsEnabled())
+        if (Log::IsCapturing())
             Log::Add(Log::Direction::In, who,
                      std::wstring(Tls::RequiredForAddress(peer)
                                       ? L"(accepted — expecting TLS"
@@ -814,7 +940,7 @@ namespace {
                 // Recorded LOCALLY all the same — this is the single most
                 // confusing failure the remote has, because both ends simply
                 // wait, and the owner of the machine is not the attacker.
-                if (Log::IsEnabled())
+                if (Log::IsCapturing())
                     Log::Add(Log::Direction::In, who, L"(dropped — TLS handshake failed)",
                              Log::SelfLabel(), L"(connection)", NowUs() - startedUs);
                 UnregisterLiveConn(static_cast<ConnId>(client));
@@ -849,9 +975,37 @@ namespace {
             // What it cost the attacker is already paid — a slot can now only be
             // held by someone who knows the password, which is a different
             // problem with a different answer (MAX_CONNECTIONS, the AllowList).
-            const DWORD noTimeout = 0;
+            // BOUNDED, NOT INFINITE — and the bound is a poll, not a deadline.
+            //
+            // This used to be 0 (block forever), which is correct for holding an
+            // idle connection open but made Kick, Kick-for and Ban do nothing:
+            // they call shutdown() from the UI thread, and WINDOWS DOES NOT
+            // GUARANTEE that a recv already blocked on another thread returns
+            // when the socket is shut down. On Linux it wakes; here the thread
+            // sat in recv until the peer happened to send something, so an
+            // ejected client stayed connected — confirmed by waiting ten seconds
+            // after a Kick and watching nothing happen.
+            //
+            // closesocket() would wake it, but a descriptor closed under a
+            // thread that is reading it can be reused by the system for
+            // something else — see the header. So the read wakes on its own
+            // instead, re-checks the flags, and goes back to waiting.
+            //
+            // THIS POLL IS THE BACKSTOP, NOT THE MECHANISM. It only ever covered
+            // the read, and a client thread blocked in SendAll — which is where
+            // a phone over Wi-Fi spends its time, writing preview JPEGs — was
+            // untouched by it and stayed for the full SEND_TIMEOUT_MS. The eject
+            // is now delivered by CancelIoEx in KickConnection, which aborts
+            // whichever call is actually pending. Read that one before changing
+            // anything here.
+            //
+            // The cost is one syscall per connection per interval that returns
+            // immediately. An idle mirrored screen is expected to sit for
+            // minutes; this makes it wake ~60 times a minute doing nothing,
+            // which is far below the cost of the keepalive already running.
+            const DWORD pollMs = RT::IDLE_POLL_MS;
             setsockopt(client, SOL_SOCKET, SO_RCVTIMEO,
-                       reinterpret_cast<const char *>(&noTimeout), sizeof(noTimeout));
+                       reinterpret_cast<const char *>(&pollMs), sizeof(pollMs));
 
             for (;;) {
                 if (g_stopRequested.load(std::memory_order_acquire)) {
@@ -860,14 +1014,36 @@ namespace {
                     break;
                 }
 
+                // EVERY ITERATION, not only after an idle timeout.
+                //
+                // Checking this on the timeout path alone made Kick work on a
+                // quiet client and do nothing on a busy one: a phone watching in
+                // Fullscreen asks for a picture on every image change, so the
+                // read kept returning lines and the wake that carries this check
+                // never happened. That is the whole of "kick sometimes works".
+                //
+                // Here it is seen between any two commands, so the worst case is
+                // one more command served — not an ejection that never lands.
+                if (IsEjected(static_cast<ConnId>(client))) break;
+
                 std::wstring line;
-                if (!RecvLine(client, accum, line, tls)) {
-                    // One line covers three causes and they cannot be separated
-                    // here: a clean close, a reset, and — for an unauthenticated
-                    // peer — the handshake deadline all surface as a failed read.
-                    // The command loop only runs AFTER authentication, so by this
-                    // point there is no deadline left and it is genuinely the
-                    // peer that went away.
+                bool readTimedOut = false;
+                if (!RecvLine(client, accum, line, tls, &readTimedOut)) {
+                    if (readTimedOut) {
+                        // NOTHING ARRIVED, which is the ordinary state of an
+                        // idle connection. The wake exists so the loop reaches
+                        // its top again: a kick from the UI thread cannot
+                        // interrupt a blocked read, so an idle connection would
+                        // otherwise never look.
+                        //
+                        // Both flags are tested up there, so this only has to go
+                        // back round.
+                        continue;
+                    }
+                    // A real end. A clean close and a reset both arrive here and
+                    // cannot be told apart at this level — which is what the
+                    // `bye` verb exists to resolve, and why its absence is what
+                    // "abrupt" means at the classification below.
                     departure = L"(disconnected — closed by peer)";
                     break;
                 }
@@ -907,6 +1083,34 @@ namespace {
                             SendLine(client, MakeOk(name), tls);
                             break;
                         }
+                        case Verb::Bye: {
+                            // Answered before the loop ends, so a client that
+                            // waits for the reply gets one rather than reading a
+                            // closed socket and reporting an error on its way out.
+                            SendLine(client, MakeOk(), tls);
+                            saidGoodbye = true;
+                            departure   = L"(disconnected — said goodbye)";
+                            break;
+                        }
+                        case Verb::Agent: {
+                            // Parsed and sanitised by ParseAgent — including the
+                            // closed platform vocabulary — so nothing peer-chosen
+                            // reaches storage unfiltered.
+                            SetPeerAgent(static_cast<ConnId>(client),
+                                         ParseAgent(req.payload));
+
+                            // ANSWERED WITH OUR OWN, which is what makes this a
+                            // greeting rather than a report. The banner already
+                            // told the client who we are in prose; this says the
+                            // same thing in the form its parser reads, so both
+                            // ends can label the other in their lists.
+                            SendLine(client,
+                                     MakeOk(BuildAgent(L"qIV",
+                                                       Constants::APP_VERSION,
+                                                       cfg.name)),
+                                     tls);
+                            break;
+                        }
                         case Verb::Version:
                             SendLine(client, MakeOk(std::wstring(Constants::APP_VERSION) +
                                                     L" protocol " +
@@ -916,6 +1120,11 @@ namespace {
                             SendLine(client, MakeErr(RT::ERR_INTERNAL, L"unhandled verb"), tls);
                             break;
                     }
+                    // `bye` is the one verb that ends the session. Checked out
+                    // here because a break inside the switch above leaves the
+                    // switch, not this loop — the classic trap, and the reason
+                    // the flag exists rather than a break in the case.
+                    if (saidGoodbye) break;
                     continue;
                 }
 
@@ -950,6 +1159,49 @@ namespace {
                     // encode happen HERE, on this socket thread, because they
                     // take far longer than REPLY_TIMEOUT_MS on a large image and
                     // would freeze the viewer for the duration.
+                    // SendDisplayedImage's second stage, same shape as the
+                    // preview one below. The UI thread returned only the PATH;
+                    // reading the file and base64-encoding it happens HERE.
+                    //
+                    // This one is the LARGER of the two — it is the original
+                    // file, not a downscaled JPEG — so it is the one that hurt
+                    // most while it ran on the UI thread. It is also what a
+                    // phone sends when the user saves the displayed picture,
+                    // which made an ordinary action stall the viewer.
+                    const std::wstring origMarker = ORIGINAL_PATH_MARKER;
+                    if (call->result.rfind(origMarker, 0) == 0) {
+                        const std::wstring path = call->result.substr(origMarker.size());
+                        std::wstring reply;
+
+                        // The OK line's shape is protocol — "<bytes>;<name>"
+                        // after the '=' — because a client checks the size
+                        // against what it received and reads the name to know
+                        // what it is decoding. Unchanged from when this ran on
+                        // the UI thread: no client can tell the difference.
+                        if (path.empty()) {
+                            reply = MakeOk(L"SendDisplayedImage=0;"); // showing nothing
+                        } else {
+                            std::vector<unsigned char> bytes;
+                            std::wstring err;
+                            if (Xfer::ReadImageFile(path, bytes, err)) {
+                                const size_t slash = path.find_last_of(L"\\/");
+                                const std::wstring name =
+                                    (slash == std::wstring::npos) ? path : path.substr(slash + 1);
+                                reply = Xfer::BuildDataReplyBody(bytes) +
+                                        MakeOk(L"SendDisplayedImage=" +
+                                               std::to_wstring(bytes.size()) + L";" + name);
+                            } else {
+                                reply = MakeErr(RT::ERR_BAD_PAYLOAD, err);
+                            }
+                        }
+
+                        if (!SendAll(client, ToUtf8(reply) + "\r\n", tls)) {
+                            departure = L"(dropped — send failed)";
+                            break;
+                        }
+                        continue;
+                    }
+
                     const std::wstring marker = PREVIEW_PATH_MARKER;
                     if (call->result.rfind(marker, 0) == 0) {
                         const std::wstring path = call->result.substr(marker.size());
@@ -1010,7 +1262,31 @@ namespace {
         // connection still open is exactly an arrival with nothing under it.
         // That is the property the log needs for "who is on this machine right
         // now" to be answerable by reading it.
-        if (Log::IsEnabled())
+        // HOW IT ENDED, decided here because this is the only place that knows
+        // all three facts: whether `bye` arrived, whether we ejected them, and
+        // that the read simply failed otherwise.
+        //
+        // ORDER MATTERS. An ejected client never gets to say goodbye, so the
+        // eject is checked first — otherwise a kick delivered while a `bye` was
+        // in flight would report whichever won the race.
+        Constants::RemoteTcpIp::ClientEvent endKind;
+        if (TakeEjected(static_cast<ConnId>(client))) {
+            endKind   = Constants::RemoteTcpIp::ClientEvent::Ejected;
+            departure = L"(disconnected — kicked or banned from here)";
+        } else if (saidGoodbye) {
+            endKind = Constants::RemoteTcpIp::ClientEvent::LeftClean;
+            // `departure` already says "said goodbye".
+        } else {
+            endKind   = Constants::RemoteTcpIp::ClientEvent::LeftAbrupt;
+            // Only overwritten when nothing more specific was recorded — a send
+            // failure mid-image already says something the generic wording would
+            // throw away.
+            if (wcscmp(departure, L"(disconnected)") == 0 ||
+                wcscmp(departure, L"(disconnected — closed by peer)") == 0)
+                departure = L"(disconnected — ABRUPTLY, no goodbye)";
+        }
+
+        if (Log::IsCapturing())
             // HOW LONG IT LASTED goes in the Δ column, which is otherwise "—" on
             // a connection row. On a command row that column is a round trip; on
             // this one it is the session, and the two are never confused because
@@ -1031,6 +1307,7 @@ namespace {
         UnregisterSendLock(static_cast<ConnId>(client));
         // After the departure line above, which is the last row that wants it.
         ForgetPeerName(static_cast<ConnId>(client));
+        ForgetPeerAgent(static_cast<ConnId>(client));
         // Last of the four, and BEFORE the socket closes: a row the panel can
         // still see is a row Kick can still act on, and acting on it once the
         // descriptor is closed would be a shutdown() against a number the
@@ -1041,7 +1318,7 @@ namespace {
         shutdown(client, SD_BOTH);
         closesocket(client);
         g_activeClients.fetch_sub(1, std::memory_order_acq_rel);
-        NotifyClientsChanged();
+        NotifyClientsChanged(endKind);
         if (SUCCEEDED(comInit)) CoUninitialize();
     }
 
@@ -1095,7 +1372,7 @@ namespace {
                 // all — the one category of arrival the owner of an exposed
                 // listener most wants to see. The store is a fixed-size ring, so
                 // a scanner hammering the port rotates it rather than growing it.
-                if (Log::IsEnabled())
+                if (Log::IsCapturing())
                     Log::Add(Log::Direction::In, who, L"(refused — blacklisted)",
                              Log::SelfLabel(), L"(connection)", -1);
                 closesocket(client);
@@ -1113,7 +1390,7 @@ namespace {
                 // empty list is a server nobody configured, a non-match is a
                 // rule that does not cover the address shown right here — and
                 // that address is the answer to "what should I have typed".
-                if (Log::IsEnabled())
+                if (Log::IsCapturing())
                     Log::Add(Log::Direction::In, who,
                              cfg.allowList.empty() ? L"(refused — AllowList empty)"
                                                    : L"(refused — not on the AllowList)",
@@ -1134,7 +1411,7 @@ namespace {
             // served. The cap is not a security boundary, and a silent close is
             // honest enough.
             if (g_activeClients.load(std::memory_order_acquire) >= cfg.maxConnections) {
-                if (Log::IsEnabled())
+                if (Log::IsCapturing())
                     Log::Add(Log::Direction::In, who, L"(refused — connection limit reached)",
                              Log::SelfLabel(), L"(connection)", -1);
                 if (!Tls::RequiredForAddress(peer))
@@ -1146,7 +1423,7 @@ namespace {
             }
 
             g_activeClients.fetch_add(1, std::memory_order_acq_rel);
-            NotifyClientsChanged();
+            NotifyClientsChanged(Constants::RemoteTcpIp::ClientEvent::Joined);
             // Detached: a client's lifetime is its socket's, and Stop() closes
             // the sockets rather than joining every conversation.
             std::thread(ClientThread, client, cfg, g_owner, peer, peerPort).detach();
@@ -1306,6 +1583,13 @@ bool Start(HWND hOwner, std::wstring &errorOut) {
 
     g_listenThread = std::thread(ListenThread);
     NotifyClientsChanged();   // the overlay indicator appears
+
+    // The beacon can only be announced once there is a listener behind it, so it
+    // is reconciled HERE rather than when the setting is read. Refresh decides
+    // for itself whether anything should be published — a beacon with the
+    // setting off, or on a loopback-only bind, is silently nothing.
+    Beacon::Refresh();
+
     errorOut.clear();
     return true;
 }
@@ -1346,6 +1630,12 @@ void Stop() {
         WSACleanup();
         g_wsaUp = false;
     }
+
+    // The listener is gone, so the announcement is now a promise nobody can
+    // keep. Withdrawn here rather than left to expire: a client browsing after a
+    // Stop would otherwise still list this instance and fail on connect, and the
+    // user blames the app rather than the stopped server.
+    Beacon::Refresh();
 }
 
 bool IsRunning() { return g_running.load(std::memory_order_acquire); }
@@ -1377,7 +1667,37 @@ std::vector<ClientInfo> Connections() {
     // a different mutex and holding two of them in an order nothing else agrees
     // on is how a deadlock is built. A name that arrives between the two loops
     // simply shows up on the next refresh.
-    for (ClientInfo &info : out) info.name = PeerNameFor(info.id);
+    for (ClientInfo &info : out) {
+        info.name     = PeerNameFor(info.id);
+        const AgentInfo ag = PeerAgentFor(info.id);
+        info.platform     = ag.platform;
+        info.agentApp     = ag.app;
+        info.agentVersion = ag.version;
+        info.agentOs      = ag.os;
+        info.agentHost    = ag.host;
+        // `hello` still wins for the display name when it was sent — it is the
+        // older path and some clients use only that. The agent's name fills in
+        // for those that greet but never said hello.
+        if (info.name.empty()) info.name = ag.name;
+    }
+
+    // OBSERVING is filled here for the same reason the name is: it needs
+    // g_observerMutex, and taking that while still holding the connection lock
+    // would introduce a second lock order for no gain. One pass over a list that
+    // is a handful of entries.
+    //
+    // Matched on the socket because Observer::sock IS the ConnId — the observer
+    // list needs no identity of its own, and giving it one would create a second
+    // place for a name to go stale.
+    {
+        std::lock_guard<std::mutex> lk(g_observerMutex);
+        for (ClientInfo &info : out) {
+            const SOCKET s = static_cast<SOCKET>(info.id);
+            for (const Observer &o : g_observers) {
+                if (o.sock == s) { info.observing = true; break; }
+            }
+        }
+    }
 
     // OLDEST FIRST, so the list does not reorder under the operator's cursor
     // every time somebody connects. The map is keyed by socket, and socket
@@ -1388,16 +1708,105 @@ std::vector<ClientInfo> Connections() {
 }
 
 bool KickConnection(ConnId id) {
+    std::wstring address;
+    int          port = 0;
+
+    // EVERYTHING THAT TOUCHES THE SOCKET HAPPENS UNDER THIS LOCK, and that is
+    // the whole point of the block below — it is not merely guarding the map.
+    //
+    // This used to look the connection up, RELEASE the lock, and only then mark
+    // and shut down. A client thread reaching its own teardown inside that
+    // window broke the kick two different ways, both silent:
+    //
+    //   • UnregisterLiveConn calls DropEjected, so a MarkEjected that landed
+    //     after it left an ORPHANED mark on a dead socket number. ConnIds ARE
+    //     socket numbers and the system reuses them, so the next client handed
+    //     that number was ejected the moment it reached its loop — a connection
+    //     dying for a reason nobody could see. One kick that missed planted one
+    //     of these, so pressing Kick repeatedly made it worse, not better.
+    //
+    //   • shutdown() and CancelIoEx then fired on a descriptor that had already
+    //     been closed and reused — an eject landing on SOMEBODY ELSE's
+    //     connection.
+    //
+    // The teardown path takes this same lock in UnregisterLiveConn and only
+    // closes the socket AFTER it (see the note there), so holding it here means
+    // the descriptor cannot be closed, and therefore cannot be reused, while
+    // this function is acting on it. A find that succeeds proves the socket is
+    // still ours for as long as we hold this.
+    //
+    // Lock order is liveConn → ejected, the same order UnregisterLiveConn uses
+    // when it calls DropEjected, so nothing new can deadlock.
     {
         std::lock_guard<std::mutex> lk(g_liveConnMutex);
-        if (!g_liveConns.count(id)) return false;
+
+        auto it = g_liveConns.find(id);
+        if (it == g_liveConns.end()) return false;
+        address = it->second.address;
+        port    = it->second.port;
+
+        // MARKED BEFORE THE SHUTDOWN, never after: the client thread can reach
+        // its departure path before this function returns, and a mark that
+        // landed second would be read too late — the eject would be reported as
+        // a crash.
+        //
+        // Timed kick and ban both come through here, so one mark covers all
+        // three.
+        MarkEjected(id);
+
+        const SOCKET sock = static_cast<SOCKET>(id);
+
+        // See the header for why this is shutdown() rather than closesocket().
+        // The client thread notices its read failing, unwinds through the
+        // ordinary departure path, and unregisters itself — so nothing here
+        // erases the map entry.
+        shutdown(sock, SD_BOTH);
+
+        // AND THEN WAKE THE THREAD, because the shutdown above does not.
+        //
+        // The socket belongs to another thread that is sitting inside a
+        // blocking call, and Windows does not promise to return from one
+        // because a second thread shut the socket down. IDLE_POLL_MS was added
+        // to work around that — but a poll only covers the READ. Nothing
+        // covered a blocked WRITE.
+        //
+        // A phone watching in Fullscreen asks for a preview on every image
+        // change, and that JPEG is written by this same client thread. Over
+        // Wi-Fi a full TCP window blocks that send until SO_SNDTIMEO — THIRTY
+        // SECONDS — so the loop top, where the ejected mark is read, was
+        // unreachable for that whole time. Loopback never blocks in send, which
+        // is exactly why the emulator was always kicked instantly and a real
+        // phone was kicked "sometimes".
+        //
+        // CancelIoEx aborts whatever is pending on the handle, read or write:
+        // the blocked call returns immediately and the thread reaches the top
+        // of its loop, sees the mark, and leaves through the ordinary departure
+        // path.
+        //
+        // SAFE WHERE closesocket IS NOT. The descriptor stays valid and stays
+        // ours, so it cannot be handed to another connection while a thread is
+        // still reading it — the reuse hazard that ruled closesocket out in the
+        // first place. Nothing here waits for the thread either; this returns
+        // at once and the thread unregisters itself as it always did.
+        CancelIoEx(reinterpret_cast<HANDLE>(sock), nullptr);
     }
 
-    // OUTSIDE the lock, and see the header for why this is shutdown() rather
-    // than closesocket(). The client thread notices its read failing, unwinds
-    // through the ordinary departure path, and unregisters itself — so nothing
-    // here erases the map entry.
-    shutdown(static_cast<SOCKET>(id), SD_BOTH);
+    // OUTSIDE the connection lock, because Log::Add takes the log store's own
+    // mutex and holding two of them in an order nothing else agrees on is how a
+    // deadlock is built — the same rule Connections() follows for PeerNameFor.
+    // The address was copied above, so nothing here reads the map.
+    //
+    // RECORDED AT THE MOMENT IT IS ISSUED, not only when the connection dies.
+    //
+    // The log is a record of the wire, so an operator action left no trace at
+    // all until the departure row appeared — which meant an eject that had not
+    // landed yet and an eject that never happened looked identical: an empty
+    // log. That ambiguity is what made this bug hard to see. The departure row
+    // still follows; this one says the order was given.
+    if (Log::IsCapturing())
+        Log::Add(Log::Direction::Out, Log::SelfLabel(),
+                 L"(ejecting — closing this connection)",
+                 NamedLabel(id, ConnLabel(address, port)), L"(connection)", -1);
     return true;
 }
 
@@ -1418,6 +1827,17 @@ bool TimedKickConnection(ConnId id, int minutes, std::wstring &scopeOut) {
     // kick that admits the peer it just ejected is worse than none: it looks
     // like it worked.
     Blacklist::AddTimed(scopeOut, minutes, Constants::Messages::BLACKLIST_REASON_TIMED);
+
+    // The BLOCK, which is a different fact from the eject KickConnection logs
+    // below it. One closes a socket; this one refuses the address for a while,
+    // outlives the connection, and is the half somebody reading the log later
+    // needs in order to explain why a screen could not get back in.
+    if (Log::IsCapturing())
+        Log::Add(Log::Direction::Out, Log::SelfLabel(),
+                 L"(blocked " + scopeOut + L" for " + std::to_wstring(minutes) +
+                     L" min — operator)",
+                 ConnLabel(address, 0), L"(security)", -1);
+
     KickConnection(id);
     return true;
 }
@@ -1440,6 +1860,15 @@ bool BanConnection(ConnId id, std::wstring &scopeOut) {
     // it was aimed at. Written before the connection is torn down, that race
     // does not exist.
     Blacklist::Add(scopeOut, Constants::Messages::BLACKLIST_REASON_OPERATOR);
+
+    // A PERMANENT block, written to a file that survives restarts. The most
+    // consequential thing this panel can do, and until now the log recorded only
+    // the socket closing — which looks identical to an ordinary kick.
+    if (Log::IsCapturing())
+        Log::Add(Log::Direction::Out, Log::SelfLabel(),
+                 L"(banned " + scopeOut + L" permanently — operator)",
+                 ConnLabel(address, 0), L"(security)", -1);
+
     KickConnection(id);
     return true;
 }
@@ -1627,7 +2056,7 @@ void EmitToObservers(const std::wstring &line, ConnId except, bool positional) {
         // instance pushes to a watcher would be missing from the log. The result
         // is reported honestly: a dropped event is exactly the thing you would
         // open the log to discover.
-        if (Log::IsEnabled())
+        if (Log::IsCapturing())
             Log::Add(Log::Direction::Out, Log::SelfLabel(),
                      std::wstring(RT::RESP_EVENT) + L" " + line, PeerLabel(s),
                      sent == static_cast<int>(bytes.size()) ? L"(pushed)"

@@ -1,3 +1,11 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// Copyright (C) 2026 Ivan Hristov Yanev
+//
+// This file is part of QuickImageViewer. It is free software: you may
+// redistribute and modify it under the terms of the GNU Affero General Public
+// License version 3 or later, as published by the Free Software Foundation.
+// It is distributed WITHOUT ANY WARRANTY. See the LICENSE file for details.
+
 #include "UIManager.h"
 #include "GdiPool.h" // Flush() — pooled colours die with the theme they came from
 #include "../AppState.h"
@@ -167,9 +175,32 @@ namespace UI {
         return dirWnd;
     }
 
+    // The panel the user last clicked in — but the fallback matters as much as
+    // the hit, because a dozen FileHandler sites route folder work through this
+    // (ClearDirThumbnailCache, SetPlaylistCopy, UpdateDirView, GetPanelFolder,
+    // SyncDirSelectionRectangle).
+    //
+    // It used to fall straight through to getDirWindow(), which CONSTRUCTS AND
+    // INITS F6 on demand. So "F6 was never opened" did not mean there was no F6
+    // — it meant a hidden one got created here and quietly received the folder
+    // work meant for whatever panel the user was actually looking at. Spawning
+    // from the history list never sets the active pointer, so with only spawned
+    // panels on screen that was every call until the first click landed.
+    //
+    // Prefer any VISIBLE dir panel over creating a hidden one. F6 first when it
+    // is up, then the spawned pool in slot order. getDirWindow() stays as the
+    // last resort so callers still get a reference when nothing is visible.
     ThumbnailPanelWnd &UIManager::getActiveDirWnd() {
         if (m_activeDirWnd && m_activeDirWnd->GetHwnd() && IsWindowVisible(m_activeDirWnd->GetHwnd()))
             return *m_activeDirWnd;
+
+        if (isInit(dirWnd) && dirWnd.IsPanelVisible())
+            return dirWnd;
+
+        for (auto *p : m_spawnedPool) {
+            if (p->IsPanelVisible()) return *p;
+        }
+
         return getDirWindow();
     }
 
@@ -201,6 +232,9 @@ namespace UI {
         return zoomWnd;
     }
 
+    // Deliberately has no caller. The zoom panel opens on '0', a digit the panel's
+    // own input box consumes, so a toggle can never see the second press. Kept for
+    // symmetry with the Jump-to / Find pair; see Command::ZoomTo for the full why.
     void UIManager::ToggleZoomWindow() {
         Toggle(getZoomWindow());
     }
@@ -308,6 +342,13 @@ applyIfVisible(exifWnd);
         RefreshVerticalPanels();
         target->UpdateDirView();
 
+        // Claim the active-dir slot when nothing visible holds it. Spawning is
+        // not a click, so it must not steal the slot from a panel the user did
+        // click — but leaving it unset sent every getActiveDirWnd() call to the
+        // hidden F6 until the first click landed here.
+        if (!m_activeDirWnd || !m_activeDirWnd->IsPanelVisible())
+            SetActiveDirWnd(target);
+
         const wchar_t *msg = nullptr;
         switch (freePos) {
             case 1: msg = Constants::Messages::SPAWN_DIR_TOP;    break;
@@ -352,6 +393,41 @@ applyIfVisible(exifWnd);
     }
 
     // -------------------------------------------------------------------------
+    // SameFolderPath
+    // -------------------------------------------------------------------------
+    // Compares two folders AS PATHS, deliberately not as filesystem objects.
+    //
+    // std::filesystem::equivalent answers "same directory on disk", which is the
+    // right question for routing a scan result to the panels that care, and the
+    // wrong one for the history list. A symlinked folder and its target are one
+    // directory but two history rows, and equivalence made them indistinguishable:
+    // spawning from either row put the position label on BOTH, and Shift+Enter on
+    // one row hid the panel spawned from the other. A history row is the path the
+    // user opened, so the panel belonging to that row is the one spawned with that
+    // path — nothing else.
+    //
+    // Separator style and trailing slashes are noise, and Windows paths are
+    // case-insensitive; those three are normalised away, and nothing else is.
+    // -------------------------------------------------------------------------
+    static std::wstring NormalizeFolderKey(const std::wstring &p) {
+        std::wstring out = p;
+        for (auto &ch: out) {
+            if (ch == L'/') ch = L'\\';
+        }
+        while (!out.empty() && out.back() == L'\\') out.pop_back();
+        return out;
+    }
+
+    static bool SameFolderPath(const std::wstring &a, const std::wstring &b) {
+        const std::wstring ka = NormalizeFolderKey(a);
+        const std::wstring kb = NormalizeFolderKey(b);
+        if (ka.size() != kb.size()) return false;
+        return CompareStringOrdinal(ka.c_str(), static_cast<int>(ka.size()),
+                                    kb.c_str(), static_cast<int>(kb.size()),
+                                    TRUE) == CSTR_EQUAL;
+    }
+
+    // -------------------------------------------------------------------------
     // GetSpawnedDirWndPositionLabel
     // Returns position label (e.g., " (Left)", " (Right)") if folder has a
     // spawned DirWnd open, else empty string.
@@ -364,15 +440,11 @@ applyIfVisible(exifWnd);
             if (!p->IsPanelVisible()) continue;
             const std::wstring panelFolder = p->GetFolderPath();
             if (panelFolder.empty()) continue;
-            try {
-                if (std::filesystem::equivalent(
-                        std::filesystem::path(folderPath),
-                        std::filesystem::path(panelFolder))) {
-                    const SlotInfo *slot = m_layout.getSlot(p->GetPosition());
-                    if (slot && !slot->name.empty())
-                        allLabels += L" (" + slot->name + L")";
-                }
-            } catch (...) {}
+            if (SameFolderPath(folderPath, panelFolder)) {
+                const SlotInfo *slot = m_layout.getSlot(p->GetPosition());
+                if (slot && !slot->name.empty())
+                    allLabels += L" (" + slot->name + L")";
+            }
         }
 
         // Check F5 DirWnd if it's visible
@@ -381,17 +453,13 @@ applyIfVisible(exifWnd);
             app.currentIndex < static_cast<int>(app.playlist.size())) {
             const std::wstring currentFolder =
                 std::filesystem::path(app.playlist[app.currentIndex]).parent_path().wstring();
-            try {
-                if (std::filesystem::equivalent(
-                        std::filesystem::path(folderPath),
-                        std::filesystem::path(currentFolder))) {
-                    const SlotInfo *slot = m_layout.getSlot(dirWnd.GetPosition());
-                    if (slot && !slot->name.empty()) {
-                        const int fNum = static_cast<int>(Shortcuts::SC_PANEL_DIR_TOGGLE) - VK_F1 + 1;
-                        allLabels += L" [F" + std::to_wstring(fNum) + L" -> " + slot->name + L"]";
-                    }
+            if (SameFolderPath(folderPath, currentFolder)) {
+                const SlotInfo *slot = m_layout.getSlot(dirWnd.GetPosition());
+                if (slot && !slot->name.empty()) {
+                    const int fNum = static_cast<int>(Shortcuts::SC_PANEL_DIR_TOGGLE) - VK_F1 + 1;
+                    allLabels += L" [F" + std::to_wstring(fNum) + L" -> " + slot->name + L"]";
                 }
-            } catch (...) {}
+            }
         }
 
         return allLabels;
@@ -402,12 +470,10 @@ applyIfVisible(exifWnd);
             if (!p->IsPanelVisible()) continue;
             const std::wstring panelFolder = p->GetFolderPath();
             if (panelFolder.empty()) continue;
-            try {
-                if (std::filesystem::equivalent(
-                        std::filesystem::path(folderPath),
-                        std::filesystem::path(panelFolder)))
-                    return p;
-            } catch (...) {}
+            // Path match, not equivalence — this drives the Shift+Enter toggle,
+            // and a symlinked row must not close the panel its target opened.
+            if (SameFolderPath(folderPath, panelFolder))
+                return p;
         }
         return nullptr;
     }
@@ -417,25 +483,17 @@ applyIfVisible(exifWnd);
             if (!p->IsPanelVisible()) continue;
             const std::wstring panelFolder = p->GetFolderPath();
             if (panelFolder.empty()) continue;
-            try {
-                if (std::filesystem::equivalent(
-                        std::filesystem::path(folderPath),
-                        std::filesystem::path(panelFolder))) {
-                    return {p->GetDirSizeStr(), static_cast<int>(p->m_thumbnails.size())};
-                }
-            } catch (...) {}
+            if (SameFolderPath(folderPath, panelFolder)) {
+                return {p->GetDirSizeStr(), static_cast<int>(p->m_thumbnails.size())};
+            }
         }
         // Also check the F6 DirWnd
         if (dirWnd.IsPanelVisible()) {
             const std::wstring panelFolder = static_cast<const ThumbnailPanelWnd &>(dirWnd).GetPanelFolder();
             if (!panelFolder.empty()) {
-                try {
-                    if (std::filesystem::equivalent(
-                            std::filesystem::path(folderPath),
-                            std::filesystem::path(panelFolder))) {
-                        return {dirWnd.GetDirSizeStr(), static_cast<int>(dirWnd.m_thumbnails.size())};
-                    }
-                } catch (...) {}
+                if (SameFolderPath(folderPath, panelFolder)) {
+                    return {dirWnd.GetDirSizeStr(), static_cast<int>(dirWnd.m_thumbnails.size())};
+                }
             }
         }
         return {{}, 0};
@@ -506,13 +564,41 @@ applyIfVisible(exifWnd);
             InvalidateRect(h, nullptr, FALSE);
         };
 
-        applyAndRepaint(helpWnd);
-        applyAndRepaint(historyListWnd);
-applyAndRepaint(exifWnd);
-        applyAndRepaint(jumpToWnd);
-        applyAndRepaint(zoomWnd);
-        applyAndRepaint(findWnd);
-        applyAndRepaint(statsWnd);
+        // Iterate the arrays rather than naming panels one by one. The old
+        // hand-written list held seven of them and had fallen eight behind:
+        // the thumbnail strips, the Dedicated panel and all six Rem_TCP_IP
+        // windows kept a stale caption colour after a theme change, because
+        // adding a panel never meant remembering to add it here too.
+        for (IPanelWindow *panel : m_fixedPanels)
+            if (panel) applyAndRepaint(*panel);
+
+        for (SpawnedDirWnd *panel : m_spawnedPool)
+            if (panel) applyAndRepaint(*panel);
+    }
+
+    // -------------------------------------------------------------------------
+    // NotifyCornerChanged
+    // Called when app.cornerPreference changes at runtime (Ctrl+Shift+Numpad*).
+    // The DWM corner attribute is per-window, so toggling it on the main window
+    // alone left every open panel with the corners it was created with.
+    // -------------------------------------------------------------------------
+    void UIManager::NotifyCornerChanged() {
+        const DWORD corner = app.cornerPreference;
+
+        auto applyCorner = [&](IPanelWindow &panel) {
+            HWND h = panel.GetHwnd();
+            if (!h) return;
+            DwmSetWindowAttribute(h, Constants::DWMWA_WINDOW_CORNER_PREFERENCES,
+                                  &corner, sizeof(corner));
+            SetWindowPos(h, nullptr, 0, 0, 0, 0,
+                         SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | SWP_FRAMECHANGED | SWP_NOACTIVATE);
+        };
+
+        for (IPanelWindow *panel : m_fixedPanels)
+            if (panel) applyCorner(*panel);
+
+        for (SpawnedDirWnd *panel : m_spawnedPool)
+            if (panel) applyCorner(*panel);
     }
 
     void UIManager::RepaintAllPanels() {
@@ -523,6 +609,22 @@ applyAndRepaint(exifWnd);
         for (auto *slot : slots) {
             if (slot->panel) slot->panel->Repaint();
         }
+    }
+
+    void UIManager::NotifySortOrderChanged() {
+        SlotInfo *slots[] = {
+            &m_layout.center, &m_layout.top, &m_layout.right,
+            &m_layout.bottom, &m_layout.left
+        };
+        for (auto *slot : slots) {
+            if (slot->panel) slot->panel->OnSortOrderChanged();
+        }
+
+        // A hidden F6 sits in no slot and keeps its playlist across hide/show,
+        // so without this it reappears in the order it was built with. Only
+        // when it already exists — this must not be the call that constructs it.
+        if (isInit(dirWnd) && !dirWnd.IsPanelVisible())
+            dirWnd.OnSortOrderChanged();
     }
 
     void UIManager::NotifyFolderRefreshed(const std::wstring &dir,

@@ -23,8 +23,10 @@ jobs:
 
       - name: Commit if changed
         run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
+          # Repository owner, not github-actions[bot] — a bot author shows up in
+          # the Contributors sidebar. See the same note in release.yml.
+          git config user.name "icyhoty2k"
+          git config user.email "icyhoty2k@gmail.com"
           git diff --quiet docs/index.html || git commit -am "chore: update dateModified to $(date -u +%Y-%m-%d) [skip ci]"
           git push
 

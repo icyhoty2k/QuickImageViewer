@@ -1,3 +1,11 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// Copyright (C) 2026 Ivan Hristov Yanev
+//
+// This file is part of QuickImageViewer. It is free software: you may
+// redistribute and modify it under the terms of the GNU Affero General Public
+// License version 3 or later, as published by the Free Software Foundation.
+// It is distributed WITHOUT ANY WARRANTY. See the LICENSE file for details.
+
 #pragma once
 #include <windows.h>
 #include <wincodec.h>
@@ -116,6 +124,12 @@ struct AppState {
     // resetting them in LoadImageIndex. Rotation and flips still reset, because
     // EXIF auto-orientation owns those (see Constants::IS_LOCK_VIEWPORT).
     bool lockViewport            = Constants::IS_LOCK_VIEWPORT;
+
+    // Reopen the main window where it was left. The rect itself is session
+    // state, not a setting — it lives in qivSession.ini or the registry with
+    // the rest of the session (see Persistence/SessionFile.h). This flag is the
+    // ordinary persisted setting that decides whether any of that is consulted.
+    bool rememberWindowPosition = Constants::IS_REMEMBER_WINDOW_POSITION;
     bool historyFullModeEnabled  = Constants::History::HISTORY_SHOW_FULL_HISTORY;
     bool openDirWndOnStart       = Constants::IS_OPEN_DIRWND_ON_START;
     bool overlayShowBackground   = Constants::Overlay::IS_OVERLAY_SHOW_BACKGROUND;
@@ -262,6 +276,23 @@ struct AppState {
     // the UI thread to read, exactly like every other toggle.
     bool remoteLogEnabled = Constants::RemoteTcpIp::REMOTE_LOG_DEFAULT;
 
+    // Also write the wire log to rotating files under logs\ beside the exe.
+    //
+    // PERSISTED, unlike the recording switch directly above — see
+    // Constants::IS_TCP_IP_LOG for why the two differ. Same UI-thread-copy
+    // arrangement: the value the writer actually reads is an atomic inside
+    // Remote::Log, flipped in the same breath as this one.
+    bool remoteLogToFile = Constants::IS_TCP_IP_LOG;
+
+    // The General log — what this instance did, as opposed to what it said on
+    // the wire. Same arrangement as the field above in every respect; the value
+    // the writer reads is an atomic inside AppLog, flipped alongside this one.
+    //
+    // It exists mainly for a DEDICATED instance: started with Windows, showing a
+    // locked fullscreen slideshow on one monitor, with nobody in front of it and
+    // no panel to look at. See Platform/AppLog.h.
+    bool generalLog = Constants::IS_GENERAL_LOG;
+
     // --- One-shot INTERJECTED image -------------------------------------------
     //
     // On the wire this arrives either as `ShowImageOnce <path>` (one machine) or
@@ -311,18 +342,44 @@ struct AppState {
     // arming it from anywhere but the UI thread silently does nothing.
     bool keepDisplayAwake = Constants::IS_KEEP_DISPLAY_AWAKE;
 
+    // Announce the Local Server on the network so clients can discover it.
+    //
+    // Persisted like any other toggle, but it does NOT by itself mean a beacon is
+    // live: the announcement only exists while the server is actually listening
+    // and reachable. Advertising a service on a loopback-only bind, or with the
+    // server stopped, would put a name on the network pointing at nothing. See
+    // Remote::Beacon::Refresh, which is what reconciles this flag with reality.
+    bool remoteBeacon = Constants::IS_REMOTE_BEACON_ENABLED;
+
     // Slideshow
     SlideshowState slideshow;
 
     // Persistent main-window overlay shown when the current directory becomes
     // unavailable.  Cleared when the user opens a new folder successfully.
-    enum class FolderOverlayState { None, Missing, Empty };
+    // Unsupported = the file is there and readable, but nothing in this build
+    // can decode it. A folder problem and a file problem, reported by the same
+    // placeholder because from the user's side they are the same event: the
+    // window is empty and they need to know why.
+    enum class FolderOverlayState { None, Missing, Empty, Unsupported };
 
     FolderOverlayState folderOverlay = FolderOverlayState::None;
+
+    // What clicking the LAST line opens. Always a real filesystem path — a
+    // folder, or a file whose folder is opened instead. Never the display text.
     std::wstring folderOverlayPath;
-    // Client-area rect of the path line in the overlay — written by the
-    // renderer each frame it draws, hit-tested by MouseHandler for
-    // click-to-open-in-Explorer. Zero rect = nothing clickable.
+
+    // What the LAST line SHOWS, when that differs from the path. Empty means
+    // "show the path", which is what the folder states want. The Unsupported
+    // state fills it with "dir \ file \ format", which reads better than a
+    // bare path and names the extension that was refused.
+    std::wstring folderOverlayDetail;
+
+    // Client-area rects of the two clickable lines, written by the renderer
+    // whenever the layout is built or re-flowed and hit-tested by MouseHandler.
+    // A zero rect means that line is not clickable.
+    //   Action = line 2, the constant "Open a file or folder…" prompt (F2).
+    //   Path   = line 3, the folder or file, opened in Explorer.
+    D2D1_RECT_F folderOverlayActionRect = {};
     D2D1_RECT_F folderOverlayPathRect = {};
 
     // Counts windows of OUR OWN class — not the global one. A dedicated copy
@@ -367,18 +424,12 @@ struct AppState {
         activeEffectsList.clear();
     }
 
-    void ResetWindowState(HWND hWnd) {
-        // --- Viewport / window ---
-        viewport.zoom = 1.0f;
-        viewport.offsetX = 0.0f;
-        viewport.offsetY = 0.0f;
-        viewport.rotation = 0;
-        viewport.flippedH = false;
-        viewport.flippedV = false;
-
-        opacity = 255;
-        SetLayeredWindowAttributes(hWnd, 0, opacity, LWA_ALPHA);
-
+    // GEOMETRY ONLY — default size, centred on the monitor the window is
+    // nearest to. Split out of ResetWindowState because the display-change
+    // rescue needs exactly this and nothing else: a window stranded by an
+    // unplugged monitor is a placement problem, and wiping the user's zoom,
+    // rotation and effects to fix it would be a second, unrelated surprise.
+    void ResetWindowGeometry(HWND hWnd) {
         int targetW = (int) (baseWidth  * dpiScale);
         int targetH = (int) (baseHeight * dpiScale);
 
@@ -394,6 +445,21 @@ struct AppState {
                          targetW, targetH,
                          SWP_NOZORDER | SWP_NOACTIVATE | SWP_FRAMECHANGED);
         }
+    }
+
+    void ResetWindowState(HWND hWnd) {
+        // --- Viewport / window ---
+        viewport.zoom = 1.0f;
+        viewport.offsetX = 0.0f;
+        viewport.offsetY = 0.0f;
+        viewport.rotation = 0;
+        viewport.flippedH = false;
+        viewport.flippedV = false;
+
+        opacity = 255;
+        SetLayeredWindowAttributes(hWnd, 0, opacity, LWA_ALPHA);
+
+        ResetWindowGeometry(hWnd);
     }
 
     // HELPER: Auto-wakes the preview toggle when a user adjusts any effect

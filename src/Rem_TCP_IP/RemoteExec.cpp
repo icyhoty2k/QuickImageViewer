@@ -1,3 +1,11 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// Copyright (C) 2026 Ivan Hristov Yanev
+//
+// This file is part of QuickImageViewer. It is free software: you may
+// redistribute and modify it under the terms of the GNU Affero General Public
+// License version 3 or later, as published by the Free Software Foundation.
+// It is distributed WITHOUT ANY WARRANTY. See the LICENSE file for details.
+
 #include "RemoteExec.h"
 #include "RemoteInbound.h" // InboundSource — which connection asked to observe
 #include "RemoteServer.h"  // Add/RemoveObserver
@@ -7,6 +15,7 @@
 #include "Platform/Constants.h"
 #include "Platform/ConstantsStrings.h"
 #include "Platform/FileHandler.h"
+#include "Input/AppCommands.h"   // applySlideshowInterval — re-arms a running show
 #include "Persistence/RegistryManager.h"
 #include "Overlays/OverlayManager.h"
 #include "Common/FuzzyMatch.h"
@@ -307,33 +316,17 @@ namespace {
         return {};
     }
 
-    std::wstring DoSendDisplayedImage() {
-        // What is ON SCREEN, which is not always a playlist entry: if this viewer
-        // is itself showing a streamed or interjected picture, that is the honest
-        // answer to "what are you displaying".
-        std::wstring path;
-        if (app.interject.showing && !app.interject.path.empty())
-            path = app.interject.path;
-        else if (app.currentIndex >= 0 &&
-                 app.currentIndex < static_cast<int>(app.playlist.size()))
-            path = app.playlist[app.currentIndex];
-
-        // The OK line's shape is part of the protocol — "<bytes>;<name>" after the
-        // '=' — because a client reads the size to check what it received and the
-        // name to know what it is decoding. Spelled the same in both branches.
-        if (path.empty())
-            return MakeOk(L"SendDisplayedImage=0;");  // showing nothing: an answer
-
-        std::vector<unsigned char> bytes;
-        std::wstring err;
-        if (!Xfer::ReadImageFile(path, bytes, err))
-            return MakeErr(RT::ERR_BAD_PAYLOAD, err);
-
-        const std::wstring name = fs::path(path).filename().wstring();
-        return Xfer::BuildDataReplyBody(bytes) +
-               MakeOk(L"SendDisplayedImage=" + std::to_wstring(bytes.size()) +
-                      L";" + name);
-    }
+    // DoSendDisplayedImage USED TO LIVE HERE and is deliberately gone.
+    //
+    // It read the whole displayed file and base64-encoded it on the UI thread,
+    // which is where this dispatch runs. That body now lives in ClientThread
+    // (RemoteServer.cpp), reached through ORIGINAL_PATH_MARKER, so the bytes are
+    // produced on the socket thread instead. The path selection it did by hand
+    // is what DisplayedPath() above already returns, identically.
+    //
+    // Left as a note rather than deleted silently: a future reader looking for
+    // the handler should find out where it went, not conclude the command is
+    // unimplemented.
 
     // --- find <query> -------------------------------------------------------
     // Mirrors FindWnd's matching rules: a query containing * or ? is a wildcard
@@ -492,10 +485,17 @@ namespace {
         int ms = 0;
         if (!ParseInt(payload, ms))
             return MakeErr(RT::ERR_BAD_PAYLOAD, L"expected milliseconds");
-        if (ms < 100 || ms > 60000)
-            return MakeErr(RT::ERR_BAD_PAYLOAD, L"out of range 100-60000");
+        if (ms < Constants::Slideshow::INTERVAL_MIN_MS
+            || ms > Constants::Slideshow::INTERVAL_MAX_MS)
+            return MakeErr(RT::ERR_BAD_PAYLOAD,
+                           L"out of range "
+                           + std::to_wstring(Constants::Slideshow::INTERVAL_MIN_MS) + L"-"
+                           + std::to_wstring(Constants::Slideshow::INTERVAL_MAX_MS));
 
-        app.slideshow.intervalMs = ms;
+        // Through applySlideshowInterval, which also RE-ARMS a running show.
+        // Writing app.slideshow.intervalMs here directly is what made this
+        // command appear to do nothing until the slideshow was restarted.
+        AppCommands::applySlideshowInterval(hWnd, ms);
         Persistence::Registry::SaveSetting(Constants::Registry::SLIDESHOW_INTERVAL_MS,
                                            static_cast<DWORD>(ms));
         g_overlayManager.PostCenterMessage(
@@ -586,8 +586,14 @@ namespace {
             else if (k == L"overlay") { if (asInt()) app.showOverlayInfoText = (iv != 0); }
             else if (k == L"layout")  { if (asInt() && iv >= 0 && iv < Constants::Overlay::LAYOUT_MODE_COUNT)
                                             app.overlayLayoutMode = iv; }
-            else if (k == L"interval"){ if (asInt() && iv >= 100 && iv <= 60000)
-                                            app.slideshow.intervalMs = iv; }
+            // Through the helper, so a mirrored instance that is ALREADY running
+            // a slideshow adopts the sender's pace immediately. Assigning the
+            // field left it running at its own old interval — the mirror looked
+            // synchronised in every respect except the one thing a slideshow is.
+            else if (k == L"interval"){ if (asInt()
+                                            && iv >= Constants::Slideshow::INTERVAL_MIN_MS
+                                            && iv <= Constants::Slideshow::INTERVAL_MAX_MS)
+                                            AppCommands::applySlideshowInterval(hWnd, iv); }
             else if (k == L"loop")    { if (asInt()) app.slideshow.loop    = (iv != 0); }
             else if (k == L"shuffle") { if (asInt()) app.slideshow.shuffle = (iv != 0); }
             else if (k == L"effects") {
@@ -788,8 +794,12 @@ bool ExecutePayload(HWND hWnd, Command cmd, const std::wstring &payload,
         case Command::StreamImageShow:
             replyOut = DoStreamShow(hWnd);
             return true;
+        // TWO-STAGE, exactly like SendDisplayedPreview below — and for a stronger
+        // reason, because the ORIGINAL file is larger than any preview built from
+        // it. Reading it and base64-encoding it here would hold the UI thread for
+        // as long as that takes, which on a large photo is long enough to see.
         case Command::SendDisplayedImage:
-            replyOut = DoSendDisplayedImage();
+            replyOut = std::wstring(ORIGINAL_PATH_MARKER) + DisplayedPath();
             return true;
 
         // TWO-STAGE, and this is only the first half.

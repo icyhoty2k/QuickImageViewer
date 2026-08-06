@@ -1,3 +1,11 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// Copyright (C) 2026 Ivan Hristov Yanev
+//
+// This file is part of QuickImageViewer. It is free software: you may
+// redistribute and modify it under the terms of the GNU Affero General Public
+// License version 3 or later, as published by the Free Software Foundation.
+// It is distributed WITHOUT ANY WARRANTY. See the LICENSE file for details.
+
 // AppCommands.h
 #pragma once
 #include <windows.h>
@@ -32,6 +40,25 @@ class AppCommands {
         static void toggleSlideshow(HWND hWnd);      // Ctrl+F1: start / stop
         static void pauseResumeSlideshow(HWND hWnd); // Space: pause / resume
         static void stopSlideshow(HWND hWnd);        // also called from WM_TIMER (end of playlist)
+
+        // THE ONLY SUPPORTED WAY TO CHANGE THE SLIDE INTERVAL.
+        //
+        // Writing app.slideshow.intervalMs on its own does nothing to a running
+        // show. SetTimer is PERIODIC: the timer armed when the slideshow started
+        // keeps firing at the period it was given, and the advance path does not
+        // re-arm it. So a new interval sat in the struct, was saved to the
+        // registry, and changed nothing until the user stopped and restarted —
+        // which is precisely how it was reported from the phone.
+        //
+        // Four sites had the same defect independently: the keyboard/menu
+        // prompt, the numeric settings entry, the remote SlideshowSetInterval
+        // command, and the mirroring Sync payload. They all call this now.
+        //
+        // The caller still owns PERSISTENCE. Not every one of them should write
+        // the registry — a Sync payload is another instance's state arriving,
+        // not this user choosing a value — so saving stays where the intent is
+        // known.
+        static void applySlideshowInterval(HWND hWnd, int ms);
 
         static void RemoveTrayIcon(HWND hWnd);
 
