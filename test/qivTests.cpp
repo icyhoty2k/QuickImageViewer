@@ -509,6 +509,26 @@ namespace {
         return raw;
     }
 
+    // Reads a file out of the source tree. Several tests below check the SOURCE
+    // rather than the built behaviour, so this has to live above all of them —
+    // it used to sit further down and only compiled by accident.
+    std::string ReadSourceFile(const char *relativePath) {
+        std::string full = QIV_SOURCE_ROOT;
+        full += "/";
+        full += relativePath;
+
+        std::FILE *f = std::fopen(full.c_str(), "rb");
+        if (!f) return std::string();
+
+        std::string out;
+        char buf[4096];
+        size_t n = 0;
+        while ((n = std::fread(buf, 1, sizeof(buf), f)) > 0)
+            out.append(buf, n);
+        std::fclose(f);
+        return out;
+    }
+
     // Data rows only — the same rule the component itself counts by, so a test
     // that disagrees with it is testing the wrong number.
     //
@@ -1179,6 +1199,53 @@ namespace {
         CHECK(nsStart != std::string::npos);
         if (nsStart == std::string::npos) return;
 
+        // ...and the scan has to STOP at its closing brace. What follows in
+        // Constants.h is Session state, backup file naming and font defaults —
+        // strings that are not value names and are deliberately unprefixed.
+        // Reading past the brace reports every one of them as a violation.
+        //
+        // Matched by counting braces, skipping the three things that can hold a
+        // brace without opening a scope: strings, // comments, /* */ comments.
+        const size_t nsOpen = constants.find('{', nsStart);
+        if (nsOpen == std::string::npos) return;
+
+        size_t nsEnd = std::string::npos;
+        int    depth = 0;
+        for (size_t i = nsOpen; i < constants.size(); ++i) {
+            const char c = constants[i];
+
+            if (c == '/' && i + 1 < constants.size() && constants[i + 1] == '/') {
+                i = constants.find('\n', i);
+                if (i == std::string::npos) break;
+                continue;
+            }
+            if (c == '/' && i + 1 < constants.size() && constants[i + 1] == '*') {
+                i = constants.find("*/", i + 2);
+                if (i == std::string::npos) break;
+                ++i; // land on the '/', the loop's ++i steps past it
+                continue;
+            }
+            if (c == '"') {
+                ++i;
+                while (i < constants.size() && constants[i] != '"') {
+                    if (constants[i] == '\\') ++i; // \" does not close the string
+                    ++i;
+                }
+                continue;
+            }
+
+            if (c == '{') {
+                ++depth;
+            } else if (c == '}') {
+                --depth;
+                if (depth == 0) { nsEnd = i; break; }
+            }
+        }
+
+        NOTE("the Registry namespace closes, so the scan has an end");
+        CHECK(nsEnd != std::string::npos);
+        if (nsEnd == std::string::npos) return;
+
         // Registry KEY PATHS and the Run entry live here too and are exempt:
         // they name locations Windows defines, or — for the startup entry — the
         // text the user sees in Task Manager, which must read "QuickImageViewer"
@@ -1203,7 +1270,7 @@ namespace {
 
         size_t pos = nsStart;
         const std::string marker = "constexpr const wchar_t *";
-        while ((pos = constants.find(marker, pos)) != std::string::npos) {
+        while ((pos = constants.find(marker, pos)) != std::string::npos && pos < nsEnd) {
             size_t p = pos + marker.size();
             while (p < constants.size() && std::isspace(static_cast<unsigned char>(constants[p]))) ++p;
 
@@ -1343,23 +1410,6 @@ namespace {
     // with itself forever while the header drifted, which is the failure this
     // is meant to catch.
     // =========================================================================
-
-    std::string ReadSourceFile(const char *relativePath) {
-        std::string full = QIV_SOURCE_ROOT;
-        full += "/";
-        full += relativePath;
-
-        std::FILE *f = std::fopen(full.c_str(), "rb");
-        if (!f) return std::string();
-
-        std::string out;
-        char buf[4096];
-        size_t n = 0;
-        while ((n = std::fread(buf, 1, sizeof(buf), f)) > 0)
-            out.append(buf, n);
-        std::fclose(f);
-        return out;
-    }
 
     // One id, and where it came from — the name is what a failure has to print,
     // because "200 is used twice" is useless without both culprits.
