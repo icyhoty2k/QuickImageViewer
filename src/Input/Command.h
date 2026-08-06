@@ -77,6 +77,20 @@ enum class Command {
     ToggleCache,
     ClearCache,
     ToggleDir,
+    // F4 / F7 — move a strip to the next free screen edge.
+    //
+    // These used to be handled ONLY by the panel's own WM_KEYDOWN, so they
+    // worked when the strip had focus and did nothing from the main window —
+    // while HelpWnd advertised them without saying so. Their toggle siblings
+    // (F3 / F6) were global all along, and there is no reason for the pair to
+    // differ: F4 names the cache strip and F7 the directory strip, so neither
+    // needs a focused panel to say which one it means.
+    //
+    // The panels still handle their own key as well, which is what lets a
+    // focused strip move itself without the keystroke leaving it. That is the
+    // same arrangement the toggles already had.
+    MoveCacheWnd,
+    MoveDirWnd,
     ToggleHistory,
     ToggleHistoryFull,
     // Master toggle  (I / Ctrl+0)

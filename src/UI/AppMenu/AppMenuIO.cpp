@@ -201,6 +201,7 @@ void ImportSettings(HWND hWnd) {
         applyBool(Constants::Registry::OPEN_DIRWND_ON_START, app.openDirWndOnStart);
         applyBool(Constants::Registry::OVERLAY_SHOW_BG,      app.overlayShowBackground);
         applyBool(Constants::Registry::OVERLAY_SHOW_DIR_NAME, app.overlayShowDirName);
+        applyBool(Constants::Registry::OVERLAY_SHOW_EFFECTS,  app.overlayShowEffectsList);
         applyBool(Constants::Registry::SWAP_MOUSE_BUTTONS,   app.swapMouseButtons);
         applyBool(Constants::Registry::CONTEXT_MENU_ENABLED, app.contextMenuEnabled);
         applyBool(Constants::Registry::KIOSK_LOCK,           app.isLocked);
@@ -510,6 +511,7 @@ void RestoreDefaults(HWND hWnd) {
     Persistence::Registry::SaveSetting(Constants::Registry::OVERLAY_SLOT_VISIBLE,  static_cast<DWORD>(app.overlaySlotVisibleMask));
     Persistence::Registry::SaveSetting(Constants::Registry::OVERLAY_SLOT_COMPACT,  static_cast<DWORD>(app.overlaySlotCompactMask));
     Persistence::Registry::SaveSetting(Constants::Registry::OVERLAY_SHOW_DIR_NAME, static_cast<DWORD>(app.overlayShowDirName));
+    Persistence::Registry::SaveSetting(Constants::Registry::OVERLAY_SHOW_EFFECTS,  static_cast<DWORD>(app.overlayShowEffectsList));
     Persistence::Registry::SaveSetting(Constants::Registry::OVERLAY_FONT_SIZE,     static_cast<DWORD>(app.overlayFontSize));
     Persistence::Registry::SaveSetting(Constants::Registry::OVERLAY_FONT_COLOR,    static_cast<DWORD>(app.overlayFontColor));
     Persistence::Registry::SaveSetting(Constants::Registry::OVERLAY_FONT_FAMILY,   static_cast<DWORD>(app.overlayFontFamily));

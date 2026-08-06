@@ -1324,6 +1324,7 @@ namespace Constants {
         constexpr const wchar_t *OVERLAY_SLOT_VISIBLE = L"qivOverlaySlotVisible"; // bitmask, bit N = slot N
         constexpr const wchar_t *OVERLAY_SLOT_COMPACT = L"qivOverlaySlotCompact"; // bitmask, bit N = slot N
         constexpr const wchar_t *OVERLAY_SHOW_DIR_NAME = L"qivOverlayShowDirName";
+        constexpr const wchar_t *OVERLAY_SHOW_EFFECTS  = L"qivOverlayShowEffects";
         constexpr const wchar_t *OVERLAY_FONT_SIZE     = L"qivOverlayFontSize";
         constexpr const wchar_t *OVERLAY_FONT_COLOR    = L"qivOverlayFontColor";
         constexpr const wchar_t *OVERLAY_FONT_FAMILY   = L"qivOverlayFontFamily"; // index into OVERLAY_FONT_FAMILIES

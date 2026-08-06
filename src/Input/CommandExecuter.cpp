@@ -641,6 +641,38 @@ void InputManager::ExecuteCommand(HWND hWnd, Command cmd) {
 
             break;
 
+        // F4 / F7 — move a strip to the next free screen edge.
+        //
+        // ONLY WHEN IT IS ALREADY VISIBLE. These getters construct the panel on
+        // first use, so an unguarded call would make F4 with no cache strip open
+        // create one and immediately move it — a key that is supposed to
+        // rearrange something producing something instead.
+        //
+        // There is ONE cache strip, so F4 has no subject to choose.
+        case Command::MoveCacheWnd:
+            if (uiManager.getCacheWindow().IsVisible())
+                uiManager.getCacheWindow().MoveCacheWindow();
+            break;
+
+        // There are FIVE directory strips — the F6 one plus the spawned pool —
+        // so F7 has to pick, and it picks the way everything else already does:
+        // getActiveDirWnd(), which is the tracked active strip when it is
+        // visible, then the F6 one, then the first visible spawned one. Moving
+        // the F6 strip unconditionally would move a panel the user is not
+        // working in while the one they ARE working in stays put.
+        //
+        // Known side effect, and the same one FileCopySelection above accepts:
+        // with NO strip visible, getActiveDirWnd() falls through to
+        // getDirWindow(), which constructs the F6 panel. The IsPanelVisible()
+        // guard then declines to move it, so nothing is shown — but the window
+        // now exists. Consistency with the established accessor is worth more
+        // than a bespoke pre-check that would have to duplicate its rules.
+        case Command::MoveDirWnd: {
+            UI::ThumbnailPanelWnd &dir = uiManager.getActiveDirWnd();
+            if (dir.IsPanelVisible()) dir.MovePanel();
+            break;
+        }
+
         case Command::ToggleDir: {
             UI::DirWnd &dirWnd = uiManager.getDirWindow();
             const bool dirWasVisible = dirWnd.IsVisible();

@@ -257,6 +257,7 @@ namespace Persistence::Registry {
         emit (R::OVERLAY_SLOT_VISIBLE,  a.overlaySlotVisibleMask);
         emit (R::OVERLAY_SLOT_COMPACT,  a.overlaySlotCompactMask);
         emitB(R::OVERLAY_SHOW_DIR_NAME, a.overlayShowDirName);
+        emitB(R::OVERLAY_SHOW_EFFECTS,  a.overlayShowEffectsList);
         emitI(R::OVERLAY_FONT_SIZE,     a.overlayFontSize);
         emit (R::OVERLAY_FONT_COLOR,    static_cast<DWORD>(a.overlayFontColor));
         emitI(R::OVERLAY_FONT_FAMILY,   a.overlayFontFamily);
@@ -369,6 +370,9 @@ namespace Persistence::Registry {
         a.overlayShowDirName = readDword(
             Constants::Registry::OVERLAY_SHOW_DIR_NAME,
             static_cast<DWORD>(Constants::Overlay::SHOW_DIR_NAME)) != 0;
+        a.overlayShowEffectsList = readDword(
+            Constants::Registry::OVERLAY_SHOW_EFFECTS,
+            static_cast<DWORD>(Constants::Overlay::SHOW_EFFECTS_LIST)) != 0;
         a.overlayFontSize = std::max(Constants::Overlay::OVERLAY_FONT_SIZE_MIN,
             std::min(Constants::Overlay::OVERLAY_FONT_SIZE_MAX,
                 static_cast<int>(readDword(Constants::Registry::OVERLAY_FONT_SIZE,

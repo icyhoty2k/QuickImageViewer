@@ -30,12 +30,26 @@
 //   * FuzzyMatch  — the Find dialog's wildcard rules, which are exactly the kind
 //                   of thing that "obviously" works until an anchor is dropped.
 //
-// NOT COVERED, and worth saying out loud: the AllowList matcher in
-// RemoteSettings, which is the single most security-relevant piece of pure logic
-// in the codebase — it decides who may connect. It cannot be linked here because
-// RemoteSettings.cpp pulls in AppState, IniFile, RemoteBlacklist and
-// RemoteCrypto. Extracting the matcher into its own translation unit would make
-// it testable, and it is the first thing worth doing after this.
+//   * AllowList    — DONE 2026-08-06, and it was the reason the note that used
+//                    to sit here existed. The matcher decides who may open a
+//                    socket to this machine, and its failure mode is silent:
+//                    too permissive produces no crash and no log line. It could
+//                    not be linked while it lived in RemoteSettings.cpp, which
+//                    also pulls in AppState, RemoteBlacklist, RemoteCrypto and
+//                    DedicatedSettings — so it was split into AddressMatch.cpp,
+//                    declarations unchanged, and covered here.
+//   * Logging      — the rotating writer and the wire log's save/load pair.
+//                    Rotation and format round-tripping both fail silently, and
+//                    the very first run caught a real one: the UTF-8 BOM was
+//                    being counted as a data row, so every adopted file rotated
+//                    one row early.
+//
+// STILL NOT COVERED, and worth saying out loud: anything that needs a window, a
+// message pump or a socket. The two use-after-frees fixed on 2026-08-06 —
+// RemoteClientsWnd::DoKick and RemotesWnd::DoRemoveTarget, both a reference into
+// a vector held across a modal dialog — are not reachable from here. They were
+// found by reading a minidump and then grepping for the same shape. Different
+// tool, different bug; this suite is not the whole answer.
 //
 
 // windows.h FIRST: Constants.h, which the log headers pull in, uses DWORD and
@@ -45,13 +59,17 @@
 #include "Common/Base64.h"
 #include "Common/Converters.h"
 #include "Common/FuzzyMatch.h"
+#include "Persistence/IniFile.h"         // every persisted setting travels through this
 #include "Persistence/RotatingLogFile.h"
 #include "Rem_TCP_IP/RemoteLog.h"
 #include "Rem_TCP_IP/RemoteSettings.h"   // AddressMatches / InList — the accept gate
+#include "Rem_TCP_IP/RemoteCrypto.h"     // the password hash and handshake secret
+#include "Platform/Constants.h"          // APP_NAME, for the banner
 
 #include <chrono>
 #include <cmath>
 #include <cstdio>
+#include <cstring>   // strlen — the HMAC test vector's message length
 #include <string>
 #include <vector>
 
@@ -71,34 +89,87 @@ namespace {
     // returned false — "TWFuT" being rejected means nothing on its own.
     const char *g_note = "";
 
+    // --- Colour ---------------------------------------------------------------
+    //
+    // ANSI escapes, but only once the console has been asked to interpret them
+    // and has agreed. Redirect the output to a file or pipe it and the request
+    // fails, g_colour stays false, and what lands in the file is plain text
+    // rather than a mess of escape sequences — which is what makes this safe to
+    // run from ctest and from CI.
+    bool g_colour = false;
+
+    void EnableColour() {
+        HANDLE h = GetStdHandle(STD_OUTPUT_HANDLE);
+        DWORD  mode = 0;
+        if (h == INVALID_HANDLE_VALUE || !GetConsoleMode(h, &mode)) return;
+        if (SetConsoleMode(h, mode | ENABLE_VIRTUAL_TERMINAL_PROCESSING))
+            g_colour = true;
+    }
+
+    const char *Green() { return g_colour ? "\x1b[32m" : ""; }
+    const char *Red()   { return g_colour ? "\x1b[31m" : ""; }
+    const char *Dim()   { return g_colour ? "\x1b[90m" : ""; }
+    const char *Bold()  { return g_colour ? "\x1b[1m"  : ""; }
+    const char *Off()   { return g_colour ? "\x1b[0m"  : ""; }
+
     void Report(bool ok, const char *expr, const char *file, int line) {
         ++g_checks;
         ++g_groupChecks;
         if (ok) {
-            if (g_verbose) std::printf("      ok    %s\n", expr);
+            if (g_verbose) std::printf("      %s·%s %s%s%s\n", Green(), Off(), Dim(), expr, Off());
             return;
         }
         ++g_failed;
         ++g_groupFailed;
-        std::printf("      FAIL  %s\n            %s:%d\n", expr, file, line);
-        if (*g_note) std::printf("            while checking: %s\n", g_note);
+        // The failure block is the one thing here that must be readable at a
+        // glance in a CI log, so it is indented, labelled and never coloured
+        // into invisibility.
+        std::printf("\n      %s✗ FAILED%s  %s\n", Red(), Off(), expr);
+        if (*g_note) std::printf("        %swhile checking:%s %s\n", Dim(), Off(), g_note);
+        std::printf("        %s%s:%d%s\n", Dim(), file, line, Off());
     }
 
-    void BeginGroup(const char *title) {
+    // Wall time per group. Cheap, and it turns the table into something that
+    // also answers "what is slow" — a group that suddenly costs 200 ms has
+    // usually started doing IO somebody did not intend.
+    std::chrono::steady_clock::time_point g_groupStart;
+
+    // Set by a group that prints its own lines — the benchmarks. Its title
+    // cannot share a line with a summary that arrives several lines later.
+    bool g_groupMultiline = false;
+
+    void BeginGroup(const char *title, bool multiline = false) {
         ++g_groups;
-        g_groupChecks = 0;
-        g_groupFailed = 0;
-        g_note        = "";
-        std::printf("  %-46s", title);
-        if (g_verbose) std::printf("\n");
+        g_groupChecks    = 0;
+        g_groupFailed    = 0;
+        g_note           = "";
+        g_groupMultiline = multiline;
+        g_groupStart     = std::chrono::steady_clock::now();
+        std::printf("  %-44s", title);
+        if (g_verbose || multiline) std::printf("\n");
     }
 
     void EndGroup() {
-        if (g_verbose || g_groupFailed) std::printf("  %-46s", "");
+        const auto ms = std::chrono::duration_cast<std::chrono::milliseconds>(
+                            std::chrono::steady_clock::now() - g_groupStart).count();
+
+        // A failure, a verbose run and a self-printing group all leave the
+        // cursor at the start of a line, so the summary needs re-indenting to
+        // land back under the column.
+        if (g_verbose || g_groupFailed || g_groupMultiline) std::printf("  %-44s", "");
+
         if (g_groupFailed)
-            std::printf("%3d checks   %d FAILED\n", g_groupChecks, g_groupFailed);
+            std::printf("%s%4d✗%s %3d checks %s%5lldms%s\n",
+                        Red(), g_groupFailed, Off(), g_groupChecks, Dim(), ms, Off());
         else
-            std::printf("%3d checks   ok\n", g_groupChecks);
+            std::printf("%s   ✓%s %3d checks %s%5lldms%s\n",
+                        Green(), Off(), g_groupChecks, Dim(), ms, Off());
+    }
+
+    void Rule() {
+        std::printf("  %s", Dim());
+        for (int i = 0; i < 62; ++i) std::printf("─");
+        std::printf("%s\n", Off());
     }
 }
 
@@ -764,8 +835,24 @@ namespace {
         CHECK(!AddressMatches(L"192.168.0.0/", L"192.168.0.1"));
         CHECK(!AddressMatches(L"/24", L"192.168.0.1"));
         CHECK(!AddressMatches(L"192.168.0.0/abc", L"192.168.0.1"));
-        CHECK(!AddressMatches(L"192.168.0.256", L"192.168.0.256"));
         CHECK(!AddressMatches(L"not-an-address", L"192.168.0.1"));
+
+        NOTE("an unparseable rule falls back to TEXT, which admits no real peer");
+        // "192.168.0.256" is not an address, so neither ParseV4 nor ParseV6
+        // accepts it and the comparison falls through to _wcsicmp — documented
+        // behaviour, kept so entries that are not address literals go on
+        // behaving as they always did.
+        //
+        // It is safe for a reason worth stating rather than assuming: a peer
+        // address reaches the accept gate from GetNameInfoW with NI_NUMERICHOST,
+        // so it is ALWAYS a valid numeric literal. A rule that can only match
+        // itself as text therefore matches nothing that can ever connect.
+        //
+        // The first check below documents the fallback; the second is the one
+        // that matters — it must not admit a real address.
+        CHECK(AddressMatches(L"192.168.0.256", L"192.168.0.256"));   // text = text
+        CHECK(!AddressMatches(L"192.168.0.256", L"192.168.0.25"));
+        CHECK(!AddressMatches(L"192.168.0.256", L"192.168.0.1"));
 
         NOTE("InList is any-of, and an empty list admits nobody");
         // Empty means DENY EVERYONE, by design — the accept gate depends on it.
@@ -833,6 +920,233 @@ namespace {
         CHECK(!SameHost(L"monitor2", L"monitor2."));
     }
 
+    // ── IniFile — what every persisted setting travels through ──────────────
+    //
+    // Every setting the application keeps is written and read back through these
+    // functions, so a defect here is not one wrong value — it is any of them.
+    // The failure modes are quiet: a key that fails to save looks exactly like a
+    // key the user never set, and a mangled non-ASCII path looks like a file
+    // that has gone missing.
+    //
+    // Runs in a temp directory and deletes it afterwards, like the log tests.
+
+    void TestIniFile() {
+        namespace Ini = Persistence::Ini;
+
+        NOTE("ParseBool accepts every documented true form");
+        // 1/true/on/yes, any non-zero number, case and whitespace ignored.
+        CHECK(Ini::ParseBool(L"1", false));
+        CHECK(Ini::ParseBool(L"true", false));
+        CHECK(Ini::ParseBool(L"TRUE", false));
+        CHECK(Ini::ParseBool(L"  yes  ", false));
+        CHECK(Ini::ParseBool(L"On", false));
+        CHECK(Ini::ParseBool(L"42", false));
+
+        NOTE("and every documented false form");
+        CHECK(!Ini::ParseBool(L"0", true));
+        CHECK(!Ini::ParseBool(L"false", true));
+        CHECK(!Ini::ParseBool(L"OFF", true));
+        CHECK(!Ini::ParseBool(L" no ", true));
+
+        NOTE("a typo falls back to the DEFAULT, never silently flipping a setting");
+        // The property that matters: garbage must not read as either value by
+        // accident. Both defaults are checked, because a rule that always
+        // returned false would pass a one-sided test.
+        CHECK(Ini::ParseBool(L"tru", true));
+        CHECK(!Ini::ParseBool(L"tru", false));
+        CHECK(Ini::ParseBool(L"", true));
+        CHECK(!Ini::ParseBool(L"", false));
+        CHECK(Ini::ParseBool(L"maybe", true));
+        CHECK(!Ini::ParseBool(L"maybe", false));
+
+        const std::wstring dir  = MakeTempDir();
+        const std::wstring path = dir + L"\\test.ini";
+
+        NOTE("reading a file that does not exist yields empty, not a crash");
+        CHECK(Ini::ReadString(path, L"Sec", L"Key").empty());
+        CHECK(!Ini::Exists(path));
+
+        NOTE("a value written comes back identical");
+        Ini::WriteString(path, L"Sec", L"Key", L"value", L"test");
+        CHECK(Ini::Exists(path));
+        CHECK(Ini::ReadString(path, L"Sec", L"Key") == L"value");
+
+        NOTE("NON-ASCII survives the round trip — the UTF-16 BOM doing its job");
+        // WritePrivateProfileStringW only writes Unicode into a file that is
+        // ALREADY Unicode. Without the BOM these files are created with, every
+        // value is narrowed to ANSI and any non-ASCII path is mangled on the way
+        // in — which would show up as a folder that "went missing".
+        Ini::WriteString(path, L"Sec", L"Path", L"C:\\Фото\\日本\\naïve", L"test");
+        CHECK(Ini::ReadString(path, L"Sec", L"Path") == L"C:\\Фото\\日本\\naïve");
+
+        NOTE("writing one key leaves every other key and section alone");
+        Ini::WriteString(path, L"Other", L"Untouched", L"keepme", L"test");
+        Ini::WriteString(path, L"Sec", L"Key", L"changed", L"test");
+        CHECK(Ini::ReadString(path, L"Sec", L"Key") == L"changed");
+        CHECK(Ini::ReadString(path, L"Other", L"Untouched") == L"keepme");
+        CHECK(Ini::ReadString(path, L"Sec", L"Path") == L"C:\\Фото\\日本\\naïve");
+
+        NOTE("an EMPTY value removes the key rather than storing a blank");
+        // Relied on directly by Session::MarkRunning, which clears the
+        // crash-detection mark on a clean exit by writing "". If this stored an
+        // empty string instead of removing the key, every launch after the first
+        // would report a crash that never happened.
+        Ini::WriteString(path, L"Sec", L"Key", L"", L"test");
+        CHECK(Ini::ReadString(path, L"Sec", L"Key").empty());
+        CHECK(Ini::ReadString(path, L"Other", L"Untouched") == L"keepme");
+
+        NOTE("DWORDs are stored as text, and garbage falls back to the default");
+        Ini::WriteDword(path, L"Sec", L"Num", 4242, L"test");
+        CHECK(Ini::ReadDword(path, L"Sec", L"Num", 7) == 4242);
+        CHECK(Ini::ReadString(path, L"Sec", L"Num") == L"4242");   // hand-editable
+        CHECK(Ini::ReadDword(path, L"Sec", L"Missing", 7) == 7);
+        Ini::WriteString(path, L"Sec", L"Junk", L"not-a-number", L"test");
+        CHECK(Ini::ReadDword(path, L"Sec", L"Junk", 7) == 7);
+
+        NOTE("zero is a legitimate value, distinguishable from absent");
+        // The reason these are stored as text at all — GetPrivateProfileInt
+        // cannot tell "key present and 0" from "key missing".
+        Ini::WriteDword(path, L"Sec", L"Zero", 0, L"test");
+        CHECK(Ini::ReadDword(path, L"Sec", L"Zero", 7) == 0);
+
+        NOTE("CreateWithHeaderIfMissing does not clobber an existing file");
+        Ini::CreateWithHeaderIfMissing(path, L"a different header");
+        CHECK(Ini::ReadDword(path, L"Sec", L"Num", 7) == 4242);
+
+        NOTE("PathBesideExe returns an absolute path ending in the name given");
+        // A bare name handed to WritePrivateProfileStringW writes into the
+        // Windows directory rather than failing, so this must never be relative.
+        {
+            const std::wstring p = Ini::PathBesideExe(L"qivTestProbe.ini");
+            CHECK(!p.empty());
+            CHECK(p.find(L'\\') != std::wstring::npos);
+            CHECK(p.size() > wcslen(L"qivTestProbe.ini"));
+            CHECK(p.substr(p.size() - wcslen(L"qivTestProbe.ini")) == L"qivTestProbe.ini");
+        }
+
+        RemoveTempDir(dir);
+    }
+
+    // ── Crypto — the password hash and the handshake secret ─────────────────
+    //
+    // If this is wrong, AUTHENTICATION is wrong, and it fails silently in the
+    // dangerous direction: a verifier that accepts too much produces no error.
+    //
+    // The property that matters most is the last group — the server derives the
+    // shared secret from the STORED value, the client derives it from the
+    // PLAINTEXT plus the salt and iteration count sent in the challenge, and the
+    // two must agree exactly. If they ever diverge, every client is locked out;
+    // if the derivation were weakened to make them agree, everyone gets in.
+
+    void TestCrypto() {
+        namespace C = Remote::Crypto;
+
+        NOTE("SHA-256 against the published vector for the empty input");
+        // A known-answer test, not a round trip: a round trip agrees with itself
+        // even when both halves are wrong.
+        CHECK(C::ToHex(C::Sha256("", 0)) ==
+              L"e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855");
+
+        NOTE("and for \"abc\"");
+        CHECK(C::ToHex(C::Sha256("abc", 3)) ==
+              L"ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad");
+
+        NOTE("HMAC-SHA256 against RFC 4231 test case 2");
+        // key = "Jefe", data = "what do ya want for nothing?"
+        {
+            const std::vector<BYTE> key = {'J', 'e', 'f', 'e'};
+            const char *msg = "what do ya want for nothing?";
+            CHECK(C::ToHex(C::HmacSha256(key, msg, strlen(msg))) ==
+                  L"5bdcc146bf60754e6a042426089575c75a003f089d2739839dec58b964ec3843");
+        }
+
+        NOTE("hex round trip, including case-insensitive input");
+        {
+            const std::vector<BYTE> raw = {0x00, 0x0F, 0xA5, 0xFF, 0x10};
+            CHECK(C::ToHex(raw) == L"000fa5ff10");
+            CHECK(C::FromHex(L"000fa5ff10") == raw);
+            CHECK(C::FromHex(L"000FA5FF10") == raw);
+        }
+
+        NOTE("RandomBytes returns the length asked for, and is not constant");
+        {
+            const auto a = C::RandomBytes(16);
+            const auto b = C::RandomBytes(16);
+            CHECK(a.size() == 16);
+            CHECK(b.size() == 16);
+            // Two draws colliding would be a 1-in-2^128 event, so this failing
+            // means the generator is stuck rather than unlucky.
+            CHECK(a != b);
+        }
+
+        NOTE("a hashed password verifies, and a wrong one does not");
+        const std::wstring stored = C::HashPassword(L"correct horse battery staple");
+        CHECK(!stored.empty());
+        CHECK(C::VerifyPassword(L"correct horse battery staple", stored));
+        CHECK(!C::VerifyPassword(L"Correct horse battery staple", stored)); // case
+        CHECK(!C::VerifyPassword(L"", stored));
+        CHECK(!C::VerifyPassword(L"correct horse battery stapl", stored));
+
+        NOTE("the SALT is per-password, so two hashes of one password differ");
+        // Without this a precomputed table works against every instance
+        // configured with the same password.
+        const std::wstring again = C::HashPassword(L"correct horse battery staple");
+        CHECK(again != stored);
+        CHECK(C::VerifyPassword(L"correct horse battery staple", again));
+
+        NOTE("a malformed stored value is refused, never accepted");
+        // The dangerous direction: a value that cannot be parsed must not verify.
+        CHECK(!C::StoredIsUsable(L""));
+        CHECK(!C::StoredIsUsable(L"not-a-hash"));
+        CHECK(!C::StoredIsUsable(L"210000$onlytwo"));
+        CHECK(!C::StoredIsUsable(L"$$"));
+        CHECK(!C::VerifyPassword(L"anything", L""));
+        CHECK(!C::VerifyPassword(L"anything", L"not-a-hash"));
+        CHECK(!C::VerifyPassword(L"anything", L"$$"));
+        CHECK(C::StoredIsUsable(stored));
+
+        NOTE("the stored value carries its own parameters back out");
+        CHECK(C::IterationsFromStored(stored) > 0);
+        CHECK(C::IterationsFromStored(L"garbage") == 0);
+        CHECK(!C::SaltFromStored(stored).empty());
+        CHECK(!C::SecretFromStored(stored).empty());
+
+        NOTE("BOTH ENDS DERIVE THE SAME SECRET BY DIFFERENT ROUTES");
+        // The server has the stored value and no plaintext; the client has the
+        // plaintext plus the salt and iteration count from the challenge. These
+        // must agree exactly or the handshake cannot succeed for anybody.
+        {
+            const auto serverSide = C::SecretFromStored(stored);
+            const auto clientSide = C::SecretFromPassword(L"correct horse battery staple",
+                                                          C::SaltFromStored(stored),
+                                                          C::IterationsFromStored(stored));
+            CHECK(!serverSide.empty());
+            CHECK(serverSide == clientSide);
+
+            // And a wrong password must NOT arrive at the same secret.
+            const auto wrong = C::SecretFromPassword(L"wrong password",
+                                                     C::SaltFromStored(stored),
+                                                     C::IterationsFromStored(stored));
+            CHECK(wrong != serverSide);
+        }
+
+        NOTE("the wrong salt or iteration count also fails to reproduce it");
+        // Both travel in the clear in the challenge; neither is secret, but both
+        // are load-bearing — a client fed the wrong one must not still match.
+        {
+            const auto serverSide = C::SecretFromStored(stored);
+            const auto wrongSalt  = C::SecretFromPassword(L"correct horse battery staple",
+                                                          C::RandomBytes(16),
+                                                          C::IterationsFromStored(stored));
+            CHECK(wrongSalt != serverSide);
+
+            const auto wrongIters = C::SecretFromPassword(L"correct horse battery staple",
+                                                          C::SaltFromStored(stored),
+                                                          C::IterationsFromStored(stored) + 1);
+            CHECK(wrongIters != serverSide);
+        }
+    }
+
 } // namespace
 
 int main(int argc, char **argv) {
@@ -842,8 +1156,16 @@ int main(int argc, char **argv) {
             g_verbose = true;
     }
 
-    std::printf("\nqIV unit tests%s\n\n", g_verbose ? "  (verbose)" : "");
+    EnableColour();
+    const auto runStart = std::chrono::steady_clock::now();
 
+    std::printf("\n  %sqIV unit tests%s%s%s\n", Bold(), Off(),
+                Dim(), g_verbose ? "   verbose" : "");
+    // %ls — APP_NAME is a wide string and the rest of this line is narrow.
+    std::printf("  %s%ls%s\n", Dim(), Constants::APP_NAME, Off());
+    std::printf("\n");
+
+    std::printf("  %sWIRE AND STORAGE%s\n", Dim(), Off());
     BeginGroup("Base64 - the wire format");
     TestBase64();
     EndGroup();
@@ -852,6 +1174,7 @@ int main(int argc, char **argv) {
     TestConverters();
     EndGroup();
 
+    std::printf("\n  %sFIND%s\n", Dim(), Off());
     BeginGroup("WildcardMatch - Find dialog rules");
     TestWildcard();
     EndGroup();
@@ -860,6 +1183,12 @@ int main(int argc, char **argv) {
     TestFuzzy();
     EndGroup();
 
+    std::printf("\n  %sPERSISTENCE%s\n", Dim(), Off());
+    BeginGroup("IniFile - how every setting is stored");
+    TestIniFile();
+    EndGroup();
+
+    std::printf("\n  %sLOGGING%s\n", Dim(), Off());
     BeginGroup("Log layout - the shared line shape");
     TestLogLayout();
     EndGroup();
@@ -872,6 +1201,8 @@ int main(int argc, char **argv) {
     TestWireLogRoundTrip();
     EndGroup();
 
+    std::printf("\n  %sSECURITY  %s— who may connect, and how they prove it%s\n",
+                Dim(), Dim(), Off());
     BeginGroup("AllowList - who may connect");
     TestAddressMatch();
     EndGroup();
@@ -880,16 +1211,34 @@ int main(int argc, char **argv) {
     TestAddressHelpers();
     EndGroup();
 
+    BeginGroup("Crypto - password hash and handshake");
+    TestCrypto();
+    EndGroup();
+
     // Prints timings, so it always breaks the column layout. Last, and after a
     // blank line, so the table above stays readable.
-    BeginGroup("Benchmarks");
+    std::printf("\n  %sBENCHMARKS%s\n", Dim(), Off());
+    BeginGroup("Throughput", /*multiline=*/true);
     Benchmarks();
     EndGroup();
 
-    std::printf("\n  %d checks in %d groups, %d failed\n\n", g_checks, g_groups, g_failed);
+    const auto totalMs = std::chrono::duration_cast<std::chrono::milliseconds>(
+                             std::chrono::steady_clock::now() - runStart).count();
+
+    std::printf("\n");
+    Rule();
+    if (g_failed == 0) {
+        std::printf("  %s✓ ALL PASSED%s   %s%d checks · %d groups · %lldms%s\n",
+                    Green(), Off(), Dim(), g_checks, g_groups, totalMs, Off());
+    } else {
+        std::printf("  %s✗ %d FAILED%s   %s%d checks · %d groups · %lldms%s\n",
+                    Red(), g_failed, Off(), Dim(), g_checks, g_groups, totalMs, Off());
+    }
+    Rule();
 
     if (g_failed == 0 && !g_verbose)
-        std::printf("  Run with -v to list every check by name.\n\n");
+        std::printf("  %sRun with -v to list every check by name.%s\n", Dim(), Off());
+    std::printf("\n");
 
     // Non-zero on failure is what makes ctest and CI report this as a failed
     // test rather than a passing one that happened to print the word FAIL.

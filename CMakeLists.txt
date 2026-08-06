@@ -551,6 +551,11 @@ if (QIV_BUILD_TESTS)
             # could be linked here; that file also pulls in AppState,
             # RemoteBlacklist, RemoteCrypto and DedicatedSettings.
             src/Rem_TCP_IP/AddressMatch.cpp
+            # The password hash and the handshake HMAC. If this is wrong,
+            # authentication is wrong — and unlike a decoder it fails silently in
+            # the dangerous direction. It reaches nothing but bcrypt and
+            # Constants.h, so it costs one system import library to cover.
+            src/Rem_TCP_IP/RemoteCrypto.cpp
             # Constants::APP_VERSION is declared extern in Constants.h and
             # DEFINED here — RemoteLog's file preamble names the build that wrote
             # the log, so the suite needs the definition or it fails to link.
@@ -584,6 +589,14 @@ if (QIV_BUILD_TESTS)
     # than locally, because the main target's flags never applied here. Any file
     # added below inherits the same requirement.
     target_compile_options(qivTests PRIVATE /utf-8)
+
+    # ws2_32 — InetPtonW and ntohl, which AddressMatch.cpp uses to turn
+    # "192.168.0.0/24" into numbers.
+    #
+    # A SYSTEM import library, not another slice of the program: the rule this
+    # target lives by is about not linking half the APPLICATION, and an OS import
+    # lib costs nothing and hides nothing.
+    target_link_libraries(qivTests PRIVATE ws2_32 bcrypt)
 
     add_test(NAME qivTests COMMAND qivTests)
 endif ()
