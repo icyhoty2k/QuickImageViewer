@@ -14,6 +14,7 @@
 #include "../WorkerThread.h"
 #include "../SimpleFormats.h"
 #include "../ImageLoadStats.h"
+#include "../Platform/AppLog.h"   // COMP_DECODE — a picture that would not open
 
 #include <algorithm>
 #include <chrono>
@@ -37,6 +38,19 @@
 // Declaring them here as well was not merely redundant: dxguid was reaching the
 // linker ONLY through this file, so the library list in CMake looked complete
 // while quietly depending on a source file nobody would think to check.
+
+namespace {
+
+    // An HRESULT written the way every Microsoft page writes it. std::to_wstring
+    // would give a huge negative decimal that nobody can look up, and the whole
+    // point of putting the code in the log is that somebody will search for it.
+    std::wstring HexOf(HRESULT hr) {
+        wchar_t buf[16]{};
+        swprintf_s(buf, L"%08X", static_cast<unsigned>(hr));
+        return buf;
+    }
+
+} // namespace
 
 // =============================================================================
 //  Initialize
@@ -641,10 +655,24 @@ const std::wstring &RendererD2D::FolderOverlayLastLine() {
 }
 
 void RendererD2D::NoteDecodeFailure(const std::wstring &path) {
+    bool firstTime = false;
     {
         std::lock_guard<std::mutex> lock(m_failedMutex);
-        m_failedPaths.insert(path);
+        firstTime = m_failedPaths.insert(path).second;
     }
+
+    // ONCE PER FILE, and outside the lock. A picture that will not open is the
+    // whole reason an unattended screen shows a placeholder, and it was the one
+    // event the General log's own header promised and never recorded. The set
+    // already exists to remember which paths gave up, so the second element of
+    // insert() answers "is this news" for free — without it, every re-probe of
+    // the same broken file would write another line and the log would read as a
+    // storm rather than one bad file.
+    //
+    // Called from a decoder worker; AppLog only formats and queues, so this is
+    // safe here and puts no file write on this thread.
+    if (firstTime && AppLog::IsEnabled())
+        AppLog::Warn(AppLog::COMP_DECODE, L"could not decode " + path);
     // Wake the UI thread. It probes the cache, finds nothing, asks this, and
     // shows the placeholder — otherwise it would sit waiting for a decode that
     // has already given up.
@@ -1598,8 +1626,24 @@ HRESULT RendererD2D::Render() {
     if (hr == D2DERR_RECREATE_TARGET ||
         hr == static_cast<HRESULT>(DXGI_ERROR_DEVICE_REMOVED) ||
         hr == static_cast<HRESULT>(DXGI_ERROR_DEVICE_RESET)) {
+        // A DRIVER RESET IS INVISIBLE FROM THE OUTSIDE and it is the answer to
+        // "the screen was black this morning". Recovery usually works, so
+        // nothing on screen ever says it happened — and a screen that lost its
+        // device four times overnight is a failing GPU, which is a conclusion
+        // only the log can reach. Warn rather than Error: this path is a
+        // recovery, not a defeat, and the failure below is the Error.
+        if (AppLog::IsEnabled())
+            AppLog::Warn(AppLog::COMP_RENDER,
+                         L"device lost on EndDraw (hr 0x" + HexOf(hr) + L") — recreating");
+
         DiscardDeviceResources();
         hr = CreateDeviceResources();
+
+        if (FAILED(hr) && AppLog::IsEnabled())
+            AppLog::Error(AppLog::COMP_RENDER,
+                          L"could not recreate the device (hr 0x" + HexOf(hr) +
+                          L") — the window stays blank until the next attempt");
+
         if (SUCCEEDED(hr)) {
             // m_pTextFormat and m_pTextBrush are recreated inside CreateDeviceResources.
             // Re-hand them to the overlay manager so it doesn't hold stale pointers
@@ -1619,6 +1663,15 @@ HRESULT RendererD2D::Render() {
     HRESULT hrPresent = m_pSwapChain->Present(0, 0);
     if (hrPresent == static_cast<HRESULT>(DXGI_ERROR_DEVICE_REMOVED) ||
         hrPresent == static_cast<HRESULT>(DXGI_ERROR_DEVICE_RESET)) {
+        // The second of the two places a device can go. Named separately from
+        // the EndDraw one above because which call noticed narrows what
+        // happened — Present failing is the swap chain, EndDraw failing is the
+        // render target, and they are not always the same fault.
+        if (AppLog::IsEnabled())
+            AppLog::Warn(AppLog::COMP_RENDER,
+                         L"device lost on Present (hr 0x" + HexOf(hrPresent) +
+                         L") — recreating");
+
         DiscardDeviceResources();
         if (SUCCEEDED(CreateDeviceResources())) {
             g_overlayManager.Init(m_pDWriteFactory.Get(), m_pTextBrush.Get(), m_pDeviceContext.Get());

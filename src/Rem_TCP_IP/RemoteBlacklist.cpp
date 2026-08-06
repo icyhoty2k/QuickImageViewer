@@ -9,6 +9,7 @@
 #include "RemoteBlacklist.h"
 
 #include "RemoteSettings.h"          // AddressMatches / LooksLikeAddress — one rule
+#include "RemoteLog.h"               // how many rules loaded, and from where
 #include "Persistence/IniFile.h"     // PathBesideExe
 #include "Platform/Constants.h"
 
@@ -224,9 +225,27 @@ void Reload() {
         start = nl + 1;
     }
 
-    std::lock_guard<std::mutex> lk(g_mutex);
-    g_entries = std::move(parsed);
-    g_loaded  = true;
+    size_t count = 0;
+    {
+        std::lock_guard<std::mutex> lk(g_mutex);
+        g_entries = std::move(parsed);
+        g_loaded  = true;
+        count     = g_entries.size();
+    }
+
+    // A REFUSAL IS ALREADY LOGGED; WHAT WAS LOADED WAS NOT. "The file has that
+    // address in it but the server let them in" could not be answered from the
+    // log at all — a rule that failed to parse and a rule that was never in the
+    // file looked identical, and both look identical to a file that was not
+    // found. The count and the path separate all three.
+    //
+    // Outside the lock: Log::Add takes the log store's own mutex, and IsBlocked
+    // calls Reload from the accept path — holding both here is a pairing worth
+    // not creating.
+    if (Log::IsCapturing())
+        Log::Add(Log::Direction::Out, Log::SelfLabel(),
+                 L"(blacklist loaded — " + std::to_wstring(count) + L" rule(s))",
+                 L"(local)", FilePath(), -1);
 }
 
 bool IsBlocked(const std::wstring &address) {

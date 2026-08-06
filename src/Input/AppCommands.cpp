@@ -27,6 +27,7 @@
 #include "../WicDecoder.h"
 #include "../UI/UIManager.h"
 #include "../Dedicated/DedicatedInstance.h" // AppIconId / IsDedicatedProcess
+#include "../Platform/AppLog.h"             // COMP_SLIDESHOW — start/stop go in the General log
 #include <shellapi.h>  // ShellExecuteW — OpenOverlayFolderInExplorer
 #include <shlobj_core.h>
 #include <shobjidl.h> // IDesktopWallpaper / CLSID_DesktopWallpaper
@@ -562,6 +563,24 @@ void AppCommands::changeAppBackdropType(HWND hWnd, DWORD newType) {
 }
 
 void AppCommands::stopSlideshow(HWND hWnd) {
+    // THE SINGLE STOP CHOKEPOINT — the toggle, and the end-of-playlist auto-stop
+    // in AppMain's WM_TIMER, both come through here, so one line covers every way
+    // a show ends. Written FIRST, while app.slideshow still describes the show
+    // that is ending; everything below this resets it.
+    //
+    // Guarded on `running` because this function is also reachable as a no-op
+    // (a stop when nothing was playing), and a log that records shows which
+    // never started is a log that cannot be trusted about the ones that did.
+    //
+    // The condition is checked before the string is built: with the log off this
+    // costs one atomic load, which matters because a dedicated screen calls this
+    // every time a playlist ends.
+    if (app.slideshow.running && AppLog::IsEnabled()) {
+        AppLog::Info(AppLog::COMP_SLIDESHOW,
+                     L"stopped at image " + std::to_wstring(app.currentIndex + 1) +
+                     L" of " + std::to_wstring(app.playlist.size()));
+    }
+
     KillTimer(hWnd, Constants::Slideshow::TIMER_ID);
     KillTimer(hWnd, Constants::Slideshow::CURSOR_TIMER_ID);
     if (app.slideshow.cursorHidden) {
@@ -624,6 +643,19 @@ void AppCommands::toggleSlideshow(HWND hWnd) {
         app.slideshow.running = true;
         app.slideshow.paused = false;
         AddTrayIcon(hWnd);
+
+        // Interval and playlist size are recorded, not just the fact of starting.
+        // The screen this log exists for runs unattended, and "it is showing the
+        // same picture all morning" is answered by the interval, while "it only
+        // ever shows three of them" is answered by the count — neither is
+        // recoverable after the fact from anywhere else.
+        if (AppLog::IsEnabled()) {
+            AppLog::Info(AppLog::COMP_SLIDESHOW,
+                         L"started — " + std::to_wstring(app.playlist.size()) +
+                         L" images, " + std::to_wstring(app.slideshow.intervalMs) +
+                         L" ms interval" +
+                         (app.slideshow.shuffle ? L", shuffled" : L""));
+        }
     } else {
         // --- Stop (whether playing or paused) ---
         stopSlideshow(hWnd);

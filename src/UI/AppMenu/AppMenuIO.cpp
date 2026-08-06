@@ -402,6 +402,15 @@ void ImportSettings(HWND hWnd) {
 
     Persistence::Registry::LoadAllSettings(app);
 
+    // RECORDED BEFORE THE SINKS BELOW ARE RECONCILED, and that ordering is the
+    // point. An imported file can switch the General log OFF — a line written
+    // after AppLog::SetEnabled would then be dropped by the very switch it was
+    // meant to explain, and the file would simply stop with nothing saying why.
+    // Written here, the log that is still running records the event that
+    // changed it, which is the last line anybody reading it will need.
+    if (AppLog::IsEnabled())
+        AppLog::Info(AppLog::COMP_SETTINGS, L"settings imported from " + importPath);
+
     // Apply side effects
     Persistence::Registry::EnableRunOnStartup(app.isEnableRunOnStartup);
     // An imported value is only a number in AppState until the sink is told —
@@ -563,6 +572,22 @@ void RestoreDefaults(HWND hWnd) {
     Persistence::Registry::SaveSetting(Constants::Registry::THUMB_PASTE_ENABLED,   static_cast<DWORD>(app.thumbPasteEnabled));
     Persistence::Registry::SaveSetting(Constants::Registry::THEME_FACTOR,
         static_cast<DWORD>(app.themeFactor * Constants::Theme::THEME_FACTOR_STORE_SCALE));
+
+    // Same ordering as ImportSettings, for the same reason: restoring defaults
+    // can switch a log off, so the line goes in while that log is still running.
+    if (AppLog::IsEnabled())
+        AppLog::Info(AppLog::COMP_SETTINGS, L"all settings restored to defaults");
+
+    // THE TWO LOG SINKS MUST BE TOLD, exactly as ImportSettings does. This was
+    // missing: the assignments above set app.generalLog and app.remoteLogToFile
+    // from the defaults and the registry was written, but nothing reached the
+    // writers — so restoring defaults with a log running left it RUNNING and
+    // still writing to disk while the menu showed it unticked, and restoring
+    // with one enabled by default produced a ticked menu and an empty folder
+    // until the next launch. A setting is a number until its sink is told; the
+    // import path already says so in its own comment.
+    Remote::Log::SetFileLogging(app.remoteLogToFile);
+    AppLog::SetEnabled(app.generalLog);
 
     Persistence::Registry::EnableRunOnStartup(app.isEnableRunOnStartup);
     g_overlayManager.SetAllVisible(app.showOverlayInfoText);

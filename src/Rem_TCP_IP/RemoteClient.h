@@ -201,6 +201,26 @@ namespace Remote {
         AgentInfo    m_peerAgent;
         int          m_peerProtocol = 0;   // 0 = the banner did not say
         bool         m_connected = false;
+
+        // --- Connect-failure log suppression -------------------------------
+        //
+        // PER TARGET, because there is one Client per mirror target and the
+        // reconnect loop belongs to it. Sender thread only — the same thread
+        // that runs DoConnect — so no lock.
+        //
+        // A failure whose reason has not changed is counted here instead of
+        // written. The moment the reason changes, or the target comes up, the
+        // count is reported alongside it, so nothing is lost: the log says "and
+        // 412 more like it" rather than containing 412 copies. Cleared on every
+        // success, so a flapping target keeps showing both edges of every cycle
+        // — that pattern is the diagnosis, and suppressing it would hide the
+        // thing worth seeing.
+        // The bool is not redundant with an empty string: a failure is not
+        // guaranteed to carry a reason, and using "" as the after-success
+        // sentinel would silently swallow the first reasonless failure.
+        std::wstring m_lastConnectError;         // reason last actually written
+        bool         m_haveLoggedFailure = false;
+        int          m_suppressedConnects = 0;
     };
 
     // One-shot reachability probe for the panel's "Check Connection" button:

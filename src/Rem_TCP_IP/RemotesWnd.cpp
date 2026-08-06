@@ -448,13 +448,18 @@ void RemotesWnd::FillFormFromRow(int row) {
         }
     }
 
+    // Copied before Rebuild(), which clears m_rows and destroys the element `r`
+    // refers to. Reading r.name after it for the status line was a use of a
+    // destroyed std::wstring.
+    const std::wstring shownName = r.name;
+
     BuildFields();
     Rebuild();
     // Loading a row does NOT unlock the form. Selecting is looking; editing is a
     // decision, and it is the Update button.
     m_status = m_formLocked
-                   ? (L"Showing \"" + r.name + L"\" — press Update to change it")
-                   : (L"Editing \"" + r.name + L"\" — Save changes, or Cancel");
+                   ? (L"Showing \"" + shownName + L"\" — press Update to change it")
+                   : (L"Editing \"" + shownName + L"\" — Save changes, or Cancel");
     Repaint();
 }
 
@@ -890,9 +895,17 @@ void RemotesWnd::DoStartTarget(int row) {
 
 void RemotesWnd::DoStopTarget(int row) {
     if (row < 0 || row >= static_cast<int>(m_rows.size())) return;
-    RowView &r = m_rows[row];
 
-    if (!DialogConfirm(L"Shut down " + r.name + L"?\r\n\r\n"
+    // COPIED, NOT REFERENCED — the same use-after-free DoRemoveTarget above
+    // documents, and worse here because the reference was WRITTEN through.
+    // DialogConfirm runs a modal message loop, so this window keeps receiving
+    // messages while the box is up, and both WM_QIV_REMOTE_TARGETS_CHANGED and
+    // TIMER_PENDING reach Rebuild(), which clears m_rows. The old code then
+    // stored DotState::Pending into a freed buffer.
+    const auto         id   = m_rows[row].id;
+    const std::wstring name = m_rows[row].name;
+
+    if (!DialogConfirm(L"Shut down " + name + L"?\r\n\r\n"
                        L"It exits immediately without saving its session.",
                        L"Remote Servers"))
         return;
@@ -901,9 +914,20 @@ void RemotesWnd::DoStopTarget(int row) {
     // command the MIRROR deny-list refuses to fan out — one Ctrl+Q must never
     // take every screen down at once — but a deliberate per-row button is
     // exactly the case that deny-list exists to leave available.
-    Remote::Mirror::SendTo(r.id, L"HardQuit");
-    r.dot    = DotState::Pending;
-    m_status = L"Stopping " + r.name + L"…";
+    Remote::Mirror::SendTo(id, L"HardQuit");
+
+    // Found again by id rather than reusing the index: a rebuild during the
+    // dialog may have moved that row or dropped it. Not finding it is a normal
+    // outcome and needs no message — the poll timer armed below refreshes the
+    // list either way.
+    for (RowView &rv : m_rows) {
+        if (rv.id == id) {
+            rv.dot = DotState::Pending;
+            break;
+        }
+    }
+
+    m_status = L"Stopping " + name + L"…";
     SetTimer(GetHwnd(), TIMER_PENDING, PENDING_DELAY_MS, nullptr);
     Repaint();
 }

@@ -7,6 +7,7 @@
 // It is distributed WITHOUT ANY WARRANTY. See the LICENSE file for details.
 
 #include "RemoteBeacon.h"
+#include "RemoteLog.h"      // the announcement is a network event, so it goes in that log
 #include "RemoteServer.h"
 #include "RemoteSettings.h"
 #include "../AppState.h"
@@ -16,7 +17,9 @@
 #include <windns.h>
 #include <mutex>
 
-#pragma comment(lib, "Dnsapi.lib")
+// NO #pragma comment(lib, "Dnsapi.lib") HERE. CMake owns library configuration
+// — see the note beside dxguid/comctl32 in CMakeLists.txt, which were moved for
+// this exact reason. A pragma here makes the link list in CMake a lie.
 
 extern AppState app;
 
@@ -67,6 +70,8 @@ namespace {
     // mainly to record that the announcement really went out rather than merely
     // being asked for.
     VOID WINAPI RegisterComplete(DWORD status, PVOID, PDNS_SERVICE_INSTANCE pInstance) {
+        std::wstring what;
+        int          port = 0;
         {
             std::lock_guard<std::mutex> lk(g_mutex);
             if (status == ERROR_SUCCESS) {
@@ -76,13 +81,45 @@ namespace {
                 g_advertised = false;
                 g_reason     = L"the network refused the announcement";
             }
+            what = g_advertisedName;
+            port = g_advertisedPort;
         }
+
+        // RECORDED HERE RATHER THAN IN Refresh(), because this is where it
+        // becomes true: registration is asynchronous, and Refresh only asks. A
+        // line written at the request would claim the instance is findable
+        // before the responder had agreed.
+        //
+        // "The phone cannot see the PC" is the support question this feature
+        // exists to create, and its answer is always whether these two lines
+        // are in the file. Outside the lock — Log::Add takes the log store's
+        // own mutex, and there is no reason to hold both.
+        if (Log::IsCapturing()) {
+            Log::Add(Log::Direction::Out, Log::SelfLabel(),
+                     status == ERROR_SUCCESS
+                         ? L"(beacon published as \"" + what + L"\" on " + SERVICE_TYPE + L")"
+                         : L"(beacon refused by the network — nothing is discoverable)",
+                     L"(local network)",
+                     status == ERROR_SUCCESS ? L"port " + std::to_wstring(port)
+                                             : L"(beacon)",
+                     -1);
+        }
+
         // The callback's copy is separate from the one we constructed.
         if (pInstance) DnsServiceFreeInstance(pInstance);
     }
 
     void UnregisterLocked() {
         if (!g_instance) return;
+
+        // The early return above is what keeps this honest: Refresh() calls
+        // this on every start, stop and toggle, and only a registration that
+        // actually existed gets a withdrawal line. Written before the fields
+        // are cleared below, so it can still name what stopped being announced.
+        if (Log::IsCapturing())
+            Log::Add(Log::Direction::Out, Log::SelfLabel(),
+                     L"(beacon withdrawn — \"" + g_advertisedName + L"\" is no longer discoverable)",
+                     L"(local network)", L"(beacon)", -1);
 
         DNS_SERVICE_REGISTER_REQUEST req = {};
         req.Version           = DNS_QUERY_REQUEST_VERSION1;

@@ -10,6 +10,7 @@
 #include <cstring>
 #include <cmath>
 #include <cstdio>
+#include <climits>   // INT_MAX — PNM header fields saturate rather than overflow
 #include <openjpeg.h>
 
 #pragma warning(push)
@@ -188,6 +189,15 @@ static ComPtr<IWICBitmap> DecodeTGA(
                 if (pos+2>data.size()) return false;
                 ci=data[pos]|((uint16_t)data[pos+1]<<8); pos+=2;
             }
+            // BELOW the map's first index is rejected here, BEFORE the
+            // subtraction. Both are uint16_t, so ci < cmFirst promotes to a
+            // negative int and the cast to size_t wraps it to near SIZE_MAX —
+            // and for a difference of exactly -1 the product is
+            // SIZE_MAX+1-cmBytesPerEntry, so cmPos+cmBytesPerEntry wraps back
+            // to 0 and walks straight through the bounds test below. The read
+            // that followed was a wild pointer, and a file with cmFirst=1 and a
+            // pixel index of 0 is all it took.
+            if (ci < cmFirst) { out[0]=out[1]=out[2]=0; out[3]=255; return true; }
             const size_t cmPos = (size_t)(ci-cmFirst)*cmBytesPerEntry;
             if (cmPos+cmBytesPerEntry > colorMap.size()) { out[0]=out[1]=out[2]=0; out[3]=255; return true; }
             if (cmBpp==32) {
@@ -505,10 +515,20 @@ static ComPtr<IWICBitmap> DecodePNM(
             else break;
         }
     };
+    // SATURATES instead of overflowing. `v = v*10 + d` on a header field that
+    // is just a long run of digits is signed overflow — undefined behaviour,
+    // and in a release build it wraps to a value that can pass the W/H and
+    // maxVal range checks below. Every caller treats a large number as a
+    // rejection, so stopping at INT_MAX loses nothing real.
     const auto readInt = [&]() -> int {
         skipWS();
         int v=0; bool got=false;
-        while (pos<data.size()&&data[pos]>='0'&&data[pos]<='9') { v=v*10+(data[pos++]-'0'); got=true; }
+        while (pos<data.size()&&data[pos]>='0'&&data[pos]<='9') {
+            const int d = data[pos++]-'0';
+            if (v > (INT_MAX - d) / 10) v = INT_MAX;
+            else                        v = v*10 + d;
+            got=true;
+        }
         return got ? v : -1;
     };
 
@@ -524,7 +544,14 @@ static ComPtr<IWICBitmap> DecodePNM(
     const size_t pixCount = static_cast<size_t>(W)*H;
     std::vector<BYTE> bgra(pixCount*4);
 
+    // CLAMPED FIRST. The ASCII variants (P1/P2/P3) read their samples with
+    // readInt, which has no idea what maxVal is, so a file can hand this a
+    // value far above it — `v*255` then overflows int on the way to a byte that
+    // was going to be wrong anyway. A sample above maxVal is a malformed file,
+    // and white is the honest answer for it.
     const auto norm8 = [&](int v) -> BYTE {
+        if (v < 0)      v = 0;
+        if (v > maxVal) v = maxVal;
         return maxVal==255 ? static_cast<BYTE>(v) : static_cast<BYTE>(v*255/maxVal);
     };
 
