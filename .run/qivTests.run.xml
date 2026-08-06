@@ -1,5 +1,5 @@
 <component name="ProjectRunConfigurationManager">
-  <configuration default="false" name="qivTests" type="CMakeRunConfiguration" factoryName="Application" REDIRECT_INPUT="false" ELEVATE="false" USE_EXTERNAL_CONSOLE="false" EMULATE_TERMINAL="false" PASS_PARENT_ENVS_2="true" PROJECT_NAME="QuickImageViewer" TARGET_NAME="qivTests" CONFIG_NAME="Debug" RUN_TARGET_PROJECT_NAME="QuickImageViewer" RUN_TARGET_NAME="qivTests">
+  <configuration default="false" name="qivTests" type="CMakeRunConfiguration" factoryName="Application" REDIRECT_INPUT="false" ELEVATE="false" USE_EXTERNAL_CONSOLE="false" EMULATE_TERMINAL="false" PASS_PARENT_ENVS_2="true" PROJECT_NAME="QuickImageViewer" TARGET_NAME="qivTests" CONFIG_NAME="Release_Static" RUN_TARGET_PROJECT_NAME="QuickImageViewer" RUN_TARGET_NAME="qivTests">
     <method v="2">
       <option name="com.jetbrains.cidr.execution.CidrBuildBeforeRunTaskProvider$BuildBeforeRunTask" enabled="true" />
     </method>

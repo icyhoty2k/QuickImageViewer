@@ -166,11 +166,23 @@ set(SOURCES
         src/UI/ThemedDialog.cpp
         src/UI/ThemedTooltip.cpp
         src/Platform/CrashHandler.cpp
-        libs/lib/tinyexr/include/miniz.c
+        # miniz, vendored in its own right — see libs/lib/miniz/README.md.
+        # It used to be the single amalgamated copy bundled inside tinyexr,
+        # which meant it could not be updated without updating tinyexr too.
+        libs/lib/miniz/miniz.c
+        libs/lib/miniz/miniz_tdef.c
+        libs/lib/miniz/miniz_tinfl.c
+        libs/lib/miniz/miniz_zip.c
         src/Common/Converters.cpp
 )
 
-set_source_files_properties(libs/lib/tinyexr/include/miniz.c PROPERTIES COMPILE_FLAGS "/wd4132")
+# C4132: 'const object should be initialized' — upstream miniz, not ours to fix.
+set_source_files_properties(
+        libs/lib/miniz/miniz.c
+        libs/lib/miniz/miniz_tdef.c
+        libs/lib/miniz/miniz_tinfl.c
+        libs/lib/miniz/miniz_zip.c
+        PROPERTIES COMPILE_FLAGS "/wd4132")
 
 #find_program(SCCACHE_PROGRAM sccache)
 #if (SCCACHE_PROGRAM)
@@ -233,6 +245,21 @@ target_compile_definitions(QuickImageViewer PRIVATE
 # finding it was meant to silence — a time-of-check time-of-use race in
 # mz_zip_add_mem_to_archive_file_in_place_v2 — is not reachable from qIV, so
 # there is nothing here worth a second crash.
+#
+# PROPOSED AGAIN 2026-08-06 and rejected again on reading this note. Verified
+# once more at that point: the flagged function opens an archive by PATH, and
+# the only miniz callers in this project are in-memory —
+#   tinyexr        mz_compress / mz_uncompress
+#   AppMenuIO.cpp  heap zip writer/reader (Backup History & Favorites)
+#   GeoNames.cpp   mz_uncompress
+# Dismiss the CodeQL alert as unreachable instead. The same applies to the
+# "redundant null check" alert in tinfl_decompress, which is present in upstream
+# miniz master and therefore is not fixed by updating either.
+#
+# Still true after miniz moved to libs/lib/miniz (11.3.2, was a copy bundled
+# inside tinyexr): miniz.h is included by three C++ translation units plus
+# miniz's own sources, which is exactly the condition that made the flag
+# dangerous.
 
 # 2. Compile Options
 #
@@ -422,6 +449,11 @@ target_include_directories(QuickImageViewer PRIVATE
         ${CMAKE_CURRENT_SOURCE_DIR}/src/UI
         ${CMAKE_CURRENT_SOURCE_DIR}/libs/lib/resvg/include
         ${CMAKE_CURRENT_SOURCE_DIR}/libs/lib/openjpeg/include
+        # BEFORE tinyexr's directory. tinyexr does #include <miniz.h>, and the
+        # old bundled copy used to live beside tinyexr.h — this ordering is what
+        # makes that resolve to the vendored miniz rather than to a stale
+        # duplicate, if one is ever restored by accident.
+        ${CMAKE_CURRENT_SOURCE_DIR}/libs/lib/miniz
         ${CMAKE_CURRENT_SOURCE_DIR}/libs/lib/tinyexr/include
 )
 
