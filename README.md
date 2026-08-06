@@ -345,7 +345,7 @@ through the setup.
 | Shortcut | Action |
 |:---|:---|
 | `↑` / `↓` | Zoom in / out, ×1.1 per step |
-| Numpad `+` / `-` | Zoom in / out — same steps as `↑` / `↓` |
+| `Num +` / `Num -` | Zoom in / out — same steps as `↑` / `↓` |
 | Numpad `*` | Reset zoom and pan to the active view mode's default fit |
 | `0` | Open the Zoom panel and type an exact percentage |
 | `W` / `A` / `S` / `D` | Pan the viewport when the image is larger than the window — 30 px per press, DPI-scaled |
@@ -374,6 +374,7 @@ keep their usual meanings (hide the app, save the edited image).
 | Statistics | `K` | Decode time, codec, file details and cache info for the current image |
 | Directory | `F6` *(or Right Shift)* / `F7` | All images in current folder; syncs selection with viewer / moves panel to next screen edge |
 | Cache | `F3` / `F4` | Live GPU cache occupancy, thumbnails of preloaded images / moves panel |
+| Clear cache | `Ctrl+F3` | Empty the VRAM cache — images are re-decoded on demand afterwards |
 | Reload | `F5` | Refresh / reload the current directory from disk |
 | History | `Tab` | Recent folders with favorites — `Shift+Enter` spawns a DirWnd without leaving current folder |
 
@@ -405,6 +406,7 @@ All thumbnail panels (Cache, Directory, and spawned DirWnds) share the same beha
 
 - **Scroll** — mouse wheel; hold Shift for 3× speed
 - **Wrap-around** — `B` toggles wheel wrap: scrolling past the last thumbnail jumps to the first (and vice-versa). A center overlay message confirms each wrap. Startup default is controlled by `THUMBNAIL_PANEL_WHEEL_WRAP_AROUND` in `Constants.h`.
+- **Visual effects** — `U` is the master runtime switch for the strip's rounded corners, the accent glow on the selected thumbnail and the hover-scale enlarge. Each effect can also be disabled individually in `Constants.h`
 - **Open** — left-click any thumbnail to open it in the main viewer
 - **Drag** — click and drag the strip to scroll freely
 - **Scrollbar** — thin bar on the inner edge; click-drag for quick scrubbing
@@ -450,20 +452,22 @@ Directory strips double as a lightweight file manager:
 ### Color Effects
 All effects are non-destructive and GPU-accelerated via the Direct2D effect graph. `Ctrl+S` saves the result to disk.
 
+Every colour effect requires **Ctrl**. The plain presses of the same keys belong to navigation — `Home` / `End` jump to the first / last image, `Page Up` / `Page Down` walk the history folders and `Insert` / `Delete` walk the favourites.
+
 | Effect | Key |
 |:---|:---|
 | Rotate CW / CCW | `R` / `Shift+R` |
 | Flip horizontal / vertical | `H` / `V` |
-| Grayscale | `Delete` |
-| Invert | `Insert` |
-| Sepia | `Home` |
-| Solarize (>50% brightness inverted) | `End` |
-| Outline (GPU edge detection) | `Page Up` |
-| Threshold (black & white at 50%) | `Page Down` |
-| Brightness ± | `\` / `'` |
-| Contrast ± | `/` / `.` |
-| Saturation ± | `[` / `]` |
-| Gamma ± | `=` / `-` |
+| Grayscale | `Ctrl+Delete` |
+| Invert | `Ctrl+Insert` |
+| Sepia | `Ctrl+Home` |
+| Solarize (>50% brightness inverted) | `Ctrl+End` |
+| Outline (GPU edge detection) | `Ctrl+Page Up` |
+| Threshold (black & white at 50%) | `Ctrl+Page Down` |
+| Brightness ± | `Ctrl+\` / `Ctrl+'` |
+| Contrast ± | `Ctrl+/` / `Ctrl+.` |
+| Saturation ± | `Ctrl+]` / `Ctrl+[` |
+| Gamma ± | `Ctrl+=` / `Ctrl+-` |
 | Toggle all effects (bypass) | `` ` `` |
 | Reset all effects | `Num 0` |
 | Save with effects baked in | `Ctrl+S` |
@@ -524,6 +528,7 @@ beside the file name).
 |:---|:---|
 | `F` / `Enter` / `Ctrl+Shift+T` | Toggle borderless fullscreen |
 | `Ctrl+Enter` / `Alt+Enter` / `Ctrl+Alt+Enter` | Send this position / stream this image / fetch its image — see [Remote Control](#remote-control--mirroring) |
+| `Ctrl+Shift+Enter` | Send this position to **every** connected instance, not only the ticked ones |
 | `Ctrl+T` / `Ctrl+A` | Toggle always-on-top |
 | `Ctrl+M` | Move the window to the **next monitor**, wrapping at the last. Screens are ordered left to right by their desktop position, and the window keeps its relative size and place — so a window sized for a 4K screen does not land half off a 1080p one. The overlay names the monitor it moved to |
 | `Shift+W/A/S/D` | Nudge window 20 px up / left / down / right |
@@ -767,13 +772,18 @@ surprise.
 
 ### Putting one picture on another screen
 
-Three keys, one question at three depths:
+Four keys, one question at four depths:
 
 | Key | What travels | Across machines | The far end |
 |:---|:---|:---:|:---|
 | `Ctrl+Enter` | a **position** — folder, sort order, image number | ✗ same machine only | goes there and **stays** |
 | `Alt+Enter` | the **image bytes**, outbound | ✅ | shows it **once**, unchanged otherwise |
 | `Ctrl+Alt+Enter` | the **image bytes**, inbound | ✅ | is only read from — you see what it shows |
+| `Ctrl+Shift+Enter` | the same **position**, to *every* connected instance | ✗ same machine only | the whole wall goes there and **stays** |
+
+`Ctrl+Shift+Enter` is `Ctrl+Enter` widened: it ignores the Control ticks in `Ctrl+F11`
+and pushes to everything connected, for lining a whole wall up at once without first
+ticking rows you are about to untick again.
 
 **`Ctrl+Enter` asks before it sends.** It queries the target: already in the same folder
 in the same order? Then just the image number — one round trip, no rescan, no flicker,
