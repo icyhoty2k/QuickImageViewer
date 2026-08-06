@@ -703,7 +703,7 @@ namespace UI {
             L"a time: out of a field, then out of edit mode, then closes the panel.\r\n"
             L"Connect all / Disconnect all act on every row, F5 polls them, and Sync all "
             L"pushes this viewer's view and effect state to all of them at once.", sRemote);
-        Add(L"CTRL+F10",
+        Add(Ctrl(SC::SC_PANEL_REMOTES_CONSOLE),
             L"Remote Commands — type a command and send it to the instances YOU TICK in this "
             L"panel's own SEND TO box, which lists everything currently connected with a "
             L"checkbox, name and address each. Its own selection on purpose: the Ctrl+F11 "
@@ -838,7 +838,7 @@ namespace UI {
             L"the far end's own disk, and choosing more targets cannot change that. "
             L"Instances on other machines are skipped and counted, and the overlay says "
             L"how many.", sRemote);
-        Add(L"CTRL+F12",
+        Add(Ctrl(SC::SC_MIRROR_LOCAL_TOGGLE),
             L"Server Log — every line that crossed the wire, both directions, in one list: "
             L"number, who sent it, the command, who received it, the reply, the time, and "
             L"how long it took. A mirroring session is a conversation, so both directions "
@@ -870,8 +870,10 @@ namespace UI {
             L"brings it to the front, pressing it again closes it. They light up while "
             L"that panel is open; dimmed digits mean the count is zero.\r\n"
             L"Clear empties it (entry numbers carry on, so a number never means two "
-            L"different exchanges). Save writes a tab-separated UTF-8 file; Load reads one "
-            L"back, REPLACING what is in memory. Click #, Time or Δ time to sort, and again to "
+            L"different exchanges). Save writes a tab-separated UTF-8 file; Load — the button "
+            L"or Ctrl+O while the panel has focus — reads one "
+            L"back, REPLACING what is in memory, which is also how a rotated TCP/IP log file "
+            L"from the logs folder is opened. Click #, Time or Δ time to sort, and again to "
             L"reverse — the text columns do not sort, because grouping a conversation by "
             L"sender destroys the ordering that makes it one. The newest 20000 entries are "
             L"kept; older ones are dropped.\r\n"
