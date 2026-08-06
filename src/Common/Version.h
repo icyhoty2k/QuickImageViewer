@@ -39,7 +39,7 @@
 // Used by the Resource Compiler for version metadata.
 // =========================================================================
 #define VER_MAJOR 2
-#define VER_MINOR 190
+#define VER_MINOR 201
 #define VER_PATCH 0
 
 #define FILE_DESC     "qIV"
