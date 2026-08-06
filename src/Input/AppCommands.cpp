@@ -17,6 +17,7 @@
 // via a #pragma comment(lib) on this line, which is why it was absent from the
 // build file's library list.
 #include <algorithm>
+#include <filesystem> // OpenOverlayFolderInExplorer walks up to a live parent
 #include <numeric>
 #include <random>
 #include "AppState.h" // Assuming this is the path
@@ -26,6 +27,7 @@
 #include "../WicDecoder.h"
 #include "../UI/UIManager.h"
 #include "../Dedicated/DedicatedInstance.h" // AppIconId / IsDedicatedProcess
+#include <shellapi.h>  // ShellExecuteW — OpenOverlayFolderInExplorer
 #include <shlobj_core.h>
 #include <shobjidl.h> // IDesktopWallpaper / CLSID_DesktopWallpaper
 
@@ -311,6 +313,29 @@ void AppCommands::RemoveTrayIcon(HWND hWnd) {
     nid.hWnd = hWnd;
     nid.uID = ID_TRAY_APP_ICON;
     Shell_NotifyIconW(NIM_DELETE, &nid);
+}
+
+bool AppCommands::OpenOverlayFolderInExplorer(HWND hWnd) {
+    if (app.folderOverlay == AppState::FolderOverlayState::None) return false;
+    if (app.folderOverlayPath.empty()) return false;
+
+    // Walk up until something that still exists is found. In the Missing state
+    // the named folder is gone by definition, and opening its nearest surviving
+    // parent is more use than doing nothing: that is where the user was.
+    std::filesystem::path p(app.folderOverlayPath);
+    std::error_code ec;
+    while (!p.empty() && (!std::filesystem::is_directory(p, ec) || ec)) {
+        std::filesystem::path parent = p.parent_path();
+        if (parent == p) break; // reached the root
+        p = parent;
+        ec.clear();
+    }
+
+    ec.clear();
+    if (!std::filesystem::is_directory(p, ec) || ec) return false;
+
+    ShellExecuteW(hWnd, L"open", p.c_str(), nullptr, nullptr, SW_SHOWNORMAL);
+    return true;
 }
 
 

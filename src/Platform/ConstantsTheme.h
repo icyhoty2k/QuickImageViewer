@@ -270,6 +270,27 @@ namespace Constants {
             constexpr float TEXT_DEBUG_R = 0.0f + DEFAULT_THEME_FACTOR * (1.0f - 2.0f * 0.0f);
             constexpr float TEXT_DEBUG_G = 1.0f + DEFAULT_THEME_FACTOR * (1.0f - 2.0f * 1.0f);
             constexpr float TEXT_DEBUG_B = 0.0f + DEFAULT_THEME_FACTOR * (1.0f - 2.0f * 0.0f);
+
+            // The "No Images / Directory Missing" placeholder.
+            //
+            // Deliberately NOT the debug green above. That colour is for
+            // diagnostics nobody is meant to read for long; this is a screen a
+            // user reads, and reads at the moment they are already unsure what
+            // the application is doing. A soft near-white says "text" and gets
+            // out of the way.
+            //
+            // No theme factor: the placeholder always sits on the empty black
+            // viewport, so there is no light background for it to adapt to.
+            constexpr float PLACEHOLDER_R = 0.88f;
+            constexpr float PLACEHOLDER_G = 0.89f;
+            constexpr float PLACEHOLDER_B = 0.92f;
+
+            // The version line. Present for bug reports, not for reading, so it
+            // is dimmed and shrunk until it stops competing with the message.
+            constexpr float PLACEHOLDER_DIM_R = 0.42f;
+            constexpr float PLACEHOLDER_DIM_G = 0.43f;
+            constexpr float PLACEHOLDER_DIM_B = 0.48f;
+            constexpr float PLACEHOLDER_VERSION_FONT_SCALE = 0.62f;
         }
 
         // =====================================================================
@@ -355,6 +376,15 @@ namespace ThemeIcons {
     constexpr const wchar_t* ICON_FAVORITES_MARK  = L"\x2605";        // ★
     constexpr const wchar_t* ICON_SYMLINK_MARK     = L"\U0001F517";   // 🔗
     constexpr const wchar_t* ICON_WARNING          = L"\x26A0";       // ⚠
+    // NO variation selector, unlike ICON_SECTION_INFO below.
+    //
+    // U+2139 defaults to TEXT presentation; adding U+FE0F forces the emoji one.
+    // In emoji presentation Segoe UI Emoji gives it a full-square advance with
+    // the ink sitting right of centre inside it, so a centred line that opens
+    // with it reads as nudged right — DWrite centres the advance, not the ink.
+    // As a text glyph it is proportioned like the letters beside it and takes
+    // the line's own colour.
+    constexpr const wchar_t* ICON_INFO             = L"\x2139";       // ℹ
     constexpr const wchar_t* ICON_EMPTY            = L"\x2205";       // ∅
     constexpr const wchar_t* ICON_CLOSE            = L"\x2715";       // ✕
     constexpr const wchar_t* ICON_CHECK            = L"\x2714";       // ✔
@@ -380,6 +410,11 @@ namespace ThemeIcons {
 
     // ── Objects / folders ────────────────────────────────────────────
     constexpr const wchar_t* ICON_FOLDER           = L"\U0001F4C1";   // 📁
+    constexpr const wchar_t* ICON_FOLDER_OPEN      = L"\U0001F4C2";   // 📂
+    // "You are here" rather than a second folder: the line it marks names the
+    // folder you are ALREADY in, and two near-identical folder glyphs stacked
+    // above each other read as one repeated thing rather than two different ones.
+    constexpr const wchar_t* ICON_LOCATION         = L"\U0001F4CD";   // 📍
 
     // ── HelpWnd section emoji ────────────────────────────────────────
     constexpr const wchar_t* ICON_SECTION_COMPASS    = L"\U0001F9ED";     // 🧭
@@ -390,6 +425,8 @@ namespace ThemeIcons {
     constexpr const wchar_t* ICON_SECTION_PICTURE    = L"\U0001F5BC\xFE0F";// 🖼️
     constexpr const wchar_t* ICON_SECTION_SCROLL     = L"\U0001F4DC";     // 📜
     constexpr const wchar_t* ICON_SECTION_PLAY       = L"\x25B6\xFE0F";   // ▶️
+    // WITH the variation selector, unlike ICON_INFO — these sit in a column of
+    // other emoji, where a text glyph would be the odd one out.
     constexpr const wchar_t* ICON_SECTION_INFO       = L"\x2139\xFE0F";   // ℹ️
     constexpr const wchar_t* ICON_SECTION_PALETTE    = L"\U0001F3A8";     // 🎨
     constexpr const wchar_t* ICON_SECTION_FLOPPY     = L"\U0001F4BE";     // 💾
