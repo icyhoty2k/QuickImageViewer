@@ -364,15 +364,12 @@ struct AppState {
 
     FolderOverlayState folderOverlay = FolderOverlayState::None;
 
-    // What clicking the LAST line opens. Always a real filesystem path — a
-    // folder, or a file whose folder is opened instead. Never the display text.
+    // What the placeholder's second line SHOWS, and what clicking it opens.
+    // Always a real filesystem path — a folder for Missing/Empty, the file
+    // itself for Unsupported (a click opens its folder). Shown as-is: the
+    // states used to differ in what they displayed here, and making all three
+    // report a plain path is what lets one line of code render any of them.
     std::wstring folderOverlayPath;
-
-    // What the LAST line SHOWS, when that differs from the path. Empty means
-    // "show the path", which is what the folder states want. The Unsupported
-    // state fills it with "dir \ file \ format", which reads better than a
-    // bare path and names the extension that was refused.
-    std::wstring folderOverlayDetail;
 
     // Client-area rects of the two clickable lines, written by the renderer
     // whenever the layout is built or re-flowed and hit-tested by MouseHandler.
@@ -548,6 +545,33 @@ struct AppState {
 
 // Global state shared across files
 extern AppState app;
+
+// =============================================================================
+//  THE ONLY SUPPORTED WAY TO RAISE OR DISMISS THE BLANK-SCREEN PLACEHOLDER
+// =============================================================================
+//
+// Assigning app.folderOverlay / app.folderOverlayPath directly is a bug. They
+// have a third dependant that is not visible from here — the window title, and
+// so the taskbar label — and every defect in this area has been the same shape:
+// two of the three updated and the third left saying something that was true a
+// moment ago.
+//
+//   * an empty folder left the taskbar naming the last picture
+//   * a file the decoder refused did the same
+//   * navigating off a refused file left the placeholder drawn OVER the good
+//     image that had just loaded, still naming the broken one
+//
+// One call writes all of it, so there is nothing left to forget. Defined in
+// FileHandler.cpp, next to the title function it drives.
+//
+// Neither repaints: the caller knows whether it is already inside one, and the
+// renderer's own last-ditch guard calls this from mid-frame.
+void SetFolderOverlay(HWND hWnd, AppState::FolderOverlayState state,
+                      const std::wstring &path);
+
+// Dismisses it. Also refreshes the title, which then falls back to naming the
+// current image — so the load path needs no second call.
+void ClearFolderOverlay(HWND hWnd);
 
 // Clamps app.viewport.zoom so the EFFECTIVE on-screen zoom — the percentage the
 // overlay shows — lands inside [ZOOM_MIN, ZOOM_MAX].

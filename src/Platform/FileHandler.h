@@ -30,6 +30,14 @@ struct ScanResult {
     bool updatePrimaryDirWnd = true;
 };
 
+// THE one place the main window's title — and so the taskbar label — is set.
+//
+// Derived from state rather than written by whoever last changed something, so
+// that every route which ends WITHOUT an image on screen still says what is
+// actually being shown. Call it after changing app.folderOverlay / the current
+// index, never instead of them.
+void UpdateWindowTitle(HWND hWnd);
+
 void OpenInitialImage(HWND hWnd);
 
 void ReloadCurrentDirectory(HWND hWnd);

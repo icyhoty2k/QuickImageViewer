@@ -712,23 +712,18 @@ LRESULT CALLBACK MainAppWndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM l
                     // far because the playlist is built from extensions, and so
                     // does a supported format whose bytes are damaged.
                     //
-                    // Say which file and which extension was refused, rather
-                    // than leaving the black rectangle that used to be the whole
-                    // report. The path stays the real one so the last line still
-                    // opens the containing folder.
-                    const std::filesystem::path p(currentPath);
-                    std::wstring detail = p.parent_path().filename().wstring();
-                    if (!detail.empty()) detail += L"  \\  ";
-                    detail += p.filename().wstring();
-                    const std::wstring ext = p.extension().wstring();
-                    if (!ext.empty()) {
-                        detail += L"  \\  ";
-                        detail += ext;
-                    }
-
-                    app.folderOverlay       = AppState::FolderOverlayState::Unsupported;
-                    app.folderOverlayPath   = currentPath;
-                    app.folderOverlayDetail = detail;
+                    // Say which file, rather than leaving the black rectangle
+                    // that used to be the whole report. The FULL PATH, exactly
+                    // as the other two states report theirs — this used to
+                    // compose a "dir \ file \ format" string of its own, which
+                    // made this the one placeholder whose second line was not a
+                    // real path and not what its (L) hint opened.
+                    //
+                    // This also rewrites the window title, which LoadImageIndex
+                    // set back when the file was still expected to decode — so
+                    // it currently names it as though it were on screen.
+                    SetFolderOverlay(hWnd, AppState::FolderOverlayState::Unsupported,
+                                     currentPath);
                     InvalidateRect(hWnd, nullptr, FALSE);
                 }
             }
