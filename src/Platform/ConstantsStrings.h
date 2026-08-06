@@ -436,6 +436,28 @@ namespace Constants::Messages {
     // overlay glitching rather than as the dot blinking.
     constexpr const wchar_t *OVERLAY_SERVER_DOT_OFF   = L"\U000026AB";
 
+    // The LIT phase, coloured by WHAT happened. Four outcomes, because they mean
+    // four different things to whoever sees them from across a room:
+    //
+    //   green   somebody arrived
+    //   white   somebody left normally — they said goodbye, nothing is wrong.
+    //           Absence rather than alarm: the screen went quiet
+    //   red     somebody VANISHED — no goodbye: a crash, a reset, a phone out of
+    //           range, a cable pulled. The only one worth walking over for
+    //   yellow  we ejected them — kicked or banned from this machine
+    //
+    // The red/blue split is the whole point. Without it a tidy disconnect and a
+    // dead screen look identical, so either every departure is alarming or none
+    // is — and both make the indicator useless.
+    //
+    // Yellow for an eject because it was DELIBERATE and done here. Showing the
+    // operator red for the thing they just did themselves would teach them to
+    // ignore red.
+    constexpr const wchar_t *OVERLAY_SERVER_DOT_JOIN   = L"\U0001F7E2"; // 🟢
+    constexpr const wchar_t *OVERLAY_SERVER_DOT_LEFT   = L"\U000026AA"; // ⚪
+    constexpr const wchar_t *OVERLAY_SERVER_DOT_LOST   = L"\U0001F534"; // 🔴
+    constexpr const wchar_t *OVERLAY_SERVER_DOT_KICKED = L"\U0001F7E1"; // 🟡
+
     // Connect / disconnect blink: how long each phase lasts, and how many blinks.
     //
     // COUNT is blinks, not phases — a blink is dark-then-lit, so the timer runs
@@ -449,7 +471,7 @@ namespace Constants::Messages {
     // 3 blinks at 250 ms is 1.5 seconds — long enough to catch the eye on a
     // screen nobody is watching, short enough that it is over before anyone
     // walks to it.
-    constexpr int  OVERLAY_SERVER_BLINK_MS    = 250;
+    constexpr int  OVERLAY_SERVER_BLINK_MS    = 300;
     constexpr int  OVERLAY_SERVER_BLINK_COUNT = 3;
 
     // F9 status line. The wording matches the overlay dot's two colours, so the

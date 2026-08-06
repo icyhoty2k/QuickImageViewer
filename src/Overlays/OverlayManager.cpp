@@ -545,15 +545,32 @@ std::wstring OverlayManager::BuildTopRightText() const {
     const std::wstring zoom = Converters::FormatZoomPercent(m_zoom);
     if (!Remote::IsRunning()) return zoom;
 
-    // Green = encrypted, orange = plaintext loopback. See the constants.
+    // THREE STATES, in order of precedence.
     //
-    // The dark phase of a blink replaces the colour but not the width, so the
-    // count and zoom beside it stay put — see OVERLAY_SERVER_DOT_OFF.
-    const std::wstring dot =
-        m_blinkDark ? Constants::Messages::OVERLAY_SERVER_DOT_OFF
-                    : (Remote::IsEncrypted()
-                           ? Constants::Messages::OVERLAY_SERVER_DOT_TLS
-                           : Constants::Messages::OVERLAY_SERVER_DOT_PLAIN);
+    // While blinking, the dot alternates dark and an EVENT colour — green for an
+    // arrival, red for a departure — so the direction is readable from across a
+    // room without going to read the count.
+    //
+    // Once the blink ends it falls back to the steady meaning: green encrypted,
+    // orange plaintext loopback. Every glyph is the same emoji class, so the
+    // count and zoom beside it never shift — see OVERLAY_SERVER_DOT_OFF.
+    std::wstring dot;
+    if (m_blinkPhasesLeft > 0) {
+        using CE = Constants::RemoteTcpIp::ClientEvent;
+        const wchar_t *lit = Constants::Messages::OVERLAY_SERVER_DOT_JOIN;
+        switch (m_blinkEvent) {
+            case CE::Joined:     lit = Constants::Messages::OVERLAY_SERVER_DOT_JOIN;   break;
+            case CE::LeftClean:  lit = Constants::Messages::OVERLAY_SERVER_DOT_LEFT;   break;
+            case CE::LeftAbrupt: lit = Constants::Messages::OVERLAY_SERVER_DOT_LOST;   break;
+            case CE::Ejected:    lit = Constants::Messages::OVERLAY_SERVER_DOT_KICKED; break;
+            default:             break;   // Other never starts a blink
+        }
+        dot = m_blinkDark ? Constants::Messages::OVERLAY_SERVER_DOT_OFF : lit;
+    } else {
+        dot = Remote::IsEncrypted()
+                  ? Constants::Messages::OVERLAY_SERVER_DOT_TLS
+                  : Constants::Messages::OVERLAY_SERVER_DOT_PLAIN;
+    }
 
     // COMPACT shows the dot alone — the slot's compact state means "the least
     // that still carries the information", and for a server that is "it is up,
@@ -564,28 +581,38 @@ std::wstring OverlayManager::BuildTopRightText() const {
            std::to_wstring(Remote::Config().maxConnections) + L"  " + zoom;
 }
 
-void OverlayManager::UpdateRemoteStatus(HWND hWnd) {
-    // ONLY A CHANGE IN THE COUNT BLINKS, not every call. This is also reached
-    // when the listener starts or stops, and a viewer that blinked at its own
-    // startup would do it on every launch with autostart on.
-    //
-    // The first observation only records the baseline: going from "not yet
-    // known" to a number is not somebody arriving.
-    const int now = Remote::IsRunning() ? Remote::ActiveConnections() : -1;
-    if (m_lastClientCount >= 0 && now >= 0 && now != m_lastClientCount && hWnd) {
-        // Two phases per blink — dark, then lit.
-        m_blinkPhasesLeft = Constants::Messages::OVERLAY_SERVER_BLINK_COUNT * 2;
-        m_blinkDark       = true;   // start dark so the first change is visible
-        KillTimer(hWnd, TIMER_SERVER_BLINK);
-        SetTimer(hWnd, TIMER_SERVER_BLINK,
-                 static_cast<UINT>(Constants::Messages::OVERLAY_SERVER_BLINK_MS), nullptr);
-    }
-    m_lastClientCount = now;
-
+// The text half, with no opinion about blinking. Called by anything that needs
+// TOP_RIGHT redrawn for a reason that is NOT somebody connecting — a compact
+// toggle, a layout change, a blink phase.
+void OverlayManager::RefreshRemoteIndicator() {
     slotTopRight.UpdateText(BuildTopRightText());
     // Summary mode folds TOP_RIGHT into TOP_LEFT's second line.
     if (app.overlayLayoutMode == 2)
         RebuildTopLeft();
+}
+
+void OverlayManager::UpdateRemoteStatus(HWND hWnd,
+                                        Constants::RemoteTcpIp::ClientEvent event) {
+    using CE = Constants::RemoteTcpIp::ClientEvent;
+
+    // ONLY A REAL ARRIVAL OR DEPARTURE BLINKS. `Other` is the listener starting
+    // or stopping, and a viewer that blinked at its own startup would do it on
+    // every launch with autostart on.
+    //
+    // Driven by the EVENT rather than by comparing counts: two clients leaving
+    // between repaints is still two departures, and only the socket thread knows
+    // whether each was a goodbye, a crash or an eject.
+    if (event != CE::Other && hWnd) {
+        // Two phases per blink — dark, then lit.
+        m_blinkPhasesLeft = Constants::Messages::OVERLAY_SERVER_BLINK_COUNT * 2;
+        m_blinkDark       = true;   // start dark so the first change is visible
+        m_blinkEvent      = event;
+        KillTimer(hWnd, TIMER_SERVER_BLINK);
+        SetTimer(hWnd, TIMER_SERVER_BLINK,
+                 static_cast<UINT>(Constants::Messages::OVERLAY_SERVER_BLINK_MS), nullptr);
+    }
+
+    RefreshRemoteIndicator();
 }
 
 void OverlayManager::OnServerBlinkTimer(HWND hWnd) {
@@ -602,9 +629,7 @@ void OverlayManager::OnServerBlinkTimer(HWND hWnd) {
         m_blinkDark = !m_blinkDark;
     }
 
-    slotTopRight.UpdateText(BuildTopRightText());
-    if (app.overlayLayoutMode == 2)
-        RebuildTopLeft();
+    RefreshRemoteIndicator();
 
     // ONLY THE OVERLAY. This does not touch the image, the playlist or the
     // renderer's state — it swaps one glyph in a text slot and asks for a
@@ -1008,7 +1033,11 @@ void OverlayManager::RebuildForCompactChange(Slot slot) {
     if (slot == BOT_RIGHT) UpdateDims(m_imgW, m_imgH, m_fileSizeBytes);
     // TOP_RIGHT joined this list when the server indicator arrived: compact is
     // the dot alone, full adds the client count.
-    if (slot == TOP_RIGHT) UpdateRemoteStatus();
+    //
+    // The TEXT half only — a compact toggle is not somebody connecting, so it
+    // must neither blink nor move the client-count baseline that decides when
+    // the next real change does.
+    if (slot == TOP_RIGHT) RefreshRemoteIndicator();
 }
 
 std::wstring OverlayManager::SlotStateMessage(Slot slot) const {

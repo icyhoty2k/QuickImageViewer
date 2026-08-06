@@ -29,6 +29,7 @@
 
 #include <algorithm>
 #include <map>      // the failed-authentication table, keyed by peer address
+#include <set>      // connections this instance ejected, pending their thread noticing
 #include <memory>   // shared_ptr — the per-connection send lock outlives its thread
 #include <mutex>
 #include <thread>
@@ -363,8 +364,36 @@ namespace {
     // Tell the UI thread the client count (or the running state) changed, so the
     // overlay's server indicator repaints. Posted, never sent: this is called
     // from socket threads and from Stop(), and none of them may block on the UI.
-    void NotifyClientsChanged() {
-        if (g_owner) PostMessageW(g_owner, Constants::WM_QIV_REMOTE_CLIENTS, 0, 0);
+    // `kind` rides in wParam: the overlay colours its blink by it, and only this
+    // thread knows which happened. Reconstructing it on the UI side is not
+    // possible — by the time the message is handled the socket is gone and the
+    // count alone cannot say whether the client meant to leave.
+    void NotifyClientsChanged(Constants::RemoteTcpIp::ClientEvent kind =
+                                  Constants::RemoteTcpIp::ClientEvent::Other) {
+        if (g_owner)
+            PostMessageW(g_owner, Constants::WM_QIV_REMOTE_CLIENTS,
+                         static_cast<WPARAM>(kind), 0);
+    }
+
+    // Connections THIS instance ended — kicked, timed-kicked or banned.
+    //
+    // A kick is a shutdown(), which the client thread meets as a failed read:
+    // identical to a crash or a cable being pulled. Without this set, ejecting
+    // somebody would blink the same colour as a screen dying on its own, and the
+    // operator would be alarmed by the thing they just did themselves.
+    //
+    // The client thread erases its own entry on the way out, so this never grows
+    // beyond the connections currently being ejected.
+    std::set<ConnId> g_ejected;
+    std::mutex       g_ejectedMutex;
+
+    void MarkEjected(ConnId id) {
+        std::lock_guard<std::mutex> lk(g_ejectedMutex);
+        g_ejected.insert(id);
+    }
+    bool TakeEjected(ConnId id) {
+        std::lock_guard<std::mutex> lk(g_ejectedMutex);
+        return g_ejected.erase(id) > 0;
     }
 
     void SetEndpoint(const std::wstring &s) {
@@ -740,6 +769,11 @@ namespace {
         // and telling them apart is the whole reason to look.
         const wchar_t *departure = L"(disconnected)";
 
+        // Set only by the `bye` verb. Everything else — a reset, a crash, a phone
+        // leaving Wi-Fi, a cable pulled — reaches the same failed read, so the
+        // ABSENCE of this is what "abrupt" means. It cannot be inferred later.
+        bool saidGoodbye = false;
+
         // WIC is COM, and SendDisplayedPreview decodes on THIS thread. MTA
         // rather than STA: nothing here pumps a message loop, and an STA
         // apartment without one deadlocks the moment a proxy is needed.
@@ -939,6 +973,15 @@ namespace {
                             SendLine(client, MakeOk(name), tls);
                             break;
                         }
+                        case Verb::Bye: {
+                            // Answered before the loop ends, so a client that
+                            // waits for the reply gets one rather than reading a
+                            // closed socket and reporting an error on its way out.
+                            SendLine(client, MakeOk(), tls);
+                            saidGoodbye = true;
+                            departure   = L"(disconnected — said goodbye)";
+                            break;
+                        }
                         case Verb::Agent: {
                             // Parsed and sanitised by ParseAgent — including the
                             // closed platform vocabulary — so nothing peer-chosen
@@ -967,6 +1010,11 @@ namespace {
                             SendLine(client, MakeErr(RT::ERR_INTERNAL, L"unhandled verb"), tls);
                             break;
                     }
+                    // `bye` is the one verb that ends the session. Checked out
+                    // here because a break inside the switch above leaves the
+                    // switch, not this loop — the classic trap, and the reason
+                    // the flag exists rather than a break in the case.
+                    if (saidGoodbye) break;
                     continue;
                 }
 
@@ -1104,6 +1152,30 @@ namespace {
         // connection still open is exactly an arrival with nothing under it.
         // That is the property the log needs for "who is on this machine right
         // now" to be answerable by reading it.
+        // HOW IT ENDED, decided here because this is the only place that knows
+        // all three facts: whether `bye` arrived, whether we ejected them, and
+        // that the read simply failed otherwise.
+        //
+        // ORDER MATTERS. An ejected client never gets to say goodbye, so the
+        // eject is checked first — otherwise a kick delivered while a `bye` was
+        // in flight would report whichever won the race.
+        Constants::RemoteTcpIp::ClientEvent endKind;
+        if (TakeEjected(static_cast<ConnId>(client))) {
+            endKind   = Constants::RemoteTcpIp::ClientEvent::Ejected;
+            departure = L"(disconnected — kicked or banned from here)";
+        } else if (saidGoodbye) {
+            endKind = Constants::RemoteTcpIp::ClientEvent::LeftClean;
+            // `departure` already says "said goodbye".
+        } else {
+            endKind   = Constants::RemoteTcpIp::ClientEvent::LeftAbrupt;
+            // Only overwritten when nothing more specific was recorded — a send
+            // failure mid-image already says something the generic wording would
+            // throw away.
+            if (wcscmp(departure, L"(disconnected)") == 0 ||
+                wcscmp(departure, L"(disconnected — closed by peer)") == 0)
+                departure = L"(disconnected — ABRUPTLY, no goodbye)";
+        }
+
         if (Log::IsEnabled())
             // HOW LONG IT LASTED goes in the Δ column, which is otherwise "—" on
             // a connection row. On a command row that column is a round trip; on
@@ -1136,7 +1208,7 @@ namespace {
         shutdown(client, SD_BOTH);
         closesocket(client);
         g_activeClients.fetch_sub(1, std::memory_order_acq_rel);
-        NotifyClientsChanged();
+        NotifyClientsChanged(endKind);
         if (SUCCEEDED(comInit)) CoUninitialize();
     }
 
@@ -1241,7 +1313,7 @@ namespace {
             }
 
             g_activeClients.fetch_add(1, std::memory_order_acq_rel);
-            NotifyClientsChanged();
+            NotifyClientsChanged(Constants::RemoteTcpIp::ClientEvent::Joined);
             // Detached: a client's lifetime is its socket's, and Stop() closes
             // the sockets rather than joining every conversation.
             std::thread(ClientThread, client, cfg, g_owner, peer, peerPort).detach();
@@ -1530,6 +1602,13 @@ bool KickConnection(ConnId id) {
         std::lock_guard<std::mutex> lk(g_liveConnMutex);
         if (!g_liveConns.count(id)) return false;
     }
+
+    // MARKED BEFORE THE SHUTDOWN, never after: the client thread can reach its
+    // departure path before this function returns, and a mark that landed second
+    // would be read too late — the eject would be reported as a crash.
+    //
+    // Timed kick and ban both come through here, so one mark covers all three.
+    MarkEjected(id);
 
     // OUTSIDE the lock, and see the header for why this is shutdown() rather
     // than closesocket(). The client thread notices its read failing, unwinds

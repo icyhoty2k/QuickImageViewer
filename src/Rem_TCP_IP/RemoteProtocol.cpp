@@ -1159,6 +1159,11 @@ RemoteRequest ParseLine(const std::wstring &line) {
     }
     // Same shape as hello and for the same reason: peer-chosen text about
     // itself, sanitised where it is parsed rather than trusted here.
+    if (_wcsicmp(name.c_str(), L"bye") == 0) {
+        req.verb   = Verb::Bye;
+        req.status = ParseStatus::Verb;
+        return req;
+    }
     if (_wcsicmp(name.c_str(), L"agent") == 0) {
         req.verb    = Verb::Agent;
         req.payload = payload;

@@ -142,6 +142,24 @@ namespace Remote {
         // password and TLS are what govern this connection, and none of them
         // read this.
         Agent,
+        // "bye" — the client is closing on purpose.
+        //
+        // WHY THIS HAS TO EXIST. A clean TCP close, a reset, a phone going out
+        // of Wi-Fi range and a crashed client all arrive here as the same thing:
+        // a failed read. The socket layer cannot tell them apart, so without a
+        // word from the client there is no way to know whether a departure was
+        // deliberate.
+        //
+        // Optional, and everything still works without it — a client that never
+        // says it simply departs as "closed by peer", which is what every client
+        // did before. It exists so the overlay can show a normal disconnect
+        // differently from a screen that vanished, because on a wall those mean
+        // opposite things: one is somebody finishing, the other is something to
+        // go and look at.
+        //
+        // Carries no payload and grants nothing. The server answers, then the
+        // client closes.
+        Bye,
     };
 
     // The parsed contents of an `agent` line. Every field is optional and empty

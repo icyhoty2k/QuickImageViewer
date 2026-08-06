@@ -117,10 +117,16 @@ class OverlayManager {
         // Takes the window because a CHANGE in the client count starts the blink
         // timer, and only a real arrival or departure does: the listener merely
         // starting is not somebody connecting.
-        void UpdateRemoteStatus(HWND hWnd);
+        void UpdateRemoteStatus(HWND hWnd,
+                                Constants::RemoteTcpIp::ClientEvent event =
+                                    Constants::RemoteTcpIp::ClientEvent::Other);
 
         // One blink phase. Called from WM_TIMER for TIMER_SERVER_BLINK.
         void OnServerBlinkTimer(HWND hWnd);
+
+        // Redraws TOP_RIGHT's text without any blink logic — for changes that
+        // are not a connection: a compact toggle, a layout switch, a blink phase.
+        void RefreshRemoteIndicator();
 
         // BOT_RIGHT  — pixel dimensions + file size in bytes
         void UpdateDims(int imgW, int imgH, int64_t fileSizeBytes);
@@ -281,12 +287,16 @@ class OverlayManager {
         int  m_blinkPhasesLeft = 0;
         bool m_blinkDark       = false;
 
-        // What the client count was last time the indicator was rebuilt.
-        //
-        // -1 MEANS "NOT YET KNOWN", and that is what stops the viewer blinking
-        // at itself on startup: the listener coming up is not somebody arriving,
-        // and a blink there would fire on every launch with autostart on.
-        int  m_lastClientCount = -1;
+        // WHAT happened, deciding the lit phase's colour. Only meaningful while
+        // m_blinkPhasesLeft > 0. Comes from the socket thread via wParam — the
+        // UI thread cannot work it out for itself, see ClientEvent.
+        Constants::RemoteTcpIp::ClientEvent m_blinkEvent =
+            Constants::RemoteTcpIp::ClientEvent::Other;
+
+        // No client-count baseline is kept. Comparing counts was the first
+        // design and it could not survive two clients leaving between repaints,
+        // nor say WHY any of them left — the socket thread sends the reason with
+        // the message instead. See ClientEvent.
 
         // ── Helpers ──────────────────────────────────────────────────────────
         // Rebuilds both slot bitmasks from m_slots into AppState and saves them.

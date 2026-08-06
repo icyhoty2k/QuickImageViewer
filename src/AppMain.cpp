@@ -287,8 +287,12 @@ LRESULT CALLBACK MainAppWndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM l
 
         // The listener started, stopped, or gained/lost a client. Repaint the
         // overlay's server indicator — the only thing that shows it.
+        // wParam carries WHY the list changed — see ClientEvent. The socket
+        // thread is the only place that knows, so it travels with the message
+        // rather than being guessed at from the count.
         case Constants::WM_QIV_REMOTE_CLIENTS:
-            g_overlayManager.UpdateRemoteStatus(hWnd);
+            g_overlayManager.UpdateRemoteStatus(
+                hWnd, static_cast<Constants::RemoteTcpIp::ClientEvent>(wParam));
             InvalidateRect(hWnd, nullptr, FALSE);
             return 0;
 

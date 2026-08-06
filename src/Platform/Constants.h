@@ -610,6 +610,21 @@ namespace Constants {
     // Full design record: docs/REMOTE_TCP_IP_SPEC.md
     // =========================================================================
     namespace RemoteTcpIp {
+        // What just happened to the client list, carried in WM_QIV_REMOTE_CLIENTS'
+        // wParam so the overlay can colour its blink by the event.
+        //
+        // ONLY THE SOCKET THREAD KNOWS THIS. By the time the UI thread handles
+        // the message the connection is gone, and the count alone cannot say
+        // whether a client meant to leave — which is the entire distinction
+        // between "somebody finished" and "a screen vanished".
+        enum class ClientEvent : unsigned {
+            Other = 0,   // the listener started or stopped — not an arrival
+            Joined,      // a client authenticated and is on the list
+            LeftClean,   // it sent `bye` first
+            LeftAbrupt,  // the socket ended without one: reset, crash, out of range
+            Ejected,     // WE ended it — kicked, timed-kicked or banned
+        };
+
         // --- The listener's own file ---
         //
         // ITS OWN FILE, not a section of the instance .ini, for the reason set
