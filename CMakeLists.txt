@@ -11,22 +11,28 @@ set(CMAKE_CXX_EXTENSIONS OFF)
 set(CMAKE_CXX_SCAN_FOR_MODULES OFF)
 
 # --- Custom Option for Static MSVC Runtime ---
-option(QIV_STATIC_RUNTIME "Statically link the MSVC C/C++ runtime (/MT instead of /MD)" ON)
-
-# TEMPORARY — remove these two lines when the /MT experiment is finished.
 #
-# option() only supplies a DEFAULT, and only on the first configure; an existing
-# CMakeCache.txt already holding OFF would ignore the flip above and the build
-# would quietly stay on /MD. FORCE overrides the cached value so pressing Build
-# actually tests what it appears to test.
+# OFF, and it cannot simply be switched ON — TESTED 2026-08-06.
 #
-# What this is testing: /MT removes msvcp140.dll, vcruntime140.dll and
-# vcruntime140_1.dll from every launch, and removes the VC++ redistributable as
-# a dependency. EXPECTED TO FAIL with LNK2038 (RuntimeLibrary mismatch) against
-# the prebuilt resvg.lib / openjp2.lib under libs/, which were compiled for the
-# dynamic CRT. If it does, revert: the fix is rebuilding those two, which is not
-# worth ~1 ms.
-set(QIV_STATIC_RUNTIME ON CACHE BOOL "Statically link the MSVC C/C++ runtime" FORCE)
+# /MT would remove msvcp140.dll, vcruntime140.dll and vcruntime140_1.dll from
+# every launch (~0.3-1 ms, on the cold path AND on every "open with qIV" while a
+# copy is running), and would drop the VC++ redistributable as a dependency —
+# "VCRUNTIME140.dll was not found" is a real first-run failure for a portable app.
+#
+# WHAT BLOCKS IT: the prebuilt libs/lib/openjp2.lib was compiled against the
+# DYNAMIC CRT. It references __imp__aligned_malloc / _free / _realloc — the
+# __imp_ prefix meaning "imported from a DLL" — which the static CRT does not
+# provide, and it carries a /DEFAULTLIB:MSVCRT directive that collides with
+# libcmt (LNK4098). resvg.lib links clean; openjp2 is the only blocker.
+#
+#   openjp2.lib(opj_malloc.c.obj) : error LNK2001: unresolved external symbol
+#                                   __imp__aligned_free
+#
+# THE ONLY REAL FIX is rebuilding OpenJPEG with /MT. Do NOT attempt the
+# alias-the-__imp_-symbols trick — it links, and then two allocators disagree
+# about which heap a pointer came from, which is a corruption bug that surfaces
+# far from its cause.
+option(QIV_STATIC_RUNTIME "Statically link the MSVC C/C++ runtime (/MT instead of /MD). Requires an /MT build of openjp2.lib — see above." OFF)
 
 # --- Fast edit-build-run iteration ---------------------------------------
 # The link, not the compile, is what a rebuild-to-test loop actually pays for
@@ -347,6 +353,61 @@ endif ()
 # 4. External Libraries (Static Linking: resvg only)
 set(STATIC_LIBS_DIR "${CMAKE_CURRENT_SOURCE_DIR}/libs/lib/static")
 
+# --- One vendored .lib per CRT, so the switch is just the option -------------
+#
+# A static .lib records which CRT it was built against, so a /MD library cannot
+# be linked into an /MT binary — see the QIV_STATIC_RUNTIME option at the top of
+# this file for the exact errors. The answer is to keep BOTH builds in the repo
+# and pick by the option, rather than making the switch depend on a tool being
+# installed or an environment variable being set.
+#
+#     libs/lib/static/     — /MD  (the default)
+#     libs/lib/static-mt/  — /MT
+#
+# HEADERS ARE SHARED, which is only sound while both libraries are the SAME
+# UPSTREAM VERSION. The vendored headers are OpenJPEG 2.5.4
+# (libs/lib/openjpeg/include/opj_config.h), so an /MT openjp2.lib built from any
+# other version compiles against one set of structs and links against another —
+# an ABI mismatch that builds cleanly and corrupts memory at run time. If the
+# /MT copy ever has to be a different version, its headers must be vendored
+# beside it and selected here too.
+#
+# Falls back per library rather than per directory: resvg.lib links clean under
+# /MT today, so it is not duplicated. If that ever changes, drop an /MT build
+# into static-mt/ and this picks it up with no edit.
+set(STATIC_MT_LIBS_DIR "${CMAKE_CURRENT_SOURCE_DIR}/libs/lib/static-mt")
+
+function(qiv_pick_static_lib out_var libName)
+    if (QIV_STATIC_RUNTIME AND EXISTS "${STATIC_MT_LIBS_DIR}/${libName}")
+        set(${out_var} "${STATIC_MT_LIBS_DIR}/${libName}" PARENT_SCOPE)
+    else ()
+        set(${out_var} "${STATIC_LIBS_DIR}/${libName}" PARENT_SCOPE)
+    endif ()
+endfunction()
+
+qiv_pick_static_lib(QIV_OPENJP2_LIB openjp2.lib)
+qiv_pick_static_lib(QIV_RESVG_LIB   resvg.lib)
+
+# Caught at CONFIGURE time with an actionable message, rather than as three
+# unresolved __imp_ symbols at the end of a full link.
+if (QIV_STATIC_RUNTIME AND NOT EXISTS "${STATIC_MT_LIBS_DIR}/openjp2.lib")
+    message(FATAL_ERROR
+            "QIV_STATIC_RUNTIME is ON, but libs/lib/static-mt/openjp2.lib is missing.\n"
+            "  The /MD copy in libs/lib/static/ cannot link into an /MT binary.\n"
+            "\n"
+            "  Produce one — it must be OpenJPEG 2.5.4 to match the vendored headers:\n"
+            "      vcpkg install openjpeg:x64-windows-static\n"
+            "      copy <vcpkg>/installed/x64-windows-static/lib/openjp2.lib\n"
+            "           libs/lib/static-mt/openjp2.lib\n"
+            "  (check the vcpkg version first: vcpkg list openjpeg)\n"
+            "\n"
+            "  Or build it: cmake -DBUILD_SHARED_LIBS=OFF -DCMAKE_MSVC_RUNTIME_LIBRARY=MultiThreaded\n"
+            "\n"
+            "  Or turn the option off: -DQIV_STATIC_RUNTIME=OFF")
+endif ()
+
+message(STATUS "openjp2: ${QIV_OPENJP2_LIB}")
+
 target_include_directories(QuickImageViewer PRIVATE
         ${QIV_GENERATED_DIR} # BuildNumber.h — regenerated every build
         ${CMAKE_CURRENT_SOURCE_DIR}/src
@@ -369,9 +430,12 @@ target_link_directories(QuickImageViewer PRIVATE
 )
 
 # 5. External Codec Libraries
+#
+# FULL PATHS, chosen above by CRT. A bare "openjp2.lib" would be resolved through
+# target_link_directories, which cannot tell the two variants apart.
 target_link_libraries(QuickImageViewer PRIVATE
-        resvg.lib
-        openjp2.lib
+        ${QIV_RESVG_LIB}
+        ${QIV_OPENJP2_LIB}
 )
 
 # 6. Windows Libraries
