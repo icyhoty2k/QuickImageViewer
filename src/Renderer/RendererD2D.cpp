@@ -767,9 +767,11 @@ void RendererD2D::UpdateFolderOverlayPathRect() {
     app.folderOverlayPathRect   = {};
     if (!m_pFolderDeletedLayout) return;
 
-    // Same composition the layout was built from, so the ranges match what is
-    // actually on screen.
-    const FolderOverlayText t = BuildFolderOverlayText();
+    // The composition the layout was ACTUALLY built from, kept since. Not
+    // rebuilt here: recomposing would allocate a fresh string to arrive at
+    // character offsets that are already stored, and it would be a second
+    // source of truth that could disagree with the layout on screen.
+    const FolderOverlayText &t = m_folderOverlayComposed;
 
     // From the first word THROUGH the key hint, gap included. The hint is part
     // of the target, and a click region with a hole where the three spaces sit
@@ -1503,7 +1505,12 @@ HRESULT RendererD2D::Render() {
             // then the version — the two middle ones clickable, each followed
             // by its key hint. Only the folder line ever changes, which is why
             // the whole thing is built once and kept.
-            const FolderOverlayText composed = BuildFolderOverlayText();
+            // Kept, not discarded. The character ranges in it are what the
+            // hit-testing needs, and recomposing them later would mean building
+            // this whole string again for numbers that were already in hand.
+            m_folderOverlayComposed = BuildFolderOverlayText();
+
+            const FolderOverlayText &composed = m_folderOverlayComposed;
             const std::wstring &msg = composed.text;
             const D2D1_SIZE_F sz = m_pDeviceContext->GetSize();
             m_pDWriteFactory->CreateTextLayout(
@@ -1549,6 +1556,11 @@ HRESULT RendererD2D::Render() {
                         Constants::Theme::Renderer::PLACEHOLDER_VERSION_FONT_SCALE,
                         ver);
                 }
+
+                // Here, not per frame. The rects are geometry of THIS layout at
+                // THIS size, and both of those change in exactly two places:
+                // here, and Resize(), which calls this for the same reason.
+                UpdateFolderOverlayPathRect();
             }
         }
 
@@ -1569,8 +1581,6 @@ HRESULT RendererD2D::Render() {
                 m_pFolderDeletedLayout.Get(),
                 brush,
                 D2D1_DRAW_TEXT_OPTIONS_ENABLE_COLOR_FONT);
-
-            UpdateFolderOverlayPathRect();
         }
     }
 

@@ -332,6 +332,16 @@ class RendererD2D final : public IImageRenderer {
         };
         static FolderOverlayText BuildFolderOverlayText();
 
+        // What the cached layout was built from, kept alongside it.
+        //
+        // The hit-testing needs the character ranges, and it runs on resize as
+        // well as on rebuild. Recomposing them there would allocate a whole
+        // string per call to recover offsets that were already computed — and
+        // worse, it would be a second copy of the composition that could
+        // disagree with the one on screen. Written in exactly one place: right
+        // after the layout it describes is created.
+        FolderOverlayText m_folderOverlayComposed;
+
         std::wstring                                  m_lastFolderOverlayPath;   // the LAST LINE it was built from
         // AppState::FolderOverlayState as an int, deliberately.
         //
