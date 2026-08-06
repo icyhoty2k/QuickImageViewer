@@ -325,6 +325,40 @@ namespace {
     std::map<ConnId, LiveConn> g_liveConns;
     std::mutex                 g_liveConnMutex;
 
+
+    // Connections THIS instance ended — kicked, timed-kicked or banned.
+    //
+    // A kick is a shutdown(), which the client thread meets as a failed read:
+    // identical to a crash or a cable being pulled. Without this set, ejecting
+    // somebody would blink the same colour as a screen dying on its own, and the
+    // operator would be alarmed by the thing they just did themselves.
+    //
+    // The client thread erases its own entry on the way out, so this never grows
+    // beyond the connections currently being ejected.
+    std::set<ConnId> g_ejected;
+    std::mutex       g_ejectedMutex;
+
+    void MarkEjected(ConnId id) {
+        std::lock_guard<std::mutex> lk(g_ejectedMutex);
+        g_ejected.insert(id);
+    }
+    bool TakeEjected(ConnId id) {
+        std::lock_guard<std::mutex> lk(g_ejectedMutex);
+        return g_ejected.erase(id) > 0;
+    }
+    // Peek, for the read loop — it has to keep the mark for the departure
+    // classification at the end of the thread, which is what TakeEjected clears.
+    bool IsEjected(ConnId id) {
+        std::lock_guard<std::mutex> lk(g_ejectedMutex);
+        return g_ejected.count(id) > 0;
+    }
+    // Erase without reporting — for the connection teardown path, which
+    // clears the mark whether or not an ejection was the reason it ended.
+    void DropEjected(ConnId id) {
+        std::lock_guard<std::mutex> lk(g_ejectedMutex);
+        g_ejected.erase(id);
+    }
+
     void RegisterLiveConn(ConnId c, const LiveConn &info) {
         std::lock_guard<std::mutex> lk(g_liveConnMutex);
         g_liveConns[c] = info;
@@ -332,6 +366,14 @@ namespace {
     void UnregisterLiveConn(ConnId c) {
         std::lock_guard<std::mutex> lk(g_liveConnMutex);
         g_liveConns.erase(c);
+        // The ejected mark dies with the connection, WHATEVER ended it.
+        //
+        // A ConnId is a socket number and the system reuses them. An orphaned
+        // mark — one set after its thread already cleared its own — would eject
+        // the next connection handed that number, instantly and for no reason
+        // anybody could see. Clearing it at both ends of the connection's life
+        // means a mark can only ever apply to the connection it was set for.
+        DropEjected(c);
     }
 
     void RegisterSendLock(ConnId c) {
@@ -373,27 +415,6 @@ namespace {
         if (g_owner)
             PostMessageW(g_owner, Constants::WM_QIV_REMOTE_CLIENTS,
                          static_cast<WPARAM>(kind), 0);
-    }
-
-    // Connections THIS instance ended — kicked, timed-kicked or banned.
-    //
-    // A kick is a shutdown(), which the client thread meets as a failed read:
-    // identical to a crash or a cable being pulled. Without this set, ejecting
-    // somebody would blink the same colour as a screen dying on its own, and the
-    // operator would be alarmed by the thing they just did themselves.
-    //
-    // The client thread erases its own entry on the way out, so this never grows
-    // beyond the connections currently being ejected.
-    std::set<ConnId> g_ejected;
-    std::mutex       g_ejectedMutex;
-
-    void MarkEjected(ConnId id) {
-        std::lock_guard<std::mutex> lk(g_ejectedMutex);
-        g_ejected.insert(id);
-    }
-    bool TakeEjected(ConnId id) {
-        std::lock_guard<std::mutex> lk(g_ejectedMutex);
-        return g_ejected.erase(id) > 0;
     }
 
     void SetEndpoint(const std::wstring &s) {
@@ -481,8 +502,17 @@ namespace {
     // Reads one \n-terminated line. Returns false on disconnect, error, or a
     // line that exceeds MAX_LINE_LEN — an unbounded line is the one input a
     // peer fully controls, so the connection is dropped rather than buffered.
+    // `timedOut` distinguishes "nothing arrived yet" from "this connection is
+    // over", which the return value alone cannot.
+    //
+    // WHY IT HAS TO EXIST. After authentication the read is bounded rather than
+    // infinite, so the loop can wake and re-check whether this connection has
+    // been kicked. Without the distinction every expiry would look like a
+    // disconnect and every idle client would be dropped a second after
+    // connecting — which is precisely why the timeout used to be removed.
     bool RecvLine(SOCKET s, std::string &accum, std::wstring &lineOut,
-                  Tls::Session *tls = nullptr) {
+                  Tls::Session *tls = nullptr, bool *timedOut = nullptr) {
+        if (timedOut) *timedOut = false;
         for (;;) {
             const size_t nl = accum.find('\n');
             if (nl != std::string::npos) {
@@ -504,13 +534,26 @@ namespace {
             // `accum` still holds the LINE remainder on top of that, so a reply
             // that arrives in one record but spans two lines still works.
             if (tls) {
-                if (!tls->Recv(s, accum)) return false;
+                if (!tls->Recv(s, accum)) {
+                    // The session's own recv failed. WSAETIMEDOUT means the
+                    // bounded wait expired rather than the peer going away —
+                    // read from the same thread that made the call, so nothing
+                    // else can have overwritten it.
+                    if (timedOut && WSAGetLastError() == WSAETIMEDOUT) *timedOut = true;
+                    return false;
+                }
                 continue;
             }
 
             char buf[1024];
             const int n = recv(s, buf, sizeof(buf), 0);
-            if (n <= 0) return false;
+            if (n <= 0) {
+                // n == 0 is a GRACEFUL CLOSE and never a timeout — only a
+                // negative return carries an error code worth reading.
+                if (timedOut && n < 0 && WSAGetLastError() == WSAETIMEDOUT)
+                    *timedOut = true;
+                return false;
+            }
             accum.append(buf, static_cast<size_t>(n));
         }
     }
@@ -915,9 +958,29 @@ namespace {
             // What it cost the attacker is already paid — a slot can now only be
             // held by someone who knows the password, which is a different
             // problem with a different answer (MAX_CONNECTIONS, the AllowList).
-            const DWORD noTimeout = 0;
+            // BOUNDED, NOT INFINITE — and the bound is a poll, not a deadline.
+            //
+            // This used to be 0 (block forever), which is correct for holding an
+            // idle connection open but made Kick, Kick-for and Ban do nothing:
+            // they call shutdown() from the UI thread, and WINDOWS DOES NOT
+            // GUARANTEE that a recv already blocked on another thread returns
+            // when the socket is shut down. On Linux it wakes; here the thread
+            // sat in recv until the peer happened to send something, so an
+            // ejected client stayed connected — confirmed by waiting ten seconds
+            // after a Kick and watching nothing happen.
+            //
+            // closesocket() would wake it, but a descriptor closed under a
+            // thread that is reading it can be reused by the system for
+            // something else — see the header. So the read wakes on its own
+            // instead, re-checks the flags, and goes back to waiting.
+            //
+            // The cost is one syscall per connection per interval that returns
+            // immediately. An idle mirrored screen is expected to sit for
+            // minutes; this makes it wake ~60 times a minute doing nothing,
+            // which is far below the cost of the keepalive already running.
+            const DWORD pollMs = RT::IDLE_POLL_MS;
             setsockopt(client, SOL_SOCKET, SO_RCVTIMEO,
-                       reinterpret_cast<const char *>(&noTimeout), sizeof(noTimeout));
+                       reinterpret_cast<const char *>(&pollMs), sizeof(pollMs));
 
             for (;;) {
                 if (g_stopRequested.load(std::memory_order_acquire)) {
@@ -926,14 +989,36 @@ namespace {
                     break;
                 }
 
+                // EVERY ITERATION, not only after an idle timeout.
+                //
+                // Checking this on the timeout path alone made Kick work on a
+                // quiet client and do nothing on a busy one: a phone watching in
+                // Fullscreen asks for a picture on every image change, so the
+                // read kept returning lines and the wake that carries this check
+                // never happened. That is the whole of "kick sometimes works".
+                //
+                // Here it is seen between any two commands, so the worst case is
+                // one more command served — not an ejection that never lands.
+                if (IsEjected(static_cast<ConnId>(client))) break;
+
                 std::wstring line;
-                if (!RecvLine(client, accum, line, tls)) {
-                    // One line covers three causes and they cannot be separated
-                    // here: a clean close, a reset, and — for an unauthenticated
-                    // peer — the handshake deadline all surface as a failed read.
-                    // The command loop only runs AFTER authentication, so by this
-                    // point there is no deadline left and it is genuinely the
-                    // peer that went away.
+                bool readTimedOut = false;
+                if (!RecvLine(client, accum, line, tls, &readTimedOut)) {
+                    if (readTimedOut) {
+                        // NOTHING ARRIVED, which is the ordinary state of an
+                        // idle connection. The wake exists so the loop reaches
+                        // its top again: a kick from the UI thread cannot
+                        // interrupt a blocked read, so an idle connection would
+                        // otherwise never look.
+                        //
+                        // Both flags are tested up there, so this only has to go
+                        // back round.
+                        continue;
+                    }
+                    // A real end. A clean close and a reset both arrive here and
+                    // cannot be told apart at this level — which is what the
+                    // `bye` verb exists to resolve, and why its absence is what
+                    // "abrupt" means at the classification below.
                     departure = L"(disconnected — closed by peer)";
                     break;
                 }

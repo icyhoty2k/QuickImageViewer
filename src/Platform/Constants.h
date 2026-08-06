@@ -625,6 +625,20 @@ namespace Constants {
             Ejected,     // WE ended it — kicked, timed-kicked or banned
         };
 
+        // How long an authenticated connection's read waits before waking to
+        // re-check whether it has been kicked or the server is stopping.
+        //
+        // NOT A DEADLINE. Expiry means "nothing arrived", never "disconnect" —
+        // an idle mirrored screen may sit for minutes and must not be dropped.
+        // It exists only because Windows will not reliably wake a recv that is
+        // already blocked when another thread shuts the socket down, so an
+        // ejected client would otherwise stay connected indefinitely.
+        //
+        // A second is well under any human's patience for a Kick to take effect,
+        // and one immediately-returning syscall per connection per second is
+        // cheaper than the TCP keepalive already running on the same socket.
+        constexpr int IDLE_POLL_MS = 1000;
+
         // --- The listener's own file ---
         //
         // ITS OWN FILE, not a section of the instance .ini, for the reason set
