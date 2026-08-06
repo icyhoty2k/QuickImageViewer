@@ -1747,31 +1747,39 @@ bool KickConnection(ConnId id) {
         shutdown(sock, SD_BOTH);
 
         // AND THEN WAKE THE THREAD, because the shutdown above does not.
-    //
-    // This is the whole reason Kick behaved like a race. The socket belongs to
-    // another thread that is sitting inside a blocking call, and Windows does
-    // not promise to return from one because a second thread shut the socket
-    // down. IDLE_POLL_MS was added to work around that — but a poll only covers
-    // the READ. Nothing covered a blocked WRITE.
-    //
-    // A phone watching in Fullscreen asks for a preview on every image change,
-    // and that JPEG is written by this same client thread. Over Wi-Fi a full
-    // TCP window blocks that send until SO_SNDTIMEO — THIRTY SECONDS — so the
-    // loop top, where the ejected mark is read, was unreachable for that whole
-    // time. Loopback never blocks in send, which is exactly why the emulator was
-    // always kicked instantly and a real phone was kicked "sometimes".
-    //
-    // CancelIoEx aborts whatever is pending on the handle, read or write: the
-    // blocked call returns immediately and the thread reaches the top of its
-    // loop, sees the mark, and leaves through the ordinary departure path.
-    //
-    // SAFE WHERE closesocket IS NOT. The descriptor stays valid and stays ours,
-    // so it cannot be handed to another connection while a thread is still
-    // reading it — the reuse hazard that ruled closesocket out in the first
-    // place. Nothing here waits for the thread either; this returns at once and
-    // the thread unregisters itself as it always did.
-    CancelIoEx(reinterpret_cast<HANDLE>(sock), nullptr);
+        //
+        // The socket belongs to another thread that is sitting inside a
+        // blocking call, and Windows does not promise to return from one
+        // because a second thread shut the socket down. IDLE_POLL_MS was added
+        // to work around that — but a poll only covers the READ. Nothing
+        // covered a blocked WRITE.
+        //
+        // A phone watching in Fullscreen asks for a preview on every image
+        // change, and that JPEG is written by this same client thread. Over
+        // Wi-Fi a full TCP window blocks that send until SO_SNDTIMEO — THIRTY
+        // SECONDS — so the loop top, where the ejected mark is read, was
+        // unreachable for that whole time. Loopback never blocks in send, which
+        // is exactly why the emulator was always kicked instantly and a real
+        // phone was kicked "sometimes".
+        //
+        // CancelIoEx aborts whatever is pending on the handle, read or write:
+        // the blocked call returns immediately and the thread reaches the top
+        // of its loop, sees the mark, and leaves through the ordinary departure
+        // path.
+        //
+        // SAFE WHERE closesocket IS NOT. The descriptor stays valid and stays
+        // ours, so it cannot be handed to another connection while a thread is
+        // still reading it — the reuse hazard that ruled closesocket out in the
+        // first place. Nothing here waits for the thread either; this returns
+        // at once and the thread unregisters itself as it always did.
+        CancelIoEx(reinterpret_cast<HANDLE>(sock), nullptr);
+    }
 
+    // OUTSIDE the connection lock, because Log::Add takes the log store's own
+    // mutex and holding two of them in an order nothing else agrees on is how a
+    // deadlock is built — the same rule Connections() follows for PeerNameFor.
+    // The address was copied above, so nothing here reads the map.
+    //
     // RECORDED AT THE MOMENT IT IS ISSUED, not only when the connection dies.
     //
     // The log is a record of the wire, so an operator action left no trace at

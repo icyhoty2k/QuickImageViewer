@@ -315,11 +315,27 @@ std::wstring RemoteClientsWnd::StatusLine() const {
 // =============================================================================
 // Actions
 // =============================================================================
+// EVERYTHING THE ACTION NEEDS IS COPIED OUT OF m_conns BEFORE THE DIALOG, and
+// all three of these functions do it for the same reason.
+//
+// They used to hold `const ClientInfo &ci = m_conns[idx]` across the confirm
+// box. A dialog runs a MODAL MESSAGE LOOP, so WM_QIV_REMOTE_CLIENTS is
+// delivered while it is open — and that reaches BuildRows, which reassigns
+// m_conns and frees the buffer the reference points into. Reading ci.id after
+// the user pressed Yes was then a use-after-free, and it crashed exactly that
+// way: a kick landing made the previous connection's departure arrive while the
+// next confirm box was up.
+//
+// A ConnId copied out early can go stale — the connection may end while the
+// question is on screen — but stale is the case these functions already handle
+// and report ("that connection had already closed"). Dangling is not.
 void RemoteClientsWnd::DoKick() {
     const int idx = SelectedClient();
     if (idx < 0) return;
-    const Remote::ClientInfo &ci = m_conns[static_cast<size_t>(idx)];
-    const std::wstring where = Remote::FormatEndpoint(ci.address, ci.port);
+    const Remote::ConnId id      = m_conns[static_cast<size_t>(idx)].id;
+    const std::wstring   address = m_conns[static_cast<size_t>(idx)].address;
+    const int            port    = m_conns[static_cast<size_t>(idx)].port;
+    const std::wstring   where   = Remote::FormatEndpoint(address, port);
 
     if (!DialogConfirm(L"Close the connection from " + where + L"?\r\n\r\n"
                        L"This does not block the address — the same client may "
@@ -329,7 +345,7 @@ void RemoteClientsWnd::DoKick() {
     // False means it ended on its own between the last refresh and the button
     // press. Said out loud rather than ignored: the row vanishing a second later
     // would otherwise look like the kick worked.
-    m_lastResult = Remote::KickConnection(ci.id)
+    m_lastResult = Remote::KickConnection(id)
                        ? L"Kicked " + where
                        : L"That connection had already closed.";
     BuildRows();
@@ -339,8 +355,11 @@ void RemoteClientsWnd::DoKick() {
 void RemoteClientsWnd::DoTimedKick() {
     const int idx = SelectedClient();
     if (idx < 0) return;
-    const Remote::ClientInfo &ci = m_conns[static_cast<size_t>(idx)];
-    const std::wstring where = Remote::FormatEndpoint(ci.address, ci.port);
+    // Copied, not referenced — see DoKick.
+    const Remote::ConnId id      = m_conns[static_cast<size_t>(idx)].id;
+    const std::wstring   address = m_conns[static_cast<size_t>(idx)].address;
+    const int            port    = m_conns[static_cast<size_t>(idx)].port;
+    const std::wstring   where   = Remote::FormatEndpoint(address, port);
 
     const int minutes = DialogPromptInt(L"Refuse this peer for how many minutes?",
                                         RT::TIMED_BLOCK_DEFAULT_MIN,
@@ -350,7 +369,7 @@ void RemoteClientsWnd::DoTimedKick() {
     if (minutes <= 0) return;   // cancelled
 
     std::wstring written;
-    if (!Remote::TimedKickConnection(ci.id, minutes, written)) {
+    if (!Remote::TimedKickConnection(id, minutes, written)) {
         m_lastResult = L"That connection had already closed — nothing was blocked.";
     } else {
         m_lastResult = L"Kicked " + where + L" — " + written + L" refused for " +
@@ -358,7 +377,7 @@ void RemoteClientsWnd::DoTimedKick() {
         // Named when it is WIDER than the row, because a /64 is not what the
         // list showed and blocking one silently would be the panel doing
         // something broader than it appeared to offer.
-        if (written != ci.address)
+        if (written != address)
             m_lastResult += L" (the whole /64)";
     }
     BuildRows();
@@ -368,18 +387,20 @@ void RemoteClientsWnd::DoTimedKick() {
 void RemoteClientsWnd::DoBan() {
     const int idx = SelectedClient();
     if (idx < 0) return;
-    const Remote::ClientInfo &ci = m_conns[static_cast<size_t>(idx)];
+    // Copied, not referenced — see DoKick.
+    const Remote::ConnId id      = m_conns[static_cast<size_t>(idx)].id;
+    const std::wstring   address = m_conns[static_cast<size_t>(idx)].address;
 
     // WHAT WILL ACTUALLY BE WRITTEN, computed before the question is asked. For
     // IPv6 that is a /64 rather than the address on the row.
-    const std::wstring scope = Remote::BlockScope(ci.address);
-    const bool         wider = (scope != ci.address);
+    const std::wstring scope = Remote::BlockScope(address);
+    const bool         wider = (scope != address);
 
     std::wstring text = L"Block " + scope + L" permanently and close this "
                         L"connection?\r\n\r\n";
     if (wider)
         text += L"That is the whole /64 this client's address belongs to, not "
-                L"just " + ci.address + L". A single IPv6 address is not worth "
+                L"just " + address + L". A single IPv6 address is not worth "
                 L"blocking — the peer has billions of others in that same "
                 L"prefix.\r\n\r\n";
     text += L"Written to qivRemoteServerBlacklist.ini and survives a restart. "
@@ -389,7 +410,7 @@ void RemoteClientsWnd::DoBan() {
     if (!DialogConfirm(text)) return;
 
     std::wstring written;
-    m_lastResult = Remote::BanConnection(ci.id, written)
+    m_lastResult = Remote::BanConnection(id, written)
                        ? L"Blocked " + written + L" permanently"
                        : L"That connection had already closed — nothing was blocked.";
     BuildRows();
