@@ -196,6 +196,7 @@ void ImportSettings(HWND hWnd) {
         applyBool(Constants::Registry::RUN_ON_STARTUP,       app.isEnableRunOnStartup);
         applyBool(Constants::Registry::THUMBNAIL_EFFECTS,    app.thumbnailEffectsEnabled);
         applyBool(Constants::Registry::LOCK_VIEWPORT,        app.lockViewport);
+        applyBool(Constants::Registry::REMEMBER_WINDOW_POS,  app.rememberWindowPosition);
         applyBool(Constants::Registry::HISTORY_FULL_MODE,    app.historyFullModeEnabled);
         applyBool(Constants::Registry::OVERLAY_VISIBLE,      app.showOverlayInfoText);
         applyBool(Constants::Registry::OPEN_DIRWND_ON_START, app.openDirWndOnStart);
@@ -443,6 +444,7 @@ void RestoreDefaults(HWND hWnd) {
     app.isEnableRunOnStartup    = Constants::IS_ENABLE_RUN_ON_STARTUP;
     app.thumbnailEffectsEnabled = Constants::ThumbnailPanel::ThumbnailEffects::EFFECTS_MASTER_ENABLED;
     app.lockViewport            = Constants::IS_LOCK_VIEWPORT;
+    app.rememberWindowPosition  = Constants::IS_REMEMBER_WINDOW_POSITION;
     app.historyFullModeEnabled  = Constants::History::HISTORY_SHOW_FULL_HISTORY;
     app.showOverlayInfoText     = Constants::Overlay::DEFAULT_SHOW_OVERLAY;
     app.openDirWndOnStart       = Constants::IS_OPEN_DIRWND_ON_START;
@@ -503,6 +505,7 @@ void RestoreDefaults(HWND hWnd) {
     Persistence::Registry::SaveSetting(Constants::Registry::RUN_ON_STARTUP,        static_cast<DWORD>(app.isEnableRunOnStartup));
     Persistence::Registry::SaveSetting(Constants::Registry::THUMBNAIL_EFFECTS,     static_cast<DWORD>(app.thumbnailEffectsEnabled));
     Persistence::Registry::SaveSetting(Constants::Registry::LOCK_VIEWPORT,         static_cast<DWORD>(app.lockViewport));
+    Persistence::Registry::SaveSetting(Constants::Registry::REMEMBER_WINDOW_POS,   static_cast<DWORD>(app.rememberWindowPosition));
     Persistence::Registry::SaveSetting(Constants::Registry::HISTORY_FULL_MODE,     static_cast<DWORD>(app.historyFullModeEnabled));
     Persistence::Registry::SaveSetting(Constants::Registry::OVERLAY_VISIBLE,       static_cast<DWORD>(app.showOverlayInfoText));
     Persistence::Registry::SaveSetting(Constants::Registry::OPEN_DIRWND_ON_START,  static_cast<DWORD>(app.openDirWndOnStart));

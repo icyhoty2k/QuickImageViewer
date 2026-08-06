@@ -463,6 +463,11 @@ void AppCommands::changeAppCornerPreference(HWND hWnd, DWORD cornerStyle) {
         DwmSetWindowAttribute(hWnd, Constants::DWMWA_WINDOW_CORNER_PREFERENCES, &app.cornerPreference, sizeof(app.cornerPreference));
         SetWindowPos(hWnd, nullptr, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | SWP_FRAMECHANGED);
     }
+
+    // The attribute is per-window: without this, every panel already on screen
+    // keeps the corners it was created with, and the toggle appears to work only
+    // on the main window until each panel is closed and reopened.
+    uiManager.NotifyCornerChanged();
 }
 
 void AppCommands::changeAppThemeToDarkMode(HWND hWnd, bool isDarkThemed) {

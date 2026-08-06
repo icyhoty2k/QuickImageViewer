@@ -576,6 +576,14 @@ if (QIV_BUILD_TESTS)
     # with what they are testing.
     target_compile_definitions(qivTests PRIVATE NOMINMAX UNICODE _UNICODE)
 
+    # The menu-id tests READ AppMenuIds.h and the two dispatch files at run time
+    # rather than duplicating the id list in the test. A hand-copied list is the
+    # very thing they exist to catch: it would agree with itself while the header
+    # drifted. Parsing the real header means an id added tomorrow is covered
+    # without anyone remembering to update a test.
+    target_compile_definitions(qivTests PRIVATE
+            QIV_SOURCE_ROOT="${CMAKE_CURRENT_SOURCE_DIR}")
+
     # /utf-8 — REQUIRED, not cosmetic, and the main target has had it all along.
     #
     # These sources are UTF-8 and contain non-ASCII character constants, e.g.

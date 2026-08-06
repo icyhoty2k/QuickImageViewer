@@ -232,6 +232,9 @@ namespace UI {
         return zoomWnd;
     }
 
+    // Deliberately has no caller. The zoom panel opens on '0', a digit the panel's
+    // own input box consumes, so a toggle can never see the second press. Kept for
+    // symmetry with the Jump-to / Find pair; see Command::ZoomTo for the full why.
     void UIManager::ToggleZoomWindow() {
         Toggle(getZoomWindow());
     }
@@ -561,13 +564,41 @@ applyIfVisible(exifWnd);
             InvalidateRect(h, nullptr, FALSE);
         };
 
-        applyAndRepaint(helpWnd);
-        applyAndRepaint(historyListWnd);
-applyAndRepaint(exifWnd);
-        applyAndRepaint(jumpToWnd);
-        applyAndRepaint(zoomWnd);
-        applyAndRepaint(findWnd);
-        applyAndRepaint(statsWnd);
+        // Iterate the arrays rather than naming panels one by one. The old
+        // hand-written list held seven of them and had fallen eight behind:
+        // the thumbnail strips, the Dedicated panel and all six Rem_TCP_IP
+        // windows kept a stale caption colour after a theme change, because
+        // adding a panel never meant remembering to add it here too.
+        for (IPanelWindow *panel : m_fixedPanels)
+            if (panel) applyAndRepaint(*panel);
+
+        for (SpawnedDirWnd *panel : m_spawnedPool)
+            if (panel) applyAndRepaint(*panel);
+    }
+
+    // -------------------------------------------------------------------------
+    // NotifyCornerChanged
+    // Called when app.cornerPreference changes at runtime (Ctrl+Shift+Numpad*).
+    // The DWM corner attribute is per-window, so toggling it on the main window
+    // alone left every open panel with the corners it was created with.
+    // -------------------------------------------------------------------------
+    void UIManager::NotifyCornerChanged() {
+        const DWORD corner = app.cornerPreference;
+
+        auto applyCorner = [&](IPanelWindow &panel) {
+            HWND h = panel.GetHwnd();
+            if (!h) return;
+            DwmSetWindowAttribute(h, Constants::DWMWA_WINDOW_CORNER_PREFERENCES,
+                                  &corner, sizeof(corner));
+            SetWindowPos(h, nullptr, 0, 0, 0, 0,
+                         SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | SWP_FRAMECHANGED | SWP_NOACTIVATE);
+        };
+
+        for (IPanelWindow *panel : m_fixedPanels)
+            if (panel) applyCorner(*panel);
+
+        for (SpawnedDirWnd *panel : m_spawnedPool)
+            if (panel) applyCorner(*panel);
     }
 
     void UIManager::RepaintAllPanels() {

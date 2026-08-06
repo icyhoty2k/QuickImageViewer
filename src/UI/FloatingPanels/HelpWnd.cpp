@@ -443,6 +443,12 @@ namespace UI {
         Add(Ctrl(SC::SC_PANEL_HISTORY_TOGGLE),
             L"Toggle the full (uncapped) history view and refresh the folder snapshot used "
             L"by horizontal-wheel navigation.", sHist);
+        Add(L"Type anything",
+            L"Filters the list as you type — fuzzy by default, wildcard when the query "
+            L"contains * or ?, the same matcher Find and this Help panel use. Matched "
+            L"characters are highlighted inside each row. Escape clears the filter; when "
+            L"it is already empty, Escape closes the panel. Space toggles a favorite while "
+            L"the filter is empty and types a space once it is not.", sHist);
         Add(K(SC::HISTORY_OPEN_IN_DIR_WND),
             L"Open the hovered folder in the main viewer.", sHist);
         Add(Shift(SC::HISTORY_OPEN_IN_DIR_WND),
@@ -976,6 +982,15 @@ namespace UI {
             L"the list is capped at the History Max Dirs value.", sTray);
         Add(L"Settings › Info Overlays",
             L"Show / hide all nine overlay text slots at once.", sTray);
+        Add(L"Overlays › Font / Font Size / Font Color…",
+            L"Typeface, point size and colour for every overlay slot. Font Color opens "
+            L"the standard colour picker; the size is shown in its own label. All three "
+            L"are persisted, so a wall of screens can be made readable from across a "
+            L"room once and left alone.", sTray);
+        Add(L"Overlays › Layout / Message Duration",
+            L"Layout picks Grid, Stacked or Summary — the same three O cycles through. "
+            L"Message Duration is how long a centre-screen message stays up, in "
+            L"milliseconds.", sTray);
         Add(L"Settings › Open Thumbnail Strip on Start",
             L"Automatically open the directory thumbnail strip on every launch.", sTray);
         Add(L"Settings › Overlay Background",
@@ -1035,6 +1050,22 @@ namespace UI {
         Add(L"Backup › Restore History && Favorites",
             L"Restore from a previously created ZIP backup after a confirmation dialog. "
             L"Overwrites current history and favorites in memory and on disk.", sTray);
+        Add(L"Logging › General Log",
+            L"Record what qIV itself did — started, closed, and whether the previous run "
+            L"ended abnormally, naming the crash dump when there is one. Off by default "
+            L"and remembered across restarts, because the screen that misbehaves at four "
+            L"in the morning is the one nobody was watching.", sTray);
+        Add(L"Logging › TCP/IP Log",
+            L"Write every line exchanged with a remote client to disk — the same traffic "
+            L"the Server Log panel shows (Ctrl+F12). Independent of that panel's Recording "
+            L"button: this captures whether or not the panel is recording.", sTray);
+        Add(L"Logging › Open Log Folder",
+            L"Open logs\\ in Explorer. Files land in logs\\general\\ and logs\\network\\ "
+            L"beside the EXE, rotate every 5000 lines, and use the standard "
+            L"time [thread] LEVEL message layout that LogViewPlus and lnav read without "
+            L"configuration. A rotated TCP/IP file reopens in the Server Log panel with "
+            L"Ctrl+O. Writing runs on its own thread, so a slow disk never stalls the "
+            L"viewer.", sTray);
 
         // ---------------------------------------------------------------
         const int sDed = Sec(Constants::ThemeIcons::ICON_SECTION_DESKTOP, L"DEDICATED SCREENS",

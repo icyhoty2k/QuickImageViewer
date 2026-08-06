@@ -41,6 +41,13 @@ namespace Constants {
     // Never default this ON — a locked viewport on a fresh install looks like the
     // app failed to fit the image.
     constexpr bool IS_LOCK_VIEWPORT = false;
+
+    // Reopen the main window where it was at the last exit, at the size it was.
+    // OFF by default on purpose: the standard launch centres a correctly sized
+    // window on the current monitor, which is right for someone who has never
+    // heard of the setting. A remembered rect can also name a monitor that is no
+    // longer attached, so the restore is validated before it is used.
+    constexpr bool IS_REMEMBER_WINDOW_POSITION = false;
     // Prefix applied to every registry value name and every data file name
     // when the app is running in dedicated (-dedicated) mode.
     // Guarantees that a dedicated instance and a normal instance never share
@@ -118,6 +125,22 @@ namespace Constants {
 
     constexpr int IS_BASE_WIDTH  = 1200;
     constexpr int IS_BASE_HEIGHT = 800;
+
+    // The window sizes the app is willing to accept, from any source — the
+    // Window Width / Height prompts and the remembered placement both use these
+    // rather than repeating the numbers.
+    constexpr int WINDOW_SIZE_MIN = 240;
+    constexpr int WINDOW_SIZE_MAX = 16000;
+
+    // How much of a restored window has to land inside a monitor's WORK area
+    // before it is considered reachable.
+    //
+    // "Touches a monitor" is not enough: a window one pixel on screen satisfies
+    // that and cannot be grabbed, moved or closed with the mouse. This is about
+    // the size of a title bar and a couple of buttons, which is the smallest
+    // patch a user can actually take hold of to fix the rest.
+    constexpr int WINDOW_MIN_VISIBLE_W = 160;
+    constexpr int WINDOW_MIN_VISIBLE_H = 48;
 
     constexpr bool IS_SWAP_MOUSE_BUTTONS = true;
     constexpr bool IS_CONTEXT_MENU_ENABLED = true; // main-window right-click context menu on/off
@@ -1282,8 +1305,31 @@ namespace Constants {
 
         // Base path for application-specific user preferences (HKEY_CURRENT_USER)
         constexpr const wchar_t *ROOT_KEY = L"Software\\QuickImageViewer";
-        // Path string to the last directory accessed by the user
-        constexpr const wchar_t *LAST_FOLDER = L"LastFolder";
+
+        // Every persisted VALUE NAME below begins with this.
+        //
+        // It is what keeps qIV's values identifiable — in HKCU\Software\
+        // QuickImageViewer, and in the [Settings] section of a portable copy's
+        // .ini, where they sit beside keys the user may have added themselves.
+        // An unprefixed value is invisible to any sweep that goes looking for
+        // ours: "LastFolder" shipped without it, outlived the code that wrote
+        // it, and was later read back in an exported .reg and taken for live
+        // state.
+        //
+        // The names below still spell the prefix out IN FULL rather than
+        // concatenating this constant. Composing them would mean that searching
+        // the source for "qivLockViewport" — the string you actually see in
+        // regedit — finds nothing, which costs more than the duplication saves.
+        // The rule is enforced instead: qivTests checks every declared value
+        // name against this constant, so the two cannot drift.
+        constexpr const wchar_t *VALUE_PREFIX = L"qiv";
+        // (LAST_FOLDER lived here. It held the folder the open-file dialog
+        //  should start in, written ONLY when a file was picked through that
+        //  dialog — so any other way of reaching a folder left it stale. It
+        //  answered the same question as Session::KEY_LAST_FOLDER and answered
+        //  it worse, so the dialog now uses the folder on screen, falling back
+        //  to the session's. The old value is deleted at startup; see
+        //  Session::REG_OBSOLETE_LAST_FOLDER.)
 
         // --- Settings (Stored under ROOT_KEY) ---
         // --- System Integration (Open With & Startup) ---
@@ -1330,6 +1376,7 @@ namespace Constants {
         constexpr const wchar_t *OVERLAY_FONT_FAMILY   = L"qivOverlayFontFamily"; // index into OVERLAY_FONT_FAMILIES
         constexpr const wchar_t *OPEN_DIRWND_ON_START = L"qivOpenDirWndOnStart";
         constexpr const wchar_t *LOCK_VIEWPORT = L"qivLockViewport";
+        constexpr const wchar_t *REMEMBER_WINDOW_POS = L"qivRememberWindowPos";
         constexpr const wchar_t *SWAP_MOUSE_BUTTONS = L"qivSwapMouseButtons";
         constexpr const wchar_t *WHEEL_INVERT   = L"qivWheelInvert";
         constexpr const wchar_t *WHEEL_INVERT_H = L"qivWheelInvertH";
@@ -1389,12 +1436,69 @@ namespace Constants {
     namespace Session {
         constexpr const wchar_t *FILE_NAME = L"qivSession.ini";
         constexpr const wchar_t *FILE_HEADER =
-            L"Session state (last image viewed). Safe to delete.";
+            L"Session state (last image and folder viewed). Safe to delete.";
         constexpr const wchar_t *SECTION    = L"Session";
 
         // Full path of the image on screen at the last exit, reopened on the
         // next launch so the app resumes where it was left instead of prompting.
-        constexpr const wchar_t *KEY_LAST_IMAGE = L"LastImage";
+        constexpr const wchar_t *KEY_LAST_IMAGE = L"LastImagePath";
+
+        // The folder that was open at the last exit. Not redundant with
+        // KEY_LAST_IMAGE: the image key is only written when an image is
+        // actually loaded, so an empty folder, or one whose images all failed
+        // to decode, records nothing at all. It is also the fallback when the
+        // remembered image has since been deleted or renamed while its folder
+        // is still there — the folder history normally covers that, but a user
+        // who has turned history off has nothing else to resume from.
+        constexpr const wchar_t *KEY_LAST_FOLDER = L"LastFolderPath";
+
+        // Main window placement at the last exit, as "x,y,width,height".
+        // Written and honoured only while Constants::Registry::REMEMBER_WINDOW_POS
+        // is on, so the default launch keeps its centred-on-monitor behaviour.
+        constexpr const wchar_t *KEY_WINDOW_RECT = L"WindowRect";
+
+        // The display device the window was on, e.g. "\\.\DISPLAY2".
+        //
+        // The rect above already names a monitor IMPLICITLY, because its
+        // coordinates are virtual-desktop coordinates: restoring x=2560 lands on
+        // whatever screen occupies that column. That is right until the screens
+        // are REARRANGED — the same monitor moved to the other side of the
+        // primary leaves the old coordinates pointing at a different display, or
+        // at nothing. Recording which device it actually was lets the restore
+        // put the window back on that screen instead of that spot.
+        constexpr const wchar_t *KEY_WINDOW_MONITOR = L"WindowMonitor";
+
+        // -------------------------------------------------------------------
+        // The same values as REGISTRY value names.
+        //
+        // Session state follows the settings store: a copy configured through a
+        // settings .ini keeps its session in qivSession.ini, a copy configured
+        // through the registry keeps it in the registry. Spelled out in full
+        // rather than composed at runtime — RecordCrashDump runs inside the
+        // unhandled-exception filter, where building a string is a gamble.
+        // -------------------------------------------------------------------
+        constexpr const wchar_t *REG_LAST_IMAGE  = L"qivSessionLastImagePath";
+        constexpr const wchar_t *REG_LAST_FOLDER = L"qivSessionLastFolderPath";
+        constexpr const wchar_t *REG_RUNNING     = L"qivSessionRunning";
+        constexpr const wchar_t *REG_CRASH_DUMP  = L"qivSessionCrashDump";
+        constexpr const wchar_t *REG_WINDOW_RECT    = L"qivSessionWindowRect";
+        constexpr const wchar_t *REG_WINDOW_MONITOR = L"qivSessionWindowMonitor";
+
+        // --- Obsolete, removed at startup ---------------------------------
+        //
+        // qivLastImage is where the resume position lived BEFORE it moved into
+        // the session store. Nothing has written or read it since, so every
+        // registry that has one is carrying a stale path from an old build —
+        // often pointing at a drive the user has not looked at in months.
+        //
+        // Left alone it is harmless but misleading: it looks like live state
+        // when read in an export, which is exactly how it was mistaken for one.
+        constexpr const wchar_t *REG_OBSOLETE_LAST_IMAGE = L"qivLastImage";
+
+        // LastFolder held the open-file dialog's starting folder. The dialog now
+        // uses the folder on screen and falls back to KEY_LAST_FOLDER, so this
+        // is dead too. Unprefixed, because it predates the qiv convention.
+        constexpr const wchar_t *REG_OBSOLETE_LAST_FOLDER = L"LastFolder";
 
         // "1" from the moment a launch is under way until a clean exit clears
         // it. Finding it still set at startup means the PREVIOUS run never

@@ -381,15 +381,14 @@ void SaveRemotes(const std::vector<RemoteEntry> &entries) {
     const std::wstring &path = RemotesFilePath();
     if (path.empty()) return;
 
-    if (!RemotesFileExists()) {
-        // UTF-16LE + BOM, written by hand. WritePrivateProfileStringW only
-        // stores Unicode into a file that is ALREADY Unicode — create it as
-        // ANSI and every non-ASCII character in a path or a name is silently
-        // mangled from the first write onwards.
-        HANDLE h = CreateFileW(path.c_str(), GENERIC_WRITE, 0, nullptr,
-                               CREATE_NEW, FILE_ATTRIBUTE_NORMAL, nullptr);
-        if (h != INVALID_HANDLE_VALUE) {
-            const std::wstring header = std::wstring(1, static_cast<wchar_t>(0xFEFF)) +
+    {
+        // Text only. Ini::CreateWithTextIfMissing owns the BOM and the
+        // create-only-if-absent — one implementation for every .ini here, so a
+        // file cannot end up ANSI (which would mangle every non-ASCII path and
+        // name from the first write onwards) because one call site forgot.
+        // No RemotesFileExists() test either: that primitive already declines
+        // when the file is there, and testing first reopens the race it closes.
+            const std::wstring header =
                 L"; QuickImageViewer - the instances THIS copy drives (F10).\r\n"
                 L"; The opposite direction from qivLocalServer.ini, which is what\r\n"
                 L"; others connect to.\r\n"
@@ -409,14 +408,8 @@ void SaveRemotes(const std::vector<RemoteEntry> &entries) {
                 L"; PASSWORDS ARE STORED AS TYPED - keep this file as secret as the\r\n"
                 L"; machines it opens.\r\n"
                 L";\r\n";
-            const std::wstring full =
-                header + Persistence::Ini::GeneratedStampLines() + L"[Remotes]\r\n";
-            DWORD written = 0;
-            WriteFile(h, full.data(),
-                      static_cast<DWORD>(full.size() * sizeof(wchar_t)),
-                      &written, nullptr);
-            CloseHandle(h);
-        }
+            Persistence::Ini::CreateWithTextIfMissing(
+                path, header + Persistence::Ini::GeneratedStampLines() + L"[Remotes]\r\n");
     }
 
     // Drop the whole section first, then write the rows back numbered from 1.

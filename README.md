@@ -64,9 +64,10 @@ once as you have devices lying around.
 
 </div>
 
-One executable. Unblock it if SmartScreen asks, put it anywhere, run it — settings live
+One executable, and **no Visual C++ Redistributable to install** — the C runtime is
+linked in. Unblock it if SmartScreen asks, put it anywhere, run it — settings live
 in the registry (or an `.ini` beside the EXE with `-config`), and nothing else is
-written to your machine. To remove qIV, delete the file.
+written to your machine unless you switch logging on. To remove qIV, delete the file.
 
 ---
 
@@ -335,6 +336,21 @@ through the setup.
 | `F2` | Open-file dialog |
 | Drag & Drop | Drop a file or folder onto the window |
 
+### Zoom, Pan & View Modes
+
+| Shortcut | Action |
+|:---|:---|
+| `↑` / `↓` | Zoom in / out, ×1.1 per step |
+| Numpad `+` / `-` | Zoom in / out — same steps as `↑` / `↓` |
+| Numpad `*` | Reset zoom and pan to the active view mode's default fit |
+| `0` | Open the Zoom panel and type an exact percentage |
+| `W` / `A` / `S` / `D` | Pan the viewport when the image is larger than the window — 30 px per press, DPI-scaled |
+| `1` – `5` | View mode: **1** Fit to view (keeps aspect) · **2** Fit to width · **3** Fit to height · **4** Fill window · **5** Original size, 1:1 pixels |
+| `Y` | **Lock Viewport** — carry zoom and pan to the next image instead of resetting, so flipping through same-framed shots holds the same detail at the same magnification. Rotation and flips still reset, because each file's EXIF orientation tag owns those |
+
+`W`/`A`/`S`/`D` pan on their own, move the window with `Shift`, and `Ctrl+W` / `Ctrl+S`
+keep their usual meanings (hide the app, save the edited image).
+
 ### Sorting
 
 | Shortcut | Order |
@@ -352,7 +368,7 @@ through the setup.
 | Help | `F1` | Full shortcut & CLI reference — 2-column, double-buffered, DPI-aware. `Ctrl+E` exports to Desktop as UTF-8 text. |
 | EXIF / Info | `M` | Full metadata: camera, exposure, GPS with offline geocoding, embedded preview thumbnail |
 | Statistics | `K` | Decode time, codec, file details and cache info for the current image |
-| Directory | `F6` / `F`  *(or Right Shift)* | All images in current folder; syncs selection with viewer / moves panel to next screen edge |
+| Directory | `F6` *(or Right Shift)* / `F7` | All images in current folder; syncs selection with viewer / moves panel to next screen edge |
 | Cache | `F3` / `F4` | Live GPU cache occupancy, thumbnails of preloaded images / moves panel |
 | Reload | `F5` | Refresh / reload the current directory from disk |
 | History | `Tab` | Recent folders with favorites — `Shift+Enter` spawns a DirWnd without leaving current folder |
@@ -407,11 +423,13 @@ Directory strips double as a lightweight file manager:
 |:---|:---|
 | `Tab` | Toggle History panel |
 | `Ctrl+Tab` | Toggle full (uncapped) view and refresh the folder snapshot |
+| *type anything* | Filter the list — fuzzy by default, wildcards (`*`, `?`) when the query contains one. Matched characters are highlighted in the row |
+| `Esc` / `✕` | Clear the filter (`Esc` closes the panel when the filter is already empty) |
 | `Enter` | Open hovered folder in main viewer |
 | `Shift+Enter` | Spawn / hide a floating DirWnd for the hovered folder (toggle) |
 | `MMB click` on a row | Spawn / hide a floating DirWnd for the hovered folder (panel stays open) |
-| `Space` | Toggle favorite on hovered entry |
-| `Delete` | Delete hovered entry (`Ctrl+Z` restores last deleted) |
+| `Space` | Toggle favorite on hovered entry (types a space once the filter has text) |
+| `Ctrl+Delete` | Delete hovered entry (`Ctrl+Z` restores last deleted) |
 | `Ctrl+Shift+Delete` | Clear all history, keep favorites |
 | `Ctrl+Alt+Shift+Delete` | Clear all favorites, keep history |
 
@@ -455,13 +473,46 @@ All effects are non-destructive and GPU-accelerated via the Direct2D effect grap
 [Ctrl+7] Bot Left    [Ctrl+8] Bot Center    [Ctrl+9] Bot Right
 ```
 
+What each slot carries: **1** index + filename · **3** zoom % · **5** centre message
+area · **7** active effects + folder name · **9** dimensions + file size. Slots **2**,
+**4**, **6** and **8** show the thumbnail-strip selection count for the panel on that
+edge.
+
 | Shortcut | Action |
 |:---|:---|
 | `N` / `I` / `Ctrl+0` | Master toggle — show / hide all slots |
-| `Ctrl+1` – `Ctrl+9` | Toggle individual slots |
-| `Ctrl+Shift+1` – `Ctrl+Shift+9` | Toggle compact mode per slot (1 line instead of 2) |
+| `Ctrl+1` – `Ctrl+9` | Walk one slot through **Compact → Full → Off** — compact is one line instead of two. `Ctrl+5` (centre messages) has no compact form, so it cycles On → Off |
 | `O` | Cycle overlay layout: Grid → Stacked → Summary |
 | `P` | Toggle semi-transparent background behind overlay text |
+
+Appearance is set from the tray menu's **Overlays** submenu rather than by shortcut:
+
+| Item | Effect |
+|:---|:---|
+| Layout | Grid / Stacked / Summary — the same three `O` cycles through |
+| Font | Typeface used by every overlay slot |
+| Font Size | Point size, shown in the label |
+| Font Color… | Colour picker for overlay text |
+| Message Duration | How long a centre-screen message stays up, in milliseconds |
+
+The nine slots are listed there too, each named for what it carries — Top Left
+(Index / File), Top Right (Zoom), Mid Center (Messages), Bot Left (Effects), Bot Right
+(Dimensions), and the four Panel Selection slots. Each opens a **three-state radio
+group — Compact / Full / Off**, the same cycle its `Ctrl+N` key walks. Mid Center is
+always single-line, so it offers only On / Off. **Bot Left** carries two extra toggles
+above its radio group, because they decide whether there is anything to format:
+**Effects** (the active colour-effect list) and **Folder Name** (the containing folder
+beside the file name).
+
+### Application Lifecycle
+
+| Shortcut | Action |
+|:---|:---|
+| `Esc` / `Ctrl+W` | Hide to the system tray — the process stays resident so the next open is instant. Extra running instances are closed |
+| `Ctrl+Q` | **Hard quit** — fully removes the process from memory |
+| `Ctrl+N` | Open a new independent qIV window |
+| `Shift+Delete` | Reset everything — window layout and all effects return to defaults (same as `Alt+X`) |
+| `Ctrl+C` | Copy the current image to the clipboard |
 
 ### Window & Chrome
 
@@ -579,6 +630,32 @@ Choose sort order: **Name** / **Date Modified** / **Size** / **Type** / **Disk O
 |:---|:---|
 | Backup History & Favorites | Export history and favorites to a `.zip` archive (file-save dialog) |
 | Restore History & Favorites | Restore from a previously created backup — confirmation required |
+
+### Logging submenu
+
+Both logs are **off by default** and survive a restart once switched on — which is the
+point of them. A screen that misbehaves at four in the morning is exactly the one nobody
+was watching, so the setting is persisted rather than something you must remember to
+enable first.
+
+| Item | Effect |
+|:---|:---|
+| General Log | What qIV itself did — started, closed, and whether the previous run ended abnormally (with the crash dump's filename when there is one) |
+| TCP/IP Log | Every line exchanged with a remote client — the same traffic the Server Log panel shows (`Ctrl+F12`), written to disk as well |
+| Open Log Folder | Opens `logs\` in Explorer |
+
+Files land in `logs\general\` and `logs\network\` beside the EXE, named
+`QuickImageViewer_General_<timestamp>.log` and `QuickImageViewer_Tcp_IP_<timestamp>.log`,
+rotating every 5000 lines. Switching a log off and on again continues the newest file
+rather than starting a fresh one.
+
+The format is the standard `time [thread] LEVEL message` layout, so
+[LogViewPlus](https://www.logviewplus.com/), lnav and similar tools parse it with no
+configuration — and a rotated TCP/IP file opens straight back in the Server Log panel
+with `Ctrl+O`.
+
+Writing happens on a thread of its own. A slow disk cannot stall the viewer, and with a
+log switched off the cost at each record point is a single atomic read.
 
 ### Dedicated Screens
 
@@ -873,7 +950,7 @@ qIV_dedicated_Lobby.exe -dedicated -config "D:\Screens\qIV_dedicated_Lobby.ini"
 | [resvg](https://github.com/RazrFalcon/resvg) | SVG rasterizer (Rust static lib) |
 | [OpenJPEG](https://github.com/uclouvain/openjpeg) | JPEG 2000 decoder |
 | [tinyexr](https://github.com/syoyo/tinyexr) | OpenEXR decoder |
-| [miniz](https://github.com/richgel999/miniz) | zlib compression for embedded GeoNames data |
+| [miniz](https://github.com/richgel999/miniz) | zlib — embedded GeoNames data, EXR scanlines, and the Backup archive |
 
 ---
 

@@ -22,7 +22,6 @@
 #include "FloatingPanels/ZoomWnd.h"
 #include "FloatingPanels/FindWnd.h"
 #include "FloatingPanels/StatsWnd.h"
-#include "FloatingPanels/ZoomWnd.h"
 #include "Dedicated/DedicatedWnd.h"
 #include "Rem_TCP_IP/RemoteWnd.h"
 #include "Rem_TCP_IP/RemoteClientsWnd.h"
@@ -196,7 +195,7 @@ ThumbnailPanelWnd &getActiveDirWnd();
             FindWnd         &getFindWindow();
             void             ToggleJumpToWindow();   // hides FindWnd if visible, then toggles JumpToWnd
             void             ToggleFindWindow();     // hides JumpToWnd if visible, then toggles FindWnd
-            void             ToggleZoomWindow();     // toggles ZoomWnd
+            void             ToggleZoomWindow();     // NOT wired to a key — see ZoomTo in CommandExecuter.cpp
             StatsWnd        &getStatsWindow();
             DedicatedWnd    &getDedicatedWindow();
             RemoteWnd       &getRemoteWindow();
@@ -261,6 +260,7 @@ ThumbnailPanelWnd &getActiveDirWnd();
             // Update DWM title-bar theme and repaint all floating panel windows.
             // Call whenever app.isDarkThemed or app.themeFactor changes.
             void NotifyThemeChanged();
+            void NotifyCornerChanged();
 
         private:
             HelpWnd        helpWnd;

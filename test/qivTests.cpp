@@ -65,10 +65,13 @@
 #include "Rem_TCP_IP/RemoteSettings.h"   // AddressMatches / InList — the accept gate
 #include "Rem_TCP_IP/RemoteCrypto.h"     // the password hash and handshake secret
 #include "Platform/Constants.h"          // APP_NAME, for the banner
+#include "UI/AppMenu/AppMenuIds.h"       // the id space the menu tests check
 
 #include <chrono>
 #include <cmath>
 #include <cstdio>
+#include <cctype>    // isdigit / isalnum — parsing AppMenuIds.h
+#include <cstdlib>   // atoi — the same
 #include <cstring>   // strlen — the HMAC test vector's message length
 #include <string>
 #include <vector>
@@ -1147,6 +1150,552 @@ namespace {
         }
     }
 
+    // =========================================================================
+    // Persisted setting names
+    //
+    // Every value qIV stores must be spelled "qiv...". The prefix is what keeps
+    // its values identifiable inside HKCU\Software\QuickImageViewer and inside
+    // the [Settings] section of a portable copy's .ini — an unprefixed one is
+    // invisible to any sweep that goes looking for them.
+    //
+    // This is not hypothetical tidiness. "LastFolder" shipped without the
+    // prefix, outlived the code that wrote it, and was then read back in an
+    // exported .reg and taken for live state. One missing prefix cost a real
+    // misdiagnosis.
+    //
+    // Checked against the DECLARED STRING, not the C++ identifier: the
+    // identifier is always upper-case, and it is the string that reaches the
+    // registry.
+    // =========================================================================
+    void TestSettingNamesArePrefixed() {
+        const std::string constants = ReadSourceFile("src/Platform/Constants.h");
+        CHECK(!constants.empty());
+        if (constants.empty()) return;
+
+        // Only the Registry namespace. The rest of Constants.h is full of
+        // strings that are not value names at all.
+        const size_t nsStart = constants.find("namespace Registry {");
+        NOTE("the Registry namespace is where value names are declared");
+        CHECK(nsStart != std::string::npos);
+        if (nsStart == std::string::npos) return;
+
+        // Registry KEY PATHS and the Run entry live here too and are exempt:
+        // they name locations Windows defines, or — for the startup entry — the
+        // text the user sees in Task Manager, which must read "QuickImageViewer"
+        // rather than an internal prefix.
+        const char *exempt[] = {
+            "ROOT_KEY", "OPEN_WITH_COMMAND", "OPEN_WITH_ROOT", "OPEN_WITH_TYPES",
+            "RUN_KEY", "RUN_VALUE_NAME"
+        };
+
+        // The prefix comes from the CONSTANT, not from a literal repeated here.
+        // If it ever changes, this test follows it instead of failing the whole
+        // codebase for disagreeing with a hard-coded "qiv".
+        std::string prefix;
+        for (const wchar_t *p = Constants::Registry::VALUE_PREFIX; *p; ++p)
+            prefix.push_back(static_cast<char>(*p)); // ASCII by construction
+
+        NOTE("the prefix constant is a non-empty ASCII string");
+        CHECK(!prefix.empty());
+
+        int checked = 0;
+        int unprefixed = 0;
+
+        size_t pos = nsStart;
+        const std::string marker = "constexpr const wchar_t *";
+        while ((pos = constants.find(marker, pos)) != std::string::npos) {
+            size_t p = pos + marker.size();
+            while (p < constants.size() && std::isspace(static_cast<unsigned char>(constants[p]))) ++p;
+
+            size_t nameStart = p;
+            while (p < constants.size() &&
+                   (std::isalnum(static_cast<unsigned char>(constants[p])) || constants[p] == '_'))
+                ++p;
+            const std::string name = constants.substr(nameStart, p - nameStart);
+
+            // Value must be a plain L"..." on the same declaration.
+            const size_t quote = constants.find(L'"', p);
+            const size_t lineEnd = constants.find('\n', p);
+            if (quote == std::string::npos || (lineEnd != std::string::npos && quote > lineEnd)) {
+                pos = p;
+                continue;
+            }
+            const size_t close = constants.find('"', quote + 1);
+            if (close == std::string::npos) break;
+            const std::string value = constants.substr(quote + 1, close - quote - 1);
+            pos = close + 1;
+
+            // Arrays of extensions and similar are not single value names.
+            if (name.empty() || value.empty()) continue;
+
+            bool isExempt = false;
+            for (const char *e : exempt)
+                if (name == e) { isExempt = true; break; }
+            if (isExempt) continue;
+
+            // A path, not a value name.
+            if (value.find('\\') != std::string::npos) continue;
+
+            // VALUE_PREFIX itself is the rule, not an instance of it.
+            if (name == "VALUE_PREFIX") continue;
+
+            ++checked;
+            if (value.rfind(prefix, 0) != 0) {
+                ++unprefixed;
+                std::printf("      not prefixed: %s = \"%s\"\n", name.c_str(), value.c_str());
+            }
+        }
+
+        NOTE("the Registry namespace parsed and yielded value names");
+        CHECK(checked > 40);
+
+        NOTE("every persisted value name starts with the prefix constant");
+        CHECK(unprefixed == 0);
+    }
+
+    // -------------------------------------------------------------------------
+    // A setting is stored under the SAME name whichever store it lands in.
+    //
+    // RegistryManager's four accessors each branch on Dedicated::SettingsUseFile
+    // and then have to name the value. If one branch ever names it differently,
+    // nothing breaks loudly: the app writes to one name and reads the other, and
+    // the setting simply stops surviving a restart for half the users — the half
+    // running whichever mode nobody tested.
+    //
+    // Both branches must therefore derive the name from the SAME `valueName`
+    // parameter. The registry branch wraps it in PrefixedName(), which adds the
+    // dedicated-mode prefix so a dedicated copy and a normal one can share one
+    // hive without colliding. The FILE branch deliberately does not: each copy
+    // already has its own .ini, so there is nothing to isolate it from.
+    // -------------------------------------------------------------------------
+    void TestSettingNamesMatchAcrossStores() {
+        const std::string src = ReadSourceFile("src/Persistence/RegistryManager.cpp");
+        CHECK(!src.empty());
+        if (src.empty()) return;
+
+        struct Accessor {
+            const char *signature;   // where the function starts
+            const char *fileCall;    // what the file branch must call it with
+            const char *registryCall;// what the registry branch must call it with
+        };
+        const Accessor accessors[] = {
+            {"void SaveSetting(",          "Dedicated::WriteDword(valueName",  "PrefixedName(valueName)"},
+            {"DWORD LoadSetting(",         "Dedicated::ReadDword(valueName",   "PrefixedName(valueName)"},
+            {"void SaveStringSetting(",    "Dedicated::WriteString(valueName", "PrefixedName(valueName)"},
+            {"std::wstring LoadStringSetting(", "Dedicated::ReadString(valueName", "PrefixedName(valueName)"},
+        };
+
+        for (const Accessor &a : accessors) {
+            const size_t start = src.find(a.signature);
+
+            NOTE("the accessor is still where this test expects it");
+            CHECK(start != std::string::npos);
+            if (start == std::string::npos) continue;
+
+            // Bounded to roughly one function so a match cannot be borrowed
+            // from the next accessor down.
+            const std::string body = src.substr(start, 1200);
+
+            NOTE("the file branch names the value with the caller's valueName");
+            const bool fileOk = body.find(a.fileCall) != std::string::npos;
+            if (!fileOk) std::printf("      missing in %s: %s\n", a.signature, a.fileCall);
+            CHECK(fileOk);
+
+            NOTE("the registry branch names it with PrefixedName(valueName)");
+            const bool regOk = body.find(a.registryCall) != std::string::npos;
+            if (!regOk) std::printf("      missing in %s: %s\n", a.signature, a.registryCall);
+            CHECK(regOk);
+        }
+
+        NOTE("PrefixedName adds only the dedicated prefix, nothing else");
+        // If this grew a second transformation the two stores would diverge
+        // again, which is precisely what the checks above are guarding.
+        const size_t pn = src.find("PrefixedName(const wchar_t *valueName)");
+        CHECK(pn != std::string::npos);
+        if (pn != std::string::npos) {
+            const std::string body = src.substr(pn, 400);
+            CHECK(body.find("DEDICATED_MODE_GLOBAL_PREFIX") != std::string::npos);
+            CHECK(body.find("return valueName;") != std::string::npos);
+        }
+    }
+
+    // =========================================================================
+    // Context menu ids
+    //
+    // WHY THIS EXISTS. Menu command ids are hand-assigned integers in
+    // AppMenuIds.h, and a duplicate is silent: both items build, both appear,
+    // and clicking one runs the other's code. It has already happened once —
+    // the header still carries the comment "Moved off 67, which the overlay
+    // 'Off' band also claimed".
+    //
+    // The trap is that the id space is not a flat list of scalars. Three of its
+    // regions are RANGES that occupy ids no line in the file ever spells out:
+    //
+    //   * SET_SORT_FIRST(43) .. SET_SORT_LAST(47)   — 44, 45, 46 are taken
+    //   * the overlay band, three runs of nine plus three layout modes
+    //   * the font-family band, one id per entry in OVERLAY_FONT_FAMILIES
+    //
+    // So "grep for the number" is not a check. Reading the file and picking an
+    // unused-LOOKING value is how 44 or 45 gets chosen and sorting quietly
+    // breaks.
+    //
+    // The header is PARSED rather than mirrored here. A copied list would agree
+    // with itself forever while the header drifted, which is the failure this
+    // is meant to catch.
+    // =========================================================================
+
+    std::string ReadSourceFile(const char *relativePath) {
+        std::string full = QIV_SOURCE_ROOT;
+        full += "/";
+        full += relativePath;
+
+        std::FILE *f = std::fopen(full.c_str(), "rb");
+        if (!f) return std::string();
+
+        std::string out;
+        char buf[4096];
+        size_t n = 0;
+        while ((n = std::fread(buf, 1, sizeof(buf), f)) > 0)
+            out.append(buf, n);
+        std::fclose(f);
+        return out;
+    }
+
+    // One id, and where it came from — the name is what a failure has to print,
+    // because "200 is used twice" is useless without both culprits.
+    struct MenuId {
+        std::string name;
+        int         value = 0;
+    };
+
+    // Values are written as a literal, or as NAME + literal. Resolved in
+    // repeated passes so a definition may refer to one that appears later; a
+    // pass that resolves nothing means whatever is left is a form this parser
+    // does not understand, which is reported rather than skipped.
+    bool ParseMenuIds(const std::string &src, std::vector<MenuId> &out,
+                      std::vector<std::string> &unresolved) {
+        struct Pending { std::string name, expr; };
+        std::vector<Pending> pending;
+
+        size_t pos = 0;
+        while (true) {
+            const size_t eq = src.find('=', pos);
+            if (eq == std::string::npos) break;
+
+            // Not an assignment: ==, !=, <=, >=. The header is full of
+            // static_assert(A == B), and reading those as definitions is how a
+            // parser invents unresolvable names and fails on a healthy file.
+            if (eq + 1 < src.size() && src[eq + 1] == '=') { pos = eq + 2; continue; }
+            if (eq > 0 && (src[eq - 1] == '=' || src[eq - 1] == '!' ||
+                           src[eq - 1] == '<' || src[eq - 1] == '>')) {
+                pos = eq + 1;
+                continue;
+            }
+
+            // Anything on a static_assert line is a claim ABOUT ids, not a
+            // definition of one. The == guard above already catches most of
+            // them; this catches the rest without depending on their spelling.
+            {
+                const size_t lineStart = src.rfind('\n', eq);
+                const size_t from = (lineStart == std::string::npos) ? 0 : lineStart + 1;
+                const std::string line = src.substr(from, eq - from);
+                if (line.find("static_assert") != std::string::npos) {
+                    pos = eq + 1;
+                    continue;
+                }
+            }
+
+            // Walk back over the name.
+            size_t nameEnd = eq;
+            while (nameEnd > 0 && std::isspace(static_cast<unsigned char>(src[nameEnd - 1]))) --nameEnd;
+            size_t nameStart = nameEnd;
+            while (nameStart > 0 &&
+                   (std::isalnum(static_cast<unsigned char>(src[nameStart - 1])) || src[nameStart - 1] == '_'))
+                --nameStart;
+
+            const std::string name = src.substr(nameStart, nameEnd - nameStart);
+
+            // Value runs to the comma, semicolon or closing brace that ends it.
+            size_t valEnd = eq + 1;
+            while (valEnd < src.size() && src[valEnd] != ',' && src[valEnd] != ';' &&
+                   src[valEnd] != '\n' && src[valEnd] != '}')
+                ++valEnd;
+            std::string expr = src.substr(eq + 1, valEnd - (eq + 1));
+
+            // Strip a trailing comment.
+            const size_t slash = expr.find("//");
+            if (slash != std::string::npos) expr = expr.substr(0, slash);
+
+            pos = valEnd + 1;
+
+            if (name.rfind("SET_", 0) != 0 && name != "VIEWER_BASE" &&
+                name != "OVERLAY_SLOT_COUNT" && name != "OVERLAY_BAND_FIRST" &&
+                name != "OVERLAY_BAND_LAST")
+                continue;
+
+            pending.push_back({name, expr});
+        }
+
+        std::vector<MenuId> resolved;
+        bool progress = true;
+        while (progress && !pending.empty()) {
+            progress = false;
+            std::vector<Pending> stillPending;
+
+            for (const Pending &p : pending) {
+                // Trim.
+                size_t a = 0, b = p.expr.size();
+                while (a < b && std::isspace(static_cast<unsigned char>(p.expr[a]))) ++a;
+                while (b > a && std::isspace(static_cast<unsigned char>(p.expr[b - 1]))) --b;
+                const std::string e = p.expr.substr(a, b - a);
+                if (e.empty()) continue;
+
+                // Plain integer?
+                if (std::isdigit(static_cast<unsigned char>(e[0]))) {
+                    resolved.push_back({p.name, std::atoi(e.c_str())});
+                    progress = true;
+                    continue;
+                }
+
+                // NAME, or NAME + literal.
+                size_t plus = e.find('+');
+                std::string base = (plus == std::string::npos) ? e : e.substr(0, plus);
+                int addend = 0;
+                if (plus != std::string::npos) addend = std::atoi(e.c_str() + plus + 1);
+
+                while (!base.empty() && std::isspace(static_cast<unsigned char>(base.back())))
+                    base.pop_back();
+
+                bool found = false;
+                for (const MenuId &r : resolved) {
+                    if (r.name == base) {
+                        resolved.push_back({p.name, r.value + addend});
+                        found = true;
+                        progress = true;
+                        break;
+                    }
+                }
+                if (!found) stillPending.push_back(p);
+            }
+            pending.swap(stillPending);
+        }
+
+        for (const Pending &p : pending) unresolved.push_back(p.name);
+        out.swap(resolved);
+        return unresolved.empty();
+    }
+
+    int ValueOf(const std::vector<MenuId> &ids, const char *name) {
+        for (const MenuId &m : ids)
+            if (m.name == name) return m.value;
+        return -1;
+    }
+
+    void TestMenuIdsUnique() {
+        const std::string src = ReadSourceFile("src/UI/AppMenu/AppMenuIds.h");
+        CHECK(!src.empty());
+        if (src.empty()) return;
+
+        std::vector<MenuId>     ids;
+        std::vector<std::string> unresolved;
+        const bool parsedAll = ParseMenuIds(src, ids, unresolved);
+
+        NOTE("every enumerator in the header parses");
+        // A value this test cannot evaluate is a value it cannot check, so an
+        // unparsed one fails rather than passing quietly.
+        if (!parsedAll) {
+            for (const std::string &n : unresolved)
+                std::printf("      unresolved: %s\n", n.c_str());
+        }
+        CHECK(parsedAll);
+        CHECK(ids.size() > 40);
+
+        // ── Build the occupancy map ─────────────────────────────────────────
+        // Every id claimed by anything, with the name that claimed it. Ranges
+        // are expanded, which is the whole point: the gaps inside them are not
+        // free.
+        struct Claim { int value; std::string owner; };
+        std::vector<Claim> claims;
+
+        const int sortFirst   = ValueOf(ids, "SET_SORT_FIRST");
+        const int sortLast    = ValueOf(ids, "SET_SORT_LAST");
+        const int bandFirst   = ValueOf(ids, "SET_OVERLAY_OFF_BASE");
+        const int layoutFirst = ValueOf(ids, "SET_LAYOUT_GRID");
+        const int fontBase    = ValueOf(ids, "SET_OVERLAY_FONT_FAMILY_BASE");
+
+        NOTE("the header still declares the ranges this test expands");
+        CHECK(sortFirst > 0 && sortLast >= sortFirst);
+        CHECK(bandFirst > 0 && layoutFirst > bandFirst);
+        CHECK(fontBase > 0);
+
+        for (const MenuId &m : ids) {
+            // The range endpoints and the band bases are accounted for by the
+            // expansions below; counting them twice would report a collision
+            // with themselves.
+            if (m.name == "SET_SORT_FIRST" || m.name == "SET_SORT_LAST") continue;
+            // A boundary ALIAS, not an item: SET_SCALAR_LAST is defined as
+            // SET_LOCATION so the band asserts have something to compare
+            // against. Counting it would report the id colliding with itself.
+            if (m.name == "SET_SCALAR_LAST") continue;
+            if (m.name.rfind("SET_OVERLAY_OFF_BASE", 0) == 0) continue;
+            if (m.name.rfind("SET_OVERLAY_FULL_BASE", 0) == 0) continue;
+            if (m.name.rfind("SET_OVERLAY_COMPACT_BASE", 0) == 0) continue;
+            if (m.name.rfind("SET_LAYOUT_", 0) == 0) continue;
+            if (m.name == "SET_OVERLAY_BASE") continue;
+            if (m.name == "SET_OVERLAY_FONT_FAMILY_BASE") continue;
+            if (m.name == "VIEWER_BASE" || m.name == "OVERLAY_SLOT_COUNT" ||
+                m.name == "OVERLAY_BAND_FIRST" || m.name == "OVERLAY_BAND_LAST")
+                continue;
+            claims.push_back({m.value, m.name});
+        }
+
+        for (int v = sortFirst; v <= sortLast; ++v)
+            claims.push_back({v, "sort order run (SET_SORT_FIRST..SET_SORT_LAST)"});
+
+        const int slots = UI::AppMenu::Ids::OVERLAY_SLOT_COUNT;
+        for (int v = bandFirst; v < bandFirst + slots * 3; ++v)
+            claims.push_back({v, "overlay slot band (Off/Full/Compact runs)"});
+        for (int v = layoutFirst; v <= layoutFirst + 2; ++v)
+            claims.push_back({v, "overlay layout modes"});
+        for (int v = fontBase;
+             v < fontBase + static_cast<int>(Constants::Overlay::OVERLAY_FONT_FAMILY_COUNT); ++v)
+            claims.push_back({v, "overlay font-family band"});
+
+        // ── The check ───────────────────────────────────────────────────────
+        NOTE("no menu id is claimed twice");
+        int collisions = 0;
+        for (size_t i = 0; i < claims.size(); ++i) {
+            for (size_t j = i + 1; j < claims.size(); ++j) {
+                if (claims[i].value != claims[j].value) continue;
+                ++collisions;
+                std::printf("      id %d claimed by %s AND %s\n",
+                            claims[i].value, claims[i].owner.c_str(), claims[j].owner.c_str());
+            }
+        }
+        CHECK(collisions == 0);
+
+        NOTE("no settings id reaches into the viewer-command space");
+        // Below VIEWER_BASE everything dispatches as a setting; at or above it,
+        // as a viewer command. An id that crossed would run the wrong handler.
+        const int viewerBase = ValueOf(ids, "VIEWER_BASE");
+        CHECK(viewerBase > 0);
+        int crossings = 0;
+        for (const Claim &c : claims)
+            if (c.value >= viewerBase) ++crossings;
+        CHECK(crossings == 0);
+    }
+
+    // -------------------------------------------------------------------------
+    // The band decode, exercised against the real constants.
+    //
+    // AppMenuSettings.cpp recovers a slot with (id - OFF_BASE) % 9 and the state
+    // with (id - OFF_BASE) / 9. The header asserts the layout that makes that
+    // correct; this walks every id the decoder will ever see and confirms it
+    // comes back as the slot and state it went in as.
+    // -------------------------------------------------------------------------
+    void TestOverlayBandDecode() {
+        namespace Id = UI::AppMenu::Ids;
+
+        NOTE("every slot/state id decodes back to the slot and state it encodes");
+        int wrong = 0;
+        for (int band = 0; band < 3; ++band) {
+            for (int slot = 0; slot < Id::OVERLAY_SLOT_COUNT; ++slot) {
+                const int id = Id::SET_OVERLAY_OFF_BASE + band * Id::OVERLAY_SLOT_COUNT + slot;
+
+                const int decodedBand = (id - Id::SET_OVERLAY_OFF_BASE) / Id::OVERLAY_SLOT_COUNT;
+                const int decodedSlot = (id - Id::SET_OVERLAY_OFF_BASE) % Id::OVERLAY_SLOT_COUNT;
+
+                if (decodedBand != band || decodedSlot != slot) ++wrong;
+            }
+        }
+        CHECK(wrong == 0);
+
+        NOTE("the slot runs stop before the layout ids begin");
+        // The decoder tells "a slot" from "a layout" with one comparison, so a
+        // gap or an overlap here misroutes every layout click into a slot.
+        CHECK(Id::SET_LAYOUT_GRID ==
+              Id::SET_OVERLAY_COMPACT_BASE + Id::OVERLAY_SLOT_COUNT);
+        CHECK(Id::SET_LAYOUT_SUMMARY == Id::SET_LAYOUT_GRID + 2);
+
+        NOTE("the declared band bounds match the ids actually in the band");
+        CHECK(Id::OVERLAY_BAND_FIRST == Id::SET_OVERLAY_OFF_BASE);
+        CHECK(Id::OVERLAY_BAND_LAST == Id::SET_LAYOUT_SUMMARY);
+
+        NOTE("the overlay scalars sit OUTSIDE the arithmetic band");
+        // They dispatch as ordinary cases. Inside the band they would be
+        // decoded as a slot instead and never reach their own handler.
+        CHECK(Id::SET_OVERLAY_EFFECTS_LIST > Id::OVERLAY_BAND_LAST);
+        CHECK(Id::SET_OVERLAY_DIR_NAME     > Id::OVERLAY_BAND_LAST);
+        CHECK(Id::SET_OVERLAY_FONT_SIZE    > Id::OVERLAY_BAND_LAST);
+        CHECK(Id::SET_OVERLAY_FONT_COLOR   > Id::OVERLAY_BAND_LAST);
+        CHECK(Id::SET_OVERLAY_FONT_FAMILY_BASE > Id::OVERLAY_BAND_LAST);
+    }
+
+    // -------------------------------------------------------------------------
+    // Every menu item must actually do something.
+    //
+    // An item built with an id that no dispatch case handles looks completely
+    // normal — it draws, it highlights, it closes the menu, and nothing happens.
+    // Nothing in the compiler notices, because both halves are valid on their
+    // own.
+    // -------------------------------------------------------------------------
+    void TestMenuItemsAreHandled() {
+        const std::string builders = ReadSourceFile("src/UI/AppMenu/AppMenuBuilders.cpp");
+        const std::string settings = ReadSourceFile("src/UI/AppMenu/AppMenuSettings.cpp");
+        const std::string io       = ReadSourceFile("src/UI/AppMenu/AppMenuIO.cpp");
+        const std::string menu     = ReadSourceFile("src/UI/AppMenu/AppMenu.cpp");
+
+        CHECK(!builders.empty());
+        CHECK(!settings.empty());
+        if (builders.empty() || settings.empty()) return;
+
+        const std::string handlers = settings + io + menu;
+
+        // Collect Id::SET_* referenced by the builders.
+        std::vector<std::string> used;
+        size_t pos = 0;
+        while ((pos = builders.find("Id::SET_", pos)) != std::string::npos) {
+            size_t start = pos + 4; // past "Id::"
+            size_t end = start;
+            while (end < builders.size() &&
+                   (std::isalnum(static_cast<unsigned char>(builders[end])) || builders[end] == '_'))
+                ++end;
+            const std::string name = builders.substr(start, end - start);
+
+            bool already = false;
+            for (const std::string &u : used)
+                if (u == name) { already = true; break; }
+            if (!already) used.push_back(name);
+            pos = end;
+        }
+
+        NOTE("the builders were read and do reference menu ids");
+        CHECK(used.size() > 20);
+
+        NOTE("every id the menu builds is handled somewhere");
+        int orphans = 0;
+        for (const std::string &name : used) {
+            // Band members are decoded arithmetically rather than by name, so a
+            // literal "case Id::X" for them will never exist.
+            if (name.rfind("SET_OVERLAY_OFF_BASE", 0) == 0) continue;
+            if (name.rfind("SET_OVERLAY_FULL_BASE", 0) == 0) continue;
+            if (name.rfind("SET_OVERLAY_COMPACT_BASE", 0) == 0) continue;
+            if (name.rfind("SET_OVERLAY_FONT_FAMILY_BASE", 0) == 0) continue;
+            if (name.rfind("SET_SORT_", 0) == 0) continue;
+            // Layout ids sit inside the arithmetic band as well — they are the
+            // three values immediately after the slot runs, and the decoder
+            // reaches them by subtraction, not by a case label.
+            if (name.rfind("SET_LAYOUT_", 0) == 0) continue;
+
+            const std::string wanted = "case Id::" + name;
+            if (handlers.find(wanted) == std::string::npos) {
+                ++orphans;
+                std::printf("      built but never handled: Id::%s\n", name.c_str());
+            }
+        }
+        CHECK(orphans == 0);
+    }
+
 } // namespace
 
 int main(int argc, char **argv) {
@@ -1199,6 +1748,27 @@ int main(int argc, char **argv) {
 
     BeginGroup("Wire log - save/load round trip");
     TestWireLogRoundTrip();
+    EndGroup();
+
+    BeginGroup("Setting names - the qiv prefix");
+    TestSettingNamesArePrefixed();
+    EndGroup();
+
+    BeginGroup("Setting names - file and registry agree");
+    TestSettingNamesMatchAcrossStores();
+    EndGroup();
+
+    std::printf("\n  %sCONTEXT MENU%s\n", Dim(), Off());
+    BeginGroup("Menu ids - one id, one meaning");
+    TestMenuIdsUnique();
+    EndGroup();
+
+    BeginGroup("Overlay band - the arithmetic decode");
+    TestOverlayBandDecode();
+    EndGroup();
+
+    BeginGroup("Menu items - built and handled");
+    TestMenuItemsAreHandled();
     EndGroup();
 
     std::printf("\n  %sSECURITY  %s— who may connect, and how they prove it%s\n",

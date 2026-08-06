@@ -193,6 +193,7 @@ namespace UI::AppMenu::Ids {
         SET_KEEP_AWAKE       = 66,
         // Moved off 67, which the overlay "Off" band also claimed.
         SET_LOCK_VIEWPORT    = 18,
+        SET_REMEMBER_WIN_POS = 19,
 
         // "Location = Registry / File". Reports where settings actually live
         // and opens it — regedit at the key, or Explorer with the .ini selected.
@@ -251,6 +252,10 @@ namespace UI::AppMenu::Ids {
                   "the overlay band overlaps a scalar settings id");
     static_assert(SET_LOCK_VIEWPORT < SET_OVERLAY_BASE,
                   "Lock Viewport fell back into the overlay band");
+    static_assert(SET_REMEMBER_WIN_POS < SET_OVERLAY_BASE,
+                  "Remember Window Position fell back into the overlay band");
+    static_assert(SET_REMEMBER_WIN_POS != SET_LOCK_VIEWPORT,
+                  "Remember Window Position reused an occupied settings id");
 
     // The three slot runs must be adjacent and nine wide: the decoder recovers
     // the slot with (id - OFF_BASE) % 9 and the state with (id - OFF_BASE) / 9,

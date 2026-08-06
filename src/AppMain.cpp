@@ -7,6 +7,7 @@
 // It is distributed WITHOUT ANY WARRANTY. See the LICENSE file for details.
 
 #include <algorithm>
+#include <filesystem> // parent_path() of the open playlist — the exit-path folder record
 #include <numeric>    // std::iota — the shuffle order. Was arriving only through
                       // an MSVC transitive include, so any stricter compiler or
                       // static-analysis pass reported it as undeclared.
@@ -149,6 +150,29 @@ LRESULT CALLBACK MainAppWndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM l
             const LRESULT r = DefWindowProcW(hWnd, message, wParam, lParam);
             AppCommands::ApplyDisplayAwake(hWnd);
             return r;
+        }
+
+        // A monitor was unplugged, or the arrangement/resolution changed. The
+        // window can be left somewhere the mouse can no longer reach — the one
+        // way a placement goes bad WHILE the app is running rather than between
+        // launches, and the user cannot drag it back because there is nothing
+        // left to grab.
+        //
+        // Only the unreachable case is touched. A window that is merely on a
+        // different monitor than before, or partly off an edge, is left exactly
+        // where it is: moving a window the user can still see and grab would be
+        // the app fighting them.
+        case WM_DISPLAYCHANGE: {
+            RECT rc{};
+            if (GetWindowRect(hWnd, &rc)) {
+                if (!IsUsableWindowRect(rc.left, rc.top,
+                                        rc.right - rc.left, rc.bottom - rc.top)) {
+                    app.ResetWindowGeometry(hWnd);
+                    g_overlayManager.PostCenterMessage(hWnd,
+                        Constants::Messages::WINDOW_RECOVERED);
+                }
+            }
+            return 0;
         }
 
         case WM_DPICHANGED: {
@@ -681,6 +705,31 @@ LRESULT CALLBACK MainAppWndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM l
                     if (app.renderer->IsAnimatedGif())
                         SetTimer(hWnd, Constants::Slideshow::GIF_TIMER_ID,
                                  app.renderer->GetCurrentGifDelay(), nullptr);
+                } else if (app.renderer->DecodeFailed(currentPath)) {
+                    // The probe found nothing AND the decoder has already given
+                    // up on this file — so this is not "still decoding", it is
+                    // never going to decode. A .txt renamed to .jpg gets this
+                    // far because the playlist is built from extensions, and so
+                    // does a supported format whose bytes are damaged.
+                    //
+                    // Say which file and which extension was refused, rather
+                    // than leaving the black rectangle that used to be the whole
+                    // report. The path stays the real one so the last line still
+                    // opens the containing folder.
+                    const std::filesystem::path p(currentPath);
+                    std::wstring detail = p.parent_path().filename().wstring();
+                    if (!detail.empty()) detail += L"  \\  ";
+                    detail += p.filename().wstring();
+                    const std::wstring ext = p.extension().wstring();
+                    if (!ext.empty()) {
+                        detail += L"  \\  ";
+                        detail += ext;
+                    }
+
+                    app.folderOverlay       = AppState::FolderOverlayState::Unsupported;
+                    app.folderOverlayPath   = currentPath;
+                    app.folderOverlayDetail = detail;
+                    InvalidateRect(hWnd, nullptr, FALSE);
                 }
             }
             return 0;
@@ -1035,6 +1084,12 @@ int WINAPI wWinMain(HINSTANCE hInstance, [[maybe_unused]] HINSTANCE hPrevInstanc
     //
     // The mark is cleared at exit only if it was set here, so turning the log
     // off mid-session cannot leave one behind and fake a crash next launch.
+    // Drop values older builds left behind. Deliberately OUTSIDE the log check
+    // below: the cleanup has nothing to do with logging, and gating it there
+    // would leave the stale value in place forever for the majority of users,
+    // who never switch logging on.
+    Persistence::Session::RemoveObsoleteValues();
+
     if (AppLog::IsEnabled()) {
         // READ BEFORE THE MARK IS RESET, or the evidence is destroyed by the run
         // that was supposed to report it.
@@ -1260,9 +1315,57 @@ int WINAPI wWinMain(HINSTANCE hInstance, [[maybe_unused]] HINSTANCE hPrevInstanc
     //
     // Skipped for a dedicated instance: it always starts from its configured
     // folder, so a resume position would only be noise.
-    if (!Dedicated::IsDedicatedFlag() && app.currentIndex >= 0 &&
-        app.currentIndex < static_cast<int>(app.playlist.size()))
-        Persistence::Session::SaveLastImage(app.playlist[app.currentIndex]);
+    if (!Dedicated::IsDedicatedFlag()) {
+        if (app.currentIndex >= 0 && app.currentIndex < static_cast<int>(app.playlist.size()))
+            Persistence::Session::SaveLastImage(app.playlist[app.currentIndex]);
+
+        // The folder is recorded separately, and on its own condition. An empty
+        // folder — or one whose images all failed to decode — leaves currentIndex
+        // at -1, so the branch above writes nothing and the next launch would fall
+        // through to the folder history, which a user who turned history off does
+        // not have. The playlist's first entry is the cheapest handle on the open
+        // folder; there is no current-directory member to read.
+        if (!app.playlist.empty()) {
+            const std::filesystem::path parent =
+                    std::filesystem::path(app.playlist[0]).parent_path();
+            if (!parent.empty())
+                Persistence::Session::SaveLastFolder(parent.wstring());
+        }
+
+        // Window placement, when the user asked for it to be remembered.
+        // GetWindowPlacement rather than GetWindowRect: the rect wanted is the
+        // RESTORED one, so closing while maximised or minimised still records
+        // the size the window returns to rather than a full-screen rect or the
+        // (-32000, -32000) a minimised window reports.
+        if (app.rememberWindowPosition) {
+            WINDOWPLACEMENT wp{};
+            wp.length = sizeof(wp);
+            if (GetWindowPlacement(hWnd, &wp)) {
+                const RECT &r = wp.rcNormalPosition;
+                const int x = r.left, y = r.top;
+                const int w = r.right - r.left, h = r.bottom - r.top;
+
+                // Checked on the way OUT as well as on the way in. If something
+                // has already gone wrong with the window — driven off screen,
+                // sized to nothing — writing that down would hand the same
+                // broken state to the next launch. Declining to save leaves the
+                // last good placement in the store, which is the better answer
+                // than either saving rubbish or clearing it.
+                if (IsUsableWindowRect(x, y, w, h)) {
+                    Persistence::Session::SaveWindowRect(x, y, w, h);
+
+                    // Which screen that was, by device name. Saved from the
+                    // window rather than from the rect so a maximised window
+                    // still records the display it was maximised on.
+                    MONITORINFOEXW mi{};
+                    mi.cbSize = sizeof(mi);
+                    HMONITOR mon = MonitorFromWindow(hWnd, MONITOR_DEFAULTTONEAREST);
+                    if (mon && GetMonitorInfoW(mon, &mi))
+                        Persistence::Session::SaveWindowMonitor(mi.szDevice);
+                }
+            }
+        }
+    }
 
     g_writeQueue.Flush(); // drain all pending registry + file writes before teardown
     app.renderer.reset();

@@ -124,6 +124,12 @@ struct AppState {
     // resetting them in LoadImageIndex. Rotation and flips still reset, because
     // EXIF auto-orientation owns those (see Constants::IS_LOCK_VIEWPORT).
     bool lockViewport            = Constants::IS_LOCK_VIEWPORT;
+
+    // Reopen the main window where it was left. The rect itself is session
+    // state, not a setting — it lives in qivSession.ini or the registry with
+    // the rest of the session (see Persistence/SessionFile.h). This flag is the
+    // ordinary persisted setting that decides whether any of that is consulted.
+    bool rememberWindowPosition = Constants::IS_REMEMBER_WINDOW_POSITION;
     bool historyFullModeEnabled  = Constants::History::HISTORY_SHOW_FULL_HISTORY;
     bool openDirWndOnStart       = Constants::IS_OPEN_DIRWND_ON_START;
     bool overlayShowBackground   = Constants::Overlay::IS_OVERLAY_SHOW_BACKGROUND;
@@ -350,13 +356,30 @@ struct AppState {
 
     // Persistent main-window overlay shown when the current directory becomes
     // unavailable.  Cleared when the user opens a new folder successfully.
-    enum class FolderOverlayState { None, Missing, Empty };
+    // Unsupported = the file is there and readable, but nothing in this build
+    // can decode it. A folder problem and a file problem, reported by the same
+    // placeholder because from the user's side they are the same event: the
+    // window is empty and they need to know why.
+    enum class FolderOverlayState { None, Missing, Empty, Unsupported };
 
     FolderOverlayState folderOverlay = FolderOverlayState::None;
+
+    // What clicking the LAST line opens. Always a real filesystem path — a
+    // folder, or a file whose folder is opened instead. Never the display text.
     std::wstring folderOverlayPath;
-    // Client-area rect of the path line in the overlay — written by the
-    // renderer each frame it draws, hit-tested by MouseHandler for
-    // click-to-open-in-Explorer. Zero rect = nothing clickable.
+
+    // What the LAST line SHOWS, when that differs from the path. Empty means
+    // "show the path", which is what the folder states want. The Unsupported
+    // state fills it with "dir \ file \ format", which reads better than a
+    // bare path and names the extension that was refused.
+    std::wstring folderOverlayDetail;
+
+    // Client-area rects of the two clickable lines, written by the renderer
+    // whenever the layout is built or re-flowed and hit-tested by MouseHandler.
+    // A zero rect means that line is not clickable.
+    //   Action = line 2, the constant "Open a file or folder…" prompt (F2).
+    //   Path   = line 3, the folder or file, opened in Explorer.
+    D2D1_RECT_F folderOverlayActionRect = {};
     D2D1_RECT_F folderOverlayPathRect = {};
 
     // Counts windows of OUR OWN class — not the global one. A dedicated copy
@@ -401,18 +424,12 @@ struct AppState {
         activeEffectsList.clear();
     }
 
-    void ResetWindowState(HWND hWnd) {
-        // --- Viewport / window ---
-        viewport.zoom = 1.0f;
-        viewport.offsetX = 0.0f;
-        viewport.offsetY = 0.0f;
-        viewport.rotation = 0;
-        viewport.flippedH = false;
-        viewport.flippedV = false;
-
-        opacity = 255;
-        SetLayeredWindowAttributes(hWnd, 0, opacity, LWA_ALPHA);
-
+    // GEOMETRY ONLY — default size, centred on the monitor the window is
+    // nearest to. Split out of ResetWindowState because the display-change
+    // rescue needs exactly this and nothing else: a window stranded by an
+    // unplugged monitor is a placement problem, and wiping the user's zoom,
+    // rotation and effects to fix it would be a second, unrelated surprise.
+    void ResetWindowGeometry(HWND hWnd) {
         int targetW = (int) (baseWidth  * dpiScale);
         int targetH = (int) (baseHeight * dpiScale);
 
@@ -428,6 +445,21 @@ struct AppState {
                          targetW, targetH,
                          SWP_NOZORDER | SWP_NOACTIVATE | SWP_FRAMECHANGED);
         }
+    }
+
+    void ResetWindowState(HWND hWnd) {
+        // --- Viewport / window ---
+        viewport.zoom = 1.0f;
+        viewport.offsetX = 0.0f;
+        viewport.offsetY = 0.0f;
+        viewport.rotation = 0;
+        viewport.flippedH = false;
+        viewport.flippedV = false;
+
+        opacity = 255;
+        SetLayeredWindowAttributes(hWnd, 0, opacity, LWA_ALPHA);
+
+        ResetWindowGeometry(hWnd);
     }
 
     // HELPER: Auto-wakes the preview toggle when a user adjusts any effect

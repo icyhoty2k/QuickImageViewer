@@ -185,6 +185,14 @@ void WriteString(const std::wstring &path, const wchar_t *section,
     WritePrivateProfileStringW(section, key, value.c_str(), path.c_str());
 }
 
+void DeleteKey(const std::wstring &path, const wchar_t *section, const wchar_t *key) {
+    if (path.empty() || !section || !key) return;
+    // No CreateWithHeaderIfMissing: there is nothing to delete from a file that
+    // does not exist, and creating one to remove a key from it would be absurd.
+    // A null value is what tells the API to remove the key rather than blank it.
+    WritePrivateProfileStringW(section, key, nullptr, path.c_str());
+}
+
 DWORD ReadDword(const std::wstring &path, const wchar_t *section,
                 const wchar_t *key, DWORD defaultValue) {
     const std::wstring raw = ReadString(path, section, key);

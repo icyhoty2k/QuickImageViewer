@@ -16,6 +16,7 @@
 #include "Input/AppCommands.h"
 #include "Overlays/OverlayManager.h"
 #include "Persistence/RegistryManager.h"
+#include "Persistence/SessionFile.h" // ClearWindowRect when the toggle goes off
 #include "Platform/Constants.h"
 #include "Platform/ConstantsStrings.h"
 #include "Platform/FileHandler.h"
@@ -208,6 +209,22 @@ void DispatchSetting(HWND hWnd, int cmd) {
         g_overlayManager.PostCenterMessage(hWnd,
             app.keepDisplayAwake ? Constants::Messages::KEEP_DISPLAY_AWAKE_ON
                                  : Constants::Messages::KEEP_DISPLAY_AWAKE_OFF);
+        break;
+
+    // Reopen the main window where it was left, at the size it was.
+    case Id::SET_REMEMBER_WIN_POS:
+        app.rememberWindowPosition = !app.rememberWindowPosition;
+        Persistence::Registry::SaveSetting(Constants::Registry::REMEMBER_WINDOW_POS,
+            static_cast<DWORD>(app.rememberWindowPosition));
+        // Switching it off drops the stored rect immediately rather than leaving
+        // a stale one to be honoured if the setting is ever switched back on —
+        // turning it on should start remembering from now, not from whenever it
+        // was last used.
+        if (!app.rememberWindowPosition)
+            Persistence::Session::ClearWindowRect();
+        g_overlayManager.PostCenterMessage(hWnd,
+            app.rememberWindowPosition ? Constants::Messages::REMEMBER_WIN_POS_ON
+                                       : Constants::Messages::REMEMBER_WIN_POS_OFF);
         break;
 
     // Viewport lock (Y) — carry zoom + pan across image changes.
@@ -447,7 +464,8 @@ void DispatchSetting(HWND hWnd, int cmd) {
     case Id::SET_WINDOW_WIDTH: {
         int v = UI::ThemedDialog::PromptInt(hWnd, L"Window Width",
             L"Default window width in pixels (240 – 16000):",
-            app.baseWidth, 240, 16000, Constants::IS_BASE_WIDTH);
+            app.baseWidth, Constants::WINDOW_SIZE_MIN, Constants::WINDOW_SIZE_MAX,
+            Constants::IS_BASE_WIDTH);
         if (v >= 0) {
             app.baseWidth = v;
             Persistence::Registry::SaveSetting(Constants::Registry::BASE_WIDTH_KEY,
@@ -458,7 +476,8 @@ void DispatchSetting(HWND hWnd, int cmd) {
     case Id::SET_WINDOW_HEIGHT: {
         int v = UI::ThemedDialog::PromptInt(hWnd, L"Window Height",
             L"Default window height in pixels (240 – 16000):",
-            app.baseHeight, 240, 16000, Constants::IS_BASE_HEIGHT);
+            app.baseHeight, Constants::WINDOW_SIZE_MIN, Constants::WINDOW_SIZE_MAX,
+            Constants::IS_BASE_HEIGHT);
         if (v >= 0) {
             app.baseHeight = v;
             Persistence::Registry::SaveSetting(Constants::Registry::BASE_HEIGHT_KEY,

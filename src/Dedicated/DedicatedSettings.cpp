@@ -181,12 +181,11 @@ namespace {
     // every subsequent value would be narrowed to ANSI and non-ASCII folder
     // paths would be mangled.
     void CreateWithHeaderIfMissing(const std::wstring &path) {
-        HANDLE h = CreateFileW(path.c_str(), GENERIC_WRITE, FILE_SHARE_READ, nullptr,
-                               CREATE_NEW, FILE_ATTRIBUTE_NORMAL, nullptr);
-        if (h == INVALID_HANDLE_VALUE) return; // already exists, or unwritable
-
+        // Builds the TEXT only. The BOM, and the create-only-if-absent race that
+        // stops a second writer truncating the first one's header, belong to
+        // Ini::CreateWithTextIfMissing — one implementation for every .ini this
+        // application writes.
         std::wstring head;
-        head += static_cast<wchar_t>(0xFEFF); // UTF-16LE BOM — must be first
         head += L"; QuickImageViewer - instance settings.\r\n"
                 L";\r\n"
                 L"; THIS FILE EXISTING is what makes the copy beside it file-backed:\r\n"
@@ -213,10 +212,7 @@ namespace {
         head += L"; Application settings, written by qIV. Same names as the registry\r\n"
                 L"; values they replace. Edit with the app closed.\r\n";
 
-        DWORD written = 0;
-        WriteFile(h, head.data(),
-                  static_cast<DWORD>(head.size() * sizeof(wchar_t)), &written, nullptr);
-        CloseHandle(h);
+        Persistence::Ini::CreateWithTextIfMissing(path, head);
     }
 
     // Reads one key, growing the buffer until the value fits — a stored folder
@@ -333,11 +329,25 @@ DWORD ReadDword(const wchar_t *valueName, DWORD defaultValue) {
 void WriteString(const wchar_t *valueName, const std::wstring &value) {
     const std::wstring &path = ResolvePath();
     if (path.empty() || !valueName) return;
+    // Same first line as WriteDword, and for two reasons rather than one. The
+    // header is the visible one. The other is that WritePrivateProfileStringW
+    // writes ANSI into a file that is not ALREADY UTF-16LE with a BOM — so if a
+    // string setting happened to be the first thing written, the file was
+    // created in the wrong encoding and every non-ASCII path in it was mangled
+    // from that point on.
+    CreateWithHeaderIfMissing(path); // keep [Instance] above [Settings]
     WritePrivateProfileStringW(SECTION, valueName, value.c_str(), path.c_str());
 }
 
 std::wstring ReadString(const wchar_t *valueName) {
     return ReadStringFrom(SECTION, valueName);
+}
+
+void DeleteValue(const wchar_t *valueName) {
+    const std::wstring &path = ResolvePath();
+    if (path.empty() || !valueName) return;
+    // A null value removes the key; an empty string would only blank it.
+    WritePrivateProfileStringW(SECTION, valueName, nullptr, path.c_str());
 }
 
 // --- Arbitrary section access ----------------------------------------------

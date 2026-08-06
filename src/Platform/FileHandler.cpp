@@ -563,6 +563,10 @@ void HandleScanComplete(HWND hWnd, ScanResult *result) {
 
     // Folder has images — dismiss any Missing/Empty renderer overlay.
     app.folderOverlay = AppState::FolderOverlayState::None;
+    // Cleared with the state, always. It belongs to whichever state set it, and
+    // a leftover from an Unsupported file would otherwise be shown as the last
+    // line of the next Empty folder.
+    app.folderOverlayDetail.clear();
     app.folderOverlayPath.clear();
     UI::NotifyFolderContentsChanged(scannedDir);
     // Same binding as the empty-scan path above: the viewer has settled on this
@@ -668,8 +672,20 @@ void OpenInitialImage(HWND hWnd) {
     pfd->SetFileTypes(ARRAYSIZE(filters), filters);
     pfd->SetFileTypeIndex(1);
 
-    // Restore last-used folder
-    std::wstring lastFolder = Persistence::Registry::LoadStringSetting(Constants::Registry::LAST_FOLDER);
+    // Where to start browsing.
+    //
+    // The folder on screen first, then the one from the last exit. There used to
+    // be a separate "LastFolder" setting for this, written only when a file was
+    // picked THROUGH THIS DIALOG — so arriving anywhere by drag-and-drop, the
+    // history panel or the command line left it pointing somewhere the user had
+    // not been in a long time. It held the same kind of value as the session
+    // folder and answered the same question worse, so it is gone.
+    std::wstring lastFolder;
+    if (!app.playlist.empty())
+        lastFolder = fs::path(app.playlist[0]).parent_path().wstring();
+    if (lastFolder.empty())
+        lastFolder = Persistence::Session::LoadLastFolder();
+
     if (!lastFolder.empty()) {
         IShellItem *psi = nullptr;
         if (SUCCEEDED(SHCreateItemFromParsingName(lastFolder.c_str(), nullptr, IID_PPV_ARGS(&psi)))) {
@@ -744,9 +760,9 @@ void OpenInitialImage(HWND hWnd) {
         return;
     }
 
-    Persistence::Registry::SaveStringSetting(
-            Constants::Registry::LAST_FOLDER,
-            selectedPath.parent_path().wstring());
+    // No separate last-folder write here any more. Opening this file builds the
+    // playlist below, and the folder it came from is recorded once at exit like
+    // every other way of arriving at a folder.
 
     // Immediate: 1-file playlist so the selected image loads right now.
     uint64_t gen = ++g_scanGeneration;
@@ -1168,6 +1184,10 @@ void OpenDirectory(HWND hWnd, const std::wstring &dirPathStr) {
 
     // Valid directory confirmed — dismiss any Missing/Empty overlay immediately.
     app.folderOverlay = AppState::FolderOverlayState::None;
+    // Cleared with the state, always. It belongs to whichever state set it, and
+    // a leftover from an Unsupported file would otherwise be shown as the last
+    // line of the next Empty folder.
+    app.folderOverlayDetail.clear();
     app.folderOverlayPath.clear();
 
     // If we are already in this directory, just jump to the first image.
@@ -1330,14 +1350,41 @@ void ReloadCurrentDirectory(HWND hWnd) {
 void OpenStartupTarget(HWND hWnd) {
     std::error_code ec;
 
+    // EVERY tier below only counts if it actually produced something to look at.
+    //
+    // Existing is not the same as usable: a remembered folder can still be
+    // there and be empty, or hold nothing this build can decode, and a
+    // remembered image can be a zero-byte leftover. Checking the playlist after
+    // each attempt is what turns "the path resolves" into "there is an image on
+    // screen" — otherwise a deleted-out folder opens qIV to a blank window with
+    // no hint of what to do next.
+    //
+    // Safe to test synchronously: OpenDirectory seeds the playlist with the
+    // first image it finds BEFORE handing the rest to the background scan, so
+    // an empty playlist here means the folder genuinely had nothing.
+
     // 1. The image on screen at the last exit — qivSession.ini, not a setting.
     const std::wstring last = Persistence::Session::LoadLastImage();
     if (!last.empty() && fs::is_regular_file(last, ec) && !ec) {
         OpenSpecificImage(hWnd, last);
-        return;
+        if (!app.playlist.empty()) return;
     }
 
-    // 2. History, most-recent first. Skips folders that have since been removed
+    // 2. The folder that was open at the last exit. Sits ahead of the history
+    //    because it is the more specific answer: history's newest entry is
+    //    normally the same folder, but it is not there at all for someone who
+    //    turned history off, and the image above records nothing when the folder
+    //    held no openable image.
+    const std::wstring lastFolder = Persistence::Session::LoadLastFolder();
+    if (!lastFolder.empty()) {
+        ec.clear();
+        if (fs::is_directory(lastFolder, ec) && !ec) {
+            OpenDirectory(hWnd, lastFolder);
+            if (!app.playlist.empty()) return;
+        }
+    }
+
+    // 3. History, most-recent first. Skips folders that have since been removed
     //    or unmounted, rather than giving up on the first dead entry.
     //    Favorites need no separate pass: a favorite is a folder that is also in
     //    history, so it is already covered here.
@@ -1345,11 +1392,44 @@ void OpenStartupTarget(HWND hWnd) {
         ec.clear();
         if (folder.empty() || !fs::is_directory(folder, ec) || ec) continue;
         OpenDirectory(hWnd, folder);
-        return;
+        if (!app.playlist.empty()) return;
+        // Present but empty — keep walking back through history rather than
+        // stopping on it. One emptied folder should not cost the user the
+        // dozen still-good ones behind it.
     }
 
-    // 3. Nothing usable — a fresh install, or history is gone/corrupt.
+    // 4. Nothing usable — a fresh install, history gone or corrupt, or every
+    //    remembered place has since been emptied or deleted. Ask, rather than
+    //    sit there blank: this is the same chooser F2 opens.
     OpenInitialImage(hWnd);
+
+    // 5. THE BLACK-SCREEN GUARD.
+    //
+    // The chooser above is modal, so by here the user has either opened
+    // something or dismissed it. Dismissing it used to leave a live window with
+    // no playlist, no folder and folderOverlay still None — which renders as a
+    // plain black rectangle with no text, no hint and nothing to click. It looks
+    // exactly like a broken renderer, and that is how it was reported.
+    //
+    // The Missing/Empty overlay already draws the two lines wanted here — a
+    // heading and the folder path, the path clickable to open it in Explorer.
+    // It simply was never switched on for this case, because every existing
+    // caller sets it from a folder SCAN that came back empty, and here there was
+    // no scan at all.
+    if (app.playlist.empty()) {
+        // Name the folder we last tried, so the second line is something the
+        // user recognises and can click. Empty when there is nothing to name —
+        // a first run — and the renderer then draws the heading alone.
+        const std::wstring &blame = lastFolder;
+
+        ec.clear();
+        const bool missing = !blame.empty() && (!fs::is_directory(blame, ec) || ec);
+
+        app.folderOverlay = missing ? AppState::FolderOverlayState::Missing
+                                    : AppState::FolderOverlayState::Empty;
+        app.folderOverlayPath = blame;
+        InvalidateRect(hWnd, nullptr, FALSE);
+    }
 }
 
 void OpenSpecificImage(HWND hWnd, const std::wstring &filePathStr) {

@@ -42,6 +42,13 @@ namespace Constants::Messages {
     constexpr const wchar_t *INFO_PANELS_OFF = L"Info Panels" STR_STATE_OFF;
 
     // Overlay background toggle (P)
+    // ` (grave) — bypasses the whole effect chain without discarding it, so the
+    // user can compare edited against original. It was the ONLY toggle in the
+    // app that changed the picture and said nothing, which made a mis-hit on a
+    // key next to 1 look like the image had been damaged.
+    constexpr const wchar_t *EFFECT_PREVIEW_ON  = L"Effects" STR_STATE_ON;
+    constexpr const wchar_t *EFFECT_PREVIEW_OFF = L"Effects" STR_STATE_OFF;
+
     constexpr const wchar_t *OVERLAY_BG_ON = L"Overlay BG" STR_STATE_ON;
     constexpr const wchar_t *OVERLAY_BG_OFF = L"Overlay BG" STR_STATE_OFF;
 
@@ -63,6 +70,19 @@ namespace Constants::Messages {
     constexpr const wchar_t *EMPTY_DIR_NO_IMAGES = L"No Images:";
     // Placeholder shown when the directory itself has been deleted
     constexpr const wchar_t *EMPTY_DIR_MISSING = L"⚠  Directory Missing";
+    // Heading shown when the file is there but nothing can decode it — an
+    // unknown format, or a known one this build was not compiled with.
+    constexpr const wchar_t *FORMAT_UNSUPPORTED = L"Format not supported:";
+    // Line 2 of the placeholder, on every one of its states. A constant, so it
+    // is built into the cached layout once and never rebuilt; clicking it opens
+    // the same chooser F2 does, which is the way OUT of every state this
+    // placeholder reports.
+    constexpr const wchar_t *OVERLAY_OPEN_PROMPT = L"Open a file or folder…";
+    // Keyboard equivalents, appended after each clickable line and left OUTSIDE
+    // the link styling — the hint tells you the key, it is not itself a target.
+    // Someone who reads them once stops needing the mouse here at all.
+    constexpr const wchar_t *OVERLAY_OPEN_PROMPT_HINT = L"   (F2)";
+    constexpr const wchar_t *OVERLAY_PATH_HINT        = L"   (L)";
     // Placeholder shown in CacheWnd when the VRAM thumbnail cache is empty
     constexpr const wchar_t *EMPTY_CACHE = L"Thumbnail Cache Empty";
 
@@ -561,6 +581,9 @@ namespace Constants::Messages {
 
     // Viewport lock (Y) — zoom + pan carried across image changes
     constexpr const wchar_t *VIEWPORT_LOCK_ON  = L"Viewport Lock" STR_STATE_ON;
+    constexpr const wchar_t *WINDOW_RECOVERED = L"Window was off screen — reset to default size and position";
+    constexpr const wchar_t *REMEMBER_WIN_POS_ON  = L"Remember Window Position" STR_STATE_ON;
+    constexpr const wchar_t *REMEMBER_WIN_POS_OFF = L"Remember Window Position" STR_STATE_OFF;
     constexpr const wchar_t *VIEWPORT_LOCK_OFF = L"Viewport Lock" STR_STATE_OFF;
 
     // Thumbnail strip visual effects

@@ -524,6 +524,14 @@ void InputManager::ExecuteCommand(HWND hWnd, Command cmd) {
             break;
 
         case Command::ZoomTo: {
+            // Show(), NOT ToggleZoomWindow() — deliberate, do not "fix" this.
+            // The panel's key is a DIGIT, and the panel routes every key into its
+            // input box, so once it has focus '0' is typed as part of the
+            // percentage and never reaches the resolver. A toggle branch here is
+            // unreachable while the panel is open, and would only fire in the odd
+            // case of the panel visible but unfocused — hiding it exactly when the
+            // user pressed the key to get at it. Jump-to and Find can toggle
+            // because J and Ctrl+F are not characters their input boxes want.
             uiManager.getZoomWindow().Show();
             break;
         }
@@ -897,6 +905,11 @@ void InputManager::ExecuteCommand(HWND hWnd, Command cmd) {
             app.effectPreviewEnabled = !app.effectPreviewEnabled;
             app.UpdateRendererColorEffects(hWnd);
             g_overlayManager.UpdateEffects();
+            // Says which way it went. Without this the key changed the picture
+            // and reported nothing — the only toggle in the app that did.
+            g_overlayManager.PostCenterMessage(hWnd,
+                app.effectPreviewEnabled ? Constants::Messages::EFFECT_PREVIEW_ON
+                                         : Constants::Messages::EFFECT_PREVIEW_OFF);
             break;
 
         // Each toggle records itself in app.activeEffectsList FIRST, so a newly

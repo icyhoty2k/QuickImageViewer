@@ -249,6 +249,7 @@ namespace Persistence::Registry {
         emitB(R::RUN_ON_STARTUP,        a.isEnableRunOnStartup);
         emitB(R::THUMBNAIL_EFFECTS,     a.thumbnailEffectsEnabled);
         emitB(R::LOCK_VIEWPORT,         a.lockViewport);
+        emitB(R::REMEMBER_WINDOW_POS,   a.rememberWindowPosition);
         emitB(R::HISTORY_FULL_MODE,     a.historyFullModeEnabled);
         emitB(R::OVERLAY_VISIBLE,       a.showOverlayInfoText);
         emitB(R::OPEN_DIRWND_ON_START,  a.openDirWndOnStart);
@@ -340,6 +341,9 @@ namespace Persistence::Registry {
         a.lockViewport = readDword(
             Constants::Registry::LOCK_VIEWPORT,
             static_cast<DWORD>(Constants::IS_LOCK_VIEWPORT)) != 0;
+        a.rememberWindowPosition = readDword(
+            Constants::Registry::REMEMBER_WINDOW_POS,
+            static_cast<DWORD>(Constants::IS_REMEMBER_WINDOW_POSITION)) != 0;
         a.historyFullModeEnabled = readDword(
             Constants::Registry::HISTORY_FULL_MODE,
             static_cast<DWORD>(Constants::History::HISTORY_SHOW_FULL_HISTORY)) != 0;

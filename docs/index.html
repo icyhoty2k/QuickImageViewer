@@ -98,7 +98,7 @@
             },
             "downloadUrl": "https://github.com/icyhoty2k/QuickImageViewer/releases/latest",
             "installUrl": "https://github.com/icyhoty2k/QuickImageViewer/releases/latest",
-            "softwareRequirements": "Windows 10 or newer",
+            "softwareRequirements": "Windows 10 or newer. No Visual C++ Redistributable required — the C runtime is linked into the executable.",
             "processorRequirements": "x64",
             "memoryRequirements": "512 MB RAM",
             "storageRequirements": "sub-10 MB",
@@ -152,7 +152,7 @@
                     "name": "Does QuickImageViewer need to be installed?",
                     "acceptedAnswer": {
                         "@type": "Answer",
-                        "text": "No. It is a single portable sub-10 MB executable. Download it and run it — no installer, no registry pollution, no background services."
+                        "text": "No. It is a single portable sub-10 MB executable. Download it and run it — no installer, no registry pollution, no background services, and no Visual C++ Redistributable to install first."
                     }
                 },
                 {
@@ -1998,6 +1998,69 @@
                     pixels
                 </td>
             </tr>
+            <tr>
+                <td>
+                    <code>0</code>
+                </td>
+                <td>
+                    Open
+                    the
+                    Zoom
+                    panel
+                    and
+                    type
+                    an
+                    exact
+                    percentage
+                </td>
+            </tr>
+            <tr>
+                <td>
+                    <code>Y</code>
+                </td>
+                <td>
+                    <strong>Lock
+                    Viewport</strong>
+                    &mdash;
+                    carry
+                    zoom
+                    and
+                    pan
+                    to
+                    the
+                    next
+                    image
+                    instead
+                    of
+                    resetting,
+                    so
+                    flipping
+                    through
+                    same-framed
+                    shots
+                    holds
+                    the
+                    same
+                    detail
+                    at
+                    the
+                    same
+                    magnification.
+                    Rotation
+                    and
+                    flips
+                    still
+                    reset,
+                    because
+                    each
+                    file's
+                    EXIF
+                    orientation
+                    tag
+                    owns
+                    those
+                </td>
+            </tr>
             </tbody>
         </table>
 
@@ -2446,6 +2509,57 @@
             </tr>
             <tr>
                 <td>
+                    <em>type anything</em>
+                </td>
+                <td>
+                    Filter
+                    the
+                    list
+                    &mdash;
+                    fuzzy
+                    by
+                    default,
+                    wildcards
+                    (<code>*</code>,
+                    <code>?</code>)
+                    when
+                    the
+                    query
+                    contains
+                    one.
+                    Matched
+                    characters
+                    are
+                    highlighted
+                    in
+                    the
+                    row
+                </td>
+            </tr>
+            <tr>
+                <td>
+                    <code>Esc</code>
+                    /
+                    <code>&#10005;</code>
+                </td>
+                <td>
+                    Clear
+                    the
+                    filter
+                    (<code>Esc</code>
+                    closes
+                    the
+                    panel
+                    when
+                    the
+                    filter
+                    is
+                    already
+                    empty)
+                </td>
+            </tr>
+            <tr>
+                <td>
                     <code>Space</code>
                 </td>
                 <td>
@@ -2454,11 +2568,19 @@
                     on
                     hovered
                     entry
+                    (types
+                    a
+                    space
+                    once
+                    the
+                    filter
+                    has
+                    text)
                 </td>
             </tr>
             <tr>
                 <td>
-                    <code>Delete</code>
+                    <code>Ctrl+Delete</code>
                 </td>
                 <td>
                     Delete
@@ -2848,13 +2970,41 @@
                     <code>Ctrl+9</code>
                 </td>
                 <td>
-                    Toggle
-                    individual
-                    slots
-                    (1
+                    Walk
+                    one
+                    slot
+                    through
+                    <strong>Compact
+                    &rarr;
+                    Full
+                    &rarr;
+                    Off</strong>
+                    &mdash;
+                    compact
+                    is
+                    one
+                    line
+                    instead
+                    of
+                    two.
+                    <code>Ctrl+5</code>
+                    (center
+                    messages)
+                    has
+                    no
+                    compact
+                    form,
+                    so
+                    it
+                    cycles
+                    On
+                    &rarr;
+                    Off.
+                    Slots:
+                    1
                     index+filename
                     •
-                    2
+                    3
                     zoom
                     %
                     •
@@ -2865,28 +3015,28 @@
                     7
                     active
                     effects
+                    +
+                    folder
+                    name
                     •
                     9
-                    dimensions+size)
-                </td>
-            </tr>
-            <tr>
-                <td>
-                    <code>Ctrl+Alt+1</code>
-                    –
-                    <code>Ctrl+Alt+9</code>
-                </td>
-                <td>
-                    Toggle
-                    compact
-                    mode
-                    per
-                    slot
-                    (1
-                    line
-                    instead
-                    of
-                    2)
+                    dimensions+size.
+                    Slots
+                    2,
+                    4,
+                    6,
+                    8
+                    show
+                    the
+                    thumbnail-strip
+                    selection
+                    count
+                    for
+                    the
+                    panel
+                    on
+                    that
+                    edge
                 </td>
             </tr>
             <tr>
@@ -2919,6 +3069,126 @@
             </tr>
             </tbody>
         </table>
+        <p>
+            Appearance
+            is
+            set
+            from
+            the
+            tray
+            menu's
+            <strong>Overlays</strong>
+            submenu
+            rather
+            than
+            by
+            shortcut:
+            <strong>Layout</strong>
+            (the
+            same
+            Grid
+            /
+            Stacked
+            /
+            Summary
+            that
+            <code>O</code>
+            cycles),
+            <strong>Font</strong>
+            and
+            <strong>Font
+            Size</strong>
+            and
+            <strong>Font
+            Color</strong>
+            for
+            every
+            slot,
+            and
+            <strong>Message
+            Duration</strong>
+            in
+            milliseconds.
+            The
+            nine
+            slots
+            are
+            listed
+            there
+            too,
+            each
+            named
+            for
+            what
+            it
+            carries,
+            and
+            each
+            opens
+            a
+            <strong>three-state
+            radio
+            group
+            &mdash;
+            Compact
+            /
+            Full
+            /
+            Off</strong>,
+            the
+            same
+            cycle
+            its
+            <code>Ctrl+N</code>
+            key
+            walks.
+            Mid
+            Center
+            is
+            always
+            single-line,
+            so
+            it
+            offers
+            only
+            On
+            /
+            Off.
+            <strong>Bot
+            Left</strong>
+            carries
+            two
+            extra
+            toggles
+            above
+            its
+            radio
+            group,
+            because
+            they
+            decide
+            whether
+            there
+            is
+            anything
+            to
+            format:
+            <strong>Effects</strong>
+            (the
+            active
+            colour-effect
+            list)
+            and
+            <strong>Folder
+            Name</strong>
+            (the
+            containing
+            folder
+            beside
+            the
+            file
+            name).
+        </p>
 
         <h3>
             Sorting</h3>
@@ -4229,8 +4499,230 @@
                     backup
                 </td>
             </tr>
+            <tr>
+                <td>
+                    Logging
+                </td>
+                <td>
+                    <strong>General
+                    Log</strong>
+                    &mdash;
+                    what
+                    qIV
+                    itself
+                    did:
+                    started,
+                    closed,
+                    and
+                    whether
+                    the
+                    previous
+                    run
+                    ended
+                    abnormally
+                    (with
+                    the
+                    crash
+                    dump's
+                    filename
+                    when
+                    there
+                    is
+                    one).
+                    <strong>TCP/IP
+                    Log</strong>
+                    &mdash;
+                    every
+                    line
+                    exchanged
+                    with
+                    a
+                    remote
+                    client,
+                    the
+                    same
+                    traffic
+                    the
+                    Server
+                    Log
+                    panel
+                    shows
+                    (<code>Ctrl+F12</code>),
+                    written
+                    to
+                    disk
+                    as
+                    well.
+                    <strong>Open
+                    Log
+                    Folder</strong>
+                    opens
+                    <code>logs\</code>
+                    in
+                    Explorer
+                </td>
+            </tr>
             </tbody>
         </table>
+        <p>
+            Both
+            logs
+            are
+            <strong>off
+            by
+            default</strong>
+            and
+            survive
+            a
+            restart
+            once
+            switched
+            on
+            &mdash;
+            which
+            is
+            the
+            point
+            of
+            them.
+            A
+            screen
+            that
+            misbehaves
+            at
+            four
+            in
+            the
+            morning
+            is
+            exactly
+            the
+            one
+            nobody
+            was
+            watching,
+            so
+            the
+            setting
+            is
+            persisted
+            rather
+            than
+            something
+            you
+            must
+            remember
+            to
+            enable
+            first.
+        </p>
+        <p>
+            Files
+            land
+            in
+            <code>logs\general\</code>
+            and
+            <code>logs\network\</code>
+            beside
+            the
+            EXE,
+            named
+            <code>QuickImageViewer_General_&lt;timestamp&gt;.log</code>
+            and
+            <code>QuickImageViewer_Tcp_IP_&lt;timestamp&gt;.log</code>,
+            rotating
+            every
+            5000
+            lines.
+            Switching
+            a
+            log
+            off
+            and
+            on
+            again
+            continues
+            the
+            newest
+            file
+            rather
+            than
+            starting
+            a
+            fresh
+            one.
+        </p>
+        <p>
+            The
+            format
+            is
+            the
+            standard
+            <code>time [thread] LEVEL message</code>
+            layout,
+            so
+            <a
+                    href="https://www.logviewplus.com/"
+                    target="_blank"
+                    rel="noopener">LogViewPlus</a>,
+            lnav
+            and
+            similar
+            tools
+            parse
+            it
+            with
+            no
+            configuration
+            &mdash;
+            and
+            a
+            rotated
+            TCP/IP
+            file
+            opens
+            straight
+            back
+            in
+            the
+            Server
+            Log
+            panel
+            with
+            <code>Ctrl+O</code>.
+            Writing
+            happens
+            on
+            a
+            thread
+            of
+            its
+            own:
+            a
+            slow
+            disk
+            cannot
+            stall
+            the
+            viewer,
+            and
+            with
+            a
+            log
+            switched
+            off
+            the
+            cost
+            at
+            each
+            record
+            point
+            is
+            a
+            single
+            atomic
+            read.
+        </p>
     </section>
 
     <section

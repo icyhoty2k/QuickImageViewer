@@ -46,14 +46,29 @@ extern AppState app;
 // =============================================================================
 
 namespace {
-    // True when the Missing/Empty overlay is visible and pt lies on its path line.
+    bool PointInRect(const POINT &pt, const D2D1_RECT_F &r) {
+        // A zero rect means the line is not on screen — reject rather than
+        // treat the top-left corner as a hit.
+        if (r.right <= r.left || r.bottom <= r.top) return false;
+        return static_cast<float>(pt.x) >= r.left && static_cast<float>(pt.x) <= r.right &&
+               static_cast<float>(pt.y) >= r.top && static_cast<float>(pt.y) <= r.bottom;
+    }
+
+    // True when the placeholder is visible and pt lies on its path line (line 3).
     bool HitTestOverlayPath(const POINT &pt) {
         if (app.folderOverlay == AppState::FolderOverlayState::None ||
             app.folderOverlayPath.empty())
             return false;
-        const D2D1_RECT_F &r = app.folderOverlayPathRect;
-        return static_cast<float>(pt.x) >= r.left && static_cast<float>(pt.x) <= r.right &&
-               static_cast<float>(pt.y) >= r.top && static_cast<float>(pt.y) <= r.bottom;
+        return PointInRect(pt, app.folderOverlayPathRect);
+    }
+
+    // True when it is visible and pt lies on the "Open a file or folder…"
+    // prompt (line 2). That line is a constant, so it is present in every state
+    // — including the one where there is no folder to name at all, which is
+    // exactly when the user most needs a way out.
+    bool HitTestOverlayAction(const POINT &pt) {
+        if (app.folderOverlay == AppState::FolderOverlayState::None) return false;
+        return PointInRect(pt, app.folderOverlayActionRect);
     }
 
     // Open the overlay path in Explorer. If the directory itself is gone
@@ -80,9 +95,19 @@ void MouseHandler::HandleButtonDown(HWND hWnd, UINT message, WPARAM wParam, LPAR
             return;
         }
     }
-    // Clickable path in the Missing/Empty overlay — opens Explorer.
+    // The two clickable lines of the blank-screen placeholder. Tested before
+    // anything else on the canvas: while it is up there is no image to pan,
+    // zoom or drag, so nothing below can want these clicks.
     if (message == WM_LBUTTONDOWN) {
         POINT pt = {GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam)};
+
+        // Line 2 — same chooser F2 opens. Checked first: it is present in every
+        // state, including the one where line 3 does not exist.
+        if (HitTestOverlayAction(pt)) {
+            InputManager::ExecuteCommand(hWnd, Command::OpenFile);
+            return;
+        }
+        // Line 3 — reveal the folder, the same thing L does.
         if (HitTestOverlayPath(pt)) {
             OpenOverlayPathInExplorer(hWnd);
             return;
@@ -342,7 +367,9 @@ bool MouseHandler::UpdateHoverCursor(HWND hWnd) {
 
     ScreenToClient(hWnd, &pt);
 
-    if (HitTestOverlayPath(pt)) {
+    // Either clickable line of the placeholder shows the hand — a link that
+    // does not change the cursor is one most people never try.
+    if (HitTestOverlayAction(pt) || HitTestOverlayPath(pt)) {
         SetCursor(Constants::Cursors::CURR_GRAB);
         return true;
     }

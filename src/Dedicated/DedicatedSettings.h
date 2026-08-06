@@ -107,6 +107,11 @@ DWORD ReadDword(const wchar_t *valueName, DWORD defaultValue);
 void         WriteString(const wchar_t *valueName, const std::wstring &value);
 std::wstring ReadString(const wchar_t *valueName);
 
+// Removes a value from [Settings] outright — used to drop keys that older
+// builds wrote and nothing reads any more. Writing an empty string would leave
+// the dead line visible in a file the user is invited to open.
+void         DeleteValue(const wchar_t *valueName);
+
 // --- Arbitrary section access ----------------------------------------------
 // The four functions above are [Settings]-only, and the [Instance] block has its
 // own pair. A subsystem that owns a whole section of the file — [REMOTE_TCP_IP]

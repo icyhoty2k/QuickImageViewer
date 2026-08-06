@@ -219,6 +219,7 @@ static HMENU BuildSettingsMenu() {
     AppendMenuW(m, MF_STRING | CheckFlag(app.isEnableRunOnStartup),    Id::SET_RUN_ON_STARTUP, L"Run on Startup");
     AppendMenuW(m, MF_STRING | CheckFlag(app.thumbnailEffectsEnabled), Id::SET_THUMB_EFFECTS,  L"Thumbnail Effects");
     AppendMenuW(m, MF_STRING | CheckFlag(app.lockViewport),            Id::SET_LOCK_VIEWPORT,  L"Lock Viewport (keep zoom/pan)\tY");
+    AppendMenuW(m, MF_STRING | CheckFlag(app.rememberWindowPosition),  Id::SET_REMEMBER_WIN_POS, L"Remember Window Position");
     AppendMenuW(m, MF_STRING | CheckFlag(app.historyFullModeEnabled),  Id::SET_HISTORY_FULL,   L"History: Open Full List");
     AppendMenuW(m, MF_STRING | CheckFlag(app.openDirWndOnStart),       Id::SET_OPEN_DIRWND,    L"Open Thumbnail Strip on Start");
     AppendMenuW(m, MF_STRING | CheckFlag(app.swapMouseButtons),        Id::SET_SWAP_MOUSE,     L"Swap Mouse Buttons");

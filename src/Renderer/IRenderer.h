@@ -149,4 +149,13 @@ class IImageRenderer {
         // Advances to next frame; returns the new current frame's delay.
         virtual int  AdvanceGifFrame() { return 0; }
         virtual void ResetGifAnimation() {}
+
+        // Has the decoder already tried this file and given up? Lets the UI
+        // stop waiting for a decode that failed and say so instead — a file
+        // whose extension promises an image the data is not (a .txt renamed to
+        // .jpg) or a supported format whose bytes are damaged.
+        //
+        // Defaults to false: a renderer that does not track this simply never
+        // reports a failure, which is the behaviour every caller had before.
+        virtual bool DecodeFailed(const std::wstring & /*path*/) const { return false; }
 };
