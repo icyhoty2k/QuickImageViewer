@@ -628,10 +628,16 @@ const wchar_t *RendererD2D::FolderOverlayHeaderIcon() {
     }
 }
 
-// What the last line shows: the detail when there is one, the path otherwise.
+// What the last line shows: the path, in every state.
+//
+// The Unsupported state used to substitute a composed "dir \ file \ format"
+// string here instead. It named the refused extension — which the path ends in
+// anyway — at the cost of being the one state whose second line was not a real
+// path: not what the pin icon promises, not what the (L) hint opens, and a
+// different shape from the two states either side of it. A full path reads the
+// same everywhere and says the same thing.
 const std::wstring &RendererD2D::FolderOverlayLastLine() {
-    return app.folderOverlayDetail.empty() ? app.folderOverlayPath
-                                           : app.folderOverlayDetail;
+    return app.folderOverlayPath;
 }
 
 void RendererD2D::NoteDecodeFailure(const std::wstring &path) {
@@ -1460,9 +1466,12 @@ HRESULT RendererD2D::Render() {
     // ordinary load path clears it again by setting FolderOverlayState::None.
     if (!m_pActiveSvg && !m_pBitmap && app.playlist.empty() &&
         app.folderOverlay == AppState::FolderOverlayState::None) {
-        app.folderOverlay = AppState::FolderOverlayState::Empty;
-        // folderOverlayPath is left as-is: whatever the last known folder was
+        // The path is passed back to itself: whatever the last known folder was
         // stays the clickable line, and an empty one simply draws the heading.
+        // Through the shared setter like every other site, so this route gets
+        // the window title updated too — it is a blank screen like any other.
+        SetFolderOverlay(m_hwnd, AppState::FolderOverlayState::Empty,
+                         app.folderOverlayPath);
     }
 
     // Persistent overlay: "Directory Missing" (red) or "No Images" (normal).

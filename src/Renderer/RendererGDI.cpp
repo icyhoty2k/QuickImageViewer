@@ -187,9 +187,7 @@ HRESULT RendererGDI::Render() {
         // never differs.
         // Keyed on the STATE and the last line, compared without composing a
         // key string — this runs on every paint the placeholder is up.
-        const std::wstring &lastLine = app.folderOverlayDetail.empty()
-                                           ? app.folderOverlayPath
-                                           : app.folderOverlayDetail;
+        const std::wstring &lastLine = app.folderOverlayPath;
 
         const int stateNow = static_cast<int>(app.folderOverlay);
         if (!m_placeholderKeyValid ||
@@ -238,9 +236,8 @@ HRESULT RendererGDI::Render() {
             m_placeholderText += heading;
 
             // Where you are, then what to do — same order as the D2D path.
-            const std::wstring &last = app.folderOverlayDetail.empty()
-                                           ? app.folderOverlayPath
-                                           : app.folderOverlayDetail;
+            // The path in every state, same as there.
+            const std::wstring &last = app.folderOverlayPath;
             if (!last.empty()) {
                 m_placeholderText += L"\n";
                 m_placeholderText += Constants::ThemeIcons::ICON_LOCATION;

@@ -12,6 +12,7 @@
 #include "../Persistence/RegistryManager.h"
 #include "../Persistence/SessionFile.h"   // qivSession.ini — the resume position
 #include "Constants.h"
+#include "ConstantsStrings.h" // the placeholder's headings — the title reuses them
 #include "../ImageLoadStats.h"
 #include <commdlg.h>
 #include <shobjidl.h>
@@ -415,6 +416,103 @@ static void LaunchBackgroundScan(HWND hWnd, std::wstring dir,
             }).detach();
 }
 
+// THE one place the main window's title is written.
+//
+// It used to be written in exactly one place too — but that place was inside
+// the image-load path, so it only ever ran when an image loaded. Every route
+// that ends with NO image left the previous title standing, and the taskbar
+// went on naming a picture that was no longer on screen: an empty folder, a
+// folder deleted underneath us, a file nothing could decode, and a startup that
+// found nothing at all. Four ways to end up lying about what is displayed.
+//
+// So the title is derived from the STATE rather than written by whoever last
+// changed it, and every one of those routes calls this.
+//
+// The wording is the placeholder's own — the window says the same thing the
+// screen says, in the same words, because they answer the same question.
+void UpdateWindowTitle(HWND hWnd) {
+    namespace M = Constants::Messages;
+
+    std::wstring title;
+
+    // The PLACEHOLDER STATE is asked first, not the playlist.
+    //
+    // Unsupported is the reason for the order: that file IS in the playlist and
+    // IS the current index — it just cannot be drawn. Asking the playlist first
+    // would name it as though it were on screen, which is the one thing the
+    // window must not claim while the viewport says "Format not supported".
+    const wchar_t *reason = nullptr;
+    switch (app.folderOverlay) {
+        case AppState::FolderOverlayState::Missing:
+            reason = M::EMPTY_DIR_MISSING;
+            break;
+        case AppState::FolderOverlayState::Unsupported:
+            reason = M::FORMAT_UNSUPPORTED;
+            break;
+        case AppState::FolderOverlayState::Empty:
+            reason = M::EMPTY_DIR_NO_IMAGES;
+            break;
+        default:
+            break; // nothing is being reported — fall through to the image
+    }
+
+    if (reason) {
+        title = reason;
+        // Same trim as the placeholder: these constants end in ':' because
+        // elsewhere they introduce the line under them. Here something else
+        // follows, separated its own way.
+        while (!title.empty() && (title.back() == L':' || title.back() == L' '))
+            title.pop_back();
+
+        // The folder for the two folder states, the FILE for Unsupported —
+        // folderOverlayPath already holds whichever one applies, so this needs
+        // no branch of its own. The leaf only: a taskbar button is a few
+        // characters wide and a full path would be truncated away to nothing.
+        const std::wstring &subject = app.folderOverlayPath;
+        if (!subject.empty()) {
+            std::wstring leaf = subject.substr(subject.find_last_of(L"\\/") + 1);
+            if (leaf.empty()) leaf = subject; // a drive root — "D:\" has no leaf
+            title += L" - ";
+            title += leaf;
+        }
+    } else if (!app.playlist.empty() &&
+               app.currentIndex >= 0 &&
+               app.currentIndex < static_cast<int>(app.playlist.size())) {
+        // An image is on screen: it names itself, as it always has.
+        const std::wstring &path = app.playlist[app.currentIndex];
+        title = path.substr(path.find_last_of(L"\\/") + 1);
+    }
+
+    if (title.empty()) {
+        SetWindowTextW(hWnd, Constants::APP_NAME);
+        return;
+    }
+
+    title += L" - ";
+    title += Constants::APP_NAME;
+    SetWindowTextW(hWnd, title.c_str());
+}
+
+void SetFolderOverlay(HWND hWnd, AppState::FolderOverlayState state,
+                      const std::wstring &path) {
+    // Self-assignment is deliberate at one call site: the renderer's last-ditch
+    // guard passes app.folderOverlayPath back in to mean "keep whatever folder
+    // was last known". std::wstring handles it, and spelling it at the call
+    // site beats a second overload that means the same thing.
+    app.folderOverlay     = state;
+    app.folderOverlayPath = path;
+    UpdateWindowTitle(hWnd);
+}
+
+void ClearFolderOverlay(HWND hWnd) {
+    app.folderOverlay = AppState::FolderOverlayState::None;
+    // Cleared with the state, always. It belongs to whichever state set it, and
+    // a leftover from an Unsupported file would otherwise be shown as the
+    // second line of the next Empty folder.
+    app.folderOverlayPath.clear();
+    UpdateWindowTitle(hWnd);
+}
+
 // Called on the UI thread from the WM_QIV_SCAN_COMPLETE handler.
 void HandleScanComplete(HWND hWnd, ScanResult *result) {
     SetCursor(Constants::Cursors::CURR_DEFAULT);
@@ -479,13 +577,11 @@ void HandleScanComplete(HWND hWnd, ScanResult *result) {
         if (!fs::is_directory(fs::path(dir), ec) || ec) {
             // Directory itself is gone (deleted, moved, renamed).
             UI::InvalidateHistoryFolderStatus(dir);
-            app.folderOverlay = AppState::FolderOverlayState::Missing;
-            app.folderOverlayPath = dir;
+            SetFolderOverlay(hWnd, AppState::FolderOverlayState::Missing, dir);
         } else {
             // Directory exists but contains no supported images.
             UI::NotifyFolderContentsChanged(dir);
-            app.folderOverlay = AppState::FolderOverlayState::Empty;
-            app.folderOverlayPath = dir;
+            SetFolderOverlay(hWnd, AppState::FolderOverlayState::Empty, dir);
         }
 
         // The viewer is now showing this folder even though the playlist is empty.
@@ -562,12 +658,7 @@ void HandleScanComplete(HWND hWnd, ScanResult *result) {
         dirWnd.SetPlaylistCopy(app.playlist);
 
     // Folder has images — dismiss any Missing/Empty renderer overlay.
-    app.folderOverlay = AppState::FolderOverlayState::None;
-    // Cleared with the state, always. It belongs to whichever state set it, and
-    // a leftover from an Unsupported file would otherwise be shown as the last
-    // line of the next Empty folder.
-    app.folderOverlayDetail.clear();
-    app.folderOverlayPath.clear();
+    ClearFolderOverlay(hWnd);
     UI::NotifyFolderContentsChanged(scannedDir);
     // Same binding as the empty-scan path above: the viewer has settled on this
     // folder, so the History panel's green row must follow it.
@@ -1095,7 +1186,27 @@ void LoadImageIndex(HWND hWnd, int index) {
     // change, next to a hash and a window-title update that already cost more.
     Platform::Crash::NoteImage(currentPath.c_str());
 
-    SetWindowTextW(hWnd, (currentPath.substr(currentPath.find_last_of(L"\\/") + 1) + L" - QuickImageViewer").c_str());
+    // A different image is being loaded, so whatever the placeholder was
+    // reporting is a verdict on a DIFFERENT file and no longer applies.
+    //
+    // It was only ever cleared by a folder scan (HandleScanComplete) and by
+    // OpenDirectory — never by plain navigation. So arrowing onto a file the
+    // decoder refused, then arrowing back to a good one, left Unsupported set:
+    // the placeholder went on drawing over a picture that had loaded perfectly,
+    // still naming the broken file. Every route out of that folder cleared it,
+    // which is why it survived — you had to come back within the same folder to
+    // see it.
+    //
+    // Cleared HERE rather than on decode success, because this same call writes
+    // the title: doing it later would have the window announce the previous
+    // image's failure over the new one.
+    //
+    // app.currentIndex was set above, so the title this produces names the new
+    // image — which is also what makes switching from a broken file, or from an
+    // empty folder, to a real image update the taskbar. The app name is no
+    // longer spelled out here either: it lived as a literal in this one line
+    // while Constants::APP_NAME held the same string.
+    ClearFolderOverlay(hWnd);
 
     // =========================================================================
     // START THE DECODE FIRST. Queue the async read/decode BELOW, then do the
@@ -1194,12 +1305,7 @@ void OpenDirectory(HWND hWnd, const std::wstring &dirPathStr) {
     if (!fs::is_directory(dirPath, ec) || ec) return;
 
     // Valid directory confirmed — dismiss any Missing/Empty overlay immediately.
-    app.folderOverlay = AppState::FolderOverlayState::None;
-    // Cleared with the state, always. It belongs to whichever state set it, and
-    // a leftover from an Unsupported file would otherwise be shown as the last
-    // line of the next Empty folder.
-    app.folderOverlayDetail.clear();
-    app.folderOverlayPath.clear();
+    ClearFolderOverlay(hWnd);
 
     // If we are already in this directory, just jump to the first image.
     // Paths are no longer resolved, so string comparison would miss "D:\x is the
@@ -1436,9 +1542,10 @@ void OpenStartupTarget(HWND hWnd) {
         ec.clear();
         const bool missing = !blame.empty() && (!fs::is_directory(blame, ec) || ec);
 
-        app.folderOverlay = missing ? AppState::FolderOverlayState::Missing
-                                    : AppState::FolderOverlayState::Empty;
-        app.folderOverlayPath = blame;
+        SetFolderOverlay(hWnd,
+                         missing ? AppState::FolderOverlayState::Missing
+                                 : AppState::FolderOverlayState::Empty,
+                         blame);
         InvalidateRect(hWnd, nullptr, FALSE);
     }
 }
