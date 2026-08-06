@@ -328,10 +328,11 @@ namespace {
 
     // Connections THIS instance ended — kicked, timed-kicked or banned.
     //
-    // A kick is a shutdown(), which the client thread meets as a failed read:
-    // identical to a crash or a cable being pulled. Without this set, ejecting
-    // somebody would blink the same colour as a screen dying on its own, and the
-    // operator would be alarmed by the thing they just did themselves.
+    // A kick is a shutdown() and a cancelled I/O, which the client thread meets
+    // as a failed read or a failed write: identical to a crash or a cable being
+    // pulled. Without this set, ejecting somebody would blink the same colour as
+    // a screen dying on its own, and the operator would be alarmed by the thing
+    // they just did themselves.
     //
     // The client thread erases its own entry on the way out, so this never grows
     // beyond the connections currently being ejected.
@@ -973,6 +974,14 @@ namespace {
             // thread that is reading it can be reused by the system for
             // something else — see the header. So the read wakes on its own
             // instead, re-checks the flags, and goes back to waiting.
+            //
+            // THIS POLL IS THE BACKSTOP, NOT THE MECHANISM. It only ever covered
+            // the read, and a client thread blocked in SendAll — which is where
+            // a phone over Wi-Fi spends its time, writing preview JPEGs — was
+            // untouched by it and stayed for the full SEND_TIMEOUT_MS. The eject
+            // is now delivered by CancelIoEx in KickConnection, which aborts
+            // whichever call is actually pending. Read that one before changing
+            // anything here.
             //
             // The cost is one syscall per connection per interval that returns
             // immediately. An idle mirrored screen is expected to sit for
@@ -1683,23 +1692,97 @@ std::vector<ClientInfo> Connections() {
 }
 
 bool KickConnection(ConnId id) {
+    std::wstring address;
+    int          port = 0;
+
+    // EVERYTHING THAT TOUCHES THE SOCKET HAPPENS UNDER THIS LOCK, and that is
+    // the whole point of the block below — it is not merely guarding the map.
+    //
+    // This used to look the connection up, RELEASE the lock, and only then mark
+    // and shut down. A client thread reaching its own teardown inside that
+    // window broke the kick two different ways, both silent:
+    //
+    //   • UnregisterLiveConn calls DropEjected, so a MarkEjected that landed
+    //     after it left an ORPHANED mark on a dead socket number. ConnIds ARE
+    //     socket numbers and the system reuses them, so the next client handed
+    //     that number was ejected the moment it reached its loop — a connection
+    //     dying for a reason nobody could see. One kick that missed planted one
+    //     of these, so pressing Kick repeatedly made it worse, not better.
+    //
+    //   • shutdown() and CancelIoEx then fired on a descriptor that had already
+    //     been closed and reused — an eject landing on SOMEBODY ELSE's
+    //     connection.
+    //
+    // The teardown path takes this same lock in UnregisterLiveConn and only
+    // closes the socket AFTER it (see the note there), so holding it here means
+    // the descriptor cannot be closed, and therefore cannot be reused, while
+    // this function is acting on it. A find that succeeds proves the socket is
+    // still ours for as long as we hold this.
+    //
+    // Lock order is liveConn → ejected, the same order UnregisterLiveConn uses
+    // when it calls DropEjected, so nothing new can deadlock.
     {
         std::lock_guard<std::mutex> lk(g_liveConnMutex);
-        if (!g_liveConns.count(id)) return false;
-    }
 
-    // MARKED BEFORE THE SHUTDOWN, never after: the client thread can reach its
-    // departure path before this function returns, and a mark that landed second
-    // would be read too late — the eject would be reported as a crash.
+        auto it = g_liveConns.find(id);
+        if (it == g_liveConns.end()) return false;
+        address = it->second.address;
+        port    = it->second.port;
+
+        // MARKED BEFORE THE SHUTDOWN, never after: the client thread can reach
+        // its departure path before this function returns, and a mark that
+        // landed second would be read too late — the eject would be reported as
+        // a crash.
+        //
+        // Timed kick and ban both come through here, so one mark covers all
+        // three.
+        MarkEjected(id);
+
+        const SOCKET sock = static_cast<SOCKET>(id);
+
+        // See the header for why this is shutdown() rather than closesocket().
+        // The client thread notices its read failing, unwinds through the
+        // ordinary departure path, and unregisters itself — so nothing here
+        // erases the map entry.
+        shutdown(sock, SD_BOTH);
+
+        // AND THEN WAKE THE THREAD, because the shutdown above does not.
     //
-    // Timed kick and ban both come through here, so one mark covers all three.
-    MarkEjected(id);
+    // This is the whole reason Kick behaved like a race. The socket belongs to
+    // another thread that is sitting inside a blocking call, and Windows does
+    // not promise to return from one because a second thread shut the socket
+    // down. IDLE_POLL_MS was added to work around that — but a poll only covers
+    // the READ. Nothing covered a blocked WRITE.
+    //
+    // A phone watching in Fullscreen asks for a preview on every image change,
+    // and that JPEG is written by this same client thread. Over Wi-Fi a full
+    // TCP window blocks that send until SO_SNDTIMEO — THIRTY SECONDS — so the
+    // loop top, where the ejected mark is read, was unreachable for that whole
+    // time. Loopback never blocks in send, which is exactly why the emulator was
+    // always kicked instantly and a real phone was kicked "sometimes".
+    //
+    // CancelIoEx aborts whatever is pending on the handle, read or write: the
+    // blocked call returns immediately and the thread reaches the top of its
+    // loop, sees the mark, and leaves through the ordinary departure path.
+    //
+    // SAFE WHERE closesocket IS NOT. The descriptor stays valid and stays ours,
+    // so it cannot be handed to another connection while a thread is still
+    // reading it — the reuse hazard that ruled closesocket out in the first
+    // place. Nothing here waits for the thread either; this returns at once and
+    // the thread unregisters itself as it always did.
+    CancelIoEx(reinterpret_cast<HANDLE>(sock), nullptr);
 
-    // OUTSIDE the lock, and see the header for why this is shutdown() rather
-    // than closesocket(). The client thread notices its read failing, unwinds
-    // through the ordinary departure path, and unregisters itself — so nothing
-    // here erases the map entry.
-    shutdown(static_cast<SOCKET>(id), SD_BOTH);
+    // RECORDED AT THE MOMENT IT IS ISSUED, not only when the connection dies.
+    //
+    // The log is a record of the wire, so an operator action left no trace at
+    // all until the departure row appeared — which meant an eject that had not
+    // landed yet and an eject that never happened looked identical: an empty
+    // log. That ambiguity is what made this bug hard to see. The departure row
+    // still follows; this one says the order was given.
+    if (Log::IsEnabled())
+        Log::Add(Log::Direction::Out, Log::SelfLabel(),
+                 L"(ejecting — closing this connection)",
+                 NamedLabel(id, ConnLabel(address, port)), L"(connection)", -1);
     return true;
 }
 
