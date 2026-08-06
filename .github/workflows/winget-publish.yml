@@ -125,6 +125,54 @@ jobs:
       #
       # The output is therefore captured and translated rather than left raw.
       # ---------------------------------------------------------------------
+      # ---------------------------------------------------------------------
+      # 3a. Say what the token actually IS before using it.
+      #
+      # "The secret was updated" and "the secret holds a token that can push
+      # workflow files" are not the same statement, and the failure downstream
+      # cannot tell them apart. A classic token reports its scopes in the
+      # X-OAuth-Scopes response header, so the answer is one API call.
+      #
+      # NOTHING SECRET IS PRINTED: an account login and a list of scope names,
+      # both of which are public facts about a token, never the token.
+      # ---------------------------------------------------------------------
+      - name: Check the token before using it
+        env:
+          GH_TOKEN: ${{ secrets.WINGET_TOKEN }}
+        run: |
+          set -euo pipefail
+
+          WHO="$(gh api user -q .login 2>/dev/null || true)"
+          SCOPES="$(gh api -i user 2>/dev/null \
+                      | tr -d '\r' \
+                      | grep -i '^x-oauth-scopes:' \
+                      | cut -d: -f2- \
+                      | sed 's/^ *//' || true)"
+
+          echo "Token belongs to: ${WHO:-<the call failed — token invalid or expired>}"
+
+          if [ -z "$SCOPES" ]; then
+            # Fine-grained tokens report no scopes at all. Not an error in
+            # itself, so this only says so rather than stopping.
+            echo "Token scopes: none reported, so this is a fine-grained token."
+            echo "It needs Workflows AND Contents at Read and write on icyhoty2k/winget-pkgs."
+          else
+            echo "Token scopes: $SCOPES"
+            # The header is comma-SPACE separated, so the spaces come out before
+            # matching or every scope but the first fails to match.
+            case ",$(printf '%s' "$SCOPES" | tr -d ' ')," in
+              *,workflow,*) echo "The workflow scope is present." ;;
+              *)
+                MSG="The WINGET_TOKEN secret holds a classic token WITHOUT the workflow scope."
+                MSG="$MSG It reports: $SCOPES."
+                MSG="$MSG The token was not replaced, or the replacement was generated"
+                MSG="$MSG without the workflow box ticked, or it belongs to ${WHO:-another account}."
+                echo "::error::$MSG"
+                exit 1
+                ;;
+            esac
+          fi
+
       - name: Sync winget-pkgs fork with upstream
         env:
           GH_TOKEN: ${{ secrets.WINGET_TOKEN }}
