@@ -13,7 +13,7 @@ rem  on its exe, so a copy failing is the ordinary case, not a reason to stop â€
 rem  the other two still want updating, and the summary says which to close.
 rem ============================================================================
 
-set "SRC=Z:\QIV\release\QuickImageViewer.exe"
+set "SRC=Z:\QIV\release_static\QuickImageViewer.exe"
 
 set "DST1=D:\08_PortablePrograms\qIV"
 set "DST2=D:\21_sandBox\qivTesting1"
