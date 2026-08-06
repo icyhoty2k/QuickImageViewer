@@ -132,6 +132,7 @@ set(SOURCES
         src/Dedicated/DedicatedLists.cpp
         src/Dedicated/PromotionPlaylist.cpp
         src/Rem_TCP_IP/RemoteSettings.cpp
+        src/Rem_TCP_IP/AddressMatch.cpp
         src/Rem_TCP_IP/RemoteBlacklist.cpp
         src/Rem_TCP_IP/RemoteCrypto.cpp
         src/Rem_TCP_IP/RemoteTls.cpp
@@ -351,11 +352,20 @@ target_link_options(QuickImageViewer PRIVATE
         # without checking Rem_TCP_IP first — the listener can be started by
         # autostart before the window is up, and a delay-load fault on a socket
         # thread is a far worse failure than the microseconds it would save.
+        # dxgi.dll and windowscodecs.dll are deliberately NOT here. They are
+        # never statically imported — WIC arrives through
+        # CoCreateInstance(CLSID_WICImagingFactory) and DXGI transitively off the
+        # D3D11 device, both COM activations that already load on demand. Listing
+        # them did nothing except produce, on every link:
+        #
+        #     LINK : warning LNK4199: /DELAYLOAD:dxgi.dll ignored;
+        #                             no imports found from dxgi.dll
+        #
+        # A warning nobody can act on is one everybody learns to ignore, which is
+        # how a real one gets missed.
         $<$<CONFIG:Release>:/DELAYLOAD:d2d1.dll>
         $<$<CONFIG:Release>:/DELAYLOAD:d3d11.dll>
-        $<$<CONFIG:Release>:/DELAYLOAD:dxgi.dll>
         $<$<CONFIG:Release>:/DELAYLOAD:dwrite.dll>
-        $<$<CONFIG:Release>:/DELAYLOAD:windowscodecs.dll>
         $<$<CONFIG:Release>:/DELAYLOAD:comdlg32.dll>
 )
 
@@ -536,11 +546,23 @@ if (QIV_BUILD_TESTS)
             src/Persistence/IniFile.cpp
             src/Persistence/RotatingLogFile.cpp
             src/Rem_TCP_IP/RemoteLog.cpp
+            # The AllowList matcher — the most security-relevant pure logic in
+            # the program. It was split out of RemoteSettings.cpp precisely so it
+            # could be linked here; that file also pulls in AppState,
+            # RemoteBlacklist, RemoteCrypto and DedicatedSettings.
+            src/Rem_TCP_IP/AddressMatch.cpp
+            # Constants::APP_VERSION is declared extern in Constants.h and
+            # DEFINED here — RemoteLog's file preamble names the build that wrote
+            # the log, so the suite needs the definition or it fails to link.
+            src/Common/Version.cpp
     )
 
     target_include_directories(qivTests PRIVATE
             ${CMAKE_CURRENT_SOURCE_DIR}/src
             ${CMAKE_CURRENT_SOURCE_DIR}/src/Common
+            # BuildNumber.h, which Version.cpp includes. Generated into the build
+            # tree and rewritten on every build, so it is not beside the source.
+            ${QIV_GENERATED_DIR}
     )
 
     # NO precompiled header, and no /FI pch.h. The main target force-includes
@@ -548,6 +570,20 @@ if (QIV_BUILD_TESTS)
     # none of it and would then fail to build for reasons that have nothing to do
     # with what they are testing.
     target_compile_definitions(qivTests PRIVATE NOMINMAX UNICODE _UNICODE)
+
+    # /utf-8 — REQUIRED, not cosmetic, and the main target has had it all along.
+    #
+    # These sources are UTF-8 and contain non-ASCII character constants, e.g.
+    # RemoteLog.cpp's L'·' (the substitute for an unprintable byte in a logged
+    # line). Without /utf-8 MSVC reads the file in the system codepage, so the
+    # two UTF-8 bytes of '·' arrive as two characters and the compile fails with
+    #
+    #     error C2015: too many characters in constant
+    #
+    # It surfaced the moment RemoteLog.cpp was added to this target, in CI rather
+    # than locally, because the main target's flags never applied here. Any file
+    # added below inherits the same requirement.
+    target_compile_options(qivTests PRIVATE /utf-8)
 
     add_test(NAME qivTests COMMAND qivTests)
 endif ()

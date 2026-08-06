@@ -47,6 +47,7 @@
 #include "Common/FuzzyMatch.h"
 #include "Persistence/RotatingLogFile.h"
 #include "Rem_TCP_IP/RemoteLog.h"
+#include "Rem_TCP_IP/RemoteSettings.h"   // AddressMatches / InList — the accept gate
 
 #include <chrono>
 #include <cmath>
@@ -436,10 +437,22 @@ namespace {
 
     // Data rows only — the same rule the component itself counts by, so a test
     // that disagrees with it is testing the wrong number.
+    //
+    // Skipping the BOM matters: without it the first byte, 0xEF, is not '#' and
+    // reads as the start of a data row. That is precisely the bug this test
+    // found in RotatingLogFile::CountRows, so the helper has to be right about
+    // it or the test would go on agreeing with the defect.
     int DataRowsIn(const std::string &text) {
+        size_t start = 0;
+        if (text.size() >= 3 && static_cast<unsigned char>(text[0]) == 0xEF &&
+            static_cast<unsigned char>(text[1]) == 0xBB &&
+            static_cast<unsigned char>(text[2]) == 0xBF)
+            start = 3;
+
         int  rows        = 0;
         bool atLineStart = true;
-        for (const char c : text) {
+        for (size_t i = start; i < text.size(); ++i) {
+            const char c = text[i];
             if (c == '\n')    { atLineStart = true; continue; }
             if (c == '\r')    continue;
             if (!atLineStart) continue;
@@ -649,6 +662,177 @@ namespace {
         RemoveTempDir(dir);
     }
 
+    // ── AllowList — who is allowed to connect ───────────────────────────────
+    //
+    // THE MOST SECURITY-RELEVANT PURE LOGIC IN THE PROGRAM. `InList` is what the
+    // accept gate asks before a peer may speak, and its failure mode is silent:
+    // a matcher that is too permissive produces no crash, no error and no log
+    // line — just a machine that admits somebody it should not have.
+    //
+    // Everything below is written against CURRENT behaviour, including the sharp
+    // edges the implementation documents on purpose. A test that "fixed" one of
+    // those by asserting what feels right would break real users' lists.
+
+    void TestAddressMatch() {
+        using Remote::AddressMatches;
+        using Remote::InList;
+
+        NOTE("empty pattern matches nothing; '*' matches everything");
+        // An empty entry must never be a wildcard. A blank line in a hand-edited
+        // list would otherwise open the machine to the world.
+        CHECK(!AddressMatches(L"", L"192.168.0.1"));
+        CHECK(AddressMatches(L"*", L"192.168.0.1"));
+        CHECK(AddressMatches(L"*", L"2001:db8::1"));
+
+        NOTE("exact v4, and a near miss is a miss");
+        CHECK(AddressMatches(L"192.168.0.10", L"192.168.0.10"));
+        CHECK(!AddressMatches(L"192.168.0.10", L"192.168.0.11"));
+        CHECK(!AddressMatches(L"192.168.0.10", L"192.168.0.100"));
+
+        NOTE("v6 compares NUMERICALLY, so spelling cannot cause a lockout");
+        // "2001:db8::1" and the fully expanded form are one host. A rule typed
+        // the long way round matching nothing would lock somebody out silently.
+        CHECK(AddressMatches(L"2001:0db8:0000:0000:0000:0000:0000:0001", L"2001:db8::1"));
+        CHECK(AddressMatches(L"2001:db8::1", L"2001:0db8::1"));
+        CHECK(!AddressMatches(L"2001:db8::1", L"2001:db8::2"));
+
+        NOTE("a scope id on the peer does not defeat a link-local rule");
+        // GetNameInfoW hands back "fe80::1%12" for a link-local peer; the %12 is
+        // the interface, not the address.
+        CHECK(AddressMatches(L"fe80::1", L"fe80::1%12"));
+
+        NOTE("text prefix '*' keeps its documented sharp edge");
+        // Compared as CHARACTERS. "192.168.1*" without the trailing dot also
+        // matches 192.168.10.x — that is why /N exists beside it. Asserted so
+        // nobody "fixes" it and silently narrows existing lists.
+        CHECK(AddressMatches(L"192.168.1.*", L"192.168.1.55"));
+        CHECK(!AddressMatches(L"192.168.1.*", L"192.168.2.55"));
+        CHECK(AddressMatches(L"192.168.1*", L"192.168.10.5"));   // the sharp edge
+        CHECK(AddressMatches(L"192.168.1*", L"192.168.100.5"));  // and again
+
+        NOTE("v4 CIDR masks on bit boundaries and off them");
+        CHECK(AddressMatches(L"192.168.0.0/24", L"192.168.0.1"));
+        CHECK(AddressMatches(L"192.168.0.0/24", L"192.168.0.255"));
+        CHECK(!AddressMatches(L"192.168.0.0/24", L"192.168.1.1"));
+        CHECK(AddressMatches(L"10.0.0.0/8", L"10.255.255.255"));
+        CHECK(!AddressMatches(L"10.0.0.0/8", L"11.0.0.1"));
+        // /31 and /32 — the narrow end, where an off-by-one in the mask shows.
+        CHECK(AddressMatches(L"192.168.0.10/32", L"192.168.0.10"));
+        CHECK(!AddressMatches(L"192.168.0.10/32", L"192.168.0.11"));
+        CHECK(AddressMatches(L"192.168.0.10/31", L"192.168.0.11"));
+        CHECK(!AddressMatches(L"192.168.0.10/31", L"192.168.0.12"));
+
+        NOTE("/0 is every address, and must not shift by 32 (UB)");
+        // Shifting a 32-bit value by 32 is undefined, not zero. Handled as a
+        // special case; this is the check that it still is.
+        CHECK(AddressMatches(L"0.0.0.0/0", L"1.2.3.4"));
+        CHECK(AddressMatches(L"0.0.0.0/0", L"255.255.255.255"));
+
+        NOTE("v6 CIDR, including a prefix that is not a whole byte");
+        CHECK(AddressMatches(L"2001:db8::/32", L"2001:db8:1234::1"));
+        CHECK(!AddressMatches(L"2001:db8::/32", L"2001:db9::1"));
+        CHECK(AddressMatches(L"2001:db8:abcd:1234::/64", L"2001:db8:abcd:1234::99"));
+        CHECK(!AddressMatches(L"2001:db8:abcd:1234::/64", L"2001:db8:abcd:1235::1"));
+        // /36 — four bits into the fifth byte, so the partial-byte mask is used.
+        CHECK(AddressMatches(L"2001:db8:1000::/36", L"2001:db8:1fff::1"));
+        CHECK(!AddressMatches(L"2001:db8:1000::/36", L"2001:db8:2000::1"));
+
+        NOTE("FAMILIES MUST NOT CROSS — a v4 rule never admits a v6 peer");
+        // The check that stops a /24 covering addresses that merely begin with
+        // the same bytes in another notation.
+        CHECK(!AddressMatches(L"192.168.0.0/24", L"2001:db8::1"));
+        CHECK(!AddressMatches(L"2001:db8::/32", L"192.168.0.1"));
+        CHECK(!AddressMatches(L"10.0.0.0/8", L"::ffff:10.0.0.1"));
+
+        NOTE("ranges, both the full form and the last-octet shorthand");
+        CHECK(AddressMatches(L"192.168.0.10-192.168.0.50", L"192.168.0.10"));
+        CHECK(AddressMatches(L"192.168.0.10-192.168.0.50", L"192.168.0.50"));
+        CHECK(!AddressMatches(L"192.168.0.10-192.168.0.50", L"192.168.0.51"));
+        CHECK(!AddressMatches(L"192.168.0.10-192.168.0.50", L"192.168.0.9"));
+        CHECK(AddressMatches(L"192.168.0.10-50", L"192.168.0.30"));
+        CHECK(!AddressMatches(L"192.168.0.10-50", L"192.168.0.51"));
+
+        NOTE("a backwards range is a typo and matches nothing");
+        CHECK(!AddressMatches(L"192.168.0.50-192.168.0.10", L"192.168.0.30"));
+        CHECK(!AddressMatches(L"192.168.0.50-10", L"192.168.0.30"));
+
+        NOTE("malformed rules are refused, never treated as wildcards");
+        // The dangerous failure would be a rule that cannot be parsed being
+        // treated as "match anything". Each of these must match NOTHING.
+        CHECK(!AddressMatches(L"192.168.0.0/33", L"192.168.0.1"));
+        CHECK(!AddressMatches(L"2001:db8::/129", L"2001:db8::1"));
+        CHECK(!AddressMatches(L"192.168.0.0/", L"192.168.0.1"));
+        CHECK(!AddressMatches(L"/24", L"192.168.0.1"));
+        CHECK(!AddressMatches(L"192.168.0.0/abc", L"192.168.0.1"));
+        CHECK(!AddressMatches(L"192.168.0.256", L"192.168.0.256"));
+        CHECK(!AddressMatches(L"not-an-address", L"192.168.0.1"));
+
+        NOTE("InList is any-of, and an empty list admits nobody");
+        // Empty means DENY EVERYONE, by design — the accept gate depends on it.
+        const std::vector<std::wstring> empty;
+        CHECK(!InList(empty, L"192.168.0.1"));
+
+        const std::vector<std::wstring> list = {L"127.0.0.1", L"192.168.1.0/24", L"10.0.0.5-10"};
+        CHECK(InList(list, L"127.0.0.1"));
+        CHECK(InList(list, L"192.168.1.77"));
+        CHECK(InList(list, L"10.0.0.7"));
+        CHECK(!InList(list, L"192.168.2.1"));
+        CHECK(!InList(list, L"10.0.0.11"));
+        CHECK(!InList(list, L"8.8.8.8"));
+
+        NOTE("one bad entry does not disable the good ones beside it");
+        const std::vector<std::wstring> mixed = {L"garbage/99", L"192.168.1.0/24"};
+        CHECK(InList(mixed, L"192.168.1.5"));
+        CHECK(!InList(mixed, L"172.16.0.1"));
+    }
+
+    // ── LooksLikeAddress / BlockScope / SameHost ────────────────────────────
+
+    void TestAddressHelpers() {
+        using Remote::LooksLikeAddress;
+        using Remote::BlockScope;
+        using Remote::SameHost;
+
+        NOTE("LooksLikeAddress accepts the real forms");
+        CHECK(LooksLikeAddress(L"192.168.0.1"));
+        CHECK(LooksLikeAddress(L"192.168.0.0/24"));
+        CHECK(LooksLikeAddress(L"192.168.0.10-50"));
+        CHECK(LooksLikeAddress(L"2001:db8::1"));
+        CHECK(LooksLikeAddress(L"*"));
+
+        NOTE("and drops entries that could never match — a typo is not a rule");
+        CHECK(!LooksLikeAddress(L""));
+        CHECK(!LooksLikeAddress(L"C:\\path\\thing"));
+        CHECK(!LooksLikeAddress(L"192.168.0.1 and more"));
+        CHECK(!LooksLikeAddress(L"192.168.0.0/99"));   // parses as text, not as CIDR
+        CHECK(!LooksLikeAddress(L"10.0.0.5-1"));       // backwards range
+        CHECK(!LooksLikeAddress(std::wstring(65, L'1')));  // over the length cap
+
+        NOTE("BlockScope widens a v6 host to its /64");
+        CHECK(BlockScope(L"2001:db8:abcd:1234::99") == L"2001:db8:abcd:1234::/64");
+
+        NOTE("BlockScope leaves v4 ALONE — a /64 over v4 would be catastrophic");
+        // An IPv4-mapped address's low bits carry a v4 address, so a /64 over one
+        // reads as ::ffff:0:0/64 and would block the entire IPv4 internet from a
+        // single wrong password.
+        CHECK(BlockScope(L"192.168.0.1") == L"192.168.0.1");
+        CHECK(BlockScope(L"::ffff:192.168.1.5") == L"::ffff:192.168.1.5");
+
+        NOTE("BlockScope refuses to widen loopback and the all-zero prefix");
+        CHECK(BlockScope(L"::1") == L"::1");
+
+        NOTE("SameHost compares numerically within a family, never across one");
+        CHECK(SameHost(L"192.168.0.1", L"192.168.0.1"));
+        CHECK(SameHost(L"2001:db8::1", L"2001:0db8:0000:0000:0000:0000:0000:0001"));
+        CHECK(!SameHost(L"192.168.0.1", L"192.168.0.2"));
+        CHECK(!SameHost(L"192.168.0.1", L"::ffff:192.168.0.1"));  // different families
+        CHECK(!SameHost(L"", L"192.168.0.1"));
+
+        NOTE("two names compare case-insensitively, and nothing more");
+        CHECK(SameHost(L"Monitor2", L"monitor2"));
+        CHECK(!SameHost(L"monitor2", L"monitor2."));
+    }
+
 } // namespace
 
 int main(int argc, char **argv) {
@@ -686,6 +870,14 @@ int main(int argc, char **argv) {
 
     BeginGroup("Wire log - save/load round trip");
     TestWireLogRoundTrip();
+    EndGroup();
+
+    BeginGroup("AllowList - who may connect");
+    TestAddressMatch();
+    EndGroup();
+
+    BeginGroup("AllowList - entry validation and scope");
+    TestAddressHelpers();
     EndGroup();
 
     // Prints timings, so it always breaks the column layout. Last, and after a

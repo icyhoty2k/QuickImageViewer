@@ -186,12 +186,26 @@ struct RotatingLogFile::Impl {
         if (!ok) return -1;
         raw.resize(read);
 
+        // THE BOM IS NOT A ROW. Every file written here opens with EF BB BF, and
+        // scanning from byte zero makes that first byte — 0xEF, which is not '#'
+        // — look like the start of a data row. The count then came back one too
+        // high, so an adopted file rotated one row early, for ever.
+        //
+        // Caught by the rotation test in test/qivTests.cpp, which is exactly the
+        // kind of silent off-by-one that suite exists for.
+        size_t start = 0;
+        if (raw.size() >= 3 && static_cast<unsigned char>(raw[0]) == 0xEF &&
+            static_cast<unsigned char>(raw[1]) == 0xBB &&
+            static_cast<unsigned char>(raw[2]) == 0xBF)
+            start = 3;
+
         // Counted on the UTF-8 bytes directly: '\n' and '#' are single-byte in
         // UTF-8 and can never appear inside a multi-byte sequence, so decoding
         // the whole file to count its lines would be work for nothing.
         int  rowCount = 0;
         bool atLineStart = true;
-        for (const char c : raw) {
+        for (size_t i = start; i < raw.size(); ++i) {
+            const char c = raw[i];
             if (c == '\n')      { atLineStart = true;  continue; }
             if (c == '\r')      { continue; }
             if (!atLineStart)   { continue; }
