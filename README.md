@@ -4,7 +4,7 @@
 
 **A fast, GPU-accelerated image viewer for Windows.**
 
-Direct2D, WIC and native Win32. One portable EXE under 10 MB — no installer, no
+Direct2D, WIC and native Win32. One portable sub-10 MB EXE — no installer, no
 telemetry, no background service.
 
 Drives other copies of itself over plain TCP, mirrors one screen to many, and has
@@ -75,22 +75,26 @@ written to your machine unless you switch logging on. To remove qIV, delete the 
 
 | Format | Extensions | Decoder | Notes |
 |:---|:---|:---|:---|
-| JPEG | `.jpg` `.jpeg` | WIC | Full EXIF / GPS metadata |
-| PNG | `.png` | WIC | 16-bit, alpha |
+| JPEG | `.jpg` `.jpeg` `.jpe` | WIC | Full EXIF / GPS metadata |
+| PNG | `.png` `.apng` | WIC | 16-bit, alpha |
 | BMP | `.bmp` | WIC | |
 | TIFF | `.tif` `.tiff` | WIC | Multi-page (first frame) |
 | GIF | `.gif` | WIC | **Animated** — plays with per-frame delays |
 | WebP | `.webp` | WIC | Windows 10+ native codec |
-| HEIF / HEIC | `.heif` `.heic` | WIC | Requires MS HEIF Extensions |
-| AVIF | `.avif` | WIC | Windows 11 native codec |
+| HEIF / HEIC | `.heif` `.heic` `.hif` `.heics` `.heifs` | WIC | Requires MS HEIF Extensions |
+| AVIF | `.avif` `.avci` `.avcs` `.avifs` | WIC | Windows 11 native codec |
 | JPEG XL | `.jxl` | WIC | Windows 11 24H2+ native codec |
-| JPEG 2000 | `.jp2` `.j2k` | OpenJPEG | Static lib |
+| JPEG XR | `.jxr` `.wdp` `.hdp` | WIC | OS native |
+| DDS | `.dds` | WIC | OS native |
+| Camera RAW | `.dng` `.cr2` `.cr3` `.nef` `.arw` | WIC | Requires MS Raw Image Extension |
+| JPEG 2000 | `.jp2` `.j2k` `.j2c` `.jpf` `.jpx` | OpenJPEG | Static lib |
 | SVG | `.svg` | resvg | Rust static lib, async IO thread |
 | OpenEXR | `.exr` | tinyexr | Reinhard tone-map + γ2.2 |
 | Radiance HDR | `.hdr` | Inline | RGBE adaptive RLE, Reinhard tone-map |
+| Targa | `.tga` | Inline | RLE and colour-mapped, 8/15/16/24/32-bit |
 | PNM | `.ppm` `.pgm` `.pbm` | Inline | P1–P6, up to 16-bit maxval |
 | QOI | `.qoi` | Inline | Lossless fast format |
-| ICO | `.ico` `.cur` | WIC | |
+| ICO / CUR | `.ico` `.cur` | WIC | |
 
 **WIC** = Windows Imaging Component (OS native, zero dependency)  
 **Inline** = implemented directly with no third-party library
@@ -104,7 +108,7 @@ written to your machine unless you switch logging on. To remove qIV, delete the 
 | **Speed & footprint** | | | |
 | GPU VRAM bitmap cache | ✅ Direct2D | ❌ | ❌ |
 | Instant image switching | ✅ pre-decoded neighbours | ⚠️ visible load delay | ⚠️ visible load delay |
-| Portable — no installer | ✅ 9 MB single EXE | ❌ UWP / Store | ✅ |
+| Portable — no installer | ✅ sub-10 MB single EXE | ❌ UWP / Store | ✅ |
 | No background services | ✅ process exits cleanly | ❌ always-on UWP runtime | ✅ |
 | **Formats** | | | |
 | HEIC / AVIF / JPEG XL | ✅ native + codec | ✅ | ⚠️ plugin required |
