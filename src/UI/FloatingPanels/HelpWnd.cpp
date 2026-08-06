@@ -636,6 +636,31 @@ namespace UI {
             L"What this instance connects OUT to lives in Remote Servers (F10). "
             L"F9 is what others connect to; F10 is what this connects to.\r\n"
             L"WHO is connected right now is Ctrl+F9, not here.", sRemote);
+        // NO SHORTCUT — it is a menu-only toggle (TCP / IP → Announce). Entered
+        // with a label rather than a key, the way the SYSTEM TRAY section below
+        // handles every menu item that has no keystroke. Without this the F1
+        // reference was the only one of the three documents that did not
+        // mention the beacon at all.
+        Add(L"TCP / IP menu → Announce (beacon)",
+            L"Publish this listener on the local network so a phone or another qIV "
+            L"FINDS it in a list instead of being told an address. mDNS / DNS-SD, "
+            L"service type _qiv._tcp, answered by the Android app's own discovery — "
+            L"nothing to install at either end. Off by default.\r\n"
+            L"IT ANNOUNCES THE INSTANCE NAME AND THE PORT, AND NOTHING ELSE. Never a "
+            L"password, never whether one is set, never a path, never a file name, "
+            L"never the AllowList. A signpost that describes the lock on the door is a "
+            L"worse signpost.\r\n"
+            L"DISCOVERY IS NOT ACCESS. Being findable changes nothing about who may "
+            L"connect: the AllowList, the password challenge and TLS all still apply, "
+            L"so someone who discovers this instance and is not allowed in gets exactly "
+            L"as far as someone who guessed the address.\r\n"
+            L"IT ONLY ANNOUNCES WHEN THERE IS SOMETHING TO REACH — the setting on, the "
+            L"listener actually running, and a bind address other than loopback. A "
+            L"beacon with no listener behind it advertises a service that refuses every "
+            L"connection, and on 127.0.0.1 it would promise something nobody who hears "
+            L"it can use. When the tick is on and one of those is missing, the F9 panel "
+            L"says which — and the menu says WILL ANNOUNCE rather than claiming it "
+            L"did.", sRemote);
         Add(Ctrl(SC::SC_PANEL_REMOTE_TOGGLE),
             L"My Clients — every peer currently connected to the listener above, with "
             L"its address, the name it gave itself, whether it is encrypted, and how long "
