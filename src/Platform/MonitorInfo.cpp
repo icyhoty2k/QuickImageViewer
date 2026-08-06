@@ -11,7 +11,8 @@
 #include <shellscalingapi.h>   // GetDpiForMonitor
 #include <algorithm>
 
-#pragma comment(lib, "Shcore.lib")
+// NO #pragma comment(lib, "Shcore.lib") HERE — CMake already lists shcore, so
+// this was a duplicate of the real dependency list rather than part of it.
 
 namespace MonitorInfo {
 

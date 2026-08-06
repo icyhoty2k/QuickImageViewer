@@ -13,6 +13,7 @@
 #include "RemoteTls.h"
 #include "RemoteSettings.h"        // IsLoopbackBind — the one rule for "is this local"
 #include "RemoteCrypto.h"          // Sha256 / ToHex — the fingerprint
+#include "RemoteLog.h"             // the certificate's identity belongs in the wire log
 #include "Persistence/IniFile.h"   // PathBesideExe
 #include "Platform/Constants.h"
 #include "Platform/ConstantsStrings.h"
@@ -499,9 +500,11 @@ bool EnsureServerCredentials(std::wstring &errorOut) {
     std::lock_guard<std::mutex> lk(g_credMutex);
     if (g_haveServerCred) return true;
 
+    bool generated = false;
     if (!Persistence::Ini::Exists(CertPath())) {
         if (!CreateCertificateFile(errorOut)) return false;
         RestrictCertFileAccess();
+        generated = true;
     }
 
     PCCERT_CONTEXT cert = LoadCertificate(errorOut);
@@ -514,6 +517,23 @@ bool EnsureServerCredentials(std::wstring &errorOut) {
 
     g_serverCert  = cert;                 // held: the credentials reference it
     g_fingerprint = FingerprintOf(cert);
+
+    // "THE CLIENT SAYS FINGERPRINT MISMATCH" HAS EXACTLY ONE ANSWER: whether
+    // this instance generated a new certificate. Nothing recorded that, and by
+    // the time anybody asks, the old value is gone — every saved client row
+    // then fails and the file cannot say when or why it started.
+    //
+    // The fingerprint itself is PUBLIC by design. Clients are told to compare
+    // it, and the certificate carrying it is presented on every handshake, so
+    // there is nothing here the network does not already see. Contrast the
+    // password, which the log redacts.
+    if (Log::IsCapturing())
+        Log::Add(Log::Direction::Out, Log::SelfLabel(),
+                 generated
+                     ? L"(TLS certificate GENERATED — every saved client needs the new fingerprint)"
+                     : L"(TLS certificate loaded)",
+                 L"(local)", g_fingerprint, -1);
+
     return true;
 }
 

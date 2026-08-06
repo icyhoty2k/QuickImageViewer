@@ -496,6 +496,7 @@ target_link_libraries(QuickImageViewer PRIVATE
         # the one place still disagreeing.
         dxguid               # the D3D/DXGI GUIDs RendererD2D references
         comctl32             # common controls — AppCommands
+        dnsapi               # DnsServiceRegister — the mDNS beacon (RemoteBeacon)
 )
 
 # 7. Track Manifest Changes

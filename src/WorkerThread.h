@@ -124,7 +124,25 @@ class DecoderThreadPool {
                         }
 
                         if (task && localFactory) {
-                            task(localFactory.Get());
+                            // A BAD PICTURE MUST NOT TAKE THE PROCESS DOWN.
+                            // Every buffer in SimpleFormats is sized from header
+                            // fields of a file this app did not write — a QOI
+                            // header alone can legitimately ask for 1.6 GB — and
+                            // std::vector answers an impossible request with
+                            // std::bad_alloc. An exception leaving a
+                            // std::thread's function calls std::terminate: no
+                            // dump, no message, the whole viewer gone because
+                            // one file was malformed.
+                            //
+                            // Swallowed rather than reported, because the task
+                            // already reports for itself: RendererD2D's
+                            // FailureReporter is a destructor, so it runs during
+                            // unwinding and the user is told that this file
+                            // failed to decode before we ever get here.
+                            try {
+                                task(localFactory.Get());
+                            } catch (...) {
+                            }
                         }
                     }
 
@@ -248,7 +266,16 @@ class IoThreadPool {
                             task = std::move(m_queue.front());
                             m_queue.pop();
                         }
-                        if (task) task();
+                        // Same reason as DecoderThreadPool above: an exception
+                        // escaping a std::thread's function is std::terminate,
+                        // and these tasks read files whose size is decided by
+                        // whatever is on disk.
+                        if (task) {
+                            try {
+                                task();
+                            } catch (...) {
+                            }
+                        }
                     }
 
                     if (SUCCEEDED(hr)) CoUninitialize();

@@ -215,6 +215,18 @@ Client::~Client() { Disconnect(); }
 bool Client::IsConnected() const { return m_connected; }
 
 void Client::Disconnect() {
+    // THE OTHER HALF OF THE CONNECT ROW. Connect() records its result and its
+    // timing; without this the log showed every connection opening and none of
+    // them closing, so a target that dropped an hour ago still reads as live to
+    // anyone reading the file afterwards.
+    //
+    // Guarded on m_connected because this is also the cleanup path for a Connect
+    // that never got there — the failure is already recorded by Connect itself,
+    // and a second line for it would double-count.
+    if (m_connected && Log::IsCapturing())
+        Log::Add(Log::Direction::Out, Log::SelfLabel(), L"(connection closed)",
+                 LogPeer(m_peerLabel), L"(connection)", -1);
+
     const SOCKET s = static_cast<SOCKET>(m_sock);
     if (s != INVALID_SOCKET) {
         shutdown(s, SD_BOTH);
@@ -603,14 +615,55 @@ bool Client::DoConnect(const std::wstring &host, int port,
     //
     // The label may not be set yet on the very first attempt, so the address is
     // used — it is what was dialled, which is the useful thing here anyway.
-    if (Log::IsCapturing()) {
+
+    // AN UNCHANGED FAILURE IS COUNTED, NOT WRITTEN — see
+    // Constants::Logging::CONNECT_FAILURE_RESTATE_AFTER for the arithmetic that
+    // made this necessary. Decided before IsCapturing() is consulted, so the
+    // counters stay correct across the log being switched on mid-session; what
+    // the switch controls is whether a row is produced, not what is true.
+    bool writeRow = true;
+    if (ok) {
+        // Always written. A success can only follow a disconnect, so two in a
+        // row are two real events, and coming back up is the answer to the
+        // failures above it.
+        m_lastConnectError.clear();
+        m_haveLoggedFailure = false;
+    } else if (!m_haveLoggedFailure || errorOut != m_lastConnectError) {
+        // The FIRST failure after a success, or a DIFFERENT reason — which is a
+        // different fact. "Connection refused" becoming "certificate does not
+        // match the saved fingerprint" is the whole diagnosis, and collapsing
+        // the two would delete it.
+        m_lastConnectError  = errorOut;
+        m_haveLoggedFailure = true;
+    } else if (m_suppressedConnects + 1 >= Constants::Logging::CONNECT_FAILURE_RESTATE_AFTER) {
+        // Nothing has changed for about an hour. Restated once so the file
+        // shows the loop is still running rather than going silent, then the
+        // counting starts again.
+    } else {
+        ++m_suppressedConnects;
+        writeRow = false;
+    }
+
+    if (writeRow && Log::IsCapturing()) {
         const std::wstring endpoint = FormatEndpoint(host, port);
         const std::wstring peer     = m_peerLabel.empty() ? endpoint : m_peerLabel;
+
+        // The skipped attempts are reported ON the row that ends the run, which
+        // is why they were counted rather than dropped. A reader sees one line
+        // and knows both what happened and how long it had been happening.
+        std::wstring response = ok ? (m_banner.empty() ? L"OK connected" : m_banner)
+                                   : errorOut;
+        if (m_suppressedConnects > 0)
+            response += L"   [+" + std::to_wstring(m_suppressedConnects) +
+                        L" identical attempt(s) not logged]";
+
         Log::Add(Log::Direction::Out, Log::SelfLabel(),
-                 L"connect " + endpoint,
-                 peer, ok ? (m_banner.empty() ? L"OK connected" : m_banner) : errorOut,
-                 LogNowUs() - t0);
+                 L"connect " + endpoint, peer, response, LogNowUs() - t0);
     }
+
+    // Reset AFTER the row is built, and outside the IsCapturing test — a run of
+    // failures that elapsed while the log was off is still over.
+    if (writeRow) m_suppressedConnects = 0;
     return ok;
 }
 

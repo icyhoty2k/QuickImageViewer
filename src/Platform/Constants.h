@@ -258,6 +258,25 @@ namespace Constants {
         // Counted in DATA rows. The preamble is not counted, so every file holds
         // the same number of records however the header grows.
         constexpr int MAX_ROWS = 5000;
+
+        // HOW MANY IDENTICAL CONNECT FAILURES PASS BEFORE ONE IS RESTATED.
+        //
+        // A mirror target that is switched off is retried every
+        // MIRROR_RECONNECT_MS (3 s), and each attempt used to write its own
+        // row: 1200 rows an hour, against MAX_ROWS above. ONE screen left off
+        // overnight rotated this log every four hours and evicted the evidence
+        // it exists to keep — the log destroying its own contents by working.
+        //
+        // So an unchanged failure is counted rather than written, and the count
+        // is reported when something actually changes. This number is only the
+        // backstop for the case where nothing ever changes: 1200 attempts is
+        // about an hour, so a target that has been off since Friday costs ~24
+        // rows a day instead of 28,800, and the log still shows the retry loop
+        // is alive rather than going silent and looking dead.
+        //
+        // Nothing polls to produce these — the row rides on a retry that was
+        // happening anyway. See RemoteClient.cpp::DoConnect.
+        constexpr int CONNECT_FAILURE_RESTATE_AFTER = 1200;
     }
 
     // Hold off the screensaver and display sleep while the main window is

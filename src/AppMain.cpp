@@ -163,6 +163,17 @@ LRESULT CALLBACK MainAppWndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM l
         // where it is: moving a window the user can still see and grab would be
         // the app fighting them.
         case WM_DISPLAYCHANGE: {
+            // The new desktop, as Windows describes it in this message: bit
+            // depth in wParam, the primary monitor's pixels in lParam. Recorded
+            // whether or not the window had to be rescued, because for a screen
+            // in another room "the monitor was replaced at 03:12" is the fact
+            // that explains everything after it.
+            if (AppLog::IsEnabled())
+                AppLog::Info(AppLog::COMP_DISPLAY,
+                             L"display change — " + std::to_wstring(LOWORD(lParam)) +
+                             L"x" + std::to_wstring(HIWORD(lParam)) + L", " +
+                             std::to_wstring(static_cast<unsigned>(wParam)) + L" bpp");
+
             RECT rc{};
             if (GetWindowRect(hWnd, &rc)) {
                 if (!IsUsableWindowRect(rc.left, rc.top,
@@ -170,6 +181,14 @@ LRESULT CALLBACK MainAppWndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM l
                     app.ResetWindowGeometry(hWnd);
                     g_overlayManager.PostCenterMessage(hWnd,
                         Constants::Messages::WINDOW_RECOVERED);
+
+                    // A SEPARATE LINE, and a warning. The overlay says this once
+                    // and vanishes; that the window had become unreachable and
+                    // was moved back is the kind of thing somebody needs to find
+                    // out about the following morning.
+                    if (AppLog::IsEnabled())
+                        AppLog::Warn(AppLog::COMP_DISPLAY,
+                                     L"window was off every monitor — geometry reset");
                 }
             }
             return 0;

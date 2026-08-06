@@ -1464,6 +1464,28 @@ bool Start(HWND hOwner, std::wstring &errorOut) {
     // cannot read Config() themselves — see RemoteLog.h.
     Log::SetSelfName(cfg.name);
 
+    // ONE record for the seven bare `return false`s below — the same shape
+    // RendererD2D::PreloadBitmap uses, and for the same reason: a line at every
+    // failure path is a list somebody has to keep in step with the code
+    // forever, and a destructor cannot be forgotten when an eighth path is
+    // added. Declared AFTER the already-running check, which is not a failure
+    // worth a line.
+    //
+    // A REFUSED START IS THE EVENT MOST WORTH HAVING IN THE FILE. The panel
+    // shows the reason once, in a dialog — and nobody is standing in front of
+    // the machine in the other room to read it.
+    bool started = false;
+    struct StartReporter {
+        const bool         &ok;
+        const std::wstring &why;
+        ~StartReporter() {
+            if (ok || !Log::IsCapturing()) return;
+            Log::Add(Log::Direction::Out, Log::SelfLabel(),
+                     L"(listener refused to start)", L"(local)",
+                     why.empty() ? std::wstring(L"(no reason recorded)") : why, -1);
+        }
+    } startReporter{started, errorOut};
+
     const std::wstring blocked = WhyCannotStart(cfg);
     // An empty AllowList is a warning, not a refusal: the server binds and
     // listens, it just denies every caller. The panel reports it so a fully
@@ -1584,6 +1606,19 @@ bool Start(HWND hOwner, std::wstring &errorOut) {
     g_listenThread = std::thread(ListenThread);
     NotifyClientsChanged();   // the overlay indicator appears
 
+    // THE FIRST LINE OF EVERY TRANSCRIPT SHOULD BE THE LISTENER OPENING. Without
+    // it a saved log begins mid-conversation, and the two cases a reader most
+    // needs to tell apart — "nobody connected" and "there was nothing to connect
+    // to" — look identical, because both are an empty file. It also stamps the
+    // endpoint and whether the connection is encrypted, which is the context
+    // every row below it is read against.
+    if (Log::IsCapturing())
+        Log::Add(Log::Direction::Out, Log::SelfLabel(),
+                 Tls::RequiredForAddress(cfg.bindAddress)
+                     ? L"(listener started — TLS)"
+                     : L"(listener started — plaintext, loopback only)",
+                 FormatEndpoint(cfg.bindAddress, cfg.port), L"(server)", -1);
+
     // The beacon can only be announced once there is a listener behind it, so it
     // is reconciled HERE rather than when the setting is read. Refresh decides
     // for itself whether anything should be published — a beacon with the
@@ -1591,6 +1626,7 @@ bool Start(HWND hOwner, std::wstring &errorOut) {
     Beacon::Refresh();
 
     errorOut.clear();
+    started = true;   // tells StartReporter there is nothing to report
     return true;
 }
 
@@ -1612,6 +1648,18 @@ void Stop() {
     // in recv() must not be able to hold up the UI thread's Stop().
 
     g_running.store(false, std::memory_order_release);
+
+    // RECORDED BEFORE THE LABELS ARE CLEARED, two lines below. SelfLabel() is
+    // built from the name and endpoint this module holds, so a stop logged after
+    // SetSelfEndpoint({}) would name the instance without saying which address
+    // it had just given up — the one detail that closes the transcript.
+    //
+    // Placed after the early return at the top of this function, so a Stop that
+    // stopped nothing writes nothing.
+    if (Log::IsCapturing())
+        Log::Add(Log::Direction::Out, Log::SelfLabel(), L"(listener stopped)",
+                 BoundEndpoint(), L"(server)", -1);
+
     SetEndpoint({});
     Log::SetSelfEndpoint({});
     NotifyClientsChanged();   // the overlay indicator goes away
