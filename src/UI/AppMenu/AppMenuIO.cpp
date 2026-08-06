@@ -602,6 +602,15 @@ void RestoreDefaults(HWND hWnd) {
     // Theme is STATE the renderer and every panel must be pushed into —
     // assigning app.themeFactor alone repaints nothing. Import does this too.
     AppCommands::changeAppThemeFactor(hWnd, app.themeFactor);
+
+    // THE SAME OMISSION AS THE TWO LOG SINKS ABOVE. SORT_ORDER and SORT_REVERSE
+    // are reset and saved with everything else, but the playlist already in
+    // memory was built with the OLD order and keeps it — so the folder on
+    // screen stayed sorted the previous way until the next folder change or a
+    // restart, with the menu showing the new setting. ImportSettings has always
+    // called this; RestoreDefaults is the parallel path that did not.
+    ReSortPlaylistAndRebuildMap(hWnd);
+
     uiManager.RepaintAllPanels();
     InvalidateRect(hWnd, nullptr, FALSE);
     UI::ThemedDialog::Message(hWnd,
