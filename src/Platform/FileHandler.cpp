@@ -504,7 +504,13 @@ void UpdateWindowTitle(HWND hWnd) {
 //
 // One enumeration, no recursion, and no peek inside any of them: see the header
 // for why probing each for images is deliberately not done here.
-static std::vector<std::wstring> SubDirectoriesOf(const fs::path &dir) {
+// `keep` is a child that must survive the hidden/system filter whatever its
+// attributes — the folder the walk is standing in. Without it, opening a folder
+// that happens to carry the hidden or system bit removed it from its own
+// parent's listing, so the walk could not find itself and refused to move. You
+// are demonstrably allowed to be in a folder you are already in.
+static std::vector<std::wstring> SubDirectoriesOf(const fs::path &dir,
+                                                  const std::wstring &keep = {}) {
     std::vector<std::wstring> out;
     std::error_code ec;
     for (auto it = fs::directory_iterator(dir, fs::directory_options::skip_permission_denied, ec);
@@ -522,10 +528,14 @@ static std::vector<std::wstring> SubDirectoriesOf(const fs::path &dir) {
         // the feature being broken. std::filesystem cannot report the Windows
         // attribute bits, so this is one GetFileAttributesW per subfolder; it
         // happens once per keypress, on metadata the enumeration just warmed.
-        const DWORD attrs = GetFileAttributesW(it->path().c_str());
-        if (attrs != INVALID_FILE_ATTRIBUTES &&
-            (attrs & (FILE_ATTRIBUTE_HIDDEN | FILE_ATTRIBUTE_SYSTEM)))
-            continue;
+        const bool isKeep = !keep.empty() &&
+                            _wcsicmp(it->path().filename().wstring().c_str(), keep.c_str()) == 0;
+        if (!isKeep) {
+            const DWORD attrs = GetFileAttributesW(it->path().c_str());
+            if (attrs != INVALID_FILE_ATTRIBUTES &&
+                (attrs & (FILE_ATTRIBUTE_HIDDEN | FILE_ATTRIBUTE_SYSTEM)))
+                continue;
+        }
 
         out.push_back(it->path().wstring());
     }
@@ -572,8 +582,20 @@ static bool StepToFolder(HWND hWnd, const std::wstring &folder, const wchar_t *i
     std::wstring leaf = fs::path(folder).filename().wstring();
     if (leaf.empty()) leaf = folder;
 
-    std::wstring msg = std::wstring(icon) + leaf;
-    if (!position.empty()) msg += L"   " + position;
+    // ARROW, then POSITION, then the NAME IN QUOTES:  ➡  3/12  "Trip"
+    //
+    // The position sits next to the arrow because the two answer the same
+    // question — which way, and how far along — and reading them together is
+    // what makes a wrap legible as 12/12 then 1/12. The name comes last and is
+    // quoted, so a folder called "3" or one with trailing spaces cannot be
+    // misread as part of the counter.
+    //
+    // Up and down carry no position, so they read  ⬆  "2026"  and the quotes
+    // still mark where the name starts and ends.
+    std::wstring msg = std::wstring(icon);
+    if (!position.empty()) msg += position + L"  ";
+    msg += L"\"" + leaf + L"\"";
+
     g_overlayManager.PostCenterMessage(hWnd, msg);
     return true;
 }
@@ -629,23 +651,58 @@ bool OpenSiblingFolder(HWND hWnd, int step) {
     // Empty means the PARENT could not be read — denied, or deleted since we
     // came through it — because a folder we are standing in must otherwise
     // appear among its own parent's children. Reported, not swallowed.
-    const std::vector<std::wstring> subs = SubDirectoriesOf(parent);
+    // The folder we are standing in is kept whatever its attributes.
+    const std::vector<std::wstring> subs = SubDirectoriesOf(parent, here.filename().wstring());
     if (subs.empty()) {
-        g_overlayManager.PostCenterMessage(hWnd, Constants::Messages::FOLDER_WALK_NO_SIBLING);
+        if (AppLog::IsEnabled())
+            AppLog::Warn(AppLog::COMP_DISPLAY,
+                         L"sibling walk: no subfolders enumerated in parent '" +
+                             parent.wstring() + L"' (walking from '" + here.wstring() + L"')");
+        g_overlayManager.PostCenterMessage(hWnd, Constants::Messages::FOLDER_WALK_PARENT_EMPTY);
         return false;
     }
 
-    // Case-insensitively, because Windows paths are, and the recorded spelling
-    // may differ from the one the enumeration produced.
+    // MATCHED ON THE LEAF NAME, not the whole path.
+    //
+    // Comparing full strings looked obvious and was wrong: the folder the app
+    // thinks it is in and the folder the enumeration produced can be the same
+    // directory spelled two different ways. HistoryListWnd says so in its own
+    // words — "OpenDirectory() runs fs::canonical(), which resolves junctions,
+    // subst drives and symlinks — the path that comes back can be a completely
+    // different string from the one the history list holds for the same folder."
+    // A viewer opened through a junction, a subst drive or a mapped share
+    // therefore failed to find itself among its own siblings, and the walk
+    // refused to move.
+    //
+    // The leaf is enough and cannot be ambiguous: every candidate came from
+    // enumerating here.parent_path(), so they already share a parent, and one
+    // directory cannot hold two children with the same name. Whatever the parent
+    // half is spelled like on either side stops mattering.
+    const std::wstring leaf = here.filename().wstring();
     size_t idx = subs.size();
     for (size_t i = 0; i < subs.size(); ++i) {
-        if (_wcsicmp(subs[i].c_str(), here.wstring().c_str()) == 0) { idx = i; break; }
+        if (_wcsicmp(fs::path(subs[i]).filename().wstring().c_str(), leaf.c_str()) == 0) {
+            idx = i;
+            break;
+        }
     }
     // Not found means the current folder is not a child of its own parent as the
     // enumeration spells it — a junction, most likely. Nothing sensible to step
     // relative to, so say so rather than guessing at an index.
     if (idx == subs.size()) {
-        g_overlayManager.PostCenterMessage(hWnd, Constants::Messages::FOLDER_WALK_NO_SIBLING);
+        // Logged with BOTH spellings, because that is the whole question when
+        // this fires: the walk knows where it thinks it is, the enumeration knows
+        // what the parent actually contains, and only seeing the two strings side
+        // by side says which one is wrong.
+        if (AppLog::IsEnabled()) {
+            std::wstring msg = L"sibling walk: '" + here.wstring() +
+                               L"' is not among the " + std::to_wstring(subs.size()) +
+                               L" children of '" + parent.wstring() + L"' — first few: ";
+            for (size_t i = 0; i < subs.size() && i < 3; ++i)
+                msg += L"'" + subs[i] + L"' ";
+            AppLog::Warn(AppLog::COMP_DISPLAY, msg);
+        }
+        g_overlayManager.PostCenterMessage(hWnd, Constants::Messages::FOLDER_WALK_NOT_A_CHILD);
         return false;
     }
 
@@ -1898,7 +1955,7 @@ bool OpenSpecificImage(HWND hWnd, const std::wstring &filePathStr) {
                 LoadImageIndex(hWnd, mapIt->second);
                 InvalidateRect(hWnd, nullptr, TRUE);
                 UpdateWindow(hWnd);
-                return;
+                return true;
             }
         }
     }
@@ -1950,6 +2007,7 @@ bool OpenSpecificImage(HWND hWnd, const std::wstring &filePathStr) {
     LaunchBackgroundScan(hWnd, filePath.parent_path().wstring(), target, gen,
                          app.fileHandlerDefaultSortOrder, app.fileHandlerIsReverseSortOrder,
                          activeIsPrimary);
+    return true;
 }
 
 void ReSortPlaylistAndRebuildMap(HWND hWnd) {

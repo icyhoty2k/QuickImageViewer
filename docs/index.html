@@ -802,7 +802,7 @@ Version 2.210.0.302 &bull; Size: 9,792.00 KB &bull; Build Date: 2026-08-07
 <div class="statstrip">
     <a class="stat" href="https://github.com/icyhoty2k/QuickImageViewer/releases">
         <span class="stat-glyph">⬇</span>
-        <span class="stat-value">298</span>
+        <span class="stat-value">301</span>
         <span class="stat-label">downloads</span>
     </a>
     <a class="stat" href="https://github.com/icyhoty2k/QuickImageViewer/stargazers">
@@ -842,12 +842,12 @@ Version 2.210.0.302 &bull; Size: 9,792.00 KB &bull; Build Date: 2026-08-07
     </a>
     <a class="stat" href="shortcuts.html">
         <span class="stat-glyph">⌨</span>
-        <span class="stat-value">207</span>
+        <span class="stat-value">209</span>
         <span class="stat-label">shortcuts</span>
     </a>
     <a class="stat" href="https://github.com/icyhoty2k/QuickImageViewer">
         <span class="stat-glyph">📐</span>
-        <span class="stat-value">71.7k</span>
+        <span class="stat-value">72.5k</span>
         <span class="stat-label">lines of C++</span>
     </a>
     <a class="stat" href="https://github.com/icyhoty2k/QuickImageViewer/blob/main/LICENSE">
@@ -1091,6 +1091,51 @@ Version 2.210.0.302 &bull; Size: 9,792.00 KB &bull; Build Date: 2026-08-07
                         deletes go to the Recycle Bin.
                     </li>
                 </ul>
+                <h3>Theming — a dial, not a switch</h3>
+                <p>
+                    Most viewers give you dark <em>or</em> light. qIV gives you every point between them,
+                    live. <code>Ctrl+Alt+Num +</code> and <code>Ctrl+Alt+Num -</code> move a single
+                    <strong>theme factor</strong> from 0.0 to 1.0 in steps of 0.05 &mdash; <strong>21 stops</strong>
+                    from full dark to full light. Every panel, scrollbar, overlay and window background
+                    re-tints as you press, with no restart. <code>Ctrl+Alt+Num 0</code> returns to the default.
+                </p>
+                <p>
+                    It is one formula, applied to each colour channel independently:
+                    <code>Final = Base + factor &times; (1 &minus; 2 &times; Base)</code>.
+                </p>
+                <ul>
+                    <li>
+                        <strong>At 0.0 the maths cancels out exactly</strong> &mdash; the dark theme is not an
+                        approximation of a neutral one. Every colour is bit-for-bit its designed value.
+                    </li>
+                    <li>
+                        <strong>At 1.0 each channel inverts</strong>, giving a true light theme.
+                    </li>
+                    <li>
+                        <strong>Hue survives the journey</strong> &mdash; red, green and blue invert
+                        independently rather than through a lightness curve, so the yellow shortcut column, the
+                        blue links and the red &ldquo;directory missing&rdquo; heading stay recognisably
+                        themselves at every stop instead of washing out to grey. Alpha is never themed, so
+                        nothing changes opacity as the dial moves.
+                    </li>
+                    <li>
+                        <strong>Windows follows along</strong> &mdash; crossing the 0.5 midpoint flips the app
+                        between dark and light mode, repainting the title bars of the main window and every
+                        floating panel so the frame never disagrees with the contents.
+                    </li>
+                    <li>
+                        <strong>It is remembered</strong> &mdash; stored as a whole percent and clamped at both
+                        the runtime setter and the registry load, so a hand-edited value cannot reach the
+                        renderer.
+                    </li>
+                </ul>
+                <p>
+                    Two neighbouring controls change the window's <em>material</em> rather than its colour, both
+                    Windows 11 22H2+ and silently ignored on older builds:
+                    <code>Ctrl+Shift+Num *</code> toggles rounded &harr; square corners, and
+                    <code>Ctrl+Shift+Num /</code> cycles the backdrop None &rarr; Mica &rarr; Acrylic &rarr;
+                    MicaAlt.
+                </p>
                 <h3>Offline Reverse Geocoding</h3>
                 <p>
                     GPS coordinates in EXIF data are resolved to full location details with <strong>zero
@@ -1215,6 +1260,10 @@ Version 2.210.0.302 &bull; Size: 9,792.00 KB &bull; Build Date: 2026-08-07
                         <tr>
                             <td>Open Thumbnail Strip on Start</td>
                             <td>Auto-open the directory strip on every launch</td>
+                        </tr>
+                        <tr>
+                            <td>Folder Walk Wraps Around</td>
+                            <td>Whether Alt+Left / Alt+Right roll from the last sibling folder back to the first. On by default; off stops at each end and says so</td>
                         </tr>
                         <tr>
                             <td>Overlay Background</td>

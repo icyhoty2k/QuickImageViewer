@@ -25,7 +25,7 @@
     together. Editing this file by hand puts it out of step with the binary,
     which is the entire problem it exists to solve.
 
-    Last generated: 2026-08-07
+    Last generated: 2026-08-08
 -->
 <body>
 
@@ -45,7 +45,7 @@
     <h1>QuickImageViewer (qIV) — Shortcuts</h1>
     <p class="meta">
         Generated from the app's own help panel — press <kbd>F1</kbd> in QuickImageViewer to see the same list on your
-        machine. 207 shortcuts in 16 sections.
+        machine. 209 shortcuts in 16 sections.
     </p>
 
 <!-- SHARED-STOREROW-START -->
@@ -73,375 +73,585 @@
     </div>
 <!-- SHARED-STOREROW-END -->
 
-    <details class="shortcut-section" open>
-        <summary>Image Navigation <span class="count">16</span></summary>
-        <div class="tablewrap">
-            <table>
-                <thead><tr><th>Keys</th><th>Action</th></tr></thead>
-                <tbody>
-                <tr><td><kbd>Left</kbd> / <kbd>Right</kbd></td><td>Go to the previous / next image in the current folder. Neighbouring images are pre-decoded into the VRAM cache, so switching is instant.</td></tr>
-                <tr><td><kbd>Space</kbd> / <kbd>Shift+Space</kbd></td><td>Next / previous image. While a slideshow is running, pauses and resumes the slideshow instead.</td></tr>
-                <tr><td><kbd>Mouse Wheel</kbd></td><td>Previous / next image when scrolled over the main window. Direction can be reversed with MOUSE_VERTICAL_REVERSE_SCROLL_DIRECTION in Constants.h.</td></tr>
-                <tr><td><kbd>Home</kbd> / <kbd>End</kbd></td><td>Jump to the first / last image of the folder.</td></tr>
-                <tr><td><kbd>Backspace</kbd></td><td>Smart jump between the first and the last image of the folder — goes to whichever end is further away from the current position.</td></tr>
-                <tr><td><kbd>Shift+Backspace</kbd></td><td>Return to the image you were viewing before the first / last jump.</td></tr>
-                <tr><td><kbd>E</kbd></td><td>Toggle between the current image and the previously viewed one — an image-level Back button.</td></tr>
-                <tr><td><kbd>Q</kbd></td><td>Toggle between the current folder and the previously opened folder.</td></tr>
-                <tr><td><kbd>Page Up</kbd> / <kbd>Page Down</kbd></td><td>Walk the History panel's list one folder up / down, visiting only the non-favorite entries. The list order is never changed — the centre overlay reports the same row number the panel shows.</td></tr>
-                <tr><td><kbd>Insert</kbd> / <kbd>Delete</kbd></td><td>Same walk restricted to the favorites, so the two pairs of keys never land on each other's entries.</td></tr>
-                <tr><td><kbd>J</kbd> / <kbd>Ctrl+G</kbd></td><td>Open the Jump-to panel: type an image number and press Enter to go straight to it. Typing @ inside the panel switches to Find mode.</td></tr>
-                <tr><td><kbd>Ctrl+F</kbd></td><td>Open the Find panel — fuzzy filename search with wildcard support: * matches any characters, ? matches exactly one (e.g. *.jpg or photo_??_2024.*). Searches the current folder and the VRAM cache. Typing # inside switches to Jump-to.</td></tr>
-                <tr><td><kbd>L</kbd></td><td>Reveal the current file in Windows Explorer (opens its folder with the file pre-selected).</td></tr>
-                <tr><td><kbd>Horizontal Wheel</kbd></td><td>Cycle through the folders of your navigation history — one folder change per wheel notches. The folder snapshot is refreshed with in the History panel.</td></tr>
-                <tr><td><kbd>F2</kbd></td><td>Open-file dialog.</td></tr>
-                <tr><td><kbd>Alt+Up</kbd> / <kbd>Alt+Down</kbd></td><td>Walk the folder tree: open the parent folder (the same key Explorer uses), or step into the first subfolder. These reach folders you have never opened, unlike the history keys which only revisit folders you have already been in. A folder with no pictures is a normal stop on the way, not a dead end.</td></tr>
-                <tr><td><kbd>Alt+Left</kbd> / <kbd>Alt+Right</kbd></td><td>Previous / next sibling folder — sideways through the tree, in Explorer's own name order, so "Trip 10" comes after "Trip 2". Each landing names the folder and shows its position in the run (3/12). Wraps from the last folder back to the first by default; Settings &rsaquo; Folder Walk Wraps Around turns that off, and then the ends stop and say so.</td></tr>
-                <tr><td><kbd>Drag &amp; Drop</kbd></td><td>Drop an image file or an entire folder onto the window to open it. Dropping several at once opens the first — pictures dropped together from one folder are all in the playlist already, so the rest are an arrow key away. Anything that cannot come along, such as a second folder, is counted in a message rather than dropped in silence.</td></tr>
-                </tbody>
-            </table>
+    <input class="sc-filter" id="sc-filter" type="search" placeholder="Filter shortcuts — try &quot;folder&quot;, &quot;alt&quot;, &quot;wheel&quot; or a section name" autocomplete="off">
+    <p class="sc-status" id="sc-status"></p>
+
+    <section class="sc-sec" data-title="Image Navigation">
+        <h2><span class="sc-ico">🧭</span>Image Navigation<span class="sc-count">18</span></h2>
+        <div class="sc-cols">
+            <div class="sc-row"><div class="sc-keys"><kbd>Left</kbd> / <kbd>Right</kbd></div><p class="sc-desc">Go to the previous / next image in the current folder. Neighbouring images are pre-decoded into the VRAM cache, so switching is instant.</p></div>
+            <div class="sc-row"><div class="sc-keys"><kbd>Space</kbd> / <kbd>Shift+Space</kbd></div><p class="sc-desc">Next / previous image. While a slideshow is running, pauses and resumes the slideshow instead.</p></div>
+            <div class="sc-row"><div class="sc-keys"><kbd>Mouse Wheel</kbd></div><p class="sc-desc">Previous / next image when scrolled over the main window. Direction can be reversed with MOUSE_VERTICAL_REVERSE_SCROLL_DIRECTION in Constants.h.</p></div>
+            <div class="sc-row"><div class="sc-keys"><kbd>Home</kbd> / <kbd>End</kbd></div><p class="sc-desc">Jump to the first / last image of the folder.</p></div>
+            <div class="sc-row"><div class="sc-keys"><kbd>Backspace</kbd></div><p class="sc-desc">Smart jump between the first and the last image of the folder — goes to whichever end is further away from the current position.</p></div>
+            <div class="sc-row"><div class="sc-keys"><kbd>Shift+Backspace</kbd></div><p class="sc-desc">Return to the image you were viewing before the first / last jump.</p></div>
+            <div class="sc-row"><div class="sc-keys"><kbd>E</kbd></div><p class="sc-desc">Toggle between the current image and the previously viewed one — an image-level Back button.</p></div>
+            <div class="sc-row"><div class="sc-keys"><kbd>Q</kbd></div><p class="sc-desc">Toggle between the current folder and the previously opened folder.</p></div>
+            <div class="sc-row"><div class="sc-keys"><kbd>Page Up</kbd> / <kbd>Page Down</kbd></div><p class="sc-desc">Walk the History panel's list one folder up / down, visiting only the non-favorite entries. The list order is never changed — the centre overlay reports the same row number the panel shows.</p></div>
+            <div class="sc-row"><div class="sc-keys"><kbd>Insert</kbd> / <kbd>Delete</kbd></div><p class="sc-desc">Same walk restricted to the favorites, so the two pairs of keys never land on each other's entries.</p></div>
+            <div class="sc-row"><div class="sc-keys"><kbd>J</kbd> / <kbd>Ctrl+G</kbd></div><p class="sc-desc">Open the Jump-to panel: type an image number and press Enter to go straight to it. Typing @ inside the panel switches to Find mode.</p></div>
+            <div class="sc-row"><div class="sc-keys"><kbd>Ctrl+F</kbd></div><p class="sc-desc">Open the Find panel — fuzzy filename search with wildcard support: * matches any characters, ? matches exactly one (e.g. *.jpg or photo_??_2024.*). Searches the current folder and the VRAM cache. <a class="sc-more" href="#image-navigation-ctrl-f">details</a></p></div>
+            <div class="sc-row"><div class="sc-keys"><kbd>L</kbd></div><p class="sc-desc">Reveal the current file in Windows Explorer (opens its folder with the file pre-selected).</p></div>
+            <div class="sc-row"><div class="sc-keys"><kbd>Horizontal Wheel</kbd></div><p class="sc-desc">Cycle through the folders of your navigation history — one folder change per wheel notches. The folder snapshot is refreshed with in the History panel.</p></div>
+            <div class="sc-row"><div class="sc-keys"><kbd>F2</kbd></div><p class="sc-desc">Open-file dialog.</p></div>
+            <div class="sc-row"><div class="sc-keys"><kbd>Alt+Up</kbd> / <kbd>Alt+Down</kbd></div><p class="sc-desc">WALK THE FOLDER TREE. Alt+Up opens the parent folder — the same key Explorer uses — and Alt+Down steps into the first subfolder. <a class="sc-more" href="#image-navigation-alt-up-alt-down">details</a></p></div>
+            <div class="sc-row"><div class="sc-keys"><kbd>Alt+Left</kbd> / <kbd>Alt+Right</kbd></div><p class="sc-desc">Previous / next SIBLING folder — sideways through the tree, in Explorer's own name order (StrCmpLogicalW, so "Trip 10" comes after "Trip 2"). <a class="sc-more" href="#image-navigation-alt-left-alt-right">details</a></p></div>
+            <div class="sc-row"><div class="sc-keys"><kbd>Drag &amp; Drop</kbd></div><p class="sc-desc">Drop an image file or an entire folder onto the window to open it. <a class="sc-more" href="#image-navigation-drag-drop">details</a></p></div>
         </div>
-    </details>
-    <details class="shortcut-section">
-        <summary>Zoom, Pan &amp; View Modes <span class="count">8</span></summary>
-        <div class="tablewrap">
-            <table>
-                <thead><tr><th>Keys</th><th>Action</th></tr></thead>
-                <tbody>
-                <tr><td><kbd>Up</kbd> / <kbd>Down</kbd></td><td>Zoom in / out by × per step.</td></tr>
-                <tr><td><kbd>Num +</kbd> / <kbd>Num −</kbd></td><td>Zoom in / out — same steps as Up / Down.</td></tr>
-                <tr><td><kbd>Num *</kbd></td><td>Reset zoom and pan back to the active view mode's default fit.</td></tr>
-                <tr><td><kbd>0</kbd></td><td>Type an exact zoom percentage.</td></tr>
-                <tr><td><kbd>Ctrl+Wheel</kbd></td><td>Zoom in / out centered on the mouse cursor.</td></tr>
-                <tr><td><kbd>W</kbd> / <kbd>A</kbd> / <kbd>S</kbd> / <kbd>D</kbd></td><td>Pan the viewport when the image is larger than the window — px per press (DPI-scaled).</td></tr>
-                <tr><td><kbd>1</kbd> – <kbd>5</kbd></td><td>Select the view mode: 1 Fit to view (keeps aspect ratio) • 2 Fit to width (stretches) • 3 Fit to height (stretches) • 4 Fill window (stretches) • 5 Original size, 1:1 pixels (keeps aspect ratio).</td></tr>
-                <tr><td><kbd>Y</kbd></td><td>Toggle viewport lock. When ON, zoom and pan carry over to the next image instead of resetting — so flipping through same-framed shots keeps the same detail on screen at the same magnification. Rotation and flips still reset, because each file's EXIF orientation tag owns those. Startup default: ONOFF (IS_LOCK_VIEWPORT in Constants.h).</td></tr>
-                </tbody>
-            </table>
+    </section>
+    <section class="sc-sec" data-title="Zoom, Pan &amp; View Modes">
+        <h2><span class="sc-ico">🔍</span>Zoom, Pan &amp; View Modes<span class="sc-count">8</span></h2>
+        <div class="sc-cols">
+            <div class="sc-row"><div class="sc-keys"><kbd>Up</kbd> / <kbd>Down</kbd></div><p class="sc-desc">Zoom in / out by × per step.</p></div>
+            <div class="sc-row"><div class="sc-keys"><kbd>Num +</kbd> / <kbd>Num −</kbd></div><p class="sc-desc">Zoom in / out — same steps as Up / Down.</p></div>
+            <div class="sc-row"><div class="sc-keys"><kbd>Num *</kbd></div><p class="sc-desc">Reset zoom and pan back to the active view mode's default fit.</p></div>
+            <div class="sc-row"><div class="sc-keys"><kbd>0</kbd></div><p class="sc-desc">Type an exact zoom percentage.</p></div>
+            <div class="sc-row"><div class="sc-keys"><kbd>Ctrl+Wheel</kbd></div><p class="sc-desc">Zoom in / out centered on the mouse cursor.</p></div>
+            <div class="sc-row"><div class="sc-keys"><kbd>W</kbd> / <kbd>A</kbd> / <kbd>S</kbd> / <kbd>D</kbd></div><p class="sc-desc">Pan the viewport when the image is larger than the window — px per press (DPI-scaled).</p></div>
+            <div class="sc-row"><div class="sc-keys"><kbd>1</kbd> – <kbd>5</kbd></div><p class="sc-desc">Select the view mode: 1 Fit to view (keeps aspect ratio) • 2 Fit to width (stretches) • 3 Fit to height (stretches) • 4 Fill window (stretches) • 5 Original size, 1:1 pixels (keeps aspect ratio).</p></div>
+            <div class="sc-row"><div class="sc-keys"><kbd>Y</kbd></div><p class="sc-desc">Toggle viewport lock. When ON, zoom and pan carry over to the next image instead of resetting — so flipping through same-framed shots keeps the same detail on screen at the same magnification. <a class="sc-more" href="#zoom-pan-view-modes-y">details</a></p></div>
         </div>
-    </details>
-    <details class="shortcut-section">
-        <summary>Mouse Controls <span class="count">10</span></summary>
-        <div class="tablewrap">
-            <table>
-                <thead><tr><th>Keys</th><th>Action</th></tr></thead>
-                <tbody>
-                <tr><td><kbd>ℹ Button roles</kbd></td><td>The roles below assume SWAP_MOUSE_BUTTONS = true in Constants.h (the shipped default). Set it to false to exchange the left and right button functions.</td></tr>
-                <tr><td><kbd>LMB hold</kbd> / <kbd>drag</kbd></td><td>Quick × zoom centered on the cursor; dragging pans while zoomed. Zoom and pan revert the moment the button is released.</td></tr>
-                <tr><td><kbd>LMB double-click</kbd></td><td>Toggle fullscreen.</td></tr>
-                <tr><td><kbd>RMB drag</kbd></td><td>Move the window.</td></tr>
-                <tr><td><kbd>RMB + LMB</kbd></td><td>Reveal the current file in Windows Explorer.</td></tr>
-                <tr><td><kbd>RMB + Wheel</kbd></td><td>Zoom in / out while the right button is held.</td></tr>
-                <tr><td><kbd>RMB + Horizontal Wheel</kbd></td><td>Live-resize the window from its center — 20 px per wheel notch.</td></tr>
-                <tr><td><kbd>MMB click</kbd></td><td>Full visual reset: zoom, pan and opacity return to defaults, the window is resized to its default dimensions and centered on the current monitor.</td></tr>
-                <tr><td><kbd>MMB drag</kbd></td><td>Live-resize the window.</td></tr>
-                <tr><td><kbd>Shift+Wheel</kbd></td><td>Adjust window opacity in % steps.</td></tr>
-                </tbody>
-            </table>
+    </section>
+    <section class="sc-sec" data-title="Mouse Controls">
+        <h2><span class="sc-ico">🖱</span>Mouse Controls<span class="sc-count">10</span></h2>
+        <div class="sc-cols">
+            <div class="sc-row"><div class="sc-keys"><kbd>ℹ Button roles</kbd></div><p class="sc-desc">The roles below assume SWAP_MOUSE_BUTTONS = true in Constants.h (the shipped default). Set it to false to exchange the left and right button functions.</p></div>
+            <div class="sc-row"><div class="sc-keys"><kbd>LMB hold</kbd> / <kbd>drag</kbd></div><p class="sc-desc">Quick × zoom centered on the cursor; dragging pans while zoomed. Zoom and pan revert the moment the button is released.</p></div>
+            <div class="sc-row"><div class="sc-keys"><kbd>LMB double-click</kbd></div><p class="sc-desc">Toggle fullscreen.</p></div>
+            <div class="sc-row"><div class="sc-keys"><kbd>RMB drag</kbd></div><p class="sc-desc">Move the window.</p></div>
+            <div class="sc-row"><div class="sc-keys"><kbd>RMB + LMB</kbd></div><p class="sc-desc">Reveal the current file in Windows Explorer.</p></div>
+            <div class="sc-row"><div class="sc-keys"><kbd>RMB + Wheel</kbd></div><p class="sc-desc">Zoom in / out while the right button is held.</p></div>
+            <div class="sc-row"><div class="sc-keys"><kbd>RMB + Horizontal Wheel</kbd></div><p class="sc-desc">Live-resize the window from its center — 20 px per wheel notch.</p></div>
+            <div class="sc-row"><div class="sc-keys"><kbd>MMB click</kbd></div><p class="sc-desc">Full visual reset: zoom, pan and opacity return to defaults, the window is resized to its default dimensions and centered on the current monitor.</p></div>
+            <div class="sc-row"><div class="sc-keys"><kbd>MMB drag</kbd></div><p class="sc-desc">Live-resize the window.</p></div>
+            <div class="sc-row"><div class="sc-keys"><kbd>Shift+Wheel</kbd></div><p class="sc-desc">Adjust window opacity in % steps.</p></div>
         </div>
-    </details>
-    <details class="shortcut-section">
-        <summary>Window Management <span class="count">10</span></summary>
-        <div class="tablewrap">
-            <table>
-                <thead><tr><th>Keys</th><th>Action</th></tr></thead>
-                <tbody>
-                <tr><td><kbd>Shift+W</kbd> / <kbd>Shift+A</kbd> / <kbd>Shift+S</kbd> / <kbd>Shift+D</kbd></td><td>Nudge the window px up / left / down / right per keypress (DPI-scaled).</td></tr>
-                <tr><td><kbd>Alt+W</kbd> / <kbd>Alt+A</kbd> / <kbd>Alt+S</kbd> / <kbd>Alt+D</kbd></td><td>Snap the window to the top / left / bottom / right half of the work area.</td></tr>
-                <tr><td><kbd>Alt+Q</kbd> / <kbd>Alt+E</kbd> / <kbd>Alt+Z</kbd> / <kbd>Alt+C</kbd></td><td>Snap the window to the top-left / top-right / bottom-left / bottom-right quarter of the work area.</td></tr>
-                <tr><td><kbd>Alt+X</kbd></td><td>Reset to defaults — window size, position and all effects (same as ).</td></tr>
-                <tr><td><kbd>Shift+Num +</kbd> / <kbd>Shift+− • Shift+=</kbd> / <kbd>Shift+-</kbd></td><td>Grow / shrink the window by px per side while keeping it centered.</td></tr>
-                <tr><td><kbd>Ctrl+Space</kbd></td><td>Toggle: first press fits the viewer to the work area (monitor minus taskbar), shrinking further to avoid any visible panel (F3 cache strip, F6 directory strip, spawned directory panels). Second press restores the default window size (baseWidth × baseHeight from Constants.h), centered on the current monitor.</td></tr>
-                <tr><td><kbd>Ctrl+M</kbd></td><td>Move the window to the next monitor, wrapping round at the last. Monitors are ordered left to right by their desktop coordinates. Position and size are carried across proportionally, so a screen of a different resolution does not leave the window half off the edge; in fullscreen the window simply fills the new monitor.</td></tr>
-                <tr><td><kbd>Drag near screen edge</kbd></td><td>Releasing a window drag within px of a screen edge snaps the window to that edge.</td></tr>
-                <tr><td><kbd>F</kbd> / <kbd>Enter</kbd> / <kbd>Ctrl+Shift+T</kbd></td><td>Toggle borderless fullscreen on the current monitor. (F11 no longer does this — it is the mirroring toggle.)</td></tr>
-                <tr><td><kbd>Ctrl+T</kbd> / <kbd>Ctrl+A</kbd></td><td>Toggle always-on-top — the main window and every visible panel stay above all other windows.</td></tr>
-                </tbody>
-            </table>
+    </section>
+    <section class="sc-sec" data-title="Window Management">
+        <h2><span class="sc-ico">🪟</span>Window Management<span class="sc-count">10</span></h2>
+        <div class="sc-cols">
+            <div class="sc-row"><div class="sc-keys"><kbd>Shift+W</kbd> / <kbd>Shift+A</kbd> / <kbd>Shift+S</kbd> / <kbd>Shift+D</kbd></div><p class="sc-desc">Nudge the window px up / left / down / right per keypress (DPI-scaled).</p></div>
+            <div class="sc-row"><div class="sc-keys"><kbd>Alt+W</kbd> / <kbd>Alt+A</kbd> / <kbd>Alt+S</kbd> / <kbd>Alt+D</kbd></div><p class="sc-desc">Snap the window to the top / left / bottom / right half of the work area.</p></div>
+            <div class="sc-row"><div class="sc-keys"><kbd>Alt+Q</kbd> / <kbd>Alt+E</kbd> / <kbd>Alt+Z</kbd> / <kbd>Alt+C</kbd></div><p class="sc-desc">Snap the window to the top-left / top-right / bottom-left / bottom-right quarter of the work area.</p></div>
+            <div class="sc-row"><div class="sc-keys"><kbd>Alt+X</kbd></div><p class="sc-desc">Reset to defaults — window size, position and all effects (same as ).</p></div>
+            <div class="sc-row"><div class="sc-keys"><kbd>Shift+Num +</kbd> / <kbd>Shift+− • Shift+=</kbd> / <kbd>Shift+-</kbd></div><p class="sc-desc">Grow / shrink the window by px per side while keeping it centered.</p></div>
+            <div class="sc-row"><div class="sc-keys"><kbd>Ctrl+Space</kbd></div><p class="sc-desc">Toggle: first press fits the viewer to the work area (monitor minus taskbar), shrinking further to avoid any visible panel (F3 cache strip, F6 directory strip, spawned directory panels). <a class="sc-more" href="#window-management-ctrl-space">details</a></p></div>
+            <div class="sc-row"><div class="sc-keys"><kbd>Ctrl+M</kbd></div><p class="sc-desc">Move the window to the next monitor, wrapping round at the last. Monitors are ordered left to right by their desktop coordinates. <a class="sc-more" href="#window-management-ctrl-m">details</a></p></div>
+            <div class="sc-row"><div class="sc-keys"><kbd>Drag near screen edge</kbd></div><p class="sc-desc">Releasing a window drag within px of a screen edge snaps the window to that edge.</p></div>
+            <div class="sc-row"><div class="sc-keys"><kbd>F</kbd> / <kbd>Enter</kbd> / <kbd>Ctrl+Shift+T</kbd></div><p class="sc-desc">Toggle borderless fullscreen on the current monitor. (F11 no longer does this — it is the mirroring toggle.)</p></div>
+            <div class="sc-row"><div class="sc-keys"><kbd>Ctrl+T</kbd> / <kbd>Ctrl+A</kbd></div><p class="sc-desc">Toggle always-on-top — the main window and every visible panel stay above all other windows.</p></div>
         </div>
-    </details>
-    <details class="shortcut-section">
-        <summary>Panels &amp; Tools <span class="count">9</span></summary>
-        <div class="tablewrap">
-            <table>
-                <thead><tr><th>Keys</th><th>Action</th></tr></thead>
-                <tbody>
-                <tr><td><kbd>F1</kbd></td><td>Toggle this help window. Scroll with the wheel, Page Up / Page Down, Home and End. exports the full help to a text file on the Desktop.</td></tr>
-                <tr><td><kbd>M</kbd></td><td>Toggle the Image Info panel — full EXIF metadata (camera, lens, exposure, GPS) including the embedded preview thumbnail.\r\nGPS IS RESOLVED OFFLINE, with no network call of any kind. The GeoNames data — 170,387 cities, 3,865 states and provinces, 47,549 districts and 252 countries — is zlib-compressed inside the executable, so a photo's coordinates become a city, district, state, country, capital, continent, currency, phone prefix and timezone with nothing leaving this machine and nothing to configure. It works with the network cable out.</td></tr>
-                <tr><td><kbd>K</kbd></td><td>Toggle the Statistics panel — decode time, codec used, file details and cache information for the current image.</td></tr>
-                <tr><td><kbd>F3</kbd> / <kbd>F4</kbd></td><td>Toggle the VRAM cache strip / move it to the next free screen edge. It shows every image currently decoded in GPU memory and updates live as you browse.</td></tr>
-                <tr><td><kbd>F6</kbd> / <kbd>F7 • Right Shift</kbd></td><td>Toggle the current-directory strip / move it to the next free screen edge. Right Shift is an alternative toggle key for .</td></tr>
-                <tr><td><kbd>F5</kbd></td><td>Reload the current directory from disk — picks up newly added, deleted or renamed files without leaving the folder.</td></tr>
-                <tr><td><kbd>Ctrl+F3</kbd></td><td>Clear the VRAM cache. Images are re-decoded on demand afterwards. (Moved from F12, which is now the mirroring toggle.)</td></tr>
-                <tr><td><kbd>Esc</kbd> / <kbd>Ctrl+W</kbd></td><td>Close the focused panel — works in every panel window.</td></tr>
-                <tr><td><kbd>MMB click</kbd></td><td>Middle-mouse-button click on any floating panel (Help, EXIF, Stats, Jump-to, Find) or on any directory / cache strip closes that panel immediately.</td></tr>
-                </tbody>
-            </table>
+    </section>
+    <section class="sc-sec" data-title="Panels &amp; Tools">
+        <h2><span class="sc-ico">🧰</span>Panels &amp; Tools<span class="sc-count">9</span></h2>
+        <div class="sc-cols">
+            <div class="sc-row"><div class="sc-keys"><kbd>F1</kbd></div><p class="sc-desc">Toggle this help window. Scroll with the wheel, Page Up / Page Down, Home and End. exports the full help to a text file on the Desktop.</p></div>
+            <div class="sc-row"><div class="sc-keys"><kbd>M</kbd></div><p class="sc-desc">Toggle the Image Info panel — full EXIF metadata (camera, lens, exposure, GPS) including the embedded preview thumbnail. <a class="sc-more" href="#panels-tools-m">details</a></p></div>
+            <div class="sc-row"><div class="sc-keys"><kbd>K</kbd></div><p class="sc-desc">Toggle the Statistics panel — decode time, codec used, file details and cache information for the current image.</p></div>
+            <div class="sc-row"><div class="sc-keys"><kbd>F3</kbd> / <kbd>F4</kbd></div><p class="sc-desc">Toggle the VRAM cache strip / move it to the next free screen edge. It shows every image currently decoded in GPU memory and updates live as you browse.</p></div>
+            <div class="sc-row"><div class="sc-keys"><kbd>F6</kbd> / <kbd>F7 • Right Shift</kbd></div><p class="sc-desc">Toggle the current-directory strip / move it to the next free screen edge. Right Shift is an alternative toggle key for .</p></div>
+            <div class="sc-row"><div class="sc-keys"><kbd>F5</kbd></div><p class="sc-desc">Reload the current directory from disk — picks up newly added, deleted or renamed files without leaving the folder.</p></div>
+            <div class="sc-row"><div class="sc-keys"><kbd>Ctrl+F3</kbd></div><p class="sc-desc">Clear the VRAM cache. Images are re-decoded on demand afterwards. (Moved from F12, which is now the mirroring toggle.)</p></div>
+            <div class="sc-row"><div class="sc-keys"><kbd>Esc</kbd> / <kbd>Ctrl+W</kbd></div><p class="sc-desc">Close the focused panel — works in every panel window.</p></div>
+            <div class="sc-row"><div class="sc-keys"><kbd>MMB click</kbd></div><p class="sc-desc">Middle-mouse-button click on any floating panel (Help, EXIF, Stats, Jump-to, Find) or on any directory / cache strip closes that panel immediately.</p></div>
         </div>
-    </details>
-    <details class="shortcut-section">
-        <summary>Thumbnail Strips <span class="count">10</span></summary>
-        <div class="tablewrap">
-            <table>
-                <thead><tr><th>Keys</th><th>Action</th></tr></thead>
-                <tbody>
-                <tr><td><kbd>Mouse Wheel</kbd></td><td>Scroll the strip. Hold Shift to scroll 3× faster.</td></tr>
-                <tr><td><kbd>B</kbd></td><td>Toggle wheel wrap-around. When ON, scrolling past the last thumbnail jumps back to the first — and scrolling before the first jumps to the last. Each wrap shows a message in the center overlay. Startup default: ONOFF (THUMBNAIL_PANEL_WHEEL_WRAP_AROUND in Constants.h).</td></tr>
-                <tr><td><kbd>U</kbd></td><td>Toggle thumbnail strip visual effects on/off (master runtime switch). Effects include: rounded corners (corner overdraw), accent-color glow border on the selected thumbnail, and a subtle hover-scale enlarge on the hovered thumbnail. Each effect can also be individually disabled in Constants.h (ThumbnailPanel::ThumbnailEffects). Startup default: ONOFF.</td></tr>
-                <tr><td><kbd>Left Click</kbd></td><td>Open the clicked thumbnail in the main viewer. Thumbnails from another folder (e.g. in the cache strip) are opened as new files.</td></tr>
-                <tr><td><kbd>Click + drag</kbd></td><td>Grab the strip and drag it to scroll freely.</td></tr>
-                <tr><td><kbd>Scrollbar edge</kbd></td><td>Every strip has a thin scrollbar on its inner edge — click and drag it to scrub through large folders quickly.</td></tr>
-                <tr><td><kbd>Drag thumbnail → other strip</kbd></td><td>Drag a thumbnail from one directory strip onto another to MOVE the file there. Hold Ctrl while dropping to COPY instead — the mouse cursor shows which operation is active. Both strips refresh automatically and files can be restored from the Recycle Bin.</td></tr>
-                <tr><td><kbd>MMB click</kbd></td><td>Close the strip. Works on the directory strip and every spawned directory panel.</td></tr>
-                <tr><td><kbd>Click to make active</kbd></td><td>Clicking any directory strip makes it the active panel. All subsequent folder navigation — including History Enter and folder changes — targets the last-clicked strip. Only one strip is active at a time; the primary strip is the fallback when no spawned panel has been clicked.</td></tr>
-                <tr><td><kbd>Right Click</kbd></td><td>Context menu on any thumbnail: Copy, Cut, Delete and Paste. Copy / Cut use the Windows clipboard, so files can also be pasted in Explorer. A cut file is shown dimmed until it is pasted. Delete sends the file to the Recycle Bin. Paste drops clipboard files into the strip's folder. Also: Select All, Select Inverse (flips the current selection) and Select None.</td></tr>
-                </tbody>
-            </table>
+    </section>
+    <section class="sc-sec" data-title="Thumbnail Strips">
+        <h2><span class="sc-ico">🖼</span>Thumbnail Strips<span class="sc-count">10</span></h2>
+        <div class="sc-cols">
+            <div class="sc-row"><div class="sc-keys"><kbd>Mouse Wheel</kbd></div><p class="sc-desc">Scroll the strip. Hold Shift to scroll 3× faster.</p></div>
+            <div class="sc-row"><div class="sc-keys"><kbd>B</kbd></div><p class="sc-desc">Toggle wheel wrap-around. When ON, scrolling past the last thumbnail jumps back to the first — and scrolling before the first jumps to the last. Each wrap shows a message in the center overlay. <a class="sc-more" href="#thumbnail-strips-b">details</a></p></div>
+            <div class="sc-row"><div class="sc-keys"><kbd>U</kbd></div><p class="sc-desc">Toggle thumbnail strip visual effects on/off (master runtime switch). Effects include: rounded corners (corner overdraw), accent-color glow border on the selected thumbnail, and a subtle hover-scale… <a class="sc-more" href="#thumbnail-strips-u">details</a></p></div>
+            <div class="sc-row"><div class="sc-keys"><kbd>Left Click</kbd></div><p class="sc-desc">Open the clicked thumbnail in the main viewer. Thumbnails from another folder (e.g. in the cache strip) are opened as new files.</p></div>
+            <div class="sc-row"><div class="sc-keys"><kbd>Click + drag</kbd></div><p class="sc-desc">Grab the strip and drag it to scroll freely.</p></div>
+            <div class="sc-row"><div class="sc-keys"><kbd>Scrollbar edge</kbd></div><p class="sc-desc">Every strip has a thin scrollbar on its inner edge — click and drag it to scrub through large folders quickly.</p></div>
+            <div class="sc-row"><div class="sc-keys"><kbd>Drag thumbnail → other strip</kbd></div><p class="sc-desc">Drag a thumbnail from one directory strip onto another to MOVE the file there. Hold Ctrl while dropping to COPY instead — the mouse cursor shows which operation is active. <a class="sc-more" href="#thumbnail-strips-drag-thumbnail-other-strip">details</a></p></div>
+            <div class="sc-row"><div class="sc-keys"><kbd>MMB click</kbd></div><p class="sc-desc">Close the strip. Works on the directory strip and every spawned directory panel.</p></div>
+            <div class="sc-row"><div class="sc-keys"><kbd>Click to make active</kbd></div><p class="sc-desc">Clicking any directory strip makes it the active panel. All subsequent folder navigation — including History Enter and folder changes — targets the last-clicked strip. <a class="sc-more" href="#thumbnail-strips-click-to-make-active">details</a></p></div>
+            <div class="sc-row"><div class="sc-keys"><kbd>Right Click</kbd></div><p class="sc-desc">Context menu on any thumbnail: Copy, Cut, Delete and Paste. Copy / Cut use the Windows clipboard, so files can also be pasted in Explorer. A cut file is shown dimmed until it is pasted. <a class="sc-more" href="#thumbnail-strips-right-click">details</a></p></div>
         </div>
-    </details>
-    <details class="shortcut-section">
-        <summary>History Panel <span class="count">11</span></summary>
-        <div class="tablewrap">
-            <table>
-                <thead><tr><th>Keys</th><th>Action</th></tr></thead>
-                <tbody>
-                <tr><td><kbd>Tab</kbd></td><td>Toggle the History panel — the list of recently opened folders. Navigate with the mouse or arrow keys.</td></tr>
-                <tr><td><kbd>Ctrl+Tab</kbd></td><td>Toggle the full (uncapped) history view and refresh the folder snapshot used by horizontal-wheel navigation.</td></tr>
-                <tr><td><kbd>Type anything</kbd></td><td>Filters the list as you type — fuzzy by default, wildcard when the query contains * or ?, the same matcher Find and this Help panel use. Matched characters are highlighted inside each row. Escape clears the filter; when it is already empty, Escape closes the panel. Space toggles a favorite while the filter is empty and types a space once it is not.</td></tr>
-                <tr><td><kbd>Enter</kbd></td><td>Open the hovered folder in the main viewer.</td></tr>
-                <tr><td><kbd>Shift+Enter</kbd></td><td>Spawn a floating directory strip for the hovered folder without leaving the current one — up to strips (top, left, right, bottom). If a strip is already open for that folder, this hides it instead (toggle). Great for comparing folders.</td></tr>
-                <tr><td><kbd>MMB click on a row</kbd></td><td>Toggle a floating directory strip for the hovered folder: spawns one if none is open, or hides the existing one. The History panel itself stays open.</td></tr>
-                <tr><td><kbd>Space</kbd></td><td>Toggle favorite on the hovered entry. Favorites survive history clears.</td></tr>
-                <tr><td><kbd>Ctrl+Delete</kbd></td><td>Delete the hovered entry. restores the last deleted one.</td></tr>
-                <tr><td><kbd>Home</kbd> / <kbd>End</kbd> / <kbd>Page Up</kbd> / <kbd>Page Down</kbd> / <kbd>Insert</kbd> / <kbd>Delete</kbd></td><td>Not captured by this panel — they reach the viewer as usual, so you can walk images and folders while watching the list highlight follow you.</td></tr>
-                <tr><td><kbd>Ctrl+Shift+Delete</kbd></td><td>Clear the entire history but keep all favorites.</td></tr>
-                <tr><td><kbd>Ctrl+Alt+Shift+Delete</kbd></td><td>Clear all favorites but keep the history.</td></tr>
-                </tbody>
-            </table>
+    </section>
+    <section class="sc-sec" data-title="History Panel">
+        <h2><span class="sc-ico">📜</span>History Panel<span class="sc-count">11</span></h2>
+        <div class="sc-cols">
+            <div class="sc-row"><div class="sc-keys"><kbd>Tab</kbd></div><p class="sc-desc">Toggle the History panel — the list of recently opened folders. Navigate with the mouse or arrow keys.</p></div>
+            <div class="sc-row"><div class="sc-keys"><kbd>Ctrl+Tab</kbd></div><p class="sc-desc">Toggle the full (uncapped) history view and refresh the folder snapshot used by horizontal-wheel navigation.</p></div>
+            <div class="sc-row"><div class="sc-keys"><kbd>Type anything</kbd></div><p class="sc-desc">Filters the list as you type — fuzzy by default, wildcard when the query contains * or ?, the same matcher Find and this Help panel use. Matched characters are highlighted inside each row. <a class="sc-more" href="#history-panel-type-anything">details</a></p></div>
+            <div class="sc-row"><div class="sc-keys"><kbd>Enter</kbd></div><p class="sc-desc">Open the hovered folder in the main viewer.</p></div>
+            <div class="sc-row"><div class="sc-keys"><kbd>Shift+Enter</kbd></div><p class="sc-desc">Spawn a floating directory strip for the hovered folder without leaving the current one — up to strips (top, left, right, bottom). <a class="sc-more" href="#history-panel-shift-enter">details</a></p></div>
+            <div class="sc-row"><div class="sc-keys"><kbd>MMB click on a row</kbd></div><p class="sc-desc">Toggle a floating directory strip for the hovered folder: spawns one if none is open, or hides the existing one. The History panel itself stays open.</p></div>
+            <div class="sc-row"><div class="sc-keys"><kbd>Space</kbd></div><p class="sc-desc">Toggle favorite on the hovered entry. Favorites survive history clears.</p></div>
+            <div class="sc-row"><div class="sc-keys"><kbd>Ctrl+Delete</kbd></div><p class="sc-desc">Delete the hovered entry. restores the last deleted one.</p></div>
+            <div class="sc-row"><div class="sc-keys"><kbd>Home</kbd> / <kbd>End</kbd> / <kbd>Page Up</kbd> / <kbd>Page Down</kbd> / <kbd>Insert</kbd> / <kbd>Delete</kbd></div><p class="sc-desc">Not captured by this panel — they reach the viewer as usual, so you can walk images and folders while watching the list highlight follow you.</p></div>
+            <div class="sc-row"><div class="sc-keys"><kbd>Ctrl+Shift+Delete</kbd></div><p class="sc-desc">Clear the entire history but keep all favorites.</p></div>
+            <div class="sc-row"><div class="sc-keys"><kbd>Ctrl+Alt+Shift+Delete</kbd></div><p class="sc-desc">Clear all favorites but keep the history.</p></div>
         </div>
-    </details>
-    <details class="shortcut-section">
-        <summary>Slideshow <span class="count">5</span></summary>
-        <div class="tablewrap">
-            <table>
-                <thead><tr><th>Keys</th><th>Action</th></tr></thead>
-                <tbody>
-                <tr><td><kbd>Ctrl+F1</kbd></td><td>Start / stop the slideshow.</td></tr>
-                <tr><td><kbd>Space (while running)</kbd></td><td>Pause / resume the slideshow.</td></tr>
-                <tr><td><kbd>R (while running)</kbd></td><td>Toggle loop — restart from the first image after the last.</td></tr>
-                <tr><td><kbd>S (while running)</kbd></td><td>Toggle shuffle — show the playlist in random order.</td></tr>
-                <tr><td><kbd>T (while running)</kbd></td><td>Step to the next slide transition ( in total, wraps around). Slideshow › Transition in the tray or right-click menu controls this in two parts: which transitions are in play — None (just the one you tick), All, or List (only the ones you tick) — and the order they play in, Sequential (the menu's numbered order) or Random. In List mode the numbered rows become checkboxes.</td></tr>
-                </tbody>
-            </table>
+    </section>
+    <section class="sc-sec" data-title="Slideshow">
+        <h2><span class="sc-ico">▶</span>Slideshow<span class="sc-count">5</span></h2>
+        <div class="sc-cols">
+            <div class="sc-row"><div class="sc-keys"><kbd>Ctrl+F1</kbd></div><p class="sc-desc">Start / stop the slideshow.</p></div>
+            <div class="sc-row"><div class="sc-keys"><kbd>Space (while running)</kbd></div><p class="sc-desc">Pause / resume the slideshow.</p></div>
+            <div class="sc-row"><div class="sc-keys"><kbd>R (while running)</kbd></div><p class="sc-desc">Toggle loop — restart from the first image after the last.</p></div>
+            <div class="sc-row"><div class="sc-keys"><kbd>S (while running)</kbd></div><p class="sc-desc">Toggle shuffle — show the playlist in random order.</p></div>
+            <div class="sc-row"><div class="sc-keys"><kbd>T (while running)</kbd></div><p class="sc-desc">Step to the next slide transition ( in total, wraps around). Slideshow › Transition in the tray or right-click menu controls this in two parts: which transitions are in play  <a class="sc-more" href="#slideshow-t-while-running">details</a></p></div>
         </div>
-    </details>
-    <details class="shortcut-section">
-        <summary>Info Overlays <span class="count">4</span></summary>
-        <div class="tablewrap">
-            <table>
-                <thead><tr><th>Keys</th><th>Action</th></tr></thead>
-                <tbody>
-                <tr><td><kbd>I</kbd> / <kbd>Ctrl+0</kbd></td><td>Master toggle — show / hide all overlay slots at once.</td></tr>
-                <tr><td><kbd>Ctrl+1</kbd> – <kbd>Ctrl+9</kbd></td><td>Cycle a slot of the 3×3 grid: Compact (one line) → Full (two lines) → Off. Assignments: 1 index + filename • 3 zoom % • 5 center message area • 7 active effects + folder name • 9 dimensions + file size. Slots 2, 4, 6, 8 show the thumbnail-strip selection count for the panel on that edge. Slot 5 has no compact form, so it cycles On → Off.</td></tr>
-                <tr><td><kbd>O</kbd></td><td>Cycle the overlay layout: Grid → Stacked → Summary.</td></tr>
-                <tr><td><kbd>P</kbd></td><td>Toggle the semi-transparent background behind overlay text — the text itself always stays visible.</td></tr>
-                </tbody>
-            </table>
+    </section>
+    <section class="sc-sec" data-title="Info Overlays">
+        <h2><span class="sc-ico">ℹ</span>Info Overlays<span class="sc-count">4</span></h2>
+        <div class="sc-cols">
+            <div class="sc-row"><div class="sc-keys"><kbd>I</kbd> / <kbd>Ctrl+0</kbd></div><p class="sc-desc">Master toggle — show / hide all overlay slots at once.</p></div>
+            <div class="sc-row"><div class="sc-keys"><kbd>Ctrl+1</kbd> – <kbd>Ctrl+9</kbd></div><p class="sc-desc">Cycle a slot of the 3×3 grid: Compact (one line) → Full (two lines) → Off. Assignments: 1 index + filename • 3 zoom % • 5 center message area • 7 active effects + folder name • 9 dimensions + file… <a class="sc-more" href="#info-overlays-ctrl-1-ctrl-9">details</a></p></div>
+            <div class="sc-row"><div class="sc-keys"><kbd>O</kbd></div><p class="sc-desc">Cycle the overlay layout: Grid → Stacked → Summary.</p></div>
+            <div class="sc-row"><div class="sc-keys"><kbd>P</kbd></div><p class="sc-desc">Toggle the semi-transparent background behind overlay text — the text itself always stays visible.</p></div>
         </div>
-    </details>
-    <details class="shortcut-section">
-        <summary>Effects &amp; Color <span class="count">14</span></summary>
-        <div class="tablewrap">
-            <table>
-                <thead><tr><th>Keys</th><th>Action</th></tr></thead>
-                <tbody>
-                <tr><td><kbd>R</kbd> / <kbd>Shift+R</kbd></td><td>Rotate 90° clockwise / counter-clockwise.</td></tr>
-                <tr><td><kbd>H</kbd> / <kbd>V</kbd></td><td>Flip horizontally / vertically.</td></tr>
-                <tr><td><kbd>Ctrl+Delete</kbd></td><td>Toggle desaturate — drops all colour. Switch Sepia on afterwards to tint the result.</td></tr>
-                <tr><td><kbd>Ctrl+Insert</kbd></td><td>Toggle color inversion (negative).</td></tr>
-                <tr><td><kbd>Ctrl+Home</kbd></td><td>Toggle sepia tone.</td></tr>
-                <tr><td><kbd>Ctrl+End</kbd></td><td>Toggle solarize — inverts only tones above % brightness.</td></tr>
-                <tr><td><kbd>Ctrl+Page Up</kbd></td><td>Toggle outline — GPU edge detection.</td></tr>
-                <tr><td><kbd>Ctrl+Page Down</kbd></td><td>Toggle black &amp; white threshold — pixels brighter than % become white, the rest black.</td></tr>
-                <tr><td><kbd>Ctrl+[</kbd> / <kbd>Ctrl+]</kbd></td><td>Saturation − / + in steps (0 = grayscale, maximum ).</td></tr>
-                <tr><td><kbd>Ctrl+\</kbd> / <kbd>Ctrl+'</kbd></td><td>Brightness + / − in steps (range ±).</td></tr>
-                <tr><td><kbd>Ctrl+/</kbd> / <kbd>Ctrl+.</kbd></td><td>Contrast + / − in steps (maximum ).</td></tr>
-                <tr><td><kbd>Ctrl+=</kbd> / <kbd>Ctrl+-</kbd></td><td>Gamma + / − in steps (range – ).</td></tr>
-                <tr><td><kbd>Num 0</kbd></td><td>Reset every color adjustment and effect back to neutral.</td></tr>
-                <tr><td><kbd>`</kbd></td><td>Effects bypass — temporarily view the untouched original; press again to re-apply all active effects.</td></tr>
-                </tbody>
-            </table>
+    </section>
+    <section class="sc-sec" data-title="Effects &amp; Color">
+        <h2><span class="sc-ico">🎨</span>Effects &amp; Color<span class="sc-count">14</span></h2>
+        <div class="sc-cols">
+            <div class="sc-row"><div class="sc-keys"><kbd>R</kbd> / <kbd>Shift+R</kbd></div><p class="sc-desc">Rotate 90° clockwise / counter-clockwise.</p></div>
+            <div class="sc-row"><div class="sc-keys"><kbd>H</kbd> / <kbd>V</kbd></div><p class="sc-desc">Flip horizontally / vertically.</p></div>
+            <div class="sc-row"><div class="sc-keys"><kbd>Ctrl+Delete</kbd></div><p class="sc-desc">Toggle desaturate — drops all colour. Switch Sepia on afterwards to tint the result.</p></div>
+            <div class="sc-row"><div class="sc-keys"><kbd>Ctrl+Insert</kbd></div><p class="sc-desc">Toggle color inversion (negative).</p></div>
+            <div class="sc-row"><div class="sc-keys"><kbd>Ctrl+Home</kbd></div><p class="sc-desc">Toggle sepia tone.</p></div>
+            <div class="sc-row"><div class="sc-keys"><kbd>Ctrl+End</kbd></div><p class="sc-desc">Toggle solarize — inverts only tones above % brightness.</p></div>
+            <div class="sc-row"><div class="sc-keys"><kbd>Ctrl+Page Up</kbd></div><p class="sc-desc">Toggle outline — GPU edge detection.</p></div>
+            <div class="sc-row"><div class="sc-keys"><kbd>Ctrl+Page Down</kbd></div><p class="sc-desc">Toggle black &amp; white threshold — pixels brighter than % become white, the rest black.</p></div>
+            <div class="sc-row"><div class="sc-keys"><kbd>Ctrl+[</kbd> / <kbd>Ctrl+]</kbd></div><p class="sc-desc">Saturation − / + in steps (0 = grayscale, maximum ).</p></div>
+            <div class="sc-row"><div class="sc-keys"><kbd>Ctrl+\</kbd> / <kbd>Ctrl+'</kbd></div><p class="sc-desc">Brightness + / − in steps (range ±).</p></div>
+            <div class="sc-row"><div class="sc-keys"><kbd>Ctrl+/</kbd> / <kbd>Ctrl+.</kbd></div><p class="sc-desc">Contrast + / − in steps (maximum ).</p></div>
+            <div class="sc-row"><div class="sc-keys"><kbd>Ctrl+=</kbd> / <kbd>Ctrl+-</kbd></div><p class="sc-desc">Gamma + / − in steps (range – ).</p></div>
+            <div class="sc-row"><div class="sc-keys"><kbd>Num 0</kbd></div><p class="sc-desc">Reset every color adjustment and effect back to neutral.</p></div>
+            <div class="sc-row"><div class="sc-keys"><kbd>`</kbd></div><p class="sc-desc">Effects bypass — temporarily view the untouched original; press again to re-apply all active effects.</p></div>
         </div>
-    </details>
-    <details class="shortcut-section">
-        <summary>Files, Clipboard &amp; Sorting <span class="count">7</span></summary>
-        <div class="tablewrap">
-            <table>
-                <thead><tr><th>Keys</th><th>Action</th></tr></thead>
-                <tbody>
-                <tr><td><kbd>Ctrl+C</kbd></td><td>Copy the current image to the clipboard.</td></tr>
-                <tr><td><kbd>Ctrl+S</kbd></td><td>Save As — choose the format in the dialog (PNG, JPEG, BMP, TIFF, GIF). Rotation, flips and all color effects are baked into the saved file.</td></tr>
-                <tr><td><kbd>Ctrl+Alt+Shift+0</kbd></td><td>Sort by name (natural Explorer order). Press again to reverse A→Z / Z→A.</td></tr>
-                <tr><td><kbd>Ctrl+Alt+Shift+9</kbd></td><td>Sort by date modified. Press again to switch newest ↔ oldest.</td></tr>
-                <tr><td><kbd>Ctrl+Alt+Shift+8</kbd></td><td>Sort by file size. Press again to switch largest ↔ smallest.</td></tr>
-                <tr><td><kbd>Ctrl+Alt+Shift+7</kbd></td><td>Sort by extension. Press again to reverse A→Z / Z→A.</td></tr>
-                <tr><td><kbd>Ctrl+Alt+Shift+6</kbd></td><td>Sort by physical disk order — reads files in on-disk sequence, the fastest option for mechanical hard drives.</td></tr>
-                </tbody>
-            </table>
+    </section>
+    <section class="sc-sec" data-title="Files, Clipboard &amp; Sorting">
+        <h2><span class="sc-ico">💾</span>Files, Clipboard &amp; Sorting<span class="sc-count">7</span></h2>
+        <div class="sc-cols">
+            <div class="sc-row"><div class="sc-keys"><kbd>Ctrl+C</kbd></div><p class="sc-desc">Copy the current image to the clipboard.</p></div>
+            <div class="sc-row"><div class="sc-keys"><kbd>Ctrl+S</kbd></div><p class="sc-desc">Save As — choose the format in the dialog (PNG, JPEG, BMP, TIFF, GIF). Rotation, flips and all color effects are baked into the saved file.</p></div>
+            <div class="sc-row"><div class="sc-keys"><kbd>Ctrl+Alt+Shift+0</kbd></div><p class="sc-desc">Sort by name (natural Explorer order). Press again to reverse A→Z / Z→A.</p></div>
+            <div class="sc-row"><div class="sc-keys"><kbd>Ctrl+Alt+Shift+9</kbd></div><p class="sc-desc">Sort by date modified. Press again to switch newest ↔ oldest.</p></div>
+            <div class="sc-row"><div class="sc-keys"><kbd>Ctrl+Alt+Shift+8</kbd></div><p class="sc-desc">Sort by file size. Press again to switch largest ↔ smallest.</p></div>
+            <div class="sc-row"><div class="sc-keys"><kbd>Ctrl+Alt+Shift+7</kbd></div><p class="sc-desc">Sort by extension. Press again to reverse A→Z / Z→A.</p></div>
+            <div class="sc-row"><div class="sc-keys"><kbd>Ctrl+Alt+Shift+6</kbd></div><p class="sc-desc">Sort by physical disk order — reads files in on-disk sequence, the fastest option for mechanical hard drives.</p></div>
         </div>
-    </details>
-    <details class="shortcut-section">
-        <summary>Application &amp; Appearance <span class="count">12</span></summary>
-        <div class="tablewrap">
-            <table>
-                <thead><tr><th>Keys</th><th>Action</th></tr></thead>
-                <tbody>
-                <tr><td><kbd>Esc</kbd> / <kbd>Ctrl+W</kbd></td><td>Hide to the system tray — the process stays resident so the next open is instant. Extra running instances are closed.</td></tr>
-                <tr><td><kbd>Ctrl+Q</kbd></td><td>Hard quit — fully removes the process from memory.</td></tr>
-                <tr><td><kbd>Ctrl+N</kbd></td><td>Open a new independent QIV window.</td></tr>
-                <tr><td><kbd>F8</kbd></td><td>Open the Dedicated panel: configure a named instance — its own images and promotions folders, promotion pacing, monitor and slideshow options — then generate a shortcut for it. Drop that shortcut in shell:startup and the screen starts itself.</td></tr>
-                <tr><td><kbd>If qIV crashes</kbd></td><td>A crash writes a dump file NEXT TO THE EXECUTABLE, named QuickImageViewer_crash_&lt;date&gt;_&lt;time&gt;_&lt;pid&gt;.dmp.\r\nNOTHING IS SENT ANYWHERE. qIV has no telemetry and makes no network call of its own — the file is written to your disk and stays there. Attaching it to a GitHub issue is entirely your choice, and it is the difference between a bug that gets fixed and one that stays a mystery, because it holds the exact stack the process died on.\r\nWHAT IS IN IT: a snapshot of the program's internal state, including open file paths and window titles — and NOT the contents of your images. If a path in it is sensitive, say so in the issue instead of attaching the file.</td></tr>
-                <tr><td><kbd>Supporting qIV</kbd></td><td>qIV is one person's work, given away complete: no advertising, no telemetry, no paid tier and no feature held back.\r\nIf it earns a place in your day, sponsorship is what buys the time to keep building it — github.com/sponsors/icyhoty2k, or ko-fi.com/ivanhristovyanev if you would rather not need a GitHub account. A star on the repository, a bug report with a dump attached, or telling someone about it all help more than they look like they do.\r\nTHE LICENCE IS AGPLv3: use it, study it, change it, share it. Building qIV or its remote subsystem into a product you do not intend to open-source — signage, kiosks, retail or museum displays, industrial or medical stations — is what the separate commercial licence is for. icyhoty2k@gmail.com.</td></tr>
-                <tr><td><kbd>N</kbd></td><td>Toggle all panels: closes every floating panel and directory strip if any is open, otherwise restores exactly the set the last close hid. Main viewer stays.</td></tr>
-                <tr><td><kbd>Shift+Delete</kbd></td><td>Reset everything — window layout and all effects return to defaults.</td></tr>
-                <tr><td><kbd>Ctrl+Alt+Num +</kbd> / <kbd>Ctrl+Alt+Num −</kbd></td><td>Theme brightness: step all panel colors lighter / darker at runtime.</td></tr>
-                <tr><td><kbd>Ctrl+Alt+Num 0</kbd></td><td>Reset theme brightness to the compiled default.</td></tr>
-                <tr><td><kbd>Ctrl+Shift+Num *</kbd></td><td>Toggle window corners: rounded ↔ square.</td></tr>
-                <tr><td><kbd>Ctrl+Shift+Num /</kbd></td><td>Cycle the window backdrop material: None → Mica → Acrylic → MicaAlt.</td></tr>
-                </tbody>
-            </table>
+    </section>
+    <section class="sc-sec" data-title="Application &amp; Appearance">
+        <h2><span class="sc-ico">⚙</span>Application &amp; Appearance<span class="sc-count">12</span></h2>
+        <div class="sc-cols">
+            <div class="sc-row"><div class="sc-keys"><kbd>Esc</kbd> / <kbd>Ctrl+W</kbd></div><p class="sc-desc">Hide to the system tray — the process stays resident so the next open is instant. Extra running instances are closed.</p></div>
+            <div class="sc-row"><div class="sc-keys"><kbd>Ctrl+Q</kbd></div><p class="sc-desc">Hard quit — fully removes the process from memory.</p></div>
+            <div class="sc-row"><div class="sc-keys"><kbd>Ctrl+N</kbd></div><p class="sc-desc">Open a new independent QIV window.</p></div>
+            <div class="sc-row"><div class="sc-keys"><kbd>F8</kbd></div><p class="sc-desc">Open the Dedicated panel: configure a named instance — its own images and promotions folders, promotion pacing, monitor and slideshow options — then generate a shortcut for it. <a class="sc-more" href="#application-appearance-f8">details</a></p></div>
+            <div class="sc-row"><div class="sc-keys"><kbd>If qIV crashes</kbd></div><p class="sc-desc">A crash writes a dump file NEXT TO THE EXECUTABLE, named QuickImageViewer_crash_&lt;date&gt;_&lt;time&gt;_&lt;pid&gt;.dmp. <a class="sc-more" href="#application-appearance-if-qiv-crashes">details</a></p></div>
+            <div class="sc-row"><div class="sc-keys"><kbd>Supporting qIV</kbd></div><p class="sc-desc">qIV is one person's work, given away complete: no advertising, no telemetry, no paid tier and no feature held back. <a class="sc-more" href="#application-appearance-supporting-qiv">details</a></p></div>
+            <div class="sc-row"><div class="sc-keys"><kbd>N</kbd></div><p class="sc-desc">Toggle all panels: closes every floating panel and directory strip if any is open, otherwise restores exactly the set the last close hid. Main viewer stays.</p></div>
+            <div class="sc-row"><div class="sc-keys"><kbd>Shift+Delete</kbd></div><p class="sc-desc">Reset everything — window layout and all effects return to defaults.</p></div>
+            <div class="sc-row"><div class="sc-keys"><kbd>Ctrl+Alt+Num +</kbd> / <kbd>Ctrl+Alt+Num −</kbd></div><p class="sc-desc">Theme brightness: step all panel colors lighter / darker at runtime.</p></div>
+            <div class="sc-row"><div class="sc-keys"><kbd>Ctrl+Alt+Num 0</kbd></div><p class="sc-desc">Reset theme brightness to the compiled default.</p></div>
+            <div class="sc-row"><div class="sc-keys"><kbd>Ctrl+Shift+Num *</kbd></div><p class="sc-desc">Toggle window corners: rounded ↔ square.</p></div>
+            <div class="sc-row"><div class="sc-keys"><kbd>Ctrl+Shift+Num /</kbd></div><p class="sc-desc">Cycle the window backdrop material: None → Mica → Acrylic → MicaAlt.</p></div>
         </div>
-    </details>
-    <details class="shortcut-section">
-        <summary>Remote Control &amp; Mirroring <span class="count">15</span></summary>
-        <div class="tablewrap">
-            <table>
-                <thead><tr><th>Keys</th><th>Action</th></tr></thead>
-                <tbody>
-                <tr><td><kbd>F9</kbd></td><td>Open the Local Server panel — the listener THIS instance runs, and nothing else. qIV can listen on a TCP port and be driven over the network — next, goto, zoom, open, slideshow — from a script, a phone, a home-automation system, or another qIV instance.\r\nThe listener is OFF unless you switch it on here, in the instance's .ini, or with -remote on the command line. It also needs a NAME and a PORT: an empty AllowList denies every connection, and a driving instance identifies this one by its name, so it will not start without one.\r\nTHE PROTOCOL DESCRIBES ITSELF. Send `help` and the answer lists every command this build accepts, one per line, with whether it takes a value, what it does and what the value means — pipe-separated, so a client can build its own command list from that one call instead of carrying a copy that goes stale. `ping` checks liveness, `version` reports the app and protocol version. It is plain UTF-8 text: netcat, curl, telnet and a five-line script are all first-class clients.\r\nENCRYPTION IS DECIDED BY THE ADDRESS, never negotiated. A peer on this machine (127.x, ::1, localhost) gets plaintext; EVERY other peer, your own LAN included, gets TLS 1.2/1.3 from the first byte. One listener on 0.0.0.0 serves both. The certificate is self-signed and the client PINS it by the SHA-256 fingerprint shown at the bottom of this panel — read it off here and type it into the client. There is no plaintext fallback for anything to strip.\r\nA PASSWORD IS COMPULSORY off loopback and the server refuses to start without one. It never crosses the wire: this end stores a PBKDF2-HMAC-SHA256 digest and the client answers an HMAC over a fresh nonce, so each guess costs the guesser a full derivation. Five failures from one address inside ten minutes blacklists it automatically, every failure is answered a second late, and a peer that connects and then says nothing is dropped after ten seconds.\r\nALLOWLIST AND BLACKLIST take addresses, never domain names — a rule is matched against the address a connection actually arrived from. Five forms: * for everything, 192.168.1.* as a TEXT prefix, 192.168.0.0/24 as CIDR (2001:db8::/32 works too), 192.168.0.10-50 as a range (or the long 192.168.0.10-192.168.1.5), and a bare address for one host. Mind the star: it compares CHARACTERS, so 192.168.1* without the dot also covers 192.168.10.x — use /24 when the boundary matters. Anything that cannot match an address is dropped when you save, and the panel names what it dropped.\r\nWhat this instance connects OUT to lives in Remote Servers (F10). F9 is what others connect to; F10 is what this connects to.\r\nWHO is connected right now is Ctrl+F9, not here.</td></tr>
-                <tr><td><kbd>TCP</kbd> / <kbd>IP menu → Announce (beacon)</kbd></td><td>Publish this listener on the local network so a phone or another qIV FINDS it in a list instead of being told an address. mDNS / DNS-SD, service type _qiv._tcp, answered by the Android app's own discovery — nothing to install at either end. Off by default.\r\nIT ANNOUNCES THE INSTANCE NAME AND THE PORT, AND NOTHING ELSE. Never a password, never whether one is set, never a path, never a file name, never the AllowList. A signpost that describes the lock on the door is a worse signpost.\r\nDISCOVERY IS NOT ACCESS. Being findable changes nothing about who may connect: the AllowList, the password challenge and TLS all still apply, so someone who discovers this instance and is not allowed in gets exactly as far as someone who guessed the address.\r\nIT ONLY ANNOUNCES WHEN THERE IS SOMETHING TO REACH — the setting on, the listener actually running, and a bind address other than loopback. A beacon with no listener behind it advertises a service that refuses every connection, and on 127.0.0.1 it would promise something nobody who hears it can use. When the tick is on and one of those is missing, the F9 panel says which — and the menu says WILL ANNOUNCE rather than claiming it did.</td></tr>
-                <tr><td><kbd>Ctrl+F9</kbd></td><td>My Clients — every peer currently connected to the listener above, with its address, the name it gave itself, whether it is encrypted, and how long it has been on. The list refreshes itself while the panel is open.\r\nTHREE WAYS TO GET RID OF ONE, and the middle one is the useful one:\r\nKICK closes the connection. Against a person that is enough; against anything automated it is useless, because it reconnects inside a second.\r\nKICK FOR N closes it AND refuses that peer for the number of minutes you type. This is what answers a bot: it outlasts a retry loop and then forgets by itself. The block is held in memory only — restarting qIV clears every one of them, which is also how you undo shutting yourself out.\r\nBAN writes the address to qivRemoteServerBlacklist.ini and it survives restarts. Undo it by editing or deleting that file.\r\nFor an IPv6 peer all three act on its /64 rather than the single address, and the panel says so before it does it — blocking one IPv6 address is close to useless, since the peer has billions of others in the same prefix.\r\nNone of this is reachable over the wire: a connected client cannot kick or ban anything, including you.</td></tr>
-                <tr><td><kbd>F10</kbd></td><td>Open Remote Servers — everything about the instances this copy can drive.\r\nTop: address, port, password, name and optional exe. Connect &amp;&amp; Save proves the target answers before recording it, then writes it to qivRemoteServers.ini beside the exe and starts driving it — so an address is typed once.\r\nBelow: one row per instance. The dot starts a stopped instance or shuts down a running one; Connect/Disconnect brings the link up or down (a remote can be listed without being dialled).\r\nWATCHING an instance moved to Ctrl+F11, along with the rest of the who-drives-whom controls. This console is about which instances exist and how to reach them.\r\nIDENTIFY makes that screen say its own name in the middle of its window. Two identical viewers side by side are otherwise anonymous, and this tells you which row drives which without walking over to them. Available on connected rows only. On the wire it is `msg &lt;text&gt;`, so a script can put any message on any instance's screen.\r\nThe form at the top is READ-ONLY until you say otherwise. Clicking a row loads it there so you can read it; pressing UPDATE unlocks the fields, and SAVE or CANCEL locks them again. New clears the form and unlocks it for a fresh remote. Without the lock a stray click on an address plus one keystroke could quietly repoint a working remote at nothing. Esc backs out one step at a time: out of a field, then out of edit mode, then closes the panel.\r\nConnect all / Disconnect all act on every row, F5 polls them, and Sync all pushes this viewer's view and effect state to all of them at once.</td></tr>
-                <tr><td><kbd>Ctrl+F10</kbd></td><td>Remote Commands — type a command and send it to the instances YOU TICK in this panel's own SEND TO box, which lists everything currently connected with a checkbox, name and address each. Its own selection on purpose: the Ctrl+F11 Control ticks decide where keystrokes go, and lining up one screen by hand should not change what F11 drives afterwards. Everything connected starts ticked; All / None sit on the box's header. The manual counterpart to mirroring: F11 forwards what you DO, this sends what you TYPE, including the commands that have no key at all — msgRemote, OpenFile, JumpToImage, SlideshowSetInterval, EnableRemoteLog.\r\nEvery command has ONE wire name, and it is spelled exactly like its Command.h enumerator — no short aliases to remember or confuse.\r\nBROWSE FIRST: the full command list is permanently on the left, scrollable and filterable — nobody remembers ninety wire names. The list shows NAMES only, in two blues: the second one marks a command that TAKES A VALUE (the header says so). Highlighting one explains it along the TOP: what the command does over the list, what its value means over the Value box, on one line — with units, limits and an example where there is one to give. The list comes from the same table the wire parser accepts, so a name shown here cannot come back "unknown command".\r\nType to filter (it matches the descriptions too). ARROWS and PgUp/PgDn move the highlight wherever the caret is. TAB swaps Filter and Value. ENTER in the filter takes the highlighted command — straight to Value if it needs one, otherwise it sends. ENTER in Value sends. ESC clears, then closes. Clicking a command selects it; it never sends on its own.\r\nTHE BOX ALONG THE BOTTOM IS A LOG of the whole session: every line you sent and every answer, numbered — → for a send, ← for a reply, with the instance that answered and its round trip. NEWEST AT THE TOP, so what just came back is there without scrolling — the opposite of the Ctrl+F12 wire log, which is a transcript you read forwards. It scrolls, and it holds your place if you have scrolled into the history.\r\nIt keeps growing while you work and survives closing the panel; only Clear empties it, which also restarts the numbering at 1.\r\nEach instance answers separately. Tick ALSO RUN IT HERE to include this viewer — off by default, since the usual reason to type a command here is to do something to the other screens. The LOG button beside Clear jumps to the Ctrl+F12 wire log, which carries the matching button back.</td></tr>
-                <tr><td><kbd>F11</kbd></td><td>MIRRORING on/off. While on, every command you give here is also sent to the instances listed in Remote Servers (F10) — navigation, zoom, effects, view mode, sort order, slideshow. Panels, window geometry, quit and hide are deliberately never forwarded: one keypress must not close or move every screen at once. Always OFF at startup.\r\nBoth switches are also in the right-click menu under REMOTEACTIVATION, as checkboxes — which is the only way to READ them without changing them, since the overlay they announce themselves on fades. That submenu also says how many instances are connected and how many are actually being driven.\r\nF11 asks nothing and puts nothing up — it is only the toggle. Which of the connected instances it drives is set in the Ctrl+F11 panel, and shown on screen each time mirroring goes on. Everything connected is driven to begin with; if you have unticked all of them, F11 says so instead of switching on and forwarding to nobody.\r\nCTRL+F11 opens Mirroring: one row per CONNECTED instance, with three controls each, in the order you ask them — IDENTIFY makes that screen say its own name so you can tell two identical viewers apart; the CONTROL tick says whether F11 drives it; and WATCH is the other direction, where that instance reports what it does and this viewer follows along, which is how you see a screen running its own slideshow (one at a time — it is a radio button). Plus All, None, Sync now, and the two mirroring switches themselves as toggle buttons — F11 (send anything at all) and F12 (also run it here) — which light up while they are on. It is a real window — leave it open beside the pictures while you work; it refreshes itself as instances connect and drop, and every tick takes effect immediately. Sync now pushes this viewer's folder, current image and view state to the ticked instances, the same push as Sync all in Remote Servers. Rows that are listed but not connected do not appear — connect them in F10 first. The selection lasts for this session only and is echoed in the Remote Servers header.</td></tr>
-                <tr><td><kbd>Ctrl+Enter</kbd></td><td>SEND THIS POSITION to the instances under Control (the ticked rows in Ctrl+F11). Prepare a picture here, press it, and those screens show that picture — the point being that they carry on doing whatever they were doing. A target running a fullscreen slideshow keeps running it, in its own view mode with its own effects, and simply continues from the image you sent. Folder, sort order and position are the ONLY things sent; that is why this is not Sync, which stamps this viewer's whole look onto the far end.\r\nIt works out what to send by ASKING first. Already in the same folder in the same order? Then just the position — one line, no rescan, no flicker, so you can walk a folder here and push each picture as you reach it. In a different folder? Then the folder, then the sort order, then — after waiting for that instance's own scan to finish — the image. Sending the position before the scan lands is the race this avoids.\r\nSame-machine instances only: a folder path and an image number are both meaningless against another machine's files, and ticked rows elsewhere are reported as skipped rather than silently left out. Independent of F11 — mirroring can be off. Plain Enter is still fullscreen.</td></tr>
-                <tr><td><kbd>Alt+Enter</kbd></td><td>STREAM THIS IMAGE to the instances under Control, shown ONCE — and change nothing else about them. No folder, no sort order, no playlist position: the picture goes up in place of the slide currently showing, and afterwards that instance carries on from exactly where it was, as if nothing had happened. An advert dropped into a running slideshow is the case it was built for.\r\nTHE PICTURE'S OWN BYTES TRAVEL, base64-encoded across several protocol lines, and the far end decodes them with its own decoder. So this works to an instance on ANOTHER MACHINE, which Ctrl+Enter cannot — a folder path and an image number are only meaningful against the far end's own disk. The file name rides along for one reason: its extension is what picks the decoder.\r\nWith a slideshow running it appears at the NEXT slide boundary, so the picture already on screen is not cut short, and it occupies one slide. With no slideshow it appears at once and stays until something else changes the image there. Either way it is gone the moment the picture changes — it never enters that instance's playlist, and both the received file and its cache entry are thrown away rather than left sitting in memory.\r\nCTRL+Enter is the other depth of the same act: that one MOVES the far end to your picture and it stays there. Plain Enter is still fullscreen.</td></tr>
-                <tr><td><kbd>Ctrl+Alt+Enter</kbd></td><td>ASK FOR THE IMAGE another instance is displaying, and show it here — once. The same transfer as Alt+Enter, inbound: that instance reads whatever is on its screen and sends the bytes, so this works from a machine in another room just as well as from one beside you.\r\nONE instance answers, because the answer is a picture and this screen shows one at a time: the instance being WATCHED (Ctrl+F11's ◉) if there is one — you are already following that screen — otherwise the first connected row under Control. The overlay names which one was asked, so a narrowed selection is never ambiguous.\r\nWhat comes back is shown the way any one-shot image is: it never enters this viewer's playlist, nothing about the folder, sort order or position moves, and it is gone the moment the picture changes — but unlike an arriving advert it appears IMMEDIATELY, without waiting for a slide boundary, because you asked for it at this keyboard.\r\nAll three of these — and the wire commands behind them — are in the Ctrl+F10 Remote Commands list, which is where to test them by hand.</td></tr>
-                <tr><td><kbd>Ctrl+Shift+Enter</kbd></td><td>The Ctrl+Enter push, WIDENED: send this folder, sort order and position to EVERY connected instance rather than only the ones ticked under Control (Ctrl+F11).\r\nFor lining up a whole wall at once without first going to a panel to tick rows you are about to untick again. Still same-machine only, for the same reason Ctrl+Enter is — a folder path and an image number are read against the far end's own disk, and choosing more targets cannot change that. Instances on other machines are skipped and counted, and the overlay says how many.</td></tr>
-                <tr><td><kbd>Ctrl+F12</kbd></td><td>Server Log — every line that crossed the wire, both directions, in one list: number, who sent it, the command, who received it, the reply, the time, and how long it took. A mirroring session is a conversation, so both directions share one table in the order things actually happened.\r\nCONNECTIONS ARE LOGGED TOO, as pairs, and the Sender column names WHO — the peer's address with its source port, 192.168.0.7:51423 or [2001:db8::1]:51423. The port is what tells two connections apart: one phone reconnecting every few minutes, or two instances on one box, are otherwise identical in every column, and an arrival could not be paired with its own departure. Command rows name the peer the same way, so a line and the connection that carried it match up. The departure also fills the Δ column with HOW LONG the session lasted.\r\nAn arrival says whether it is plaintext or TLS; the matching departure says WHY it ended — closed by peer, send failed, authentication failed, server shutting down, or a TLS handshake that never completed. A connection still open is an arrival with nothing under it yet, so the list answers who is on this machine right now. Connections that never became clients are here as well — refused for being blacklisted, not on the AllowList, or over the connection limit — and on a listener anyone can reach, those are the lines worth reading first.\r\nRECORDING IS OFF by default and costs nothing while it is off. The Recording button starts it — and tells every connected instance to start too, because a log of one end of a conversation answers half the question. Opening this panel does not start recording.\r\nTwo live counts sit at the right of the button row: CONNECTIONS n/m — how many listed targets are actually connected — and CONTROL n/m — how many of those F11 actually drives. They are TOGGLE buttons for the panels behind those numbers: pressing one opens the F10 console or the Ctrl+F11 panel and brings it to the front, pressing it again closes it. They light up while that panel is open; dimmed digits mean the count is zero.\r\nClear empties it (entry numbers carry on, so a number never means two different exchanges). Save writes a tab-separated UTF-8 file; Load — the button or Ctrl+O while the panel has focus — reads one back, REPLACING what is in memory, which is also how a rotated TCP/IP log file from the logs folder is opened. Click #, Time or Δ time to sort, and again to reverse — the text columns do not sort, because grouping a conversation by sender destroys the ordering that makes it one. The newest 20000 entries are kept; older ones are dropped.\r\nThe list follows the newest entry until you scroll up, and follows again when you scroll back to the bottom.\r\nDOUBLE-CLICK A ROW (or select it and press Enter) to open it in its own window with every field on its own line, wrapped and untrimmed — the table has to ellipsise a long command or reply, and that window is where the full text lives. Previous / Next step through the list in whatever order it is currently sorted, and the list's selection follows along, so closing the window leaves you where you finished reading. Copy puts the whole entry on the clipboard.</td></tr>
-                <tr><td><kbd>While connected</kbd></td><td>A connection — driving another instance, or being driven by one — puts the viewer into a restricted mode, and leaves it when the last connection drops.\r\nRefused while connected: sort by Disk Order (physical order differs per drive, so two instances would order their playlists differently), Find, and anything that changes the folder — delete, cut, paste, drag-drop and Ctrl+S. Adding or removing one file shifts every image number after it, which is exactly what the two instances rely on to stay on the same picture. Each refusal says so on screen. Copy to clipboard still works: it reads a file and writes nothing.\r\nConnecting while already sorted by disk order switches you to sort by Name.\r\nDelete, move, paste and save are additionally NEVER reachable over the network, whatever the password or allow-list says.</td></tr>
-                <tr><td><kbd>Driving another machine</kbd></td><td>An instance on the SAME computer is mirrored exactly — it shares the folder, so image numbers mean the same picture on both. An instance on ANOTHER computer gets the portable commands only: navigation, zoom, effects, view mode and slideshow, applied to its own content. Image numbers and folder paths are not sent there, because a path from this machine names nothing on that one. The Remote Servers marks those rows (remote), and its start button cannot launch them — nothing here can start a process on another machine.\r\nTHE EXCEPTION IS A STREAMED IMAGE. Alt+Enter and Ctrl+Alt+Enter send the picture's own bytes rather than a path, so they work to any machine: the far end decodes what it receives, and nothing about the transfer depends on it being able to read your disk. Both ends must be recent enough to know the streaming commands (remote protocol v2) — an older one is refused with a message that says so rather than being left to fail.</td></tr>
-                <tr><td><kbd>F12</kbd></td><td>While mirroring, also execute the command HERE. Off (the default) makes this viewer a pure remote control: it drives the other screens and its own display stays where it is. Has no effect while mirroring is off. Always OFF at startup.</td></tr>
-                <tr><td><kbd>qIV Remote (Android)</kbd></td><td>THE PHONE CLIENT, and the reason F9 is worth switching on even if you never drive a second PC. It speaks this same protocol — the verbs listed by `help` — so it is a real client rather than a screen share.\r\nIT DRIVES THE VIEWER: next / previous, first / last, slideshow with its interval, pause, loop and shuffle, zoom, rotate, flip, all five view modes, the colour effects, fullscreen, always-on-top, panels and the overlay. This viewer's folder history goes down to the phone too, so a folder here is one tap away there.\r\nPICTURES TRAVEL BOTH WAYS, which is the part a remote control usually cannot do at all. The phone's live preview asks for the displayed image SCALED and re-encoded before it leaves this machine — 25-40x fewer bytes than the original. Save asks for the ORIGINAL FILE separately and writes it into the phone's gallery, because a re-encoded preview is not the file anyone meant to keep. Pushing the other way sends the phone photo's own bytes here, and it is shown ONCE, over whatever is up: no folder change, no sort order change, no playlist move, and a running slideshow carries on with it occupying a single slide.\r\nPRESENTATION MODE is the picture and two large next/previous buttons, sized to press without looking. Bind the connection and the preview follows this viewer by itself — change the picture here, it appears there.\r\nSAME RULES AS ANY OTHER CLIENT. TLS with the pinned certificate off loopback, the password answered by challenge-response so it never crosses the wire, and the AllowList above still decides who may connect at all. Turn Local Server on here first; the app's About screen walks through it, and its demo mode runs every screen against a viewer that does not exist if you want to look before opening a port.</td></tr>
-                </tbody>
-            </table>
+    </section>
+    <section class="sc-sec" data-title="Remote Control &amp; Mirroring">
+        <h2><span class="sc-ico">📡</span>Remote Control &amp; Mirroring<span class="sc-count">15</span></h2>
+        <div class="sc-cols">
+            <div class="sc-row"><div class="sc-keys"><kbd>F9</kbd></div><p class="sc-desc">Open the Local Server panel — the listener THIS instance runs, and nothing else. qIV can listen on a TCP port and be driven over the network — next, goto, zoom, open, slideshow  <a class="sc-more" href="#remote-control-mirroring-f9">details</a></p></div>
+            <div class="sc-row"><div class="sc-keys"><kbd>TCP</kbd> / <kbd>IP menu → Announce (beacon)</kbd></div><p class="sc-desc">Publish this listener on the local network so a phone or another qIV FINDS it in a list instead of being told an address. <a class="sc-more" href="#remote-control-mirroring-tcp-ip-menu-announce-beacon">details</a></p></div>
+            <div class="sc-row"><div class="sc-keys"><kbd>Ctrl+F9</kbd></div><p class="sc-desc">My Clients — every peer currently connected to the listener above, with its address, the name it gave itself, whether it is encrypted, and how long it has been on. <a class="sc-more" href="#remote-control-mirroring-ctrl-f9">details</a></p></div>
+            <div class="sc-row"><div class="sc-keys"><kbd>F10</kbd></div><p class="sc-desc">Open Remote Servers — everything about the instances this copy can drive. <a class="sc-more" href="#remote-control-mirroring-f10">details</a></p></div>
+            <div class="sc-row"><div class="sc-keys"><kbd>Ctrl+F10</kbd></div><p class="sc-desc">Remote Commands — type a command and send it to the instances YOU TICK in this panel's own SEND TO box, which lists everything currently connected with a checkbox, name and address each. <a class="sc-more" href="#remote-control-mirroring-ctrl-f10">details</a></p></div>
+            <div class="sc-row"><div class="sc-keys"><kbd>F11</kbd></div><p class="sc-desc">MIRRORING on/off. While on, every command you give here is also sent to the instances listed in Remote Servers (F10) — navigation, zoom, effects, view mode, sort order, slideshow. <a class="sc-more" href="#remote-control-mirroring-f11">details</a></p></div>
+            <div class="sc-row"><div class="sc-keys"><kbd>Ctrl+Enter</kbd></div><p class="sc-desc">SEND THIS POSITION to the instances under Control (the ticked rows in Ctrl+F11). Prepare a picture here, press it, and those screens show that picture  <a class="sc-more" href="#remote-control-mirroring-ctrl-enter">details</a></p></div>
+            <div class="sc-row"><div class="sc-keys"><kbd>Alt+Enter</kbd></div><p class="sc-desc">STREAM THIS IMAGE to the instances under Control, shown ONCE — and change nothing else about them. <a class="sc-more" href="#remote-control-mirroring-alt-enter">details</a></p></div>
+            <div class="sc-row"><div class="sc-keys"><kbd>Ctrl+Alt+Enter</kbd></div><p class="sc-desc">ASK FOR THE IMAGE another instance is displaying, and show it here — once. The same transfer as Alt+Enter, inbound: that instance reads whatever is on its screen and sends the bytes, so this works… <a class="sc-more" href="#remote-control-mirroring-ctrl-alt-enter">details</a></p></div>
+            <div class="sc-row"><div class="sc-keys"><kbd>Ctrl+Shift+Enter</kbd></div><p class="sc-desc">The Ctrl+Enter push, WIDENED: send this folder, sort order and position to EVERY connected instance rather than only the ones ticked under Control (Ctrl+F11). <a class="sc-more" href="#remote-control-mirroring-ctrl-shift-enter">details</a></p></div>
+            <div class="sc-row"><div class="sc-keys"><kbd>Ctrl+F12</kbd></div><p class="sc-desc">Server Log — every line that crossed the wire, both directions, in one list: number, who sent it, the command, who received it, the reply, the time, and how long it took. <a class="sc-more" href="#remote-control-mirroring-ctrl-f12">details</a></p></div>
+            <div class="sc-row"><div class="sc-keys"><kbd>While connected</kbd></div><p class="sc-desc">A connection — driving another instance, or being driven by one — puts the viewer into a restricted mode, and leaves it when the last connection drops. <a class="sc-more" href="#remote-control-mirroring-while-connected">details</a></p></div>
+            <div class="sc-row"><div class="sc-keys"><kbd>Driving another machine</kbd></div><p class="sc-desc">An instance on the SAME computer is mirrored exactly — it shares the folder, so image numbers mean the same picture on both. <a class="sc-more" href="#remote-control-mirroring-driving-another-machine">details</a></p></div>
+            <div class="sc-row"><div class="sc-keys"><kbd>F12</kbd></div><p class="sc-desc">While mirroring, also execute the command HERE. Off (the default) makes this viewer a pure remote control: it drives the other screens and its own display stays where it is. <a class="sc-more" href="#remote-control-mirroring-f12">details</a></p></div>
+            <div class="sc-row"><div class="sc-keys"><kbd>qIV Remote (Android)</kbd></div><p class="sc-desc">THE PHONE CLIENT, and the reason F9 is worth switching on even if you never drive a second PC. It speaks this same protocol — the verbs listed by `help`  <a class="sc-more" href="#remote-control-mirroring-qiv-remote-android">details</a></p></div>
         </div>
-    </details>
-    <details class="shortcut-section">
-        <summary>System Tray <span class="count">34</span></summary>
-        <div class="tablewrap">
-            <table>
-                <thead><tr><th>Keys</th><th>Action</th></tr></thead>
-                <tbody>
-                <tr><td><kbd>Double-click tray icon</kbd></td><td>Restore the main window to the foreground.</td></tr>
-                <tr><td><kbd>Restore QuickImageViewer</kbd></td><td>Show and bring the main window to the front.</td></tr>
-                <tr><td><kbd>Help</kbd> / <kbd>Shortcuts</kbd></td><td>Open this help window directly from the tray.</td></tr>
-                <tr><td><kbd>Exit Completely</kbd></td><td>Remove the tray icon, destroy the window and fully exit the process.</td></tr>
-                <tr><td><kbd>Settings › Keep in Background</kbd></td><td>When enabled, closing the window (Esc / Ctrl+W) hides QIV to the tray instead of exiting — the process stays resident for an instant re-open. When disabled (or if more than one instance is running), Esc / Ctrl+W closes the window entirely.</td></tr>
-                <tr><td><kbd>Settings › Run on Startup</kbd></td><td>Write / remove the Windows startup registry entry (HKCU\\…\\Run) so QIV launches automatically with Windows. Dedicated instances write their own separate entry and do not conflict with the normal instance.</td></tr>
-                <tr><td><kbd>Settings › Thumbnail Effects</kbd></td><td>Master switch for thumbnail strip visual effects: glow border on the selected thumbnail, rounded-corner overdraw, and hover-scale enlarge.</td></tr>
-                <tr><td><kbd>Settings › History: Open Full List</kbd></td><td>When enabled, Tab opens the full (uncapped) history view. When disabled, the list is capped at the History Max Dirs value.</td></tr>
-                <tr><td><kbd>Settings › Info Overlays</kbd></td><td>Show / hide all nine overlay text slots at once.</td></tr>
-                <tr><td><kbd>Overlays › Font</kbd> / <kbd>Font Size</kbd> / <kbd>Font Color…</kbd></td><td>Typeface, point size and colour for every overlay slot. Font Color opens the standard colour picker; the size is shown in its own label. All three are persisted, so a wall of screens can be made readable from across a room once and left alone.</td></tr>
-                <tr><td><kbd>Overlays › Layout</kbd> / <kbd>Message Duration</kbd></td><td>Layout picks Grid, Stacked or Summary — the same three O cycles through. Message Duration is how long a centre-screen message stays up, in milliseconds.</td></tr>
-                <tr><td><kbd>Settings › Open Thumbnail Strip on Start</kbd></td><td>Automatically open the directory thumbnail strip on every launch.</td></tr>
-                <tr><td><kbd>Settings › Overlay Background</kbd></td><td>Toggle the semi-transparent background panel behind overlay text.</td></tr>
-                <tr><td><kbd>Settings › Swap Mouse Buttons</kbd></td><td>Exchange left and right button roles: hold-to-zoom ↔ drag-to-move-window.</td></tr>
-                <tr><td><kbd>Settings › Invert Scroll Direction</kbd></td><td>Reverse vertical mouse wheel for image navigation.</td></tr>
-                <tr><td><kbd>Settings › Invert Horizontal Scroll</kbd></td><td>Reverse horizontal wheel direction used for folder history navigation.</td></tr>
-                <tr><td><kbd>Settings › Start in Fullscreen</kbd></td><td>Open in fullscreen mode on every launch.</td></tr>
-                <tr><td><kbd>Settings › VRAM Cache Size</kbd></td><td>How many images to keep decoded in GPU memory (0 – 999). Click to open a numeric input dialog; current value is shown in the label.</td></tr>
-                <tr><td><kbd>Settings › Window Width</kbd> / <kbd>Height</kbd></td><td>Default window dimensions in pixels (240 – 16000). Used by Ctrl+Space restore and window-reset commands.</td></tr>
-                <tr><td><kbd>Settings › History Max Dirs</kbd> / <kbd>Favs</kbd></td><td>Maximum folders / favorites to show in the History panel (0 – 999 each).</td></tr>
-                <tr><td><kbd>Settings › Dir Thumb Cache</kbd></td><td>Memory budget in MB for the directory thumbnail bitmap store (100 – 64000 MB).</td></tr>
-                <tr><td><kbd>Settings › Preload Lookaside</kbd></td><td>How many images ahead and behind the current one to pre-decode into GPU memory in the background (1 – 99).</td></tr>
-                <tr><td><kbd>Settings › Overlay Message Duration</kbd></td><td>How long center overlay messages remain visible in milliseconds (250 – 10000 ms).</td></tr>
-                <tr><td><kbd>Settings › History Save Limit</kbd></td><td>Maximum number of folders to persist to disk between sessions (1 – 99999).</td></tr>
-                <tr><td><kbd>Settings › Export</kbd> / <kbd>Import Settings</kbd></td><td>Save all settings to a UTF-8 INI file, or load a previously exported one. Import requires a confirmation dialog and applies all values immediately, including theme, overlays and sort order.</td></tr>
-                <tr><td><kbd>Settings › Restore Defaults</kbd></td><td>Reset every setting to its compiled-in default value after a confirmation dialog. History and favorites are not affected.</td></tr>
-                <tr><td><kbd>View Mode submenu</kbd></td><td>Pick the default fit mode applied to newly loaded images: 1 Fit to view (keeps aspect) • 2 Fit to width • 3 Fit to height • 4 Stretch to window • 5 Original size, 1:1 pixels. The current mode is shown with a radio-button check.</td></tr>
-                <tr><td><kbd>Slideshow submenu</kbd></td><td>Configure slideshow defaults: interval (100 – 60000 ms), loop, shuffle, and transition type ( styles, plus Random). All changes persist immediately.</td></tr>
-                <tr><td><kbd>Sort submenu</kbd></td><td>Choose the playlist sort order (Name / Date Modified / Size / Type / Disk Order) and toggle Reverse Order. Takes effect immediately on the current folder.</td></tr>
-                <tr><td><kbd>Backup › Backup History &amp;&amp; Favorites</kbd></td><td>Export the history and favorites files into a ZIP archive (file-save dialog). The default filename includes today's date.</td></tr>
-                <tr><td><kbd>Backup › Restore History &amp;&amp; Favorites</kbd></td><td>Restore from a previously created ZIP backup after a confirmation dialog. Overwrites current history and favorites in memory and on disk.</td></tr>
-                <tr><td><kbd>Logging › General Log</kbd></td><td>Record what qIV itself did — started, closed, and whether the previous run ended abnormally, naming the crash dump when there is one. Off by default and remembered across restarts, because the screen that misbehaves at four in the morning is the one nobody was watching.</td></tr>
-                <tr><td><kbd>Logging › TCP/IP Log</kbd></td><td>Write every line exchanged with a remote client to disk — the same traffic the Server Log panel shows (Ctrl+F12). Independent of that panel's Recording button: this captures whether or not the panel is recording.</td></tr>
-                <tr><td><kbd>Logging › Open Log Folder</kbd></td><td>Open logs\\ in Explorer. Files land in logs\\general\\ and logs\\network\\ beside the EXE, rotate every 5000 lines, and use the standard time [thread] LEVEL message layout that LogViewPlus and lnav read without configuration. A rotated TCP/IP file reopens in the Server Log panel with Ctrl+O. Writing runs on its own thread, so a slow disk never stalls the viewer.</td></tr>
-                </tbody>
-            </table>
+    </section>
+    <section class="sc-sec" data-title="System Tray">
+        <h2><span class="sc-ico">🔔</span>System Tray<span class="sc-count">34</span></h2>
+        <div class="sc-cols">
+            <div class="sc-row"><div class="sc-keys"><kbd>Double-click tray icon</kbd></div><p class="sc-desc">Restore the main window to the foreground.</p></div>
+            <div class="sc-row"><div class="sc-keys"><kbd>Restore QuickImageViewer</kbd></div><p class="sc-desc">Show and bring the main window to the front.</p></div>
+            <div class="sc-row"><div class="sc-keys"><kbd>Help</kbd> / <kbd>Shortcuts</kbd></div><p class="sc-desc">Open this help window directly from the tray.</p></div>
+            <div class="sc-row"><div class="sc-keys"><kbd>Exit Completely</kbd></div><p class="sc-desc">Remove the tray icon, destroy the window and fully exit the process.</p></div>
+            <div class="sc-row"><div class="sc-keys"><kbd>Settings › Keep in Background</kbd></div><p class="sc-desc">When enabled, closing the window (Esc / Ctrl+W) hides QIV to the tray instead of exiting — the process stays resident for an instant re-open. <a class="sc-more" href="#system-tray-settings-keep-in-background">details</a></p></div>
+            <div class="sc-row"><div class="sc-keys"><kbd>Settings › Run on Startup</kbd></div><p class="sc-desc">Write / remove the Windows startup registry entry (HKCU\\…\\Run) so QIV launches automatically with Windows. <a class="sc-more" href="#system-tray-settings-run-on-startup">details</a></p></div>
+            <div class="sc-row"><div class="sc-keys"><kbd>Settings › Thumbnail Effects</kbd></div><p class="sc-desc">Master switch for thumbnail strip visual effects: glow border on the selected thumbnail, rounded-corner overdraw, and hover-scale enlarge.</p></div>
+            <div class="sc-row"><div class="sc-keys"><kbd>Settings › History: Open Full List</kbd></div><p class="sc-desc">When enabled, Tab opens the full (uncapped) history view. When disabled, the list is capped at the History Max Dirs value.</p></div>
+            <div class="sc-row"><div class="sc-keys"><kbd>Settings › Info Overlays</kbd></div><p class="sc-desc">Show / hide all nine overlay text slots at once.</p></div>
+            <div class="sc-row"><div class="sc-keys"><kbd>Overlays › Font</kbd> / <kbd>Font Size</kbd> / <kbd>Font Color…</kbd></div><p class="sc-desc">Typeface, point size and colour for every overlay slot. Font Color opens the standard colour picker; the size is shown in its own label. <a class="sc-more" href="#system-tray-overlays-font-font-size-font-color">details</a></p></div>
+            <div class="sc-row"><div class="sc-keys"><kbd>Overlays › Layout</kbd> / <kbd>Message Duration</kbd></div><p class="sc-desc">Layout picks Grid, Stacked or Summary — the same three O cycles through. Message Duration is how long a centre-screen message stays up, in milliseconds.</p></div>
+            <div class="sc-row"><div class="sc-keys"><kbd>Settings › Open Thumbnail Strip on Start</kbd></div><p class="sc-desc">Automatically open the directory thumbnail strip on every launch.</p></div>
+            <div class="sc-row"><div class="sc-keys"><kbd>Settings › Overlay Background</kbd></div><p class="sc-desc">Toggle the semi-transparent background panel behind overlay text.</p></div>
+            <div class="sc-row"><div class="sc-keys"><kbd>Settings › Swap Mouse Buttons</kbd></div><p class="sc-desc">Exchange left and right button roles: hold-to-zoom ↔ drag-to-move-window.</p></div>
+            <div class="sc-row"><div class="sc-keys"><kbd>Settings › Invert Scroll Direction</kbd></div><p class="sc-desc">Reverse vertical mouse wheel for image navigation.</p></div>
+            <div class="sc-row"><div class="sc-keys"><kbd>Settings › Invert Horizontal Scroll</kbd></div><p class="sc-desc">Reverse horizontal wheel direction used for folder history navigation.</p></div>
+            <div class="sc-row"><div class="sc-keys"><kbd>Settings › Start in Fullscreen</kbd></div><p class="sc-desc">Open in fullscreen mode on every launch.</p></div>
+            <div class="sc-row"><div class="sc-keys"><kbd>Settings › VRAM Cache Size</kbd></div><p class="sc-desc">How many images to keep decoded in GPU memory (0 – 999). Click to open a numeric input dialog; current value is shown in the label.</p></div>
+            <div class="sc-row"><div class="sc-keys"><kbd>Settings › Window Width</kbd> / <kbd>Height</kbd></div><p class="sc-desc">Default window dimensions in pixels (240 – 16000). Used by Ctrl+Space restore and window-reset commands.</p></div>
+            <div class="sc-row"><div class="sc-keys"><kbd>Settings › History Max Dirs</kbd> / <kbd>Favs</kbd></div><p class="sc-desc">Maximum folders / favorites to show in the History panel (0 – 999 each).</p></div>
+            <div class="sc-row"><div class="sc-keys"><kbd>Settings › Dir Thumb Cache</kbd></div><p class="sc-desc">Memory budget in MB for the directory thumbnail bitmap store (100 – 64000 MB).</p></div>
+            <div class="sc-row"><div class="sc-keys"><kbd>Settings › Preload Lookaside</kbd></div><p class="sc-desc">How many images ahead and behind the current one to pre-decode into GPU memory in the background (1 – 99).</p></div>
+            <div class="sc-row"><div class="sc-keys"><kbd>Settings › Overlay Message Duration</kbd></div><p class="sc-desc">How long center overlay messages remain visible in milliseconds (250 – 10000 ms).</p></div>
+            <div class="sc-row"><div class="sc-keys"><kbd>Settings › History Save Limit</kbd></div><p class="sc-desc">Maximum number of folders to persist to disk between sessions (1 – 99999).</p></div>
+            <div class="sc-row"><div class="sc-keys"><kbd>Settings › Export</kbd> / <kbd>Import Settings</kbd></div><p class="sc-desc">Save all settings to a UTF-8 INI file, or load a previously exported one. Import requires a confirmation dialog and applies all values immediately, including theme, overlays and sort order.</p></div>
+            <div class="sc-row"><div class="sc-keys"><kbd>Settings › Restore Defaults</kbd></div><p class="sc-desc">Reset every setting to its compiled-in default value after a confirmation dialog. History and favorites are not affected.</p></div>
+            <div class="sc-row"><div class="sc-keys"><kbd>View Mode submenu</kbd></div><p class="sc-desc">Pick the default fit mode applied to newly loaded images: 1 Fit to view (keeps aspect) • 2 Fit to width • 3 Fit to height • 4 Stretch to window • 5 Original size, 1:1 pixels. <a class="sc-more" href="#system-tray-view-mode-submenu">details</a></p></div>
+            <div class="sc-row"><div class="sc-keys"><kbd>Slideshow submenu</kbd></div><p class="sc-desc">Configure slideshow defaults: interval (100 – 60000 ms), loop, shuffle, and transition type ( styles, plus Random). All changes persist immediately.</p></div>
+            <div class="sc-row"><div class="sc-keys"><kbd>Sort submenu</kbd></div><p class="sc-desc">Choose the playlist sort order (Name / Date Modified / Size / Type / Disk Order) and toggle Reverse Order. Takes effect immediately on the current folder.</p></div>
+            <div class="sc-row"><div class="sc-keys"><kbd>Backup › Backup History &amp;&amp; Favorites</kbd></div><p class="sc-desc">Export the history and favorites files into a ZIP archive (file-save dialog). The default filename includes today's date.</p></div>
+            <div class="sc-row"><div class="sc-keys"><kbd>Backup › Restore History &amp;&amp; Favorites</kbd></div><p class="sc-desc">Restore from a previously created ZIP backup after a confirmation dialog. Overwrites current history and favorites in memory and on disk.</p></div>
+            <div class="sc-row"><div class="sc-keys"><kbd>Logging › General Log</kbd></div><p class="sc-desc">Record what qIV itself did — started, closed, and whether the previous run ended abnormally, naming the crash dump when there is one. <a class="sc-more" href="#system-tray-logging-general-log">details</a></p></div>
+            <div class="sc-row"><div class="sc-keys"><kbd>Logging › TCP/IP Log</kbd></div><p class="sc-desc">Write every line exchanged with a remote client to disk — the same traffic the Server Log panel shows (Ctrl+F12). <a class="sc-more" href="#system-tray-logging-tcp-ip-log">details</a></p></div>
+            <div class="sc-row"><div class="sc-keys"><kbd>Logging › Open Log Folder</kbd></div><p class="sc-desc">Open logs\\ in Explorer. Files land in logs\\general\\ and logs\\network\\ beside the EXE, rotate every 5000 lines, and use the standard time [thread] LEVEL message layout that LogViewPlus and lnav… <a class="sc-more" href="#system-tray-logging-open-log-folder">details</a></p></div>
         </div>
-    </details>
-    <details class="shortcut-section">
-        <summary>Dedicated Screens <span class="count">13</span></summary>
-        <div class="tablewrap">
-            <table>
-                <thead><tr><th>Keys</th><th>Action</th></tr></thead>
-                <tbody>
-                <tr><td><kbd>F8</kbd></td><td>Open the Dedicated panel. A dedicated screen is a separate copy of qIV with its own settings file beside it — normally parked fullscreen on one monitor running a slideshow. Any number can run at once alongside the main app without sharing anything.</td></tr>
-                <tr><td><kbd>Dedicated › Generate App</kbd></td><td>Copy this executable to a chosen folder as qIV_dedicated_&lt;name&gt;.exe. The name is what keeps screens apart: its settings, folder lists, single-instance identity and shortcut are all derived from it.</td></tr>
-                <tr><td><kbd>Dedicated › Generate Config</kbd></td><td>Write that copy's .ini next to it, holding every setting shown in the panel. The panel edits the CONFIG only — it never changes the app you are using.</td></tr>
-                <tr><td><kbd>Dedicated › Add Images</kbd> / <kbd>Add Promotions</kbd></td><td>Append a folder to the screen's image list (.qim) or promotion list (.qpr). Duplicates are reported and skipped. Missing list files are created.</td></tr>
-                <tr><td><kbd>Dedicated › Add Startup</kbd> / <kbd>Remove Startup</kbd></td><td>Create or delete a shortcut in shell:startup pointing at the copy with -dedicated -config "&lt;its .ini&gt;", so the screen starts itself after a reboot.</td></tr>
-                <tr><td><kbd>Dedicated › Test Config</kbd> / <kbd>Test Images</kbd> / <kbd>Test Promos</kbd></td><td>Check one thing at a time: the .ini, the image list, or the promotion list. The list tests count the images actually found per folder and flag folders that are missing or empty — a folder that exists but holds nothing decodable looks fine until the screen goes blank.</td></tr>
-                <tr><td><kbd>Promotions</kbd></td><td>A SECOND playlist, never merged into the images. Shown occasionally between them and invisible to the image counter and arrow keys. Weighted order favours files whose name ends in #N — "sale#500.jpg" is 500x likelier than a file with no suffix (1 to 65535).</td></tr>
-                <tr><td><kbd>Promotion pacing</kbd></td><td>Two independent triggers, each a (from, to) pair: 0 = off, a single value is an exact cadence, a range is re-rolled each time so it never looks mechanical. Count them in images, in seconds, or both — whichever comes due first shows a promotion. Promotions can hold the screen for their own dwell time.</td></tr>
-                <tr><td><kbd>Kiosk lock</kbd></td><td>Tick "Kiosk lock" in the panel and the screen ignores every key and every click, so a passer-by cannot pause the slideshow or reach the panels. The tray icon keeps working — its menu runs its own message loop, so it is unaffected — and Settings &gt; Kiosk Lock there is the only way back in. Available to the main app too, from the same tray item or -lock.</td></tr>
-                <tr><td><kbd>Always on top</kbd></td><td>Keeps the screen above every other window, so nothing that pops up can cover it. Ctrl+T toggles it live; the panel sets it for a generated screen.</td></tr>
-                <tr><td><kbd>Keep display awake</kbd></td><td>Blocks the screensaver and display sleep while the window is on screen. Leave it off and Windows eventually blanks the display with nobody there to wake it — and with the kiosk lock on, nobody could. Released automatically when the window hides to the tray.</td></tr>
-                <tr><td><kbd>Isolation</kbd></td><td>A dedicated screen writes NOTHING to the registry: settings live in its .ini, and it keeps no history or favorites. Its own mutex and window class mean a file opened from Explorer can never land on a slideshow instead of the main window.</td></tr>
-                <tr><td><kbd>Turning any copy portable</kbd></td><td>Put an .ini beside any copy and it reads settings from that file instead of the registry. With Dedicated=0 inside, it stays an ordinary viewer — history, favorites and all — just portable.</td></tr>
-                </tbody>
-            </table>
+    </section>
+    <section class="sc-sec" data-title="Dedicated Screens">
+        <h2><span class="sc-ico">🖥</span>Dedicated Screens<span class="sc-count">13</span></h2>
+        <div class="sc-cols">
+            <div class="sc-row"><div class="sc-keys"><kbd>F8</kbd></div><p class="sc-desc">Open the Dedicated panel. A dedicated screen is a separate copy of qIV with its own settings file beside it — normally parked fullscreen on one monitor running a slideshow. <a class="sc-more" href="#dedicated-screens-f8">details</a></p></div>
+            <div class="sc-row"><div class="sc-keys"><kbd>Dedicated › Generate App</kbd></div><p class="sc-desc">Copy this executable to a chosen folder as qIV_dedicated_&lt;name&gt;.exe. The name is what keeps screens apart: its settings, folder lists, single-instance identity and shortcut are all derived from it.</p></div>
+            <div class="sc-row"><div class="sc-keys"><kbd>Dedicated › Generate Config</kbd></div><p class="sc-desc">Write that copy's .ini next to it, holding every setting shown in the panel. The panel edits the CONFIG only — it never changes the app you are using.</p></div>
+            <div class="sc-row"><div class="sc-keys"><kbd>Dedicated › Add Images</kbd> / <kbd>Add Promotions</kbd></div><p class="sc-desc">Append a folder to the screen's image list (.qim) or promotion list (.qpr). Duplicates are reported and skipped. Missing list files are created.</p></div>
+            <div class="sc-row"><div class="sc-keys"><kbd>Dedicated › Add Startup</kbd> / <kbd>Remove Startup</kbd></div><p class="sc-desc">Create or delete a shortcut in shell:startup pointing at the copy with -dedicated -config "&lt;its .ini&gt;", so the screen starts itself after a reboot.</p></div>
+            <div class="sc-row"><div class="sc-keys"><kbd>Dedicated › Test Config</kbd> / <kbd>Test Images</kbd> / <kbd>Test Promos</kbd></div><p class="sc-desc">Check one thing at a time: the .ini, the image list, or the promotion list. The list tests count the images actually found per folder and flag folders that are missing or empty  <a class="sc-more" href="#dedicated-screens-dedicated-test-config-test-images-test-pro">details</a></p></div>
+            <div class="sc-row"><div class="sc-keys"><kbd>Promotions</kbd></div><p class="sc-desc">A SECOND playlist, never merged into the images. Shown occasionally between them and invisible to the image counter and arrow keys. Weighted order favours files whose name ends in #N  <a class="sc-more" href="#dedicated-screens-promotions">details</a></p></div>
+            <div class="sc-row"><div class="sc-keys"><kbd>Promotion pacing</kbd></div><p class="sc-desc">Two independent triggers, each a (from, to) pair: 0 = off, a single value is an exact cadence, a range is re-rolled each time so it never looks mechanical. Count them in images, in seconds, or both  <a class="sc-more" href="#dedicated-screens-promotion-pacing">details</a></p></div>
+            <div class="sc-row"><div class="sc-keys"><kbd>Kiosk lock</kbd></div><p class="sc-desc">Tick "Kiosk lock" in the panel and the screen ignores every key and every click, so a passer-by cannot pause the slideshow or reach the panels. The tray icon keeps working  <a class="sc-more" href="#dedicated-screens-kiosk-lock">details</a></p></div>
+            <div class="sc-row"><div class="sc-keys"><kbd>Always on top</kbd></div><p class="sc-desc">Keeps the screen above every other window, so nothing that pops up can cover it. Ctrl+T toggles it live; the panel sets it for a generated screen.</p></div>
+            <div class="sc-row"><div class="sc-keys"><kbd>Keep display awake</kbd></div><p class="sc-desc">Blocks the screensaver and display sleep while the window is on screen. Leave it off and Windows eventually blanks the display with nobody there to wake it — and with the kiosk lock on, nobody could. <a class="sc-more" href="#dedicated-screens-keep-display-awake">details</a></p></div>
+            <div class="sc-row"><div class="sc-keys"><kbd>Isolation</kbd></div><p class="sc-desc">A dedicated screen writes NOTHING to the registry: settings live in its .ini, and it keeps no history or favorites. <a class="sc-more" href="#dedicated-screens-isolation">details</a></p></div>
+            <div class="sc-row"><div class="sc-keys"><kbd>Turning any copy portable</kbd></div><p class="sc-desc">Put an .ini beside any copy and it reads settings from that file instead of the registry. With Dedicated=0 inside, it stays an ordinary viewer — history, favorites and all — just portable.</p></div>
         </div>
-    </details>
-    <details class="shortcut-section">
-        <summary>Command-Line Arguments <span class="count">29</span></summary>
-        <div class="tablewrap">
-            <table>
-                <thead><tr><th>Keys</th><th>Action</th></tr></thead>
-                <tbody>
-                <tr><td><kbd>"path\\to\\image.jpg"</kbd></td><td>Positional argument — open this image at startup and browse its folder.</td></tr>
-                <tr><td><kbd>-startFolder &lt;path&gt;</kbd></td><td>Open this folder at startup — used as the browse source or, combined with -slideshow, as the slideshow source.</td></tr>
-                <tr><td><kbd>-background</kbd></td><td>Start hidden in the system tray (service mode). QIV waits in RAM and opens instantly when an image is requested.</td></tr>
-                <tr><td><kbd>-fullscreen</kbd></td><td>Start in fullscreen.</td></tr>
-                <tr><td><kbd>-windowedView</kbd></td><td>Start windowed — the default; useful as an explicit override.</td></tr>
-                <tr><td><kbd>-alwaysOnTop</kbd></td><td>Keep the window above all others from launch (also accepted: -awaysOnTop).</td></tr>
-                <tr><td><kbd>-monitorNum#N</kbd></td><td>Open centered on monitor N (1-based). Example: -monitorNum#2.</td></tr>
-                <tr><td><kbd>-slideshow</kbd></td><td>Auto-start a slideshow after the content is loaded.</td></tr>
-                <tr><td><kbd>-slideshowInterval N</kbd></td><td>Seconds between slides (whole number). Example: -slideshowInterval 8.</td></tr>
-                <tr><td><kbd>-repeat</kbd></td><td>Loop the slideshow when it reaches the end.</td></tr>
-                <tr><td><kbd>-shuffle</kbd></td><td>Play the slideshow in random order.</td></tr>
-                <tr><td><kbd>-slideshowTransition=&lt;type&gt;</kbd></td><td>Slide transition by name: Cut, Fade, Dissolve, Ripple, Flicker, SlideLeft, SlideRight, SlideUp, SlideDown, SlideDiagonal, DriftLeft, DriftUp, ZoomIn, ZoomOut, SoftZoom, Spin, SpinZoom, Swing, Bounce, Slam or Iris. Example: -slideshowTransition=Fade.</td></tr>
-                <tr><td><kbd>-slideshowTransitions=&lt;list&gt;</kbd></td><td>Use a custom set of transitions, mirroring List mode in the menu. Accepts names or the numbers shown beside them — "Fade,Iris,Spin" or "6,8,17". Unknown entries are ignored.</td></tr>
-                <tr><td><kbd>-slideshowTransitionSource=&lt;none|all|list&gt;</kbd></td><td>Which transitions are in play: the single one picked, all of them, or only the custom list.</td></tr>
-                <tr><td><kbd>-slideshowTransitionOrder=&lt;sequential|random&gt;</kbd></td><td>How the next transition is drawn from that set.</td></tr>
-                <tr><td><kbd>-slideshowTransitionShuffle</kbd></td><td>Legacy shorthand for source=all order=random.</td></tr>
-                <tr><td><kbd>-hideMouse</kbd></td><td>Hide the mouse cursor at startup.</td></tr>
-                <tr><td><kbd>-lock</kbd></td><td>KIOSK mode — all keyboard and mouse input is ignored. Combine with -fullscreen -slideshow for unattended public displays. The tray icon stays live and is the only way to unlock. The switch only forces the lock on for one launch; the stored setting is left alone.</td></tr>
-                <tr><td><kbd>-keepDisplayAwake</kbd></td><td>Block the screensaver and display sleep while the window is on screen.</td></tr>
-                <tr><td><kbd>-dedicated</kbd></td><td>Run as a dedicated screen: no registry writes at all, no history or favorites, its own icon, mutex and window class — safe alongside any number of other instances. Settings come from the .ini beside the exe.</td></tr>
-                <tr><td><kbd>-config &lt;path&gt;</kbd></td><td>Use this .ini instead of the one named after the exe. Generated startup shortcuts pass it, so one executable can serve several configured screens.</td></tr>
-                <tr><td><kbd>-instance=&lt;name&gt;</kbd></td><td>Name this instance. Everything that keeps screens apart derives from it: settings file, folder lists, mutex and window class.</td></tr>
-                <tr><td><kbd>-instanceDesc=&lt;text&gt;</kbd></td><td>Free-text description, shown on the generated shortcut.</td></tr>
-                <tr><td><kbd>-promoOrder=&lt;sequential|weighted&gt;</kbd></td><td>How the next promotion is chosen. Weighted favours files whose name ends in #N.</td></tr>
-                <tr><td><kbd>-promoEveryImages=&lt;from&gt;-&lt;to&gt;</kbd></td><td>Show a promotion every N images. 0 = off; "5-0" is exactly every 5th; "5-15" is re-rolled between 5 and 15.</td></tr>
-                <tr><td><kbd>-promoEverySeconds=&lt;from&gt;-&lt;to&gt;</kbd></td><td>Same, counted in seconds. Runs independently of the image counter — whichever comes due first shows a promotion.</td></tr>
-                <tr><td><kbd>-runOnStartup</kbd></td><td>Write or refresh the Windows startup registry entry (HKCU\\…\\Run) so QIV launches automatically with Windows — equivalent to enabling "Run on startup" from the tray icon. Useful after moving the exe or for scripted first-run setup. Dedicated instances write their own separate entry.</td></tr>
-                <tr><td><kbd>Example</kbd></td><td>QuickImageViewer.exe -dedicated -lock -fullscreen -slideshow -shuffle -slideshowInterval 8 -startFolder "D:\\Ads"</td></tr>
-                <tr><td><kbd>Example</kbd> — <kbd>dedicated screen</kbd></td><td>qIV_dedicated_Lobby.exe -dedicated -config "D:\\Screens\\qIV_dedicated_Lobby.ini" — the form the Dedicated panel writes into a startup shortcut. Folders and every setting come from the .ini and its .qim / .qpr lists.</td></tr>
-                </tbody>
-            </table>
+    </section>
+    <section class="sc-sec" data-title="Command-Line Arguments">
+        <h2><span class="sc-ico">⌨</span>Command-Line Arguments<span class="sc-count">29</span></h2>
+        <div class="sc-cols">
+            <div class="sc-row"><div class="sc-keys"><kbd>"path\\to\\image.jpg"</kbd></div><p class="sc-desc">Positional argument — open this image at startup and browse its folder.</p></div>
+            <div class="sc-row"><div class="sc-keys"><kbd>-startFolder &lt;path&gt;</kbd></div><p class="sc-desc">Open this folder at startup — used as the browse source or, combined with -slideshow, as the slideshow source.</p></div>
+            <div class="sc-row"><div class="sc-keys"><kbd>-background</kbd></div><p class="sc-desc">Start hidden in the system tray (service mode). QIV waits in RAM and opens instantly when an image is requested.</p></div>
+            <div class="sc-row"><div class="sc-keys"><kbd>-fullscreen</kbd></div><p class="sc-desc">Start in fullscreen.</p></div>
+            <div class="sc-row"><div class="sc-keys"><kbd>-windowedView</kbd></div><p class="sc-desc">Start windowed — the default; useful as an explicit override.</p></div>
+            <div class="sc-row"><div class="sc-keys"><kbd>-alwaysOnTop</kbd></div><p class="sc-desc">Keep the window above all others from launch (also accepted: -awaysOnTop).</p></div>
+            <div class="sc-row"><div class="sc-keys"><kbd>-monitorNum#N</kbd></div><p class="sc-desc">Open centered on monitor N (1-based). Example: -monitorNum#2.</p></div>
+            <div class="sc-row"><div class="sc-keys"><kbd>-slideshow</kbd></div><p class="sc-desc">Auto-start a slideshow after the content is loaded.</p></div>
+            <div class="sc-row"><div class="sc-keys"><kbd>-slideshowInterval N</kbd></div><p class="sc-desc">Seconds between slides (whole number). Example: -slideshowInterval 8.</p></div>
+            <div class="sc-row"><div class="sc-keys"><kbd>-repeat</kbd></div><p class="sc-desc">Loop the slideshow when it reaches the end.</p></div>
+            <div class="sc-row"><div class="sc-keys"><kbd>-shuffle</kbd></div><p class="sc-desc">Play the slideshow in random order.</p></div>
+            <div class="sc-row"><div class="sc-keys"><kbd>-slideshowTransition=&lt;type&gt;</kbd></div><p class="sc-desc">Slide transition by name: Cut, Fade, Dissolve, Ripple, Flicker, SlideLeft, SlideRight, SlideUp, SlideDown, SlideDiagonal, DriftLeft, DriftUp, ZoomIn, ZoomOut, SoftZoom, Spin, SpinZoom, Swing, Bounce,… <a class="sc-more" href="#command-line-arguments-slideshowtransition-type">details</a></p></div>
+            <div class="sc-row"><div class="sc-keys"><kbd>-slideshowTransitions=&lt;list&gt;</kbd></div><p class="sc-desc">Use a custom set of transitions, mirroring List mode in the menu. Accepts names or the numbers shown beside them — "Fade,Iris,Spin" or "6,8,17". Unknown entries are ignored.</p></div>
+            <div class="sc-row"><div class="sc-keys"><kbd>-slideshowTransitionSource=&lt;none|all|list&gt;</kbd></div><p class="sc-desc">Which transitions are in play: the single one picked, all of them, or only the custom list.</p></div>
+            <div class="sc-row"><div class="sc-keys"><kbd>-slideshowTransitionOrder=&lt;sequential|random&gt;</kbd></div><p class="sc-desc">How the next transition is drawn from that set.</p></div>
+            <div class="sc-row"><div class="sc-keys"><kbd>-slideshowTransitionShuffle</kbd></div><p class="sc-desc">Legacy shorthand for source=all order=random.</p></div>
+            <div class="sc-row"><div class="sc-keys"><kbd>-hideMouse</kbd></div><p class="sc-desc">Hide the mouse cursor at startup.</p></div>
+            <div class="sc-row"><div class="sc-keys"><kbd>-lock</kbd></div><p class="sc-desc">KIOSK mode — all keyboard and mouse input is ignored. Combine with -fullscreen -slideshow for unattended public displays. The tray icon stays live and is the only way to unlock. <a class="sc-more" href="#command-line-arguments-lock">details</a></p></div>
+            <div class="sc-row"><div class="sc-keys"><kbd>-keepDisplayAwake</kbd></div><p class="sc-desc">Block the screensaver and display sleep while the window is on screen.</p></div>
+            <div class="sc-row"><div class="sc-keys"><kbd>-dedicated</kbd></div><p class="sc-desc">Run as a dedicated screen: no registry writes at all, no history or favorites, its own icon, mutex and window class — safe alongside any number of other instances. <a class="sc-more" href="#command-line-arguments-dedicated">details</a></p></div>
+            <div class="sc-row"><div class="sc-keys"><kbd>-config &lt;path&gt;</kbd></div><p class="sc-desc">Use this .ini instead of the one named after the exe. Generated startup shortcuts pass it, so one executable can serve several configured screens.</p></div>
+            <div class="sc-row"><div class="sc-keys"><kbd>-instance=&lt;name&gt;</kbd></div><p class="sc-desc">Name this instance. Everything that keeps screens apart derives from it: settings file, folder lists, mutex and window class.</p></div>
+            <div class="sc-row"><div class="sc-keys"><kbd>-instanceDesc=&lt;text&gt;</kbd></div><p class="sc-desc">Free-text description, shown on the generated shortcut.</p></div>
+            <div class="sc-row"><div class="sc-keys"><kbd>-promoOrder=&lt;sequential|weighted&gt;</kbd></div><p class="sc-desc">How the next promotion is chosen. Weighted favours files whose name ends in #N.</p></div>
+            <div class="sc-row"><div class="sc-keys"><kbd>-promoEveryImages=&lt;from&gt;-&lt;to&gt;</kbd></div><p class="sc-desc">Show a promotion every N images. 0 = off; "5-0" is exactly every 5th; "5-15" is re-rolled between 5 and 15.</p></div>
+            <div class="sc-row"><div class="sc-keys"><kbd>-promoEverySeconds=&lt;from&gt;-&lt;to&gt;</kbd></div><p class="sc-desc">Same, counted in seconds. Runs independently of the image counter — whichever comes due first shows a promotion.</p></div>
+            <div class="sc-row"><div class="sc-keys"><kbd>-runOnStartup</kbd></div><p class="sc-desc">Write or refresh the Windows startup registry entry (HKCU\\…\\Run) so QIV launches automatically with Windows — equivalent to enabling "Run on startup" from the tray icon. <a class="sc-more" href="#command-line-arguments-runonstartup">details</a></p></div>
+            <div class="sc-row"><div class="sc-keys"><kbd>Example</kbd></div><p class="sc-desc">QuickImageViewer.exe -dedicated -lock -fullscreen -slideshow -shuffle -slideshowInterval 8 -startFolder "D:\\Ads"</p></div>
+            <div class="sc-row"><div class="sc-keys"><kbd>Example</kbd> — <kbd>dedicated screen</kbd></div><p class="sc-desc">qIV_dedicated_Lobby.exe -dedicated -config "D:\\Screens\\qIV_dedicated_Lobby.ini" — the form the Dedicated panel writes into a startup shortcut. <a class="sc-more" href="#command-line-arguments-example-dedicated-screen">details</a></p></div>
         </div>
-    </details>
+    </section>
+
+    <h2 class="sc-deep-head">In depth</h2>
+    <p class="sc-deep-intro">The 54 shortcuts above whose behaviour needs more than a line. Every one is linked from its row.</p>
+    <article class="sc-deep" id="image-navigation-ctrl-f">
+        <h3><kbd>Ctrl+F</kbd><span class="sc-deep-sec">Image Navigation</span></h3>
+        <p>Open the Find panel — fuzzy filename search with wildcard support: * matches any characters, ? matches exactly one (e.g. *.jpg or photo_??_2024.*). Searches the current folder and the VRAM cache. Typing # inside switches to Jump-to.</p>
+    </article>
+    <article class="sc-deep" id="image-navigation-alt-up-alt-down">
+        <h3><kbd>Alt+Up</kbd> / <kbd>Alt+Down</kbd><span class="sc-deep-sec">Image Navigation</span></h3>
+        <p>WALK THE FOLDER TREE. Alt+Up opens the parent folder — the same key Explorer uses — and Alt+Down steps into the first subfolder.</p>
+        <p>These reach folders you have never opened, which is what separates them from the history keys below: those only revisit folders you have already been in.</p>
+        <p>A folder with no pictures in it is a normal stop on the way, not a dead end — the placeholder names it and the same keys carry on.</p>
+    </article>
+    <article class="sc-deep" id="image-navigation-alt-left-alt-right">
+        <h3><kbd>Alt+Left</kbd> / <kbd>Alt+Right</kbd><span class="sc-deep-sec">Image Navigation</span></h3>
+        <p>Previous / next SIBLING folder — sideways through the tree, in Explorer's own name order (StrCmpLogicalW, so "Trip 10" comes after "Trip 2").</p>
+        <p>Each landing shows the folder and its POSITION, 3/12, so the ends of the run are visible before you reach them.</p>
+        <p>WRAPS from the last folder back to the first by default; the tray's Settings › Folder Walk Wraps Around turns that off, and then the ends stop and say so. A lone subfolder never wraps — reopening the folder already open would look like nothing happened.</p>
+    </article>
+    <article class="sc-deep" id="image-navigation-drag-drop">
+        <h3><kbd>Drag &amp; Drop</kbd><span class="sc-deep-sec">Image Navigation</span></h3>
+        <p>Drop an image file or an entire folder onto the window to open it.</p>
+        <p>DROPPING SEVERAL AT ONCE opens the first. Pictures dropped together from ONE folder are all there already — opening any image builds the playlist from its whole folder, so the rest are an arrow key away. Anything that cannot come along — a second folder, a file from somewhere else — is counted in a message rather than dropped in silence.</p>
+    </article>
+    <article class="sc-deep" id="zoom-pan-view-modes-y">
+        <h3><kbd>Y</kbd><span class="sc-deep-sec">Zoom, Pan &amp; View Modes</span></h3>
+        <p>Toggle viewport lock. When ON, zoom and pan carry over to the next image instead of resetting — so flipping through same-framed shots keeps the same detail on screen at the same magnification. Rotation and flips still reset, because each file's EXIF orientation tag owns those. Startup default: ONOFF (IS_LOCK_VIEWPORT in Constants.h).</p>
+    </article>
+    <article class="sc-deep" id="window-management-ctrl-space">
+        <h3><kbd>Ctrl+Space</kbd><span class="sc-deep-sec">Window Management</span></h3>
+        <p>Toggle: first press fits the viewer to the work area (monitor minus taskbar), shrinking further to avoid any visible panel (F3 cache strip, F6 directory strip, spawned directory panels). Second press restores the default window size (baseWidth × baseHeight from Constants.h), centered on the current monitor.</p>
+    </article>
+    <article class="sc-deep" id="window-management-ctrl-m">
+        <h3><kbd>Ctrl+M</kbd><span class="sc-deep-sec">Window Management</span></h3>
+        <p>Move the window to the next monitor, wrapping round at the last. Monitors are ordered left to right by their desktop coordinates. Position and size are carried across proportionally, so a screen of a different resolution does not leave the window half off the edge; in fullscreen the window simply fills the new monitor.</p>
+    </article>
+    <article class="sc-deep" id="panels-tools-m">
+        <h3><kbd>M</kbd><span class="sc-deep-sec">Panels &amp; Tools</span></h3>
+        <p>Toggle the Image Info panel — full EXIF metadata (camera, lens, exposure, GPS) including the embedded preview thumbnail.</p>
+        <p>GPS IS RESOLVED OFFLINE, with no network call of any kind. The GeoNames data — 170,387 cities, 3,865 states and provinces, 47,549 districts and 252 countries — is zlib-compressed inside the executable, so a photo's coordinates become a city, district, state, country, capital, continent, currency, phone prefix and timezone with nothing leaving this machine and nothing to configure. It works with the network cable out.</p>
+    </article>
+    <article class="sc-deep" id="thumbnail-strips-b">
+        <h3><kbd>B</kbd><span class="sc-deep-sec">Thumbnail Strips</span></h3>
+        <p>Toggle wheel wrap-around. When ON, scrolling past the last thumbnail jumps back to the first — and scrolling before the first jumps to the last. Each wrap shows a message in the center overlay. Startup default: ONOFF (THUMBNAIL_PANEL_WHEEL_WRAP_AROUND in Constants.h).</p>
+    </article>
+    <article class="sc-deep" id="thumbnail-strips-u">
+        <h3><kbd>U</kbd><span class="sc-deep-sec">Thumbnail Strips</span></h3>
+        <p>Toggle thumbnail strip visual effects on/off (master runtime switch). Effects include: rounded corners (corner overdraw), accent-color glow border on the selected thumbnail, and a subtle hover-scale enlarge on the hovered thumbnail. Each effect can also be individually disabled in Constants.h (ThumbnailPanel::ThumbnailEffects). Startup default: ONOFF.</p>
+    </article>
+    <article class="sc-deep" id="thumbnail-strips-drag-thumbnail-other-strip">
+        <h3><kbd>Drag thumbnail → other strip</kbd><span class="sc-deep-sec">Thumbnail Strips</span></h3>
+        <p>Drag a thumbnail from one directory strip onto another to MOVE the file there. Hold Ctrl while dropping to COPY instead — the mouse cursor shows which operation is active. Both strips refresh automatically and files can be restored from the Recycle Bin.</p>
+    </article>
+    <article class="sc-deep" id="thumbnail-strips-click-to-make-active">
+        <h3><kbd>Click to make active</kbd><span class="sc-deep-sec">Thumbnail Strips</span></h3>
+        <p>Clicking any directory strip makes it the active panel. All subsequent folder navigation — including History Enter and folder changes — targets the last-clicked strip. Only one strip is active at a time; the primary strip is the fallback when no spawned panel has been clicked.</p>
+    </article>
+    <article class="sc-deep" id="thumbnail-strips-right-click">
+        <h3><kbd>Right Click</kbd><span class="sc-deep-sec">Thumbnail Strips</span></h3>
+        <p>Context menu on any thumbnail: Copy, Cut, Delete and Paste. Copy / Cut use the Windows clipboard, so files can also be pasted in Explorer. A cut file is shown dimmed until it is pasted. Delete sends the file to the Recycle Bin. Paste drops clipboard files into the strip's folder. Also: Select All, Select Inverse (flips the current selection) and Select None.</p>
+    </article>
+    <article class="sc-deep" id="history-panel-type-anything">
+        <h3><kbd>Type anything</kbd><span class="sc-deep-sec">History Panel</span></h3>
+        <p>Filters the list as you type — fuzzy by default, wildcard when the query contains * or ?, the same matcher Find and this Help panel use. Matched characters are highlighted inside each row. Escape clears the filter; when it is already empty, Escape closes the panel. Space toggles a favorite while the filter is empty and types a space once it is not.</p>
+    </article>
+    <article class="sc-deep" id="history-panel-shift-enter">
+        <h3><kbd>Shift+Enter</kbd><span class="sc-deep-sec">History Panel</span></h3>
+        <p>Spawn a floating directory strip for the hovered folder without leaving the current one — up to strips (top, left, right, bottom). If a strip is already open for that folder, this hides it instead (toggle). Great for comparing folders.</p>
+    </article>
+    <article class="sc-deep" id="slideshow-t-while-running">
+        <h3><kbd>T (while running)</kbd><span class="sc-deep-sec">Slideshow</span></h3>
+        <p>Step to the next slide transition ( in total, wraps around). Slideshow › Transition in the tray or right-click menu controls this in two parts: which transitions are in play — None (just the one you tick), All, or List (only the ones you tick) — and the order they play in, Sequential (the menu's numbered order) or Random. In List mode the numbered rows become checkboxes.</p>
+    </article>
+    <article class="sc-deep" id="info-overlays-ctrl-1-ctrl-9">
+        <h3><kbd>Ctrl+1</kbd> – <kbd>Ctrl+9</kbd><span class="sc-deep-sec">Info Overlays</span></h3>
+        <p>Cycle a slot of the 3×3 grid: Compact (one line) → Full (two lines) → Off. Assignments: 1 index + filename • 3 zoom % • 5 center message area • 7 active effects + folder name • 9 dimensions + file size. Slots 2, 4, 6, 8 show the thumbnail-strip selection count for the panel on that edge. Slot 5 has no compact form, so it cycles On → Off.</p>
+    </article>
+    <article class="sc-deep" id="application-appearance-f8">
+        <h3><kbd>F8</kbd><span class="sc-deep-sec">Application &amp; Appearance</span></h3>
+        <p>Open the Dedicated panel: configure a named instance — its own images and promotions folders, promotion pacing, monitor and slideshow options — then generate a shortcut for it. Drop that shortcut in shell:startup and the screen starts itself.</p>
+    </article>
+    <article class="sc-deep" id="application-appearance-if-qiv-crashes">
+        <h3><kbd>If qIV crashes</kbd><span class="sc-deep-sec">Application &amp; Appearance</span></h3>
+        <p>A crash writes a dump file NEXT TO THE EXECUTABLE, named QuickImageViewer_crash_&lt;date&gt;_&lt;time&gt;_&lt;pid&gt;.dmp.</p>
+        <p>NOTHING IS SENT ANYWHERE. qIV has no telemetry and makes no network call of its own — the file is written to your disk and stays there. Attaching it to a GitHub issue is entirely your choice, and it is the difference between a bug that gets fixed and one that stays a mystery, because it holds the exact stack the process died on.</p>
+        <p>WHAT IS IN IT: a snapshot of the program's internal state, including open file paths and window titles — and NOT the contents of your images. If a path in it is sensitive, say so in the issue instead of attaching the file.</p>
+    </article>
+    <article class="sc-deep" id="application-appearance-supporting-qiv">
+        <h3><kbd>Supporting qIV</kbd><span class="sc-deep-sec">Application &amp; Appearance</span></h3>
+        <p>qIV is one person's work, given away complete: no advertising, no telemetry, no paid tier and no feature held back.</p>
+        <p>If it earns a place in your day, sponsorship is what buys the time to keep building it — github.com/sponsors/icyhoty2k, or ko-fi.com/ivanhristovyanev if you would rather not need a GitHub account. A star on the repository, a bug report with a dump attached, or telling someone about it all help more than they look like they do.</p>
+        <p>THE LICENCE IS AGPLv3: use it, study it, change it, share it. Building qIV or its remote subsystem into a product you do not intend to open-source — signage, kiosks, retail or museum displays, industrial or medical stations — is what the separate commercial licence is for. icyhoty2k@gmail.com.</p>
+    </article>
+    <article class="sc-deep" id="remote-control-mirroring-f9">
+        <h3><kbd>F9</kbd><span class="sc-deep-sec">Remote Control &amp; Mirroring</span></h3>
+        <p>Open the Local Server panel — the listener THIS instance runs, and nothing else. qIV can listen on a TCP port and be driven over the network — next, goto, zoom, open, slideshow — from a script, a phone, a home-automation system, or another qIV instance.</p>
+        <p>The listener is OFF unless you switch it on here, in the instance's .ini, or with -remote on the command line. It also needs a NAME and a PORT: an empty AllowList denies every connection, and a driving instance identifies this one by its name, so it will not start without one.</p>
+        <p>THE PROTOCOL DESCRIBES ITSELF. Send `help` and the answer lists every command this build accepts, one per line, with whether it takes a value, what it does and what the value means — pipe-separated, so a client can build its own command list from that one call instead of carrying a copy that goes stale. `ping` checks liveness, `version` reports the app and protocol version. It is plain UTF-8 text: netcat, curl, telnet and a five-line script are all first-class clients.</p>
+        <p>ENCRYPTION IS DECIDED BY THE ADDRESS, never negotiated. A peer on this machine (127.x, ::1, localhost) gets plaintext; EVERY other peer, your own LAN included, gets TLS 1.2/1.3 from the first byte. One listener on 0.0.0.0 serves both. The certificate is self-signed and the client PINS it by the SHA-256 fingerprint shown at the bottom of this panel — read it off here and type it into the client. There is no plaintext fallback for anything to strip.</p>
+        <p>A PASSWORD IS COMPULSORY off loopback and the server refuses to start without one. It never crosses the wire: this end stores a PBKDF2-HMAC-SHA256 digest and the client answers an HMAC over a fresh nonce, so each guess costs the guesser a full derivation. Five failures from one address inside ten minutes blacklists it automatically, every failure is answered a second late, and a peer that connects and then says nothing is dropped after ten seconds.</p>
+        <p>ALLOWLIST AND BLACKLIST take addresses, never domain names — a rule is matched against the address a connection actually arrived from. Five forms: * for everything, 192.168.1.* as a TEXT prefix, 192.168.0.0/24 as CIDR (2001:db8::/32 works too), 192.168.0.10-50 as a range (or the long 192.168.0.10-192.168.1.5), and a bare address for one host. Mind the star: it compares CHARACTERS, so 192.168.1* without the dot also covers 192.168.10.x — use /24 when the boundary matters. Anything that cannot match an address is dropped when you save, and the panel names what it dropped.</p>
+        <p>What this instance connects OUT to lives in Remote Servers (F10). F9 is what others connect to; F10 is what this connects to.</p>
+        <p>WHO is connected right now is Ctrl+F9, not here.</p>
+    </article>
+    <article class="sc-deep" id="remote-control-mirroring-tcp-ip-menu-announce-beacon">
+        <h3><kbd>TCP</kbd> / <kbd>IP menu → Announce (beacon)</kbd><span class="sc-deep-sec">Remote Control &amp; Mirroring</span></h3>
+        <p>Publish this listener on the local network so a phone or another qIV FINDS it in a list instead of being told an address. mDNS / DNS-SD, service type _qiv._tcp, answered by the Android app's own discovery — nothing to install at either end. Off by default.</p>
+        <p>IT ANNOUNCES THE INSTANCE NAME AND THE PORT, AND NOTHING ELSE. Never a password, never whether one is set, never a path, never a file name, never the AllowList. A signpost that describes the lock on the door is a worse signpost.</p>
+        <p>DISCOVERY IS NOT ACCESS. Being findable changes nothing about who may connect: the AllowList, the password challenge and TLS all still apply, so someone who discovers this instance and is not allowed in gets exactly as far as someone who guessed the address.</p>
+        <p>IT ONLY ANNOUNCES WHEN THERE IS SOMETHING TO REACH — the setting on, the listener actually running, and a bind address other than loopback. A beacon with no listener behind it advertises a service that refuses every connection, and on 127.0.0.1 it would promise something nobody who hears it can use. When the tick is on and one of those is missing, the F9 panel says which — and the menu says WILL ANNOUNCE rather than claiming it did.</p>
+    </article>
+    <article class="sc-deep" id="remote-control-mirroring-ctrl-f9">
+        <h3><kbd>Ctrl+F9</kbd><span class="sc-deep-sec">Remote Control &amp; Mirroring</span></h3>
+        <p>My Clients — every peer currently connected to the listener above, with its address, the name it gave itself, whether it is encrypted, and how long it has been on. The list refreshes itself while the panel is open.</p>
+        <p>THREE WAYS TO GET RID OF ONE, and the middle one is the useful one:</p>
+        <p>KICK closes the connection. Against a person that is enough; against anything automated it is useless, because it reconnects inside a second.</p>
+        <p>KICK FOR N closes it AND refuses that peer for the number of minutes you type. This is what answers a bot: it outlasts a retry loop and then forgets by itself. The block is held in memory only — restarting qIV clears every one of them, which is also how you undo shutting yourself out.</p>
+        <p>BAN writes the address to qivRemoteServerBlacklist.ini and it survives restarts. Undo it by editing or deleting that file.</p>
+        <p>For an IPv6 peer all three act on its /64 rather than the single address, and the panel says so before it does it — blocking one IPv6 address is close to useless, since the peer has billions of others in the same prefix.</p>
+        <p>None of this is reachable over the wire: a connected client cannot kick or ban anything, including you.</p>
+    </article>
+    <article class="sc-deep" id="remote-control-mirroring-f10">
+        <h3><kbd>F10</kbd><span class="sc-deep-sec">Remote Control &amp; Mirroring</span></h3>
+        <p>Open Remote Servers — everything about the instances this copy can drive.</p>
+        <p>Top: address, port, password, name and optional exe. Connect &amp;&amp; Save proves the target answers before recording it, then writes it to qivRemoteServers.ini beside the exe and starts driving it — so an address is typed once.</p>
+        <p>Below: one row per instance. The dot starts a stopped instance or shuts down a running one; Connect/Disconnect brings the link up or down (a remote can be listed without being dialled).</p>
+        <p>WATCHING an instance moved to Ctrl+F11, along with the rest of the who-drives-whom controls. This console is about which instances exist and how to reach them.</p>
+        <p>IDENTIFY makes that screen say its own name in the middle of its window. Two identical viewers side by side are otherwise anonymous, and this tells you which row drives which without walking over to them. Available on connected rows only. On the wire it is `msg &lt;text&gt;`, so a script can put any message on any instance's screen.</p>
+        <p>The form at the top is READ-ONLY until you say otherwise. Clicking a row loads it there so you can read it; pressing UPDATE unlocks the fields, and SAVE or CANCEL locks them again. New clears the form and unlocks it for a fresh remote. Without the lock a stray click on an address plus one keystroke could quietly repoint a working remote at nothing. Esc backs out one step at a time: out of a field, then out of edit mode, then closes the panel.</p>
+        <p>Connect all / Disconnect all act on every row, F5 polls them, and Sync all pushes this viewer's view and effect state to all of them at once.</p>
+    </article>
+    <article class="sc-deep" id="remote-control-mirroring-ctrl-f10">
+        <h3><kbd>Ctrl+F10</kbd><span class="sc-deep-sec">Remote Control &amp; Mirroring</span></h3>
+        <p>Remote Commands — type a command and send it to the instances YOU TICK in this panel's own SEND TO box, which lists everything currently connected with a checkbox, name and address each. Its own selection on purpose: the Ctrl+F11 Control ticks decide where keystrokes go, and lining up one screen by hand should not change what F11 drives afterwards. Everything connected starts ticked; All / None sit on the box's header. The manual counterpart to mirroring: F11 forwards what you DO, this sends what you TYPE, including the commands that have no key at all — msgRemote, OpenFile, JumpToImage, SlideshowSetInterval, EnableRemoteLog.</p>
+        <p>Every command has ONE wire name, and it is spelled exactly like its Command.h enumerator — no short aliases to remember or confuse.</p>
+        <p>BROWSE FIRST: the full command list is permanently on the left, scrollable and filterable — nobody remembers ninety wire names. The list shows NAMES only, in two blues: the second one marks a command that TAKES A VALUE (the header says so). Highlighting one explains it along the TOP: what the command does over the list, what its value means over the Value box, on one line — with units, limits and an example where there is one to give. The list comes from the same table the wire parser accepts, so a name shown here cannot come back "unknown command".</p>
+        <p>Type to filter (it matches the descriptions too). ARROWS and PgUp/PgDn move the highlight wherever the caret is. TAB swaps Filter and Value. ENTER in the filter takes the highlighted command — straight to Value if it needs one, otherwise it sends. ENTER in Value sends. ESC clears, then closes. Clicking a command selects it; it never sends on its own.</p>
+        <p>THE BOX ALONG THE BOTTOM IS A LOG of the whole session: every line you sent and every answer, numbered — → for a send, ← for a reply, with the instance that answered and its round trip. NEWEST AT THE TOP, so what just came back is there without scrolling — the opposite of the Ctrl+F12 wire log, which is a transcript you read forwards. It scrolls, and it holds your place if you have scrolled into the history.</p>
+        <p>It keeps growing while you work and survives closing the panel; only Clear empties it, which also restarts the numbering at 1.</p>
+        <p>Each instance answers separately. Tick ALSO RUN IT HERE to include this viewer — off by default, since the usual reason to type a command here is to do something to the other screens. The LOG button beside Clear jumps to the Ctrl+F12 wire log, which carries the matching button back.</p>
+    </article>
+    <article class="sc-deep" id="remote-control-mirroring-f11">
+        <h3><kbd>F11</kbd><span class="sc-deep-sec">Remote Control &amp; Mirroring</span></h3>
+        <p>MIRRORING on/off. While on, every command you give here is also sent to the instances listed in Remote Servers (F10) — navigation, zoom, effects, view mode, sort order, slideshow. Panels, window geometry, quit and hide are deliberately never forwarded: one keypress must not close or move every screen at once. Always OFF at startup.</p>
+        <p>Both switches are also in the right-click menu under REMOTEACTIVATION, as checkboxes — which is the only way to READ them without changing them, since the overlay they announce themselves on fades. That submenu also says how many instances are connected and how many are actually being driven.</p>
+        <p>F11 asks nothing and puts nothing up — it is only the toggle. Which of the connected instances it drives is set in the Ctrl+F11 panel, and shown on screen each time mirroring goes on. Everything connected is driven to begin with; if you have unticked all of them, F11 says so instead of switching on and forwarding to nobody.</p>
+        <p>CTRL+F11 opens Mirroring: one row per CONNECTED instance, with three controls each, in the order you ask them — IDENTIFY makes that screen say its own name so you can tell two identical viewers apart; the CONTROL tick says whether F11 drives it; and WATCH is the other direction, where that instance reports what it does and this viewer follows along, which is how you see a screen running its own slideshow (one at a time — it is a radio button). Plus All, None, Sync now, and the two mirroring switches themselves as toggle buttons — F11 (send anything at all) and F12 (also run it here) — which light up while they are on. It is a real window — leave it open beside the pictures while you work; it refreshes itself as instances connect and drop, and every tick takes effect immediately. Sync now pushes this viewer's folder, current image and view state to the ticked instances, the same push as Sync all in Remote Servers. Rows that are listed but not connected do not appear — connect them in F10 first. The selection lasts for this session only and is echoed in the Remote Servers header.</p>
+    </article>
+    <article class="sc-deep" id="remote-control-mirroring-ctrl-enter">
+        <h3><kbd>Ctrl+Enter</kbd><span class="sc-deep-sec">Remote Control &amp; Mirroring</span></h3>
+        <p>SEND THIS POSITION to the instances under Control (the ticked rows in Ctrl+F11). Prepare a picture here, press it, and those screens show that picture — the point being that they carry on doing whatever they were doing. A target running a fullscreen slideshow keeps running it, in its own view mode with its own effects, and simply continues from the image you sent. Folder, sort order and position are the ONLY things sent; that is why this is not Sync, which stamps this viewer's whole look onto the far end.</p>
+        <p>It works out what to send by ASKING first. Already in the same folder in the same order? Then just the position — one line, no rescan, no flicker, so you can walk a folder here and push each picture as you reach it. In a different folder? Then the folder, then the sort order, then — after waiting for that instance's own scan to finish — the image. Sending the position before the scan lands is the race this avoids.</p>
+        <p>Same-machine instances only: a folder path and an image number are both meaningless against another machine's files, and ticked rows elsewhere are reported as skipped rather than silently left out. Independent of F11 — mirroring can be off. Plain Enter is still fullscreen.</p>
+    </article>
+    <article class="sc-deep" id="remote-control-mirroring-alt-enter">
+        <h3><kbd>Alt+Enter</kbd><span class="sc-deep-sec">Remote Control &amp; Mirroring</span></h3>
+        <p>STREAM THIS IMAGE to the instances under Control, shown ONCE — and change nothing else about them. No folder, no sort order, no playlist position: the picture goes up in place of the slide currently showing, and afterwards that instance carries on from exactly where it was, as if nothing had happened. An advert dropped into a running slideshow is the case it was built for.</p>
+        <p>THE PICTURE'S OWN BYTES TRAVEL, base64-encoded across several protocol lines, and the far end decodes them with its own decoder. So this works to an instance on ANOTHER MACHINE, which Ctrl+Enter cannot — a folder path and an image number are only meaningful against the far end's own disk. The file name rides along for one reason: its extension is what picks the decoder.</p>
+        <p>With a slideshow running it appears at the NEXT slide boundary, so the picture already on screen is not cut short, and it occupies one slide. With no slideshow it appears at once and stays until something else changes the image there. Either way it is gone the moment the picture changes — it never enters that instance's playlist, and both the received file and its cache entry are thrown away rather than left sitting in memory.</p>
+        <p>CTRL+Enter is the other depth of the same act: that one MOVES the far end to your picture and it stays there. Plain Enter is still fullscreen.</p>
+    </article>
+    <article class="sc-deep" id="remote-control-mirroring-ctrl-alt-enter">
+        <h3><kbd>Ctrl+Alt+Enter</kbd><span class="sc-deep-sec">Remote Control &amp; Mirroring</span></h3>
+        <p>ASK FOR THE IMAGE another instance is displaying, and show it here — once. The same transfer as Alt+Enter, inbound: that instance reads whatever is on its screen and sends the bytes, so this works from a machine in another room just as well as from one beside you.</p>
+        <p>ONE instance answers, because the answer is a picture and this screen shows one at a time: the instance being WATCHED (Ctrl+F11's ◉) if there is one — you are already following that screen — otherwise the first connected row under Control. The overlay names which one was asked, so a narrowed selection is never ambiguous.</p>
+        <p>What comes back is shown the way any one-shot image is: it never enters this viewer's playlist, nothing about the folder, sort order or position moves, and it is gone the moment the picture changes — but unlike an arriving advert it appears IMMEDIATELY, without waiting for a slide boundary, because you asked for it at this keyboard.</p>
+        <p>All three of these — and the wire commands behind them — are in the Ctrl+F10 Remote Commands list, which is where to test them by hand.</p>
+    </article>
+    <article class="sc-deep" id="remote-control-mirroring-ctrl-shift-enter">
+        <h3><kbd>Ctrl+Shift+Enter</kbd><span class="sc-deep-sec">Remote Control &amp; Mirroring</span></h3>
+        <p>The Ctrl+Enter push, WIDENED: send this folder, sort order and position to EVERY connected instance rather than only the ones ticked under Control (Ctrl+F11).</p>
+        <p>For lining up a whole wall at once without first going to a panel to tick rows you are about to untick again. Still same-machine only, for the same reason Ctrl+Enter is — a folder path and an image number are read against the far end's own disk, and choosing more targets cannot change that. Instances on other machines are skipped and counted, and the overlay says how many.</p>
+    </article>
+    <article class="sc-deep" id="remote-control-mirroring-ctrl-f12">
+        <h3><kbd>Ctrl+F12</kbd><span class="sc-deep-sec">Remote Control &amp; Mirroring</span></h3>
+        <p>Server Log — every line that crossed the wire, both directions, in one list: number, who sent it, the command, who received it, the reply, the time, and how long it took. A mirroring session is a conversation, so both directions share one table in the order things actually happened.</p>
+        <p>CONNECTIONS ARE LOGGED TOO, as pairs, and the Sender column names WHO — the peer's address with its source port, 192.168.0.7:51423 or [2001:db8::1]:51423. The port is what tells two connections apart: one phone reconnecting every few minutes, or two instances on one box, are otherwise identical in every column, and an arrival could not be paired with its own departure. Command rows name the peer the same way, so a line and the connection that carried it match up. The departure also fills the Δ column with HOW LONG the session lasted.</p>
+        <p>An arrival says whether it is plaintext or TLS; the matching departure says WHY it ended — closed by peer, send failed, authentication failed, server shutting down, or a TLS handshake that never completed. A connection still open is an arrival with nothing under it yet, so the list answers who is on this machine right now. Connections that never became clients are here as well — refused for being blacklisted, not on the AllowList, or over the connection limit — and on a listener anyone can reach, those are the lines worth reading first.</p>
+        <p>RECORDING IS OFF by default and costs nothing while it is off. The Recording button starts it — and tells every connected instance to start too, because a log of one end of a conversation answers half the question. Opening this panel does not start recording.</p>
+        <p>Two live counts sit at the right of the button row: CONNECTIONS n/m — how many listed targets are actually connected — and CONTROL n/m — how many of those F11 actually drives. They are TOGGLE buttons for the panels behind those numbers: pressing one opens the F10 console or the Ctrl+F11 panel and brings it to the front, pressing it again closes it. They light up while that panel is open; dimmed digits mean the count is zero.</p>
+        <p>Clear empties it (entry numbers carry on, so a number never means two different exchanges). Save writes a tab-separated UTF-8 file; Load — the button or Ctrl+O while the panel has focus — reads one back, REPLACING what is in memory, which is also how a rotated TCP/IP log file from the logs folder is opened. Click #, Time or Δ time to sort, and again to reverse — the text columns do not sort, because grouping a conversation by sender destroys the ordering that makes it one. The newest 20000 entries are kept; older ones are dropped.</p>
+        <p>The list follows the newest entry until you scroll up, and follows again when you scroll back to the bottom.</p>
+        <p>DOUBLE-CLICK A ROW (or select it and press Enter) to open it in its own window with every field on its own line, wrapped and untrimmed — the table has to ellipsise a long command or reply, and that window is where the full text lives. Previous / Next step through the list in whatever order it is currently sorted, and the list's selection follows along, so closing the window leaves you where you finished reading. Copy puts the whole entry on the clipboard.</p>
+    </article>
+    <article class="sc-deep" id="remote-control-mirroring-while-connected">
+        <h3><kbd>While connected</kbd><span class="sc-deep-sec">Remote Control &amp; Mirroring</span></h3>
+        <p>A connection — driving another instance, or being driven by one — puts the viewer into a restricted mode, and leaves it when the last connection drops.</p>
+        <p>Refused while connected: sort by Disk Order (physical order differs per drive, so two instances would order their playlists differently), Find, and anything that changes the folder — delete, cut, paste, drag-drop and Ctrl+S. Adding or removing one file shifts every image number after it, which is exactly what the two instances rely on to stay on the same picture. Each refusal says so on screen. Copy to clipboard still works: it reads a file and writes nothing.</p>
+        <p>Connecting while already sorted by disk order switches you to sort by Name.</p>
+        <p>Delete, move, paste and save are additionally NEVER reachable over the network, whatever the password or allow-list says.</p>
+    </article>
+    <article class="sc-deep" id="remote-control-mirroring-driving-another-machine">
+        <h3><kbd>Driving another machine</kbd><span class="sc-deep-sec">Remote Control &amp; Mirroring</span></h3>
+        <p>An instance on the SAME computer is mirrored exactly — it shares the folder, so image numbers mean the same picture on both. An instance on ANOTHER computer gets the portable commands only: navigation, zoom, effects, view mode and slideshow, applied to its own content. Image numbers and folder paths are not sent there, because a path from this machine names nothing on that one. The Remote Servers marks those rows (remote), and its start button cannot launch them — nothing here can start a process on another machine.</p>
+        <p>THE EXCEPTION IS A STREAMED IMAGE. Alt+Enter and Ctrl+Alt+Enter send the picture's own bytes rather than a path, so they work to any machine: the far end decodes what it receives, and nothing about the transfer depends on it being able to read your disk. Both ends must be recent enough to know the streaming commands (remote protocol v2) — an older one is refused with a message that says so rather than being left to fail.</p>
+    </article>
+    <article class="sc-deep" id="remote-control-mirroring-f12">
+        <h3><kbd>F12</kbd><span class="sc-deep-sec">Remote Control &amp; Mirroring</span></h3>
+        <p>While mirroring, also execute the command HERE. Off (the default) makes this viewer a pure remote control: it drives the other screens and its own display stays where it is. Has no effect while mirroring is off. Always OFF at startup.</p>
+    </article>
+    <article class="sc-deep" id="remote-control-mirroring-qiv-remote-android">
+        <h3><kbd>qIV Remote (Android)</kbd><span class="sc-deep-sec">Remote Control &amp; Mirroring</span></h3>
+        <p>THE PHONE CLIENT, and the reason F9 is worth switching on even if you never drive a second PC. It speaks this same protocol — the verbs listed by `help` — so it is a real client rather than a screen share.</p>
+        <p>IT DRIVES THE VIEWER: next / previous, first / last, slideshow with its interval, pause, loop and shuffle, zoom, rotate, flip, all five view modes, the colour effects, fullscreen, always-on-top, panels and the overlay. This viewer's folder history goes down to the phone too, so a folder here is one tap away there.</p>
+        <p>PICTURES TRAVEL BOTH WAYS, which is the part a remote control usually cannot do at all. The phone's live preview asks for the displayed image SCALED and re-encoded before it leaves this machine — 25-40x fewer bytes than the original. Save asks for the ORIGINAL FILE separately and writes it into the phone's gallery, because a re-encoded preview is not the file anyone meant to keep. Pushing the other way sends the phone photo's own bytes here, and it is shown ONCE, over whatever is up: no folder change, no sort order change, no playlist move, and a running slideshow carries on with it occupying a single slide.</p>
+        <p>PRESENTATION MODE is the picture and two large next/previous buttons, sized to press without looking. Bind the connection and the preview follows this viewer by itself — change the picture here, it appears there.</p>
+        <p>SAME RULES AS ANY OTHER CLIENT. TLS with the pinned certificate off loopback, the password answered by challenge-response so it never crosses the wire, and the AllowList above still decides who may connect at all. Turn Local Server on here first; the app's About screen walks through it, and its demo mode runs every screen against a viewer that does not exist if you want to look before opening a port.</p>
+    </article>
+    <article class="sc-deep" id="system-tray-settings-keep-in-background">
+        <h3><kbd>Settings › Keep in Background</kbd><span class="sc-deep-sec">System Tray</span></h3>
+        <p>When enabled, closing the window (Esc / Ctrl+W) hides QIV to the tray instead of exiting — the process stays resident for an instant re-open. When disabled (or if more than one instance is running), Esc / Ctrl+W closes the window entirely.</p>
+    </article>
+    <article class="sc-deep" id="system-tray-settings-run-on-startup">
+        <h3><kbd>Settings › Run on Startup</kbd><span class="sc-deep-sec">System Tray</span></h3>
+        <p>Write / remove the Windows startup registry entry (HKCU\\…\\Run) so QIV launches automatically with Windows. Dedicated instances write their own separate entry and do not conflict with the normal instance.</p>
+    </article>
+    <article class="sc-deep" id="system-tray-overlays-font-font-size-font-color">
+        <h3><kbd>Overlays › Font</kbd> / <kbd>Font Size</kbd> / <kbd>Font Color…</kbd><span class="sc-deep-sec">System Tray</span></h3>
+        <p>Typeface, point size and colour for every overlay slot. Font Color opens the standard colour picker; the size is shown in its own label. All three are persisted, so a wall of screens can be made readable from across a room once and left alone.</p>
+    </article>
+    <article class="sc-deep" id="system-tray-view-mode-submenu">
+        <h3><kbd>View Mode submenu</kbd><span class="sc-deep-sec">System Tray</span></h3>
+        <p>Pick the default fit mode applied to newly loaded images: 1 Fit to view (keeps aspect) • 2 Fit to width • 3 Fit to height • 4 Stretch to window • 5 Original size, 1:1 pixels. The current mode is shown with a radio-button check.</p>
+    </article>
+    <article class="sc-deep" id="system-tray-logging-general-log">
+        <h3><kbd>Logging › General Log</kbd><span class="sc-deep-sec">System Tray</span></h3>
+        <p>Record what qIV itself did — started, closed, and whether the previous run ended abnormally, naming the crash dump when there is one. Off by default and remembered across restarts, because the screen that misbehaves at four in the morning is the one nobody was watching.</p>
+    </article>
+    <article class="sc-deep" id="system-tray-logging-tcp-ip-log">
+        <h3><kbd>Logging › TCP/IP Log</kbd><span class="sc-deep-sec">System Tray</span></h3>
+        <p>Write every line exchanged with a remote client to disk — the same traffic the Server Log panel shows (Ctrl+F12). Independent of that panel's Recording button: this captures whether or not the panel is recording.</p>
+    </article>
+    <article class="sc-deep" id="system-tray-logging-open-log-folder">
+        <h3><kbd>Logging › Open Log Folder</kbd><span class="sc-deep-sec">System Tray</span></h3>
+        <p>Open logs\\ in Explorer. Files land in logs\\general\\ and logs\\network\\ beside the EXE, rotate every 5000 lines, and use the standard time [thread] LEVEL message layout that LogViewPlus and lnav read without configuration. A rotated TCP/IP file reopens in the Server Log panel with Ctrl+O. Writing runs on its own thread, so a slow disk never stalls the viewer.</p>
+    </article>
+    <article class="sc-deep" id="dedicated-screens-f8">
+        <h3><kbd>F8</kbd><span class="sc-deep-sec">Dedicated Screens</span></h3>
+        <p>Open the Dedicated panel. A dedicated screen is a separate copy of qIV with its own settings file beside it — normally parked fullscreen on one monitor running a slideshow. Any number can run at once alongside the main app without sharing anything.</p>
+    </article>
+    <article class="sc-deep" id="dedicated-screens-dedicated-test-config-test-images-test-pro">
+        <h3><kbd>Dedicated › Test Config</kbd> / <kbd>Test Images</kbd> / <kbd>Test Promos</kbd><span class="sc-deep-sec">Dedicated Screens</span></h3>
+        <p>Check one thing at a time: the .ini, the image list, or the promotion list. The list tests count the images actually found per folder and flag folders that are missing or empty — a folder that exists but holds nothing decodable looks fine until the screen goes blank.</p>
+    </article>
+    <article class="sc-deep" id="dedicated-screens-promotions">
+        <h3><kbd>Promotions</kbd><span class="sc-deep-sec">Dedicated Screens</span></h3>
+        <p>A SECOND playlist, never merged into the images. Shown occasionally between them and invisible to the image counter and arrow keys. Weighted order favours files whose name ends in #N — "sale#500.jpg" is 500x likelier than a file with no suffix (1 to 65535).</p>
+    </article>
+    <article class="sc-deep" id="dedicated-screens-promotion-pacing">
+        <h3><kbd>Promotion pacing</kbd><span class="sc-deep-sec">Dedicated Screens</span></h3>
+        <p>Two independent triggers, each a (from, to) pair: 0 = off, a single value is an exact cadence, a range is re-rolled each time so it never looks mechanical. Count them in images, in seconds, or both — whichever comes due first shows a promotion. Promotions can hold the screen for their own dwell time.</p>
+    </article>
+    <article class="sc-deep" id="dedicated-screens-kiosk-lock">
+        <h3><kbd>Kiosk lock</kbd><span class="sc-deep-sec">Dedicated Screens</span></h3>
+        <p>Tick "Kiosk lock" in the panel and the screen ignores every key and every click, so a passer-by cannot pause the slideshow or reach the panels. The tray icon keeps working — its menu runs its own message loop, so it is unaffected — and Settings &gt; Kiosk Lock there is the only way back in. Available to the main app too, from the same tray item or -lock.</p>
+    </article>
+    <article class="sc-deep" id="dedicated-screens-keep-display-awake">
+        <h3><kbd>Keep display awake</kbd><span class="sc-deep-sec">Dedicated Screens</span></h3>
+        <p>Blocks the screensaver and display sleep while the window is on screen. Leave it off and Windows eventually blanks the display with nobody there to wake it — and with the kiosk lock on, nobody could. Released automatically when the window hides to the tray.</p>
+    </article>
+    <article class="sc-deep" id="dedicated-screens-isolation">
+        <h3><kbd>Isolation</kbd><span class="sc-deep-sec">Dedicated Screens</span></h3>
+        <p>A dedicated screen writes NOTHING to the registry: settings live in its .ini, and it keeps no history or favorites. Its own mutex and window class mean a file opened from Explorer can never land on a slideshow instead of the main window.</p>
+    </article>
+    <article class="sc-deep" id="command-line-arguments-slideshowtransition-type">
+        <h3><kbd>-slideshowTransition=&lt;type&gt;</kbd><span class="sc-deep-sec">Command-Line Arguments</span></h3>
+        <p>Slide transition by name: Cut, Fade, Dissolve, Ripple, Flicker, SlideLeft, SlideRight, SlideUp, SlideDown, SlideDiagonal, DriftLeft, DriftUp, ZoomIn, ZoomOut, SoftZoom, Spin, SpinZoom, Swing, Bounce, Slam or Iris. Example: -slideshowTransition=Fade.</p>
+    </article>
+    <article class="sc-deep" id="command-line-arguments-lock">
+        <h3><kbd>-lock</kbd><span class="sc-deep-sec">Command-Line Arguments</span></h3>
+        <p>KIOSK mode — all keyboard and mouse input is ignored. Combine with -fullscreen -slideshow for unattended public displays. The tray icon stays live and is the only way to unlock. The switch only forces the lock on for one launch; the stored setting is left alone.</p>
+    </article>
+    <article class="sc-deep" id="command-line-arguments-dedicated">
+        <h3><kbd>-dedicated</kbd><span class="sc-deep-sec">Command-Line Arguments</span></h3>
+        <p>Run as a dedicated screen: no registry writes at all, no history or favorites, its own icon, mutex and window class — safe alongside any number of other instances. Settings come from the .ini beside the exe.</p>
+    </article>
+    <article class="sc-deep" id="command-line-arguments-runonstartup">
+        <h3><kbd>-runOnStartup</kbd><span class="sc-deep-sec">Command-Line Arguments</span></h3>
+        <p>Write or refresh the Windows startup registry entry (HKCU\\…\\Run) so QIV launches automatically with Windows — equivalent to enabling "Run on startup" from the tray icon. Useful after moving the exe or for scripted first-run setup. Dedicated instances write their own separate entry.</p>
+    </article>
+    <article class="sc-deep" id="command-line-arguments-example-dedicated-screen">
+        <h3><kbd>Example</kbd> — <kbd>dedicated screen</kbd><span class="sc-deep-sec">Command-Line Arguments</span></h3>
+        <p>qIV_dedicated_Lobby.exe -dedicated -config "D:\\Screens\\qIV_dedicated_Lobby.ini" — the form the Dedicated panel writes into a startup shortcut. Folders and every setting come from the .ini and its .qim / .qpr lists.</p>
+    </article>
+
+<!-- SHARED-EXAMPLES-START -->
+<!-- SHARED-EXAMPLES-END -->
 
 </main>
 
@@ -500,6 +710,37 @@
     </div>
 </footer>
 <!-- SHARED-FOOTER-END -->
+
+<script>
+// Filters rows in place. Vendored, like everything else on this site — no
+// library, and it degrades to a plain full list if scripting is off, which is
+// why the filter box is the only thing that would be missing rather than the
+// reference itself.
+(function () {
+    var f = document.getElementById('sc-filter'),
+        s = document.getElementById('sc-status');
+    if (!f) return;
+    var secs = [].slice.call(document.querySelectorAll('.sc-sec'));
+    secs.forEach(function (c) { c._rows = [].slice.call(c.querySelectorAll('.sc-row')); });
+    f.addEventListener('input', function () {
+        var q = f.value.trim().toLowerCase(), hits = 0;
+        secs.forEach(function (c) {
+            // A section-name match keeps the whole section, so "tray" answers
+            // "show me the tray" rather than only rows containing the word.
+            var whole = q && c.dataset.title.toLowerCase().indexOf(q) > -1, vis = 0;
+            c._rows.forEach(function (r) {
+                var m = !q || whole || r.textContent.toLowerCase().indexOf(q) > -1;
+                r.classList.toggle('sc-hidden', !m);
+                if (m) vis++;
+            });
+            c.classList.toggle('sc-hidden', vis === 0);
+            hits += vis;
+        });
+        s.textContent = q ? (hits + ' shortcut' + (hits === 1 ? '' : 's') +
+                             ' match "' + f.value.trim() + '"') : '';
+    });
+})();
+</script>
 
 </body>
 </html>

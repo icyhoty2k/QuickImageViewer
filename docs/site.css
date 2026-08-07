@@ -763,79 +763,172 @@ footer .footer-pages a {
 }
 
 /* ------------------------------------------------------------------
-   THE SHORTCUT DRAWERS on shortcuts.html — the same <details> pattern
-   the FAQ uses on index.html, because 207 rows laid flat is a wall
-   nobody reads. Collapsed, the whole reference is sixteen lines.
+   THE SHORTCUT REFERENCE on shortcuts.html.
+
+   Every section visible, two dense columns inside each, and a filter
+   box above. This replaced one collapsed <details> per section: the
+   drawers kept the page short, but they put the reference behind a
+   click each and nothing a visitor cannot see is scannable or
+   Ctrl+F-able. Laid flat it is a few screens, and rows are capped at
+   one paragraph so no single entry can tower over the list.
    ------------------------------------------------------------------ */
 
-.shortcut-section {
+.sc-filter {
+    width: 100%;
+    padding: 0.7rem 0.9rem;
+    font-size: 1rem;
+    color: var(--text-main);
     background: var(--surface-color);
     border: 1px solid var(--border-color);
     border-radius: 10px;
-    margin-bottom: 10px;
-    overflow: hidden;
 }
 
-.shortcut-section > summary {
-    cursor: pointer;
-    padding: 14px 18px;
-    font-weight: 600;
-    font-size: 1rem;
-    list-style: none;
+.sc-filter:focus {
+    outline: none;
+    border-color: var(--accent-primary);
+}
+
+.sc-status {
+    color: var(--text-muted);
+    font-size: 0.85rem;
+    margin: 0.5rem 0 1.5rem;
+    min-height: 1.2em;
+}
+
+.sc-sec {
+    margin: 0 0 1.9rem;
+}
+
+.sc-sec h2 {
     display: flex;
     align-items: center;
-    gap: 10px;
-    user-select: none;
+    gap: 0.55rem;
+    font-size: 1.05rem;
+    margin: 0 0 0.7rem;
+    padding-bottom: 0.5rem;
+    border-bottom: 1px solid var(--border-color);
 }
 
-.shortcut-section > summary::-webkit-details-marker {
-    display: none;
+.sc-ico {
+    font-size: 1.1rem;
 }
 
-/* The disclosure triangle, drawn rather than inherited so it turns with
-   the drawer on every browser instead of only the ones that style the
-   native marker. */
-.shortcut-section > summary::before {
-    content: "\25B8";
-    color: var(--accent-primary);
-    transition: transform .15s;
-    display: inline-block;
-}
-
-.shortcut-section[open] > summary::before {
-    transform: rotate(90deg);
-}
-
-.shortcut-section > summary:hover {
-    color: var(--accent-primary);
-}
-
-.shortcut-section .count {
+.sc-count {
     margin-left: auto;
-    font-weight: 400;
-    font-size: 0.8rem;
+    font-size: 0.75rem;
     color: var(--text-muted);
+    background: var(--surface-color);
+    border-radius: 999px;
+    padding: 0.15rem 0.55rem;
 }
 
-.shortcut-section .tablewrap {
+/* Multi-column, not grid: sections run from 5 entries to 34, and the
+   browser balances a column flow by itself. break-inside keeps a row
+   whole across the split. */
+.sc-cols {
+    columns: 2;
+    column-gap: 2.25rem;
+}
+
+.sc-row {
+    break-inside: avoid;
+    -webkit-column-break-inside: avoid;
+    display: inline-block;
+    width: 100%;
+    padding: 0.45rem 0;
+    border-top: 1px solid rgba(51, 65, 85, 0.55);
+}
+
+.sc-keys {
+    margin-bottom: 0.18rem;
+}
+
+.sc-desc {
+    font-size: 0.85rem;
+    color: var(--text-muted);
+    line-height: 1.5;
     margin: 0;
-    border-top: 1px solid var(--border-color);
 }
 
-.shortcut-section table {
-    font-size: 0.9rem;
-}
-
-.shortcut-section td:first-child {
+.sc-more {
+    color: var(--accent-primary);
+    text-decoration: none;
+    font-size: 0.78rem;
     white-space: nowrap;
 }
 
-.shortcut-section kbd {
+.sc-more::before {
+    content: " ↓ ";
+}
+
+.sc-more:hover {
+    text-decoration: underline;
+}
+
+h2.sc-deep-head {
+    font-size: 1.3rem;
+    margin: 2.5rem 0 0.3rem;
+    padding-top: 1.5rem;
+    border-top: 2px solid var(--border-color);
+}
+
+.sc-deep-intro {
+    color: var(--text-muted);
+    font-size: 0.9rem;
+    margin: 0 0 1.25rem;
+}
+
+.sc-deep {
+    background: var(--surface-color);
+    border: 1px solid var(--border-color);
+    border-radius: 12px;
+    padding: 1rem 1.15rem;
+    margin: 0 0 0.9rem;
+    scroll-margin-top: 1rem;
+}
+
+.sc-deep h3 {
+    display: flex;
+    align-items: center;
+    gap: 0.6rem;
+    font-size: 0.95rem;
+    margin: 0 0 0.55rem;
+}
+
+.sc-deep-sec {
+    margin-left: auto;
+    font-size: 0.72rem;
+    color: var(--text-muted);
+    font-weight: 400;
+}
+
+.sc-deep p {
+    font-size: 0.86rem;
+    color: var(--text-muted);
+    line-height: 1.6;
+    margin: 0 0 0.6rem;
+}
+
+.sc-deep p:last-child {
+    margin-bottom: 0;
+}
+
+.sc-sec kbd,
+.sc-deep kbd {
     background: var(--code-bg);
     border: 1px solid var(--border-color);
-    border-radius: 4px;
-    padding: 1px 6px;
-    font-size: 0.85em;
+    border-bottom-width: 2px;
+    border-radius: 5px;
+    padding: 0.22rem 0.42rem;
+    font-size: 0.78rem;
+    color: var(--accent-primary);
+    white-space: nowrap;
+    display: inline-block;
+    margin: 0.1rem 0.05rem;
+}
+
+.sc-hidden {
+    display: none;
 }
 
 /* ==================================================================
