@@ -45,6 +45,14 @@ enum class Command {
     GoToLastImage,  // End  — unconditional jump to the final index
     ShowInExplorer,
 
+    // Walk the folder TREE. Alt+Up opens the parent; Alt+Down descends into the
+    // first subfolder that actually contains images. Local only — a tree walk
+    // means nothing to a remote instance, whose filesystem is not this one.
+    FolderUp,
+    FolderDown,
+    FolderPrevSibling,
+    FolderNextSibling,
+
     // --- View modes (1-5) ---
     ViewMode1,
     ViewMode2,

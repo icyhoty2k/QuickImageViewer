@@ -260,6 +260,7 @@ namespace Persistence::Registry {
         emitB(R::HISTORY_FULL_MODE,     a.historyFullModeEnabled);
         emitB(R::OVERLAY_VISIBLE,       a.showOverlayInfoText);
         emitB(R::OPEN_DIRWND_ON_START,  a.openDirWndOnStart);
+        emitB(R::FOLDER_WALK_WRAP,      a.folderWalkWrap);
         emitB(R::OVERLAY_SHOW_BG,       a.overlayShowBackground);
         emitI(R::OVERLAY_LAYOUT_MODE,   a.overlayLayoutMode);
         emit (R::OVERLAY_SLOT_VISIBLE,  a.overlaySlotVisibleMask);
@@ -360,6 +361,9 @@ namespace Persistence::Registry {
         a.openDirWndOnStart = readDword(
             Constants::Registry::OPEN_DIRWND_ON_START,
             static_cast<DWORD>(Constants::IS_OPEN_DIRWND_ON_START)) != 0;
+        a.folderWalkWrap = readDword(
+            Constants::Registry::FOLDER_WALK_WRAP,
+            static_cast<DWORD>(Constants::IS_FOLDER_WALK_WRAP)) != 0;
         a.overlayShowBackground = readDword(
             Constants::Registry::OVERLAY_SHOW_BG,
             static_cast<DWORD>(Constants::Overlay::IS_OVERLAY_SHOW_BACKGROUND)) != 0;

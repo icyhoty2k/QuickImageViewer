@@ -207,6 +207,7 @@ void ImportSettings(HWND hWnd) {
         applyBool(Constants::Registry::HISTORY_FULL_MODE,    app.historyFullModeEnabled);
         applyBool(Constants::Registry::OVERLAY_VISIBLE,      app.showOverlayInfoText);
         applyBool(Constants::Registry::OPEN_DIRWND_ON_START, app.openDirWndOnStart);
+        applyBool(Constants::Registry::FOLDER_WALK_WRAP,     app.folderWalkWrap);
         applyBool(Constants::Registry::OVERLAY_SHOW_BG,      app.overlayShowBackground);
         applyBool(Constants::Registry::OVERLAY_SHOW_DIR_NAME, app.overlayShowDirName);
         applyBool(Constants::Registry::OVERLAY_SHOW_EFFECTS,  app.overlayShowEffectsList);
@@ -464,6 +465,7 @@ void RestoreDefaults(HWND hWnd) {
     app.historyFullModeEnabled  = Constants::History::HISTORY_SHOW_FULL_HISTORY;
     app.showOverlayInfoText     = Constants::Overlay::DEFAULT_SHOW_OVERLAY;
     app.openDirWndOnStart       = Constants::IS_OPEN_DIRWND_ON_START;
+    app.folderWalkWrap          = Constants::IS_FOLDER_WALK_WRAP;
     app.overlayShowBackground   = Constants::Overlay::IS_OVERLAY_SHOW_BACKGROUND;
     app.overlayLayoutMode       = Constants::Overlay::DEFAULT_LAYOUT_MODE;
     app.overlaySlotVisibleMask  = Constants::Overlay::DEFAULT_SLOT_VISIBLE_MASK;
@@ -525,6 +527,7 @@ void RestoreDefaults(HWND hWnd) {
     Persistence::Registry::SaveSetting(Constants::Registry::HISTORY_FULL_MODE,     static_cast<DWORD>(app.historyFullModeEnabled));
     Persistence::Registry::SaveSetting(Constants::Registry::OVERLAY_VISIBLE,       static_cast<DWORD>(app.showOverlayInfoText));
     Persistence::Registry::SaveSetting(Constants::Registry::OPEN_DIRWND_ON_START,  static_cast<DWORD>(app.openDirWndOnStart));
+    Persistence::Registry::SaveSetting(Constants::Registry::FOLDER_WALK_WRAP,      static_cast<DWORD>(app.folderWalkWrap));
     Persistence::Registry::SaveSetting(Constants::Registry::OVERLAY_SHOW_BG,       static_cast<DWORD>(app.overlayShowBackground));
     Persistence::Registry::SaveSetting(Constants::Registry::OVERLAY_LAYOUT_MODE,   static_cast<DWORD>(app.overlayLayoutMode));
     Persistence::Registry::SaveSetting(Constants::Registry::OVERLAY_SLOT_VISIBLE,  static_cast<DWORD>(app.overlaySlotVisibleMask));

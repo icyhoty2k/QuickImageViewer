@@ -7,6 +7,8 @@
 // It is distributed WITHOUT ANY WARRANTY. See the LICENSE file for details.
 
 #include <algorithm>
+#include <climits>    // INT_MAX — the dedicated-interval overflow guard
+#include <vector>     // WM_QIV_OPEN_FILE payload — the dropped-path list
 #include <filesystem> // parent_path() of the open playlist — the exit-path folder record
 #include <numeric>    // std::iota — the shuffle order. Was arriving only through
                       // an MSVC transitive include, so any stricter compiler or
@@ -235,7 +237,12 @@ LRESULT CALLBACK MainAppWndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM l
                     // sending process. WM_QIV_OPEN_FILE owns the pointer and
                     // deletes it; if the post fails it never gets there, so it
                     // is deleted here instead.
-                    auto *p = new std::wstring(raw, len);
+                    //
+                    // A ONE-ELEMENT vector: a forwarded launch carries a single
+                    // path, and sharing the drop's payload type is what keeps
+                    // both routes going through identical folder/file handling
+                    // instead of drifting into two rules.
+                    auto *p = new std::vector<std::wstring>{std::wstring(raw, len)};
                     if (!PostMessageW(hWnd, Constants::WM_QIV_OPEN_FILE, 0,
                                       reinterpret_cast<LPARAM>(p)))
                         delete p;
@@ -250,9 +257,108 @@ LRESULT CALLBACK MainAppWndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM l
         }
 
         case Constants::WM_QIV_OPEN_FILE: {
-            auto *path = reinterpret_cast<std::wstring *>(lParam);
-            OpenSpecificImage(hWnd, path->c_str());
-            delete path;
+            // Owned here — the unique_ptr frees it on every way out of this case,
+            // including the early return below. Same arrangement as
+            // WM_QIV_REMOTE_PULLED further down.
+            std::unique_ptr<std::vector<std::wstring>> dropped(
+                reinterpret_cast<std::vector<std::wstring> *>(lParam));
+            if (!dropped || dropped->empty()) return 0;
+
+            const std::wstring &first = dropped->front();
+            if (first.empty()) return 0;
+
+            std::error_code ec;
+            const bool firstIsDir = std::filesystem::is_directory(first, ec) && !ec;
+            const std::wstring firstFolder = firstIsDir
+                                                 ? first
+                                                 : std::filesystem::path(first).parent_path().wstring();
+
+            // EVERY DROPPED ITEM PUTS ITS FOLDER IN HISTORY — before the open, so
+            // that the one actually opened is pushed last and lands at the top of
+            // the MRU list where it belongs.
+            //
+            // Only one item can open, so without this the rest of a multi-drop
+            // simply vanished and had to be dragged again. Recording their folders
+            // makes them a Tab away instead, which is also what turns the
+            // "N others not opened" line below into something the user can act on.
+            //
+            // Duplicates need no guarding here: PushFolderHistory normalises case,
+            // trailing separators, quotes and whitespace, matches
+            // case-insensitively, and on a hit merely promotes the existing row to
+            // the front WITHOUT writing to disk. Dropping forty photos from one
+            // folder therefore touches one row, once.
+            //
+            // Unreachable is counted in the same pass. NOT simply count-1: opening
+            // an image builds the playlist from its WHOLE folder, so pictures
+            // dropped together out of one folder are already reachable with an
+            // arrow key and must not be reported as lost. Genuinely unreachable is
+            // any second FOLDER — only one can be open — and any file from a
+            // different folder than the one that opened.
+            UINT unreachable = 0;
+            for (size_t i = 1; i < dropped->size(); ++i) {
+                const std::wstring &item = (*dropped)[i];
+                if (item.empty()) continue;
+
+                // One is_directory per item, and the folder derived from it: an
+                // item IS its folder when it is one, otherwise it contributes the
+                // folder it sits in.
+                ec.clear();
+                const bool itemIsDir = std::filesystem::is_directory(item, ec) && !ec;
+                const std::wstring itemFolder =
+                    itemIsDir ? item
+                              : std::filesystem::path(item).parent_path().wstring();
+                if (!itemFolder.empty()) UI::PushFolderHistory(itemFolder);
+
+                if (firstIsDir || itemIsDir)
+                    ++unreachable;                       // a folder never rides along
+                else if (_wcsicmp(itemFolder.c_str(), firstFolder.c_str()) != 0)
+                    ++unreachable;                       // a file from somewhere else
+            }
+
+            // A FOLDER OR A FILE. This message carries whichever the user handed
+            // over, and both are legitimate: it is the funnel for drag-and-drop
+            // AND for the single-instance handoff, where `qIV.exe <path>` reaches
+            // an already-running copy through WM_COPYDATA.
+            //
+            // It used to go straight to OpenSpecificImage, which refuses anything
+            // that is not a regular file — so dropping a FOLDER on the window did
+            // nothing whatsoever and gave no hint why. Only images could be
+            // dropped, which is not what a drop target that accepts the drag
+            // implies.
+            //
+            // The rule is not new: the file dialog routes on is_directory the same
+            // way (see OpenFileDialog), and so does the remote `open` verb. This is
+            // the third caller of a decision both of those already make.
+            //
+            // An empty folder is not a failure case to guard here — OpenDirectory
+            // scans it, finds nothing and raises the "No Images" placeholder,
+            // which is the feedback the silent version never gave.
+            const bool opened = firstIsDir ? OpenDirectory(hWnd, first)
+                                           : OpenSpecificImage(hWnd, first);
+
+            // A REFUSAL THAT RAISED NO PLACEHOLDER leaves no other trace.
+            // SetFolderOverlay logs the Unsupported and Missing cases already, so
+            // what is left here is the quiet one: a path that vanished between
+            // the drag starting and the drop landing, where OpenDirectory /
+            // OpenSpecificImage return false without putting anything on screen.
+            if (!opened && AppLog::IsEnabled())
+                AppLog::Warn(AppLog::COMP_DISPLAY,
+                             L"dropped item could not be opened: " + first);
+
+            // Said after the open, so the screen shows the picture and the
+            // explanation together.
+            //
+            // ONLY WHEN SOMETHING OPENED. "Opened the first item" is false after a
+            // refusal, and worse, posting it would overwrite the Unsupported
+            // placeholder that explains WHY nothing opened — replacing the answer
+            // with a remark about the items that were not the problem.
+            if (opened && unreachable > 0)
+                g_overlayManager.PostCenterMessage(
+                    hWnd,
+                    std::wstring(Constants::Messages::DROP_EXTRAS_PREFIX) +
+                        std::to_wstring(unreachable) +
+                        Constants::Messages::DROP_EXTRAS_SUFFIX);
+
             InvalidateRect(hWnd, nullptr, FALSE);
             return 0;
         }
@@ -1302,8 +1408,14 @@ int WINAPI wWinMain(HINSTANCE hInstance, [[maybe_unused]] HINSTANCE hPrevInstanc
         }
         if (runArgs.monitorNum < 1 && cfg.monitorNum >= 1)
             runArgs.monitorNum = cfg.monitorNum;
-        if (runArgs.slideshowIntervalMs <= 0 && cfg.intervalSeconds > 0)
-            runArgs.slideshowIntervalMs = cfg.intervalSeconds * 1000;
+        // In long long — intervalSeconds comes from a hand-editable INI or
+        // registry value, and `* 1000` in int is signed overflow from 2147484
+        // up. Too large is ignored, same as CMDArgs treats the CLI switch.
+        if (runArgs.slideshowIntervalMs <= 0 && cfg.intervalSeconds > 0) {
+            const long long ms = static_cast<long long>(cfg.intervalSeconds) * 1000LL;
+            if (ms <= INT_MAX)
+                runArgs.slideshowIntervalMs = static_cast<int>(ms);
+        }
 
         runArgs.fullscreen = runArgs.fullscreen || cfg.fullscreen;
         runArgs.slideshow  = runArgs.slideshow  || cfg.slideshow;

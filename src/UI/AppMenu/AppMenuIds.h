@@ -194,6 +194,10 @@ namespace UI::AppMenu::Ids {
         // Moved off 67, which the overlay "Off" band also claimed.
         SET_LOCK_VIEWPORT    = 18,
         SET_REMEMBER_WIN_POS = 19,
+        // 20-22 were the only gap left in the low band; 67 is spoken for by the
+        // overlay "Off" row, so this takes the next free low id rather than
+        // starting a new range for one item.
+        SET_FOLDER_WALK_WRAP = 20,
 
         // "Location = Registry / File". Reports where settings actually live
         // and opens it — regedit at the key, or Explorer with the .ini selected.

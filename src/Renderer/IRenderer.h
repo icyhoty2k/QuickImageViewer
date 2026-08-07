@@ -158,4 +158,19 @@ class IImageRenderer {
         // Defaults to false: a renderer that does not track this simply never
         // reports a failure, which is the behaviour every caller had before.
         virtual bool DecodeFailed(const std::wstring & /*path*/) const { return false; }
+
+        // The other half of DecodeFailed: RECORD that this file will not open.
+        //
+        // The renderer's own decode path has always marked its failures
+        // internally. Nothing else could — so a caller that discovered the file
+        // was unusable BEFORE handing it to the decoder had no way to say so, and
+        // the UI went on waiting for a decode that had not even been queued. The
+        // SVG route hit exactly that: it reads the bytes itself on the IO worker,
+        // and a file that would not read left the screen blank with no
+        // placeholder, because the pixels never reached a decoder to fail in.
+        //
+        // Implementations record the path and wake the UI, which then finds
+        // DecodeFailed true and raises the Unsupported placeholder. Safe from any
+        // thread. Default no-op, matching DecodeFailed's default of false.
+        virtual void MarkDecodeFailed(const std::wstring & /*path*/) {}
 };

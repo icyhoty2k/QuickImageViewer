@@ -214,6 +214,18 @@ namespace Shortcuts {
 
     constexpr UINT SC_NAV_PREV = VK_LEFT;
     constexpr UINT SC_NAV_NEXT = VK_RIGHT;
+
+    // Alt+Up / Alt+Down — walk the folder TREE, as opposed to the four keys that
+    // walk the folders already visited. Alt+Up is what Explorer uses for "up one
+    // level", so the one people already know is the one that works here.
+    //
+    // The pair matters more than either half. Up on its own lands on a parent
+    // that, in any ordinary photo tree, holds only subfolders and no images —
+    // the placeholder appears and nothing on screen shows a way onward, because
+    // this app never displays folders. Down is what makes that a waypoint
+    // instead of a dead end.
+    constexpr UINT SC_NAV_FOLDER_UP = VK_UP;     // Alt+Up   — parent folder
+    constexpr UINT SC_NAV_FOLDER_DOWN = VK_DOWN; // Alt+Down — first subfolder with images
     constexpr UINT SC_NAV_NEXT_SPACE = VK_SPACE;
     constexpr UINT SC_NAV_SHOW_IN_EXPLORER = 'L';
     // toggle first / last image in folder , Shift+Backspace go to last image which is not first or last

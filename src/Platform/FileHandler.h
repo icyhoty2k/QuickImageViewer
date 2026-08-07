@@ -42,9 +42,41 @@ void OpenInitialImage(HWND hWnd);
 
 void ReloadCurrentDirectory(HWND hWnd);
 
-void OpenDirectory(HWND hWnd, const std::wstring &dirPathStr);
+// Both return whether they actually opened anything. Most callers hand over a
+// path they already validated and ignore the answer; the drop handler does not,
+// because it has to decide whether "and N other items were not opened" is a true
+// sentence — after a refusal, nothing opened and saying otherwise is a lie that
+// also overwrites the message explaining the refusal.
+bool OpenDirectory(HWND hWnd, const std::wstring &dirPathStr);
 
-void OpenSpecificImage(HWND hWnd, const std::wstring &filePath);
+bool OpenSpecificImage(HWND hWnd, const std::wstring &filePath);
+
+// =============================================================================
+// FOLDER-TREE WALK  —  Alt+Up / Alt+Down / Alt+Left / Alt+Right
+//
+// Different from the four history keys, which walk folders already VISITED.
+// These walk the tree on disk, so they reach folders that have never been open.
+//
+// COST, because it is a keypress and not a background job: each of these does
+// exactly ONE directory enumeration and then opens a folder. Neither probes the
+// candidates for image content — that would mean a directory open per candidate,
+// which on a network share with a run of empty subfolders is a multi-second
+// stall on the UI thread. Landing on a folder with no images is a fully handled
+// state (the "No Images" placeholder), and one more keypress moves on; a frozen
+// window is not recoverable at all.
+//
+// All four report false and say why when the step is not possible, rather than
+// doing nothing.
+// =============================================================================
+bool OpenParentFolder(HWND hWnd);
+
+// Into the FIRST subfolder, in the same natural order the strips use.
+bool OpenSubFolder(HWND hWnd);
+
+// Across: step = -1 for the previous sibling, +1 for the next. Stops at the
+// ends rather than wrapping — silently rolling from the last folder back to the
+// first makes a long press look like it did nothing.
+bool OpenSiblingFolder(HWND hWnd, int step);
 
 // Resolves what to show when the app is launched with no file or folder.
 // Tries, in order:

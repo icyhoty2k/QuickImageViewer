@@ -16,9 +16,11 @@
 #include "../ImageLoadStats.h"
 #include <commdlg.h>
 #include <shobjidl.h>
+#include <cstdio>      // swprintf_s — the HRESULT hex in the SVG failure log
 #include <filesystem>
 #include <numeric>
 #include "Platform/CrashHandler.h" // NoteImage / NoteCommand breadcrumbs
+#include "Platform/AppLog.h"       // COMP_DISPLAY — why the screen went to a placeholder
 #include <ranges>
 #include <shlwapi.h>
 #include <thread>
@@ -493,8 +495,203 @@ void UpdateWindowTitle(HWND hWnd) {
     SetWindowTextW(hWnd, title.c_str());
 }
 
+// =============================================================================
+// Folder-tree walk helpers
+// =============================================================================
+// The immediate SUBDIRECTORIES of a folder, in the same natural order the
+// strips and the playlist use — StrCmpLogicalW, so "Trip 10" sorts after
+// "Trip 2" rather than before it.
+//
+// One enumeration, no recursion, and no peek inside any of them: see the header
+// for why probing each for images is deliberately not done here.
+static std::vector<std::wstring> SubDirectoriesOf(const fs::path &dir) {
+    std::vector<std::wstring> out;
+    std::error_code ec;
+    for (auto it = fs::directory_iterator(dir, fs::directory_options::skip_permission_denied, ec);
+         !ec && it != fs::directory_iterator(); it.increment(ec)) {
+        std::error_code entryEc;
+        // is_directory FOLLOWS a link, which is what is wanted: a directory
+        // junction is a folder you can open, so it belongs in the walk. The path
+        // kept is the link's own spelling, never the target's — the same rule
+        // OpenDirectory follows, and what keeps Alt+Up returning to the folder
+        // you came through rather than to the target's parent somewhere else.
+        if (!it->is_directory(entryEc) || entryEc) continue;
+
+        // HIDDEN AND SYSTEM FOLDERS ARE SKIPPED, or Alt+Down at a drive root
+        // lands in $RECYCLE.BIN or System Volume Information — which reads as
+        // the feature being broken. std::filesystem cannot report the Windows
+        // attribute bits, so this is one GetFileAttributesW per subfolder; it
+        // happens once per keypress, on metadata the enumeration just warmed.
+        const DWORD attrs = GetFileAttributesW(it->path().c_str());
+        if (attrs != INVALID_FILE_ATTRIBUTES &&
+            (attrs & (FILE_ATTRIBUTE_HIDDEN | FILE_ATTRIBUTE_SYSTEM)))
+            continue;
+
+        out.push_back(it->path().wstring());
+    }
+    std::ranges::sort(out, [](const std::wstring &a, const std::wstring &b) {
+        return StrCmpLogicalW(a.c_str(), b.c_str()) < 0;
+    });
+    return out;
+}
+
+// Where the walk starts. UI::CurrentFolder is the recorded navigation, which is
+// the only answer that survives a placeholder — app.playlist is empty during
+// Missing and Empty, which is exactly when stepping away matters most.
+static fs::path WalkOrigin() {
+    const std::wstring cur = UI::CurrentFolder();
+    if (!cur.empty()) return fs::path(cur);
+    if (!app.playlist.empty()) return fs::path(app.playlist[0]).parent_path();
+    return {};
+}
+
+// Open a folder and SAY WHICH ONE.
+//
+// The announcement is the whole point of routing all three through here: a step
+// that lands on a folder WITH pictures produces no other feedback at all — the
+// picture simply changes, and nothing on screen says which folder it came from
+// or which way you moved. The empty and missing landings speak for themselves
+// through the placeholder; these are the ones that would otherwise be silent.
+//
+// The leaf name, not the full path: it is what changed, and a centre overlay
+// that fades has no room for "D:\Photos\2026\Summer\Trip". A drive root has no
+// filename(), so it falls back to the path — "D:\" is its own best name.
+//
+// The strips need no telling. OpenDirectory already retargets the active one and
+// the scan completion feeds it through OnFolderRefreshed, exactly as it does for
+// the history panel, drag-drop and F2.
+// `position` is "3/12" for a sideways step and empty for up and down. It is what
+// tells you a wrap HAPPENED: rolling from the last folder to the first otherwise
+// looks like a random jump, and with the counter it reads 12/12 then 1/12.
+// Up and down have no meaningful counter — a parent's position among its own
+// siblings would cost a second enumeration to answer a question nobody asked.
+static bool StepToFolder(HWND hWnd, const std::wstring &folder, const wchar_t *icon,
+                         const std::wstring &position = {}) {
+    if (!OpenDirectory(hWnd, folder)) return false;
+
+    std::wstring leaf = fs::path(folder).filename().wstring();
+    if (leaf.empty()) leaf = folder;
+
+    std::wstring msg = std::wstring(icon) + leaf;
+    if (!position.empty()) msg += L"   " + position;
+    g_overlayManager.PostCenterMessage(hWnd, msg);
+    return true;
+}
+
+bool OpenParentFolder(HWND hWnd) {
+    const fs::path here = WalkOrigin();
+    // Nothing opened this session — say so rather than eating the keypress.
+    if (here.empty()) {
+        g_overlayManager.PostCenterMessage(hWnd, Constants::Messages::FOLDER_WALK_NOWHERE);
+        return false;
+    }
+
+    const fs::path parent = here.parent_path();
+    // At a drive root parent_path() returns the root again, so comparing is what
+    // detects the top rather than testing for an empty string.
+    if (parent.empty() || parent == here) {
+        g_overlayManager.PostCenterMessage(hWnd, Constants::Messages::FOLDER_WALK_NO_PARENT);
+        return false;
+    }
+    return StepToFolder(hWnd, parent.wstring(), Constants::Messages::FOLDER_WALK_UP);
+}
+
+bool OpenSubFolder(HWND hWnd) {
+    const fs::path here = WalkOrigin();
+    // Nothing opened this session — say so rather than eating the keypress.
+    if (here.empty()) {
+        g_overlayManager.PostCenterMessage(hWnd, Constants::Messages::FOLDER_WALK_NOWHERE);
+        return false;
+    }
+
+    const std::vector<std::wstring> subs = SubDirectoriesOf(here);
+    if (subs.empty()) {
+        g_overlayManager.PostCenterMessage(hWnd, Constants::Messages::FOLDER_WALK_NO_CHILD);
+        return false;
+    }
+    return StepToFolder(hWnd, subs.front(), Constants::Messages::FOLDER_WALK_DOWN);
+}
+
+bool OpenSiblingFolder(HWND hWnd, int step) {
+    const fs::path here = WalkOrigin();
+    // Nothing opened this session — say so rather than eating the keypress.
+    if (here.empty()) {
+        g_overlayManager.PostCenterMessage(hWnd, Constants::Messages::FOLDER_WALK_NOWHERE);
+        return false;
+    }
+
+    const fs::path parent = here.parent_path();
+    if (parent.empty() || parent == here) {
+        g_overlayManager.PostCenterMessage(hWnd, Constants::Messages::FOLDER_WALK_NO_PARENT);
+        return false;
+    }
+
+    // Empty means the PARENT could not be read — denied, or deleted since we
+    // came through it — because a folder we are standing in must otherwise
+    // appear among its own parent's children. Reported, not swallowed.
+    const std::vector<std::wstring> subs = SubDirectoriesOf(parent);
+    if (subs.empty()) {
+        g_overlayManager.PostCenterMessage(hWnd, Constants::Messages::FOLDER_WALK_NO_SIBLING);
+        return false;
+    }
+
+    // Case-insensitively, because Windows paths are, and the recorded spelling
+    // may differ from the one the enumeration produced.
+    size_t idx = subs.size();
+    for (size_t i = 0; i < subs.size(); ++i) {
+        if (_wcsicmp(subs[i].c_str(), here.wstring().c_str()) == 0) { idx = i; break; }
+    }
+    // Not found means the current folder is not a child of its own parent as the
+    // enumeration spells it — a junction, most likely. Nothing sensible to step
+    // relative to, so say so rather than guessing at an index.
+    if (idx == subs.size()) {
+        g_overlayManager.PostCenterMessage(hWnd, Constants::Messages::FOLDER_WALK_NO_SIBLING);
+        return false;
+    }
+
+    const bool atFirst = (step < 0 && idx == 0);
+    const bool atLast  = (step > 0 && idx + 1 >= subs.size());
+
+    size_t target;
+    if (atFirst || atLast) {
+        // app.folderWalkWrap — tray-settable, ON by default. A single sibling is
+        // not a wrap: rolling from 1/1 back to 1/1 would reopen the folder that
+        // is already open and read as the key doing nothing, so it is refused
+        // like any other end-stop.
+        if (!app.folderWalkWrap || subs.size() < 2) {
+            g_overlayManager.PostCenterMessage(hWnd, Constants::Messages::FOLDER_WALK_AT_END);
+            return false;
+        }
+        target = atFirst ? subs.size() - 1 : 0;
+    } else {
+        target = idx + static_cast<size_t>(step);
+    }
+
+    // 1-based, matching the image counter the overlay already shows.
+    const std::wstring position = std::to_wstring(target + 1) + L"/" +
+                                  std::to_wstring(subs.size());
+
+    return StepToFolder(hWnd, subs[target],
+                        step < 0 ? Constants::Messages::FOLDER_WALK_PREV
+                                 : Constants::Messages::FOLDER_WALK_NEXT,
+                        position);
+}
+
 void SetFolderOverlay(HWND hWnd, AppState::FolderOverlayState state,
                       const std::wstring &path) {
+    // THE ONE PLACE A PLACEHOLDER IS RAISED, so it is the one place worth
+    // logging. Every route to a blank screen passes through here — a deleted
+    // folder, a folder with no images, a file whose format is refused, a decode
+    // that gave up — and "the screen was blank this morning" is exactly the
+    // question the general log exists to answer. Logging at the call sites
+    // instead would be five copies to keep in step, and the sixth would be
+    // forgotten.
+    //
+    // ONLY ON A CHANGE. The renderer's last-ditch guard calls this from Render()
+    // and is stopped from repeating only by the state it just set; a log line
+    // per frame would bury the file it was trying to report.
+    const bool changed = (app.folderOverlay != state) || (app.folderOverlayPath != path);
+
     // Self-assignment is deliberate at one call site: the renderer's last-ditch
     // guard passes app.folderOverlayPath back in to mean "keep whatever folder
     // was last known". std::wstring handles it, and spelling it at the call
@@ -502,6 +699,26 @@ void SetFolderOverlay(HWND hWnd, AppState::FolderOverlayState state,
     app.folderOverlay     = state;
     app.folderOverlayPath = path;
     UpdateWindowTitle(hWnd);
+
+    // Gate BEFORE the string is built — concatenating a path only to throw it
+    // away is the cost this check exists to avoid.
+    if (!changed || !AppLog::IsEnabled()) return;
+
+    switch (state) {
+        case AppState::FolderOverlayState::Missing:
+            AppLog::Warn(AppLog::COMP_DISPLAY, L"folder is gone, showing placeholder: " + path);
+            break;
+        case AppState::FolderOverlayState::Unsupported:
+            AppLog::Warn(AppLog::COMP_DISPLAY, L"cannot show this file, showing placeholder: " + path);
+            break;
+        case AppState::FolderOverlayState::Empty:
+            // Info, not Warn: a folder with no pictures in it is an ordinary
+            // thing to open, not a fault.
+            AppLog::Info(AppLog::COMP_DISPLAY, L"folder has no images, showing placeholder: " + path);
+            break;
+        case AppState::FolderOverlayState::None:
+            break;   // ClearFolderOverlay's job, and not worth a line
+    }
 }
 
 void ClearFolderOverlay(HWND hWnd) {
@@ -1234,8 +1451,46 @@ void LoadImageIndex(HWND hWnd, int index) {
             if (app.wantedPathHash.load(std::memory_order_acquire) != std::hash<std::wstring>{}(currentPath))
                 return;
 
+            // A FAILED READ REPORTS ITSELF, exactly as the raster path does.
+            //
+            // This used to be a bare `return`, and it was the worst of the silent
+            // ones: ClearActiveImage() has already run above, so the screen is
+            // blank by the time this fires. Deleting a folder of .svg files and
+            // scrolling on gave a black window with no picture, no placeholder
+            // and no message — the raster path at least left the previous image
+            // standing.
+            //
+            // Same split as the raster path, for the same reason: a file that is
+            // GONE means the folder moved on and the whole listing should resync,
+            // while a file that is merely unreadable — locked, empty, past
+            // SvgDecoder's 64 MB ceiling — still exists, so a rescan would find
+            // it and ask again forever. MarkDecodeFailed records it once.
             std::vector<BYTE> svgBytes;
-            if (FAILED(SvgDecoder::LoadFile(currentPath, svgBytes))) return;
+            const HRESULT svgHr = SvgDecoder::LoadFile(currentPath, svgBytes);
+            if (FAILED(svgHr)) {
+                if (svgHr == HRESULT_FROM_WIN32(ERROR_FILE_NOT_FOUND) ||
+                    svgHr == HRESULT_FROM_WIN32(ERROR_PATH_NOT_FOUND)) {
+                    // Same reason as the raster path: if only this file vanished
+                    // the resync raises no placeholder, so this is the sole
+                    // record of it.
+                    if (AppLog::IsEnabled())
+                        AppLog::Warn(AppLog::COMP_DECODE,
+                                     L"file is gone, resyncing the folder: " + currentPath);
+                    PostMessageW(hWnd, Constants::WM_QIV_DIR_CHANGED, 0, 0);
+                } else if (app.renderer) {
+                    if (AppLog::IsEnabled()) {
+                        // Hex, the way every Microsoft page writes an HRESULT —
+                        // the decimal form is a huge negative nobody can look up.
+                        wchar_t hrHex[16]{};
+                        swprintf_s(hrHex, L"%08X", static_cast<unsigned>(svgHr));
+                        AppLog::Warn(AppLog::COMP_DECODE,
+                                     L"could not read the SVG (hr 0x" + std::wstring(hrHex) +
+                                         L"): " + currentPath);
+                    }
+                    app.renderer->MarkDecodeFailed(currentPath);
+                }
+                return;
+            }
 
             struct SvgPayload {
                 std::wstring path;
@@ -1297,7 +1552,7 @@ void LoadImageIndex(HWND hWnd, int index) {
              Constants::PRELOAD_TIMER_COUNTDOWN, nullptr);
 }
 
-void OpenDirectory(HWND hWnd, const std::wstring &dirPathStr) {
+bool OpenDirectory(HWND hWnd, const std::wstring &dirPathStr) {
     // Deliberately NOT canonical(): that resolves junctions and directory
     // symlinks, so opening D:\12_Wallpapers\... (a junction) recorded
     // E:\12_Wallpapers\... instead. Everything downstream then disagreed with the
@@ -1307,9 +1562,12 @@ void OpenDirectory(HWND hWnd, const std::wstring &dirPathStr) {
     // still cleans up relatives and any ".." without touching the link.
     std::error_code ec;
     fs::path dirPath = fs::absolute(fs::path(dirPathStr), ec).lexically_normal();
-    if (ec) return;
-    // canonical used to double as the existence check — now explicit.
-    if (!fs::is_directory(dirPath, ec) || ec) return;
+    if (ec) return false;
+    // canonical used to double as the existence check — now explicit. Also the
+    // answer for a folder that was deleted between the drag starting and the
+    // drop landing: nothing opens, and the caller is told so rather than
+    // reporting a success that did not happen.
+    if (!fs::is_directory(dirPath, ec) || ec) return false;
 
     // Valid directory confirmed — dismiss any Missing/Empty overlay immediately.
     ClearFolderOverlay(hWnd);
@@ -1344,7 +1602,7 @@ void OpenDirectory(HWND hWnd, const std::wstring &dirPathStr) {
             LoadImageIndex(hWnd, 0);
             InvalidateRect(hWnd, nullptr, TRUE);
             UpdateWindow(hWnd);
-            return;
+            return true;
         }
     }
 
@@ -1390,7 +1648,11 @@ void OpenDirectory(HWND hWnd, const std::wstring &dirPathStr) {
         LaunchBackgroundScan(hWnd, dirPath.wstring(), L"", emptyGen,
                              app.fileHandlerDefaultSortOrder, app.fileHandlerIsReverseSortOrder,
                              activeIsPrimary);
-        return;
+        // TRUE: an empty folder OPENED. It is now the current folder, it is in
+        // history, the placeholder explains itself and F5 picks up images the
+        // moment any appear. Nothing failed here, so a caller must not report it
+        // as a failure.
+        return true;
     }
 
     uint64_t gen = ++g_scanGeneration;
@@ -1429,6 +1691,7 @@ void OpenDirectory(HWND hWnd, const std::wstring &dirPathStr) {
     LaunchBackgroundScan(hWnd, dirPath.wstring(), L"", gen,
                          app.fileHandlerDefaultSortOrder, app.fileHandlerIsReverseSortOrder,
                          activeIsPrimary);
+    return true;
 }
 
 // Used to reload / refresh current dir with F5
@@ -1557,7 +1820,7 @@ void OpenStartupTarget(HWND hWnd) {
     }
 }
 
-void OpenSpecificImage(HWND hWnd, const std::wstring &filePathStr) {
+bool OpenSpecificImage(HWND hWnd, const std::wstring &filePathStr) {
     fs::path filePath(filePathStr);
     {
         // Same rule as the dialog path above, and this one is reached from a
@@ -1565,8 +1828,52 @@ void OpenSpecificImage(HWND hWnd, const std::wstring &filePathStr) {
         // this process never validated. The throwing overloads turn a dropped
         // network share into an exception inside the window procedure.
         std::error_code ec;
-        if (!fs::exists(filePath, ec) || ec) return;
-        if (!fs::is_regular_file(filePath, ec) || ec) return;
+        // Also the answer for a file deleted between the drag starting and the
+        // drop landing, and for a path that is neither file nor folder.
+        if (!fs::exists(filePath, ec) || ec) return false;
+        if (!fs::is_regular_file(filePath, ec) || ec) return false;
+    }
+
+    // REFUSED BEFORE ANYTHING IS TOUCHED, and this is the whole point of doing it
+    // here rather than letting the decode fail later.
+    //
+    // Everything below replaces app.playlist, pushes folder history and clears
+    // the active panel's thumbnail cache. Reached with a .txt — one slip while
+    // dragging — that ran to completion: a browse through five hundred photos
+    // collapsed to a one-entry playlist of a text file, the position lost, and
+    // the only feedback was the decoder's "could not decode" placeholder
+    // afterwards. The file was rejectable from its extension before any of it.
+    //
+    // is_image_ext is the SAME test the folder scan uses to decide what belongs
+    // in a playlist, so this cannot refuse a file that browsing would have shown.
+    // The remote `open` verb already checks it; this was the caller that did not.
+    //
+    // A file with no extension is refused too, deliberately: the scan does not
+    // put extensionless files in playlists either, so accepting one here would
+    // create an image the rest of the app cannot navigate to.
+    if (!is_image_ext(filePath.extension().wstring())) {
+        // THE PLACEHOLDER SCREEN, not a message that fades.
+        //
+        // Unsupported already exists and already means exactly this — AppState
+        // documents its path as "the file itself ... a click opens its folder" —
+        // and a damaged .jpg reaches it from the decoder side already
+        // (WM_QIV_DECODE_DONE). Answering a dropped .txt with a three-second
+        // toast instead would have been a second, weaker vocabulary for the same
+        // event, and the toast can be missed entirely by anyone who looked away.
+        //
+        // The active image is dropped first, or the placeholder would draw on top
+        // of the picture that is still on screen and the refusal would read as a
+        // rendering glitch.
+        //
+        // THE PLAYLIST IS LEFT ALONE. A refusal must not cost the user the browse
+        // they were in the middle of — press an arrow key and the pictures are
+        // still there. That is also the difference between this and the decoder's
+        // route to the same screen, where the file really is the current one.
+        if (app.renderer) app.renderer->ClearActiveImage();
+        SetFolderOverlay(hWnd, AppState::FolderOverlayState::Unsupported,
+                         filePath.wstring());
+        InvalidateRect(hWnd, nullptr, FALSE);
+        return false;
     }
     // Same reason as OpenDirectory: canonical() would rewrite a path that arrived
     // through a junction into the target's spelling, and the folder recorded in
@@ -1576,7 +1883,7 @@ void OpenSpecificImage(HWND hWnd, const std::wstring &filePathStr) {
     {
         std::error_code ec;
         filePath = fs::absolute(filePath, ec).lexically_normal();
-        if (ec) return;
+        if (ec) return false;
     }
 
     if (!app.playlist.empty()) {

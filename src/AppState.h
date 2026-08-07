@@ -156,6 +156,8 @@ struct AppState {
     bool rememberWindowPosition = Constants::IS_REMEMBER_WINDOW_POSITION;
     bool historyFullModeEnabled  = Constants::History::HISTORY_SHOW_FULL_HISTORY;
     bool openDirWndOnStart       = Constants::IS_OPEN_DIRWND_ON_START;
+    // Alt+Left / Alt+Right: roll past the last sibling back to the first.
+    bool folderWalkWrap          = Constants::IS_FOLDER_WALK_WRAP;
     bool overlayShowBackground   = Constants::Overlay::IS_OVERLAY_SHOW_BACKGROUND;
     // Overlay layout mode (0 grid / 1 stacked / 2 summary) and the per-slot
     // visibility + compact bitmasks, one bit per OverlayManager::Slot.

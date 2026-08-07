@@ -359,7 +359,9 @@ through the setup.
 | `Insert` / `Delete` | Next / previous **favourite** folder — walks only the starred rows |
 | Horizontal Wheel | Cycle through navigation history folders (one change per 3 notches) — unlike the four keys above, this walks **every** row, starred or not |
 | `F2` | Open-file dialog |
-| Drag & Drop | Drop a file or folder onto the window |
+| `Alt+Up` / `Alt+Down` | Walk the folder **tree** — parent folder (same key as Explorer) / into the first subfolder. Reaches folders you have never opened, unlike the history keys below |
+| `Alt+Left` / `Alt+Right` | Previous / next **sibling** folder, in Explorer's own name order. Each landing shows the folder and its position (`3/12`). Wraps from last back to first by default — turn it off with **Settings › Folder Walk Wraps Around** |
+| Drag & Drop | Drop a file or folder onto the window. Dropping several opens the first — pictures dropped together from one folder are all in the playlist already, and anything that cannot come along is reported rather than ignored silently |
 
 </details>
 
@@ -681,6 +683,7 @@ All toggles save immediately and are reflected live.
 | History: Open Full List | Tab opens the full uncapped history view when enabled |
 | Info Overlays | Show / hide all nine overlay text slots |
 | Open Thumbnail Strip on Start | Auto-open the directory strip on every launch |
+| Folder Walk Wraps Around | Whether `Alt+Left` / `Alt+Right` roll from the last sibling folder back to the first. On by default; off stops at each end and says so |
 | Overlay Background | Semi-transparent background panel behind overlay text |
 | Swap Mouse Buttons | Exchange left/right button roles: hold-to-zoom ↔ drag-to-move-window |
 | Invert Scroll Direction | Reverse vertical wheel for image navigation |

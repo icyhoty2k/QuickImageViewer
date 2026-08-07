@@ -128,8 +128,21 @@ Command InputManager::ResolveKeyboardKeys(UINT key, LPARAM lParam) {
     // -------------------------------------------------------------------------
     switch (key) {
         // --- Navigation ---
-        case Shortcuts::SC_NAV_NEXT: return Command::NextImage;
-        case Shortcuts::SC_NAV_PREV: return Command::PrevImage;
+        // The four arrows carry the FOLDER-TREE walk under Alt, and the image
+        // walk without it. Alt+Up is Explorer's own "up one level", so the pair
+        // people already have in their fingers is the pair that works here.
+        case Shortcuts::SC_NAV_NEXT:
+            if (alt && !ctrl && !shift) return Command::FolderNextSibling;
+            return Command::NextImage;
+        case Shortcuts::SC_NAV_PREV:
+            if (alt && !ctrl && !shift) return Command::FolderPrevSibling;
+            return Command::PrevImage;
+        case Shortcuts::SC_NAV_FOLDER_UP:
+            if (alt && !ctrl && !shift) return Command::FolderUp;
+            break;
+        case Shortcuts::SC_NAV_FOLDER_DOWN:
+            if (alt && !ctrl && !shift) return Command::FolderDown;
+            break;
         //smart jump to first or last image depending which is further
         case Shortcuts::SC_NAV_TOGGLE_FIRST_LAST_IMAGE_IN_CURR_FOLDER:
             return shift ? Command::GoToLastImageInCurrentFolder : Command::ToggleFirstLastImageInCurrentFolder;

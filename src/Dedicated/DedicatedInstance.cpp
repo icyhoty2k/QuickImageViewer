@@ -17,6 +17,7 @@
 #include "../../resources/resource.h"    // IDI_APP_ICON / IDI_APP_ICON_DEDICATED
 #include <functional>
 #include <algorithm>
+#include <climits>   // INT_MAX — the interval overflow guard
 #include <shlobj.h>
 #include <shobjidl.h>
 
@@ -313,8 +314,14 @@ void WriteConfigTo(const std::wstring &ini, const InstanceConfig &cfg) {
     PutInt(ini, SEC_SETTINGS, R::SLIDESHOW_TRANSITION,   cfg.transitionType);
     PutInt(ini, SEC_SETTINGS, R::SLIDESHOW_TRANS_SOURCE, cfg.transitionSource);
     PutInt(ini, SEC_SETTINGS, R::SLIDESHOW_TRANS_ORDER,  cfg.transitionOrder);
-    if (cfg.intervalSeconds > 0)
-        PutInt(ini, SEC_SETTINGS, R::SLIDESHOW_INTERVAL_MS, cfg.intervalSeconds * 1000);
+    // In long long: intervalSeconds is read back from a hand-editable INI, and
+    // `* 1000` in int is signed overflow from 2147484 up. An unusable value
+    // writes nothing, leaving the generated instance on its default interval.
+    if (cfg.intervalSeconds > 0) {
+        const long long ms = static_cast<long long>(cfg.intervalSeconds) * 1000LL;
+        if (ms <= INT_MAX)
+            PutInt(ini, SEC_SETTINGS, R::SLIDESHOW_INTERVAL_MS, static_cast<int>(ms));
+    }
 
     PutInt(ini, SEC_SETTINGS, R::VIEW_MODE,        cfg.viewMode);
     PutInt(ini, SEC_SETTINGS, R::BASE_WIDTH_KEY,   cfg.baseWidth);
