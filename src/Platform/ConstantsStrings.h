@@ -190,10 +190,35 @@ namespace Constants::Messages {
     // way the step went, which the folder name alone cannot. Landing on "2026"
     // reads very differently depending on whether you went up into it or across
     // to it. Icon then two spaces, matching EMPTY_DIR_MISSING above.
-    constexpr const wchar_t *FOLDER_WALK_UP      = L"⬆  ";   // + folder name
-    constexpr const wchar_t *FOLDER_WALK_DOWN    = L"⬇  ";
-    constexpr const wchar_t *FOLDER_WALK_PREV    = L"⬅  ";
-    constexpr const wchar_t *FOLDER_WALK_NEXT    = L"➡  ";
+    // THE BORDERED RECTANGLE COMES FROM SEGOE UI EMOJI, and from nothing else.
+    // Rendering all four codepoints across the candidate faces settles it:
+    //
+    //   Segoe UI Emoji    ⬆ ⬇ ⬅ ➡   all four, arrow inside a rounded border
+    //   Segoe UI Symbol   ⬆ ⬇ ⬅ ➡   all four, plain arrows, no border
+    //   Segoe UI          ⬆ ⬇ ⬅ ➡   all four, plain arrows, no border
+    //
+    // So the odd one out was never the glyph — it was the FONT FALLBACK. A bare
+    // U+27A1 happens to reach Segoe UI Emoji, while bare U+2B05-2B07 land in
+    // Segoe UI, which is why one arrow had a border and three did not.
+    //
+    // U+FE0F on every one asks for the emoji form explicitly, so all four resolve
+    // to the same face and get the same border. It is on the right arrow too:
+    // that is the presentation it was already getting by luck, and pinning it
+    // means a font-fallback change on some other machine cannot silently take the
+    // border away again.
+    //
+    // THIS MUST STAY PAIRED WITH D2D1_DRAW_TEXT_OPTIONS_NONE at the centre-message
+    // draw call. The outline form is what carries the border and takes the
+    // message brush; ENABLE_COLOR_FONT swaps it for a flat filled blue tile and
+    // loses both. See OverlayManager's centre-slot branch.
+    //
+    // Written as escapes rather than pasted glyphs: a variation selector is
+    // invisible in an editor, and one stripped by a save or a merge would bring
+    // the mismatch back with nothing in the diff to explain it.
+    constexpr const wchar_t *FOLDER_WALK_UP      = L"\x2B06\xFE0F  ";   // ⬆ + folder name
+    constexpr const wchar_t *FOLDER_WALK_DOWN    = L"\x2B07\xFE0F  ";   // ⬇
+    constexpr const wchar_t *FOLDER_WALK_PREV    = L"\x2B05\xFE0F  ";   // ⬅
+    constexpr const wchar_t *FOLDER_WALK_NEXT    = L"\x27A1\xFE0F  ";   // ➡
 
     // The wrap setting being toggled from the tray.
     constexpr const wchar_t *FOLDER_WALK_WRAP_ON  = L"Folder walk wraps around" STR_STATE_ON;
@@ -202,7 +227,12 @@ namespace Constants::Messages {
     constexpr const wchar_t *FOLDER_WALK_NOWHERE    = L"No folder open to walk from";
     constexpr const wchar_t *FOLDER_WALK_NO_PARENT  = L"Already at the top — no parent folder";
     constexpr const wchar_t *FOLDER_WALK_NO_CHILD   = L"No subfolders here";
-    constexpr const wchar_t *FOLDER_WALK_NO_SIBLING = L"Cannot step sideways from here";
+    // TWO DISTINCT FAILURES, two distinct texts. They shared one message and it
+    // cost a debugging round: "cannot step sideways" is true of both "the parent
+    // holds no subfolders" and "this folder is not among the ones it holds", and
+    // those have nothing to do with each other.
+    constexpr const wchar_t *FOLDER_WALK_PARENT_EMPTY = L"The parent folder has no subfolders to step through";
+    constexpr const wchar_t *FOLDER_WALK_NOT_A_CHILD  = L"This folder was not found among its parent's subfolders";
     constexpr const wchar_t *FOLDER_WALK_AT_END     = L"No further folder in that direction";
 
     // A file this app has no decoder for. Named with its extension, because

@@ -621,6 +621,41 @@ beside the file name).
 
 </details>
 
+<a id="theming"></a>
+<details>
+<summary><b>Theming — a dial, not a switch</b> <sub>5</sub></summary>
+
+Most viewers give you dark **or** light. qIV gives you every point between them, live.
+
+`Ctrl+Alt+Num +` and `Ctrl+Alt+Num -` move a single value — the **theme factor** — from `0.0` to `1.0` in steps of `0.05`, so there are **21 stops** from full dark to full light. Every panel, scrollbar, overlay and window background re-tints as you press, with no restart and no reload.
+
+It is one formula, applied to every colour channel independently:
+
+```
+Final = Base + factor × (1 − 2 × Base)
+```
+
+That has three consequences worth knowing:
+
+- **At `0.0` the maths cancels out exactly.** The dark theme is not an approximation of a neutral one — every colour is bit-for-bit its designed value.
+- **At `1.0` each channel inverts**, giving a true light theme.
+- **Hue survives the journey.** Because red, green and blue invert independently rather than through a lightness curve, a coloured element — the yellow shortcut column, the blue links, the red "directory missing" heading — stays recognisably itself at every stop instead of washing out to grey. Alpha is never themed, so nothing changes opacity as you move the dial.
+
+**Windows follows along.** Crossing the `0.5` midpoint flips the app between dark and light mode, which repaints the DWM title bars of the main window and every floating panel to match — so the frame never disagrees with the contents.
+
+**It persists as a whole percent** (`qivThemeFactor`, `0`–`100`) because the registry stores DWORDs, and it is clamped to `0.0`–`1.0` at both ends — the runtime setter and the registry load — so a hand-edited or corrupt value cannot reach the renderer.
+
+Two neighbouring controls change the window's *material* rather than its colour, and both are Windows 11 22H2+ (silently ignored on older builds):
+
+| Shortcut | Action |
+|:---|:---|
+| `Ctrl+Alt+Num +` / `Ctrl+Alt+Num -` | Step the theme factor lighter / darker — 0.05 per press |
+| `Ctrl+Alt+Num 0` | Reset the theme factor to the compiled default |
+| `Ctrl+Shift+Num *` | Window corners: rounded ↔ square |
+| `Ctrl+Shift+Num /` | Backdrop material: None → Mica → Acrylic → MicaAlt |
+
+</details>
+
 <a id="mouse-shortcuts"></a>
 <details>
 <summary><b>Mouse Shortcuts</b> <sub>13</sub></summary>

@@ -484,18 +484,30 @@ void InputManager::ExecuteCommand(HWND hWnd, Command cmd) {
         // Each does one directory enumeration and opens a folder; they run only
         // here, on the keypress, and touch nothing on the render or decode path.
         // Every refusal reports itself inside these calls.
+        //
+        // The arrival is logged before the work. "I pressed the key and nothing
+        // happened at all" has two completely different causes — the keystroke
+        // never became a command, or it did and the walk declined — and from
+        // outside they look identical. One line here tells the two apart without
+        // another round of guessing.
         case Command::FolderUp:
-            (void) OpenParentFolder(hWnd);
-            break;
         case Command::FolderDown:
-            (void) OpenSubFolder(hWnd);
-            break;
         case Command::FolderPrevSibling:
-            (void) OpenSiblingFolder(hWnd, -1);
+        case Command::FolderNextSibling: {
+            if (AppLog::IsEnabled()) {
+                const wchar_t *which =
+                    cmd == Command::FolderUp          ? L"up" :
+                    cmd == Command::FolderDown        ? L"down" :
+                    cmd == Command::FolderPrevSibling ? L"previous sibling" : L"next sibling";
+                AppLog::Info(AppLog::COMP_DISPLAY,
+                             std::wstring(L"folder walk requested: ") + which);
+            }
+            if      (cmd == Command::FolderUp)          (void) OpenParentFolder(hWnd);
+            else if (cmd == Command::FolderDown)        (void) OpenSubFolder(hWnd);
+            else if (cmd == Command::FolderPrevSibling) (void) OpenSiblingFolder(hWnd, -1);
+            else                                        (void) OpenSiblingFolder(hWnd, +1);
             break;
-        case Command::FolderNextSibling:
-            (void) OpenSiblingFolder(hWnd, +1);
-            break;
+        }
 
         // -----------------------------------------------------------------------
         // View modes

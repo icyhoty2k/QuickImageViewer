@@ -1154,6 +1154,17 @@ void OverlayManager::RenderAll(ID2D1DeviceContext *ctx) const {
                             Constants::Overlay::MSG_CENTER_COLOR_A));
                 }
             }
+            // DELIBERATELY *NOT* ENABLE_COLOR_FONT, unlike the outer slots below.
+            //
+            // The monochrome form is the one that belongs here. Segoe UI Emoji
+            // draws the direction arrows as an arrow inside a rounded rectangle
+            // when asked for outlines, and that glyph takes the centre message's
+            // own brush — so it inherits the message colour and the error and
+            // warning tints along with it. Switching this to colour fonts once,
+            // to "improve" the arrows, replaced that with the flat filled emoji
+            // square and lost both the shape and the tinting. The outer slots
+            // want colour because the server dot is meaningless without it; the
+            // centre message wants ink it can dye.
             ctx->DrawTextLayout(
                     D2D1::Point2F(slotRect.left, slotRect.top),
                     layout,

@@ -337,6 +337,47 @@ def kbdify(label):
     return '<kbd>%s</kbd>' % esc(label)
 
 
+# One per section title, because the app's own section glyphs are Segoe MDL2 and
+# the site vendors no icon font — an MDL2 codepoint renders as a box anywhere but
+# Windows. Emoji is what the rest of the site already uses (⚠, 🔒, 🖥).
+SECTION_ICONS = {
+    'IMAGE NAVIGATION': '\U0001F9ED', 'ZOOM, PAN & VIEW MODES': '\U0001F50D',
+    'MOUSE CONTROLS': '\U0001F5B1', 'WINDOW MANAGEMENT': '\U0001FA9F',
+    'PANELS & TOOLS': '\U0001F9F0', 'THUMBNAIL STRIPS': '\U0001F5BC',
+    'HISTORY PANEL': '\U0001F4DC', 'SLIDESHOW': '▶',
+    'INFO OVERLAYS': 'ℹ', 'EFFECTS & COLOR': '\U0001F3A8',
+    'FILES, CLIPBOARD & SORTING': '\U0001F4BE', 'APPLICATION & APPEARANCE': '⚙',
+    'SYSTEM TRAY': '\U0001F514', 'DEDICATED SCREENS': '\U0001F5A5',
+    'COMMAND-LINE ARGUMENTS': '⌨', 'REMOTE CONTROL & MIRRORING': '\U0001F4E1',
+}
+
+# A row is one to three lines. Past this it is cut and the rest moves to "In depth".
+ROW_MAX_CHARS = 200
+
+
+def helpwnd_paragraphs(desc):
+    r"""Split a HelpWnd description into paragraphs.
+
+    HelpWnd writes its paragraph breaks as the C++ escape \r\n INSIDE a wide
+    string literal, so the parser hands them over as four literal characters —
+    backslash, r, backslash, n — not as a newline. esc() only escapes HTML, so
+    they used to travel all the way onto the published page and render as the
+    text "\r\n"; there were fourteen of them live before this split existed.
+    """
+    return [p.strip() for p in re.split(r'\\r\\n|\r\n', desc) if p.strip()]
+
+
+def shorten_for_row(text, limit=ROW_MAX_CHARS):
+    """Trim to a sentence boundary. Returns (text, was_cut)."""
+    if len(text) <= limit:
+        return text, False
+    cut = text[:limit]
+    dot = max(cut.rfind('. '), cut.rfind(' — '))
+    if dot > 80:
+        return cut[:dot + 1], True
+    return cut.rsplit(' ', 1)[0] + '…', True
+
+
 def build_shortcuts_page():
     data, unresolved = parse_helpwnd()
     total = sum(len(r) for _, r in data)
@@ -352,29 +393,73 @@ def build_shortcuts_page():
     body.append('<!-- SHARED-STOREROW-START -->')
     body.append('<!-- SHARED-STOREROW-END -->')
     body.append('')
-    # ONE COLLAPSED DRAWER PER SECTION, which is the same <details> the FAQ on
-    # index.html uses — the site's own idiom rather than a new one.
+    body.append('    <input class="sc-filter" id="sc-filter" type="search"'
+                ' placeholder="Filter shortcuts — try &quot;folder&quot;,'
+                ' &quot;alt&quot;, &quot;wheel&quot; or a section name"'
+                ' autocomplete="off">')
+    body.append('    <p class="sc-status" id="sc-status"></p>')
+    body.append('')
+
+    # EVERY SECTION VISIBLE, two dense columns inside each.
     #
-    # 207 rows laid flat is a wall nobody reads and a page nobody scrolls to the
-    # end of. Collapsed, the whole reference is sixteen lines: you see the shape
-    # of what the app can do, and open only the part you came for. The first
-    # section is open so the page does not look empty on arrival.
-    for i, (title, entries) in enumerate(data):
-        body.append('    <details class="shortcut-section"%s>'
-                    % (' open' if i == 0 else ''))
-        body.append('        <summary>%s <span class="count">%d</span></summary>'
-                    % (esc(title.title()), len(entries)))
-        body.append('        <div class="tablewrap">')
-        body.append('            <table>')
-        body.append('                <thead><tr><th>Keys</th><th>Action</th></tr></thead>')
-        body.append('                <tbody>')
+    # This replaced one collapsed <details> per section. Collapsed drawers keep
+    # the page short, but they hide the reference behind a click each and a
+    # visitor cannot scan or Ctrl+F what is not in the DOM. Laid flat in two
+    # columns the whole thing is a few screens, and the filter box above finds
+    # any one of 209 in a keystroke.
+    #
+    # AND THE ROWS STAY SHORT. Only the first paragraph goes in the row, capped
+    # at ROW_MAX_CHARS; anything longer moves to "In depth" below and the row
+    # links to it. Some descriptions run past three thousand characters — F9 and
+    # Ctrl+F12 are essays — and printed in full they turned one section into a
+    # wall that dwarfed the other fifteen. The full text is still on the page,
+    # still searchable, just not in the way of the list.
+    deep = []
+    seen_ids = {}
+    for title, entries in data:
+        rows = []
         for keys, desc in entries:
-            body.append('                <tr><td>%s</td><td>%s</td></tr>'
-                        % (kbdify(keys), esc(desc)))
-        body.append('                </tbody>')
-        body.append('            </table>')
+            paragraphs = helpwnd_paragraphs(desc)
+            head = paragraphs[0] if paragraphs else ''
+            short, was_cut = shorten_for_row(head)
+            link = ''
+            if was_cut or len(paragraphs) > 1:
+                base = re.sub(r'[^a-z0-9]+', '-',
+                              (title + '-' + keys).lower()).strip('-')[:60]
+                seen_ids[base] = seen_ids.get(base, 0) + 1
+                anchor = base if seen_ids[base] == 1 else '%s-%d' % (base, seen_ids[base])
+                link = ' <a class="sc-more" href="#%s">details</a>' % anchor
+                deep.append(
+                    '    <article class="sc-deep" id="%s">\n'
+                    '        <h3>%s<span class="sc-deep-sec">%s</span></h3>\n%s\n'
+                    '    </article>'
+                    % (anchor, kbdify(keys), esc(title.title()),
+                       '\n'.join('        <p>%s</p>' % esc(p) for p in paragraphs)))
+            rows.append('            <div class="sc-row"><div class="sc-keys">%s</div>'
+                        '<p class="sc-desc">%s%s</p></div>'
+                        % (kbdify(keys), esc(short), link))
+
+        body.append('    <section class="sc-sec" data-title="%s">' % esc(title.title()))
+        body.append('        <h2><span class="sc-ico">%s</span>%s'
+                    '<span class="sc-count">%d</span></h2>'
+                    % (SECTION_ICONS.get(title, '⌨'), esc(title.title()), len(entries)))
+        body.append('        <div class="sc-cols">')
+        body.extend(rows)
         body.append('        </div>')
-        body.append('    </details>')
+        body.append('    </section>')
+
+    if deep:
+        body.append('')
+        body.append('    <h2 class="sc-deep-head">In depth</h2>')
+        body.append('    <p class="sc-deep-intro">The %d shortcuts above whose '
+                    'behaviour needs more than a line. Every one is linked from '
+                    'its row.</p>' % len(deep))
+        body.extend(deep)
+
+    body.append('')
+    body.append('<!-- SHARED-EXAMPLES-START -->')
+    body.append('<!-- SHARED-EXAMPLES-END -->')
+
     inner = '\n'.join(body)
 
     page = '''<!DOCTYPE html>
@@ -419,6 +504,37 @@ def build_shortcuts_page():
 
 <!-- SHARED-FOOTER-START -->
 <!-- SHARED-FOOTER-END -->
+
+<script>
+// Filters rows in place. Vendored, like everything else on this site — no
+// library, and it degrades to a plain full list if scripting is off, which is
+// why the filter box is the only thing that would be missing rather than the
+// reference itself.
+(function () {
+    var f = document.getElementById('sc-filter'),
+        s = document.getElementById('sc-status');
+    if (!f) return;
+    var secs = [].slice.call(document.querySelectorAll('.sc-sec'));
+    secs.forEach(function (c) { c._rows = [].slice.call(c.querySelectorAll('.sc-row')); });
+    f.addEventListener('input', function () {
+        var q = f.value.trim().toLowerCase(), hits = 0;
+        secs.forEach(function (c) {
+            // A section-name match keeps the whole section, so "tray" answers
+            // "show me the tray" rather than only rows containing the word.
+            var whole = q && c.dataset.title.toLowerCase().indexOf(q) > -1, vis = 0;
+            c._rows.forEach(function (r) {
+                var m = !q || whole || r.textContent.toLowerCase().indexOf(q) > -1;
+                r.classList.toggle('sc-hidden', !m);
+                if (m) vis++;
+            });
+            c.classList.toggle('sc-hidden', vis === 0);
+            hits += vis;
+        });
+        s.textContent = q ? (hits + ' shortcut' + (hits === 1 ? '' : 's') +
+                             ' match "' + f.value.trim() + '"') : '';
+    });
+})();
+</script>
 
 </body>
 </html>

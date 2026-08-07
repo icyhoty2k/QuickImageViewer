@@ -74,6 +74,8 @@ class TextOverlay {
             if (FAILED(hr))
                 return nullptr;
 
+            ForceEmojiFaceOnIcons();
+
             m_layout->GetMetrics(&m_cachedMetrics);
             m_layoutDirty = false;
             return m_layout.Get();
@@ -83,6 +85,41 @@ class TextOverlay {
         // Valid only after a successful GetLayout call.
         [[nodiscard]]
         const DWRITE_TEXT_METRICS &GetCachedMetrics() const { return m_cachedMetrics; }
+
+        // Pin every emoji-marked run to the emoji face.
+        //
+        // WHY IT IS NEEDED. DirectWrite falls back to another font only for a
+        // character the base font DOES NOT HAVE. Segoe UI carries U+2B05/2B06/2B07,
+        // so the up, down and left arrows were drawn from it as plain arrows, while
+        // U+27A1 — which it lacks — fell through to Segoe UI Emoji and came out as
+        // an arrow inside a rounded rectangle. One boxed arrow and three bare ones
+        // from a single string, and U+FE0F could not fix it on its own because no
+        // fallback is consulted in the first place. Naming the family for the run
+        // is what settles it.
+        //
+        // SCOPE IS FOUR CODEPOINTS, deliberately, and it must stay that way.
+        //
+        // Only the direction arrows are broken; every other icon in the app already
+        // renders the way it is wanted. A general rule — "pin anything carrying
+        // U+FE0F", or every surrogate pair — would sweep in ▶️ ℹ️ ⚙️ ⌨️ 🖱️ and the
+        // supplementary-plane set as well, and any of those that DirectWrite is
+        // currently drawing from the UI face would change appearance. Fixing four
+        // arrows is not worth restyling icons nobody complained about, so this
+        // touches the four and nothing else.
+        //
+        // Runs on layout REBUILD only — once per message, not once per frame.
+        void ForceEmojiFaceOnIcons() {
+            if (!m_layout || text.empty()) return;
+
+            const wchar_t c = text[0];
+            if (c != 0x2B05 && c != 0x2B06 && c != 0x2B07 && c != 0x27A1)
+                return;   // every other message, and every other icon, untouched
+
+            // The arrow plus its variation selector when one follows.
+            const UINT32 len = (text.length() > 1 && text[1] == 0xFE0F) ? 2u : 1u;
+            (void) m_layout->SetFontFamilyName(L"Segoe UI Emoji",
+                                               DWRITE_TEXT_RANGE{0, len});
+        }
 
         // Call when the D2D/DWrite device is lost — layouts hold device resources.
         void InvalidateLayout() {
