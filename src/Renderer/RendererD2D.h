@@ -236,6 +236,30 @@ class RendererD2D final : public IImageRenderer {
         std::unordered_set<std::wstring> m_bitmapInFlight;
         std::mutex m_cacheMutex;
 
+        // Evict LRU entries until there is room for ONE more, then return.
+        // The CALLER MUST HOLD m_cacheMutex and is about to push_front.
+        //
+        // This was open-coded at four insert sites as
+        //   if (m_lruList.size() >= vramCacheCount) { erase(back()); pop_back(); }
+        // which had two faults. vramCacheCount is floored at 0 by both setters,
+        // so `size() >= 0` was always true and back() ran on an EMPTY list — a
+        // crash the moment an image is opened with the cache set to 0. And a lone
+        // `if` evicts only one per insert, so lowering the limit from 900 to 10
+        // at runtime left the cache oversized, shrinking one entry per image
+        // instead of at once. One while-loop fixes both, and having one copy
+        // means the next change cannot land in three places and miss the fourth.
+        //
+        // The effective floor is 1, not 0: the caller unconditionally pushes one
+        // entry after this, so a true 0 is not reachable from here without moving
+        // the push too. Bounding at 1 keeps the degenerate "cache 0" setting to a
+        // single resident bitmap rather than letting the list grow without limit,
+        // which a plain `>= 0` loop would do.
+        //
+        // Defined in the .cpp, NOT inline: it reads app.vramCacheCount, and this
+        // header deliberately does not include AppState.h (see the note by
+        // m_lastFolderOverlayState for why). The .cpp already has it.
+        void EvictCacheToMakeRoom();
+
         // Animated GIF runtime state (active image only)
         std::vector<Microsoft::WRL::ComPtr<ID2D1Bitmap1>> m_gifFrames;
         std::vector<int> m_gifDelays;
@@ -350,6 +374,13 @@ class RendererD2D final : public IImageRenderer {
         // every one of those translation units to store four bits of cache key.
         // -1 is "nothing cached yet"; it matches no enumerator.
         int                                           m_lastFolderOverlayState   = -1;
+        // THE THIRD CACHE INPUT, and the one that was missing. The text format is
+        // built at MSG_CENTER_FONT_SIZE * app.dpiScale and the version line is
+        // sized the same way, so a move to a monitor at a different scaling
+        // changes what this placeholder should look like — while neither the
+        // state nor the path has changed, which is all the key used to compare.
+        // 0 never matches a real scale, so the first frame always builds.
+        float                                         m_lastFolderOverlayDpi     = 0.0f;
         bool                                          m_lastFolderOverlayValid   = false;
 
         // SVG: active D2D SVG document (legacy path, never set by resvg;

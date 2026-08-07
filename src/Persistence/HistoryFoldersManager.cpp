@@ -152,10 +152,17 @@ namespace HistoryPath {
 
 // Returns (creating if needed) the QivBackup folder next to the executable.
 static fs::path GetBackupDir() {
+    // fs::current_path() THROWS, and this is reached from the history thread as
+    // well as the UI one — an exception leaving a std::thread's function is
+    // std::terminate, with no dump and no message. The empty fallback lands the
+    // backup next to the working directory, which is where the throwing version
+    // was aiming anyway.
+    std::error_code cwdEc;
     std::wstring exePath = Persistence::Registry::GetExePathW();
     fs::path exeDir = exePath.empty()
-                          ? fs::current_path()
+                          ? fs::current_path(cwdEc)
                           : fs::path(exePath).parent_path();
+    if (cwdEc) exeDir.clear();
 
     // Strip leading slash from the constant (it is stored as L"/QivBackup")
     std::wstring folderName = Constants::History::HISTORY_FAVORITES_BACKUP_FOLDER;
@@ -163,8 +170,9 @@ static fs::path GetBackupDir() {
         folderName = folderName.substr(1);
 
     fs::path backupDir = exeDir / folderName;
-    if (!fs::exists(backupDir))
-        fs::create_directories(backupDir);
+    std::error_code ec;
+    if (!fs::exists(backupDir, ec))
+        fs::create_directories(backupDir, ec);
 
     return backupDir;
 }
@@ -246,8 +254,13 @@ std::wstring HistoryFoldersManager::GetFilePath() const {
 
     if (!historyFolderName.empty()) {
         appDir /= historyFolderName;
-        if (!fs::exists(appDir))
-            fs::create_directories(appDir);
+        // Non-throwing: this is called from the history thread at startup, and
+        // an exception out of a std::thread's function is std::terminate. If the
+        // directory cannot be made, the path is still returned and the open that
+        // follows fails the ordinary way, with a message.
+        std::error_code ec;
+        if (!fs::exists(appDir, ec))
+            fs::create_directories(appDir, ec);
     }
 
     return (appDir / name).wstring();
@@ -266,8 +279,10 @@ std::wstring HistoryFoldersManager::GetFavoritesFilePath() const {
 
     if (!historyFolderName.empty()) {
         appDir /= historyFolderName;
-        if (!fs::exists(appDir))
-            fs::create_directories(appDir);
+        // Same reason as GetFilePath above.
+        std::error_code ec;
+        if (!fs::exists(appDir, ec))
+            fs::create_directories(appDir, ec);
     }
 
     return (appDir / name).wstring();

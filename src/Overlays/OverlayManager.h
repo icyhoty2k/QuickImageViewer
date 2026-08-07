@@ -267,8 +267,10 @@ class OverlayManager {
         float m_rtW = 0.0f;
         float m_rtH = 0.0f;
 
-        // Center-message timer state
-        static constexpr UINT_PTR TIMER_CENTER_MSG = 1002;
+        // Center-message timer state.
+        // The VALUE lives in Constants.h with the rest of the main window's timer
+        // map — this is the local name for it, not a second definition of it.
+        static constexpr UINT_PTR TIMER_CENTER_MSG = Constants::CENTER_MSG_TIMER_ID;
         bool m_centerMsgActive = false; // true while the auto-hide timer is running
         MsgSeverity m_centerMsgSeverity = MsgSeverity::Normal; // colour of the live message
 
@@ -277,9 +279,9 @@ class OverlayManager {
         // a change is noticeable on a screen nobody is staring at. The count
         // beside it already says what happened; this is what makes anyone look.
         //
-        // 1010 — 1002 is the centre message, 1003-1006 the slideshow, 1008-1009
-        // the directory watchers. See Constants.h.
-        static constexpr UINT_PTR TIMER_SERVER_BLINK = 1010;
+        // Value from Constants.h, which holds the whole main-window timer map —
+        // the list of who owns which number is there rather than restated here.
+        static constexpr UINT_PTR TIMER_SERVER_BLINK = Constants::SERVER_BLINK_TIMER_ID;
 
         // Phases remaining, counting down to 0 = not blinking. Two phases make
         // one blink, so this starts at OVERLAY_SERVER_BLINK_COUNT * 2 and the

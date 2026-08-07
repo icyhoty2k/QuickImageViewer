@@ -26,6 +26,37 @@
 
 namespace UI {
     // =========================================================================
+    // Footer links. TWO PARALLEL TABLES, indexed together — label[i] opens
+    // url[i]. Adding one means adding the other and bumping
+    // HelpWnd::FOOTER_LINK_COUNT; the static_assert below catches the case
+    // where the tables and the count disagree.
+    //
+    // The privacy policy is here rather than buried in a help entry because it
+    // is the one page a user goes looking for deliberately, and an app that
+    // makes it hard to find reads as one with something to hide. The Android
+    // About screen carries the same two links for the same reason.
+    // =========================================================================
+    namespace {
+        const wchar_t *const kFooterLabel[] = {
+            L"Home page", L"Privacy policy", L"qIV Remote on Google Play", L"Facebook"
+        };
+        const wchar_t *const kFooterUrl[] = {
+            Constants::Links::URL_HOME,
+            Constants::Links::URL_PRIVACY,
+            Constants::Links::URL_ANDROID_APP,
+            Constants::Links::URL_FACEBOOK
+        };
+        const wchar_t *const kFooterSeparator = L"   \x2022   ";
+        const wchar_t *const kFooterSeparatorTight = L" \x2022 ";
+
+        static_assert(sizeof(kFooterLabel) == sizeof(kFooterUrl),
+                      "footer label and URL tables must stay parallel");
+        static_assert(sizeof(kFooterLabel) / sizeof(kFooterLabel[0])
+                      == HelpWnd::FOOTER_LINK_COUNT,
+                      "FOOTER_LINK_COUNT must match the footer tables");
+    }
+
+    // =========================================================================
     // Key-name helpers — every shortcut label is derived from the VK constants
     // in Shortcuts.h. Remap a key there and the help text follows automatically.
     // OEM keys are resolved through MapVirtualKeyW so they always show the
@@ -1732,16 +1763,61 @@ namespace UI {
                 DrawTextW(hdc, copyrightText.c_str(), -1, &copyrightRect,
                           DT_CENTER | DT_TOP | DT_NOPREFIX);
 
-                m_footerLinkRect = {
-                    contentLeft, rc.bottom - MulDiv(18, dpiI, 96),
-                    contentRight, rc.bottom - MulDiv(2, dpiI, 96)
-                };
-                SetTextColor(hdc, Constants::Theme::ThemedColor(
-                                     Constants::Links::COLOR_R_F,
-                                     Constants::Links::COLOR_G_F,
-                                     Constants::Links::COLOR_B_F, app.themeFactor));
-                DrawTextW(hdc, L"Follow on Facebook - Ivan Hristov Yanev", -1,
-                          &m_footerLinkRect, DT_CENTER | DT_TOP | DT_NOPREFIX);
+                // ---- footer links --------------------------------------------
+                // The links on one centred line. Each is measured and drawn
+                // itself so it gets its own hit rect; kFooterUrl is parallel to
+                // kFooterLabel, so a label added in one place needs the URL added
+                // in the other.
+                const COLORREF linkColor = Constants::Theme::ThemedColor(
+                        Constants::Links::COLOR_R_F,
+                        Constants::Links::COLOR_G_F,
+                        Constants::Links::COLOR_B_F, app.themeFactor);
+
+                SIZE labelSize[FOOTER_LINK_COUNT] = {};
+                int labelTotalW = 0;
+                for (int i = 0; i < FOOTER_LINK_COUNT; ++i) {
+                    GetTextExtentPoint32W(hdc, kFooterLabel[i],
+                                          static_cast<int>(wcslen(kFooterLabel[i])),
+                                          &labelSize[i]);
+                    labelTotalW += labelSize[i].cx;
+                }
+
+                // Wide separator first; if the line would not fit the panel, fall
+                // back to the tight one rather than letting the row run off both
+                // edges. A narrow panel is the normal case for this window.
+                const wchar_t *sepText = kFooterSeparator;
+                int sepLen = static_cast<int>(wcslen(sepText));
+                SIZE sepSize = {};
+                GetTextExtentPoint32W(hdc, sepText, sepLen, &sepSize);
+                int linkLineW = labelTotalW + sepSize.cx * (FOOTER_LINK_COUNT - 1);
+
+                if (linkLineW > contentRight - contentLeft) {
+                    sepText = kFooterSeparatorTight;
+                    sepLen = static_cast<int>(wcslen(sepText));
+                    GetTextExtentPoint32W(hdc, sepText, sepLen, &sepSize);
+                    linkLineW = labelTotalW + sepSize.cx * (FOOTER_LINK_COUNT - 1);
+                }
+
+                const int linkTop = rc.bottom - MulDiv(18, dpiI, 96);
+                const int linkBottom = rc.bottom - MulDiv(2, dpiI, 96);
+                int linkX = contentLeft + ((contentRight - contentLeft) - linkLineW) / 2;
+                if (linkX < contentLeft)
+                    linkX = contentLeft;
+
+                for (int i = 0; i < FOOTER_LINK_COUNT; ++i) {
+                    if (i > 0) {
+                        SetTextColor(hdc, subColor);
+                        TextOutW(hdc, linkX, linkTop, sepText, sepLen);
+                        linkX += sepSize.cx;
+                    }
+                    m_footerLinkRects[i] = {
+                        linkX, linkTop, linkX + labelSize[i].cx, linkBottom
+                    };
+                    SetTextColor(hdc, linkColor);
+                    TextOutW(hdc, linkX, linkTop, kFooterLabel[i],
+                             static_cast<int>(wcslen(kFooterLabel[i])));
+                    linkX += labelSize[i].cx;
+                }
 
                 // ---- flip ----------------------------------------------------
                 BitBlt(hdcWin, 0, 0, rc.right, rc.bottom, hdc, 0, 0, SRCCOPY);
@@ -1774,11 +1850,12 @@ namespace UI {
                     return 0;
                 }
 
-                if (pt.x >= m_footerLinkRect.left && pt.x <= m_footerLinkRect.right &&
-                    pt.y >= m_footerLinkRect.top && pt.y <= m_footerLinkRect.bottom) {
-                    ShellExecuteW(nullptr, L"open", L"https://www.facebook.com/IvanHristovYanev",
-                                  nullptr, nullptr, SW_SHOW);
-                    return 0;
+                for (int i = 0; i < FOOTER_LINK_COUNT; ++i) {
+                    if (PtInRect(&m_footerLinkRects[i], pt)) {
+                        ShellExecuteW(nullptr, L"open", kFooterUrl[i],
+                                      nullptr, nullptr, SW_SHOW);
+                        return 0;
+                    }
                 }
 
                 RECT rc;
@@ -1800,12 +1877,15 @@ namespace UI {
                 if (m_filter.RouteMouse(WM_MOUSEMOVE, wParam, lParam, m_hWnd) == InputResult::ConsumedRepaint)
                     InvalidateRect(m_hWnd, nullptr, FALSE);
 
-                if (pt.x >= m_footerLinkRect.left && pt.x <= m_footerLinkRect.right &&
-                    pt.y >= m_footerLinkRect.top && pt.y <= m_footerLinkRect.bottom) {
-                    SetCursor(Constants::Cursors::CURR_CLICK);
-                } else {
-                    SetCursor(Constants::Cursors::CURR_DEFAULT);
+                bool overLink = false;
+                for (int i = 0; i < FOOTER_LINK_COUNT; ++i) {
+                    if (PtInRect(&m_footerLinkRects[i], pt)) {
+                        overLink = true;
+                        break;
+                    }
                 }
+                SetCursor(overLink ? Constants::Cursors::CURR_CLICK
+                                   : Constants::Cursors::CURR_DEFAULT);
 
                 // A thumb drag never reaches here — the base holds capture.
                 return 0;

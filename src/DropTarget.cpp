@@ -47,9 +47,12 @@ HRESULT __stdcall DropTarget::Drop(IDataObject* pDataObj, DWORD, POINTL, DWORD* 
             if (DragQueryFileW(hDrop, 0, szFile.data(), needed + 1)) {
                 szFile.resize(needed);
                 // Post asynchronously so the drag animation is released immediately.
-                // WM_QIV_OPEN_FILE handler owns the pointer and deletes it.
-                PostMessageW(m_hWnd, Constants::WM_QIV_OPEN_FILE, 0,
-                             reinterpret_cast<LPARAM>(new std::wstring(std::move(szFile))));
+                // WM_QIV_OPEN_FILE handler owns the pointer and deletes it — but
+                // only if it arrives, so a refused post frees it here.
+                auto *p = new std::wstring(std::move(szFile));
+                if (!PostMessageW(m_hWnd, Constants::WM_QIV_OPEN_FILE, 0,
+                                  reinterpret_cast<LPARAM>(p)))
+                    delete p;
             }
         }
         DragFinish(hDrop);

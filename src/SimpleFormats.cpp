@@ -29,15 +29,30 @@ static std::wstring LowerExt(const std::wstring& path) {
     return e;
 }
 
+// The one place every decoder hands its pixels to WIC — so the arithmetic
+// WIC is given is checked here, once, rather than in seven callers.
+//
+// STRIDE AND BUFFER SIZE ARE UINT PARAMETERS. `w * 4` and `w * h * 4` are
+// computed in UINT too, so a header claiming 65535x65535 (a legal TGA) makes
+// the byte count wrap to a small number: WIC would then accept a stride and a
+// height describing far more memory than the buffer it was handed. Computed in
+// 64-bit and rejected above UINT_MAX instead.
 static ComPtr<IWICBitmap> WrapInWIC(
     IWICImagingFactory* wicFac,
     const BYTE* pixels, UINT w, UINT h,
     UINT& outW, UINT& outH)
 {
+    if (w == 0 || h == 0) return nullptr;
+
+    const uint64_t stride = static_cast<uint64_t>(w) * 4;
+    const uint64_t bytes  = stride * h;
+    if (stride > UINT_MAX || bytes > UINT_MAX) return nullptr;
+
     ComPtr<IWICBitmap> bmp;
     const HRESULT hr = wicFac->CreateBitmapFromMemory(
         w, h, GUID_WICPixelFormat32bppPBGRA,
-        w * 4, w * h * 4, const_cast<BYTE*>(pixels), &bmp);
+        static_cast<UINT>(stride), static_cast<UINT>(bytes),
+        const_cast<BYTE*>(pixels), &bmp);
     if (FAILED(hr)) return nullptr;
     outW = w; outH = h;
     return bmp;
@@ -162,6 +177,21 @@ static ComPtr<IWICBitmap> DecodeTGA(
     if (isTrueColor   && depth!=15&&depth!=16&&depth!=24&&depth!=32) return nullptr;
     if (isGray        && depth!=8)  return nullptr;
     if (isColorMapped && depth!=8&&depth!=16) return nullptr;
+
+    // THE COLOUR MAP'S OWN DEPTH, which nothing checked. readPixel switches on
+    // cmBpp and its final branch reads TWO bytes, so any value that is not 24
+    // or 32 lands there — including 0 and 8, which make cmBytesPerEntry 0 and 1.
+    // With 0 the bounds test below is `0 + 0 > size`, false for an EMPTY map,
+    // and the read walks off a zero-length vector; with 8 it is one byte past
+    // the last entry. Both are decided entirely by bytes 1, 2 and 7 of the file.
+    if (isColorMapped && cmBpp!=15 && cmBpp!=16 && cmBpp!=24 && cmBpp!=32) return nullptr;
+
+    // The same ceiling QOI uses, and for the same reason: w and h are uint16_t,
+    // so an unbounded file may ask for 65535x65535 = 4.29 billion pixels, which
+    // is a 17 GB allocation before a single pixel is decoded. bad_alloc is caught
+    // by the worker pool, but refusing here costs nothing and keeps the failure
+    // where it can be explained.
+    if (static_cast<size_t>(w)*h > 400'000'000u) return nullptr;
 
     size_t pos = 18 + idLen;
 
@@ -348,17 +378,64 @@ static ComPtr<IWICBitmap> DecodeJP2(
     const uint32_t nc = image->numcomps;
 
     if (w==0||h==0||nc==0) { opj_image_destroy(image); return nullptr; }
+    if (static_cast<size_t>(w)*h > 400'000'000u) { opj_image_destroy(image); return nullptr; }
 
-    // Scale any bit depth to 8-bit
-    const int prec   = image->comps[0].prec;
-    const int sgnd   = image->comps[0].sgnd;
-    const int offset = sgnd ? (1 << (prec-1)) : 0;
-    const int maxVal = (1 << prec) - 1;
-    const auto scale8 = [&](OPJ_INT32 v) -> BYTE {
-        v += offset;
-        if (v < 0) v = 0; if (v > maxVal) v = maxVal;
-        return prec==8 ? static_cast<BYTE>(v)
-                       : static_cast<BYTE>((v * 255 + maxVal/2) / maxVal);
+    // EVERY COMPONENT HAS ITS OWN GRID, and this code used to ignore that.
+    //
+    // w and h come from the image's reference grid (x1-x0, y1-y0), but
+    // comps[k].data holds comps[k].w * comps[k].h samples — and for a
+    // chroma-subsampled file, which is what most photographic JPEG 2000 is,
+    // the chroma planes are a QUARTER of that. Indexing all three planes with
+    // the same 0..w*h-1 counter read about four times past the end of two live
+    // heap allocations on an ordinary 4:2:0 .jp2, with no malformed file
+    // involved at all.
+    //
+    // So each component is read through its own dimensions, at its own
+    // sampling factor. A plane smaller than the grid is stretched by repeating
+    // samples — nearest-neighbour, which is what the pixel already was before
+    // subsampling threw the detail away.
+    struct Plane {
+        const OPJ_INT32* data;
+        uint32_t w, h, dx, dy;
+        int      offset, maxVal, prec;
+    };
+
+    // PER COMPONENT, not from comps[0]. The precision and signedness are
+    // per-component fields, and a file whose alpha plane is 1-bit while its
+    // colour is 8-bit would have had the alpha scaled with the wrong maximum.
+    const auto makePlane = [&](uint32_t k, Plane& out) -> bool {
+        const opj_image_comp_t& c = image->comps[k];
+        if (!c.data || c.w == 0 || c.h == 0) return false;
+        // 16 bits, not 31. `1 << (prec-1)` and `v * 255` are int arithmetic, and
+        // both overflow well before the format's theoretical 38-bit ceiling.
+        // Above 16 the honest answer is that this decoder cannot scale it.
+        if (c.prec == 0 || c.prec > 16)      return false;
+        out.data   = c.data;
+        out.w      = c.w;
+        out.h      = c.h;
+        out.dx     = c.dx ? c.dx : 1;
+        out.dy     = c.dy ? c.dy : 1;
+        out.prec   = static_cast<int>(c.prec);
+        out.offset = c.sgnd ? (1 << (out.prec - 1)) : 0;
+        out.maxVal = (1 << out.prec) - 1;
+        return true;
+    };
+
+    // Grid pixel (x,y) → this plane's sample, scaled to 8-bit. The clamp is the
+    // bounds check: ceil rounding means the last column of an odd-width image
+    // can map one sample past the plane, and a file is free to declare a dx
+    // that does not match its plane size at all.
+    const auto sample8 = [](const Plane& p, uint32_t x, uint32_t y) -> BYTE {
+        uint32_t sx = x / p.dx;
+        uint32_t sy = y / p.dy;
+        if (sx >= p.w) sx = p.w - 1;
+        if (sy >= p.h) sy = p.h - 1;
+
+        int v = p.data[static_cast<size_t>(sy) * p.w + sx] + p.offset;
+        if (v < 0)         v = 0;
+        if (v > p.maxVal)  v = p.maxVal;
+        return p.prec == 8 ? static_cast<BYTE>(v)
+                           : static_cast<BYTE>((v * 255 + p.maxVal/2) / p.maxVal);
     };
 
     const size_t pixCount = static_cast<size_t>(w) * h;
@@ -366,27 +443,42 @@ static ComPtr<IWICBitmap> DecodeJP2(
 
     if (nc == 1) {
         // Grayscale
-        const OPJ_INT32* c0 = image->comps[0].data;
-        for (size_t i = 0; i < pixCount; ++i) {
-            const BYTE v = scale8(c0[i]);
-            bgra[i*4+0]=v; bgra[i*4+1]=v; bgra[i*4+2]=v; bgra[i*4+3]=255;
+        Plane p0{};
+        if (!makePlane(0, p0)) { opj_image_destroy(image); return nullptr; }
+
+        size_t i = 0;
+        for (uint32_t y = 0; y < h; ++y) {
+            for (uint32_t x = 0; x < w; ++x, ++i) {
+                const BYTE v = sample8(p0, x, y);
+                bgra[i*4+0]=v; bgra[i*4+1]=v; bgra[i*4+2]=v; bgra[i*4+3]=255;
+            }
         }
     } else if (nc >= 3) {
         // RGB / RGBA — OpenJPEG gives planar R,G,B[,A]
-        const OPJ_INT32* cR = image->comps[0].data;
-        const OPJ_INT32* cG = image->comps[1].data;
-        const OPJ_INT32* cB = image->comps[2].data;
-        const OPJ_INT32* cA = (nc >= 4) ? image->comps[3].data : nullptr;
-        for (size_t i = 0; i < pixCount; ++i) {
-            const BYTE r=scale8(cR[i]), g=scale8(cG[i]), b=scale8(cB[i]);
-            const BYTE a = cA ? scale8(cA[i]) : 255;
-            if      (a==255) { bgra[i*4+0]=b; bgra[i*4+1]=g; bgra[i*4+2]=r; bgra[i*4+3]=255; }
-            else if (a==0)   { bgra[i*4+0]=bgra[i*4+1]=bgra[i*4+2]=bgra[i*4+3]=0; }
-            else {
-                bgra[i*4+0]=(BYTE)((b*a+127)/255);
-                bgra[i*4+1]=(BYTE)((g*a+127)/255);
-                bgra[i*4+2]=(BYTE)((r*a+127)/255);
-                bgra[i*4+3]=a;
+        Plane pR{}, pG{}, pB{}, pA{};
+        if (!makePlane(0, pR) || !makePlane(1, pG) || !makePlane(2, pB)) {
+            opj_image_destroy(image);
+            return nullptr;
+        }
+        // A fourth component that will not validate is treated as no alpha
+        // rather than as a reason to refuse the picture — the colour is intact.
+        const bool hasAlpha = (nc >= 4) && makePlane(3, pA);
+
+        size_t i = 0;
+        for (uint32_t y = 0; y < h; ++y) {
+            for (uint32_t x = 0; x < w; ++x, ++i) {
+                const BYTE r = sample8(pR, x, y);
+                const BYTE g = sample8(pG, x, y);
+                const BYTE b = sample8(pB, x, y);
+                const BYTE a = hasAlpha ? sample8(pA, x, y) : 255;
+                if      (a==255) { bgra[i*4+0]=b; bgra[i*4+1]=g; bgra[i*4+2]=r; bgra[i*4+3]=255; }
+                else if (a==0)   { bgra[i*4+0]=bgra[i*4+1]=bgra[i*4+2]=bgra[i*4+3]=0; }
+                else {
+                    bgra[i*4+0]=(BYTE)((b*a+127)/255);
+                    bgra[i*4+1]=(BYTE)((g*a+127)/255);
+                    bgra[i*4+2]=(BYTE)((r*a+127)/255);
+                    bgra[i*4+3]=a;
+                }
             }
         }
     } else {
@@ -627,6 +719,16 @@ static ComPtr<IWICBitmap> DecodeEXR(
     const char* err = nullptr;
     if (LoadEXRFromMemory(&rgba, &w, &h, data.data(), data.size(), &err) != TINYEXR_SUCCESS) {
         if (err) FreeEXRErrorMessage(err);
+        return nullptr;
+    }
+
+    // tinyexr's own limits are not this app's. w and h are ints it filled in
+    // from the file, and the only thing standing between a hostile header and a
+    // multi-gigabyte allocation here was that tinyexr had already tried a bigger
+    // one. Free what it gave us and refuse, rather than relying on that.
+    if (w <= 0 || h <= 0 ||
+        static_cast<size_t>(w)*h > 400'000'000u) {
+        free(rgba);
         return nullptr;
     }
 

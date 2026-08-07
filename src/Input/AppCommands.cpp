@@ -126,7 +126,9 @@ void AppCommands::SetDesktopWallpaper(HWND hWnd, int position) {
 }
 
 void AppCommands::SaveImageToDisk(HWND hWnd) {
-    if (!app.renderer || app.playlist.empty() || app.currentIndex < 0) return;
+    if (!app.renderer || app.currentIndex < 0 ||
+        app.currentIndex >= static_cast<int>(app.playlist.size()))
+        return;
 
     const std::wstring &srcPath = app.playlist[app.currentIndex];
 
@@ -663,7 +665,9 @@ void AppCommands::toggleSlideshow(HWND hWnd) {
 }
 
 void AppCommands::CopyImageToClipboard(HWND hWnd) {
-    if (app.playlist.empty() || app.currentIndex < 0 || !app.wicFactory) return;
+    if (!app.wicFactory || app.currentIndex < 0 ||
+        app.currentIndex >= static_cast<int>(app.playlist.size()))
+        return;
     const std::wstring &path = app.playlist[app.currentIndex];
 
     DecodedImage img;

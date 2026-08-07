@@ -847,6 +847,18 @@ void RendererD2D::Resize(UINT width, UINT height) {
 }
 
 // =============================================================================
+//  EvictCacheToMakeRoom — caller holds m_cacheMutex, see the header for the
+//  bug this replaced (back() on an empty list when vramCacheCount == 0).
+// =============================================================================
+void RendererD2D::EvictCacheToMakeRoom() {
+    const size_t limit = std::max<size_t>(1, static_cast<size_t>(app.vramCacheCount));
+    while (!m_lruList.empty() && m_lruList.size() >= limit) {
+        m_bitmapCache.erase(m_lruList.back());
+        m_lruList.pop_back();
+    }
+}
+
+// =============================================================================
 //  LoadBitmap
 // =============================================================================
 HRESULT RendererD2D::LoadBitmap(IWICBitmapSource *bitmap, UINT width, UINT height,
@@ -904,10 +916,7 @@ HRESULT RendererD2D::LoadBitmap(IWICBitmapSource *bitmap, UINT width, UINT heigh
                 m_lruList.erase(it->second.lruIt);
                 m_bitmapCache.erase(it);
             }
-            if (m_lruList.size() >= static_cast<size_t>(app.vramCacheCount)) {
-                m_bitmapCache.erase(m_lruList.back());
-                m_lruList.pop_back();
-            }
+            EvictCacheToMakeRoom();
 
             m_lruList.push_front(filePath);
             m_bitmapCache[filePath] = {newBitmap, m_lruList.begin(), width, height};
@@ -1221,7 +1230,7 @@ HRESULT RendererD2D::PreloadBitmap(const std::wstring &filePath, int requestInde
                         std::lock_guard<std::mutex> lock(m_cacheMutex);
                         auto it = m_bitmapCache.find(filePath);
                         if (it != m_bitmapCache.end()) { m_lruList.erase(it->second.lruIt); m_bitmapCache.erase(it); }
-                        if (m_lruList.size() >= static_cast<size_t>(app.vramCacheCount)) { m_bitmapCache.erase(m_lruList.back()); m_lruList.pop_back(); }
+                        EvictCacheToMakeRoom();
                         m_lruList.push_front(filePath);
                         auto &entry = m_bitmapCache[filePath];
                         entry.bitmap      = newBitmap;
@@ -1307,10 +1316,7 @@ HRESULT RendererD2D::PreloadBitmap(const std::wstring &filePath, int requestInde
                     m_lruList.erase(it->second.lruIt);
                     m_bitmapCache.erase(it);
                 }
-                if (m_lruList.size() >= static_cast<size_t>(app.vramCacheCount)) {
-                    m_bitmapCache.erase(m_lruList.back());
-                    m_lruList.pop_back();
-                }
+                EvictCacheToMakeRoom();
                 m_lruList.push_front(filePath);
                 m_bitmapCache[filePath] = {newBitmap, m_lruList.begin(), width, height, orientation};
             }
@@ -1509,6 +1515,20 @@ HRESULT RendererD2D::Render() {
     if (app.folderOverlay != AppState::FolderOverlayState::None
         && m_pFolderDeletedBrush && m_pDWriteFactory) {
 
+        // THE FORMAT CARRIES THE DPI, so it cannot be "cached forever" after all.
+        // It is built at MSG_CENTER_FONT_SIZE * app.dpiScale; dragging the window
+        // to a monitor at a different scaling used to leave the placeholder at
+        // the old physical size for the rest of the session — WM_DPICHANGED
+        // refreshes the overlay manager's format and nothing here, and even a
+        // device loss only drops the layout, never this.
+        //
+        // Checked here rather than from the DPI handler on purpose: this is the
+        // one place that already decides whether the placeholder is out of date,
+        // so the new input hangs off the existing invalidation point instead of
+        // becoming a second call site somebody has to remember.
+        if (m_pFolderOverlayFormat && m_lastFolderOverlayDpi != app.dpiScale)
+            m_pFolderOverlayFormat.Reset();
+
         if (!m_pFolderOverlayFormat) {
             (void) m_pDWriteFactory->CreateTextFormat(
                 Constants::Overlay::MSG_CENTER__FONT_FAMILY_DEFAULT, nullptr,
@@ -1530,6 +1550,7 @@ HRESULT RendererD2D::Render() {
         const int stateNow = static_cast<int>(app.folderOverlay);
         const bool stale = !m_lastFolderOverlayValid ||
                            m_lastFolderOverlayState != stateNow ||
+                           m_lastFolderOverlayDpi != app.dpiScale ||
                            m_lastFolderOverlayPath != FolderOverlayLastLine() ||
                            !m_pFolderDeletedLayout;
 
@@ -1537,6 +1558,7 @@ HRESULT RendererD2D::Render() {
             m_pFolderDeletedLayout.Reset();
             m_lastFolderOverlayPath  = FolderOverlayLastLine();
             m_lastFolderOverlayState = stateNow;
+            m_lastFolderOverlayDpi   = app.dpiScale;
             m_lastFolderOverlayValid = true;
             // Four lines: heading, the folder or file, the constant prompt,
             // then the version — the two middle ones clickable, each followed
@@ -1730,8 +1752,22 @@ HRESULT RendererD2D::DecodeSvgToBitmap(const std::vector<BYTE> &svgBytes,
 
     // Determine raster size (native SVG units, capped at 8192 px)
     resvg_size sz = resvg_get_image_size(tree);
-    uint32_t w = (sz.width  > 0.5f) ? static_cast<uint32_t>(sz.width  + 0.5f) : 1920u;
-    uint32_t h = (sz.height > 0.5f) ? static_cast<uint32_t>(sz.height + 0.5f) : 1080u;
+
+    // CLAMPED BEFORE THE CAST, not after. These floats come out of the file —
+    // `width="1e12"` is a nine-character SVG — and converting a float that does
+    // not fit uint32_t is undefined behaviour, so the kMaxDim step below was
+    // being handed a value the standard says nothing about. 65535 is far above
+    // any raster this produces and safely inside the range, which leaves the
+    // scaling that follows to do its ordinary job.
+    // The `> 0.5f` tests are false for NaN as well as for zero, so a file with
+    // no usable size still falls back to 1920x1080.
+    uint32_t w = 1920u;
+    uint32_t h = 1080u;
+    if (sz.width > 0.5f)
+        w = (sz.width  > 65535.0f) ? 65535u : static_cast<uint32_t>(sz.width  + 0.5f);
+    if (sz.height > 0.5f)
+        h = (sz.height > 65535.0f) ? 65535u : static_cast<uint32_t>(sz.height + 0.5f);
+
     constexpr uint32_t kMaxDim = 8192u;
     if (w > kMaxDim || h > kMaxDim) {
         const float s = std::min(static_cast<float>(kMaxDim) / w,
@@ -1830,10 +1866,7 @@ HRESULT RendererD2D::PreloadSvgFromBytes(std::vector<BYTE> svgBytes,
                     m_lruList.erase(it->second.lruIt);
                     m_bitmapCache.erase(it);
                 }
-                if (m_lruList.size() >= static_cast<size_t>(app.vramCacheCount)) {
-                    m_bitmapCache.erase(m_lruList.back());
-                    m_lruList.pop_back();
-                }
+                EvictCacheToMakeRoom();
                 m_lruList.push_front(filePath);
                 m_bitmapCache[filePath] = {d2dBmp, m_lruList.begin(), w, h};
             }
