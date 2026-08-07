@@ -173,6 +173,14 @@ inline bool WildcardMatch(const wchar_t *pat, const wchar_t *text,
 inline bool FuzzyMatch(const wchar_t *query, int queryLen,
                        const wchar_t *text,  int textLen,
                        FuzzyMatchResult &out) {
+    // An EMPTY QUERY matches everything, and every caller filters it out before
+    // arriving here — which is exactly why the scoring below reads positions[0]
+    // and positions[pi-1] without checking. Stated rather than assumed: with
+    // pi == 0 those are an uninitialised stack read and an index of -1, and the
+    // next caller that forgets the check would inherit that silently.
+    if (queryLen <= 0) return false;
+    if (queryLen > FUZZY_MAX_QUERY) return false;   // positions[] is this long
+
     int positions[FUZZY_MAX_QUERY];
     int ni = 0, qi = 0, pi = 0;
     while (ni < textLen && qi < queryLen) {

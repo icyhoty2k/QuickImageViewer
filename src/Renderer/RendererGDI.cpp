@@ -303,7 +303,11 @@ HRESULT RendererGDI::Render() {
     }
 
     // Overlays text logic remains untouched
-    if (!app.playlist.empty() && app.showOverlayInfoText) {
+    // Bounds, not emptiness. A filled playlist with nothing selected yet is a
+    // real state during the first scan, and currentIndex is -1 there — the same
+    // check every other reader of this pair already makes.
+    if (app.showOverlayInfoText && app.currentIndex >= 0 &&
+        app.currentIndex < static_cast<int>(app.playlist.size())) {
         std::wstring fullPath = app.playlist[app.currentIndex];
         std::wstring fileName = fullPath.substr(fullPath.find_last_of(L"\\/") + 1);
         std::wstring text = std::to_wstring(app.currentIndex + 1) + L" / " +

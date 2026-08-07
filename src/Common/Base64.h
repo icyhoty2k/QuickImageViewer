@@ -62,17 +62,39 @@ namespace Common::Base64 {
 
     // Reverse lookup, built once. -1 marks "not part of the alphabet", which is
     // how whitespace and line breaks are skipped rather than rejected.
-    inline const signed char *ReverseTable() {
-        static signed char table[256];
-        static bool built = false;
-        if (!built) {
-            for (int i = 0; i < 256; ++i) table[i] = -1;
+    //
+    // WRAPPED IN A TYPE SO THE BUILD IS THREAD-SAFE. This used to be a plain
+    // `static signed char table[256]` beside a `static bool built`, filled by
+    // ordinary code on first call. Zero-initialised statics get no initialisation
+    // guard from the compiler — that guarantee applies to a static object being
+    // CONSTRUCTED — so the fill was an unsynchronised write racing every other
+    // caller's read, and `built = true` could be observed before the table it
+    // describes.
+    //
+    // It is genuinely reached from several threads: DoStreamChunk decodes an
+    // inbound phone transfer on the UI thread, while Xfer::ParseDataReply decodes
+    // a pulled image on a mirror SENDER thread — and there is one of those per
+    // target, so two of them alone are enough. The failure is not a crash: a
+    // reader that catches the table half-filled gets -1 for valid characters and
+    // silently drops bytes, which arrives as a corrupt picture with nothing in
+    // any log to explain it.
+    //
+    // A constructor makes it a static with dynamic initialisation, and C++11
+    // requires exactly one thread to run that while the others wait.
+    struct ReverseTableData {
+        signed char v[256];
+
+        ReverseTableData() {
+            for (int i = 0; i < 256; ++i) v[i] = -1;
             const char *A = Alphabet();
             for (int i = 0; i < 64; ++i)
-                table[static_cast<unsigned char>(A[i])] = static_cast<signed char>(i);
-            built = true;
+                v[static_cast<unsigned char>(A[i])] = static_cast<signed char>(i);
         }
-        return table;
+    };
+
+    inline const signed char *ReverseTable() {
+        static const ReverseTableData table;
+        return table.v;
     }
 
     // Returns false only on a truncated quartet — i.e. the body was cut short in

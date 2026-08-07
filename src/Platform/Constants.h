@@ -73,6 +73,22 @@ namespace Constants {
         constexpr float COLOR_R_F = static_cast<float>(COLOR & 0xFF) / 255.0f;
         constexpr float COLOR_G_F = static_cast<float>((COLOR >> 8) & 0xFF) / 255.0f;
         constexpr float COLOR_B_F = static_cast<float>((COLOR >> 16) & 0xFF) / 255.0f;
+
+        // Where the app points a user OUTWARD. The Help panel footer opens these.
+        // URL_PRIVACY is the same published page the site header links to, and the
+        // Android About screen links to its Android counterpart on the same site —
+        // one policy per app, in one place, so the two cannot drift apart.
+        constexpr const wchar_t *URL_HOME =
+                L"https://icyhoty2k.github.io/QuickImageViewer/";
+        constexpr const wchar_t *URL_PRIVACY =
+                L"https://icyhoty2k.github.io/QuickImageViewer/qiv-privacy.html";
+        // The phone client's store page. Valid only once qIV Remote is live on
+        // Play — the desktop release that carries this link must not ship before
+        // the listing is public, or the footer points at a 404.
+        constexpr const wchar_t *URL_ANDROID_APP =
+                L"https://play.google.com/store/apps/details?id=net.icyhoty2k.qivremote";
+        constexpr const wchar_t *URL_FACEBOOK =
+                L"https://www.facebook.com/IvanHristovYanev";
     }
 
 
@@ -721,8 +737,30 @@ namespace Constants {
     // ---------------------------------------------------------------------------
     constexpr bool WATCH_DIR_FOR_CHANGES = true; // master on/off switch
     constexpr UINT DIR_WATCHER_DEBOUNCE_MS = 400; // quiet period before auto-refresh fires
-    constexpr UINT_PTR DIR_WATCHER_TIMER_ID = 1008; // main-window dir-change debounce tick
+
+    // ---------------------------------------------------------------------------
+    // WM_TIMER IDs ON THE MAIN WINDOW — the whole map, in one place.
+    //
+    // A timer id is only unique per HWND, and all of these are set on the SAME
+    // window, so a repeated value means one feature silently cancels another's
+    // timer. They used to be scattered: 1001 as a bare literal in FileHandler
+    // with its name declared locally inside AppMain's WM_TIMER case, 1002 in
+    // that same local block AND again as a private constant in OverlayManager,
+    // 1010 as a class constant read by a raw `wParam == 1010` with the name in
+    // a comment beside it — and a line here listing the taken values that
+    // nothing could check. Four places to keep in step by hand.
+    //
+    // Panel-local ids (each panel's own TIMER_PENDING, TIMER_REFRESH and the
+    // like) are deliberately NOT here: they are set on the panel's own HWND, so
+    // they cannot collide with these and belong with the panel that owns them.
+    // PANEL_DIR_WATCHER_TIMER_ID is the exception — it is listed because it
+    // shares this numbering to stay obviously distinct from its main-window twin.
+    constexpr UINT_PTR LOOKASIDE_TIMER_ID = 1001;         // preload look-ahead/behind kick
+    constexpr UINT_PTR CENTER_MSG_TIMER_ID = 1002;        // centre-message auto-hide
+    //                                        1003-1006     Slideshow:: — see below
+    constexpr UINT_PTR DIR_WATCHER_TIMER_ID = 1008;       // main-window dir-change debounce tick
     constexpr UINT_PTR PANEL_DIR_WATCHER_TIMER_ID = 1009; // per-panel dir-change debounce tick
+    constexpr UINT_PTR SERVER_BLINK_TIMER_ID = 1010;      // server-dot connect/disconnect blink
 
     // First-character panel-switch triggers
     constexpr wchar_t PANEL_SWITCH_TO_JUMP_CHAR = L'#'; // type this in FindWnd  to open JumpToWnd
@@ -1863,7 +1901,9 @@ namespace Constants {
     // Init-only constants; runtime state lives in AppState::SlideshowState.
     // =========================================================================
     namespace Slideshow {
-        // WM_TIMER wParam IDs (1001/1002 are taken by lookaside/center-msg)
+        // WM_TIMER wParam IDs. The rest of the main window's map — and the reason
+        // these four may not be renumbered casually — is beside
+        // Constants::LOOKASIDE_TIMER_ID.
         constexpr UINT_PTR TIMER_ID = 1003; // slide-advance tick
         constexpr UINT_PTR CURSOR_TIMER_ID = 1004; // cursor-hide inactivity tick
         constexpr UINT_PTR TRANSITION_TIMER_ID = 1005; // transition animation tick

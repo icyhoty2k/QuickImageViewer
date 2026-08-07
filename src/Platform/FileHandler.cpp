@@ -856,8 +856,14 @@ void OpenInitialImage(HWND hWnd) {
         return;
     }
 
-    // User typed a folder path in the filename field
-    if (fs::is_directory(selectedPath)) {
+    // User typed a folder path in the filename field.
+    // With an error_code: the throwing overload raises filesystem_error for
+    // anything that is not a plain "no such file" — a share that dropped, a
+    // denied parent — and this runs inside the window procedure, where an
+    // escaping exception crosses a kernel callback boundary and the behaviour
+    // stops being defined. Everything else in this file already takes an `ec`.
+    std::error_code dirEc;
+    if (fs::is_directory(selectedPath, dirEc) && !dirEc) {
         OpenDirectory(hWnd, selectedPath.wstring());
         return;
     }
@@ -1287,7 +1293,8 @@ void LoadImageIndex(HWND hWnd, int index) {
         uiManager.RefreshStatsWindowIfVisible();
     }
 
-    SetTimer(hWnd, 1001, Constants::PRELOAD_TIMER_COUNTDOWN, nullptr);
+    SetTimer(hWnd, Constants::LOOKASIDE_TIMER_ID,
+             Constants::PRELOAD_TIMER_COUNTDOWN, nullptr);
 }
 
 void OpenDirectory(HWND hWnd, const std::wstring &dirPathStr) {
@@ -1552,7 +1559,15 @@ void OpenStartupTarget(HWND hWnd) {
 
 void OpenSpecificImage(HWND hWnd, const std::wstring &filePathStr) {
     fs::path filePath(filePathStr);
-    if (!fs::exists(filePath) || !fs::is_regular_file(filePath)) return;
+    {
+        // Same rule as the dialog path above, and this one is reached from a
+        // drag-drop and from a remote `open` — both of which hand over a path
+        // this process never validated. The throwing overloads turn a dropped
+        // network share into an exception inside the window procedure.
+        std::error_code ec;
+        if (!fs::exists(filePath, ec) || ec) return;
+        if (!fs::is_regular_file(filePath, ec) || ec) return;
+    }
     // Same reason as OpenDirectory: canonical() would rewrite a path that arrived
     // through a junction into the target's spelling, and the folder recorded in
     // history would not be the one the user dropped or double-clicked.

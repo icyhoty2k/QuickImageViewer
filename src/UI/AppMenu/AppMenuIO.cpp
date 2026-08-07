@@ -95,8 +95,15 @@ namespace {
     }
 
     std::string ToUtf8(const wchar_t *ws) {
-        int n = WideCharToMultiByte(CP_UTF8, 0, ws, -1, nullptr, 0, nullptr, nullptr);
-        std::string s(n - 1, '\0');
+        // `n` INCLUDES the terminator because the length is -1, so the string is
+        // sized n-1 — which turns into std::string(SIZE_MAX) the moment the call
+        // returns 0, and that is a length_error rather than an empty result.
+        // Today every caller passes a compile-time constant, so this cannot fire;
+        // it is one line and the next caller will not necessarily be one.
+        if (!ws) return {};
+        const int n = WideCharToMultiByte(CP_UTF8, 0, ws, -1, nullptr, 0, nullptr, nullptr);
+        if (n <= 1) return {};
+        std::string s(static_cast<size_t>(n - 1), '\0');
         WideCharToMultiByte(CP_UTF8, 0, ws, -1, s.data(), n, nullptr, nullptr);
         return s;
     }

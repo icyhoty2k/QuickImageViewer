@@ -216,12 +216,30 @@ LRESULT CALLBACK MainAppWndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM l
 
         // Handle file paths sent from other instances of the viewer
         case WM_COPYDATA: {
+            // A CROSS-PROCESS MESSAGE, and the sender is only USUALLY another
+            // copy of this program. Any process on the desktop may post one to
+            // this window, so cbData is the only thing that bounds the buffer.
+            //
+            // `std::wstring((LPCWSTR) lpData)` scans for a NUL that a sender is
+            // under no obligation to have written, and it reads straight off the
+            // end of the shared mapping when there is none.
             COPYDATASTRUCT *cds = (COPYDATASTRUCT *) lParam;
-            if (cds->dwData == 1) {
-                // Post asynchronously — returning quickly unblocks the sending process.
-                // WM_QIV_OPEN_FILE handler owns the pointer and deletes it.
-                PostMessageW(hWnd, Constants::WM_QIV_OPEN_FILE, 0,
-                             reinterpret_cast<LPARAM>(new std::wstring((LPCWSTR) cds->lpData)));
+            if (!cds) return TRUE;
+
+            if (cds->dwData == 1 && cds->lpData && cds->cbData >= sizeof(wchar_t)) {
+                const wchar_t *raw = static_cast<const wchar_t *>(cds->lpData);
+                const size_t   cap = cds->cbData / sizeof(wchar_t);
+                const size_t   len = wcsnlen(raw, cap);   // bounded scan
+                if (len > 0) {
+                    // Post asynchronously — returning quickly unblocks the
+                    // sending process. WM_QIV_OPEN_FILE owns the pointer and
+                    // deletes it; if the post fails it never gets there, so it
+                    // is deleted here instead.
+                    auto *p = new std::wstring(raw, len);
+                    if (!PostMessageW(hWnd, Constants::WM_QIV_OPEN_FILE, 0,
+                                      reinterpret_cast<LPARAM>(p)))
+                        delete p;
+                }
                 ShowWindow(hWnd, SW_RESTORE);
                 SetForegroundWindow(hWnd);
             } else if (cds->dwData == 2) {
@@ -368,10 +386,7 @@ LRESULT CALLBACK MainAppWndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM l
                      Constants::DIR_WATCHER_DEBOUNCE_MS, nullptr);
             return 0;
         case WM_TIMER: {
-            constexpr UINT_PTR TIMER_LOOKASIDE = 1001;
-            constexpr UINT_PTR TIMER_CENTER_MSG = 1002;
-
-            if (wParam == TIMER_CENTER_MSG) {
+            if (wParam == Constants::CENTER_MSG_TIMER_ID) {
                 g_overlayManager.OnCenterMessageTimer(hWnd);
                 return 0;
             }
@@ -379,7 +394,7 @@ LRESULT CALLBACK MainAppWndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM l
             // The server dot's connect / disconnect blink. It kills its own
             // timer when the count runs out — nothing ticks between blinks.
             // Rate and count are OVERLAY_SERVER_BLINK_MS / _COUNT.
-            if (wParam == 1010) {   // OverlayManager::TIMER_SERVER_BLINK
+            if (wParam == Constants::SERVER_BLINK_TIMER_ID) {
                 g_overlayManager.OnServerBlinkTimer(hWnd);
                 return 0;
             }
@@ -536,13 +551,19 @@ LRESULT CALLBACK MainAppWndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM l
                 return 0;
             }
 
-            if (wParam == TIMER_LOOKASIDE) {
-                KillTimer(hWnd, TIMER_LOOKASIDE);
+            if (wParam == Constants::LOOKASIDE_TIMER_ID) {
+                KillTimer(hWnd, Constants::LOOKASIDE_TIMER_ID);
 
-                if (app.playlist.empty()) return 0;
-
-                int index = app.currentIndex;
                 const int total = static_cast<int>(app.playlist.size());
+                const int index = app.currentIndex;
+
+                // BOTH ENDS. The look-ahead below tests `fwd < total` but the
+                // look-behind only tested `bwd >= 0`, so an index left past the
+                // end of a list that shrank — a folder rescanned while the timer
+                // was armed — read out of the playlist on the backward pass.
+                // Nothing to preload around an index that is not in the list,
+                // and the timer is re-armed by the next image that does load.
+                if (index < 0 || index >= total) return 0;
 
                 // Relay preloads through g_decoderWorker so they don't flood
                 // g_ioWorker directly and starve thumbnail IO tasks that share it.
@@ -692,7 +713,13 @@ LRESULT CALLBACK MainAppWndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM l
 
             // The background thread has finished decoding and caching the bitmap.
             // Now, on the UI thread, we probe the cache to make it the active bitmap.
-            if (app.renderer && !app.playlist.empty()) {
+            // THE INDEX IS CHECKED, not just the playlist. A non-empty playlist
+            // does not imply a current index: the first scan fills the list
+            // before anything is selected, and currentIndex is -1 for that
+            // window — which is exactly when the first decode finishes and this
+            // message arrives. app.playlist[-1] is a read before the vector.
+            if (app.renderer && app.currentIndex >= 0 &&
+                app.currentIndex < static_cast<int>(app.playlist.size())) {
                 const std::wstring &currentPath = app.playlist[app.currentIndex];
                 // This call will find the bitmap in the cache and set it as active.
                 if (SUCCEEDED(app.renderer->LoadBitmap(nullptr, 0, 0, currentPath))) {
@@ -1018,7 +1045,24 @@ int WINAPI wWinMain(HINSTANCE hInstance, [[maybe_unused]] HINSTANCE hPrevInstanc
                 cds.cbData = 0;
                 cds.lpData = nullptr;
             }
-            SendMessageW(hExistingWnd, WM_COPYDATA, 0, (LPARAM) &cds);
+            // BOUNDED, because a plain SendMessage here waits forever.
+            //
+            // This is the forwarded-launch path — the comment below calls it the
+            // most common way the program is started — and it blocks on ANOTHER
+            // process pumping its message queue. An existing instance stuck in a
+            // long synchronous operation left this one hanging with no window and
+            // no error, still holding the single-instance mutex, so every further
+            // double-click piled onto the same dead window.
+            //
+            // SendMessageTimeout, not Post: WM_COPYDATA has to be delivered
+            // synchronously because cds and the buffer it points at live on this
+            // stack. ABORTIFHUNG gives up immediately on a window Windows already
+            // knows is not responding, rather than spending the full timeout.
+            constexpr UINT HANDOFF_TIMEOUT_MS = 5000;
+            DWORD_PTR sendResult = 0;
+            SendMessageTimeoutW(hExistingWnd, WM_COPYDATA, 0, (LPARAM) &cds,
+                                SMTO_NORMAL | SMTO_ABORTIFHUNG,
+                                HANDOFF_TIMEOUT_MS, &sendResult);
         }
 
         // Nothing to stop and nothing to join: no pool has been started and no

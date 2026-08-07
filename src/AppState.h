@@ -59,6 +59,30 @@ struct ViewportState {
 inline void GetRenderSize(float winW, float winH, float imgW, float imgH,
                           Constants::ViewModes::ViewMode viewMode, float zoom,
                           float &renderW, float &renderH) {
+    // A DEGENERATE SIZE IS ANSWERED HERE, not by each caller remembering to.
+    //
+    // The FitToView branch divides by imgW and imgH. Float division by zero is
+    // not a crash — it is an infinity, and `imgW * scale` then makes the result
+    // NaN, which propagates into the viewport offsets and the pan clamps and
+    // parks the image somewhere no comparison can bring it back from. Silent,
+    // and much harder to trace than the divide that caused it.
+    //
+    // Every one of the twelve call sites currently guards imgW/imgH itself, so
+    // this changes nothing today — except that the guarantee now belongs to the
+    // function whose header already insists every caller go through it, instead
+    // of to twelve places that each have to keep remembering. The one that came
+    // closest to needing it is the SVG path, which substitutes the render-target
+    // size when the file declares none.
+    //
+    // Zero out rather than fall back to the window: nothing can be drawn for an
+    // image with no area, and a zero rect says that where a window-sized one
+    // would claim there is something on screen.
+    if (!(imgW > 0.0f) || !(imgH > 0.0f) || !(winW > 0.0f) || !(winH > 0.0f)) {
+        renderW = 0.0f;
+        renderH = 0.0f;
+        return;
+    }
+
     renderW = imgW;
     renderH = imgH;
     switch (viewMode) {

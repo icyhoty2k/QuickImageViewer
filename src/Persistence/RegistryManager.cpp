@@ -50,7 +50,11 @@ namespace Persistence::Registry {
             return true;
         }
 
-        std::wstring current(size / sizeof(wchar_t), L'\0');
+        // ROUNDED UP. `size` is a BYTE count the registry reported, and nothing
+        // requires it to be even — a REG_SZ written by hand or left half-written
+        // can carry an odd one. Dividing truncates, so the buffer came out a byte
+        // short and the read below wrote that byte past the end of it.
+        std::wstring current((size + sizeof(wchar_t) - 1) / sizeof(wchar_t), L'\0');
         DWORD readType = 0;
         if (RegQueryValueExW(hKey, nullptr, nullptr, &readType,
                              reinterpret_cast<LPBYTE>(current.data()), &size) != ERROR_SUCCESS || readType != REG_SZ) {
@@ -158,7 +162,9 @@ namespace Persistence::Registry {
             DWORD size = 0, type = 0;
             if (RegQueryValueExW(hKey, runValueName.c_str(), nullptr, &type, nullptr, &size) == ERROR_SUCCESS) {
                 if (type == REG_SZ && size <= 1024 * 1024) {
-                    std::wstring current(size / sizeof(wchar_t), L'\0');
+                    // Rounded up — see LooksLikeStaleRegistration for why an odd
+                    // byte count is possible and what truncating it costs.
+                    std::wstring current((size + sizeof(wchar_t) - 1) / sizeof(wchar_t), L'\0');
                     if (RegQueryValueExW(hKey, runValueName.c_str(), nullptr, nullptr,
                                          reinterpret_cast<LPBYTE>(current.data()), &size) == ERROR_SUCCESS) {
                         if (!current.empty() && current.back() == L'\0') current.pop_back();
@@ -222,7 +228,8 @@ namespace Persistence::Registry {
         if (RegGetValueW(Constants::Registry::ROOT_HIVE, Constants::Registry::ROOT_KEY, key.c_str(),
                          RRF_RT_REG_SZ, nullptr, nullptr, &size) != ERROR_SUCCESS || size == 0)
             return {};
-        std::wstring result(size / sizeof(wchar_t), L'\0');
+        // Rounded up, same reason as the two RegQueryValueExW readers above.
+        std::wstring result((size + sizeof(wchar_t) - 1) / sizeof(wchar_t), L'\0');
         if (RegGetValueW(Constants::Registry::ROOT_HIVE, Constants::Registry::ROOT_KEY, key.c_str(),
                          RRF_RT_REG_SZ, nullptr, result.data(), &size) != ERROR_SUCCESS)
             return {};

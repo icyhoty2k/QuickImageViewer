@@ -32,6 +32,11 @@ namespace UI {
     // =========================================================================
     class HelpWnd : public FloatingPanelWnd {
         public:
+            // Number of clickable links in the footer. Public because the label
+            // and URL tables live in HelpWnd.cpp and static_assert against it —
+            // the tables and this count must never disagree.
+            static constexpr int FOOTER_LINK_COUNT = 4;
+
             void Init(HINSTANCE hInstance, HWND hParent) override;
             void Init(HINSTANCE hInstance, HWND hParent, int8_t position) override;
             void Show() override;
@@ -122,8 +127,12 @@ namespace UI {
             UI::ScrollView *ScrollViewAt(POINT) override { return &m_view; }
             int ScrollLinePx(const UI::ScrollView &) const override;
 
-            // Footer link rect
-            RECT m_footerLinkRect = {0, 0, 0, 0};
+            // Footer link rects — home page, privacy policy, Facebook. Measured
+            // and filled in WM_PAINT, hit-tested by WM_LBUTTONDOWN / WM_MOUSEMOVE.
+            // One rect per link rather than one for the whole line: a single
+            // DT_CENTER rect spans the full width, so every click would open
+            // whichever page happened to be first.
+            RECT m_footerLinkRects[FOOTER_LINK_COUNT] = {};
 
             // Shortcut column font is slightly larger than description font
             static constexpr float KEY_FONT_SCALE = 1.1f;

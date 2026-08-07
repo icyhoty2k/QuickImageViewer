@@ -219,8 +219,12 @@ namespace UI {
                               KEY_QUERY_VALUE, &hk) == ERROR_SUCCESS) {
                 DWORD sz = 0, type = 0;
                 if (RegQueryValueExW(hk, Constants::Registry::RUN_VALUE_NAME,
-                                     nullptr, &type, nullptr, &sz) == ERROR_SUCCESS && sz > 0) {
-                    std::wstring val(sz / sizeof(wchar_t), L'\0');
+                                     nullptr, &type, nullptr, &sz) == ERROR_SUCCESS &&
+                    sz > 0 && sz <= 1024 * 1024) {
+                    // Rounded up: sz is a byte count from the registry and an odd
+                    // one truncates to a buffer a byte short of what the second
+                    // call writes. The ceiling matches RegistryManager's readers.
+                    std::wstring val((sz + sizeof(wchar_t) - 1) / sizeof(wchar_t), L'\0');
                     if (RegQueryValueExW(hk, Constants::Registry::RUN_VALUE_NAME,
                                          nullptr, &type,
                                          reinterpret_cast<BYTE *>(val.data()), &sz) == ERROR_SUCCESS) {

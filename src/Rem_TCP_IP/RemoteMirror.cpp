@@ -498,8 +498,15 @@ namespace {
 
     void PostEventLine(const std::wstring &line) {
         if (!g_owner) return;
-        PostMessageW(g_owner, Constants::WM_QIV_REMOTE_EVENT, 0,
-                     reinterpret_cast<LPARAM>(new std::wstring(line)));
+        // Deleted here when the post fails, the way the two WM_QIV_REMOTE_PULLED
+        // sites further down already do it. This one is the likeliest of the
+        // three to fail: it runs on a sender thread and an observed target that
+        // is busy can produce EVENT lines faster than a stalled UI thread drains
+        // them, which is exactly when the queue fills.
+        auto *p = new std::wstring(line);
+        if (!PostMessageW(g_owner, Constants::WM_QIV_REMOTE_EVENT, 0,
+                          reinterpret_cast<LPARAM>(p)))
+            delete p;
     }
 
     // Bounded pause between `QueryState` polls while the far end's scan runs.
