@@ -166,4 +166,29 @@ jobs:
           # checkout above and this push. Rebase rather than fail: the two touch
           # different lines of index.html.
           git pull --rebase origin main
-          git push
+
+          # A FAILED PUSH IS NOT PROOF THE PUSH FAILED. On v2.210.0.302 the ref
+          # moved to this run's own commit and git still reported
+          #   ! [remote rejected] main -> main (cannot lock ref 'refs/heads/main':
+          #     is at 6560f9a... but expected 8eef89c...)
+          # — the update was accepted and a retry of the same push then hit the
+          # guard, so the job failed with the work already done. Re-running it
+          # would have been a no-op, and the red run said the release metadata
+          # never shipped when it had.
+          #
+          # So: if the push fails, ask the remote what it holds. Our commit being
+          # there is success, whatever the exit code said.
+          if git push; then
+            exit 0
+          fi
+
+          echo "Push reported failure — checking whether it landed anyway."
+          git fetch origin main
+          if [ "$(git rev-parse HEAD)" = "$(git rev-parse FETCH_HEAD)" ]; then
+            echo "origin/main is at our commit. The push succeeded; the error was spurious."
+            exit 0
+          fi
+
+          echo "origin/main is at $(git rev-parse --short FETCH_HEAD), not our $(git rev-parse --short HEAD)."
+          echo "The metadata did NOT ship. Re-run this workflow."
+          exit 1
