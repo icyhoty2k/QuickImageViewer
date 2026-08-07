@@ -1,0 +1,134 @@
+# Regenerates everything on the website that is DERIVED from something else, so
+# no one has to remember to run a script before pushing.
+#
+# There are two kinds of staleness here and they need different triggers.
+#
+# 1. THE STATISTICS drift on their own. Downloads, stars, watchers and "last
+#    updated" are written into the HTML at build time, because fetching them in
+#    the browser would put every visitor's IP on api.github.com — on a site
+#    whose own privacy policy says it contacts nobody. Baking them in is the
+#    right trade, but they are only true on the day they were baked: downloads
+#    moved 285 -> 292 in a single morning. Nothing in the repository changes
+#    when they go wrong, so only a SCHEDULE can catch it.
+#
+# 2. THE SHORTCUT PAGE goes stale from a commit. docs/shortcuts.html is
+#    generated from HelpWnd.cpp, so remapping a key makes the page wrong
+#    immediately. A PUSH trigger on that file catches it; waiting for the
+#    weekly run would leave the site advertising the old key for six days.
+#
+# IT DOES NOT BUILD THE APPLICATION. Same rule as release.yml: no compiler runs
+# in CI, releases are made by hand from a locally built exe. This runs one
+# Python script that reads the GitHub API and writes inside docs/.
+#
+# WHY WEEKLY AND NOT DAILY. Every run that finds new numbers makes a commit, and
+# a commit a day on a one-person repository is noise that buries the real
+# history. Weekly keeps the strip honest without the log becoming a changelog of
+# somebody else's stars. Trigger it by hand whenever a number matters sooner.
+name: Rebuild generated site files
+
+on:
+  schedule:
+    # Mondays, 06:14 UTC. Deliberately not on the hour — GitHub queues the
+    # scheduled runs that everybody sets for :00, and a cron at a busy minute
+    # can be delayed by a long stretch or dropped altogether.
+    #
+    # The schedule is for the STATISTICS, which drift on their own because other
+    # people download and star the project. Nothing in the repository has to
+    # change for the strip to become wrong.
+    - cron: '14 6 * * 1'
+
+  # THE SHORTCUT PAGE IS A DIFFERENT PROBLEM AND NEEDS A DIFFERENT TRIGGER.
+  # docs/shortcuts.html is generated from HelpWnd.cpp, so it goes stale the
+  # moment a key is remapped — and waiting for Monday would leave the site
+  # advertising the old key for up to six days. Confidently wrong is worse than
+  # visibly out of date: somebody presses what the page says and nothing
+  # happens.
+  #
+  # So the script also runs whenever one of its INPUTS lands on main. The
+  # workflow's own commit is marked [skip ci], so this cannot loop.
+  push:
+    branches: [main]
+    paths:
+      - 'src/UI/FloatingPanels/HelpWnd.cpp'
+      - 'src/Input/Shortcuts.h'
+      - 'docs/_partials/**'
+      - 'tools/build-site.py'
+
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+# release.yml and update-date.yml also push to main. Sharing their group would
+# serialise unrelated work; a group of its own with no cancellation means two
+# refreshes never race each other.
+concurrency:
+  group: docs-stats
+  cancel-in-progress: false
+
+jobs:
+  refresh:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout main
+        uses: actions/checkout@v4
+        with:
+          ref: main
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Rebuild the site
+        env:
+          # The script reads the public API. A token lifts the rate limit from
+          # 60 requests an hour per IP — shared with every other Actions runner
+          # on the same host — to 1,000 for this repository.
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: python tools/build-site.py
+
+      - name: Commit if anything changed
+        run: |
+          set -euo pipefail
+
+          # Commit as the repository owner, NOT as github-actions[bot]. A bot
+          # author appears in the Contributors sidebar, which makes a
+          # one-person project look like it has an automation team. Same
+          # decision as release.yml.
+          git config user.name  "icyhoty2k"
+          git config user.email "icyhoty2k@gmail.com"
+
+          if git diff --quiet; then
+            echo "Numbers unchanged — nothing to commit."
+            exit 0
+          fi
+
+          git add -A docs
+          git commit -m "chore: refresh site statistics [skip ci]"
+
+          # update-date.yml and release.yml push to this branch too and can land
+          # between the checkout and this push. Rebase rather than fail: they
+          # touch different lines.
+          git pull --rebase origin main
+
+          # A FAILED PUSH IS NOT PROOF THE PUSH FAILED — see the same guard in
+          # release.yml, where a push was accepted and then reported
+          # '[remote rejected] ... cannot lock ref'. Ask the remote what it
+          # actually holds before calling the run red.
+          if git push; then
+            exit 0
+          fi
+
+          echo "Push reported failure — checking whether it landed anyway."
+          git fetch origin main
+          if [ "$(git rev-parse HEAD)" = "$(git rev-parse FETCH_HEAD)" ]; then
+            echo "origin/main is at our commit. The push succeeded."
+            exit 0
+          fi
+
+          echo "origin/main is at $(git rev-parse --short FETCH_HEAD), not our $(git rev-parse --short HEAD)."
+          echo "The statistics did NOT ship. Re-run this workflow."
+          exit 1

@@ -1,0 +1,455 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>qIV Remote — every feature, screen by screen</title>
+
+    <meta name="description"
+          content="qIV Remote turns an Android phone or tablet into a remote control, a second screen and a photo frame for QuickImageViewer on Windows. Four screens, swipe gestures, fuzzy find by file name, photos both ways. No ads, no tracking, no account.">
+    <meta name="robots" content="index, follow">
+    <link rel="canonical" href="https://icyhoty2k.github.io/QuickImageViewer/qiv-remote.html">
+
+    <link rel="icon" type="image/svg+xml" href="favicon.svg">
+    <link rel="icon" type="image/x-icon" href="favicon.ico">
+    <meta name="theme-color" content="#0d1a26">
+
+    <meta property="og:type" content="website">
+    <meta property="og:title" content="qIV Remote for Android — every feature, screen by screen">
+    <meta property="og:description"
+          content="Drive QuickImageViewer from your phone over your own network. Four screens, swipe gestures, find any picture by typing part of its name.">
+    <meta property="og:url" content="https://icyhoty2k.github.io/QuickImageViewer/qiv-remote.html">
+
+    <link rel="stylesheet" href="site.css">
+</head>
+<body class="android">
+
+<!-- SHARED-HEADER-START — generated from docs/_partials/header.html by sync-site.py. Do not edit between the fences; edit the partial. -->
+<nav class="sitenav">
+    <div class="inner">
+        <a href="./">🖥&nbsp; QuickImageViewer (qIV)</a>
+        <a href="qiv-privacy.html">🔒&nbsp; Privacy — Windows</a>
+        <a href="qiv-remote.html" class="current">📱&nbsp; qIV Remote</a>
+        <a href="qiv-remote-privacy.html">🔒&nbsp; Privacy — Android</a>
+    </div>
+</nav>
+<!-- SHARED-HEADER-END -->
+
+<main class="container">
+
+    <h1>qIV Remote</h1>
+    <p class="meta">
+        The companion app for <a href="./">QuickImageViewer</a>. Your phone becomes the
+        viewer's remote, a second screen, and a photo frame your PC drives.
+    </p>
+
+    <!--
+        THE STORE ROW. Each column is one app: its button, and the privacy
+        policy FOR THAT APP under it. Order inside a column is what the reader
+        follows, so the pairing has to be vertical rather than two parallel rows.
+
+        The Play URL is the applicationId and will not change, so the link is
+        live now and simply starts working when the listing is approved. It is on
+        four pages — grep this folder for "store/apps/details" before editing.
+
+        NOT the official Play badge image: a licensed asset with its own
+        placement and clear-space rules, which cannot be inlined. Swap the
+        anchor's contents for the artwork later; href and layout stay.
+    -->
+    <!--
+        NO STATISTICS STRIP ON THIS PAGE, and that is deliberate.
+
+        It had one, and every number in it described the DESKTOP app: the size
+        of QuickImageViewer.exe, 71.2k lines of C++, 49 image formats, 207
+        keyboard shortcuts, "Windows 10 & 11". On the page selling an Android
+        remote. The strip is shared, and shared furniture is only correct when
+        the thing it says is true of every page carrying it — these facts are
+        true of exactly one.
+
+        There is nothing honest to put here yet: the app is a Play Console draft,
+        so there are no installs, no ratings and no reviews to report. When it is
+        published and those exist, this is where they go — as their own partial
+        with the app's own numbers, never the desktop's.
+    -->
+
+
+    <!-- SHARED-STOREROW-START — generated from docs/_partials/storerow.html by sync-site.py. Do not edit between the fences; edit the partial. -->
+<div class="storerow">
+        <div class="store-col">
+            <!-- THE FILE ITSELF, not the releases page. GitHub resolves
+                 /releases/latest/download/<name> to the newest release's asset
+                 and serves it, so this needs no update per release — but only
+                 because the asset name never changes. If a version ever gets
+                 into the filename, this URL 404s silently and the download
+                 button dies without anything else looking wrong. -->
+            <a class="cta-button" href="https://github.com/icyhoty2k/QuickImageViewer/releases/latest/download/QuickImageViewer.exe">
+                <span class="glyph"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3a1 1 0 0 1 1 1v8.6l2.3-2.3a1 1 0 1 1 1.4 1.4l-4 4a1 1 0 0 1-1.4 0l-4-4a1 1 0 1 1 1.4-1.4l2.3 2.3V4a1 1 0 0 1 1-1Z"/><path d="M4 14a1 1 0 0 1 1 1v3a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-3a1 1 0 1 1 2 0v3a3 3 0 0 1-3 3H6a3 3 0 0 1-3-3v-3a1 1 0 0 1 1-1Z"/></svg></span>
+                <span>Download QuickImageViewer<small>Windows 10 &amp; 11 &mdash; free</small></span>
+            </a>
+            <a class="policy" href="qiv-privacy.html">🔒&nbsp; Privacy — Windows app</a>
+        </div>
+        <div class="store-col">
+            <a class="cta-button" href="https://play.google.com/store/apps/details?id=net.icyhoty2k.qivremote">
+                <span class="glyph"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 4.6a1 1 0 0 1 1.51-.86l11.5 6.9a1 1 0 0 1 0 1.72l-11.5 6.9A1 1 0 0 1 7 18.4V4.6Z"/></svg></span>
+                <span>Get qIV Remote<small>Android &mdash; Google Play</small></span>
+            </a>
+            <a class="policy" href="qiv-remote-privacy.html">🔒&nbsp; Privacy — Android app</a>
+        </div>
+    </div>
+<!-- SHARED-STOREROW-END -->
+
+    <div class="callout lead">
+        <strong>It needs the desktop app.</strong> qIV Remote does not open pictures of its
+        own — it drives QuickImageViewer running on a Windows PC, over your own network.
+        <a href="./">Get the desktop app first</a>, or try the app's built-in demo, which
+        runs every screen against a viewer that does not exist.
+    </div>
+
+    <h2>What is on this page</h2>
+    <ul class="toc">
+        <li><a href="#screens">The four screens</a></li>
+        <li><a href="#simple">Simple — the picture and nothing else</a></li>
+        <li><a href="#find">Find any picture by typing part of its name</a></li>
+        <li><a href="#advanced">Advanced — every command</a></li>
+        <li><a href="#watch">Watch — the photo-frame screen</a></li>
+        <li><a href="#stream">Stream — photos from the phone</a></li>
+        <li><a href="#settings">Settings</a></li>
+        <li><a href="#editions">Free and full editions</a></li>
+        <li><a href="#security">Security and privacy</a></li>
+        <li><a href="#setup">Setting up the connection</a></li>
+    </ul>
+
+    <h2 id="screens">The four screens</h2>
+    <p>
+        Every screen drives the same connection. They differ in how much of the phone they
+        spend on controls, and each saved computer remembers which one it opens on — so the
+        machine wired to the television and the one on your desk can behave differently.
+    </p>
+
+    <div class="grid">
+        <div class="card">
+            <h3>Simple <span class="pill free">Free</span></h3>
+            <p>
+                The picture, edge to edge, with two arrows over it. For one hand, in a dark
+                room, while something else has your attention.
+            </p>
+        </div>
+        <div class="card">
+            <h3>Advanced <span class="pill paid">Full</span></h3>
+            <p>
+                Every command the viewer accepts, one button each, with a live preview and
+                the name and number of the file on screen.
+            </p>
+        </div>
+        <div class="card">
+            <h3>Watch <span class="pill paid">Full</span></h3>
+            <p>
+                That preview filling the display and nothing else. Read-only: it shows what
+                the desktop shows and sends nothing that could change it.
+            </p>
+        </div>
+        <div class="card">
+            <h3>Stream <span class="pill paid">Full</span></h3>
+            <p>
+                Send a photo from the phone to the big screen. It appears once, over
+                whatever is up, disturbing neither the folder nor a running slideshow.
+            </p>
+        </div>
+    </div>
+
+    <h2 id="simple">Simple — the picture and nothing else</h2>
+    <p>
+        This is where most people will spend their time, so it spends almost nothing on
+        itself. There is no button bar: the photograph fills the screen from the header to
+        the navigation bar, and the only controls drawn on it are two arrows sharing one
+        row with the file's name and number.
+    </p>
+
+    <h3>Swipe it in any of four directions <span class="pill paid">Full</span></h3>
+    <p>
+        Nothing scrolls or zooms on this screen, so every direction is free to mean
+        something.
+    </p>
+    <div class="tablewrap">
+        <table>
+            <thead>
+            <tr><th>Gesture</th><th>What it does</th></tr>
+            </thead>
+            <tbody>
+            <tr><td>Swipe left, or up</td><td>Next picture</td></tr>
+            <tr><td>Swipe right, or down</td><td>Previous picture</td></tr>
+            <tr><td>Two fingers, same directions</td><td>Jump to the last or first picture in the folder</td></tr>
+            <tr><td>Three fingers, any direction</td><td>Open <strong>Go to</strong> and type a number</td></tr>
+            <tr><td>Tap an arrow</td><td>Next or previous <span class="pill free">Free</span></td></tr>
+            </tbody>
+        </table>
+    </div>
+    <p>
+        Left and up go forward because that is the direction a photo roll and a feed already
+        move. If your hand expects the opposite, each axis has its own switch in Settings —
+        they are separate because people invert one without wanting the other touched.
+    </p>
+    <p>
+        <strong>The two arrows are free, and they do everything the gestures do.</strong>
+        The screen is completely usable without the unlock; the gestures are the shortcut.
+    </p>
+
+    <h3>Where things sit is yours to decide</h3>
+    <p>
+        Everything drawn over a photograph covers part of it, and which part matters depends
+        entirely on the photographs. So the file name can sit between the arrows (sharing
+        their row, costing the picture nothing extra), on the top edge, on the bottom edge,
+        or nowhere at all. The arrows themselves sit low, centred, or off.
+    </p>
+
+    <h2 id="find">Find any picture by typing part of its name</h2>
+
+    <div class="callout lead">
+        <strong>Type part of a name. The right picture opens.</strong> Not a prefix, not a
+        "contains" — the desktop scores every name in the folder and jumps to the closest
+        one. <code>0042</code>, <code>sunset</code>, or a fragment from the middle of a name
+        all land. Use <code>*</code> and <code>?</code> when you know the shape but not the
+        text.
+    </div>
+
+    <p>
+        A phone keyboard is the worst place in the world to type a thirty-character camera
+        filename, and this is the feature that means you never have to. It also scales with
+        the folder: among forty pictures, Next is fine; among four thousand, this is the only
+        way to arrive somewhere on purpose.
+    </p>
+    <p>
+        There is no index to build and nothing to keep in sync — the desktop already holds
+        the folder, so the match is instant and always current, even for a folder you opened
+        a second ago.
+    </p>
+    <p>
+        Its partner is <strong>Go to #</strong>, which takes the picture's number. Out of
+        range is refused rather than quietly rounded to the nearest legal one. Both are
+        buttons on the Advanced screen, and Go to # is the three-finger swipe on Simple.
+    </p>
+
+    <h2 id="advanced">Advanced — every command</h2>
+    <p>
+        One button per command, grouped the way the viewer groups them, over an optional
+        live preview of the desktop's screen. The buttons that represent a state — an
+        effect, a window toggle, the slideshow — light up from what the viewer reports, not
+        from what the phone last pressed, so they stay honest when someone changes something
+        at the keyboard.
+    </p>
+
+    <div class="tablewrap">
+        <table>
+            <thead>
+            <tr><th>Group</th><th>What is in it</th></tr>
+            </thead>
+            <tbody>
+            <tr>
+                <td><strong>Navigation</strong></td>
+                <td>Previous, Next, First, Last, Go to #, Go to name, folder history, connected clients</td>
+            </tr>
+            <tr>
+                <td><strong>Preview</strong></td>
+                <td>Show the desktop's current picture, follow it live, and save the original to your gallery</td>
+            </tr>
+            <tr>
+                <td><strong>Slideshow</strong></td>
+                <td>Start and stop, pause and resume, loop, shuffle, and set the interval</td>
+            </tr>
+            <tr><td><strong>Zoom</strong></td><td>In, out, reset to the view mode's own fit</td></tr>
+            <tr><td><strong>Transform</strong></td><td>Rotate either way, flip horizontally or vertically</td></tr>
+            <tr><td><strong>View mode</strong></td><td>Fit, Width, Height, Fill, 1:1</td></tr>
+            <tr><td><strong>Effects</strong></td><td>Grayscale, invert, sepia, and reset them</td></tr>
+            <tr>
+                <td><strong>Window</strong></td>
+                <td>Fullscreen, always-on-top, panels, the info overlay, show or hide the
+                    window, and move it to the next monitor
+                </td>
+            </tr>
+            </tbody>
+        </table>
+    </div>
+    <p>
+        <strong>Save</strong> writes the original file, byte for byte, into
+        <code>Pictures/qIVRemote</code> in your gallery — it asks the desktop for the
+        original separately rather than keeping the preview, because a re-encoded JPEG is
+        not the file you meant to keep. It needs no storage permission.
+    </p>
+
+    <h2 id="watch">Watch — the photo-frame screen</h2>
+    <p>
+        The picture from the desktop, filling the display, with no toolbar and no buttons.
+        Put a phone on a stand or prop up the tablet with the cracked case, start a
+        slideshow on the PC, and it follows picture for picture for as long as you leave it.
+    </p>
+    <p>
+        <strong>It sends nothing back.</strong> Watch is read-only by design — it observes
+        and issues no command that could change what anyone else is looking at.
+    </p>
+    <p>
+        How the picture meets the screen is a setting, and separately for each orientation,
+        because the answer genuinely differs: turned sideways a wide photograph nearly
+        matches the display and cropping costs a sliver, while upright the same photograph
+        is the wrong shape entirely and cropping would cut off its ends. Choose keep the
+        shape, fill by cropping, or stretch — for each of portrait and landscape.
+    </p>
+
+    <h2 id="stream">Stream — photos from the phone</h2>
+    <p>
+        The direction a remote control usually cannot go at all. Pick photos with Android's
+        own picker and push them to the desktop: the app never gets access to your gallery,
+        and the PC never needs to reach your phone's storage.
+    </p>
+    <p>
+        A pushed photo appears <strong>once</strong>, over whatever is up. It changes no
+        folder, no sort order and no playlist position, and a running slideshow keeps
+        running with the photo occupying a single slide. Nothing has to be paused first and
+        nothing is left behind.
+    </p>
+    <p>
+        Pick several and Stream will drive them as a slideshow of its own, from the phone,
+        with its own interval, loop and shuffle — independent of whatever the desktop's own
+        slideshow is doing.
+    </p>
+
+    <h2 id="settings">Settings</h2>
+    <p>
+        Grouped by the screen each setting belongs to, so a preference that applies to one
+        screen is never mistaken for an app-wide rule.
+    </p>
+    <ul>
+        <li><strong>This device</strong> — the name the app announces to a server, so the PC can show which phone is connected.</li>
+        <li><strong>Appearance</strong> — light, dark, or follow the system.</li>
+        <li><strong>Control screens</strong> — keep the screen awake while a remote is open, and vibrate on press.</li>
+        <li><strong>Servers</strong> — which screen new servers open on, and forget every saved password in one action.</li>
+        <li><strong>Simple screen</strong> — where the file name sits, where the arrows sit, and which way each swipe axis runs.</li>
+        <li><strong>Advanced screen</strong> — where the file name sits over the preview.</li>
+        <li><strong>Watch screen</strong> — how the picture fills the display, separately for portrait and landscape.</li>
+        <li><strong>Preview</strong> — the size and JPEG quality asked of the desktop, which is the trade between sharpness and speed on a slow network.</li>
+        <li><strong>Stream screen</strong> — send only over Wi-Fi, and whether the server's own preview is shown beside the phone's.</li>
+    </ul>
+    <p>
+        <strong>Restore defaults</strong> puts every setting back to how the app shipped and
+        forgets every saved password, without touching the servers themselves.
+    </p>
+
+    <h2 id="editions">Free and full editions</h2>
+    <p>
+        One app, one optional one-time unlock. Everything that keeps the connection private
+        is in the free edition and always will be — security is not a paid feature.
+    </p>
+    <div class="tablewrap">
+        <table>
+            <thead>
+            <tr><th></th><th>Free</th><th>Full</th></tr>
+            </thead>
+            <tbody>
+            <tr><td>Simple remote, with its two arrows</td><td>✅</td><td>✅</td></tr>
+            <tr><td>TLS, certificate pinning, password authentication</td><td>✅</td><td>✅</td></tr>
+            <tr><td>Saved servers</td><td>One</td><td>As many as you like</td></tr>
+            <tr><td>Swipe gestures on Simple</td><td>❌</td><td>✅</td></tr>
+            <tr><td>Advanced remote</td><td>❌</td><td>✅</td></tr>
+            <tr><td>Watch</td><td>❌</td><td>✅</td></tr>
+            <tr><td>Stream</td><td>❌</td><td>✅</td></tr>
+            <tr><td>Save pictures to your gallery</td><td>❌</td><td>✅</td></tr>
+            </tbody>
+        </table>
+    </div>
+    <p>
+        <strong>Demo mode is always unlocked</strong>, and it is the try-before-you-buy: it
+        runs every screen, including the paid ones, against a viewer that does not exist. No
+        setup, no network connection, and it never opens a socket.
+    </p>
+
+    <h2 id="security">Security and privacy</h2>
+    <ul>
+        <li>Connections are encrypted with TLS 1.3 or 1.2. Nothing older is offered, so the connection cannot be talked down to a weaker one.</li>
+        <li>The server's certificate is <strong>pinned</strong>: the app connects only to a certificate you were shown and accepted, and warns you if one ever changes.</li>
+        <li>Your password proves who you are without being sent in the clear.</li>
+        <li>Commands that would alter files — delete, move, save — cannot be sent over the network at all. The desktop refuses them by design, not by setting.</li>
+        <li>The desktop's own AllowList decides which devices may connect in the first place.</li>
+    </ul>
+    <p>
+        The app declares exactly one Android permission, <code>INTERNET</code>, and uses it
+        to reach the computer you typed in and nothing else. No accounts, no analytics, no
+        advertising, no crash reporting, no tracking identifiers.
+        <a href="qiv-remote-privacy.html">Read the full privacy policy</a>.
+    </p>
+
+    <h2 id="setup">Setting up the connection</h2>
+    <p>
+        In QuickImageViewer on the PC:
+    </p>
+    <ul>
+        <li>Press <kbd>F9</kbd> to open <strong>Local Server</strong>.</li>
+        <li>Set <strong>Enable</strong> to On and choose a port.</li>
+        <li>Set <strong>Bind address</strong> to <code>0.0.0.0</code> to accept connections from the network.</li>
+        <li>Add the phone's IP address to the <strong>AllowList</strong> — entries are separated by a comma or a semicolon, never a space.</li>
+        <li>Press <strong>Start</strong>, then <strong>Save to INI</strong> to keep it.</li>
+    </ul>
+    <p>
+        Then add the PC in the app's Servers screen. Nearly every connection problem is one
+        of three things: Local Server switched off, the phone missing from the AllowList, or
+        a firewall on the port. The app's own About screen walks through the same steps.
+    </p>
+
+    </main>
+
+<!-- SHARED-FOOTER-START — generated from docs/_partials/footer.html by sync-site.py. Do not edit between the fences; edit the partial. -->
+<footer>
+    <div class="footer-inner">
+        <div class="footer-apps">
+            <p class="footer-pages">
+                <a href="./">🖥&nbsp; QuickImageViewer (qIV)</a>
+                <a href="qiv-privacy.html">🔒&nbsp; Privacy — Windows app</a>
+            </p>
+            <p class="footer-pages">
+                <a href="qiv-remote.html">📱&nbsp; qIV Remote</a>
+                <a href="qiv-remote-privacy.html">🔒&nbsp; Privacy — Android app</a>
+            </p>
+        </div>
+        <p>
+            Developed by <strong>👤&nbsp; Ivan Hristov Yanev (IcyHoty2k)</strong>.
+            Licensed under the AGPLv3.
+        </p>
+        <p>
+            <a href="https://github.com/icyhoty2k/QuickImageViewer">GitHub repository</a>
+            &bull;
+            <a href="https://github.com/icyhoty2k/QuickImageViewer/releases">Releases</a>
+            &bull;
+            <a href="https://github.com/icyhoty2k/QuickImageViewer/issues/new?template=bug_report.yml">Report a bug</a>
+            &bull;
+            <a href="https://github.com/icyhoty2k/QuickImageViewer/issues/new?template=android_remote.yml">Report an Android problem</a>
+            &bull;
+            <a href="https://github.com/icyhoty2k/QuickImageViewer/issues/new?template=feature_request.yml">Request a feature</a>
+            &bull;
+            <a href="https://github.com/sponsors/icyhoty2k">Sponsor</a>
+            &bull;
+            <a href="https://ko-fi.com/ivanhristovyanev">Ko-fi</a>
+        </p>
+        <!--
+            BUSINESS SPONSORS GO HERE. The $100/month tier promises a name or logo
+            "on the project website", and this is the spot — a line of links above
+            the funding sentence below.
+
+            Left as a comment rather than an empty heading on purpose: a section
+            headed "Sponsors" with nothing under it advertises that nobody
+            sponsors this project, which is the opposite of what it is for. Turn
+            it into real markup when the first one arrives.
+
+            Ask before listing anyone. The tier wording promises them the choice.
+        -->
+        <p>
+            qIV is free, has no advertising and collects nothing.
+            <a href="https://github.com/sponsors/icyhoty2k">Sponsorship</a>
+            is what keeps it being worked on.
+            Building it into a closed product?
+            <a href="mailto:icyhoty2k@gmail.com">Commercial licensing</a>
+            is available.
+        </p>
+    </div>
+</footer>
+<!-- SHARED-FOOTER-END -->
+
+</body>
+</html>

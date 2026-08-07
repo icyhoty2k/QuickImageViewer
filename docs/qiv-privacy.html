@@ -1,0 +1,225 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>QuickImageViewer (qIV) — Privacy Policy</title>
+
+    <meta name="description"
+          content="Privacy policy for QuickImageViewer, the free image viewer for Windows. No telemetry, no accounts, no advertising, and no network call the app makes on its own.">
+    <meta name="robots" content="index, follow">
+    <link rel="canonical" href="https://icyhoty2k.github.io/QuickImageViewer/qiv-privacy.html">
+
+    <link rel="icon" type="image/svg+xml" href="favicon.svg">
+    <link rel="icon" type="image/x-icon" href="favicon.ico">
+    <meta name="theme-color" content="#0f172a">
+
+    <link rel="stylesheet" href="site.css">
+</head>
+<body>
+
+<!-- SHARED-HEADER-START — generated from docs/_partials/header.html by sync-site.py. Do not edit between the fences; edit the partial. -->
+<nav class="sitenav">
+    <div class="inner">
+        <a href="./">🖥&nbsp; QuickImageViewer (qIV)</a>
+        <a href="qiv-privacy.html" class="current">🔒&nbsp; Privacy — Windows</a>
+        <a href="qiv-remote.html">📱&nbsp; qIV Remote</a>
+        <a href="qiv-remote-privacy.html">🔒&nbsp; Privacy — Android</a>
+    </div>
+</nav>
+<!-- SHARED-HEADER-END -->
+
+<main class="container">
+
+    <h1>QuickImageViewer (qIV) — Privacy Policy</h1>
+    <p class="meta">
+        Applies to the Windows application <code>QuickImageViewer.exe</code> —
+        <a href="./">what the app does</a>.<br>
+        Last updated: 7 August 2026.
+    </p>
+
+    <!--
+        THE STORE ROW. Each column is one app: its button, and the privacy
+        policy FOR THAT APP under it. Order inside a column is what the reader
+        follows, so the pairing has to be vertical rather than two parallel rows.
+
+        The Play URL is the applicationId and will not change, so the link is
+        live now and simply starts working when the listing is approved. It is on
+        four pages — grep this folder for "store/apps/details" before editing.
+
+        NOT the official Play badge image: a licensed asset with its own
+        placement and clear-space rules, which cannot be inlined. Swap the
+        anchor's contents for the artwork later; href and layout stay.
+    -->
+    <!-- SHARED-STOREROW-START — generated from docs/_partials/storerow.html by sync-site.py. Do not edit between the fences; edit the partial. -->
+<div class="storerow">
+        <div class="store-col">
+            <!-- THE FILE ITSELF, not the releases page. GitHub resolves
+                 /releases/latest/download/<name> to the newest release's asset
+                 and serves it, so this needs no update per release — but only
+                 because the asset name never changes. If a version ever gets
+                 into the filename, this URL 404s silently and the download
+                 button dies without anything else looking wrong. -->
+            <a class="cta-button" href="https://github.com/icyhoty2k/QuickImageViewer/releases/latest/download/QuickImageViewer.exe">
+                <span class="glyph"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3a1 1 0 0 1 1 1v8.6l2.3-2.3a1 1 0 1 1 1.4 1.4l-4 4a1 1 0 0 1-1.4 0l-4-4a1 1 0 1 1 1.4-1.4l2.3 2.3V4a1 1 0 0 1 1-1Z"/><path d="M4 14a1 1 0 0 1 1 1v3a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-3a1 1 0 1 1 2 0v3a3 3 0 0 1-3 3H6a3 3 0 0 1-3-3v-3a1 1 0 0 1 1-1Z"/></svg></span>
+                <span>Download QuickImageViewer<small>Windows 10 &amp; 11 &mdash; free</small></span>
+            </a>
+            <a class="policy" href="qiv-privacy.html">🔒&nbsp; Privacy — Windows app</a>
+        </div>
+        <div class="store-col">
+            <a class="cta-button" href="https://play.google.com/store/apps/details?id=net.icyhoty2k.qivremote">
+                <span class="glyph"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 4.6a1 1 0 0 1 1.51-.86l11.5 6.9a1 1 0 0 1 0 1.72l-11.5 6.9A1 1 0 0 1 7 18.4V4.6Z"/></svg></span>
+                <span>Get qIV Remote<small>Android &mdash; Google Play</small></span>
+            </a>
+            <a class="policy" href="qiv-remote-privacy.html">🔒&nbsp; Privacy — Android app</a>
+        </div>
+    </div>
+<!-- SHARED-STOREROW-END -->
+
+    <div class="callout">
+        <strong>The short version.</strong> QuickImageViewer has no accounts, no analytics,
+        no advertising and no telemetry. It makes no network call of its own. Everything it
+        keeps stays on your computer, and nothing is ever sent to the developer or to any
+        third party.
+    </div>
+
+    <h2>What the app stores, and where</h2>
+    <ul>
+        <li>
+            <strong>Settings</strong> — your preferences, window position, panel layout and
+            recent folders, in the Windows registry under your own user account.
+        </li>
+        <li>
+            <strong>Logs</strong> — only when you switch logging on. Written to files beside
+            the executable and never sent anywhere.
+        </li>
+        <li>
+            <strong>Crash dumps</strong> — if the app crashes it writes a
+            <code>.dmp</code> file to your disk and tells you where it put it. It stays
+            there. Attaching one to a bug report is your decision to make, every time.
+        </li>
+    </ul>
+    <p>
+        The application is portable: it installs nothing, runs no background service, and
+        leaves nothing behind but the registry key above.
+    </p>
+
+    <h2>What leaves your computer</h2>
+    <p>
+        <strong>Nothing, unless you switch on the Local Server.</strong> The viewer itself
+        opens no connection, checks for no update, and contacts no server. There is no
+        analytics endpoint, no crash reporter and no licence check, because there is nothing
+        to license.
+    </p>
+    <p>
+        The optional Local Server (<kbd>F9</kbd>) is what lets the
+        <a href="qiv-remote.html">Android app</a> or another copy of qIV drive this one. It
+        is off until you turn it on, and when it is on:
+    </p>
+    <ul>
+        <li>it listens on the address and port you choose, on your own network;</li>
+        <li>only the devices in your AllowList may connect at all;</li>
+        <li>connections are encrypted, and a password proves who is connecting;</li>
+        <li>
+            commands that would alter files — delete, move, save — cannot be sent over it.
+            The viewer refuses them by design, not by setting.
+        </li>
+    </ul>
+    <p>
+        What travels over that connection travels between your own machines. It does not
+        pass through any service of the developer's, because there is not one.
+    </p>
+
+    <h2>Your files</h2>
+    <p>
+        The app reads the images and folders you open, on your own disk, to display them.
+        It does not index your drives in the background, upload anything, or report what you
+        looked at.
+    </p>
+
+    <h2>Children</h2>
+    <p>
+        The app collects no personal data from anyone, of any age.
+    </p>
+
+    <h2>Source code</h2>
+    <p>
+        QuickImageViewer is free and open source under the AGPLv3. Every claim on this page
+        can be checked against
+        <a href="https://github.com/icyhoty2k/QuickImageViewer">the source</a> rather than
+        taken on trust.
+    </p>
+
+    <h2>Changes to this policy</h2>
+    <p>
+        If the app's behaviour changes in a way that affects this policy — for example if a
+        feature is added that transmits something new — this page is updated and the date at
+        the top changes with it.
+    </p>
+
+    <h2>Contact</h2>
+    <p>
+        Questions about this policy:
+        <a href="mailto:icyhoty2k@gmail.com">icyhoty2k@gmail.com</a>
+    </p>
+
+    </main>
+
+<!-- SHARED-FOOTER-START — generated from docs/_partials/footer.html by sync-site.py. Do not edit between the fences; edit the partial. -->
+<footer>
+    <div class="footer-inner">
+        <div class="footer-apps">
+            <p class="footer-pages">
+                <a href="./">🖥&nbsp; QuickImageViewer (qIV)</a>
+                <a href="qiv-privacy.html">🔒&nbsp; Privacy — Windows app</a>
+            </p>
+            <p class="footer-pages">
+                <a href="qiv-remote.html">📱&nbsp; qIV Remote</a>
+                <a href="qiv-remote-privacy.html">🔒&nbsp; Privacy — Android app</a>
+            </p>
+        </div>
+        <p>
+            Developed by <strong>👤&nbsp; Ivan Hristov Yanev (IcyHoty2k)</strong>.
+            Licensed under the AGPLv3.
+        </p>
+        <p>
+            <a href="https://github.com/icyhoty2k/QuickImageViewer">GitHub repository</a>
+            &bull;
+            <a href="https://github.com/icyhoty2k/QuickImageViewer/releases">Releases</a>
+            &bull;
+            <a href="https://github.com/icyhoty2k/QuickImageViewer/issues/new?template=bug_report.yml">Report a bug</a>
+            &bull;
+            <a href="https://github.com/icyhoty2k/QuickImageViewer/issues/new?template=android_remote.yml">Report an Android problem</a>
+            &bull;
+            <a href="https://github.com/icyhoty2k/QuickImageViewer/issues/new?template=feature_request.yml">Request a feature</a>
+            &bull;
+            <a href="https://github.com/sponsors/icyhoty2k">Sponsor</a>
+            &bull;
+            <a href="https://ko-fi.com/ivanhristovyanev">Ko-fi</a>
+        </p>
+        <!--
+            BUSINESS SPONSORS GO HERE. The $100/month tier promises a name or logo
+            "on the project website", and this is the spot — a line of links above
+            the funding sentence below.
+
+            Left as a comment rather than an empty heading on purpose: a section
+            headed "Sponsors" with nothing under it advertises that nobody
+            sponsors this project, which is the opposite of what it is for. Turn
+            it into real markup when the first one arrives.
+
+            Ask before listing anyone. The tier wording promises them the choice.
+        -->
+        <p>
+            qIV is free, has no advertising and collects nothing.
+            <a href="https://github.com/sponsors/icyhoty2k">Sponsorship</a>
+            is what keeps it being worked on.
+            Building it into a closed product?
+            <a href="mailto:icyhoty2k@gmail.com">Commercial licensing</a>
+            is available.
+        </p>
+    </div>
+</footer>
+<!-- SHARED-FOOTER-END -->
+
+</body>
+</html>
