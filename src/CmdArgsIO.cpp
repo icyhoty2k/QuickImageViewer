@@ -24,6 +24,7 @@
 #include "Persistence/RegistryManager.h"
 #include "Platform/Constants.h"
 #include "Platform/ConstantsStrings.h"
+#include "Platform/ConstantsIcons.h"
 #include "UI/ThemedDialog.h"
 #include <algorithm>
 #include <string>
@@ -411,9 +412,9 @@ void TestCmdArgsFile(HWND hWnd) {
     const std::wstring tally = L"\n\nArguments checked: " + std::to_wstring(okCount) +
                                L" of " + std::to_wstring(tokens.size());
     if (problems.empty())
-        UI::ThemedDialog::Message(hWnd, (std::wstring(Constants::ThemeIcons::ICON_CHECK) + L" All arguments are valid." + tally).c_str(),
+        UI::ThemedDialog::Message(hWnd, (std::wstring(Constants::Icon::CHECK) + L" All arguments are valid." + tally).c_str(),
                                   L"Test CmdArgs");
     else
-        UI::ThemedDialog::Message(hWnd, (std::wstring(Constants::ThemeIcons::ICON_WARNING) + L" Problems found:" + problems + tally).c_str(),
+        UI::ThemedDialog::Message(hWnd, (std::wstring(Constants::Icon::WARNING) + L" Problems found:" + problems + tally).c_str(),
                                   L"Test CmdArgs");
 }

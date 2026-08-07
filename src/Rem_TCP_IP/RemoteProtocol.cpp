@@ -14,6 +14,7 @@
 #include "RemoteProtocol.h"
 #include "RemoteMirror.h" // SessionActive — the switch BlockedNow hangs off
 #include "Platform/Constants.h"
+#include "Platform/ConstantsIcons.h" // ScopeIcon / DescribeAgent glyphs
 
 #include <algorithm>
 #include <cwctype>
@@ -821,20 +822,20 @@ std::wstring AgentField(const std::wstring &value) {
 }
 
 const wchar_t *ScopeIcon(const std::wstring &address, bool sameMachine) {
-    if (sameMachine)                                  return L"\U0001F3E0"; // 🏠 this machine
+    if (sameMachine)                                  return Constants::Icon::HOME;
 
     const std::wstring a = StripAddressBrackets(address);
 
-    if (a.empty())                                    return L"\U0001F3E0";
-    if (a.rfind(L"127.", 0) == 0 || a == L"::1")      return L"\U0001F3E0";
-    if (_wcsicmp(a.c_str(), L"localhost") == 0)       return L"\U0001F3E0";
+    if (a.empty())                                    return Constants::Icon::HOME;
+    if (a.rfind(L"127.", 0) == 0 || a == L"::1")      return Constants::Icon::HOME;
+    if (_wcsicmp(a.c_str(), L"localhost") == 0)       return Constants::Icon::HOME;
 
     // RFC 1918 and the IPv6 equivalents. Anything private is "the LAN".
-    if (a.rfind(L"10.", 0) == 0)                      return L"\U0001F5A7"; // 🖧 LAN
-    if (a.rfind(L"192.168.", 0) == 0)                 return L"\U0001F5A7";
-    if (a.rfind(L"169.254.", 0) == 0)                 return L"\U0001F5A7"; // link-local
-    if (a.rfind(L"fe80", 0) == 0)                     return L"\U0001F5A7"; // IPv6 link-local
-    if (a.rfind(L"fc", 0) == 0 || a.rfind(L"fd", 0) == 0) return L"\U0001F5A7"; // ULA
+    if (a.rfind(L"10.", 0) == 0)                      return Constants::Icon::LAN;
+    if (a.rfind(L"192.168.", 0) == 0)                 return Constants::Icon::LAN;
+    if (a.rfind(L"169.254.", 0) == 0)                 return Constants::Icon::LAN; // link-local
+    if (a.rfind(L"fe80", 0) == 0)                     return Constants::Icon::LAN; // IPv6 link-local
+    if (a.rfind(L"fc", 0) == 0 || a.rfind(L"fd", 0) == 0) return Constants::Icon::LAN; // ULA
 
     // 172.16.0.0 – 172.31.255.255 only. The whole of 172. is NOT private, so the
     // second octet has to be read rather than the prefix matched — treating all
@@ -843,7 +844,7 @@ const wchar_t *ScopeIcon(const std::wstring &address, bool sameMachine) {
         const size_t dot = a.find(L'.', 4);
         if (dot != std::wstring::npos) {
             const int second = _wtoi(a.substr(4, dot - 4).c_str());
-            if (second >= 16 && second <= 31)         return L"\U0001F5A7";
+            if (second >= 16 && second <= 31)         return Constants::Icon::LAN;
         }
     }
 
@@ -852,22 +853,25 @@ const wchar_t *ScopeIcon(const std::wstring &address, bool sameMachine) {
     // direction is worse than saying nothing, so it reads as LAN: a hostname
     // typed into a local-network viewer is overwhelmingly a local machine.
     if (a.find_first_not_of(L"0123456789.:abcdefABCDEF") != std::wstring::npos)
-        return L"\U0001F5A7";
+        return Constants::Icon::LAN;
 
-    return L"\U0001F310"; // 🌐 public — this connection leaves the network
+    return Constants::Icon::GLOBE; // public — this connection leaves the network
 }
 
 std::wstring DescribeAgent(const AgentInfo &info, AgentRole role) {
-    // 🙋 someone asking this viewer for something, 📡 something this viewer asks.
+    // CLIENT: someone asking this viewer for something.
+    // ANTENNA: something this viewer asks.
     const std::wstring lead = (role == AgentRole::Client)
-                                  ? L"\U0001F64B Client"
-                                  : L"\U0001F4E1 Server";
+                                  ? std::wstring(Constants::Icon::CLIENT)  + L" Client"
+                                  : std::wstring(Constants::Icon::ANTENNA) + L" Server";
+
+    const std::wstring sep = std::wstring(L"  ") + Constants::Icon::MIDDLE_DOT + L"  ";
 
     return lead +
-           L"  \x00B7  App "  + AgentField(info.app) +
-           L" "               + AgentField(info.version) +
-           L"  \x00B7  OS "   + AgentField(info.os) +
-           L"  \x00B7  Host " + AgentField(info.host);
+           sep + L"App "  + AgentField(info.app) +
+           L" "           + AgentField(info.version) +
+           sep + L"OS "   + AgentField(info.os) +
+           sep + L"Host " + AgentField(info.host);
 }
 
 bool NameForCommand(Command cmd, std::wstring &nameOut) {

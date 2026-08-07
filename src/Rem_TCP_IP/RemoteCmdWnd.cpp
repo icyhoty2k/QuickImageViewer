@@ -12,6 +12,7 @@
 
 #include "AppState.h"
 #include "Platform/Constants.h"
+#include "Platform/ConstantsIcons.h"
 #include "Input/Command.h"
 // Safe from a .cpp even though UIManager.h includes THIS header: the guard has
 // already fired by the time it is reached, so there is no cycle. Same note as
@@ -922,8 +923,8 @@ LRESULT RemoteCmdWnd::HandlePanelMessage(UINT message, WPARAM wParam, LPARAM lPa
                 SelectObject(bb, m_hFontBody);
                 SetTextColor(bb, m_alsoLocal ? PC::ON : dim);
                 RECT cr = m_localRect;
-                DrawTextW(bb, m_alsoLocal ? L"☑  also run it here"
-                                          : L"☐  also run it here",
+                DrawTextW(bb, m_alsoLocal ? QIV_ICON_CHECKBOX_ON  L"  also run it here"
+                                          : QIV_ICON_CHECKBOX_OFF L"  also run it here",
                           -1, &cr, DT_LEFT | DT_VCENTER | DT_SINGLELINE);
                 y = m_localRect.bottom + static_cast<int>(12 * s);
 
@@ -1010,7 +1011,7 @@ LRESULT RemoteCmdWnd::HandlePanelMessage(UINT message, WPARAM wParam, LPARAM lPa
                         SetTextColor(bb, ticked ? PC::ON : dim);
                         RECT kr{rr.left + static_cast<int>(8 * s), ry,
                                 rr.left + static_cast<int>(30 * s), ry + rowH};
-                        DrawTextW(bb, ticked ? L"☑" : L"☐", -1, &kr,
+                        DrawTextW(bb, ticked ? Constants::Icon::CHECKBOX_ON : Constants::Icon::CHECKBOX_OFF, -1, &kr,
                                   DT_LEFT | DT_VCENTER | DT_SINGLELINE);
 
                         // Dimmed when unticked, so a glance at the box says where the
@@ -1051,7 +1052,7 @@ LRESULT RemoteCmdWnd::HandlePanelMessage(UINT message, WPARAM wParam, LPARAM lPa
                     m_status.empty()
                         ? std::wstring(L"Nothing sent yet.")
                         : (m_awaiting > 0
-                               ? m_status + L"   ·   waiting for " +
+                               ? m_status + L"   " QIV_ICON_MIDDLE_DOT L"   waiting for " +
                                      std::to_wstring(m_awaiting) + L"…"
                                : m_status);
                 DrawTextW(bb, line2.c_str(), -1, &st,
@@ -1116,7 +1117,7 @@ LRESULT RemoteCmdWnd::HandlePanelMessage(UINT message, WPARAM wParam, LPARAM lPa
                     SetTextColor(bb, r.outbound ? PC::NUMBER : (r.ok ? PC::ON : PC::WARN));
                     RECT ar{m_log.view.left + static_cast<int>(52 * s), ry,
                             m_log.view.left + static_cast<int>(72 * s), ry + rowH};
-                    DrawTextW(bb, r.outbound ? L"→" : L"←", -1, &ar,
+                    DrawTextW(bb, r.outbound ? Constants::Icon::ARROW_RIGHT : Constants::Icon::ARROW_LEFT, -1, &ar,
                               DT_LEFT | DT_VCENTER | DT_SINGLELINE);
 
                     SelectObject(bb, m_hFontBody);

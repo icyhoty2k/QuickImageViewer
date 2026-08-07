@@ -14,6 +14,7 @@
 #include "../Persistence/RegistryManager.h"
 #include "../Platform/Constants.h"
 #include "../Platform/ConstantsStrings.h"
+#include "../Platform/ConstantsIcons.h"
 #include <algorithm>
 #include <wrl/client.h>
 
@@ -817,7 +818,7 @@ const std::wstring &OverlayManager::CurrentFolderName() {
     // saves rebuilding "icon + space + name" on every navigation.
     m_folderLine.clear();
     if (!m_folderName.empty()) {
-        m_folderLine = Constants::ThemeIcons::ICON_FOLDER;
+        m_folderLine = Constants::Icon::FOLDER;
         m_folderLine += L' ';
         m_folderLine += m_folderName;
     }

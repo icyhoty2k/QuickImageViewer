@@ -11,6 +11,7 @@
 #include "../../GeoNames.h"
 #include "../../Platform/Constants.h"
 #include "../../Platform/ConstantsTheme.h"
+#include "../../Platform/ConstantsIcons.h"
 #include "../../AppState.h"
 #include "../../WorkerThread.h"
 #include "../../Input/MouseHandler.h"
@@ -336,7 +337,7 @@ namespace UI {
                     const double lonDec = GpsDecimal(pvLon, lonRef);
                     wchar_t url[128], coords[64];
                     swprintf_s(url, L"https://maps.google.com/?q=%.6f,%.6f", latDec, lonDec);
-                    swprintf_s(coords, L"%.6f, %.6f  →  open in maps", latDec, lonDec);
+                    swprintf_s(coords, L"%.6f, %.6f  " QIV_ICON_ARROW_RIGHT L"  open in maps", latDec, lonDec);
                     rows.push_back({L"Location", std::wstring(coords), false, std::wstring(url)});
 
                     const auto loc = GeoNames::Lookup(latDec, lonDec);

@@ -371,69 +371,7 @@ namespace Constants {
             return RGB(ToByte(Apply(r, factor)), ToByte(Apply(g, factor)), ToByte(Apply(b, factor)));
         }
     }
-namespace ThemeIcons {
-    // ── Status / indicators ──────────────────────────────────────────
-    constexpr const wchar_t* ICON_FAVORITES_MARK  = L"\x2605";        // ★
-    constexpr const wchar_t* ICON_SYMLINK_MARK     = L"\U0001F517";   // 🔗
-    constexpr const wchar_t* ICON_WARNING          = L"\x26A0";       // ⚠
-    // NO variation selector, unlike ICON_SECTION_INFO below.
-    //
-    // U+2139 defaults to TEXT presentation; adding U+FE0F forces the emoji one.
-    // In emoji presentation Segoe UI Emoji gives it a full-square advance with
-    // the ink sitting right of centre inside it, so a centred line that opens
-    // with it reads as nudged right — DWrite centres the advance, not the ink.
-    // As a text glyph it is proportioned like the letters beside it and takes
-    // the line's own colour.
-    constexpr const wchar_t* ICON_INFO             = L"\x2139";       // ℹ
-    constexpr const wchar_t* ICON_EMPTY            = L"\x2205";       // ∅
-    constexpr const wchar_t* ICON_CLOSE            = L"\x2715";       // ✕
-    constexpr const wchar_t* ICON_CHECK            = L"\x2714";       // ✔
-    constexpr const wchar_t* ICON_FOLDER_ARROW     = L"\x25B8";       // ▸
-    // Shown when a row has MORE than one badge and only one slot to show them in;
-    // hovering it lists them all. Two joined squares — the layered look says
-    // "several things stacked here" without borrowing any badge's own meaning.
-    constexpr const wchar_t* ICON_BADGE_STACK      = L"\x29C9";       // ⧉
-
-    // ── Directional arrows ───────────────────────────────────────────
-    constexpr const wchar_t* ICON_ARROW_RIGHT      = L"\x2192";       // →
-    constexpr const wchar_t* ICON_ARROW_DOWN       = L"\x2193";       // ↓
-    constexpr const wchar_t* ICON_ARROWS_UP_DOWN   = L"\x2191\x2193"; // ↑↓
-
-    // ── Media playback ───────────────────────────────────────────────
-    constexpr const wchar_t* ICON_PLAY             = L"\x25B6";       // ▶
-    constexpr const wchar_t* ICON_PAUSE            = L"\x23F8";       // ⏸
-    constexpr const wchar_t* ICON_STOP             = L"\x25A0";       // ■
-
-    // ── Wrap navigation ──────────────────────────────────────────────
-    constexpr const wchar_t* ICON_WRAP_START       = L"\x21A9";       // ↩
-    constexpr const wchar_t* ICON_WRAP_END         = L"\x21AA";       // ↪
-
-    // ── Objects / folders ────────────────────────────────────────────
-    constexpr const wchar_t* ICON_FOLDER           = L"\U0001F4C1";   // 📁
-    constexpr const wchar_t* ICON_FOLDER_OPEN      = L"\U0001F4C2";   // 📂
-    // "You are here" rather than a second folder: the line it marks names the
-    // folder you are ALREADY in, and two near-identical folder glyphs stacked
-    // above each other read as one repeated thing rather than two different ones.
-    constexpr const wchar_t* ICON_LOCATION         = L"\U0001F4CD";   // 📍
-
-    // ── HelpWnd section emoji ────────────────────────────────────────
-    constexpr const wchar_t* ICON_SECTION_COMPASS    = L"\U0001F9ED";     // 🧭
-    constexpr const wchar_t* ICON_SECTION_MAGNIFIER  = L"\U0001F50D";     // 🔍
-    constexpr const wchar_t* ICON_SECTION_MOUSE      = L"\U0001F5B1\xFE0F";// 🖱️
-    constexpr const wchar_t* ICON_SECTION_WINDOW     = L"\U0001FA9F";     // 🪟
-    constexpr const wchar_t* ICON_SECTION_TOOLBOX    = L"\U0001F9F0";     // 🧰
-    constexpr const wchar_t* ICON_SECTION_PICTURE    = L"\U0001F5BC\xFE0F";// 🖼️
-    constexpr const wchar_t* ICON_SECTION_SCROLL     = L"\U0001F4DC";     // 📜
-    constexpr const wchar_t* ICON_SECTION_PLAY       = L"\x25B6\xFE0F";   // ▶️
-    // WITH the variation selector, unlike ICON_INFO — these sit in a column of
-    // other emoji, where a text glyph would be the odd one out.
-    constexpr const wchar_t* ICON_SECTION_INFO       = L"\x2139\xFE0F";   // ℹ️
-    constexpr const wchar_t* ICON_SECTION_PALETTE    = L"\U0001F3A8";     // 🎨
-    constexpr const wchar_t* ICON_SECTION_FLOPPY     = L"\U0001F4BE";     // 💾
-    constexpr const wchar_t* ICON_SECTION_GEAR       = L"\x2699\xFE0F";   // ⚙️
-    constexpr const wchar_t* ICON_SECTION_BELL       = L"\U0001F514";     // 🔔
-    constexpr const wchar_t* ICON_SECTION_DESKTOP    = L"\U0001F5A5\xFE0F";// 🖥️
-    constexpr const wchar_t* ICON_SECTION_KEYBOARD   = L"\x2328\xFE0F";   // ⌨️
-    constexpr const wchar_t* ICON_SECTION_ANTENNA    = L"\U0001F4E1";     // 📡
-    }
-} 
+    // Icons used to live here as Constants::ThemeIcons. They are in
+    // ConstantsIcons.h now, as Constants::Icon — a glyph is not a colour, and
+    // ConstantsStrings.h needs them as macros to paste into its literals.
+}

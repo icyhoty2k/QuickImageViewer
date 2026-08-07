@@ -11,6 +11,7 @@
 #include "UI/CustomControls/ScrollView.h" // WheelDeltaToPixels — the one wheel rule
 #include "../../AppState.h"
 #include "../../Platform/Constants.h"
+#include "../../Platform/ConstantsIcons.h"
 #include "../../Platform/WriteQueue.h"
 #include "../../Platform/MonitorInfo.h"     // the display list — same order Ctrl+M uses
 #include "../../Persistence/RegistryManager.h"
@@ -586,7 +587,7 @@ namespace UI {
                         SelectObject(hdc, m_hFontLink);
                         SetTextColor(hdc, clrLink);
                         RECT rLink = {pad + MulDiv(6, dpi, 96), y, c3, y + row};
-                        DrawTextW(hdc, (std::wstring(Constants::ThemeIcons::ICON_FOLDER_ARROW) + L"  " + m_thumbCachePath).c_str(), -1, &rLink,
+                        DrawTextW(hdc, (std::wstring(Constants::Icon::FOLDER_ARROW) + L"  " + m_thumbCachePath).c_str(), -1, &rLink,
                                   DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
                         m_links.push_back({{rLink.left, y, c3, y + row}, m_thumbCachePath, false});
                     }
@@ -1002,7 +1003,7 @@ namespace UI {
                     const wchar_t *sortNames[] = {L"Name", L"Date modified", L"File size", L"Extension", L"Disk order"};
                     int si = std::clamp(app.fileHandlerDefaultSortOrder, 0, 4);
                     std::wstring s = sortNames[si];
-                    if (app.fileHandlerIsReverseSortOrder) s += std::wstring(L"  ") + Constants::ThemeIcons::ICON_ARROW_DOWN;
+                    if (app.fileHandlerIsReverseSortOrder) s += std::wstring(L"  ") + Constants::Icon::ARROW_DOWN;
                     row2(L"Sort order", s, clrValue);
                 }
                 {
@@ -1070,7 +1071,7 @@ namespace UI {
                         // The one the viewer is actually on, called out because
                         // that is the question this panel gets opened to answer.
                         const bool here = (onIdx >= 0 && static_cast<size_t>(onIdx) == i);
-                        if (here) val += L"  ← qIV";
+                        if (here) val += L"  " QIV_ICON_ARROW_LEFT L" qIV";
 
                         row2(label, val, here ? clrGreen : clrValue, here);
                     }

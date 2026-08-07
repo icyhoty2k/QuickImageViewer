@@ -12,6 +12,7 @@
 
 #include "AppState.h"
 #include "Platform/Constants.h"
+#include "Platform/ConstantsIcons.h"
 #include "Input/Command.h"   // InputManager::ExecuteCommand — the one sink
 #include "UI/GdiPool.h"      // pooled brushes and pens — never DeleteObject them
 
@@ -229,7 +230,7 @@ void MirrorPickerWnd::DoSyncSelected() {
     // come from the command; this panel only says it happened.
     InputManager::ExecuteCommand(m_hParent, Command::MirrorSyncNow);
 
-    m_status = L"Sent folder · image · view";
+    m_status = L"Sent folder " QIV_ICON_MIDDLE_DOT L" image " QIV_ICON_MIDDLE_DOT L" view";
     Repaint();
 }
 
@@ -439,7 +440,8 @@ LRESULT MirrorPickerWnd::HandlePanelMessage(UINT message, WPARAM wParam, LPARAM 
                 if (rv.mirroring) ++tickedCount;
 
             const std::wstring title =
-                L"\U0001F4E1 Mirroring — which servers receive what this instance does   ·   " +
+                std::wstring(Constants::Icon::ANTENNA) +
+                L" Mirroring — which servers receive what this instance does   " QIV_ICON_MIDDLE_DOT L"   " +
                 std::to_wstring(m_rows.size()) + L" connected, " +
                 std::to_wstring(tickedCount) + L" ticked";
 
@@ -453,8 +455,10 @@ LRESULT MirrorPickerWnd::HandlePanelMessage(UINT message, WPARAM wParam, LPARAM 
                 // The F11 state used to be spelled out here; it now has its own
                 // button, and saying it twice invites the two to disagree.
                 const std::wstring sub =
-                    L"☑ controls it · ◉ watches it · Identify names the screen"
-                    L"   ·   A all · N none · S sync · W watch · I identify";
+                    QIV_ICON_CHECKBOX_ON L" controls it " QIV_ICON_MIDDLE_DOT L" "
+                    QIV_ICON_RADIO_ON    L" watches it " QIV_ICON_MIDDLE_DOT L" Identify names the screen"
+                    L"   " QIV_ICON_MIDDLE_DOT L"   A all " QIV_ICON_MIDDLE_DOT L" N none " QIV_ICON_MIDDLE_DOT
+                    L" S sync " QIV_ICON_MIDDLE_DOT L" W watch " QIV_ICON_MIDDLE_DOT L" I identify";
                 DrawTextW(bb, sub.c_str(), -1, &sr, DT_LEFT | DT_SINGLELINE | DT_END_ELLIPSIS);
             }
 
@@ -627,7 +631,7 @@ LRESULT MirrorPickerWnd::HandlePanelMessage(UINT message, WPARAM wParam, LPARAM 
                 {
                     SetTextColor(bb, r.mirroring ? PC::ON : dim);
                     RECT mr = r.markRect;
-                    DrawTextW(bb, r.mirroring ? L"☑" : L"☐", -1, &mr,
+                    DrawTextW(bb, r.mirroring ? Constants::Icon::CHECKBOX_ON : Constants::Icon::CHECKBOX_OFF, -1, &mr,
                               DT_CENTER | DT_VCENTER | DT_SINGLELINE);
                 }
 
@@ -638,7 +642,7 @@ LRESULT MirrorPickerWnd::HandlePanelMessage(UINT message, WPARAM wParam, LPARAM 
                 {
                     SetTextColor(bb, r.observing ? PC::ON : dim);
                     RECT er2 = r.eyeRect;
-                    DrawTextW(bb, r.observing ? L"◉" : L"○", -1, &er2,
+                    DrawTextW(bb, r.observing ? Constants::Icon::RADIO_ON : Constants::Icon::RADIO_OFF, -1, &er2,
                               DT_CENTER | DT_VCENTER | DT_SINGLELINE);
                 }
 
@@ -666,7 +670,7 @@ LRESULT MirrorPickerWnd::HandlePanelMessage(UINT message, WPARAM wParam, LPARAM 
                            L"being forwarded anywhere.";
                     fc   = PC::WARN;
                 } else if (foot.empty()) {
-                    foot = L"Ticks take effect immediately. ◉ is a radio button — one "
+                    foot = L"Ticks take effect immediately. " QIV_ICON_RADIO_ON L" is a radio button — one "
                            L"watched instance at a time. Esc closes; the selection stays.";
                 }
 

@@ -10,6 +10,7 @@
 #include "UI/GdiPool.h" // pooled brushes and pens — never DeleteObject them
 #include "UI/CustomControls/ScrollView.h" // WheelDeltaToPixels — the one wheel rule
 #include "../../Platform/Constants.h"
+#include "../../Platform/ConstantsIcons.h"
 #include "../../AppState.h"
 #include "Shortcuts.h"
 #include <string>
@@ -46,8 +47,8 @@ namespace UI {
             Constants::Links::URL_ANDROID_APP,
             Constants::Links::URL_FACEBOOK
         };
-        const wchar_t *const kFooterSeparator = L"   \x2022   ";
-        const wchar_t *const kFooterSeparatorTight = L" \x2022 ";
+        const wchar_t *const kFooterSeparator = L"   " QIV_ICON_BULLET L"   ";
+        const wchar_t *const kFooterSeparatorTight = L" " QIV_ICON_BULLET L" ";
 
         static_assert(sizeof(kFooterLabel) == sizeof(kFooterUrl),
                       "footer label and URL tables must stay parallel");
@@ -229,7 +230,7 @@ namespace UI {
         };
 
         // ---------------------------------------------------------------
-        const int sNav = Sec(Constants::ThemeIcons::ICON_SECTION_COMPASS, L"IMAGE NAVIGATION",
+        const int sNav = Sec(Constants::Icon::SECTION_COMPASS, L"IMAGE NAVIGATION",
                              L"Moving between images and folders");
 
         Add(K(SC::SC_NAV_PREV) + L" / " + K(SC::SC_NAV_NEXT),
@@ -304,7 +305,7 @@ namespace UI {
             L"silence.", sNav);
 
         // ---------------------------------------------------------------
-        const int sZoom = Sec(Constants::ThemeIcons::ICON_SECTION_MAGNIFIER, L"ZOOM, PAN & VIEW MODES",
+        const int sZoom = Sec(Constants::Icon::SECTION_MAGNIFIER, L"ZOOM, PAN & VIEW MODES",
                               L"How the image fits and moves inside the window");
 
         Add(L"Up / Down",
@@ -336,10 +337,10 @@ namespace UI {
             L" (IS_LOCK_VIEWPORT in Constants.h).", sZoom);
 
         // ---------------------------------------------------------------
-        const int sMouse = Sec(Constants::ThemeIcons::ICON_SECTION_MOUSE, L"MOUSE CONTROLS",
+        const int sMouse = Sec(Constants::Icon::SECTION_MOUSE, L"MOUSE CONTROLS",
                                L"All pointer actions on the main window");
 
-        Add(L"ℹ Button roles",
+        Add(QIV_ICON_INFO L" Button roles",
             L"The roles below assume SWAP_MOUSE_BUTTONS = true in Constants.h (the shipped "
             L"default). Set it to false to exchange the left and right button functions.", sMouse);
         Add(L"LMB hold / drag",
@@ -359,7 +360,7 @@ namespace UI {
             L"Adjust window opacity in " + NumI(Constants::OPACITY_STEP) + L"% steps.", sMouse);
 
         // ---------------------------------------------------------------
-        const int sWin = Sec(Constants::ThemeIcons::ICON_SECTION_WINDOW, L"WINDOW MANAGEMENT",
+        const int sWin = Sec(Constants::Icon::SECTION_WINDOW, L"WINDOW MANAGEMENT",
                              L"Move, resize, snap, fullscreen and stacking");
 
         Add(L"Shift+" + K(SC::SC_APP_HIDE_ALT) + L" / " + K(SC::SC_PAN_LEFT) + L" / " +
@@ -376,7 +377,7 @@ namespace UI {
         Add(Alt(SC::SC_WINDOW_RESET_DEFAULTS),
             L"Reset to defaults — window size, position and all effects "
             L"(same as " + Shift(SC::SC_APP_RESET_DEFAULTS) + L").", sWin);
-        Add(L"Shift+Num + / −   •   Shift+" + K(FX::SC_COLOR_GAMMA_UP) + L" / " +
+        Add(L"Shift+Num + / −   " QIV_ICON_BULLET L"   Shift+" + K(FX::SC_COLOR_GAMMA_UP) + L" / " +
             K(FX::SC_COLOR_GAMMA_DOWN),
             L"Grow / shrink the window by " + NumI(Constants::KEYBOARD_WINDOW_RESIZE_STEP) +
             L" px per side while keeping it centered.", sWin);
@@ -403,7 +404,7 @@ namespace UI {
             L"all other windows.", sWin);
 
         // ---------------------------------------------------------------
-        const int sPanels = Sec(Constants::ThemeIcons::ICON_SECTION_TOOLBOX, L"PANELS & TOOLS",
+        const int sPanels = Sec(Constants::Icon::SECTION_TOOLBOX, L"PANELS & TOOLS",
                                 L"Help, info, statistics and the thumbnail panels");
 
         Add(K(SC::SC_PANEL_HELP_TOGGLE),
@@ -440,7 +441,7 @@ namespace UI {
             L"or on any directory / cache strip closes that panel immediately.", sPanels);
 
         // ---------------------------------------------------------------
-        const int sThumbs = Sec(Constants::ThemeIcons::ICON_SECTION_PICTURE, L"THUMBNAIL STRIPS",
+        const int sThumbs = Sec(Constants::Icon::SECTION_PICTURE, L"THUMBNAIL STRIPS",
                                 L"Cache, directory and spawned directory panels");
 
         Add(L"Mouse Wheel",
@@ -489,7 +490,7 @@ namespace UI {
             L"Select Inverse (flips the current selection) and Select None.", sThumbs);
 
         // ---------------------------------------------------------------
-        const int sHist = Sec(Constants::ThemeIcons::ICON_SECTION_SCROLL, L"HISTORY PANEL",
+        const int sHist = Sec(Constants::Icon::SECTION_SCROLL, L"HISTORY PANEL",
                               L"Recently visited folders with favorites");
 
         Add(K(SC::SC_PANEL_HISTORY_TOGGLE),
@@ -527,7 +528,7 @@ namespace UI {
             L"Clear all favorites but keep the history.", sHist);
 
         // ---------------------------------------------------------------
-        const int sSlide = Sec(Constants::ThemeIcons::ICON_SECTION_PLAY, L"SLIDESHOW",
+        const int sSlide = Sec(Constants::Icon::SECTION_PLAY, L"SLIDESHOW",
                                L"Automatic playback with transitions");
 
         Add(Ctrl(SC::SC_SLIDESHOW_TOGGLE), L"Start / stop the slideshow.", sSlide);
@@ -546,7 +547,7 @@ namespace UI {
             L"In List mode the numbered rows become checkboxes.", sSlide);
 
         // ---------------------------------------------------------------
-        const int sOverlay = Sec(Constants::ThemeIcons::ICON_SECTION_INFO, L"INFO OVERLAYS",
+        const int sOverlay = Sec(Constants::Icon::SECTION_INFO, L"INFO OVERLAYS",
                                  L"The 3×3 on-screen information grid");
 
         Add(K(SC::SC_PANEL_OVERLAY_MASTER) + L" / " + Ctrl(SC::SC_PANEL_OVERLAY_MASTER_CTRL0),
@@ -564,7 +565,7 @@ namespace UI {
             L"always stays visible.", sOverlay);
 
         // ---------------------------------------------------------------
-        const int sFx = Sec(Constants::ThemeIcons::ICON_SECTION_PALETTE, L"EFFECTS & COLOR",
+        const int sFx = Sec(Constants::Icon::SECTION_PALETTE, L"EFFECTS & COLOR",
                             L"Effects stack in the order you switch them on — each one works on "
                             L"the result of the previous. Non-destructive: the file on disk is "
                             L"never touched.");
@@ -605,7 +606,7 @@ namespace UI {
             L"re-apply all active effects.", sFx);
 
         // ---------------------------------------------------------------
-        const int sFiles = Sec(Constants::ThemeIcons::ICON_SECTION_FLOPPY, L"FILES, CLIPBOARD & SORTING",
+        const int sFiles = Sec(Constants::Icon::SECTION_FLOPPY, L"FILES, CLIPBOARD & SORTING",
                                L"Saving, copying and playlist ordering");
 
         Add(Ctrl(SC::SC_COPY_TO_CLIPBOARD),
@@ -626,7 +627,7 @@ namespace UI {
             L"option for mechanical hard drives.", sFiles);
 
         // ---------------------------------------------------------------
-        const int sApp = Sec(Constants::ThemeIcons::ICON_SECTION_GEAR, L"APPLICATION & APPEARANCE",
+        const int sApp = Sec(Constants::Icon::SECTION_GEAR, L"APPLICATION & APPEARANCE",
                              L"Lifecycle, theme and window chrome");
 
         Add(K(SC::SC_APP_HIDE) + L"  /  " + Ctrl(SC::SC_APP_HIDE_ALT),
@@ -645,7 +646,7 @@ namespace UI {
         // outbound side, mirroring, a wire log, a restricted mode and a phone client —
         // and none of that is appearance. Its own section, so a reader looking for it
         // finds a heading rather than scrolling past theme brightness.
-        const int sRemote = Sec(Constants::ThemeIcons::ICON_SECTION_ANTENNA,
+        const int sRemote = Sec(Constants::Icon::SECTION_ANTENNA,
                                 L"REMOTE CONTROL & MIRRORING",
                                 L"Drive other screens, and the phone app");
 
@@ -786,7 +787,8 @@ namespace UI {
             L"one, otherwise it sends. ENTER in Value sends. ESC clears, then closes. "
             L"Clicking a command selects it; it never sends on its own.\r\n"
             L"THE BOX ALONG THE BOTTOM IS A LOG of the whole session: every line you "
-            L"sent and every answer, numbered — → for a send, ← for a reply, with the "
+            L"sent and every answer, numbered — " QIV_ICON_ARROW_RIGHT L" for a send, "
+            QIV_ICON_ARROW_LEFT L" for a reply, with the "
             L"instance that answered and its round trip. NEWEST AT THE TOP, so what "
             L"just came back is there without scrolling — the opposite of the Ctrl+F12 "
             L"wire log, which is a transcript you read forwards. It scrolls, and it "
@@ -872,7 +874,8 @@ namespace UI {
             L"its screen and sends the bytes, so this works from a machine in another room "
             L"just as well as from one beside you.\r\n"
             L"ONE instance answers, because the answer is a picture and this screen shows "
-            L"one at a time: the instance being WATCHED (Ctrl+F11's ◉) if there is one — "
+            L"one at a time: the instance being WATCHED (Ctrl+F11's " QIV_ICON_RADIO_ON
+            L") if there is one — "
             L"you are already following that screen — otherwise the first connected row "
             L"under Control. The overlay names which one was asked, so a narrowed "
             L"selection is never ambiguous.\r\n"
@@ -1036,7 +1039,7 @@ namespace UI {
             L"Cycle the window backdrop material: None → Mica → Acrylic → MicaAlt.", sApp);
 
         // ---------------------------------------------------------------
-        const int sTray = Sec(Constants::ThemeIcons::ICON_SECTION_BELL, L"SYSTEM TRAY",
+        const int sTray = Sec(Constants::Icon::SECTION_BELL, L"SYSTEM TRAY",
                               L"Right-click the tray icon to access all persistent settings");
 
         Add(L"Double-click tray icon",
@@ -1150,7 +1153,7 @@ namespace UI {
             L"viewer.", sTray);
 
         // ---------------------------------------------------------------
-        const int sDed = Sec(Constants::ThemeIcons::ICON_SECTION_DESKTOP, L"DEDICATED SCREENS",
+        const int sDed = Sec(Constants::Icon::SECTION_DESKTOP, L"DEDICATED SCREENS",
                              L"Isolated copies for unattended displays (F8)");
 
         Add(K(SC::SC_PANEL_DEDICATED_TOGGLE),
@@ -1211,7 +1214,7 @@ namespace UI {
             L"favorites and all — just portable.", sDed);
 
         // ---------------------------------------------------------------
-        const int sCli = Sec(Constants::ThemeIcons::ICON_SECTION_KEYBOARD, L"COMMAND-LINE ARGUMENTS",
+        const int sCli = Sec(Constants::Icon::SECTION_KEYBOARD, L"COMMAND-LINE ARGUMENTS",
                              L"Options for QuickImageViewer.exe at launch");
 
         Add(L"\"path\\to\\image.jpg\"",

@@ -64,6 +64,7 @@ DOCS = os.path.join(REPO, 'docs')
 PARTIALS = os.path.join(DOCS, '_partials')
 HELPWND = os.path.join(REPO, 'src', 'UI', 'FloatingPanels', 'HelpWnd.cpp')
 SHORTCUTS_H = os.path.join(REPO, 'src', 'Input', 'Shortcuts.h')
+ICONS_H = os.path.join(REPO, 'src', 'Platform', 'ConstantsIcons.h')
 OUT_PAGE = os.path.join(DOCS, 'shortcuts.html')
 
 CURRENT_PAGE = {
@@ -190,14 +191,95 @@ def load_constants():
     return out
 
 
-def resolve_label(expr, consts, unresolved):
+def decode_cpp_escapes(lit):
+    r"""Decode the escapes ConstantsIcons.h uses: \xNNNN, \uNNNN, \UNNNNNNNN.
+
+    Python's own unicode_escape codec is not usable here. C's \x consumes EVERY
+    hex digit that follows it, Python's consumes exactly two — so L"\x2022" comes
+    back from the codec as "\x20" followed by the text "22" instead of a bullet.
+    """
+    out = []
+    i = 0
+    while i < len(lit):
+        if lit[i] != '\\':
+            out.append(lit[i])
+            i += 1
+            continue
+        i += 1
+        if i >= len(lit):
+            break
+        esc = lit[i]
+        i += 1
+        if esc == 'x':
+            start = i
+            while i < len(lit) and lit[i] in '0123456789abcdefABCDEF':
+                i += 1
+            if i > start:
+                out.append(chr(int(lit[start:i], 16)))
+        elif esc in ('u', 'U'):
+            width = 4 if esc == 'u' else 8
+            digits = lit[i:i + width]
+            i += width
+            if len(digits) == width:
+                out.append(chr(int(digits, 16)))
+        elif esc == 'n':
+            out.append('\n')
+        elif esc == 't':
+            out.append('\t')
+        elif esc == 'r':
+            out.append('\r')
+        else:
+            out.append(esc)                   # \\ and \" land here
+    return ''.join(out)
+
+
+def load_icons():
+    """QIV_ICON_* macro name -> the glyph it expands to.
+
+    HELPWND STOPPED WRITING ITS GLYPHS AS LITERALS. "•" and "→" used to sit in
+    the L"..." fragments this file reads; they are now ConstantsIcons.h macros,
+    invisible to a parser that only collects string literals. Dropping the
+    bullet silently merged the two groups of
+
+        L"Shift+Num + / −   " QIV_ICON_BULLET L"   Shift+" + K(SC_COLOR_GAMMA_UP)
+
+    into one run, and the page published a <kbd> reading "Shift+− • Shift+="
+    for a key nobody can press. Every macro in that header is ordinary Unicode
+    or emoji — no Segoe MDL2 private-use codepoints — so all of them are safe to
+    put on a page the site serves without an icon font.
+    """
+    icons = {}
+    if not os.path.exists(ICONS_H):
+        return icons                          # header is new; older trees lack it
+    text = read(ICONS_H)
+    for m in re.finditer(r'#define\s+(QIV_ICON_\w+)[ \t]+([^\r\n]+)', text):
+        name, body = m.group(1), m.group(2)
+        alias = re.match(r'\s*(QIV_ICON_\w+)', body)
+        if alias:                             # QIV_ICON_SECTION_ANTENNA = QIV_ICON_ANTENNA
+            if alias.group(1) in icons:
+                icons[name] = icons[alias.group(1)]
+            continue
+        glyph = ''
+        for lit in re.findall(r'L"((?:[^"\\]|\\.)*)"', body):
+            glyph += decode_cpp_escapes(lit)
+        if glyph:
+            icons[name] = glyph
+    return icons
+
+
+def resolve_label(expr, consts, unresolved, icons):
     """Turn an Add()'s first argument into the string the panel would print."""
     parts = []
-    for tok in re.finditer(r'(\w+)\s*\(\s*(?:\w+::)?(\w+)\s*\)|L"((?:[^"\\]|\\.)*)"',
+    for tok in re.finditer(r'(\w+)\s*\(\s*(?:\w+::)?(\w+)\s*\)'
+                           r'|L"((?:[^"\\]|\\.)*)"'
+                           r'|\b(QIV_ICON_\w+)\b',
                            expr):
         fn, const, lit = tok.group(1), tok.group(2), tok.group(3)
         if lit is not None:
             parts.append(lit.replace('\\"', '"'))
+            continue
+        if tok.group(4) is not None:
+            parts.append(icons.get(tok.group(4), ''))
             continue
         if fn not in WRAPPERS:
             continue
@@ -247,21 +329,31 @@ def split_args(text):
     return [a.strip() for a in out]
 
 
-def joined_literals(expr):
+def joined_literals(expr, icons):
     """Join adjacent C++ string literals into the sentence they form.
 
     A description is routinely four L"..." fragments across four lines, which
     the compiler concatenates. Reading only one of them is how a description
     comes out as " per step." instead of the whole line.
+
+    Icon macros count as fragments too — the remote-log description reads
+    "numbered — QIV_ICON_ARROW_RIGHT for a send", and without the arrow the
+    sentence published as "numbered — for a send".
     """
-    parts = re.findall(r'L"((?:[^"\\]|\\.)*)"', expr)
-    return re.sub(r'\s+', ' ', ''.join(parts).replace('\\"', '"')).strip()
+    parts = []
+    for tok in re.finditer(r'L"((?:[^"\\]|\\.)*)"|\b(QIV_ICON_\w+)\b', expr):
+        if tok.group(1) is not None:
+            parts.append(tok.group(1).replace('\\"', '"'))
+        else:
+            parts.append(icons.get(tok.group(2), ''))
+    return re.sub(r'\s+', ' ', ''.join(parts)).strip()
 
 
 def parse_helpwnd():
     """[(section title, [(keys, description), …]), …] in the panel's own order."""
     text = read(HELPWND)
     consts = load_constants()
+    icons = load_icons()
     unresolved = set()
 
     sections = {}
@@ -287,8 +379,8 @@ def parse_helpwnd():
         # previous..." because the label and the description ran together, and
         # dropped most of every description because C++ concatenates adjacent
         # literals and only the final fragment survived.
-        label = resolve_label(args[0], consts, unresolved)
-        desc = joined_literals(args[1])
+        label = resolve_label(args[0], consts, unresolved, icons)
+        desc = joined_literals(args[1], icons)
         if not label or not desc:
             continue
 
@@ -305,6 +397,13 @@ def esc(s):
 
 
 MODIFIER = re.compile(r'^((?:Ctrl\+|Alt\+|Shift\+)+)')
+
+# ONE PASS OVER ALL SEPARATORS, not the first one that happens to be present.
+# The old loop returned on the first separator it found, so a label carrying two
+# kinds kept the second one inside a <kbd>: "Shift+Num + / −  •  Shift+= / -"
+# came out with an element reading "Shift+− • Shift+=", a key nobody can press.
+# The separator is captured so it can be put back between the elements verbatim.
+SEPARATORS = re.compile(r'( / | – | — | • )')
 
 
 def kbdify(label):
@@ -323,18 +422,25 @@ def kbdify(label):
     Separators stay outside the elements, where they belong — they are prose,
     not keys.
     """
-    for sep in (' / ', ' – ', ' — '):
-        if sep in label:
-            parts = [p.strip() for p in label.split(sep)]
-            mod = MODIFIER.match(parts[0])
-            mod = mod.group(1) if mod else ''
-            out = []
-            for i, part in enumerate(parts):
-                if i and mod and not MODIFIER.match(part):
-                    part = mod + part
-                out.append('<kbd>%s</kbd>' % esc(part))
-            return sep.join(out)
-    return '<kbd>%s</kbd>' % esc(label)
+    pieces = SEPARATORS.split(label)
+    if len(pieces) == 1:
+        return '<kbd>%s</kbd>' % esc(label)
+
+    mod = MODIFIER.match(pieces[0].strip())
+    mod = mod.group(1) if mod else ''
+
+    out = []
+    first = True
+    for piece in pieces:
+        if SEPARATORS.fullmatch(piece):
+            out.append(piece)
+            continue
+        part = piece.strip()
+        if not first and mod and not MODIFIER.match(part):
+            part = mod + part
+        first = False
+        out.append('<kbd>%s</kbd>' % esc(part))
+    return ''.join(out)
 
 
 # One per section title, because the app's own section glyphs are Segoe MDL2 and

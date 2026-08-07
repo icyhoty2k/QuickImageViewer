@@ -10,6 +10,7 @@
 #include "../AppState.h"
 #include "../Platform/Constants.h"
 #include "../Platform/ConstantsStrings.h" // EMPTY_DIR_NO_IMAGES — the black-screen guard
+#include "../Platform/ConstantsIcons.h"
 #include <algorithm>
 
 RendererGDI::RendererGDI() = default;
@@ -216,11 +217,11 @@ HRESULT RendererGDI::Render() {
                     break;
                 case AppState::FolderOverlayState::Unsupported:
                     heading     = Constants::Messages::FORMAT_UNSUPPORTED;
-                    headingIcon = Constants::ThemeIcons::ICON_WARNING;
+                    headingIcon = Constants::Icon::WARNING;
                     break;
                 default:
                     heading     = Constants::Messages::EMPTY_DIR_NO_IMAGES;
-                    headingIcon = Constants::ThemeIcons::ICON_INFO;
+                    headingIcon = Constants::Icon::INFO;
                     break;
             }
             // Trailing ':' trimmed for the same reason as the D2D path: the
@@ -240,14 +241,14 @@ HRESULT RendererGDI::Render() {
             const std::wstring &last = app.folderOverlayPath;
             if (!last.empty()) {
                 m_placeholderText += L"\n";
-                m_placeholderText += Constants::ThemeIcons::ICON_LOCATION;
+                m_placeholderText += Constants::Icon::LOCATION;
                 m_placeholderText += L" ";
                 m_placeholderText += last;
                 m_placeholderText += Constants::Messages::OVERLAY_PATH_HINT;
             }
 
             m_placeholderText += L"\n";
-            m_placeholderText += Constants::ThemeIcons::ICON_FOLDER_OPEN;
+            m_placeholderText += Constants::Icon::FOLDER_OPEN;
             m_placeholderText += L" ";
             m_placeholderText += Constants::Messages::OVERLAY_OPEN_PROMPT;
             m_placeholderText += Constants::Messages::OVERLAY_OPEN_PROMPT_HINT;

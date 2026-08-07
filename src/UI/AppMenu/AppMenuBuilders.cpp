@@ -16,6 +16,7 @@
 #include "Overlays/OverlayManager.h"
 #include "Platform/Constants.h"
 #include "Platform/ConstantsStrings.h"
+#include "Platform/ConstantsIcons.h"
 #include "SlideshowTransitions.h" // TransitionDisplayOrder — shared menu/sequential order
 #include "Rem_TCP_IP/RemoteMirror.h" // ConnectedCount / MirroredLiveCount — the
                                      // status line under RemoteActivation
@@ -509,7 +510,7 @@ static HMENU BuildTcpIpMenu() {
     // up, and the tick means "announce when running", not "announcing now" —
     // Beacon::Refresh reconciles the two.
     AppendMenuW(m, MF_STRING | CheckFlag(app.remoteBeacon),
-                Id::ID_REMOTE_BEACON, L"\U0001F5A7 Announce (beacon)");
+                Id::ID_REMOTE_BEACON, QIV_ICON_LAN L" Announce (beacon)");
 
     AppendMenuW(m, MF_SEPARATOR, 0, nullptr);
 

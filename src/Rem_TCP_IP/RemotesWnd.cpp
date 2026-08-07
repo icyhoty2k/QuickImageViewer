@@ -18,6 +18,7 @@
 #include "AppState.h"
 #include "Platform/Constants.h"
 #include "Platform/ConstantsStrings.h"
+#include "Platform/ConstantsIcons.h"
 #include "UI/ThemedDialog.h"
 #include "UI/ThemedTooltip.h" // hover help — the glyph controls are not guessable
 #include "UI/GdiPool.h" // pooled brushes and pens — never DeleteObject them
@@ -201,7 +202,7 @@ void RemotesWnd::BuildFields() {
         L"REQUIRED. Identifies this remote — in the list, in messages about it, and when "
         L"matching it up again later. Add from file fills it in.");
     add(F_EXE, L"Exe to launch", OrUnset(m_newExe),
-        L"Optional. Lets the ● start this instance when it is down — only possible on this machine.");
+        L"Optional. Lets the " QIV_ICON_DOT_FILLED L" start this instance when it is down — only possible on this machine.");
 }
 
 void RemotesWnd::EditField(int fieldIndex) {
@@ -1392,7 +1393,8 @@ LRESULT RemotesWnd::HandlePanelMessage(UINT message, WPARAM wParam, LPARAM lPara
             // name lives in the row loop below, and /W4 is right that one
             // shadowing the other is a trap waiting for whoever edits next.
             const std::wstring serversTitle =
-                L"\U0001F4E1 Servers — the instances this copy can connect to   \x00B7   " +
+                std::wstring(Constants::Icon::ANTENNA) +
+                L" Servers — the instances this copy can connect to   " QIV_ICON_MIDDLE_DOT L"   " +
                 std::to_wstring(m_rows.size()) + L" saved, " +
                 std::to_wstring(upCount) + L" connected";
 
@@ -1410,13 +1412,14 @@ LRESULT RemotesWnd::HandlePanelMessage(UINT message, WPARAM wParam, LPARAM lPara
                 // ordinary case and needs no explaining.
                 std::wstring mirror = app.passCommandToRemote ? L"ON" : L"off";
                 if (app.passCommandToRemote && Remote::Mirror::HasLiveTargets())
-                    mirror += L" → " + Remote::Mirror::SelectionSummary();
+                    mirror += L" " QIV_ICON_ARROW_RIGHT L" " + Remote::Mirror::SelectionSummary();
 
                 const std::wstring sub =
                     std::wstring(L"F11 mirror ") + mirror +
-                    L"   ·   F12 execute here " + (app.resendCommandToCaller ? L"ON" : L"off") +
-                    L"   ·   Ctrl+F11 picks which & watches · ● starts/stops the "
-                    L"program · Identify names the screen · F5 polls";
+                    L"   " QIV_ICON_MIDDLE_DOT L"   F12 execute here " + (app.resendCommandToCaller ? L"ON" : L"off") +
+                    L"   " QIV_ICON_MIDDLE_DOT L"   Ctrl+F11 picks which & watches "
+                    QIV_ICON_MIDDLE_DOT L" " QIV_ICON_DOT_FILLED L" starts/stops the program "
+                    QIV_ICON_MIDDLE_DOT L" Identify names the screen " QIV_ICON_MIDDLE_DOT L" F5 polls";
                 DrawTextW(bb, sub.c_str(), -1, &sr, DT_LEFT | DT_SINGLELINE | DT_END_ELLIPSIS);
             }
 
@@ -1738,7 +1741,7 @@ LRESULT RemotesWnd::HandlePanelMessage(UINT message, WPARAM wParam, LPARAM lPara
                     const RowView &sel = m_rows[m_selectedRow];
                     if (sel.exeMissing) {
                         foot = L"Exe not found — " + sel.exePath +
-                               L"   ·   moved or deleted, so the dot cannot start it";
+                               L"   " QIV_ICON_MIDDLE_DOT L"   moved or deleted, so the dot cannot start it";
                     } else if (sel.dot == DotState::Down) {
                         foot = Remote::Mirror::DownRemedy(sel.down);
                         if (foot.empty()) foot = sel.lastError;
