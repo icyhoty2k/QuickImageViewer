@@ -21,103 +21,68 @@
           type="image/x-icon"
           href="favicon.ico">
     <meta name="theme-color"
-          content="#0f172a">
+          content="#0d1a26">
 
-    <style>
-        :root {
-            --bg-color: #0f172a;
-            --surface-color: #1e293b;
-            --text-main: #f8fafc;
-            --text-muted: #94a3b8;
-            --accent-primary: #38bdf8;
-            --accent-hover: #0284c7;
-            --border-color: #334155;
-            --code-bg: #0b1120;
-        }
-
-        body {
-            font-family: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-            background-color: var(--bg-color);
-            color: var(--text-main);
-            line-height: 1.65;
-            margin: 0;
-            padding: 0;
-            -webkit-font-smoothing: antialiased;
-        }
-
-        .container {
-            max-width: 820px;
-            margin: 0 auto;
-            padding: 48px 24px 80px;
-        }
-
-        h1 {
-            font-size: 2rem;
-            margin-bottom: 4px;
-        }
-
-        h2 {
-            font-size: 1.25rem;
-            margin-top: 40px;
-            padding-top: 24px;
-            border-top: 1px solid var(--border-color);
-        }
-
-        .meta {
-            color: var(--text-muted);
-            font-size: 0.9rem;
-            margin-top: 0;
-        }
-
-        a {
-            color: var(--accent-primary);
-        }
-
-        a:hover {
-            color: var(--accent-hover);
-        }
-
-        code, kbd {
-            background: var(--code-bg);
-            border: 1px solid var(--border-color);
-            border-radius: 4px;
-            padding: 1px 6px;
-            font-size: 0.9em;
-        }
-
-        ul {
-            padding-left: 22px;
-        }
-
-        li {
-            margin-bottom: 8px;
-        }
-
-        .callout {
-            background: var(--surface-color);
-            border: 1px solid var(--border-color);
-            border-radius: 10px;
-            padding: 18px 20px;
-            margin: 24px 0;
-        }
-
-        footer {
-            margin-top: 56px;
-            padding-top: 24px;
-            border-top: 1px solid var(--border-color);
-            color: var(--text-muted);
-            font-size: 0.9rem;
-        }
-    </style>
+    <link rel="stylesheet" href="site.css">
 </head>
-<body>
-<div class="container">
+<body class="android">
+
+<!-- SHARED-HEADER-START — generated from docs/_partials/header.html by sync-site.py. Do not edit between the fences; edit the partial. -->
+<nav class="sitenav">
+    <div class="inner">
+        <a href="./">🖥&nbsp; QuickImageViewer (qIV)</a>
+        <a href="qiv-privacy.html">🔒&nbsp; Privacy — Windows</a>
+        <a href="qiv-remote.html">📱&nbsp; qIV Remote</a>
+        <a href="qiv-remote-privacy.html" class="current">🔒&nbsp; Privacy — Android</a>
+    </div>
+</nav>
+<!-- SHARED-HEADER-END -->
+<main class="container">
 
     <h1>qIV Remote — Privacy Policy</h1>
     <p class="meta">
-        Applies to the Android application <code>net.icyhoty2k.qivremote</code>.<br>
+        Applies to the Android application <code>net.icyhoty2k.qivremote</code> —
+        <a href="qiv-remote.html">what the app does</a>.<br>
         Last updated: 7 August 2026.
     </p>
+
+    <!--
+        THE STORE ROW. Each column is one app: its button, and the privacy
+        policy FOR THAT APP under it. Order inside a column is what the reader
+        follows, so the pairing has to be vertical rather than two parallel rows.
+
+        The Play URL is the applicationId and will not change, so the link is
+        live now and simply starts working when the listing is approved. It is on
+        four pages — grep this folder for "store/apps/details" before editing.
+
+        NOT the official Play badge image: a licensed asset with its own
+        placement and clear-space rules, which cannot be inlined. Swap the
+        anchor's contents for the artwork later; href and layout stay.
+    -->
+    <!-- SHARED-STOREROW-START — generated from docs/_partials/storerow.html by sync-site.py. Do not edit between the fences; edit the partial. -->
+<div class="storerow">
+        <div class="store-col">
+            <!-- THE FILE ITSELF, not the releases page. GitHub resolves
+                 /releases/latest/download/<name> to the newest release's asset
+                 and serves it, so this needs no update per release — but only
+                 because the asset name never changes. If a version ever gets
+                 into the filename, this URL 404s silently and the download
+                 button dies without anything else looking wrong. -->
+            <a class="cta-button" href="https://github.com/icyhoty2k/QuickImageViewer/releases/latest/download/QuickImageViewer.exe">
+                <span class="glyph"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3a1 1 0 0 1 1 1v8.6l2.3-2.3a1 1 0 1 1 1.4 1.4l-4 4a1 1 0 0 1-1.4 0l-4-4a1 1 0 1 1 1.4-1.4l2.3 2.3V4a1 1 0 0 1 1-1Z"/><path d="M4 14a1 1 0 0 1 1 1v3a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-3a1 1 0 1 1 2 0v3a3 3 0 0 1-3 3H6a3 3 0 0 1-3-3v-3a1 1 0 0 1 1-1Z"/></svg></span>
+                <span>Download QuickImageViewer<small>Windows 10 &amp; 11 &mdash; free</small></span>
+            </a>
+            <a class="policy" href="qiv-privacy.html">🔒&nbsp; Privacy — Windows app</a>
+        </div>
+        <div class="store-col">
+            <a class="cta-button" href="https://play.google.com/store/apps/details?id=net.icyhoty2k.qivremote">
+                <span class="glyph"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 4.6a1 1 0 0 1 1.51-.86l11.5 6.9a1 1 0 0 1 0 1.72l-11.5 6.9A1 1 0 0 1 7 18.4V4.6Z"/></svg></span>
+                <span>Get qIV Remote<small>Android &mdash; Google Play</small></span>
+            </a>
+            <a class="policy" href="qiv-remote-privacy.html">🔒&nbsp; Privacy — Android app</a>
+        </div>
+    </div>
+<!-- SHARED-STOREROW-END -->
 
     <div class="callout">
         <strong>The short version.</strong> qIV Remote has no accounts, no analytics, no
@@ -274,10 +239,63 @@
         <a href="mailto:icyhoty2k@gmail.com">icyhoty2k@gmail.com</a>
     </p>
 
-    <footer>
-        <a href="./">&larr; QuickImageViewer home</a>
-    </footer>
+    </main>
 
-</div>
+<!-- SHARED-FOOTER-START — generated from docs/_partials/footer.html by sync-site.py. Do not edit between the fences; edit the partial. -->
+<footer>
+    <div class="footer-inner">
+        <div class="footer-apps">
+            <p class="footer-pages">
+                <a href="./">🖥&nbsp; QuickImageViewer (qIV)</a>
+                <a href="qiv-privacy.html">🔒&nbsp; Privacy — Windows app</a>
+            </p>
+            <p class="footer-pages">
+                <a href="qiv-remote.html">📱&nbsp; qIV Remote</a>
+                <a href="qiv-remote-privacy.html">🔒&nbsp; Privacy — Android app</a>
+            </p>
+        </div>
+        <p>
+            Developed by <strong>👤&nbsp; Ivan Hristov Yanev (IcyHoty2k)</strong>.
+            Licensed under the AGPLv3.
+        </p>
+        <p>
+            <a href="https://github.com/icyhoty2k/QuickImageViewer">GitHub repository</a>
+            &bull;
+            <a href="https://github.com/icyhoty2k/QuickImageViewer/releases">Releases</a>
+            &bull;
+            <a href="https://github.com/icyhoty2k/QuickImageViewer/issues/new?template=bug_report.yml">Report a bug</a>
+            &bull;
+            <a href="https://github.com/icyhoty2k/QuickImageViewer/issues/new?template=android_remote.yml">Report an Android problem</a>
+            &bull;
+            <a href="https://github.com/icyhoty2k/QuickImageViewer/issues/new?template=feature_request.yml">Request a feature</a>
+            &bull;
+            <a href="https://github.com/sponsors/icyhoty2k">Sponsor</a>
+            &bull;
+            <a href="https://ko-fi.com/ivanhristovyanev">Ko-fi</a>
+        </p>
+        <!--
+            BUSINESS SPONSORS GO HERE. The $100/month tier promises a name or logo
+            "on the project website", and this is the spot — a line of links above
+            the funding sentence below.
+
+            Left as a comment rather than an empty heading on purpose: a section
+            headed "Sponsors" with nothing under it advertises that nobody
+            sponsors this project, which is the opposite of what it is for. Turn
+            it into real markup when the first one arrives.
+
+            Ask before listing anyone. The tier wording promises them the choice.
+        -->
+        <p>
+            qIV is free, has no advertising and collects nothing.
+            <a href="https://github.com/sponsors/icyhoty2k">Sponsorship</a>
+            is what keeps it being worked on.
+            Building it into a closed product?
+            <a href="mailto:icyhoty2k@gmail.com">Commercial licensing</a>
+            is available.
+        </p>
+    </div>
+</footer>
+<!-- SHARED-FOOTER-END -->
+
 </body>
 </html>

@@ -3,11 +3,12 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Page Not Found — QuickImageViewer</title>
+    <title>Page Not Found — QuickImageViewer (qIV)</title>
     <meta name="robots" content="noindex">
     <link rel="icon" type="image/svg+xml" href="favicon.svg">
     <link rel="icon" type="image/x-icon" href="favicon.ico">
     <meta name="theme-color" content="#0f172a">
+    <link rel="stylesheet" href="site.css">
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
         body {
@@ -20,7 +21,13 @@
             align-items: center;
             justify-content: center;
             text-align: center;
-            padding: 2rem;
+            padding: 2rem 2rem 0;
+        }
+
+        /* Holds the 404 message in the optical centre now that a footer shares
+           the column — without it the message drifts up by half the footer. */
+        .notfound {
+            margin: auto 0;
         }
         .code {
             font-size: 6rem;
@@ -44,11 +51,90 @@
             transition: opacity 0.2s;
         }
         a:hover { opacity: 0.85; }
+
+        /* The page is a flex column: this pins the footer to the bottom and
+           lets it span the full width rather than the centred content box. */
+        footer {
+            margin-top: auto;
+            width: 100%;
+            text-align: center;
+        }
+
     </style>
 </head>
 <body>
+
+<!-- SHARED-HEADER-START — generated from docs/_partials/header.html by sync-site.py. Do not edit between the fences; edit the partial. -->
+<nav class="sitenav">
+    <div class="inner">
+        <a href="./">🖥&nbsp; QuickImageViewer (qIV)</a>
+        <a href="qiv-privacy.html">🔒&nbsp; Privacy — Windows</a>
+        <a href="qiv-remote.html">📱&nbsp; qIV Remote</a>
+        <a href="qiv-remote-privacy.html">🔒&nbsp; Privacy — Android</a>
+    </div>
+</nav>
+<!-- SHARED-HEADER-END -->
+
+<div class="notfound">
     <div class="code">404</div>
     <h1>Page not found</h1>
-    <a href="https://icyhoty2k.github.io/QuickImageViewer/">Back to QuickImageViewer</a>
+    <a href="./">Back to QuickImageViewer</a>
+</div>
+
+<!-- SHARED-FOOTER-START — generated from docs/_partials/footer.html by sync-site.py. Do not edit between the fences; edit the partial. -->
+<footer>
+    <div class="footer-inner">
+        <div class="footer-apps">
+            <p class="footer-pages">
+                <a href="./">🖥&nbsp; QuickImageViewer (qIV)</a>
+                <a href="qiv-privacy.html">🔒&nbsp; Privacy — Windows app</a>
+            </p>
+            <p class="footer-pages">
+                <a href="qiv-remote.html">📱&nbsp; qIV Remote</a>
+                <a href="qiv-remote-privacy.html">🔒&nbsp; Privacy — Android app</a>
+            </p>
+        </div>
+        <p>
+            Developed by <strong>👤&nbsp; Ivan Hristov Yanev (IcyHoty2k)</strong>.
+            Licensed under the AGPLv3.
+        </p>
+        <p>
+            <a href="https://github.com/icyhoty2k/QuickImageViewer">GitHub repository</a>
+            &bull;
+            <a href="https://github.com/icyhoty2k/QuickImageViewer/releases">Releases</a>
+            &bull;
+            <a href="https://github.com/icyhoty2k/QuickImageViewer/issues/new?template=bug_report.yml">Report a bug</a>
+            &bull;
+            <a href="https://github.com/icyhoty2k/QuickImageViewer/issues/new?template=android_remote.yml">Report an Android problem</a>
+            &bull;
+            <a href="https://github.com/icyhoty2k/QuickImageViewer/issues/new?template=feature_request.yml">Request a feature</a>
+            &bull;
+            <a href="https://github.com/sponsors/icyhoty2k">Sponsor</a>
+            &bull;
+            <a href="https://ko-fi.com/ivanhristovyanev">Ko-fi</a>
+        </p>
+        <!--
+            BUSINESS SPONSORS GO HERE. The $100/month tier promises a name or logo
+            "on the project website", and this is the spot — a line of links above
+            the funding sentence below.
+
+            Left as a comment rather than an empty heading on purpose: a section
+            headed "Sponsors" with nothing under it advertises that nobody
+            sponsors this project, which is the opposite of what it is for. Turn
+            it into real markup when the first one arrives.
+
+            Ask before listing anyone. The tier wording promises them the choice.
+        -->
+        <p>
+            qIV is free, has no advertising and collects nothing.
+            <a href="https://github.com/sponsors/icyhoty2k">Sponsorship</a>
+            is what keeps it being worked on.
+            Building it into a closed product?
+            <a href="mailto:icyhoty2k@gmail.com">Commercial licensing</a>
+            is available.
+        </p>
+    </div>
+</footer>
+<!-- SHARED-FOOTER-END -->
 </body>
 </html>

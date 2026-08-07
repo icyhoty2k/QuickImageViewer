@@ -1,0 +1,973 @@
+/* ===================================================================
+   A RESET, NOT A FRAMEWORK — and that distinction is the whole lesson
+   from the attempt before this one.
+
+   Pico CSS was tried here and removed. It is a good library; it was the
+   wrong KIND of library for this site. A classless framework styles bare
+   elements, and it does so with selectors like `a:not([role=button])` —
+   specificity 0,1,1, which BEATS a plain class like `.storebtn` at 0,1,0
+   however late this file loads. So the store buttons lost their text
+   colour and the header reflowed, and no amount of load-order fixed it:
+   the only remedies would have been !important everywhere or rewriting
+   the markup in the framework's vocabulary.
+
+   This site already has a design. What it needed from a library was the
+   boring part — the cross-browser inconsistencies — not opinions about
+   how a link should look.
+
+   modern-normalize is exactly that and nothing more: box-sizing, sane
+   font defaults, form-control inheritance, and the handful of remaining
+   browser bugs. It sets no colours and no spacing, so it cannot fight
+   anything below it. Proven: it is the reset behind a very large share
+   of the web, tested across every mobile browser in the matrix.
+
+   Vendored, like everything here — see the no-CDN rule. MIT, licence
+   reproduced in full below, which is what makes bundling it legitimate.
+   =================================================================== */
+
+/* ======================= MODERN-NORMALIZE-START ===================
+MIT License
+
+Copyright (c) Sindre Sorhus <sindresorhus@gmail.com> (https://sindresorhus.com)
+Copyright (c) Jonathan Neal
+Copyright (c) Nicolas Gallagher
+
+Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated documentation files (the "Software"), to deal in the Software without restriction, including without limitation the rights to use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of the Software, and to permit persons to whom the Software is furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+   =================================================================== */
+/**
+ * Minified by jsDelivr using clean-css v5.3.3.
+ * Original file: /npm/modern-normalize@3.0.1/modern-normalize.css
+ *
+ * Do NOT use SRI with dynamically generated files! More information: https://www.jsdelivr.com/using-sri-with-dynamic-files
+ */
+/*! modern-normalize v3.0.1 | MIT License | https://github.com/sindresorhus/modern-normalize */
+*,::after,::before{box-sizing:border-box}html{font-family:system-ui,'Segoe UI',Roboto,Helvetica,Arial,sans-serif,'Apple Color Emoji','Segoe UI Emoji';line-height:1.15;-webkit-text-size-adjust:100%;tab-size:4}body{margin:0}b,strong{font-weight:bolder}code,kbd,pre,samp{font-family:ui-monospace,SFMono-Regular,Consolas,'Liberation Mono',Menlo,monospace;font-size:1em}small{font-size:80%}sub,sup{font-size:75%;line-height:0;position:relative;vertical-align:baseline}sub{bottom:-.25em}sup{top:-.5em}table{border-color:currentcolor}button,input,optgroup,select,textarea{font-family:inherit;font-size:100%;line-height:1.15;margin:0}[type=button],[type=reset],[type=submit],button{-webkit-appearance:button}legend{padding:0}progress{vertical-align:baseline}::-webkit-inner-spin-button,::-webkit-outer-spin-button{height:auto}[type=search]{-webkit-appearance:textfield;outline-offset:-2px}::-webkit-search-decoration{-webkit-appearance:none}::-webkit-file-upload-button{-webkit-appearance:button;font:inherit}summary{display:list-item}
+/*# sourceMappingURL=/sm/d2d8cd206fb9f42f071e97460f3ad9c875edb5e7a4b10f900a83cdf8401c53a9.map */
+
+/* ======================== MODERN-NORMALIZE-END ====================
+   Everything below is this site's own.
+   =================================================================== */
+
+/* ------------------------------------------------------------------
+   THE TYPEFACES, SERVED FROM THIS REPOSITORY.
+
+   These used to come from fonts.googleapis.com, with the files from
+   fonts.gstatic.com — a third-party request on every view, carrying
+   each visitor's IP, user-agent and referring page, on a site whose own
+   privacy policy says it contacts nobody. The files are here now.
+
+   VARIABLE FONTS, one file per subset. Google's CSS lists a separate
+   src per weight; they are byte-identical, because both faces are
+   variable and one file covers the range. Deduping took 748 KB to 179.
+
+   `font-weight: 100 900` is what tells the browser it IS a range —
+   without it the font pins to its default and every bold is synthetic.
+   `font-display: swap` means text is never invisible while it loads.
+   unicode-range is why latin-ext is separate: it is only fetched if the
+   page actually uses one of those characters.
+
+   LICENCE: Inter and Fira Code are SIL Open Font License 1.1, which
+   permits bundling provided the licence travels along — fonts/OFL.txt.
+   ------------------------------------------------------------------ */
+
+@font-face {
+    font-family: 'Inter';
+    font-style: normal;
+    font-weight: 100 900;
+    font-display: swap;
+    src: url('fonts/inter-latin.woff2') format('woff2');
+    unicode-range: U+0000-00FF,U+0131,U+0152-0153,U+02BB-02BC,U+02C6,U+02DA,U+02DC,U+0304,U+0308,U+0329,U+2000-206F,U+2074,U+20AC,U+2122,U+2191,U+2193,U+2212,U+2215,U+FEFF,U+FFFD;
+}
+
+@font-face {
+    font-family: 'Inter';
+    font-style: normal;
+    font-weight: 100 900;
+    font-display: swap;
+    src: url('fonts/inter-latin-ext.woff2') format('woff2');
+    unicode-range: U+0100-02BA,U+02BD-02C5,U+02C7-02CC,U+02CE-02D7,U+02DD-02FF,U+0304,U+0308,U+0329,U+1D00-1DBF,U+1E00-1E9F,U+1EF2-1EFF,U+2020,U+20A0-20AB,U+20AD-20C0,U+2113,U+2C60-2C7F,U+A720-A7FF;
+}
+
+@font-face {
+    font-family: 'Fira Code';
+    font-style: normal;
+    font-weight: 300 700;
+    font-display: swap;
+    src: url('fonts/fira-code-latin.woff2') format('woff2');
+    unicode-range: U+0000-00FF,U+0131,U+0152-0153,U+02BB-02BC,U+02C6,U+02DA,U+02DC,U+0304,U+0308,U+0329,U+2000-206F,U+2074,U+20AC,U+2122,U+2191,U+2193,U+2212,U+2215,U+FEFF,U+FFFD;
+}
+
+@font-face {
+    font-family: 'Fira Code';
+    font-style: normal;
+    font-weight: 300 700;
+    font-display: swap;
+    src: url('fonts/fira-code-latin-ext.woff2') format('woff2');
+    unicode-range: U+0100-02BA,U+02BD-02C5,U+02C7-02CC,U+02CE-02D7,U+02DD-02FF,U+0304,U+0308,U+0329,U+1D00-1DBF,U+1E00-1E9F,U+1EF2-1EFF,U+2020,U+20A0-20AB,U+20AD-20C0,U+2113,U+2C60-2C7F,U+A720-A7FF;
+}
+
+/* ===================================================================
+   site.css — everything shared by every page on this site.
+
+   WHY THIS FILE EXISTS. The header, the footer, the store row and the
+   page head were copied into five HTML files and kept in step by hand.
+   They did not stay in step: the document pages ended up 820 / 880 / 820
+   wide with 32 / 32 / 48 of top padding and 2 / 2.1 / 2rem titles, none
+   of it chosen — each page was written from the one before it and a
+   value moved each time. The footer rendered four different ways off
+   identical markup because every page styled `footer` its own way.
+
+   Duplication was the cause, so the fix is to stop duplicating rather
+   than to check more carefully.
+
+   WHAT BELONGS HERE: anything that must look the same on every page, and
+   the document-page typography the three prose pages share. What does
+   NOT belong here is page-specific work — index.html's hero, carousel,
+   comparison tables and badges stay in that file, as does 404.html's
+   centred layout.
+
+   THE TWO PALETTES. Slate is the Windows side, blue the Android side.
+   The split is deliberate: the colour is what tells a reader which half
+   of the site they are in. A page opts into the blue one by putting
+   class="android" on its <body> — see the block below.
+   =================================================================== */
+
+:root {
+    --bg-color: #0f172a;
+    --surface-color: #1e293b;
+    --text-main: #f8fafc;
+    --text-muted: #94a3b8;
+    --accent-primary: #38bdf8;
+    --accent-hover: #0284c7;
+    --border-color: #334155;
+    --code-bg: #0b1120;
+}
+
+/* The Android half. Same family as slate, shifted toward the blue the app
+   itself is built on, and one step deeper. Text and accent are deliberately
+   identical to the Windows side — only the surfaces move, so the two halves
+   are told apart without looking like different sites. */
+body.android {
+    --bg-color: #0d1a26;
+    --surface-color: #162a39;
+    --border-color: #2c4657;
+    --code-bg: #081219;
+}
+
+body {
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    background-color: var(--bg-color);
+    color: var(--text-main);
+    line-height: 1.65;
+    margin: 0;
+    padding: 0;
+    -webkit-font-smoothing: antialiased;
+}
+
+/* ------------------------------------------------------------------
+   THE HEADER BAR — same layout everywhere, TINTED BY THE PAGE.
+
+   The opposite decision from the footer below, and deliberately: the
+   colour is the signal for which half of the site you are in, so this
+   one takes the page's own surface and border.
+   ------------------------------------------------------------------ */
+
+nav.sitenav {
+    background: var(--surface-color);
+    border-bottom: 1px solid var(--border-color);
+}
+
+nav.sitenav .inner {
+    justify-content: center;
+    /* WIDER THAN THE TEXT COLUMN, and that is the fix for the two-row
+       header. The four labels come to roughly 830px of glyphs; at 880px
+       with 24px of padding each side only 832px was usable, so they
+       wrapped on almost every machine — 8px of slack is not a margin, it
+       is a coin toss on font rendering.
+
+       1000px matches index.html's own content width, so the bar still
+       lines up with the page under it, and the row now has ~120px spare.
+       The gap came down from 22 to 18 for the same reason: a nav is a
+       strip, and a strip that wraps has stopped being one. */
+    max-width: 1000px;
+    margin: 0 auto;
+    padding: 12px 24px;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px 18px;
+    align-items: center;
+    font-size: 0.95rem;
+}
+
+nav.sitenav a {
+    color: var(--text-muted);
+    text-decoration: none;
+    white-space: nowrap;
+    padding: 4px 0;
+    display: inline;
+    background: none;
+    border-radius: 0;
+    font-weight: 400;
+    transition: color .15s;
+}
+
+nav.sitenav a:hover {
+    color: var(--accent-primary);
+    text-decoration: none;
+    opacity: 1;
+}
+
+nav.sitenav a.current {
+    color: var(--text-main);
+    font-weight: 600;
+    border-bottom: 2px solid var(--accent-primary);
+}
+
+/* ------------------------------------------------------------------
+   THE PAGE HEAD — title and standfirst, for the document pages.
+
+   CENTRED, to match the home page's hero and the store row beneath it.
+   A left-aligned title over a centred pair of buttons is the mismatch
+   that showed the drift up in the first place.
+   ------------------------------------------------------------------ */
+
+.container {
+    max-width: 880px;
+    margin: 0 auto;
+    padding: 48px 24px 80px;
+}
+
+.container h1 {
+    /* FLUID, so one rule serves a 360px phone and a wide monitor. It reads
+       2.7rem on anything roomy and shrinks with the viewport instead of
+       needing a breakpoint to rescue it — a fixed 2.7rem wraps "QuickImageViewer
+       (qIV)" onto three lines on a narrow screen. */
+    font-size: clamp(1.75rem, 4.8vw, 2.5rem);
+    line-height: 1.15;
+    margin: 0 0 12px;
+    text-align: center;
+    color: var(--text-main);
+    font-weight: 800;
+}
+
+/* THE TITLE GRADIENT, on every page rather than only the home page.
+
+   index.html had it and the other five did not, so the site looked like one
+   designed page and five documents that happened to share a footer. It is the
+   same sky-to-indigo ramp, defined here once instead of copied.
+
+   BEHIND @supports, and that guard is not decoration. The effect works by
+   painting a gradient behind the text and then making the glyphs themselves
+   transparent so it shows through — which means a browser that understands
+   `-webkit-text-fill-color` but NOT `background-clip: text` renders a
+   transparent heading on a dark page. Invisible. The plain colour above is the
+   fallback, and this block only replaces it where both halves are supported. */
+@supports ((-webkit-background-clip: text) or (background-clip: text)) {
+    .container h1 {
+        background: linear-gradient(45deg, #38bdf8, #818cf8);
+        -webkit-background-clip: text;
+        background-clip: text;
+        -webkit-text-fill-color: transparent;
+        letter-spacing: -0.5px;
+    }
+}
+
+/* THE STANDFIRST — the line under the title, whatever a page calls it.
+
+   index.html marked it .subtitle at 1.25rem and every other page marked it
+   .meta at 0.95rem: the same element, in the same place, doing the same job, at
+   sizes 5px apart. Two names for one thing is how that happens, so both names
+   now resolve to one rule. */
+.container .meta,
+.subtitle {
+    color: var(--text-muted);
+    font-size: 1.1rem;
+    line-height: 1.55;
+    margin: 0 auto 22px;
+    text-align: center;
+    max-width: 64ch;
+    font-weight: 400;
+}
+
+/* ------------------------------------------------------------------
+   THE STORE ROW — one column per app: its button, and the privacy
+   policy FOR THAT APP directly beneath it.
+
+   The pairing is vertical because that is the direction a reader
+   follows. Two parallel rows put the Windows policy under the Android
+   button, which is exactly what happened.
+   ------------------------------------------------------------------ */
+
+.storerow {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    align-items: flex-start;
+    gap: 16px 28px;
+    margin: 26px 0 8px;
+}
+
+.store-col {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 8px;
+}
+
+/* STACKED — one app above the other instead of side by side.
+
+   index.html's hero uses this. The document pages want the pair to read as a
+   single line of options; the landing page gives each app its own row, because
+   that is where somebody is deciding which to download and the two-line label
+   is the thing doing the persuading.
+
+   NO WIDTH IS SET. The buttons size to their own labels, exactly as they do on
+   the other four pages, so "Get qIV Remote" is narrower than "Download
+   QuickImageViewer" and both are the size they are everywhere else. Stretching
+   them to a common width was tried and made the Android button look inflated
+   next to the same button on every other page. Centred, ragged edges and all.
+
+   The 720px rule near the bottom of this file still takes them full width on a
+   phone, where a centred short button is a small target in a lot of space. */
+.storerow.stacked {
+    flex-direction: column;
+    align-items: center;
+    gap: 18px;
+}
+
+/* .storebtn IS GONE. It was the outlined card — surface background, muted
+   border, glyph and a line of small print — and it was the site's other way
+   of saying "get this app". index.html used the filled .cta-button in five
+   places and .storebtn in one, the other four pages used .storebtn only, and
+   the result was two button designs with no rule about which meant what.
+
+   One button now: .cta-button, below. It absorbed the glyph and small-print
+   layout, so the markup did not have to change shape — only the class name. */
+
+.policy {
+    font-size: 0.85rem;
+    color: var(--text-muted);
+    text-decoration: none;
+    white-space: nowrap;
+}
+
+.policy:hover {
+    color: var(--accent-primary);
+}
+
+/* ------------------------------------------------------------------
+   THE BUTTON. There is one, and this is it.
+
+   It used to live in index.html's own <style>, so the landing page had a
+   filled call to action and no other page could have one at all. Meanwhile
+   four pages used an outlined .storebtn — and index used BOTH, filled in
+   five places and outlined in one. Two designs, no rule about which meant
+   what, and a reader crossing from the home page to the privacy page saw
+   what looked like two different sites.
+
+   ONE CLASS NOW, here, used by every page. .storebtn is deleted.
+
+   A CLASS AND NOT A BARE ELEMENT, so `.container a:not([class])` cannot
+   reach it. That guard is the whole reason this button is still visible —
+   the earlier `.container a` rule was 0,1,1 and painted it blue on blue.
+   ------------------------------------------------------------------ */
+
+.cta-button {
+    /* INLINE-FLEX, not inline-block. It has to hold a glyph beside a label
+       that may carry a second line under it — the shape .storebtn used to
+       provide. Centred, so the same rule serves a bare text button and a
+       glyph-plus-two-lines one without either drifting off axis. */
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+    background-color: var(--accent-primary);
+    color: #0f172a;
+    font-weight: 700;
+    padding: 12px 28px;
+    border-radius: 8px;
+    text-decoration: none;
+    text-align: center;
+    transition: all 0.2s ease;
+    font-size: 1.1rem;
+    box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+}
+
+.cta-button:hover {
+    background-color: var(--accent-hover);
+    transform: translateY(-2px);
+    color: #ffffff;
+}
+
+/* THE ICON SITS ON THE FIRST LINE, not between the two.
+
+   The button centres its items, which is right for a one-line label and wrong
+   the moment a second line appears underneath: the icon slid into the gap
+   between "Download QuickImageViewer" and "Windows 10 & 11 — free" and hung
+   there. align-self pins it to the top instead, and giving it a box exactly
+   one line tall — 1.65em, the inherited line-height — puts it on the same
+   line as the label rather than above it.
+
+   AN SVG, NOT A CHARACTER. It was &#11015;, which is an emoji codepoint:
+   Windows and Android draw it as a coloured blob in someone else's palette,
+   at whatever size their emoji font feels like. This is drawn in
+   currentColor, so it is the button's own text colour and it inverts with the
+   label on hover. No file to fetch either — see the no-CDN rule. */
+.cta-button .glyph {
+    flex: none;
+    align-self: flex-start;
+    display: inline-flex;
+    align-items: center;
+    height: 1.65em;
+}
+
+.cta-button .glyph svg {
+    width: 1.15em;
+    height: 1.15em;
+    display: block;
+    fill: currentColor;
+}
+
+/* THE SECOND LINE — "Android — Google Play", "Windows 10 & 11 — free".
+
+   NOT var(--text-muted). That is #94a3b8, chosen to sit on a dark surface,
+   and this button is light blue: it came out at roughly 1.7:1 against the
+   background, which is unreadable and fails contrast outright. A translucent
+   black keeps the same "quieter than the label" relationship against a light
+   fill, and it stays correct on the hover colour too. */
+.cta-button small {
+    display: block;
+    font-weight: 400;
+    font-size: 0.75rem;
+    color: rgba(15, 23, 42, 0.72);
+}
+
+.cta-button:hover small {
+    color: rgba(255, 255, 255, 0.85);
+}
+
+/* .hero-cta IS GONE. It existed to force the hero's two buttons to one
+   width with min-width: 280px, back when they were a button and a footnote
+   -- 272x52 beside 195x68, in different colours.
+
+   They are the same component now, and .storerow.stacked caps the COLUMN so
+   the button fills it, which makes them one width without a second class
+   carrying a magic number. Sizing belongs to the layout, not to the button.
+   ------------------------------------------------------------------ */
+
+/* ------------------------------------------------------------------
+   DOCUMENT-PAGE TYPOGRAPHY — the three prose pages share all of this.
+   index.html overrides what it needs in its own <style>.
+   ------------------------------------------------------------------ */
+
+.container h2 {
+    font-size: 1.35rem;
+    margin-top: 48px;
+    padding-top: 24px;
+    border-top: 1px solid var(--border-color);
+}
+
+.container h3 {
+    font-size: 1.05rem;
+    margin-top: 28px;
+    margin-bottom: 6px;
+}
+
+/* BARE LINKS ONLY — an anchor with a class styles itself.
+;
+   This was `.container a`, which is specificity 0,1,1 and therefore beat
+   EVERY button class inside a container: .cta-button (0,1,0) rendered blue
+   text on its blue background and vanished, and .stat and .policy lost their
+   colours the same way. Load order could not save them, because specificity
+   is decided before order is.
+;
+   It is the identical mistake Pico CSS made against this site with
+   `a:not([role=button])`, made against itself. The fix is the same one: say
+   what is meant. These rules are for prose links, and a link that carries a
+   class is not prose — it is a component that has already been styled. */
+.container a:not([class]) {
+    color: var(--accent-primary);
+}
+
+.container a:not([class]):hover {
+    color: var(--accent-hover);
+}
+
+.container code,
+.container kbd {
+    background: var(--code-bg);
+    border: 1px solid var(--border-color);
+    border-radius: 4px;
+    padding: 1px 6px;
+    font-size: 0.9em;
+}
+
+.container ul {
+    padding-left: 22px;
+}
+
+.container li {
+    margin-bottom: 8px;
+}
+
+.callout {
+    background: var(--surface-color);
+    border: 1px solid var(--border-color);
+    border-radius: 10px;
+    padding: 18px 20px;
+    margin: 24px 0;
+}
+
+.callout.lead {
+    border-left: 3px solid var(--accent-primary);
+}
+
+.tablewrap {
+    overflow-x: auto;
+    margin: 20px 0;
+}
+
+.container table {
+    border-collapse: collapse;
+    width: 100%;
+    font-size: 0.95rem;
+}
+
+.container th,
+.container td {
+    border: 1px solid var(--border-color);
+    padding: 9px 12px;
+    text-align: left;
+    vertical-align: top;
+}
+
+.container th {
+    background: var(--surface-color);
+    font-weight: 600;
+}
+
+/* THE CARD GRID — two across, not three.
+
+   240px of minimum width fits THREE columns in the 832px text column, and the
+   only grid on this site holds FOUR cards. So it laid out 3 across with a
+   single orphan underneath, stretched to full width, looking like something
+   had failed to load.
+
+   340px is the number that forces two: 832px admits two 340s and a gap, never
+   three. Four cards become a 2x2 block, and any future grid of an even number
+   pairs up the same way.
+
+   min(100%, 340px) rather than a bare 340px, because a minimum wider than the
+   screen is how a grid pushes the whole page sideways on a phone. Below about
+   370px it collapses to one column on its own — no breakpoint needed. */
+.grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(min(100%, 340px), 1fr));
+    gap: 16px;
+    margin: 20px 0;
+}
+
+.card {
+    background: var(--surface-color);
+    border: 1px solid var(--border-color);
+    border-radius: 10px;
+    padding: 16px 18px;
+}
+
+.card h3 {
+    margin-top: 0;
+}
+
+.pill {
+    display: inline-block;
+    font-size: 0.75rem;
+    letter-spacing: 0.02em;
+    border-radius: 999px;
+    padding: 2px 10px;
+    border: 1px solid var(--border-color);
+    color: var(--text-muted);
+    vertical-align: middle;
+    margin-left: 6px;
+}
+
+.pill.free {
+    border-color: #14532d;
+    background: #052e16;
+    color: #86efac;
+}
+
+.pill.paid {
+    border-color: #78350f;
+    background: #2b1607;
+    color: #fcd34d;
+}
+
+.toc {
+    columns: 2;
+    column-gap: 32px;
+}
+
+@media (max-width: 620px) {
+    .toc {
+        columns: 1;
+    }
+}
+
+/* ------------------------------------------------------------------
+   THE FOOTER — the same on every page, in LITERAL colours.
+
+   Identical markup was not enough on its own: the colours used to come
+   from the page's variables, which differ between the two halves, so
+   one block rendered two ways. This is the one element that must look
+   the same on a page whose palette is deliberately different, and
+   inheriting the thing that differs is what broke it.
+
+   .footer-inner rather than .container: index.html sets .container to
+   1000px for its own layout, which would have made the footer wider
+   there than on the document pages — identical markup, different width.
+   ------------------------------------------------------------------ */
+
+footer {
+    margin-top: 64px;
+    background: #0b1220;
+    border-top: 1px solid #1e293b;
+    color: #94a3b8;
+    font-size: 0.9rem;
+    line-height: 1.65;
+    text-align: center;
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+}
+
+footer .footer-inner {
+    max-width: 880px;
+    margin: 0 auto;
+    padding: 32px 24px 36px;
+}
+
+footer p {
+    margin: 0 0 14px;
+}
+
+footer p:last-child {
+    margin-bottom: 0;
+}
+
+footer a {
+    color: #38bdf8;
+    text-decoration: none;
+    display: inline;
+    background: none;
+    padding: 0;
+    border-radius: 0;
+    font-weight: 400;
+}
+
+footer a:hover {
+    color: #38bdf8;
+    text-decoration: underline;
+    opacity: 1;
+}
+
+footer .footer-apps {
+    margin-bottom: 18px;
+}
+
+footer .footer-pages {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: 4px 22px;
+    margin: 0 0 6px;
+}
+
+footer .footer-pages:last-child {
+    margin-bottom: 0;
+}
+
+footer .footer-pages a {
+    white-space: nowrap;
+    font-weight: 600;
+}
+
+/* ------------------------------------------------------------------
+   THE STATISTICS STRIP — real repository numbers, written into the page
+   at BUILD time by build-site.py.
+
+   Not shields.io images: those are safe in the README, because GitHub
+   proxies README images through its own servers, but on this site they
+   would be a direct request to shields.io from every visitor. Same
+   picture, entirely different privacy consequence — see the no-CDN rule.
+
+   Built from text and CSS rather than images, which also means they
+   scale with the reader's font size and read correctly to a screen
+   reader, neither of which a PNG badge does.
+   ------------------------------------------------------------------ */
+
+.statstrip {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: 10px;
+    margin: 22px 0 6px;
+}
+
+.stat {
+    display: flex;
+    align-items: baseline;
+    gap: 7px;
+    text-decoration: none;
+    padding: 8px 14px;
+    border-radius: 999px;
+    border: 1px solid var(--border-color);
+    background: var(--surface-color);
+    color: var(--text-main);
+    font-size: 0.9rem;
+    transition: border-color .15s, transform .15s;
+}
+
+.stat:hover {
+    border-color: var(--accent-primary);
+    color: var(--text-main);
+    transform: translateY(-1px);
+}
+
+.stat-glyph {
+    font-size: 0.95rem;
+    line-height: 1;
+}
+
+.stat-value {
+    font-weight: 700;
+    color: var(--accent-primary);
+    font-variant-numeric: tabular-nums;
+}
+
+.stat-label {
+    color: var(--text-muted);
+    font-size: 0.82rem;
+}
+
+@media (max-width: 720px) {
+    .statstrip {
+        gap: 8px;
+    }
+
+    .stat {
+        padding: 7px 11px;
+        font-size: 0.85rem;
+    }
+}
+
+/* ------------------------------------------------------------------
+   THE SHORTCUT DRAWERS on shortcuts.html — the same <details> pattern
+   the FAQ uses on index.html, because 207 rows laid flat is a wall
+   nobody reads. Collapsed, the whole reference is sixteen lines.
+   ------------------------------------------------------------------ */
+
+.shortcut-section {
+    background: var(--surface-color);
+    border: 1px solid var(--border-color);
+    border-radius: 10px;
+    margin-bottom: 10px;
+    overflow: hidden;
+}
+
+.shortcut-section > summary {
+    cursor: pointer;
+    padding: 14px 18px;
+    font-weight: 600;
+    font-size: 1rem;
+    list-style: none;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    user-select: none;
+}
+
+.shortcut-section > summary::-webkit-details-marker {
+    display: none;
+}
+
+/* The disclosure triangle, drawn rather than inherited so it turns with
+   the drawer on every browser instead of only the ones that style the
+   native marker. */
+.shortcut-section > summary::before {
+    content: "\25B8";
+    color: var(--accent-primary);
+    transition: transform .15s;
+    display: inline-block;
+}
+
+.shortcut-section[open] > summary::before {
+    transform: rotate(90deg);
+}
+
+.shortcut-section > summary:hover {
+    color: var(--accent-primary);
+}
+
+.shortcut-section .count {
+    margin-left: auto;
+    font-weight: 400;
+    font-size: 0.8rem;
+    color: var(--text-muted);
+}
+
+.shortcut-section .tablewrap {
+    margin: 0;
+    border-top: 1px solid var(--border-color);
+}
+
+.shortcut-section table {
+    font-size: 0.9rem;
+}
+
+.shortcut-section td:first-child {
+    white-space: nowrap;
+}
+
+.shortcut-section kbd {
+    background: var(--code-bg);
+    border: 1px solid var(--border-color);
+    border-radius: 4px;
+    padding: 1px 6px;
+    font-size: 0.85em;
+}
+
+/* ==================================================================
+   SMALL SCREENS.
+
+   Most of this site was already fluid — Pico handles prose, the store
+   row and the footer are wrapping flex, the card grid is auto-fit. What
+   follows is the handful of places where "it wraps" is not the same as
+   "it works on a phone".
+
+   NO FRAMEWORK FOR THIS. A grid library would have brought a class
+   vocabulary into the markup to solve four problems, and it is another
+   file to download and licence under the no-CDN rule. These are the
+   four problems.
+   ================================================================== */
+
+/* 1. NOTHING MAY SCROLL THE PAGE SIDEWAYS. A single wide element — a
+      table, a long unbroken URL — drags the whole document with it, and
+      the reader ends up panning every paragraph to read it. */
+html {
+    overflow-x: hidden;
+}
+
+body {
+    overflow-wrap: break-word;
+}
+
+/* 2. TABLES SCROLL INSIDE THEMSELVES rather than widening the page. The
+      document pages wrap theirs in .tablewrap; this catches any that are
+      not wrapped, which is every table in a page written later. */
+.container table {
+    display: block;
+    overflow-x: auto;
+    max-width: 100%;
+}
+
+/* Images never exceed their column. */
+img {
+    max-width: 100%;
+    height: auto;
+}
+
+@media (max-width: 720px) {
+
+    /* 3. THE HEADER BAR IS THE REAL PROBLEM ON A PHONE. Four links with
+          22px between them run to roughly 560px, so on a 360px screen
+          they wrap to three ragged rows against the left edge. Centred
+          and closer together they make two tidy rows — and the links
+          keep a 44px touch height, which is the floor for a target
+          somebody taps with a thumb. */
+    nav.sitenav .inner {
+        justify-content: center;
+        gap: 2px 16px;
+        padding: 8px 16px;
+        font-size: 0.9rem;
+    }
+
+    nav.sitenav a {
+        padding: 10px 0;
+        line-height: 1.2;
+    }
+
+    .container {
+        padding: 28px 18px 56px;
+    }
+
+    .container h1 {
+        font-size: 1.6rem;
+    }
+
+    .container h2 {
+        font-size: 1.2rem;
+        margin-top: 36px;
+        padding-top: 18px;
+    }
+
+    /* 4. THE STORE BUTTONS GO FULL WIDTH AND STACK. Side by side they are
+          two half-width buttons with the label wrapping inside each, which
+          is unreadable and awkward to hit. Stacked, each is a full-width
+          target with its policy under it — and the pairing the layout
+          exists to express survives, because the column is the pair. */
+    .storerow {
+        flex-direction: column;
+        align-items: stretch;
+        gap: 18px;
+    }
+
+    .store-col {
+        width: 100%;
+    }
+
+    .cta-button {
+        width: 100%;
+        justify-content: center;
+        padding: 14px 18px;
+    }
+
+    .toc {
+        columns: 1;
+    }
+
+    footer .footer-inner {
+        padding: 24px 18px 28px;
+    }
+
+    footer .footer-pages {
+        gap: 2px 16px;
+    }
+
+    footer .footer-pages a {
+        padding: 6px 0;
+        display: inline-block;
+    }
+}
+
+@media (max-width: 420px) {
+    .container h1 {
+        font-size: 1.4rem;
+    }
+
+    nav.sitenav .inner {
+        gap: 0 12px;
+        font-size: 0.85rem;
+    }
+}
+
+/* Respect the platform: a reader who has asked for less motion gets it. */
+@media (prefers-reduced-motion: reduce) {
+    * {
+        animation-duration: 0.01ms !important;
+        animation-iteration-count: 1 !important;
+        transition-duration: 0.01ms !important;
+        scroll-behavior: auto !important;
+    }
+}

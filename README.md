@@ -18,6 +18,12 @@ once as you have devices lying around.
 [![Licence AGPLv3](https://img.shields.io/badge/licence-AGPLv3-d29922?style=for-the-badge)](LICENSE)
 [![Stars](https://img.shields.io/github/stars/icyhoty2k/QuickImageViewer?style=for-the-badge&color=8957e5)](https://github.com/icyhoty2k/QuickImageViewer/stargazers)
 [![Android companion app](https://img.shields.io/badge/companion%20app-Android-3DDC84?style=for-the-badge&logo=android&logoColor=white)](#qiv-remote--the-android-app)
+[![Downloads of the latest release](https://img.shields.io/github/downloads/icyhoty2k/QuickImageViewer/latest/total?style=for-the-badge&logo=github&label=latest%20release&color=1f6feb)](https://github.com/icyhoty2k/QuickImageViewer/releases/latest)
+[![Last commit](https://img.shields.io/github/last-commit/icyhoty2k/QuickImageViewer?style=for-the-badge&logo=git&logoColor=white&color=d29922)](https://github.com/icyhoty2k/QuickImageViewer/commits)
+[![Commit activity](https://img.shields.io/github/commit-activity/m/icyhoty2k/QuickImageViewer?style=for-the-badge&label=commits%2Fmonth&color=2ea44f)](https://github.com/icyhoty2k/QuickImageViewer/pulse)
+[![Open issues](https://img.shields.io/github/issues/icyhoty2k/QuickImageViewer?style=for-the-badge&color=d1242f)](https://github.com/icyhoty2k/QuickImageViewer/issues)
+[![Code size](https://img.shields.io/github/languages/code-size/icyhoty2k/QuickImageViewer?style=for-the-badge&color=8957e5)](https://github.com/icyhoty2k/QuickImageViewer)
+[![Written in C++](https://img.shields.io/badge/written%20in-C%2B%2B23-00599C?style=for-the-badge&logo=cplusplus&logoColor=white)](https://github.com/icyhoty2k/QuickImageViewer)
 
 <br>
 
@@ -315,13 +321,20 @@ through the setup.
 
 ## Features
 
-### Performance
+<a id="performance"></a>
+<details>
+<summary><b>Performance</b></summary>
+
 - **GPU bitmap cache** — decoded images live in VRAM, preloaded in both directions
 - **Background decode** — worker thread pool; UI thread never blocks on IO
 - **Instant startup** — process stays resident in RAM after first launch (hide to tray with `Esc`, recall instantly)
 - **Software fallback** — GDI renderer for edge cases where Direct2D is unavailable
 
-### Navigation
+</details>
+
+<a id="navigation"></a>
+<details>
+<summary><b>Navigation</b> <sub>14</sub></summary>
 
 | Shortcut | Action |
 |:---|:---|
@@ -340,7 +353,11 @@ through the setup.
 | `F2` | Open-file dialog |
 | Drag & Drop | Drop a file or folder onto the window |
 
-### Zoom, Pan & View Modes
+</details>
+
+<a id="zoom-pan--view-modes"></a>
+<details>
+<summary><b>Zoom, Pan & View Modes</b> <sub>7</sub></summary>
 
 | Shortcut | Action |
 |:---|:---|
@@ -355,7 +372,11 @@ through the setup.
 `W`/`A`/`S`/`D` pan on their own, move the window with `Shift`, and `Ctrl+W` / `Ctrl+S`
 keep their usual meanings (hide the app, save the edited image).
 
-### Sorting
+</details>
+
+<a id="sorting"></a>
+<details>
+<summary><b>Sorting</b> <sub>5</sub></summary>
 
 | Shortcut | Order |
 |:---|:---|
@@ -365,7 +386,11 @@ keep their usual meanings (hide the app, save the edited image).
 | `Ctrl+Alt+Shift+7` | By extension — press again to reverse |
 | `Ctrl+Alt+Shift+6` | By physical disk order (fastest for HDDs) |
 
-### UI Panels
+</details>
+
+<a id="ui-panels"></a>
+<details>
+<summary><b>UI Panels</b> <sub>8</sub></summary>
 
 | Panel | Shortcut | Description |
 |:---|:---|:---|
@@ -378,7 +403,12 @@ keep their usual meanings (hide the app, save the edited image).
 | Reload | `F5` | Refresh / reload the current directory from disk |
 | History | `Tab` | Recent folders with favorites — `Shift+Enter` spawns a DirWnd without leaving current folder |
 
-### Offline Reverse Geocoding
+</details>
+
+<a id="offline-reverse-geocoding"></a>
+<details>
+<summary><b>Offline Reverse Geocoding</b> <sub>4</sub></summary>
+
 GPS coordinates in EXIF are resolved to full location data with **zero network calls**. All data is compressed (zlib) and embedded directly in the EXE.
 
 | Data | Source | Entries | Shows |
@@ -401,7 +431,12 @@ Phone       +33
 Timezone    Europe/Paris
 ```
 
-### Thumbnail Strips
+</details>
+
+<a id="thumbnail-strips"></a>
+<details>
+<summary><b>Thumbnail Strips</b></summary>
+
 All thumbnail panels (Cache, Directory, and spawned DirWnds) share the same behaviour:
 
 - **Scroll** — mouse wheel; hold Shift for 3× speed
@@ -414,7 +449,12 @@ All thumbnail panels (Cache, Directory, and spawned DirWnds) share the same beha
 - **Active strip** — clicking any directory strip makes it the *active* panel; all subsequent folder navigation (History `Enter`, folder changes) targets that strip. The primary `F6` strip is the fallback when no spawned panel has been clicked
 - **Close with MMB** — middle-mouse-button click on any directory strip or floating panel (Help, EXIF, Stats, Jump-to, Find) closes it immediately
 
-### File Management on Thumbnail Strips
+</details>
+
+<a id="file-management-on-thumbnail-strips"></a>
+<details>
+<summary><b>File Management on Thumbnail Strips</b></summary>
+
 Directory strips double as a lightweight file manager:
 
 - **Drag & drop between strips** — drag a thumbnail from one directory strip and drop it on another to **move** the file. Hold `Ctrl` while dropping to **copy** instead; the mouse cursor shows which operation is active. Both panels refresh automatically and every operation goes through the Recycle-Bin-aware Windows shell (undo with `Ctrl+Z` in Explorer).
@@ -423,7 +463,11 @@ Directory strips double as a lightweight file manager:
   - **Paste** — drops clipboard files into the strip's folder; both source and destination strips refresh instantly.
   - **Delete** — sends the file to the Recycle Bin.
 
-### History Panel
+</details>
+
+<a id="history-panel"></a>
+<details>
+<summary><b>History Panel</b> <sub>11</sub></summary>
 
 | Shortcut | Action |
 |:---|:---|
@@ -439,7 +483,11 @@ Directory strips double as a lightweight file manager:
 | `Ctrl+Shift+Delete` | Clear all history, keep favorites |
 | `Ctrl+Alt+Shift+Delete` | Clear all favorites, keep history |
 
-### Slideshow
+</details>
+
+<a id="slideshow"></a>
+<details>
+<summary><b>Slideshow</b> <sub>5</sub></summary>
 
 | Shortcut | Action |
 |:---|:---|
@@ -449,7 +497,12 @@ Directory strips double as a lightweight file manager:
 | `S` *(while running)* | Toggle shuffle |
 | `T` *(while running)* | Step to the next transition (21 available, wraps) |
 
-### Color Effects
+</details>
+
+<a id="color-effects"></a>
+<details>
+<summary><b>Color Effects</b> <sub>15</sub></summary>
+
 All effects are non-destructive and GPU-accelerated via the Direct2D effect graph. `Ctrl+S` saves the result to disk.
 
 Every colour effect requires **Ctrl**. The plain presses of the same keys belong to navigation — `Home` / `End` jump to the first / last image, `Page Up` / `Page Down` walk the history folders and `Insert` / `Delete` walk the favourites.
@@ -472,7 +525,12 @@ Every colour effect requires **Ctrl**. The plain presses of the same keys belong
 | Reset all effects | `Num 0` |
 | Save with effects baked in | `Ctrl+S` |
 
-### Overlay System
+</details>
+
+<a id="overlay-system"></a>
+<details>
+<summary><b>Overlay System</b> <sub>11</sub></summary>
+
 9 independently configurable data slots rendered on the image canvas.
 
 ```
@@ -512,7 +570,11 @@ above its radio group, because they decide whether there is anything to format:
 **Effects** (the active colour-effect list) and **Folder Name** (the containing folder
 beside the file name).
 
-### Application Lifecycle
+</details>
+
+<a id="application-lifecycle"></a>
+<details>
+<summary><b>Application Lifecycle</b> <sub>5</sub></summary>
 
 | Shortcut | Action |
 |:---|:---|
@@ -522,7 +584,11 @@ beside the file name).
 | `Shift+Delete` | Reset everything — window layout and all effects return to defaults (same as `Alt+X`) |
 | `Ctrl+C` | Copy the current image to the clipboard |
 
-### Window & Chrome
+</details>
+
+<a id="window--chrome"></a>
+<details>
+<summary><b>Window & Chrome</b> <sub>16</sub></summary>
 
 | Shortcut | Action |
 |:---|:---|
@@ -543,7 +609,11 @@ beside the file name).
 | `Ctrl+Shift+Num *` | Toggle window corners: rounded ↔ square |
 | `Ctrl+Shift+Num /` | Cycle backdrop material: None → Mica → Acrylic → MicaAlt |
 
-### Mouse Shortcuts
+</details>
+
+<a id="mouse-shortcuts"></a>
+<details>
+<summary><b>Mouse Shortcuts</b> <sub>13</sub></summary>
 
 | Input | Action |
 |:---|:---|
@@ -565,6 +635,9 @@ beside the file name).
 
 ---
 
+</details>
+
+
 ## System Tray
 
 When QIV is hidden or running in the background, its icon appears in the system tray. All persistent settings are accessible from the right-click context menu — no config files to edit.
@@ -584,7 +657,9 @@ When QIV is hidden or running in the background, its icon appears in the system 
 | Help / Shortcuts | Open the in-app help window |
 | Exit Completely | Remove the tray icon and fully quit the process |
 
-### Settings submenu
+<a id="settings-submenu"></a>
+<details>
+<summary><b>Settings submenu</b> <sub>25</sub></summary>
 
 All toggles save immediately and are reflected live.
 
@@ -624,23 +699,46 @@ All toggles save immediately and are reflected live.
 | Import Settings | Load a previously exported `.ini` file — confirmation required; all settings applied immediately |
 | Restore Defaults | Reset every setting to its compiled-in default — confirmation required; history and favorites are not affected |
 
-### View Mode submenu
+</details>
+
+<a id="view-mode-submenu"></a>
+<details>
+<summary><b>View Mode submenu</b></summary>
+
 Pick the default fit mode (radio buttons): **1** Fit to view (aspect) · **2** Fit to width · **3** Fit to height · **4** Stretch to window · **5** Original size.
 
-### Slideshow submenu
+</details>
+
+<a id="slideshow-submenu"></a>
+<details>
+<summary><b>Slideshow submenu</b></summary>
+
 Set default interval (100 – 60000 ms), toggle Loop and Shuffle, and choose the default transition type (Cut / Fade / Dissolve / Ripple / Push / Zoom). All changes persist.
 
-### Sort submenu
+</details>
+
+<a id="sort-submenu"></a>
+<details>
+<summary><b>Sort submenu</b></summary>
+
 Choose sort order: **Name** / **Date Modified** / **Size** / **Type** / **Disk Order**, plus a **Reverse Order** toggle. Takes effect immediately on the current folder.
 
-### Backup submenu
+</details>
+
+<a id="backup-submenu"></a>
+<details>
+<summary><b>Backup submenu</b> <sub>2</sub></summary>
 
 | Item | Effect |
 |:---|:---|
 | Backup History & Favorites | Export history and favorites to a `.zip` archive (file-save dialog) |
 | Restore History & Favorites | Restore from a previously created backup — confirmation required |
 
-### Logging submenu
+</details>
+
+<a id="logging-submenu"></a>
+<details>
+<summary><b>Logging submenu</b> <sub>3</sub></summary>
 
 Both logs are **off by default** and survive a restart once switched on — which is the
 point of them. A screen that misbehaves at four in the morning is exactly the one nobody
@@ -666,7 +764,11 @@ with `Ctrl+O`.
 Writing happens on a thread of its own. A slow disk cannot stall the viewer, and with a
 log switched off the cost at each record point is a single atomic read.
 
-### Dedicated Screens
+</details>
+
+<a id="dedicated-screens"></a>
+<details>
+<summary><b>Dedicated Screens</b> <sub>10</sub></summary>
 
 Press `F8` for the Dedicated panel. A **dedicated screen** is a separate copy of qIV with its own settings file beside it — normally parked fullscreen on one monitor running a slideshow. Any number can run at once, alongside the main app, sharing nothing.
 
@@ -713,7 +815,11 @@ The panel edits the **config only** — it never changes the app you are using, 
 
 **Isolation.** A dedicated screen writes *nothing* to the registry, keeps no history or favorites, and has its own mutex and window class — so a file opened from Explorer can never land on a slideshow instead of the main window. It auto-starts from a shortcut rather than the `Run` key.
 
-### Promotions
+</details>
+
+<a id="promotions"></a>
+<details>
+<summary><b>Promotions</b> <sub>5</sub></summary>
 
 A dedicated screen can interleave a **second playlist** with its images — never merged into them, and invisible to the image counter and arrow keys.
 
@@ -732,6 +838,9 @@ Both triggers are `(from, to)` pairs and run **independently** — set either, o
 - `(5, 15)` — re-rolled between 5 and 15 each time, so it never looks mechanical
 
 ---
+
+</details>
+
 
 ## Remote Control & Mirroring
 
@@ -905,6 +1014,10 @@ and the executor refuses them again at run time.
 QuickImageViewer.exe [image_path] [options]
 ```
 
+<a id="every-switch"></a>
+<details>
+<summary><b>Every switch</b> <sub>28</sub></summary>
+
 | Argument | Description |
 |:---|:---|
 | `"path\to\image.jpg"` | Open this image at startup and browse its folder |
@@ -947,6 +1060,8 @@ qIV_dedicated_Lobby.exe -dedicated -config "D:\Screens\qIV_dedicated_Lobby.ini"
 ```
 
 ---
+
+</details>
 
 ## Architecture
 
