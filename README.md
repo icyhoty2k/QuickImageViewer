@@ -4,6 +4,10 @@
 
 **A fast, GPU-accelerated image viewer for Windows.**
 
+[![Website](https://img.shields.io/badge/%F0%9F%8C%90%20Website-quickimageviewer-38bdf8?style=for-the-badge&labelColor=0f172a)](https://icyhoty2k.github.io/QuickImageViewer/)
+[![Every keyboard shortcut](https://img.shields.io/badge/%E2%8C%A8%20Every%20shortcut-reference-8957e5?style=for-the-badge&labelColor=3c1e70)](https://icyhoty2k.github.io/QuickImageViewer/shortcuts.html)
+[![qIV Remote for Android](https://img.shields.io/badge/%F0%9F%93%B1%20qIV%20Remote-what%20it%20does-3DDC84?style=for-the-badge&labelColor=1b6b41)](https://icyhoty2k.github.io/QuickImageViewer/qiv-remote.html)
+
 Direct2D, WIC and native Win32. One portable sub-10 MB EXE — no installer, no
 telemetry, no background service.
 
@@ -11,12 +15,6 @@ Drives other copies of itself over plain TCP, mirrors one screen to many, and ha
 **[an Android app](#qiv-remote--the-android-app)** that turns any phone or tablet into a
 remote control, a second screen, or a **photo frame your PC drives** — as many of them at
 once as you have devices lying around.
-
-[![Website](https://img.shields.io/badge/%F0%9F%8C%90%20Website-quickimageviewer-38bdf8?style=for-the-badge&labelColor=0f172a)](https://icyhoty2k.github.io/QuickImageViewer/)
-[![Every keyboard shortcut](https://img.shields.io/badge/%E2%8C%A8%20Every%20shortcut-reference-8957e5?style=for-the-badge&labelColor=3c1e70)](https://icyhoty2k.github.io/QuickImageViewer/shortcuts.html)
-[![qIV Remote for Android](https://img.shields.io/badge/%F0%9F%93%B1%20qIV%20Remote-what%20it%20does-3DDC84?style=for-the-badge&labelColor=1b6b41)](https://icyhoty2k.github.io/QuickImageViewer/qiv-remote.html)
-
-<br>
 
 [![Latest release](https://img.shields.io/github/v/release/icyhoty2k/QuickImageViewer?style=for-the-badge&logo=github&label=release&color=2ea44f)](https://github.com/icyhoty2k/QuickImageViewer/releases/latest)
 [![Downloads](https://img.shields.io/github/downloads/icyhoty2k/QuickImageViewer/total?style=for-the-badge&color=1f6feb)](https://github.com/icyhoty2k/QuickImageViewer/releases)
