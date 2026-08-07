@@ -1001,27 +1001,95 @@ HRESULT RendererD2D::PreloadBitmap(const std::wstring &filePath, int requestInde
             return;
         }
 
-        HANDLE hFile = CreateFileW(filePath.c_str(), GENERIC_READ, FILE_SHARE_READ, NULL, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, NULL);
+        // FILE_FLAG_SEQUENTIAL_SCAN: this read is the whole file, front to back,
+        // exactly once — the pattern the flag exists for. It tells the cache
+        // manager to read ahead aggressively and evict behind, which is worth up
+        // to ~2x on a cold read from a spinning disk or a network share, and is
+        // neutral on a warm NVMe read. Image-open latency is the product, and
+        // the first open of a folder over SMB is where it is felt most.
+        HANDLE hFile = CreateFileW(filePath.c_str(), GENERIC_READ, FILE_SHARE_READ, NULL,
+                                   OPEN_EXISTING,
+                                   FILE_ATTRIBUTE_NORMAL | FILE_FLAG_SEQUENTIAL_SCAN, NULL);
+        // A FAILED READ MUST REPORT ITSELF. All three exits below used to erase
+        // the in-flight marker and return in silence, and the UI thread — which
+        // is sitting there waiting to be told the bitmap arrived — was never told
+        // anything. Delete the open folder from Explorer with no thumbnail strip
+        // showing (the watcher lives on DirWnd, so hiding it stops the watching)
+        // and the next arrow key produced exactly nothing: no picture, no
+        // placeholder, no explanation. The same black window that was fixed for
+        // undecodable files was still there for VANISHED ones.
+        //
+        // The two causes need different answers, which is why the error code is
+        // read rather than treating every failure alike:
+        //
+        //   GONE      → resync the whole folder. Posting WM_QIV_DIR_CHANGED runs
+        //               the debounce → ReloadCurrentDirectory chain the watcher
+        //               would have run, and that already handles both endings:
+        //               folder deleted → the "Directory Missing" placeholder;
+        //               folder alive, file gone → a rescan that drops it from the
+        //               playlist and lands on a real picture. Reusing it means no
+        //               second recovery path to keep in step with the first.
+        //
+        //   UNREADABLE→ NoteDecodeFailure, the same route a corrupt file takes.
+        //               A locked or permission-denied file still EXISTS, so a
+        //               rescan would find it, request it, and fail again every
+        //               400 ms forever. NoteDecodeFailure records the path, so it
+        //               reports once and stays reported.
+        auto reportUnreadable = [&](DWORD err) {
+            if (err == ERROR_FILE_NOT_FOUND || err == ERROR_PATH_NOT_FOUND) {
+                // Logged here rather than left to SetFolderOverlay: when the
+                // FOLDER survives and only this file vanished, the resync just
+                // drops it from the playlist and no placeholder is ever raised —
+                // so this is the only record that a picture disappeared from
+                // under the viewer. Gate before the string, as everywhere.
+                if (AppLog::IsEnabled())
+                    AppLog::Warn(AppLog::COMP_DECODE,
+                                 L"file is gone, resyncing the folder: " + filePath);
+                if (m_hwnd) PostMessageW(m_hwnd, Constants::WM_QIV_DIR_CHANGED, 0, 0);
+            } else {
+                // NoteDecodeFailure writes its own COMP_DECODE line, so the
+                // reason is recorded once and only once.
+                if (AppLog::IsEnabled())
+                    AppLog::Warn(AppLog::COMP_DECODE,
+                                 L"could not read (win32 " + std::to_wstring(err) + L"): " + filePath);
+                NoteDecodeFailure(filePath);
+            }
+        };
+
         if (hFile == INVALID_HANDLE_VALUE) {
-            std::lock_guard<std::mutex> lock(m_cacheMutex);
-            m_bitmapInFlight.erase(filePath);
+            const DWORD err = GetLastError();
+            {
+                std::lock_guard<std::mutex> lock(m_cacheMutex);
+                m_bitmapInFlight.erase(filePath);
+            }
+            reportUnreadable(err);
             return;
         }
 
         LARGE_INTEGER fileSize;
         if (!GetFileSizeEx(hFile, &fileSize)) {
+            const DWORD err = GetLastError();
             CloseHandle(hFile);
-            std::lock_guard<std::mutex> lock(m_cacheMutex);
-            m_bitmapInFlight.erase(filePath);
+            {
+                std::lock_guard<std::mutex> lock(m_cacheMutex);
+                m_bitmapInFlight.erase(filePath);
+            }
+            reportUnreadable(err);
             return;
         }
 
         std::vector<BYTE> compressedBytes(fileSize.QuadPart);
         DWORD bytesRead;
         if (!ReadFile(hFile, compressedBytes.data(), static_cast<DWORD>(fileSize.QuadPart), &bytesRead, NULL) || bytesRead != fileSize.QuadPart) {
+            const DWORD err = GetLastError();
             CloseHandle(hFile);
-            std::lock_guard<std::mutex> lock(m_cacheMutex);
-            m_bitmapInFlight.erase(filePath);
+            {
+                std::lock_guard<std::mutex> lock(m_cacheMutex);
+                m_bitmapInFlight.erase(filePath);
+            }
+            // A short read on a file that still exists is a damaged or truncated
+            // one — reported as unreadable, not as a folder change.
+            reportUnreadable(err);
             return;
         }
         CloseHandle(hFile);

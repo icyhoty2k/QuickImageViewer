@@ -140,6 +140,15 @@ namespace UI {
     // row is now here".
     void NotifyCurrentFolder(const std::wstring &folderPath);
 
+    // WHICH FOLDER IS THE VIEWER IN — the recorded navigation, falling back to
+    // the playlist only before anything has been opened.
+    //
+    // Exposed because the folder-tree walk (Alt+Up / Down / Left / Right) needs
+    // it and app.playlist cannot answer: while a Missing or Empty placeholder is
+    // up the playlist is empty or still describes the PREVIOUS folder, which is
+    // exactly when stepping to a parent or sibling matters most.
+    std::wstring CurrentFolder();
+
     // Toggle favorite status on the path at display index 'rowIndex'.
     void ToggleFavorite(int rowIndex);
 

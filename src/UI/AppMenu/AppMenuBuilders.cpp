@@ -222,6 +222,7 @@ static HMENU BuildSettingsMenu() {
     AppendMenuW(m, MF_STRING | CheckFlag(app.rememberWindowPosition),  Id::SET_REMEMBER_WIN_POS, L"Remember Window Position");
     AppendMenuW(m, MF_STRING | CheckFlag(app.historyFullModeEnabled),  Id::SET_HISTORY_FULL,   L"History: Open Full List");
     AppendMenuW(m, MF_STRING | CheckFlag(app.openDirWndOnStart),       Id::SET_OPEN_DIRWND,    L"Open Thumbnail Strip on Start");
+    AppendMenuW(m, MF_STRING | CheckFlag(app.folderWalkWrap),          Id::SET_FOLDER_WALK_WRAP, L"Folder Walk Wraps Around");
     AppendMenuW(m, MF_STRING | CheckFlag(app.swapMouseButtons),        Id::SET_SWAP_MOUSE,     L"Swap Mouse Buttons");
     AppendMenuW(m, MF_STRING | CheckFlag(app.contextMenuEnabled),      Id::SET_CONTEXT_MENU,   L"Right-Click Context Menu");
     AppendMenuW(m, MF_STRING | CheckFlag(app.invertWheelDirection),    Id::SET_WHEEL_INVERT,   L"Invert Scroll Direction");

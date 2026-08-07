@@ -480,6 +480,23 @@ void InputManager::ExecuteCommand(HWND hWnd, Command cmd) {
             }
             break;
 
+        // --- Folder-tree walk (Alt + arrows) --------------------------------
+        // Each does one directory enumeration and opens a folder; they run only
+        // here, on the keypress, and touch nothing on the render or decode path.
+        // Every refusal reports itself inside these calls.
+        case Command::FolderUp:
+            (void) OpenParentFolder(hWnd);
+            break;
+        case Command::FolderDown:
+            (void) OpenSubFolder(hWnd);
+            break;
+        case Command::FolderPrevSibling:
+            (void) OpenSiblingFolder(hWnd, -1);
+            break;
+        case Command::FolderNextSibling:
+            (void) OpenSiblingFolder(hWnd, +1);
+            break;
+
         // -----------------------------------------------------------------------
         // View modes
         // -----------------------------------------------------------------------
@@ -2309,6 +2326,12 @@ std::wstring InputManager::GetCommandValue(HWND hWnd, Command cmd) {
         case Command::ShowInExplorer:
         case Command::ResetAll:
         case Command::ResetWindowLayout:
+        // The folder walk is LOCAL by nature: a remote instance's filesystem is
+        // not this one, so "go to my parent folder" names nothing there.
+        case Command::FolderUp:
+        case Command::FolderDown:
+        case Command::FolderPrevSibling:
+        case Command::FolderNextSibling:
         // Local only — they have no table row, so no caller can ask. A case here
         // costs nothing and stops the next reader wondering.
         case Command::SendImagePositionToRemotes:

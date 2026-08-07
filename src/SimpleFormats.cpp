@@ -421,19 +421,54 @@ static ComPtr<IWICBitmap> DecodeJP2(
         return true;
     };
 
-    // Grid pixel (x,y) → this plane's sample, scaled to 8-bit. The clamp is the
-    // bounds check: ceil rounding means the last column of an odd-width image
-    // can map one sample past the plane, and a file is free to declare a dx
-    // that does not match its plane size at all.
-    const auto sample8 = [](const Plane& p, uint32_t x, uint32_t y) -> BYTE {
-        uint32_t sx = x / p.dx;
-        uint32_t sy = y / p.dy;
-        if (sx >= p.w) sx = p.w - 1;
-        if (sy >= p.h) sy = p.h - 1;
+    // Walks a plane in step with the grid WITHOUT dividing per pixel.
+    //
+    // The obvious mapping — sx = x / dx, sy = y / dy, clamped, per sample —
+    // costs two integer divisions per sample per channel: ~72 million divisions
+    // for a 12-megapixel RGB image, several hundred milliseconds added to every
+    // JP2 open. Image-open latency is the product, so the divisions go: the
+    // cursor counts dx grid columns and then advances one source column, which
+    // is the same arithmetic as the division, done with an increment and a
+    // compare. Advancing stops at the last column/row, so the ceil-rounding
+    // overhang of an odd-width image is clamped HERE, once per step, instead of
+    // per sample — Sample() itself is a bare load.
+    //
+    // For the common unsubsampled plane (dx == dy == 1) the carry fires every
+    // step and this degrades to the plain linear walk the old code did.
+    struct PlaneCursor {
+        const Plane*     p   = nullptr;
+        const OPJ_INT32* row = nullptr;  // base of the current source row
+        uint32_t sx = 0, colCnt = 0;     // source column, grid columns consumed of it
+        uint32_t sy = 0, rowCnt = 0;
 
-        int v = p.data[static_cast<size_t>(sy) * p.w + sx] + p.offset;
-        if (v < 0)         v = 0;
-        if (v > p.maxVal)  v = p.maxVal;
+        void Reset(const Plane& pl) {
+            p = &pl;
+            sx = colCnt = sy = rowCnt = 0;
+            row = pl.data;
+        }
+        int Sample() const { return row[sx]; }
+        void NextCol() {
+            if (++colCnt >= p->dx) {
+                colCnt = 0;
+                if (sx + 1 < p->w) ++sx;   // clamp: repeat the last source column
+            }
+        }
+        void NextRow() {                   // after each grid row; rewinds the column
+            sx = 0;
+            colCnt = 0;
+            if (++rowCnt >= p->dy) {
+                rowCnt = 0;
+                if (sy + 1 < p->h) ++sy;   // clamp: repeat the last source row
+            }
+            row = p->data + static_cast<size_t>(sy) * p->w;
+        }
+    };
+
+    // Raw sample → 8-bit, honouring the plane's own offset and precision.
+    const auto scale8 = [](const Plane& p, int v) -> BYTE {
+        v += p.offset;
+        if (v < 0)        v = 0;
+        if (v > p.maxVal) v = p.maxVal;
         return p.prec == 8 ? static_cast<BYTE>(v)
                            : static_cast<BYTE>((v * 255 + p.maxVal/2) / p.maxVal);
     };
@@ -446,12 +481,17 @@ static ComPtr<IWICBitmap> DecodeJP2(
         Plane p0{};
         if (!makePlane(0, p0)) { opj_image_destroy(image); return nullptr; }
 
+        PlaneCursor c0{};
+        c0.Reset(p0);
+
         size_t i = 0;
         for (uint32_t y = 0; y < h; ++y) {
             for (uint32_t x = 0; x < w; ++x, ++i) {
-                const BYTE v = sample8(p0, x, y);
+                const BYTE v = scale8(p0, c0.Sample());
                 bgra[i*4+0]=v; bgra[i*4+1]=v; bgra[i*4+2]=v; bgra[i*4+3]=255;
+                c0.NextCol();
             }
+            c0.NextRow();
         }
     } else if (nc >= 3) {
         // RGB / RGBA — OpenJPEG gives planar R,G,B[,A]
@@ -464,13 +504,19 @@ static ComPtr<IWICBitmap> DecodeJP2(
         // rather than as a reason to refuse the picture — the colour is intact.
         const bool hasAlpha = (nc >= 4) && makePlane(3, pA);
 
+        PlaneCursor cR{}, cG{}, cB{}, cA{};
+        cR.Reset(pR);
+        cG.Reset(pG);
+        cB.Reset(pB);
+        if (hasAlpha) cA.Reset(pA);
+
         size_t i = 0;
         for (uint32_t y = 0; y < h; ++y) {
             for (uint32_t x = 0; x < w; ++x, ++i) {
-                const BYTE r = sample8(pR, x, y);
-                const BYTE g = sample8(pG, x, y);
-                const BYTE b = sample8(pB, x, y);
-                const BYTE a = hasAlpha ? sample8(pA, x, y) : 255;
+                const BYTE r = scale8(pR, cR.Sample());
+                const BYTE g = scale8(pG, cG.Sample());
+                const BYTE b = scale8(pB, cB.Sample());
+                const BYTE a = hasAlpha ? scale8(pA, cA.Sample()) : 255;
                 if      (a==255) { bgra[i*4+0]=b; bgra[i*4+1]=g; bgra[i*4+2]=r; bgra[i*4+3]=255; }
                 else if (a==0)   { bgra[i*4+0]=bgra[i*4+1]=bgra[i*4+2]=bgra[i*4+3]=0; }
                 else {
@@ -479,7 +525,15 @@ static ComPtr<IWICBitmap> DecodeJP2(
                     bgra[i*4+2]=(BYTE)((r*a+127)/255);
                     bgra[i*4+3]=a;
                 }
+                cR.NextCol();
+                cG.NextCol();
+                cB.NextCol();
+                if (hasAlpha) cA.NextCol();
             }
+            cR.NextRow();
+            cG.NextRow();
+            cB.NextRow();
+            if (hasAlpha) cA.NextRow();
         }
     } else {
         opj_image_destroy(image);

@@ -276,8 +276,32 @@ namespace UI {
             L" wheel notches. The folder snapshot is refreshed with " + Ctrl(SC::SC_PANEL_HISTORY_TOGGLE) +
             L" in the History panel.", sNav);
         Add(K(SC::SC_PANEL_OPEN_FILE), L"Open-file dialog.", sNav);
+        Add(L"Alt+" + K(SC::SC_NAV_FOLDER_UP) + L" / Alt+" + K(SC::SC_NAV_FOLDER_DOWN),
+            L"WALK THE FOLDER TREE. Alt+Up opens the parent folder — the same key "
+            L"Explorer uses — and Alt+Down steps into the first subfolder.\r\n"
+            L"These reach folders you have never opened, which is what separates "
+            L"them from the history keys below: those only revisit folders you "
+            L"have already been in.\r\n"
+            L"A folder with no pictures in it is a normal stop on the way, not a "
+            L"dead end — the placeholder names it and the same keys carry on.", sNav);
+        Add(L"Alt+" + K(SC::SC_NAV_PREV) + L" / Alt+" + K(SC::SC_NAV_NEXT),
+            L"Previous / next SIBLING folder — sideways through the tree, in "
+            L"Explorer's own name order (StrCmpLogicalW, so \"Trip 10\" comes "
+            L"after \"Trip 2\").\r\n"
+            L"Each landing shows the folder and its POSITION, 3/12, so the ends "
+            L"of the run are visible before you reach them.\r\n"
+            L"WRAPS from the last folder back to the first by default; the tray's "
+            L"Settings › Folder Walk Wraps Around turns that off, and then the "
+            L"ends stop and say so. A lone subfolder never wraps — reopening the "
+            L"folder already open would look like nothing happened.", sNav);
         Add(L"Drag & Drop",
-            L"Drop an image file or an entire folder onto the window to open it.", sNav);
+            L"Drop an image file or an entire folder onto the window to open it.\r\n"
+            L"DROPPING SEVERAL AT ONCE opens the first. Pictures dropped together "
+            L"from ONE folder are all there already — opening any image builds the "
+            L"playlist from its whole folder, so the rest are an arrow key away. "
+            L"Anything that cannot come along — a second folder, a file from "
+            L"somewhere else — is counted in a message rather than dropped in "
+            L"silence.", sNav);
 
         // ---------------------------------------------------------------
         const int sZoom = Sec(Constants::ThemeIcons::ICON_SECTION_MAGNIFIER, L"ZOOM, PAN & VIEW MODES",

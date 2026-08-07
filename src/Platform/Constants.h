@@ -33,6 +33,13 @@ namespace Constants {
     constexpr bool IS_KEEP_IN_BACKGROUND = true; // enable or disable run on startup reg value add/delete
     constexpr bool IS_OPEN_DIRWND_ON_START = false; // open F6 DirWnd automatically when the app starts
 
+    // Alt+Left / Alt+Right sibling walk: roll from the last folder back to the
+    // first, and vice versa. ON by default — a wall of folders is usually
+    // circled through rather than read end to end, and the centre overlay names
+    // every landing, so a wrap announces itself rather than being mistaken for
+    // a key that did nothing. Off stops at each end and says so instead.
+    constexpr bool IS_FOLDER_WALK_WRAP = true;
+
     // Viewport lock (Y). When ON, zoom and pan survive an image change instead of
     // being reset — so flipping through same-framed shots keeps the same detail
     // on screen at the same magnification. Rotation and flips are NOT carried:
@@ -653,7 +660,13 @@ namespace Constants {
     constexpr UINT WM_QIV_PENDING_UPLOADS = WM_USER + 1; // Posted by background decoder thread
     constexpr UINT WM_QIV_REPAINT = WM_USER + 2; // Signal to UI thread that bitmap is ready
     constexpr UINT WM_QIV_SVG_READY = WM_USER + 3; // Posted by IO thread when SVG bytes are loaded
-    constexpr UINT WM_QIV_OPEN_FILE = WM_USER + 4; // Posted by DropTarget/WM_COPYDATA; LPARAM = new std::wstring*
+    // Posted by DropTarget / WM_COPYDATA.
+    // LPARAM = new std::vector<std::wstring>*, owned by the handler.
+    //   [0]  = what to OPEN (a file or a folder)
+    //   [1…] = everything else that came with the drop, kept because each one's
+    //          FOLDER is recorded in history even when only [0] can open. A
+    //          single-path sender posts a one-element vector.
+    constexpr UINT WM_QIV_OPEN_FILE = WM_USER + 4;
     constexpr UINT WM_QIV_SWITCH_TO_FIND = WM_USER + 5; // FindWnd  ← PANEL_SWITCH_TO_FIND_CHAR typed in JumpToWnd
     constexpr UINT WM_QIV_SWITCH_TO_JUMP = WM_USER + 6; // JumpToWnd ← PANEL_SWITCH_TO_JUMP_CHAR typed in FindWnd
     constexpr UINT WM_QIV_SCAN_COMPLETE = WM_USER + 7; // Background dir scan done; LPARAM = new ScanResult*
@@ -1432,6 +1445,7 @@ namespace Constants {
         constexpr const wchar_t *OVERLAY_FONT_COLOR    = L"qivOverlayFontColor";
         constexpr const wchar_t *OVERLAY_FONT_FAMILY   = L"qivOverlayFontFamily"; // index into OVERLAY_FONT_FAMILIES
         constexpr const wchar_t *OPEN_DIRWND_ON_START = L"qivOpenDirWndOnStart";
+        constexpr const wchar_t *FOLDER_WALK_WRAP = L"qivFolderWalkWrap";
         constexpr const wchar_t *LOCK_VIEWPORT = L"qivLockViewport";
         constexpr const wchar_t *REMEMBER_WINDOW_POS = L"qivRememberWindowPos";
         constexpr const wchar_t *SWAP_MOUSE_BUTTONS = L"qivSwapMouseButtons";
@@ -1705,7 +1719,7 @@ namespace Constants {
         // =========================================================================
         // How long the center-center notification stays visible before auto-hiding (ms)
 
-        constexpr UINT IS_MSG_CENTER_DISPLAY_MS = 1000;
+        constexpr UINT IS_MSG_CENTER_DISPLAY_MS = 1500;
         // Center-center text color  (R, G, B, A)
         constexpr float MSG_CENTER_COLOR_R = 1.0f;
         constexpr float MSG_CENTER_COLOR_G = 0.85f;

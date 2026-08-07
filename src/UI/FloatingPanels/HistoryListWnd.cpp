@@ -1324,6 +1324,12 @@ namespace UI {
             InvalidateRect(histWnd.GetHwnd(), nullptr, FALSE);
     }
 
+    // The public face of AppCurrentFolder — see the header for why the folder
+    // walk cannot ask app.playlist instead.
+    std::wstring CurrentFolder() {
+        return AppCurrentFolder();
+    }
+
     void NotifyCurrentFolder(const std::wstring &folderPath) {
         std::wstring norm;
         if (!HistoryPath::Normalize(folderPath, norm)) return;

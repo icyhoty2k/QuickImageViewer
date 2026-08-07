@@ -178,6 +178,44 @@ namespace Constants::Messages {
     constexpr const wchar_t *MIRROR_LOCAL_OFF  = L"Mirror: remote only (this screen stays put)";
     constexpr const wchar_t *MIRROR_LOCAL_IDLE = L"Mirroring is off (F11 to start)";
 
+    // The folder-tree walk (Alt+Up / Down / Left / Right) refusing to step.
+    // Each says WHICH edge was hit — "nothing happened" on a navigation key is
+    // indistinguishable from a key that did not register.
+    // Where the walk LANDED. Needed precisely because a successful step is the
+    // case with no other feedback: stepping into a folder that has pictures just
+    // changes the picture, and nothing on screen says which folder it came from.
+    // The empty and missing folders announce themselves through the placeholder;
+    // this is for the ones that work.
+    // One per DIRECTION rather than a single folder icon: the arrow says which
+    // way the step went, which the folder name alone cannot. Landing on "2026"
+    // reads very differently depending on whether you went up into it or across
+    // to it. Icon then two spaces, matching EMPTY_DIR_MISSING above.
+    constexpr const wchar_t *FOLDER_WALK_UP      = L"⬆  ";   // + folder name
+    constexpr const wchar_t *FOLDER_WALK_DOWN    = L"⬇  ";
+    constexpr const wchar_t *FOLDER_WALK_PREV    = L"⬅  ";
+    constexpr const wchar_t *FOLDER_WALK_NEXT    = L"➡  ";
+
+    // The wrap setting being toggled from the tray.
+    constexpr const wchar_t *FOLDER_WALK_WRAP_ON  = L"Folder walk wraps around" STR_STATE_ON;
+    constexpr const wchar_t *FOLDER_WALK_WRAP_OFF = L"Folder walk stops at the first and last folder";
+
+    constexpr const wchar_t *FOLDER_WALK_NOWHERE    = L"No folder open to walk from";
+    constexpr const wchar_t *FOLDER_WALK_NO_PARENT  = L"Already at the top — no parent folder";
+    constexpr const wchar_t *FOLDER_WALK_NO_CHILD   = L"No subfolders here";
+    constexpr const wchar_t *FOLDER_WALK_NO_SIBLING = L"Cannot step sideways from here";
+    constexpr const wchar_t *FOLDER_WALK_AT_END     = L"No further folder in that direction";
+
+    // A file this app has no decoder for. Named with its extension, because
+    // "unsupported" on its own invites a bug report while ".txt" does not.
+    constexpr const wchar_t *OPEN_NOT_AN_IMAGE = L"Not a supported image format · ";  // + ext
+
+    // A multi-item drop where some of it could not come along. Only shown for
+    // what is genuinely unreachable — a second folder, or a file from elsewhere.
+    // Files dropped from the SAME folder as the one that opened are already in
+    // the playlist, so they are never counted here and never mentioned.
+    constexpr const wchar_t *DROP_EXTRAS_PREFIX  = L"Opened the first item · ";  // + count
+    constexpr const wchar_t *DROP_EXTRAS_SUFFIX  = L" other(s) not opened";
+
     // Ctrl+Enter — pushing this viewer's picture at the instances under Control.
     // Every outcome says which it was: a push that reaches nothing must not look
     // the same as one that reached three screens.

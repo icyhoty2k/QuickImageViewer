@@ -321,6 +321,15 @@ void DispatchSetting(HWND hWnd, int cmd) {
                                   : Constants::Messages::OPEN_THUMB_START_OFF);
         break;
 
+    case Id::SET_FOLDER_WALK_WRAP:
+        app.folderWalkWrap = !app.folderWalkWrap;
+        Persistence::Registry::SaveSetting(Constants::Registry::FOLDER_WALK_WRAP,
+            static_cast<DWORD>(app.folderWalkWrap));
+        g_overlayManager.PostCenterMessage(hWnd,
+            app.folderWalkWrap ? Constants::Messages::FOLDER_WALK_WRAP_ON
+                               : Constants::Messages::FOLDER_WALK_WRAP_OFF);
+        break;
+
     case Id::SET_OVERLAY_BG:
         app.overlayShowBackground = !app.overlayShowBackground;
         Persistence::Registry::SaveSetting(Constants::Registry::OVERLAY_SHOW_BG,

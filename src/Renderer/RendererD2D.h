@@ -315,6 +315,13 @@ class RendererD2D final : public IImageRenderer {
         // is asked for again, since the file on disk may have been replaced.
         bool DecodeFailed(const std::wstring &path) const override;
 
+        // Public because callers OUTSIDE the decode path need it — the SVG route
+        // reads its own bytes on the IO worker and has to be able to report a
+        // file it could not read. NoteDecodeFailure below is the implementation
+        // both this and the internal decode failures go through, so there is one
+        // record and one wake-up, not two.
+        void MarkDecodeFailed(const std::wstring &path) override { NoteDecodeFailure(path); }
+
     private:
         void NoteDecodeFailure(const std::wstring &path);
 

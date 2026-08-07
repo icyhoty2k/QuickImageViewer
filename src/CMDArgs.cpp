@@ -18,6 +18,7 @@
 #include <numeric>
 #include <random>
 #include <algorithm>
+#include <climits>   // INT_MAX — the -slideshowInterval overflow guard
 
 extern AppState app;
 
@@ -149,8 +150,17 @@ CmdArgs ParseCmdArgs(int argc, LPWSTR *argv) {
             // -slideshowInterval N  (seconds)
         else if (arg == L"-slideshowInterval" && i + 1 < argc) {
             try {
-                int secs = std::stoi(std::wstring(argv[++i]));
-                if (secs > 0) args.slideshowIntervalMs = secs * 1000;
+                // The multiply happens in long long: `secs * 1000` in int is
+                // signed overflow from 2147484 up, and a typo with one digit too
+                // many is exactly how such a number arrives. Too large is treated
+                // like any other unusable value — ignored — rather than clamped,
+                // because the CLI deliberately has no upper bound (a museum wall
+                // may really want an hour per slide, see INTERVAL_MAX_MS's
+                // comment for why the UI stops earlier).
+                const long long secs = std::stoll(std::wstring(argv[++i]));
+                const long long ms   = secs * 1000LL;
+                if (secs > 0 && ms <= INT_MAX)
+                    args.slideshowIntervalMs = static_cast<int>(ms);
             } catch (...) {}
         }
 
