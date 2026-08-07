@@ -27,6 +27,12 @@ once as you have devices lying around.
 
 <br>
 
+[![Website](https://img.shields.io/badge/%F0%9F%8C%90%20Website-quickimageviewer-38bdf8?style=for-the-badge&labelColor=0f172a)](https://icyhoty2k.github.io/QuickImageViewer/)
+[![Every keyboard shortcut](https://img.shields.io/badge/%E2%8C%A8%20Every%20shortcut-reference-8957e5?style=for-the-badge&labelColor=3c1e70)](https://icyhoty2k.github.io/QuickImageViewer/shortcuts.html)
+[![qIV Remote for Android](https://img.shields.io/badge/%F0%9F%93%B1%20qIV%20Remote-what%20it%20does-3DDC84?style=for-the-badge&labelColor=1b6b41)](https://icyhoty2k.github.io/QuickImageViewer/qiv-remote.html)
+
+<br>
+
 [![Download qIV](https://img.shields.io/badge/%E2%AC%87%20Download%20qIV-latest%20release-2ea44f?style=for-the-badge&labelColor=1a7f37)](https://github.com/icyhoty2k/QuickImageViewer/releases/latest)
 [![Sponsor](https://img.shields.io/badge/%E2%99%A5%20Sponsor-GitHub%20Sponsors-EA4AAA?style=for-the-badge&labelColor=bf3a8c)](https://github.com/sponsors/icyhoty2k)
 [![Ko-fi](https://img.shields.io/badge/%E2%98%95%20Ko--fi-buy%20a%20coffee-FF5E5B?style=for-the-badge&labelColor=c94340)](https://ko-fi.com/ivanhristovyanev)
@@ -320,6 +326,12 @@ through the setup.
 ---
 
 ## Features
+
+> The tables below are the useful subset. **[Every shortcut the app defines,
+> in one page →](https://icyhoty2k.github.io/QuickImageViewer/shortcuts.html)**
+> — generated from the viewer's own help panel, so it cannot fall behind the
+> build. Or press <kbd>F1</kbd> in qIV for the same list on your own machine,
+> with your own keyboard layout.
 
 <a id="performance"></a>
 <details>
