@@ -10,6 +10,7 @@
 #include "UI/GdiPool.h" // pooled brushes and pens — never DeleteObject them
 #include "../../AppState.h"
 #include "../../Platform/Constants.h"
+#include "../../Platform/ConstantsIcons.h"
 #include "../../Platform/FileHandler.h"
 #include "../../Renderer/IRenderer.h"
 #include "Common/FuzzyMatch.h"
@@ -444,7 +445,8 @@ LRESULT FindWnd::HandlePanelMessage(UINT message, WPARAM wParam, LPARAM lParam) 
         {
             wchar_t hint[128];
             if (!m_results.empty()) {
-                swprintf_s(hint, L"%d / %d    ↑↓ select  •  Enter open  •  Esc cancel",
+                swprintf_s(hint, L"%d / %d    " QIV_ICON_ARROWS_UP_DOWN L" select  " QIV_ICON_BULLET
+                                 L"  Enter open  " QIV_ICON_BULLET L"  Esc cancel",
                            m_selIdx + 1, static_cast<int>(m_results.size()));
             } else {
                 wcscpy_s(hint, L"Esc cancel");

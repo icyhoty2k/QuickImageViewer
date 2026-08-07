@@ -9,10 +9,15 @@
 #pragma once
 
 #include "ConstantsTheme.h"
+#include "ConstantsIcons.h" // Constants::Icon + the QIV_ICON_* literal macros
 
 // ConstantsStrings.h
 // Central repository for all user-visible text used in QIV overlays.
 // Keep strings here so they have one place to change for localization.
+//
+// NO GLYPH IS SPELLED OUT IN THIS FILE. A message that opens with a warning
+// triangle pastes QIV_ICON_WARNING in front of its literal — same compile-time
+// string, one definition of the icon, in ConstantsIcons.h.
 
 // Internal compile-time string fragments
 // Do not use directly outside this header.
@@ -69,7 +74,7 @@ namespace Constants::Messages {
     // Empty-dir placeholder shown in DirWnd / SpawnedDirWnd when the folder has no images
     constexpr const wchar_t *EMPTY_DIR_NO_IMAGES = L"No Images:";
     // Placeholder shown when the directory itself has been deleted
-    constexpr const wchar_t *EMPTY_DIR_MISSING = L"⚠  Directory Missing";
+    constexpr const wchar_t *EMPTY_DIR_MISSING = QIV_ICON_WARNING L"  Directory Missing";
     // Heading shown when the file is there but nothing can decode it — an
     // unknown format, or a known one this build was not compiled with.
     constexpr const wchar_t *FORMAT_UNSUPPORTED = L"Format not supported:";
@@ -102,13 +107,13 @@ namespace Constants::Messages {
 
     // Q — toggle last/current dir
     constexpr const wchar_t *TOGGLE_DIR_NO_PREV = L"No previous folder";
-    constexpr const wchar_t *TOGGLE_DIR_CHANGED = L"→ "; // prefix — append folder name
-    constexpr const wchar_t *TOGGLE_DIR_MISSING = L"⚠ Previous folder no longer exists";
+    constexpr const wchar_t *TOGGLE_DIR_CHANGED = QIV_ICON_ARROW_RIGHT L" "; // prefix — append folder name
+    constexpr const wchar_t *TOGGLE_DIR_MISSING = QIV_ICON_WARNING L" Previous folder no longer exists";
 
     // E — toggle last/current image
     constexpr const wchar_t *TOGGLE_IMAGE_NO_PREV = L"No previous image";
-    constexpr const wchar_t *TOGGLE_IMAGE_CHANGED = L"→ "; // prefix — append filename
-    constexpr const wchar_t *TOGGLE_IMAGE_MISSING = L"⚠ Previous image no longer exists";
+    constexpr const wchar_t *TOGGLE_IMAGE_CHANGED = QIV_ICON_ARROW_RIGHT L" "; // prefix — append filename
+    constexpr const wchar_t *TOGGLE_IMAGE_MISSING = QIV_ICON_WARNING L" Previous image no longer exists";
 
     // Runtime theme factor  (Ctrl+Alt+Shift+Numpad+/-/0)
     constexpr const wchar_t *THEME_FACTOR_PREFIX = L"Theme: ";
@@ -125,9 +130,9 @@ namespace Constants::Messages {
     constexpr const wchar_t *BACKDROP_MICA_ALT = L"Backdrop: MicaAlt";
 
     // Ctrl+F1 / Space / R / S — Slideshow
-    constexpr const wchar_t *SLIDESHOW_PLAYING = L"▶ Slideshow"; // prefix; interval/loop/shuffle appended dynamically
-    constexpr const wchar_t *SLIDESHOW_PAUSED = L"⏸ Slideshow Paused";
-    constexpr const wchar_t *SLIDESHOW_STOPPED = L"■ Slideshow Stopped";
+    constexpr const wchar_t *SLIDESHOW_PLAYING = QIV_ICON_PLAY L" Slideshow"; // prefix; interval/loop/shuffle appended dynamically
+    constexpr const wchar_t *SLIDESHOW_PAUSED = QIV_ICON_PAUSE L" Slideshow Paused";
+    constexpr const wchar_t *SLIDESHOW_STOPPED = QIV_ICON_STOP L" Slideshow Stopped";
     constexpr const wchar_t *SLIDESHOW_LOOP_ON = L"Loop" STR_STATE_ON;
     constexpr const wchar_t *SLIDESHOW_LOOP_OFF = L"Loop" STR_STATE_OFF;
     constexpr const wchar_t *SLIDESHOW_SHUFFLE_ON = L"Shuffle" STR_STATE_ON;
@@ -151,7 +156,7 @@ namespace Constants::Messages {
     constexpr const wchar_t *TRANSITION_ORDER_NAMES[] = { L"Sequential", L"Random" };
     constexpr const wchar_t *TRANSITION_SOURCE_PREFIX = L"Transitions: ";
     constexpr const wchar_t *TRANSITION_ORDER_PREFIX  = L"Transition Order: ";
-    constexpr const wchar_t *TRANSITION_LIST_EMPTY    = L"⚠ Transition list is empty";
+    constexpr const wchar_t *TRANSITION_LIST_EMPTY    = QIV_ICON_WARNING L" Transition list is empty";
     // Runtime-appendable forms of the STR_STATE_* macros, for messages whose
     // subject is only known at run time.
     constexpr const wchar_t *STATE_ON_SUFFIX  = STR_STATE_ON;
@@ -165,7 +170,7 @@ namespace Constants::Messages {
     // F11 / F12 — mirroring to other instances. The ON message names the target
     // count: "Mirroring: On" with nothing connected looks identical to a broken
     // feature, and the number is the fastest way to see which it is.
-    constexpr const wchar_t *MIRROR_ON_PREFIX  = L"Mirroring" STR_STATE_ON L" → "; // append "<n> target(s)"
+    constexpr const wchar_t *MIRROR_ON_PREFIX  = L"Mirroring" STR_STATE_ON L" " QIV_ICON_ARROW_RIGHT L" "; // append "<n> target(s)"
     constexpr const wchar_t *MIRROR_OFF        = L"Mirroring" STR_STATE_OFF;
     constexpr const wchar_t *MIRROR_NO_TARGETS = L"Mirroring" STR_STATE_ON L" — no targets (F10 to connect)";
     // The picker (two or more instances connected) closed with nothing ticked.
@@ -190,35 +195,15 @@ namespace Constants::Messages {
     // way the step went, which the folder name alone cannot. Landing on "2026"
     // reads very differently depending on whether you went up into it or across
     // to it. Icon then two spaces, matching EMPTY_DIR_MISSING above.
-    // THE BORDERED RECTANGLE COMES FROM SEGOE UI EMOJI, and from nothing else.
-    // Rendering all four codepoints across the candidate faces settles it:
     //
-    //   Segoe UI Emoji    ⬆ ⬇ ⬅ ➡   all four, arrow inside a rounded border
-    //   Segoe UI Symbol   ⬆ ⬇ ⬅ ➡   all four, plain arrows, no border
-    //   Segoe UI          ⬆ ⬇ ⬅ ➡   all four, plain arrows, no border
-    //
-    // So the odd one out was never the glyph — it was the FONT FALLBACK. A bare
-    // U+27A1 happens to reach Segoe UI Emoji, while bare U+2B05-2B07 land in
-    // Segoe UI, which is why one arrow had a border and three did not.
-    //
-    // U+FE0F on every one asks for the emoji form explicitly, so all four resolve
-    // to the same face and get the same border. It is on the right arrow too:
-    // that is the presentation it was already getting by luck, and pinning it
-    // means a font-fallback change on some other machine cannot silently take the
-    // border away again.
-    //
-    // THIS MUST STAY PAIRED WITH D2D1_DRAW_TEXT_OPTIONS_NONE at the centre-message
-    // draw call. The outline form is what carries the border and takes the
-    // message brush; ENABLE_COLOR_FONT swaps it for a flat filled blue tile and
-    // loses both. See OverlayManager's centre-slot branch.
-    //
-    // Written as escapes rather than pasted glyphs: a variation selector is
-    // invisible in an editor, and one stripped by a save or a merge would bring
-    // the mismatch back with nothing in the diff to explain it.
-    constexpr const wchar_t *FOLDER_WALK_UP      = L"\x2B06\xFE0F  ";   // ⬆ + folder name
-    constexpr const wchar_t *FOLDER_WALK_DOWN    = L"\x2B07\xFE0F  ";   // ⬇
-    constexpr const wchar_t *FOLDER_WALK_PREV    = L"\x2B05\xFE0F  ";   // ⬅
-    constexpr const wchar_t *FOLDER_WALK_NEXT    = L"\x27A1\xFE0F  ";   // ➡
+    // The variation selector on each of the four, and the font-fallback finding
+    // behind it, are explained where the glyphs are defined — see the folder-walk
+    // block in ConstantsIcons.h. It matters here only that these must stay paired
+    // with D2D1_DRAW_TEXT_OPTIONS_NONE at the centre-message draw call.
+    constexpr const wchar_t *FOLDER_WALK_UP      = QIV_ICON_WALK_UP   L"  "; // + folder name
+    constexpr const wchar_t *FOLDER_WALK_DOWN    = QIV_ICON_WALK_DOWN L"  ";
+    constexpr const wchar_t *FOLDER_WALK_PREV    = QIV_ICON_WALK_PREV L"  ";
+    constexpr const wchar_t *FOLDER_WALK_NEXT    = QIV_ICON_WALK_NEXT L"  ";
 
     // The wrap setting being toggled from the tray.
     constexpr const wchar_t *FOLDER_WALK_WRAP_ON  = L"Folder walk wraps around" STR_STATE_ON;
@@ -237,29 +222,30 @@ namespace Constants::Messages {
 
     // A file this app has no decoder for. Named with its extension, because
     // "unsupported" on its own invites a bug report while ".txt" does not.
-    constexpr const wchar_t *OPEN_NOT_AN_IMAGE = L"Not a supported image format · ";  // + ext
+    constexpr const wchar_t *OPEN_NOT_AN_IMAGE = L"Not a supported image format " QIV_ICON_MIDDLE_DOT L" ";  // + ext
 
     // A multi-item drop where some of it could not come along. Only shown for
     // what is genuinely unreachable — a second folder, or a file from elsewhere.
     // Files dropped from the SAME folder as the one that opened are already in
     // the playlist, so they are never counted here and never mentioned.
-    constexpr const wchar_t *DROP_EXTRAS_PREFIX  = L"Opened the first item · ";  // + count
+    constexpr const wchar_t *DROP_EXTRAS_PREFIX  = L"Opened the first item " QIV_ICON_MIDDLE_DOT L" ";  // + count
     constexpr const wchar_t *DROP_EXTRAS_SUFFIX  = L" other(s) not opened";
 
     // Ctrl+Enter — pushing this viewer's picture at the instances under Control.
     // Every outcome says which it was: a push that reaches nothing must not look
     // the same as one that reached three screens.
-    constexpr const wchar_t *PUSH_SENT_PREFIX = L"Pushed image → ";      // + count
+    constexpr const wchar_t *PUSH_SENT_PREFIX = L"Pushed image " QIV_ICON_ARROW_RIGHT L" ";      // + count
     constexpr const wchar_t *PUSH_SENT_SUFFIX = L" instance(s)";
     // Sync now. Says what travelled, because this one sends the whole LOOK and
     // a push sends a place — the two must not read alike on an overlay that
     // fades before you can check which key you pressed.
-    constexpr const wchar_t *SYNC_SENT_PREFIX = L"Synced folder · image · view → ";
+    constexpr const wchar_t *SYNC_SENT_PREFIX =
+        L"Synced folder " QIV_ICON_MIDDLE_DOT L" image " QIV_ICON_MIDDLE_DOT L" view " QIV_ICON_ARROW_RIGHT L" ";
     constexpr const wchar_t *PUSH_NO_IMAGE    = L"Nothing to push — no image loaded";
     // Alt+Enter. Worded differently from the Ctrl+Enter line on purpose: the two
     // do visibly different things at the far end, and an identical message would
     // make a mis-pressed modifier impossible to notice.
-    constexpr const wchar_t *PUSH_ONCE_PREFIX = L"Image streamed → ";  // + count
+    constexpr const wchar_t *PUSH_ONCE_PREFIX = L"Image streamed " QIV_ICON_ARROW_RIGHT L" ";  // + count
     // Ctrl+Alt+Enter — asking one instance for the picture it is displaying.
     constexpr const wchar_t *STREAM_IN_ASKING_PREFIX = L"Asking ";  // + target name
     constexpr const wchar_t *STREAM_IN_ASKING_SUFFIX = L" for its image…";
@@ -354,14 +340,14 @@ namespace Constants::Messages {
         L"A file is written on the first exchange with a client.";
 
     // Sort order  (Ctrl+Alt+Shift+0/6/7/8/9)  — press once: ascending, press again: descending
-    constexpr const wchar_t *SORT_BY_NAME = L"Sort: Name (A→Z)";
-    constexpr const wchar_t *SORT_BY_NAME_REV = L"Sort: Name (Z→A)";
+    constexpr const wchar_t *SORT_BY_NAME = L"Sort: Name (A" QIV_ICON_ARROW_RIGHT L"Z)";
+    constexpr const wchar_t *SORT_BY_NAME_REV = L"Sort: Name (Z" QIV_ICON_ARROW_RIGHT L"A)";
     constexpr const wchar_t *SORT_BY_DATE = L"Sort: Date (Newest)";
     constexpr const wchar_t *SORT_BY_DATE_REV = L"Sort: Date (Oldest)";
     constexpr const wchar_t *SORT_BY_SIZE = L"Sort: Size (Largest)";
     constexpr const wchar_t *SORT_BY_SIZE_REV = L"Sort: Size (Smallest)";
-    constexpr const wchar_t *SORT_BY_TYPE = L"Sort: Extension (A→Z)";
-    constexpr const wchar_t *SORT_BY_TYPE_REV = L"Sort: Extension (Z→A)";
+    constexpr const wchar_t *SORT_BY_TYPE = L"Sort: Extension (A" QIV_ICON_ARROW_RIGHT L"Z)";
+    constexpr const wchar_t *SORT_BY_TYPE_REV = L"Sort: Extension (Z" QIV_ICON_ARROW_RIGHT L"A)";
     constexpr const wchar_t *SORT_BY_DISK = L"Sort: Disk Order";
 
     // Spawned DirWnd messages
@@ -382,19 +368,18 @@ namespace Constants::Messages {
         L"Fill", L"Fit", L"Stretch", L"Tile", L"Center", L"Span"
     };
     constexpr const wchar_t *WALLPAPER_SET = L"Wallpaper: "; // prefix — append the style name
-    constexpr const wchar_t *WALLPAPER_FAILED = L"⚠ Wallpaper could not be applied";
+    constexpr const wchar_t *WALLPAPER_FAILED = QIV_ICON_WARNING L" Wallpaper could not be applied";
     // Folder walking — used by ALL three walkers (horizontal wheel, PageUp/Down,
     // Insert/Delete) so the centre message never depends on how you moved.
     // Format is "<prefix><n>/<total> <folder name>", where <n> is the row number
     // the History panel shows for that folder, so overlay and panel always agree.
     // The prefix is chosen from the row itself: starred rows get ★, the rest 📁.
-    constexpr const wchar_t *WALK_HISTORY_FOLDER = Constants::ThemeIcons::ICON_FOLDER;
-    constexpr const wchar_t *WALK_FAVORITE_FOLDER = Constants::ThemeIcons::ICON_FAVORITES_MARK;
+    constexpr const wchar_t *WALK_HISTORY_FOLDER = Constants::Icon::FOLDER;
+    constexpr const wchar_t *WALK_FAVORITE_FOLDER = Constants::Icon::FAVORITES_MARK;
     // Shown when a walk stepped over more than one dead folder to reach its
     // destination — append the count. A single skip names the folder instead.
-    // Text only: ThemeIcons entries are constexpr pointers, not macros, so
-    // ICON_WARNING cannot be concatenated into the literal here — the caller
-    // prepends it at runtime.
+    // Text only: the caller prepends the warning icon at run time, because the
+    // count sits between the icon and this word.
     constexpr const wchar_t *WALK_SKIPPED = L" skipped ";
     // History panel footer total, and its hover popup.
     // Footer reads "<size>/<files>" plus "/<n>" only when folders were excluded.
@@ -439,13 +424,13 @@ namespace Constants::Messages {
 
     constexpr const wchar_t *WALK_NO_HISTORY_FOLDERS = L"No other history folders";
     constexpr const wchar_t *WALK_NO_FAVORITE_FOLDERS = L"No favorite folders";
-    constexpr const wchar_t *FOLDER_DEAD_MISSING = L"⚠ Folder not found";
-    constexpr const wchar_t *FOLDER_DEAD_EMPTY = L"⚠ No images in folder";
-    constexpr const wchar_t *FOLDER_DELETED_NOTIFY = L"⚠ Folder deleted";
+    constexpr const wchar_t *FOLDER_DEAD_MISSING = QIV_ICON_WARNING L" Folder not found";
+    constexpr const wchar_t *FOLDER_DEAD_EMPTY = QIV_ICON_WARNING L" No images in folder";
+    constexpr const wchar_t *FOLDER_DELETED_NOTIFY = QIV_ICON_WARNING L" Folder deleted";
 
     // Thumbnail strip wrap-around
-    constexpr const wchar_t *THUMB_STRIP_WRAP_TO_START = L"↩ Start";
-    constexpr const wchar_t *THUMB_STRIP_WRAP_TO_END = L"↪ End";
+    constexpr const wchar_t *THUMB_STRIP_WRAP_TO_START = QIV_ICON_WRAP_START L" Start";
+    constexpr const wchar_t *THUMB_STRIP_WRAP_TO_END = QIV_ICON_WRAP_END L" End";
     constexpr const wchar_t *THUMB_STRIP_WRAP_ON = STR_THUMBNAIL_STRIP L" Wrap" STR_STATE_ON;
     constexpr const wchar_t *THUMB_STRIP_WRAP_OFF = STR_THUMBNAIL_STRIP L" Wrap" STR_STATE_OFF;
 
@@ -541,8 +526,8 @@ namespace Constants::Messages {
     // Orange rather than red on purpose: a loopback listener is not a fault or a
     // misconfiguration, it is the normal local case. Red would cry wolf on the
     // setup most people run.
-    constexpr const wchar_t *OVERLAY_SERVER_DOT_TLS   = L"\U0001F7E2";
-    constexpr const wchar_t *OVERLAY_SERVER_DOT_PLAIN = L"\U0001F7E0";
+    constexpr const wchar_t *OVERLAY_SERVER_DOT_TLS   = Constants::Icon::DOT_GREEN;
+    constexpr const wchar_t *OVERLAY_SERVER_DOT_PLAIN = Constants::Icon::DOT_ORANGE;
 
     // The dark phase of the connect / disconnect blink.
     //
@@ -550,7 +535,7 @@ namespace Constants::Messages {
     // above so it measures the same width. Blanking it would make the count and
     // the zoom beside it jump left and back three times, which reads as the
     // overlay glitching rather than as the dot blinking.
-    constexpr const wchar_t *OVERLAY_SERVER_DOT_OFF   = L"\U000026AB";
+    constexpr const wchar_t *OVERLAY_SERVER_DOT_OFF   = Constants::Icon::DOT_BLACK;
 
     // The LIT phase, coloured by WHAT happened. Four outcomes, because they mean
     // four different things to whoever sees them from across a room:
@@ -569,10 +554,10 @@ namespace Constants::Messages {
     // Yellow for an eject because it was DELIBERATE and done here. Showing the
     // operator red for the thing they just did themselves would teach them to
     // ignore red.
-    constexpr const wchar_t *OVERLAY_SERVER_DOT_JOIN   = L"\U0001F7E2"; // 🟢
-    constexpr const wchar_t *OVERLAY_SERVER_DOT_LEFT   = L"\U000026AA"; // ⚪
-    constexpr const wchar_t *OVERLAY_SERVER_DOT_LOST   = L"\U0001F534"; // 🔴
-    constexpr const wchar_t *OVERLAY_SERVER_DOT_KICKED = L"\U0001F7E1"; // 🟡
+    constexpr const wchar_t *OVERLAY_SERVER_DOT_JOIN   = Constants::Icon::DOT_GREEN;
+    constexpr const wchar_t *OVERLAY_SERVER_DOT_LEFT   = Constants::Icon::DOT_WHITE;
+    constexpr const wchar_t *OVERLAY_SERVER_DOT_LOST   = Constants::Icon::DOT_RED;
+    constexpr const wchar_t *OVERLAY_SERVER_DOT_KICKED = Constants::Icon::DOT_YELLOW;
 
     // Connect / disconnect blink: how long each phase lasts, and how many blinks.
     //
@@ -592,8 +577,8 @@ namespace Constants::Messages {
 
     // F9 status line. The wording matches the overlay dot's two colours, so the
     // panel and the indicator cannot appear to disagree.
-    constexpr const wchar_t *REMOTE_STATUS_TLS   = L"· TLS for remote clients";
-    constexpr const wchar_t *REMOTE_STATUS_PLAIN = L"· loopback only — nothing to encrypt";
+    constexpr const wchar_t *REMOTE_STATUS_TLS   = QIV_ICON_MIDDLE_DOT L" TLS for remote clients";
+    constexpr const wchar_t *REMOTE_STATUS_PLAIN = QIV_ICON_MIDDLE_DOT L" loopback only — nothing to encrypt";
     constexpr const wchar_t *REMOTE_STATUS_FINGERPRINT = L"Fingerprint: ";
     constexpr const wchar_t *REMOTE_FINGERPRINT_COPIED = L"— copied";
 

@@ -11,6 +11,7 @@
 #include "../AppState.h"
 #include "../Platform/Constants.h"
 #include "../Platform/ConstantsStrings.h"
+#include "../Platform/ConstantsIcons.h"
 #include "../WorkerThread.h"
 #include "../SimpleFormats.h"
 #include "../ImageLoadStats.h"
@@ -636,9 +637,9 @@ const wchar_t *RendererD2D::FolderOverlayHeaderIcon() {
         case AppState::FolderOverlayState::Missing:
             return L"";
         case AppState::FolderOverlayState::Unsupported:
-            return Constants::ThemeIcons::ICON_WARNING;
+            return Constants::Icon::WARNING;
         default:
-            return Constants::ThemeIcons::ICON_INFO;
+            return Constants::Icon::INFO;
     }
 }
 
@@ -734,7 +735,7 @@ RendererD2D::FolderOverlayText RendererD2D::BuildFolderOverlayText() {
         // ALREADY in, and the same glyph as the prompt below would read as one
         // repeated thing rather than two different ones. The icon is outside
         // the link range — it marks the line, it is not part of the target.
-        out.text += Constants::ThemeIcons::ICON_LOCATION;
+        out.text += Constants::Icon::LOCATION;
         out.text += L" ";
 
         out.pathStart = static_cast<UINT32>(out.text.size());
@@ -748,7 +749,7 @@ RendererD2D::FolderOverlayText RendererD2D::BuildFolderOverlayText() {
     // to name. Last of the three because it is the ACTION — it reads as the
     // conclusion of the two lines above it.
     out.text += L"\n";
-    out.text += Constants::ThemeIcons::ICON_FOLDER_OPEN;
+    out.text += Constants::Icon::FOLDER_OPEN;
     out.text += L" ";
 
     out.actionStart = static_cast<UINT32>(out.text.size());

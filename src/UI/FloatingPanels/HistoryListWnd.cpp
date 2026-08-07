@@ -12,6 +12,7 @@
 #include "../../Platform/Constants.h"
 #include "../../Platform/ConstantsTheme.h"
 #include "../../Platform/ConstantsStrings.h"
+#include "../../Platform/ConstantsIcons.h"
 #include "../../Platform/FileHandler.h"
 #include "../../Persistence/RegistryManager.h"
 #include "../../Overlays/OverlayManager.h"
@@ -407,17 +408,17 @@ namespace UI {
         const FolderStatus status = (sit != g_statusCache.end()) ? sit->second
                                                                  : FolderStatus::Unknown;
         if (status == FolderStatus::Missing) {
-            badges.push_back({Constants::ThemeIcons::ICON_WARNING,
+            badges.push_back({Constants::Icon::WARNING,
                               Constants::Theme::HistoryPanel::PATH_DEAD_DRIVE,
                               Constants::Messages::BADGE_MISSING});
         } else if (status == FolderStatus::Empty) {
-            badges.push_back({Constants::ThemeIcons::ICON_EMPTY,
+            badges.push_back({Constants::Icon::EMPTY,
                               Constants::Theme::HistoryPanel::PATH_EMPTY_DRIVE,
                               Constants::Messages::BADGE_EMPTY});
         }
 
         if (isFavorite) {
-            badges.push_back({Constants::ThemeIcons::ICON_FAVORITES_MARK,
+            badges.push_back({Constants::Icon::FAVORITES_MARK,
                               Constants::Theme::Markers::FAVORITES,
                               Constants::Messages::BADGE_FAVORITE});
         }
@@ -430,10 +431,10 @@ namespace UI {
                     : li.kind == LinkKind::Symlink ? Constants::Messages::LINK_KIND_SYMLINK
                                                    : Constants::Messages::LINK_KIND_MAPPED;
             line += L"  ";
-            line += Constants::ThemeIcons::ICON_ARROW_RIGHT;
+            line += Constants::Icon::ARROW_RIGHT;
             line += L"  ";
             line += li.target.empty() ? Constants::Messages::LINK_TARGET_UNKNOWN : li.target;
-            badges.push_back({Constants::ThemeIcons::ICON_SYMLINK_MARK,
+            badges.push_back({Constants::Icon::SYMLINK_MARK,
                               Constants::Theme::Markers::SYMLINK, std::move(line)});
         }
 
@@ -569,7 +570,7 @@ namespace UI {
                 const std::wstring &target = CachedRealPathOf(p);
                 if (!HistoryPath::Equal(target, p)) {
                     out += L" ";
-                    out += Constants::ThemeIcons::ICON_ARROW_RIGHT;
+                    out += Constants::Icon::ARROW_RIGHT;
                     out += L" " + target;
                 }
             }
@@ -1644,11 +1645,11 @@ namespace UI {
             // whole message as a warning so it is visibly not an ordinary hop.
             // MID_CENTER is single-line, hence a prefix rather than a second line.
             const std::wstring arrow = std::wstring(L"  ") +
-                                       Constants::ThemeIcons::ICON_ARROW_RIGHT + L"  ";
+                                       Constants::Icon::ARROW_RIGHT + L"  ";
             if (skipped == 1)
                 text = lastSkipText + arrow + text;
             else if (skipped > 1)
-                text = std::wstring(Constants::ThemeIcons::ICON_WARNING) +
+                text = std::wstring(Constants::Icon::WARNING) +
                        Constants::Messages::WALK_SKIPPED +
                        std::to_wstring(skipped) + arrow + text;
 
@@ -2197,11 +2198,11 @@ namespace UI {
                 {
                     std::wstring caption = L"Folder History  (showing "
                                            + std::to_wstring(totalShown) + L" of "
-                                           + std::to_wstring(totalSaved) + L" saved)   " + Constants::ThemeIcons::ICON_FAVORITES_MARK + L" = Space (toggle fav)   "
+                                           + std::to_wstring(totalSaved) + L" saved)   " + Constants::Icon::FAVORITES_MARK + L" = Space (toggle fav)   "
                                            + std::to_wstring(favCount) + L" / "
                                            + std::to_wstring(app.historyMaxFavs)
                                            + L" favorites   "
-                                           + Constants::ThemeIcons::ICON_SYMLINK_MARK
+                                           + Constants::Icon::SYMLINK_MARK
                                            + L" = symlink / junction";
                     SetWindowTextW(m_hWnd, caption.c_str());
                 }
@@ -2422,7 +2423,7 @@ namespace UI {
                                 // several states at once, so borrowing any one of
                                 // their colours would misreport the row at a glance.
                                 SetTextColor(hdc, Constants::Theme::Markers::BADGE_STACK);
-                                DrawTextW(hdc, Constants::ThemeIcons::ICON_BADGE_STACK, -1, &slotRect,
+                                DrawTextW(hdc, Constants::Icon::BADGE_STACK, -1, &slotRect,
                                           DT_CENTER | DT_VCENTER | DT_SINGLELINE);
                             }
                             g_linkRects.push_back(badges.empty() ? RECT{0, 0, 0, 0} : slotRect);

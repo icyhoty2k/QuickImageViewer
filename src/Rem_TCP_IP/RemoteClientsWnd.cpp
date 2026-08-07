@@ -14,6 +14,7 @@
 #include "Dedicated/DedicatedSettings.h" // PanelColors / PANEL_OPACITY only
 #include "Platform/Constants.h"
 #include "Platform/ConstantsStrings.h"
+#include "Platform/ConstantsIcons.h"
 #include "UI/ThemedDialog.h"
 // Safe from a .cpp despite UIManager.h including this panel's header — the guard
 // has already fired, so there is no cycle. Same as RemoteWnd.cpp, whose button
@@ -688,7 +689,8 @@ LRESULT RemoteClientsWnd::HandlePanelMessage(UINT message, WPARAM wParam, LPARAM
                 if (c.observing) ++watchingCount;
 
             const std::wstring clientsTitle =
-                L"\U0001F64B Clients — who connected to this instance   \x00B7   " +
+                std::wstring(Constants::Icon::CLIENT) +
+                L" Clients — who connected to this instance   " QIV_ICON_MIDDLE_DOT L"   " +
                 std::to_wstring(m_conns.size()) + L" connected, " +
                 std::to_wstring(watchingCount) + L" watching";
 

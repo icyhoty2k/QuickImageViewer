@@ -27,6 +27,7 @@
 #include "../../Renderer/RendererD2D.h"
 #include "../../Overlays/OverlayManager.h"
 #include "../../Platform/ConstantsStrings.h"
+#include "../../Platform/ConstantsIcons.h"
 #include "../ThemedDialog.h"
 #include "../../Input/Command.h"
 #include "../../Rem_TCP_IP/RemoteProtocol.h" // BlockedNow — see FileOpBlocked below
@@ -85,7 +86,7 @@ namespace UI {
         const std::wstring folder = GetPanelFolder();
         if (folder.empty()) return {{}, 0};
         std::wstring text = folder;
-        if (!m_dirSizeStr.empty()) text += L" → " + m_dirSizeStr;
+        if (!m_dirSizeStr.empty()) text += L" " QIV_ICON_ARROW_RIGHT L" " + m_dirSizeStr;
         const auto lastSlash = folder.find_last_of(L"\\/");
         const UINT32 boldStart = (lastSlash != std::wstring::npos)
                                      ? static_cast<UINT32>(lastSlash + 1)

@@ -15,6 +15,7 @@
 #include "Thumbnail.h"
 #include "../../AppState.h"
 #include "../../Platform/Constants.h"
+#include "../../Platform/ConstantsIcons.h"
 
 namespace UI {
     class CacheWnd : public ThumbnailPanelWnd {
@@ -107,7 +108,7 @@ namespace UI {
                 const UINT32 boldStart = 4; // everything after "vRam" is bold
                 text += L'(' + std::to_wstring(count)
                         + L'/' + std::to_wstring(app.vramCacheCount) + L')';
-                text += L" → " + FormatDirSize(static_cast<int64_t>(bytes));
+                text += L" " QIV_ICON_ARROW_RIGHT L" " + FormatDirSize(static_cast<int64_t>(bytes));
                 return {std::move(text), boldStart};
             }
     };

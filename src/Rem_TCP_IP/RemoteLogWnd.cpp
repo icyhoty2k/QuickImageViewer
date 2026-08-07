@@ -11,6 +11,7 @@
 
 #include "AppState.h"
 #include "Platform/Constants.h"
+#include "Platform/ConstantsIcons.h"
 #include "Input/Command.h"       // InputManager::ExecuteCommand — the one sink
 // Safe from a .cpp even though UIManager.h includes THIS header: the guard has
 // already fired by the time it is reached, so there is no cycle.
@@ -707,11 +708,13 @@ LRESULT RemoteLogWnd::HandlePanelMessage(UINT message, WPARAM wParam, LPARAM lPa
             {
                 RECT sr{pad, tr.bottom, W - pad, tr.bottom + static_cast<int>(16 * s)};
                 const std::wstring sub =
-                    std::wstring(L"→ sent by this instance · ← received   ·   ") +
+                    std::wstring(QIV_ICON_ARROW_RIGHT L" sent by this instance "
+                                 QIV_ICON_MIDDLE_DOT L" " QIV_ICON_ARROW_LEFT L" received   "
+                                 QIV_ICON_MIDDLE_DOT L"   ") +
                     std::to_wstring(m_rows.size()) + L" of " +
-                    std::to_wstring(RL::CAPACITY) + L" entries   ·   " +
-                    L"click #, Time or Δ time to sort   ·   double-click a row for the "
-                    L"full text   ·   the two counts on the right open F10 / Ctrl+F11";
+                    std::to_wstring(RL::CAPACITY) + L" entries   " QIV_ICON_MIDDLE_DOT L"   " +
+                    L"click #, Time or Δ time to sort   " QIV_ICON_MIDDLE_DOT L"   double-click a row for the "
+                    L"full text   " QIV_ICON_MIDDLE_DOT L"   the two counts on the right open F10 / Ctrl+F11";
                 DrawTextW(bb, sub.c_str(), -1, &sr, DT_LEFT | DT_SINGLELINE | DT_END_ELLIPSIS);
             }
 
@@ -832,7 +835,8 @@ LRESULT RemoteLogWnd::HandlePanelMessage(UINT message, WPARAM wParam, LPARAM lPa
                     // user may not be looking at.
                     std::wstring title = c.title;
                     if (c.sortable && c.key == m_sortKey)
-                        title += m_sortAscending ? L" ▲" : L" ▼";
+                        title += m_sortAscending ? L" " QIV_ICON_SORT_ASCENDING
+                                                 : L" " QIV_ICON_SORT_DESCENDING;
 
                     SetTextColor(bb, (c.sortable && c.key == m_sortKey) ? fg : PC::HEADER);
                     RECT hr{x + static_cast<int>(4 * s), hdrY, x + cw, hdrY + hdrH};
@@ -895,7 +899,7 @@ LRESULT RemoteLogWnd::HandlePanelMessage(UINT message, WPARAM wParam, LPARAM lPa
 
                     // The arrow is the direction, in the column that is already
                     // narrow and already just a number.
-                    cell(0, (out ? L"→ " : L"← ") + std::to_wstring(e.seq),
+                    cell(0, (out ? QIV_ICON_ARROW_RIGHT L" " : QIV_ICON_ARROW_LEFT L" ") + std::to_wstring(e.seq),
                          out ? dim : PC::CHOICE);
                     cell(1, e.sender,   PC::TEXT);
                     cell(2, e.command,  PC::PATH);
@@ -1037,7 +1041,8 @@ void RemoteLogEntryWnd::BuildFields() {
 
     m_fields = {
         { L"#",         std::to_wstring(m_entry.seq) },
-        { L"Direction", out ? L"→ sent by this instance" : L"← received" },
+        { L"Direction", out ? QIV_ICON_ARROW_RIGHT L" sent by this instance"
+                            : QIV_ICON_ARROW_LEFT  L" received" },
         { L"Sender",    m_entry.sender },
         { L"Command",   m_entry.command },
         { L"Receiver",  m_entry.receiver },
@@ -1053,8 +1058,8 @@ void RemoteLogEntryWnd::BuildFields() {
     const bool canNext = m_owner && m_owner->CanStepSelection(+1);
 
     m_buttons = {
-        { L"◀ Previous", DBTN_PREV,  {}, canPrev },
-        { L"Next ▶",     DBTN_NEXT,  {}, canNext },
+        { QIV_ICON_PAGE_PREV L" Previous", DBTN_PREV,  {}, canPrev },
+        { L"Next " QIV_ICON_PAGE_NEXT,     DBTN_NEXT,  {}, canNext },
         { L"Copy",       DBTN_COPY,  {}, true    },
         { L"Close",      DBTN_CLOSE, {}, true    },
     };
@@ -1222,8 +1227,9 @@ LRESULT RemoteLogEntryWnd::HandlePanelMessage(UINT message, WPARAM wParam, LPARA
                 SelectObject(bb, m_hFontSmall);
                 SetTextColor(bb, dim);
                 RECT sr{pad, tr.bottom, W - pad, tr.bottom + static_cast<int>(16 * s)};
-                DrawTextW(bb, L"Full text, nothing trimmed   ·   ← → steps entries   ·   "
-                              L"C copies   ·   Esc closes",
+                DrawTextW(bb, L"Full text, nothing trimmed   " QIV_ICON_MIDDLE_DOT L"   "
+                              QIV_ICON_ARROW_LEFT L" " QIV_ICON_ARROW_RIGHT L" steps entries   "
+                              QIV_ICON_MIDDLE_DOT L"   C copies   " QIV_ICON_MIDDLE_DOT L"   Esc closes",
                           -1, &sr, DT_LEFT | DT_SINGLELINE | DT_END_ELLIPSIS);
             }
 
