@@ -1062,9 +1062,11 @@ namespace UI {
         Add(L"Settings › Thumbnail Effects",
             L"Master switch for thumbnail strip visual effects: glow border on the "
             L"selected thumbnail, rounded-corner overdraw, and hover-scale enlarge.", sTray);
-        Add(L"Settings › History: Open Full List",
+        Add(L"Settings › History › Tab Opens Full List",
             L"When enabled, Tab opens the full (uncapped) history view. When disabled, "
-            L"the list is capped at the History Max Dirs value.", sTray);
+            L"Tab caps the list at Rows Shown in Panel. Ctrl+Tab opens the full list "
+            L"once whatever this is set to, so the setting decides the DEFAULT rather "
+            L"than the only way in.", sTray);
         Add(L"Settings › Info Overlays",
             L"Show / hide all nine overlay text slots at once.", sTray);
         Add(L"Overlays › Font / Font Size / Font Color…",
@@ -1072,6 +1074,14 @@ namespace UI {
             L"the standard colour picker; the size is shown in its own label. All three "
             L"are persisted, so a wall of screens can be made readable from across a "
             L"room once and left alone.", sTray);
+        Add(L"Overlays › Bot Left › Folder Name / Full Path",
+            L"The bottom-left slot can name the folder holding the current image in "
+            L"one of two ways: 📁 the leaf folder alone, or 📂 the whole path. They "
+            L"are a radio pair because they are one line in two spellings — showing "
+            L"both would print the folder name twice, once on its own and once as "
+            L"the tail of the path above it. Clicking the lit one turns it off, "
+            L"which is how you get neither. In Summary layout the line moves to the "
+            L"top-left slot instead.", sTray);
         Add(L"Overlays › Layout / Message Duration",
             L"Layout picks Grid, Stacked or Summary — the same three O cycles through. "
             L"Message Duration is how long a centre-screen message stays up, in "
@@ -1094,8 +1104,55 @@ namespace UI {
         Add(L"Settings › Window Width / Height",
             L"Default window dimensions in pixels (240 – 16000). Used by Ctrl+Space "
             L"restore and window-reset commands.", sTray);
-        Add(L"Settings › History Max Dirs / Favs",
-            L"Maximum folders / favorites to show in the History panel (0 – 999 each).", sTray);
+        Add(L"Settings › History › Record Folders I Visit",
+            L"Master switch for recording folder history. OFF stops new folders "
+            L"reaching both the list and qivHistory.txt. Nothing already saved is "
+            L"removed — that is what Clear History is for — and navigation itself "
+            L"is unaffected: the folder walk, the placeholder and the overlay "
+            L"folder line all keep working.", sTray);
+        Add(L"Settings › History › Record Only Folders With Images",
+            L"ON by default. Folders with no images in them are not recorded. This "
+            L"is what keeps the Alt-arrow folder walk from filling the history with "
+            L"folders you merely stepped through: the walk lands in every child of "
+            L"a parent, images or not. A folder DROPPED on the window is recorded "
+            L"either way — that is a deliberate act, not walk noise.", sTray);
+        Add(L"Settings › History › Rows Shown in Panel",
+            L"How many history rows the panel draws (0 – 999). Display only — it "
+            L"does not affect what is recorded or saved.", sTray);
+        Add(L"Settings › History › Favorite Rows Shown in Panel",
+            L"How many favorite rows the panel draws (0 – 999). Display only, and "
+            L"bounded in practice by Favorites You Can Add.", sTray);
+        Add(L"Settings › History › Favorites You Can Add",
+            L"How many folders may be starred at once (0 – 999). Starring another "
+            L"is refused when full. This number also caps qivFavorites.txt itself, "
+            L"on load, on merge and on save — so LOWERING IT DROPS favorites past "
+            L"the new limit the next time the file is written.", sTray);
+        Add(L"Settings › History › Folders Saved to File",
+            L"How many folders qivHistory.txt keeps (1 – 99999). The oldest are "
+            L"dropped past this.", sTray);
+        Add(L"Settings › History › Remove Invalid Folders",
+            L"Drops history rows that cannot be parsed as a path, that point at a "
+            L"folder which no longer exists, or that hold no images. Favorites are "
+            L"kept whatever their state. Rows the background scan has not reached "
+            L"yet are KEPT and reported, so a run started early is partial and "
+            L"says so rather than looking complete.", sTray);
+        Add(L"Settings › History › Remove Duplicates",
+            L"Collapses repeated folders to one row each, keeping the most recent. "
+            L"Usually removes nothing from the list — the real work is rewriting "
+            L"the append-only file, which is where repeats accumulate.", sTray);
+        Add(L"Settings › History › Clear History",
+            L"Removes every non-favorite folder from the list and from "
+            L"qivHistory.txt. Favorites are untouched.", sTray);
+        Add(L"Settings › History › Clear Favorites",
+            L"Un-stars every favorite and empties qivFavorites.txt. The folders "
+            L"themselves stay in the history — only the star goes.", sTray);
+        Add(L"Settings › History › Clear History and Favorites",
+            L"Empties both lists and both files in one action. Each of the three "
+            L"clears backs its file up first, so any of them can be undone with "
+            L"Backup && Export › Restore History && Favorites.", sTray);
+        Add(L"Settings › History › Open History File",
+            L"Selects qivHistory.txt in Explorer, next to qivFavorites.txt and the "
+            L"QivBackup folder.", sTray);
         Add(L"Settings › Dir Thumb Cache",
             L"Memory budget in MB for the directory thumbnail bitmap store "
             L"(100 – 64000 MB).", sTray);
@@ -1105,13 +1162,27 @@ namespace UI {
         Add(L"Settings › Overlay Message Duration",
             L"How long center overlay messages remain visible in milliseconds "
             L"(250 – 10000 ms).", sTray);
-        Add(L"Settings › History Save Limit",
-            L"Maximum number of folders to persist to disk between sessions "
-            L"(1 – 99999).", sTray);
-        Add(L"Settings › Export / Import Settings",
+        Add(L"Backup && Export › Export / Import Settings",
             L"Save all settings to a UTF-8 INI file, or load a previously exported one. "
             L"Import requires a confirmation dialog and applies all values immediately, "
-            L"including theme, overlays and sort order.", sTray);
+            L"including theme, overlays and sort order. Covers the REGISTRY settings "
+            L"only — the TCP/IP .ini files have their own pair below.", sTray);
+        Add(L"Backup && Export › Backup Logs",
+            L"Zips the whole logs folder — general and network together — to a "
+            L"location you choose. One-way: logs are a record, so there is nothing "
+            L"to restore them into. Says so plainly when neither log has written "
+            L"anything yet.", sTray);
+        Add(L"Backup && Export › Backup / Restore TCP/IP Config",
+            L"Zips qivLocalServer.ini, qivRemoteServers.ini and "
+            L"qivRemoteServerBlacklist.ini — none of which are in the registry, so "
+            L"the settings export above never covered them. Restore asks per file "
+            L"before replacing one that already exists, and needs a restart: a "
+            L"running listener keeps the settings it started with. The archive "
+            L"holds your allow-list and the stored password hash, so keep it as "
+            L"private as the configuration itself.", sTray);
+        Add(L"Backup && Export › Backup / Restore History && Favorites",
+            L"Zips qivHistory.txt and qivFavorites.txt, and restores them from a "
+            L"previously written archive.", sTray);
         Add(L"Settings › Restore Defaults",
             L"Reset every setting to its compiled-in default value after a confirmation "
             L"dialog. History and favorites are not affected.", sTray);

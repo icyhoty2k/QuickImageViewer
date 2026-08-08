@@ -84,7 +84,10 @@
 //   Edge cases:
 //     *              — matches everything, including an empty path
 //     **             — same as * (consecutive stars are handled correctly)
-//     ""  (empty)    — IsWildcardQuery returns false → treated as fuzzy, matches all
+//     ""  (empty)    — NEVER REACHES EITHER MATCHER. The caller shows the whole
+//                      list itself (see FindWnd::RebuildMatches). Handed to
+//                      FuzzyMatch anyway it returns FALSE, not "matches all" —
+//                      the guard there explains why.
 //
 // ─────────────────────────────────────────────────────────────────────────────
 //   Case handling:
@@ -170,14 +173,20 @@ inline bool WildcardMatch(const wchar_t *pat, const wchar_t *text,
 //   text/textLen   : lowercased candidate string.
 //   out            : populated on match; untouched on no-match.
 // Returns true if every query character appears in text in order.
+// An EMPTY QUERY returns FALSE — see the guard below for why.
 inline bool FuzzyMatch(const wchar_t *query, int queryLen,
                        const wchar_t *text,  int textLen,
                        FuzzyMatchResult &out) {
-    // An EMPTY QUERY matches everything, and every caller filters it out before
-    // arriving here — which is exactly why the scoring below reads positions[0]
-    // and positions[pi-1] without checking. Stated rather than assumed: with
-    // pi == 0 those are an uninitialised stack read and an index of -1, and the
-    // next caller that forgets the check would inherit that silently.
+    // AN EMPTY QUERY IS REFUSED, deliberately. It is NOT treated as "matches
+    // everything" — that reading cost a failing test once, because the sentence
+    // above it used to say so.
+    //
+    // Every caller filters an empty query out before arriving here (an empty
+    // box shows the whole list), which is exactly why the scoring below reads
+    // positions[0] and positions[pi-1] without checking. With pi == 0 those are
+    // an uninitialised stack read and an index of -1, so returning true here
+    // would hand the next caller who forgets that check a silent out-of-bounds
+    // read instead of a refusal.
     if (queryLen <= 0) return false;
     if (queryLen > FUZZY_MAX_QUERY) return false;   // positions[] is this long
 

@@ -41,8 +41,11 @@ static constexpr float ROW_EFFECTS = static_cast<float>(EFFECT_MAX_LINES) * EFFE
 // stack would push the topmost entry outside the rect and get clipped.
 // Summary puts the name on TOP_LEFT's first line instead, so it costs nothing
 // here in that mode.
+// Either spelling of the folder line occupies the same ONE line, so the extra
+// row is owed when either is on — they can never both be.
 static float BotLeftRowHeight() {
-    const bool nameInSlot = app.overlayShowDirName && app.overlayLayoutMode != 2;
+    const bool nameInSlot = (app.overlayShowDirName || app.overlayShowFullPath) &&
+                            app.overlayLayoutMode != 2;
     return ROW_EFFECTS + (nameInSlot ? EFFECT_LINE_HEIGHT : 0.0f);
 }
 
@@ -446,12 +449,10 @@ void OverlayManager::RebuildTopLeft() {
     // Effects are NOT folded in — they stay in BOT_LEFT.
     if (app.overlayLayoutMode == 2) {
         std::wstring text;
-        if (app.overlayShowDirName) {
-            const std::wstring &dirLine = CurrentFolderLine();
-            if (!dirLine.empty()) {
-                text = dirLine;
-                text += L'\n';
-            }
+        const std::wstring &dirLine = CurrentFolderDisplayLine();
+        if (!dirLine.empty()) {
+            text = dirLine;
+            text += L'\n';
         }
         swprintf_s(buf, L"%d / %d  ", m_infoIndex + 1, m_infoTotal);
         text += buf;
@@ -727,8 +728,9 @@ void OverlayManager::UpdateEffects() {
     //   Summary — the name is TOP_LEFT's first line instead, so it is omitted
     //             here entirely and BOT_LEFT carries effects only.
     const int mode = app.overlayLayoutMode;
-    const bool wantDir = app.overlayShowDirName && mode != 2;
-    const std::wstring &dirLine = wantDir ? CurrentFolderLine() : kNoLine;
+    // Summary parks the line on TOP_LEFT instead, so BOT_LEFT omits it there
+    // whichever spelling is on.
+    const std::wstring &dirLine = (mode != 2) ? CurrentFolderDisplayLine() : kNoLine;
     if (mode == 1) appendLine(dirLine);
 
     // ── Effects list ─────────────────────────────────────────────────────────
@@ -790,6 +792,7 @@ const std::wstring &OverlayManager::CurrentFolderName() {
         m_folderSrc.clear();
         m_folderName.clear();
         m_folderLine.clear();
+        m_folderPathLine.clear();
         return m_folderName;
     };
 
@@ -817,10 +820,24 @@ const std::wstring &OverlayManager::CurrentFolderName() {
     // same event as the name, so caching it costs no extra invalidation and
     // saves rebuilding "icon + space + name" on every navigation.
     m_folderLine.clear();
+    m_folderPathLine.clear();
     if (!m_folderName.empty()) {
         m_folderLine = Constants::Icon::FOLDER;
         m_folderLine += L' ';
         m_folderLine += m_folderName;
+
+        // BOTH forms are composed here, not on demand, even though only one can
+        // be displayed. They share the one event that invalidates them, the
+        // strings are small, and the alternative is a branch on an AppState flag
+        // inside a cache whose whole job is to be checked on every navigation.
+        // Toggling the menu item then costs nothing — the line is already built.
+        //
+        // OPEN folder, against the closed one above: the pair has to be legible
+        // at a glance in a corner of a photograph, and "unfolded" reading as the
+        // longer form is the only mnemonic available at 12 points.
+        m_folderPathLine = Constants::Icon::FOLDER_OPEN;
+        m_folderPathLine += L' ';
+        m_folderPathLine += m_folderSrc;
     }
     return m_folderName;
 }
@@ -830,6 +847,21 @@ const std::wstring &OverlayManager::CurrentFolderName() {
 const std::wstring &OverlayManager::CurrentFolderLine() {
     CurrentFolderName();
     return m_folderLine;
+}
+
+// "📂 D:\Photos\2026\Holiday2024", or empty when no image is loaded.
+const std::wstring &OverlayManager::CurrentFolderPathLine() {
+    CurrentFolderName();
+    return m_folderPathLine;
+}
+
+// The folder line the user actually asked for. The two settings are mutually
+// exclusive (Constants::Overlay::SHOW_FULL_PATH says why), so this is a plain
+// three-way answer and no caller has to know both flags exist.
+const std::wstring &OverlayManager::CurrentFolderDisplayLine() {
+    if (app.overlayShowFullPath) return CurrentFolderPathLine();
+    if (app.overlayShowDirName)  return CurrentFolderLine();
+    return kNoLine; // the file's existing empty-line sentinel, declared above
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

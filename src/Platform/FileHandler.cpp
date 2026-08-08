@@ -523,17 +523,36 @@ static std::vector<std::wstring> SubDirectoriesOf(const fs::path &dir,
         // you came through rather than to the target's parent somewhere else.
         if (!it->is_directory(entryEc) || entryEc) continue;
 
-        // HIDDEN AND SYSTEM FOLDERS ARE SKIPPED, or Alt+Down at a drive root
-        // lands in $RECYCLE.BIN or System Volume Information — which reads as
-        // the feature being broken. std::filesystem cannot report the Windows
-        // attribute bits, so this is one GetFileAttributesW per subfolder; it
-        // happens once per keypress, on metadata the enumeration just warmed.
+        // HIDDEN FOLDERS ARE SKIPPED, or Alt+Down at a drive root lands in
+        // $RECYCLE.BIN or System Volume Information — which reads as the feature
+        // being broken. std::filesystem cannot report the Windows attribute bits,
+        // so this is one GetFileAttributesW per subfolder; it happens once per
+        // keypress, on metadata the enumeration just warmed.
+        //
+        // HIDDEN ONLY — NOT SYSTEM, and the difference is not academic.
+        //
+        // Testing SYSTEM as well made an entire drive unwalkable. On E: every one
+        // of the 23 top-level folders carries FILE_ATTRIBUTE_SYSTEM — a whole-disk
+        // `attrib +s`, from a sync tool or an old recursive command, and the user's
+        // own picture folders among them. Every sibling was filtered out, the list
+        // came back holding only the folder being walked from (kept below), and a
+        // one-entry list is both the first and the last entry: Alt+Left AND
+        // Alt+Right then answered "No further folder in that direction", correctly
+        // and uselessly, in a folder with 22 siblings sitting beside it.
+        //
+        // Dropping the bit costs nothing, because SYSTEM never excluded anything
+        // HIDDEN did not already exclude. Checked across C:, D: and I:: every
+        // System-flagged folder on all three — $RECYCLE.BIN, System Volume
+        // Information, Config.Msi, Recovery, found.000, "Documents and Settings" —
+        // is Hidden+System. Not one is System-only. That is Windows' own rule:
+        // a PROTECTED OS folder is Hidden AND System, which is exactly what
+        // Explorer's "hide protected operating system files" tests. SYSTEM alone
+        // means nothing more than that somebody once set a bit.
         const bool isKeep = !keep.empty() &&
                             _wcsicmp(it->path().filename().wstring().c_str(), keep.c_str()) == 0;
         if (!isKeep) {
             const DWORD attrs = GetFileAttributesW(it->path().c_str());
-            if (attrs != INVALID_FILE_ATTRIBUTES &&
-                (attrs & (FILE_ATTRIBUTE_HIDDEN | FILE_ATTRIBUTE_SYSTEM)))
+            if (attrs != INVALID_FILE_ATTRIBUTES && (attrs & FILE_ATTRIBUTE_HIDDEN))
                 continue;
         }
 
@@ -716,6 +735,24 @@ bool OpenSiblingFolder(HWND hWnd, int step) {
         // is already open and read as the key doing nothing, so it is refused
         // like any other end-stop.
         if (!app.folderWalkWrap || subs.size() < 2) {
+            // POSITION AND COUNT, because "no further folder in that direction"
+            // has two causes the message cannot tell apart:
+            //
+            //   a real end-stop        7/20 with wrap off — working as designed
+            //   a list that came back  1/1  because a filter ate every sibling
+            //
+            // The second refuses in BOTH directions and looks identical on
+            // screen. It cost an attribute-by-attribute hunt across four drives
+            // to find that every folder on E: carries FILE_ATTRIBUTE_SYSTEM —
+            // see SubDirectoriesOf. "1/1" in the log says it in one glance.
+            if (AppLog::IsEnabled())
+                AppLog::Warn(AppLog::COMP_DISPLAY,
+                             L"sibling walk: refused at end — position " +
+                                 std::to_wstring(idx + 1) + L"/" +
+                                 std::to_wstring(subs.size()) +
+                                 L", step " + std::to_wstring(step) +
+                                 L", wrap " + (app.folderWalkWrap ? L"on" : L"off") +
+                                 L", parent '" + parent.wstring() + L"'");
             g_overlayManager.PostCenterMessage(hWnd, Constants::Messages::FOLDER_WALK_AT_END);
             return false;
         }
@@ -1688,9 +1725,14 @@ bool OpenDirectory(HWND hWnd, const std::wstring &dirPathStr) {
         }
     }
     if (firstFile.empty()) {
-        // Empty directory — still navigate to it so history records it, the panel
-        // shows the empty-dir placeholder, and F5 can recover when images appear.
-        UI::PushFolderHistory(dirPath.wstring());
+        // Empty directory — still navigate to it so the panel shows the
+        // empty-dir placeholder and F5 can recover when images appear.
+        //
+        // FALSE: this branch runs BECAUSE the first-image scan above found
+        // nothing, so it is the one place that knows the folder holds no
+        // images. app.historyImagesOnly drops it from the history on that
+        // basis; with the setting off it is recorded exactly as before.
+        UI::PushFolderHistory(dirPath.wstring(), /*folderHasImages=*/false);
         UpdateIoWorkerForPath(dirPath.wstring());
         UI::ThumbnailPanelWnd &activePanel = uiManager.getActiveDirWnd();
         const bool activeIsPrimary = (&activePanel == &uiManager.getDirWindow());

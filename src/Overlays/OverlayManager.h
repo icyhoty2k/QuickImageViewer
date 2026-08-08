@@ -328,9 +328,16 @@ class OverlayManager {
         const std::wstring &CurrentFolderName();
         // The composed "📁 <name>" display line, cached on the same event.
         const std::wstring &CurrentFolderLine();
+        // The composed "📂 <full path>" line, cached on that same event too.
+        const std::wstring &CurrentFolderPathLine();
+        // Whichever of the two the user has switched on, or empty when neither
+        // is. The one every caller should use — they are mutually exclusive, so
+        // asking "which line goes here" has exactly one answer.
+        const std::wstring &CurrentFolderDisplayLine();
         std::wstring m_folderSrc;  // directory the cached name was derived from
         std::wstring m_folderName; // cached last path component of m_folderSrc
         std::wstring m_folderLine; // cached icon + name, ready to display
+        std::wstring m_folderPathLine; // cached icon + full path, ready to display
 
         // Last BOT_LEFT height handed to RecomputeRects, so UpdateEffects can
         // skip the recompute when the folder-name toggle has not moved it.

@@ -53,6 +53,13 @@ namespace UI::AppMenu::detail {
     void ImportSettings(HWND hWnd);
     void RestoreDefaults(HWND hWnd);
     void BackupHistoryAndFavorites(HWND hWnd);
+    // Zips the whole logs\ tree to a location the user picks. No restore
+    // counterpart — see the definition for why.
+    void BackupLogs(HWND hWnd);
+    // The three TCP/IP .ini files. Restore asks per file before replacing one
+    // that already exists, and needs a restart to take effect.
+    void BackupRemoteConfig(HWND hWnd);
+    void RestoreRemoteConfig(HWND hWnd);
     void RestoreHistoryAndFavorites(HWND hWnd);
 
 } // namespace UI::AppMenu::detail

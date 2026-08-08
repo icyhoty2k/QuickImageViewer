@@ -135,8 +135,15 @@ static HMENU BuildSlotSubmenu(OverlayManager::Slot s) {
     if (s == OverlayManager::BOT_LEFT) {
         AppendMenuW(m, MF_STRING | CheckFlag(app.overlayShowEffectsList),
                     Id::SET_OVERLAY_EFFECTS_LIST, L"Effects");
-        AppendMenuW(m, MF_STRING | CheckFlag(app.overlayShowDirName),
+        // Folder Name and Full Path are the SAME line in two spellings, so they
+        // are drawn as a radio pair rather than two ticks — a tick beside each
+        // would invite ticking both, which is the one state they cannot be in.
+        // Unlike a true radio group, though, both can be clear: that is "no
+        // folder line", and clicking the lit one turns it off.
+        AppendMenuW(m, RadioFlag(app.overlayShowDirName),
                     Id::SET_OVERLAY_DIR_NAME,     L"Folder Name");
+        AppendMenuW(m, RadioFlag(app.overlayShowFullPath),
+                    Id::SET_OVERLAY_FULL_PATH,    L"Full Path");
         AppendMenuW(m, MF_SEPARATOR, 0, nullptr);
     }
     if (s == OverlayManager::MID_CENTER) {
@@ -221,7 +228,6 @@ static HMENU BuildSettingsMenu() {
     AppendMenuW(m, MF_STRING | CheckFlag(app.thumbnailEffectsEnabled), Id::SET_THUMB_EFFECTS,  L"Thumbnail Effects");
     AppendMenuW(m, MF_STRING | CheckFlag(app.lockViewport),            Id::SET_LOCK_VIEWPORT,  L"Lock Viewport (keep zoom/pan)\tY");
     AppendMenuW(m, MF_STRING | CheckFlag(app.rememberWindowPosition),  Id::SET_REMEMBER_WIN_POS, L"Remember Window Position");
-    AppendMenuW(m, MF_STRING | CheckFlag(app.historyFullModeEnabled),  Id::SET_HISTORY_FULL,   L"History: Open Full List");
     AppendMenuW(m, MF_STRING | CheckFlag(app.openDirWndOnStart),       Id::SET_OPEN_DIRWND,    L"Open Thumbnail Strip on Start");
     AppendMenuW(m, MF_STRING | CheckFlag(app.folderWalkWrap),          Id::SET_FOLDER_WALK_WRAP, L"Folder Walk Wraps Around");
     AppendMenuW(m, MF_STRING | CheckFlag(app.swapMouseButtons),        Id::SET_SWAP_MOUSE,     L"Swap Mouse Buttons");
@@ -250,6 +256,74 @@ static HMENU BuildSettingsMenu() {
         AppendMenuW(ops, MF_STRING | CheckFlag(app.thumbPasteEnabled),  Id::SET_THUMB_PASTE,  L"Paste (Ctrl+V)");
         AppendMenuW(m, MF_POPUP, reinterpret_cast<UINT_PTR>(ops), L"Thumbnail Operations");
     }
+    // Everything about the folder history in one place. These used to be spread
+    // across the toggle list and the scalar block below, so "History Max Dirs"
+    // and "History: Open Full List" sat a dozen unrelated items apart and the
+    // reader had to know both were history to connect them.
+    {
+        HMENU hist = CreatePopupMenu();
+        wchar_t hbuf[80];
+        // The master switch first, because everything under it is moot when it
+        // is off, and the filter directly beneath it because it narrows it.
+        AppendMenuW(hist, MF_STRING | CheckFlag(app.historyEnabled),
+                    Id::SET_HISTORY_ENABLED,     L"Record Folders I Visit");
+        AppendMenuW(hist, MF_STRING | CheckFlag(app.historyImagesOnly),
+                    Id::SET_HISTORY_IMAGES_ONLY, L"Record Only Folders With Images");
+        AppendMenuW(hist, MF_SEPARATOR, 0, nullptr);
+        // The accelerator column names the key this item CHANGES THE MEANING OF,
+        // not a key that toggles the item — nothing toggles it but this click.
+        // Tab is what the setting governs, so Tab is what belongs beside it.
+        // Ctrl+Tab opens the full list once regardless, and is documented in Help
+        // rather than crowded in here.
+        AppendMenuW(hist, MF_STRING | CheckFlag(app.historyFullModeEnabled),
+                    Id::SET_HISTORY_FULL,        L"Tab Opens Full List (uncapped)\tTab");
+        AppendMenuW(hist, MF_SEPARATOR, 0, nullptr);
+        // SHOWN, then LIMIT, then SAVED — three different questions that the old
+        // labels ran together. "Max Favs" in particular was not a display cap at
+        // all: it decides how many favorites may EXIST. Grouping them made the
+        // collision obvious, which is the point of grouping them.
+        // "IN PANEL" versus "KEPT" / "CAN STAR" is the whole distinction these
+        // four items exist to make, and the old labels buried it — "Max Favs"
+        // sat next to "Max Dirs" reading as a display cap when it decides how
+        // many favorites may exist at all. Each label now says which of the two
+        // questions it answers, in words rather than by position.
+        swprintf_s(hbuf, L"Rows Shown in Panel: %d", app.historyMaxDirs);
+        AppendMenuW(hist, MF_STRING, Id::SET_HISTORY_MAX_DIRS, hbuf);
+        swprintf_s(hbuf, L"Favorite Rows Shown in Panel: %d", app.historyMaxFavsShown);
+        AppendMenuW(hist, MF_STRING, Id::SET_HISTORY_FAVS_SHOWN, hbuf);
+        AppendMenuW(hist, MF_SEPARATOR, 0, nullptr);
+        // ONE NUMBER, THREE GATES: it refuses the star when full, it caps what
+        // qivFavorites.txt is loaded with, and it caps what is written back.
+        // The file used to be uncapped at both ends, which let it grow past the
+        // limit and stay there. Lowering this therefore DROPS favorites on the
+        // next save — the prompt says so, because a number that silently deletes
+        // data must say it where the number is typed.
+        // See HistoryFoldersManager::RewriteFavoritesToDisk.
+        swprintf_s(hbuf, L"Favorites You Can Add: %d", app.historyMaxFavs);
+        AppendMenuW(hist, MF_STRING, Id::SET_HISTORY_MAX_FAVS, hbuf);
+        swprintf_s(hbuf, L"Folders Saved to File: %d", app.historyMaxDirsSave);
+        AppendMenuW(hist, MF_STRING, Id::SET_HISTORY_SAVE_MAX, hbuf);
+        AppendMenuW(hist, MF_SEPARATOR, 0, nullptr);
+        // The destructive group, last and behind a separator. Each backs up
+        // qivHistory.txt before touching it and each asks first — the list is
+        // months of navigation and the file is its only copy.
+        AppendMenuW(hist, MF_STRING, Id::SET_HISTORY_REMOVE_BAD, L"Remove Invalid Folders...");
+        AppendMenuW(hist, MF_STRING, Id::SET_HISTORY_DEDUPE,     L"Remove Duplicates...");
+        AppendMenuW(hist, MF_SEPARATOR, 0, nullptr);
+        // Three clears, each naming what SURVIVES it. "Clear History" alone
+        // was ambiguous the moment a favorites clear sat beside it.
+        AppendMenuW(hist, MF_STRING, Id::SET_HISTORY_CLEAR,      L"Clear History (keeps favorites)...");
+        AppendMenuW(hist, MF_STRING, Id::SET_HISTORY_CLEAR_FAVS, L"Clear Favorites (keeps history)...");
+        AppendMenuW(hist, MF_STRING, Id::SET_HISTORY_CLEAR_BOTH, L"Clear History and Favorites...");
+        AppendMenuW(hist, MF_SEPARATOR, 0, nullptr);
+        // Backup / Restore are NOT here. They sit in the top-level
+        // "Backup & Export" menu with Import and Export Settings: the four
+        // operations that move this app's data on and off the disk belong
+        // together and belong one click from the root, not buried two deep
+        // inside a settings group.
+        AppendMenuW(hist, MF_STRING, Id::SET_HISTORY_OPEN_FILE,  L"Open History File");
+        AppendMenuW(m, MF_POPUP, reinterpret_cast<UINT_PTR>(hist), L"History");
+    }
     AppendMenuW(m, MF_SEPARATOR, 0, nullptr);
     wchar_t buf[80];
     swprintf_s(buf, L"VRAM Cache Size: %d", app.vramCacheCount);
@@ -259,15 +333,12 @@ static HMENU BuildSettingsMenu() {
     AppendMenuW(m, MF_STRING, Id::SET_ZOOM_CLICK, buf);
     swprintf_s(buf, L"Window Width: %d",  app.baseWidth);   AppendMenuW(m, MF_STRING, Id::SET_WINDOW_WIDTH, buf);
     swprintf_s(buf, L"Window Height: %d", app.baseHeight);  AppendMenuW(m, MF_STRING, Id::SET_WINDOW_HEIGHT, buf);
-    swprintf_s(buf, L"History Max Dirs: %d", app.historyMaxDirs); AppendMenuW(m, MF_STRING, Id::SET_HISTORY_MAX_DIRS, buf);
-    swprintf_s(buf, L"History Max Favs: %d", app.historyMaxFavs); AppendMenuW(m, MF_STRING, Id::SET_HISTORY_MAX_FAVS, buf);
     swprintf_s(buf, L"Dir Thumb Cache: %d MB", app.dirThumbCacheMB); AppendMenuW(m, MF_STRING, Id::SET_DIR_THUMB_CACHE, buf);
     swprintf_s(buf, L"Preload Lookaside: %d",  app.preloadLookaside); AppendMenuW(m, MF_STRING, Id::SET_PRELOAD_LOOKASIDE, buf);
-    swprintf_s(buf, L"History Save Limit: %d", app.historyMaxDirsSave); AppendMenuW(m, MF_STRING, Id::SET_HISTORY_SAVE_MAX, buf);
     AppendMenuW(m, MF_SEPARATOR, 0, nullptr);
-    AppendMenuW(m, MF_STRING, Id::SET_EXPORT, L"Export Settings");
-    AppendMenuW(m, MF_STRING, Id::SET_IMPORT, L"Import Settings");
-    AppendMenuW(m, MF_SEPARATOR, 0, nullptr);
+    // Export / Import moved to the top-level "Backup & Export" menu, beside
+    // Backup / Restore. Restore Defaults stays: it writes no file and reads
+    // none, it just puts these settings back, so it belongs with them.
     AppendMenuW(m, MF_STRING, Id::SET_RESTORE_DEFAULTS, L"Restore Defaults");
     return m;
 }
@@ -542,8 +613,34 @@ static HMENU BuildWallpaperMenu() {
     return m;
 }
 
+// EVERY OPERATION THAT MOVES THIS APP'S DATA ON AND OFF THE DISK, in one
+// top-level menu. Each opens a file dialog, and these are the items you go
+// looking for when something has gone wrong or a machine is being set up.
+//
+// Four groups, ordered by how often they are wanted rather than by what they
+// carry:
+//
+//   Settings          the registry values — the usual "move me to a new PC"
+//   Logs              one-way, alone: a record has nothing to restore into
+//   TCP/IP config     three .ini files that are NOT in the registry, so the
+//                     settings export above never covered them
+//   History           the folder trail and favorites
+//
+// Top-level on purpose. They were scattered before — backup under its own root
+// menu, export/import buried in Settings — so the two you want at the same
+// moment were never in the same place.
 static HMENU BuildBackupMenu() {
     HMENU m = CreatePopupMenu();
+    AppendMenuW(m, MF_STRING, Id::SET_EXPORT,         L"Export Settings");
+    AppendMenuW(m, MF_STRING, Id::SET_IMPORT,         L"Import Settings");
+    AppendMenuW(m, MF_SEPARATOR, 0, nullptr);
+    // One-way, and alone in its group because of it: logs are a record, so
+    // there is nothing to restore them into.
+    AppendMenuW(m, MF_STRING, Id::SET_BACKUP_LOGS,    L"Backup Logs");
+    AppendMenuW(m, MF_SEPARATOR, 0, nullptr);
+    AppendMenuW(m, MF_STRING, Id::SET_BACKUP_REMOTE,  L"Backup TCP/IP Config");
+    AppendMenuW(m, MF_STRING, Id::SET_RESTORE_REMOTE, L"Restore TCP/IP Config");
+    AppendMenuW(m, MF_SEPARATOR, 0, nullptr);
     AppendMenuW(m, MF_STRING, Id::SET_BACKUP,         L"Backup History && Favorites");
     AppendMenuW(m, MF_STRING, Id::SET_RESTORE_BACKUP, L"Restore History && Favorites");
     return m;
@@ -593,7 +690,7 @@ HMENU Build(HWND hWnd) {
     AppendMenuW(m, MF_POPUP, reinterpret_cast<UINT_PTR>(BuildSlideshowMenu()), L"Slideshow");
     AppendMenuW(m, MF_POPUP, reinterpret_cast<UINT_PTR>(BuildSettingsMenu()),  L"Settings");
     AppendMenuW(m, MF_POPUP, reinterpret_cast<UINT_PTR>(BuildOverlaysMenu()),  L"Overlays");
-    AppendMenuW(m, MF_POPUP, reinterpret_cast<UINT_PTR>(BuildBackupMenu()),    L"Backup");
+    AppendMenuW(m, MF_POPUP, reinterpret_cast<UINT_PTR>(BuildBackupMenu()),    L"Backup && Export");
     // With the other configuration submenus rather than under TCP/IP: only one
     // of the two logs is about the network, and the General one is the whole
     // application talking about itself. Below Backup because both are about what

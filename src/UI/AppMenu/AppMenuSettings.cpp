@@ -237,6 +237,147 @@ void DispatchSetting(HWND hWnd, int cmd) {
                              : Constants::Messages::VIEWPORT_LOCK_OFF);
         break;
 
+    // ── Folder history ──────────────────────────────────────────────────────
+    // Neither of these touches what is already saved. Turning recording off is
+    // not the same request as Clear History, and quietly doing the second would
+    // be unrecoverable — the file is the only copy.
+    case Id::SET_HISTORY_ENABLED:
+        app.historyEnabled = !app.historyEnabled;
+        Persistence::Registry::SaveSetting(Constants::Registry::HISTORY_ENABLED,
+            static_cast<DWORD>(app.historyEnabled));
+        g_overlayManager.PostCenterMessage(hWnd,
+            app.historyEnabled ? Constants::Messages::HISTORY_RECORD_ON
+                               : Constants::Messages::HISTORY_RECORD_OFF);
+        break;
+
+    case Id::SET_HISTORY_IMAGES_ONLY:
+        app.historyImagesOnly = !app.historyImagesOnly;
+        Persistence::Registry::SaveSetting(Constants::Registry::HISTORY_IMAGES_ONLY,
+            static_cast<DWORD>(app.historyImagesOnly));
+        g_overlayManager.PostCenterMessage(hWnd,
+            app.historyImagesOnly ? Constants::Messages::HISTORY_IMAGES_ONLY_ON
+                                  : Constants::Messages::HISTORY_IMAGES_ONLY_OFF);
+        break;
+
+    // ── History maintenance ─────────────────────────────────────────────────
+    //
+    // All three ASK FIRST and BACK UP FIRST (the backup happens inside each
+    // function, before it touches anything). qivHistory.txt is the only copy of
+    // a trail built over months and there is no undo button — the .bak in
+    // QivBackup/ is the undo, and Restore History && Favorites is how it comes
+    // back. Each reports what it actually did rather than closing silently,
+    // because "nothing happened" and "nothing needed to happen" look identical.
+    case Id::SET_HISTORY_REMOVE_BAD: {
+        if (!UI::ThemedDialog::Confirm(hWnd,
+                L"Remove history folders that cannot be parsed, are missing, or "
+                L"hold no images?\n\nFavorites are kept. qivHistory.txt is backed "
+                L"up first.",
+                L"Remove Invalid Folders"))
+            break;
+
+        const UI::HistoryCleanupResult r = UI::RemoveInvalidHistoryEntries();
+
+        std::wstring msg;
+        if (r.removed == 0) {
+            msg = L"Nothing to remove — every history folder is valid.";
+        } else {
+            msg = L"Removed " + std::to_wstring(r.removed) + L" folder(s):\n";
+            if (r.unparseable) msg += L"\n   " + std::to_wstring(r.unparseable) + L"  not a usable path";
+            if (r.missing)     msg += L"\n   " + std::to_wstring(r.missing)     + L"  folder no longer exists";
+            if (r.empty)       msg += L"\n   " + std::to_wstring(r.empty)       + L"  no images inside";
+        }
+        // The partial-run case, stated plainly. The folder sweep runs in the
+        // background, so a run started early can only judge the rows it has
+        // reached — and silently reporting a clean list would be a lie.
+        if (r.unchecked)
+            msg += L"\n\n" + std::to_wstring(r.unchecked) +
+                   L" folder(s) had not been scanned yet and were kept. "
+                   L"Open the History panel (Tab), let the scan finish, then run this again.";
+
+        UI::ThemedDialog::Message(hWnd, msg.c_str(), L"Remove Invalid Folders");
+        InvalidateRect(hWnd, nullptr, FALSE);
+        break;
+    }
+
+    case Id::SET_HISTORY_DEDUPE: {
+        if (!UI::ThemedDialog::Confirm(hWnd,
+                L"Collapse repeated folders to one entry each?\n\nThe most recent "
+                L"copy is kept. qivHistory.txt is backed up first.",
+                L"Remove Duplicates"))
+            break;
+
+        const int removed = UI::RemoveDuplicateHistoryEntries();
+        // Zero is the normal answer and is NOT a failure: the in-memory list is
+        // already deduped, so the real work was rewriting the append-only file.
+        // Say that, or a correct run reads as a broken button.
+        const std::wstring msg =
+            removed > 0
+                ? L"Removed " + std::to_wstring(removed) + L" duplicate row(s)."
+                : std::wstring(L"No duplicates in the list. The history file was "
+                               L"rewritten anyway, which is what collapses repeats "
+                               L"that had built up inside it.");
+        UI::ThemedDialog::Message(hWnd, msg.c_str(), L"Remove Duplicates");
+        InvalidateRect(hWnd, nullptr, FALSE);
+        break;
+    }
+
+    case Id::SET_HISTORY_CLEAR:
+        if (!UI::ThemedDialog::Confirm(hWnd,
+                L"Clear the folder history?\n\nFavorites are kept. "
+                L"qivHistory.txt is backed up first, so this can be undone with "
+                L"Restore History && Favorites.",
+                L"Clear History"))
+            break;
+        UI::ClearHistoryKeepFavorites();
+        UI::ThemedDialog::Message(hWnd,
+            L"History cleared. Favorites are untouched.", L"Clear History");
+        InvalidateRect(hWnd, nullptr, FALSE);
+        break;
+
+    case Id::SET_HISTORY_CLEAR_FAVS:
+        if (!UI::ThemedDialog::Confirm(hWnd,
+                L"Clear all favorites?\n\nThe folders stay in the history, they "
+                L"just stop being starred. qivFavorites.txt is backed up first, so "
+                L"this can be undone with Restore History && Favorites.",
+                L"Clear Favorites"))
+            break;
+        UI::ClearFavoritesKeepHistory();
+        UI::ThemedDialog::Message(hWnd,
+            L"Favorites cleared. The folders remain in the history.",
+            L"Clear Favorites");
+        InvalidateRect(hWnd, nullptr, FALSE);
+        break;
+
+    case Id::SET_HISTORY_CLEAR_BOTH:
+        // The only one that can empty everything, so it says so in full and
+        // names the way back before asking.
+        if (!UI::ThemedDialog::Confirm(hWnd,
+                L"Clear the folder history AND every favorite?\n\nThis empties both "
+                L"lists and both files. Each is backed up first, so it can be undone "
+                L"with Restore History && Favorites.",
+                L"Clear History and Favorites"))
+            break;
+        UI::ClearHistoryAndFavorites();
+        UI::ThemedDialog::Message(hWnd,
+            L"History and favorites cleared. Both files were backed up first.",
+            L"Clear History and Favorites");
+        InvalidateRect(hWnd, nullptr, FALSE);
+        break;
+
+    case Id::SET_HISTORY_OPEN_FILE: {
+        // Selected in Explorer rather than opened in an editor: there is no
+        // knowing what .txt is associated with, and the folder also holds
+        // qivFavorites.txt and QivBackup/ — which is where anyone opening this
+        // is usually headed anyway.
+        const std::wstring path = UI::HistoryFilePath();
+        if (path.empty()) break;
+        if (PIDLIST_ABSOLUTE pidl = ILCreateFromPathW(path.c_str())) {
+            SHOpenFolderAndSelectItems(pidl, 0, nullptr, 0);
+            ILFree(pidl);
+        }
+        break;
+    }
+
     // ── BOT_LEFT readouts ───────────────────────────────────────────────────
     // Session-only by design — no SaveSetting here, unlike the folder name.
     case Id::SET_OVERLAY_EFFECTS_LIST:
@@ -248,14 +389,36 @@ void DispatchSetting(HWND hWnd, int cmd) {
         InvalidateRect(hWnd, nullptr, FALSE);
         break;
 
+    // ── The folder line: name OR full path, never both ──────────────────────
+    // Turning one on turns the other off, and BOTH registry values are written
+    // either way. Writing only the one that was clicked would leave the other
+    // one's old TRUE on disk, and the next launch would load two mutually
+    // exclusive settings that are both on — the exact state this prevents.
     case Id::SET_OVERLAY_DIR_NAME:
         app.overlayShowDirName = !app.overlayShowDirName;
+        if (app.overlayShowDirName) app.overlayShowFullPath = false;
         Persistence::Registry::SaveSetting(Constants::Registry::OVERLAY_SHOW_DIR_NAME,
             static_cast<DWORD>(app.overlayShowDirName));
+        Persistence::Registry::SaveSetting(Constants::Registry::OVERLAY_SHOW_FULL_PATH,
+            static_cast<DWORD>(app.overlayShowFullPath));
         g_overlayManager.RefreshFolderNameLine();
         g_overlayManager.PostCenterMessage(hWnd,
             app.overlayShowDirName ? Constants::Messages::OVERLAY_DIR_NAME_ON
                                    : Constants::Messages::OVERLAY_DIR_NAME_OFF);
+        InvalidateRect(hWnd, nullptr, FALSE);
+        break;
+
+    case Id::SET_OVERLAY_FULL_PATH:
+        app.overlayShowFullPath = !app.overlayShowFullPath;
+        if (app.overlayShowFullPath) app.overlayShowDirName = false;
+        Persistence::Registry::SaveSetting(Constants::Registry::OVERLAY_SHOW_FULL_PATH,
+            static_cast<DWORD>(app.overlayShowFullPath));
+        Persistence::Registry::SaveSetting(Constants::Registry::OVERLAY_SHOW_DIR_NAME,
+            static_cast<DWORD>(app.overlayShowDirName));
+        g_overlayManager.RefreshFolderNameLine();
+        g_overlayManager.PostCenterMessage(hWnd,
+            app.overlayShowFullPath ? Constants::Messages::OVERLAY_FULL_PATH_ON
+                                    : Constants::Messages::OVERLAY_FULL_PATH_OFF);
         InvalidateRect(hWnd, nullptr, FALSE);
         break;
 
@@ -495,8 +658,9 @@ void DispatchSetting(HWND hWnd, int cmd) {
         break;
     }
     case Id::SET_HISTORY_MAX_DIRS: {
-        int v = UI::ThemedDialog::PromptInt(hWnd, L"History Max Dirs",
-            L"Maximum history folders to show (0 – 999):",
+        int v = UI::ThemedDialog::PromptInt(hWnd, L"Rows Shown in Panel",
+            L"How many history rows the panel draws (0 - 999).\n"
+            L"Does not affect what is saved:",
             app.historyMaxDirs, 0, 999,
             Constants::History::IS_HISTORY_MAX_DIRS_TO_SHOW);
         if (v >= 0) {
@@ -507,14 +671,34 @@ void DispatchSetting(HWND hWnd, int cmd) {
         break;
     }
     case Id::SET_HISTORY_MAX_FAVS: {
-        int v = UI::ThemedDialog::PromptInt(hWnd, L"History Max Favs",
-            L"Maximum favorite folders to show (0 – 999):",
+        int v = UI::ThemedDialog::PromptInt(hWnd, L"Favorites You Can Add",
+            L"How many folders may be starred at once (0 - 999).\n"
+            L"This also caps qivFavorites.txt, so LOWERING IT DROPS\n"
+            L"favorites past the new limit on the next save:",
             app.historyMaxFavs, 0, 999,
             Constants::History::IS_HISTORY_MAX_FAVORITES_TO_SHOW);
         if (v >= 0) {
             app.historyMaxFavs = v;
             Persistence::Registry::SaveSetting(Constants::Registry::HISTORY_MAX_FAVS,
                 static_cast<DWORD>(app.historyMaxFavs));
+        }
+        break;
+    }
+    case Id::SET_HISTORY_FAVS_SHOWN: {
+        int v = UI::ThemedDialog::PromptInt(hWnd, L"Favorite Rows Shown in Panel",
+            L"How many favorite rows the panel draws (0 - 999).\n"
+            L"Capped in practice by Favorites You Can Add:",
+            app.historyMaxFavsShown, 0, 999,
+            Constants::History::IS_HISTORY_MAX_FAVORITES_SHOWN);
+        if (v >= 0) {
+            app.historyMaxFavsShown = v;
+            Persistence::Registry::SaveSetting(Constants::Registry::HISTORY_MAX_FAVS_SHOWN,
+                static_cast<DWORD>(app.historyMaxFavsShown));
+            // No repaint, matching Folders Shown directly above: the cap is
+            // applied while BuildDisplayList runs, so a bare InvalidateRect
+            // would redraw the OLD list and look like the setting was ignored.
+            // It takes effect the next time the list is built — reopening the
+            // panel, or F5 inside it.
         }
         break;
     }
@@ -555,8 +739,9 @@ void DispatchSetting(HWND hWnd, int cmd) {
         break;
     }
     case Id::SET_HISTORY_SAVE_MAX: {
-        int v = UI::ThemedDialog::PromptInt(hWnd, L"History Save Limit",
-            L"Maximum folders to remember on disk (1 – 99999):",
+        int v = UI::ThemedDialog::PromptInt(hWnd, L"Folders Saved to File",
+            L"How many folders qivHistory.txt keeps (1 - 99999).\n"
+            L"Oldest are dropped past this:",
             app.historyMaxDirsSave, 1, 99999,
             Constants::History::IS_HISTORY_MAX_DIRS_TO_SAVE);
         if (v >= 0) {
@@ -603,6 +788,9 @@ void DispatchSetting(HWND hWnd, int cmd) {
     case Id::SET_IMPORT:           ImportSettings(hWnd);            break;
     case Id::SET_RESTORE_DEFAULTS: RestoreDefaults(hWnd);           break;
     case Id::SET_BACKUP:           BackupHistoryAndFavorites(hWnd); break;
+    case Id::SET_BACKUP_LOGS:      BackupLogs(hWnd); break;
+    case Id::SET_BACKUP_REMOTE:    BackupRemoteConfig(hWnd); break;
+    case Id::SET_RESTORE_REMOTE:   RestoreRemoteConfig(hWnd); break;
     case Id::SET_RESTORE_BACKUP:   RestoreHistoryAndFavorites(hWnd);break;
 
     default:

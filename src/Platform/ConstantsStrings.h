@@ -674,6 +674,12 @@ namespace Constants::Messages {
     constexpr const wchar_t *OVERLAY_EFFECTS_LIST_OFF = L"Effects Overlay" STR_STATE_OFF;
     constexpr const wchar_t *OVERLAY_DIR_NAME_ON      = L"Folder Name" STR_STATE_ON;
     constexpr const wchar_t *OVERLAY_DIR_NAME_OFF     = L"Folder Name" STR_STATE_OFF;
+    constexpr const wchar_t *HISTORY_RECORD_ON        = L"Record Folder History" STR_STATE_ON;
+    constexpr const wchar_t *HISTORY_RECORD_OFF       = L"Record Folder History" STR_STATE_OFF;
+    constexpr const wchar_t *HISTORY_IMAGES_ONLY_ON   = L"History: Only Folders With Images" STR_STATE_ON;
+    constexpr const wchar_t *HISTORY_IMAGES_ONLY_OFF  = L"History: Only Folders With Images" STR_STATE_OFF;
+    constexpr const wchar_t *OVERLAY_FULL_PATH_ON     = L"Full Path" STR_STATE_ON;
+    constexpr const wchar_t *OVERLAY_FULL_PATH_OFF    = L"Full Path" STR_STATE_OFF;
 
     // Settings-menu-only toggles (no keyboard shortcut counterpart)
     constexpr const wchar_t *KEEP_IN_BG_ON        = L"Keep in Background" STR_STATE_ON;

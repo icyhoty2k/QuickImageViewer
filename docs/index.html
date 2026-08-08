@@ -88,7 +88,7 @@
                     "name": "Is QuickImageViewer free?",
                     "acceptedAnswer": {
                         "@type": "Answer",
-                        "text": "Yes. QuickImageViewer is completely free and open source under the AGPLv3 license. There are no ads, no telemetry, and no paid version."
+                        "text": "Yes. QuickImageViewer for Windows is completely free and open source under the AGPLv3 license, with no ads, no telemetry and nothing held back for a paid tier. The optional Android companion, qIV Remote, is listed free and stays usable free: connect to one saved desktop, the Simple remote, and every security feature. It has no ads at all, free or paid. A single one-time unlock (about USD 2, no subscription and no account) adds unlimited saved desktops, the Advanced and Fullscreen screens, phone-to-desktop streaming and save-to-gallery. A built-in demo mode lets you explore the whole app without owning a desktop, and it never opens a network socket. The desktop itself never asks for anything."
                     }
                 },
                 {
@@ -1312,11 +1312,6 @@ Version 2.210.0.302 &bull; Size: 9,792.00 KB &bull; Build Date: 2026-08-07
                             <td>Default dimensions used by Ctrl+Space and window reset</td>
                         </tr>
                         <tr>
-                            <td>History Max Dirs / Favs</td>
-                            <td>0 – 999</td>
-                            <td>Items shown in the History panel</td>
-                        </tr>
-                        <tr>
                             <td>Dir Thumb Cache</td>
                             <td>100 – 64000 MB</td>
                             <td>Memory budget for directory thumbnail bitmaps</td>
@@ -1331,14 +1326,127 @@ Version 2.210.0.302 &bull; Size: 9,792.00 KB &bull; Build Date: 2026-08-07
                             <td>250 – 10000 ms</td>
                             <td>How long center overlay messages stay visible</td>
                         </tr>
-                        <tr>
-                            <td>History Save Limit</td>
-                            <td>1 – 99999</td>
-                            <td>Folders persisted to disk between sessions</td>
-                        </tr>
                     </tbody>
                 </table>
                 <h3>Settings file operations</h3>
+                <p>
+                    Export and Import moved to the top-level <b>Backup &amp; Export</b> menu,
+                    with the log and TCP/IP archives.
+                </p>
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Item</th>
+                            <th>Effect</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td>Restore Defaults</td>
+                            <td>
+                                Reset every setting to its compiled-in default — confirmation required;
+                                history and favorites are not affected
+                            </td>
+                        </tr>
+                    </tbody>
+                </table>
+                <h3>Settings &rsaquo; History</h3>
+                <p>
+                    Everything about the folder history in one place — what gets recorded,
+                    how much of it is shown, and how to tidy it up.
+                </p>
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Setting</th>
+                            <th>Default</th>
+                            <th>Effect</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td>Record Folders I Visit</td>
+                            <td>On</td>
+                            <td>Master switch. Off stops new folders reaching the list and <code>qivHistory.txt</code>. Nothing already saved is removed, and navigation is unaffected</td>
+                        </tr>
+                        <tr>
+                            <td>Record Only Folders With Images</td>
+                            <td>On</td>
+                            <td>Folders holding no images are not recorded — what stops the Alt+arrow folder walk filling the history with folders you merely stepped through. A folder dropped on the window is recorded either way</td>
+                        </tr>
+                        <tr>
+                            <td>Tab Opens Full List</td>
+                            <td>Off</td>
+                            <td>Tab opens the uncapped list. Ctrl+Tab opens it once whatever this is set to, so the setting picks the default rather than the only way in</td>
+                        </tr>
+                        <tr>
+                            <td>Rows Shown in Panel</td>
+                            <td>0 – 999</td>
+                            <td>How many history rows the panel draws. Display only</td>
+                        </tr>
+                        <tr>
+                            <td>Favorite Rows Shown in Panel</td>
+                            <td>0 – 999</td>
+                            <td>How many favorite rows the panel draws. Display only</td>
+                        </tr>
+                        <tr>
+                            <td>Favorites You Can Add</td>
+                            <td>0 – 999</td>
+                            <td>How many folders may be starred at once. Also caps <code>qivFavorites.txt</code> on load, merge and save — lowering it drops favorites past the new limit</td>
+                        </tr>
+                        <tr>
+                            <td>Folders Saved to File</td>
+                            <td>1 – 99999</td>
+                            <td>How many folders <code>qivHistory.txt</code> keeps; oldest dropped past this</td>
+                        </tr>
+                        <tr>
+                            <td>Remove Invalid Folders</td>
+                            <td>action</td>
+                            <td>Drops rows that cannot be parsed as a path, point at a missing folder, or hold no images. Rows the background scan has not reached yet are kept and reported, so an early run says it was partial</td>
+                        </tr>
+                        <tr>
+                            <td>Remove Duplicates</td>
+                            <td>action</td>
+                            <td>Collapses repeats, keeping the most recent. Usually removes nothing from the list — the real work is rewriting the append-only file</td>
+                        </tr>
+                        <tr>
+                            <td>Clear History</td>
+                            <td>action</td>
+                            <td>Removes every non-favorite folder from the list and the file</td>
+                        </tr>
+                        <tr>
+                            <td>Clear Favorites</td>
+                            <td>action</td>
+                            <td>
+                                Un-stars everything and empties
+                                <code>qivFavorites.txt</code>. The folders stay in the history,
+                                only the star goes
+                            </td>
+                        </tr>
+                        <tr>
+                            <td>Clear History and Favorites</td>
+                            <td>action</td>
+                            <td>Empties both lists and both files in one action</td>
+                        </tr>
+                        <tr>
+                            <td>Open History File</td>
+                            <td>action</td>
+                            <td>Selects <code>qivHistory.txt</code> in Explorer</td>
+                        </tr>
+                    </tbody>
+                </table>
+                <p>
+                    Every action asks first and backs up the file it is about to change, so
+                    any of them can be undone with Backup &amp; Export &rsaquo; Restore History
+                    &amp; Favorites. Remove Invalid Folders and Remove Duplicates never touch
+                    favorites; the three Clear items are the only ones that do, and each names
+                    what survives it.
+                </p>
+                <h3>Backup &amp; Export</h3>
+                <p>
+                    Every operation that moves qIV's data on and off the disk, in one
+                    top-level menu.
+                </p>
                 <table>
                     <thead>
                         <tr>
@@ -1349,27 +1457,39 @@ Version 2.210.0.302 &bull; Size: 9,792.00 KB &bull; Build Date: 2026-08-07
                     <tbody>
                         <tr>
                             <td>Export Settings</td>
-                            <td>
-                                Save all settings to a UTF-8 <code>.ini</code> file (filename includes today's
-                                date)
-                            </td>
+                            <td>Save all settings to a UTF-8 <code>.ini</code> file (filename includes today's date)</td>
                         </tr>
                         <tr>
                             <td>Import Settings</td>
-                            <td>
-                                Load a previously exported <code>.ini</code> — confirmation required; all
-                                settings applied immediately
-                            </td>
+                            <td>Load a previously exported <code>.ini</code> — confirmation required; all settings applied immediately</td>
                         </tr>
                         <tr>
-                            <td>Restore Defaults</td>
-                            <td>
-                                Reset every setting to its compiled-in default — confirmation required;
-                                history and favorites are not affected
-                            </td>
+                            <td>Backup Logs</td>
+                            <td>Zip the whole <code>logs</code> folder, general and network together, to a location you choose. One-way — a log is a record, there is nothing to restore it into</td>
+                        </tr>
+                        <tr>
+                            <td>Backup TCP/IP Config</td>
+                            <td>Zip <code>qivLocalServer.ini</code>, <code>qivRemoteServers.ini</code> and <code>qivRemoteServerBlacklist.ini</code>. None of these are in the registry, so Export Settings never covered them</td>
+                        </tr>
+                        <tr>
+                            <td>Restore TCP/IP Config</td>
+                            <td>Restore those three files. Asks per file before replacing one that already exists, and needs a restart — a running listener keeps the settings it started with</td>
+                        </tr>
+                        <tr>
+                            <td>Backup History &amp; Favorites</td>
+                            <td>Export history and favorites to a <code>.zip</code> archive</td>
+                        </tr>
+                        <tr>
+                            <td>Restore History &amp; Favorites</td>
+                            <td>Restore from a previously created backup — confirmation required</td>
                         </tr>
                     </tbody>
                 </table>
+                <p>
+                    The TCP/IP archive holds your allow-list and the stored password hash
+                    (PBKDF2, not plaintext) — keep it as private as the configuration
+                    itself. The logs archive is the one meant to be handed to somebody else.
+                </p>
                 <h3>Other submenus</h3>
                 <table>
                     <thead>
@@ -2496,8 +2616,23 @@ CMD JumpToImage|1|go to a numbered image in the current playlist|image NUMBER, 1
                             <td colspan="4"><strong>Remote &amp; multi-screen</strong></td>
                         </tr>
                         <tr>
+                            <td><strong>Built-in remote control server</strong></td>
+                            <td>
+                                ✅ every copy is a <strong>server and a client</strong> — it can be
+                                driven, and it can drive others
+                            </td>
+                            <td>❌</td>
+                            <td>❌</td>
+                        </tr>
+                        <tr>
                             <td><strong>Android companion app</strong></td>
-                            <td>✅ <strong>qIV Remote</strong> — control, live preview, photo frame</td>
+                            <td>
+                                ✅ <strong><a href="qiv-remote.html">qIV Remote</a></strong> — control,
+                                live preview, photo frame. Free for one desktop on the Simple remote,
+                                <strong>no ads ever</strong>; one-time unlock (~USD 2) adds unlimited
+                                desktops, Advanced + Fullscreen, streaming and save-to-gallery. Demo
+                                mode runs it all with no desktop at all
+                            </td>
                             <td>❌</td>
                             <td>❌</td>
                         </tr>
@@ -2628,8 +2763,24 @@ CMD JumpToImage|1|go to a numbered image in the current playlist|image NUMBER, 1
                 <details>
                     <summary>Is QuickImageViewer free?</summary>
                     <p>
-                        Yes. QuickImageViewer is completely free and open source under the AGPLv3 license. No
-                        ads, no telemetry, no paid version.
+                        Yes. QuickImageViewer for Windows is completely free and open source under the
+                        AGPLv3 license &mdash; no ads, no telemetry, and nothing held back for a paid
+                        tier. The desktop never asks for anything.
+                    </p>
+                    <p>
+                        The optional Android companion,
+                        <a href="qiv-remote.html">qIV Remote</a>, is listed free and <strong>stays
+                        usable free</strong>: one saved desktop, the Simple remote, and every security
+                        feature included. <strong>No ads at all</strong>, free or paid &mdash; the same
+                        &ldquo;no account, no cloud, no analytics, no advertising&rdquo; rule the desktop
+                        follows.
+                    </p>
+                    <p>
+                        A single <strong>one-time unlock</strong> (about USD&nbsp;2 &mdash; no
+                        subscription, no account) adds unlimited saved desktops, the Advanced and
+                        Fullscreen screens, phone-to-desktop streaming and save-to-gallery. Not sure?
+                        The built-in <strong>demo mode</strong> runs the whole app with no desktop at
+                        all, and never opens a network socket.
                     </p>
                 </details>
                 <details>

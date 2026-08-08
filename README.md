@@ -132,7 +132,8 @@ written to your machine unless you switch logging on. To remove qIV, delete the 
 | Thumbnail strips as file manager | ✅ drag between folders, shell ops | ❌ | ⚠️ in the browser window |
 | Offline GPS geocoding | ✅ embedded, zero network | ❌ | ❌ |
 | **Remote & multi-screen** | | | |
-| **Android companion app** | ✅ **[qIV Remote](#qiv-remote--the-android-app)** — control, live preview, photo frame | ❌ | ❌ |
+| **Built-in remote control server** | ✅ every copy is a **server and a client** — it can be driven, and it can drive others | ❌ | ❌ |
+| **Android companion app** | ✅ **[qIV Remote](#qiv-remote--the-android-app)** — control, live preview, photo frame. Free for one desktop on the Simple remote, **no ads ever**; one-time unlock (~USD 2) adds unlimited desktops, Advanced + Fullscreen, streaming and save-to-gallery. Demo mode runs it all with no desktop at all | ❌ | ❌ |
 | Phone ↔ desktop photo transfer | ✅ both ways, originals not re-encodes | ❌ | ❌ |
 | Drive other copies over TCP | ✅ plain-text protocol, self-describing | ❌ | ❌ |
 | Mirror one screen to many | ✅ F11, per-target selection | ❌ | ❌ |
@@ -575,10 +576,14 @@ The nine slots are listed there too, each named for what it carries — Top Left
 (Index / File), Top Right (Zoom), Mid Center (Messages), Bot Left (Effects), Bot Right
 (Dimensions), and the four Panel Selection slots. Each opens a **three-state radio
 group — Compact / Full / Off**, the same cycle its `Ctrl+N` key walks. Mid Center is
-always single-line, so it offers only On / Off. **Bot Left** carries two extra toggles
+always single-line, so it offers only On / Off. **Bot Left** carries extra toggles
 above its radio group, because they decide whether there is anything to format:
-**Effects** (the active colour-effect list) and **Folder Name** (the containing folder
-beside the file name).
+**Effects** (the active colour-effect list), then a folder line in one of two
+spellings — **Folder Name** (📁 the leaf folder alone) or **Full Path** (📂 the whole
+path). Those two are a radio pair rather than two ticks: they are one line written two
+ways, and showing both would print the folder name twice, once on its own and once as
+the tail of the path directly above it. Clicking the lit one turns it off, which is how
+you get neither. In **Summary** layout the folder line moves to Top Left instead.
 
 </details>
 
@@ -731,19 +736,56 @@ All toggles save immediately and are reflected live.
 |:---|:---|:---|
 | VRAM Cache Size | 0 – 999 | Images to keep decoded in GPU memory |
 | Window Width / Height | 240 – 16000 px | Default dimensions used by Ctrl+Space and window reset |
-| History Max Dirs / Favs | 0 – 999 | Items shown in the History panel |
 | Dir Thumb Cache | 100 – 64000 MB | Memory budget for directory thumbnail bitmaps |
 | Preload Lookaside | 1 – 99 | Images to pre-decode ahead and behind the current one |
 | Overlay Message Duration | 250 – 10000 ms | How long center overlay messages stay visible |
-| History Save Limit | 1 – 99999 | Folders persisted to disk between sessions |
 
-**Settings file operations:**
+**Export and Import** moved to the top-level **Backup & Export** menu — see
+[Backup & Export](#backup-submenu).
 
 | Item | Effect |
 |:---|:---|
-| Export Settings | Save all settings to a UTF-8 `.ini` file (default filename includes today's date) |
-| Import Settings | Load a previously exported `.ini` file — confirmation required; all settings applied immediately |
 | Restore Defaults | Reset every setting to its compiled-in default — confirmation required; history and favorites are not affected |
+
+</details>
+
+<a id="history-submenu"></a>
+<details>
+<summary><b>Settings › History submenu</b></summary>
+
+Everything about the folder history in one place — what gets recorded, how much of it
+is shown, and how to tidy it up.
+
+| Toggle | Default | Effect |
+|:---|:---|:---|
+| Record Folders I Visit | On | Master switch. Off stops new folders reaching the list **and** `qivHistory.txt`. Nothing already saved is removed, and navigation is unaffected |
+| Record Only Folders With Images | On | Folders with no images are not recorded. This is what stops the `Alt`+arrow folder walk filling the history with folders you merely stepped through. A folder **dropped** on the window is recorded either way |
+| Tab Opens Full List | Off | `Tab` opens the uncapped list. `Ctrl`+`Tab` opens it once whatever this is set to, so the setting picks the default rather than the only way in |
+
+| Number | Range | Effect |
+|:---|:---|:---|
+| Rows Shown in Panel | 0 – 999 | How many history rows the panel draws. Display only |
+| Favorite Rows Shown in Panel | 0 – 999 | How many favorite rows the panel draws. Display only |
+| Favorites You Can Add | 0 – 999 | How many folders may be starred at once. **Also caps `qivFavorites.txt`** on load, merge and save — so lowering it drops favorites past the new limit |
+| Folders Saved to File | 1 – 99999 | How many folders `qivHistory.txt` keeps; oldest dropped past this |
+
+| Action | Effect |
+|:---|:---|
+| Remove Invalid Folders | Drops rows that cannot be parsed as a path, point at a missing folder, or hold no images. Rows the background scan has not reached yet are **kept** and reported, so an early run says it was partial instead of looking complete |
+| Remove Duplicates | Collapses repeats, keeping the most recent. Usually removes nothing from the list — the real work is rewriting the append-only file |
+| Clear History | Removes every non-favorite folder from the list and the file |
+| Clear Favorites | Un-stars everything and empties `qivFavorites.txt` — the folders stay in the history, only the star goes |
+| Clear History and Favorites | Empties both lists and both files in one action |
+| Open History File | Selects `qivHistory.txt` in Explorer |
+
+Every action asks first and **backs up the file it is about to change**, so any of them
+can be undone with *Backup & Export › Restore History & Favorites*.
+
+`Remove Invalid Folders` and `Remove Duplicates` never touch favorites — starring a
+folder is deliberate, and a cleanup that dropped a starred row because a drive was
+unplugged today would be data loss wearing a tidy-up label. The three **Clear** items
+are the only ones that remove favorites, and each says in its own name exactly what
+survives it.
 
 </details>
 
@@ -773,12 +815,23 @@ Choose sort order: **Name** / **Date Modified** / **Size** / **Type** / **Disk O
 
 <a id="backup-submenu"></a>
 <details>
-<summary><b>Backup submenu</b> <sub>2</sub></summary>
+<summary><b>Backup & Export menu</b> <sub>7</sub></summary>
+
+Every operation that moves qIV's data on and off the disk, in one top-level menu.
 
 | Item | Effect |
 |:---|:---|
+| Export Settings | Save all settings to a UTF-8 `.ini` file (default filename includes today's date) |
+| Import Settings | Load a previously exported `.ini` file - confirmation required; all settings applied immediately |
+| Backup Logs | Zip the whole `logs` folder, general and network together, to a location you choose. One-way - a log is a record, there is nothing to restore it into |
+| Backup TCP/IP Config | Zip `qivLocalServer.ini`, `qivRemoteServers.ini` and `qivRemoteServerBlacklist.ini`. None of these are in the registry, so Export Settings never covered them |
+| Restore TCP/IP Config | Restore those three files. **Asks per file** before replacing one that already exists, and needs a restart - a running listener keeps the settings it started with |
 | Backup History & Favorites | Export history and favorites to a `.zip` archive (file-save dialog) |
-| Restore History & Favorites | Restore from a previously created backup — confirmation required |
+| Restore History & Favorites | Restore from a previously created backup - confirmation required |
+
+> The TCP/IP archive holds your allow-list and the stored password hash (PBKDF2, not
+> plaintext). Keep it as private as the configuration itself. The **logs** archive is the
+> one meant to be handed to somebody else.
 
 </details>
 
