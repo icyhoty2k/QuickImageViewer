@@ -40,7 +40,7 @@
 // =========================================================================
 #define VER_MAJOR 2
 #define VER_MINOR 250
-#define VER_PATCH 0
+#define VER_PATCH 1
 
 #define FILE_DESC     "qIV"
 #define ORIG_FILENAME "QuickImageViewer.exe"
