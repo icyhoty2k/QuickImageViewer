@@ -840,6 +840,11 @@ bool ExecutePayload(HWND hWnd, Command cmd, const std::wstring &payload,
         // acknowledged — with events arriving unsolicited mid-exchange, an
         // "OK" that named nothing would be unmatchable to what caused it.
         case Command::ImageChanged:
+        // Its blank-screen counterpart, acknowledged the same way and for the
+        // same reason: the sender says what its screen is now, the receiver
+        // changes nothing, and the echoed payload is what makes the reply
+        // matchable to the announcement that caused it.
+        case Command::FolderChanged:
             replyOut = payload;
             return true;
         default:

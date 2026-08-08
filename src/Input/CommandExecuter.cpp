@@ -846,10 +846,12 @@ void InputManager::ExecuteCommand(HWND hWnd, Command cmd) {
             break;
         }
 
-        // A notification, not an instruction — see Command.h. It exists so that
-        // an observer on ANOTHER MACHINE learns the picture changed; acting on
-        // it here would mean this viewer responding to its own announcement.
+        // A notification, not an instruction — see Command.h. They exist so that
+        // an observer on ANOTHER MACHINE learns the picture changed, or that
+        // there is no longer a picture at all; acting on either here would mean
+        // this viewer responding to its own announcement.
         case Command::ImageChanged:
+        case Command::FolderChanged:
             break;
 
         case Command::NewWindow: {
@@ -2282,6 +2284,19 @@ std::wstring InputManager::GetCommandValue(HWND hWnd, Command cmd) {
                 folder = std::filesystem::path(app.playlist[0]).parent_path().wstring();
             }
 
+            // AND FROM THE PLACEHOLDER WHEN THE PLAYLIST CANNOT SAY.
+            //
+            // Both branches above read app.playlist, so the one case that most
+            // needs a folder named is the one case that names none: an empty
+            // folder holds no entries and no current index, so a client asking
+            // "what happened?" was told count=0 with every other field blank —
+            // byte-identical to a viewer sitting idle with nothing ever opened.
+            //
+            // The viewer knows perfectly well: it is drawing a placeholder that
+            // says so, from app.folderOverlayPath. Reporting it costs a copy of a
+            // string this process already holds.
+            if (folder.empty()) folder = app.folderOverlayPath;
+
             std::wstring s = L"count=" + std::to_wstring(total);
             s += L";index=" + std::to_wstring(have ? app.currentIndex + 1 : 0);
             s += L";sort="  + std::to_wstring(app.fileHandlerDefaultSortOrder);
@@ -2289,6 +2304,19 @@ std::wstring InputManager::GetCommandValue(HWND hWnd, Command cmd) {
             s += app.fileHandlerIsReverseSortOrder ? L"1" : L"0";
             s += L";name="   + name;
             s += L";folder=" + folder;
+            // WHY THERE IS NOTHING TO SHOW, in one word.
+            //
+            // A remote screen cannot tell an empty folder from a missing one from
+            // a file this build cannot decode from an idle viewer — all four
+            // answer count=0 — so it had to either stay vague or guess. This is
+            // the same state the placeholder on this screen is drawn from, said
+            // out loud.
+            //
+            // LAST, and an added key rather than a changed one: both ends ignore
+            // fields they do not know, so a client written before this reads the
+            // reply exactly as it always did.
+            s += L";reason=";
+            s += FolderOverlayWireWord(app.folderOverlay);
             return s;
         }
 

@@ -794,6 +794,44 @@ void SetFolderOverlay(HWND hWnd, AppState::FolderOverlayState state,
     app.folderOverlayPath = path;
     UpdateWindowTitle(hWnd);
 
+    // =========================================================================
+    // AND TELL ANYONE WATCHING. This is the announcement for "there is nothing
+    // to show", and it had no emitter at all until now.
+    //
+    // Every other change of screen is announced from LoadImageIndex, which by
+    // definition runs only when there IS a picture. So a folder holding nothing
+    // readable produced silence: no image load, no event, and the walk commands
+    // that reach one have no table row for the ExecuteCommand echo to send
+    // either. An observing phone went on displaying the last photograph while
+    // this window showed its "folder is empty" placeholder — a remote asserting
+    // something the viewer is not doing, until the user happened to press
+    // something.
+    //
+    // HERE because this is the single funnel: every route to a blank screen
+    // already passes through this function, which is the same reason the logging
+    // below lives here rather than at five call sites.
+    //
+    // `changed` GATES IT, and that is not an optimisation. The renderer's
+    // last-ditch guard calls this from inside Render(), so an ungated emit would
+    // put a line on every observer's socket every frame.
+    //
+    // None is excluded: it means a picture is on screen, and that case is
+    // already announced — by LoadImageIndex, with the file name in it.
+    //
+    // EXCLUDES THE CONNECTION THAT CAUSED IT, rather than suppressing the whole
+    // emit while an inbound command runs. A phone that opened this folder itself
+    // is reading the reply to its own OpenFile and does not need the echo; a
+    // SECOND observer watching the same viewer has no other way to find out.
+    //
+    // Every test before any work, like the emit in LoadImageIndex: a viewer
+    // nobody is watching must not build a string here.
+    if (changed && state != AppState::FolderOverlayState::None &&
+        Remote::HasObservers()) {
+        Remote::EmitToObservers(std::wstring(L"FolderChanged ") +
+                                    FolderOverlayWireWord(state) + L" " + path,
+                                Remote::InboundSource());
+    }
+
     // Gate BEFORE the string is built — concatenating a path only to throw it
     // away is the cost this check exists to avoid.
     if (!changed || !AppLog::IsEnabled()) return;

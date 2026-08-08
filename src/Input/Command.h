@@ -386,6 +386,26 @@ enum class Command {
     // In the table so a qIV observer that replays events parses it instead of
     // answering ERR, and so a third-party client can look it up.
     ImageChanged,
+    // `FolderChanged <reason> <path>` — the OTHER half of the same idea, and the
+    // half that was missing: the announcement for when there is NO picture.
+    //
+    // ImageChanged is emitted from LoadImageIndex, so every route to a blank
+    // screen is silent by construction — opening a folder with no readable
+    // images loads nothing, and the walk commands that reach one have no table
+    // row for the ExecuteCommand echo to send. An observer therefore kept
+    // displaying the last photograph while this viewer showed its "folder is
+    // empty" placeholder: a remote asserting something the viewer is not doing,
+    // for as long as nobody pressed anything.
+    //
+    // It carries the same two facts the placeholder draws — WHY (one of
+    // FolderOverlayWireWord's four words) and WHICH folder or file — so a client
+    // can say which folder was empty without having to remember what it asked
+    // for. Emitted from SetFolderOverlay, the single funnel every blank-screen
+    // state already passes through, and only when the state actually changes.
+    //
+    // A notification like ImageChanged: local execution is deliberately nothing,
+    // it is never mirrored, and the correct client response is to ask.
+    FolderChanged,
     // ── Alt+Enter. Sends the PICTURE ITSELF — the file's bytes, in base64 chunks
     // — to be shown ONCE and change nothing else there: no folder, no sort order,
     // no playlist position. It goes up in place of the current slide and the far

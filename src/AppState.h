@@ -613,6 +613,32 @@ void SetFolderOverlay(HWND hWnd, AppState::FolderOverlayState state,
 // current image — so the load path needs no second call.
 void ClearFolderOverlay(HWND hWnd);
 
+// THE SAME STATE, AS THE ONE WORD A REMOTE UNDERSTANDS: none / missing / empty
+// / unsupported. Never empty, never localised, never punctuated — a client
+// branches on it, and QueryState carries it in a ';'-separated list.
+//
+// It is protocol vocabulary and would rather live in RemoteProtocol.h, but this
+// enum is nested and cannot be forward-declared: declaring it there would pull
+// AppState.h — and IRenderer.h, and wincodec.h — into every file that wanted
+// nothing but the command table. So it sits beside the enum it spells.
+//
+// TWO CALLERS, ONE SPELLING: QueryState's `reason=` field and the FolderChanged
+// notification. An answer and an announcement about the same folder cannot
+// disagree, and renaming a word here changes both at once — which is correct,
+// because renaming one is a wire change either way.
+inline const wchar_t *FolderOverlayWireWord(AppState::FolderOverlayState state) {
+    switch (state) {
+        case AppState::FolderOverlayState::Missing:     return L"missing";
+        case AppState::FolderOverlayState::Empty:       return L"empty";
+        case AppState::FolderOverlayState::Unsupported: return L"unsupported";
+        case AppState::FolderOverlayState::None:        break;
+    }
+    // No default: adding a state must fail to compile here rather than reach a
+    // client as "none" — which reads as "nothing is wrong" and is the one answer
+    // a new blank-screen state definitely does not mean.
+    return L"none";
+}
+
 // Clamps app.viewport.zoom so the EFFECTIVE on-screen zoom — the percentage the
 // overlay shows — lands inside [ZOOM_MIN, ZOOM_MAX].
 //
