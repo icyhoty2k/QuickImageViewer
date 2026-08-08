@@ -45,7 +45,7 @@
     <h1>QuickImageViewer (qIV) — Shortcuts</h1>
     <p class="meta">
         Generated from the app's own help panel — press <kbd>F1</kbd> in QuickImageViewer to see the same list on your
-        machine. 209 shortcuts in 16 sections.
+        machine. 223 shortcuts in 16 sections.
     </p>
 
 <!-- SHARED-STOREROW-START -->
@@ -275,7 +275,7 @@
         </div>
     </section>
     <section class="sc-sec" data-title="System Tray">
-        <h2><span class="sc-ico">🔔</span>System Tray<span class="sc-count">34</span></h2>
+        <h2><span class="sc-ico">🔔</span>System Tray<span class="sc-count">48</span></h2>
         <div class="sc-cols">
             <div class="sc-row"><div class="sc-keys"><kbd>Double-click tray icon</kbd></div><p class="sc-desc">Restore the main window to the foreground.</p></div>
             <div class="sc-row"><div class="sc-keys"><kbd>Restore QuickImageViewer</kbd></div><p class="sc-desc">Show and bring the main window to the front.</p></div>
@@ -284,9 +284,10 @@
             <div class="sc-row"><div class="sc-keys"><kbd>Settings › Keep in Background</kbd></div><p class="sc-desc">When enabled, closing the window (Esc / Ctrl+W) hides QIV to the tray instead of exiting — the process stays resident for an instant re-open. <a class="sc-more" href="#system-tray-settings-keep-in-background">details</a></p></div>
             <div class="sc-row"><div class="sc-keys"><kbd>Settings › Run on Startup</kbd></div><p class="sc-desc">Write / remove the Windows startup registry entry (HKCU\\…\\Run) so QIV launches automatically with Windows. <a class="sc-more" href="#system-tray-settings-run-on-startup">details</a></p></div>
             <div class="sc-row"><div class="sc-keys"><kbd>Settings › Thumbnail Effects</kbd></div><p class="sc-desc">Master switch for thumbnail strip visual effects: glow border on the selected thumbnail, rounded-corner overdraw, and hover-scale enlarge.</p></div>
-            <div class="sc-row"><div class="sc-keys"><kbd>Settings › History: Open Full List</kbd></div><p class="sc-desc">When enabled, Tab opens the full (uncapped) history view. When disabled, the list is capped at the History Max Dirs value.</p></div>
+            <div class="sc-row"><div class="sc-keys"><kbd>Settings › History › Tab Opens Full List</kbd></div><p class="sc-desc">When enabled, Tab opens the full (uncapped) history view. When disabled, Tab caps the list at Rows Shown in Panel. <a class="sc-more" href="#system-tray-settings-history-tab-opens-full-list">details</a></p></div>
             <div class="sc-row"><div class="sc-keys"><kbd>Settings › Info Overlays</kbd></div><p class="sc-desc">Show / hide all nine overlay text slots at once.</p></div>
             <div class="sc-row"><div class="sc-keys"><kbd>Overlays › Font</kbd> / <kbd>Font Size</kbd> / <kbd>Font Color…</kbd></div><p class="sc-desc">Typeface, point size and colour for every overlay slot. Font Color opens the standard colour picker; the size is shown in its own label. <a class="sc-more" href="#system-tray-overlays-font-font-size-font-color">details</a></p></div>
+            <div class="sc-row"><div class="sc-keys"><kbd>Overlays › Bot Left › Folder Name</kbd> / <kbd>Full Path</kbd></div><p class="sc-desc">The bottom-left slot can name the folder holding the current image in one of two ways: 📁 the leaf folder alone, or 📂 the whole path. They are a radio pair because they are one line in two spellings  <a class="sc-more" href="#system-tray-overlays-bot-left-folder-name-full-path">details</a></p></div>
             <div class="sc-row"><div class="sc-keys"><kbd>Overlays › Layout</kbd> / <kbd>Message Duration</kbd></div><p class="sc-desc">Layout picks Grid, Stacked or Summary — the same three O cycles through. Message Duration is how long a centre-screen message stays up, in milliseconds.</p></div>
             <div class="sc-row"><div class="sc-keys"><kbd>Settings › Open Thumbnail Strip on Start</kbd></div><p class="sc-desc">Automatically open the directory thumbnail strip on every launch.</p></div>
             <div class="sc-row"><div class="sc-keys"><kbd>Settings › Overlay Background</kbd></div><p class="sc-desc">Toggle the semi-transparent background panel behind overlay text.</p></div>
@@ -296,12 +297,25 @@
             <div class="sc-row"><div class="sc-keys"><kbd>Settings › Start in Fullscreen</kbd></div><p class="sc-desc">Open in fullscreen mode on every launch.</p></div>
             <div class="sc-row"><div class="sc-keys"><kbd>Settings › VRAM Cache Size</kbd></div><p class="sc-desc">How many images to keep decoded in GPU memory (0 – 999). Click to open a numeric input dialog; current value is shown in the label.</p></div>
             <div class="sc-row"><div class="sc-keys"><kbd>Settings › Window Width</kbd> / <kbd>Height</kbd></div><p class="sc-desc">Default window dimensions in pixels (240 – 16000). Used by Ctrl+Space restore and window-reset commands.</p></div>
-            <div class="sc-row"><div class="sc-keys"><kbd>Settings › History Max Dirs</kbd> / <kbd>Favs</kbd></div><p class="sc-desc">Maximum folders / favorites to show in the History panel (0 – 999 each).</p></div>
+            <div class="sc-row"><div class="sc-keys"><kbd>Settings › History › Record Folders I Visit</kbd></div><p class="sc-desc">Master switch for recording folder history. OFF stops new folders reaching both the list and qivHistory.txt. Nothing already saved is removed — that is what Clear History is for  <a class="sc-more" href="#system-tray-settings-history-record-folders-i-visit">details</a></p></div>
+            <div class="sc-row"><div class="sc-keys"><kbd>Settings › History › Record Only Folders With Images</kbd></div><p class="sc-desc">ON by default. Folders with no images in them are not recorded. This is what keeps the Alt-arrow folder walk from filling the history with folders you merely stepped through: the walk lands in every… <a class="sc-more" href="#system-tray-settings-history-record-only-folders-with-images">details</a></p></div>
+            <div class="sc-row"><div class="sc-keys"><kbd>Settings › History › Rows Shown in Panel</kbd></div><p class="sc-desc">How many history rows the panel draws (0 – 999). Display only — it does not affect what is recorded or saved.</p></div>
+            <div class="sc-row"><div class="sc-keys"><kbd>Settings › History › Favorite Rows Shown in Panel</kbd></div><p class="sc-desc">How many favorite rows the panel draws (0 – 999). Display only, and bounded in practice by Favorites You Can Add.</p></div>
+            <div class="sc-row"><div class="sc-keys"><kbd>Settings › History › Favorites You Can Add</kbd></div><p class="sc-desc">How many folders may be starred at once (0 – 999). Starring another is refused when full. This number also caps qivFavorites.txt itself, on load, on merge and on save  <a class="sc-more" href="#system-tray-settings-history-favorites-you-can-add">details</a></p></div>
+            <div class="sc-row"><div class="sc-keys"><kbd>Settings › History › Folders Saved to File</kbd></div><p class="sc-desc">How many folders qivHistory.txt keeps (1 – 99999). The oldest are dropped past this.</p></div>
+            <div class="sc-row"><div class="sc-keys"><kbd>Settings › History › Remove Invalid Folders</kbd></div><p class="sc-desc">Drops history rows that cannot be parsed as a path, that point at a folder which no longer exists, or that hold no images. Favorites are kept whatever their state. <a class="sc-more" href="#system-tray-settings-history-remove-invalid-folders">details</a></p></div>
+            <div class="sc-row"><div class="sc-keys"><kbd>Settings › History › Remove Duplicates</kbd></div><p class="sc-desc">Collapses repeated folders to one row each, keeping the most recent. Usually removes nothing from the list — the real work is rewriting the append-only file, which is where repeats accumulate.</p></div>
+            <div class="sc-row"><div class="sc-keys"><kbd>Settings › History › Clear History</kbd></div><p class="sc-desc">Removes every non-favorite folder from the list and from qivHistory.txt. Favorites are untouched.</p></div>
+            <div class="sc-row"><div class="sc-keys"><kbd>Settings › History › Clear Favorites</kbd></div><p class="sc-desc">Un-stars every favorite and empties qivFavorites.txt. The folders themselves stay in the history — only the star goes.</p></div>
+            <div class="sc-row"><div class="sc-keys"><kbd>Settings › History › Clear History and Favorites</kbd></div><p class="sc-desc">Empties both lists and both files in one action. Each of the three clears backs its file up first, so any of them can be undone with Backup &amp;&amp; Export › Restore History &amp;&amp; Favorites.</p></div>
+            <div class="sc-row"><div class="sc-keys"><kbd>Settings › History › Open History File</kbd></div><p class="sc-desc">Selects qivHistory.txt in Explorer, next to qivFavorites.txt and the QivBackup folder.</p></div>
             <div class="sc-row"><div class="sc-keys"><kbd>Settings › Dir Thumb Cache</kbd></div><p class="sc-desc">Memory budget in MB for the directory thumbnail bitmap store (100 – 64000 MB).</p></div>
             <div class="sc-row"><div class="sc-keys"><kbd>Settings › Preload Lookaside</kbd></div><p class="sc-desc">How many images ahead and behind the current one to pre-decode into GPU memory in the background (1 – 99).</p></div>
             <div class="sc-row"><div class="sc-keys"><kbd>Settings › Overlay Message Duration</kbd></div><p class="sc-desc">How long center overlay messages remain visible in milliseconds (250 – 10000 ms).</p></div>
-            <div class="sc-row"><div class="sc-keys"><kbd>Settings › History Save Limit</kbd></div><p class="sc-desc">Maximum number of folders to persist to disk between sessions (1 – 99999).</p></div>
-            <div class="sc-row"><div class="sc-keys"><kbd>Settings › Export</kbd> / <kbd>Import Settings</kbd></div><p class="sc-desc">Save all settings to a UTF-8 INI file, or load a previously exported one. Import requires a confirmation dialog and applies all values immediately, including theme, overlays and sort order.</p></div>
+            <div class="sc-row"><div class="sc-keys"><kbd>Backup &amp;&amp; Export › Export</kbd> / <kbd>Import Settings</kbd></div><p class="sc-desc">Save all settings to a UTF-8 INI file, or load a previously exported one. Import requires a confirmation dialog and applies all values immediately, including theme, overlays and sort order. <a class="sc-more" href="#system-tray-backup-export-export-import-settings">details</a></p></div>
+            <div class="sc-row"><div class="sc-keys"><kbd>Backup &amp;&amp; Export › Backup Logs</kbd></div><p class="sc-desc">Zips the whole logs folder — general and network together — to a location you choose. One-way: logs are a record, so there is nothing to restore them into. <a class="sc-more" href="#system-tray-backup-export-backup-logs">details</a></p></div>
+            <div class="sc-row"><div class="sc-keys"><kbd>Backup &amp;&amp; Export › Backup</kbd> / <kbd>Restore TCP/IP Config</kbd></div><p class="sc-desc">Zips qivLocalServer.ini, qivRemoteServers.ini and qivRemoteServerBlacklist.ini — none of which are in the registry, so the settings export above never covered them. <a class="sc-more" href="#system-tray-backup-export-backup-restore-tcp-ip-config">details</a></p></div>
+            <div class="sc-row"><div class="sc-keys"><kbd>Backup &amp;&amp; Export › Backup</kbd> / <kbd>Restore History &amp;&amp; Favorites</kbd></div><p class="sc-desc">Zips qivHistory.txt and qivFavorites.txt, and restores them from a previously written archive.</p></div>
             <div class="sc-row"><div class="sc-keys"><kbd>Settings › Restore Defaults</kbd></div><p class="sc-desc">Reset every setting to its compiled-in default value after a confirmation dialog. History and favorites are not affected.</p></div>
             <div class="sc-row"><div class="sc-keys"><kbd>View Mode submenu</kbd></div><p class="sc-desc">Pick the default fit mode applied to newly loaded images: 1 Fit to view (keeps aspect) • 2 Fit to width • 3 Fit to height • 4 Stretch to window • 5 Original size, 1:1 pixels. <a class="sc-more" href="#system-tray-view-mode-submenu">details</a></p></div>
             <div class="sc-row"><div class="sc-keys"><kbd>Slideshow submenu</kbd></div><p class="sc-desc">Configure slideshow defaults: interval (100 – 60000 ms), loop, shuffle, and transition type ( styles, plus Random). All changes persist immediately.</p></div>
@@ -367,7 +381,7 @@
     </section>
 
     <h2 class="sc-deep-head">In depth</h2>
-    <p class="sc-deep-intro">The 54 shortcuts above whose behaviour needs more than a line. Every one is linked from its row.</p>
+    <p class="sc-deep-intro">The 63 shortcuts above whose behaviour needs more than a line. Every one is linked from its row.</p>
     <article class="sc-deep" id="image-navigation-ctrl-f">
         <h3><kbd>Ctrl+F</kbd><span class="sc-deep-sec">Image Navigation</span></h3>
         <p>Open the Find panel — fuzzy filename search with wildcard support: * matches any characters, ? matches exactly one (e.g. *.jpg or photo_??_2024.*). Searches the current folder and the VRAM cache. Typing # inside switches to Jump-to.</p>
@@ -581,9 +595,45 @@
         <h3><kbd>Settings › Run on Startup</kbd><span class="sc-deep-sec">System Tray</span></h3>
         <p>Write / remove the Windows startup registry entry (HKCU\\…\\Run) so QIV launches automatically with Windows. Dedicated instances write their own separate entry and do not conflict with the normal instance.</p>
     </article>
+    <article class="sc-deep" id="system-tray-settings-history-tab-opens-full-list">
+        <h3><kbd>Settings › History › Tab Opens Full List</kbd><span class="sc-deep-sec">System Tray</span></h3>
+        <p>When enabled, Tab opens the full (uncapped) history view. When disabled, Tab caps the list at Rows Shown in Panel. Ctrl+Tab opens the full list once whatever this is set to, so the setting decides the DEFAULT rather than the only way in.</p>
+    </article>
     <article class="sc-deep" id="system-tray-overlays-font-font-size-font-color">
         <h3><kbd>Overlays › Font</kbd> / <kbd>Font Size</kbd> / <kbd>Font Color…</kbd><span class="sc-deep-sec">System Tray</span></h3>
         <p>Typeface, point size and colour for every overlay slot. Font Color opens the standard colour picker; the size is shown in its own label. All three are persisted, so a wall of screens can be made readable from across a room once and left alone.</p>
+    </article>
+    <article class="sc-deep" id="system-tray-overlays-bot-left-folder-name-full-path">
+        <h3><kbd>Overlays › Bot Left › Folder Name</kbd> / <kbd>Full Path</kbd><span class="sc-deep-sec">System Tray</span></h3>
+        <p>The bottom-left slot can name the folder holding the current image in one of two ways: 📁 the leaf folder alone, or 📂 the whole path. They are a radio pair because they are one line in two spellings — showing both would print the folder name twice, once on its own and once as the tail of the path above it. Clicking the lit one turns it off, which is how you get neither. In Summary layout the line moves to the top-left slot instead.</p>
+    </article>
+    <article class="sc-deep" id="system-tray-settings-history-record-folders-i-visit">
+        <h3><kbd>Settings › History › Record Folders I Visit</kbd><span class="sc-deep-sec">System Tray</span></h3>
+        <p>Master switch for recording folder history. OFF stops new folders reaching both the list and qivHistory.txt. Nothing already saved is removed — that is what Clear History is for — and navigation itself is unaffected: the folder walk, the placeholder and the overlay folder line all keep working.</p>
+    </article>
+    <article class="sc-deep" id="system-tray-settings-history-record-only-folders-with-images">
+        <h3><kbd>Settings › History › Record Only Folders With Images</kbd><span class="sc-deep-sec">System Tray</span></h3>
+        <p>ON by default. Folders with no images in them are not recorded. This is what keeps the Alt-arrow folder walk from filling the history with folders you merely stepped through: the walk lands in every child of a parent, images or not. A folder DROPPED on the window is recorded either way — that is a deliberate act, not walk noise.</p>
+    </article>
+    <article class="sc-deep" id="system-tray-settings-history-favorites-you-can-add">
+        <h3><kbd>Settings › History › Favorites You Can Add</kbd><span class="sc-deep-sec">System Tray</span></h3>
+        <p>How many folders may be starred at once (0 – 999). Starring another is refused when full. This number also caps qivFavorites.txt itself, on load, on merge and on save — so LOWERING IT DROPS favorites past the new limit the next time the file is written.</p>
+    </article>
+    <article class="sc-deep" id="system-tray-settings-history-remove-invalid-folders">
+        <h3><kbd>Settings › History › Remove Invalid Folders</kbd><span class="sc-deep-sec">System Tray</span></h3>
+        <p>Drops history rows that cannot be parsed as a path, that point at a folder which no longer exists, or that hold no images. Favorites are kept whatever their state. Rows the background scan has not reached yet are KEPT and reported, so a run started early is partial and says so rather than looking complete.</p>
+    </article>
+    <article class="sc-deep" id="system-tray-backup-export-export-import-settings">
+        <h3><kbd>Backup &amp;&amp; Export › Export</kbd> / <kbd>Import Settings</kbd><span class="sc-deep-sec">System Tray</span></h3>
+        <p>Save all settings to a UTF-8 INI file, or load a previously exported one. Import requires a confirmation dialog and applies all values immediately, including theme, overlays and sort order. Covers the REGISTRY settings only — the TCP/IP .ini files have their own pair below.</p>
+    </article>
+    <article class="sc-deep" id="system-tray-backup-export-backup-logs">
+        <h3><kbd>Backup &amp;&amp; Export › Backup Logs</kbd><span class="sc-deep-sec">System Tray</span></h3>
+        <p>Zips the whole logs folder — general and network together — to a location you choose. One-way: logs are a record, so there is nothing to restore them into. Says so plainly when neither log has written anything yet.</p>
+    </article>
+    <article class="sc-deep" id="system-tray-backup-export-backup-restore-tcp-ip-config">
+        <h3><kbd>Backup &amp;&amp; Export › Backup</kbd> / <kbd>Restore TCP/IP Config</kbd><span class="sc-deep-sec">System Tray</span></h3>
+        <p>Zips qivLocalServer.ini, qivRemoteServers.ini and qivRemoteServerBlacklist.ini — none of which are in the registry, so the settings export above never covered them. Restore asks per file before replacing one that already exists, and needs a restart: a running listener keeps the settings it started with. The archive holds your allow-list and the stored password hash, so keep it as private as the configuration itself.</p>
     </article>
     <article class="sc-deep" id="system-tray-view-mode-submenu">
         <h3><kbd>View Mode submenu</kbd><span class="sc-deep-sec">System Tray</span></h3>
