@@ -15,6 +15,7 @@
 #include "Input/AppCommands.h"
 #include "Overlays/OverlayManager.h"
 #include "Persistence/HistoryFoldersManager.h"
+#include "Persistence/IniFile.h"    // PathBesideExe — locates the logs\ tree
 #include "Persistence/RegistryManager.h"
 #include "Rem_TCP_IP/RemoteLog.h"   // the file sink has to be told what an import changed
 #include "Platform/AppLog.h"        // and so does the General one
@@ -210,7 +211,14 @@ void ImportSettings(HWND hWnd) {
         applyBool(Constants::Registry::FOLDER_WALK_WRAP,     app.folderWalkWrap);
         applyBool(Constants::Registry::OVERLAY_SHOW_BG,      app.overlayShowBackground);
         applyBool(Constants::Registry::OVERLAY_SHOW_DIR_NAME, app.overlayShowDirName);
+        applyBool(Constants::Registry::OVERLAY_SHOW_FULL_PATH, app.overlayShowFullPath);
+        // Same guard LoadAllSettings applies, for the same reason: an imported
+        // file is as hand-editable as the registry. Full path wins — it already
+        // contains the folder name.
+        if (app.overlayShowFullPath) app.overlayShowDirName = false;
         applyBool(Constants::Registry::OVERLAY_SHOW_EFFECTS,  app.overlayShowEffectsList);
+        applyBool(Constants::Registry::HISTORY_ENABLED,       app.historyEnabled);
+        applyBool(Constants::Registry::HISTORY_IMAGES_ONLY,   app.historyImagesOnly);
         applyBool(Constants::Registry::SWAP_MOUSE_BUTTONS,   app.swapMouseButtons);
         applyBool(Constants::Registry::CONTEXT_MENU_ENABLED, app.contextMenuEnabled);
         applyBool(Constants::Registry::KIOSK_LOCK,           app.isLocked);
@@ -260,6 +268,11 @@ void ImportSettings(HWND hWnd) {
             app.historyMaxFavs = std::max(0, std::min(999, val));
             Persistence::Registry::SaveSetting(Constants::Registry::HISTORY_MAX_FAVS,
                 static_cast<DWORD>(app.historyMaxFavs));
+        }
+        if (wcscmp(key, Constants::Registry::HISTORY_MAX_FAVS_SHOWN) == 0) {
+            app.historyMaxFavsShown = std::max(0, std::min(999, val));
+            Persistence::Registry::SaveSetting(Constants::Registry::HISTORY_MAX_FAVS_SHOWN,
+                static_cast<DWORD>(app.historyMaxFavsShown));
         }
         if (wcscmp(key, Constants::Registry::DIR_THUMB_CACHE_MB) == 0) {
             app.dirThumbCacheMB = std::max(100, std::min(64000, val));
@@ -471,6 +484,9 @@ void RestoreDefaults(HWND hWnd) {
     app.overlaySlotVisibleMask  = Constants::Overlay::DEFAULT_SLOT_VISIBLE_MASK;
     app.overlaySlotCompactMask  = Constants::Overlay::DEFAULT_SLOT_COMPACT_MASK;
     app.overlayShowDirName      = Constants::Overlay::SHOW_DIR_NAME;
+    app.overlayShowFullPath     = Constants::Overlay::SHOW_FULL_PATH;
+    app.historyEnabled          = Constants::History::HISTORY_ENABLED;
+    app.historyImagesOnly       = Constants::History::HISTORY_IMAGES_ONLY;
     app.overlayShowEffectsList  = Constants::Overlay::SHOW_EFFECTS_LIST;
     app.overlayFontSize         = Constants::Overlay::OVERLAY_FONT_SIZE_DEFAULT;
     app.overlayFontColor        = Constants::Overlay::OVERLAY_FONT_COLOR_DEFAULT;
@@ -495,6 +511,7 @@ void RestoreDefaults(HWND hWnd) {
     app.themeFactor             = Constants::Theme::DEFAULT_THEME_FACTOR;
     app.historyMaxDirs          = Constants::History::IS_HISTORY_MAX_DIRS_TO_SHOW;
     app.historyMaxFavs          = Constants::History::IS_HISTORY_MAX_FAVORITES_TO_SHOW;
+    app.historyMaxFavsShown     = Constants::History::IS_HISTORY_MAX_FAVORITES_SHOWN;
     app.dirThumbCacheMB         = Constants::IS_DIR_THUMB_CACHE_BUDGET_MB;
     app.preloadLookaside        = Constants::IS_PRELOAD_LOOKASIDE_COUNT;
     app.msgCenterDisplayMs      = static_cast<int>(Constants::Overlay::IS_MSG_CENTER_DISPLAY_MS);
@@ -533,6 +550,9 @@ void RestoreDefaults(HWND hWnd) {
     Persistence::Registry::SaveSetting(Constants::Registry::OVERLAY_SLOT_VISIBLE,  static_cast<DWORD>(app.overlaySlotVisibleMask));
     Persistence::Registry::SaveSetting(Constants::Registry::OVERLAY_SLOT_COMPACT,  static_cast<DWORD>(app.overlaySlotCompactMask));
     Persistence::Registry::SaveSetting(Constants::Registry::OVERLAY_SHOW_DIR_NAME, static_cast<DWORD>(app.overlayShowDirName));
+    Persistence::Registry::SaveSetting(Constants::Registry::OVERLAY_SHOW_FULL_PATH, static_cast<DWORD>(app.overlayShowFullPath));
+    Persistence::Registry::SaveSetting(Constants::Registry::HISTORY_ENABLED,       static_cast<DWORD>(app.historyEnabled));
+    Persistence::Registry::SaveSetting(Constants::Registry::HISTORY_IMAGES_ONLY,   static_cast<DWORD>(app.historyImagesOnly));
     Persistence::Registry::SaveSetting(Constants::Registry::OVERLAY_SHOW_EFFECTS,  static_cast<DWORD>(app.overlayShowEffectsList));
     Persistence::Registry::SaveSetting(Constants::Registry::OVERLAY_FONT_SIZE,     static_cast<DWORD>(app.overlayFontSize));
     Persistence::Registry::SaveSetting(Constants::Registry::OVERLAY_FONT_COLOR,    static_cast<DWORD>(app.overlayFontColor));
@@ -556,6 +576,7 @@ void RestoreDefaults(HWND hWnd) {
     Persistence::Registry::SaveSetting(Constants::Registry::START_FULLSCREEN,      static_cast<DWORD>(app.startInFullscreen));
     Persistence::Registry::SaveSetting(Constants::Registry::HISTORY_MAX_DIRS,      static_cast<DWORD>(app.historyMaxDirs));
     Persistence::Registry::SaveSetting(Constants::Registry::HISTORY_MAX_FAVS,      static_cast<DWORD>(app.historyMaxFavs));
+    Persistence::Registry::SaveSetting(Constants::Registry::HISTORY_MAX_FAVS_SHOWN, static_cast<DWORD>(app.historyMaxFavsShown));
     Persistence::Registry::SaveSetting(Constants::Registry::DIR_THUMB_CACHE_MB,    static_cast<DWORD>(app.dirThumbCacheMB));
     Persistence::Registry::SaveSetting(Constants::Registry::PRELOAD_LOOKASIDE,     static_cast<DWORD>(app.preloadLookaside));
     Persistence::Registry::SaveSetting(Constants::Registry::MSG_CENTER_MS,         static_cast<DWORD>(app.msgCenterDisplayMs));
@@ -682,6 +703,330 @@ void BackupHistoryAndFavorites(HWND hWnd) {
         }
     } else {
         UI::ThemedDialog::Message(hWnd, L"Failed to create backup archive.", L"Backup");
+    }
+    mz_free(pBuf);
+}
+
+// =============================================================================
+// TCP/IP configuration  ⇄  .zip
+//
+// THE THREE FILES THAT DECIDE WHO MAY DRIVE THIS INSTANCE AND WHO IT DRIVES:
+//
+//   qivLocalServer.ini            this instance's own listener — port, bind
+//                                 address, allow-list, TLS, password
+//   qivRemoteServers.ini          the instances this copy connects OUT to
+//   qivRemoteServerBlacklist.ini  addresses refused, by the brute-force guard
+//                                 and by hand from the My Clients panel
+//
+// Worth a backup of their own rather than riding along with the settings export:
+// that export is registry values, and none of these are in the registry. They
+// are hand-editable text holding the work of setting up a network of screens,
+// and re-typing an allow-list and a password across several machines is exactly
+// the job nobody wants to do twice.
+//
+// THIS ARCHIVE CONTAINS A PASSWORD HASH. qivLocalServer.ini stores the remote
+// password as PBKDF2, not plaintext, so the zip is not a plaintext credential —
+// but it is still the material an offline guess would be run against, and it
+// names every address permitted to connect. It is NOT the logs archive, which
+// exists to be attached to bug reports. Keep it as you would the config itself.
+// =============================================================================
+namespace {
+    // One list, used by both directions, so a file can never be backed up and
+    // then not restored (or the reverse) because someone added it to one
+    // function and forgot the other.
+    const wchar_t *const REMOTE_INI_FILES[] = {
+        Constants::RemoteTcpIp::LOCAL_SERVER_FILE_NAME,
+        Constants::RemoteTcpIp::REMOTES_FILE_NAME,
+        Constants::RemoteTcpIp::BLACKLIST_FILE_NAME,
+    };
+}
+
+void BackupRemoteConfig(HWND hWnd) {
+    auto readBytes = [](const std::wstring &p) -> std::vector<char> {
+        std::ifstream f(p, std::ios::binary);
+        if (!f.is_open()) return {};
+        return {std::istreambuf_iterator<char>(f), {}};
+    };
+
+    // Read BEFORE the dialog: none of the three has to exist — a copy that only
+    // ever connects out has no qivLocalServer.ini, one that has never banned
+    // anybody has no blacklist — so "nothing to back up" is a real state and is
+    // reported without asking for a destination first.
+    struct Item { std::string entry; std::vector<char> bytes; };
+    std::vector<Item> items;
+    for (const wchar_t *name : REMOTE_INI_FILES) {
+        std::vector<char> bytes = readBytes(Persistence::Ini::PathBesideExe(name));
+        if (bytes.empty()) continue;
+        items.push_back({ToUtf8(name), std::move(bytes)});
+    }
+
+    if (items.empty()) {
+        UI::ThemedDialog::Message(hWnd,
+            L"No TCP/IP configuration to back up.\n\n"
+            L"None of qivLocalServer.ini, qivRemoteServers.ini or "
+            L"qivRemoteServerBlacklist.ini exists beside the executable yet.",
+            L"Backup TCP/IP Config");
+        return;
+    }
+
+    SYSTEMTIME st{};
+    GetLocalTime(&st);
+    wchar_t defaultName[MAX_PATH];
+    swprintf_s(defaultName, L"%s%04d%02d%02d.zip",
+               Constants::Backup::REMOTE_BACKUP_PREFIX,
+               st.wYear, st.wMonth, st.wDay);
+
+    const std::wstring zipPath =
+        PickFile(hWnd, true, ZIP_FILTERS, ARRAYSIZE(ZIP_FILTERS), L"zip", defaultName);
+    if (zipPath.empty()) return;
+
+    mz_zip_archive zip{};
+    bool ok = mz_zip_writer_init_heap(&zip, 0, 65536) == MZ_TRUE;
+    for (const Item &it : items) {
+        if (!ok) break;
+        ok = mz_zip_writer_add_mem(&zip, it.entry.c_str(), it.bytes.data(),
+                                   it.bytes.size(), MZ_BEST_COMPRESSION) == MZ_TRUE;
+    }
+    void  *pBuf  = nullptr;
+    size_t bufSz = 0;
+    if (ok) ok = mz_zip_writer_finalize_heap_archive(&zip, &pBuf, &bufSz) == MZ_TRUE;
+    mz_zip_writer_end(&zip);
+
+    if (ok && pBuf) {
+        FILE *fz = nullptr;
+        _wfopen_s(&fz, zipPath.c_str(), L"wb");
+        if (fz) {
+            fwrite(pBuf, 1, bufSz, fz);
+            fclose(fz);
+            const std::wstring msg =
+                L"Backed up " + std::to_wstring(items.size()) +
+                L" configuration file(s).\n\n"
+                L"This archive holds your allow-list and the stored password hash — "
+                L"keep it as private as the configuration itself.";
+            UI::ThemedDialog::Message(hWnd, msg.c_str(), L"Backup TCP/IP Config");
+        } else {
+            UI::ThemedDialog::Message(hWnd, L"Failed to write the archive.", L"Backup TCP/IP Config");
+        }
+    } else {
+        UI::ThemedDialog::Message(hWnd, L"Failed to create the archive.", L"Backup TCP/IP Config");
+    }
+    mz_free(pBuf);
+}
+
+void RestoreRemoteConfig(HWND hWnd) {
+    // NO BLANKET "are you sure" HERE. The real decisions are per file, and they
+    // are asked below, once each, only for files that actually exist and would
+    // therefore be destroyed. An up-front confirm on top of those would be a
+    // fourth dialog that decides nothing — and the kind users learn to click
+    // through, which is how the per-file prompts would stop being read too.
+    const std::wstring zipPath =
+        PickFile(hWnd, false, ZIP_FILTERS, ARRAYSIZE(ZIP_FILTERS), L"zip", nullptr);
+    if (zipPath.empty()) return;
+
+    std::vector<char> zipBytes;
+    {
+        std::ifstream fz(zipPath, std::ios::binary);
+        if (!fz.is_open()) {
+            UI::ThemedDialog::Message(hWnd, L"Failed to open the archive.", L"Restore TCP/IP Config");
+            return;
+        }
+        zipBytes = {std::istreambuf_iterator<char>(fz), {}};
+    }
+
+    mz_zip_archive zip{};
+    if (!mz_zip_reader_init_mem(&zip, zipBytes.data(), zipBytes.size(), 0)) {
+        UI::ThemedDialog::Message(hWnd,
+            L"The selected file is not a valid archive.", L"Restore TCP/IP Config");
+        return;
+    }
+
+    // What each file governs, so the replace prompt names what is at stake
+    // rather than just a filename. Same order as REMOTE_INI_FILES.
+    const wchar_t *const WHAT_IT_HOLDS[] = {
+        L"this instance's listener — port, bind address, allow-list, TLS and password",
+        L"the saved list of instances this copy connects out to",
+        L"the addresses refused by the brute-force guard and by hand",
+    };
+    static_assert(std::size(WHAT_IT_HOLDS) == std::size(REMOTE_INI_FILES),
+                  "every remote .ini needs a description for the replace prompt");
+
+    int restored = 0;
+    int skipped  = 0;
+    for (size_t i = 0; i < std::size(REMOTE_INI_FILES); ++i) {
+        const wchar_t *name = REMOTE_INI_FILES[i];
+        const std::string entry = ToUtf8(name);
+        size_t sz    = 0;
+        void  *pData = mz_zip_reader_extract_file_to_heap(&zip, entry.c_str(), &sz, 0);
+        // ABSENT IS NOT AN ERROR. The backup only stores the files that existed,
+        // so a copy that never ran a listener produces a two-file archive and
+        // restoring it must leave the third alone rather than truncate it.
+        if (!pData) continue;
+
+        const std::wstring dest = Persistence::Ini::PathBesideExe(name);
+
+        // ASKED PER FILE, and ONLY when something would actually be destroyed.
+        // Writing a file that is not there replaces nothing, so prompting for it
+        // would be asking permission to do the thing that was just requested.
+        std::error_code ec;
+        if (fs::exists(dest, ec) && !ec) {
+            const std::wstring q =
+                std::wstring(L"Replace ") + name + L"?\n\n"
+                L"The current file holds " + WHAT_IT_HOLDS[i] + L".\n\n"
+                L"Choose No to keep it and carry on with the rest.";
+            if (!UI::ThemedDialog::Confirm(hWnd, q.c_str(), L"Restore TCP/IP Config")) {
+                mz_free(pData);
+                ++skipped;
+                continue;
+            }
+        }
+
+        FILE *f = nullptr;
+        _wfopen_s(&f, dest.c_str(), L"wb");
+        if (f) {
+            if (fwrite(pData, 1, sz, f) == sz) ++restored;
+            fclose(f);
+        }
+        mz_free(pData);
+    }
+    mz_zip_reader_end(&zip);
+
+    if (restored > 0 || skipped > 0) {
+        // NOT reloaded into the running instance, and the dialog says so. The
+        // listener, the mirror targets and the blacklist each read their file at
+        // startup and hold the result; re-reading them under a live connection
+        // would mean rebinding a socket and re-authenticating peers mid-session.
+        // A restart is one action the user understands and cannot get half done.
+        std::wstring msg = L"Restored " + std::to_wstring(restored) +
+                           L" configuration file(s).";
+        if (skipped > 0)
+            msg += L"\nKept " + std::to_wstring(skipped) + L" existing file(s) unchanged.";
+        if (restored > 0)
+            msg += L"\n\nRestart qIV for the restored settings to take effect — a "
+                   L"running listener keeps the ones it started with.";
+        UI::ThemedDialog::Message(hWnd, msg.c_str(), L"Restore TCP/IP Config");
+    } else {
+        UI::ThemedDialog::Message(hWnd,
+            L"That archive holds no TCP/IP configuration files.",
+            L"Restore TCP/IP Config");
+    }
+}
+
+// =============================================================================
+// Backup Logs  →  .zip
+//
+// The whole logs\ tree in one archive, general and network together, because
+// the question being answered is almost always "what was the app doing" and the
+// answer is usually spread across both — a network fault that ends in a decode
+// failure has half its story in each.
+//
+// WRITTEN WHEREVER THE USER SAYS, not into QivBackup/ beside the exe like the
+// history backup. This one exists to be handed to somebody else: attached to a
+// bug report, dropped in a chat. A fixed location beside a portable exe is the
+// wrong default for a file whose purpose is to leave the machine.
+//
+// No Restore counterpart, deliberately. Logs are a record, not a setting — there
+// is nothing to put back, and an app that could overwrite its own log history
+// from a file would make every log it wrote afterwards untrustworthy.
+// =============================================================================
+void BackupLogs(HWND hWnd) {
+    const std::wstring logRoot =
+        Persistence::Ini::PathBesideExe(Constants::Logging::DIR_NAME);
+
+    std::error_code ec;
+    if (logRoot.empty() || !fs::is_directory(logRoot, ec) || ec) {
+        // Said plainly rather than offering a dialog that can only produce an
+        // empty zip: both logs are off by default, so "no folder" is the normal
+        // state for most installs and is not a failure.
+        UI::ThemedDialog::Message(hWnd,
+            L"No logs to back up — nothing has been written yet.\n\n"
+            L"Switch on General log or Server log to file under Logging first.",
+            L"Backup Logs");
+        return;
+    }
+
+    // Collected BEFORE the file dialog, so an empty tree is reported without
+    // making the user pick a destination for nothing.
+    struct Entry { fs::path full; std::string name; };
+    std::vector<Entry> files;
+    uint64_t totalBytes = 0;
+    for (fs::recursive_directory_iterator it(
+             logRoot, fs::directory_options::skip_permission_denied, ec), end;
+         !ec && it != end; it.increment(ec)) {
+        if (!it->is_regular_file(ec) || ec) { ec.clear(); continue; }
+
+        // Path INSIDE the archive, relative to logs\ and with forward slashes,
+        // so the zip carries "general/qIV_General_20260808.log" and any unzipper
+        // recreates the two subfolders rather than dumping every file together.
+        std::wstring rel = fs::relative(it->path(), logRoot, ec).wstring();
+        if (ec) { ec.clear(); continue; }
+        for (wchar_t &c : rel) if (c == L'\\') c = L'/';
+
+        files.push_back({it->path(), ToUtf8(rel.c_str())});
+        totalBytes += static_cast<uint64_t>(it->file_size(ec));
+        ec.clear();
+    }
+
+    if (files.empty()) {
+        UI::ThemedDialog::Message(hWnd,
+            L"The logs folder is empty — nothing has been written yet.",
+            L"Backup Logs");
+        return;
+    }
+
+    SYSTEMTIME st{};
+    GetLocalTime(&st);
+    wchar_t defaultName[MAX_PATH];
+    swprintf_s(defaultName, L"%s%04d%02d%02d.zip",
+               Constants::Backup::LOGS_BACKUP_PREFIX,
+               st.wYear, st.wMonth, st.wDay);
+
+    const std::wstring zipPath =
+        PickFile(hWnd, true, ZIP_FILTERS, ARRAYSIZE(ZIP_FILTERS), L"zip", defaultName);
+    if (zipPath.empty()) return;
+
+    auto readBytes = [](const fs::path &p) -> std::vector<char> {
+        std::ifstream f(p, std::ios::binary);
+        if (!f.is_open()) return {};
+        return {std::istreambuf_iterator<char>(f), {}};
+    };
+
+    mz_zip_archive zip{};
+    bool ok = mz_zip_writer_init_heap(&zip, 0, 65536) == MZ_TRUE;
+    int added = 0;
+    for (const Entry &e : files) {
+        if (!ok) break;
+        const std::vector<char> bytes = readBytes(e.full);
+        // A log the writer still holds open can come back short or empty; that
+        // is worth skipping, not worth failing the whole archive over.
+        if (bytes.empty()) continue;
+        // MZ_BEST_COMPRESSION, not BEST_SPEED as the history backup uses: these
+        // are line-oriented text that deflates to a fraction of its size, and
+        // the archive is meant to be attached to something.
+        ok = mz_zip_writer_add_mem(&zip, e.name.c_str(), bytes.data(), bytes.size(),
+                                   MZ_BEST_COMPRESSION) == MZ_TRUE;
+        if (ok) ++added;
+    }
+
+    void  *pBuf  = nullptr;
+    size_t bufSz = 0;
+    if (ok) ok = mz_zip_writer_finalize_heap_archive(&zip, &pBuf, &bufSz) == MZ_TRUE;
+    mz_zip_writer_end(&zip);
+
+    if (ok && pBuf) {
+        FILE *fz = nullptr;
+        _wfopen_s(&fz, zipPath.c_str(), L"wb");
+        if (fz) {
+            fwrite(pBuf, 1, bufSz, fz);
+            fclose(fz);
+            const std::wstring msg =
+                L"Backed up " + std::to_wstring(added) + L" log file(s), " +
+                std::to_wstring((totalBytes + 1023) / 1024) + L" KB uncompressed.";
+            UI::ThemedDialog::Message(hWnd, msg.c_str(), L"Backup Logs");
+        } else {
+            UI::ThemedDialog::Message(hWnd, L"Failed to write the log archive.", L"Backup Logs");
+        }
+    } else {
+        UI::ThemedDialog::Message(hWnd, L"Failed to create the log archive.", L"Backup Logs");
     }
     mz_free(pBuf);
 }

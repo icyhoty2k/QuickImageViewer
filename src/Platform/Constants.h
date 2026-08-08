@@ -1434,12 +1434,15 @@ namespace Constants {
         constexpr const wchar_t *RUN_ON_STARTUP = L"qivRunOnStartup";
         constexpr const wchar_t *THUMBNAIL_EFFECTS = L"qivThumbnailEffects";
         constexpr const wchar_t *HISTORY_FULL_MODE = L"qivHistoryFullMode";
+        constexpr const wchar_t *HISTORY_ENABLED   = L"qivHistoryEnabled";
+        constexpr const wchar_t *HISTORY_IMAGES_ONLY = L"qivHistoryImagesOnly";
         constexpr const wchar_t *OVERLAY_VISIBLE = L"qivOverlayVisible";
         constexpr const wchar_t *OVERLAY_SHOW_BG = L"qivOverlayShowBg";
         constexpr const wchar_t *OVERLAY_LAYOUT_MODE  = L"qivOverlayLayoutMode";
         constexpr const wchar_t *OVERLAY_SLOT_VISIBLE = L"qivOverlaySlotVisible"; // bitmask, bit N = slot N
         constexpr const wchar_t *OVERLAY_SLOT_COMPACT = L"qivOverlaySlotCompact"; // bitmask, bit N = slot N
         constexpr const wchar_t *OVERLAY_SHOW_DIR_NAME = L"qivOverlayShowDirName";
+        constexpr const wchar_t *OVERLAY_SHOW_FULL_PATH = L"qivOverlayShowFullPath";
         constexpr const wchar_t *OVERLAY_SHOW_EFFECTS  = L"qivOverlayShowEffects";
         constexpr const wchar_t *OVERLAY_FONT_SIZE     = L"qivOverlayFontSize";
         constexpr const wchar_t *OVERLAY_FONT_COLOR    = L"qivOverlayFontColor";
@@ -1458,6 +1461,7 @@ namespace Constants {
         constexpr const wchar_t *START_FULLSCREEN      = L"qivStartFullscreen";
         constexpr const wchar_t *HISTORY_MAX_DIRS      = L"qivHistoryMaxDirs";
         constexpr const wchar_t *HISTORY_MAX_FAVS      = L"qivHistoryMaxFavs";
+        constexpr const wchar_t *HISTORY_MAX_FAVS_SHOWN = L"qivHistoryMaxFavsShown";
         constexpr const wchar_t *DIR_THUMB_CACHE_MB    = L"qivDirThumbCacheMB";
         constexpr const wchar_t *PRELOAD_LOOKASIDE      = L"qivPreloadLookaside";
         constexpr const wchar_t *MSG_CENTER_MS          = L"qivMsgCenterMs";
@@ -1600,6 +1604,13 @@ namespace Constants {
 
     namespace Backup {
         constexpr const wchar_t *BACKUP_PREFIX = L"qIVBackup_";
+        // Distinct prefix so a logs archive and a history archive cannot be
+        // mistaken for each other in a downloads folder six months later.
+        constexpr const wchar_t *LOGS_BACKUP_PREFIX = L"qIVLogs_";
+        // The TCP/IP .ini set. Named apart from the history backup because the
+        // two restore to completely different things and a mix-up would put a
+        // listener config where a folder list was expected.
+        constexpr const wchar_t *REMOTE_BACKUP_PREFIX = L"qIVRemoteConfig_";
     }
 
     namespace ViewModes {
@@ -1674,11 +1685,27 @@ namespace Constants {
         constexpr int LAYOUT_MODE_COUNT   = 3;
 
         // BOT_LEFT carries two independent readouts, in this order:
-        //   the active-effects list, then the current folder name LAST.
-        // The slot is bottom-anchored and grows upward, so the folder name
-        // stays pinned to the bottom while effects stack above it. The two
-        // toggles are independent — hiding one never hides the other.
+        //   the active-effects list, then the current FOLDER LINE last.
+        // The slot is bottom-anchored and grows upward, so the folder line
+        // stays pinned to the bottom while effects stack above it. The effects
+        // list and the folder line are independent — hiding one never hides
+        // the other.
+        //
+        // THE FOLDER LINE HAS TWO FORMS AND THEY ARE MUTUALLY EXCLUSIVE:
+        //
+        //   SHOW_DIR_NAME   📁 Summer          the leaf folder only
+        //   SHOW_FULL_PATH  📂 D:\Pics\Summer  the whole path
+        //
+        // One line, two spellings of the same fact — showing both would print
+        // the folder name twice, once on its own and once as the tail of the
+        // path directly above it. Turning either ON therefore turns the other
+        // OFF; both OFF means no folder line at all. The exclusion is enforced
+        // in AppMenuSettings (the toggles), in RegistryManager (a hand-edited
+        // registry) and in AppMenuIO (an imported .reg), because a value that
+        // can only be set through the menu is not a value that only arrives
+        // through the menu.
         constexpr bool SHOW_DIR_NAME     = false; // persisted (qivOverlayShowDirName)
+        constexpr bool SHOW_FULL_PATH    = false; // persisted (qivOverlayShowFullPath)
         constexpr bool SHOW_EFFECTS_LIST = true;  // session-only, not persisted
 
         // Per-slot visibility / compact state is persisted as one bit per slot,
@@ -1774,6 +1801,44 @@ namespace Constants {
         // Folder History (HistoryWindow)
         // =========================================================================
         constexpr bool HISTORY_SHOW_FULL_HISTORY = false; // controls initial behaviour of HistoryWnd full or limited , you can swith with key comb that after you show but this is for inital behaviour
+
+        // The master switch for RECORDING folder history. ON by default — this
+        // exists to be turned off, not to be discovered off.
+        //
+        // OFF stops new folders reaching either the in-RAM list or
+        // qivHistory.txt. It does NOT hide, clear or rewrite what is already
+        // saved: the panel keeps working on the entries you already have, and
+        // Clear History stays the deliberate way to get rid of them. "Stop
+        // recording" and "erase the record" are different requests and a single
+        // toggle must not silently do the second.
+        //
+        // Favorites are untouched either way. Starring a folder is an explicit
+        // act, qivFavorites.txt is a separate file, and a privacy switch that
+        // quietly dropped hand-picked bookmarks would be a data-loss bug.
+        constexpr bool HISTORY_ENABLED = true; // persisted (qivHistoryEnabled)
+
+        // Record ONLY folders that actually hold images.
+        //
+        // ON by default. This is an IMAGE VIEWER, and a history of folders with
+        // no images in them is a history of places you cannot look at anything —
+        // the list exists to get you back to pictures.
+        //
+        // It matters because the Alt-arrow folder walk made empty folders easy
+        // to pass THROUGH: stepping across a parent's children lands in every
+        // one of them, images or not, and each landing would otherwise earn a
+        // history row. The walk is navigation, not intent, and without this the
+        // useful entries get buried by the folders you merely crossed.
+        //
+        // The default DOES change what an existing install records after an
+        // upgrade. That is deliberate and was the call made when the setting was
+        // added; nothing already saved is touched, so the only effect is on new
+        // navigation, and the toggle is one click away in Settings > History.
+        //
+        // "Has images" is never probed here — every caller already knows,
+        // because OpenDirectory's first-image scan is what chooses which of
+        // its two PushFolderHistory calls runs. A folder DROPPED on the window
+        // is recorded either way: that is a deliberate act, not walk noise.
+        constexpr bool HISTORY_IMAGES_ONLY = true; // persisted (qivHistoryImagesOnly)
         constexpr const wchar_t *HISTORY_FILE_NAME = L"qivHistory.txt";
         constexpr const wchar_t *FAVORITES_FILE_NAME = L"qivFavorites.txt";
 
@@ -1804,6 +1869,24 @@ namespace Constants {
         constexpr int IS_HISTORY_MAX_DIRS_TO_SAVE = 1000; // how many folders to remember/sava in file , just append to end new ones until max is reached excluding duplicates
         constexpr char HISTORY_FAVORITES_MARK = '*'; // mark for favorites appened before the file name
         constexpr int IS_HISTORY_MAX_FAVORITES_TO_SHOW = 10; // how many favorites folders to show in HistoryWnd
+
+        // How many favorite rows the panel DRAWS. The badly named constant
+        // above is not this: despite "TO_SHOW" it caps how many favorites may
+        // EXIST, refusing the star once the list is full, and it trims
+        // qivFavorites.txt on load. Two different questions that read alike,
+        // which is why the menu now labels them "Favorites Limit" and
+        // "Favorites Shown".
+        //
+        // TEN, matching IS_HISTORY_MAX_FAVORITES_TO_SHOW above, so the two
+        // favorites numbers agree out of the box.
+        //
+        // It was briefly 999 to preserve the old "always drawn in full"
+        // behaviour, and that made this item inert: you can hold at most 10
+        // favorites, so a 999-row display cap could never bind and the menu
+        // showed a number that did nothing. Equal defaults mean every favorite
+        // you are allowed to have is drawn — the same visible result as before —
+        // while the setting still does something the moment either is raised.
+        constexpr int IS_HISTORY_MAX_FAVORITES_SHOWN = 10;
         constexpr int HISTORY_FAVORITES_POSITION = 0; // 0 on top , 1 on bottom , 2 don't change position(not pinned)
 
         constexpr int HISTORY_ROW_HEIGHT = 28; // px at 96 DPI per history row

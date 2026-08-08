@@ -337,8 +337,11 @@ namespace {
         CHECK(!Common::FuzzyMatch(L"dloh", 4, L"holiday", 7, r));   // wrong order
         CHECK(!Common::FuzzyMatch(L"holidayx", 8, L"holiday", 7, r));
 
-        NOTE("an empty query matches anything; empty text matches nothing but empty");
-        CHECK(Common::FuzzyMatch(L"", 0, L"holiday", 7, r));
+        NOTE("an empty query is REFUSED here, not treated as matching everything: "
+             "the scoring reads positions[0] and positions[pi-1] unguarded, so a "
+             "zero-length match would be an out-of-bounds read. Callers filter it "
+             "out first. Empty text matches nothing either");
+        CHECK(!Common::FuzzyMatch(L"", 0, L"holiday", 7, r));
         CHECK(!Common::FuzzyMatch(L"a", 1, L"", 0, r));
 
         NOTE("positions point at the matched characters, for highlighting");

@@ -155,6 +155,13 @@ struct AppState {
     // ordinary persisted setting that decides whether any of that is consulted.
     bool rememberWindowPosition = Constants::IS_REMEMBER_WINDOW_POSITION;
     bool historyFullModeEnabled  = Constants::History::HISTORY_SHOW_FULL_HISTORY;
+    // Master switch for RECORDING folder history. Read by PushFolderHistory
+    // only — see Constants::History::HISTORY_ENABLED for what it does and does
+    // not stop.
+    bool historyEnabled          = Constants::History::HISTORY_ENABLED;
+    // Narrows what historyEnabled records: ON keeps folders that hold no
+    // images out of the list entirely. See HISTORY_IMAGES_ONLY.
+    bool historyImagesOnly       = Constants::History::HISTORY_IMAGES_ONLY;
     bool openDirWndOnStart       = Constants::IS_OPEN_DIRWND_ON_START;
     // Alt+Left / Alt+Right: roll past the last sibling back to the first.
     bool folderWalkWrap          = Constants::IS_FOLDER_WALK_WRAP;
@@ -170,6 +177,10 @@ struct AppState {
     // own visible/compact bits. overlayShowEffectsList governs only the overlay
     // text — effectPreviewEnabled still decides whether effects are rendered.
     bool overlayShowDirName     = Constants::Overlay::SHOW_DIR_NAME;
+    // Mutually exclusive with overlayShowDirName — never both true. See the
+    // SHOW_FULL_PATH block in Constants.h for why, and for the three places
+    // that enforce it.
+    bool overlayShowFullPath    = Constants::Overlay::SHOW_FULL_PATH;
     bool overlayShowEffectsList = Constants::Overlay::SHOW_EFFECTS_LIST;
     // Text style for the eight outer overlay slots. MID_CENTER keeps its own
     // colour and size — it is a transient notice that must stay readable
@@ -195,6 +206,9 @@ struct AppState {
     bool startInFullscreen       = false;
     int  historyMaxDirs          = Constants::History::IS_HISTORY_MAX_DIRS_TO_SHOW;
     int  historyMaxFavs          = Constants::History::IS_HISTORY_MAX_FAVORITES_TO_SHOW;
+    // How many favorite rows are DRAWN, the twin of historyMaxDirs.
+    // historyMaxFavs above caps how many may exist, not how many are shown.
+    int  historyMaxFavsShown     = Constants::History::IS_HISTORY_MAX_FAVORITES_SHOWN;
     int  dirThumbCacheMB         = Constants::IS_DIR_THUMB_CACHE_BUDGET_MB;
     int  preloadLookaside        = Constants::IS_PRELOAD_LOOKASIDE_COUNT;
     int  msgCenterDisplayMs      = static_cast<int>(Constants::Overlay::IS_MSG_CENTER_DISPLAY_MS);

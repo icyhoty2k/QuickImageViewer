@@ -1138,10 +1138,19 @@ namespace UI {
             return !emitted.insert(p).second;
         };
         const int favPos = Constants::History::HISTORY_FAVORITES_POSITION;
-        // Favorites are always shown in full — historyMaxFavs only caps adding, not display.
-        // Normal rows are capped by historyMaxDirs unless full-history mode is active.
+        // TWO CAPS, TWO SETTINGS, and they are not the ones the old names
+        // suggested. historyMaxFavs caps how many favorites may EXIST (it
+        // refuses the star when full); historyMaxFavsShown caps how many are
+        // DRAWN here, which is what historyMaxDirs does for normal rows.
+        // This line used to be a hardcoded INT_MAX with a comment saying
+        // favorites are always shown in full — that was the missing setting,
+        // not a decision.
+        //
+        // Full-history mode lifts BOTH, for the same reason: it is the "show me
+        // everything" view, and a starred row still hidden inside it would read
+        // as the favorite having been lost.
         const int maxNormal = EffectiveFullMode() ? INT_MAX : app.historyMaxDirs;
-        const int maxFavs = INT_MAX;
+        const int maxFavs   = EffectiveFullMode() ? INT_MAX : app.historyMaxFavsShown;
 
         if (favPos == 2) {
             // In-place: iterate MRU order, count normals and favs separately
@@ -1267,7 +1276,7 @@ namespace UI {
         // loaded from the registry by RegistryManager and is read directly.
     }
 
-    void PushFolderHistory(const std::wstring &rawFolderPath) {
+    void PushFolderHistory(const std::wstring &rawFolderPath, bool folderHasImages) {
         // Normalize on the way in, exactly as the disk loader does, so a path
         // arriving from drag-drop, the command line or the shell cannot create a
         // second row that differs only by case, a trailing backslash, quotes or
@@ -1283,7 +1292,39 @@ namespace UI {
                                    return HistoryPath::Equal(p, folderPath);
                                });
 
-        if (it != history.end()) {
+        // TWO SETTINGS DECIDE WHETHER THIS NAVIGATION IS RECORDED:
+        //
+        //   historyEnabled     off  — record nothing at all
+        //   historyImagesOnly  on   — record only folders that hold images
+        //
+        // When neither allows it, nothing enters the RAM list and nothing is
+        // appended to qivHistory.txt. Existing rows are left exactly as they
+        // are, INCLUDING THEIR ORDER: promoting an entry to the front is
+        // recording too, and a switch that says "stop recording" must not
+        // quietly rewrite the MRU.
+        //
+        // THE FUNCTION STILL RUNS TO THE END, and that is the whole subtlety
+        // here. g_lastNavigatedFolder below is not history — it is the answer to
+        // "which folder is the app in?", and WalkOrigin (the Alt-arrow folder
+        // walk), the blank-screen placeholder and the overlay folder line all
+        // read it. An early return here would switch off navigation along with
+        // the history and look exactly like the walk keys being dead.
+        //
+        // folderHasImages is not probed here. Every caller already knows —
+        // OpenDirectory's synchronous first-image scan is what decides which of
+        // its two PushFolderHistory calls runs — so asking again would be a
+        // directory enumeration per navigation on the UI thread, which is
+        // exactly the kind of work that must never touch the open path.
+        const bool record = app.historyEnabled &&
+                            (folderHasImages || !app.historyImagesOnly);
+        if (!record) {
+            // The STORED spelling when this folder is already known, for the
+            // same reason the recording path below keeps it: the value is
+            // compared against list entries downstream, and fs::canonical() may
+            // have handed us a different name for the same folder. `it` is the
+            // search that was already done above — no second lookup.
+            g_lastNavigatedFolder = (it != history.end()) ? *it : folderPath;
+        } else if (it != history.end()) {
             // Already exists: promote to front (MRU), no file write needed.
             // Keeps the stored spelling rather than the incoming one, so the row
             // does not flicker between casings as the same folder is revisited.
@@ -1392,6 +1433,117 @@ namespace UI {
         historyFoldersManager.RewriteHistoryToDisk();
         g_hoverRow = -1;
         InvalidateWalkSnapshot(); // rows disappeared
+        InvalidateTotals();       // and so did their bytes and file counts
+    }
+
+    std::wstring HistoryFilePath() {
+        return historyFoldersManager.GetFilePath();
+    }
+
+    // ── Maintenance: prune the history list ─────────────────────────────────
+    //
+    // Both of these BACK UP FIRST, exactly as ClearHistoryKeepFavorites does.
+    // qivHistory.txt is the only copy of this list — there is no undo, and a
+    // user who mis-clicks one of these has lost a folder trail built over
+    // months. The backup is the undo.
+    //
+    // NEITHER TOUCHES FAVORITES. Starring a folder is an explicit act, and a
+    // cleanup that silently dropped a starred entry because the drive was
+    // unplugged today would be a data-loss bug wearing a tidy-up label.
+
+    HistoryCleanupResult RemoveInvalidHistoryEntries() {
+        HistoryCleanupResult r;
+        historyFoldersManager.BackupHistoryToDisk();
+
+        auto &history = historyFoldersManager.folderHistory;
+        const auto &favSet = historyFoldersManager.favorites;
+
+        std::vector<std::wstring> keep;
+        keep.reserve(history.size());
+
+        for (const std::wstring &path : history) {
+            // A starred row survives whatever its state — see the note above.
+            if (favSet.count(path)) {
+                keep.push_back(path);
+                continue;
+            }
+
+            // UNPARSEABLE: a pure string test, so this half is always exact and
+            // needs no disk at all. It is what catches "C;\asfdasfd" — a typo'd
+            // colon, a stray quote, a line that is not a path in any reading.
+            if (HistoryPath::IsBroken(path)) {
+                ++r.unparseable;
+                continue;
+            }
+
+            // MISSING / EMPTY come from the background sweep's cache, never from
+            // a fresh probe. Re-checking here would be one directory enumeration
+            // per row, synchronously, on a list that can hold thousands — over
+            // an unplugged network share that is a frozen window, not a cleanup.
+            auto sit = g_statusCache.find(path);
+            const FolderStatus status = (sit != g_statusCache.end()) ? sit->second
+                                                                     : FolderStatus::Unknown;
+            switch (status) {
+                case FolderStatus::Missing: ++r.missing; continue;
+                case FolderStatus::Empty:   ++r.empty;   continue;
+                case FolderStatus::Unknown:
+                    // NOT YET SCANNED, so NOT removed. Unknown means "no answer",
+                    // and deleting on no answer is how a cleanup eats a list whose
+                    // scan had not finished. Counted so the report can say the run
+                    // was partial rather than quietly look complete.
+                    ++r.unchecked;
+                    break;
+                case FolderStatus::Valid:
+                    break;
+            }
+            keep.push_back(path);
+        }
+
+        r.removed = static_cast<int>(history.size() - keep.size());
+        if (r.removed > 0) {
+            history.swap(keep);
+            historyFoldersManager.RewriteHistoryToDisk();
+            g_hoverRow = -1;
+            InvalidateWalkSnapshot();
+            InvalidateTotals();
+        }
+        return r;
+    }
+
+    int RemoveDuplicateHistoryEntries() {
+        historyFoldersManager.BackupHistoryToDisk();
+
+        auto &history = historyFoldersManager.folderHistory;
+
+        // FIRST occurrence wins, and the list is MRU-ordered, so the copy that
+        // survives is the most recently visited one. Keeping the last instead
+        // would silently demote a folder you opened this morning to wherever its
+        // oldest duplicate happened to sit.
+        //
+        // Case-insensitive, because Windows paths are: "D:\Pics" and "d:\pics"
+        // are one folder and must collapse to one row.
+        FolderPathSet seen;
+        seen.reserve(history.size());
+        std::vector<std::wstring> keep;
+        keep.reserve(history.size());
+        for (const std::wstring &path : history) {
+            if (!seen.insert(path).second) continue;
+            keep.push_back(path);
+        }
+
+        const int removed = static_cast<int>(history.size() - keep.size());
+        // The RAM list is deduped on load and by PushFolderHistory, so this
+        // usually removes nothing — and the rewrite is STILL the point. The file
+        // is append-only, so duplicates accumulate there and are only collapsed
+        // when RAM is written back over it.
+        history.swap(keep);
+        historyFoldersManager.RewriteHistoryToDisk();
+        if (removed > 0) {
+            g_hoverRow = -1;
+            InvalidateWalkSnapshot();
+            InvalidateTotals();
+        }
+        return removed;
     }
 
     void ClearFavoritesKeepHistory() {
@@ -1404,6 +1556,31 @@ namespace UI {
         historyFoldersManager.RewriteFavoritesToDisk();
         g_hoverRow = -1;
         InvalidateWalkSnapshot(); // every row changed category
+        InvalidateTotals();       // the footer counts favorites separately
+    }
+
+    // BOTH LISTS AND BOTH FILES, in one action.
+    //
+    // Not "call the other two in a row": ClearHistoryKeepFavorites deliberately
+    // KEEPS favorites in folderHistory, so running it before clearing favorites
+    // would leave the starred paths sitting in qivHistory.txt with nothing
+    // marking them, and running it after would rewrite the file twice. Emptying
+    // both containers and writing both files once each is the honest shape.
+    void ClearHistoryAndFavorites() {
+        // Both backups first, before anything is emptied — this is the only one
+        // of the three that can lose everything at once, so it is the one whose
+        // undo matters most. Restore History && Favorites reads both.
+        historyFoldersManager.BackupHistoryToDisk();
+        historyFoldersManager.BackupFavoritesToDisk();
+
+        historyFoldersManager.folderHistory.clear();
+        historyFoldersManager.favorites.clear();
+
+        historyFoldersManager.RewriteHistoryToDisk();
+        historyFoldersManager.RewriteFavoritesToDisk();
+        g_hoverRow = -1;
+        InvalidateWalkSnapshot();
+        InvalidateTotals();
     }
 
     const std::vector<std::wstring> &GetFolderHistory() {
@@ -3399,8 +3576,9 @@ namespace UI {
         Toggle();
     }
 
-    void HistoryListWnd::PushFolderHistory(const std::wstring &folderPath) {
-        UI::PushFolderHistory(folderPath);
+    void HistoryListWnd::PushFolderHistory(const std::wstring &folderPath,
+                                           bool folderHasImages) {
+        UI::PushFolderHistory(folderPath, folderHasImages);
     }
 
     const std::vector<std::wstring> &HistoryListWnd::GetFolderHistory() {

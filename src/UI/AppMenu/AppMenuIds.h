@@ -171,6 +171,22 @@ namespace UI::AppMenu::Ids {
         SET_PRELOAD_LOOKASIDE= 29,
         SET_MSG_DURATION     = 30,
         SET_HISTORY_SAVE_MAX = 31,
+        // 32-40 were the gap between the scalars and SET_BACKUP.
+        SET_HISTORY_ENABLED     = 32,
+        SET_HISTORY_IMAGES_ONLY = 33,
+        SET_HISTORY_CLEAR       = 34,
+        SET_HISTORY_REMOVE_BAD  = 35,
+        SET_HISTORY_DEDUPE      = 36,
+        SET_HISTORY_OPEN_FILE   = 37,
+        SET_HISTORY_FAVS_SHOWN  = 38,
+        SET_BACKUP_LOGS         = 39,
+        SET_BACKUP_REMOTE       = 40,
+        // NOT 43 — that is SET_SORT_FIRST, and 43-48 is the contiguous sort band
+        // decoded by arithmetic. 41/42 are the history backup pair, so this one
+        // lands past the thumbnail-operation run instead of renumbering anything.
+        SET_RESTORE_REMOTE      = 54,
+        SET_HISTORY_CLEAR_FAVS  = 55,
+        SET_HISTORY_CLEAR_BOTH  = 56,
         SET_BACKUP           = 41,
         SET_RESTORE_BACKUP   = 42,
 
@@ -231,6 +247,8 @@ namespace UI::AppMenu::Ids {
         SET_OVERLAY_DIR_NAME     = 231,
         SET_OVERLAY_FONT_SIZE    = 232,
         SET_OVERLAY_FONT_COLOR   = 233,
+        // The other spelling of SET_OVERLAY_DIR_NAME's line — exclusive with it.
+        SET_OVERLAY_FULL_PATH    = 234,
 
         // Contiguous, one id per entry in Constants::Overlay::OVERLAY_FONT_FAMILIES.
         // Its own band, checked separately from the slot band above.

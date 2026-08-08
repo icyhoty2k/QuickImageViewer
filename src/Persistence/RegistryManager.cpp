@@ -266,6 +266,9 @@ namespace Persistence::Registry {
         emit (R::OVERLAY_SLOT_VISIBLE,  a.overlaySlotVisibleMask);
         emit (R::OVERLAY_SLOT_COMPACT,  a.overlaySlotCompactMask);
         emitB(R::OVERLAY_SHOW_DIR_NAME, a.overlayShowDirName);
+        emitB(R::OVERLAY_SHOW_FULL_PATH, a.overlayShowFullPath);
+        emitB(R::HISTORY_ENABLED,       a.historyEnabled);
+        emitB(R::HISTORY_IMAGES_ONLY,   a.historyImagesOnly);
         emitB(R::OVERLAY_SHOW_EFFECTS,  a.overlayShowEffectsList);
         emitI(R::OVERLAY_FONT_SIZE,     a.overlayFontSize);
         emit (R::OVERLAY_FONT_COLOR,    static_cast<DWORD>(a.overlayFontColor));
@@ -289,6 +292,7 @@ namespace Persistence::Registry {
         emitB(R::START_FULLSCREEN,      a.startInFullscreen);
         emitI(R::HISTORY_MAX_DIRS,      a.historyMaxDirs);
         emitI(R::HISTORY_MAX_FAVS,      a.historyMaxFavs);
+        emitI(R::HISTORY_MAX_FAVS_SHOWN, a.historyMaxFavsShown);
         emitI(R::DIR_THUMB_CACHE_MB,    a.dirThumbCacheMB);
         emitI(R::PRELOAD_LOOKASIDE,     a.preloadLookaside);
         emitI(R::MSG_CENTER_MS,         a.msgCenterDisplayMs);
@@ -385,6 +389,21 @@ namespace Persistence::Registry {
         a.overlayShowDirName = readDword(
             Constants::Registry::OVERLAY_SHOW_DIR_NAME,
             static_cast<DWORD>(Constants::Overlay::SHOW_DIR_NAME)) != 0;
+        a.overlayShowFullPath = readDword(
+            Constants::Registry::OVERLAY_SHOW_FULL_PATH,
+            static_cast<DWORD>(Constants::Overlay::SHOW_FULL_PATH)) != 0;
+        // Two values on disk, one line on screen. The menu can never set both,
+        // but regedit and a hand-written .reg can, and the renderer would then
+        // silently pick one and make the other look like a dead setting.
+        // FULL PATH WINS, because it is the strictly more informative of the
+        // two — it already contains the folder name.
+        if (a.overlayShowFullPath) a.overlayShowDirName = false;
+        a.historyEnabled = readDword(
+            Constants::Registry::HISTORY_ENABLED,
+            static_cast<DWORD>(Constants::History::HISTORY_ENABLED)) != 0;
+        a.historyImagesOnly = readDword(
+            Constants::Registry::HISTORY_IMAGES_ONLY,
+            static_cast<DWORD>(Constants::History::HISTORY_IMAGES_ONLY)) != 0;
         a.overlayShowEffectsList = readDword(
             Constants::Registry::OVERLAY_SHOW_EFFECTS,
             static_cast<DWORD>(Constants::Overlay::SHOW_EFFECTS_LIST)) != 0;
@@ -466,6 +485,9 @@ namespace Persistence::Registry {
         a.historyMaxFavs = std::max(0, std::min(999, static_cast<int>(
             readDword(Constants::Registry::HISTORY_MAX_FAVS,
                 static_cast<DWORD>(Constants::History::IS_HISTORY_MAX_FAVORITES_TO_SHOW)))));
+        a.historyMaxFavsShown = std::max(0, std::min(999, static_cast<int>(
+            readDword(Constants::Registry::HISTORY_MAX_FAVS_SHOWN,
+                static_cast<DWORD>(Constants::History::IS_HISTORY_MAX_FAVORITES_SHOWN)))));
         a.dirThumbCacheMB = std::max(100, std::min(64000, static_cast<int>(
             readDword(Constants::Registry::DIR_THUMB_CACHE_MB,
                 static_cast<DWORD>(Constants::IS_DIR_THUMB_CACHE_BUDGET_MB)))));

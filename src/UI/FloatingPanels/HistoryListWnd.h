@@ -48,7 +48,8 @@ namespace UI {
             void Show() override;
             void Toggle() override;
 
-            void PushFolderHistory(const std::wstring &folderPath);
+            void PushFolderHistory(const std::wstring &folderPath,
+                                   bool folderHasImages = true);
             const std::vector<std::wstring> &GetFolderHistory();
 
         protected:
@@ -125,7 +126,15 @@ namespace UI {
     void StartBackgroundHistoryScan();
 
     // Called by FileHandler after every successful folder load.
-    void PushFolderHistory(const std::wstring &folderPath);
+    //
+    // folderHasImages is what app.historyImagesOnly filters on. It DEFAULTS TO
+    // TRUE because every caller but one is recording the folder an image was
+    // just opened from, where the answer is true by construction. The one
+    // exception is OpenDirectory's empty-folder branch, which passes false —
+    // it is the branch that ran precisely because the first-image scan found
+    // nothing. Nobody probes the disk to answer this.
+    void PushFolderHistory(const std::wstring &folderPath,
+                           bool folderHasImages = true);
 
     // Tells the panel which folder the MAIN VIEWER is now showing, and repaints
     // it if visible. This is what drives the green "you are here" row.
@@ -155,8 +164,37 @@ namespace UI {
     // Remove all non-favorite entries from memory and rewrite qivHistory.txt only.
     void ClearHistoryKeepFavorites();
 
+    // What RemoveInvalidHistoryEntries actually did, so the report can be
+    // specific rather than "some rows went". `unchecked` is the honest half:
+    // rows the background sweep has not reached yet are KEPT, so a run started
+    // before the scan finished is partial and says so.
+    struct HistoryCleanupResult {
+        int unparseable = 0; // not a path in any reading — pure string test
+        int missing     = 0; // folder is gone
+        int empty       = 0; // folder holds no images
+        int unchecked   = 0; // status not known yet, deliberately kept
+        int removed     = 0; // rows actually dropped
+    };
+    // Drops unparseable, missing and empty rows. Favorites are never touched.
+    // Backs up qivHistory.txt first — this has no undo.
+    HistoryCleanupResult RemoveInvalidHistoryEntries();
+
+    // Full path to qivHistory.txt. The HistoryFoldersManager instance is
+    // file-static inside HistoryListWnd.cpp, so this accessor is the only way
+    // for anything else to name the file.
+    std::wstring HistoryFilePath();
+
+    // Collapses repeated folders, keeping the most recent copy of each, and
+    // rewrites the append-only file (which is where duplicates actually live).
+    // Returns how many rows went. Backs up first.
+    int RemoveDuplicateHistoryEntries();
+
     // Remove all favorites from memory and rewrite qivFavorites.txt only.
     void ClearFavoritesKeepHistory();
+
+    // Empties both lists and rewrites both files, backing each up first. Not the
+    // other two run in sequence — see the definition for why that would be wrong.
+    void ClearHistoryAndFavorites();
 
     // Returns the full MRU list (index 0 = most recent).
     const std::vector<std::wstring> &GetFolderHistory();

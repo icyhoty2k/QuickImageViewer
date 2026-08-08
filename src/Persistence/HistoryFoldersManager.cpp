@@ -9,6 +9,7 @@
 #include "HistoryFoldersManager.h"
 
 #include <windows.h>
+#include <algorithm>   // std::sort — deterministic order before the favorites cap
 #include <filesystem>
 #include <fstream>
 #include <vector>
@@ -314,8 +315,18 @@ void HistoryFoldersManager::LoadHistoryFromDisk() {
             while (std::getline(fav, line)) {
                 if (IsCommentLine(line)) continue;
                 if (!HistoryPath::Normalize(line, path)) continue;
+                // CAPPED, and the cap is app.historyMaxFavs — the same number the
+                // "Favorites You Can Add" menu item sets. It bounds this FILE as
+                // well as the act of starring, so a qivFavorites.txt that grew
+                // past the limit (lowered setting, hand edit, restored backup)
+                // cannot carry that excess forward forever.
+                //
+                // Checked BEFORE the insert rather than trimming afterwards, so
+                // the entries kept are the first ones in the file — the same ones
+                // the writer keeps, which is what makes load and save agree.
+                if (static_cast<int>(favorites.size()) >= app.historyMaxFavs) break;
                 // FolderPathSet dedupes case-insensitively on insert.
-                favorites.insert(path); // no cap — all favorites must always be loadable
+                favorites.insert(path);
             }
         }
     }
@@ -460,8 +471,14 @@ void HistoryFoldersManager::MergeHistoryFromDisk() {
         // Missing file → diskFavSet empty; memory favorites will be rewritten below if any.
     }
 
-    // Disk → memory: disk favorites not in RAM (no cap — all favorites must be visible)
+    // Disk → memory: disk favorites not in RAM.
+    //
+    // CAPPED, like the loader and the writer. This is the merge path — a second
+    // instance, or this one after an external edit — and leaving it uncapped
+    // would be a hole straight through the limit: the file would be trimmed on
+    // save and then refilled past the cap on the next merge, forever.
     for (const auto &path : diskFavSet) {
+        if (static_cast<int>(favorites.size()) >= app.historyMaxFavs) break;
         if (!favorites.count(path))
             favorites.insert(path);
     }
@@ -549,18 +566,43 @@ void HistoryFoldersManager::RewriteFavoritesToDisk() const {
     if (HistoryDisabled()) return; // dedicated instance: no history, no favorites
     std::wstring path = GetFavoritesFilePath();
     std::vector<std::wstring> snap(favorites.begin(), favorites.end());
-    g_writeQueue.PushTask([path = std::move(path), snap = std::move(snap)]() {
+
+    // SORTED BEFORE THE CAP, and that is the whole reason the sort is here.
+    // `favorites` is an unordered set, so without this the entries dropped by
+    // the cap below would be whichever ones the hash order happened to put last
+    // — different on a rehash, different between runs, and impossible for a user
+    // to predict or for a bug report to reproduce. Alphabetical is arbitrary but
+    // it is STABLE, and it agrees with the loader, which keeps the first lines
+    // it reads out of a file this function wrote in this order.
+    std::sort(snap.begin(), snap.end(),
+              [](const std::wstring &a, const std::wstring &b) {
+                  return _wcsicmp(a.c_str(), b.c_str()) < 0;
+              });
+
+    const int maxFavs = app.historyMaxFavs;
+    g_writeQueue.PushTask([path = std::move(path), snap = std::move(snap), maxFavs]() {
         { std::wofstream wipe(path, std::ios::out | std::ios::trunc); }
         EnsureTextHeader(path, Constants::History::FAVORITES_FILE_TITLE);
 
         std::wofstream f(path, std::ios::out | std::ios::app);
         if (!f.is_open()) return;
-        // Everything in RAM is written — the cap belongs at the point a favorite
-        // is ADDED, not here. Truncating on save silently destroys favorites the
-        // user already has, and that is now reachable: the add-time limit counts
-        // unique folders, so a junction and its target are one favorite for the
-        // cap but two lines in this file.
-        for (const auto &e : snap) f << e << L"\n";
+        // CAPPED AT app.historyMaxFavs, deliberately, so that one setting bounds
+        // the file and not only the act of starring — an uncapped file was free
+        // to grow past the limit and stay there.
+        //
+        // THIS CAN DROP A REAL FAVORITE, and the case is worth knowing: the
+        // add-time gate counts UNIQUE FOLDERS (see UniqueFavoriteCount), so a
+        // junction and its target are one favorite for the gate but two lines
+        // here. Somebody starring the same folder through several spellings can
+        // therefore hold more lines than the cap, and the excess is trimmed on
+        // the next save. That is the accepted cost of having the number mean the
+        // file; the menu prompt says so where the number is changed.
+        int written = 0;
+        for (const auto &e : snap) {
+            if (written >= maxFavs) break;
+            f << e << L"\n";
+            ++written;
+        }
     });
 }
 
