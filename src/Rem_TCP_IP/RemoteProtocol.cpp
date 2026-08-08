@@ -155,6 +155,21 @@ namespace {
           L"<n>/<total> <file name>, the same numbering QueryState reports.   e.g.  "
           L"12/238 IMG_0012.jpg" },
 
+        // The same announcement for the case with no picture in it. Without this
+        // row every blank-screen state was silent: ImageChanged is emitted from
+        // the image load, and a folder holding nothing readable never reaches
+        // one — so an observer went on displaying the previous photograph.
+        //
+        // Required payload, like ImageChanged and for the same reason: the
+        // emitter always names both the reason and the path, and a bare
+        // `FolderChanged` would say only "something", which no client can act on.
+        { L"FolderChanged",         Command::FolderChanged,                   PayloadRule::Required,
+          L"NOTIFICATION pushed by an observed instance: it now has NOTHING to show, and "
+          L"this is why. Carries no instruction — a client repaints its own placeholder, "
+          L"and may confirm with QueryState. Executing it does nothing",
+          L"<reason> <path>, where reason is missing | empty | unsupported — the same "
+          L"word QueryState's reason= field carries.   e.g.  empty D:\\Photos\\New folder" },
+
         // --- One-shot display, and the image transfer that feeds it ---
         //
         // All five are in the table because the Ctrl+F10 Send Command panel builds
@@ -901,8 +916,10 @@ bool IsMirrorable(Command cmd) {
             return false;
 
         // A pushed notification, never a keystroke. Fanning it out would have
-        // every target announce a picture change it did not make.
+        // every target announce a picture change it did not make — or, for the
+        // second one, announce a blank screen while showing a picture.
         case Command::ImageChanged:
+        case Command::FolderChanged:
             return false;
 
         // Opens Explorer on a machine nobody is sitting at.

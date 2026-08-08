@@ -273,6 +273,12 @@ namespace Remote {
     // no row, i.e. one that is not remotely reachable at all.
     bool NameForCommand(Command cmd, std::wstring &nameOut);
 
+    // The wire word for a blank-screen state lives in AppState.h, beside the
+    // enum it spells — FolderOverlayWireWord. It belongs to the protocol, but
+    // the enum is nested and cannot be forward-declared, so declaring it here
+    // would mean this header pulling AppState.h (and IRenderer.h, and wincodec)
+    // into every file that only wanted the command table.
+
     // --- Mirroring ------------------------------------------------------------
     // Whether a command should be forwarded to the connected targets when
     // mirroring is on.
