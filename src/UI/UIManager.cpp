@@ -13,6 +13,8 @@
 #include "../Platform/ConstantsStrings.h"
 #include "../Platform/ConstantsTheme.h"
 #include "../Input/Shortcuts.h"
+#include "../Rem_TCP_IP/RemoteServer.h"  // EmitToObservers — the panel announcement
+#include "../Rem_TCP_IP/RemoteInbound.h" // InboundSource — do not echo to the asker
 #include <filesystem>
 #include <dwmapi.h>
 
@@ -54,19 +56,59 @@ namespace UI {
     // Show / Hide / Toggle — notify layout on every state change
     // -------------------------------------------------------------------------
 
+    // =========================================================================
+    // "A panel opened or closed here" — told to whoever is watching.
+    //
+    // ToggleAllPanels reports AnyPanelVisible(), and every command that changes
+    // it is refused by the observer echo: an observer EXECUTES what it receives,
+    // so replaying a panel toggle would raise a window on a screen nobody is
+    // sitting at. Correct, and it left the value itself unreportable — press F6
+    // and a phone's Panels button was wrong until the screen was reopened.
+    //
+    // So the VALUE is announced rather than the command. TogglesChanged
+    // instructs nothing, which is what makes it safe to push at a desktop
+    // observer, and it is spelled in QueryToggles' own vocabulary so a client
+    // hands it to the parser it already has. 1 / 0, matching OnOff — NOT On/Off.
+    //
+    // ONLY ON A REAL FLIP. This is called from every route that can change panel
+    // visibility, and most of those calls change nothing — opening a second
+    // panel while one is already up leaves AnyPanelVisible() true. Without the
+    // comparison a phone would get a line per panel per keystroke, all saying
+    // the same thing.
+    //
+    // Cheap enough to call everywhere: a walk of a handful of pointers, and the
+    // early return happens before HasObservers() is even asked.
+    // =========================================================================
+    void UIManager::AnnouncePanelVisibility() {
+        const bool now = AnyPanelVisible();
+        if (now == m_lastPanelsVisible) return;
+        m_lastPanelsVisible = now;
+
+        if (!Remote::HasObservers()) return;
+
+        // Excludes the connection that caused it, like every other emit: a phone
+        // that sent ToggleAllPanels reads the value off its own reply.
+        Remote::EmitToObservers(
+            std::wstring(L"TogglesChanged ToggleAllPanels=") + (now ? L"1" : L"0"),
+            Remote::InboundSource());
+    }
+
     void UIManager::Show(IPanelWindow &panel) {
         panel.Show();
         // OnPanelShown is called from ThumbnailPanelWnd::Show via Toggle path.
+        AnnouncePanelVisibility();
     }
 
     void UIManager::Hide(IPanelWindow &panel) {
         panel.Hide();
         // OnPanelHidden is called from ThumbnailPanelWnd::Hide.
+        AnnouncePanelVisibility();
     }
 
     void UIManager::Toggle(IPanelWindow &panel) {
         panel.Toggle();
         RefreshStatsWindowIfVisible();
+        AnnouncePanelVisibility();
     }
 
     void UIManager::HideAllPanelWindows() {
@@ -90,6 +132,7 @@ namespace UI {
         for (IPanelWindow *p : m_fixedPanels)
             p->Hide();
         HideAllSpawnedDirWnds();
+        AnnouncePanelVisibility();
     }
 
     void UIManager::RestoreAllPanels() {
@@ -97,6 +140,7 @@ namespace UI {
             if (!p->IsVisible()) p->Show();
         RefreshVerticalPanels();
         RefreshStatsWindowIfVisible();
+        AnnouncePanelVisibility();
     }
 
     bool UIManager::AnyPanelVisible() const {
