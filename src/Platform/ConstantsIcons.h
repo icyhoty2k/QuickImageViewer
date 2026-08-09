@@ -255,6 +255,18 @@ namespace Constants::Icon {
     constexpr const wchar_t *FOLDER_OPEN     = QIV_ICON_FOLDER_OPEN;
     constexpr const wchar_t *LOCATION        = QIV_ICON_LOCATION;
 
+    // HISTORY — the folders already visited, as opposed to a folder as a thing
+    // on disk. The distinction is the whole point of it existing: the history
+    // walk announced itself with 📁, which is what the FOLDER-TREE walk is
+    // about, so the two features that move between folders were marked with the
+    // same glyph while doing different things.
+    //
+    // AN ALIAS OF THE SECTION ICON, not a second literal. HelpWnd's HISTORY
+    // PANEL section already used 📜, so this is the app's existing mark for the
+    // idea and the panel, the help section and the walk overlay now all lead
+    // with one glyph — which only stays true while there is one definition.
+    constexpr const wchar_t *HISTORY         = QIV_ICON_SECTION_SCROLL;
+
     // ── Folder-tree walk ─────────────────────────────────────────────────────
     constexpr const wchar_t *WALK_UP         = QIV_ICON_WALK_UP;
     constexpr const wchar_t *WALK_DOWN       = QIV_ICON_WALK_DOWN;

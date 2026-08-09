@@ -1800,16 +1800,42 @@ namespace UI {
             const std::wstring folder = entry.path; // copy — OpenDirectory rebuilds g_displayList
             const std::wstring name = folderName(folder);
 
+            // DIRECTION FIRST, THE SAME ARROW THE FOLDER-TREE WALK USES.
+            //
+            // Alt+Left/Right/Up/Down announce with ⬅️ ➡️ ⬆️ ⬇️ and read at a
+            // glance: the icon says which way you went. This walk said only WHAT
+            // it landed on — 📁 for a history folder, ★ for a favourite — and
+            // used the identical glyph whichever direction the wheel was
+            // turned, so the one thing a walk most needs to report was the one
+            // thing missing. Two ways of moving between folders, two vocabularies.
+            //
+            // The kind marker is KEPT, not replaced. It carries something the
+            // arrow does not — whether this row is starred — and dropping it to
+            // unify the icons would trade one missing fact for another. So the
+            // line now reads direction, then kind, then where you are:
+            //
+            //     ⬅️ ★ 3/12 Holidays
+            //
             // Prefix comes from the ROW, not from the scope, so every caller —
             // wheel included — produces the identical message for a given folder.
             // For the two key pairs this is fixed anyway (their scope already
             // pins the category); for the wheel it correctly marks starred rows.
-            const wchar_t *prefix = entry.isFavorite
+            const wchar_t *kind = entry.isFavorite
                                             ? Constants::Messages::WALK_FAVORITE_FOLDER
                                             : Constants::Messages::WALK_HISTORY_FOLDER;
 
+            // `reverse` is the walk's own direction argument, so this cannot
+            // disagree with the step that was actually taken.
+            //
+            // NOT `arrow` — that name is taken further down by the "→" that
+            // separates a skip report from the destination, and the two are
+            // different things sharing one scope.
+            const wchar_t *directionArrow = reverse ? Constants::Messages::WALK_ARROW_PREV
+                                                    : Constants::Messages::WALK_ARROW_NEXT;
+
             // row + 1 is literally the number the panel paints next to that row.
-            std::wstring text = std::wstring(prefix) + L" " + std::to_wstring(row + 1) + L"/" +
+            std::wstring text = std::wstring(directionArrow) + L"  " + kind + L" " +
+                                std::to_wstring(row + 1) + L"/" +
                                 std::to_wstring(total) + L" " + name;
 
             // Landing on an empty folder is legitimate but worth saying out loud,
@@ -2373,7 +2399,15 @@ namespace UI {
                 // otherwise a junction and its target read as two favorites.
                 int favCount = UniqueFavoriteCount();
                 {
-                    std::wstring caption = L"Folder History  (showing "
+                    // THE SAME 📜 THE WALK OVERLAY LEADS WITH, and that is the
+                    // point of it being here. A centre message that flashes for
+                    // a second teaches nothing on its own; seeing the identical
+                    // mark on the title bar of the panel those rows live in is
+                    // what makes the overlay legible the next time it appears.
+                    // The star and the symlink mark below already work that way
+                    // — named in this caption, recognised wherever they appear.
+                    std::wstring caption = std::wstring(Constants::Icon::HISTORY)
+                                           + L"  Folder History  (showing "
                                            + std::to_wstring(totalShown) + L" of "
                                            + std::to_wstring(totalSaved) + L" saved)   " + Constants::Icon::FAVORITES_MARK + L" = Space (toggle fav)   "
                                            + std::to_wstring(favCount) + L" / "

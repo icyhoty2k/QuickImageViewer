@@ -199,6 +199,14 @@ No second vocabulary to maintain. Received commands land in
 `InputManager::ExecuteCommand` — the same shared sink keyboard, mouse and tray
 already funnel through, so remote behaviour is identical to local by construction.
 
+**Including the payload commands**, which is worth stating because it was not
+always true. The server used to call `Remote::ExecutePayload` directly to obtain
+the reply line the sink's `void` overload threw away, so those commands reached
+the handler without passing the sink — and everything hanging off the sink, the
+crash breadcrumb and the observer echo, silently did not cover them. The overload
+returns the reply now, so there is nothing left to route around, and
+`ExecutePayload` has exactly one caller: inside the sink.
+
 ### Names on the wire, never ordinals
 
 **This is a hard constraint, not a preference.**
@@ -221,7 +229,8 @@ struct RemoteRequest {
 };
 ```
 
-Most commands take no payload and go straight to `ExecuteCommand`. Five need one:
+Most commands take no payload and go straight to `ExecuteCommand`. Twenty rows
+are marked `PayloadRule::Required`, in four groups:
 
 | Command | Payload |
 |---|---|
@@ -230,11 +239,40 @@ Most commands take no payload and go straight to `ExecuteCommand`. Five need one
 | `SlideshowSetInterval` | milliseconds |
 | `ZoomTo` | percent |
 | `FindImage` | search string |
+| `Observe` | `1` / `0` |
+| `Sync` | `k=v;k=v;…` — the whole view/effect state |
+| `EnableRemoteLog` | `1` / `0` |
+| `msgRemote` | text to show on that screen |
+| `ShowImageOnce` | path |
+| `StreamImageBegin` | `<totalBytes> <fileName>` |
+| `StreamImageChunk` | base64 slice |
+| `SendDisplayedPreview` | max dimension |
+| `ImageChanged` | `<n>/<total> <file name>` |
+| `FolderChanged` | `<reason> <path>` |
+| `TogglesChanged` | `<Name>=<value>` |
 
-**Known remaining work:** these five currently raise UI — `JumpToImage` opens a
-panel, `SlideshowSetInterval` prompts a dialog. The payload carries the *value*, but
-each still needs a headless path that consumes it without the dialog. This is
-scoped, not open-ended: five commands, the other ~145 need nothing.
+**The headless paths exist.** An earlier version of this section said these
+"currently raise UI — `JumpToImage` opens a panel, `SlideshowSetInterval` prompts
+a dialog" and listed that as remaining work. It was done: `Remote::ExecutePayload`
+(`RemoteExec.cpp`) is the headless body, and the payload overload of
+`InputManager::ExecuteCommand` runs it *before* the bare switch, so a payload
+command never reaches the case that would open a window and hold the caller's
+socket until somebody dismissed it.
+
+### The three announcements
+
+`ImageChanged`, `FolderChanged` and `TogglesChanged` are the odd rows above: they
+are not instructions. An observed instance PUSHES them, prefixed `EVENT`, to say
+what it is now showing or what changed. **Executing one does nothing** — the
+handler acknowledges the payload and returns — which is what makes them safe to
+send to a peer that replays what it receives.
+
+They exist because an observer is otherwise told only about COMMANDS, and three
+things a client displays never arrive that way: a picture changed by the
+slideshow timer (no command runs at all), a folder that turned out to hold
+nothing, and a value moved by a command that is never echoed — a panel opened at
+the keyboard, or one command clearing several toggles at once. See
+`REMOTE_MIRRORING.md` §3.
 
 ---
 
