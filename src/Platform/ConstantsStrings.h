@@ -382,10 +382,28 @@ namespace Constants::Messages {
     constexpr const wchar_t *WALLPAPER_FAILED = QIV_ICON_WARNING L" Wallpaper could not be applied";
     // Folder walking — used by ALL three walkers (horizontal wheel, PageUp/Down,
     // Insert/Delete) so the centre message never depends on how you moved.
-    // Format is "<prefix><n>/<total> <folder name>", where <n> is the row number
-    // the History panel shows for that folder, so overlay and panel always agree.
-    // The prefix is chosen from the row itself: starred rows get ★, the rest 📁.
-    constexpr const wchar_t *WALK_HISTORY_FOLDER = Constants::Icon::FOLDER;
+    // Format is "<arrow>  <kind> <n>/<total> <folder name>", where <n> is the row
+    // number the History panel shows for that folder, so overlay and panel always
+    // agree. The kind is chosen from the row itself: starred rows get ★, the
+    // rest 📁.
+    //
+    // THE ARROW IS THE SAME ONE THE FOLDER-TREE WALK USES, deliberately. Alt+Up,
+    // Alt+Down and the two siblings announce with ⬆️ ⬇️ ⬅️ ➡️, and this walk
+    // used to lead with the kind icon alone — identical whichever way the wheel
+    // was turned. Two ways of moving between folders spoke two vocabularies, and
+    // the one that reported no direction was the one driven by a gesture that
+    // has nothing else to say which way it went.
+    //
+    // Kind is kept BESIDE the arrow rather than replaced by it: it says whether
+    // the row is starred, which the arrow cannot, and unifying by deletion would
+    // swap one missing fact for another.
+    constexpr const wchar_t *WALK_ARROW_PREV = Constants::Icon::WALK_PREV;
+    constexpr const wchar_t *WALK_ARROW_NEXT = Constants::Icon::WALK_NEXT;
+    // 📜, NOT 📁 — see Icon::HISTORY. A row in this walk is a folder you have
+    // BEEN to, and the folder glyph is what the folder-tree walk is about, so
+    // the two features read as the same thing while doing different ones. It is
+    // the mark the History panel's own title bar and the help section carry.
+    constexpr const wchar_t *WALK_HISTORY_FOLDER = Constants::Icon::HISTORY;
     constexpr const wchar_t *WALK_FAVORITE_FOLDER = Constants::Icon::FAVORITES_MARK;
     // Shown when a walk stepped over more than one dead folder to reach its
     // destination — append the count. A single skip names the folder instead.
