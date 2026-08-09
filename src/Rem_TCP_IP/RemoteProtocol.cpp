@@ -190,10 +190,13 @@ namespace {
         // Executing it does NOTHING, like the two above — that is what makes an
         // announcement safe to send to a desktop observer.
         { L"TogglesChanged",        Command::TogglesChanged,                  PayloadRule::Required,
-          L"NOTIFICATION pushed by an observed instance: one of the values QueryToggles "
-          L"reports has changed by some route that carries no command a client may be "
-          L"sent — a panel opened at the keyboard, for instance. Carries no instruction; "
-          L"executing it does nothing",
+          L"NOTIFICATION pushed by an observed instance: something QueryToggles reports has "
+          L"changed by a route no command echo can carry. Two cases — a panel opened at the "
+          L"keyboard (the commands that open panels are never echoed), and a command that "
+          L"changed MORE than its own value, such as ResetEffects clearing three toggles "
+          L"while its reply names only the effect chain. The second is sent to the asking "
+          L"client too, which the echo deliberately never is. Carries no instruction; "
+          L"executing it does nothing, and the correct response is to re-ask QueryToggles",
           L"<Name>=<value>, one pair, spelled exactly as QueryToggles spells it — "
           L"including the value vocabulary, which for a plain toggle is 1 / 0 and NOT "
           L"On / Off.   e.g.  ToggleAllPanels=1" },
