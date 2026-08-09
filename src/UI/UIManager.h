@@ -204,6 +204,12 @@ ThumbnailPanelWnd &getActiveDirWnd();
             // because it must NOT construct the panel to find out — getting it
             // would create one nobody asked for.
             void             RefreshRemoteWindowIfVisible();
+
+            // Tell any observer that AnyPanelVisible() flipped — the value
+            // ToggleAllPanels reports. Called from every route that can change
+            // panel visibility; emits only on an actual change. See the body for
+            // why the VALUE is announced rather than the command echoed.
+            void             AnnouncePanelVisibility();
             RemoteClientsWnd &getRemoteClientsWindow();
             RemotesWnd      &getRemotesConsoleWindow();
             MirrorPickerWnd &getMirrorPickerWindow();
@@ -337,6 +343,12 @@ ThumbnailPanelWnd &getActiveDirWnd();
             // replayed by RestoreAllPanels(). Only overwritten when non-empty so a
             // second "Close All Panels" doesn't wipe a still-restorable set.
             std::vector<IPanelWindow *> m_restoreList;
+
+            // Last value announced by AnnouncePanelVisibility, so it emits on a
+            // change rather than on every call. Starts false because nothing is
+            // open at launch, which is also the value a client that connects
+            // before touching anything would read from QueryToggles.
+            bool m_lastPanelsVisible = false;
 
             bool isInit(IPanelWindow &panel);
     };

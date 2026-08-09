@@ -415,6 +415,22 @@ enum class Command {
     // A notification like ImageChanged: local execution is deliberately nothing,
     // it is never mirrored, and the correct client response is to ask.
     FolderChanged,
+    // `TogglesChanged <Name>=<value>` — the third notification, for state that
+    // changes with no command a client is allowed to be sent.
+    //
+    // The observer echo replays COMMANDS, and the commands that open panels are
+    // refused for it on purpose: an observer executes what it receives, and a
+    // window raised on an unattended screen has to be walked over to and closed.
+    // The consequence was that opening a panel HERE changed what
+    // `ToggleAllPanels` reports and told nobody — the phone's Panels button was
+    // wrong from that moment, unfixably, because the fact never left this
+    // machine.
+    //
+    // This reports the VALUE instead of replaying the command, so it instructs
+    // nothing and is safe to push at a desktop observer. Local execution is
+    // deliberately nothing, and it is never mirrored — see ImageChanged, which
+    // it is modelled on.
+    TogglesChanged,
     // ── Alt+Enter. Sends the PICTURE ITSELF — the file's bytes, in base64 chunks
     // — to be shown ONCE and change nothing else there: no folder, no sort order,
     // no playlist position. It goes up in place of the current slide and the far

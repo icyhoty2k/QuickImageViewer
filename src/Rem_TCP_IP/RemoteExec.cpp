@@ -845,6 +845,9 @@ bool ExecutePayload(HWND hWnd, Command cmd, const std::wstring &payload,
         // changes nothing, and the echoed payload is what makes the reply
         // matchable to the announcement that caused it.
         case Command::FolderChanged:
+        // And the third, acknowledged identically: a value the sender is
+        // reporting, which the receiver records or ignores and acts on never.
+        case Command::TogglesChanged:
             replyOut = payload;
             return true;
         default:

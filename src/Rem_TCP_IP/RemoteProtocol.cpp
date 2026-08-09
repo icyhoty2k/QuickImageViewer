@@ -171,6 +171,33 @@ namespace {
           L"<reason> <path>, where reason is missing | empty | unsupported — the same "
           L"word QueryState's reason= field carries.   e.g.  empty D:\\Photos\\New folder" },
 
+        // The THIRD announcement, and the one that covers everything the other
+        // two cannot.
+        //
+        // A command that is refused for fan-out is also refused for the observer
+        // echo — rightly, since an observer EXECUTES what it receives and panels
+        // opening on an unattended screen is exactly what that deny list is for.
+        // But the RESULT of such a command is still state a client is showing:
+        // press F6 here and `ToggleAllPanels` becomes On, with nothing on the
+        // wire to say so. A phone's Panels button therefore sat wrong from the
+        // moment anybody touched a panel at this keyboard, and no amount of
+        // work on the phone could fix it — the fact never left this machine.
+        //
+        // So this reports the VALUE rather than replaying the command, in the
+        // same `Name=value` vocabulary QueryToggles answers in, which is what
+        // lets a client feed it straight to the parser it already has.
+        //
+        // Executing it does NOTHING, like the two above — that is what makes an
+        // announcement safe to send to a desktop observer.
+        { L"TogglesChanged",        Command::TogglesChanged,                  PayloadRule::Required,
+          L"NOTIFICATION pushed by an observed instance: one of the values QueryToggles "
+          L"reports has changed by some route that carries no command a client may be "
+          L"sent — a panel opened at the keyboard, for instance. Carries no instruction; "
+          L"executing it does nothing",
+          L"<Name>=<value>, one pair, spelled exactly as QueryToggles spells it — "
+          L"including the value vocabulary, which for a plain toggle is 1 / 0 and NOT "
+          L"On / Off.   e.g.  ToggleAllPanels=1" },
+
         // --- One-shot display, and the image transfer that feeds it ---
         //
         // All five are in the table because the Ctrl+F10 Send Command panel builds
@@ -927,6 +954,10 @@ static bool MirrorableCore(Command cmd, bool allowPayload) {
         // second one, announce a blank screen while showing a picture.
         case Command::ImageChanged:
         case Command::FolderChanged:
+        // Same reason, third of the same kind: a value this instance is
+        // REPORTING. Fanned out it would have every target announce a change it
+        // did not make.
+        case Command::TogglesChanged:
             return false;
 
         // Opens Explorer on a machine nobody is sitting at.
