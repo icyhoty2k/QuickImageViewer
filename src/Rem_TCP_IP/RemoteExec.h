@@ -51,9 +51,16 @@ namespace Remote {
     bool ExecutePayload(HWND hWnd, Command cmd, const std::wstring &payload,
                         std::wstring &replyOut);
 
-    // Wire-side convenience: unpacks a parsed request and calls the above.
-    bool ExecutePayloadCommand(HWND hWnd, const RemoteRequest &req,
-                               std::wstring &replyOut);
+    // NOTE: ExecutePayloadCommand — the "unpack a RemoteRequest and call the
+    // above" convenience — is gone. It had two callers, the server dispatch and
+    // AppMain's observer replay, and both used it to reach the payload handlers
+    // WITHOUT going through InputManager::ExecuteCommand. That was the detour
+    // that left payload commands outside the crash breadcrumb and the observer
+    // echo. Both now call the sink's payload overload, which unpacks nothing
+    // because it is handed the two fields directly.
+    //
+    // Call ExecutePayload above only from inside that sink. Anything else wants
+    // InputManager::ExecuteCommand(hWnd, cmd, payload, &reply).
 
     // This instance's view/effect state as a `sync` payload — "k=v;k=v;…".
     //

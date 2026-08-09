@@ -285,6 +285,17 @@ namespace Constants::Messages {
     // A command refused because a connection is live. The reason is appended
     // from the SESSION_BLOCKED table, so this is only the opening.
     constexpr const wchar_t *REMOTE_BLOCKED_PREFIX = L"Blocked while connected: ";
+
+    // Ctrl+Alt+S — the listener toggled from the keyboard, with no panel open to
+    // show the result. The endpoint is appended to the first, because "started"
+    // alone does not say which address and port it came up on, and that is the
+    // whole answer somebody needs before pointing a phone at it.
+    //
+    // The failure form is a CENTER MESSAGE, not a dialog: this is a keystroke,
+    // and WhyCannotStart already returns a sentence saying what is wrong.
+    constexpr const wchar_t *SERVER_STARTED_PREFIX = L"Local server started on ";
+    constexpr const wchar_t *SERVER_STOPPED        = L"Local server stopped";
+    constexpr const wchar_t *SERVER_START_FAILED   = L"Local server could not start — ";
     // Shown when the lock is turned ON so the operator knows the window went
     // deaf on purpose, and that the tray is the way back.
     constexpr const wchar_t *KIOSK_LOCK_ON  = L"Kiosk Lock" STR_STATE_ON L" — unlock from the tray icon";

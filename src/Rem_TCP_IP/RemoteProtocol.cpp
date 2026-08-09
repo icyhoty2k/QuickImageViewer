@@ -13,6 +13,7 @@
 
 #include "RemoteProtocol.h"
 #include "RemoteMirror.h" // SessionActive — the switch BlockedNow hangs off
+#include "RemoteInbound.h" // InboundActive — a wire caller is not fanning out
 #include "Platform/Constants.h"
 #include "Platform/ConstantsIcons.h" // ScopeIcon / DescribeAgent glyphs
 
@@ -902,7 +903,13 @@ bool NameForCommand(Command cmd, std::wstring &nameOut) {
     return false;
 }
 
-bool IsMirrorable(Command cmd) {
+// Shared body for the two questions below. They differ in exactly one place —
+// the table rule at the bottom — and in nothing else, which is the point: every
+// SAFETY exclusion in the switch must apply to both. An observer EXECUTES what
+// it is sent (AppMain's WM_QIV_REMOTE_EVENT), so a command that is wrong to fan
+// out to a target is equally wrong to push at a watcher. HardQuit settles it:
+// echoing that to an observer quits the machine that is merely watching.
+static bool MirrorableCore(Command cmd, bool allowPayload) {
     switch (cmd) {
         // ── Never fanned out ────────────────────────────────────────────────
         // Each of these is reachable on purpose as a single deliberate act (the
@@ -991,6 +998,14 @@ bool IsMirrorable(Command cmd) {
         case Command::Sync:
             return false;
 
+        // The LISTENER switch (Ctrl+Alt+S). Fanning this out would stop the
+        // server on every screen at once — and every one of them would have to
+        // be restarted by hand at its own keyboard, because the way back in is
+        // the thing that was just switched off. It has no table row either, so
+        // this case is belt to that brace and says why out loud.
+        case Command::ServerToggle:
+            return false;
+
         // Fanned out by BroadcastEnableLog, which sends the STATE (`enablelog 1`)
         // — not by the generic mirror path, which would send the bare verb and
         // have every target reject it for a missing payload. Excluded here so
@@ -1063,6 +1078,15 @@ bool IsMirrorable(Command cmd) {
     // that already knows.
     for (size_t i = 0; i < TABLE_COUNT; ++i) {
         if (TABLE[i].cmd == cmd) {
+            // THE ONE DIFFERENCE between the two questions.
+            //
+            // Fanning out cannot carry a value — the paragraph above explains
+            // why — so mirroring stops here for a Required row. ANNOUNCING can:
+            // the echo is built for a command this instance is already
+            // performing, from a payload it was handed, so the value exists by
+            // the time the line is written.
+            if (allowPayload) return true;
+
             // First row wins, matching NameForCommand — the name that would be
             // sent and the rule that governs it come from the same row.
             return TABLE[i].payload != PayloadRule::Required;
@@ -1072,6 +1096,127 @@ bool IsMirrorable(Command cmd) {
     // No row at all: not reachable on the wire, so nothing to send. Reachability
     // is still the outer bound — this function narrows that set, never widens it.
     return false;
+}
+
+bool IsMirrorable(Command cmd) {
+    return MirrorableCore(cmd, /*allowPayload=*/false);
+}
+
+// =============================================================================
+// IsAnnounceable — "should a WATCHER be told this happened?"
+//
+// A THIRD question over the same enum, and it exists because the observer echo
+// was asking IsMirrorable instead. That predicate refuses every payload row, for
+// a reason that is sound for fan-out and does not hold for an echo — so every
+// payload command was silent to every observer. A phone that changed the
+// slideshow interval or opened a folder announced nothing, and a SECOND phone
+// watching the same viewer had no way to learn it had happened.
+//
+// Everything IsMirrorable excludes for SAFETY is excluded here too, via the
+// shared body. What this removes on top are the rows that are not events at all:
+// =============================================================================
+bool IsAnnounceable(Command cmd, bool hasValue) {
+    switch (cmd) {
+        // READ-ONLY. Nothing happened, and the caller already has the answer in
+        // its own reply — announcing a question would be reporting a change
+        // that was never made.
+        case Command::SendDisplayedImage:
+        case Command::SendDisplayedPreview:
+            return false;
+
+        // TRANSPORT, not events. A begin and its chunks are the framing of one
+        // transfer, meaningless one line at a time. The picture going up is
+        // announced by ShowInterjectedImage, at the moment that is actually
+        // true — which is also the only point that covers the slideshow-boundary
+        // case, where the picture appears with no command in flight at all.
+        case Command::StreamImageBegin:
+        case Command::StreamImageChunk:
+        case Command::StreamImageShow:
+            return false;
+
+        default:
+            break;
+    }
+
+    // THE PAYLOAD FORM OF A COMMAND WHOSE BARE FORM RAISES A PANEL.
+    //
+    // `ZoomTo` is two things under one enum, exactly like SlideshowSetInterval:
+    // bare it opens the Zoom panel, with a value it sets the zoom. The deny list
+    // groups it with the panel toggles, which is right for the bare form — an
+    // observer that opened a window nobody asked for would have to be walked
+    // over to and closed — and wrong for the value form, which is a plain state
+    // change a watcher should follow.
+    //
+    // It showed up as an inconsistency rather than in the abstract: ZoomIn,
+    // ZoomOut and ZoomReset are all announced, being nowhere in that switch, so
+    // the phone's zoom BUTTONS reached a second watcher and its zoom SLIDER —
+    // which sends `ZoomTo <factor>` — did not.
+    //
+    // Gated on actually having a value, so the bare form still announces
+    // nothing: without this the echo would put a payload-less `ZoomTo` on the
+    // wire and every observer would answer ERR_PAYLOAD_REQUIRED.
+    //
+    // FindImage and JumpToImage are in that same group and are deliberately NOT
+    // listed here. Both move the playlist, so LoadImageIndex already announces
+    // where they landed — with the file NAME, which is the form that survives a
+    // different machine. Adding them would say the same thing twice, in the
+    // weaker spelling.
+    if (hasValue) {
+        switch (cmd) {
+            case Command::ZoomTo:
+                return true;
+            default:
+                break;
+        }
+    }
+
+    // allowPayload follows hasValue, and must NOT be a bare `true`.
+    //
+    // A payload row is admissible only when the caller actually holds the value.
+    // The BARE echo runs at the top of ExecuteCommand, before the panel or the
+    // prompt that collects it — SlideshowSetInterval opens a dialog, ZoomTo and
+    // FindImage open panels — so passing true there put the naked verb on the
+    // wire and every observer answered ERR_PAYLOAD_REQUIRED. That is the exact
+    // failure the mirror path's comment above describes, and this is where it
+    // comes back if the two arguments are ever collapsed into one.
+    return MirrorableCore(cmd, /*allowPayload=*/hasValue);
+}
+
+// =============================================================================
+// IsMachineSpecificPayload — is this command's VALUE meaningless off-machine?
+//
+// `IsMirrorableRemote` answers the same question for bare commands, and its
+// comment says the two things that do not survive the trip "are not commands:
+// the `goto <n>` that LoadImageIndex emits, and the `folder=` field inside a
+// `sync`. Both are filtered where they are produced, since a bare Command
+// carries neither."
+//
+// A command WITH a payload carries one. `OpenFile C:\Photos\x.jpg` on a machine
+// with no C:\Photos opens nothing; on a machine that HAS one it opens a
+// different picture, which is the worse half. So the announcement of it goes to
+// same-machine observers only, through the `positional` flag EmitToObservers
+// already has for exactly this — the flag is about locality, not about indices.
+//
+// Such an observer is not left with nothing: a folder change is separately
+// announced by FolderChanged (with the path, which it can ignore) and the
+// picture by ImageChanged (with the file NAME, which is the portable spelling).
+// =============================================================================
+bool IsMachineSpecificPayload(Command cmd) {
+    switch (cmd) {
+        // A filesystem path, built here.
+        case Command::OpenFile:
+        case Command::ShowImageOnce:
+            return true;
+
+        // An index into THIS playlist. Not echoed today — LoadImageIndex makes
+        // the announcement instead, and marks it positional itself — but listed
+        // so that stops being load-bearing if the deny list ever changes.
+        case Command::JumpToImage:
+            return true;
+
+        default:
+            return false;
+    }
 }
 
 bool IsMirrorableRemote(Command cmd) {
@@ -1100,6 +1245,28 @@ bool IsNeverRemote(Command cmd) {
 }
 
 bool BlockedNow(Command cmd, const wchar_t *&reasonOut) {
+    // A COMMAND THAT ARRIVED FROM THE WIRE IS NEVER REFUSED HERE.
+    //
+    // Every reason in SESSION_BLOCKED is about an index this instance SENDS
+    // OUT — "every index exchanged after that lands on the wrong file", "what
+    // the two ends are relying on to stay aligned". That is a statement about
+    // unsolicited position traffic, and a caller that asked for something is not
+    // that: it gets a reply naming the file actually landed on
+    // (`OK goto=47/238 IMG_0042.jpg`), compares, and repairs. §6 of
+    // REMOTE_MIRRORING.md is explicit that divergence is detected rather than
+    // assumed impossible — this is the mechanism it means.
+    //
+    // WITHOUT THIS the filter cannot be applied to the wire at all. The payload
+    // commands used to slip past it by going around ExecuteCommand entirely;
+    // routing them through the sink brought them under a filter written for
+    // local keypresses, which would have refused the phone's `FindImage` — the
+    // Advanced screen's "Go to name" — for searching a playlist that is the only
+    // one it was ever asking about.
+    //
+    // The local guarantee is untouched: a keypress at THIS keyboard still has no
+    // reply to check and still fans its result out, so it is still refused.
+    if (InboundActive()) return false;
+
     if (!Mirror::SessionActive()) return false;
     return IsBlockedInSession(cmd, reasonOut);
 }

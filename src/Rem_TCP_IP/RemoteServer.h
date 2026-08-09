@@ -221,6 +221,13 @@ namespace Remote {
     void RemoveObserver(ConnId conn);
     bool HasObservers();
 
+    // Whether any observer is on THIS machine — the ones that receive positional
+    // lines and so depend on this instance's indices holding still.
+    //
+    // A different question from HasObservers(), and the reason it exists is that
+    // "is a socket open" was standing in for it. See SessionActive.
+    bool HasLocalObservers();
+
     // Push one line to every observer except `except` (the connection the
     // command came from, which must not be told what it just told us).
     //

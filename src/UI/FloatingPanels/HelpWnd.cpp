@@ -717,6 +717,23 @@ namespace UI {
             L"it can use. When the tick is on and one of those is missing, the F9 panel "
             L"says which — and the menu says WILL ANNOUNCE rather than claiming it "
             L"did.", sRemote);
+        Add(CtrlAlt(SC::SC_SERVER_TOGGLE),
+            L"Start or stop that listener without opening its panel. The same two actions "
+            L"as the panel's Start and Stop buttons, on one key — it reports the address "
+            L"and port it came up on, or why it would not start.\r\n"
+            L"IT CONFIGURES NOTHING. The name, port, password and AllowList are whatever "
+            L"this instance already holds — qivLocalServer.ini is read at startup, with any "
+            L"-remote switches layered on top — and this only switches the listener on and "
+            L"off. So it works from a cold start on a configured machine, without opening "
+            L"the panel at all. A server that has never been configured still has to be set "
+            L"up there once.\r\n"
+            L"It does NOT re-read the .ini; opening the panel does that. Editing the file "
+            L"by hand while qIV is running therefore needs one F9 to be picked up.\r\n"
+            L"LOCAL ONLY, deliberately. It has no place in the command table, so nothing "
+            L"can send it over the network — a client that stopped the listener would be "
+            L"cutting the connection it sent the command on, and could never turn it back "
+            L"on. It is not mirrored either: fanning it out would silence every screen at "
+            L"once, each needing a hand at its own keyboard to recover.", sRemote);
         Add(Ctrl(SC::SC_PANEL_REMOTE_TOGGLE),
             L"My Clients — every peer currently connected to the listener above, with "
             L"its address, the name it gave itself, whether it is encrypted, and how long "

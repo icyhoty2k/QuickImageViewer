@@ -76,6 +76,15 @@ namespace Shortcuts {
     // instance runs and edit its configuration. Its own window for the same
     // reason F8 is: it is a form, not a menu.
     constexpr UINT SC_PANEL_REMOTE_TOGGLE = VK_F9;
+    // Ctrl+Alt+S — start/stop that listener WITHOUT opening its panel. F9 is a
+    // form: it configures the server and carries Start and Stop as two of its
+    // five buttons. Turning the listener on and off is the one thing done often
+    // enough to want without a window, and it is the switch a viewer left on a
+    // wall screen most wants reachable from the keyboard.
+    //
+    // Ctrl+Alt because plain S is the slideshow's shuffle toggle and Ctrl+S
+    // saves the adjusted image — both already spoken for, neither related.
+    constexpr UINT SC_SERVER_TOGGLE = 'S'; // requires ctrl+alt
     // Ctrl+F9 — My Clients (Rem_TCP_IP/RemoteClientsWnd.h): who is connected
     // to the listener above, and the buttons to kick, timed-kick or ban them.
     // The modifier form of the key that opens the listener's own panel, matching

@@ -304,6 +304,35 @@ namespace Remote {
     // when the folders differ anyway.
     bool IsMirrorableRemote(Command cmd);
 
+    // --- Observing --------------------------------------------------------
+    // Whether a command is worth PUSHING TO A WATCHER once this instance has
+    // done it. A third question over the same enum, and not the mirroring one:
+    // fan-out sends a bare name before the user has typed the value, while an
+    // echo reports something already done and holds the value in its hand.
+    //
+    // The observer echo used to ask IsMirrorable, which refuses every payload
+    // row for that fan-out reason — so `SlideshowSetInterval 5000` and
+    // `OpenFile <path>` told observers nothing at all. Two phones on one viewer
+    // is where that shows: the one that acted knew from its own reply, and the
+    // other went stale with nothing to tell it.
+    //
+    // It is NOT more permissive about anything else. An observer executes what
+    // it receives, so every safety exclusion mirroring makes — HardQuit, window
+    // geometry, the panel toggles — applies here unchanged.
+    //
+    // `hasValue` says the caller holds a payload. It admits the commands that
+    // are denied ONLY because their bare form raises a panel but that mean a
+    // plain state change once a value is attached — `ZoomTo` today. Left false
+    // by the bare echo, so a payload-less verb is never put on the wire for
+    // every observer to refuse.
+    bool IsAnnounceable(Command cmd, bool hasValue = false);
+
+    // Whether that command's VALUE only means something on this machine — a
+    // path, an index. Such an announcement goes to same-machine observers only,
+    // via the `positional` argument of EmitToObservers, because a path that
+    // resolves on the far end names a DIFFERENT picture. See §5.
+    bool IsMachineSpecificPayload(Command cmd);
+
     // =========================================================================
     // TWO KINDS OF "NO", and they are not the same kind.
     //

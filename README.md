@@ -950,6 +950,7 @@ display in another room. It is plain UTF-8 line protocol over TCP, so a script,
 | Shortcut | Panel / Action |
 |:---|:---|
 | `F9` | **Local Server** — the listener *this* instance runs. Off unless switched on; needs a name and a port |
+| `Ctrl+Alt+S` | **Start / stop the listener** — the panel's Start and Stop buttons on one key, without opening it. Reports the address it came up on, or why it would not start. Configures nothing, and is local only: it cannot be sent over the network or mirrored |
 | `Ctrl+F9` | **My Clients** — who is connected to *your* listener right now: address, the name and platform each gave, whether it is encrypted, how long it has been on, and whether it is watching. Kick, kick-for-N-minutes, or ban from here |
 | `F10` | **Remote Servers** — the instances this copy can drive. Connect, start/stop, watch, sync |
 | `Ctrl+F10` | **Send Command** — pick any wire command from the list, give it a value, send it |

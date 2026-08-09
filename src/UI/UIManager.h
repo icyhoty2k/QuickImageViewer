@@ -199,6 +199,11 @@ ThumbnailPanelWnd &getActiveDirWnd();
             StatsWnd        &getStatsWindow();
             DedicatedWnd    &getDedicatedWindow();
             RemoteWnd       &getRemoteWindow();
+            // Ctrl+Alt+S changes the listener without going through that panel,
+            // so its buttons go stale. Named ...IfVisible like the two above
+            // because it must NOT construct the panel to find out — getting it
+            // would create one nobody asked for.
+            void             RefreshRemoteWindowIfVisible();
             RemoteClientsWnd &getRemoteClientsWindow();
             RemotesWnd      &getRemotesConsoleWindow();
             MirrorPickerWnd &getMirrorPickerWindow();

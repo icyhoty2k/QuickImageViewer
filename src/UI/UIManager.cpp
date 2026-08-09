@@ -269,6 +269,10 @@ namespace UI {
         if (isInit(statsWnd)) statsWnd.Refresh();
     }
 
+    void UIManager::RefreshRemoteWindowIfVisible() {
+        if (isInit(remoteWnd)) remoteWnd.Refresh();
+    }
+
     void UIManager::ApplyAlwaysOnTop(bool onTop) {
         HWND zOrder = onTop ? HWND_TOPMOST : HWND_NOTOPMOST;
         constexpr UINT flags = SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE;

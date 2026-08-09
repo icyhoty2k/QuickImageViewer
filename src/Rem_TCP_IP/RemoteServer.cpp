@@ -420,6 +420,23 @@ namespace {
     // most one missed event on the connection that just asked to observe.
     std::atomic<int> g_observerCount{0};
 
+    // The SAME-MACHINE half of that count, kept for a different question.
+    //
+    // A positional line (`JumpToImage 47`) is sent only to an observer that
+    // shares this folder, because an index names a different picture anywhere
+    // else — see EmitToObservers. Such an observer is therefore relying on this
+    // instance's indices staying put, and it has no reply to check: the line
+    // arrives unsolicited. THAT is what makes deleting a file mid-session unsafe.
+    //
+    // An ordinary client is not in that position at all. It asks, and reads an
+    // answer naming the file it landed on. Counting one as a "session" is what
+    // made a connected PHONE take Delete, Move, Paste, Save and Find away from
+    // this keyboard — see SessionActive.
+    //
+    // Same publication rule as the count above: written under g_observerMutex,
+    // read without it, because this is asked on the command path.
+    std::atomic<int> g_localObserverCount{0};
+
     // Tell the UI thread the client count (or the running state) changed, so the
     // overlay's server indicator repaints. Posted, never sent: this is called
     // from socket threads and from Stop(), and none of them may block on the UI.
@@ -1957,22 +1974,32 @@ static std::wstring ExecuteOnUiThreadBody(HWND hWnd, const RemoteRequest &req, C
     // Scoped, so an early return cannot leave the flag set.
     InboundGuard guard(from);
 
-    // The payload-carrying commands go to their headless paths in RemoteExec.
-    // They must NOT reach the bare ExecuteCommand, where each raises a panel or
-    // a dialog and would hold the client's connection open until somebody
-    // dismissed a window on the machine.
-    std::wstring reply;
-    if (ExecutePayloadCommand(hWnd, req, reply))
-        return reply;
-
-    // The shared sink. Keyboard, mouse, tray and panels all funnel through
-    // here, so a remote command behaves identically to the same command given
-    // locally.
+    // THE SHARED SINK, for payload and bare commands alike. Keyboard, mouse,
+    // tray and panels all funnel through here, so a remote command behaves
+    // identically to the same command given locally.
+    //
+    // This used to call Remote::ExecutePayload FIRST and return, reaching the
+    // sink only for the bare commands. The reason was never that the sink could
+    // not do the work — the sink's payload overload has always called the same
+    // handler — but that the overload returned void and a client needs the
+    // reply line. So the socket took a short cut around the one function every
+    // other input path goes through, and everything attached to that function
+    // stopped covering payload commands: the crash breadcrumb, and the observer
+    // echo. `ZoomTo`, `SlideshowSetInterval` and `OpenFile` announced nothing to
+    // anyone watching, which is invisible with one client and obvious with two.
+    //
+    // The overload now hands the reply back, so there is nothing left to route
+    // around. The original constraint still holds and is still honoured inside
+    // it: a payload command runs its HEADLESS handler in RemoteExec and never
+    // reaches the bare switch, where several raise a panel or a dialog and would
+    // hold this connection open until somebody dismissed a window on the machine.
     //
     // The kiosk lock is deliberately NOT consulted: isLocked exists to stop
     // someone at the keyboard of an unattended screen, while a remote caller has
     // already passed the address gates and the password.
-    InputManager::ExecuteCommand(hWnd, req.cmd);
+    std::wstring reply;
+    if (InputManager::ExecuteCommand(hWnd, req.cmd, req.payload, &reply))
+        return reply;
 
     // Report the resulting state, not a bare OK. A driving instance uses this
     // to confirm that what it sent actually took effect — and for the commands
@@ -1995,6 +2022,23 @@ std::wstring ExecuteOnUiThread(HWND hWnd, const RemoteRequest &req, ConnId from)
 // Observers
 // =============================================================================
 
+// Both shadow counts, republished together. CALLERS MUST HOLD g_observerMutex —
+// this walks the vector.
+//
+// A recount rather than an increment, because removal cannot decrement blindly:
+// the two counts move independently, and RemoveObserver is given a socket, not
+// the kind of observer that is leaving. The vector is at most a handful of
+// entries and this runs only when somebody joins or leaves, never on the command
+// path — which is the whole reason the counts exist.
+static void PublishObserverCounts() {
+    int local = 0;
+    for (const Observer &o : g_observers) {
+        if (o.sameMachine) ++local;
+    }
+    g_observerCount.store(static_cast<int>(g_observers.size()), std::memory_order_release);
+    g_localObserverCount.store(local, std::memory_order_release);
+}
+
 void AddObserver(ConnId conn) {
     const SOCKET s = static_cast<SOCKET>(conn);
     if (s == INVALID_SOCKET) return;
@@ -2008,7 +2052,7 @@ void AddObserver(ConnId conn) {
     for (const Observer &o : g_observers)
         if (o.sock == s) return; // `observe 1` twice is not two observers
     g_observers.push_back(Observer{s, local, SessionFor(conn)});
-    g_observerCount.store(static_cast<int>(g_observers.size()), std::memory_order_release);
+    PublishObserverCounts();
 }
 
 void RemoveObserver(ConnId conn) {
@@ -2017,12 +2061,16 @@ void RemoveObserver(ConnId conn) {
     g_observers.erase(std::remove_if(g_observers.begin(), g_observers.end(),
                                      [s](const Observer &o) { return o.sock == s; }),
                       g_observers.end());
-    g_observerCount.store(static_cast<int>(g_observers.size()), std::memory_order_release);
+    PublishObserverCounts();
 }
 
 bool HasObservers() {
     // Lock-free by design — see g_observerCount. This is on the keystroke path.
     return g_observerCount.load(std::memory_order_acquire) > 0;
+}
+
+bool HasLocalObservers() {
+    return g_localObserverCount.load(std::memory_order_acquire) > 0;
 }
 
 void EmitToObservers(const std::wstring &line, ConnId except, bool positional) {

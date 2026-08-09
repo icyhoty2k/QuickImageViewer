@@ -380,20 +380,28 @@ void RemoteCmdWnd::DoSend() {
                line, m_awaiting > 0 || m_alsoLocal, -1});
 
     if (m_alsoLocal) {
-        // The headless path, not the bare sink: the payload commands raise
-        // panels and dialogs through InputManager::ExecuteCommand and would hold
-        // this press open until somebody dismissed a window. ExecutePayload is
-        // the same body the wire uses — "also run it here" must mean exactly
-        // what it means over there.
+        // THE SINK, payload form — which is the same body the wire uses, so
+        // "also run it here" means exactly what it means over there.
+        //
+        // This used to call Remote::ExecutePayload and hand-roll the fallback to
+        // the bare form, to keep payload commands off a path where each raises a
+        // panel or a dialog and would hold this press open until somebody
+        // dismissed a window. That reasoning was right and the detour is no
+        // longer how to act on it: the overload runs the HEADLESS handler first
+        // and only falls through to the bare switch for a command that takes no
+        // value. Going through it also gets this press the crash breadcrumb and
+        // the observer echo — a payload command typed here was invisible to
+        // anyone watching this screen.
+        //
+        // THE MAIN WINDOW, not this panel's HWND — m_hParent, as before.
         std::wstring reply;
         Remote::RemoteRequest req = Remote::ParseLine(line);
         if (req.status != Remote::ParseStatus::Ok) {
             AddLogRow({0, false, L"(this instance)",
                        L"ERR this build cannot run that locally", false, -1});
-        } else if (Remote::ExecutePayload(m_hParent, req.cmd, req.payload, reply)) {
+        } else if (InputManager::ExecuteCommand(m_hParent, req.cmd, req.payload, &reply)) {
             AddLogRow({0, false, L"(this instance)", reply, true, -1});
         } else {
-            InputManager::ExecuteCommand(m_hParent, req.cmd);
             AddLogRow({0, false, L"(this instance)", L"OK", true, -1});
         }
     }
