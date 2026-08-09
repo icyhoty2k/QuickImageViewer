@@ -1103,6 +1103,38 @@ void InputManager::ExecuteCommand(HWND hWnd, Command cmd) {
             app.UpdateRendererColorEffects(hWnd);
             g_overlayManager.UpdateEffects();
             g_overlayManager.PostCenterMessage(hWnd, Constants::Messages::ALL_EFFECTS_RESET);
+
+            // ANNOUNCED TO EVERYONE, INCLUDING THE CLIENT THAT ASKED FOR IT.
+            //
+            // The echo above excludes the sender, on the sound principle that it
+            // reads the result off its own reply. This is the command where that
+            // principle does not hold: it clears grayscale, invert, sepia and
+            // the rest, and one `OK ResetEffects=<chain>` line cannot say so —
+            // it reports the effect CHAIN, which is a different fact from the
+            // three booleans a client has buttons for.
+            //
+            // The symptom was precise and backwards-looking: press Reset on one
+            // phone and every OTHER client went dark correctly, while the phone
+            // that pressed it kept all three lit. It was the only one told
+            // nothing it could use.
+            //
+            // So the RESULT is announced rather than the command echoed —
+            // TogglesChanged instructs nothing, which is what makes it safe to
+            // send to the asker as well. CONN_NONE excludes nobody, exactly like
+            // the interjection announcement in ShowInterjectedImage and for the
+            // same reason: an announcement is not a command bouncing back.
+            //
+            // Not gated on ObserverEchoAllowed either. This must fire when the
+            // command came FROM the wire — that is the case being fixed.
+            if (Remote::HasObservers()) {
+                std::wstring wireName;
+                if (Remote::NameForCommand(Command::ResetEffects, wireName)) {
+                    Remote::EmitToObservers(
+                        std::wstring(L"TogglesChanged ") + wireName + L"=" +
+                            GetCommandValue(hWnd, Command::ResetEffects),
+                        Remote::CONN_NONE);
+                }
+            }
             break;
 
         case Command::SaveImage: {
