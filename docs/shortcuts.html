@@ -25,7 +25,7 @@
     together. Editing this file by hand puts it out of step with the binary,
     which is the entire problem it exists to solve.
 
-    Last generated: 2026-08-08
+    Last generated: 2026-08-09
 -->
 <body>
 
@@ -45,7 +45,7 @@
     <h1>QuickImageViewer (qIV) — Shortcuts</h1>
     <p class="meta">
         Generated from the app's own help panel — press <kbd>F1</kbd> in QuickImageViewer to see the same list on your
-        machine. 223 shortcuts in 16 sections.
+        machine. 224 shortcuts in 16 sections.
     </p>
 
 <!-- SHARED-STOREROW-START -->
@@ -255,10 +255,11 @@
         </div>
     </section>
     <section class="sc-sec" data-title="Remote Control &amp; Mirroring">
-        <h2><span class="sc-ico">📡</span>Remote Control &amp; Mirroring<span class="sc-count">15</span></h2>
+        <h2><span class="sc-ico">📡</span>Remote Control &amp; Mirroring<span class="sc-count">16</span></h2>
         <div class="sc-cols">
             <div class="sc-row"><div class="sc-keys"><kbd>F9</kbd></div><p class="sc-desc">Open the Local Server panel — the listener THIS instance runs, and nothing else. qIV can listen on a TCP port and be driven over the network — next, goto, zoom, open, slideshow  <a class="sc-more" href="#remote-control-mirroring-f9">details</a></p></div>
             <div class="sc-row"><div class="sc-keys"><kbd>TCP</kbd> / <kbd>IP menu → Announce (beacon)</kbd></div><p class="sc-desc">Publish this listener on the local network so a phone or another qIV FINDS it in a list instead of being told an address. <a class="sc-more" href="#remote-control-mirroring-tcp-ip-menu-announce-beacon">details</a></p></div>
+            <div class="sc-row"><div class="sc-keys"><kbd>Ctrl+Alt+S</kbd></div><p class="sc-desc">Start or stop that listener without opening its panel. The same two actions as the panel's Start and Stop buttons, on one key  <a class="sc-more" href="#remote-control-mirroring-ctrl-alt-s">details</a></p></div>
             <div class="sc-row"><div class="sc-keys"><kbd>Ctrl+F9</kbd></div><p class="sc-desc">My Clients — every peer currently connected to the listener above, with its address, the name it gave itself, whether it is encrypted, and how long it has been on. <a class="sc-more" href="#remote-control-mirroring-ctrl-f9">details</a></p></div>
             <div class="sc-row"><div class="sc-keys"><kbd>F10</kbd></div><p class="sc-desc">Open Remote Servers — everything about the instances this copy can drive. <a class="sc-more" href="#remote-control-mirroring-f10">details</a></p></div>
             <div class="sc-row"><div class="sc-keys"><kbd>Ctrl+F10</kbd></div><p class="sc-desc">Remote Commands — type a command and send it to the instances YOU TICK in this panel's own SEND TO box, which lists everything currently connected with a checkbox, name and address each. <a class="sc-more" href="#remote-control-mirroring-ctrl-f10">details</a></p></div>
@@ -381,7 +382,7 @@
     </section>
 
     <h2 class="sc-deep-head">In depth</h2>
-    <p class="sc-deep-intro">The 63 shortcuts above whose behaviour needs more than a line. Every one is linked from its row.</p>
+    <p class="sc-deep-intro">The 64 shortcuts above whose behaviour needs more than a line. Every one is linked from its row.</p>
     <article class="sc-deep" id="image-navigation-ctrl-f">
         <h3><kbd>Ctrl+F</kbd><span class="sc-deep-sec">Image Navigation</span></h3>
         <p>Open the Find panel — fuzzy filename search with wildcard support: * matches any characters, ? matches exactly one (e.g. *.jpg or photo_??_2024.*). Searches the current folder and the VRAM cache. Typing # inside switches to Jump-to.</p>
@@ -489,6 +490,13 @@
         <p>IT ANNOUNCES THE INSTANCE NAME AND THE PORT, AND NOTHING ELSE. Never a password, never whether one is set, never a path, never a file name, never the AllowList. A signpost that describes the lock on the door is a worse signpost.</p>
         <p>DISCOVERY IS NOT ACCESS. Being findable changes nothing about who may connect: the AllowList, the password challenge and TLS all still apply, so someone who discovers this instance and is not allowed in gets exactly as far as someone who guessed the address.</p>
         <p>IT ONLY ANNOUNCES WHEN THERE IS SOMETHING TO REACH — the setting on, the listener actually running, and a bind address other than loopback. A beacon with no listener behind it advertises a service that refuses every connection, and on 127.0.0.1 it would promise something nobody who hears it can use. When the tick is on and one of those is missing, the F9 panel says which — and the menu says WILL ANNOUNCE rather than claiming it did.</p>
+    </article>
+    <article class="sc-deep" id="remote-control-mirroring-ctrl-alt-s">
+        <h3><kbd>Ctrl+Alt+S</kbd><span class="sc-deep-sec">Remote Control &amp; Mirroring</span></h3>
+        <p>Start or stop that listener without opening its panel. The same two actions as the panel's Start and Stop buttons, on one key — it reports the address and port it came up on, or why it would not start.</p>
+        <p>IT CONFIGURES NOTHING. The name, port, password and AllowList are whatever this instance already holds — qivLocalServer.ini is read at startup, with any -remote switches layered on top — and this only switches the listener on and off. So it works from a cold start on a configured machine, without opening the panel at all. A server that has never been configured still has to be set up there once.</p>
+        <p>It does NOT re-read the .ini; opening the panel does that. Editing the file by hand while qIV is running therefore needs one F9 to be picked up.</p>
+        <p>LOCAL ONLY, deliberately. It has no place in the command table, so nothing can send it over the network — a client that stopped the listener would be cutting the connection it sent the command on, and could never turn it back on. It is not mirrored either: fanning it out would silence every screen at once, each needing a hand at its own keyboard to recover.</p>
     </article>
     <article class="sc-deep" id="remote-control-mirroring-ctrl-f9">
         <h3><kbd>Ctrl+F9</kbd><span class="sc-deep-sec">Remote Control &amp; Mirroring</span></h3>
