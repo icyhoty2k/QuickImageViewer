@@ -15,6 +15,27 @@
 // #include "Shortcuts.h"
 
 namespace UI {
+
+    // "A panel just appeared or disappeared."
+    //
+    // Defined in UIManager.cpp, DECLARED here rather than reached through
+    // UIManager.h: that header includes every panel class, and every panel class
+    // includes this one, so pulling it in would close the circle.
+    //
+    // It exists because panel visibility has two funnels and neither sees the
+    // other. Floating panels come through IPanelWindow::Show/Hide below —
+    // including Toggle, ToggleToFront, the Esc key the base router intercepts,
+    // and each panel's own close button. ThumbnailPanelWnd OVERRIDES both and
+    // never calls the base, reporting through UIManager::OnPanelShown/Hidden
+    // instead. Hooking only one of the two left half the panels silent: the
+    // observer announcement for ToggleAllPanels fired when a panel was opened
+    // through the UIManager wrapper and not when one was closed by pressing Esc
+    // on it, which is how most of them are actually closed.
+    //
+    // Cheap and idempotent — it recomputes AnyPanelVisible() and returns unless
+    // the answer flipped, so calling it from both funnels costs nothing.
+    void NotifyPanelVisibilityChanged();
+
     class IPanelWindow {
         public:
             virtual ~IPanelWindow() {
@@ -40,12 +61,16 @@ namespace UI {
                 if (m_hWnd) {
                     ShowWindow(m_hWnd, SW_SHOW);
                     SetForegroundWindow(m_hWnd);
+                    NotifyPanelVisibilityChanged();
                 }
             }
 
             virtual void Hide() {
                 if (m_hWnd && IsWindowVisible(m_hWnd)) {
                     ShowWindow(m_hWnd, SW_HIDE);
+                    // INSIDE the guard: hiding an already-hidden panel changed
+                    // nothing and must not be reported as a change.
+                    NotifyPanelVisibilityChanged();
                 }
             }
 

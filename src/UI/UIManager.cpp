@@ -33,6 +33,11 @@ namespace UI {
     void UIManager::OnPanelShown(ThumbnailPanelWnd *panel, int8_t position) {
         m_layout.set(position, panel);
         RefreshVerticalPanels();
+        // The thumbnail panels' half of the funnel — they override Show/Hide and
+        // never reach IPanelWindow's, so this is the only place their visibility
+        // change is observable. MovePanel calls Hidden then Shown, which nets to
+        // no change and emits nothing, because the announcement compares first.
+        AnnouncePanelVisibility();
     }
 
     void UIManager::OnPanelHidden(ThumbnailPanelWnd *panel) {
@@ -42,10 +47,13 @@ namespace UI {
             m_layout.clearPanel(panel);
             RefreshVerticalPanels();
             RefreshStatsWindowIfVisible();
+            AnnouncePanelVisibility();
             return; // pool panel — never deleted
         }
         m_layout.clearPanel(panel);
         RefreshVerticalPanels();
+        // Closing one is the case that was missing. See OnPanelShown.
+        AnnouncePanelVisibility();
     }
 
     int8_t UIManager::NextFreePosition(int8_t currentPosition) const {
@@ -79,6 +87,12 @@ namespace UI {
     // Cheap enough to call everywhere: a walk of a handful of pointers, and the
     // early return happens before HasObservers() is even asked.
     // =========================================================================
+    // The free function IPanelWindow.h declares — see the comment there for why
+    // it is not simply a call to uiManager from that header.
+    void NotifyPanelVisibilityChanged() {
+        uiManager.AnnouncePanelVisibility();
+    }
+
     void UIManager::AnnouncePanelVisibility() {
         const bool now = AnyPanelVisible();
         if (now == m_lastPanelsVisible) return;
