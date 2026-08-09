@@ -48,8 +48,34 @@ interleave two unrelated streams of actions into one screen.
 
 Every input path resolves to a `Command` and goes through
 `InputManager::ExecuteCommand` — keyboard, mouse, tray, context menu, panel
-clicks, and the socket. Nothing applies a side effect by calling
-`LoadImageIndex` or an `AppCommands` helper directly.
+clicks, and the socket. That includes the **payload** commands, which until
+recently had **three** call sites reaching `Remote::ExecutePayload` directly and
+skipping the sink: the server dispatch, AppMain's observer replay, and the
+Ctrl+F10 Send Command panel's "also run it here". None of them detoured because
+the sink could not do the work — it calls the same handler — but because the
+payload overload returned `void` and each needed the reply line.
+
+It hands that back now (`replyOut`, and a `bool` saying whether a payload handler
+ran), so there is nothing left to route around. All three call it, and the two
+things attached to the sink that payload commands were missing — the crash
+breadcrumb and the observer echo — now cover them. `ExecutePayload` has exactly
+one caller, inside the sink, which is what keeps that true.
+
+The constraint the detours existed to honour still holds and lives inside the
+overload: a payload command runs its **headless** handler and never reaches the
+bare switch, where several raise a panel or a dialog that would hold a socket or
+a keypress open until somebody dismissed a window.
+
+Two kinds of side effect are reached without a command, both deliberately, and
+neither is an input path:
+
+- **`LoadImageIndex`**, which is where a *position* is announced. Item picks
+  (thumbnail, Find, JumpTo, history) travel as an index from there rather than as
+  a command — §6 — and the slideshow timer reaches it with no command at all.
+  `ForwardGuard` (§4) is what keeps the two announcement points from both firing
+  on one keypress.
+- **`ThumbnailPanelWnd`'s file operations**, for the reason given under
+  `SESSION_BLOCKED` below.
 
 That is not tidiness. `ExecuteCommand` is where mirroring is gated, so **an
 input path that skips it is an input path that silently does not mirror.**
@@ -89,7 +115,24 @@ issues commands as the authenticated caller. Better auth would narrow that;
 keeping `delete` off the menu removes it.
 
 ### `SESSION_BLOCKED` — policy
-Refused *locally* while any connection is live, each entry carrying its reason:
+Refused *locally* while this instance is sending **unsolicited positions**, each
+entry carrying its reason. Two relationships do that: a live mirror target, and a
+**same-machine observer** (the only kind a positional `goto` is sent to — §5).
+
+This used to read "while any connection is live", and the code matched — it asked
+`ActiveConnections()`, every client the local server had accepted. That put a
+connected **phone** into the test, so opening the Android app took Delete, Move,
+Paste, Save and Find away from the keyboard, each with an overlay citing a
+mirroring hazard that was not occurring. A client that asks and reads a reply
+holds no playlist to keep aligned.
+
+**A command that arrived from the wire is never refused here.** Every reason
+below is about an index this instance *sends out*, unsolicited, with nothing at
+the far end able to check it. A caller that asked gets back the file actually
+landed on (`OK goto=47/238 IMG_0042.jpg`) and repairs its own drift — the
+mechanism §6 describes. Without this the filter could not be applied to the wire
+at all: it would refuse the phone's `FindImage` for searching the one playlist it
+was asking about.
 
 - `SortByDisk` — physical disk order differs per drive
 - `FindImage` — searches this playlist only
@@ -117,6 +160,25 @@ Denied: `HardQuit`, `HideToTray`, `NewWindow`, `ShowInExplorer`, `SaveImage`,
 `CopyToClipboard`, all panel toggles, all geometry, `CmdArgs*`,
 `ToggleDedicated`, and the mirror controls themselves. Anything refused stays
 reachable individually.
+
+### `IsAnnounceable` — what a WATCHER is told
+A fourth question over the same enum, sharing `IsMirrorable`'s body so every
+safety exclusion above applies unchanged — an observer *executes* what it
+receives, so a command wrong to fan out is equally wrong to push at a watcher.
+
+It differs in one place: the table rule. `IsMirrorable` ends by refusing every
+`PayloadRule::Required` row, because `Mirror::Broadcast` sends a bare name and
+the value does not exist yet at the keystroke. An echo has no such problem — it
+reports something already done, from a payload it was handed. Asking the mirror
+predicate instead therefore silenced **every payload command for every
+observer**: `ZoomTo`, `SlideshowSetInterval` and `OpenFile` announced nothing.
+Invisible with one client; obvious with two, where the phone that acted knew from
+its own reply and the other went stale.
+
+Also removed as not-events: `SendDisplayedImage` / `SendDisplayedPreview` (read
+only), and `StreamImageBegin` / `Chunk` / `Show` (transport framing — the picture
+going up is announced by `ShowInterjectedImage`, §7c, the one point that also
+covers the slide-boundary case where no command is in flight).
 
 ---
 

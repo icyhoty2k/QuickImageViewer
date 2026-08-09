@@ -282,6 +282,15 @@ enum class Command {
     // that one describes the listener's CONFIGURATION, and a live list of peers
     // is not configuration — it changes while you look at it.
     ToggleRemoteClients,
+    // Ctrl+Alt+S — start/stop the listener itself, no panel involved. The same
+    // two actions F9's Start and Stop buttons perform, on one key because that
+    // is the part of the panel worth reaching without opening it.
+    //
+    // DELIBERATELY NOT IN THE COMMAND TABLE, so it is unreachable from the wire.
+    // A client that could stop the listener would be severing the connection it
+    // sent the command on — the reply would race the socket closing, and the
+    // caller could never turn it back on. Local input only.
+    ServerToggle,
     ToggleDedicated,        // -dedicated: separate registry/history namespace
     CmdArgsExport,          // current settings → a cmdArgs .txt
     CmdArgsImport,          // read a cmdArgs .txt and apply it
@@ -565,7 +574,18 @@ class InputManager {
         // RemoteExec, so a value that arrives from a panel and one that arrives
         // from a socket run the SAME code — previously two implementations kept
         // in step by hand.
-        static void ExecuteCommand(HWND hWnd, Command cmd, const std::wstring &payload);
+        // `replyOut`, when given, receives the handler's "OK …"/"ERR …" line so
+        // the SOCKET path can go through this sink like everything else. It used
+        // to call Remote::ExecutePayload directly — not because the sink could
+        // not do the work, but because the void form threw the reply away and a
+        // client needs it. That detour is why payload commands reached neither
+        // the breadcrumb nor the observer echo.
+        //
+        // Returns true when a payload handler ran and `replyOut` was filled;
+        // false when `cmd` takes no value and the bare form was used instead.
+        // Panels pass nothing and ignore both.
+        static bool ExecuteCommand(HWND hWnd, Command cmd, const std::wstring &payload,
+                                   std::wstring *replyOut = nullptr);
 
         // Current value of whatever `cmd` controls, read straight from `app`
         // (the source of truth), for the "OK <name>=<value>" reply a remote

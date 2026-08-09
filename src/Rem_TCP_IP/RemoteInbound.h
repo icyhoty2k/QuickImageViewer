@@ -80,6 +80,36 @@ namespace Remote {
     inline ConnId InboundSource() { return detail::g_inboundSource; }
 
     // =========================================================================
+    // "May this instance echo what it is doing to its observers right now?"
+    //
+    // NOT the same question as `!InboundActive()`, and treating it as one is
+    // what broke the two-phone case: phone A presses Next, the server executes
+    // it under the inbound guard, and every observer echo was suppressed — so
+    // phone B, watching the same viewer with `observe 1`, was told NOTHING and
+    // sat frozen on the previous picture. The only client that ever learned
+    // anything was the one that already knew, from its own reply.
+    //
+    // The suppression that IS needed is narrower, and the `except` argument of
+    // EmitToObservers already expresses it: do not bounce the line back to the
+    // connection that sent the command. Observers B and C still get it.
+    //
+    // The one case that must still be silenced wholesale is the OTHER inbound
+    // route — WM_QIV_REMOTE_EVENT in AppMain, where this instance is replaying
+    // what an observed PEER did. That guard carries CONN_NONE, so there is no
+    // connection to exclude, and echoing there is exactly the mutual-observe
+    // loop this header exists to cut: two instances watching each other would
+    // trade one keystroke forever. Hence the source test rather than a bare
+    // depth test — a real ConnId means "a client asked for this", CONN_NONE
+    // while inbound means "a peer's event is being replayed".
+    //
+    // Callers still pass InboundSource() as `except`; this only decides whether
+    // to emit at all.
+    // =========================================================================
+    inline bool ObserverEchoAllowed() {
+        return !InboundActive() || InboundSource() != CONN_NONE;
+    }
+
+    // =========================================================================
     // "This dispatch already forwarded a command — do not also forward what it
     // did."
     //

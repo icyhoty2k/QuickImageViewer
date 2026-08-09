@@ -852,8 +852,4 @@ bool ExecutePayload(HWND hWnd, Command cmd, const std::wstring &payload,
     }
 }
 
-bool ExecutePayloadCommand(HWND hWnd, const RemoteRequest &req, std::wstring &replyOut) {
-    return ExecutePayload(hWnd, req.cmd, req.payload, replyOut);
-}
-
 } // namespace Remote

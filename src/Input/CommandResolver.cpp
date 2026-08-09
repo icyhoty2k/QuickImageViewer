@@ -88,6 +88,7 @@ Command InputManager::ResolveKeyboardKeys(UINT key, LPARAM lParam) {
             case Shortcuts::SC_THEME_FACTOR_UP: return Command::ThemeFactorUp;
             case Shortcuts::SC_THEME_FACTOR_DOWN: return Command::ThemeFactorDown;
             case Shortcuts::SC_THEME_FACTOR_RESET: return Command::ThemeFactorReset;
+            case Shortcuts::SC_SERVER_TOGGLE: return Command::ServerToggle;
         }
     }
 

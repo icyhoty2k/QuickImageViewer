@@ -260,13 +260,62 @@ void InputManager::handleKeyboard(HWND hWnd, WPARAM wParam, LPARAM lParam) {
 // socket path — go to Remote::ExecutePayload directly rather than through the
 // input pipeline.
 // =============================================================================
-void InputManager::ExecuteCommand(HWND hWnd, Command cmd, const std::wstring &payload) {
+bool InputManager::ExecuteCommand(HWND hWnd, Command cmd, const std::wstring &payload,
+                                  std::wstring *replyOut) {
     std::wstring reply;
-    if (Remote::ExecutePayload(hWnd, cmd, payload, reply)) return;
+    if (Remote::ExecutePayload(hWnd, cmd, payload, reply)) {
+        // Breadcrumb here rather than at the top: the fall-through below reaches
+        // the bare form, which records its own, and a command noted twice makes
+        // a dump report a repeat that never happened.
+        Platform::Crash::NoteCommand(static_cast<int>(cmd));
+
+        // THE ECHO THIS PATH NEVER HAD.
+        //
+        // Payload commands were invisible to observers twice over: they do not
+        // reach the bare ExecuteCommand where the echo lives, and the predicate
+        // that echo asks — IsMirrorable — refuses every payload row anyway. So a
+        // phone that set the interval or opened a folder told the watchers
+        // nothing, and a SECOND phone on the same viewer went stale with no way
+        // to find out. That is the two-phone bug in its general form.
+        //
+        // AFTER the handler, not before, and only on success. This is the one
+        // echo site with a reply in hand, and a value can be REFUSED — an
+        // out-of-range interval answers ERR. Announcing before would report a
+        // change the viewer then declined to make, which is worse than silence:
+        // an observer would show a state the observed screen is not in.
+        //
+        // Every test before any work, like the other emit sites — a viewer
+        // nobody is watching must not build a string here.
+        if (Remote::HasObservers() && Remote::ObserverEchoAllowed() &&
+            Remote::IsAnnounceable(cmd, /*hasValue=*/true) &&
+            reply.rfind(Constants::RemoteTcpIp::RESP_OK, 0) == 0) {
+            std::wstring wireName;
+            if (Remote::NameForCommand(cmd, wireName)) {
+                // The VALUE travels with the name. Without it the line is the
+                // bare verb every target already refuses for a missing payload.
+                //
+                // POSITIONAL when that value is a path or an index: those reach
+                // same-machine observers only, because `OpenFile C:\Photos\x.jpg`
+                // on a machine that happens to have such a folder opens a
+                // DIFFERENT picture. An off-machine watcher still learns what
+                // changed — FolderChanged and ImageChanged both carry portable
+                // spellings.
+                Remote::EmitToObservers(wireName + L" " + payload,
+                                        Remote::InboundSource(),
+                                        Remote::IsMachineSpecificPayload(cmd));
+            }
+        }
+
+        if (replyOut) *replyOut = reply;
+        return true;
+    }
 
     // Not a payload-carrying command — the value is meaningless, so run the
-    // ordinary form rather than silently doing nothing.
+    // ordinary form rather than silently doing nothing. The gates, the mirror
+    // fan-out and the echo all live there, so each happens exactly once however
+    // this function was entered.
     ExecuteCommand(hWnd, cmd);
+    return false;
 }
 
 // =============================================================================
@@ -350,18 +399,27 @@ void InputManager::ExecuteCommand(HWND hWnd, Command cmd) {
     Remote::ForwardGuard forwardGuard(forwarded);
 
     // The echo half. An observed instance reports what it does to whoever asked
-    // to watch — skipped for anything that arrived from the wire, or a command
-    // would bounce back to the connection that sent it.
+    // to watch — INCLUDING when the command arrived from the wire, minus the
+    // one connection that sent it. It used to be skipped outright for anything
+    // inbound, which meant a second client watching the same viewer learned
+    // nothing whenever the first one drove it: two phones observing one
+    // desktop, and only the phone pressing the button ever updated.
+    //
+    // The bounce that suppression was protecting against is handled by `except`
+    // instead, and the loop that genuinely needs silence — replaying an
+    // observed PEER's event — is what ObserverEchoAllowed still refuses.
     //
     // HasObservers() first: it is one atomic load, and it is false in any viewer
     // nobody is watching. IsMirrorable is a switch and NameForCommand walks the
     // command table — neither belongs on the keystroke path of a standalone
     // viewer, and this ordering keeps them off it.
-    if (Remote::HasObservers() && !Remote::InboundActive() &&
-        Remote::IsMirrorable(cmd)) {
+    // IsAnnounceable, NOT IsMirrorable — they are different questions and this
+    // asked the wrong one for as long as it existed. See RemoteProtocol.h.
+    if (Remote::HasObservers() && Remote::ObserverEchoAllowed() &&
+        Remote::IsAnnounceable(cmd)) {
         std::wstring wireName;
         if (Remote::NameForCommand(cmd, wireName))
-            Remote::EmitToObservers(wireName, Remote::CONN_NONE);
+            Remote::EmitToObservers(wireName, Remote::InboundSource());
     }
 
     // Direct transition pick — handled ahead of the switch because it is a
@@ -1104,6 +1162,48 @@ void InputManager::ExecuteCommand(HWND hWnd, Command cmd) {
         case Command::ToggleRemoteClients:
             uiManager.Toggle(uiManager.getRemoteClientsWindow());
             break;
+
+        // ── Ctrl+Alt+S — the listener itself, without its panel ──────────────
+        //
+        // The same two actions RemoteWnd's Start and Stop buttons perform. What
+        // it does NOT do is that panel's PushToConfig() first: there are no edit
+        // fields in flight when the command comes from a keystroke, so the
+        // configuration to start from is the one already loaded or saved.
+        //
+        // THE MAIN WINDOW HWND, which is what this function is handed. The
+        // server posts WM_QIV_REMOTE_COMMAND to whatever it is given, and only
+        // AppMain's window proc answers it — start it against a panel and every
+        // client waits out the full reply timeout instead. RemoteWnd::DoStart
+        // carries the same warning for the same reason.
+        case Command::ServerToggle: {
+            if (Remote::IsRunning()) {
+                Remote::Stop();
+                g_overlayManager.PostCenterMessage(hWnd, Constants::Messages::SERVER_STOPPED);
+            } else {
+                std::wstring err;
+                if (Remote::Start(hWnd, err)) {
+                    g_overlayManager.PostCenterMessage(
+                        hWnd, Constants::Messages::SERVER_STARTED_PREFIX +
+                                  Remote::BoundEndpoint());
+                } else {
+                    // Start() fills `err` on the failures it can name. When it
+                    // does not, WhyCannotStart says what is wrong with the
+                    // configuration — an empty name, a bad port — which is the
+                    // usual reason and the one the F9 panel shows in its status
+                    // line. Reporting neither would leave a key that appears to
+                    // do nothing, which is the failure shape this app has
+                    // already been bitten by.
+                    if (err.empty()) err = Remote::WhyCannotStart(Remote::Config());
+                    g_overlayManager.PostCenterMessage(
+                        hWnd, Constants::Messages::SERVER_START_FAILED + err);
+                }
+            }
+            // The F9 panel, if it happens to be open, is showing Start/Stop
+            // button states and a status line that just went stale. Refreshed
+            // only when it EXISTS — asking uiManager for it would construct one.
+            uiManager.RefreshRemoteWindowIfVisible();
+            break;
+        }
 
         // ── Mirroring (F11 / F12) ────────────────────────────────────────────
         // Both are pure state flips reported on screen. The forwarding itself
@@ -2208,6 +2308,13 @@ std::wstring InputManager::GetCommandValue(HWND hWnd, Command cmd) {
         case Command::ToggleRemoteLogFile: return OnOff(app.remoteLogToFile);
         case Command::ToggleGeneralLog:    return OnOff(app.generalLog);
         case Command::MirrorLocalToggle: return OnOff(app.resendCommandToCaller);
+        // Ctrl+Alt+S. Unreachable over the wire on purpose — it has no table row,
+        // so NameForCommand refuses it and the reply that would carry this value
+        // is never built. Answered anyway because this switch and the one above
+        // are meant to be edited together (see Command.h): a command with a case
+        // there and none here reports "?", and relying on "nothing can ask" is
+        // relying on the deny holding forever.
+        case Command::ServerToggle:      return OnOff(Remote::IsRunning());
 
         // The read-only one. Everything a driving instance needs in order to
         // decide whether an index is safe to send it: which folder this viewer is

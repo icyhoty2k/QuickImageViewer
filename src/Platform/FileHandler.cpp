@@ -1491,7 +1491,12 @@ void LoadImageIndex(HWND hWnd, int index) {
     // with a position from a different list.
     const bool tellTargets = app.passCommandToRemote && Remote::Mirror::HasLiveTargets() &&
                              !Remote::InboundActive() && !Remote::ForwardInFlight();
-    const bool tellObservers = Remote::HasObservers() && !Remote::InboundActive();
+    //
+    // Observing: NOT suppressed merely because a command is inbound. A second
+    // watcher has no other way to learn the picture moved — one phone pressing
+    // Next left every other observer frozen on the old frame. The connection
+    // that asked is excluded by name below instead; see ObserverEchoAllowed.
+    const bool tellObservers = Remote::HasObservers() && Remote::ObserverEchoAllowed();
 
     if (tellTargets || tellObservers) {
         const std::wstring line = L"JumpToImage " + std::to_wstring(index + 1);
@@ -1504,7 +1509,7 @@ void LoadImageIndex(HWND hWnd, int index) {
         }
         // positional: a `goto` reaches same-machine observers only.
         if (tellObservers) {
-            Remote::EmitToObservers(line, Remote::CONN_NONE, /*positional=*/true);
+            Remote::EmitToObservers(line, Remote::InboundSource(), /*positional=*/true);
 
             // …and the machine-independent half of the same announcement.
             //
@@ -1524,11 +1529,15 @@ void LoadImageIndex(HWND hWnd, int index) {
             // already been tested — a viewer nobody is watching still allocates
             // nothing on this path, which is the whole point of the ordering
             // above.
+            // Excludes the connection that asked, not every observer: the
+            // client that sent `next` reads the file name off its own reply,
+            // while a SECOND phone watching the same viewer has no other
+            // source for it at all.
             Remote::EmitToObservers(
                 L"ImageChanged " + std::to_wstring(index + 1) + L"/" +
                     std::to_wstring(app.playlist.size()) + L" " +
                     currentPath.substr(currentPath.find_last_of(L"\\/") + 1),
-                Remote::CONN_NONE);
+                Remote::InboundSource());
         }
     }
     // Path-identity guard for the main decode — same file keeps the same hash

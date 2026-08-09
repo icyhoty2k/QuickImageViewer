@@ -54,6 +54,12 @@ class RemoteWnd : public FloatingPanelWnd {
         void Init(HINSTANCE hInstance, HWND hParent, int8_t position) override;
         void Show() override;
 
+        // Re-read the listener's state and repaint, for a change this panel did
+        // not make. Ctrl+Alt+S starts and stops the server from the keyboard, so
+        // the Start/Stop buttons and the status line here can go stale without
+        // anything in this file running. No-op when hidden — Show() rebuilds.
+        void Refresh();
+
         ~RemoteWnd() {
             if (m_hFontBody)  DeleteObject(m_hFontBody);
             if (m_hFontBold)  DeleteObject(m_hFontBold);

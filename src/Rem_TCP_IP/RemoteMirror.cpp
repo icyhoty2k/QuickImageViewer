@@ -14,7 +14,7 @@
 #include "RemoteMirror.h"
 #include "RemoteClient.h"
 #include "RemoteProtocol.h"
-#include "RemoteServer.h" // ActiveConnections — the other half of SessionActive
+#include "RemoteServer.h" // HasLocalObservers — the other half of SessionActive
 #include "RemotesFile.h"  // SplitStoredSecret — imported credentials
 #include "RemoteLog.h"    // Ctrl+F12 — the record of what crossed the wire
 #include "RemoteSettings.h" // Config().name, snapshotted for the log's Sender column
@@ -1033,8 +1033,23 @@ const wchar_t *DownRemedy(Down d) {
 bool SessionActive() {
     // CONNECTED targets, not configured ones — see g_connectedCount. Two atomic
     // loads, nothing else: this is asked on every command.
+    //
+    // THE SECOND TERM USED TO BE ActiveConnections() — every client accepted by
+    // the local server — and that was wrong in a way nobody could see until a
+    // phone was plugged in. This predicate gates SESSION_BLOCKED, so opening the
+    // Android app took Delete, Move, Paste, Save and Find away from THIS
+    // keyboard, each with an overlay explaining a mirroring hazard that was not
+    // happening. The phone drives nothing and holds no playlist to keep aligned.
+    //
+    // What the block is actually about is UNSOLICITED POSITION TRAFFIC: a `goto`
+    // this instance sends out, which the far end applies to its own list with no
+    // reply to check. Two relationships do that and no others — a mirror target,
+    // and a SAME-MACHINE observer. An ordinary client asks and reads the answer,
+    // so it repairs its own drift and never belonged in this test.
+    //
+    // Still two atomic loads.
     return g_connectedCount.load(std::memory_order_acquire) > 0 ||
-           ActiveConnections() > 0;
+           HasLocalObservers();
 }
 
 bool HasLiveTargets() {

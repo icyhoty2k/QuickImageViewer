@@ -403,9 +403,20 @@ LRESULT CALLBACK MainAppWndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM l
             const Remote::RemoteRequest req = Remote::ParseLine(body);
             if (req.status == Remote::ParseStatus::Ok) {
                 Remote::InboundGuard guard(Remote::CONN_NONE);
-                std::wstring unused;
-                if (!Remote::ExecutePayloadCommand(hWnd, req, unused))
-                    InputManager::ExecuteCommand(hWnd, req.cmd);
+
+                // THE SINK, payload form — the same one the socket path uses.
+                //
+                // This used to call Remote::ExecutePayloadCommand first and fall
+                // back to the bare ExecuteCommand, which is the detour the
+                // server path also took: two entry points into one dispatch,
+                // each missing whatever hangs off the other. The overload does
+                // both branches itself, so an observed peer's event is now
+                // executed by exactly the same code as a keypress.
+                //
+                // No reply is asked for. An EVENT is an announcement — there is
+                // nobody waiting on an answer, which is what distinguishes this
+                // from the server path.
+                InputManager::ExecuteCommand(hWnd, req.cmd, req.payload);
             }
             return 0;
         }

@@ -254,6 +254,12 @@ std::wstring RemoteWnd::StatusLine() const {
 // =============================================================================
 // Actions
 // =============================================================================
+void RemoteWnd::Refresh() {
+    if (!IsVisible()) return;
+    BuildRows();
+    Repaint();
+}
+
 void RemoteWnd::DoStart() {
     PushToConfig();
     std::wstring err;
