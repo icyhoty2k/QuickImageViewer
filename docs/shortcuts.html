@@ -64,9 +64,15 @@
             <a class="policy" href="qiv-privacy.html">🔒&nbsp; Privacy — Windows app</a>
         </div>
         <div class="store-col">
-            <a class="cta-button" href="https://play.google.com/store/apps/details?id=net.icyhoty2k.qivremote">
+            <!-- CLOSED TESTING: the group, not the store. The store URL returns
+                 "item not found" to anyone who is not an enrolled tester, so it
+                 cannot be the public CTA — it advertises an app that looks like it
+                 does not exist. Revert to the store URL and the "Get qIV Remote"
+                 label on production launch. index.html carries its own UNFENCED
+                 copy of this row; change both. -->
+            <a class="cta-button" href="https://groups.google.com/g/qiv-remote-testers">
                 <span class="glyph"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 4.6a1 1 0 0 1 1.51-.86l11.5 6.9a1 1 0 0 1 0 1.72l-11.5 6.9A1 1 0 0 1 7 18.4V4.6Z"/></svg></span>
-                <span>Get qIV Remote<small>Android &mdash; Google Play</small></span>
+                <span>Help test qIV Remote<small>Android 13+ &mdash; closed test</small></span>
             </a>
             <a class="policy" href="qiv-remote-privacy.html">🔒&nbsp; Privacy — Android app</a>
         </div>

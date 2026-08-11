@@ -160,7 +160,7 @@ does not try to replace them.</sub>
 <div align="center">
 
 [![Android](https://img.shields.io/badge/Android-13%2B-3DDC84?style=for-the-badge&logo=android&logoColor=white)](#requirements)
-[![Google Play](https://img.shields.io/badge/Google%20Play-coming%20soon-414141?style=for-the-badge&logo=googleplay&logoColor=white)](#)
+[![Google Play](https://img.shields.io/badge/Google%20Play-closed%20testing%20·%20testers%20wanted-3DDC84?style=for-the-badge&logo=googleplay&logoColor=white)](#it-is-in-closed-testing--testers-wanted)
 [![No account](https://img.shields.io/badge/no%20account-no%20cloud%20·%20no%20analytics-1f6feb?style=for-the-badge)](#a-private-network-and-nothing-else)
 
 **Your phone becomes the viewer's remote, a second screen, and a photo frame your PC drives.**
@@ -314,11 +314,26 @@ without the TV. You need **QuickImageViewer running on a Windows PC with its Loc
 enabled** (`F9` in qIV), and the phone on the same network. The app's About screen walks
 through the setup.
 
-<div align="center">
+### It is in closed testing — testers wanted
 
-*Coming to Google Play. Until then, the desktop side is ready and waiting on `F9`.*
+Google does not let a new app go public until **twelve people have tested it for fourteen
+days**. Until that is done the Play listing stays invisible to anyone who has not joined
+the test, so there is no ordinary download link yet.
 
-</div>
+If you run qIV and have an Android phone on **Android 13 or newer**, joining takes a
+minute. Three steps, all three needed, and **the same Google account for each**:
+
+1. Join the tester group — <https://groups.google.com/g/qiv-remote-testers>
+2. Open <https://play.google.com/apps/testing/net.icyhoty2k.qivremote> **on the phone** and tap **Become a tester**
+3. Install from [Google Play](https://play.google.com/store/apps/details?id=net.icyhoty2k.qivremote), and please keep it installed for fourteen days
+
+> **Joining the group does not enrol you** — step 2 is what does, and it is the step people
+> skip. If step 3 says the app is not available, that is normal for a few minutes: reopen
+> the step 2 link, which then reads *"You are a tester"* and offers its own download button.
+
+You do not need a Windows PC to try it. Open the app and tap **Try it without a desktop** —
+demo mode runs every screen, including the paid ones, against a viewer that does not exist,
+and opens no network connection at all.
 
 ---
 
