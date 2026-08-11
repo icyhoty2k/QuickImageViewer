@@ -60,7 +60,7 @@
             "fileSize": "9,873.50 KB",
             "softwareVersion": "2.252.0.327",
             "datePublished": "2026-08-09",
-            "dateModified": "2026-08-09",
+            "dateModified": "2026-08-10",
             "license": "https://www.gnu.org/licenses/agpl-3.0.html",
             "releaseNotes": "https://github.com/icyhoty2k/QuickImageViewer/releases",
             "screenshot": [
@@ -620,7 +620,7 @@
     </style>
     </head>
     <body>
-        <!-- SHARED-HEADER-START — generated from docs/_partials/header.html by tools/build-site.py. Do not edit between the fences; edit the partial. -->
+        <!-- SHARED-HEADER-START — generated from docs/_partials/header.html by sync-site.py. Do not edit between the fences; edit the partial. -->
 <nav class="sitenav">
     <div class="inner">
         <a href="./" class="current">🖥&nbsp; QuickImageViewer (qIV)</a>
@@ -683,15 +683,9 @@ Version 2.252.0.327 &bull; Size: 9,873.50 KB &bull; Build Date: 2026-08-09
                         <a class="policy" href="qiv-privacy.html">🔒&nbsp; Privacy — Windows app</a>
                     </div>
                     <div class="store-col">
-                        <!-- CLOSED TESTING: the group, not the store. The store URL returns
-                             "item not found" to anyone who is not an enrolled tester, so it
-                             cannot be the public CTA. Revert to the store URL and the "Get
-                             qIV Remote" label on production launch — this copy is NOT inside
-                             a SHARED-STOREROW fence, so docs/_partials/storerow.html has to
-                             be changed too and does not propagate here on its own. -->
-                        <a class="cta-button" href="https://groups.google.com/g/qiv-remote-testers">
+                        <a class="cta-button" href="https://play.google.com/store/apps/details?id=net.icyhoty2k.qivremote">
                         <span class="glyph"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 4.6a1 1 0 0 1 1.51-.86l11.5 6.9a1 1 0 0 1 0 1.72l-11.5 6.9A1 1 0 0 1 7 18.4V4.6Z"/></svg></span>
-                        <span>Help test qIV Remote<small>Android 13+ &mdash; closed test</small></span></a>
+                        <span>Get qIV Remote<small>Android &mdash; Google Play</small></span></a>
                         <a class="policy" href="qiv-remote-privacy.html">🔒&nbsp; Privacy — Android app</a>
                     </div>
                     <!--
@@ -808,12 +802,12 @@ Version 2.252.0.327 &bull; Size: 9,873.50 KB &bull; Build Date: 2026-08-09
 <div class="statstrip">
     <a class="stat" href="https://github.com/icyhoty2k/QuickImageViewer/releases">
         <span class="stat-glyph">⬇</span>
-        <span class="stat-value">406</span>
+        <span class="stat-value">371</span>
         <span class="stat-label">downloads</span>
     </a>
     <a class="stat" href="https://github.com/icyhoty2k/QuickImageViewer/stargazers">
         <span class="stat-glyph">⭐</span>
-        <span class="stat-value">9</span>
+        <span class="stat-value">10</span>
         <span class="stat-label">stars</span>
     </a>
     <a class="stat" href="https://github.com/icyhoty2k/QuickImageViewer/watchers">
@@ -833,7 +827,7 @@ Version 2.252.0.327 &bull; Size: 9,873.50 KB &bull; Build Date: 2026-08-09
     </a>
     <a class="stat" href="https://github.com/icyhoty2k/QuickImageViewer/commits">
         <span class="stat-glyph">🕒</span>
-        <span class="stat-value">yesterday</span>
+        <span class="stat-value">today</span>
         <span class="stat-label">last updated</span>
     </a>
     <a class="stat" href="https://github.com/icyhoty2k/QuickImageViewer/releases/latest">
@@ -2334,27 +2328,15 @@ CMD JumpToImage|1|go to a numbered image in the current playlist|image NUMBER, 1
                     network. The app's About screen walks through the setup.
                 </p>
                 <p>
-                    <strong>It is in closed testing on Google Play and needs testers.</strong> Google will not
-                    let a new app go public until twelve people have tested it for fourteen days, so the store
-                    page stays invisible to everyone who has not joined. If you run qIV and have an Android
-                    phone on <strong>Android 13 or newer</strong>, joining takes a minute and
-                    <a href="qiv-remote.html#testing">the three steps are here</a>.
+                    <em>Coming to Google Play. Until then, the desktop side is ready and waiting on <kbd>F9</kbd>.</em>
                 </p>
                 <!--
-            THE GROUP LINK, NOT THE STORE LINK, AND THAT IS DELIBERATE.
-            The store URL returns "item not found" to anyone who is not an enrolled
-            tester, so pointing a public page at it advertises an app that looks like
-            it does not exist. The group is the first of the three steps and the only
-            one a stranger can act on.
-
-            ON PRODUCTION LAUNCH: revert this href to
-            https://play.google.com/store/apps/details?id=net.icyhoty2k.qivremote
-            and restore the "Get qIV Remote on Google Play" label. Same change in
-            docs/_partials/storerow.html and in the unfenced storerow copy near the
-            top of this file. Listed as a launch-day step in the Android handoff.
+            LIVE from here on. The store URL 404s until the listing is approved, which is a
+            deliberate choice: the link is the applicationId and will not change, so nothing
+            has to be remembered on publish day.
         -->
-                <a href="https://groups.google.com/g/qiv-remote-testers" class="cta-button">Help
-                test qIV Remote on Android</a>
+                <a href="https://play.google.com/store/apps/details?id=net.icyhoty2k.qivremote" class="cta-button">Get
+                qIV Remote on Google Play</a>
             </section>
             <section id="kiosk-cli">
                 <details class="doc-drawer">
@@ -2997,7 +2979,7 @@ cmake --build . --config Release</code></pre>
                 </details>
             </section>
         </main>
-        <!-- SHARED-FOOTER-START — generated from docs/_partials/footer.html by tools/build-site.py. Do not edit between the fences; edit the partial. -->
+        <!-- SHARED-FOOTER-START — generated from docs/_partials/footer.html by sync-site.py. Do not edit between the fences; edit the partial. -->
 <footer>
     <div class="footer-inner">
         <div class="footer-apps">
