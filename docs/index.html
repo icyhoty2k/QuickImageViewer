@@ -623,15 +623,29 @@
         <!-- SHARED-HEADER-START — generated from docs/_partials/header.html by tools/build-site.py. Do not edit between the fences; edit the partial. -->
 <nav class="sitenav">
     <div class="inner">
-        <a href="./" class="current">🖥&nbsp; QuickImageViewer (qIV)</a>
-        <a href="qiv-privacy.html">🔒&nbsp; Privacy — Windows</a>
-        <a href="qiv-remote.html">📱&nbsp; qIV Remote</a>
-        <a href="qiv-remote-privacy.html">🔒&nbsp; Privacy — Android</a>
+        <!--
+            INLINE SVG, NOT EMOJI. These were emoji, and an emoji is a font
+            glyph: it renders as Apple's cartoon on a Mac, Microsoft's flat one on
+            Windows, something else again on Android, and as a box on whatever is
+            missing the font. Five icons drawn by five different vendors do not
+            look like a set.
+
+            These are the same shapes as the glyph row on icyhoty2k.github.io, so
+            the two sites share one icon language. They inherit currentColor, so
+            they take the link colour and the hover colour for free, and they cost
+            no extra request.
+
+            aria-hidden because the label beside each one already says it.
+        -->
+        <a href="./" class="current"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><rect x="2.5" y="4" width="19" height="12.5" rx="1.8"/><path d="M12 16.5v3M8 19.5h8"/></svg>QuickImageViewer (qIV)</a>
+        <a href="qiv-privacy.html"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><rect x="4.5" y="10.5" width="15" height="10" rx="2"/><path d="M8 10.5V7.2a4 4 0 0 1 8 0v3.3"/></svg>Privacy — Windows</a>
+        <a href="qiv-remote.html"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><rect x="7" y="2.5" width="10" height="19" rx="2"/><path d="M10.5 5h3M10 19.2h4"/></svg>qIV Remote</a>
+        <a href="qiv-remote-privacy.html"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><rect x="4.5" y="10.5" width="15" height="10" rx="2"/><path d="M8 10.5V7.2a4 4 0 0 1 8 0v3.3"/></svg>Privacy — Android</a>
         <!-- The developer site, one level up at the account root. An absolute URL
              on purpose: this project lives at /QuickImageViewer/, so "../" would
              work from a page but breaks the moment anything is previewed from a
              file path or served from a different prefix. -->
-        <a href="https://icyhoty2k.github.io/">👤&nbsp; icyhoty2k</a>
+        <a href="https://icyhoty2k.github.io/"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><circle cx="12" cy="8" r="3.6"/><path d="M4.8 20.2a7.2 7.2 0 0 1 14.4 0"/></svg>icyhoty2k</a>
     </div>
 </nav>
 <!-- SHARED-HEADER-END -->
@@ -685,7 +699,7 @@
 Version 2.252.0.327 &bull; Size: 9,873.50 KB &bull; Build Date: 2026-08-09
 <!-- SHARED-VERSION-END -->
                         </div>
-                        <a class="policy" href="qiv-privacy.html">🔒&nbsp; Privacy — Windows app</a>
+                        <a class="policy" href="qiv-privacy.html"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><rect x="4.5" y="10.5" width="15" height="10" rx="2"/><path d="M8 10.5V7.2a4 4 0 0 1 8 0v3.3"/></svg>Privacy — Windows app</a>
                     </div>
                     <div class="store-col">
                         <!-- CLOSED TESTING: the group, not the store. The store URL returns
@@ -697,7 +711,7 @@ Version 2.252.0.327 &bull; Size: 9,873.50 KB &bull; Build Date: 2026-08-09
                         <a class="cta-button" href="https://groups.google.com/g/qiv-remote-testers">
                         <span class="glyph"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 4.6a1 1 0 0 1 1.51-.86l11.5 6.9a1 1 0 0 1 0 1.72l-11.5 6.9A1 1 0 0 1 7 18.4V4.6Z"/></svg></span>
                         <span>Help test qIV Remote<small>Android 13+ &mdash; closed test</small></span></a>
-                        <a class="policy" href="qiv-remote-privacy.html">🔒&nbsp; Privacy — Android app</a>
+                        <a class="policy" href="qiv-remote-privacy.html"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><rect x="4.5" y="10.5" width="15" height="10" rx="2"/><path d="M8 10.5V7.2a4 4 0 0 1 8 0v3.3"/></svg>Privacy — Android app</a>
                     </div>
                     <!--
                 THE SECOND ANDROID BUTTON IS GONE. It read "What the Android app
@@ -3007,16 +3021,16 @@ cmake --build . --config Release</code></pre>
     <div class="footer-inner">
         <div class="footer-apps">
             <p class="footer-pages">
-                <a href="./">🖥&nbsp; QuickImageViewer (qIV)</a>
-                <a href="qiv-privacy.html">🔒&nbsp; Privacy — Windows app</a>
+                <a href="./"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><rect x="2.5" y="4" width="19" height="12.5" rx="1.8"/><path d="M12 16.5v3M8 19.5h8"/></svg>QuickImageViewer (qIV)</a>
+                <a href="qiv-privacy.html"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><rect x="4.5" y="10.5" width="15" height="10" rx="2"/><path d="M8 10.5V7.2a4 4 0 0 1 8 0v3.3"/></svg>Privacy — Windows app</a>
             </p>
             <p class="footer-pages">
-                <a href="qiv-remote.html">📱&nbsp; qIV Remote</a>
-                <a href="qiv-remote-privacy.html">🔒&nbsp; Privacy — Android app</a>
+                <a href="qiv-remote.html"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><rect x="7" y="2.5" width="10" height="19" rx="2"/><path d="M10.5 5h3M10 19.2h4"/></svg>qIV Remote</a>
+                <a href="qiv-remote-privacy.html"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><rect x="4.5" y="10.5" width="15" height="10" rx="2"/><path d="M8 10.5V7.2a4 4 0 0 1 8 0v3.3"/></svg>Privacy — Android app</a>
             </p>
         </div>
         <p>
-            Developed by <strong>👤&nbsp; Ivan Hristov Yanev (IcyHoty2k)</strong>.
+            Developed by <strong>Ivan Hristov Yanev (IcyHoty2k)</strong>.
             Licensed under the AGPLv3.
         </p>
         <p>

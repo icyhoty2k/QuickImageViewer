@@ -1,13 +1,27 @@
 <nav class="sitenav">
     <div class="inner">
-        <a href="./"{{CURRENT:home}}>🖥&nbsp; QuickImageViewer (qIV)</a>
-        <a href="qiv-privacy.html"{{CURRENT:priv}}>🔒&nbsp; Privacy — Windows</a>
-        <a href="qiv-remote.html"{{CURRENT:remote}}>📱&nbsp; qIV Remote</a>
-        <a href="qiv-remote-privacy.html"{{CURRENT:remotepriv}}>🔒&nbsp; Privacy — Android</a>
+        <!--
+            INLINE SVG, NOT EMOJI. These were emoji, and an emoji is a font
+            glyph: it renders as Apple's cartoon on a Mac, Microsoft's flat one on
+            Windows, something else again on Android, and as a box on whatever is
+            missing the font. Five icons drawn by five different vendors do not
+            look like a set.
+
+            These are the same shapes as the glyph row on icyhoty2k.github.io, so
+            the two sites share one icon language. They inherit currentColor, so
+            they take the link colour and the hover colour for free, and they cost
+            no extra request.
+
+            aria-hidden because the label beside each one already says it.
+        -->
+        <a href="./"{{CURRENT:home}}><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><rect x="2.5" y="4" width="19" height="12.5" rx="1.8"/><path d="M12 16.5v3M8 19.5h8"/></svg>QuickImageViewer (qIV)</a>
+        <a href="qiv-privacy.html"{{CURRENT:priv}}><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><rect x="4.5" y="10.5" width="15" height="10" rx="2"/><path d="M8 10.5V7.2a4 4 0 0 1 8 0v3.3"/></svg>Privacy — Windows</a>
+        <a href="qiv-remote.html"{{CURRENT:remote}}><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><rect x="7" y="2.5" width="10" height="19" rx="2"/><path d="M10.5 5h3M10 19.2h4"/></svg>qIV Remote</a>
+        <a href="qiv-remote-privacy.html"{{CURRENT:remotepriv}}><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><rect x="4.5" y="10.5" width="15" height="10" rx="2"/><path d="M8 10.5V7.2a4 4 0 0 1 8 0v3.3"/></svg>Privacy — Android</a>
         <!-- The developer site, one level up at the account root. An absolute URL
              on purpose: this project lives at /QuickImageViewer/, so "../" would
              work from a page but breaks the moment anything is previewed from a
              file path or served from a different prefix. -->
-        <a href="https://icyhoty2k.github.io/">👤&nbsp; icyhoty2k</a>
+        <a href="https://icyhoty2k.github.io/"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><circle cx="12" cy="8" r="3.6"/><path d="M4.8 20.2a7.2 7.2 0 0 1 14.4 0"/></svg>icyhoty2k</a>
     </div>
 </nav>

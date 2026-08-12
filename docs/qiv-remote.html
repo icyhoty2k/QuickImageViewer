@@ -152,15 +152,29 @@
 <!-- SHARED-HEADER-START — generated from docs/_partials/header.html by tools/build-site.py. Do not edit between the fences; edit the partial. -->
 <nav class="sitenav">
     <div class="inner">
-        <a href="./">🖥&nbsp; QuickImageViewer (qIV)</a>
-        <a href="qiv-privacy.html">🔒&nbsp; Privacy — Windows</a>
-        <a href="qiv-remote.html" class="current">📱&nbsp; qIV Remote</a>
-        <a href="qiv-remote-privacy.html">🔒&nbsp; Privacy — Android</a>
+        <!--
+            INLINE SVG, NOT EMOJI. These were emoji, and an emoji is a font
+            glyph: it renders as Apple's cartoon on a Mac, Microsoft's flat one on
+            Windows, something else again on Android, and as a box on whatever is
+            missing the font. Five icons drawn by five different vendors do not
+            look like a set.
+
+            These are the same shapes as the glyph row on icyhoty2k.github.io, so
+            the two sites share one icon language. They inherit currentColor, so
+            they take the link colour and the hover colour for free, and they cost
+            no extra request.
+
+            aria-hidden because the label beside each one already says it.
+        -->
+        <a href="./"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><rect x="2.5" y="4" width="19" height="12.5" rx="1.8"/><path d="M12 16.5v3M8 19.5h8"/></svg>QuickImageViewer (qIV)</a>
+        <a href="qiv-privacy.html"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><rect x="4.5" y="10.5" width="15" height="10" rx="2"/><path d="M8 10.5V7.2a4 4 0 0 1 8 0v3.3"/></svg>Privacy — Windows</a>
+        <a href="qiv-remote.html" class="current"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><rect x="7" y="2.5" width="10" height="19" rx="2"/><path d="M10.5 5h3M10 19.2h4"/></svg>qIV Remote</a>
+        <a href="qiv-remote-privacy.html"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><rect x="4.5" y="10.5" width="15" height="10" rx="2"/><path d="M8 10.5V7.2a4 4 0 0 1 8 0v3.3"/></svg>Privacy — Android</a>
         <!-- The developer site, one level up at the account root. An absolute URL
              on purpose: this project lives at /QuickImageViewer/, so "../" would
              work from a page but breaks the moment anything is previewed from a
              file path or served from a different prefix. -->
-        <a href="https://icyhoty2k.github.io/">👤&nbsp; icyhoty2k</a>
+        <a href="https://icyhoty2k.github.io/"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><circle cx="12" cy="8" r="3.6"/><path d="M4.8 20.2a7.2 7.2 0 0 1 14.4 0"/></svg>icyhoty2k</a>
     </div>
 </nav>
 <!-- SHARED-HEADER-END -->
@@ -222,7 +236,7 @@
                 <span class="glyph"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3a1 1 0 0 1 1 1v8.6l2.3-2.3a1 1 0 1 1 1.4 1.4l-4 4a1 1 0 0 1-1.4 0l-4-4a1 1 0 1 1 1.4-1.4l2.3 2.3V4a1 1 0 0 1 1-1Z"/><path d="M4 14a1 1 0 0 1 1 1v3a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-3a1 1 0 1 1 2 0v3a3 3 0 0 1-3 3H6a3 3 0 0 1-3-3v-3a1 1 0 0 1 1-1Z"/></svg></span>
                 <span>Download QuickImageViewer<small>Windows 10 &amp; 11 &mdash; free</small></span>
             </a>
-            <a class="policy" href="qiv-privacy.html">🔒&nbsp; Privacy — Windows app</a>
+            <a class="policy" href="qiv-privacy.html"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><rect x="4.5" y="10.5" width="15" height="10" rx="2"/><path d="M8 10.5V7.2a4 4 0 0 1 8 0v3.3"/></svg>Privacy — Windows app</a>
         </div>
         <div class="store-col">
             <!-- CLOSED TESTING: the group, not the store. The store URL returns
@@ -235,7 +249,7 @@
                 <span class="glyph"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 4.6a1 1 0 0 1 1.51-.86l11.5 6.9a1 1 0 0 1 0 1.72l-11.5 6.9A1 1 0 0 1 7 18.4V4.6Z"/></svg></span>
                 <span>Help test qIV Remote<small>Android 13+ &mdash; closed test</small></span>
             </a>
-            <a class="policy" href="qiv-remote-privacy.html">🔒&nbsp; Privacy — Android app</a>
+            <a class="policy" href="qiv-remote-privacy.html"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><rect x="4.5" y="10.5" width="15" height="10" rx="2"/><path d="M8 10.5V7.2a4 4 0 0 1 8 0v3.3"/></svg>Privacy — Android app</a>
         </div>
     </div>
 <!-- SHARED-STOREROW-END -->
@@ -247,66 +261,19 @@
         runs every screen against a viewer that does not exist.
     </div>
 
-    <h2>What is on this page</h2>
-    <ul class="toc">
-        <li><a href="#testing">It is in closed testing — how to join</a></li>
-        <li><a href="#screens">The four screens</a></li>
-        <li><a href="#simple">Simple — the picture and nothing else</a></li>
-        <li><a href="#find">Find any picture by typing part of its name</a></li>
-        <li><a href="#advanced">Advanced — every command</a></li>
-        <li><a href="#watch">Watch — the photo-frame screen</a></li>
-        <li><a href="#stream">Stream — photos from the phone</a></li>
-        <li><a href="#settings">Settings</a></li>
-        <li><a href="#editions">Free and full editions</a></li>
-        <li><a href="#security">Security and privacy</a></li>
-        <li><a href="#setup">Setting up the connection</a></li>
-    </ul>
-
-    <h2 id="testing">It is in closed testing — how to join</h2>
-    <p>
-        Google does not let a new app go public until <strong>twelve people have tested it for
-        fourteen days</strong>. Until that is done the Play listing stays invisible to everyone
-        who has not joined the test, which is why there is no ordinary download button above.
-    </p>
-    <p>
-        You need an Android phone on <strong>Android 13 or newer</strong>. Three steps, all
-        three needed, and <strong>the same Google account for each</strong>:
-    </p>
-    <ol>
-        <li>
-            Join the tester group:
-            <a href="https://groups.google.com/g/qiv-remote-testers">groups.google.com/g/qiv-remote-testers</a>
-        </li>
-        <li>
-            Open
-            <a href="https://play.google.com/apps/testing/net.icyhoty2k.qivremote">this link on the phone</a>
-            and tap <strong>Become a tester</strong>.
-        </li>
-        <li>
-            Install from
-            <a href="https://play.google.com/store/apps/details?id=net.icyhoty2k.qivremote">Google Play</a>,
-            and please keep it installed for fourteen days.
-        </li>
-    </ol>
-    <div class="callout">
-        <strong>Joining the group does not enrol you</strong> — step 2 is what does, and it is
-        the step people skip. And if step 3 says the app is not available, that is normal for a
-        few minutes: reopen the step 2 link, which then reads <em>"You are a tester"</em> and
-        offers its own download button.
-    </div>
-    <p>
-        You do not need a Windows PC to try it. Open the app and tap <strong>Try it without a
-        desktop</strong> — demo mode runs every screen, including the paid ones, against a
-        viewer that does not exist, and opens no network connection at all.
-    </p>
-
-    <h2 id="screens">The four screens</h2>
+    <h2 id="gallery">What it looks like</h2>
 
     <!--
-        THE GALLERY. This page described four screens in detail and showed none
-        of them, which is the one thing a page about a phone app cannot get away
+        THE GALLERY. This page described the app in detail and showed none of
+        it, which is the one thing a page about a phone app cannot get away
         with. Same component as index.html's, portrait-framed -- see the style
         block in the head for why.
+
+        IT SITS HERE, HIGH UP, AND NOT UNDER "The four screens". It holds ten
+        shots -- Servers, Settings, demo mode and three landscape views are not
+        four screens, and putting it there made the page contradict its own
+        heading. index.html shows its carousel right after the buttons; this is
+        the same position in this page's rhythm.
 
         Shots are webp, 197 KB for all ten, and only the first is fetched: the
         rest load when they are asked for, plus the two neighbours of whatever is
@@ -395,6 +362,63 @@
         show(0);
     })();
     </script>
+
+    <h2>What is on this page</h2>
+    <ul class="toc">
+        <li><a href="#gallery">What it looks like</a></li>
+        <li><a href="#testing">It is in closed testing — how to join</a></li>
+        <li><a href="#screens">The four screens</a></li>
+        <li><a href="#simple">Simple — the picture and nothing else</a></li>
+        <li><a href="#find">Find any picture by typing part of its name</a></li>
+        <li><a href="#advanced">Advanced — every command</a></li>
+        <li><a href="#watch">Watch — the photo-frame screen</a></li>
+        <li><a href="#stream">Stream — photos from the phone</a></li>
+        <li><a href="#settings">Settings</a></li>
+        <li><a href="#editions">Free and full editions</a></li>
+        <li><a href="#security">Security and privacy</a></li>
+        <li><a href="#setup">Setting up the connection</a></li>
+    </ul>
+
+    <h2 id="testing">It is in closed testing — how to join</h2>
+    <p>
+        Google does not let a new app go public until <strong>twelve people have tested it for
+        fourteen days</strong>. Until that is done the Play listing stays invisible to everyone
+        who has not joined the test, which is why there is no ordinary download button above.
+    </p>
+    <p>
+        You need an Android phone on <strong>Android 13 or newer</strong>. Three steps, all
+        three needed, and <strong>the same Google account for each</strong>:
+    </p>
+    <ol>
+        <li>
+            Join the tester group:
+            <a href="https://groups.google.com/g/qiv-remote-testers">groups.google.com/g/qiv-remote-testers</a>
+        </li>
+        <li>
+            Open
+            <a href="https://play.google.com/apps/testing/net.icyhoty2k.qivremote">this link on the phone</a>
+            and tap <strong>Become a tester</strong>.
+        </li>
+        <li>
+            Install from
+            <a href="https://play.google.com/store/apps/details?id=net.icyhoty2k.qivremote">Google Play</a>,
+            and please keep it installed for fourteen days.
+        </li>
+    </ol>
+    <div class="callout">
+        <strong>Joining the group does not enrol you</strong> — step 2 is what does, and it is
+        the step people skip. And if step 3 says the app is not available, that is normal for a
+        few minutes: reopen the step 2 link, which then reads <em>"You are a tester"</em> and
+        offers its own download button.
+    </div>
+    <p>
+        You do not need a Windows PC to try it. Open the app and tap <strong>Try it without a
+        desktop</strong> — demo mode runs every screen, including the paid ones, against a
+        viewer that does not exist, and opens no network connection at all.
+    </p>
+
+    <h2 id="screens">The four screens</h2>
+
 
     <p>
         Every screen drives the same connection. They differ in how much of the phone they
@@ -684,16 +708,16 @@
     <div class="footer-inner">
         <div class="footer-apps">
             <p class="footer-pages">
-                <a href="./">🖥&nbsp; QuickImageViewer (qIV)</a>
-                <a href="qiv-privacy.html">🔒&nbsp; Privacy — Windows app</a>
+                <a href="./"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><rect x="2.5" y="4" width="19" height="12.5" rx="1.8"/><path d="M12 16.5v3M8 19.5h8"/></svg>QuickImageViewer (qIV)</a>
+                <a href="qiv-privacy.html"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><rect x="4.5" y="10.5" width="15" height="10" rx="2"/><path d="M8 10.5V7.2a4 4 0 0 1 8 0v3.3"/></svg>Privacy — Windows app</a>
             </p>
             <p class="footer-pages">
-                <a href="qiv-remote.html">📱&nbsp; qIV Remote</a>
-                <a href="qiv-remote-privacy.html">🔒&nbsp; Privacy — Android app</a>
+                <a href="qiv-remote.html"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><rect x="7" y="2.5" width="10" height="19" rx="2"/><path d="M10.5 5h3M10 19.2h4"/></svg>qIV Remote</a>
+                <a href="qiv-remote-privacy.html"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><rect x="4.5" y="10.5" width="15" height="10" rx="2"/><path d="M8 10.5V7.2a4 4 0 0 1 8 0v3.3"/></svg>Privacy — Android app</a>
             </p>
         </div>
         <p>
-            Developed by <strong>👤&nbsp; Ivan Hristov Yanev (IcyHoty2k)</strong>.
+            Developed by <strong>Ivan Hristov Yanev (IcyHoty2k)</strong>.
             Licensed under the AGPLv3.
         </p>
         <p>

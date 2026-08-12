@@ -208,12 +208,31 @@ nav.sitenav a {
     text-decoration: none;
     white-space: nowrap;
     padding: 4px 0;
-    display: inline;
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
     background: none;
     border-radius: 0;
     font-weight: 400;
     transition: color .15s;
 }
+
+/* The nav icons. Inline SVG rather than emoji -- see _partials/header.html for
+   why. inline-flex above is what lets them sit on the text baseline without the
+   descender wobble a floated glyph gives you.
+
+   em rather than px so the icon tracks the label if the nav font size ever
+   changes, and flex:none so a long label cannot squash it. */
+nav.sitenav a svg {
+    width: 1.05em;
+    height: 1.05em;
+    flex: none;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+    opacity: .85;
+}
+
+nav.sitenav a:hover svg { opacity: 1; }
 
 nav.sitenav a:hover {
     color: var(--accent-primary);
@@ -353,11 +372,28 @@ nav.sitenav a.current {
     color: var(--text-muted);
     text-decoration: none;
     white-space: nowrap;
+    /* inline-flex so the padlock sits on the text baseline. It used to be a
+       🔒 emoji followed by &nbsp;, which rendered as a different picture on
+       every operating system. */
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.policy svg {
+    width: 1.05em;
+    height: 1.05em;
+    flex: none;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+    opacity: .85;
 }
 
 .policy:hover {
     color: var(--accent-primary);
 }
+
+.policy:hover svg { opacity: 1; }
 
 /* ------------------------------------------------------------------
    THE BUTTON. There is one, and this is it.
