@@ -44,6 +44,108 @@
   "offers": { "@type": "Offer", "price": "0", "priceCurrency": "EUR" }
 }
 </script>
+    <style>
+        /* Screenshot carousel. Same behaviour and same class names as the one on
+           index.html, deliberately -- two galleries on one site that work
+           differently is worse than either of them being imperfect.
+
+           THE FRAME IS PORTRAIT HERE, and that is the one real difference. Seven
+           of the ten shots are 1080x2340 phone screens; contained inside
+           index.html's 16/9 frame they would be a narrow sliver between two
+           enormous black bars. A 3/4 frame lets a portrait shot fill the height
+           and still letterboxes the three landscape ones politely. */
+        .carousel {
+            position: relative;
+            max-width: 560px;
+            margin: 34px auto 0;
+            user-select: none;
+        }
+
+        .carousel-frame {
+            position: relative;
+            border-radius: 12px;
+            border: 1px solid var(--border-color);
+            overflow: hidden;
+            box-shadow: 0 20px 50px rgba(0,0,0,0.5);
+            background: #000;
+            aspect-ratio: 3 / 4;
+        }
+
+        /* The image itself advances the gallery -- clicking a picture to see the
+           next one is what people try first, and the arrows are easy to miss on
+           a phone. */
+        .carousel-frame img {
+            width: 100%;
+            height: 100%;
+            object-fit: contain;
+            display: block;
+            cursor: pointer;
+        }
+
+        .carousel-btn {
+            position: absolute;
+            top: 50%;
+            transform: translateY(-50%);
+            width: 46px;
+            height: 46px;
+            border-radius: 50%;
+            border: 1px solid var(--border-color);
+            background: rgba(15, 23, 42, 0.85);
+            color: var(--accent-primary);
+            font-size: 1.3rem;
+            line-height: 1;
+            cursor: pointer;
+            transition: all 0.15s ease;
+            z-index: 2;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .carousel-btn:hover { background: var(--accent-primary); color: #0f172a; }
+        .carousel-btn:focus-visible {
+            outline: 2px solid var(--accent-primary);
+            outline-offset: 2px;
+        }
+        .carousel-btn.prev { left: 12px; }
+        .carousel-btn.next { right: 12px; }
+
+        .carousel-caption {
+            margin-top: 14px;
+            color: var(--text-muted);
+            font-size: 0.95rem;
+            min-height: 1.4em;
+            text-align: center;
+        }
+
+        .carousel-counter {
+            color: var(--accent-primary);
+            font-weight: 600;
+            font-size: 0.85rem;
+        }
+
+        .carousel-dots {
+            display: flex;
+            justify-content: center;
+            gap: 8px;
+            margin-top: 12px;
+            flex-wrap: wrap;
+        }
+
+        .carousel-dot {
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+            border: none;
+            padding: 0;
+            background: var(--border-color);
+            cursor: pointer;
+            transition: all 0.15s ease;
+        }
+
+        .carousel-dot:hover { background: var(--text-muted); }
+        .carousel-dot.active { background: var(--accent-primary); transform: scale(1.25); }
+    </style>
 </head>
 <body class="android">
 
@@ -199,6 +301,101 @@
     </p>
 
     <h2 id="screens">The four screens</h2>
+
+    <!--
+        THE GALLERY. This page described four screens in detail and showed none
+        of them, which is the one thing a page about a phone app cannot get away
+        with. Same component as index.html's, portrait-framed -- see the style
+        block in the head for why.
+
+        Shots are webp, 197 KB for all ten, and only the first is fetched: the
+        rest load when they are asked for, plus the two neighbours of whatever is
+        on screen so an arrow click is instant.
+    -->
+    <div class="carousel" id="shotCarousel" aria-label="qIV Remote screenshot gallery">
+        <div class="carousel-frame">
+            <button class="carousel-btn prev" id="shotPrev" aria-label="Previous screenshot">&#10094;</button>
+            <img id="shotImg" src="screenshots/remote/simple.webp"
+                 alt="qIV Remote: the Simple screen, showing one picture and nothing else">
+            <button class="carousel-btn next" id="shotNext" aria-label="Next screenshot">&#10095;</button>
+        </div>
+        <p class="carousel-caption">
+            <span class="carousel-counter" id="shotCounter">1 / 10</span> &nbsp;—&nbsp;
+            <span id="shotCaption">Simple — the picture and nothing else</span>
+        </p>
+        <div class="carousel-dots" id="shotDots" role="tablist"></div>
+    </div>
+
+    <script>
+    (function () {
+        const BASE = "screenshots/remote/";
+        const SHOTS = [
+            ["simple.webp",             "Simple — the picture and nothing else"],
+            ["advanced.webp",           "Advanced — every command on one screen"],
+            ["watch.webp",              "Watch — the photo-frame screen"],
+            ["stream.webp",             "Stream — send pictures from the phone to the PC"],
+            ["servers.webp",            "Servers — each saved PC keeps its own address and port"],
+            ["settings.webp",           "Settings — theme, keep-screen-on, vibration, device name"],
+            ["demo.webp",               "Demo mode — every screen, with no desktop at all"],
+            ["advanced-landscape.webp", "Advanced in landscape — picture and controls side by side"],
+            ["stream-landscape.webp",   "Stream in landscape"],
+            ["servers-landscape.webp",  "Servers in landscape, with two saved machines"]
+        ];
+
+        const img = document.getElementById("shotImg");
+        const caption = document.getElementById("shotCaption");
+        const counter = document.getElementById("shotCounter");
+        const dots = document.getElementById("shotDots");
+        let idx = 0;
+
+        SHOTS.forEach((_, i) => {
+            const d = document.createElement("button");
+            d.className = "carousel-dot" + (i === 0 ? " active" : "");
+            d.setAttribute("aria-label", "Screenshot " + (i + 1));
+            d.addEventListener("click", () => show(i));
+            dots.appendChild(d);
+        });
+
+        function show(i) {
+            idx = (i + SHOTS.length) % SHOTS.length;
+            img.src = BASE + SHOTS[idx][0];
+            img.alt = "qIV Remote screenshot: " + SHOTS[idx][1];
+            caption.textContent = SHOTS[idx][1];
+            counter.textContent = (idx + 1) + " / " + SHOTS.length;
+            dots.querySelectorAll(".carousel-dot").forEach(
+                (d, n) => d.classList.toggle("active", n === idx));
+            // Preload the neighbours so an arrow click shows instantly.
+            [idx + 1, idx - 1].forEach(n => {
+                const p = new Image();
+                p.src = BASE + SHOTS[(n + SHOTS.length) % SHOTS.length][0];
+            });
+        }
+
+        document.getElementById("shotPrev").addEventListener("click", () => show(idx - 1));
+        document.getElementById("shotNext").addEventListener("click", () => show(idx + 1));
+
+        // Left-clicking the picture advances it. People try this before they
+        // notice the arrows, and on a phone the arrows are small.
+        img.addEventListener("click", () => show(idx + 1));
+
+        document.addEventListener("keydown", e => {
+            if (e.key === "ArrowLeft") show(idx - 1);
+            if (e.key === "ArrowRight") show(idx + 1);
+        });
+
+        let touchX = null;
+        img.addEventListener("touchstart", e => { touchX = e.touches[0].clientX; }, {passive: true});
+        img.addEventListener("touchend", e => {
+            if (touchX === null) return;
+            const dx = e.changedTouches[0].clientX - touchX;
+            if (Math.abs(dx) > 40) show(dx < 0 ? idx + 1 : idx - 1);
+            touchX = null;
+        }, {passive: true});
+
+        show(0);
+    })();
+    </script>
+
     <p>
         Every screen drives the same connection. They differ in how much of the phone they
         spend on controls, and each saved computer remembers which one it opens on — so the
