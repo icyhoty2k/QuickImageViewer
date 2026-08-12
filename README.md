@@ -7,6 +7,7 @@
 [![Website](https://img.shields.io/badge/%F0%9F%8C%90%20Website-quickimageviewer-38bdf8?style=for-the-badge&labelColor=0f172a)](https://icyhoty2k.github.io/QuickImageViewer/)
 [![Every keyboard shortcut](https://img.shields.io/badge/%E2%8C%A8%20Every%20shortcut-reference-8957e5?style=for-the-badge&labelColor=3c1e70)](https://icyhoty2k.github.io/QuickImageViewer/shortcuts.html)
 [![qIV Remote for Android](https://img.shields.io/badge/%F0%9F%93%B1%20qIV%20Remote-what%20it%20does-3DDC84?style=for-the-badge&labelColor=1b6b41)](https://icyhoty2k.github.io/QuickImageViewer/qiv-remote.html)
+[![icyhoty2k](https://img.shields.io/badge/%F0%9F%91%A4%20icyhoty2k-developer%20site-0284c7?style=for-the-badge&labelColor=0f172a)](https://icyhoty2k.github.io/)
 
 Direct2D, WIC and native Win32. One portable sub-10 MB EXE — no installer, no
 telemetry, no background service.
