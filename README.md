@@ -1314,8 +1314,8 @@ remains possible. Everything contributed stays AGPLv3 for the public.
 There is no paid tier and no feature behind a wall. Sponsorship is simply what buys
 the time to keep building it.
 
-[![Sponsor on GitHub](https://img.shields.io/badge/%E2%99%A5%20Sponsor%20on%20GitHub-monthly%20or%20one--off-EA4AAA?style=for-the-badge&labelColor=bf3a8c)](https://github.com/sponsors/icyhoty2k)
-[![Buy me a coffee on Ko-fi](https://img.shields.io/badge/%E2%98%95%20Ko--fi-no%20account%20needed-FF5E5B?style=for-the-badge&labelColor=c94340)](https://ko-fi.com/ivanhristovyanev)
+[![Sponsor](https://img.shields.io/badge/%E2%99%A5%20Sponsor-GitHub%20Sponsors-EA4AAA?style=for-the-badge&labelColor=bf3a8c)](https://github.com/sponsors/icyhoty2k)
+[![Ko-fi](https://img.shields.io/badge/%E2%98%95%20Ko--fi-buy%20a%20coffee-FF5E5B?style=for-the-badge&labelColor=c94340)](https://ko-fi.com/ivanhristovyanev)
 
 <table>
 <tr>

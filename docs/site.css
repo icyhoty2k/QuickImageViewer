@@ -1100,3 +1100,86 @@ img {
         scroll-behavior: auto !important;
     }
 }
+
+/* --- funding buttons: ONE look on every surface -------------------------- */
+/*
+   These deliberately mirror the shields.io "for-the-badge" sponsor badges in
+   README.md, down to the two-tone split and the exact hex values, because the
+   same pair of buttons appears on GitHub, on both websites, and anywhere else
+   the work asks to be funded. One identity, three media.
+
+   THE SITES CANNOT USE THE SHIELDS IMAGES THEMSELVES. An <img> pointing at
+   img.shields.io is a third-party request from every visitor, and both sites
+   promise in writing that they contact nobody. In README.md the same badge is
+   fine, because GitHub proxies README images through its own camo servers and
+   shields.io never sees a reader -- same picture, completely different
+   consequence. So on the web the look is rebuilt in CSS, with inline SVG icons
+   in place of the emoji shields renders.
+
+   KEEP IN SYNC: this block is byte-identical in
+   icyhoty2k.github.io/assets/site.css and QuickImageViewer/docs/site.css, and
+   the colours match the badge URLs in README.md. Change one, change all three.
+*/
+.fundrow {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 12px;
+    margin: 0;
+}
+
+.fund {
+    display: inline-flex;
+    align-items: stretch;
+    border-radius: 6px;
+    overflow: hidden;
+    color: #fff;
+    font-weight: 700;
+    font-size: 0.72rem;
+    letter-spacing: 0.09em;
+    text-transform: uppercase;
+    line-height: 1;
+    transition: filter .18s ease, transform .18s ease;
+}
+
+.fund:hover {
+    text-decoration: none;
+    color: #fff;
+    filter: brightness(1.12);
+    transform: translateY(-1px);
+}
+
+.fund:focus-visible {
+    outline: 2px solid #fff;
+    outline-offset: 2px;
+}
+
+/* Two segments, exactly as the badge draws them: the darker one carries the
+   icon and the name, the brighter one carries the phrase. */
+.fund .fund-k,
+.fund .fund-v {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 13px 15px;
+}
+
+.fund svg {
+    width: 15px;
+    height: 15px;
+    flex: none;
+}
+
+.fund.gh   .fund-k { background: #bf3a8c; }
+.fund.gh   .fund-v { background: #ea4aaa; }
+.fund.kofi .fund-k { background: #c94340; }
+.fund.kofi .fund-v { background: #ff5e5b; }
+
+@media (prefers-reduced-motion: reduce) {
+    .fund { transition: none; }
+    .fund:hover { transform: none; }
+}
+
+/* Footer context only: the footer is centre-aligned, so the shared .fundrow --
+   which must stay byte-identical to the copy on icyhoty2k.github.io -- gets its
+   alignment here instead of in the shared block. */
+footer .fundrow { justify-content: center; margin: 18px 0 4px; }

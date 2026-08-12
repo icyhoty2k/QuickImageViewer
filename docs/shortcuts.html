@@ -802,11 +802,29 @@
             <a href="https://github.com/icyhoty2k/QuickImageViewer/issues/new?template=android_remote.yml">Report an Android problem</a>
             &bull;
             <a href="https://github.com/icyhoty2k/QuickImageViewer/issues/new?template=feature_request.yml">Request a feature</a>
-            &bull;
-            <a href="https://github.com/sponsors/icyhoty2k">Sponsor</a>
-            &bull;
-            <a href="https://ko-fi.com/ivanhristovyanev">Ko-fi</a>
         </p>
+
+        <!-- ONE funding look on every surface. Sponsor and Ko-fi used to be two more
+             bullet-separated text links in the row above, which made asking for money
+             look like a footnote. This is the same two-tone button, with the same
+             labels and the same hex values, as the shields.io badges in README.md and
+             the pair on icyhoty2k.github.io.
+
+             Rebuilt in CSS rather than using the shields images: an <img> from
+             img.shields.io is a third-party request from every visitor, and this site
+             says it contacts nobody. In the README the same badge is fine, because
+             GitHub proxies README images through camo and shields.io never sees a
+             reader. Keep the three in sync. -->
+        <div class="fundrow">
+            <a class="fund gh" href="https://github.com/sponsors/icyhoty2k">
+                <span class="fund-k"><svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 20.3l-1.1-1C6.1 15 3 12.2 3 8.8 3 6.1 5.1 4 7.8 4c1.5 0 3 .7 3.9 1.9l.3.4.3-.4C13.2 4.7 14.7 4 16.2 4 18.9 4 21 6.1 21 8.8c0 3.4-3.1 6.2-7.9 10.5l-1.1 1z"/></svg>Sponsor</span>
+                <span class="fund-v">GitHub Sponsors</span>
+            </a>
+            <a class="fund kofi" href="https://ko-fi.com/ivanhristovyanev">
+                <span class="fund-k"><svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M4 6h11a2 2 0 0 1 2 2v1h1.8a3.2 3.2 0 0 1 0 6.4H17A5 5 0 0 1 12 20H9a5 5 0 0 1-5-5V6zm13 5v3.4h1.8a1.7 1.7 0 0 0 0-3.4H17z"/></svg>Ko-fi</span>
+                <span class="fund-v">Buy a coffee</span>
+            </a>
+        </div>
         <!--
             BUSINESS SPONSORS GO HERE. The $100/month tier promises a name or logo
             "on the project website", and this is the spot — a line of links above
