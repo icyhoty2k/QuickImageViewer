@@ -26,10 +26,51 @@ Two instances, or several. One drives; the rest follow.
 | **F12** | While mirroring, also execute here (off = pure remote control) |
 | **F10** | Remote Servers — the instances this copy can drive |
 | **F9** | Local Server — the listener *this* instance runs |
-| **Ctrl+F12** | RemoteLog — every line that crossed the wire (recording off by default) |
+| **Ctrl+F9** | My Clients — who is connected to me now, and kick / block them |
+| **Ctrl+F12** | Server Log — every line that crossed the wire (recording off by default) |
 | **Ctrl+Enter** | Push THIS picture to the instances under Control, without disturbing what they are doing — see §7b |
+| **Ctrl+Shift+Enter** | The same push, to **every connected** instance, ignoring the Ctrl+F11 ticks — see §7 |
 | **Alt+Enter** | STREAM this picture there, shown once, changing nothing at all — any machine — see §7c |
 | **Ctrl+Alt+Enter** | Ask one instance for the picture it is displaying and show it here, once — any machine — see §7c |
+
+### One `TCP / IP` menu, and the labels name the ROLE
+
+All of it now lives under a single `TCP / IP` submenu. The main menu used to carry
+six of these as top-level rows plus a submenu, which was most of what made it long,
+for one subject most users never touch.
+
+The order is the order you meet them: what this instance **advertises**, who is
+**on** it, what it can **reach**, which of those it **drives**, then the tools for
+driving them.
+
+```
+Announce (beacon)          ← checkable; the only resting sign this PC advertises itself
+--
+Local Server        F9     ← this viewer as a SERVER
+My Clients          Ctrl+F9
+--
+Remote Servers      F10    ← this viewer as a CLIENT
+Mirroring           Ctrl+F11
+--
+Remote Commands     Ctrl+F10
+Server Log          Ctrl+F12
+--
+Remote Bindings ▸
+```
+
+🔥 **The grouping is two roles, not four panels.** This viewer is a *server* to the
+things that dial in and a *client* of the servers it dials out to. Naming them for
+the action instead — "Remote Control" for a checkbox list — is exactly what made two
+panels at opposite ends of two different connections read as views of the same one.
+
+**`Ctrl+F11` is labelled "Mirroring", not "Remote Control"**, because F11 is already
+the mirroring key and that panel picks which servers it reaches. Panel and key now
+share a name instead of describing each other.
+
+⚠ **The beacon row stays enabled while the server is stopped.** Greying it would
+make the setting unreachable exactly when somebody is setting the server up, and the
+tick means *"announce when running"*, not *"announcing now"* — `Beacon::Refresh`
+reconciles the two.
 
 Both F11 and F12 are **session-only and start OFF at every launch**. A viewer
 that came back from a restart already driving machines you'd forgotten about
@@ -262,6 +303,40 @@ the folder (same-machine only). Built and parsed in the same file
 
 Deliberately carries **no playlist position** — applying a folder starts an async
 scan a position would race. Position travels separately.
+
+### `MirrorSyncNow` — the command that sends it
+
+Built in `CommandExecuter.cpp` as **two spellings at once**: `BuildSyncPayload(true)`
+carries the folder, `BuildSyncPayload(false)` does not. `Remote::Mirror::SyncNow`
+picks which target gets which, because it is the side holding the same-machine
+flags — a path means nothing to an instance on another machine (§5).
+
+Both are built here rather than in `RemoteMirror` because this is where `RemoteExec`
+is already reachable, and the reply reports the count: no ticked target says
+`PUSH_NO_TARGETS`, otherwise `SYNC_SENT_PREFIX <n>`.
+
+### Position sends: <kbd>Ctrl+Enter</kbd> and <kbd>Ctrl+Shift+Enter</kbd>
+
+`SendImagePositionToRemotes` and `SendImagePositionToAllRemotes` are **one case with
+one flag**, not two implementations:
+
+| | Targets |
+|---|---|
+| <kbd>Ctrl+Enter</kbd> | only the screens ticked in <kbd>Ctrl+F11</kbd> |
+| <kbd>Ctrl+Shift+Enter</kbd> | **every connected** instance, ticks ignored |
+
+The only difference is whether the <kbd>Ctrl+F11</kbd> ticks are consulted, so they
+share the payload, the reporting and the failure modes rather than being a copy that
+would have to be kept in step.
+
+⚠ **The state is snapshotted on the UI thread**, because `app` belongs to it; the
+sender threads negotiate entirely from that copy. The index is sent **1-based**, the
+way `JumpToImage` counts.
+
+Two ways it legitimately does nothing, and it says which: no screen ticked
+(`PUSH_NO_TARGETS`), or every ticked one on another machine, where a path and an
+index mean nothing (`PUSH_ONLY_REMOTE`). A picture's *bytes* reach any machine —
+that is <kbd>Alt+Enter</kbd>, §7c.
 
 ---
 
@@ -539,13 +614,33 @@ change. **Callers must not `DeleteObject` what they get back.**
 
 ## 12. Known gaps
 
-- **Cross-machine security.** Plaintext protocol; connection-time-only auth with
-  no per-message MAC. Fine on loopback; on a network, treat the network as the
-  boundary (VPN/trusted VLAN) or add per-line HMAC.
-- **No `SO_KEEPALIVE`** on client sockets — an unplugged machine leaves a
-  half-open socket and the dot stays green until the next send fails.
-- **Request/reply serialises.** At LAN latency, holding an arrow key can outrun
-  the queue (bounded, drops oldest).
+**Two entries here were wrong and have been corrected** — both described the state
+of the code before TLS and keepalive landed, and a gaps list that overstates the
+gaps is as misleading as one that hides them.
+
+- ✅ **Cross-machine security is no longer plaintext.** `RemoteTls.cpp` uses
+  Schannel `SCH_CREDENTIALS`, and the client pins the **SHA-256 of the
+  certificate's DER bytes**. A loopback-bound listener stays plaintext by design,
+  which is what `Server::IsEncrypted()` reports — answered from the snapshot taken
+  at `Start()`, not from live config, so the indicator describes the socket rather
+  than an intention somebody typed into the panel.
+- ✅ **Keepalive is enabled on both ends**, server-accepted and client-connected,
+  from one helper. It is there for **NAT**, not for a slow peer: an idle mirror is
+  supposed to send nothing, so a discarded NAT mapping has no other detection path.
+  See `REMOTE_TCP_IP_SPEC.md` §3.
+
+Still true:
+
+- **Connection-time-only auth, with no per-message MAC.** TLS covers the transport;
+  there is no per-line authentication inside an established session.
+- **Request/reply serialises.** At LAN latency, holding an arrow key can outrun the
+  queue (bounded, drops oldest).
 - **`MirrorPicker` is not covered here** — see §0.
-- **Untested as of writing**: the F10 console's layout arithmetic, the ini
-  import path, and everything cross-machine.
+- **The F10 console's layout arithmetic and the `.ini` import path** are still
+  thinly exercised. Cross-machine is no longer untested: the Android client
+  (`qIV Remote`) drives the whole protocol over the network, including TLS with the
+  pinned certificate.
+
+⚠ **The wire protocol has a second consumer that is invisible from this repo.**
+Any change to the banner, `AUTH`, or command framing has to be checked against the
+Android client as well, not only against `RemoteClient.cpp`.

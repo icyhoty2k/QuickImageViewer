@@ -98,12 +98,66 @@ MaxConnections=1
 
 ### Bind address
 
-`0.0.0.0` means `INADDR_ANY` — listen on *every* network interface, including ones
-added later. `127.0.0.1` keeps traffic on the loopback: reachable only from this
-machine, and Windows Firewall never prompts.
+Three values, cycled by the panel:
+
+| Value | Meaning |
+|---|---|
+| `127.0.0.1` | Loopback only — reachable from this machine, and Windows Firewall never prompts. The default, and what a new `AllowList` is seeded with |
+| `0.0.0.0` | Every interface, **IPv4 only**. The socket family follows the literal |
+| `::` | Every interface, **dual stack** — IPv6 *and* IPv4 on one socket |
+
+**`::` is not a synonym for `0.0.0.0`.** A mobile client on a carrier that hands
+out no IPv4 address can reach `::` and nothing else, which is the reason the third
+value exists rather than being a tidier spelling of the second.
+
+**Windows defaults `IPV6_V6ONLY` to 1**, so a listener on `::` would accept IPv6
+and *refuse* IPv4 — on a machine whose LAN is v4 that looks like a server which
+started cleanly and cannot be reached by anything. `Start()` therefore clears the
+option when the resolved family is `AF_INET6`, so one socket serves both families
+and v4 peers arrive as `::ffff:a.b.c.d`. Clearing it is **best effort**: a failure
+leaves the documented v6-only behaviour, which is still a working listener, so it
+must not refuse to start.
+
+⚠ **IPv4-mapped addresses are normalised away before the access rules see them.**
+`AcceptedPeerAddress` flattens `::ffff:192.168.1.5` back to `192.168.1.5`, so the
+`AllowList` and `BlackList` keep exactly the shape they had before dual stack
+existed. Nothing in the access path needs to know which family a peer arrived on.
+
+**`SO_REUSEADDR` is deliberately NOT set.** On Windows it lets two processes bind
+one port and silently steal each other's connections, which for a control channel
+is a security problem rather than a convenience. A port already in use fails loudly.
 
 Note the panel has both a **bind** field (server) and a **connect-to** field
-(client). `0.0.0.0` is meaningful only in the first. Label them distinctly.
+(client). `0.0.0.0` and `::` are meaningful only in the first. Label them
+distinctly.
+
+### TCP keepalive — for NAT, not for a slow peer
+
+Enabled on **both** ends: server-accepted sockets and client-connected ones, from
+one helper in `RemoteProtocol.cpp`.
+
+An authenticated connection deliberately has **no receive timeout** — a mirrored
+screen is supposed to sit silent for minutes. On a LAN that is free. Across a home
+router it is not: a NAT mapping with no traffic through it is discarded after a few
+minutes, and **the discard is silent in both directions.** Neither end sees a
+close, so the server thread stays blocked in `recv()` on a socket that can never
+deliver again while the driving end's row stays green and the mirror does nothing.
+
+🔥 **That failure has no other detection path**, because the whole design of an idle
+mirror is that nothing is sent.
+
+`SIO_KEEPALIVE_VALS` rather than `setsockopt(SO_KEEPALIVE)`: the plain option turns
+keepalive on but leaves the **system-wide** defaults in force, which on Windows is
+two hours — far too late to matter here.
+
+| Constant | Value | Why |
+|---|---|---|
+| `KEEPALIVE_IDLE_MS` | 60000 | Consumer NAT idle timeouts start around five minutes; one minute is comfortably inside the shortest of them, at one empty segment a minute per connection |
+| `KEEPALIVE_INTERVAL_MS` | 10000 | Gap between probes once one goes unanswered |
+
+⚠ **The retry count is not settable.** Windows fixes it at 10 on Vista and later
+and `SIO_KEEPALIVE_VALS` cannot change it, so the interval is the only lever on how
+fast a dead peer is declared dead: 10 s × 10 ≈ 100 s after the idle period.
 
 ### Constants
 
@@ -145,6 +199,82 @@ Consequence worth handling in the UI: `Enable=true` with an empty `AllowList` is
 server that refuses everything, which looks like a bug from outside. The panel
 status line must say so explicitly — *"Listening — AllowList empty, all connections
 denied"* — not merely *"Running"*.
+
+### Blocking an IPv6 peer means blocking its `/64`
+
+`Remote::BlockScope(address)` decides what a ban, a timed kick or the brute-force
+guard actually writes:
+
+| Input | Written |
+|---|---|
+| IPv4 literal, or anything that does not parse | unchanged |
+| IPv6 host address | the first four groups, then `::/64` |
+
+🔥 **Banning one IPv6 address is close to useless — the peer has 2^64 of them.** A
+single machine can step to the next address in its own prefix for every retry, so a
+per-address rule is a rule it never notices. The `/64` is the smallest unit that
+corresponds to *one site* rather than one interface.
+
+Three inputs are returned untouched, and each is a correctness case rather than a
+tidiness one:
+
+- ⚠ **IPv4-mapped (`::ffff:192.168.1.5`) is not an IPv6 host.** Its low 64 bits
+  carry a v4 address, so a `/64` over one would read `::ffff:0:0/64` and block **the
+  entire IPv4 internet** from a single wrong password. `AcceptedPeerAddress` already
+  flattens these before anything here sees them, so this is a second line of
+  defence — but it is the one mistake in the function that would be catastrophic
+  rather than merely wrong.
+- **An all-zero prefix** is `::` and its neighbours, where loopback lives. Nothing
+  routable arrives with one; this is a guard, not a case.
+- **Anything that is not an address at all** — host-name entries have no prefix to
+  widen.
+
+The prefix is printed lower case with no leading zeros, so two spellings of one
+prefix cannot produce two blacklist rows.
+
+### Timed blocks — the middle option between a kick and a ban
+
+`KickConnection` alone is answered by a reconnect a second later; a ban is a
+permanent decision nobody wants to make about an address that may be a customer
+tomorrow. **A timed block outlasts a retry loop and then forgets.**
+
+```cpp
+namespace Remote::Blacklist {
+    void AddTimed(const std::wstring &address, int minutes, const std::wstring &reason);
+    bool ClearTimed(const std::wstring &address);   // false when it had none
+    std::vector<TimedEntry> TimedSnapshot();        // live entries, expired pruned
+}
+```
+
+`Server::TimedKickConnection(id, minutes, scopeOut)` kicks and blocks in one step,
+scoping through `BlockScope` exactly like `Ban`, and reports back what was really
+blocked so the panel can tell the operator they blocked a prefix rather than an
+address.
+
+**In memory only, never written to `qivRemoteServerBlacklist.ini`, and a restart
+clears every one.** That is deliberate: a timed block is a reaction to something
+happening right now, and a file that outlived the incident would accumulate rules
+nobody remembers making.
+
+Two behaviours worth not re-deriving:
+
+- **A second `AddTimed` on one address REPLACES the first**, and the newest expiry
+  wins whether it is longer or shorter. Accumulating would make "blocked for ten
+  minutes" mean something different depending on what had been pressed before.
+- **Full (`TIMED_BLOCK_MAX`) drops the soonest-expiring entry**, rather than
+  refusing like the permanent list does. The permanent list fails closed on a file
+  it cannot grow; this is a live decision an operator just made and is entitled to
+  see take effect, and the entry closest to expiring is the one whose loss changes
+  least.
+
+⚠ **`IsBlocked` asks both lists and must have one answer.** The timed table is
+checked first, then the permanent one. Keeping them in the same module is the point:
+a second list consulted from a second place is how an address ends up blocked by one
+rule and admitted by another.
+
+**Auto-blacklist entries still never expire** — the brute-force guard writes
+permanent rows. Now that the timed machinery exists, an escalating first offence
+would suit it; not done.
 
 ---
 
@@ -302,6 +432,38 @@ The panel both **configures and generates/regenerates** the `.ini`.
 target IP / port / password entered in the panel. One-off commands — **not** action
 mirroring or wall-sync. qIV is therefore both server and client.
 
+### My Clients — a second panel, <kbd>Ctrl+F9</kbd>
+
+`RemoteClientsWnd` answers a question <kbd>F9</kbd> cannot: **who is connected to me
+right now, and how do I get rid of them.** <kbd>F9</kbd> configures the listener;
+this one operates it while it runs.
+
+The list holds two kinds of row — live connections, and current timed blocks — so
+the thing an operator just did is visible beside the thing it did it to.
+
+| Button | Effect |
+|---|---|
+| **Kick** | `shutdown()` on that connection. **Not a ban** — the same peer may reconnect immediately |
+| **Kick for…** | Kick, then refuse the peer for N minutes. `TimedKickConnection` |
+| **Ban** | Blacklist, *then* kick, in that order so a reconnect racing the disconnect is refused at the accept gate rather than admitted |
+| **Lift** | Clears a selected timed block early. Enabled only on a block row |
+
+Both destructive buttons confirm first, and the result line reports **what was
+actually blocked** — appending *"(the whole /64)"* when `BlockScope` widened an IPv6
+address, because an operator who thinks they blocked one address should not discover
+otherwise later.
+
+⚠ **Kick uses `shutdown()`, never `closesocket()`.** The client thread owns that
+socket and closes it itself; shutting it down makes its blocked `recv()` return so
+the thread unwinds through its ordinary path — logging its departure, leaving the
+observer list, releasing its locks. Closing the descriptor from here would race that
+thread and could shut down a number the system had already reissued.
+
+🔥 **Never hold a reference to a row across a dialog.** Every action here copies the
+connection id and address *before* opening its confirmation, because the modal loop
+pumps messages, the panel refreshes, and `m_rows` is rebuilt underneath. Taking a
+reference and using it after the dialog returns crashed `DoKick`.
+
 ---
 
 ## 10. `.ini` generation
@@ -369,9 +531,23 @@ Each slice independently testable. Sockets deliberately last.
 
 ## 12. Deferred
 
-- **`-query current`** style state readback. TCP supports it; not in the initial scope.
-- **IPv6.** Unspecified so far.
-- **Latent bug, unrelated but adjacent:** `AppMain.cpp` constructs
-  `new std::wstring((LPCWSTR)cds->lpData)` from `WM_COPYDATA` with **no `cbData`
-  length check**. A sender passing a non-NUL-terminated buffer reads past the end.
-  Local-only and low severity, but worth fixing.
+**Everything this section used to list has since shipped.** Kept as a record, because
+a deferred list that is silently wrong is worse than no list — it invites the same
+work to be planned twice.
+
+- ✅ **State readback.** `QueryState`, `QueryToggles`, `QueryHistory` and
+  `QueryClients` all exist and are read-only.
+- ✅ **IPv6.** Dual stack, `::` in the bind cycle, `IPV6_V6ONLY` cleared, and
+  `BlockScope` so a v6 ban means the `/64`. See §3 and §4.
+- ✅ **The `WM_COPYDATA` length check.** `AppMain.cpp` now requires
+  `cbData >= sizeof(wchar_t)` and scans with `wcsnlen(raw, cds->cbData / sizeof(wchar_t))`
+  instead of trusting a NUL the sender was never obliged to write. Any process on
+  the desktop may post that message, so `cbData` is the only thing bounding the
+  buffer.
+
+Still open, and small:
+
+- **Auto-blacklist entries never expire.** The brute-force guard writes permanent
+  rows. The timed machinery from §4 would suit an escalating first offence.
+- **`ExifWnd`'s scrollbar drag never called `SetCapture`** — fixed by the ScrollView
+  migration, but the same shape may exist in other panels. Worth a sweep.
