@@ -876,9 +876,90 @@ def build_stats():
                (rel.get('published_at') or '')[:10]))
         break
 
+    # The raw numbers, for the history file. The strip above renders them as
+    # "1.2k"; a time series needs the integers.
+    raw = {
+        'downloads': downloads,
+        'stars': repo.get('stargazers_count', 0),
+        'forks': repo.get('forks_count', 0),
+        'watching': repo.get('subscribers_count', 0),
+        'releases': len(releases),
+        'latest': latest or '',
+        'exe_kb': int(round(exe_mb * 1024)),
+        'loc': loc,
+        'formats': formats,
+        'shortcuts': shortcuts,
+    }
+
     return ('\n'.join(rows) + '\n', ver_html,
             '%s downloads, %s stars' % (human(downloads),
-                                        human(repo.get('stargazers_count', 0))))
+                                        human(repo.get('stargazers_count', 0))),
+            raw)
+
+
+# =====================================================================
+# JOB 4 — the history file, so a chart is possible one day
+# =====================================================================
+#
+# The API answers with CURRENT TOTALS ONLY. There is no endpoint for "downloads
+# per week", and nothing anywhere remembers what the number was last month — so
+# a downloads-over-time chart is impossible forever unless the recording starts
+# at some point. This is that point. It costs one line a week.
+#
+# IT LIVES UNDER docs/ ON PURPOSE. That makes it a published file, which is what
+# lets a future chart read it WITHOUT a third-party request: both this site and
+# the developer homepage are served from icyhoty2k.github.io, so a fetch of
+# QuickImageViewer/stats-history.csv is same-origin from either of them. Putting
+# it outside docs/ would mean any chart had to reach api.github.com from the
+# visitor's browser, which is the exact thing build_stats() exists to avoid.
+# It is also inside the path the workflow already stages (`git add -A docs`).
+#
+# A ROW IS WRITTEN ONLY WHEN A NUMBER MOVED. The workflow commits only when the
+# build changed something, deliberately, so that a one-person repository does
+# not collect a commit a week saying nothing. An unconditional append would
+# defeat that and turn the log into a changelog of other people's stars. A flat
+# week therefore leaves no row, and nothing is lost: the previous row still
+# states the value, and a step plot reconstructs the gap exactly.
+#
+# ONE ROW PER DAY AT MOST. A same-day re-run replaces its own row rather than
+# appending a second one, so running the script twice by hand is harmless.
+
+HISTORY_CSV = os.path.join(DOCS, 'stats-history.csv')
+
+HISTORY_COLUMNS = ['date', 'downloads', 'stars', 'forks', 'watching',
+                   'releases', 'latest', 'exe_kb', 'loc', 'formats',
+                   'shortcuts']
+
+
+def append_history(raw, check):
+    """Add today's numbers to docs/stats-history.csv. Returns a status string."""
+    today = date.today().isoformat()
+    row = [today] + [str(raw[c]) for c in HISTORY_COLUMNS[1:]]
+
+    lines = []
+    if os.path.isfile(HISTORY_CSV):
+        lines = [l for l in read(HISTORY_CSV).splitlines() if l.strip()]
+
+    if not lines:
+        lines = [','.join(HISTORY_COLUMNS)]
+
+    # Drop a row already written today, so a re-run corrects it in place.
+    if len(lines) > 1 and lines[-1].split(',')[0] == today:
+        lines.pop()
+
+    if len(lines) > 1:
+        previous = lines[-1].split(',')
+        if previous[1:] == row[1:]:
+            return 'unchanged since %s — no row added' % previous[0]
+
+    lines.append(','.join(row))
+
+    if check:
+        return 'would add a row for %s' % today
+
+    write(HISTORY_CSV, '\n'.join(lines) + '\n')
+    return 'wrote a row for %s (%d rows total)' % (today, len(lines) - 1)
+
 
 # =====================================================================
 
@@ -925,11 +1006,16 @@ def main():
         print('  docs/shortcuts.html is current — %d shortcuts, %d sections' % (total, nsec))
 
     print('\n== repository statistics ==')
-    stats_html, version_html, note = build_stats()
+    stats_html, version_html, note, raw = build_stats()
     stats_stale = False
     if stats_html is None:
         print('  %s - keeping the numbers already in _partials/' % note)
     else:
+        # The history file is written even when the strip is unchanged in the
+        # HTML sense, and skipped when the numbers themselves have not moved.
+        # Offline is the one case where nothing is recorded: an unreachable API
+        # is not evidence that a total dropped to zero.
+        print('  history: %s' % append_history(raw, check))
         # The version line rides along: same fetch, same freshness, its own
         # partial so a page can take one without the other.
         if version_html and not check:
