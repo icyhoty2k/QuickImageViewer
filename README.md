@@ -318,9 +318,9 @@ through the setup.
 <!-- CLOSED-TEST-ONLY-START — deleted at production launch by site-mode.py -->
 ### It is in closed testing — testers wanted
 
-Google does not let a new app go public until **twelve people have tested it for fourteen
-days**. Until that is done the Play listing stays invisible to anyone who has not joined
-the test, so there is no ordinary download link yet.
+Google does not let a new app go public until **a group of people has tested it for
+fourteen days**. Until that is done the Play listing stays invisible to anyone who has not
+joined the test, so there is no ordinary download link yet.
 
 If you run qIV and have an Android phone on **Android 13 or newer**, joining takes a
 minute. Three steps, all three needed, and **the same Google account for each**:
