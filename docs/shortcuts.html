@@ -85,8 +85,24 @@
         <!-- The developer site, one level up at the account root. An absolute URL
              on purpose: this project lives at /QuickImageViewer/, so "../" would
              work from a page but breaks the moment anything is previewed from a
-             file path or served from a different prefix. -->
-        <a href="https://icyhoty2k.github.io/"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><circle cx="12" cy="8" r="3.6"/><path d="M4.8 20.2a7.2 7.2 0 0 1 14.4 0"/></svg>icyhoty2k</a>
+             file path or served from a different prefix.
+
+             THE MARK, NOT A PERSON ICON. This was a generic head-and-shoulders,
+             which said "an account" rather than "this account" — every site on
+             the web has that icon. The `i` is the mark used on the developer
+             site, the Play developer icon and the Play header, so the same
+             letter identifies the account everywhere.
+
+             Two-tone on purpose while the other four icons are plain strokes:
+             the stem takes currentColor so it follows the link and hover states,
+             and the dot and foot keep the accent so the mark reads as a brand
+             rather than as an information symbol — which is exactly what a thin
+             single-colour `i` looks like at 17 px.
+
+             Flat shoulder, rounded foot. A fully rounded top turns the letter
+             into a capsule. Geometry is the mark's, scaled to a 24 box:
+             stem 0.36 R wide, colour split at 0.63, dot 0.20 R at -0.62 R. -->
+        <a href="https://icyhoty2k.github.io/"><svg width="17" height="17" viewBox="0 0 24 24" aria-hidden="true"><defs><clipPath id="navmark"><path d="M9.84 9.6H14.16V20.16a2.16 2.16 0 0 1-4.32 0Z"/></clipPath></defs><g clip-path="url(#navmark)"><rect x="9.84" y="9.6" width="4.32" height="8.01" fill="currentColor"/><rect x="9.84" y="17.61" width="4.32" height="4.71" fill="#38bdf8"/></g><circle cx="12" cy="4.56" r="2.4" fill="#38bdf8"/></svg>icyhoty2k</a>
     </div>
 </nav>
 <!-- SHARED-HEADER-END -->
@@ -788,9 +804,22 @@
                 <a href="qiv-remote-privacy.html"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><rect x="4.5" y="10.5" width="15" height="10" rx="2"/><path d="M8 10.5V7.2a4 4 0 0 1 8 0v3.3"/></svg>Privacy — Android app</a>
             </p>
         </div>
-        <p>
-            Developed by <strong>Ivan Hristov Yanev (IcyHoty2k)</strong>.
-            Licensed under the AGPLv3.
+        <!-- The account signature, not just a name. `icyhoty2k productions` is
+             the label the Play developer page and the developer site both carry,
+             and the handle is lowercase everywhere else — it was written
+             "IcyHoty2k" here and nowhere else, which is the kind of drift that
+             makes one person look like two.
+
+             The mark repeats here in the same two-tone as the nav. Its clip path
+             needs an id of its own: two <clipPath id="navmark"> on one page and
+             the second silently loses its clip. -->
+        <p class="footer-sig">
+            <svg width="18" height="18" viewBox="0 0 24 24" aria-hidden="true"><defs><clipPath id="footmark"><path d="M9.84 9.6H14.16V20.16a2.16 2.16 0 0 1-4.32 0Z"/></clipPath></defs><g clip-path="url(#footmark)"><rect x="9.84" y="9.6" width="4.32" height="8.01" fill="currentColor"/><rect x="9.84" y="17.61" width="4.32" height="4.71" fill="#38bdf8"/></g><circle cx="12" cy="4.56" r="2.4" fill="#38bdf8"/></svg>
+            <span>
+                <a href="https://icyhoty2k.github.io/">icyhoty2k productions</a>
+                &mdash; developed by <strong>Ivan Hristov Yanev</strong>.
+                Licensed under the AGPLv3.
+            </span>
         </p>
         <p>
             <a href="https://github.com/icyhoty2k/QuickImageViewer">GitHub repository</a>

@@ -692,6 +692,21 @@ footer p:last-child {
     margin-bottom: 0;
 }
 
+/* The account signature line: mark, then the label and the credit.
+   align-items:flex-start rather than center, because the text wraps to two
+   lines on a phone and a centred mark then floats in the middle of them. */
+.footer-sig {
+    display: flex;
+    justify-content: center;
+    align-items: flex-start;
+    gap: 9px;
+}
+
+.footer-sig svg {
+    flex: none;
+    margin-top: 1px;
+}
+
 footer a {
     color: #38bdf8;
     text-decoration: none;
