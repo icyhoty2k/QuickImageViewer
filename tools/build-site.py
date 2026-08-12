@@ -584,6 +584,38 @@ def build_shortcuts_page():
     <link rel="icon" type="image/x-icon" href="favicon.ico">
     <meta name="theme-color" content="#0f172a">
 
+    <!-- Open Graph and Twitter. Without og:image a shared link renders as a
+         blank grey box on Facebook, Messenger, Viber and Slack.
+
+         THESE LIVE IN THE GENERATOR, NOT IN shortcuts.html. That file is written
+         from scratch on every build, so a tag added to it by hand survives until
+         the next run and then vanishes without a word. -->
+    <meta property="og:type" content="website">
+    <meta property="og:site_name" content="QuickImageViewer">
+    <meta property="og:title" content="Every QuickImageViewer keyboard shortcut">
+    <meta property="og:description"
+          content="The complete reference: 224 shortcuts in 16 sections, generated from the application's own help panel.">
+    <meta property="og:url" content="https://icyhoty2k.github.io/QuickImageViewer/shortcuts.html">
+    <meta property="og:image" content="https://icyhoty2k.github.io/QuickImageViewer/screenshots/less300kb/10.webp">
+    <meta property="og:image:alt" content="QuickImageViewer showing a photo with a thumbnail strip">
+    <meta property="og:locale" content="en_GB">
+    <meta name="twitter:card" content="summary_large_image">
+    <meta name="twitter:title" content="Every QuickImageViewer keyboard shortcut">
+    <meta name="twitter:description"
+          content="The complete reference: 224 shortcuts in 16 sections, generated from the application's own help panel.">
+    <meta name="twitter:image" content="https://icyhoty2k.github.io/QuickImageViewer/screenshots/less300kb/10.webp">
+
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "WebPage",
+  "name": "Every QuickImageViewer keyboard shortcut",
+  "url": "https://icyhoty2k.github.io/QuickImageViewer/shortcuts.html",
+  "isPartOf": { "@type": "WebSite", "name": "QuickImageViewer", "url": "https://icyhoty2k.github.io/QuickImageViewer/" },
+  "author": { "@type": "Person", "name": "Ivan Hristov Yanev", "alternateName": "icyhoty2k", "url": "https://icyhoty2k.github.io/" }
+}
+</script>
+
     <link rel="stylesheet" href="site.css">
 </head>
 <!--
