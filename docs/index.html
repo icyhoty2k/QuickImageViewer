@@ -701,18 +701,37 @@ Version 2.252.0.327 &bull; Size: 9,873.50 KB &bull; Build Date: 2026-08-09
                         </div>
                         <a class="policy" href="qiv-privacy.html"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><rect x="4.5" y="10.5" width="15" height="10" rx="2"/><path d="M8 10.5V7.2a4 4 0 0 1 8 0v3.3"/></svg>Privacy — Windows app</a>
                     </div>
+                    <!-- SHARED-ANDROIDCTA-START — generated from docs/_partials/androidcta.html by tools/build-site.py. Do not edit between the fences; edit the partial. -->
+<!-- The hero's Android call to action.
+
+     WHY THIS IS A PARTIAL RATHER THAN PLAIN HTML IN index.html. The weekly
+     statistics workflow commits to docs/index.html, so every hand edit to that
+     file collides with a bot commit, and resolving the conflict in favour of
+     origin reverts the hand edit without reporting anything. It happened on
+     12 August 2026 and cost three separate changes. Content that lives here
+     cannot be lost that way: the bot never touches _partials/, and an
+     index.html restored from origin is repaired by re-running build-site.py.
+
+     It is NOT the same block as the Android column in storerow.html, and it is
+     deliberately not shared with it. index.html's hero is a "storerow stacked"
+     variant whose desktop column carries the SHARED-VERSION fence, and its
+     formatting differs. A fence cannot be filled from inside another partial in
+     one pass anyway — inject_partials walks docs/*.html only. Both copies are
+     flipped together by the maintainer's site-mode script, kept outside this
+     repository, which fails if they ever disagree.
+
+     THIS BUTTON'S TARGET IS MODE-DEPENDENT AND IS NOT HAND-MAINTAINED. While the
+     app is in closed testing it points at the tester group, because the store URL
+     returns "item not found" to anyone who is not enrolled. Ten surfaces on this
+     site carry that same state and a half-done flip is invisible, so one script
+     owns all of them. -->
                     <div class="store-col">
-                        <!-- CLOSED TESTING: the group, not the store. The store URL returns
-                             "item not found" to anyone who is not an enrolled tester, so it
-                             cannot be the public CTA. Revert to the store URL and the "Get
-                             qIV Remote" label on production launch — this copy is NOT inside
-                             a SHARED-STOREROW fence, so docs/_partials/storerow.html has to
-                             be changed too and does not propagate here on its own. -->
                         <a class="cta-button" href="https://groups.google.com/g/qiv-remote-testers">
                         <span class="glyph"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 4.6a1 1 0 0 1 1.51-.86l11.5 6.9a1 1 0 0 1 0 1.72l-11.5 6.9A1 1 0 0 1 7 18.4V4.6Z"/></svg></span>
                         <span>Help test qIV Remote<small>Android 13+ &mdash; closed test</small></span></a>
                         <a class="policy" href="qiv-remote-privacy.html"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><rect x="4.5" y="10.5" width="15" height="10" rx="2"/><path d="M8 10.5V7.2a4 4 0 0 1 8 0v3.3"/></svg>Privacy — Android app</a>
                     </div>
+<!-- SHARED-ANDROIDCTA-END -->
                     <!--
                 THE SECOND ANDROID BUTTON IS GONE. It read "What the Android app
                 does" and went to qiv-remote.html — which is precisely where the
@@ -2352,6 +2371,7 @@ CMD JumpToImage|1|go to a numbered image in the current playlist|image NUMBER, 1
                     a Windows PC with its Local Server enabled (<kbd>F9</kbd>), and the phone on the same
                     network. The app's About screen walks through the setup.
                 </p>
+                <!-- CLOSED-TEST-ONLY-START — this block is DELETED at production launch by site-mode.py -->
                 <p>
                     <strong>It is in closed testing on Google Play and needs testers.</strong> Google will not
                     let a new app go public until twelve people have tested it for fourteen days, so the store
@@ -2359,18 +2379,14 @@ CMD JumpToImage|1|go to a numbered image in the current playlist|image NUMBER, 1
                     phone on <strong>Android 13 or newer</strong>, joining takes a minute and
                     <a href="qiv-remote.html#testing">the three steps are here</a>.
                 </p>
+                <!-- CLOSED-TEST-ONLY-END -->
                 <!--
-            THE GROUP LINK, NOT THE STORE LINK, AND THAT IS DELIBERATE.
-            The store URL returns "item not found" to anyone who is not an enrolled
-            tester, so pointing a public page at it advertises an app that looks like
-            it does not exist. The group is the first of the three steps and the only
-            one a stranger can act on.
-
-            ON PRODUCTION LAUNCH: revert this href to
-            https://play.google.com/store/apps/details?id=net.icyhoty2k.qivremote
-            and restore the "Get qIV Remote on Google Play" label. Same change in
-            docs/_partials/storerow.html and in the unfenced storerow copy near the
-            top of this file. Listed as a launch-day step in the Android handoff.
+            THIS BUTTON'S TARGET IS MODE-DEPENDENT AND IS NOT HAND-MAINTAINED.
+            While the app is in closed testing it points at the tester group,
+            because the store URL returns "item not found" to anyone who is not an
+            enrolled tester. Ten surfaces on this site carry that same state and a
+            half-done flip is invisible, so one maintainer script owns all of them
+            and a checker proves they still agree.
         -->
                 <a href="https://groups.google.com/g/qiv-remote-testers" class="cta-button">Help
                 test qIV Remote on Android</a>

@@ -115,12 +115,17 @@
             <a class="policy" href="qiv-privacy.html"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><rect x="4.5" y="10.5" width="15" height="10" rx="2"/><path d="M8 10.5V7.2a4 4 0 0 1 8 0v3.3"/></svg>Privacy — Windows app</a>
         </div>
         <div class="store-col">
-            <!-- CLOSED TESTING: the group, not the store. The store URL returns
-                 "item not found" to anyone who is not an enrolled tester, so it
-                 cannot be the public CTA — it advertises an app that looks like it
-                 does not exist. Revert to the store URL and the "Get qIV Remote"
-                 label on production launch. index.html carries its own UNFENCED
-                 copy of this row; change both. -->
+            <!-- THIS BUTTON'S TARGET IS MODE-DEPENDENT AND IS NOT HAND-MAINTAINED.
+                 In closed testing it points at the tester group, because the store
+                 URL returns "item not found" to anyone who is not enrolled.
+
+                 index.html's hero carries a SECOND copy of this button, in
+                 _partials/androidcta.html, and four pages are generated from this
+                 file. Ten surfaces in total, so one maintainer script flips all of
+                 them and refuses a partial job. After any change here:
+
+                     python tools/build-site.py
+                     python tools/build-site.py --check -->
             <a class="cta-button" href="https://groups.google.com/g/qiv-remote-testers">
                 <span class="glyph"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 4.6a1 1 0 0 1 1.51-.86l11.5 6.9a1 1 0 0 1 0 1.72l-11.5 6.9A1 1 0 0 1 7 18.4V4.6Z"/></svg></span>
                 <span>Help test qIV Remote<small>Android 13+ &mdash; closed test</small></span>

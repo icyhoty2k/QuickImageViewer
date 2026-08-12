@@ -315,6 +315,7 @@ without the TV. You need **QuickImageViewer running on a Windows PC with its Loc
 enabled** (`F9` in qIV), and the phone on the same network. The app's About screen walks
 through the setup.
 
+<!-- CLOSED-TEST-ONLY-START — deleted at production launch by site-mode.py -->
 ### It is in closed testing — testers wanted
 
 Google does not let a new app go public until **twelve people have tested it for fourteen
@@ -335,6 +336,7 @@ minute. Three steps, all three needed, and **the same Google account for each**:
 You do not need a Windows PC to try it. Open the app and tap **Try it without a desktop** —
 demo mode runs every screen, including the paid ones, against a viewer that does not exist,
 and opens no network connection at all.
+<!-- CLOSED-TEST-ONLY-END -->
 
 ---
 
