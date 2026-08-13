@@ -11,6 +11,7 @@
 #include <windows.h>
 #include <vector>
 #include <string>
+#include <utility>  // std::pair — SnapshotHistoryForRemote's element type
 
 #include "FloatingPanelWnd.h"
 
@@ -198,6 +199,19 @@ namespace UI {
 
     // Returns the full MRU list (index 0 = most recent).
     const std::vector<std::wstring> &GetFolderHistory();
+
+    // The folder list as a REMOTE client should see it: favourites first, then
+    // the rest, each in MRU order, with the `bool` saying which are starred.
+    //
+    // Built from the live RAM list rather than from qivHistory.txt, which is
+    // append-only and therefore cannot contain this session's promotions — that
+    // gap is why the phone's folder list used to disagree with the panel's.
+    // Deliberately ignores the panel's filter, row caps and full-mode: those
+    // describe a view the remote user is not looking at. Broken rows are dropped.
+    //
+    // UI THREAD ONLY. It reads the same vectors the panel mutates; the socket
+    // thread only ever sees the marshalled string built from the result.
+    std::vector<std::pair<std::wstring, bool>> SnapshotHistoryForRemote();
 
     // True when two paths name the SAME directory on disk, following junctions,
     // directory symlinks and subst drives. Uses the panel's cached link info, so

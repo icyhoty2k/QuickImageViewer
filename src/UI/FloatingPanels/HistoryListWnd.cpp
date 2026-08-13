@@ -1587,6 +1587,95 @@ namespace UI {
         return historyFoldersManager.folderHistory;
     }
 
+    // ---------------------------------------------------------------------------
+    //  SnapshotHistoryForRemote  —  the folder list as a remote client sees it
+    //
+    //  WHY THIS EXISTS RATHER THAN THE REMOTE READING THE FILE. QueryHistory used
+    //  to build a fresh HistoryFoldersManager and LoadHistoryFromDisk() on every
+    //  request: two file opens on the UI thread, and — the real defect — an order
+    //  that cannot include this session's promotions. qivHistory.txt is
+    //  append-only by design; PushFolderHistory moves a REVISITED folder to the
+    //  front of the RAM vector and deliberately does not write (see its "already
+    //  exists: promote to front (MRU), no file write needed" branch). So the
+    //  panel showed one order and the phone showed another, and opening a folder
+    //  from the phone promoted a list the phone was never shown.
+    //
+    //  THE RAM LIST IS THE SOURCE, NOT g_displayList. The display list is a VIEW:
+    //  it carries the typed filter, the row caps and the full-mode override, and
+    //  it is empty on an instance where the panel was never opened, because
+    //  BuildDisplayList only runs from Show()/F5/the full-mode toggle. Serving it
+    //  would mean a filter typed on the desktop silently shortening a list on a
+    //  phone that can neither see nor clear it, and a panel that was never opened
+    //  answering "no folders". Both are worse than the bug being fixed.
+    //
+    //  So: no caps, no filter, no full-mode — the whole list, every time.
+    //
+    //  FAVOURITES FIRST, and that ordering has to happen here: the client renders
+    //  the rows in the order they arrive and does no grouping of its own. The
+    //  desktop's own favourites-position setting (top/bottom/in-place) is NOT
+    //  consulted, because it describes where they sit in a panel the phone user
+    //  is not looking at.
+    //
+    //  Broken rows are dropped, as they were before. The panel paints them red as
+    //  a warning worth seeing; a phone can only try to open them and fail.
+    // ---------------------------------------------------------------------------
+    std::vector<std::pair<std::wstring, bool>> SnapshotHistoryForRemote() {
+        const std::vector<std::wstring> &history = historyFoldersManager.folderHistory;
+        const FolderPathSet             &favs    = historyFoldersManager.favorites;
+
+        // A favourite that is NOT in the history list at all, collected first so
+        // the emit below stays one straight pass.
+        //
+        // It cannot be produced by starring — ToggleFavorite acts on a row that is
+        // in the list by definition, and ClearHistoryKeepFavorites deliberately
+        // keeps favourites in it. A hand-edited qivFavorites.txt can, and that
+        // file is documented as hand-editable. Before this, such an entry was
+        // invisible to a remote for the same reason it is invisible to the walks
+        // below: they walk the HISTORY. Reported as a favourite with no position,
+        // which is exactly what it is.
+        //
+        // SORTED, because FolderPathSet is an unordered_set: iterating it raw
+        // would let the same data come back in a different order from one run to
+        // the next, and a list that reshuffles for no reason reads as a bug.
+        std::vector<std::wstring> orphans;
+        for (const std::wstring &fav : favs) {
+            if (HistoryPath::IsBroken(fav)) continue;
+
+            bool inHistory = false;
+            for (const std::wstring &folder : history) {
+                if (HistoryPath::Equal(folder, fav)) { inHistory = true; break; }
+            }
+            if (inHistory) continue;
+
+            orphans.push_back(fav);
+        }
+        std::sort(orphans.begin(), orphans.end());
+
+        std::vector<std::pair<std::wstring, bool>> out;
+        out.reserve(history.size() + orphans.size());
+
+        // One: the starred folders, keeping their MRU order among themselves.
+        for (const std::wstring &folder : history) {
+            if (HistoryPath::IsBroken(folder)) continue;
+            if (favs.count(folder) == 0)       continue;
+            out.push_back({folder, true});
+        }
+
+        // Two: the starred folders that have no position, behind the ones that do.
+        for (const std::wstring &orphan : orphans) {
+            out.push_back({orphan, true});
+        }
+
+        // Three: everything else, again in MRU order.
+        for (const std::wstring &folder : history) {
+            if (HistoryPath::IsBroken(folder)) continue;
+            if (favs.count(folder) != 0)       continue;
+            out.push_back({folder, false});
+        }
+
+        return out;
+    }
+
     // ===========================================================================
     //  FOLDER WALKING  —  one implementation, three callers
     //

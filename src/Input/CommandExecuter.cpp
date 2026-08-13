@@ -44,7 +44,11 @@
 // The Ctrl+F11 selection panel reaches ExecuteCommand through UIManager, which
 // CommandExecuter already includes — nothing extra is needed here.
 #include "Rem_TCP_IP/RemoteServer.h"  // EmitToObservers — the echo half
-#include "Persistence/HistoryFoldersManager.h" // QueryHistory reads the list from disk
+// No longer needed by QueryHistory, which serves UI::SnapshotHistoryForRemote()
+// from the live MRU list instead of loading the files itself. Left in place
+// rather than removed on a hunch: dropping an include is a build-wide change and
+// this file has no way to prove nothing else here leans on it transitively.
+#include "Persistence/HistoryFoldersManager.h"
 #include "Rem_TCP_IP/RemoteSettings.h"         // QueryClients reports the configured cap
 
 // These two functions live in AppMain.cpp.
@@ -2459,26 +2463,54 @@ std::wstring InputManager::GetCommandValue(HWND hWnd, Command cmd) {
             return s;
         }
 
-        // Read straight from disk rather than from the History panel's list.
-        // That list is a file-static inside HistoryListWnd and only exists once
-        // the panel has been opened, so asking it would answer "no history" on
-        // an instance nobody has pressed F3 on. The file is the source of truth
-        // and AppMenuIO already loads it this way.
+        // SERVED FROM THE LIVE LIST, NOT FROM THE FILE.
+        //
+        // This used to build a fresh HistoryFoldersManager and load both files on
+        // every request, and the comment here defended that by saying the panel's
+        // list "only exists once the panel has been opened". THAT WAS TRUE OF THE
+        // WRONG THING. g_displayList — the rendered rows, with the filter and the
+        // caps applied — does need F3. The MRU vector behind it does not:
+        // AppMain starts LoadFolderHistoryFromDisk() on a background thread and
+        // JOINS IT before the first image decodes, so it is populated on every
+        // instance whether or not a panel was ever opened.
+        //
+        // What the file cannot supply is this session's order. qivHistory.txt is
+        // append-only by design, and PushFolderHistory promotes a REVISITED
+        // folder in RAM without writing ("already exists: promote to front (MRU),
+        // no file write needed"). So a re-read answered first-seen order while the
+        // panel showed the real MRU: opening a folder from the phone promoted a
+        // list the phone was never shown. It also cost two file opens on the UI
+        // thread per press.
+        //
+        // The ordering and the favourite marking now live in
+        // SnapshotHistoryForRemote, next to the data they read. This end only
+        // formats the wire reply.
         case Command::QueryHistory: {
-            HistoryFoldersManager hfm;
-            hfm.LoadHistoryFromDisk();
+            const std::vector<std::pair<std::wstring, bool>> rows =
+                UI::SnapshotHistoryForRemote();
 
             // Pipe-separated: a Windows path cannot contain '|', but it very
             // often contains spaces and commas. Favourites carry a leading '*'
             // so a client can group them without a second round trip.
             std::wstring list;
-            for (const std::wstring &folder : hfm.folderHistory) {
-                if (HistoryPath::IsBroken(folder)) continue; // never offer a path that cannot open
+            // COUNTED AS THEY ARE WRITTEN, not from the source list.
+            //
+            // This reported folderHistory.size() while the loop skipped every
+            // broken row, so the number and the list it labels disagreed by
+            // exactly the number of dead paths in qivHistory.txt — a client
+            // sizing anything off count= would be wrong whenever a recorded
+            // folder had since been deleted, which is the normal way that file
+            // ages. The snapshot has already dropped them, so the count is now
+            // simply the number of rows; it is still written from the loop rather
+            // than from size() so the two can never drift apart again.
+            int emitted = 0;
+            for (const std::pair<std::wstring, bool> &row : rows) {
                 if (!list.empty()) list += L'|';
-                if (hfm.favorites.count(folder)) list += L'*';
-                list += folder;
+                if (row.second) list += L'*';
+                list += row.first;
+                ++emitted;
             }
-            return L"count=" + std::to_wstring(hfm.folderHistory.size()) +
+            return L"count=" + std::to_wstring(emitted) +
                    L";folders=" + list;
         }
 

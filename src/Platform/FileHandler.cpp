@@ -1031,6 +1031,42 @@ void HandleScanComplete(HWND hWnd, ScanResult *result) {
         UpdateOverlaysForCurrentImage(hWnd);
         uiManager.getActiveDirWnd().SyncDirSelectionRectangle();
         InvalidateRect(hWnd, nullptr, FALSE);
+
+        // THE COUNT CHANGED, AND ONLY THIS WINDOW WAS TOLD.
+        //
+        // Opening a folder displays the first file against a one-entry playlist
+        // and enumerates the rest here, on the worker's result. The overlay call
+        // above repaints 1/1 → N/M locally, but this branch deliberately does
+        // not call LoadImageIndex — and LoadImageIndex is the only emitter of
+        // ImageChanged. So a bound client that asked during the scan was told
+        // "1 / 1", truthfully, about a moment that had passed, and nothing ever
+        // corrected it: no index moved, no command was in flight, no further
+        // event was due.
+        //
+        // The visible cost was a phone captioned 1 / 1 next to a viewer reading
+        // 1 / 800, and a "Go to #" dialog that refused every valid number above
+        // one.
+        //
+        // Same line as the emit in LoadImageIndex, for the same reason: it names
+        // WHAT is on screen rather than where it sits, and the picture has not
+        // actually changed here — only the set it belongs to. A client keys on
+        // the counts and re-asks for state; it costs one short line.
+        //
+        // CONN_NONE — every observer, excluding nobody. The connection that sent
+        // OpenFile is the one holding the stale count, because it read it off
+        // its own reply mid-scan. Excluding it would leave exactly the client
+        // this fixes still wrong.
+        //
+        // Guarded before anything is built, like every other emit on this path:
+        // a viewer nobody is watching allocates nothing.
+        if (Remote::HasObservers()) {
+            const std::wstring &shown = app.playlist[targetIdx];
+            Remote::EmitToObservers(
+                L"ImageChanged " + std::to_wstring(targetIdx + 1) + L"/" +
+                    std::to_wstring(app.playlist.size()) + L" " +
+                    shown.substr(shown.find_last_of(L"\\/") + 1),
+                Remote::CONN_NONE);
+        }
     } else {
         // Different target — do a normal load (decode/display the new image).
         // LoadImageIndex's internal SyncDirSelectionRectangle snaps the selection
