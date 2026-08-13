@@ -840,10 +840,10 @@ LRESULT CALLBACK MainAppWndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM l
                 const std::wstring &currentPath = app.playlist[app.currentIndex];
                 // This call will find the bitmap in the cache and set it as active.
                 if (SUCCEEDED(app.renderer->LoadBitmap(nullptr, 0, 0, currentPath))) {
-                    // Apply EXIF orientation stored in the cache entry during decode.
-                    // The viewport was already reset in LoadImageIndex; orientation
-                    // could not be applied earlier because the file wasn't decoded yet.
-                    ApplyOrientationToViewport(app.renderer->GetCachedOrientation(currentPath));
+                    // NO ORIENTATION STEP — the decode bakes it into the pixels,
+                    // so there is nothing left to turn by the time this runs. See
+                    // RendererD2D's decode for why the viewport stopped being the
+                    // place for it.
                     // Dimensions are now the new image's — re-clamp a locked
                     // viewport (Y) so a carried zoom/pan stays inside its limits.
                     ReclampLockedViewport(hWnd);

@@ -392,7 +392,7 @@ ID2D1Effect *RendererD2D::BuildEffectChain(ID2D1Image *source) {
 
     // ---- STACKING ORDER = THE ORDER THE USER ENABLED THEM --------------------
     // Each effect sees the output of every effect enabled before it, so turning
-    // Sepia on while Desaturate is already active tints the desaturated image.
+    // Sepia on while Grayscale is already active tints the grayscaled image.
     // Switching an effect off removes only its link; the rest of the chain is
     // rebuilt from the untouched source bitmap, so nothing is destructive.
     //
@@ -1375,6 +1375,88 @@ HRESULT RendererD2D::PreloadBitmap(const std::wstring &filePath, int requestInde
                     uploadSource = converter.Get();
                 }
 
+                // =====================================================
+                //  THE ORIENTATION IS BAKED IN HERE, NOT APPLIED LATER
+                // =====================================================
+                //
+                // It used to be carried to the VIEWPORT instead: the tag was
+                // stored with the cache entry and FileHandler turned the drawing
+                // with it (ApplyOrientationToViewport). The picture then looked
+                // right and every measurement of it was wrong, because a
+                // draw-time rotation is invisible to arithmetic:
+                //
+                //   • FIT — GetRenderSize scaled the unrotated shape, so a
+                //     portrait photo was fitted as a landscape one and spilled
+                //     off the top and bottom.
+                //   • PAN LIMITS — maxOffX came from renderW against the window
+                //     width, but after a quarter turn the on-screen horizontal
+                //     extent is renderH. Two separate places computed it.
+                //   • PAN DIRECTION — a screen-space mouse delta was added to an
+                //     offset that is applied BEFORE the rotation, so dragging
+                //     right moved the picture down.
+                //   • The zoom readout and click-zoom, from the same maths.
+                //
+                // Fixing those one at a time would mean five sites that must all
+                // agree forever, and the next calculation anybody adds walks
+                // into the same trap. Turning the PIXELS instead makes
+                // width/height the on-screen dimensions, so every one of those
+                // calculations is simply correct with no knowledge of rotation
+                // at all — and none of them changed.
+                //
+                // WHY IT SHOWED UP ON HEIC. A phone records the sensor's pixels
+                // unrotated and puts the turn in the tag, so a photo off a Galaxy
+                // carries one every time. JPEGs that have lived on a PC are
+                // usually already upright, tag 1, which is why a normal library
+                // never revealed any of this.
+                //
+                // COSTS NOTHING AT TAG 1, which is almost every file: the branch
+                // is skipped and the upload source is the one it always was. When
+                // it does run it is one pass on THIS thread — the decode worker,
+                // never the UI thread — next to a decode that costs far more.
+                Microsoft::WRL::ComPtr<IWICBitmapFlipRotator> rotator;
+                if (orientation != 1) {
+                    // The eight EXIF cases in WIC's vocabulary. Same mapping as
+                    // Xfer::BuildPreviewJpeg and WicDecoder use, deliberately:
+                    // one tag read three ways would put the screen, the phone and
+                    // the clipboard at different angles.
+                    WICBitmapTransformOptions transform = WICBitmapTransformRotate0;
+                    switch (orientation) {
+                        case 2: transform = WICBitmapTransformFlipHorizontal; break;
+                        case 3: transform = WICBitmapTransformRotate180;      break;
+                        case 4: transform = WICBitmapTransformFlipVertical;   break;
+                        case 5: transform = static_cast<WICBitmapTransformOptions>(
+                                    WICBitmapTransformRotate90 | WICBitmapTransformFlipHorizontal); break;
+                        case 6: transform = WICBitmapTransformRotate90;       break;
+                        case 7: transform = static_cast<WICBitmapTransformOptions>(
+                                    WICBitmapTransformRotate270 | WICBitmapTransformFlipHorizontal); break;
+                        case 8: transform = WICBitmapTransformRotate270;      break;
+                        default: break;   // a corrupt tag means "as-is"
+                    }
+
+                    if (transform != WICBitmapTransformRotate0) {
+                        if (FAILED(wicFac->CreateBitmapFlipRotator(&rotator))) return;
+                        if (FAILED(rotator->Initialize(uploadSource, transform))) return;
+                        uploadSource = rotator.Get();
+
+                        // The cached dimensions describe the BITMAP, and the
+                        // bitmap has just turned. Everything downstream sizes
+                        // itself from these — a quarter turn swaps them; 180 and
+                        // the two flips keep the shape.
+                        if (orientation == 5 || orientation == 6 ||
+                            orientation == 7 || orientation == 8) {
+                            const UINT swap = width;
+                            width  = height;
+                            height = swap;
+                        }
+                    }
+
+                    // ALREADY UPRIGHT, and the cache entry has to say so. This is
+                    // what makes the change safe without hunting down every
+                    // reader: GetCachedOrientation now answers 1 for every
+                    // picture, so anything that still applies it applies nothing.
+                    orientation = 1;
+                }
+
                 if (FAILED(taskCtx->CreateBitmapFromWicBitmap(uploadSource, nullptr, &newBitmap))) return;
             }
 
@@ -1967,6 +2049,12 @@ std::vector<IImageRenderer::CacheItem> RendererD2D::GetCachedBitmaps() {
     return items;
 }
 
+// ALWAYS ANSWERS 1 NOW, and that is not a bug to fix.
+//
+// The decode bakes the EXIF turn into the pixels and then stores 1 with the
+// entry, meaning "already upright". Nothing calls this any more; it is left in
+// place so that a caller written against the old contract — apply what this
+// returns — would apply nothing rather than rotate a picture twice.
 USHORT RendererD2D::GetCachedOrientation(const std::wstring &filePath) {
     std::lock_guard<std::mutex> lock(m_cacheMutex);
     auto it = m_bitmapCache.find(filePath);

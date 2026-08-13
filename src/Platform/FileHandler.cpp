@@ -1305,6 +1305,16 @@ void UpdateOverlaysForCurrentImage(HWND hWnd) {
     g_overlayManager.UpdateEffects();
 }
 
+// NO LONGER PART OF DISPLAYING A PICTURE — kept, but nothing calls it.
+//
+// Orientation is baked into the pixels by the decoder now (see RendererD2D), so
+// a bitmap arrives upright and there is nothing for this to turn. Its three call
+// sites are gone. It survives because the mapping it encodes — the eight EXIF
+// cases — is the reference the two WIC sites copy, and deleting the original of
+// a rule that lives in three places is how the copies start disagreeing.
+//
+// If you are here because a picture is the wrong way up: this is not the place.
+// Look at the flip-rotator in the decode path.
 void ApplyOrientationToViewport(USHORT orient) {
     switch (orient) {
         case 2: app.viewport.flippedH = true;
@@ -1361,6 +1371,13 @@ bool ShowInterjectedImage(HWND hWnd) {
     // Shown clean and full-frame, ignoring whatever pan/zoom the images were
     // using: it is a message dropped between two slides, not part of the walk.
     app.viewport = ViewportState{};
+
+    // NOTHING TO DO ABOUT ORIENTATION HERE. This briefly did apply it, to fix
+    // a photo pushed from the phone arriving on its side — correct at the time,
+    // and made redundant hours later when the decoder started baking the turn
+    // into the pixels instead. Left as a note rather than silence: the reset
+    // above still zeroes rotation, and that is now simply the right answer,
+    // because an upright bitmap needs no turning.
     // An interjection is one frame. Whatever the previous image had running must
     // not keep firing over it.
     KillTimer(hWnd, Constants::Slideshow::GIF_TIMER_ID);
@@ -1694,8 +1711,12 @@ void LoadImageIndex(HWND hWnd, int index) {
                     ImageLoadStats::NowUs() -
                     ImageLoadStats::g_loadStartUs.load(std::memory_order_relaxed),
                     std::memory_order_relaxed);
-            // Orientation stored in the cache entry, applied after the viewport reset.
-            ApplyOrientationToViewport(app.renderer->GetCachedOrientation(currentPath));
+            // NO ORIENTATION STEP HERE ANY MORE — the decoder bakes it into the
+            // pixels now, so the bitmap arrives upright and its width/height are
+            // already the on-screen ones. See the long note in RendererD2D's
+            // decode: turning the drawing instead left every measurement of the
+            // picture — fit, pan limits, pan direction, zoom — computing on the
+            // unrotated shape.
             // LoadBitmap has set imgWidth/imgHeight — safe to re-clamp a locked
             // viewport against the new image's dimensions.
             ReclampLockedViewport(hWnd);

@@ -542,7 +542,7 @@ struct AppState {
 
     // The order the user switched effects on. This IS the render order: each
     // effect operates on the result of the ones before it, so enabling Sepia
-    // while Desaturate is already on tints the desaturated image, not the
+    // while Grayscale is already on tints the grayscaled image, not the
     // original. Stays in lockstep with the effect* booleans above — every
     // toggle goes through ToggleEffectChronological.
     //

@@ -2503,15 +2503,74 @@ std::wstring InputManager::GetCommandValue(HWND hWnd, Command cmd) {
             // ages. The snapshot has already dropped them, so the count is now
             // simply the number of rows; it is still written from the loop rather
             // than from size() so the two can never drift apart again.
+            // BOUNDED, BECAUSE THIS REPLY IS ONE LINE AND THE HISTORY IS NOT.
+            //
+            // The list holds up to IS_HISTORY_MAX_DIRS_TO_SAVE (1000) paths, and
+            // a Windows path reaches 260 characters. That product passes
+            // MAX_LINE_LEN, which is the ceiling BOTH ends of this protocol
+            // enforce on a line they RECEIVE — RecvLine drops the connection
+            // above it. So the server could emit an answer its own reader would
+            // refuse, and nothing here stopped it. Today only the Android client
+            // asks, and that one reads with no limit of its own, which is why
+            // this has never been seen; a second desktop or any client honouring
+            // the documented maximum would simply lose the connection.
+            //
+            // COUNTED IN BYTES, NOT CHARACTERS. The line is UTF-8 encoded before
+            // its length is tested, and a BMP character costs up to three bytes,
+            // so the budget divides by three rather than trusting the character
+            // count. Deliberately pessimistic: this is a valve that must never
+            // be the thing that breaks a connection, and being wrong in the
+            // generous direction is the only way it could be.
+            constexpr size_t WIRE_MAX  = Constants::RemoteTcpIp::MAX_LINE_LEN;
+            constexpr size_t UTF8_WORST = 3;   // bytes per wchar_t, BMP worst case
+            // "OK QueryHistory=count=1000;truncated=1000;folders=" and CRLF, with
+            // room to spare. Subtracted rather than measured because the wrapper
+            // is added two layers up, in RemoteServer.
+            constexpr size_t WRAPPER   = 128;
+            constexpr size_t BUDGET    = WIRE_MAX / UTF8_WORST - WRAPPER;
+
+            // COUNTED AS THEY ARE WRITTEN, not from the source list.
+            //
+            // This reported folderHistory.size() while the loop skipped every
+            // broken row, so the number and the list it labels disagreed by
+            // exactly the number of dead paths in qivHistory.txt — a client
+            // sizing anything off count= would be wrong whenever a recorded
+            // folder had since been deleted, which is the normal way that file
+            // ages. The snapshot has already dropped them, so the count is now
+            // simply the number of rows; it is still written from the loop rather
+            // than from size() so the two can never drift apart again. The cap
+            // below keeps that true: a row that does not fit is not counted.
             int emitted = 0;
+            int dropped = 0;
             for (const std::pair<std::wstring, bool> &row : rows) {
+                // What this row will add: the separator, the favourite star, and
+                // the path itself. Measured BEFORE appending, so the budget is
+                // never exceeded and then repaired.
+                const size_t cost = (list.empty() ? 0u : 1u)
+                                    + (row.second ? 1u : 0u)
+                                    + row.first.size();
+                if (list.size() + cost > BUDGET) {
+                    ++dropped;
+                    continue;   // keep counting the rest — the client is told how many
+                }
+
                 if (!list.empty()) list += L'|';
                 if (row.second) list += L'*';
                 list += row.first;
                 ++emitted;
             }
-            return L"count=" + std::to_wstring(emitted) +
-                   L";folders=" + list;
+
+            // SAID OUT LOUD WHEN IT HAPPENS. A silently shortened list is a
+            // phone showing eight hundred folders as though that were all of
+            // them. The field is written ONLY when something was dropped, so the
+            // ordinary reply is byte-for-byte what it was before this change.
+            //
+            // BEFORE `folders=`, which has to stay last: the client reads a field
+            // up to the next ';', and the folder list is the one value that can
+            // legitimately contain one.
+            std::wstring reply = L"count=" + std::to_wstring(emitted);
+            if (dropped > 0) reply += L";truncated=" + std::to_wstring(dropped);
+            return reply + L";folders=" + list;
         }
 
         // The count INCLUDES the caller — it is asking over one of the very

@@ -66,6 +66,57 @@ bool BuildPreviewJpeg(const std::wstring &path, int maxDim, int quality,
         return false;
     }
 
+    // WHICH WAY UP, read the same way the renderer reads it — EXIF tag 274, the
+    // app1/ifd path first and the bare ifd path as the fallback. No extra I/O:
+    // the decoder already has the bytes.
+    //
+    // WHY A PREVIEW NEEDS THIS AT ALL. The viewer applies orientation to its
+    // VIEWPORT (ApplyOrientationToViewport), which rotates what is on the glass
+    // and leaves the pixels alone. This function does not draw to the glass — it
+    // re-encodes the pixels for another machine — so it saw none of that and
+    // handed the phone a sideways picture of an upright one.
+    //
+    // It goes unnoticed on a normal library because files that have lived on a
+    // PC are usually already rotated in their pixels, tag 1. It is the ordinary
+    // case for anything straight off a camera, which is exactly what the Stream
+    // feature pushes — so the preview confirming a pushed photo was the one
+    // place guaranteed to show it wrong.
+    USHORT orientation = 1;
+    {
+        ComPtr<IWICMetadataQueryReader> metaRdr;
+        if (SUCCEEDED(frame->GetMetadataQueryReader(&metaRdr))) {
+            PROPVARIANT pv;
+            PropVariantInit(&pv);
+            if (FAILED(metaRdr->GetMetadataByName(L"/app1/ifd/{ushort=274}", &pv)) ||
+                pv.vt == VT_EMPTY) {
+                PropVariantClear(&pv);
+                PropVariantInit(&pv);
+                metaRdr->GetMetadataByName(L"/ifd/{ushort=274}", &pv);
+            }
+            if      (pv.vt == VT_UI2) orientation = pv.uiVal;
+            else if (pv.vt == VT_UI4) orientation = static_cast<USHORT>(pv.ulVal);
+            PropVariantClear(&pv);
+        }
+    }
+
+    // The same eight cases ApplyOrientationToViewport maps, in WIC's vocabulary.
+    // Kept in that order and with that meaning deliberately: two mappings of one
+    // tag that disagree would put the phone and the desktop at right angles to
+    // each other, which is worse than both being wrong.
+    WICBitmapTransformOptions transform = WICBitmapTransformRotate0;
+    switch (orientation) {
+        case 2: transform = WICBitmapTransformFlipHorizontal; break;
+        case 3: transform = WICBitmapTransformRotate180;      break;
+        case 4: transform = WICBitmapTransformFlipVertical;   break;
+        case 5: transform = static_cast<WICBitmapTransformOptions>(
+                    WICBitmapTransformRotate90 | WICBitmapTransformFlipHorizontal); break;
+        case 6: transform = WICBitmapTransformRotate90;       break;
+        case 7: transform = static_cast<WICBitmapTransformOptions>(
+                    WICBitmapTransformRotate270 | WICBitmapTransformFlipHorizontal); break;
+        case 8: transform = WICBitmapTransformRotate270;      break;
+        default: break;   // 1, and anything a corrupt tag invents, mean "as-is"
+    }
+
     // Fit the longest edge, preserving aspect. Never up.
     UINT tw = w, th = h;
     const UINT longest = std::max(w, h);
@@ -101,6 +152,40 @@ bool BuildPreviewJpeg(const std::wstring &path, int maxDim, int quality,
             return false;
         }
         source = scaler;
+    }
+
+    // ROTATED LAST, on the small picture. The scaler has already brought this
+    // down to at most maxDim on its longest edge, and a rotation does not change
+    // which edge that is — a 90 turn swaps the two, and the longer of the pair is
+    // still the one that was fitted. So the size contract holds either way, and
+    // doing it here turns a handful of pixels rather than a 50-megapixel frame.
+    //
+    // Skipped entirely at orientation 1, which is almost every file. That is what
+    // keeps this change unable to hurt anything that was already right: a picture
+    // with no tag, or a tag saying "as-is", goes through the identical code path
+    // it did before.
+    ComPtr<IWICBitmapFlipRotator> rotator;
+    if (transform != WICBitmapTransformRotate0) {
+        if (FAILED(factory->CreateBitmapFlipRotator(&rotator)) ||
+            FAILED(rotator->Initialize(source.Get(), transform))) {
+            errOut = Constants::Messages::PREVIEW_CANNOT_DECODE;
+            return false;
+        }
+        source = rotator;
+
+        // AND THE OUTPUT FRAME IS THE OTHER WAY ROUND NOW. A quarter turn swaps
+        // width and height, and the encoder below is told the size explicitly
+        // through SetSize — hand it the pre-rotation pair and it disagrees with
+        // the source it is about to pull from.
+        //
+        // Only the quarter turns. 180 and the two plain flips keep the shape, so
+        // swapping for them would introduce the very fault this prevents.
+        if (orientation == 5 || orientation == 6 ||
+            orientation == 7 || orientation == 8) {
+            const UINT swap = tw;
+            tw = th;
+            th = swap;
+        }
     }
 
     ComPtr<IStream> stream;

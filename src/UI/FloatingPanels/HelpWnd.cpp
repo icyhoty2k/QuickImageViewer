@@ -575,7 +575,7 @@ namespace UI {
         Add(K(SC::SC_TRANSFORM_FLIP_H) + L" / " + K(SC::SC_TRANSFORM_FLIP_V),
             L"Flip horizontally / vertically.", sFx);
         Add(Ctrl(FX::SC_COLOR_GRAYSCALE_OR_NAVIGATE_FAVS_NEXT),
-            L"Toggle desaturate — drops all colour. Switch Sepia on afterwards to tint "
+            L"Toggle grayscale — drops all colour. Switch Sepia on afterwards to tint "
             L"the result.", sFx);
         Add(Ctrl(FX::SC_COLOR_INVERT_OR_NAVIGATE_FAVS_PREV), L"Toggle color inversion (negative).", sFx);
         Add(Ctrl(FX::SC_COLOR_SEPIA_OR_SC_NAV_FIRST_IMAGE), L"Toggle sepia tone.", sFx);

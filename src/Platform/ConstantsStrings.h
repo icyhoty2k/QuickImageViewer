@@ -775,14 +775,31 @@ namespace Constants::Strings {
     // app.activeEffectsList, so the renderer matches on them — changing a value
     // changes what RendererD2D::ChainEffectByName() compares against.
     //
-    // Shown as "Desaturate", not "Grayscale", deliberately: effects stack, so a
-    // later Sepia tints this one's output and the picture ends up brown while
-    // the label is still listed. "Grayscale" reads as a promise that the final
-    // image IS gray and looks broken the moment anything follows it;
-    // "Desaturate" names the operation being performed, which is what the entry
-    // actually is. The identifier stays EFFECT_GRAYSCALE to match
-    // app.effectGrayscale and Command::ToggleGrayscale.
-    constexpr const wchar_t *EFFECT_GRAYSCALE = L"Desaturate";
+    // "Grayscale", on the user's call 2026-08-13: *"desaturate is not accurate
+    // enough, Grayscale is more accurate"*. It had been "Desaturate" on the
+    // argument below — kept here so the trade is visible rather than rediscovered
+    // and quietly reverted:
+    //
+    //   effects STACK, so a later Sepia tints this one's output and the picture
+    //   ends up brown while the label still reads Grayscale. That is the case
+    //   "Desaturate" was chosen to describe honestly, by naming the OPERATION
+    //   rather than promising a result.
+    //
+    // Weighed against it: on its own — which is how it is used almost every time,
+    // and what Ctrl+Del does in one press — the picture IS gray, and "Desaturate"
+    // sends people looking for a slider that does not exist. The common reading
+    // wins over the stacked one.
+    //
+    // The identifier already matched: EFFECT_GRAYSCALE, app.effectGrayscale,
+    // Command::ToggleGrayscale. Only the shown text moved.
+    //
+    // SAFE TO CHANGE, checked rather than assumed: this string is a key in
+    // app.activeEffectsList and is compared by RendererD2D::ChainEffectByName and
+    // by RemoteExec's effects parser — both through THIS constant, so they move
+    // together. It is not persisted (the booleans are), and the Android client
+    // never sees it: it sends the COMMAND name ToggleGrayscale and labels its own
+    // button "Gray".
+    constexpr const wchar_t *EFFECT_GRAYSCALE = L"Grayscale";
     constexpr const wchar_t *EFFECT_INVERT = L"Invert";
     constexpr const wchar_t *EFFECT_SEPIA = L"Sepia";
     constexpr const wchar_t *EFFECT_SOLARIZE = L"Solarize";

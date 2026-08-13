@@ -297,7 +297,7 @@ Command InputManager::ResolveKeyboardKeys(UINT key, LPARAM lParam) {
         // presses belong to the navigation cluster — see the cases below.
         case Shortcuts::ImageEffects::SC_EFFECT_APPLY_TOGGLE: return Command::ToggleEffectPreview;
 
-        case Shortcuts::SC_APP_RESET_DEFAULTS: // VK_DELETE  shift=reset-all  ctrl=desaturate  plain=prev favorite
+        case Shortcuts::SC_APP_RESET_DEFAULTS: // VK_DELETE  shift=reset-all  ctrl=grayscale   plain=prev favorite
             if (shift && !ctrl && !alt) return Command::ResetAll;
             if (ctrl && !alt && !shift) return Command::ToggleGrayscale;
             if (!ctrl && !alt && !shift) return Command::NextFavoriteFolder;
