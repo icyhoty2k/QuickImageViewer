@@ -8,23 +8,16 @@
 
 #include "LinkText.h"
 
-#include <shlobj_core.h> // ILCreateFromPathW / SHOpenFolderAndSelectItems
+#include <shlobj_core.h>
+#include "../Input/AppCommands.h" // RevealInExplorer — the shared reveal
 
 namespace UI::Link {
 
+// This function's body is now AppCommands::RevealInExplorer, guard and all —
+// it was the only one of the five copies that had the existence check, so it
+// became the shared one rather than being replaced by a weaker version.
 void Reveal(const std::wstring &path) {
-    if (path.empty()) return;
-
-    // Checked here rather than trusted: a panel can be showing a path that was
-    // valid when it was painted and deleted since, and SHOpenFolderAndSelectItems
-    // on a missing file opens a window on the wrong folder rather than failing.
-    const DWORD attr = GetFileAttributesW(path.c_str());
-    if (attr == INVALID_FILE_ATTRIBUTES) return;
-
-    if (PIDLIST_ABSOLUTE pidl = ILCreateFromPathW(path.c_str())) {
-        SHOpenFolderAndSelectItems(pidl, 0, nullptr, 0);
-        ILFree(pidl);
-    }
+    AppCommands::RevealInExplorer(path);
 }
 
 bool CopyToClipboard(HWND owner, const std::wstring &text) {

@@ -539,6 +539,24 @@ void AppCommands::CopyImagePathToClipboard(HWND hWnd) {
     g_overlayManager.PostCenterMessage(hWnd, Constants::Messages::COPIED_PATH_PREFIX + name);
 }
 
+bool AppCommands::RevealInExplorer(const std::wstring &path) {
+    if (path.empty()) return false;
+
+    // Checked here rather than trusted — see the header. GetFileAttributesW
+    // rather than fs::exists: this is a single syscall on a path the caller
+    // already has, and it answers for directories too, which the settings and
+    // log reveals rely on.
+    const DWORD attr = GetFileAttributesW(path.c_str());
+    if (attr == INVALID_FILE_ATTRIBUTES) return false;
+
+    PIDLIST_ABSOLUTE pidl = ILCreateFromPathW(path.c_str());
+    if (!pidl) return false;
+
+    SHOpenFolderAndSelectItems(pidl, 0, nullptr, 0);
+    ILFree(pidl);
+    return true;
+}
+
 bool AppCommands::OpenPathWith(HWND hWnd, const std::wstring &path) {
     if (path.empty()) return false;
 

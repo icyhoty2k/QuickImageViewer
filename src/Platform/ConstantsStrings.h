@@ -409,6 +409,12 @@ namespace Constants::Messages {
     // the two above: there IS a file, Windows just would not raise the chooser.
     constexpr const wchar_t *OPEN_WITH_FAILED =
             QIV_ICON_WARNING L" Could not open the 'Open with' chooser";
+    // Reveal-in-Explorer on a file that has been deleted since the panel or the
+    // playlist last saw it. Its own sentence because the alternative is not an
+    // error at all — Explorer silently opening the wrong folder — and "it is not
+    // there any more" is the one thing that explains what the user is looking at.
+    constexpr const wchar_t *REVEAL_FILE_GONE =
+            QIV_ICON_WARNING L" That file is no longer there";
 
     // Desktop wallpaper — NAMES is indexed by Constants::Wallpaper::FILL..SPAN and
     // is the single source for both the submenu labels and the overlay message.

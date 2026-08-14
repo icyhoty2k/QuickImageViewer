@@ -122,6 +122,23 @@ class AppCommands {
         // there is no multi-file form of it.
         static bool OpenPathWith(HWND hWnd, const std::wstring &path);
 
+        // Show one file in Explorer, selected. Returns false when there is
+        // nothing to show — an empty path, or a file that is gone.
+        //
+        // THE EXISTENCE CHECK IS THE POINT, not a nicety. A panel or a thumbnail
+        // can be displaying a path that was valid when it was painted and has
+        // been deleted since, and SHOpenFolderAndSelectItems given a missing
+        // file does not fail: it opens a window on the WRONG FOLDER. The user
+        // asked "where is this picture" and got somewhere else, with no error.
+        //
+        // That guard existed in exactly one of the five hand-written copies of
+        // this three-line sequence (LinkText's, with the comment that explains
+        // it); the other four — including the main window's own L key — went
+        // without. Hoisted rather than copied a sixth time, because the fix
+        // belongs to the SHAPE and this codebase has already paid once for
+        // fixing one path and leaving its twin.
+        static bool RevealInExplorer(const std::wstring &path);
+
     private:
         // This remains private and inaccessible to the rest of the app
         static void SaveImageToDisk(HWND hWnd);

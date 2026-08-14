@@ -28,7 +28,8 @@
 #include "UI/GdiPool.h" // brushes and pens are pooled — never DeleteObject them
 
 #include <algorithm>
-#include <shlobj_core.h> // ILCreateFromPathW / SHOpenFolderAndSelectItems
+#include <shlobj_core.h>
+#include "../Input/AppCommands.h" // RevealInExplorer — the shared reveal
 #include <windowsx.h>
 
 extern AppState app;
@@ -328,11 +329,10 @@ void RemoteWnd::DoSaveToIni() {
 // which is a text editor at best and an unknown at worst. Matches the
 // reveal-in-Explorer the main window already does for the current image.
 void RemoteWnd::RevealSavedFile() {
-    if (m_savedPath.empty()) return;
-    if (PIDLIST_ABSOLUTE pidl = ILCreateFromPathW(m_savedPath.c_str())) {
-        SHOpenFolderAndSelectItems(pidl, 0, nullptr, 0);
-        ILFree(pidl);
-    }
+    // Shared helper: the saved path can be deleted between writing it and
+    // clicking the line, and a missing file opens Explorer on the wrong folder
+    // rather than failing.
+    AppCommands::RevealInExplorer(m_savedPath);
 }
 
 // =============================================================================

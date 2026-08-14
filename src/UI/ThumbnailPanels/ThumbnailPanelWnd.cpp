@@ -92,6 +92,42 @@ namespace UI {
             return true;
         }
 
+        // =====================================================================
+        // Is this path the temp file a STREAMED image is living in?
+        //
+        // THE CACHE STRIP LISTS IT. CacheWnd::GetSourceItems returns
+        // app.renderer->GetCachedBitmaps() — the VRAM cache, keyed by path — and
+        // an interjection is put into that very cache (WarmInterjectedImage
+        // calls PreloadBitmap(app.interject.path, …), which is how it becomes
+        // the active bitmap without touching the playlist). So a picture pushed
+        // here from the phone or from another desktop instance shows up in F4 as
+        // an ordinary thumbnail whose path is in %TEMP% and which
+        // ClearInterjection DELETES at the next change of image.
+        //
+        // Copying that path hands out a string that is already dying; opening it
+        // hands an editor a file that vanishes underneath it; revealing it opens
+        // a temp folder the user never chose. All three are refused rather than
+        // explained away, because the honest answer is that there is no file of
+        // the user's here.
+        //
+        // Checked by PATH, not by panel kind. A directory strip enumerates a
+        // real folder and cannot list this file, so one predicate covers both
+        // strips without anyone having to remember which is which — the same
+        // reason the reveal guard lives in the shared helper rather than at the
+        // call sites.
+        // =====================================================================
+        bool IsStreamedTempImage(const std::wstring &path) {
+            if (!app.interject.ownsTempFile) return false;
+            if (path.empty() || app.interject.path.empty()) return false;
+            return _wcsicmp(path.c_str(), app.interject.path.c_str()) == 0;
+        }
+
+        bool AnyStreamedTempImage(const std::vector<std::wstring> &paths) {
+            for (const auto &p: paths)
+                if (IsStreamedTempImage(p)) return true;
+            return false;
+        }
+
         // Convenience for the drop target: an incoming drop WRITES into this
         // folder whether it is a copy or a move, so both forms are the paste
         // case as far as index stability is concerned.
@@ -1730,6 +1766,7 @@ namespace UI {
                 constexpr UINT ID_CTX_SELECT_INVERSE = 9;
                 constexpr UINT ID_CTX_COPY_PATH = 10;
                 constexpr UINT ID_CTX_OPEN_WITH = 11;
+                constexpr UINT ID_CTX_REVEAL = 12;
 
                 const bool hasFiles = !opPaths.empty();
                 const bool canPaste = !pasteDir.empty() && AppCommands::ClipboardHasFiles() &&
@@ -1760,9 +1797,22 @@ namespace UI {
                 // vanishes looks like a different build, one that is greyed looks
                 // like a state — and the state is temporary, ending when the last
                 // connection drops.
-                const bool canCopy = hasFiles && app.thumbCopyEnabled &&
+                // The streamed check is on Copy and Cut but NOT on Delete,
+                // because the three mean different things depending on which
+                // strip this is. Delete is overridden by CacheWnd to evict from
+                // VRAM and never touch the disk, so it is safe on anything the
+                // cache lists. Copy and Cut are NOT overridden: they put the
+                // real file on the clipboard as CF_HDROP, and Cut marks it
+                // DROPEFFECT_MOVE — so on the streamed temp file a paste in
+                // Explorer moves a file this process is about to delete, and the
+                // user ends up owning a copy of a picture qIV thinks it still
+                // controls. The keyboard forms cannot reach here (that whole
+                // block is inside if (IsDirPanel())); the context menu is the
+                // one surface both strips share.
+                const bool opStreamed = AnyStreamedTempImage(opPaths);
+                const bool canCopy = hasFiles && app.thumbCopyEnabled && !opStreamed &&
                                      !FileOpBlocked(Command::FileCopySelection);
-                const bool canCut  = hasFiles && app.thumbMoveEnabled &&
+                const bool canCut  = hasFiles && app.thumbMoveEnabled && !opStreamed &&
                                      !FileOpBlocked(Command::FileMoveSelection);
                 const bool canDel  = hasFiles && app.thumbDeleteEnabled &&
                                      !FileOpBlocked(Command::FileDeleteSelection);
@@ -1776,7 +1826,15 @@ namespace UI {
                 // the same file set; this reads a name and writes text. Leaving
                 // it live while the trio is greyed also says which kind of thing
                 // it is more plainly than any label could.
-                AppendMenuW(hMenu, hasFiles ? MF_STRING : (MF_STRING | MF_GRAYED),
+                //
+                // Greyed for the WHOLE set when any member is the streamed temp
+                // file, rather than quietly copying the rest: dropping one line
+                // out of a list of paths is a silent no-op wearing a success
+                // message, which is worse than refusing outright.
+                const bool canCopyPath = hasFiles && !opStreamed;
+                const bool canActOnHit = !hitPath.empty() && !IsStreamedTempImage(hitPath);
+
+                AppendMenuW(hMenu, canCopyPath ? MF_STRING : (MF_STRING | MF_GRAYED),
                             ID_CTX_COPY_PATH, copyPathLabel.c_str());
                 // Acts on the thumbnail UNDER THE CURSOR, not on the selection,
                 // and is the one item here that does. SHOpenWithDialog takes a
@@ -1786,8 +1844,16 @@ namespace UI {
                 //
                 // Ungated like Copy Path above: it launches a reader, and
                 // changes nothing in the folder.
-                AppendMenuW(hMenu, !hitPath.empty() ? MF_STRING : (MF_STRING | MF_GRAYED),
+                AppendMenuW(hMenu, canActOnHit ? MF_STRING : (MF_STRING | MF_GRAYED),
                             ID_CTX_OPEN_WITH, L"Open With…");
+                // Also the item under the cursor, for the same reason: Explorer
+                // selects ONE file, and "reveal these five" has no meaning.
+                //
+                // The main window's L key reveals the CURRENT image, which is
+                // not necessarily the thumbnail being pointed at — before this
+                // there was no way to reveal a specific thumbnail at all.
+                AppendMenuW(hMenu, canActOnHit ? MF_STRING : (MF_STRING | MF_GRAYED),
+                            ID_CTX_REVEAL, L"Show in Explorer");
                 if (showPaste) {
                     AppendMenuW(hMenu, MF_SEPARATOR, 0, nullptr);
                     AppendMenuW(hMenu, canPaste ? MF_STRING : (MF_STRING | MF_GRAYED), ID_CTX_PASTE, L"Paste");
@@ -1841,12 +1907,17 @@ namespace UI {
                         break;
                     }
                     case ID_CTX_COPY_PATH: {
+                        // Re-checked after the modal loop, not trusted from the
+                        // greying above: TrackPopupMenu ran a message pump, and
+                        // an interjection can be armed or retired inside it.
+                        if (AnyStreamedTempImage(opPaths)) {
+                            g_overlayManager.PostCenterMessage(
+                                    m_hOwner, Constants::Messages::IMAGE_IS_STREAMED,
+                                    OverlayManager::MsgSeverity::Warning);
+                            break;
+                        }
                         // One path per line for several, which is what a shell,
                         // an editor and a chat box all read back as a list.
-                        // These are directory-scan entries, so unlike the main
-                        // window's Ctrl+Shift+C there is no interjected or
-                        // streamed image to screen out — a thumbnail exists
-                        // because a file on this disk was enumerated.
                         std::wstring text;
                         for (size_t i = 0; i < opPaths.size(); ++i) {
                             if (i) text += L"\r\n";
@@ -1873,10 +1944,35 @@ namespace UI {
                         // loop and SHOpenWithDialog runs another, and m_thumbnails
                         // is rebuilt under both by the folder watcher. A
                         // reference into it would be dangling by now.
-                        if (!hitPath.empty() &&
-                            !AppCommands::OpenPathWith(m_hOwner, hitPath)) {
+                        if (hitPath.empty()) break;
+                        if (IsStreamedTempImage(hitPath)) {
+                            g_overlayManager.PostCenterMessage(
+                                    m_hOwner, Constants::Messages::IMAGE_IS_STREAMED,
+                                    OverlayManager::MsgSeverity::Warning);
+                            break;
+                        }
+                        if (!AppCommands::OpenPathWith(m_hOwner, hitPath)) {
                             g_overlayManager.PostCenterMessage(
                                     m_hOwner, Constants::Messages::OPEN_WITH_FAILED,
+                                    OverlayManager::MsgSeverity::Warning);
+                        }
+                        break;
+                    case ID_CTX_REVEAL:
+                        // A thumbnail is the exact case the guard inside
+                        // RevealInExplorer was written for: the strip paints from
+                        // a scan that may be seconds old, so the file under the
+                        // cursor can already be gone. Without the check Explorer
+                        // opens on the wrong folder and says nothing.
+                        if (hitPath.empty()) break;
+                        if (IsStreamedTempImage(hitPath)) {
+                            g_overlayManager.PostCenterMessage(
+                                    m_hOwner, Constants::Messages::IMAGE_IS_STREAMED,
+                                    OverlayManager::MsgSeverity::Warning);
+                            break;
+                        }
+                        if (!AppCommands::RevealInExplorer(hitPath)) {
+                            g_overlayManager.PostCenterMessage(
+                                    m_hOwner, Constants::Messages::REVEAL_FILE_GONE,
                                     OverlayManager::MsgSeverity::Warning);
                         }
                         break;

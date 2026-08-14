@@ -525,12 +525,16 @@ void InputManager::ExecuteCommand(HWND hWnd, Command cmd) {
 
         case Command::ShowInExplorer:
             if (!app.playlist.empty() && app.currentIndex >= 0) {
-                const std::wstring &path = app.playlist[app.currentIndex];
-                PIDLIST_ABSOLUTE pidl = ILCreateFromPathW(path.c_str());
-                if (pidl) {
-                    SHOpenFolderAndSelectItems(pidl, 0, nullptr, 0);
-                    ILFree(pidl);
-                }
+                // Reports when the file is gone. It used to hand the path
+                // straight to SHOpenFolderAndSelectItems, which does not fail on
+                // a missing file — it opens a window on the WRONG FOLDER. The
+                // playlist outlives a deletion by design (the watcher rescans on
+                // a debounce), so this is reachable simply by pressing L quickly
+                // after deleting the picture on screen.
+                if (!AppCommands::RevealInExplorer(app.playlist[app.currentIndex]))
+                    g_overlayManager.PostCenterMessage(
+                            hWnd, Constants::Messages::REVEAL_FILE_GONE,
+                            OverlayManager::MsgSeverity::Warning);
             } else {
                 // No current image — but the blank-screen placeholder may be up
                 // and naming a folder, and it advertises L as the way to open

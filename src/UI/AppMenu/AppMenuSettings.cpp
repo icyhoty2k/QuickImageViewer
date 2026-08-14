@@ -25,7 +25,7 @@
 #include "UI/UIManager.h"
 
 #include <commdlg.h>     // ChooseColorW — overlay font colour picker
-#include <shlobj_core.h> // ILCreateFromPathW / SHOpenFolderAndSelectItems
+#include <shlobj_core.h> // ShellExecuteW's SW_ constants
 #include <string>
 
 extern AppState app;
@@ -369,12 +369,7 @@ void DispatchSetting(HWND hWnd, int cmd) {
         // knowing what .txt is associated with, and the folder also holds
         // qivFavorites.txt and QivBackup/ — which is where anyone opening this
         // is usually headed anyway.
-        const std::wstring path = UI::HistoryFilePath();
-        if (path.empty()) break;
-        if (PIDLIST_ABSOLUTE pidl = ILCreateFromPathW(path.c_str())) {
-            SHOpenFolderAndSelectItems(pidl, 0, nullptr, 0);
-            ILFree(pidl);
-        }
+        AppCommands::RevealInExplorer(UI::HistoryFilePath());
         break;
     }
 
@@ -760,12 +755,7 @@ void DispatchSetting(HWND hWnd, int cmd) {
     // elevation is involved and nothing else is disturbed.
     case Id::SET_LOCATION: {
         if (Dedicated::SettingsUseFile()) {
-            const std::wstring &path = Dedicated::SettingsFilePath();
-            if (path.empty()) break;
-            if (PIDLIST_ABSOLUTE pidl = ILCreateFromPathW(path.c_str())) {
-                SHOpenFolderAndSelectItems(pidl, 0, nullptr, 0);
-                ILFree(pidl);
-            }
+            AppCommands::RevealInExplorer(Dedicated::SettingsFilePath());
         } else {
             HKEY k = nullptr;
             if (RegCreateKeyExW(HKEY_CURRENT_USER,
