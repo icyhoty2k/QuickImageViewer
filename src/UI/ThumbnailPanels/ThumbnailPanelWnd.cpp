@@ -63,9 +63,42 @@ namespace UI {
             return Remote::BlockedNow(cmd, unused);
         }
 
+        // The same question, asked by a KEYSTROKE rather than by the menu.
+        //
+        // BlockedNow hands back the reason it refused, and the silent form above
+        // throws it away — correct where the answer only greys a menu item out,
+        // wrong where the user just pressed Ctrl+C and is owed an explanation.
+        // Ctrl+C from the MAIN window has always said so (CommandExecuter.cpp,
+        // the Remote::BlockedNow gate at the top of ExecuteCommand); the same
+        // keystroke inside a strip did nothing at all and reported nothing,
+        // which reads as a dead key rather than a refused one.
+        //
+        // This builds the SAME sentence from the SAME table, so the two paths
+        // cannot drift into two explanations of one rule.
+        bool FileOpBlockedReport(HWND hOwner, Command cmd) {
+            const wchar_t *reason = nullptr;
+            if (!Remote::BlockedNow(cmd, reason)) return false;
+
+            std::wstring name;
+            if (!Remote::NameForCommand(cmd, name))
+                name = std::to_wstring(static_cast<int>(cmd));
+            std::wstring msg = Constants::Messages::REMOTE_BLOCKED_PREFIX + name;
+            if (reason) {
+                msg += L" — ";
+                msg += reason;
+            }
+            g_overlayManager.PostCenterMessage(hOwner, msg,
+                                               OverlayManager::MsgSeverity::Warning);
+            return true;
+        }
+
         // Convenience for the drop target: an incoming drop WRITES into this
         // folder whether it is a copy or a move, so both forms are the paste
         // case as far as index stability is concerned.
+        //
+        // Silent on purpose — a drop asks this to decide the CURSOR it shows
+        // while the mouse is still moving, and a message per mouse-move is not
+        // an explanation, it is a stutter. The drop itself reports when it lands.
         bool DropBlocked() { return FileOpBlocked(Command::FilePasteIntoFolder); }
     }
 
@@ -1164,7 +1197,7 @@ namespace UI {
 
                     if (ctrl && key == 'C') {
                         if (app.thumbCopyEnabled &&
-                            !FileOpBlocked(Command::FileCopySelection)) {
+                            !FileOpBlockedReport(m_hOwner, Command::FileCopySelection)) {
                             const auto paths = buildOpPaths();
                             if (!paths.empty()) {
                                 s_cutPaths.clear();
@@ -1176,7 +1209,7 @@ namespace UI {
                     }
                     if (ctrl && key == 'X') {
                         if (app.thumbMoveEnabled &&
-                            !FileOpBlocked(Command::FileMoveSelection)) {
+                            !FileOpBlockedReport(m_hOwner, Command::FileMoveSelection)) {
                             const auto paths = buildOpPaths();
                             if (!paths.empty()) {
                                 AppCommands::CopyFilesToClipboard(m_hOwner, paths, true);
@@ -1190,7 +1223,7 @@ namespace UI {
                     }
                     if (ctrl && key == 'V') {
                         if (app.thumbPasteEnabled &&
-                            !FileOpBlocked(Command::FilePasteIntoFolder)) {
+                            !FileOpBlockedReport(m_hOwner, Command::FilePasteIntoFolder)) {
                             std::wstring pasteDir = GetPanelFolder();
                             if (!pasteDir.empty() && AppCommands::ClipboardHasFiles()) {
                                 std::wstring srcDir;
@@ -1220,7 +1253,7 @@ namespace UI {
                     }
                     if (key == VK_DELETE) {
                         if (app.thumbDeleteEnabled &&
-                            !FileOpBlocked(Command::FileDeleteSelection)) {
+                            !FileOpBlockedReport(m_hOwner, Command::FileDeleteSelection)) {
                             const auto paths = buildOpPaths();
                             if (!paths.empty()) {
                                 for (const auto &p: paths) s_cutPaths.erase(p);
@@ -1695,6 +1728,8 @@ namespace UI {
                 constexpr UINT ID_CTX_SELECT_ALL = 7;
                 constexpr UINT ID_CTX_SELECT_NONE = 8;
                 constexpr UINT ID_CTX_SELECT_INVERSE = 9;
+                constexpr UINT ID_CTX_COPY_PATH = 10;
+                constexpr UINT ID_CTX_OPEN_WITH = 11;
 
                 const bool hasFiles = !opPaths.empty();
                 const bool canPaste = !pasteDir.empty() && AppCommands::ClipboardHasFiles() &&
@@ -1708,11 +1743,13 @@ namespace UI {
                 std::wstring copyLabel = L"Copy";
                 std::wstring cutLabel = L"Cut";
                 std::wstring deleteLabel = delLabel;
+                std::wstring copyPathLabel = L"Copy Path";
                 if (opPaths.size() > 1) {
                     const std::wstring cnt = L" (" + std::to_wstring(opPaths.size()) + L" files)";
                     copyLabel += cnt;
                     cutLabel += cnt;
                     deleteLabel += cnt;
+                    copyPathLabel += cnt;
                 }
 
                 const bool hasAny = !m_thumbnails.empty();
@@ -1733,6 +1770,24 @@ namespace UI {
                 AppendMenuW(hMenu, canCopy ? MF_STRING : (MF_STRING | MF_GRAYED), ID_CTX_COPY,   copyLabel.c_str());
                 AppendMenuW(hMenu, canCut  ? MF_STRING : (MF_STRING | MF_GRAYED), ID_CTX_CUT,    cutLabel.c_str());
                 AppendMenuW(hMenu, canDel  ? MF_STRING : (MF_STRING | MF_GRAYED), ID_CTX_DELETE, deleteLabel.c_str());
+                // NOT gated on FileOpBlocked or on thumbCopyEnabled, unlike the
+                // three above. Those change what is IN the folder, which is what
+                // both gates exist to stop while two instances are counting on
+                // the same file set; this reads a name and writes text. Leaving
+                // it live while the trio is greyed also says which kind of thing
+                // it is more plainly than any label could.
+                AppendMenuW(hMenu, hasFiles ? MF_STRING : (MF_STRING | MF_GRAYED),
+                            ID_CTX_COPY_PATH, copyPathLabel.c_str());
+                // Acts on the thumbnail UNDER THE CURSOR, not on the selection,
+                // and is the one item here that does. SHOpenWithDialog takes a
+                // single pcszFile and has no multi-file form, so there is no
+                // honest way to obey a selection of five. Greyed when the click
+                // landed on empty space, where there is no "this one" to mean.
+                //
+                // Ungated like Copy Path above: it launches a reader, and
+                // changes nothing in the folder.
+                AppendMenuW(hMenu, !hitPath.empty() ? MF_STRING : (MF_STRING | MF_GRAYED),
+                            ID_CTX_OPEN_WITH, L"Open With…");
                 if (showPaste) {
                     AppendMenuW(hMenu, MF_SEPARATOR, 0, nullptr);
                     AppendMenuW(hMenu, canPaste ? MF_STRING : (MF_STRING | MF_GRAYED), ID_CTX_PASTE, L"Paste");
@@ -1785,6 +1840,46 @@ namespace UI {
                         uiManager.RepaintAllPanels();
                         break;
                     }
+                    case ID_CTX_COPY_PATH: {
+                        // One path per line for several, which is what a shell,
+                        // an editor and a chat box all read back as a list.
+                        // These are directory-scan entries, so unlike the main
+                        // window's Ctrl+Shift+C there is no interjected or
+                        // streamed image to screen out — a thumbnail exists
+                        // because a file on this disk was enumerated.
+                        std::wstring text;
+                        for (size_t i = 0; i < opPaths.size(); ++i) {
+                            if (i) text += L"\r\n";
+                            text += opPaths[i];
+                        }
+                        if (!AppCommands::CopyTextToClipboard(m_hOwner, text)) {
+                            g_overlayManager.PostCenterMessage(
+                                    m_hOwner, Constants::Messages::CLIPBOARD_UNAVAILABLE,
+                                    OverlayManager::MsgSeverity::Warning);
+                            break;
+                        }
+                        std::wstring msg = Constants::Messages::COPIED_PATH_PREFIX;
+                        if (opPaths.size() == 1)
+                            msg += opPaths[0].substr(opPaths[0].find_last_of(L"\\/") + 1);
+                        else
+                            msg += std::to_wstring(opPaths.size()) +
+                                   Constants::Messages::CLIPBOARD_FILES_COUNT;
+                        g_overlayManager.PostCenterMessage(m_hOwner, msg);
+                        break;
+                    }
+                    case ID_CTX_OPEN_WITH:
+                        // hitPath is a std::wstring COPY taken before the menu
+                        // was tracked, which matters: TrackPopupMenu ran a modal
+                        // loop and SHOpenWithDialog runs another, and m_thumbnails
+                        // is rebuilt under both by the folder watcher. A
+                        // reference into it would be dangling by now.
+                        if (!hitPath.empty() &&
+                            !AppCommands::OpenPathWith(m_hOwner, hitPath)) {
+                            g_overlayManager.PostCenterMessage(
+                                    m_hOwner, Constants::Messages::OPEN_WITH_FAILED,
+                                    OverlayManager::MsgSeverity::Warning);
+                        }
+                        break;
                     case ID_CTX_EXTRA:
                         OnContextMenuExtra();
                         break;

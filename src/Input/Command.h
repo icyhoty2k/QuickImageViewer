@@ -273,6 +273,22 @@ enum class Command {
 
     // --- Clipboard ---
     CopyToClipboard, // Ctrl+C
+    // Ctrl+Shift+C — the FULL PATH of the current image, as text. The sibling
+    // above puts the picture on the clipboard; this puts the thing you paste
+    // into a terminal, a file dialog or a message. Separate command rather than
+    // a mode on the first, because "what is on the clipboard afterwards" is the
+    // whole difference and a caller has to be able to say which it wanted.
+    CopyPathToClipboard, // Ctrl+Shift+C
+
+    // Ctrl+Shift+O — raise Windows' own "Open with" chooser on the current
+    // image. The obvious next thing after looking at a picture is editing it,
+    // and without this that means finding the file in Explorer first.
+    //
+    // DELIBERATELY NOT IN THE COMMAND TABLE. It launches a program of the
+    // caller's choosing on the machine it runs on, and it raises a modal dialog
+    // that only somebody sitting at that machine can answer — a remote client
+    // driving it would hang the far end on a chooser nobody can see.
+    OpenImageWith, // Ctrl+Shift+O
 
     // --- Dedicated instances (src/Dedicated) ---
     ToggleDedicatedPanel,   // F8 — the Dedicated configuration panel

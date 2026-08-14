@@ -269,8 +269,9 @@ Command InputManager::ResolveKeyboardKeys(UINT key, LPARAM lParam) {
             if (!ctrl) return Command::ToggleOverlay;
             break;
 
-        case Shortcuts::SC_OVERLAY_LAYOUT_CYCLE: // O
+        case Shortcuts::SC_OVERLAY_LAYOUT_CYCLE: // O  — also Ctrl+Shift+O below
             if (!ctrl && !alt && !shift) return Command::CycleOverlayLayout;
+            if (ctrl && shift && !alt) return Command::OpenImageWith;
             break;
 
         case Shortcuts::SC_OVERLAY_BG_TOGGLE: // P
@@ -388,6 +389,13 @@ Command InputManager::ResolveKeyboardKeys(UINT key, LPARAM lParam) {
 
         case 'C':
             if (ctrl && !alt && !shift && app.ctrlCEnabled) return Command::CopyToClipboard;
+            // NOT gated on ctrlCEnabled. That switch is the Ctrl+C Copy to
+            // Clipboard menu tick, and it is about the PICTURE — someone who
+            // turned it off did so to stop a stray Ctrl+C replacing what they
+            // had copied with a bitmap. A path is text and costs them nothing,
+            // so borrowing that flag would switch off a feature its owner never
+            // meant to speak for.
+            if (ctrl && shift && !alt) return Command::CopyPathToClipboard;
             if (!ctrl && alt && !shift) return Command::SnapBottomRight;
             break;
 

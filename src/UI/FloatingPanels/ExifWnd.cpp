@@ -15,6 +15,7 @@
 #include "../../AppState.h"
 #include "../../WorkerThread.h"
 #include "../../Input/MouseHandler.h"
+#include "../../Input/AppCommands.h" // CopyTextToClipboard — the one shared copy
 #include "Shortcuts.h"
 #include <dwmapi.h>
 #include <windowsx.h>
@@ -119,20 +120,16 @@ namespace UI {
         return buf;
     }
 
+    // Was a fourth hand-written copy of the Win32 clipboard sequence, and the
+    // one that had it wrong: it called SetClipboardData even when GlobalLock
+    // failed (publishing a handle it never wrote into), and it never freed the
+    // handle when SetClipboardData failed, which leaks it — ownership passes to
+    // the clipboard on SUCCESS ONLY. Both are fixed by not writing it a fourth
+    // time. LinkText and RemoteLogWnd keep their own: theirs are correct, and
+    // rewriting working code in three modules to reach the same behaviour is a
+    // bigger change than the bug justified.
     static void CopyToClipboard(HWND hwnd, const std::wstring &text) {
-        if (text.empty() || !OpenClipboard(hwnd)) return;
-        EmptyClipboard();
-        const size_t bytes = (text.size() + 1) * sizeof(wchar_t);
-        HGLOBAL hMem = GlobalAlloc(GMEM_MOVEABLE, bytes);
-        if (hMem) {
-            void *ptr = GlobalLock(hMem);
-            if (ptr) {
-                memcpy(ptr, text.c_str(), bytes);
-                GlobalUnlock(hMem);
-            }
-            SetClipboardData(CF_UNICODETEXT, hMem);
-        }
-        CloseClipboard();
+        AppCommands::CopyTextToClipboard(hwnd, text);
     }
 
     static std::wstring FormatFileSize(LONGLONG bytes) {

@@ -82,10 +82,58 @@ class AppCommands {
         static void PasteFilesFromClipboard(HWND hWnd, const std::wstring &targetDir);
         static bool ClipboardHasFiles();
 
+        // Put plain text on the clipboard. Returns false when the clipboard
+        // could not be opened — another process holds it, which is ordinary and
+        // transient — so the caller can say so instead of appearing to succeed.
+        //
+        // ONE copy of this. The same fifteen lines had been written three times
+        // (ExifWnd, RemoteLogWnd, LinkText) and the three did not agree: two
+        // freed the handle when SetClipboardData failed and one leaked it, and
+        // only one of them reported anything back. Three transcriptions of a
+        // Win32 sequence is three chances to get the ownership rule wrong.
+        static bool CopyTextToClipboard(HWND hWnd, const std::wstring &text);
+
+        // ── What file is the picture on screen? ───────────────────────────────
+        //
+        // NOT app.playlist[app.currentIndex]. Every command that has to name the
+        // current image on disk asks THIS, because the index is wrong in two
+        // ways that are invisible at the call site:
+        //
+        //  * An interjection does not move the index. ArmInterjection is
+        //    explicit that "nothing here touches app.playlist, app.currentIndex
+        //    or the sort order", so while one is showing the index still names
+        //    the picture it is COVERING.
+        //  * A picture streamed in from the phone or another desktop instance is
+        //    a temp file this process wrote and will DELETE at the next change
+        //    of image (ownsTempFile). Any path handed out is dead on arrival.
+        //
+        // One helper rather than the same two checks at each call site: a caller
+        // that forgets them gets a confident wrong answer, not a crash, which is
+        // the failure shape this codebase is worst at noticing.
+        enum class CurrentImage { Ok, None, Streamed };
+        static CurrentImage GetCurrentImagePath(std::wstring &pathOut);
+
+        // Raises Windows' own "Open with" chooser on one named file. Public
+        // because the thumbnail strips call it on the thumbnail under the
+        // cursor, which they already know and which never needs the guard above
+        // — a thumbnail exists because a file on this disk was enumerated.
+        //
+        // ONE file, not a list: SHOpenWithDialog takes a single pcszFile and
+        // there is no multi-file form of it.
+        static bool OpenPathWith(HWND hWnd, const std::wstring &path);
+
     private:
         // This remains private and inaccessible to the rest of the app
         static void SaveImageToDisk(HWND hWnd);
         static void CopyImageToClipboard(HWND hWnd);
+        // The current image's full path, as text. Private beside its sibling
+        // above for the same reason: both read app.playlist / app.currentIndex,
+        // and "which image is current" is the InputManager's question to ask.
+        static void CopyImagePathToClipboard(HWND hWnd);
+        // Raises Windows' own "Open with" chooser on the current image, so the
+        // obvious next thing after looking at a picture — editing it — does not
+        // mean finding it in Explorer first.
+        static void OpenCurrentImageWith(HWND hWnd);
 
         // Sets the currently displayed file as the desktop wallpaper.
         // position: Constants::Wallpaper::FILL .. SPAN — mapped onto the native

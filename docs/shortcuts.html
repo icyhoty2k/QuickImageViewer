@@ -24,7 +24,7 @@
     <meta property="og:site_name" content="QuickImageViewer">
     <meta property="og:title" content="Every QuickImageViewer keyboard shortcut">
     <meta property="og:description"
-          content="The complete reference: 224 shortcuts in 16 sections, generated from the application's own help panel.">
+          content="The complete reference: 226 shortcuts in 16 sections, generated from the application's own help panel.">
     <meta property="og:url" content="https://icyhoty2k.github.io/QuickImageViewer/shortcuts.html">
     <meta property="og:image" content="https://icyhoty2k.github.io/QuickImageViewer/screenshots/less300kb/10.webp">
     <meta property="og:image:alt" content="QuickImageViewer showing a photo with a thumbnail strip">
@@ -32,7 +32,7 @@
     <meta name="twitter:card" content="summary_large_image">
     <meta name="twitter:title" content="Every QuickImageViewer keyboard shortcut">
     <meta name="twitter:description"
-          content="The complete reference: 224 shortcuts in 16 sections, generated from the application's own help panel.">
+          content="The complete reference: 226 shortcuts in 16 sections, generated from the application's own help panel.">
     <meta name="twitter:image" content="https://icyhoty2k.github.io/QuickImageViewer/screenshots/less300kb/10.webp">
 
 <script type="application/ld+json">
@@ -57,7 +57,7 @@
     together. Editing this file by hand puts it out of step with the binary,
     which is the entire problem it exists to solve.
 
-    Last generated: 2026-08-12
+    Last generated: 2026-08-14
 -->
 <body>
 
@@ -118,7 +118,7 @@
     <h1>QuickImageViewer (qIV) — Shortcuts</h1>
     <p class="meta">
         Generated from the app's own help panel — press <kbd>F1</kbd> in QuickImageViewer to see the same list on your
-        machine. 224 shortcuts in 16 sections.
+        machine. 226 shortcuts in 16 sections.
     </p>
 
 <!-- SHARED-STOREROW-START -->
@@ -310,9 +310,11 @@
         </div>
     </section>
     <section class="sc-sec" data-title="Files, Clipboard &amp; Sorting">
-        <h2><span class="sc-ico">💾</span>Files, Clipboard &amp; Sorting<span class="sc-count">7</span></h2>
+        <h2><span class="sc-ico">💾</span>Files, Clipboard &amp; Sorting<span class="sc-count">9</span></h2>
         <div class="sc-cols">
             <div class="sc-row"><div class="sc-keys"><kbd>Ctrl+C</kbd></div><p class="sc-desc">Copy the current image to the clipboard.</p></div>
+            <div class="sc-row"><div class="sc-keys"><kbd>Ctrl+Shift+C</kbd></div><p class="sc-desc">Copy the current image's full path to the clipboard as text — paste it into a terminal, a file dialog or a message. A picture streamed in over the network has no file here and says so instead.</p></div>
+            <div class="sc-row"><div class="sc-keys"><kbd>Ctrl+Shift+O</kbd></div><p class="sc-desc">Open With — hand the current image to another program through Windows' own chooser. <a class="sc-more" href="#files-clipboard-sorting-ctrl-shift-o">details</a></p></div>
             <div class="sc-row"><div class="sc-keys"><kbd>Ctrl+S</kbd></div><p class="sc-desc">Save As — choose the format in the dialog (PNG, JPEG, BMP, TIFF, GIF). Rotation, flips and all color effects are baked into the saved file.</p></div>
             <div class="sc-row"><div class="sc-keys"><kbd>Ctrl+Alt+Shift+0</kbd></div><p class="sc-desc">Sort by name (natural Explorer order). Press again to reverse A→Z / Z→A.</p></div>
             <div class="sc-row"><div class="sc-keys"><kbd>Ctrl+Alt+Shift+9</kbd></div><p class="sc-desc">Sort by date modified. Press again to switch newest ↔ oldest.</p></div>
@@ -466,7 +468,7 @@
     </section>
 
     <h2 class="sc-deep-head">In depth</h2>
-    <p class="sc-deep-intro">The 64 shortcuts above whose behaviour needs more than a line. Every one is linked from its row.</p>
+    <p class="sc-deep-intro">The 65 shortcuts above whose behaviour needs more than a line. Every one is linked from its row.</p>
     <article class="sc-deep" id="image-navigation-ctrl-f">
         <h3><kbd>Ctrl+F</kbd><span class="sc-deep-sec">Image Navigation</span></h3>
         <p>Open the Find panel — fuzzy filename search with wildcard support: * matches any characters, ? matches exactly one (e.g. *.jpg or photo_??_2024.*). Searches the current folder and the VRAM cache. Typing # inside switches to Jump-to.</p>
@@ -540,6 +542,10 @@
     <article class="sc-deep" id="info-overlays-ctrl-1-ctrl-9">
         <h3><kbd>Ctrl+1</kbd> – <kbd>Ctrl+9</kbd><span class="sc-deep-sec">Info Overlays</span></h3>
         <p>Cycle a slot of the 3×3 grid: Compact (one line) → Full (two lines) → Off. Assignments: 1 index + filename • 3 zoom % • 5 center message area • 7 active effects + folder name • 9 dimensions + file size. Slots 2, 4, 6, 8 show the thumbnail-strip selection count for the panel on that edge. Slot 5 has no compact form, so it cycles On → Off.</p>
+    </article>
+    <article class="sc-deep" id="files-clipboard-sorting-ctrl-shift-o">
+        <h3><kbd>Ctrl+Shift+O</kbd><span class="sc-deep-sec">Files, Clipboard &amp; Sorting</span></h3>
+        <p>Open With — hand the current image to another program through Windows' own chooser. The 'always use this app' box is hidden on purpose, so picking an editor for one look never reassigns the file type. Also on a thumbnail's right-click menu, for the thumbnail under the cursor.</p>
     </article>
     <article class="sc-deep" id="application-appearance-f8">
         <h3><kbd>F8</kbd><span class="sc-deep-sec">Application &amp; Appearance</span></h3>

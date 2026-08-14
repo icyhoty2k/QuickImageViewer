@@ -1150,6 +1150,14 @@ void InputManager::ExecuteCommand(HWND hWnd, Command cmd) {
             AppCommands::CopyImageToClipboard(hWnd);
             break;
 
+        case Command::CopyPathToClipboard:
+            AppCommands::CopyImagePathToClipboard(hWnd);
+            break;
+
+        case Command::OpenImageWith:
+            AppCommands::OpenCurrentImageWith(hWnd);
+            break;
+
         // ── File operations on the active thumbnail panel's selection ────────
         // Commands purely so that ONE gate governs them: the session filter at
         // the top of this function refuses the three destructive ones while a

@@ -568,6 +568,16 @@ def build_shortcuts_page():
 
     inner = '\n'.join(body)
 
+    # The social-card descriptions quote the shortcut count, and it used to be
+    # typed into the template as a literal. That is the same staleness the
+    # comment below warns about, one level up: the tags were moved INTO the
+    # generator so nobody would hand-edit them in the output, and then the number
+    # inside them was hand-written anyway. It said 224 while the page body said
+    # 226 — the body has always computed it. Computed in both places now.
+    summary = ('The complete reference: %d shortcuts in %d sections, '
+               'generated from the application\'s own help panel.'
+               % (total, len(data)))
+
     page = '''<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -594,7 +604,7 @@ def build_shortcuts_page():
     <meta property="og:site_name" content="QuickImageViewer">
     <meta property="og:title" content="Every QuickImageViewer keyboard shortcut">
     <meta property="og:description"
-          content="The complete reference: 224 shortcuts in 16 sections, generated from the application's own help panel.">
+          content="%s">
     <meta property="og:url" content="https://icyhoty2k.github.io/QuickImageViewer/shortcuts.html">
     <meta property="og:image" content="https://icyhoty2k.github.io/QuickImageViewer/screenshots/less300kb/10.webp">
     <meta property="og:image:alt" content="QuickImageViewer showing a photo with a thumbnail strip">
@@ -602,7 +612,7 @@ def build_shortcuts_page():
     <meta name="twitter:card" content="summary_large_image">
     <meta name="twitter:title" content="Every QuickImageViewer keyboard shortcut">
     <meta name="twitter:description"
-          content="The complete reference: 224 shortcuts in 16 sections, generated from the application's own help panel.">
+          content="%s">
     <meta name="twitter:image" content="https://icyhoty2k.github.io/QuickImageViewer/screenshots/less300kb/10.webp">
 
 <script type="application/ld+json">
@@ -676,7 +686,7 @@ def build_shortcuts_page():
 
 </body>
 </html>
-''' % (date.today().isoformat(), inner)
+''' % (summary, summary, date.today().isoformat(), inner)
     return page, total, len(data), unresolved
 
 

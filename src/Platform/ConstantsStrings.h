@@ -372,6 +372,43 @@ namespace Constants::Messages {
     constexpr const wchar_t *SPAWN_DIR_CLOSED = STR_THUMBNAIL_STRIP STR_SEPARATOR L"Closed";
     constexpr const wchar_t *SPAWN_DIR_NO_SPACE = L"No free positions for " STR_THUMBNAIL_STRIP;
     constexpr const wchar_t *COPIED_TO_CLIPBOARD = L"Copied to Clipboard";
+    // Ctrl+C / Ctrl+X on a thumbnail strip's SELECTION, as opposed to the image
+    // on screen above. Prefixes — the caller appends the single file's name, or
+    // "<n> files", the way the delete confirmation already names one file and
+    // counts several.
+    constexpr const wchar_t *COPIED_FILES_PREFIX = L"Copied to Clipboard: ";
+    constexpr const wchar_t *CUT_FILES_PREFIX = L"Cut to Clipboard: ";
+    constexpr const wchar_t *CLIPBOARD_FILES_COUNT = L" files";
+    // OpenClipboard fails while another process holds the clipboard open, which
+    // is ordinary and transient — a Ctrl+C that lands in that window copied
+    // NOTHING. Without this the keystroke is indistinguishable from a successful
+    // one until the paste comes up empty or, worse, pastes what was there before.
+    constexpr const wchar_t *CLIPBOARD_UNAVAILABLE =
+            QIV_ICON_WARNING L" Clipboard is in use by another app";
+    // Ctrl+Shift+C — the path went to the clipboard, the NAME goes on screen.
+    // Prefix; the caller appends the file name.
+    constexpr const wchar_t *COPIED_PATH_PREFIX = L"Path copied: ";
+    // ── "The image on screen has no usable file" ──────────────────────────────
+    // Shared by every command that has to name the current image on disk —
+    // Ctrl+Shift+C and Ctrl+Shift+O today. Worded without naming the action so
+    // one string can serve both: what failed is the same fact each time, and
+    // two near-identical sentences per command is how a vocabulary drifts.
+    //
+    // Kept separate from CLIPBOARD_UNAVAILABLE above, and from each other: "no
+    // image", "the image is streamed" and "the clipboard is busy" are three
+    // unrelated causes with three unrelated fixes, and one string for several is
+    // the quieter version of saying nothing.
+    constexpr const wchar_t *NO_IMAGE_ON_SCREEN =
+            QIV_ICON_WARNING L" No image open";
+    // A picture pushed here over the network arrived as BYTES, not as a name. It
+    // lives in a temp file this process deletes at the next change of picture,
+    // so there is no path worth handing out and no file worth opening.
+    constexpr const wchar_t *IMAGE_IS_STREAMED =
+            QIV_ICON_WARNING L" Streamed image — it has no file on this machine";
+    // Ctrl+Shift+O — SHOpenWithDialog itself refused. Rare, and distinct from
+    // the two above: there IS a file, Windows just would not raise the chooser.
+    constexpr const wchar_t *OPEN_WITH_FAILED =
+            QIV_ICON_WARNING L" Could not open the 'Open with' chooser";
 
     // Desktop wallpaper — NAMES is indexed by Constants::Wallpaper::FILL..SPAN and
     // is the single source for both the submenu labels and the overlay message.

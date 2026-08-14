@@ -506,6 +506,10 @@ namespace {
           L"copy the current image to the clipboard OF THAT MACHINE — which is why it "
           L"is never mirrored: a clipboard is per-machine and copying on a wall screen "
           L"achieves nothing" },
+        { L"CopyPathToClipboard",   Command::CopyPathToClipboard,             PayloadRule::None,
+          L"copy the current image's FULL PATH, as text, to the clipboard of that "
+          L"machine. Same per-machine caveat as the row above. Reads a file name, "
+          L"writes nothing — not a file operation, so not NEVER_REMOTE" },
 
         // --- Application control ---
         // HideToTray and quit are the two a screen-management script actually
@@ -973,6 +977,7 @@ static bool MirrorableCore(Command cmd, bool allowPayload) {
 
         // Clipboard is per-machine; copying on a wall screen achieves nothing.
         case Command::CopyToClipboard:
+        case Command::CopyPathToClipboard:
             return false;
 
         // Panels raise a window on the far screen that then has to be closed

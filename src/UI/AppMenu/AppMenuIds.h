@@ -52,6 +52,8 @@ namespace UI::AppMenu::Ids {
         ID_STATS,                 // toggle StatsWnd                 (K)
         ID_METADATA,              // toggle image info / metadata    (M)
         ID_COPY,                  // copy image to clipboard         (Ctrl+C)
+        ID_COPY_PATH,             // copy full path as text          (Ctrl+Shift+C)
+        ID_OPEN_WITH,             // Windows "Open with" chooser     (Ctrl+Shift+O)
         ID_SAVE_AS,               // save image as…                  (Ctrl+S)
         ID_EXPLORER,              // reveal current file in Explorer (L)
         ID_NEXT_MONITOR,          // move the window to the next monitor (Ctrl+M)

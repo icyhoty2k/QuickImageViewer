@@ -391,9 +391,25 @@ void AppCommands::CopyFilesToClipboard(HWND hWnd, const std::vector<std::wstring
             GlobalFree(hEffect);
         }
         CloseClipboard();
+
+        // Say so, the way CopyImageToClipboard below already does for the image
+        // on screen. Ctrl+C is one keystroke with two targets — the picture when
+        // the main window has focus, the strip's selection when a strip does —
+        // and only one of them used to answer. A copy leaves no mark on the
+        // thumbnails either (a CUT dims them; a copy changes nothing), so
+        // without this the successful case and the refused case looked alike.
+        std::wstring msg = cut ? Constants::Messages::CUT_FILES_PREFIX
+                               : Constants::Messages::COPIED_FILES_PREFIX;
+        if (paths.size() == 1)
+            msg += paths[0].substr(paths[0].find_last_of(L"\\/") + 1);
+        else
+            msg += std::to_wstring(paths.size()) + Constants::Messages::CLIPBOARD_FILES_COUNT;
+        g_overlayManager.PostCenterMessage(hWnd, msg);
     } else {
         GlobalFree(hDrop);
         if (hEffect) GlobalFree(hEffect);
+        g_overlayManager.PostCenterMessage(hWnd, Constants::Messages::CLIPBOARD_UNAVAILABLE,
+                                           OverlayManager::MsgSeverity::Warning);
     }
 }
 
@@ -423,6 +439,154 @@ void AppCommands::DeleteFileToRecycleBin(const std::wstring &path) {
 
 bool AppCommands::ClipboardHasFiles() {
     return IsClipboardFormatAvailable(CF_HDROP) == TRUE;
+}
+
+bool AppCommands::CopyTextToClipboard(HWND hWnd, const std::wstring &text) {
+    if (text.empty()) return false;
+    if (!OpenClipboard(hWnd)) return false;
+
+    EmptyClipboard();
+
+    // +1 for the terminating null — GlobalAlloc'd memory handed to
+    // SetClipboardData must carry it, the string's size() does not.
+    const size_t bytes = (text.size() + 1) * sizeof(wchar_t);
+    HGLOBAL hMem = GlobalAlloc(GMEM_MOVEABLE, bytes);
+    if (!hMem) {
+        CloseClipboard();
+        return false;
+    }
+
+    void *ptr = GlobalLock(hMem);
+    if (!ptr) {
+        GlobalFree(hMem);
+        CloseClipboard();
+        return false;
+    }
+    memcpy(ptr, text.c_str(), bytes);
+    GlobalUnlock(hMem);
+
+    // The clipboard OWNS hMem once this succeeds — freeing it then is a
+    // double-free. Free it only on the failure path, where ownership never
+    // transferred. This is the line the three hand-written copies disagreed on.
+    const bool ok = SetClipboardData(CF_UNICODETEXT, hMem) != nullptr;
+    if (!ok) GlobalFree(hMem);
+
+    CloseClipboard();
+    return ok;
+}
+
+// What file is the picture on screen? See the header for why this is not simply
+// app.playlist[app.currentIndex].
+//
+// `ShowImageOnce <path>` is the one interjection that answers Ok: it names a
+// file that was already on this machine, and ownsTempFile=false is exactly the
+// flag that keeps this code from deleting it. It is genuinely what is on screen,
+// so it is genuinely the right answer.
+//
+// The playlist can be EMPTY while an interjection shows, so the bounds check
+// cannot come first — it would report "nothing open" with a picture plainly on
+// the screen.
+AppCommands::CurrentImage AppCommands::GetCurrentImagePath(std::wstring &pathOut) {
+    pathOut.clear();
+
+    if (app.interject.showing) {
+        if (app.interject.ownsTempFile) return CurrentImage::Streamed;
+        if (app.interject.path.empty()) return CurrentImage::None;
+        pathOut = app.interject.path;
+        return CurrentImage::Ok;
+    }
+
+    if (app.currentIndex < 0 ||
+        app.currentIndex >= static_cast<int>(app.playlist.size()))
+        return CurrentImage::None;
+
+    if (app.playlist[app.currentIndex].empty()) return CurrentImage::None;
+
+    pathOut = app.playlist[app.currentIndex];
+    return CurrentImage::Ok;
+}
+
+// Posts the message for a non-Ok result. Both current-image commands fail the
+// same two ways and say the same two things, so the wording lives once.
+static void ReportNoCurrentImage(HWND hWnd, AppCommands::CurrentImage what) {
+    const wchar_t *msg = (what == AppCommands::CurrentImage::Streamed)
+                                 ? Constants::Messages::IMAGE_IS_STREAMED
+                                 : Constants::Messages::NO_IMAGE_ON_SCREEN;
+    g_overlayManager.PostCenterMessage(hWnd, msg, OverlayManager::MsgSeverity::Warning);
+}
+
+// Ctrl+Shift+C — the full path of the image on screen, as text.
+void AppCommands::CopyImagePathToClipboard(HWND hWnd) {
+    std::wstring path;
+    const CurrentImage what = GetCurrentImagePath(path);
+    if (what != CurrentImage::Ok) {
+        // This is a key the user just pressed, and a silent return is
+        // indistinguishable from a copy that worked.
+        ReportNoCurrentImage(hWnd, what);
+        return;
+    }
+
+    if (!CopyTextToClipboard(hWnd, path)) {
+        g_overlayManager.PostCenterMessage(hWnd, Constants::Messages::CLIPBOARD_UNAVAILABLE,
+                                           OverlayManager::MsgSeverity::Warning);
+        return;
+    }
+
+    // The NAME, not the path, in the confirmation. The path is on the clipboard
+    // where it was asked for; a full path in the centre of the screen wraps
+    // across three lines and says nothing the user did not just ask for.
+    const std::wstring name = path.substr(path.find_last_of(L"\\/") + 1);
+    g_overlayManager.PostCenterMessage(hWnd, Constants::Messages::COPIED_PATH_PREFIX + name);
+}
+
+bool AppCommands::OpenPathWith(HWND hWnd, const std::wstring &path) {
+    if (path.empty()) return false;
+
+    OPENASINFO oi = {};
+    oi.pcszFile = path.c_str();
+    oi.pcszClass = nullptr; // choose by the file's own extension
+
+    // OAIF_EXEC launches whatever the user picks. OAIF_HIDE_REGISTRATION hides
+    // the "always use this app" checkbox ON PURPOSE:
+    //
+    // qIV is itself an image viewer, and for most users it IS the registered
+    // handler for these extensions. A tick left in that box while glancing at a
+    // one-off "open this in Paint" hands .jpg to Paint permanently, and the
+    // symptom — double-clicking a picture stops opening qIV — appears later,
+    // somewhere else, with nothing to connect it back to this dialog. Changing
+    // file associations is Explorer's job and is one right-click away there.
+    oi.oaifInFlags = OAIF_EXEC | OAIF_HIDE_REGISTRATION;
+
+    // Modal, and deliberately so — the user asked for a chooser and is waiting
+    // at it. Nothing is held across it: the caller passes a path BY VALUE, so
+    // the playlist rebuilding underneath (a folder watcher tick, a remote
+    // command) cannot leave this pointing at a freed string.
+    const HRESULT hr = SHOpenWithDialog(hWnd, &oi);
+
+    // PRESSING CANCEL IS A FAILURE HRESULT. SHOpenWithDialog answers
+    // HRESULT_FROM_WIN32(ERROR_CANCELLED) when the user closes the chooser
+    // without picking anything, so a plain SUCCEEDED() test reports "could not
+    // open the chooser" every time someone changes their mind — an error
+    // message for the ordinary way out of a dialog. Cancel is a normal ending
+    // and says nothing.
+    if (hr == HRESULT_FROM_WIN32(ERROR_CANCELLED)) return true;
+
+    return SUCCEEDED(hr);
+}
+
+// Ctrl+Shift+O — hand the picture on screen to another program.
+void AppCommands::OpenCurrentImageWith(HWND hWnd) {
+    std::wstring path;
+    const CurrentImage what = GetCurrentImagePath(path);
+    if (what != CurrentImage::Ok) {
+        ReportNoCurrentImage(hWnd, what);
+        return;
+    }
+
+    // A path by VALUE into the modal call — see OpenPathWith.
+    if (!OpenPathWith(hWnd, path))
+        g_overlayManager.PostCenterMessage(hWnd, Constants::Messages::OPEN_WITH_FAILED,
+                                           OverlayManager::MsgSeverity::Warning);
 }
 
 void AppCommands::PasteFilesFromClipboard(HWND hWnd, const std::wstring &targetDir) {
@@ -739,6 +903,11 @@ void AppCommands::CopyImageToClipboard(HWND hWnd) {
     } else {
         DeleteObject(hBmp);
         GlobalFree(hDrop);
+        // The success path above has always announced itself, so a silent
+        // failure here reads as "copied" — the one wrong conclusion to leave
+        // the user with before they paste over something.
+        g_overlayManager.PostCenterMessage(hWnd, Constants::Messages::CLIPBOARD_UNAVAILABLE,
+                                           OverlayManager::MsgSeverity::Warning);
     }
 }
 

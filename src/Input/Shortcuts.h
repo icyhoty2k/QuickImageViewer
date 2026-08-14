@@ -378,6 +378,22 @@ namespace Shortcuts {
     // Clipboard
     // -------------------------------------------------------------------------
     constexpr UINT SC_COPY_TO_CLIPBOARD = 'C'; // Ctrl+C — copy current image to clipboard
+    // Ctrl+Shift+C — the current image's FULL PATH, as text.
+    //
+    // Same key as the line above, split by modifier, the way SC_APP_NEW_WINDOW
+    // and SC_TOGGLE_ALL_PANELS already share 'N'. It carries its own name so the
+    // resolver and HelpWnd both read as what they do rather than as "the copy
+    // key again"; check-shortcuts.h works by VALUE, so a second name on a key
+    // that is already handled costs it nothing.
+    constexpr UINT SC_COPY_PATH_TO_CLIPBOARD = 'C';
+    // Ctrl+Shift+O — hand the current image to another program.
+    //
+    // NOT Ctrl+O, which reads as "open a file" and would sit awkwardly beside
+    // Command::OpenFile, an existing wire command that means exactly that.
+    // Ctrl+Shift+O pairs with Ctrl+Shift+C above instead: both take the picture
+    // on screen and hand it to something outside the app. Plain 'O' is the
+    // overlay layout cycle and is untouched.
+    constexpr UINT SC_OPEN_IMAGE_WITH = 'O';
 
     // -------------------------------------------------------------------------
     // HISTORY WINDOW

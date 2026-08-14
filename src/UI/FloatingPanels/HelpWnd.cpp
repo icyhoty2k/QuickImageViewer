@@ -611,6 +611,15 @@ namespace UI {
 
         Add(Ctrl(SC::SC_COPY_TO_CLIPBOARD),
             L"Copy the current image to the clipboard.", sFiles);
+        Add(CtrlShift(SC::SC_COPY_PATH_TO_CLIPBOARD),
+            L"Copy the current image's full path to the clipboard as text — paste it "
+            L"into a terminal, a file dialog or a message. A picture streamed in over "
+            L"the network has no file here and says so instead.", sFiles);
+        Add(CtrlShift(SC::SC_OPEN_IMAGE_WITH),
+            L"Open With — hand the current image to another program through Windows' "
+            L"own chooser. The 'always use this app' box is hidden on purpose, so "
+            L"picking an editor for one look never reassigns the file type. Also on "
+            L"a thumbnail's right-click menu, for the thumbnail under the cursor.", sFiles);
         Add(Ctrl(FX::SC_COLOR_SAVE_TO_DISK),
             L"Save As — choose the format in the dialog (PNG, JPEG, BMP, TIFF, GIF). "
             L"Rotation, flips and all color effects are baked into the saved file.", sFiles);

@@ -607,7 +607,7 @@ you get neither. In **Summary** layout the folder line moves to Top Left instead
 
 <a id="application-lifecycle"></a>
 <details>
-<summary><b>Application Lifecycle</b> <sub>5</sub></summary>
+<summary><b>Application Lifecycle</b> <sub>7</sub></summary>
 
 | Shortcut | Action |
 |:---|:---|
@@ -616,6 +616,8 @@ you get neither. In **Summary** layout the folder line moves to Top Left instead
 | `Ctrl+N` | Open a new independent qIV window |
 | `Shift+Delete` | Reset everything — window layout and all effects return to defaults (same as `Alt+X`) |
 | `Ctrl+C` | Copy the current image to the clipboard |
+| `Ctrl+Shift+C` | Copy the current image's full path to the clipboard as text — paste it into a terminal, a file dialog or a message. A picture streamed in over the network has no file here and says so instead |
+| `Ctrl+Shift+O` | **Open With** — hand the current image to another program through Windows' own chooser. The "always use this app" box is hidden on purpose, so picking an editor for one look never reassigns the file type. Also on a thumbnail's right-click menu, for the thumbnail under the cursor |
 
 </details>
 

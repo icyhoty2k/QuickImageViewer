@@ -80,6 +80,8 @@ Command CommandForId(int id) {
         case Id::ID_STATS:           return Command::ToggleStats;
         case Id::ID_METADATA:        return Command::ShowInfo;
         case Id::ID_COPY:            return Command::CopyToClipboard;
+        case Id::ID_COPY_PATH:       return Command::CopyPathToClipboard;
+        case Id::ID_OPEN_WITH:       return Command::OpenImageWith;
         case Id::ID_SAVE_AS:         return Command::SaveImage;
         case Id::ID_EXPLORER:        return Command::ShowInExplorer;
         case Id::ID_NEXT_MONITOR:    return Command::MoveToNextMonitor;
@@ -679,8 +681,10 @@ HMENU Build(HWND hWnd) {
 
     AppendMenuW(m, MF_SEPARATOR, 0, nullptr);
     AppendMenuW(m, MF_STRING, Id::ID_COPY,        L"Copy\tCtrl+C");
+    AppendMenuW(m, MF_STRING, Id::ID_COPY_PATH,   L"Copy Path\tCtrl+Shift+C");
     AppendMenuW(m, MF_STRING, Id::ID_SAVE_AS,     L"Save As…\tCtrl+S");
     AppendMenuW(m, MF_STRING, Id::ID_EXPLORER,    L"Open File in Explorer\tL");
+    AppendMenuW(m, MF_STRING, Id::ID_OPEN_WITH,   L"Open With…\tCtrl+Shift+O");
     AppendMenuW(m, MF_STRING, Id::ID_NEXT_MONITOR, L"Move to Next Monitor\tCtrl+M");
     AppendMenuW(m, MF_POPUP, reinterpret_cast<UINT_PTR>(BuildWallpaperMenu()), L"Set as Desktop Wallpaper");
     //Group
