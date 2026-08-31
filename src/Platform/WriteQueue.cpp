@@ -54,9 +54,22 @@ void WriteQueue::Run() {
         });
 
         // Snapshot everything under the lock, then release before doing any I/O.
-        decltype(m_dwords)  dwords  = std::move(m_dwords);
-        decltype(m_strings) strings = std::move(m_strings);
+        //
+        // SWAP, NOT MOVE, and for a reason that bites exactly here. A moved-from
+        // standard container is left "valid but unspecified" - emptiness is not
+        // promised by the standard, only by every implementation in practice. If
+        // one ever left an element behind, the wait predicate below is
+        // !m_dwords.empty(), so it would be true again immediately and this
+        // thread would spin, rewriting the same registry values for ever.
+        // Swapping with a fresh container makes the member provably empty.
+        //
+        // The task queue three lines down already used swap; the two maps were
+        // the odd ones out.
+        decltype(m_dwords)  dwords;
+        decltype(m_strings) strings;
         std::queue<std::function<void()>> tasks;
+        dwords.swap(m_dwords);
+        strings.swap(m_strings);
         std::swap(tasks, m_tasks);
         const bool stop = m_stop;
         lk.unlock();

@@ -977,6 +977,33 @@ namespace UI {
                         row2(L"Dir thumbnails", buf, clrValue, true);
                         row2(L"  VRAM used", FormatBytes(m_dirThumbCacheBytes), clrGreen);
                     }
+
+                    // The card's capacity, and how much of it the thumbnail
+                    // cache may take.
+                    //
+                    // SHOWN TOGETHER BECAUSE NEITHER MEANS ANYTHING ALONE. 512 MB
+                    // is most of a 2 GB laptop chip and a rounding error on a
+                    // 24 GB card, and the budget dialog now bounds itself by this
+                    // same number - so the panel that reports the cache should
+                    // report what it is being measured against.
+                    {
+                        dotSep();
+                        const int vramMB = app.renderer ? app.renderer->VramTotalMB() : 0;
+                        if (vramMB > 0) {
+                            wchar_t vbuf[32];
+                            swprintf_s(vbuf, L"%d MB", vramMB);
+                            row2(L"Graphics memory", vbuf, clrValue, true);
+                        }
+
+                        // "Off" rather than "0 MB", matching the tray menu: zero
+                        // is a deliberate setting, and a panel reading 0 MB looks
+                        // like a value that failed to load.
+                        wchar_t bbuf[32];
+                        if (app.dirThumbCacheMB <= 0) swprintf_s(bbuf, L"Off");
+                        else                          swprintf_s(bbuf, L"%d MB", app.dirThumbCacheMB);
+                        row2(vramMB > 0 ? L"  Thumb budget" : L"Thumb budget", bbuf,
+                             app.dirThumbCacheMB <= 0 ? clrOrange : clrValue, vramMB <= 0);
+                    }
                 }
 
                 y += sgap;
