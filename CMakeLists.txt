@@ -12,7 +12,27 @@ set(CMAKE_CXX_SCAN_FOR_MODULES OFF)
 
 # --- Custom Option for Static MSVC Runtime ---
 #
-# OFF, and it cannot simply be switched ON — TESTED 2026-08-06.
+# ⚠ THE BLOCKER DESCRIBED BELOW WAS REMOVED ON THE DAY IT WAS WRITTEN, AND THIS
+# COMMENT WAS NOT UPDATED. It said the option "cannot simply be switched ON",
+# and that has been wrong since 2026-08-06: libs/lib/static-mt/openjp2.lib is an
+# /MT build of OpenJPEG 2.5.4, produced that same afternoon, and
+# qiv_pick_static_lib below selects it whenever this option is ON.
+#
+# -DQIV_STATIC_RUNTIME=ON BUILDS AND LINKS TODAY — verified 2026-08-31, whole
+# program plus the test binary, both green. It is also the ONLY profile that may
+# be published: check-release-binary.ps1 REFUSES a binary linked against the
+# dynamic CRT, so a Release build without this flag cannot be attached to a
+# GitHub release or pushed to winget.
+#
+#     cmake -B build-release -DCMAKE_BUILD_TYPE=Release -DQIV_STATIC_RUNTIME=ON
+#
+# The default stays OFF because the dynamic CRT links faster and the day-to-day
+# loop is a Debug build, not because the static one does not work. If the /MT
+# library is ever missing, configure fails with an actionable message rather than
+# three unresolved __imp_ symbols at the end of a full link — see below.
+#
+# What follows is the ORIGINAL reasoning, kept because it explains why the /MT
+# library had to be produced and why the shortcut must never be taken:
 #
 # /MT would remove msvcp140.dll, vcruntime140.dll and vcruntime140_1.dll from
 # every launch (~0.3-1 ms, on the cold path AND on every "open with qIV" while a
@@ -32,7 +52,7 @@ set(CMAKE_CXX_SCAN_FOR_MODULES OFF)
 # alias-the-__imp_-symbols trick — it links, and then two allocators disagree
 # about which heap a pointer came from, which is a corruption bug that surfaces
 # far from its cause.
-option(QIV_STATIC_RUNTIME "Statically link the MSVC C/C++ runtime (/MT instead of /MD). Requires an /MT build of openjp2.lib — see above." OFF)
+option(QIV_STATIC_RUNTIME "Statically link the MSVC C/C++ runtime (/MT instead of /MD). Required for any published binary; the /MT openjp2 it needs is vendored in libs/lib/static-mt." OFF)
 
 # --- Fast edit-build-run iteration ---------------------------------------
 # The link, not the compile, is what a rebuild-to-test loop actually pays for
