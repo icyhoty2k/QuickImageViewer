@@ -180,6 +180,7 @@ set(SOURCES
         src/Overlays/OverlayManager.cpp
         src/UI/ThumbnailPanels/ThumbnailPanelWnd.cpp
         src/UI/FloatingPanels/FindWnd.cpp
+        src/Platform/JumpList.cpp
         src/Persistence/HistoryFoldersManager.cpp
         src/Persistence/HistoryPath.cpp
         src/CMDArgs.cpp
@@ -505,6 +506,8 @@ target_link_libraries(QuickImageViewer PRIVATE
 target_link_libraries(QuickImageViewer PRIVATE
         d3d11 dxgi d2d1 dwrite user32 comdlg32 windowscodecs gdi32 dwmapi
         uxtheme advapi32 shell32 ole32 oleaut32 uuid shlwapi shcore
+        # propsys - InitPropVariantFromString, the Jump List entry titles
+        propsys
         ws2_32 ntdll userenv # ws2_32 also carries the Rem_TCP_IP sockets
         bcrypt               # CNG — remote-control password hashing / HMAC
         secur32 crypt32 ncrypt # Schannel TLS + the self-signed server certificate

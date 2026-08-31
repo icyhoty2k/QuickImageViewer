@@ -1181,6 +1181,12 @@ namespace UI {
         Add(L"Settings › History › Open History File",
             L"Selects qivHistory.txt in Explorer, next to qivFavorites.txt and the "
             L"QivBackup folder.", sTray);
+        Add(L"Taskbar › Jump List",
+            L"Right-click qIV's taskbar button and Windows lists your folders — "
+            L"favourites first, then the most recent — each opening that folder in "
+            L"qIV. Built from the same history the Tab panel shows, so the two "
+            L"cannot disagree, and rebuilt whenever you navigate or star a folder. "
+            L"Clearing the history clears it too.", sTray);
         Add(L"Settings › Dir Thumb Cache",
             L"Memory budget in MB for the directory thumbnail bitmap store. "
             L"0 turns the cache off, keeping only the thumbnail on screen; the "

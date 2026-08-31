@@ -28,6 +28,7 @@
 #include <atomic>
 #include <cwctype>
 #include <shlwapi.h> // StrCmpLogicalW - folder lists sort the way the rest of qIV does
+#include "Platform/JumpList.h" // the taskbar copy of this same list
 #include <thread>
 #include <unordered_map>
 #include "../ThemedTooltip.h"
@@ -1373,6 +1374,13 @@ namespace UI {
         if (!g_walkOwnsNavigation)
             g_externalNavigation = true;
 
+        // The taskbar's copy of this list follows the same one call. Every
+        // navigation reaches here - the walk keys, the wheel, Enter in this
+        // panel, F2, drag-drop, the command line - so hanging the Jump List off
+        // it means there is no second place to remember to update, and no way
+        // for the two to drift.
+        Platform::JumpList::Refresh();
+
         // Repaint only — the row ORDER on screen is deliberately left alone while
         // the panel is open, so the list does not reshuffle under the user on
         // every step of a walk. Only the green "you are here" marker moves.
@@ -1402,6 +1410,8 @@ namespace UI {
             InvalidateRect(histWnd.GetHwnd(), nullptr, FALSE);
     }
 
+    // Starring reorders the taskbar list as well as this one - favourites lead
+    // in both - so the Jump List is rebuilt at the end of this function.
     void ToggleFavorite(int rowIndex) {
         if (rowIndex < 0 || rowIndex >= static_cast<int>(g_displayList.size()))
             return;
@@ -1426,6 +1436,7 @@ namespace UI {
         historyFoldersManager.RewriteFavoritesToDisk();
         // The row moved between categories, so any frozen walk is now wrong.
         InvalidateWalkSnapshot();
+        Platform::JumpList::Refresh();
     }
 
     void ClearHistoryKeepFavorites() {
@@ -1561,7 +1572,9 @@ namespace UI {
         return removed;
     }
 
+    // The folders remain, but their order changes: nothing is starred any more.
     void ClearFavoritesKeepHistory() {
+        struct RefreshTaskbar { ~RefreshTaskbar() { Platform::JumpList::Refresh(); } } refreshTaskbar;
         // Backup first — before any RAM or file change
         historyFoldersManager.BackupFavoritesToDisk();
 
@@ -1581,7 +1594,12 @@ namespace UI {
     // would leave the starred paths sitting in qivHistory.txt with nothing
     // marking them, and running it after would rewrite the file twice. Emptying
     // both containers and writing both files once each is the honest shape.
+    // Nothing is left to offer, so the taskbar must stop offering it.
     void ClearHistoryAndFavorites() {
+        // Clear, not Refresh: with nothing left, Refresh would abort and leave
+        // the shell's previous list standing - still offering folders the app
+        // has just been told to forget.
+        struct ClearTaskbar { ~ClearTaskbar() { Platform::JumpList::Clear(); } } clearTaskbar;
         // Both backups first, before anything is emptied — this is the only one
         // of the three that can lose everything at once, so it is the one whose
         // undo matters most. Restore History && Favorites reads both.
