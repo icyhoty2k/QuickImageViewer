@@ -28,7 +28,9 @@
 #include <atomic>
 #include <cwctype>
 #include <shlwapi.h> // StrCmpLogicalW - folder lists sort the way the rest of qIV does
-#include "Platform/JumpList.h" // the taskbar copy of this same list
+#include "Platform/JumpList.h"    // the taskbar copy of this same list
+#include "Platform/FolderIndex.h" // the cross-folder picture index
+#include "../../WorkerThread.h"   // g_ioWorker - the index walk is filesystem work
 #include <thread>
 #include <unordered_map>
 #include "../ThemedTooltip.h"
@@ -1292,6 +1294,23 @@ namespace UI {
         // loaded from the registry by RegistryManager and is read directly.
     }
 
+    // Walks every folder qIV remembers and refreshes the search index.
+    //
+    // Fire and forget, on the IO pool: nothing waits for it, and if the pool
+    // refuses the task (its queue is bounded) the index simply stays as it was
+    // until the next navigation - one keystroke's worth of staleness, against a
+    // guarantee that the UI thread never blocks on a directory walk.
+    static void RebuildFolderIndexAsync() {
+        std::vector<std::wstring> folders;
+        folders.reserve(historyFoldersManager.folderHistory.size());
+        for (const std::wstring &f : historyFoldersManager.folderHistory)
+            if (!HistoryPath::IsBroken(f)) folders.push_back(f);
+
+        (void) g_ioWorker.PushTask([folders = std::move(folders)]() {
+            Platform::FolderIndex::Build(folders);
+        });
+    }
+
     void PushFolderHistory(const std::wstring &rawFolderPath, bool folderHasImages) {
         // Normalize on the way in, exactly as the disk loader does, so a path
         // arriving from drag-drop, the command line or the shell cannot create a
@@ -1380,6 +1399,13 @@ namespace UI {
         // it means there is no second place to remember to update, and no way
         // for the two to drift.
         Platform::JumpList::Refresh();
+
+        // And so does the cross-folder search index, for the same reason: this
+        // is where the set of folders qIV knows about changes. Rebuilt on a
+        // worker because it walks directories, and the previous index stays
+        // searchable until the new one is ready - a rebuild never blanks the
+        // results under somebody who is typing.
+        RebuildFolderIndexAsync();
 
         // Repaint only — the row ORDER on screen is deliberately left alone while
         // the panel is open, so the list does not reshuffle under the user on

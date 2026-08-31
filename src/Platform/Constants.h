@@ -674,6 +674,16 @@ namespace Constants {
     // value the card could have held is worse than allowing one it cannot.
     constexpr int IS_DIR_THUMB_CACHE_MIN_MB = 0;
     constexpr int IS_DIR_THUMB_CACHE_MAX_MB = 64000;
+    // Ceiling on the cross-folder picture index (Platform/FolderIndex).
+    //
+    // Only NAMES are held, so 200,000 of them is roughly 20-30 MB of strings -
+    // and a history of a thousand folders would have to average two hundred
+    // pictures each to reach it. The cap exists so that one folder holding a
+    // camera dump of half a million files cannot decide how much memory the
+    // viewer uses; hitting it means the search covers a little less, which is a
+    // far better failure than a viewer that will not start.
+    constexpr size_t FOLDER_INDEX_MAX_FILES = 200000;
+
     constexpr int IS_PRELOAD_LOOKASIDE_COUNT = 1;
     constexpr const int PRELOAD_TIMER_COUNTDOWN = 60; // {ms} this is used to delay preloading if user scrolls very fast
     //==========================Cache optimization====================================

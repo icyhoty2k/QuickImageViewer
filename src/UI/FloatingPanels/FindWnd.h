@@ -15,6 +15,12 @@
 
 namespace UI {
     class FindWnd : public FloatingPanelWnd {
+        public:
+            // How many cross-folder hits are offered at once. A human reads this
+            // list: one letter can match tens of thousands of names, and the ones
+            // past the first screenful are neither read nor useful.
+            static constexpr int CROSS_FOLDER_MAX = 200;
+
     public:
         void Init(HINSTANCE hInstance, HWND hParent) override;
         void Init(HINSTANCE hInstance, HWND hParent, int8_t position) override;

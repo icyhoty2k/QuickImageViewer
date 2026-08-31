@@ -181,6 +181,7 @@ set(SOURCES
         src/UI/ThumbnailPanels/ThumbnailPanelWnd.cpp
         src/UI/FloatingPanels/FindWnd.cpp
         src/Platform/JumpList.cpp
+        src/Platform/FolderIndex.cpp
         src/Persistence/HistoryFoldersManager.cpp
         src/Persistence/HistoryPath.cpp
         src/CMDArgs.cpp

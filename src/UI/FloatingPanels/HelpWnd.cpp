@@ -1181,6 +1181,13 @@ namespace UI {
         Add(L"Settings › History › Open History File",
             L"Selects qivHistory.txt in Explorer, next to qivFavorites.txt and the "
             L"QivBackup folder.", sTray);
+        Add(L"Find › searches EVERY folder qIV knows",
+            L"Typing in Find matches the current folder first, then every other "
+            L"folder in your history — so a picture is found by its name whether "
+            L"or not you remember where it lives, and opening one takes you there. "
+            L"The index holds file names only, is rebuilt in the background "
+            L"whenever you open a folder, and is not recursive: it covers the "
+            L"folders qIV would open, not their subfolders.", sTray);
         Add(L"Taskbar › Jump List",
             L"Right-click qIV's taskbar button and Windows lists your folders — "
             L"favourites first, then the most recent — each opening that folder in "

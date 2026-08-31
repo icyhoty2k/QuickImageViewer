@@ -12,6 +12,7 @@
 #include "../../Platform/Constants.h"
 #include "../../Platform/ConstantsIcons.h"
 #include "../../Platform/FileHandler.h"
+#include "../../Platform/FolderIndex.h" // every folder qIV knows
 #include "../../Renderer/IRenderer.h"
 #include "Common/FuzzyMatch.h"
 #include "CustomControls/InputBox.h"
@@ -146,6 +147,37 @@ void FindWnd::RebuildMatches() {
     for (auto &p : extraPaths)
         tryMatch(p, -1);
     m_cachedExtraCount = static_cast<int>(m_results.size()) - extraStart;
+
+    // --- EVERY OTHER FOLDER qIV KNOWS ---------------------------------------
+    //
+    // "Go to name" has always searched the folder you are standing in. This is
+    // the same typing across every folder in the history, so a picture is found
+    // by its name whether or not you remember where it lives - and opening one
+    // takes you there.
+    //
+    // ONLY WHEN SOMETHING WAS TYPED. An empty query lists the current playlist,
+    // and folding thousands of remembered files into that would replace a view
+    // of "where I am" with a view of "everything", which is not what an empty
+    // box means.
+    //
+    // Paths already in the playlist are skipped: they matched above WITH a
+    // playlist index, and that index is what makes Enter jump within the folder
+    // instead of reopening it.
+    //
+    // Capped, because a human reads this list. One letter can match tens of
+    // thousands of names; the ones past the first screenful are neither read nor
+    // useful, and the cap also bounds the sort below.
+    if (m_queryLen > 0) {
+        int crossFolder = 0;
+        for (const auto &e : Platform::FolderIndex::Snapshot()) {
+            if (crossFolder >= CROSS_FOLDER_MAX) break;
+            if (app.playlistIndexMap.find(e.path) != app.playlistIndexMap.end()) continue;
+
+            const size_t before = m_results.size();
+            tryMatch(e.path, -1);
+            if (m_results.size() != before) ++crossFolder;
+        }
+    }
 
     if (!hasWildcard) {
         std::sort(m_results.begin(), m_results.end(),
