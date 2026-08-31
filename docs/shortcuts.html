@@ -57,7 +57,7 @@
     together. Editing this file by hand puts it out of step with the binary,
     which is the entire problem it exists to solve.
 
-    Last generated: 2026-08-14
+    Last generated: 2026-08-31
 -->
 <body>
 
@@ -396,7 +396,7 @@
             <div class="sc-row"><div class="sc-keys"><kbd>Settings › History › Clear Favorites</kbd></div><p class="sc-desc">Un-stars every favorite and empties qivFavorites.txt. The folders themselves stay in the history — only the star goes.</p></div>
             <div class="sc-row"><div class="sc-keys"><kbd>Settings › History › Clear History and Favorites</kbd></div><p class="sc-desc">Empties both lists and both files in one action. Each of the three clears backs its file up first, so any of them can be undone with Backup &amp;&amp; Export › Restore History &amp;&amp; Favorites.</p></div>
             <div class="sc-row"><div class="sc-keys"><kbd>Settings › History › Open History File</kbd></div><p class="sc-desc">Selects qivHistory.txt in Explorer, next to qivFavorites.txt and the QivBackup folder.</p></div>
-            <div class="sc-row"><div class="sc-keys"><kbd>Settings › Dir Thumb Cache</kbd></div><p class="sc-desc">Memory budget in MB for the directory thumbnail bitmap store (100 – 64000 MB).</p></div>
+            <div class="sc-row"><div class="sc-keys"><kbd>Settings › Dir Thumb Cache</kbd></div><p class="sc-desc">Memory budget in MB for the directory thumbnail bitmap store. 0 turns the cache off, keeping only the thumbnail on screen; the maximum is this card's own graphics memory, which the dialog shows when… <a class="sc-more" href="#system-tray-settings-dir-thumb-cache">details</a></p></div>
             <div class="sc-row"><div class="sc-keys"><kbd>Settings › Preload Lookaside</kbd></div><p class="sc-desc">How many images ahead and behind the current one to pre-decode into GPU memory in the background (1 – 99).</p></div>
             <div class="sc-row"><div class="sc-keys"><kbd>Settings › Overlay Message Duration</kbd></div><p class="sc-desc">How long center overlay messages remain visible in milliseconds (250 – 10000 ms).</p></div>
             <div class="sc-row"><div class="sc-keys"><kbd>Backup &amp;&amp; Export › Export</kbd> / <kbd>Import Settings</kbd></div><p class="sc-desc">Save all settings to a UTF-8 INI file, or load a previously exported one. Import requires a confirmation dialog and applies all values immediately, including theme, overlays and sort order. <a class="sc-more" href="#system-tray-backup-export-export-import-settings">details</a></p></div>
@@ -468,7 +468,7 @@
     </section>
 
     <h2 class="sc-deep-head">In depth</h2>
-    <p class="sc-deep-intro">The 65 shortcuts above whose behaviour needs more than a line. Every one is linked from its row.</p>
+    <p class="sc-deep-intro">The 66 shortcuts above whose behaviour needs more than a line. Every one is linked from its row.</p>
     <article class="sc-deep" id="image-navigation-ctrl-f">
         <h3><kbd>Ctrl+F</kbd><span class="sc-deep-sec">Image Navigation</span></h3>
         <p>Open the Find panel — fuzzy filename search with wildcard support: * matches any characters, ? matches exactly one (e.g. *.jpg or photo_??_2024.*). Searches the current folder and the VRAM cache. Typing # inside switches to Jump-to.</p>
@@ -569,7 +569,7 @@
         <p>The listener is OFF unless you switch it on here, in the instance's .ini, or with -remote on the command line. It also needs a NAME and a PORT: an empty AllowList denies every connection, and a driving instance identifies this one by its name, so it will not start without one.</p>
         <p>THE PROTOCOL DESCRIBES ITSELF. Send `help` and the answer lists every command this build accepts, one per line, with whether it takes a value, what it does and what the value means — pipe-separated, so a client can build its own command list from that one call instead of carrying a copy that goes stale. `ping` checks liveness, `version` reports the app and protocol version. It is plain UTF-8 text: netcat, curl, telnet and a five-line script are all first-class clients.</p>
         <p>ENCRYPTION IS DECIDED BY THE ADDRESS, never negotiated. A peer on this machine (127.x, ::1, localhost) gets plaintext; EVERY other peer, your own LAN included, gets TLS 1.2/1.3 from the first byte. One listener on 0.0.0.0 serves both. The certificate is self-signed and the client PINS it by the SHA-256 fingerprint shown at the bottom of this panel — read it off here and type it into the client. There is no plaintext fallback for anything to strip.</p>
-        <p>A PASSWORD IS COMPULSORY off loopback and the server refuses to start without one. It never crosses the wire: this end stores a PBKDF2-HMAC-SHA256 digest and the client answers an HMAC over a fresh nonce, so each guess costs the guesser a full derivation. Five failures from one address inside ten minutes blacklists it automatically, every failure is answered a second late, and a peer that connects and then says nothing is dropped after ten seconds.</p>
+        <p>A PASSWORD IS COMPULSORY off loopback and the server refuses to start without one. It never crosses the wire: this end stores a PBKDF2-HMAC-SHA256 digest and the client answers an HMAC over a fresh nonce, so each guess costs the guesser a full derivation. Five failures from one address inside ten minutes block it for fifteen minutes; five more earn a permanent entry in the blacklist file. The temporary block lives in memory only, so a restart lifts it - a mistyped password should not need an .ini edited. Every failure is also answered a second late, and a peer that connects and then says nothing is dropped after ten seconds.</p>
         <p>ALLOWLIST AND BLACKLIST take addresses, never domain names — a rule is matched against the address a connection actually arrived from. Five forms: * for everything, 192.168.1.* as a TEXT prefix, 192.168.0.0/24 as CIDR (2001:db8::/32 works too), 192.168.0.10-50 as a range (or the long 192.168.0.10-192.168.1.5), and a bare address for one host. Mind the star: it compares CHARACTERS, so 192.168.1* without the dot also covers 192.168.10.x — use /24 when the boundary matters. Anything that cannot match an address is dropped when you save, and the panel names what it dropped.</p>
         <p>What this instance connects OUT to lives in Remote Servers (F10). F9 is what others connect to; F10 is what this connects to.</p>
         <p>WHO is connected right now is Ctrl+F9, not here.</p>
@@ -720,6 +720,10 @@
     <article class="sc-deep" id="system-tray-settings-history-remove-invalid-folders">
         <h3><kbd>Settings › History › Remove Invalid Folders</kbd><span class="sc-deep-sec">System Tray</span></h3>
         <p>Drops history rows that cannot be parsed as a path, that point at a folder which no longer exists, or that hold no images. Favorites are kept whatever their state. Rows the background scan has not reached yet are KEPT and reported, so a run started early is partial and says so rather than looking complete.</p>
+    </article>
+    <article class="sc-deep" id="system-tray-settings-dir-thumb-cache">
+        <h3><kbd>Settings › Dir Thumb Cache</kbd><span class="sc-deep-sec">System Tray</span></h3>
+        <p>Memory budget in MB for the directory thumbnail bitmap store. 0 turns the cache off, keeping only the thumbnail on screen; the maximum is this card's own graphics memory, which the dialog shows when it can read it. The Statistics panel reports both the budget and the card's total.</p>
     </article>
     <article class="sc-deep" id="system-tray-backup-export-export-import-settings">
         <h3><kbd>Backup &amp;&amp; Export › Export</kbd> / <kbd>Import Settings</kbd><span class="sc-deep-sec">System Tray</span></h3>
