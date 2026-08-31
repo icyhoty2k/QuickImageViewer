@@ -24,7 +24,7 @@
     <meta property="og:site_name" content="QuickImageViewer">
     <meta property="og:title" content="Every QuickImageViewer keyboard shortcut">
     <meta property="og:description"
-          content="The complete reference: 227 shortcuts in 16 sections, generated from the application's own help panel.">
+          content="The complete reference: 228 shortcuts in 16 sections, generated from the application's own help panel.">
     <meta property="og:url" content="https://icyhoty2k.github.io/QuickImageViewer/shortcuts.html">
     <meta property="og:image" content="https://icyhoty2k.github.io/QuickImageViewer/screenshots/less300kb/10.webp">
     <meta property="og:image:alt" content="QuickImageViewer showing a photo with a thumbnail strip">
@@ -32,7 +32,7 @@
     <meta name="twitter:card" content="summary_large_image">
     <meta name="twitter:title" content="Every QuickImageViewer keyboard shortcut">
     <meta name="twitter:description"
-          content="The complete reference: 227 shortcuts in 16 sections, generated from the application's own help panel.">
+          content="The complete reference: 228 shortcuts in 16 sections, generated from the application's own help panel.">
     <meta name="twitter:image" content="https://icyhoty2k.github.io/QuickImageViewer/screenshots/less300kb/10.webp">
 
 <script type="application/ld+json">
@@ -118,7 +118,7 @@
     <h1>QuickImageViewer (qIV) — Shortcuts</h1>
     <p class="meta">
         Generated from the app's own help panel — press <kbd>F1</kbd> in QuickImageViewer to see the same list on your
-        machine. 227 shortcuts in 16 sections.
+        machine. 228 shortcuts in 16 sections.
     </p>
 
 <!-- SHARED-STOREROW-START -->
@@ -362,7 +362,7 @@
         </div>
     </section>
     <section class="sc-sec" data-title="System Tray">
-        <h2><span class="sc-ico">🔔</span>System Tray<span class="sc-count">49</span></h2>
+        <h2><span class="sc-ico">🔔</span>System Tray<span class="sc-count">50</span></h2>
         <div class="sc-cols">
             <div class="sc-row"><div class="sc-keys"><kbd>Double-click tray icon</kbd></div><p class="sc-desc">Restore the main window to the foreground.</p></div>
             <div class="sc-row"><div class="sc-keys"><kbd>Restore QuickImageViewer</kbd></div><p class="sc-desc">Show and bring the main window to the front.</p></div>
@@ -396,6 +396,7 @@
             <div class="sc-row"><div class="sc-keys"><kbd>Settings › History › Clear Favorites</kbd></div><p class="sc-desc">Un-stars every favorite and empties qivFavorites.txt. The folders themselves stay in the history — only the star goes.</p></div>
             <div class="sc-row"><div class="sc-keys"><kbd>Settings › History › Clear History and Favorites</kbd></div><p class="sc-desc">Empties both lists and both files in one action. Each of the three clears backs its file up first, so any of them can be undone with Backup &amp;&amp; Export › Restore History &amp;&amp; Favorites.</p></div>
             <div class="sc-row"><div class="sc-keys"><kbd>Settings › History › Open History File</kbd></div><p class="sc-desc">Selects qivHistory.txt in Explorer, next to qivFavorites.txt and the QivBackup folder.</p></div>
+            <div class="sc-row"><div class="sc-keys"><kbd>Find › searches EVERY folder qIV knows</kbd></div><p class="sc-desc">Typing in Find matches the current folder first, then every other folder in your history  <a class="sc-more" href="#system-tray-find-searches-every-folder-qiv-knows">details</a></p></div>
             <div class="sc-row"><div class="sc-keys"><kbd>Taskbar › Jump List</kbd></div><p class="sc-desc">Right-click qIV's taskbar button and Windows lists your folders — favourites first, then the most recent — each opening that folder in qIV. <a class="sc-more" href="#system-tray-taskbar-jump-list">details</a></p></div>
             <div class="sc-row"><div class="sc-keys"><kbd>Settings › Dir Thumb Cache</kbd></div><p class="sc-desc">Memory budget in MB for the directory thumbnail bitmap store. 0 turns the cache off, keeping only the thumbnail on screen; the maximum is this card's own graphics memory, which the dialog shows when… <a class="sc-more" href="#system-tray-settings-dir-thumb-cache">details</a></p></div>
             <div class="sc-row"><div class="sc-keys"><kbd>Settings › Preload Lookaside</kbd></div><p class="sc-desc">How many images ahead and behind the current one to pre-decode into GPU memory in the background (1 – 99).</p></div>
@@ -469,7 +470,7 @@
     </section>
 
     <h2 class="sc-deep-head">In depth</h2>
-    <p class="sc-deep-intro">The 67 shortcuts above whose behaviour needs more than a line. Every one is linked from its row.</p>
+    <p class="sc-deep-intro">The 68 shortcuts above whose behaviour needs more than a line. Every one is linked from its row.</p>
     <article class="sc-deep" id="image-navigation-ctrl-f">
         <h3><kbd>Ctrl+F</kbd><span class="sc-deep-sec">Image Navigation</span></h3>
         <p>Open the Find panel — fuzzy filename search with wildcard support: * matches any characters, ? matches exactly one (e.g. *.jpg or photo_??_2024.*). Searches the current folder and the VRAM cache. Typing # inside switches to Jump-to.</p>
@@ -721,6 +722,10 @@
     <article class="sc-deep" id="system-tray-settings-history-remove-invalid-folders">
         <h3><kbd>Settings › History › Remove Invalid Folders</kbd><span class="sc-deep-sec">System Tray</span></h3>
         <p>Drops history rows that cannot be parsed as a path, that point at a folder which no longer exists, or that hold no images. Favorites are kept whatever their state. Rows the background scan has not reached yet are KEPT and reported, so a run started early is partial and says so rather than looking complete.</p>
+    </article>
+    <article class="sc-deep" id="system-tray-find-searches-every-folder-qiv-knows">
+        <h3><kbd>Find › searches EVERY folder qIV knows</kbd><span class="sc-deep-sec">System Tray</span></h3>
+        <p>Typing in Find matches the current folder first, then every other folder in your history — so a picture is found by its name whether or not you remember where it lives, and opening one takes you there. The index holds file names only, is rebuilt in the background whenever you open a folder, and is not recursive: it covers the folders qIV would open, not their subfolders.</p>
     </article>
     <article class="sc-deep" id="system-tray-taskbar-jump-list">
         <h3><kbd>Taskbar › Jump List</kbd><span class="sc-deep-sec">System Tray</span></h3>
