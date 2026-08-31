@@ -335,7 +335,13 @@ static HMENU BuildSettingsMenu() {
     AppendMenuW(m, MF_STRING, Id::SET_ZOOM_CLICK, buf);
     swprintf_s(buf, L"Window Width: %d",  app.baseWidth);   AppendMenuW(m, MF_STRING, Id::SET_WINDOW_WIDTH, buf);
     swprintf_s(buf, L"Window Height: %d", app.baseHeight);  AppendMenuW(m, MF_STRING, Id::SET_WINDOW_HEIGHT, buf);
-    swprintf_s(buf, L"Dir Thumb Cache: %d MB", app.dirThumbCacheMB); AppendMenuW(m, MF_STRING, Id::SET_DIR_THUMB_CACHE, buf);
+    // "Off" rather than "0 MB": zero is a deliberate setting here, and a menu
+    // reading "0 MB" looks like a value that failed to load.
+    if (app.dirThumbCacheMB <= 0)
+        swprintf_s(buf, L"Dir Thumb Cache: Off");
+    else
+        swprintf_s(buf, L"Dir Thumb Cache: %d MB", app.dirThumbCacheMB);
+    AppendMenuW(m, MF_STRING, Id::SET_DIR_THUMB_CACHE, buf);
     swprintf_s(buf, L"Preload Lookaside: %d",  app.preloadLookaside); AppendMenuW(m, MF_STRING, Id::SET_PRELOAD_LOOKASIDE, buf);
     AppendMenuW(m, MF_SEPARATOR, 0, nullptr);
     // Export / Import moved to the top-level "Backup & Export" menu, beside

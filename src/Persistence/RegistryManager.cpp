@@ -488,9 +488,15 @@ namespace Persistence::Registry {
         a.historyMaxFavsShown = std::max(0, std::min(999, static_cast<int>(
             readDword(Constants::Registry::HISTORY_MAX_FAVS_SHOWN,
                 static_cast<DWORD>(Constants::History::IS_HISTORY_MAX_FAVORITES_SHOWN)))));
-        a.dirThumbCacheMB = std::max(100, std::min(64000, static_cast<int>(
-            readDword(Constants::Registry::DIR_THUMB_CACHE_MB,
-                static_cast<DWORD>(Constants::IS_DIR_THUMB_CACHE_BUDGET_MB)))));
+        // Floor 0, not 100: 0 is the "off" setting and has to survive a
+        // restart. Ceiling is the fallback constant rather than the adapter's
+        // VRAM, because settings load before the renderer exists — the real
+        // per-card clamp happens in EnforceThumbBudget, which is the only place
+        // that both knows the card and runs after it is created.
+        a.dirThumbCacheMB = std::max(Constants::IS_DIR_THUMB_CACHE_MIN_MB,
+            std::min(Constants::IS_DIR_THUMB_CACHE_MAX_MB, static_cast<int>(
+                readDword(Constants::Registry::DIR_THUMB_CACHE_MB,
+                    static_cast<DWORD>(Constants::IS_DIR_THUMB_CACHE_BUDGET_MB)))));
         a.preloadLookaside = std::max(1, std::min(99, static_cast<int>(
             readDword(Constants::Registry::PRELOAD_LOOKASIDE,
                 static_cast<DWORD>(Constants::IS_PRELOAD_LOOKASIDE_COUNT)))));

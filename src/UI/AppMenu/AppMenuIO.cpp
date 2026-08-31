@@ -275,7 +275,12 @@ void ImportSettings(HWND hWnd) {
                 static_cast<DWORD>(app.historyMaxFavsShown));
         }
         if (wcscmp(key, Constants::Registry::DIR_THUMB_CACHE_MB) == 0) {
-            app.dirThumbCacheMB = std::max(100, std::min(64000, val));
+            // Floor 0, matching RegistryManager and the dialog: 0 is the "off"
+            // setting. Clamping to 100 here would have turned an exported "off"
+            // back into 100 MB on import, silently — the failure this file's
+            // whole clamp column exists to prevent.
+            app.dirThumbCacheMB = std::max(Constants::IS_DIR_THUMB_CACHE_MIN_MB,
+                std::min(Constants::IS_DIR_THUMB_CACHE_MAX_MB, val));
             Persistence::Registry::SaveSetting(Constants::Registry::DIR_THUMB_CACHE_MB,
                 static_cast<DWORD>(app.dirThumbCacheMB));
         }

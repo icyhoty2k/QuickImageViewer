@@ -633,11 +633,6 @@ namespace Constants {
     // catches — multi-thousand-frame novelty GIFs — nobody watches to the end.
     constexpr size_t GIF_MAX_DECODED_BYTES = 256ull * 1024 * 1024; // 256 MB of frames
     constexpr size_t GIF_MAX_FRAMES        = 600;                  // second, cheaper guard
-    // VRAM budget for the dir-panel thumbnail cache.
-    // Each entry is CACHE_THUMB_WIDTH * CACHE_THUMB_HEIGHT * 4 bytes ≈ 37 KB
-    // after scaling.  512 MB holds ~14 000 thumbnails — far more than any
-    // realistic folder.  Increase if you open folders with tens of thousands
-    // of images; decrease on low-VRAM cards.
     // Shell thumbnail retrieval flags (SIIGBF — int bitmask from shobjidl.h):
     //   0x00000000  SIIGBF_RESIZETOFIT    — fit within requested SIZE, generate+cache if needed (default)
     //   0x00000001  SIIGBF_BIGGERSIZEOK   — allow returning a larger bitmap than requested
@@ -650,7 +645,35 @@ namespace Constants {
     // Use everywhere a wchar_t buffer receives a user-selected or drag-dropped path.
     constexpr DWORD MAX_FILE_PATH = 32767;
 
+    // VRAM budget for the dir-panel thumbnail cache — the DEFAULT, not a fixed
+    // size: it is a live setting (tray menu, registry, Dedicated config) read on
+    // every eviction pass. Each entry is CACHE_THUMB_WIDTH * CACHE_THUMB_HEIGHT
+    // * 4 bytes ≈ 37 KB after scaling, so 512 MB holds ~14 000 thumbnails — far
+    // more than any realistic folder. Increase for folders with tens of
+    // thousands of images; decrease on a low-VRAM card.
+    //
+    // ⚠ THIS COMMENT USED TO SIT FIVE DECLARATIONS HIGHER, above
+    // SHELL_THUMB_FLAGS, where an insertion had stranded it — it read as
+    // documentation for the wrong constant. Keep it welded to the thing it
+    // describes.
     constexpr int IS_DIR_THUMB_CACHE_BUDGET_MB = 512;
+
+    // The settable range for that budget.
+    //
+    // ZERO IS "OFF", AND IT IS SAFE BY CONSTRUCTION. The eviction loop stops
+    // while one entry remains, so a budget of 0 does not blank the strips or
+    // evict a thumbnail before it has been drawn once — it drops the cache to
+    // the single thumbnail currently in front of the user. That is the smallest
+    // honest meaning of "off" for a cache the renderer still has to draw from.
+    //
+    // The CEILING is the adapter's own dedicated VRAM when the renderer managed
+    // to ask (RendererD2D::VramTotalMB), because a number the user picks should
+    // be bounded by the card they actually have — 24 GB on one of these machines
+    // and 12 GB on the other. This constant is only the fallback for when the
+    // query fails, and it is deliberately large rather than clever: refusing a
+    // value the card could have held is worse than allowing one it cannot.
+    constexpr int IS_DIR_THUMB_CACHE_MIN_MB = 0;
+    constexpr int IS_DIR_THUMB_CACHE_MAX_MB = 64000;
     constexpr int IS_PRELOAD_LOOKASIDE_COUNT = 1;
     constexpr const int PRELOAD_TIMER_COUNTDOWN = 60; // {ms} this is used to delay preloading if user scrolls very fast
     //==========================Cache optimization====================================
@@ -1083,6 +1106,16 @@ namespace Constants {
         // the case being served is a phone with a saved-but-stale password
         // retrying, not a careful attacker, and five is past any typo.
         constexpr int AUTH_MAX_FAILURES = 5;
+
+        // How long the FIRST threshold crossing keeps a peer out, in minutes.
+        //
+        // The first offence is a timed block and only a repeat earns the
+        // permanent, file-backed one - see Remote::AuthPolicy for the reasoning.
+        // Fifteen minutes is long enough to make guessing pointless and short
+        // enough that somebody who simply mistyped their own password is not
+        // hunting for an .ini file to edit. A restart also clears it, because
+        // timed blocks live in memory only.
+        constexpr int AUTH_FIRST_BLOCK_MINUTES = 15;
 
         // Failures older than this are forgotten, so an address that fails once
         // a day forever is never blacklisted for it. The counter measures a

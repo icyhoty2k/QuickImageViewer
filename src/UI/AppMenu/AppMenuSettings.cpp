@@ -20,6 +20,7 @@
 #include "Platform/Constants.h"
 #include "Platform/ConstantsStrings.h"
 #include "Platform/FileHandler.h"
+#include "Renderer/RendererD2D.h" // VramTotalMB — bounds the thumbnail budget
 #include "UI/FloatingPanels/HistoryListWnd.h"
 #include "UI/ThemedDialog.h"
 #include "UI/UIManager.h"
@@ -698,9 +699,30 @@ void DispatchSetting(HWND hWnd, int cmd) {
         break;
     }
     case Id::SET_DIR_THUMB_CACHE: {
+        // The ceiling is the card's own dedicated VRAM, so the range offered
+        // describes the machine the user is sitting at rather than a constant
+        // that means nothing on either of them. The fallback applies when DXGI
+        // did not answer or the renderer does not exist yet — VramTotalMB()
+        // returns 0 for BOTH, and 0 must never become the ceiling.
+        const int vramMB = app.renderer ? app.renderer->VramTotalMB() : 0;
+        const int maxMB  = (vramMB > 0) ? vramMB : Constants::IS_DIR_THUMB_CACHE_MAX_MB;
+
+        // The prompt states the detected VRAM when it is known. Picking a cache
+        // size is guesswork without it, and it is the one number the user
+        // cannot look up from inside the dialog.
+        wchar_t prompt[192];
+        if (vramMB > 0)
+            swprintf_s(prompt,
+                L"Thumbnail cache budget in MB (0 = off, up to %d):\n"
+                L"Detected graphics memory: %d MB",
+                maxMB, vramMB);
+        else
+            swprintf_s(prompt, L"Thumbnail cache budget in MB (0 = off, up to %d):", maxMB);
+
         int v = UI::ThemedDialog::PromptInt(hWnd, L"Dir Thumb Cache Budget",
-            L"Thumbnail cache budget in MB (100 – 64000):",
-            app.dirThumbCacheMB, 100, 64000,
+            prompt,
+            app.dirThumbCacheMB,
+            Constants::IS_DIR_THUMB_CACHE_MIN_MB, maxMB,
             Constants::IS_DIR_THUMB_CACHE_BUDGET_MB);
         if (v >= 0) {
             app.dirThumbCacheMB = v;

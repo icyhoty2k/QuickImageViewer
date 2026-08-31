@@ -64,6 +64,7 @@
 #include "Rem_TCP_IP/RemoteLog.h"
 #include "Rem_TCP_IP/RemoteSettings.h"   // AddressMatches / InList — the accept gate
 #include "Rem_TCP_IP/RemoteCrypto.h"     // the password hash and handshake secret
+#include "Rem_TCP_IP/AuthFailPolicy.h"   // what a wrong password costs
 #include "Platform/Constants.h"          // APP_NAME, for the banner
 #include "UI/AppMenu/AppMenuIds.h"       // the id space the menu tests check
 
@@ -769,6 +770,91 @@ namespace {
     // Everything below is written against CURRENT behaviour, including the sharp
     // edges the implementation documents on purpose. A test that "fixed" one of
     // those by asserting what feels right would break real users' lists.
+
+    // -------------------------------------------------------------------------
+    //  The brute-force guard's escalation.
+    //
+    //  This is the half of the guard that decides what a wrong password costs,
+    //  and until v3 it was unreachable from a test - the decision sat inside a
+    //  function holding a mutex, a map and a file write. It is pure now, so the
+    //  rule can be stated as checks instead of as a comment nobody can verify.
+    // -------------------------------------------------------------------------
+    void TestAuthFailPolicy() {
+        using namespace Remote::AuthPolicy;
+        constexpr int MAXF = 5;
+        constexpr long long WINDOW = 10 * 60 * 1000;
+
+        NOTE("failures below the threshold cost nothing");
+        {
+            FailRecord r;
+            for (int i = 1; i < MAXF; ++i)
+                CHECK(NoteFailure(r, 1000 + i, MAXF, WINDOW) == Response::Ignore);
+        }
+
+        NOTE("the FIRST crossing is temporary, not permanent");
+        // The whole point of the v3 change: a mistyped password five times over
+        // must not write a permanent, file-backed ban on a family phone.
+        {
+            FailRecord r;
+            Response last = Response::Ignore;
+            for (int i = 0; i < MAXF; ++i) last = NoteFailure(r, 1000 + i, MAXF, WINDOW);
+            CHECK(last == Response::BlockTimed);
+            CHECK(r.strikes == 1);
+        }
+
+        NOTE("the SECOND crossing is permanent");
+        {
+            FailRecord r;
+            for (int i = 0; i < MAXF; ++i) NoteFailure(r, 1000 + i, MAXF, WINDOW);
+            Response last = Response::Ignore;
+            for (int i = 0; i < MAXF; ++i) last = NoteFailure(r, 2000 + i, MAXF, WINDOW);
+            CHECK(last == Response::BlockPermanent);
+            CHECK(r.strikes == 2);
+        }
+
+        NOTE("crossing RESETS the count, so the next attempt does not re-trigger");
+        // Leaving the count at the threshold would make every later attempt
+        // report a fresh block, and the second one would be permanent
+        // immediately - collapsing the escalation to no escalation at all.
+        {
+            FailRecord r;
+            for (int i = 0; i < MAXF; ++i) NoteFailure(r, 1000 + i, MAXF, WINDOW);
+            CHECK(NoteFailure(r, 1100, MAXF, WINDOW) == Response::Ignore);
+            CHECK(r.strikes == 1);
+        }
+
+        NOTE("a stale window is a NEW window - an occasional typo never blocks");
+        {
+            FailRecord r;
+            for (int i = 0; i < 20; ++i)
+                CHECK(NoteFailure(r, 1000 + i * (WINDOW + 1), MAXF, WINDOW) == Response::Ignore);
+            CHECK(r.strikes == 0);
+        }
+
+        NOTE("STRIKES SURVIVE a window reset - waiting it out does not forgive");
+        // An attacker who pauses between bursts must still reach the permanent
+        // ban. If strikes reset with the window they would collect timed blocks
+        // for ever and never earn the permanent one.
+        {
+            FailRecord r;
+            for (int i = 0; i < MAXF; ++i) NoteFailure(r, 1000 + i, MAXF, WINDOW);
+            CHECK(r.strikes == 1);
+
+            const long long later = 1000 + WINDOW * 5;
+            Response last = Response::Ignore;
+            for (int i = 0; i < MAXF; ++i) last = NoteFailure(r, later + i, MAXF, WINDOW);
+            CHECK(last == Response::BlockPermanent);
+        }
+
+        NOTE("lastSeenMs tracks every failure, so eviction picks the stalest");
+        {
+            FailRecord r;
+            NoteFailure(r, 4242, MAXF, WINDOW);
+            CHECK(r.lastSeenMs == 4242);
+            NoteFailure(r, 9999, MAXF, WINDOW);
+            CHECK(r.lastSeenMs == 9999);
+        }
+    }
 
     void TestAddressMatch() {
         using Remote::AddressMatches;
@@ -1828,6 +1914,10 @@ int main(int argc, char **argv) {
                 Dim(), Dim(), Off());
     BeginGroup("AllowList - who may connect");
     TestAddressMatch();
+    EndGroup();
+
+    BeginGroup("Brute-force guard - what a wrong password costs");
+    TestAuthFailPolicy();
     EndGroup();
 
     BeginGroup("AllowList - entry validation and scope");

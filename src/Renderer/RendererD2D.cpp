@@ -453,6 +453,26 @@ HRESULT RendererD2D::CreateDeviceResources() {
     hr = dxgiDevice->GetAdapter(dxgiAdapter.GetAddressOf());
     if (FAILED(hr)) return hr;
 
+    // How much dedicated VRAM this adapter has, asked once while the adapter is
+    // already in hand. It bounds the thumbnail-cache budget the user can pick,
+    // so the ceiling in the settings dialog describes the card in the machine
+    // instead of an arbitrary constant.
+    //
+    // FAILURE IS NOT AN ERROR HERE. A failed GetDesc leaves m_vramTotalMB at 0,
+    // which callers read as "unknown" and replace with the fallback ceiling. A
+    // renderer that refused to start because it could not size a cache would be
+    // a far worse trade than a cache sized by a constant.
+    //
+    // DedicatedVideoMemory is SIZE_T and is the on-card memory only — shared
+    // system memory is deliberately not added in. Budgeting thumbnails into
+    // shared memory would let the "VRAM" cache spill into RAM across the bus,
+    // which is the outcome the cache exists to avoid.
+    DXGI_ADAPTER_DESC adapterDesc{};
+    if (SUCCEEDED(dxgiAdapter->GetDesc(&adapterDesc))) {
+        const unsigned long long mb = static_cast<unsigned long long>(adapterDesc.DedicatedVideoMemory) >> 20;
+        m_vramTotalMB = static_cast<int>(mb > 1024ull * 1024ull ? 1024ull * 1024ull : mb);
+    }
+
     Microsoft::WRL::ComPtr<IDXGIFactory2> dxgiFactory;
     hr = dxgiAdapter->GetParent(IID_PPV_ARGS(&dxgiFactory));
     if (FAILED(hr)) return hr;
@@ -2395,9 +2415,26 @@ void RendererD2D::EnforceThumbBudget() {
     // Read per call rather than cached: the budget is a live tray-menu setting,
     // so lowering it takes effect on the next thumbnail instead of at restart.
     // Clamped the same way RegistryManager clamps it, so a hand-edited registry
-    // value cannot produce a zero budget that evicts everything on sight.
+    // value cannot put a number outside the settable range in here.
+    //
+    // THE FLOOR IS NOW 0, WHICH IS THE "OFF" SETTING, and that is safe for the
+    // reason the loop below already relied on: it stops while one entry
+    // remains, so a zero budget cannot evict a thumbnail before it has been
+    // drawn once and cannot leave a strip blank. It collapses the cache to the
+    // single thumbnail in front of the user, which is what "off" can honestly
+    // mean for a cache the renderer still draws from. The old floor of 100 MB
+    // existed to stop exactly the eviction storm that the size() > 1 guard
+    // already prevents.
+    //
+    // The ceiling is the card's own VRAM when DXGI answered, otherwise the
+    // fallback constant — never m_vramTotalMB unconditionally, because 0 there
+    // means "unknown" and would clamp every budget to nothing.
+    const int ceilingMB = (m_vramTotalMB > 0)
+                              ? m_vramTotalMB
+                              : Constants::IS_DIR_THUMB_CACHE_MAX_MB;
     const size_t budget =
-        static_cast<size_t>(std::max(100, std::min(64000, app.dirThumbCacheMB))) *
+        static_cast<size_t>(std::max(Constants::IS_DIR_THUMB_CACHE_MIN_MB,
+                                     std::min(ceilingMB, app.dirThumbCacheMB))) *
         1024u * 1024u;
 
     // Drops the globally least-recently-DRAWN thumbnail, whichever panel owns it.

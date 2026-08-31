@@ -16,6 +16,7 @@
 #include "RemoteServer.h"
 #include "RemoteSettings.h"
 #include "RemoteBlacklist.h"   // gate 1, and where the brute-force guard writes
+#include "AuthFailPolicy.h"    // what a wrong password costs - pure, and tested
 #include "RemoteTls.h"         // Schannel — mandatory on any non-loopback bind
 #include "RemoteCrypto.h"
 #include "RemoteExec.h"
@@ -86,11 +87,10 @@ namespace {
     // It is NOT cleared by Stop(), so stopping and starting the listener from
     // the F9 panel does not hand an attacker a reset. Only exiting qIV clears
     // it, and an attacker cannot cause that.
-    struct AuthFailures {
-        int       count      = 0;   // failures inside the current window
-        long long firstMs    = 0;   // when the window opened
-        long long lastSeenMs = 0;   // for eviction at AUTH_TRACK_MAX
-    };
+    // The record itself and the decision it drives now live in AuthFailPolicy,
+    // which is pure and therefore testable. This alias keeps every use site
+    // below reading the way it always did.
+    using AuthFailures = Remote::AuthPolicy::FailRecord;
 
     std::map<std::wstring, AuthFailures> g_authFails;
     std::mutex                           g_authFailMutex;
@@ -128,7 +128,7 @@ namespace {
         const std::wstring key = BlockScope(peer);
 
         const long long now = NowMs();
-        bool blacklist = false;
+        Remote::AuthPolicy::Response verdict = Remote::AuthPolicy::Response::Ignore;
 
         {
             std::lock_guard<std::mutex> lk(g_authFailMutex);
@@ -143,32 +143,29 @@ namespace {
                 g_authFails.erase(oldest);
             }
 
-            AuthFailures &f = g_authFails[key];
-            f.lastSeenMs = now;
-
-            // A stale window is a NEW window, not a continuation. Without this
-            // an address that fails once a month is eventually blocked for it.
-            if (f.count == 0 || now - f.firstMs > RT::AUTH_FAIL_WINDOW_MS) {
-                f.count   = 1;
-                f.firstMs = now;
-            } else if (++f.count >= RT::AUTH_MAX_FAILURES) {
-                blacklist = true;
-                // Reset rather than erase: the address is about to be refused at
-                // accept(), so this record has done its job, and leaving the
-                // count at the threshold would re-trigger on any later attempt
-                // that slipped through.
-                f.count   = 0;
-                f.firstMs = 0;
-            }
+            // The counting, the window and the escalation are all in
+            // AuthPolicy::NoteFailure. What stays here is what cannot be pure:
+            // the mutex, the table and its eviction.
+            verdict = Remote::AuthPolicy::NoteFailure(
+                g_authFails[key], now,
+                RT::AUTH_MAX_FAILURES, RT::AUTH_FAIL_WINDOW_MS);
         }
 
-        // Outside the lock — this writes a file, and the accept path must not
-        // wait behind disk IO.
-        if (blacklist) {
-            Blacklist::Add(key,
-                           std::wstring(Constants::Messages::BLACKLIST_REASON_AUTH_PREFIX) +
-                               std::to_wstring(RT::AUTH_MAX_FAILURES) +
-                               Constants::Messages::BLACKLIST_REASON_AUTH_SUFFIX);
+        // Outside the lock — the permanent branch writes a file, and the accept
+        // path must not wait behind disk IO.
+        if (verdict != Remote::AuthPolicy::Response::Ignore) {
+            const std::wstring reason =
+                std::wstring(Constants::Messages::BLACKLIST_REASON_AUTH_PREFIX) +
+                std::to_wstring(RT::AUTH_MAX_FAILURES) +
+                Constants::Messages::BLACKLIST_REASON_AUTH_SUFFIX;
+
+            // FIRST CROSSING IS TEMPORARY, a repeat is permanent. The timed list
+            // is in memory and is never written to the blacklist file, so a
+            // first offence leaves no trace to hand-edit away later.
+            if (verdict == Remote::AuthPolicy::Response::BlockTimed)
+                Blacklist::AddTimed(key, RT::AUTH_FIRST_BLOCK_MINUTES, reason);
+            else
+                Blacklist::Add(key, reason);
 
             // THE MOMENT AN ADDRESS BANS ITSELF, which had no record at all.
             //
@@ -181,10 +178,19 @@ namespace {
             //
             // The word "blacklisted" is what LevelFor keys on for ERROR; see the
             // note there before rewording this.
-            if (Log::IsCapturing())
-                Log::Add(Log::Direction::In, key,
-                         L"(blacklisted — too many failed authentications)",
+            //
+            // BOTH BRANCHES SAY "blacklisted" ON PURPOSE. LevelFor keys on that
+            // word to log the line at ERROR, and a temporary block that arrived
+            // at INFO would be the quiet one - while being the one somebody is
+            // actually looking for when a phone stops connecting.
+            if (Log::IsCapturing()) {
+                const std::wstring what =
+                    (verdict == Remote::AuthPolicy::Response::BlockTimed)
+                        ? L"(blacklisted temporarily — too many failed authentications)"
+                        : L"(blacklisted — too many failed authentications)";
+                Log::Add(Log::Direction::In, key, what,
                          Log::SelfLabel(), L"(security)", -1);
+            }
         }
     }
 

@@ -37,6 +37,19 @@ class RendererD2D final : public IImageRenderer {
         const wchar_t* GetName() const override { return L"Direct2D"; }
         [[nodiscard]] HRESULT Initialize(HWND hwnd) override;
 
+        // Dedicated VRAM on the adapter this device actually runs on, in MB, or
+        // 0 when the query failed or the device has not been created yet.
+        //
+        // Read once from DXGI_ADAPTER_DESC at device creation and never again:
+        // the number cannot change under a live device, and asking per call
+        // would put a COM round-trip inside the eviction path.
+        //
+        // ⚠ 0 MEANS "UNKNOWN", NOT "NO VRAM". Every caller must fall back to
+        // Constants::IS_DIR_THUMB_CACHE_MAX_MB rather than treating it as a
+        // ceiling of zero, which would clamp the thumbnail budget to nothing on
+        // the exact machines where the query is least reliable.
+        [[nodiscard]] int VramTotalMB() const override { return m_vramTotalMB; }
+
         void Resize(UINT width, UINT height) override;
 
         [[nodiscard]] HRESULT LoadBitmap(IWICBitmapSource *bitmap, UINT width, UINT height, const std::wstring &filePath) override;
@@ -116,6 +129,10 @@ class RendererD2D final : public IImageRenderer {
         // It points to EITHER m_pBitmap (bypass) or the effect output (active).
         Microsoft::WRL::ComPtr<ID2D1Image> m_pActiveDisplayNode;
         // Device-dependent resources
+        // Dedicated VRAM of m_pD3DDevice's adapter, MB. 0 = never answered.
+        // See VramTotalMB() for why it is cached rather than queried.
+        int m_vramTotalMB = 0;
+
         Microsoft::WRL::ComPtr<ID3D11Device> m_pD3DDevice;
         Microsoft::WRL::ComPtr<ID3D11DeviceContext> m_pD3DContext;
         Microsoft::WRL::ComPtr<IDXGISwapChain1> m_pSwapChain;

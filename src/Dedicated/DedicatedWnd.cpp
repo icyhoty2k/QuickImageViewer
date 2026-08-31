@@ -1174,9 +1174,16 @@ void DedicatedWnd::EditRow(int rowIndex) {
             break;
         }
         case R_THUMB_CACHE: {
+            // Same range and same meaning as the main instance's setting: 0 is
+            // off. A dedicated window is the likeliest place to want it off —
+            // it is usually one picture on one screen, with no thumbnail strips
+            // open at all.
             const int v = DialogPromptInt(L"Thumb cache",
-                L"Thumbnail cache budget in megabytes.",
-                m_cfg.thumbCacheMB, 100, 64000, Constants::IS_DIR_THUMB_CACHE_BUDGET_MB);
+                L"Thumbnail cache budget in megabytes (0 = off).",
+                m_cfg.thumbCacheMB,
+                Constants::IS_DIR_THUMB_CACHE_MIN_MB,
+                Constants::IS_DIR_THUMB_CACHE_MAX_MB,
+                Constants::IS_DIR_THUMB_CACHE_BUDGET_MB);
             if (v >= 0) m_cfg.thumbCacheMB = v;
             break;
         }

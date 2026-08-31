@@ -41,6 +41,20 @@ class IImageRenderer {
 
         virtual void ProcessPendingUploads() {}
 
+        /// Dedicated VRAM of the adapter this renderer runs on, in MB.
+        ///
+        /// 0 MEANS "UNKNOWN" — no device yet, the query failed, or a renderer
+        /// that has no concept of a graphics adapter. It never means "no
+        /// memory", so every caller must substitute its own fallback rather
+        /// than using 0 as a limit. Bounding a cache by it would clamp that
+        /// cache to nothing on exactly the machines where the answer is least
+        /// reliable.
+        ///
+        /// Lives on the interface rather than on RendererD2D because AppState
+        /// holds an IImageRenderer, and the alternative at the call sites is a
+        /// downcast that would be wrong the moment a second renderer exists.
+        [[nodiscard]] virtual int VramTotalMB() const { return 0; }
+
         /// Initialize the renderer resources for the specified window handle.
         [[nodiscard]]
         virtual HRESULT Initialize(HWND hwnd) = 0;
