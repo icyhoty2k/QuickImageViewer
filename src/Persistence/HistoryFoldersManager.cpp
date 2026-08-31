@@ -100,7 +100,21 @@ static bool WriteTextUtf8(const std::wstring &path, const std::wstring &text, bo
     std::ofstream f(path, std::ios::out | std::ios::binary |
                               (truncate ? std::ios::trunc : std::ios::app));
     if (!f.is_open()) return false;
-    const std::string utf8 = Common::Utf8::Encode(text);
+
+    // LF -> CRLF on the way out, because the streams this replaced were in TEXT
+    // mode and the CRT did it for them. The encoding is the only thing meant to
+    // change here: these files are documented as hand-editable, and an editor
+    // that has always seen CRLF should not suddenly be handed LF because the
+    // encoding was fixed. ReadTextUtf8 strips CR on the way back in, so both
+    // forms load - this keeps what is WRITTEN identical to every earlier version.
+    std::wstring wide;
+    wide.reserve(text.size() + 16);
+    for (const wchar_t c : text) {
+        if (c == L'\n') wide += L'\r';
+        wide += c;
+    }
+
+    const std::string utf8 = Common::Utf8::Encode(wide);
     if (!utf8.empty()) f.write(utf8.data(), static_cast<std::streamsize>(utf8.size()));
     return static_cast<bool>(f);
 }
