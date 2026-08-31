@@ -252,6 +252,11 @@ class RendererD2D final : public IImageRenderer {
             std::vector<int> gifDelays;
         };
 
+        // What ONE entry costs. Declared AFTER CachedBitmap because it takes one
+        // by reference. Static because it needs nothing else, and the eviction
+        // loop subtracts it rather than re-totalling the whole map.
+        [[nodiscard]] static size_t EntryBytes(const CachedBitmap &e);
+
         Microsoft::WRL::ComPtr<ID2D1Bitmap1> m_pBitmap;
         std::unordered_map<std::wstring, CachedBitmap> m_bitmapCache;
         std::list<std::wstring> m_lruList;

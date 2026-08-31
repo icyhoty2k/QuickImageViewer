@@ -908,8 +908,18 @@ void RendererD2D::EvictCacheToMakeRoom() {
     // size() > 1 keeps the entry the caller is about to use alive, the same rule
     // the thumbnail budget uses: a single picture larger than the whole budget
     // must still be shown once rather than vanish before it is drawn.
-    while (m_lruList.size() > 1 && CacheBytes() > budget) {
-        m_bitmapCache.erase(m_lruList.back());
+    //
+    // The total is computed ONCE and reduced as entries go, rather than
+    // recomputed per iteration. CacheBytes walks the whole map, so calling it in
+    // the loop condition makes this O(n^2) on a path that runs for every image
+    // opened - and the cache may hold up to 999 entries.
+    size_t total = CacheBytes();
+    while (m_lruList.size() > 1 && total > budget) {
+        const auto victim = m_bitmapCache.find(m_lruList.back());
+        if (victim != m_bitmapCache.end()) {
+            total -= std::min(total, EntryBytes(victim->second));
+            m_bitmapCache.erase(victim);
+        }
         m_lruList.pop_back();
     }
 }
@@ -928,12 +938,19 @@ void RendererD2D::EvictCacheToMakeRoom() {
 //
 //  Caller holds m_cacheMutex.
 // =============================================================================
+size_t RendererD2D::EntryBytes(const CachedBitmap &e) {
+    // An animation costs its canvas ONCE PER FRAME. Every frame is composited to
+    // full size, so a 500-frame 1080p GIF is about 4 GB however little of each
+    // frame changed - and counting it as one image is what let this cache
+    // overcommit.
+    const size_t frames = e.gifFrames.empty() ? 1u : e.gifFrames.size();
+    return static_cast<size_t>(e.width) * static_cast<size_t>(e.height) * 4u * frames;
+}
+
 size_t RendererD2D::CacheBytes() const {
     size_t total = 0;
-    for (const auto &[path, e] : m_bitmapCache) {
-        const size_t frames = e.gifFrames.empty() ? 1u : e.gifFrames.size();
-        total += static_cast<size_t>(e.width) * static_cast<size_t>(e.height) * 4u * frames;
-    }
+    for (const auto &entry : m_bitmapCache)
+        total += EntryBytes(entry.second);
     return total;
 }
 
