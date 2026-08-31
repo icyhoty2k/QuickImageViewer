@@ -107,14 +107,7 @@ static bool WriteTextUtf8(const std::wstring &path, const std::wstring &text, bo
     // that has always seen CRLF should not suddenly be handed LF because the
     // encoding was fixed. ReadTextUtf8 strips CR on the way back in, so both
     // forms load - this keeps what is WRITTEN identical to every earlier version.
-    std::wstring wide;
-    wide.reserve(text.size() + 16);
-    for (const wchar_t c : text) {
-        if (c == L'\n') wide += L'\r';
-        wide += c;
-    }
-
-    const std::string utf8 = Common::Utf8::Encode(wide);
+    const std::string utf8 = Common::Utf8::Encode(Common::Utf8::ToCrlf(text));
     if (!utf8.empty()) f.write(utf8.data(), static_cast<std::streamsize>(utf8.size()));
     return static_cast<bool>(f);
 }

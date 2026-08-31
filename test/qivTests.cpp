@@ -954,6 +954,26 @@ namespace {
         std::wstring empty;
         StripCr(empty);
         CHECK(empty.empty());
+
+        NOTE("ToCrlf is the way back out, and it is idempotent");
+        // These files have always been CRLF on disk and must stay that way now
+        // the writer is in binary mode. The guard against doubling matters
+        // because no caller passes CRLF today and any caller could tomorrow -
+        // and the corruption it would cause is silent.
+        CHECK(ToCrlf(L"a\nb\n") == std::wstring(L"a\r\nb\r\n"));
+        CHECK(ToCrlf(L"a\r\nb\r\n") == std::wstring(L"a\r\nb\r\n"));
+        CHECK(ToCrlf(ToCrlf(L"a\nb")) == ToCrlf(L"a\nb"));
+        CHECK(ToCrlf(L"no newlines here") == std::wstring(L"no newlines here"));
+        CHECK(ToCrlf(std::wstring()).empty());
+
+        NOTE("a lone CR is not touched, and does not swallow the next line");
+        CHECK(ToCrlf(L"a\rb\n") == std::wstring(L"a\rb\r\n"));
+
+        NOTE("StripCr then ToCrlf round-trips a CRLF file unchanged");
+        std::wstring file = L"one\r\ntwo\r\n";
+        StripCr(file);
+        CHECK(file == std::wstring(L"one\ntwo\n"));
+        CHECK(ToCrlf(file) == std::wstring(L"one\r\ntwo\r\n"));
     }
 
     void TestAuthFailPolicy() {

@@ -76,4 +76,27 @@ namespace Common::Utf8 {
         text.resize(w);
     }
 
+    // LF -> CRLF, for a file that is written in BINARY mode.
+    //
+    // The counterpart of StripCr. Writing bytes means the CRT no longer converts
+    // line endings on the way out, so a file that has always been CRLF would
+    // silently become LF the moment its writer stopped using text mode - and
+    // these files are documented as hand-editable.
+    //
+    // ⚠ A LINE ENDING THAT IS ALREADY CRLF IS LEFT ALONE. Inserting a CR before
+    // every LF unconditionally turns "\r\n" into "\r\r\n", which no
+    // caller does today and every caller could tomorrow. Corrupting a file that
+    // way is silent, so the guard costs one comparison and removes the class.
+    inline std::wstring ToCrlf(const std::wstring &text) {
+        std::wstring out;
+        out.reserve(text.size() + text.size() / 8 + 16);
+        wchar_t prev = 0;
+        for (const wchar_t c : text) {
+            if (c == L'\n' && prev != L'\r') out += L'\r';
+            out += c;
+            prev = c;
+        }
+        return out;
+    }
+
 } // namespace Common::Utf8
