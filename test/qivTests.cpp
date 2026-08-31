@@ -59,6 +59,7 @@
 #include "Common/Base64.h"
 #include "Common/Converters.h"
 #include "Common/FuzzyMatch.h"
+#include "Common/Utf8.h"           // the history files' encoding
 #include "Persistence/IniFile.h"         // every persisted setting travels through this
 #include "Persistence/RotatingLogFile.h"
 #include "Rem_TCP_IP/RemoteLog.h"
@@ -779,6 +780,82 @@ namespace {
     //  function holding a mutex, a map and a file write. It is pure now, so the
     //  rule can be stated as checks instead of as a comment nobody can verify.
     // -------------------------------------------------------------------------
+    // -------------------------------------------------------------------------
+    //  UTF-8 for the history and favourites files.
+    //
+    //  These files were written through std::wofstream with no imbue, and the
+    //  default C locale cannot represent anything above one byte. Writing such a
+    //  character put the stream into fail+bad and DISCARDED EVERY LINE AFTER IT -
+    //  so a Cyrillic folder name silently truncated the file. The conversion is
+    //  explicit now, and these checks are what stop it regressing.
+    // -------------------------------------------------------------------------
+    void TestUtf8() {
+        using namespace Common::Utf8;
+
+        NOTE("ASCII survives unchanged, so old files read back identically");
+        // Every file written before this change is ASCII - non-ASCII could not be
+        // written at all. Byte-identical round-tripping is what makes the switch
+        // need no migration.
+        const std::wstring ascii = L"D:/Pictures/Holiday 2026";
+        CHECK(Encode(ascii) == std::string("D:/Pictures/Holiday 2026"));
+        CHECK(Decode(Encode(ascii)) == ascii);
+
+        NOTE("Cyrillic round-trips - the case that used to truncate the file");
+        std::wstring cyr;
+        cyr += L'D'; cyr += L':'; cyr += L'/';
+        cyr += static_cast<wchar_t>(0x0421); // C
+        cyr += static_cast<wchar_t>(0x043D); // n
+        cyr += static_cast<wchar_t>(0x0438); // i
+        cyr += static_cast<wchar_t>(0x043C); // m
+        cyr += static_cast<wchar_t>(0x043A); // k
+        cyr += static_cast<wchar_t>(0x0438); // i
+        const std::string enc = Encode(cyr);
+        CHECK(enc.size() == 3 + 12);        // 3 ASCII + 6 two-byte code points
+        CHECK(Decode(enc) == cyr);
+
+        NOTE("a character outside the BMP survives as its surrogate pair");
+        // Four-byte UTF-8. wchar_t is 16 bits here, so this is two wchar_t in and
+        // must come back as the same two - a converter that mishandled surrogates
+        // would corrupt any path containing an emoji, which Windows allows.
+        std::wstring astral;
+        astral += static_cast<wchar_t>(0xD83D);
+        astral += static_cast<wchar_t>(0xDCC1); // U+1F4C1 file folder
+        CHECK(Encode(astral).size() == 4);
+        CHECK(Decode(Encode(astral)) == astral);
+
+        NOTE("empty in, empty out - never a partial result");
+        CHECK(Encode(std::wstring()).empty());
+        CHECK(Decode(std::string()).empty());
+
+        NOTE("the BOM Notepad writes is stripped, and only at the front");
+        std::string bom = "\xEF\xBB\xBF" "D:/x";
+        StripBom(bom);
+        CHECK(bom == std::string("D:/x"));
+
+        std::string inner = "D:/x" "\xEF\xBB\xBF";   // not at the front: left alone
+        StripBom(inner);
+        CHECK(inner.size() == 7);
+
+        std::string shortStr = "\xEF\xBB";            // too short to be a BOM
+        StripBom(shortStr);
+        CHECK(shortStr.size() == 2);
+
+        NOTE("CR is dropped so a CRLF file does not yield unusable paths");
+        // Reading in binary mode keeps the CR the CRT used to strip. Left in
+        // place it becomes part of the path and every entry is rejected.
+        std::wstring crlf = L"a\r\nb\r\n";
+        StripCr(crlf);
+        CHECK(crlf == std::wstring(L"a\nb\n"));
+
+        std::wstring none = L"a\nb";
+        StripCr(none);
+        CHECK(none == std::wstring(L"a\nb"));
+
+        std::wstring empty;
+        StripCr(empty);
+        CHECK(empty.empty());
+    }
+
     void TestAuthFailPolicy() {
         using namespace Remote::AuthPolicy;
         constexpr int MAXF = 5;
@@ -1918,6 +1995,10 @@ int main(int argc, char **argv) {
 
     BeginGroup("Brute-force guard - what a wrong password costs");
     TestAuthFailPolicy();
+    EndGroup();
+
+    BeginGroup("UTF-8 - the history files' encoding");
+    TestUtf8();
     EndGroup();
 
     BeginGroup("AllowList - entry validation and scope");

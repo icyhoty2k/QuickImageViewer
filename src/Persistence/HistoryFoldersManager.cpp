@@ -12,9 +12,11 @@
 #include <algorithm>   // std::sort — deterministic order before the favorites cap
 #include <filesystem>
 #include <fstream>
+#include <sstream>     // reading a whole UTF-8 file, then splitting it into lines
 #include <vector>
 #include <cwctype>
 #include <cstring>
+#include "../Common/Utf8.h"   // Encode / Decode / StripBom / StripCr
 #include "../AppState.h"
 #include "RegistryManager.h"
 #include "IniFile.h"                       // TimeStampNow — one clock format
@@ -39,6 +41,70 @@ extern AppState app;
 // Keyed on the DEDICATED flag, not merely on being file-backed: a portable copy
 // that keeps its settings in an .ini but is not an appliance should still have
 // its history.
+// =============================================================================
+//  UTF-8 on the history files - and why they are not wide streams any more
+//
+//  🔥 A NON-ASCII FOLDER PATH USED TO SILENTLY TRUNCATE THE FILE.
+//
+//  These files were read and written with std::wifstream / std::wofstream and
+//  no imbue, which means the default C locale: a codecvt that can only
+//  represent what fits in one byte. Writing a single character outside that
+//  range does not drop the character - it puts the STREAM into fail+bad state,
+//  and every line after it is discarded.
+//
+//  Measured, not assumed. Writing an ASCII path, then a Cyrillic one, then a
+//  third ASCII path gave good=1, then fail=1 bad=1, and the third line never
+//  reached the disk. So a user with a Cyrillic, Greek or accented folder name
+//  lost every history entry that came after it on each rewrite, silently.
+//
+//  Reading had the mirror fault: bytes came back one wide character each, so a
+//  path that did survive was mangled and then dropped by Normalize as unusable.
+//
+//  UTF-8 rather than UTF-16 because the files are documented as hand-editable,
+//  every other file this program writes is UTF-8 (RotatingLogFile, RemoteLog,
+//  RemoteBlacklist all convert the same way), and an ASCII file written by any
+//  earlier version reads back byte-identical - so nothing needs migrating.
+//
+//  Converted explicitly through WideCharToMultiByte rather than by imbuing a
+//  codecvt facet: the only standard facet that does this is deprecated, and the
+//  #define that silences it cannot work in a translation unit that uses a
+//  precompiled header, which parses <locale> before the file's own first line.
+// =============================================================================
+// Whole file, decoded. False when it could not be opened - an empty file is a
+// successful read of nothing, which is a different answer.
+//
+// A UTF-8 BOM is skipped if present. Notepad writes one when a user edits these
+// files by hand and picks "UTF-8 with BOM", and without this the first path
+// would carry an invisible U+FEFF and be dropped as unusable.
+static bool ReadTextUtf8(const std::wstring &path, std::wstring &out) {
+    out.clear();
+    std::ifstream f(path, std::ios::in | std::ios::binary);
+    if (!f.is_open()) return false;
+
+    std::string bytes((std::istreambuf_iterator<char>(f)), std::istreambuf_iterator<char>());
+    Common::Utf8::StripBom(bytes);
+
+    out = Common::Utf8::Decode(bytes);
+
+    // CRLF -> LF, because binary mode no longer does it and a stray CR would
+    // become part of the path. See Common::Utf8::StripCr.
+    Common::Utf8::StripCr(out);
+    return true;
+}
+
+// Appends, or truncates first when `truncate` is set. Binary on purpose: the
+// text already carries the line endings it wants, and letting the CRT translate
+// them would rewrite every newline written here into CRLF on the way out and
+// leave the next read to undo it.
+static bool WriteTextUtf8(const std::wstring &path, const std::wstring &text, bool truncate) {
+    std::ofstream f(path, std::ios::out | std::ios::binary |
+                              (truncate ? std::ios::trunc : std::ios::app));
+    if (!f.is_open()) return false;
+    const std::string utf8 = Common::Utf8::Encode(text);
+    if (!utf8.empty()) f.write(utf8.data(), static_cast<std::streamsize>(utf8.size()));
+    return static_cast<bool>(f);
+}
+
 static bool HistoryDisabled() {
     return Dedicated::IsDedicatedFlag();
 }
@@ -215,19 +281,18 @@ static void EnsureTextHeader(const std::wstring &path, const wchar_t *title) {
         if (probe.is_open() && probe.tellg() > 0) return;
     }
 
-    std::wofstream f(path, std::ios::out | std::ios::app);
-    if (!f.is_open()) return;
-
-    f << L"; QuickImageViewer - " << title << L"\n"
-      << L"; Generated: " << Persistence::Ini::TimeStampNow() << L"\n"
-      << L"; Lines starting with ; or # are comments and are ignored.\n"
-      << L"; This header is not rewritten later - the file's modified date is the\n"
-      << L"; accurate last-changed time.\n";
+    std::wstring head;
+    head += L"; QuickImageViewer - "; head += title;               head += L"\n";
+    head += L"; Generated: ";         head += Persistence::Ini::TimeStampNow(); head += L"\n";
+    head += L"; Lines starting with ; or # are comments and are ignored.\n";
+    head += L"; This header is not rewritten later - the file's modified date is the\n";
+    head += L"; accurate last-changed time.\n";
+    (void) WriteTextUtf8(path, head, false);
 }
 
 // Writes the mandatory first line:
 //   BACKUP COMPUTER_NAME, dd.MM.YYYY, HH:MM:SS.ms, Backup Version Schema : 1.0
-static void WriteBackupHeader(std::wofstream &f, const SYSTEMTIME &st) {
+static std::wstring BackupHeaderLine(const SYSTEMTIME &st) {
     wchar_t compName[MAX_COMPUTERNAME_LENGTH + 1] = {};
     DWORD sz = MAX_COMPUTERNAME_LENGTH + 1;
     GetComputerNameW(compName, &sz);
@@ -239,7 +304,7 @@ static void WriteBackupHeader(std::wofstream &f, const SYSTEMTIME &st) {
                st.wDay, st.wMonth, st.wYear,
                st.wHour, st.wMinute, st.wSecond, st.wMilliseconds,
                Constants::History::HISTORY_FAVORITES_BACKUP_VERSION);
-    f << header << L"\n";
+    return std::wstring(header) + L"\n";
 }
 
 // ---------------------------------------------------------------------------
@@ -309,8 +374,10 @@ void HistoryFoldersManager::LoadHistoryFromDisk() {
 
     // --- Load favorites first (small file, O(1) lookup during history load) ---
     {
-        std::wifstream fav(GetFavoritesFilePath());
-        if (fav.is_open()) {
+        std::wstring favText;
+        const bool favOpened = ReadTextUtf8(GetFavoritesFilePath(), favText);
+        std::wistringstream fav(favText);
+        if (favOpened) {
             std::wstring line, path;
             while (std::getline(fav, line)) {
                 if (IsCommentLine(line)) continue;
@@ -333,9 +400,10 @@ void HistoryFoldersManager::LoadHistoryFromDisk() {
 
     // --- Load history ---
     {
-        std::wifstream file(GetFilePath());
-        if (!file.is_open())
+        std::wstring histText;
+        if (!ReadTextUtf8(GetFilePath(), histText))
             return;
+        std::wistringstream file(histText);
 
         FolderPathSet seen; // case-insensitive duplicate guard
         std::wstring line;
@@ -408,8 +476,10 @@ void HistoryFoldersManager::MergeHistoryFromDisk() {
     std::vector<std::wstring> diskList;
     FolderPathSet diskSet;
     {
-        std::wifstream file(GetFilePath());
-        if (file.is_open()) {
+        std::wstring histText;
+        const bool histOpened = ReadTextUtf8(GetFilePath(), histText);
+        std::wistringstream file(histText);
+        if (histOpened) {
             std::wstring line;
             while (std::getline(file, line)) {
                 if (IsCommentLine(line)) continue;
@@ -459,8 +529,10 @@ void HistoryFoldersManager::MergeHistoryFromDisk() {
     // ---- FAVORITES ------------------------------------------------------
     FolderPathSet diskFavSet;
     {
-        std::wifstream fav(GetFavoritesFilePath());
-        if (fav.is_open()) {
+        std::wstring favText;
+        const bool favOpened = ReadTextUtf8(GetFavoritesFilePath(), favText);
+        std::wistringstream fav(favText);
+        if (favOpened) {
             std::wstring line, path;
             while (std::getline(fav, line)) {
                 if (IsCommentLine(line)) continue;
@@ -524,10 +596,11 @@ void HistoryFoldersManager::AppendNewFolderToDisk(const std::wstring &folderPath
             }
         }
 
-        std::wofstream f(path, std::ios::out | std::ios::app);
-        if (!f.is_open()) return;
-        if (needsNewline) f << L"\n";
-        f << entry << L"\n";
+        std::wstring text;
+        if (needsNewline) text += L"\n";
+        text += entry;
+        text += L"\n";
+        (void) WriteTextUtf8(path, text, false);
     });
 }
 
@@ -547,12 +620,12 @@ void HistoryFoldersManager::RewriteHistoryToDisk() const {
         // trunc wipes the header along with the rows, so it is laid down again
         // before them. The Generated time therefore tracks the last full
         // rewrite here, which is the only honest thing it can say.
-        { std::wofstream wipe(path, std::ios::out | std::ios::trunc); }
+        (void) WriteTextUtf8(path, std::wstring(), true); // truncate
         EnsureTextHeader(path, Constants::History::HISTORY_FILE_TITLE);
 
-        std::wofstream f(path, std::ios::out | std::ios::app);
-        if (!f.is_open()) return;
-        for (const auto &e : snap) f << e << L"\n";
+        std::wstring text;
+        for (const auto &e : snap) { text += e; text += L"\n"; }
+        (void) WriteTextUtf8(path, text, false);
     });
 }
 
@@ -581,11 +654,10 @@ void HistoryFoldersManager::RewriteFavoritesToDisk() const {
 
     const int maxFavs = app.historyMaxFavs;
     g_writeQueue.PushTask([path = std::move(path), snap = std::move(snap), maxFavs]() {
-        { std::wofstream wipe(path, std::ios::out | std::ios::trunc); }
+        (void) WriteTextUtf8(path, std::wstring(), true); // truncate
         EnsureTextHeader(path, Constants::History::FAVORITES_FILE_TITLE);
 
-        std::wofstream f(path, std::ios::out | std::ios::app);
-        if (!f.is_open()) return;
+        std::wstring text;
         // CAPPED AT app.historyMaxFavs, deliberately, so that one setting bounds
         // the file and not only the act of starring — an uncapped file was free
         // to grow past the limit and stay there.
@@ -600,9 +672,11 @@ void HistoryFoldersManager::RewriteFavoritesToDisk() const {
         int written = 0;
         for (const auto &e : snap) {
             if (written >= maxFavs) break;
-            f << e << L"\n";
+            text += e;
+            text += L"\n";
             ++written;
         }
+        (void) WriteTextUtf8(path, text, false);
     });
 }
 
@@ -622,10 +696,9 @@ void HistoryFoldersManager::BackupHistoryToDisk() const {
     std::vector<std::wstring> snap(folderHistory.rbegin(), folderHistory.rend());
     g_writeQueue.PushTask([st, fileName = std::move(fileName), snap = std::move(snap)]() {
         fs::path backupPath = MakeBackupPath(GetBackupDir(), fileName, st);
-        std::wofstream f(backupPath, std::ios::out | std::ios::trunc);
-        if (!f.is_open()) return;
-        WriteBackupHeader(f, st);
-        for (const auto &e : snap) f << e << L"\n";
+        std::wstring text = BackupHeaderLine(st);
+        for (const auto &e : snap) { text += e; text += L"\n"; }
+        (void) WriteTextUtf8(backupPath, text, true);
     });
 }
 
@@ -644,14 +717,14 @@ void HistoryFoldersManager::BackupFavoritesToDisk() const {
     const int maxFavs = app.historyMaxFavs;
     g_writeQueue.PushTask([st, fileName = std::move(fileName), snap = std::move(snap), maxFavs]() {
         fs::path backupPath = MakeBackupPath(GetBackupDir(), fileName, st);
-        std::wofstream f(backupPath, std::ios::out | std::ios::trunc);
-        if (!f.is_open()) return;
-        WriteBackupHeader(f, st);
+        std::wstring text = BackupHeaderLine(st);
         int written = 0;
         for (const auto &e : snap) {
             if (written >= maxFavs) break;
-            f << e << L"\n";
+            text += e;
+            text += L"\n";
             ++written;
         }
+        (void) WriteTextUtf8(backupPath, text, true);
     });
 }
