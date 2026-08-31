@@ -15,6 +15,7 @@
 #include "Rem_TCP_IP/RemoteSettings.h"   // -remote* switches layer onto the .ini
 #include "Platform/Constants.h"
 #include "Platform/FileHandler.h"
+#include "Platform/MonitorInfo.h" // the ONE monitor order - see the -monitor block
 #include <numeric>
 #include <random>
 #include <algorithm>
@@ -310,33 +311,35 @@ void ApplyCmdArgs(HWND hWnd, const CmdArgs &args, int nCmdShow) {
     // known whether the window is being shown at all.
     if (args.keepAwake) app.keepDisplayAwake = true;
 
-    // 3. Position on a specific monitor before the window is shown
+    // 3. Position on a specific monitor before the window is shown.
+    //
+    // THE NUMBER MUST MEAN WHAT THE APP MEANS BY IT. This used to walk
+    // EnumDisplayMonitors itself and take the Nth callback, which is the order
+    // the DISPLAY DRIVER happens to report and bears no relation to how the
+    // screens are arranged. Everything else in the program - Ctrl+M's "next
+    // monitor", the Statistics panel, every "monitor 2 of 3" message - uses
+    // MonitorInfo::Enumerate, which sorts by virtual-desktop position (left,
+    // then top) and whose header says the sort IS the contract.
+    //
+    // So -monitor=2 could put a wall screen on a different display from the one
+    // the user read off the panel, and nothing would report it. That is the
+    // same disagreement CommandExecuter's MoveWindowToNextMonitor comment says
+    // was already resolved once - "they used to carry a sort each"; this third
+    // copy was simply missed, in the one place launched from a script by
+    // somebody who is not standing in front of the screen.
     if (args.monitorNum >= 1) {
-        struct MonitorInfo {
-            int target, current;
-            RECT rcWork;
-            bool found;
-        };
-        MonitorInfo mi{args.monitorNum, 0, {}, false};
-        EnumDisplayMonitors(nullptr, nullptr,
-                            [](HMONITOR hMon, HDC, RECT *, LPARAM lp) -> BOOL {
-                                auto *m = reinterpret_cast<MonitorInfo *>(lp);
-                                if (++m->current == m->target) {
-                                    MONITORINFO miMon = {sizeof(miMon)};
-                                    GetMonitorInfoW(hMon, &miMon);
-                                    m->rcWork = miMon.rcWork;
-                                    m->found = true;
-                                    return FALSE;
-                                }
-                                return TRUE;
-                            },
-                            reinterpret_cast<LPARAM>(&mi));
+        const std::vector<MonitorInfo::Entry> mons = MonitorInfo::Enumerate();
 
-        if (mi.found) {
-            int w = static_cast<int>(app.baseWidth  * app.dpiScale);
-            int h = static_cast<int>(app.baseHeight * app.dpiScale);
-            int x = mi.rcWork.left + (mi.rcWork.right - mi.rcWork.left - w) / 2;
-            int y = mi.rcWork.top  + (mi.rcWork.bottom - mi.rcWork.top  - h) / 2;
+        // 1-based, and out of range is left alone rather than clamped: asking
+        // for screen 3 on a two-screen desk is a mistake in a script, and
+        // silently opening on screen 2 would hide it.
+        const size_t idx = static_cast<size_t>(args.monitorNum) - 1;
+        if (idx < mons.size()) {
+            const RECT rcWork = mons[idx].rcWork;
+            const int w = static_cast<int>(app.baseWidth  * app.dpiScale);
+            const int h = static_cast<int>(app.baseHeight * app.dpiScale);
+            const int x = rcWork.left + (rcWork.right - rcWork.left - w) / 2;
+            const int y = rcWork.top  + (rcWork.bottom - rcWork.top  - h) / 2;
             SetWindowPos(hWnd, nullptr, x, y, w, h, SWP_NOZORDER | SWP_NOACTIVATE);
         }
     }
