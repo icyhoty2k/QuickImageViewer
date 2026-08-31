@@ -10,6 +10,7 @@
 #include "Platform/FileHandler.h" // is_image_ext — one shared definition of "an image"
 #include <algorithm>
 #include <cwctype>
+#include <shlwapi.h> // StrCmpLogicalW - the natural order the rest of qIV uses
 #include <filesystem>
 
 namespace fs = std::filesystem;
@@ -90,9 +91,18 @@ bool PromotionPlaylist::Scan(const std::wstring &folder) {
 
     // Stable, predictable order so SEQUENTIAL matches what the user sees in
     // Explorer rather than whatever order the filesystem handed back.
+    //
+    // StrCmpLogicalW, NOT _wcsicmp. This said "matches what the user sees in
+    // Explorer" while sorting ordinally, and Explorer sorts NATURALLY - so
+    // promo10.jpg played before promo2.jpg and the intent stated one line above
+    // was never met. It also disagreed with every other list in the program:
+    // the folder scan, the thumbnail strips and the subdirectory walk all use
+    // StrCmpLogicalW, and DirWnd carries a comment warning against exactly this
+    // substitution. Case-insensitivity is not lost - StrCmpLogicalW is already
+    // case-insensitive.
     std::sort(m_entries.begin(), m_entries.end(),
               [](const PromotionEntry &a, const PromotionEntry &b) {
-                  return _wcsicmp(a.path.c_str(), b.path.c_str()) < 0;
+                  return StrCmpLogicalW(a.path.c_str(), b.path.c_str()) < 0;
               });
 
     m_folder = folder;
@@ -138,10 +148,11 @@ bool PromotionPlaylist::Scan(const std::vector<std::wstring> &folders) {
     }
 
     // Sorted across ALL folders so SEQUENTIAL is deterministic regardless of
-    // the order the list file happens to name them in.
+    // the order the list file happens to name them in. Natural order, matching
+    // the single-folder path above and the rest of the program - see there.
     std::sort(m_entries.begin(), m_entries.end(),
               [](const PromotionEntry &a, const PromotionEntry &b) {
-                  return _wcsicmp(a.path.c_str(), b.path.c_str()) < 0;
+                  return StrCmpLogicalW(a.path.c_str(), b.path.c_str()) < 0;
               });
 
     RefreshPeek();

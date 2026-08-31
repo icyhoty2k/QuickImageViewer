@@ -27,6 +27,7 @@
 #include <algorithm>
 #include <atomic>
 #include <cwctype>
+#include <shlwapi.h> // StrCmpLogicalW - folder lists sort the way the rest of qIV does
 #include <thread>
 #include <unordered_map>
 #include "../ThemedTooltip.h"
@@ -487,6 +488,14 @@ namespace UI {
 
     static void InvalidateTotals() { g_totalsDirty = true; }
 
+    // The one ordering rule for every folder list this panel shows. Natural and
+    // case-insensitive, matching FileHandler's scans and the thumbnail strips -
+    // a maintenance list that ordered folders differently from the panel the
+    // user just came from reads as a different set of folders.
+    static bool NaturalLess(const std::wstring &a, const std::wstring &b) {
+        return StrCmpLogicalW(a.c_str(), b.c_str()) < 0;
+    }
+
     static HistoryTotals ComputeHistoryTotals() {
         HistoryTotals t;
 
@@ -533,9 +542,15 @@ namespace UI {
         // claiming them in a total would be a guess.
         t.scanned = static_cast<int>(valid.size() + t.missing.size() + t.empty.size());
 
-        std::sort(t.duplicates.begin(), t.duplicates.end());
-        std::sort(t.missing.begin(), t.missing.end());
-        std::sort(t.empty.begin(), t.empty.end());
+        // NATURAL ORDER, not std::wstring's operator<. The default is ordinal
+        // AND case-sensitive, so "Zebra" came before "apple" and "Set 10"
+        // before "Set 2" - in a list of folder paths shown to somebody trying
+        // to find one. Every other list in the program uses StrCmpLogicalW,
+        // which is also case-insensitive; these three were simply never given
+        // a comparator.
+        std::sort(t.duplicates.begin(), t.duplicates.end(), NaturalLess);
+        std::sort(t.missing.begin(),    t.missing.end(),    NaturalLess);
+        std::sort(t.empty.begin(),      t.empty.end(),      NaturalLess);
         return t;
     }
 
@@ -1649,7 +1664,7 @@ namespace UI {
 
             orphans.push_back(fav);
         }
-        std::sort(orphans.begin(), orphans.end());
+        std::sort(orphans.begin(), orphans.end(), NaturalLess);
 
         std::vector<std::pair<std::wstring, bool>> out;
         out.reserve(history.size() + orphans.size());
