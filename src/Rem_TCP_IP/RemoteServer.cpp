@@ -1168,9 +1168,18 @@ namespace {
                     continue;
                 }
 
+                // DELETED IF THE POST FAILS. Ownership of this heap shared_ptr
+                // moves to the UI thread only once the message is queued, and
+                // PostMessageW answers FALSE when the window has gone or its
+                // queue is full - the ordinary case while qIV is closing under a
+                // live connection. Allocated into a named variable rather than
+                // inside the call so there is something to delete: written as
+                // one expression, the pointer was unreachable on the failure
+                // path and leaked a RemoteCall with its event handle.
+                auto *payload = new std::shared_ptr<RemoteCall>(call);
                 if (!PostMessageW(owner, Constants::WM_QIV_REMOTE_COMMAND, 0,
-                                  reinterpret_cast<LPARAM>(
-                                      new std::shared_ptr<RemoteCall>(call)))) {
+                                  reinterpret_cast<LPARAM>(payload))) {
+                    delete payload;
                     SendLine(client, MakeErr(RT::ERR_INTERNAL, L"viewer not accepting commands"), tls);
                     continue;
                 }
