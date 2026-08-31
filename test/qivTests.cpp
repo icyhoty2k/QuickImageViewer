@@ -60,6 +60,7 @@
 #include "Common/Converters.h"
 #include "Common/FuzzyMatch.h"
 #include "Common/Utf8.h"           // the history files' encoding
+#include "Persistence/HistoryFoldersManager.h" // HistoryPath - untrusted line hygiene
 #include "Persistence/IniFile.h"         // every persisted setting travels through this
 #include "Persistence/RotatingLogFile.h"
 #include "Rem_TCP_IP/RemoteLog.h"
@@ -789,6 +790,105 @@ namespace {
     //  so a Cyrillic folder name silently truncated the file. The conversion is
     //  explicit now, and these checks are what stop it regressing.
     // -------------------------------------------------------------------------
+    // -------------------------------------------------------------------------
+    //  HistoryPath - the hygiene every line of a hand-editable file passes.
+    //
+    //  Both history files are documented as editable by hand, so every line is a
+    //  string somebody may have typed. Normalize is what decides whether one is
+    //  a usable folder path, and until this was split out of
+    //  HistoryFoldersManager.cpp nothing could reach it from a test.
+    // -------------------------------------------------------------------------
+    void TestHistoryPath() {
+        std::wstring out;
+
+        NOTE("a plain absolute path survives, unchanged");
+        CHECK(HistoryPath::Normalize(L"D:\\Pictures\\Holiday", out));
+        CHECK(out == std::wstring(L"D:\\Pictures\\Holiday"));
+
+        NOTE("forward slashes become backslashes and repeats collapse");
+        // A user typing a path from a browser or a script writes it either way.
+        CHECK(HistoryPath::Normalize(L"D:/Pictures//Holiday", out));
+        CHECK(out == std::wstring(L"D:\\Pictures\\Holiday"));
+
+        NOTE("surrounding whitespace and one wrapping pair of quotes are trimmed");
+        // Copying a path from Explorer's address bar brings the quotes with it.
+        CHECK(HistoryPath::Normalize(L"   \"D:\\Pictures\\Holiday\"  ", out));
+        CHECK(out == std::wstring(L"D:\\Pictures\\Holiday"));
+
+        NOTE("a trailing separator goes, EXCEPT on a drive root");
+        CHECK(HistoryPath::Normalize(L"D:\\Pictures\\", out));
+        CHECK(out == std::wstring(L"D:\\Pictures"));
+        CHECK(HistoryPath::Normalize(L"D:\\", out));
+        CHECK(out == std::wstring(L"D:\\"));   // a drive root is a real folder
+
+        NOTE("a bare drive letter is NOT a folder");
+        CHECK(!HistoryPath::Normalize(L"D:", out));
+
+        NOTE("relative and empty are rejected - the list stores absolute paths only");
+        CHECK(!HistoryPath::Normalize(L"", out));
+        CHECK(!HistoryPath::Normalize(L"    ", out));
+        CHECK(!HistoryPath::Normalize(L"Pictures\\Holiday", out));
+        CHECK(!HistoryPath::Normalize(L"..\\Holiday", out));
+
+        NOTE("a UNC share is accepted");
+        CHECK(HistoryPath::Normalize(L"\\\\nas\\photos", out));
+
+        NOTE("characters Win32 forbids in a path are rejected");
+        // This is the check that matters for a file anybody can edit: a line
+        // carrying these is corrupt, not a folder somebody has.
+        CHECK(!HistoryPath::Normalize(L"D:\\Pic<ures", out));
+        CHECK(!HistoryPath::Normalize(L"D:\\Pic>ures", out));
+        CHECK(!HistoryPath::Normalize(L"D:\\Pic|ures", out));
+        CHECK(!HistoryPath::Normalize(L"D:\\Pic?ures", out));
+        CHECK(!HistoryPath::Normalize(L"D:\\Pic*ures", out));
+
+        NOTE("a TRAILING CR is trimmed, not rejected - it is surrounding whitespace");
+        // Clean() runs first and trims whitespace, and CR is whitespace. So a
+        // line from a CRLF file that reached here unstripped still yields the
+        // right path rather than being thrown away. This is the belt to the
+        // reader's braces, and the reason the reader's CR removal is a
+        // convenience rather than the only thing standing between a CRLF file
+        // and an empty history.
+        std::wstring withCr = L"D:\\Pictures";
+        withCr += static_cast<wchar_t>(13);
+        CHECK(HistoryPath::Normalize(withCr, out));
+        CHECK(out == std::wstring(L"D:\\Pictures"));
+
+        NOTE("a control character INSIDE the path is still rejected");
+
+        std::wstring withTab = L"D:\\Pic";
+        withTab += static_cast<wchar_t>(9);
+        withTab += L"tures";
+        CHECK(!HistoryPath::Normalize(withTab, out));
+
+        NOTE("an absurd length is a corrupt line, not a path");
+        CHECK(!HistoryPath::Normalize(L"D:\\" + std::wstring(40000, L'a'), out));
+
+        NOTE("rejected input leaves 'out' untouched, so a caller cannot use half a result");
+        std::wstring keep = L"UNTOUCHED";
+        CHECK(!HistoryPath::Normalize(L"nonsense", keep));
+        CHECK(keep == std::wstring(L"UNTOUCHED"));
+
+        NOTE("IsBroken is exactly 'Normalize refused it'");
+        CHECK(HistoryPath::IsBroken(L"nonsense"));
+        CHECK(!HistoryPath::IsBroken(L"D:\\Pictures"));
+
+        NOTE("Clean trims but never validates - a broken line stays visible");
+        // A row the panel shows as broken must still be shown. Swallowing it
+        // looks like data loss and hides the mistake the user needs to see.
+        CHECK(HistoryPath::Clean(L"  D:\\Pic<ures  ") == std::wstring(L"D:\\Pic<ures"));
+
+        NOTE("case-insensitive equality, so one folder is one entry");
+        CHECK(HistoryPath::Equal(L"D:\\Pics", L"d:\\pics"));
+        CHECK(!HistoryPath::Equal(L"D:\\Pics", L"D:\\Pics2"));
+
+        NOTE("the hash AGREES with that equality, or the sets break");
+        // FolderPathSet uses both. A hash that disagreed would put two spellings
+        // of one folder in different buckets and silently duplicate entries.
+        HistoryPath::HashCI h;
+        CHECK(h(L"D:\\Pics") == h(L"d:\\PICS"));
+    }
+
     void TestUtf8() {
         using namespace Common::Utf8;
 
@@ -1999,6 +2099,10 @@ int main(int argc, char **argv) {
 
     BeginGroup("UTF-8 - the history files' encoding");
     TestUtf8();
+    EndGroup();
+
+    BeginGroup("HistoryPath - hygiene on every hand-edited line");
+    TestHistoryPath();
     EndGroup();
 
     BeginGroup("AllowList - entry validation and scope");

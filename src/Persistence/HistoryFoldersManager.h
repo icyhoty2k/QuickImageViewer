@@ -57,6 +57,12 @@ namespace HistoryPath {
     //   • rejects anything that cannot be an absolute folder path: empty, not
     //     drive-qualified and not UNC, containing characters illegal in Win32
     //     paths (< > " | ? *) or control characters, or absurdly long
+    //
+    // ⚠ TRIMMING HAPPENS FIRST, so a control character at either END is removed
+    // rather than rejected — CR is whitespace, and a line from a CRLF file that
+    // arrived unstripped still yields the right path instead of being thrown
+    // away. Only an INTERIOR control character makes the line unusable. The
+    // distinction matters: it is what stops one missed CR emptying a history.
     // Returns false when the input is unusable; 'out' is then untouched.
     bool Normalize(const std::wstring &raw, std::wstring &out);
 

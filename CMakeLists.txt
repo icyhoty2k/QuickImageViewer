@@ -181,6 +181,7 @@ set(SOURCES
         src/UI/ThumbnailPanels/ThumbnailPanelWnd.cpp
         src/UI/FloatingPanels/FindWnd.cpp
         src/Persistence/HistoryFoldersManager.cpp
+        src/Persistence/HistoryPath.cpp
         src/CMDArgs.cpp
         src/SlideshowTransitions.cpp
         src/GeoNames.cpp
@@ -572,6 +573,9 @@ if (QIV_BUILD_TESTS)
             # could be linked here; that file also pulls in AppState,
             # RemoteBlacklist, RemoteCrypto and DedicatedSettings.
             src/Rem_TCP_IP/AddressMatch.cpp
+            # Same reason as AddressMatch above: the pure, untrusted-input half
+            # of HistoryFoldersManager, split out so these tests can link it.
+            src/Persistence/HistoryPath.cpp
             # The password hash and the handshake HMAC. If this is wrong,
             # authentication is wrong — and unlike a decoder it fails silently in
             # the dangerous direction. It reaches nothing but bcrypt and
