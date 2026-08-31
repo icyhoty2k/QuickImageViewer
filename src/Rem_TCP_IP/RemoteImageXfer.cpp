@@ -16,6 +16,7 @@
 #include <wrl/client.h>
 
 #include <algorithm>
+#include <atomic>     // the temp-name counter is touched from several socket threads
 #include <filesystem>
 #include <fstream>
 
@@ -387,10 +388,22 @@ bool WriteTempImage(const std::wstring &fileName,
 
     // Unique per process and per transfer, so two arriving at once cannot collide
     // and a leftover from a previous run cannot be picked up as this one.
-    static unsigned counter = 0;
+    //
+    // ATOMIC, BECAUSE "TWO ARRIVING AT ONCE" IS THE STATED CASE. This ran on a
+    // plain unsigned, and every caller is a socket thread - RemoteExec's stream
+    // handler and RemoteMirror's receive path, one per connected client. Two
+    // transfers landing together raced the increment: a data race in itself, and
+    // when it resolved badly both wrote the SAME temp file, so one picture
+    // silently replaced the other on its way to the screen. The comment above
+    // promised exactly what the code did not do.
+    //
+    // fetch_add returns the value BEFORE the increment, so + 1 keeps the names
+    // starting at 1 as they always did.
+    static std::atomic<unsigned> counter{0};
+    const unsigned serial = counter.fetch_add(1, std::memory_order_relaxed) + 1;
     const std::wstring path = std::wstring(tempDir) + L"qIV_stream_" +
                               std::to_wstring(GetCurrentProcessId()) + L"_" +
-                              std::to_wstring(++counter) + ext;
+                              std::to_wstring(serial) + ext;
 
     std::ofstream f(path, std::ios::binary | std::ios::trunc);
     if (!f) return false;
