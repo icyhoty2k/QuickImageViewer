@@ -547,7 +547,21 @@ work to be planned twice.
 
 Still open, and small:
 
-- **Auto-blacklist entries never expire.** The brute-force guard writes permanent
-  rows. The timed machinery from §4 would suit an escalating first offence.
-- **`ExifWnd`'s scrollbar drag never called `SetCapture`** — fixed by the ScrollView
-  migration, but the same shape may exist in other panels. Worth a sweep.
+- **A permanent auto-blacklist entry never expires.** It ages out of nothing, and
+  clearing one means editing `qivRemoteServerBlacklist.ini` by hand.
+
+  **The first offence is no longer permanent, as of v3.** Five failures inside the
+  window now cost a fifteen-minute timed block, and only a repeat writes the file -
+  see `Remote::AuthPolicy`, which holds that decision as pure, tested logic. What
+  remains open is ageing out the permanent rows, which is a separate question: the
+  file is the record of who is barred, and entries that vanish on their own make it
+  answer that question differently over time.
+
+Closed since this list was written:
+
+- **`ExifWnd`'s scrollbar drag never called `SetCapture`.** Swept in v3: scroll-drag
+  capture is centralised in `FloatingPanelWnd`, with `SetCapture` on the thumb press
+  and a release on `WM_CAPTURECHANGED` however the drag ends, and every panel in the
+  program derives from it. `InputBox` handles its own text-selection drag without
+  capture on purpose - it self-terminates on the `MK_LBUTTON` bit and says so. **No
+  second instance of the shape exists.**

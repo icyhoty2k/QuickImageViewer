@@ -686,9 +686,11 @@ namespace UI {
             L"without one. It never crosses the wire: this end stores a PBKDF2-HMAC-SHA256 "
             L"digest and the client answers an HMAC over a fresh nonce, so each guess "
             L"costs the guesser a full derivation. Five failures from one address inside "
-            L"ten minutes blacklists it automatically, every failure is answered a second "
-            L"late, and a peer that connects and then says nothing is dropped after ten "
-            L"seconds.\r\n"
+            L"ten minutes block it for fifteen minutes; five more earn a permanent entry "
+            L"in the blacklist file. The temporary block lives in memory only, so a "
+            L"restart lifts it - a mistyped password should not need an .ini edited. "
+            L"Every failure is also answered a second late, and a peer that connects and "
+            L"then says nothing is dropped after ten seconds.\r\n"
             L"ALLOWLIST AND BLACKLIST take addresses, never domain names — a rule is "
             L"matched against the address a connection actually arrived from. Five forms: "
             L"* for everything, 192.168.1.* as a TEXT prefix, 192.168.0.0/24 as CIDR "
@@ -1180,8 +1182,11 @@ namespace UI {
             L"Selects qivHistory.txt in Explorer, next to qivFavorites.txt and the "
             L"QivBackup folder.", sTray);
         Add(L"Settings › Dir Thumb Cache",
-            L"Memory budget in MB for the directory thumbnail bitmap store "
-            L"(100 – 64000 MB).", sTray);
+            L"Memory budget in MB for the directory thumbnail bitmap store. "
+            L"0 turns the cache off, keeping only the thumbnail on screen; the "
+            L"maximum is this card's own graphics memory, which the dialog shows "
+            L"when it can read it. The Statistics panel reports both the budget "
+            L"and the card's total.", sTray);
         Add(L"Settings › Preload Lookaside",
             L"How many images ahead and behind the current one to pre-decode into GPU "
             L"memory in the background (1 – 99).", sTray);
