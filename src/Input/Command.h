@@ -268,6 +268,15 @@ enum class Command {
     // --- Find image by name (Ctrl+F) ---
     FindImage,
 
+    // The same panel, opened to search EVERY folder qIV knows rather than only
+    // the one on screen. A separate enumerator rather than a flag on FindImage
+    // because the resolver deals in commands, and "which key was pressed" is
+    // exactly what it is for.
+    //
+    // Deliberately absent from RemoteProtocol's table: a Command not listed there
+    // is unreachable remotely, and the phone already has FindImage.
+    FindImageEverywhere,
+
     // --- Statistics window (K) ---
     ToggleStats,
 

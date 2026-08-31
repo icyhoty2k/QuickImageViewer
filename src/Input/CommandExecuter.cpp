@@ -715,7 +715,11 @@ void InputManager::ExecuteCommand(HWND hWnd, Command cmd) {
             break;
 
         case Command::FindImage:
-            uiManager.ToggleFindWindow();
+            uiManager.ToggleFindWindow(false);
+            break;
+
+        case Command::FindImageEverywhere:
+            uiManager.ToggleFindWindow(true);
             break;
 
         case Command::ToggleStats:

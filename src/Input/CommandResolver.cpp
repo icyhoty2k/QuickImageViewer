@@ -205,6 +205,10 @@ Command InputManager::ResolveKeyboardKeys(UINT key, LPARAM lParam) {
         // --- Fullscreen ---
         case Shortcuts::SC_PANEL_FULLSCREEN_F: // 'F' — same value as SC_NAV_FIND
             if (ctrl && !alt && !shift) return Command::FindImage; // Ctrl+F → find
+            // Shift WIDENS the plain Ctrl form, the same relationship it has on
+            // Ctrl+Enter below: Ctrl+F searches the folder on screen, Ctrl+Shift+F
+            // searches every folder qIV knows.
+            if (ctrl && shift && !alt) return Command::FindImageEverywhere;
             if (!ctrl && !alt && !shift) return Command::ToggleFullscreen; // F → fullscreen
             break;
         // One key, three depths (Shortcuts.h):

@@ -194,7 +194,10 @@ ThumbnailPanelWnd &getActiveDirWnd();
             ZoomWnd         &getZoomWindow();
             FindWnd         &getFindWindow();
             void             ToggleJumpToWindow();   // hides FindWnd if visible, then toggles JumpToWnd
-            void             ToggleFindWindow();     // hides JumpToWnd if visible, then toggles FindWnd
+            // searchEverywhere: false = this folder (Ctrl+F), true = every folder
+            // qIV knows (Ctrl+Shift+F). Pressing the other key while it is open
+            // re-scopes the search instead of closing the panel.
+            void             ToggleFindWindow(bool searchEverywhere); // hides JumpToWnd if visible, then toggles FindWnd
             void             ToggleZoomWindow();     // NOT wired to a key — see ZoomTo in CommandExecuter.cpp
             StatsWnd        &getStatsWindow();
             DedicatedWnd    &getDedicatedWindow();

@@ -486,7 +486,9 @@ LRESULT CALLBACK MainAppWndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM l
             return 0;
 
         case Constants::WM_QIV_SWITCH_TO_FIND:
-            uiManager.ToggleFindWindow();
+            // The narrow scope: this is JumpToWnd handing over when the user
+            // typed the switch character, and they were looking at one folder.
+            uiManager.ToggleFindWindow(false);
             return 0;
         case Constants::WM_QIV_SWITCH_TO_JUMP:
             uiManager.ToggleJumpToWindow();

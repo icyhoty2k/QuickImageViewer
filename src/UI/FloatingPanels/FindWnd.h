@@ -25,6 +25,17 @@ namespace UI {
         void Init(HINSTANCE hInstance, HWND hParent) override;
         void Init(HINSTANCE hInstance, HWND hParent, int8_t position) override;
         void Show() override;
+
+        // WHICH FOLDERS THE SEARCH COVERS. False is the folder on screen
+        // (Ctrl+F); true is every folder qIV knows (Ctrl+Shift+F).
+        //
+        // Set BEFORE Show, so the first rebuild already has the right scope.
+        void SetSearchEverywhere(bool on) { m_searchEverywhere = on; }
+        [[nodiscard]] bool SearchesEverywhere() const { return m_searchEverywhere; }
+
+        // Re-runs the current query in the current scope. For the case where the
+        // scope changed while the panel was already open and typing.
+        void RefreshMatches();
         ~FindWnd() {
             if (m_hFontNorm) DeleteObject(m_hFontNorm);
             if (m_hFontBold) DeleteObject(m_hFontBold);
@@ -39,6 +50,12 @@ namespace UI {
     private:
         static constexpr int MAX_QUERY    = 200;
         static constexpr int VISIBLE_ROWS = 8;
+
+        // False = the folder on screen, true = every folder qIV knows. Not
+        // persisted: the scope belongs to the keystroke that opened the panel,
+        // so Ctrl+F is always the narrow search and never inherits a wide one
+        // from an hour ago.
+        bool m_searchEverywhere = false;
 
         struct MatchResult {
             int          playlistIdx; // -1 for cache-only entries

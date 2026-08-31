@@ -308,9 +308,25 @@ namespace UI {
         Toggle(getJumpToWindow());
     }
 
-    void UIManager::ToggleFindWindow() {
+    void UIManager::ToggleFindWindow(bool searchEverywhere) {
         if (isInit(jumpToWnd)) jumpToWnd.Hide();
-        Toggle(getFindWindow());
+
+        // THE SCOPE IS SET BEFORE THE TOGGLE, so a panel about to be shown
+        // already knows what it searches when Show() rebuilds the list. Setting
+        // it afterwards would match the first keystroke against the old scope.
+        //
+        // And pressing the OTHER key while it is already open re-scopes the
+        // search rather than closing the panel: Ctrl+F then Ctrl+Shift+F widens
+        // the search you are already typing, which is the whole point of having
+        // two keys rather than one that toggles.
+        FindWnd &find = getFindWindow();
+        const bool rescope = find.IsVisible() && find.SearchesEverywhere() != searchEverywhere;
+        find.SetSearchEverywhere(searchEverywhere);
+        if (rescope) {
+            find.RefreshMatches();
+            return;
+        }
+        Toggle(find);
     }
 
     StatsWnd &UIManager::getStatsWindow() {

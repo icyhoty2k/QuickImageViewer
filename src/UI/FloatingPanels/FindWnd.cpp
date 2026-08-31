@@ -167,7 +167,7 @@ void FindWnd::RebuildMatches() {
     // Capped, because a human reads this list. One letter can match tens of
     // thousands of names; the ones past the first screenful are neither read nor
     // useful, and the cap also bounds the sort below.
-    if (m_queryLen > 0) {
+    if (m_searchEverywhere && m_queryLen > 0) {
         int crossFolder = 0;
         for (const auto &e : Platform::FolderIndex::Snapshot()) {
             if (crossFolder >= CROSS_FOLDER_MAX) break;
@@ -183,6 +183,16 @@ void FindWnd::RebuildMatches() {
         std::sort(m_results.begin(), m_results.end(),
                   [](const MatchResult &a, const MatchResult &b) { return a.score > b.score; });
     }
+}
+
+// Re-runs the current query. Used when the scope changed under an open panel -
+// Ctrl+Shift+F pressed while Ctrl+F's results are on screen.
+void FindWnd::RefreshMatches() {
+    RebuildMatches();
+    m_selIdx = 0;
+    m_rowScroll = 0;
+    AdjustScroll();
+    InvalidateRect(m_hWnd, nullptr, FALSE);
 }
 
 void FindWnd::AdjustScroll() {
@@ -384,10 +394,24 @@ LRESULT FindWnd::HandlePanelMessage(UINT message, WPARAM wParam, LPARAM lParam) 
                          : 0;
             int extra = cached - static_cast<int>(app.playlist.size());
             if (extra < 0) extra = 0;
-            if (total > 0 && extra > 0)
-                swprintf_s(lbl, L"Find in %d images  +  %d cached", total, extra);
+            // THE SCOPE IS NAMED, not implied. Two keys open this panel and the
+            // results differ completely between them; a user who cannot see
+            // which one they pressed has to guess why a picture is missing.
+            //
+            // The wide form states the size of the index rather than the
+            // playlist, because that is what is actually being searched, and it
+            // is also the honest answer to "why did that not appear" - a folder
+            // qIV has never opened is not in it.
+            if (m_searchEverywhere) {
+                const int indexed = static_cast<int>(Platform::FolderIndex::Count());
+                if (indexed > 0)
+                    swprintf_s(lbl, L"Find in ALL folders  ·  %d pictures indexed", indexed);
+                else
+                    swprintf_s(lbl, L"Find in ALL folders  ·  building the index…");
+            } else if (total > 0 && extra > 0)
+                swprintf_s(lbl, L"Find in this folder  ·  %d images  +  %d cached", total, extra);
             else if (total > 0)
-                swprintf_s(lbl, L"Find in %d images", total);
+                swprintf_s(lbl, L"Find in this folder  ·  %d images", total);
             else
                 swprintf_s(lbl, L"No images loaded");
             SetTextColor(hdc, clrLabel);

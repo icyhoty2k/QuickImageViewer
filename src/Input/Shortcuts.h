@@ -367,7 +367,10 @@ namespace Shortcuts {
     // -------------------------------------------------------------------------
     // Find image by name  (shares 'F' with SC_PANEL_FULLSCREEN_F)
     // -------------------------------------------------------------------------
-    constexpr UINT SC_NAV_FIND = 'F'; // Ctrl+F — open find-by-name dialog
+    // Ctrl+F searches THIS folder; Ctrl+Shift+F searches every folder qIV knows.
+    // Shift WIDENS the plain Ctrl form, the same relationship it has on
+    // Ctrl+Enter — see CommandResolver, where both are decided.
+    constexpr UINT SC_NAV_FIND = 'F'; // Ctrl+F — find here, Ctrl+Shift+F — find everywhere
 
     // -------------------------------------------------------------------------
     // Statistics window

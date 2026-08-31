@@ -267,7 +267,14 @@ namespace UI {
         Add(Ctrl(SC::SC_NAV_FIND),
             L"Open the Find panel — fuzzy filename search with wildcard support: "
             L"* matches any characters, ? matches exactly one (e.g. *.jpg or photo_??_2024.*). "
-            L"Searches the current folder and the VRAM cache. Typing # inside switches to Jump-to.", sNav);
+            L"Searches THIS folder and the VRAM cache. Typing # inside switches to Jump-to.", sNav);
+        Add(CtrlShift(SC::SC_NAV_FIND),
+            L"The same panel, searching EVERY folder qIV knows — the whole history, not "
+            L"just the one on screen. Find a picture by name without remembering where it "
+            L"lives; opening a result takes you to that folder. The panel header says which "
+            L"scope you are in and how many pictures are indexed. Pressed while Find is "
+            L"already open it widens the search you are typing instead of closing the panel, "
+            L"and Ctrl+F narrows it back.", sNav);
         Add(K(SC::SC_NAV_SHOW_IN_EXPLORER),
             L"Reveal the current file in Windows Explorer (opens its folder with the file "
             L"pre-selected).", sNav);
