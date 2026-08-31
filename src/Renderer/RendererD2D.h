@@ -229,6 +229,11 @@ class RendererD2D final : public IImageRenderer {
         // share of app.dirThumbCacheMB. The budget is shared between the five
         // strips, not granted to each — see the definition.
         // Caller must already hold m_dirThumbMutex.
+        // What m_bitmapCache holds, in bytes, from the stored dimensions.
+        // Caller holds m_cacheMutex. See the definition for why an animation
+        // costs its canvas once per FRAME.
+        [[nodiscard]] size_t CacheBytes() const;
+
         void EnforceThumbBudget();
 
         // Marks a thumbnail as just-used. Caller must hold m_dirThumbMutex.

@@ -877,6 +877,64 @@ void RendererD2D::EvictCacheToMakeRoom() {
         m_bitmapCache.erase(m_lruList.back());
         m_lruList.pop_back();
     }
+
+    // --- Second rule: a BYTE ceiling, because the count rule cannot see size ---
+    //
+    // THE CASE THIS EXISTS FOR IS WRITTEN DOWN IN Constants.h AND WAS UNGUARDED.
+    // The animation budget caps ONE file at GIF_MAX_DECODED_BYTES (256 MB), and
+    // this cache holds vramCacheCount of them - twenty by default. Twenty large
+    // animations is therefore up to 5 GB of graphics memory held by a cache that
+    // believes it is holding twenty entries out of twenty, which is every slot
+    // it was told to use and no reason to evict anything.
+    //
+    // ⚠ IT CHANGES NOTHING IN THE ORDINARY CASE, AND THAT IS DELIBERATE. Twenty
+    // still photographs are a few hundred megabytes and never reach the ceiling,
+    // so the count rule above continues to be the one that fires. This only ever
+    // takes effect where the count rule is meaningless.
+    //
+    // WHEN THE CARD'S SIZE IS UNKNOWN, DO NOTHING. VramTotalMB() answers 0 for a
+    // failed query and for a renderer whose device is not up yet, and a budget
+    // computed from 0 would evict the cache down to one entry on exactly the
+    // machines where the answer is least reliable. No number, no second rule.
+    const int vramMB = VramTotalMB();
+    if (vramMB <= 0) return;
+
+    // Half the card. The other half belongs to the swap chain, the thumbnail
+    // cache, the effect graph and every other program on the machine - a viewer
+    // that fills the GPU because it was allowed to is not better behaved than one
+    // that decodes a frame late.
+    const size_t budget = (static_cast<size_t>(vramMB) / 2u) * 1024u * 1024u;
+
+    // size() > 1 keeps the entry the caller is about to use alive, the same rule
+    // the thumbnail budget uses: a single picture larger than the whole budget
+    // must still be shown once rather than vanish before it is drawn.
+    while (m_lruList.size() > 1 && CacheBytes() > budget) {
+        m_bitmapCache.erase(m_lruList.back());
+        m_lruList.pop_back();
+    }
+}
+
+// =============================================================================
+//  CacheBytes — what m_bitmapCache is actually holding, in bytes.
+//
+//  Computed from the stored dimensions rather than by asking each bitmap: the
+//  numbers are already in the entry, and a GetPixelSize per frame would put a
+//  COM call per animation frame inside an eviction loop.
+//
+//  An animation costs its canvas ONCE PER FRAME, which is the whole point -
+//  every frame is composited to full size, so a 500-frame 1080p GIF is ~4 GB
+//  regardless of how little of each frame changed. Counting it as one image is
+//  what let this cache overcommit.
+//
+//  Caller holds m_cacheMutex.
+// =============================================================================
+size_t RendererD2D::CacheBytes() const {
+    size_t total = 0;
+    for (const auto &[path, e] : m_bitmapCache) {
+        const size_t frames = e.gifFrames.empty() ? 1u : e.gifFrames.size();
+        total += static_cast<size_t>(e.width) * static_cast<size_t>(e.height) * 4u * frames;
+    }
+    return total;
 }
 
 // =============================================================================
