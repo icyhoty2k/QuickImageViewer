@@ -60,6 +60,7 @@
 #include "Common/Converters.h"
 #include "Common/FuzzyMatch.h"
 #include "Common/Utf8.h"           // the history files' encoding
+#include "Common/DuplicateFinder.h" // what counts as the same picture
 #include "Persistence/HistoryFoldersManager.h" // HistoryPath - untrusted line hygiene
 #include "Persistence/IniFile.h"         // every persisted setting travels through this
 #include "Persistence/RotatingLogFile.h"
@@ -798,6 +799,147 @@ namespace {
     //  a usable folder path, and until this was split out of
     //  HistoryFoldersManager.cpp nothing could reach it from a test.
     // -------------------------------------------------------------------------
+    // -------------------------------------------------------------------------
+    //  Duplicate detection - the rule, with no filesystem behind it.
+    //
+    //  This is the operation where being wrong is worst: somebody acting on a
+    //  wrong answer deletes a photograph. So the rule is pure, and every way it
+    //  could be wrong is a check here.
+    // -------------------------------------------------------------------------
+    void TestDuplicateFinder() {
+        using namespace Common::DuplicateFinder;
+        auto C = [](const wchar_t *path, unsigned long long size,
+                    std::uint64_t digest, bool hashed) {
+            Candidate c;
+            c.path = path; c.size = size; c.digest = digest; c.hashed = hashed;
+            return c;
+        };
+
+        NOTE("only files SHARING a size are worth reading");
+        {
+            std::vector<Candidate> in {
+                C(L"a.jpg", 100, 0, false),
+                C(L"b.jpg", 100, 0, false),
+                C(L"c.jpg", 999, 0, false),   // alone at its size - never read
+            };
+            const auto need = NeedHashing(in);
+            CHECK(need.size() == 2);
+            CHECK(need[0] == 0);
+            CHECK(need[1] == 1);
+        }
+
+        NOTE("a size of 0 is UNKNOWN and is never grouped with other unknowns");
+        // Grouping them would read every file whose size could not be read, to
+        // compare them against each other for no reason.
+        {
+            std::vector<Candidate> in {
+                C(L"a.jpg", 0, 0, false),
+                C(L"b.jpg", 0, 0, false),
+            };
+            CHECK(NeedHashing(in).empty());
+        }
+
+        NOTE("same size AND same digest is a duplicate");
+        {
+            std::vector<Candidate> in {
+                C(L"one.jpg", 2048, 0xABCD, true),
+                C(L"two.jpg", 2048, 0xABCD, true),
+            };
+            const auto groups = FindGroups(in);
+            CHECK(groups.size() == 1);
+            CHECK(groups[0].paths.size() == 2);
+            CHECK(groups[0].size == 2048);
+        }
+
+        NOTE("same size, DIFFERENT digest is not");
+        {
+            std::vector<Candidate> in {
+                C(L"one.jpg", 2048, 0xABCD, true),
+                C(L"two.jpg", 2048, 0x1234, true),
+            };
+            CHECK(FindGroups(in).empty());
+        }
+
+        NOTE("same digest, DIFFERENT size is not - both must agree");
+        {
+            std::vector<Candidate> in {
+                C(L"one.jpg", 2048, 0xABCD, true),
+                C(L"two.jpg", 4096, 0xABCD, true),
+            };
+            CHECK(FindGroups(in).empty());
+        }
+
+        NOTE("a file that could NOT be read proves nothing and is never matched");
+        // The one failure that would cost somebody a photograph: treating an
+        // unreadable file as equal to whatever it sits beside.
+        //
+        // ⚠ THE DIGESTS HERE ARE BOTH 0 ON PURPOSE. An unhashed candidate keeps
+        // the default digest, so the only way this check can fail when the
+        // hashed guard is removed is if the file it sits beside also digests to
+        // 0. Written with different digests - as it first was - the pair is
+        // separated by the digest comparison instead, and the check passes
+        // whether the guard is there or not: a test that cannot fail the real
+        // way. Removing the guard now turns the suite red, which was proved by
+        // doing it.
+        {
+            std::vector<Candidate> in {
+                C(L"good.jpg",   2048, 0, true),   // legitimately digests to 0
+                C(L"locked.jpg", 2048, 0, false),  // never read, so 0 by default
+            };
+            CHECK(FindGroups(in).empty());
+        }
+
+        NOTE("one copy is not a duplicate");
+        {
+            std::vector<Candidate> in { C(L"only.jpg", 10, 0x1, true) };
+            CHECK(FindGroups(in).empty());
+        }
+
+        NOTE("three copies are ONE group of three, not three pairs");
+        {
+            std::vector<Candidate> in {
+                C(L"a.jpg", 50, 0x7, true),
+                C(L"b.jpg", 50, 0x7, true),
+                C(L"c.jpg", 50, 0x7, true),
+            };
+            const auto groups = FindGroups(in);
+            CHECK(groups.size() == 1);
+            CHECK(groups[0].paths.size() == 3);
+        }
+
+        NOTE("biggest waste first, and the order is STABLE across runs");
+        // The backing map has no defined iteration order; without the sort the
+        // list would reshuffle between runs and be unusable.
+        {
+            std::vector<Candidate> in {
+                C(L"small1.jpg", 10, 0x1, true),
+                C(L"small2.jpg", 10, 0x1, true),
+                C(L"big1.jpg",   99, 0x2, true),
+                C(L"big2.jpg",   99, 0x2, true),
+                C(L"big3.jpg",   99, 0x2, true),
+            };
+            const auto groups = FindGroups(in);
+            CHECK(groups.size() == 2);
+            CHECK(groups[0].paths.size() == 3);   // more copies leads
+            CHECK(groups[1].size == 10);
+
+            const auto again = FindGroups(in);
+            CHECK(again.size() == groups.size());
+            CHECK(again[0].paths.front() == groups[0].paths.front());
+        }
+
+        NOTE("paths keep the order they were given, so the caller decides the original");
+        {
+            std::vector<Candidate> in {
+                C(L"keep-me.jpg", 8, 0x9, true),
+                C(L"copy.jpg",    8, 0x9, true),
+            };
+            const auto groups = FindGroups(in);
+            CHECK(groups.size() == 1);
+            CHECK(groups[0].paths[0] == std::wstring(L"keep-me.jpg"));
+        }
+    }
+
     void TestHistoryPath() {
         std::wstring out;
 
@@ -2123,6 +2265,10 @@ int main(int argc, char **argv) {
 
     BeginGroup("HistoryPath - hygiene on every hand-edited line");
     TestHistoryPath();
+    EndGroup();
+
+    BeginGroup("Duplicates - what counts as the same picture");
+    TestDuplicateFinder();
     EndGroup();
 
     BeginGroup("AllowList - entry validation and scope");

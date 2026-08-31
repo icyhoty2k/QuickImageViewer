@@ -47,6 +47,13 @@ namespace Platform::FolderIndex {
                 if (!is_image_ext(p.extension().wstring())) continue;
 
                 Entry e;
+
+                // From the directory entry, not a separate stat: the walk
+                // already has it. A failure leaves 0, which means "unknown".
+                std::error_code se;
+                const auto sz = de.file_size(se);
+                if (!se) e.size = static_cast<unsigned long long>(sz);
+
                 e.path = p.wstring();
                 const size_t slash = e.path.find_last_of(L"\/");
                 e.nameOffset = (slash == std::wstring::npos)

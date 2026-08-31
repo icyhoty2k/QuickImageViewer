@@ -182,6 +182,7 @@ set(SOURCES
         src/UI/FloatingPanels/FindWnd.cpp
         src/Platform/JumpList.cpp
         src/Platform/FolderIndex.cpp
+        src/Common/DuplicateFinder.cpp
         src/Persistence/HistoryFoldersManager.cpp
         src/Persistence/HistoryPath.cpp
         src/CMDArgs.cpp
@@ -580,6 +581,8 @@ if (QIV_BUILD_TESTS)
             # Same reason as AddressMatch above: the pure, untrusted-input half
             # of HistoryFoldersManager, split out so these tests can link it.
             src/Persistence/HistoryPath.cpp
+            # Pure: what counts as a duplicate, with no filesystem behind it.
+            src/Common/DuplicateFinder.cpp
             # The password hash and the handshake HMAC. If this is wrong,
             # authentication is wrong — and unlike a decoder it fails silently in
             # the dangerous direction. It reaches nothing but bcrypt and

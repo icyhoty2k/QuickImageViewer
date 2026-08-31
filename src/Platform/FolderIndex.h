@@ -37,6 +37,18 @@ namespace Platform::FolderIndex {
     struct Entry {
         std::wstring path;
         int          nameOffset = 0;
+
+        // Size in bytes, taken from the directory entry during the walk.
+        //
+        // FREE HERE, EXPENSIVE LATER. The iterator already holds it, so reading
+        // it costs nothing extra; asking for it afterwards is a stat() per file.
+        // It is what makes duplicate detection cheap - two pictures of different
+        // sizes cannot be the same picture, so most of the work never happens.
+        //
+        // 0 when the size could not be read, which is treated as "unknown" and
+        // excluded from duplicate grouping rather than matched against other
+        // unknowns.
+        unsigned long long size = 0;
     };
 
     // Walks the folders qIV remembers and replaces the index with what it finds.
