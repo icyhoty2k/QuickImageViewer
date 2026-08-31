@@ -1693,9 +1693,17 @@ void LoadImageIndex(HWND hWnd, int index) {
 
             auto *payload = new SvgPayload{currentPath, std::move(svgBytes)};
 
-            PostMessageW(hWnd, Constants::WM_QIV_SVG_READY,
-                         static_cast<WPARAM>(index),
-                         reinterpret_cast<LPARAM>(payload));
+            // DELETE IT IF THE POST FAILS. Ownership moves to the message handler
+            // only when the message is actually queued; PostMessageW returns FALSE
+            // when the window has gone, which is the ordinary case for a decode
+            // still running while qIV is closing. This site was the only one of
+            // five that did not check - AppMain's forwarded launch, ExifWnd's two
+            // results and both of RemoteMirror's pulls all do - and the payload it
+            // leaks carries the whole file's bytes, not a path.
+            if (!PostMessageW(hWnd, Constants::WM_QIV_SVG_READY,
+                              static_cast<WPARAM>(index),
+                              reinterpret_cast<LPARAM>(payload)))
+                delete payload;
         });
     } else if (app.renderer) {
         // -------------------------------------------------------------------------
