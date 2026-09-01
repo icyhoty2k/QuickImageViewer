@@ -1,0 +1,131 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    MSIX manifest for QuickImageViewer.
+
+    ⚠ IDENTITY IS A PLACEHOLDER UNTIL THE NAME IS RESERVED. Name, Publisher and
+    PublisherDisplayName below must be replaced with the exact strings Partner
+    Center shows under Product identity after the app name is reserved. An upload
+    whose Publisher does not match the account character for character is rejected,
+    and the error does not say which field is wrong.
+
+    WHY MSIX AND NOT AN EXE SUBMISSION. The Store's EXE/MSI route requires a code
+    signing certificate from a CA in the Microsoft Trusted Root Program - a
+    recurring purchase - and a SILENT INSTALLER. qIV has no installer at all, and
+    "one portable EXE, no installer" is the thing it is known for. MSIX is signed
+    and hosted by Microsoft for free, so the portable EXE on GitHub stays exactly
+    as it is and this is an additional wrapper, never a replacement.
+
+    THE VERSION'S LAST FIELD MUST BE 0. The Store reserves the revision field, and
+    a package built as 3.0.0.368 is refused on upload. The build number lives in
+    the third field instead.
+-->
+<Package
+    xmlns="http://schemas.microsoft.com/appx/manifest/foundation/windows10"
+    xmlns:uap="http://schemas.microsoft.com/appx/manifest/uap/windows10"
+    xmlns:rescap="http://schemas.microsoft.com/appx/manifest/foundation/windows10/restrictedcapabilities"
+    IgnorableNamespaces="uap rescap">
+
+  <Identity
+      Name="PLACEHOLDER.QuickImageViewer"
+      Publisher="CN=PLACEHOLDER"
+      Version="3.0.368.0"
+      ProcessorArchitecture="x64" />
+
+  <Properties>
+    <DisplayName>QuickImageViewer</DisplayName>
+    <PublisherDisplayName>icyhoty2k</PublisherDisplayName>
+    <Logo>Assets\StoreLogo.png</Logo>
+  </Properties>
+
+  <Dependencies>
+    <TargetDeviceFamily Name="Windows.Desktop" MinVersion="10.0.19041.0" MaxVersionTested="10.0.26100.0" />
+  </Dependencies>
+
+  <Resources>
+    <Resource Language="en-gb" />
+  </Resources>
+
+  <Capabilities>
+    <!-- A full-trust desktop application: it is the same Win32 binary, not a UWP
+         app, so it keeps ordinary Win32 permissions rather than running in an
+         AppContainer. runFullTrust is what says so, and it is the only capability
+         needed - the local server, the tray icon and the registry all follow from
+         it. -->
+    <rescap:Capability Name="runFullTrust" />
+  </Capabilities>
+
+  <Applications>
+    <Application Id="QuickImageViewer" Executable="QuickImageViewer.exe" EntryPoint="Windows.FullTrustApplication">
+      <uap:VisualElements
+          DisplayName="QuickImageViewer"
+          Description="A fast, portable image viewer for Windows. Opens HEIC, AVIF, JPEG XL, WebP, SVG, OpenEXR and camera RAW, with a GPU bitmap cache and 230 keyboard shortcuts."
+          Square150x150Logo="Assets\Square150x150Logo.png"
+          Square44x44Logo="Assets\Square44x44Logo.png"
+          BackgroundColor="transparent">
+        <uap:DefaultTile
+            Square71x71Logo="Assets\Square71x71Logo.png"
+            Square310x310Logo="Assets\Square310x310Logo.png"
+            Wide310x150Logo="Assets\Wide310x150Logo.png" />
+      </uap:VisualElements>
+
+      <Extensions>
+        <!-- The 44 extensions in Constants.h's SUPPORTED_EXTENSIONS[], and only
+             those. .ini, .log and .bak also appear in that header as qIV's own
+             settings, log and backup files; registering them here would make this
+             app the handler for every text file on the machine. -->
+        <uap:Extension Category="windows.fileTypeAssociation">
+          <uap:FileTypeAssociation Name="qivimage">
+            <uap:SupportedFileTypes>
+            <uap:FileType>.apng</uap:FileType>
+            <uap:FileType>.arw</uap:FileType>
+            <uap:FileType>.avci</uap:FileType>
+            <uap:FileType>.avcs</uap:FileType>
+            <uap:FileType>.avif</uap:FileType>
+            <uap:FileType>.avifs</uap:FileType>
+            <uap:FileType>.bmp</uap:FileType>
+            <uap:FileType>.cr2</uap:FileType>
+            <uap:FileType>.cr3</uap:FileType>
+            <uap:FileType>.cur</uap:FileType>
+            <uap:FileType>.dds</uap:FileType>
+            <uap:FileType>.dng</uap:FileType>
+            <uap:FileType>.exr</uap:FileType>
+            <uap:FileType>.gif</uap:FileType>
+            <uap:FileType>.hdp</uap:FileType>
+            <uap:FileType>.hdr</uap:FileType>
+            <uap:FileType>.heic</uap:FileType>
+            <uap:FileType>.heics</uap:FileType>
+            <uap:FileType>.heif</uap:FileType>
+            <uap:FileType>.heifs</uap:FileType>
+            <uap:FileType>.hif</uap:FileType>
+            <uap:FileType>.ico</uap:FileType>
+            <uap:FileType>.j2c</uap:FileType>
+            <uap:FileType>.j2k</uap:FileType>
+            <uap:FileType>.jp2</uap:FileType>
+            <uap:FileType>.jpe</uap:FileType>
+            <uap:FileType>.jpeg</uap:FileType>
+            <uap:FileType>.jpf</uap:FileType>
+            <uap:FileType>.jpg</uap:FileType>
+            <uap:FileType>.jpx</uap:FileType>
+            <uap:FileType>.jxl</uap:FileType>
+            <uap:FileType>.jxr</uap:FileType>
+            <uap:FileType>.nef</uap:FileType>
+            <uap:FileType>.pbm</uap:FileType>
+            <uap:FileType>.pgm</uap:FileType>
+            <uap:FileType>.png</uap:FileType>
+            <uap:FileType>.ppm</uap:FileType>
+            <uap:FileType>.qoi</uap:FileType>
+            <uap:FileType>.svg</uap:FileType>
+            <uap:FileType>.tga</uap:FileType>
+            <uap:FileType>.tif</uap:FileType>
+            <uap:FileType>.tiff</uap:FileType>
+            <uap:FileType>.wdp</uap:FileType>
+            <uap:FileType>.webp</uap:FileType>
+            </uap:SupportedFileTypes>
+            <uap:DisplayName>Image</uap:DisplayName>
+            <uap:Logo>Assets\Square44x44Logo.png</uap:Logo>
+          </uap:FileTypeAssociation>
+        </uap:Extension>
+      </Extensions>
+    </Application>
+  </Applications>
+</Package>
