@@ -504,8 +504,25 @@ namespace UI {
         CreateDeviceResources();
         ShowWindow(m_hWnd, SW_HIDE);
 
-        if (IsDirPanel())
-            RegisterDragDrop(m_hWnd, new PanelDropTarget(this));
+        if (IsDirPanel()) {
+            // ⚠ RELEASE OUR OWN REFERENCE. PanelDropTarget starts at m_ref = 1
+            // and RegisterDragDrop takes a reference of its own, so passing the
+            // raw new leaves the count at 2 forever: RevokeDragDrop in WM_DESTROY
+            // brings it back to 1 and the object is never deleted.
+            //
+            // The main window already does this correctly - it keeps
+            // g_pDropTarget and Releases it at shutdown - so this was the odd
+            // one out rather than a house style. Releasing here is the simpler
+            // half of the same rule: nothing needs to hold the pointer, because
+            // OLE does until the revoke.
+            //
+            // Correct even when RegisterDragDrop fails: it took no reference in
+            // that case, so this Release is the last one and destroys the object
+            // rather than stranding it.
+            auto *dropTarget = new PanelDropTarget(this);
+            RegisterDragDrop(m_hWnd, dropTarget);
+            dropTarget->Release();
+        }
     }
 
     // =========================================================================
