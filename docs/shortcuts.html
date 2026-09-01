@@ -24,7 +24,7 @@
     <meta property="og:site_name" content="QuickImageViewer">
     <meta property="og:title" content="Every QuickImageViewer keyboard shortcut">
     <meta property="og:description"
-          content="The complete reference: 229 shortcuts in 16 sections, generated from the application's own help panel.">
+          content="The complete reference: 230 shortcuts in 16 sections, generated from the application's own help panel.">
     <meta property="og:url" content="https://icyhoty2k.github.io/QuickImageViewer/shortcuts.html">
     <meta property="og:image" content="https://icyhoty2k.github.io/QuickImageViewer/screenshots/less300kb/10.webp">
     <meta property="og:image:alt" content="QuickImageViewer showing a photo with a thumbnail strip">
@@ -32,7 +32,7 @@
     <meta name="twitter:card" content="summary_large_image">
     <meta name="twitter:title" content="Every QuickImageViewer keyboard shortcut">
     <meta name="twitter:description"
-          content="The complete reference: 229 shortcuts in 16 sections, generated from the application's own help panel.">
+          content="The complete reference: 230 shortcuts in 16 sections, generated from the application's own help panel.">
     <meta name="twitter:image" content="https://icyhoty2k.github.io/QuickImageViewer/screenshots/less300kb/10.webp">
 
 <script type="application/ld+json">
@@ -57,7 +57,7 @@
     together. Editing this file by hand puts it out of step with the binary,
     which is the entire problem it exists to solve.
 
-    Last generated: 2026-08-31
+    Last generated: 2026-09-01
 -->
 <body>
 
@@ -118,7 +118,7 @@
     <h1>QuickImageViewer (qIV) — Shortcuts</h1>
     <p class="meta">
         Generated from the app's own help panel — press <kbd>F1</kbd> in QuickImageViewer to see the same list on your
-        machine. 229 shortcuts in 16 sections.
+        machine. 230 shortcuts in 16 sections.
     </p>
 
 <!-- SHARED-STOREROW-START -->
@@ -161,7 +161,7 @@
     <p class="sc-status" id="sc-status"></p>
 
     <section class="sc-sec" data-title="Image Navigation">
-        <h2><span class="sc-ico">🧭</span>Image Navigation<span class="sc-count">19</span></h2>
+        <h2><span class="sc-ico">🧭</span>Image Navigation<span class="sc-count">20</span></h2>
         <div class="sc-cols">
             <div class="sc-row"><div class="sc-keys"><kbd>Left</kbd> / <kbd>Right</kbd></div><p class="sc-desc">Go to the previous / next image in the current folder. Neighbouring images are pre-decoded into the VRAM cache, so switching is instant.</p></div>
             <div class="sc-row"><div class="sc-keys"><kbd>Space</kbd> / <kbd>Shift+Space</kbd></div><p class="sc-desc">Next / previous image. While a slideshow is running, pauses and resumes the slideshow instead.</p></div>
@@ -175,6 +175,7 @@
             <div class="sc-row"><div class="sc-keys"><kbd>Insert</kbd> / <kbd>Delete</kbd></div><p class="sc-desc">Same walk restricted to the favorites, so the two pairs of keys never land on each other's entries.</p></div>
             <div class="sc-row"><div class="sc-keys"><kbd>J</kbd> / <kbd>Ctrl+G</kbd></div><p class="sc-desc">Open the Jump-to panel: type an image number and press Enter to go straight to it. Typing @ inside the panel switches to Find mode.</p></div>
             <div class="sc-row"><div class="sc-keys"><kbd>Ctrl+F</kbd></div><p class="sc-desc">Open the Find panel — fuzzy filename search with wildcard support: * matches any characters, ? matches exactly one (e.g. *.jpg or photo_??_2024.*). Searches THIS folder and the VRAM cache. <a class="sc-more" href="#image-navigation-ctrl-f">details</a></p></div>
+            <div class="sc-row"><div class="sc-keys"><kbd>Ctrl+D</kbd></div><p class="sc-desc">Find duplicate pictures across every folder qIV knows. Groups by file size first, so almost nothing is read; only files that share a size are opened and hashed in full. Byte-identical copies only  <a class="sc-more" href="#image-navigation-ctrl-d">details</a></p></div>
             <div class="sc-row"><div class="sc-keys"><kbd>Ctrl+Shift+F</kbd></div><p class="sc-desc">The same panel, searching EVERY folder qIV knows — the whole history, not just the one on screen. Find a picture by name without remembering where it lives; opening a result takes you to that folder. <a class="sc-more" href="#image-navigation-ctrl-shift-f">details</a></p></div>
             <div class="sc-row"><div class="sc-keys"><kbd>L</kbd></div><p class="sc-desc">Reveal the current file in Windows Explorer (opens its folder with the file pre-selected).</p></div>
             <div class="sc-row"><div class="sc-keys"><kbd>Horizontal Wheel</kbd></div><p class="sc-desc">Cycle through the folders of your navigation history — one folder change per wheel notches. The folder snapshot is refreshed with in the History panel.</p></div>
@@ -471,10 +472,14 @@
     </section>
 
     <h2 class="sc-deep-head">In depth</h2>
-    <p class="sc-deep-intro">The 69 shortcuts above whose behaviour needs more than a line. Every one is linked from its row.</p>
+    <p class="sc-deep-intro">The 70 shortcuts above whose behaviour needs more than a line. Every one is linked from its row.</p>
     <article class="sc-deep" id="image-navigation-ctrl-f">
         <h3><kbd>Ctrl+F</kbd><span class="sc-deep-sec">Image Navigation</span></h3>
         <p>Open the Find panel — fuzzy filename search with wildcard support: * matches any characters, ? matches exactly one (e.g. *.jpg or photo_??_2024.*). Searches THIS folder and the VRAM cache. Typing # inside switches to Jump-to.</p>
+    </article>
+    <article class="sc-deep" id="image-navigation-ctrl-d">
+        <h3><kbd>Ctrl+D</kbd><span class="sc-deep-sec">Image Navigation</span></h3>
+        <p>Find duplicate pictures across every folder qIV knows. Groups by file size first, so almost nothing is read; only files that share a size are opened and hashed in full. Byte-identical copies only — a re-encoded or rotated version is a different file and is deliberately not listed. Results open in the Find panel with the copies next to each other, and a listing is written to qivDuplicates.txt beside qIV. NOTHING IS DELETED: deciding what to remove stays yours, in Explorer, where it can be undone.</p>
     </article>
     <article class="sc-deep" id="image-navigation-ctrl-shift-f">
         <h3><kbd>Ctrl+Shift+F</kbd><span class="sc-deep-sec">Image Navigation</span></h3>
