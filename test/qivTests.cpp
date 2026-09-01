@@ -1000,6 +1000,86 @@ namespace {
     //  These are the four inputs that broke it, and they are the reason the
     //  guard is written !(v > 0) rather than v <= 0.
     // -------------------------------------------------------------------------
+    // -------------------------------------------------------------------------
+    //  THE IMPORT CLAMP AND THE LOAD CLAMP MUST AGREE.
+    //
+    //  A numeric setting is bounded in two places: RegistryManager clamps it
+    //  when it is read at startup, and AppMenuIO clamps it when a settings file
+    //  is imported. They are two hand-written tables of the same numbers, and
+    //  two hand-written tables of the same numbers drift.
+    //
+    //  ⚠ THIS ALREADY SHIPPED ONCE. The thumbnail cache budget gained 0 as a
+    //  legitimate "Off", the load side was updated to allow it and the import
+    //  side was not - so exporting Off and importing it back silently produced
+    //  100 MB. The setting was still there, still named the same, and quietly
+    //  meant something else.
+    //
+    //  Comparing the bounds as TEXT is deliberate. The point is not whether 999
+    //  is a good limit; it is that both files say the same thing, whether that
+    //  is a literal or a named constant.
+    // -------------------------------------------------------------------------
+    void TestClampsAgree() {
+        const std::string load   = ReadSourceFile("src/Persistence/RegistryManager.cpp");
+        const std::string import = ReadSourceFile("src/UI/AppMenu/AppMenuIO.cpp");
+        CHECK(!load.empty());
+        CHECK(!import.empty());
+
+        // Every setting bounded on both sides. A new one belongs here the day
+        // it is added - which is the same day somebody could get the two
+        // tables to disagree.
+        const char *settings[] = {
+            "vramCacheCount",
+            "baseWidth",
+            "baseHeight",
+            "historyMaxDirs",
+            "historyMaxFavs",
+            "historyMaxFavsShown",
+            "dirThumbCacheMB",
+            "preloadLookaside",
+            "msgCenterDisplayMs",
+            "historyMaxDirsSave",
+            "overlayFontSize",
+        };
+
+        // Pulls "LO" and "HI" out of  <name> = std::max(LO, std::min(HI,
+        // Whitespace and line breaks are stripped so the two files may format
+        // the same bounds differently, which they do.
+        auto bounds = [](const std::string &src, const char *name) -> std::string {
+            const std::string key = std::string(name) + " = std::max(";
+            const size_t at = src.find(key);
+            if (at == std::string::npos) return "";
+
+            const size_t lo = at + key.size();
+            const size_t comma = src.find(',', lo);
+            if (comma == std::string::npos) return "";
+
+            const size_t minAt = src.find("std::min(", comma);
+            if (minAt == std::string::npos) return "";
+            const size_t hi = minAt + std::string("std::min(").size();
+            const size_t comma2 = src.find(',', hi);
+            if (comma2 == std::string::npos) return "";
+
+            std::string out = src.substr(lo, comma - lo) + "|" +
+                              src.substr(hi, comma2 - hi);
+            std::string tight;
+            for (char c : out)
+                if (c != ' ' && c != 9 && c != 13 && c != 10) tight += c;
+            return tight;
+        };
+
+        for (const char *s : settings) {
+            NOTE(s);
+            const std::string a = bounds(load,   s);
+            const std::string b = bounds(import, s);
+            // An empty result means the pattern was not found at all, which is
+            // itself a finding: the setting stopped being clamped on one side,
+            // or was renamed in one file only.
+            CHECK(!a.empty());
+            CHECK(!b.empty());
+            CHECK(a == b);
+        }
+    }
+
     void TestToneMap() {
         using Common::ToneMap::HdrToByte;
         using Common::ToneMap::UnitToByte;
@@ -2668,6 +2748,10 @@ int main(int argc, char **argv) {
 
     BeginGroup("Tone map - HDR floats to a display byte");
     TestToneMap();
+    EndGroup();
+
+    BeginGroup("Settings - import and load clamp the same");
+    TestClampsAgree();
     EndGroup();
 
     BeginGroup("Source hygiene - no invalid escape sequences");
