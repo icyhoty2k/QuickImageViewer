@@ -3,46 +3,126 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>QuickImageViewer (qIV) — Privacy Policy</title>
+    <title>Turn an Old Phone or Tablet into a Digital Photo Frame — Free, No Cloud</title>
 
-    <meta name="description"
-          content="Privacy policy for QuickImageViewer, the free image viewer for Windows. No telemetry, no accounts, no advertising, and no network call the app makes on its own.">
+    <meta name="description" content="Use a spare Android phone or tablet as a digital photo frame driven by your Windows PC. Your photos stay on your own machine — no cloud, no account, no subscription, no new hardware.">
     <meta name="robots" content="index, follow">
-    <link rel="canonical" href="https://icyhoty2k.github.io/QuickImageViewer/qiv-privacy.html">
+    <link rel="canonical" href="https://icyhoty2k.github.io/QuickImageViewer/photo-frame.html">
 
     <link rel="icon" type="image/svg+xml" href="favicon.svg">
     <link rel="icon" type="image/x-icon" href="favicon.ico">
-    <meta name="theme-color" content="#0f172a">
+    <meta name="theme-color" content="#0d1a26">
 
     <link rel="stylesheet" href="site.css?v=2">
-    <!-- Open Graph and Twitter. Without og:image a shared link renders as a
-         blank grey box on Facebook, Messenger, Viber and Slack. -->
-    <meta property="og:type" content="website">
+
+    <meta property="og:type" content="article">
     <meta property="og:site_name" content="QuickImageViewer">
-    <meta property="og:title" content="Privacy Policy - QuickImageViewer for Windows">
-    <meta property="og:description" content="What QuickImageViewer stores, what leaves your computer, and why the answer to the second one is nothing.">
-    <meta property="og:url" content="https://icyhoty2k.github.io/QuickImageViewer/qiv-privacy.html">
-    <meta property="og:image" content="https://icyhoty2k.github.io/QuickImageViewer/screenshots/less300kb/10.webp">
-    <meta property="og:image:alt" content="QuickImageViewer showing a photo with a thumbnail strip">
+    <meta property="og:title" content="Turn an old phone or tablet into a digital photo frame">
+    <meta property="og:description" content="A spare Android device, your Windows PC, and your own Wi-Fi. No cloud, no account, no subscription, and nothing new to buy.">
+    <meta property="og:url" content="https://icyhoty2k.github.io/QuickImageViewer/photo-frame.html">
+    <meta property="og:image" content="https://icyhoty2k.github.io/QuickImageViewer/qiv-remote-og.png">
+    <meta property="og:image:alt" content="An Android tablet showing a photograph, driven by a Windows PC">
     <meta property="og:locale" content="en_GB">
     <meta name="twitter:card" content="summary_large_image">
-    <meta name="twitter:title" content="Privacy Policy - QuickImageViewer for Windows">
-    <meta name="twitter:description" content="What QuickImageViewer stores, what leaves your computer, and why the answer to the second one is nothing.">
-    <meta name="twitter:image" content="https://icyhoty2k.github.io/QuickImageViewer/screenshots/less300kb/10.webp">
+    <meta name="twitter:title" content="Turn an old phone or tablet into a digital photo frame">
+    <meta name="twitter:description" content="A spare Android device, your Windows PC, and your own Wi-Fi. No cloud, no account, no subscription.">
+    <meta name="twitter:image" content="https://icyhoty2k.github.io/QuickImageViewer/qiv-remote-og.png">
+
+<!-- HowTo, because the page IS a how-to and the query behind it is a task
+     rather than a product. FAQPage below it answers the four objections that
+     decide whether somebody bothers: does it cost anything, does it need the
+     internet, does the PC have to stay on, how old can the device be. Both are
+     written from what the page actually says - a schema block that promises
+     steps the page does not contain is the kind of thing that earns a manual
+     action, not a rich result. -->
 <script type="application/ld+json">
 {
   "@context": "https://schema.org",
-  "@type": "WebPage",
-  "name": "Privacy Policy - QuickImageViewer for Windows",
-  "url": "https://icyhoty2k.github.io/QuickImageViewer/qiv-privacy.html",
-  "isPartOf": { "@type": "WebSite", "name": "QuickImageViewer", "url": "https://icyhoty2k.github.io/QuickImageViewer/" },
-  "author": { "@type": "Person", "name": "Ivan Hristov Yanev", "alternateName": "icyhoty2k", "url": "https://icyhoty2k.github.io/" }
+  "@type": "HowTo",
+  "name": "Turn an old phone or tablet into a digital photo frame",
+  "description": "Use a spare Android device as a photo frame driven by a Windows PC over your own network, with no cloud service and no subscription.",
+  "totalTime": "PT10M",
+  "estimatedCost": { "@type": "MonetaryAmount", "currency": "EUR", "value": "0" },
+  "supply": [
+    { "@type": "HowToSupply", "name": "A spare Android phone or tablet, Android 13 or later" },
+    { "@type": "HowToSupply", "name": "A Windows 10 or 11 PC holding your photographs" },
+    { "@type": "HowToSupply", "name": "A Wi-Fi network both devices are on" }
+  ],
+  "tool": [
+    { "@type": "HowToTool", "name": "QuickImageViewer for Windows" },
+    { "@type": "HowToTool", "name": "qIV Remote for Android" }
+  ],
+  "step": [
+    {
+      "@type": "HowToStep",
+      "name": "Install QuickImageViewer on the PC",
+      "text": "Download the single executable and run it. There is no installer and nothing is written outside the registry.",
+      "url": "https://icyhoty2k.github.io/QuickImageViewer/photo-frame.html#step-1"
+    },
+    {
+      "@type": "HowToStep",
+      "name": "Switch on the local server",
+      "text": "Press F9 in QuickImageViewer to start its local server and set a password. The PC now accepts connections from your own network only.",
+      "url": "https://icyhoty2k.github.io/QuickImageViewer/photo-frame.html#step-2"
+    },
+    {
+      "@type": "HowToStep",
+      "name": "Install qIV Remote on the Android device",
+      "text": "Install the free companion app from Google Play. It has no ads and needs no account.",
+      "url": "https://icyhoty2k.github.io/QuickImageViewer/photo-frame.html#step-3"
+    },
+    {
+      "@type": "HowToStep",
+      "name": "Connect the device to the PC",
+      "text": "Enter the PC's address and the password you set. The app finds the viewer on the same Wi-Fi and connects directly to it.",
+      "url": "https://icyhoty2k.github.io/QuickImageViewer/photo-frame.html#step-4"
+    },
+    {
+      "@type": "HowToStep",
+      "name": "Start the slideshow and prop the device up",
+      "text": "Start a slideshow on the PC and the device follows it. Every picture the PC shows appears on the frame.",
+      "url": "https://icyhoty2k.github.io/QuickImageViewer/photo-frame.html#step-5"
+    }
+  ]
+}
+</script>
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "FAQPage",
+  "mainEntity": [
+    {
+      "@type": "Question",
+      "name": "Does it cost anything?",
+      "acceptedAnswer": { "@type": "Answer", "text": "No. QuickImageViewer is free and open source under the AGPL, and qIV Remote is free on Google Play with no ads, no account and no paid tier. There is nothing to buy and nothing to subscribe to." }
+    },
+    {
+      "@type": "Question",
+      "name": "Do my photos go to a cloud service?",
+      "acceptedAnswer": { "@type": "Answer", "text": "No. The phone talks to your PC directly over your own network. There is no server in the middle, no account, and no copy of your pictures anywhere but the machine they were already on." }
+    },
+    {
+      "@type": "Question",
+      "name": "Does the PC have to stay switched on?",
+      "acceptedAnswer": { "@type": "Answer", "text": "Yes. The PC holds the photographs and drives the frame, so it has to be running and on the same network. This is a way to use a machine you already leave on, not a standalone photo frame." }
+    },
+    {
+      "@type": "Question",
+      "name": "How old can the phone or tablet be?",
+      "acceptedAnswer": { "@type": "Answer", "text": "It needs Android 13 or later, which rules out devices older than roughly 2022. The app is small and does no decoding of its own beyond displaying what the PC sends, so an old device is not a problem as long as it meets that." }
+    },
+    {
+      "@type": "Question",
+      "name": "Can I use more than one device at once?",
+      "acceptedAnswer": { "@type": "Answer", "text": "Yes. The PC drives as many connected devices as you have, and they all show the same picture. A phone in the kitchen and a tablet in the hall work from one machine." }
+    }
+  ]
 }
 </script>
 </head>
-<body>
+<body class="android">
 
-<!-- SHARED-HEADER-START — generated from docs/_partials/header.html by tools/build-site.py. Do not edit between the fences; edit the partial. -->
+<!-- SHARED-HEADER-START -->
 <nav class="sitenav">
     <div class="inner">
         <!--
@@ -60,14 +140,14 @@
             aria-hidden because the label beside each one already says it.
         -->
         <a href="./"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><rect x="2.5" y="4" width="19" height="12.5" rx="1.8"/><path d="M12 16.5v3M8 19.5h8"/></svg>QuickImageViewer (qIV)</a>
-        <a href="qiv-privacy.html" class="current"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><rect x="4.5" y="10.5" width="15" height="10" rx="2"/><path d="M8 10.5V7.2a4 4 0 0 1 8 0v3.3"/></svg>Privacy — Windows</a>
+        <a href="qiv-privacy.html"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><rect x="4.5" y="10.5" width="15" height="10" rx="2"/><path d="M8 10.5V7.2a4 4 0 0 1 8 0v3.3"/></svg>Privacy — Windows</a>
         <a href="qiv-remote.html"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><rect x="7" y="2.5" width="10" height="19" rx="2"/><path d="M10.5 5h3M10 19.2h4"/></svg>qIV Remote</a>
         <!-- The photo-frame guide. In the nav rather than buried in a page,
              because it is the one thing here no other image viewer does and
              the query behind it has no incumbent - and because an internal
              link from every page is the strongest signal this site can give
              a crawler on its own. -->
-        <a href="photo-frame.html"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><rect x="3" y="4.5" width="18" height="15" rx="2"/><circle cx="8.3" cy="9.3" r="1.6"/><path d="m3.6 17.4 4.9-4.6 3.4 3.2 3.1-2.7 5.4 4.7"/></svg>Photo frame</a>
+        <a href="photo-frame.html" class="current"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><rect x="3" y="4.5" width="18" height="15" rx="2"/><circle cx="8.3" cy="9.3" r="1.6"/><path d="m3.6 17.4 4.9-4.6 3.4 3.2 3.1-2.7 5.4 4.7"/></svg>Photo frame</a>
         <a href="qiv-remote-privacy.html"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><rect x="4.5" y="10.5" width="15" height="10" rx="2"/><path d="M8 10.5V7.2a4 4 0 0 1 8 0v3.3"/></svg>Privacy — Android</a>
         <!-- The developer site, one level up at the account root. An absolute URL
              on purpose: this project lives at /QuickImageViewer/, so "../" would
@@ -102,33 +182,155 @@
 
 <main class="container">
 
-    <h1>QuickImageViewer (qIV) — Privacy Policy</h1>
-    <p class="meta">
-        Applies to the Windows application <code>QuickImageViewer.exe</code> —
-        <a href="./">what the app does</a>.<br>
-        Last updated: 7 August 2026.
+    <h1>Turn an old phone or tablet into a digital photo frame</h1>
+
+    <p class="subtitle">
+        A spare Android device, the Windows PC your photographs are already on, and your own
+        Wi-Fi. No cloud service, no account, no subscription, and nothing new to buy.
     </p>
 
-    <!--
-        THE STORE ROW. Each column is one app: its button, and the privacy
-        policy FOR THAT APP under it. Order inside a column is what the reader
-        follows, so the pairing has to be vertical rather than two parallel rows.
+    <div class="callout">
+        <p>
+            <strong>The short version.</strong> <a href="./">QuickImageViewer</a> is a free
+            image viewer for Windows. Its free companion app, <a href="qiv-remote.html">qIV
+            Remote</a>, connects to it over your own network and mirrors whatever the PC is
+            showing. Start a slideshow on the PC, prop the device up, and it is a photo
+            frame. The pictures never leave your machine.
+        </p>
+    </div>
 
-        DURING CLOSED TESTING this button points at the tester GROUP, not the
-        store: the store URL returns "item not found" to anyone who is not an
-        enrolled tester. Revert it on production launch.
+    <h2>Why not a real photo frame</h2>
 
-        FIVE pages carry this row. Four take it from docs/_partials/storerow.html
-        through a SHARED-STOREROW fence (this one, qiv-privacy, qiv-remote-privacy,
-        shortcuts) and are regenerated by tools/build-site.py. index.html keeps its
-        OWN UNFENCED copy and does not inherit — edit it by hand as well, then run
-        tools/build-site.py and tools/build-site.py --check.
+    <p>
+        Bought photo frames ask you to hand your family pictures to somebody's cloud, pay
+        a subscription to keep them there, and trust a company to still exist next year.
+        The ones that do not want a subscription want an SD card you have to physically
+        carry back and forth every time you take a new photograph.
+    </p>
 
-        NOT the official Play badge image: a licensed asset with its own
-        placement and clear-space rules, which cannot be inlined. Swap the
-        anchor's contents for the artwork later; href and layout stay.
-    -->
-    <!-- SHARED-STOREROW-START — generated from docs/_partials/storerow.html by tools/build-site.py. Do not edit between the fences; edit the partial. -->
+    <p>
+        The device in your drawer already has a screen, a battery and Wi-Fi. The photographs
+        are already on your PC, in the folders you already keep them in. Nothing else is
+        needed, and no third party has to be involved at any point.
+    </p>
+
+    <h2>What you need</h2>
+
+    <ul>
+        <li><strong>A spare Android phone or tablet</strong> running Android 13 or later.</li>
+        <li><strong>A Windows 10 or 11 PC</strong> with your photographs on it.</li>
+        <li><strong>One Wi-Fi network</strong> that both are connected to.</li>
+    </ul>
+
+    <p>
+        That is the whole list. There is no hub, no bridge, no account, and no cable.
+    </p>
+
+    <h2>How to set it up</h2>
+
+    <h3 id="step-1">1. Install QuickImageViewer on the PC</h3>
+    <p>
+        It is a single executable of about 9.7 MB. Download it, put it wherever you like and
+        run it &mdash; there is no installer, no Visual C++ Redistributable and no background
+        service. To remove it later, delete the file.
+    </p>
+
+    <h3 id="step-2">2. Switch on the local server</h3>
+    <p>
+        Press <kbd>F9</kbd> in QuickImageViewer. That starts its local server and asks you to
+        set a password. The password is compulsory for anything other than the machine
+        itself, it never crosses the network, and five wrong guesses from one address cost
+        that address fifteen minutes.
+    </p>
+
+    <h3 id="step-3">3. Install qIV Remote on the device</h3>
+    <p>
+        It is free on Google Play, has no ads and needs no account. It also has a demo mode,
+        so you can see every screen before connecting it to anything at all.
+    </p>
+
+    <h3 id="step-4">4. Connect the device to the PC</h3>
+    <p>
+        Open the app, enter the PC's address and the password you set. The connection is
+        direct: the phone opens a socket to your PC and nothing else is involved. If the two
+        are on the same Wi-Fi it takes a few seconds.
+    </p>
+
+    <h3 id="step-5">5. Start the slideshow and prop it up</h3>
+    <p>
+        Start a slideshow on the PC. The device follows it &mdash; every picture the PC shows
+        appears on the frame, at the pace you set. Stand the device against something, plug
+        it in, and that is a photo frame showing your own photographs from your own machine.
+    </p>
+
+    <h2>More than one frame at a time</h2>
+
+    <p>
+        The PC drives as many connected devices as you have. A phone in the kitchen and a
+        tablet in the hall both show the same picture from the same machine, and adding a
+        third costs nothing but finding a third old device. Each one can also be told to show
+        a different folder if you would rather they did not agree.
+    </p>
+
+    <h2>It is a remote control too</h2>
+
+    <p>
+        The same app that acts as a frame is a full remote for the viewer: next, previous,
+        zoom, slideshow, a live preview of what the desktop is showing, and a search that
+        opens a picture when you type part of its name. Useful from the sofa, and useful when
+        the PC is plugged into a television.
+        <a href="qiv-remote.html">Every screen, in detail &rarr;</a>
+    </p>
+
+    <h2>What this is not</h2>
+
+    <p>
+        <strong>It is not a standalone frame.</strong> The PC holds the pictures and drives
+        the display, so it has to be switched on and on the same network. If you want
+        something that works with the computer off, this is the wrong tool and a bought frame
+        is the right one.
+    </p>
+
+    <p>
+        <strong>It is not a cloud album.</strong> Nothing is uploaded, which is the point, and
+        it also means the frame does not work from somebody else's house.
+    </p>
+
+    <h2>Questions</h2>
+
+    <h3>Does it cost anything?</h3>
+    <p>
+        No. The viewer is free and open source under the AGPL; the Android app is free on
+        Google Play with no ads and no paid tier. There is nothing to buy and nothing to
+        subscribe to.
+    </p>
+
+    <h3>Do my photos go to a cloud service?</h3>
+    <p>
+        No. The phone talks to your PC directly. There is no server in the middle, no account,
+        and no copy of your pictures anywhere but the machine they were already on.
+    </p>
+
+    <h3>Does the PC have to stay switched on?</h3>
+    <p>
+        Yes. This turns a machine you already leave running into the engine behind the frame;
+        it does not replace one.
+    </p>
+
+    <h3>How old can the device be?</h3>
+    <p>
+        It needs Android 13, which rules out anything older than roughly 2022. Beyond that,
+        age does not matter much &mdash; the app is small and the PC does the work.
+    </p>
+
+    <h3>What picture formats does it handle?</h3>
+    <p>
+        Whatever the PC can open, which is 49 file extensions across more than twenty formats
+        &mdash; JPEG, PNG, WebP, HEIC from an iPhone, AVIF, JPEG XL, camera RAW and others.
+        <a href="./#format-support">The full list &rarr;</a>
+    </p>
+
+    <!-- SHARED-STOREROW-START -->
 <div class="storerow">
         <div class="store-col">
             <!-- THE FILE ITSELF, not the releases page. GitHub resolves
@@ -165,96 +367,9 @@
     </div>
 <!-- SHARED-STOREROW-END -->
 
-    <div class="callout">
-        <strong>The short version.</strong> QuickImageViewer has no accounts, no analytics,
-        no advertising and no telemetry. It makes no network call of its own. Everything it
-        keeps stays on your computer, and nothing is ever sent to the developer or to any
-        third party.
-    </div>
+</main>
 
-    <h2>What the app stores, and where</h2>
-    <ul>
-        <li>
-            <strong>Settings</strong> — your preferences, window position, panel layout and
-            recent folders, in the Windows registry under your own user account.
-        </li>
-        <li>
-            <strong>Logs</strong> — only when you switch logging on. Written to files beside
-            the executable and never sent anywhere.
-        </li>
-        <li>
-            <strong>Crash dumps</strong> — if the app crashes it writes a
-            <code>.dmp</code> file to your disk and tells you where it put it. It stays
-            there. Attaching one to a bug report is your decision to make, every time.
-        </li>
-    </ul>
-    <p>
-        The application is portable: it installs nothing, runs no background service, and
-        leaves nothing behind but the registry key above.
-    </p>
-
-    <h2>What leaves your computer</h2>
-    <p>
-        <strong>Nothing, unless you switch on the Local Server.</strong> The viewer itself
-        opens no connection, checks for no update, and contacts no server. There is no
-        analytics endpoint, no crash reporter and no licence check, because there is nothing
-        to license.
-    </p>
-    <p>
-        The optional Local Server (<kbd>F9</kbd>) is what lets the
-        <a href="qiv-remote.html">Android app</a> or another copy of qIV drive this one. It
-        is off until you turn it on, and when it is on:
-    </p>
-    <ul>
-        <li>it listens on the address and port you choose, on your own network;</li>
-        <li>only the devices in your AllowList may connect at all;</li>
-        <li>connections are encrypted, and a password proves who is connecting;</li>
-        <li>
-            commands that would alter files — delete, move, save — cannot be sent over it.
-            The viewer refuses them by design, not by setting.
-        </li>
-    </ul>
-    <p>
-        What travels over that connection travels between your own machines. It does not
-        pass through any service of the developer's, because there is not one.
-    </p>
-
-    <h2>Your files</h2>
-    <p>
-        The app reads the images and folders you open, on your own disk, to display them.
-        It does not index your drives in the background, upload anything, or report what you
-        looked at.
-    </p>
-
-    <h2>Children</h2>
-    <p>
-        The app collects no personal data from anyone, of any age.
-    </p>
-
-    <h2>Source code</h2>
-    <p>
-        QuickImageViewer is free and open source under the AGPLv3. Every claim on this page
-        can be checked against
-        <a href="https://github.com/icyhoty2k/QuickImageViewer">the source</a> rather than
-        taken on trust.
-    </p>
-
-    <h2>Changes to this policy</h2>
-    <p>
-        If the app's behaviour changes in a way that affects this policy — for example if a
-        feature is added that transmits something new — this page is updated and the date at
-        the top changes with it.
-    </p>
-
-    <h2>Contact</h2>
-    <p>
-        Questions about this policy:
-        <a href="mailto:icyhoty2k@gmail.com">icyhoty2k@gmail.com</a>
-    </p>
-
-    </main>
-
-<!-- SHARED-FOOTER-START — generated from docs/_partials/footer.html by tools/build-site.py. Do not edit between the fences; edit the partial. -->
+<!-- SHARED-FOOTER-START -->
 <footer>
     <div class="footer-inner">
         <div class="footer-apps">

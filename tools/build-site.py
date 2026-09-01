@@ -50,6 +50,7 @@ writes is committed, and GitHub Pages only hands the files over.
 import io
 import os
 import re
+import subprocess
 import sys
 from datetime import date
 
@@ -72,6 +73,7 @@ CURRENT_PAGE = {
     'qiv-privacy.html': 'priv',
     'qiv-remote.html': 'remote',
     'qiv-remote-privacy.html': 'remotepriv',
+    'photo-frame.html': 'frame',
 }
 
 TOKEN = re.compile(r'\{\{CURRENT:(\w+)\}\}')
@@ -973,6 +975,68 @@ def append_history(raw, check):
 
 # =====================================================================
 
+# ---------------------------------------------------------------------------
+# JOB 3 - THE SITEMAP
+#
+# It was hand-maintained, and it did what every hand-maintained list in this
+# project eventually does: went stale. Every entry read 2026-08-12 while the
+# site changed most days, and a page added today would have been absent from it
+# until somebody remembered.
+#
+# lastmod COMES FROM GIT, not from the filesystem. A fresh clone stamps every
+# file with the checkout time, which would tell a crawler the whole site changed
+# at once and none of it since - worse than a stale date, because it is
+# confidently wrong. `git log -1 --format=%cs` is when the file last actually
+# changed.
+#
+# Pages are DISCOVERED, not listed, which is the half that stops it going stale
+# again. 404.html is excluded because a soft 404 in a sitemap is a crawl error,
+# and the Search Console verification file because it is not a page.
+# ---------------------------------------------------------------------------
+SITE_BASE = 'https://icyhoty2k.github.io/QuickImageViewer/'
+SITEMAP = os.path.join(DOCS, 'sitemap.xml')
+SITEMAP_SKIP = ('404.html',)
+
+
+def git_lastmod(relpath):
+    """The date this file last changed, per git. None when git cannot say."""
+    try:
+        out = subprocess.run(['git', 'log', '-1', '--format=%cs', '--', relpath],
+                             cwd=REPO, capture_output=True, text=True, timeout=20)
+        d = out.stdout.strip()
+        return d if len(d) == 10 else None
+    except Exception:
+        # A missing git, a detached worktree, anything: the sitemap is still
+        # valid without lastmod, and a wrong date is worse than none.
+        return None
+
+
+def build_sitemap():
+    """Returns (text, stale). Writes nothing - the caller decides."""
+    pages = []
+    for f in sorted(os.listdir(DOCS)):
+        if not f.endswith('.html') or f in SITEMAP_SKIP:
+            continue
+        if re.match(r'^google[0-9a-f]{10,}\.html$', f):
+            continue
+        pages.append(f)
+
+    out = ['<?xml version="1.0" encoding="UTF-8"?>',
+           '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">']
+    for f in pages:
+        out.append('  <url>')
+        out.append('    <loc>%s</loc>' % (SITE_BASE + ('' if f == 'index.html' else f)))
+        d = git_lastmod('docs/' + f)
+        if d:
+            out.append('    <lastmod>%s</lastmod>' % d)
+        out.append('  </url>')
+    out.append('</urlset>')
+    text = '\n'.join(out) + '\n'
+
+    existing = read(SITEMAP) if os.path.isfile(SITEMAP) else None
+    return text, (existing != text)
+
+
 def main():
     check = '--check' in sys.argv
     print('QuickImageViewer site build%s' % ('  [check only]' if check else ''))
@@ -1043,6 +1107,17 @@ def main():
             write(STATS_PARTIAL, stats_html)
             print('  wrote _partials/stats.html - %s' % note)
 
+    print('\n== sitemap ==')
+    smtext, smstale = build_sitemap()
+    npages = smtext.count('<loc>')
+    if not smstale:
+        print('  docs/sitemap.xml is current - %d pages' % npages)
+    elif check:
+        print('  STALE: docs/sitemap.xml')
+    else:
+        write(SITEMAP, smtext)
+        print('  wrote docs/sitemap.xml - %d pages' % npages)
+
     print('\n== shared blocks ==')
     stale, written = inject_partials(check)
     for p in written:
@@ -1052,7 +1127,7 @@ def main():
     if not written and not stale:
         print('  every page already matches _partials/')
 
-    if check and (stale or shortcuts_stale):
+    if check and (stale or shortcuts_stale or smstale):
         print('\nFAIL - run:  python build-site.py')
         return 1
     print('\nOK.')
