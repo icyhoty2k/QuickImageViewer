@@ -829,6 +829,84 @@ namespace {
     //  It went unnoticed because the value was computed and never read. Pulling
     //  it out is what makes it reachable from here at all.
     // -------------------------------------------------------------------------
+    // -------------------------------------------------------------------------
+    //  NO INVALID ESCAPE SEQUENCES IN ANY STRING LITERAL.
+    //
+    //  FolderIndex.cpp shipped L"\/" in 3.0. That is not a valid escape:
+    //  the compiler folds it to "/" alone, so the separator set lost its
+    //  backslash and every Windows path came back with a name offset of 0.
+    //
+    //  ⚠ THE COMPILER DID WARN, AND NOBODY READ IT. MSVC emits C4129,
+    //  "unrecognized character escape sequence", five times over - once per
+    //  translation unit that includes the header. It shipped anyway, because a
+    //  warning in a build log that scrolls past is not a signal anyone acts on.
+    //
+    //  That is the argument for a test rather than for reading warnings harder:
+    //  this FAILS, and a failure stops the run. Verified by injecting L"a\q b"
+    //  into DuplicateScan.cpp - the compiler warned, the suite went red, and
+    //  only the red one is impossible to walk past.
+    //
+    //  The files listed are the ones that actually spell out path separators.
+    //  A new file carrying one has to be added here; that is the cost of the
+    //  harness having no directory walk, and it is cheaper than the bug.
+    // -------------------------------------------------------------------------
+    void TestNoInvalidEscapes() {
+        // Everything C++ defines, plus the numeric and universal forms.
+        const std::string valid = "abfnrtv\\\'\"?01234567xuU";
+
+        const char *files[] = {
+            "src/Platform/FolderIndex.h",
+            "src/Platform/FolderIndex.cpp",
+            "src/Platform/DuplicateScan.cpp",
+            "src/Common/DuplicateFinder.cpp",
+            "src/UI/FloatingPanels/FindWnd.cpp",
+            "src/Persistence/HistoryPath.cpp",
+            "src/Platform/JumpList.cpp",
+        };
+
+        for (const char *rel : files) {
+            const std::string src = ReadSourceFile(rel);
+            NOTE(rel);
+            CHECK(!src.empty());
+
+            // COMMENTS ARE SKIPPED, and that is not a convenience.
+            //
+            // FolderIndex.h documents the bug this test exists for, and quotes
+            // the broken literal to do it. A scan that cannot tell code from
+            // prose flags that comment forever - and a test which fails on its
+            // own documentation is one somebody deletes rather than obeys.
+            int  offenders = 0;
+            enum { CODE, LINE_COMMENT, BLOCK_COMMENT, STRING } state = CODE;
+
+            for (size_t i = 0; i < src.size(); ++i) {
+                const char c = src[i];
+                const char n = (i + 1 < src.size()) ? src[i + 1] : '\0';
+
+                if (state == LINE_COMMENT) {
+                    if (c == '\n') state = CODE;
+                } else if (state == BLOCK_COMMENT) {
+                    if (c == '*' && n == '/') { state = CODE; ++i; }
+                } else if (state == STRING) {
+                    if (c == '\\') {
+                        // An escaped backslash consumes the next character, so
+                        // the pair after it is not itself an escape. Without the
+                        // ++i, every "\\" would read as a backslash and a stray
+                        // quote, and the scan would report the opposite of the truth.
+                        if (valid.find(n) == std::string::npos) ++offenders;
+                        ++i;
+                    } else if (c == '\"') {
+                        state = CODE;
+                    }
+                } else {
+                    if (c == '/' && n == '/')       { state = LINE_COMMENT;  ++i; }
+                    else if (c == '/' && n == '*') { state = BLOCK_COMMENT; ++i; }
+                    else if (c == '\"')                { state = STRING; }
+                }
+            }
+            CHECK(offenders == 0);
+        }
+    }
+
     void TestNameOffset() {
         using Platform::FolderIndex::NameOffsetOf;
 
@@ -2441,6 +2519,10 @@ int main(int argc, char **argv) {
 
     BeginGroup("FolderIndex - where a file name starts inside a path");
     TestNameOffset();
+    EndGroup();
+
+    BeginGroup("Source hygiene - no invalid escape sequences");
+    TestNoInvalidEscapes();
     EndGroup();
 
     BeginGroup("AllowList - entry validation and scope");
