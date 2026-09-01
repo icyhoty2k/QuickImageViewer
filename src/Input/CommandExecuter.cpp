@@ -38,6 +38,7 @@
 #include "Platform/AppLog.h"       // the General log — this instance's own record
 #include "Persistence/IniFile.h"   // PathBesideExe — the logs\ folder Explorer opens
 #include "Platform/CrashHandler.h" // NoteImage / NoteCommand breadcrumbs
+#include "Platform/DuplicateScan.h" // Ctrl+D — the cross-folder duplicate scan
 #include "Platform/MonitorInfo.h"  // the display list, and the names Ctrl+M reports
 #include "Rem_TCP_IP/RemoteBeacon.h" // Announce on network — the TCP/IP menu tick
 #include "Rem_TCP_IP/RemoteInbound.h" // …and the loop cut that makes it safe
@@ -720,6 +721,18 @@ void InputManager::ExecuteCommand(HWND hWnd, Command cmd) {
 
         case Command::FindImageEverywhere:
             uiManager.ToggleFindWindow(true);
+            break;
+
+        case Command::FindDuplicates:
+            // Says so before it starts. The scan reads files, so on a large
+            // history it takes a moment, and a viewer that appeared to ignore a
+            // keypress for several seconds would simply be pressed again.
+            if (Platform::DuplicateScan::IsRunning()) {
+                g_overlayManager.PostCenterMessage(hWnd, L"Still looking for duplicates…");
+            } else {
+                g_overlayManager.PostCenterMessage(hWnd, L"Looking for duplicate pictures…");
+                Platform::DuplicateScan::StartAsync(hWnd);
+            }
             break;
 
         case Command::ToggleStats:

@@ -27,8 +27,19 @@ namespace UI {
 // =============================================================================
 
 void FindWnd::Init(HINSTANCE hInstance, HWND hParent) {
-    const int w = static_cast<int>(460.0f * app.dpiScale);
-    const int h = static_cast<int>(330.0f * app.dpiScale);
+    // SIZED FOR A PATH, NOT A FILE NAME.
+    //
+    // 460 was right when every row was one file name from the folder already on
+    // screen. Rows now carry the FOLDER as well - a cross-folder search hit, or
+    // a duplicate group where the folder is the only thing telling three
+    // identically named copies apart - and at that width the path was
+    // ellipsised down to almost nothing.
+    //
+    // Taller for the same reason: duplicates arrive in groups, and a group of
+    // three that does not fit on screen at once has to be scrolled to be
+    // compared, which is the one thing the list exists to make easy.
+    const int w = static_cast<int>(820.0f * app.dpiScale);
+    const int h = static_cast<int>(460.0f * app.dpiScale);
     InitFloating(hInstance, hParent, L"QivFindWndClass", L"Find Image", w, h);
 
     m_inputBox.SetPlaceholder(L"filename or *.ext…");
@@ -60,7 +71,43 @@ void FindWnd::Show() {
 //  Search logic
 // =============================================================================
 
+void FindWnd::ShowList(std::vector<std::wstring> paths, std::wstring heading) {
+    if (!m_hWnd) return;
+
+    // THE BOX IS RESET FIRST, and the list built after.
+    //
+    // Clear() fires OnChanged, which calls RebuildMatches - and RebuildMatches
+    // clears the heading and refills m_results from the playlist. Doing it the
+    // other way round would build the list and then immediately throw it away,
+    // leaving the panel showing the current folder under a duplicates heading.
+    m_inputBox.Clear();
+
+    m_results.clear();
+    m_results.reserve(paths.size());
+    for (std::wstring &p : paths) {
+        MatchResult r;
+        // -1 on purpose: these paths come from other folders, and -1 is what
+        // routes Enter through OpenSpecificImage rather than a playlist jump.
+        r.playlistIdx = -1;
+        r.path        = std::move(p);
+        r.score       = 0;
+        r.posCount    = 0;
+        m_results.push_back(std::move(r));
+    }
+
+    m_listHeading = std::move(heading);
+    m_selIdx      = 0;
+    m_rowScroll   = 0;
+
+    ShowCenterOverParent();
+    AdjustScroll();
+    InvalidateRect(m_hWnd, nullptr, FALSE);
+}
+
 void FindWnd::RebuildMatches() {
+    // Any rebuild means the user is searching again, so a supplied list is no
+    // longer what is on screen.
+    m_listHeading.clear();
     m_results.clear();
     m_selIdx          = 0;
     m_rowScroll       = 0;
@@ -402,7 +449,11 @@ LRESULT FindWnd::HandlePanelMessage(UINT message, WPARAM wParam, LPARAM lParam) 
             // playlist, because that is what is actually being searched, and it
             // is also the honest answer to "why did that not appear" - a folder
             // qIV has never opened is not in it.
-            if (m_searchEverywhere) {
+            // A supplied list names itself; the search headings below describe
+            // a search, which is not what is on screen.
+            if (!m_listHeading.empty()) {
+                swprintf_s(lbl, L"%s", m_listHeading.c_str());
+            } else if (m_searchEverywhere) {
                 const int indexed = static_cast<int>(Platform::FolderIndex::Count());
                 if (indexed > 0)
                     swprintf_s(lbl, L"Find in ALL folders  ·  %d pictures indexed", indexed);
@@ -480,6 +531,45 @@ LRESULT FindWnd::HandlePanelMessage(UINT message, WPARAM wParam, LPARAM lParam) 
 
                 Common::DrawMatchText(hdc, fname, fnameLen, isHL, textX, textY, clip,
                                       selected ? clrSelText : clrRowText, clrYellow);
+
+
+                // THE FOLDER, for any row that is not in the current playlist.
+                //
+                // Without it a duplicate list is unusable: three rows reading
+                // copy1.png, copy2.png, IMG_0042.png say nothing about WHICH
+                // copy to keep, and the folder is the only thing telling them
+                // apart. The same is true of a cross-folder search hit - "found
+                // it" is half an answer if you cannot see where.
+                //
+                // Rows that ARE in the playlist all live in the folder already
+                // on screen, so naming it on every line would be noise.
+                if (mr.playlistIdx < 0 && sep != std::wstring::npos) {
+                    const std::wstring folder = fullPath.substr(0, sep);
+
+                    // Whatever room is left after the name, and the path is
+                    // COMPRESSED to fit rather than dropped.
+                    //
+                    // DT_PATH_ELLIPSIS is the right tool: it removes from the
+                    // MIDDLE, so both the drive and the last folder survive -
+                    // "T:" and "dupA" are exactly what tells two copies apart,
+                    // and they are the first things lost to a plain trailing
+                    // ellipsis. A full path is wider than this panel almost
+                    // always, so the first draft's "drop it if it does not fit"
+                    // meant never drawing it at all.
+                    SIZE nameSz{};
+                    GetTextExtentPoint32W(hdc, fname, fnameLen, &nameSz);
+
+                    const int gapPx    = static_cast<int>(12.0f * dpi);
+                    const int folderL  = textX + nameSz.cx + gapPx;
+                    const int minRoom  = static_cast<int>(60.0f * dpi);
+                    if (rc.right - pad - folderL >= minRoom) {
+                        SetTextColor(hdc, selected ? clrSelText : clrLabel);
+                        RECT fr = { folderL, y, rc.right - pad, y + rowH };
+                        DrawTextW(hdc, folder.c_str(), static_cast<int>(folder.size()), &fr,
+                                  DT_RIGHT | DT_VCENTER | DT_SINGLELINE | DT_NOPREFIX |
+                                  DT_PATH_ELLIPSIS);
+                    }
+                }
 
                 y += rowH;
             }

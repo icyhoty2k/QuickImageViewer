@@ -183,6 +183,7 @@ set(SOURCES
         src/Platform/JumpList.cpp
         src/Platform/FolderIndex.cpp
         src/Common/DuplicateFinder.cpp
+        src/Platform/DuplicateScan.cpp
         src/Persistence/HistoryFoldersManager.cpp
         src/Persistence/HistoryPath.cpp
         src/CMDArgs.cpp

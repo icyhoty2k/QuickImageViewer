@@ -268,6 +268,14 @@ namespace UI {
             L"Open the Find panel — fuzzy filename search with wildcard support: "
             L"* matches any characters, ? matches exactly one (e.g. *.jpg or photo_??_2024.*). "
             L"Searches THIS folder and the VRAM cache. Typing # inside switches to Jump-to.", sNav);
+        Add(Ctrl(SC::SC_PAN_RIGHT),
+            L"Find duplicate pictures across every folder qIV knows. Groups by file size "
+            L"first, so almost nothing is read; only files that share a size are opened and "
+            L"hashed in full. Byte-identical copies only — a re-encoded or rotated version "
+            L"is a different file and is deliberately not listed. Results open in the Find "
+            L"panel with the copies next to each other, and a listing is written to "
+            L"qivDuplicates.txt beside qIV. NOTHING IS DELETED: deciding what to remove "
+            L"stays yours, in Explorer, where it can be undone.", sNav);
         Add(CtrlShift(SC::SC_NAV_FIND),
             L"The same panel, searching EVERY folder qIV knows — the whole history, not "
             L"just the one on screen. Find a picture by name without remembering where it "

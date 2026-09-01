@@ -36,6 +36,18 @@ namespace UI {
         // Re-runs the current query in the current scope. For the case where the
         // scope changed while the panel was already open and typing.
         void RefreshMatches();
+
+        // Show a LIST somebody else built, instead of searching.
+        //
+        // Used by the duplicate scan: the panel already lists paths from other
+        // folders, highlights the selection, scrolls, and opens whatever is
+        // chosen through OpenSpecificImage - which is exactly what a list of
+        // duplicates needs. Reusing it means a proven opening path rather than a
+        // second one written at three in the morning.
+        //
+        // Typing in the box leaves the list and returns to searching, so the
+        // panel never has two meanings at once.
+        void ShowList(std::vector<std::wstring> paths, std::wstring heading);
         ~FindWnd() {
             if (m_hFontNorm) DeleteObject(m_hFontNorm);
             if (m_hFontBold) DeleteObject(m_hFontBold);
@@ -49,7 +61,9 @@ namespace UI {
 
     private:
         static constexpr int MAX_QUERY    = 200;
-        static constexpr int VISIBLE_ROWS = 8;
+        // Rows on screen at once. Raised with the window: duplicates come in
+        // groups and comparing them means seeing the group together.
+        static constexpr int VISIBLE_ROWS = 12;
 
         // False = the folder on screen, true = every folder qIV knows. Not
         // persisted: the scope belongs to the keystroke that opened the panel,
@@ -71,6 +85,11 @@ namespace UI {
         wchar_t                  m_query[MAX_QUERY + 2] = {};
         int                      m_queryLen  = 0;
         std::vector<MatchResult> m_results;
+
+        // Non-empty while the panel is showing a supplied list rather than
+        // search results. It is also the header text, so there is one thing to
+        // check rather than a flag and a string that could disagree.
+        std::wstring             m_listHeading;
         int                      m_selIdx    = 0;
         int                      m_rowScroll = 0;
 

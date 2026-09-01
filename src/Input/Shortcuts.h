@@ -219,7 +219,9 @@ namespace Shortcuts {
     //       SC_COLOR_SAVE_TO_DISK = 'S' (ctrl+S saves; plain S pans down; Shift+S moves window down)
     constexpr UINT SC_PAN_LEFT = 'A'; // plain: pan left;  Shift: move window left
     constexpr UINT SC_ALWAYS_ON_TOP_A = 'A'; // Ctrl+A — toggle always-on-top
-    constexpr UINT SC_PAN_RIGHT = 'D'; // plain: pan right; Shift: move window right
+    // Ctrl+D — find duplicate pictures across every folder qIV knows. Unrelated
+    // to panning; the mnemonic is the letter, and every modifier on it was free.
+    constexpr UINT SC_PAN_RIGHT = 'D'; // plain: pan right; Shift: move window right; Ctrl: duplicates
 
     constexpr UINT SC_NAV_PREV = VK_LEFT;
     constexpr UINT SC_NAV_NEXT = VK_RIGHT;

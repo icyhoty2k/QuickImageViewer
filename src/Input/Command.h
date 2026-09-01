@@ -277,6 +277,12 @@ enum class Command {
     // is unreachable remotely, and the phone already has FindImage.
     FindImageEverywhere,
 
+    // Scan every folder qIV knows for byte-identical pictures and list them.
+    // Reports only - see Platform::DuplicateScan. Not in RemoteProtocol's table:
+    // a scan that reads every candidate file is not something a phone should be
+    // able to start on somebody's desktop.
+    FindDuplicates,
+
     // --- Statistics window (K) ---
     ToggleStats,
 

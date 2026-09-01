@@ -83,6 +83,7 @@ extern void UpdateOverlaysForCurrentImage(HWND hWnd);
 #include "Persistence/RegistryManager.h"
 #include "Persistence/SessionFile.h"   // qivSession.ini — the resume position
 #include "Renderer/RendererD2D.h"
+#include "Platform/DuplicateScan.h" // Ctrl+D results arrive as a posted message
 #include "Renderer/RendererGDI.h"
 
 
@@ -484,6 +485,44 @@ LRESULT CALLBACK MainAppWndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM l
                 hWnd, static_cast<Constants::RemoteTcpIp::ClientEvent>(wParam));
             InvalidateRect(hWnd, nullptr, FALSE);
             return 0;
+
+        case Constants::WM_QIV_DUPLICATES_READY: {
+            // OWNS THE PAYLOAD. The scan handed it over when the post
+            // succeeded; nothing else will free it.
+            std::unique_ptr<Platform::DuplicateScan::Result> res(
+                reinterpret_cast<Platform::DuplicateScan::Result *>(lParam));
+            if (!res) return 0;
+
+            if (res->groups == 0) {
+                wchar_t msg[192];
+                swprintf_s(msg, L"No duplicate pictures — %d checked, %d read",
+                           res->indexed, res->read);
+                g_overlayManager.PostCenterMessage(hWnd, msg);
+                return 0;
+            }
+
+            // The panel gets the list; the overlay gets the number. Both,
+            // because the list answers "which ones" and the summary answers
+            // "was this worth doing" - and the second is what decides whether
+            // anybody reads the first.
+            wchar_t heading[192];
+            swprintf_s(heading, L"%d duplicate group(s)  ·  %.1f MB in extra copies",
+                       res->groups,
+                       static_cast<double>(res->reclaimable) / (1024.0 * 1024.0));
+            uiManager.getFindWindow().ShowList(std::move(res->paths), heading);
+
+            wchar_t msg[256];
+            if (res->reportWritten)
+                swprintf_s(msg, L"%d duplicate group(s), %.1f MB — listing saved beside qIV",
+                           res->groups,
+                           static_cast<double>(res->reclaimable) / (1024.0 * 1024.0));
+            else
+                swprintf_s(msg, L"%d duplicate group(s), %.1f MB",
+                           res->groups,
+                           static_cast<double>(res->reclaimable) / (1024.0 * 1024.0));
+            g_overlayManager.PostCenterMessage(hWnd, msg);
+            return 0;
+        }
 
         case Constants::WM_QIV_SWITCH_TO_FIND:
             // The narrow scope: this is JumpToWnd handing over when the user
@@ -1439,6 +1478,7 @@ int WINAPI wWinMain(HINSTANCE hInstance, [[maybe_unused]] HINSTANCE hPrevInstanc
         Dedicated::InitPromotions();
     }
     ApplyCmdArgs(hWnd, runArgs, nCmdShow);
+
 
     // Remote control. ApplyCmdArgs has just merged the .ini with the -remote*
     // switches, so this is the first moment the configuration is complete.

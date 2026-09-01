@@ -700,6 +700,10 @@ namespace Constants {
     //          FOLDER is recorded in history even when only [0] can open. A
     //          single-path sender posts a one-element vector.
     constexpr UINT WM_QIV_OPEN_FILE = WM_USER + 4;
+
+    // Posted by the duplicate scan when it finishes. LPARAM owns a
+    // Platform::DuplicateScan::Result, which the window procedure deletes.
+    constexpr UINT WM_QIV_DUPLICATES_READY = WM_USER + 21;
     constexpr UINT WM_QIV_SWITCH_TO_FIND = WM_USER + 5; // FindWnd  ← PANEL_SWITCH_TO_FIND_CHAR typed in JumpToWnd
     constexpr UINT WM_QIV_SWITCH_TO_JUMP = WM_USER + 6; // JumpToWnd ← PANEL_SWITCH_TO_JUMP_CHAR typed in FindWnd
     constexpr UINT WM_QIV_SCAN_COMPLETE = WM_USER + 7; // Background dir scan done; LPARAM = new ScanResult*
@@ -1882,6 +1886,12 @@ namespace Constants {
         // its two PushFolderHistory calls runs. A folder DROPPED on the window
         // is recorded either way: that is a deliberate act, not walk noise.
         constexpr bool HISTORY_IMAGES_ONLY = true; // persisted (qivHistoryImagesOnly)
+        // Where the duplicate listing is written, beside the other qIV files.
+        // A FILE rather than a panel because it is a listing: it is read, sorted
+        // through and acted on in Explorer, and it survives closing the viewer -
+        // which a panel does not.
+        constexpr const wchar_t *DUPLICATES_REPORT_NAME = L"qivDuplicates.txt";
+
         constexpr const wchar_t *HISTORY_FILE_NAME = L"qivHistory.txt";
         constexpr const wchar_t *FAVORITES_FILE_NAME = L"qivFavorites.txt";
 

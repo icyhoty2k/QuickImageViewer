@@ -382,6 +382,9 @@ Command InputManager::ResolveKeyboardKeys(UINT key, LPARAM lParam) {
             break;
 
         case Shortcuts::SC_PAN_RIGHT: // 'D'  plain=pan-right  shift=move-right  alt=snap-right
+            // Ctrl+D — Duplicates. Unrelated to panning, but the mnemonic is the
+            // letter and every modifier on it was still free.
+            if (ctrl && !alt && !shift) return Command::FindDuplicates;
             if (!ctrl && alt && !shift) return Command::SnapRight;
             if (!ctrl && !alt && !shift) return Command::PanRight;
             if (!ctrl && !alt && shift) return Command::MoveWindowRight;
