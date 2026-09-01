@@ -2,11 +2,19 @@
 <!--
     MSIX manifest for QuickImageViewer.
 
-    ⚠ IDENTITY IS A PLACEHOLDER UNTIL THE NAME IS RESERVED. Name, Publisher and
-    PublisherDisplayName below must be replaced with the exact strings Partner
-    Center shows under Product identity after the app name is reserved. An upload
-    whose Publisher does not match the account character for character is rejected,
-    and the error does not say which field is wrong.
+    IDENTITY IS REAL, taken from Partner Center's Product identity page on
+    2026-09-02 after the name QuickImageViewer was reserved. Do not "tidy" any of
+    the three: the Publisher GUID, the Name and the PublisherDisplayName must match
+    the account character for character, and an upload that does not is rejected
+    with an error that never says which field is wrong.
+
+        Package/Identity/Name              IVANHRISTOVYANEV.QuickImageViewer
+        Package/Identity/Publisher         CN=6B94F428-...
+        Package/Properties/Publisher…Name  IVAN HRISTOV YANEV
+
+    ⚠ The PublisherDisplayName is capitalised the way Partner Center holds it, not
+    the way the app writes the author's name elsewhere. It is a matched field, not
+    a display choice.
 
     WHY MSIX AND NOT AN EXE SUBMISSION. The Store's EXE/MSI route requires a code
     signing certificate from a CA in the Microsoft Trusted Root Program - a
@@ -26,14 +34,14 @@
     IgnorableNamespaces="uap rescap">
 
   <Identity
-      Name="PLACEHOLDER.QuickImageViewer"
-      Publisher="CN=PLACEHOLDER"
+      Name="IVANHRISTOVYANEV.QuickImageViewer"
+      Publisher="CN=6B94F428-4184-428F-B240-2FDD4CF49248"
       Version="3.0.368.0"
       ProcessorArchitecture="x64" />
 
   <Properties>
     <DisplayName>QuickImageViewer</DisplayName>
-    <PublisherDisplayName>icyhoty2k</PublisherDisplayName>
+    <PublisherDisplayName>IVAN HRISTOV YANEV</PublisherDisplayName>
     <Logo>Assets\StoreLogo.png</Logo>
   </Properties>
 

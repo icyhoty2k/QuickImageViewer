@@ -40,16 +40,25 @@ Write-Host "  SDK      $($kit.Name)"
 
 if (-not (Test-Path $ExePath)) { throw "Not found: $ExePath - build Release_Static first." }
 
-# ⚠ THE EXE IS COPIED IN AND DELETED AGAIN. It is 10 MB of build output and has
-# no business being committed beside the manifest; the packaging folder holds
-# the manifest and the artwork, nothing that a build produces.
-$staged = Join-Path $here 'QuickImageViewer.exe'
-Copy-Item $ExePath $staged -Force
+# ⚠ STAGED INTO A CLEAN FOLDER, NEVER PACKED FROM $here.
+#
+# makeappx /d sweeps EVERYTHING under the directory it is given, and the first
+# build of this package shipped build-msix.ps1 to the Microsoft Store inside the
+# submission. The exe is also 10 MB of build output that has no business sitting
+# beside the manifest in git. Staging fixes both: the package contains exactly
+# the manifest, the artwork and the binary, and nothing that happens to share a
+# folder with them.
+$stage = Join-Path ([System.IO.Path]::GetTempPath()) ('qiv-msix-' + [guid]::NewGuid().ToString('N'))
+New-Item -ItemType Directory -Path $stage -Force | Out-Null
 try {
-    & $makeappx pack /d $here /p $OutFile /o
+    Copy-Item (Join-Path $here 'AppxManifest.xml') $stage
+    Copy-Item (Join-Path $here 'Assets') $stage -Recurse
+    Copy-Item $ExePath (Join-Path $stage 'QuickImageViewer.exe')
+
+    & $makeappx pack /d $stage /p $OutFile /o
     if ($LASTEXITCODE -ne 0) { throw "makeappx failed ($LASTEXITCODE)" }
 } finally {
-    Remove-Item $staged -Force -ErrorAction SilentlyContinue
+    Remove-Item $stage -Recurse -Force -ErrorAction SilentlyContinue
 }
 
 if ($SelfSign) {
@@ -88,7 +97,7 @@ if ($SelfSign) {
 Write-Host ''
 Write-Host "  wrote $OutFile"
 Write-Host ''
-Write-Host '  ⚠ BEFORE SUBMITTING: replace Identity Name, Publisher and'
-Write-Host '    PublisherDisplayName in AppxManifest.xml with the exact strings'
-Write-Host '    Partner Center shows under Product identity once the app name is'
-Write-Host '    reserved. A mismatch is rejected on upload without naming the field.'
+Write-Host '  Identity is set from Partner Center and must not be edited:'
+Write-Host '    IVANHRISTOVYANEV.QuickImageViewer / CN=6B94F428-...'
+Write-Host ''
+Write-Host '  Upload this file UNSIGNED. The Store signs it.'
