@@ -26,6 +26,31 @@ namespace Common::DuplicateFinder {
         return out;
     }
 
+    std::vector<std::vector<std::wstring>> Partition(
+        const std::vector<std::wstring> &paths,
+        const std::function<bool(const std::wstring &, const std::wstring &)> &equal) {
+
+        std::vector<std::vector<std::wstring>> sets;
+
+        // Each path is compared against the FIRST member of each existing set -
+        // its representative. Identical content is transitive, so agreeing with
+        // the representative is agreeing with all of them, and one comparison
+        // per set is enough. Groups reaching here hold a handful of files, so
+        // the quadratic worst case is a handful of comparisons.
+        for (const std::wstring &p : paths) {
+            bool placed = false;
+            for (auto &set : sets) {
+                if (equal(set.front(), p)) {
+                    set.push_back(p);
+                    placed = true;
+                    break;
+                }
+            }
+            if (!placed) sets.push_back({p});
+        }
+        return sets;
+    }
+
     std::vector<Group> FindGroups(const std::vector<Candidate> &candidates) {
         // Keyed by size AND digest. Digest alone would be enough for a good
         // hash, but size is already known and free to compare, and a collision

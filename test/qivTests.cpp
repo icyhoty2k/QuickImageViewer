@@ -928,6 +928,55 @@ namespace {
             CHECK(again[0].paths.front() == groups[0].paths.front());
         }
 
+        NOTE("Partition splits a group that only LOOKED identical");
+        // The hash said these three match. Bytes say the middle one does not.
+        // This is the collision case: astronomically unlikely, and the whole
+        // reason the comparison exists, because the consequence is a deleted
+        // photograph.
+        {
+            auto equal = [](const std::wstring &a, const std::wstring &b) {
+                const bool aOdd = a.find(L"odd") != std::wstring::npos;
+                const bool bOdd = b.find(L"odd") != std::wstring::npos;
+                return aOdd == bOdd;
+            };
+            const std::vector<std::wstring> paths { L"a.jpg", L"odd.jpg", L"b.jpg" };
+            const auto sets = Partition(paths, equal);
+            CHECK(sets.size() == 2);
+            CHECK(sets[0].size() == 2);          // a and b
+            CHECK(sets[1].size() == 1);          // odd, alone
+            CHECK(sets[1][0] == std::wstring(L"odd.jpg"));
+        }
+
+        NOTE("a group that IS identical survives partitioning whole");
+        {
+            auto always = [](const std::wstring &, const std::wstring &) { return true; };
+            const std::vector<std::wstring> paths { L"a.jpg", L"b.jpg", L"c.jpg" };
+            const auto sets = Partition(paths, always);
+            CHECK(sets.size() == 1);
+            CHECK(sets[0].size() == 3);
+        }
+
+        NOTE("a file that cannot be READ ends up alone, never somebody's duplicate");
+        // The comparison answers false when it cannot read, and false must mean
+        // "not the same" rather than "assume the same".
+        {
+            auto never = [](const std::wstring &, const std::wstring &) { return false; };
+            const std::vector<std::wstring> paths { L"a.jpg", L"b.jpg" };
+            const auto sets = Partition(paths, never);
+            CHECK(sets.size() == 2);
+            CHECK(sets[0].size() == 1);
+            CHECK(sets[1].size() == 1);
+        }
+
+        NOTE("partitioning keeps the given order inside each set");
+        {
+            auto always = [](const std::wstring &, const std::wstring &) { return true; };
+            const std::vector<std::wstring> paths { L"keep.jpg", L"copy.jpg" };
+            const auto sets = Partition(paths, always);
+            CHECK(sets.size() == 1);
+            CHECK(sets[0][0] == std::wstring(L"keep.jpg"));
+        }
+
         NOTE("paths keep the order they were given, so the caller decides the original");
         {
             std::vector<Candidate> in {

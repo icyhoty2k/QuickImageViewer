@@ -10,6 +10,7 @@
 
 #include <atomic>
 #include <cstdio>
+#include <cstring> // memcmp - the byte-for-byte confirmation
 #include <fstream>
 #include <vector>
 
@@ -48,6 +49,37 @@ namespace Platform::DuplicateScan {
             }
             out = h;
             return true;
+        }
+
+        // Byte-for-byte. The last word on whether two files are the same file.
+        //
+        // Reads both in lockstep and stops at the first difference, so a pair
+        // that is NOT identical usually costs a single block rather than two
+        // whole files. Only pairs that already agree on size and on a 64-bit
+        // digest ever get here, so in practice it confirms rather than refutes.
+        //
+        // Any read failure answers FALSE - not "assume equal". An unreadable
+        // file then lands in a set of its own and is never reported as somebody
+        // else's duplicate, which is the only safe direction for a tool whose
+        // output people delete things from.
+        bool SameBytes(const std::wstring &a, const std::wstring &b) {
+            if (a == b) return true; // the same file, listed once
+
+            std::ifstream fa(a, std::ios::in | std::ios::binary);
+            std::ifstream fb(b, std::ios::in | std::ios::binary);
+            if (!fa.is_open() || !fb.is_open()) return false;
+
+            char bufA[64 * 1024];
+            char bufB[64 * 1024];
+            for (;;) {
+                fa.read(bufA, sizeof bufA);
+                fb.read(bufB, sizeof bufB);
+                const std::streamsize na = fa.gcount();
+                const std::streamsize nb = fb.gcount();
+                if (na != nb) return false;                 // different lengths
+                if (na == 0) return fa.eof() && fb.eof();   // both ended together
+                if (std::memcmp(bufA, bufB, static_cast<size_t>(na)) != 0) return false;
+            }
         }
 
         std::wstring ReportPath() {
@@ -119,7 +151,27 @@ namespace Platform::DuplicateScan {
                     }
                 }
 
-                const auto groups = Common::DuplicateFinder::FindGroups(candidates);
+                // PROVEN, not merely hashed. Same size and same 64-bit digest is
+                // enormously strong evidence and still evidence: a hash maps many
+                // inputs onto one value. The consequence of being wrong is a
+                // deleted photograph, so each group is confirmed byte for byte
+                // before it is reported.
+                //
+                // Affordable because it runs LAST: what reaches here is a handful
+                // of files that already agree twice over, so this confirms rather
+                // than searches. A group that turns out to hold two different
+                // pictures is split, and any set left with one member is dropped
+                // by the same rule FindGroups uses.
+                std::vector<Common::DuplicateFinder::Group> groups;
+                for (const auto &g : Common::DuplicateFinder::FindGroups(candidates)) {
+                    for (auto &set : Common::DuplicateFinder::Partition(g.paths, SameBytes)) {
+                        if (set.size() < 2) continue;
+                        Common::DuplicateFinder::Group confirmed;
+                        confirmed.size  = g.size;
+                        confirmed.paths = std::move(set);
+                        groups.push_back(std::move(confirmed));
+                    }
+                }
                 result->groups = static_cast<int>(groups.size());
                 for (const auto &g : groups) {
                     result->files += static_cast<int>(g.paths.size());

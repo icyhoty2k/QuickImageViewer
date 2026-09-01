@@ -2,6 +2,7 @@
 #pragma once
 
 #include <cstdint>
+#include <functional>
 #include <string>
 #include <vector>
 
@@ -76,5 +77,37 @@ namespace Common::DuplicateFinder {
     // were given, so the caller's own ordering decides which copy reads as the
     // original.
     std::vector<Group> FindGroups(const std::vector<Candidate> &candidates);
+
+    // Splits one group into sets that are ACTUALLY identical, using a caller
+    // supplied byte comparison.
+    //
+    // WHY THIS EXISTS AT ALL. Same size plus same 64-bit digest is enormously
+    // strong evidence, and it is still evidence rather than proof: a hash maps
+    // many inputs onto one value, so two different pictures CAN collide. The
+    // odds are astronomical and the consequence is somebody deleting a
+    // photograph they wanted, which is exactly the trade where astronomical is
+    // not good enough.
+    //
+    // (A CRC32 would be far weaker, not stronger: 32 bits collide by accident
+    // within tens of thousands of files, and it is an error-detection code, not
+    // a fingerprint. The answer to "be certain" is not a different hash - it is
+    // to stop hashing and compare the bytes.)
+    //
+    // It is affordable BECAUSE it runs last. Size eliminated almost everything,
+    // the digest eliminated the rest, and what reaches here is a handful of
+    // files that really are expected to match - so the comparison confirms, and
+    // reads each file at most once more.
+    //
+    // `equal(a, b)` returns true when the two files hold identical bytes. It may
+    // return false for a file it could not read, and that is the safe direction:
+    // an unreadable file ends up in a set of its own and is never reported as a
+    // duplicate of anything.
+    //
+    // Returns one vector per distinct content. Sets of a single path are kept -
+    // the caller decides that a set of one is not a duplicate, the same rule
+    // FindGroups already applies.
+    std::vector<std::vector<std::wstring>> Partition(
+        const std::vector<std::wstring> &paths,
+        const std::function<bool(const std::wstring &, const std::wstring &)> &equal);
 
 } // namespace Common::DuplicateFinder
