@@ -271,11 +271,16 @@ namespace UI {
         Add(Ctrl(SC::SC_PAN_RIGHT),
             L"Find duplicate pictures across every folder qIV knows. Groups by file size "
             L"first, so almost nothing is read; only files that share a size are opened and "
-            L"hashed in full. Byte-identical copies only — a re-encoded or rotated version "
-            L"is a different file and is deliberately not listed. Results open in the Find "
-            L"panel with the copies next to each other, and a listing is written to "
-            L"qivDuplicates.txt beside qIV. NOTHING IS DELETED: deciding what to remove "
-            L"stays yours, in Explorer, where it can be undone.", sNav);
+            L"compared byte for byte. Identical copies only — a re-encoded or rotated "
+            L"version is a different file and is deliberately not listed. Results open in "
+            L"the Find panel, each row numbered by group so 1. 1. 1. 2. 2. says which "
+            L"copies belong together, and a listing is written to qivDuplicates.txt beside "
+            L"qIV. Clicking a row shows every copy in its group side by side at the bottom "
+            L"of the panel, the selected one framed — identical files usually differ only "
+            L"in name, and seeing them together is the only way to be sure. Clicking a "
+            L"thumbnail selects that copy. RIGHT-CLICK a row or a thumbnail to open it, "
+            L"show it in Explorer, or send it to the RECYCLE BIN — never a straight "
+            L"delete, because a choice made at speed from a list has to be undoable.", sNav);
         Add(CtrlShift(SC::SC_NAV_FIND),
             L"The same panel, searching EVERY folder qIV knows — the whole history, not "
             L"just the one on screen. Find a picture by name without remembering where it "

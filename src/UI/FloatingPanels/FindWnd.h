@@ -37,6 +37,7 @@ namespace UI {
         // scope changed while the panel was already open and typing.
         void RefreshMatches();
 
+
         // Show a LIST somebody else built, instead of searching.
         //
         // Used by the duplicate scan: the panel already lists paths from other
@@ -47,10 +48,18 @@ namespace UI {
         //
         // Typing in the box leaves the list and returns to searching, so the
         // panel never has two meanings at once.
-        void ShowList(std::vector<std::wstring> paths, std::wstring heading);
+        // `groupIds` is aligned with `paths` and says which entries are copies of
+        // each other. Selecting one then previews the WHOLE group, because the
+        // question a duplicate list has to answer is "are these the same
+        // picture", and one thumbnail cannot answer it. Pass an empty vector
+        // when the list has no grouping.
+        void ShowList(std::vector<std::wstring> paths, std::vector<int> groupIds,
+                      std::wstring heading);
         ~FindWnd() {
             if (m_hFontNorm) DeleteObject(m_hFontNorm);
             if (m_hFontBold) DeleteObject(m_hFontBold);
+            // The previews are GDI bitmaps this panel owns; nothing else frees them.
+            ClearPreviews();
             DestroyBackBuffer();
         }
 
@@ -90,6 +99,78 @@ namespace UI {
         // search results. It is also the header text, so there is one thing to
         // check rather than a flag and a string that could disagree.
         std::wstring             m_listHeading;
+
+        // --- The preview of the SELECTED row -----------------------------------
+        //
+        // Duplicates are the reason this exists: three byte-identical files with
+        // different names, and the only safe way to decide which to delete is to
+        // look at it. A path and a size do not answer "is this the picture I
+        // think it is".
+        //
+        // A shell thumbnail rather than a decode: it is one call, it is cached by
+        // Windows, and it is the same source the thumbnail strips already use -
+        // so this panel cannot disagree with them about what a file looks like.
+        struct Preview {
+            std::wstring path;
+            HBITMAP      bmp = nullptr;
+            int          w   = 0;
+            int          h   = 0;
+        };
+
+        // The pictures currently on show: every copy in the selected row's
+        // group, in list order, so the row and the thumbnail under it line up.
+        std::vector<Preview> m_previews;
+
+        // Which group they belong to, so arrowing WITHIN a group costs nothing -
+        // the same pictures are already loaded and must not be re-read on every
+        // keystroke.
+        int m_previewGroup = -1;
+
+        // Group id per row, aligned with m_results. Empty when the list is not
+        // grouped, in which case each row previews only itself.
+        std::vector<int> m_rowGroup;
+
+        // At most this many thumbnails side by side. A group of thirty copies is
+        // possible and unreadable; the list still lists them all.
+        static constexpr int PREVIEW_MAX = 5;
+
+        // Loads the previews for the selected row's group, if they are not the
+        // ones already loaded.
+        void RequestPreview();
+
+        void ClearPreviews();
+
+        // Where the preview strip was last painted, so a click on a thumbnail
+        // can be turned back into the row it belongs to. Same reason as
+        // m_listTopPx: the arithmetic is DPI- and count-dependent, and a second
+        // copy of it in the mouse handler is how a click lands on the
+        // neighbouring copy. Box 0 means nothing is on show.
+        int m_prevLeftPx = 0;
+        int m_prevTopPx  = 0;
+        int m_prevBoxPx  = 0;
+        int m_prevCellPx = 0;
+
+        // The row whose picture is under (x, y), or -1. A thumbnail stands for a
+        // row, so clicking it must do what clicking that row does - the pictures
+        // are the readable half of a duplicate list and the list is the half
+        // that acts.
+        [[nodiscard]] int PreviewRowAt(int x, int y) const;
+
+        // The right-click menu for one row: open it, show it in Explorer, or
+        // send it to the Recycle Bin.
+        //
+        // ⚠ RECYCLE BIN, NEVER A REAL DELETE. This panel exists to help decide
+        // which of several identical files to remove, and a decision taken from
+        // a list at speed has to be reversible. Windows' own undo is the safety
+        // net, and it costs nothing to keep.
+        void ShowRowMenu(int row);
+
+        // Where the list was last painted, so a click can be turned into a row.
+        // Written by the paint, read by the mouse handler: the geometry depends
+        // on DPI and on the header, and duplicating that arithmetic in two
+        // places is how a click lands one row off.
+        int m_listTopPx = 0;
+        int m_rowHPx    = 0;
         int                      m_selIdx    = 0;
         int                      m_rowScroll = 0;
 

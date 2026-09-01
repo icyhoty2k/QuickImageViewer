@@ -149,9 +149,9 @@
 
                      python tools/build-site.py
                      python tools/build-site.py --check -->
-            <a class="cta-button" href="https://play.google.com/store/apps/details?id=net.icyhoty2k.qivremote">
-                <span class="glyph"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 4.6a1 1 0 0 1 1.51-.86l11.5 6.9a1 1 0 0 1 0 1.72l-11.5 6.9A1 1 0 0 1 7 18.4V4.6Z"/></svg></span>
-                <span>Get qIV Remote<small>Android &mdash; Google Play</small></span>
+            <a class="cta-button play" href="https://play.google.com/store/apps/details?id=net.icyhoty2k.qivremote">
+                <span class="glyph"><svg viewBox="0 0 24 24" aria-hidden="true"><path fill="#00d3ff" d="M3.6 2.3a1.5 1.5 0 0 0-.5 1.1v17.2c0 .45.19.85.5 1.1l9.03-9.7L3.6 2.3Z"/><path fill="#00f076" d="M3.6 2.3 16.1 9.3l-3.47 3.7L3.6 2.3Z"/><path fill="#ffce00" d="M16.1 9.3l3.9 2.18c.86.48.86 1.56 0 2.04l-3.9 2.18-3.47-3.2 3.47-3.2Z"/><path fill="#ff3a44" d="M3.6 21.7 12.63 13l3.47 3.7-12.5 5Z"/></svg></span>
+                <span>GET IT ON<small>Google Play &mdash; qIV Remote, free</small></span>
             </a>
             <a class="policy" href="qiv-remote-privacy.html"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><rect x="4.5" y="10.5" width="15" height="10" rx="2"/><path d="M8 10.5V7.2a4 4 0 0 1 8 0v3.3"/></svg>Privacy — Android app</a>
         </div>
@@ -176,7 +176,7 @@
             <div class="sc-row"><div class="sc-keys"><kbd>Insert</kbd> / <kbd>Delete</kbd></div><p class="sc-desc">Same walk restricted to the favorites, so the two pairs of keys never land on each other's entries.</p></div>
             <div class="sc-row"><div class="sc-keys"><kbd>J</kbd> / <kbd>Ctrl+G</kbd></div><p class="sc-desc">Open the Jump-to panel: type an image number and press Enter to go straight to it. Typing @ inside the panel switches to Find mode.</p></div>
             <div class="sc-row"><div class="sc-keys"><kbd>Ctrl+F</kbd></div><p class="sc-desc">Open the Find panel — fuzzy filename search with wildcard support: * matches any characters, ? matches exactly one (e.g. *.jpg or photo_??_2024.*). Searches THIS folder and the VRAM cache. <a class="sc-more" href="#image-navigation-ctrl-f">details</a></p></div>
-            <div class="sc-row"><div class="sc-keys"><kbd>Ctrl+D</kbd></div><p class="sc-desc">Find duplicate pictures across every folder qIV knows. Groups by file size first, so almost nothing is read; only files that share a size are opened and hashed in full. Byte-identical copies only  <a class="sc-more" href="#image-navigation-ctrl-d">details</a></p></div>
+            <div class="sc-row"><div class="sc-keys"><kbd>Ctrl+D</kbd></div><p class="sc-desc">Find duplicate pictures across every folder qIV knows. Groups by file size first, so almost nothing is read; only files that share a size are opened and compared byte for byte. <a class="sc-more" href="#image-navigation-ctrl-d">details</a></p></div>
             <div class="sc-row"><div class="sc-keys"><kbd>Ctrl+Shift+F</kbd></div><p class="sc-desc">The same panel, searching EVERY folder qIV knows — the whole history, not just the one on screen. Find a picture by name without remembering where it lives; opening a result takes you to that folder. <a class="sc-more" href="#image-navigation-ctrl-shift-f">details</a></p></div>
             <div class="sc-row"><div class="sc-keys"><kbd>L</kbd></div><p class="sc-desc">Reveal the current file in Windows Explorer (opens its folder with the file pre-selected).</p></div>
             <div class="sc-row"><div class="sc-keys"><kbd>Horizontal Wheel</kbd></div><p class="sc-desc">Cycle through the folders of your navigation history — one folder change per wheel notches. The folder snapshot is refreshed with in the History panel.</p></div>
@@ -480,7 +480,7 @@
     </article>
     <article class="sc-deep" id="image-navigation-ctrl-d">
         <h3><kbd>Ctrl+D</kbd><span class="sc-deep-sec">Image Navigation</span></h3>
-        <p>Find duplicate pictures across every folder qIV knows. Groups by file size first, so almost nothing is read; only files that share a size are opened and hashed in full. Byte-identical copies only — a re-encoded or rotated version is a different file and is deliberately not listed. Results open in the Find panel with the copies next to each other, and a listing is written to qivDuplicates.txt beside qIV. NOTHING IS DELETED: deciding what to remove stays yours, in Explorer, where it can be undone.</p>
+        <p>Find duplicate pictures across every folder qIV knows. Groups by file size first, so almost nothing is read; only files that share a size are opened and compared byte for byte. Identical copies only — a re-encoded or rotated version is a different file and is deliberately not listed. Results open in the Find panel, each row numbered by group so 1. 1. 1. 2. 2. says which copies belong together, and a listing is written to qivDuplicates.txt beside qIV. Clicking a row shows every copy in its group side by side at the bottom of the panel, the selected one framed — identical files usually differ only in name, and seeing them together is the only way to be sure. Clicking a thumbnail selects that copy. RIGHT-CLICK a row or a thumbnail to open it, show it in Explorer, or send it to the RECYCLE BIN — never a straight delete, because a choice made at speed from a list has to be undoable.</p>
     </article>
     <article class="sc-deep" id="image-navigation-ctrl-shift-f">
         <h3><kbd>Ctrl+Shift+F</kbd><span class="sc-deep-sec">Image Navigation</span></h3>

@@ -641,6 +641,14 @@ namespace Constants {
     // Default: let Windows generate and persistently cache thumbnails on first access.
     constexpr int SHELL_THUMB_FLAGS = 0x00000000;
 
+    // Longest edge of the Find panel's preview, in logical pixels.
+    //
+    // Big enough to tell two photographs apart at a glance, which is the whole
+    // job: duplicates are byte-identical files with different names, and the
+    // only safe way to choose which to delete is to look at one. Small enough
+    // that it costs a shell thumbnail rather than a decode.
+    constexpr int FIND_PREVIEW_SIZE = 180;
+
     // Maximum path buffer size for Win32 file dialogs (OPENFILENAMEW documented max).
     // Use everywhere a wchar_t buffer receives a user-selected or drag-dropped path.
     constexpr DWORD MAX_FILE_PATH = 32767;
@@ -704,6 +712,16 @@ namespace Constants {
     // Posted by the duplicate scan when it finishes. LPARAM owns a
     // Platform::DuplicateScan::Result, which the window procedure deletes.
     constexpr UINT WM_QIV_DUPLICATES_READY = WM_USER + 21;
+
+    // THE STARTUP FILE CHOOSER, asked for rather than opened.
+    //
+    // It is MODAL, and startup used to call it inline: with no remembered image
+    // and no history, everything after that call - the remote listener, -full,
+    // -slideshow, -hideMouse - waited on a human answering a dialog, and never
+    // ran at all if the window was left sitting there. Posting it hands the rest
+    // of the startup sequence its turn first, and the dialog opens when the
+    // message loop reaches it.
+    constexpr UINT WM_QIV_STARTUP_CHOOSER = WM_USER + 22;
     constexpr UINT WM_QIV_SWITCH_TO_FIND = WM_USER + 5; // FindWnd  ← PANEL_SWITCH_TO_FIND_CHAR typed in JumpToWnd
     constexpr UINT WM_QIV_SWITCH_TO_JUMP = WM_USER + 6; // JumpToWnd ← PANEL_SWITCH_TO_JUMP_CHAR typed in FindWnd
     constexpr UINT WM_QIV_SCAN_COMPLETE = WM_USER + 7; // Background dir scan done; LPARAM = new ScanResult*

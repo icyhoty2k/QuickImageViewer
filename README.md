@@ -32,7 +32,14 @@ once as you have devices lying around.
 
 <br>
 
-[![Download qIV](https://img.shields.io/badge/%E2%AC%87%20Download%20qIV-latest%20release-2ea44f?style=for-the-badge&labelColor=1a7f37)](https://github.com/icyhoty2k/QuickImageViewer/releases/latest)
+<a href="https://github.com/icyhoty2k/QuickImageViewer/releases/latest"><img height="62" alt="Download QuickImageViewer for Windows" src="https://img.shields.io/badge/%E2%AC%87%20DOWNLOAD-QuickImageViewer-2ea44f?style=for-the-badge&labelColor=0f172a"></a>
+&nbsp;&nbsp;
+<a href="https://play.google.com/store/apps/details?id=net.icyhoty2k.qivremote"><img height="62" alt="Get qIV Remote on Google Play" src="https://img.shields.io/badge/GET%20IT%20ON-Google%20Play-3DDC84?style=for-the-badge&logo=googleplay&logoColor=white&labelColor=01875F"></a>
+
+<sub><b>Windows 10 &amp; 11</b> &mdash; one portable EXE, no installer&nbsp;&nbsp;·&nbsp;&nbsp;<b>Android 13+</b> &mdash; free, no ads, no account</sub>
+
+<br>
+
 [![Sponsor](https://img.shields.io/badge/%E2%99%A5%20Sponsor-GitHub%20Sponsors-EA4AAA?style=for-the-badge&labelColor=bf3a8c)](https://github.com/sponsors/icyhoty2k)
 [![Ko-fi](https://img.shields.io/badge/%E2%98%95%20Ko--fi-buy%20a%20coffee-FF5E5B?style=for-the-badge&labelColor=c94340)](https://ko-fi.com/ivanhristovyanev)
 
@@ -69,7 +76,11 @@ once as you have devices lying around.
 
 <div align="center">
 
-[![Download the latest release](https://img.shields.io/badge/%E2%AC%87%20Download-QuickImageViewer.exe-2ea44f?style=for-the-badge&labelColor=1a7f37)](https://github.com/icyhoty2k/QuickImageViewer/releases/latest)
+<a href="https://github.com/icyhoty2k/QuickImageViewer/releases/latest"><img height="62" alt="Download QuickImageViewer.exe" src="https://img.shields.io/badge/%E2%AC%87%20DOWNLOAD-QuickImageViewer.exe-2ea44f?style=for-the-badge&labelColor=0f172a"></a>
+&nbsp;&nbsp;
+<a href="https://play.google.com/store/apps/details?id=net.icyhoty2k.qivremote"><img height="62" alt="Get qIV Remote on Google Play" src="https://img.shields.io/badge/GET%20IT%20ON-Google%20Play-3DDC84?style=for-the-badge&logo=googleplay&logoColor=white&labelColor=01875F"></a>
+
+<sub>The viewer for your PC, and <b>qIV Remote</b> for the phone in your pocket. Neither needs the other to be useful — together they turn any spare screen into a photo frame.</sub>
 
 </div>
 
@@ -160,11 +171,13 @@ does not try to replace them.</sub>
 
 <div align="center">
 
-[![Android](https://img.shields.io/badge/Android-13%2B-3DDC84?style=for-the-badge&logo=android&logoColor=white)](#requirements)
-[![Google Play](https://img.shields.io/badge/Google%20Play-get%20the%20app-3DDC84?style=for-the-badge&logo=googleplay&logoColor=white)](https://play.google.com/store/apps/details?id=net.icyhoty2k.qivremote)
-[![No account](https://img.shields.io/badge/no%20account-no%20cloud%20·%20no%20analytics-1f6feb?style=for-the-badge)](#a-private-network-and-nothing-else)
-
 **Your phone becomes the viewer's remote, a second screen, and a photo frame your PC drives.**
+
+<a href="https://play.google.com/store/apps/details?id=net.icyhoty2k.qivremote"><img height="72" alt="Get qIV Remote on Google Play" src="https://img.shields.io/badge/GET%20IT%20ON-Google%20Play-3DDC84?style=for-the-badge&logo=googleplay&logoColor=white&labelColor=01875F"></a>
+
+[![Android](https://img.shields.io/badge/Android-13%2B-3DDC84?style=for-the-badge&logo=android&logoColor=white)](#requirements)
+[![No account](https://img.shields.io/badge/no%20account-no%20cloud%20·%20no%20analytics-1f6feb?style=for-the-badge)](#a-private-network-and-nothing-else)
+[![Free](https://img.shields.io/badge/price-free-2ea44f?style=for-the-badge)](https://play.google.com/store/apps/details?id=net.icyhoty2k.qivremote)
 
 </div>
 
@@ -315,8 +328,13 @@ without the TV. You need **QuickImageViewer running on a Windows PC with its Loc
 enabled** (`F9` in qIV), and the phone on the same network. The app's About screen walks
 through the setup.
 
-[**Get it on Google Play**](https://play.google.com/store/apps/details?id=net.icyhoty2k.qivremote)
-— free to install, no ads, and demo mode runs every screen before you connect it to anything.
+<div align="center">
+
+<a href="https://play.google.com/store/apps/details?id=net.icyhoty2k.qivremote"><img height="62" alt="Get qIV Remote on Google Play" src="https://img.shields.io/badge/GET%20IT%20ON-Google%20Play-3DDC84?style=for-the-badge&logo=googleplay&logoColor=white&labelColor=01875F"></a>
+
+<sub>Free to install, no ads &mdash; and <b>demo mode runs every screen</b> before you connect it to anything.</sub>
+
+</div>
 
 ---
 
@@ -354,7 +372,7 @@ through the setup.
 | `J` / `Ctrl+G` | Jump to image by number (type `@` to switch to Find mode) |
 | `Ctrl+F` | Find by filename in **this folder** — wildcard support (`*`, `?`); type `#` to switch to Jump mode |
 | `Ctrl+Shift+F` | The same search across **every folder qIV knows** — find a picture by name without remembering where it lives, and open it straight from the result. Press it while Find is open to widen the search you are already typing; `Ctrl+F` narrows it back |
-| `Ctrl+D` | Find **duplicate pictures** across every folder qIV knows — byte-identical copies only. Groups by size first so almost nothing is read; results open in the Find panel with copies adjacent, and a listing is written to `qivDuplicates.txt`. Nothing is ever deleted |
+| `Ctrl+D` | Find **duplicate pictures** across every folder qIV knows — byte-identical copies only. Groups by size first so almost nothing is read; results open in the Find panel with each row numbered by group (`1. 1. 1. 2. 2.`), and a listing is written to `qivDuplicates.txt`. Click a row to see **every copy in its group side by side** with the selected one framed; click a thumbnail to select that copy. **Right-click** a row or a thumbnail to open it, show it in Explorer, or send it to the **Recycle Bin** — never a straight delete |
 | `L` | Reveal current file in Windows Explorer |
 | `PageUp` / `PageDown` | Previous / next folder in your history — walks only the **non-starred** rows |
 | `Insert` / `Delete` | Next / previous **favourite** folder — walks only the starred rows |
@@ -689,6 +707,16 @@ Two neighbouring controls change the window's *material* rather than its colour,
 
 </details>
 
+
+## Taskbar Jump List
+
+Right-click qIV's button on the taskbar and Windows lists your folders —
+favourites first, then the most recent — each one opening that folder straight
+in qIV, without the app having to be running first.
+
+It is built from the same history the Tab panel shows, so the two cannot
+disagree, and it is rebuilt whenever you navigate or star a folder. Clearing the
+history clears the Jump List with it.
 
 ## System Tray
 

@@ -486,6 +486,24 @@ LRESULT CALLBACK MainAppWndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM l
             InvalidateRect(hWnd, nullptr, FALSE);
             return 0;
 
+        case Constants::WM_QIV_STARTUP_CHOOSER:
+            // THE LAST-RESORT CHOOSER, reached only when startup found nothing
+            // to show - no remembered image, no remembered folder, no history.
+            //
+            // It arrives as a message rather than a call so that the rest of
+            // ApplyCmdArgs runs first: this dialog is modal, and inline it held
+            // up the remote listener, -full, -slideshow and -hideMouse behind a
+            // human. See WM_QIV_STARTUP_CHOOSER in Constants.h.
+            //
+            // Guarded on the playlist still being empty, because between the
+            // post and here a picture may already have arrived - a drag-drop, a
+            // remote `open`, or a second instance forwarding its argument. In
+            // that case the question has answered itself and a dialog on top of
+            // the picture would be a startup that ignored what it was given.
+            if (app.playlist.empty())
+                OpenInitialImage(hWnd);
+            return 0;
+
         case Constants::WM_QIV_DUPLICATES_READY: {
             // OWNS THE PAYLOAD. The scan handed it over when the post
             // succeeded; nothing else will free it.
@@ -509,7 +527,7 @@ LRESULT CALLBACK MainAppWndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM l
             swprintf_s(heading, L"%d duplicate group(s)  ·  %.1f MB in extra copies",
                        res->groups,
                        static_cast<double>(res->reclaimable) / (1024.0 * 1024.0));
-            uiManager.getFindWindow().ShowList(std::move(res->paths), heading);
+            uiManager.getFindWindow().ShowList(std::move(res->paths), std::move(res->groupIds), heading);
 
             wchar_t msg[256];
             if (res->reportWritten)

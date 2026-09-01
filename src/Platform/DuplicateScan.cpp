@@ -12,6 +12,7 @@
 #include <cstdio>
 #include <cstring> // memcmp - the byte-for-byte confirmation
 #include <fstream>
+#include <memory>  // unique_ptr - the result frees itself if the post fails
 #include <vector>
 
 extern IoThreadPool g_ioWorker;
@@ -130,7 +131,18 @@ namespace Platform::DuplicateScan {
         if (!g_running.compare_exchange_strong(expected, true)) return; // already scanning
 
         if (!g_ioWorker.PushTask([hWnd]() {
-                auto *result = new Result();
+                // ⚠ BOTH OF THESE RELEASE THEMSELVES ON THE WAY OUT, and the
+                // reason is that the thread pool CATCHES AND DISCARDS whatever a
+                // task throws. A bad_alloc partway through - a plausible end for
+                // an index of two hundred thousand paths - would otherwise leave
+                // g_running stuck true, and Ctrl+D dead for the rest of the
+                // session with no error anywhere saying why. The result would
+                // leak with it.
+                struct FlagGuard {
+                    ~FlagGuard() { g_running.store(false, std::memory_order_relaxed); }
+                } flagGuard;
+
+                auto result = std::make_unique<Result>();
 
                 std::vector<Common::DuplicateFinder::Candidate> candidates;
                 for (const auto &e : FolderIndex::Snapshot()) {
@@ -173,9 +185,14 @@ namespace Platform::DuplicateScan {
                     }
                 }
                 result->groups = static_cast<int>(groups.size());
+                int groupId = 0;
                 for (const auto &g : groups) {
                     result->files += static_cast<int>(g.paths.size());
-                    for (const std::wstring &p : g.paths) result->paths.push_back(p);
+                    for (const std::wstring &p : g.paths) {
+                        result->paths.push_back(p);
+                        result->groupIds.push_back(groupId);
+                    }
+                    ++groupId;
                     // What is RECLAIMABLE is every copy but one - the point is
                     // to keep a copy, so counting the whole group would promise
                     // space that only deleting the picture entirely would free.
@@ -186,14 +203,13 @@ namespace Platform::DuplicateScan {
                 result->reportWritten = !groups.empty() &&
                                         WriteReport(result->reportPath, groups, result->reclaimable);
 
-                g_running.store(false, std::memory_order_relaxed);
-
                 // Ownership moves to the window procedure only if the post
                 // succeeds - the same rule every other posted payload here
-                // follows.
-                if (!PostMessageW(hWnd, Constants::WM_QIV_DUPLICATES_READY, 0,
-                                  reinterpret_cast<LPARAM>(result)))
-                    delete result;
+                // follows. release() is called only after PostMessageW has said
+                // yes, so a failed post frees it here rather than leaking.
+                if (PostMessageW(hWnd, Constants::WM_QIV_DUPLICATES_READY, 0,
+                                 reinterpret_cast<LPARAM>(result.get())))
+                    (void)result.release();
             })) {
             // The pool refused the task, so nothing will ever clear the flag.
             g_running.store(false, std::memory_order_relaxed);

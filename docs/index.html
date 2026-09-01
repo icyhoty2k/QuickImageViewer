@@ -748,9 +748,9 @@ Version 2.263.0.334 &bull; Size: 9,888.50 KB &bull; Build Date: 2026-08-14
      that state is owned by one script, and a half-done flip is invisible -- so the
      script also sweeps for surfaces its own table does not name. -->
                     <div class="store-col">
-                        <a class="cta-button" href="https://play.google.com/store/apps/details?id=net.icyhoty2k.qivremote">
-                        <span class="glyph"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 4.6a1 1 0 0 1 1.51-.86l11.5 6.9a1 1 0 0 1 0 1.72l-11.5 6.9A1 1 0 0 1 7 18.4V4.6Z"/></svg></span>
-                        <span>Get qIV Remote<small>Android &mdash; Google Play</small></span></a>
+                        <a class="cta-button play" href="https://play.google.com/store/apps/details?id=net.icyhoty2k.qivremote">
+                        <span class="glyph"><svg viewBox="0 0 24 24" aria-hidden="true"><path fill="#00d3ff" d="M3.6 2.3a1.5 1.5 0 0 0-.5 1.1v17.2c0 .45.19.85.5 1.1l9.03-9.7L3.6 2.3Z"/><path fill="#00f076" d="M3.6 2.3 16.1 9.3l-3.47 3.7L3.6 2.3Z"/><path fill="#ffce00" d="M16.1 9.3l3.9 2.18c.86.48.86 1.56 0 2.04l-3.9 2.18-3.47-3.2 3.47-3.2Z"/><path fill="#ff3a44" d="M3.6 21.7 12.63 13l3.47 3.7-12.5 5Z"/></svg></span>
+                        <span>GET IT ON<small>Google Play &mdash; qIV Remote, free</small></span></a>
                         <a class="policy" href="qiv-remote-privacy.html"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><rect x="4.5" y="10.5" width="15" height="10" rx="2"/><path d="M8 10.5V7.2a4 4 0 0 1 8 0v3.3"/></svg>Privacy — Android app</a>
                     </div>
 <!-- SHARED-ANDROIDCTA-END -->
@@ -913,7 +913,7 @@ Version 2.263.0.334 &bull; Size: 9,888.50 KB &bull; Build Date: 2026-08-14
     </a>
     <a class="stat" href="https://github.com/icyhoty2k/QuickImageViewer">
         <span class="stat-glyph">📐</span>
-        <span class="stat-value">78.2k</span>
+        <span class="stat-value">78.5k</span>
         <span class="stat-label">lines of C++</span>
     </a>
     <a class="stat" href="https://github.com/icyhoty2k/QuickImageViewer/blob/main/LICENSE">
@@ -1144,6 +1144,36 @@ Version 2.263.0.334 &bull; Size: 9,888.50 KB &bull; Build Date: 2026-08-14
                         mixed-DPI setups
                     </li>
                 </ul>
+                <h3>Finding pictures</h3>
+                <ul>
+                    <li>
+                        <strong>Search every folder qIV knows</strong> &mdash; <kbd>Ctrl</kbd>+<kbd>F</kbd>
+                        searches the folder on screen, <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>F</kbd> searches
+                        the whole history. Find a picture by name without remembering where you put it, and
+                        open it straight from the result. Pressed while Find is already open it widens the
+                        search you are typing rather than closing the panel.
+                    </li>
+                    <li>
+                        <strong>Duplicate finder</strong> (<kbd>Ctrl</kbd>+<kbd>D</kbd>) &mdash; identical
+                        copies across every folder qIV knows. Files are grouped by size first, so almost
+                        nothing is read; only files that share a size are opened and compared
+                        <em>byte for byte</em>. No hash, no &ldquo;probably&rdquo;: a re-encoded or rotated
+                        version is a different file and is deliberately not listed.
+                    </li>
+                    <li>
+                        <strong>See them before you decide</strong> &mdash; results are numbered by group
+                        (<code>1. 1. 1. 2. 2.</code>), and clicking a row shows every copy in that group side
+                        by side with the selected one framed. Identical files usually differ only in name, so
+                        looking at them together is the only way to be sure. Right-click a row or a thumbnail
+                        to open it, show it in Explorer, or send it to the <strong>Recycle Bin</strong> &mdash;
+                        never a straight delete.
+                    </li>
+                    <li>
+                        <strong>Your folders on the taskbar</strong> &mdash; right-click qIV's taskbar button
+                        and Windows lists your favourites and recent folders, each opening that folder
+                        directly. Built from the same history the Tab panel shows, so the two cannot disagree.
+                    </li>
+                </ul>
                 <h3>File Management</h3>
                 <ul>
                     <li>
@@ -1254,7 +1284,7 @@ Version 2.263.0.334 &bull; Size: 9,888.50 KB &bull; Build Date: 2026-08-14
             everything below was pushed a screen further away by chrome that
             sells nothing.
 
-            Worse, it was hand-maintained. The app defines 207 shortcuts and
+            Worse, it was hand-maintained. The app defines 230 shortcuts and
             this listed 123, so it was both incomplete and free to drift from
             the binary the moment a key was remapped.
 
@@ -1263,13 +1293,13 @@ Version 2.263.0.334 &bull; Size: 9,888.50 KB &bull; Build Date: 2026-08-14
             of the things that actually make somebody try the app.
         -->
                 <p>
-                    Every shortcut in qIV &mdash; all 207 of them, in 16 sections &mdash; has its own page,
+                    Every shortcut in qIV &mdash; all 230 of them, in 16 sections &mdash; has its own page,
                     generated from the application's own help panel so it can never fall behind the build:
                 </p>
                 <div class="storerow">
                     <div class="store-col">
                         <a class="cta-button" href="shortcuts.html"><span class="glyph"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6h16a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2Zm0 2v8h16V8H4Z"/><path d="M6 10h2v1.6H6V10Zm3 0h2v1.6H9V10Zm3 0h2v1.6h-2V10Zm3 0h2v1.6h-2V10ZM6 12.9h2v1.6H6v-1.6Zm3 0h6v1.6H9v-1.6Zm7 0h2v1.6h-2v-1.6Z"/></svg></span>
-                        <span>Every keyboard shortcut<small>207 shortcuts, 16 sections</small></span></a>
+                        <span>Every keyboard shortcut<small>230 shortcuts, 16 sections</small></span></a>
                     </div>
                 </div>
                 <p style="margin-top: 14px;">
@@ -1379,8 +1409,11 @@ Version 2.263.0.334 &bull; Size: 9,888.50 KB &bull; Build Date: 2026-08-14
                         </tr>
                         <tr>
                             <td>Dir Thumb Cache</td>
-                            <td>100 – 64000 MB</td>
-                            <td>Memory budget for directory thumbnail bitmaps</td>
+                            <td>0 &ndash; your card's VRAM</td>
+                            <td>Memory budget for directory thumbnail bitmaps. <strong>0 turns the cache
+                                off</strong>, keeping only the thumbnail on screen; the maximum is this card's
+                                own graphics memory, which the dialog shows when it can read it. The
+                                Statistics panel reports both the budget and the card's total</td>
                         </tr>
                         <tr>
                             <td>Preload Lookaside</td>
@@ -2059,9 +2092,13 @@ CMD JumpToImage|1|go to a numbered image in the current playlist|image NUMBER, 1
                     <strong>A password is compulsory off loopback</strong> &mdash; the listener refuses to
                     start without one. It never crosses the wire: the server stores a PBKDF2-HMAC-SHA256
                     digest (210,000 iterations) and the client answers an HMAC over a fresh per-connection
-                    nonce, so every guess costs the guesser a full derivation and the server one HMAC. Five
-                    failures from one address within ten minutes blacklist it, each failure is answered a
-                    second late, and a peer that connects and then goes quiet is dropped after ten seconds.
+                    nonce, so every guess costs the guesser a full derivation and the server one HMAC.
+                    <strong>Failures escalate rather than banning outright</strong> &mdash; five from one
+                    address within ten minutes block it for fifteen minutes, and only five more earn a
+                    permanent entry in <code>qivRemoteServerBlacklist.ini</code>. The temporary block lives in
+                    memory only, so restarting qIV lifts it: mistyping your own password on a phone should not
+                    need a file edited to undo. Each failure is answered a second late, and a peer that
+                    connects and then goes quiet is dropped after ten seconds.
                 </p>
                 <p>
                     <strong>AllowList and BlackList take addresses, never domain names</strong> &mdash; a rule

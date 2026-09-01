@@ -486,6 +486,105 @@ nav.sitenav a.current {
     color: rgba(255, 255, 255, 0.85);
 }
 
+/* ------------------------------------------------------------------
+   THE GOOGLE PLAY BUTTON, made to be the loudest thing in its row.
+
+   WHY IT NEEDS ITS OWN LOOK. Both store buttons were the same sky-blue
+   .cta-button, which read as "two links" rather than "two products" — and
+   the Android one is the newer, less expected half of what this project is.
+   A visitor who scanned the row and saw one colour twice had no reason to
+   look at the second.
+
+   PLAY'S OWN GREEN, not the site accent. #01875F is the store's, and it is
+   the colour somebody is already looking for when they came to install an
+   app. The label stays white on it, which clears contrast comfortably —
+   the sky-blue button's dark-slate label would not.
+
+   NOT the official Play artwork. That badge is Google's, has its own
+   sizing and clear-space rules, and is a PNG this site would have to fetch
+   or vendor. A green button that says GET IT ON / Google Play is the same
+   promise, drawn in CSS, and stays inside the no-CDN rule.
+   ------------------------------------------------------------------ */
+.cta-button.play {
+    background-color: #01875f;
+    color: #ffffff;
+    /* The glow is what makes it the loudest without making it the biggest —
+       the row's geometry stays as it was, so nothing below moves. */
+    box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.25),
+                0 0 0 1px rgba(61, 220, 132, 0.35),
+                0 0 22px -4px rgba(61, 220, 132, 0.55);
+}
+
+.cta-button.play:hover {
+    background-color: #00a06f;
+    color: #ffffff;
+    box-shadow: 0 8px 18px -4px rgba(0, 0, 0, 0.35),
+                0 0 0 1px rgba(61, 220, 132, 0.55),
+                0 0 34px -2px rgba(61, 220, 132, 0.75);
+}
+
+/* The small print is set against a DARK fill here, so the translucent black
+   the blue button uses would be unreadable. Same relationship, other way up. */
+.cta-button.play small,
+.cta-button.play:hover small {
+    color: rgba(255, 255, 255, 0.82);
+}
+
+/* The four-colour Play mark. currentColor is deliberately NOT used: the
+   triangle is the one place on this site where the brand's own colours say
+   what the button is faster than the words do. */
+/* BIGGER THAN THE OTHER BUTTON'S GLYPH, on purpose. At 1.15em the four
+   colours resolve to a single green smudge and the mark says nothing; at
+   1.6em it is recognisably the store's own icon, which is the fastest way a
+   visitor learns what the button does. The glyph box grows with it so the
+   label stays on the first line. */
+.cta-button.play .glyph {
+    height: 2.1em;
+}
+
+.cta-button.play .glyph svg {
+    width: 1.6em;
+    height: 1.6em;
+    fill: none;
+}
+
+/* A "NEW" flag, because the app went to production on 31 August 2026 and a
+   visitor has no way to know that from a button. Positioned on the button
+   rather than beside it so it cannot wrap away from what it labels. */
+.cta-button.play {
+    position: relative;
+    overflow: visible;
+}
+
+.cta-button.play::after {
+    content: "NEW";
+    position: absolute;
+    top: -9px;
+    right: -10px;
+    background: #f59e0b;
+    color: #1a1200;
+    font-size: 0.62rem;
+    font-weight: 800;
+    letter-spacing: 0.08em;
+    padding: 2px 7px;
+    border-radius: 999px;
+    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.45);
+}
+
+/* A slow breath, so the eye lands on it once and then is left alone.
+   STOPPED for anyone who asked the OS to stop animations — a pulsing
+   element is a genuine problem for some readers, not a preference. */
+@keyframes qiv-play-pulse {
+    0%, 100% { transform: translateY(0); }
+    50%      { transform: translateY(-2px); }
+}
+
+@media (prefers-reduced-motion: no-preference) {
+    .cta-button.play {
+        animation: qiv-play-pulse 3.2s ease-in-out 1.5s 3;
+    }
+}
+
 /* .hero-cta IS GONE. It existed to force the hero's two buttons to one
    width with min-width: 280px, back when they were a button and a footnote
    -- 272x52 beside 195x68, in different colours.

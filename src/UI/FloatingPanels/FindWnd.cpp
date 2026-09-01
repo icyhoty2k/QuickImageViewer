@@ -12,13 +12,25 @@
 #include "../../Platform/Constants.h"
 #include "../../Platform/ConstantsIcons.h"
 #include "../../Platform/FileHandler.h"
+#include "../../Input/AppCommands.h" // RevealInExplorer / DeleteFileToRecycleBin
 #include "../../Platform/FolderIndex.h" // every folder qIV knows
 #include "../../Renderer/IRenderer.h"
 #include "Common/FuzzyMatch.h"
 #include "CustomControls/InputBox.h"
+#include "../../WorkerThread.h" // g_ioWorker — the preview thumbnail is filesystem work
+
+#include <shlobj_core.h> // SHCreateItemFromParsingName / IShellItemImageFactory
+#include <wrl/client.h>
+#include <memory>
 #include <algorithm>
+#include "Common/PreviewStrip.h" // which thumbnail a click landed on
 
 extern AppState app;
+
+// The selected row's thumbnail, ready to draw. Same mechanism ExifWnd uses, and
+// deliberately the same SOURCE - Windows' own thumbnail - so this panel cannot
+// disagree with the strips about what a file looks like.
+static constexpr UINT WM_FIND_PREVIEW_READY = WM_APP + 117;
 
 namespace UI {
 
@@ -39,7 +51,8 @@ void FindWnd::Init(HINSTANCE hInstance, HWND hParent) {
     // three that does not fit on screen at once has to be scrolled to be
     // compared, which is the one thing the list exists to make easy.
     const int w = static_cast<int>(820.0f * app.dpiScale);
-    const int h = static_cast<int>(460.0f * app.dpiScale);
+    // Taller again for the preview strip under the list - see the paint.
+    const int h = static_cast<int>(690.0f * app.dpiScale);
     InitFloating(hInstance, hParent, L"QivFindWndClass", L"Find Image", w, h);
 
     m_inputBox.SetPlaceholder(L"filename or *.ext…");
@@ -71,7 +84,8 @@ void FindWnd::Show() {
 //  Search logic
 // =============================================================================
 
-void FindWnd::ShowList(std::vector<std::wstring> paths, std::wstring heading) {
+void FindWnd::ShowList(std::vector<std::wstring> paths, std::vector<int> groupIds,
+                      std::wstring heading) {
     if (!m_hWnd) return;
 
     // THE BOX IS RESET FIRST, and the list built after.
@@ -95,6 +109,11 @@ void FindWnd::ShowList(std::vector<std::wstring> paths, std::wstring heading) {
         m_results.push_back(std::move(r));
     }
 
+    // Aligned with m_results, or empty when the caller has no grouping - in
+    // which case a row previews only itself.
+    m_rowGroup = (groupIds.size() == m_results.size()) ? std::move(groupIds)
+                                                       : std::vector<int>{};
+
     m_listHeading = std::move(heading);
     m_selIdx      = 0;
     m_rowScroll   = 0;
@@ -109,6 +128,18 @@ void FindWnd::RebuildMatches() {
     // longer what is on screen.
     m_listHeading.clear();
     m_results.clear();
+
+    // The grouping belonged to the OLD list. Left behind it is read by index
+    // against the new one, so search hit 3 would inherit whatever group row 3 of
+    // the duplicate list had - and preview four unrelated pictures as copies of
+    // each other.
+    m_rowGroup.clear();
+
+    // And the pictures on screen are of rows that no longer exist. A query that
+    // matches nothing would otherwise leave the previous thumbnails under a
+    // "No matches" list, which reads as those being the matches.
+    ClearPreviews();
+
     m_selIdx          = 0;
     m_rowScroll       = 0;
     m_cachedExtraCount = 0;
@@ -234,6 +265,170 @@ void FindWnd::RebuildMatches() {
 
 // Re-runs the current query. Used when the scope changed under an open panel -
 // Ctrl+Shift+F pressed while Ctrl+F's results are on screen.
+void FindWnd::ClearPreviews() {
+    for (Preview &pv : m_previews)
+        if (pv.bmp) DeleteObject(pv.bmp);
+    m_previews.clear();
+    m_previewGroup = -1;
+}
+
+// A thumbnail is looked up by PATH rather than by index, because the strip is
+// capped at PREVIEW_MAX while the list is not: preview 3 is not row 3 once a
+// group has more copies than the strip can hold.
+int FindWnd::PreviewRowAt(int x, int y) const {
+    const int slot = Common::PreviewStrip::SlotAt(
+        x, y, m_prevLeftPx, m_prevTopPx, m_prevBoxPx, m_prevCellPx,
+        static_cast<int>(m_previews.size()));
+    if (slot < 0) return -1;
+
+    for (size_t i = 0; i < m_results.size(); ++i)
+        if (m_results[i].path == m_previews[slot].path) return static_cast<int>(i);
+    return -1;
+}
+
+void FindWnd::RequestPreview() {
+    if (m_results.empty()) return;
+    if (m_selIdx < 0 || m_selIdx >= static_cast<int>(m_results.size())) return;
+
+    // WHICH PICTURES BELONG WITH THE SELECTED ONE. In a duplicate list that is
+    // its whole group, because "are these really the same picture" cannot be
+    // answered by one thumbnail - the copies have to be seen together. Anywhere
+    // else there is no grouping and a row stands for itself.
+    const int group = (m_selIdx < static_cast<int>(m_rowGroup.size()))
+                          ? m_rowGroup[m_selIdx]
+                          : -1;
+
+    // Already loaded. Arrowing WITHIN a group must not re-read the same files on
+    // every keystroke - the pictures on screen are already the right ones.
+    if (group >= 0 && group == m_previewGroup && !m_previews.empty()) return;
+
+    ClearPreviews();
+    m_previewGroup = group;
+
+    std::vector<std::wstring> wanted;
+    if (group < 0) {
+        wanted.push_back(m_results[m_selIdx].path);
+    } else {
+        for (size_t i = 0; i < m_results.size() && wanted.size() < PREVIEW_MAX; ++i)
+            if (i < m_rowGroup.size() && m_rowGroup[i] == group)
+                wanted.push_back(m_results[i].path);
+    }
+
+    // The slots exist before any thumbnail arrives, so the answers can be placed
+    // by path rather than by arrival order - they come back out of order, and a
+    // slow drive must not shuffle the pictures under the names.
+    for (std::wstring &w : wanted) {
+        Preview pv;
+        pv.path = std::move(w);
+        m_previews.push_back(std::move(pv));
+    }
+
+    const HWND hwnd = m_hWnd;
+    const LONG size = static_cast<LONG>(Constants::FIND_PREVIEW_SIZE * app.dpiScale);
+
+    for (const Preview &pv : m_previews) {
+        const std::wstring path = pv.path;
+
+        // On the IO pool: a shell thumbnail can touch a slow or absent drive, and
+        // a list that stopped responding while somebody arrows down it would be
+        // worse than no preview at all.
+        (void) g_ioWorker.PushTask([path, hwnd, size]() {
+            Microsoft::WRL::ComPtr<IShellItem> item;
+            if (FAILED(SHCreateItemFromParsingName(path.c_str(), nullptr, IID_PPV_ARGS(&item)))) return;
+
+            Microsoft::WRL::ComPtr<IShellItemImageFactory> factory;
+            if (FAILED(item->QueryInterface(IID_PPV_ARGS(&factory)))) return;
+
+            HBITMAP bmp = nullptr;
+            const SIZE sz = { size, size };
+            if (FAILED(factory->GetImage(sz, static_cast<SIIGBF>(Constants::SHELL_THUMB_FLAGS), &bmp)) || !bmp)
+                return;
+
+            auto *sent = new std::wstring(path);
+            if (!PostMessageW(hwnd, WM_FIND_PREVIEW_READY,
+                              reinterpret_cast<WPARAM>(sent), reinterpret_cast<LPARAM>(bmp))) {
+                DeleteObject(bmp);
+                delete sent;
+            }
+        });
+    }
+}
+
+void FindWnd::ShowRowMenu(int row) {
+    if (row < 0 || row >= static_cast<int>(m_results.size())) return;
+    const std::wstring path = m_results[row].path; // copied: the list may change under us
+
+    enum : UINT { ID_OPEN = 1, ID_REVEAL, ID_RECYCLE };
+
+    HMENU menu = CreatePopupMenu();
+    if (!menu) return;
+    AppendMenuW(menu, MF_STRING, ID_OPEN,    L"Open");
+    AppendMenuW(menu, MF_STRING, ID_REVEAL,  L"Show in Explorer");
+    AppendMenuW(menu, MF_SEPARATOR, 0, nullptr);
+    AppendMenuW(menu, MF_STRING, ID_RECYCLE, L"Delete to Recycle Bin");
+
+    POINT pt{};
+    GetCursorPos(&pt);
+
+    // TPM_RETURNCMD, so the command comes back here rather than as a WM_COMMAND
+    // this panel would have to route. SetForegroundWindow first is the documented
+    // requirement for a popup on a window that may not be active, without which
+    // the menu can refuse to dismiss.
+    SetForegroundWindow(m_hWnd);
+    const UINT cmd = static_cast<UINT>(TrackPopupMenu(
+        menu, TPM_RETURNCMD | TPM_RIGHTBUTTON | TPM_NONOTIFY, pt.x, pt.y, 0, m_hWnd, nullptr));
+    DestroyMenu(menu);
+
+    switch (cmd) {
+        case ID_OPEN:
+            CommitOpen();
+            break;
+
+        case ID_REVEAL:
+            AppCommands::RevealInExplorer(path);
+            break;
+
+        case ID_RECYCLE: {
+            AppCommands::DeleteFileToRecycleBin(path);
+
+            // The row goes even if the delete was refused - it is checked below
+            // by asking the filesystem rather than by trusting the call, because
+            // a row still listing a file that is gone is the one thing that
+            // makes somebody delete the WRONG copy next.
+            if (GetFileAttributesW(path.c_str()) == INVALID_FILE_ATTRIBUTES) {
+                m_results.erase(m_results.begin() + row);
+
+                // ⚠ THE GROUP IDS ARE A PARALLEL ARRAY AND MUST BE ERASED WITH
+                // IT. Left alone, every row below the deleted one reads the id
+                // of the row above it: the numbers in the gutter shift, and -
+                // far worse - RequestPreview then gathers the wrong set of
+                // pictures as "this row's group" and shows copies of a
+                // DIFFERENT picture as if they were this one's. That is the
+                // exact mistake that ends in the wrong file being deleted next.
+                if (row < static_cast<int>(m_rowGroup.size()))
+                    m_rowGroup.erase(m_rowGroup.begin() + row);
+
+                if (m_selIdx >= static_cast<int>(m_results.size()))
+                    m_selIdx = static_cast<int>(m_results.size()) - 1;
+                if (m_selIdx < 0) m_selIdx = 0;
+
+                // The preview is of a file that no longer exists.
+                // The pictures on screen include one that no longer exists, and
+                // the group is now smaller - both are reasons to load it again
+                // rather than patch what is displayed.
+                ClearPreviews();
+
+                AdjustScroll();
+                InvalidateRect(m_hWnd, nullptr, FALSE);
+            }
+            break;
+        }
+
+        default:
+            break; // dismissed
+    }
+}
+
 void FindWnd::RefreshMatches() {
     RebuildMatches();
     m_selIdx = 0;
@@ -245,6 +440,11 @@ void FindWnd::RefreshMatches() {
 void FindWnd::AdjustScroll() {
     if (m_results.empty()) return;
     m_selIdx = std::max(0, std::min(m_selIdx, static_cast<int>(m_results.size()) - 1));
+
+    // EVERY selection change funnels through here - the arrows, page keys, a
+    // click, a rebuild - so the preview is asked for once, in one place, rather
+    // than from each of those separately where one would eventually be missed.
+    RequestPreview();
     if (m_selIdx < m_rowScroll)
         m_rowScroll = m_selIdx;
     if (m_selIdx >= m_rowScroll + VISIBLE_ROWS)
@@ -348,6 +548,45 @@ LRESULT FindWnd::HandlePanelMessage(UINT message, WPARAM wParam, LPARAM lParam) 
     if (message == WM_ERASEBKGND) return 1;
     switch (message) {
 
+    case WM_FIND_PREVIEW_READY: {
+        // OWNS BOTH. The worker handed over the bitmap and the path it belongs
+        // to when the post succeeded; nothing else will free them.
+        std::unique_ptr<std::wstring> forPath(reinterpret_cast<std::wstring *>(wParam));
+        HBITMAP bmp = reinterpret_cast<HBITMAP>(lParam);
+
+        // A LATE ANSWER FOR A ROW THE USER HAS LEFT IS DROPPED. Arrowing down a
+        // list starts a request per row and they finish out of order; without
+        // this check a slow drive's thumbnail would appear under whatever name
+        // is selected by the time it lands.
+        // PLACED BY PATH, never by arrival order. Several thumbnails are in
+        // flight at once and they finish in whatever order the disk allows; a
+        // slow one landing last must not end up under the wrong name.
+        //
+        // A path nobody is waiting for any more - the selection moved to another
+        // group while it was loading - is simply dropped.
+        bool placed = false;
+        if (forPath && bmp) {
+            for (Preview &pv : m_previews) {
+                if (pv.path != *forPath) continue;
+                if (pv.bmp) DeleteObject(pv.bmp);
+                pv.bmp = bmp;
+                BITMAP bm{};
+                GetObject(bmp, sizeof(bm), &bm);
+                pv.w = bm.bmWidth;
+                pv.h = bm.bmHeight;
+                placed = true;
+                break;
+            }
+        }
+        if (!placed) {
+            if (bmp) DeleteObject(bmp);
+            return 0;
+        }
+
+        InvalidateRect(m_hWnd, nullptr, FALSE);
+        return 0;
+    }
+
     case WM_CHAR: {
         wchar_t ch = static_cast<wchar_t>(wParam);
         if (ch == Constants::PANEL_SWITCH_TO_JUMP_CHAR && m_inputBox.IsEmpty()) {
@@ -360,10 +599,45 @@ LRESULT FindWnd::HandlePanelMessage(UINT message, WPARAM wParam, LPARAM lParam) 
         return 0;
     }
 
-    case WM_LBUTTONDOWN:
+    case WM_LBUTTONDOWN: {
+        // A CLICK ON A ROW SELECTS IT, which is what puts that picture in the
+        // preview below. The list was keyboard-only - tolerable for a search you
+        // are typing into, wrong for a list of duplicates: that list is READ,
+        // and the natural way to inspect an entry is to click it.
+        //
+        // Tested BEFORE the input box sees the message, because a click in the
+        // list is not a click in the box, and the box would otherwise swallow it
+        // and move its caret instead.
+        const int mx = GET_X_LPARAM(lParam);
+        const int my = GET_Y_LPARAM(lParam);
+
+        // A PICTURE IS A ROW. Clicking a thumbnail selects the copy it shows, so
+        // the list highlight, the frame and the path all move together - having
+        // to look at a picture and then hunt for its line above would undo the
+        // reason the strip is there.
+        const int pvRow = PreviewRowAt(mx, my);
+        if (pvRow >= 0) {
+            m_selIdx = pvRow;
+            AdjustScroll();     // scrolls the list to it; the group is unchanged
+            InvalidateRect(m_hWnd, nullptr, FALSE);
+            return 0;
+        }
+
+        if (!m_results.empty() && m_rowHPx > 0 && my >= m_listTopPx) {
+            const int row = m_rowScroll + (my - m_listTopPx) / m_rowHPx;
+            if (row >= 0 && row < static_cast<int>(m_results.size()) &&
+                row < m_rowScroll + VISIBLE_ROWS) {
+                m_selIdx = row;
+                AdjustScroll();     // also asks for that row's preview
+                InvalidateRect(m_hWnd, nullptr, FALSE);
+                return 0;
+            }
+        }
+
         if (m_inputBox.RouteMouse(WM_LBUTTONDOWN, wParam, lParam, m_hWnd) == InputResult::ConsumedRepaint)
             InvalidateRect(m_hWnd, nullptr, FALSE);
         return 0;
+    }
 
     case WM_LBUTTONUP:
         // Ends a drag-select. Without it the box only drops m_dragging on the
@@ -372,10 +646,45 @@ LRESULT FindWnd::HandlePanelMessage(UINT message, WPARAM wParam, LPARAM lParam) 
             InvalidateRect(m_hWnd, nullptr, FALSE);
         return 0;
 
-    case WM_RBUTTONUP:
+    case WM_RBUTTONUP: {
+        // RIGHT-CLICK RESOLVES. Finding duplicates is only half the job; the
+        // other half is doing something about one, and making the user leave
+        // for Explorer to do it means losing the list that told them which copy
+        // it was.
+        const int mx = GET_X_LPARAM(lParam);
+        const int my = GET_Y_LPARAM(lParam);
+
+        // Right-clicking a picture resolves that copy. The menu has to be
+        // reachable from whichever half of the panel the eye is on.
+        const int pvRow = PreviewRowAt(mx, my);
+        if (pvRow >= 0) {
+            m_selIdx = pvRow;
+            AdjustScroll();
+            InvalidateRect(m_hWnd, nullptr, FALSE);
+            UpdateWindow(m_hWnd);
+            ShowRowMenu(pvRow);
+            return 0;
+        }
+
+        if (!m_results.empty() && m_rowHPx > 0 && my >= m_listTopPx) {
+            const int row = m_rowScroll + (my - m_listTopPx) / m_rowHPx;
+            if (row >= 0 && row < static_cast<int>(m_results.size()) &&
+                row < m_rowScroll + VISIBLE_ROWS) {
+                // Select first, so the preview shows what the menu is about -
+                // acting on a row you cannot see is how the wrong copy goes.
+                m_selIdx = row;
+                AdjustScroll();
+                InvalidateRect(m_hWnd, nullptr, FALSE);
+                UpdateWindow(m_hWnd);
+                ShowRowMenu(row);
+                return 0;
+            }
+        }
+
         if (m_inputBox.RouteMouse(WM_RBUTTONUP, wParam, lParam, m_hWnd) == InputResult::ConsumedRepaint)
             InvalidateRect(m_hWnd, nullptr, FALSE);
         return 0;
+    }
 
     case WM_MOUSEMOVE:
         if (m_inputBox.RouteMouse(WM_MOUSEMOVE, wParam, lParam, m_hWnd) == InputResult::ConsumedRepaint)
@@ -492,6 +801,8 @@ LRESULT FindWnd::HandlePanelMessage(UINT message, WPARAM wParam, LPARAM lParam) 
 
         // ── Match list ────────────────────────────────────────────────────────
         const int listTop = y;
+        m_listTopPx = listTop;   // for the click hit-test - see WM_LBUTTONDOWN
+        m_rowHPx    = rowH;
 
         if (m_results.empty()) {
             const bool hasQuery = m_queryLen > 0;
@@ -527,6 +838,42 @@ LRESULT FindWnd::HandlePanelMessage(UINT message, WPARAM wParam, LPARAM lParam) 
 
                 int textX = pad + (selected ? pad / 2 : 0);
                 int textY = y + (rowH - tm.tmHeight) / 2;
+
+                // ── THE GROUP NUMBER ──────────────────────────────────────────
+                //
+                // WHICH COPIES BELONG TOGETHER. A flat list of eight names is
+                // unreadable as duplicates: it says every one of them is a
+                // duplicate of SOMETHING and never which. "1. 1. 1. 2. 2." is
+                // the whole answer, and it is answered by a gutter rather than
+                // by blank separator lines, because a list that has to scroll
+                // cannot spend rows on nothing.
+                //
+                // Only when the list IS grouped. A search result has no groups,
+                // and an empty gutter there would be indentation with no meaning.
+                if (!m_rowGroup.empty() && ri < static_cast<int>(m_rowGroup.size())) {
+                    // Sized off the widest number actually in this list, so the
+                    // names line up with each other and a two-digit group does
+                    // not push its own row out of step with the rest.
+                    wchar_t widest[16];
+                    swprintf_s(widest, L"%d.", *std::max_element(m_rowGroup.begin(),
+                                                                 m_rowGroup.end()) + 1);
+                    SIZE gutSz{};
+                    GetTextExtentPoint32W(hdc, widest, static_cast<int>(wcslen(widest)), &gutSz);
+
+                    wchar_t num[16];
+                    swprintf_s(num, L"%d.", m_rowGroup[ri] + 1);
+
+                    // Right-aligned in the gutter: the dots form a column, which
+                    // is what makes "same number" readable at a glance instead of
+                    // something to compare digit by digit.
+                    SetTextColor(hdc, selected ? clrSelText : clrLabel);
+                    RECT nr = { textX, y, textX + gutSz.cx, y + rowH };
+                    DrawTextW(hdc, num, -1, &nr,
+                              DT_RIGHT | DT_VCENTER | DT_SINGLELINE | DT_NOPREFIX);
+
+                    textX += gutSz.cx + static_cast<int>(10.0f * dpi);
+                }
+
                 RECT clip = { textX, y, rc.right - pad, y + rowH };
 
                 Common::DrawMatchText(hdc, fname, fnameLen, isHL, textX, textY, clip,
@@ -576,6 +923,84 @@ LRESULT FindWnd::HandlePanelMessage(UINT message, WPARAM wParam, LPARAM lParam) 
         }
 
         y = listTop + rowH * VISIBLE_ROWS + gap;
+
+        // --- The selected picture -----------------------------------------------
+        //
+        // THE POINT OF THE WHOLE PANEL WHEN IT IS SHOWING DUPLICATES. Three
+        // byte-identical files with different names in different folders: the
+        // list says they are the same, and the only way to be comfortable
+        // deleting one is to see what it is. A path is not an answer to "is this
+        // the picture I think it is".
+        //
+        // Drawn for any selection that has one, so a cross-folder search hit
+        // gets the same confirmation - "found it" and "found the right one" are
+        // different claims.
+        m_prevBoxPx = 0; // nothing hit-testable unless the strip is drawn below
+        if (!m_previews.empty()) {
+            const int box = static_cast<int>(Constants::FIND_PREVIEW_SIZE * dpi);
+            const int cell = box + gap;
+            const int count = static_cast<int>(m_previews.size());
+
+            // Centred as a row, so a group of three reads as three pictures side
+            // by side rather than one picture and some space.
+            int px = (rc.right - (cell * count - gap)) / 2;
+            const int py = y + gap;
+            int tallest = 0;
+
+            // Handed to the mouse handler - see PreviewRowAt.
+            m_prevLeftPx = px;
+            m_prevTopPx  = py;
+            m_prevBoxPx  = box;
+            m_prevCellPx = cell;
+
+            for (int i = 0; i < count; ++i) {
+                const Preview &pv = m_previews[i];
+
+                // The SELECTED copy is framed. With several identical pictures on
+                // screen the frame is the only thing saying which row the menu
+                // and Enter will act on - without it, acting on "this one" is a
+                // guess.
+                const bool isSel = (m_selIdx < static_cast<int>(m_results.size())) &&
+                                   (m_results[m_selIdx].path == pv.path);
+                if (isSel) {
+                    RECT fr = { px - 2, py - 2, px + box + 2, py + box + 2 };
+                    FrameRect(hdc, &fr, UI::Gdi::Brush(clrOrange));
+                }
+
+                if (pv.bmp && pv.w > 0 && pv.h > 0) {
+                    // Aspect preserved and never enlarged past the box: a
+                    // stretched preview would misrepresent the very thing being
+                    // compared.
+                    const float scale = std::min(static_cast<float>(box) / pv.w,
+                                                 static_cast<float>(box) / pv.h);
+                    const int dstW = std::max(1, static_cast<int>(pv.w * scale));
+                    const int dstH = std::max(1, static_cast<int>(pv.h * scale));
+
+                    HDC hMem = CreateCompatibleDC(hdc);
+                    HBITMAP prev = static_cast<HBITMAP>(SelectObject(hMem, pv.bmp));
+
+                    // HALFTONE would look better and SILENTLY FAILS here: it
+                    // needs a SetBrushOrgEx beside it, and without one StretchBlt
+                    // returns 0 and draws nothing at all.
+                    SetStretchBltMode(hdc, COLORONCOLOR);
+                    StretchBlt(hdc, px + (box - dstW) / 2, py + (box - dstH) / 2,
+                               dstW, dstH, hMem, 0, 0, pv.w, pv.h, SRCCOPY);
+                    SelectObject(hMem, prev);
+                    DeleteDC(hMem);
+                    tallest = std::max(tallest, dstH);
+                } else {
+                    // Still loading. Saying so beats an empty rectangle that
+                    // looks like a picture which failed to open.
+                    SetTextColor(hdc, clrDim);
+                    RECT lr = { px, py, px + box, py + box };
+                    DrawTextW(hdc, L"…", -1, &lr, DT_CENTER | DT_VCENTER | DT_SINGLELINE);
+                    tallest = std::max(tallest, box / 3);
+                }
+                px += cell;
+            }
+
+            y = py + std::max(tallest, box / 3) + gap;
+        }
 
         // ── Bottom divider ────────────────────────────────────────────────────
         {

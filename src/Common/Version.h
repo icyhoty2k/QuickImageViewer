@@ -38,8 +38,8 @@
 // RC COMPATIBLE DEFINITIONS
 // Used by the Resource Compiler for version metadata.
 // =========================================================================
-#define VER_MAJOR 2
-#define VER_MINOR 263
+#define VER_MAJOR 3
+#define VER_MINOR 0
 #define VER_PATCH 0
 
 #define FILE_DESC     "qIV"

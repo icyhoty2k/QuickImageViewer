@@ -1999,15 +1999,31 @@ void OpenStartupTarget(HWND hWnd) {
     // 4. Nothing usable — a fresh install, history gone or corrupt, or every
     //    remembered place has since been emptied or deleted. Ask, rather than
     //    sit there blank: this is the same chooser F2 opens.
-    OpenInitialImage(hWnd);
+    //
+    // ⚠ POSTED, NEVER CALLED HERE. The chooser is MODAL, and this function runs
+    // inside ApplyCmdArgs — so calling it inline stopped the startup sequence
+    // dead at this line. Everything after it waited on a human: the remote
+    // listener never opened its socket, -full never went fullscreen, -slideshow
+    // never started, and a launch left with the dialog on screen did none of
+    // them at all. `qIV -remote` on a machine with no history is exactly that
+    // case, and the phone could not connect to it.
+    //
+    // Posting hands the rest of startup its turn first; the dialog opens when
+    // the message loop reaches it, which is the same dialog either way.
+    PostMessageW(hWnd, Constants::WM_QIV_STARTUP_CHOOSER, 0, 0);
 
     // 5. THE BLACK-SCREEN GUARD.
     //
-    // The chooser above is modal, so by here the user has either opened
-    // something or dismissed it. Dismissing it used to leave a live window with
-    // no playlist, no folder and folderOverlay still None — which renders as a
-    // plain black rectangle with no text, no hint and nothing to click. It looks
-    // exactly like a broken renderer, and that is how it was reported.
+    // Raised BEFORE the chooser now rather than after it, which is also better:
+    // it is what the window shows while the dialog is up, instead of black. A
+    // successful pick clears it — OpenDirectory and OpenSpecificImage both call
+    // ClearFolderOverlay — so it survives exactly the case it is for, which is
+    // the dialog being dismissed.
+    //
+    // Without it, dismissing left a live window with no playlist, no folder and
+    // folderOverlay still None — a plain black rectangle with no text, no hint
+    // and nothing to click. It looks exactly like a broken renderer, and that is
+    // how it was reported.
     //
     // The Missing/Empty overlay already draws the two lines wanted here — a
     // heading and the folder path, the path clickable to open it in Explorer.

@@ -52,6 +52,12 @@ namespace Platform::DuplicateScan {
         // you are comparing are next to each other in the list, so arrowing
         // through it shows copy, copy, next group.
         std::vector<std::wstring> paths;
+
+        // Which group each path belongs to, aligned with `paths`. Carried rather
+        // than re-derived: the panel needs to show the OTHER copies of whatever
+        // row is selected, and size-and-digest equality is the scan's answer to
+        // give, not something a UI should work out again from file names.
+        std::vector<int> groupIds;
     };
 
 } // namespace Platform::DuplicateScan

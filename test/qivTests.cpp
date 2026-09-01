@@ -61,6 +61,7 @@
 #include "Common/FuzzyMatch.h"
 #include "Common/Utf8.h"           // the history files' encoding
 #include "Common/DuplicateFinder.h" // what counts as the same picture
+#include "Common/PreviewStrip.h"    // which thumbnail a click landed on
 #include "Persistence/HistoryFoldersManager.h" // HistoryPath - untrusted line hygiene
 #include "Persistence/IniFile.h"         // every persisted setting travels through this
 #include "Persistence/RotatingLogFile.h"
@@ -806,6 +807,62 @@ namespace {
     //  wrong answer deletes a photograph. So the rule is pure, and every way it
     //  could be wrong is a check here.
     // -------------------------------------------------------------------------
+    // -------------------------------------------------------------------------
+    //  THE PREVIEW STRIP - which thumbnail a click landed on.
+    //
+    //  The duplicate list draws every copy in a group side by side, and clicking
+    //  one selects that copy. Get this wrong by one cell and the panel selects
+    //  the picture NEXT to the one under the finger - and the next thing that
+    //  happens is a Recycle Bin entry for the wrong file.
+    //
+    //  Boxes are `box` wide, `cell` apart, so cell - box is the gap between them.
+    // -------------------------------------------------------------------------
+    void TestPreviewStrip() {
+        using Common::PreviewStrip::SlotAt;
+
+        // Three 100-wide boxes at x = 10, 120, 230; top 50; gap 10.
+        const int L = 10, T = 50, BOX = 100, CELL = 110, N = 3;
+
+        NOTE("a point inside a box selects THAT box");
+        CHECK(SlotAt( 10, 50, L, T, BOX, CELL, N) == 0);   // exact top-left
+        CHECK(SlotAt( 60, 100, L, T, BOX, CELL, N) == 0);  // middle of the first
+        CHECK(SlotAt(170, 100, L, T, BOX, CELL, N) == 1);
+        CHECK(SlotAt(280, 100, L, T, BOX, CELL, N) == 2);
+
+        NOTE("the LAST pixel of a box still belongs to it");
+        CHECK(SlotAt(109, 149, L, T, BOX, CELL, N) == 0);
+        CHECK(SlotAt(329, 149, L, T, BOX, CELL, N) == 2);
+
+        NOTE("the GAP between two boxes belongs to neither");
+        // A click here is visibly in empty space; selecting the box on its left
+        // would read as the click landing somewhere it did not.
+        CHECK(SlotAt(110, 100, L, T, BOX, CELL, N) == -1);
+        CHECK(SlotAt(119, 100, L, T, BOX, CELL, N) == -1);
+        CHECK(SlotAt(120, 100, L, T, BOX, CELL, N) ==  1); // first pixel of the next
+
+        NOTE("outside the strip is a miss, in every direction");
+        CHECK(SlotAt(  9, 100, L, T, BOX, CELL, N) == -1); // left of the first
+        CHECK(SlotAt(340, 100, L, T, BOX, CELL, N) == -1); // past the last
+        CHECK(SlotAt( 60,  49, L, T, BOX, CELL, N) == -1); // above
+        CHECK(SlotAt( 60, 150, L, T, BOX, CELL, N) == -1); // below
+
+        NOTE("the gap AFTER the last box is a miss, not slot 2");
+        CHECK(SlotAt(330, 100, L, T, BOX, CELL, N) == -1);
+
+        NOTE("nothing on show means nothing to hit");
+        // The strip is not painted when the count is zero, and the stored
+        // geometry is stale - so the count has to be the thing that decides.
+        CHECK(SlotAt( 60, 100, L, T, BOX, CELL, 0) == -1);
+        CHECK(SlotAt( 60, 100, L, T,   0, CELL, N) == -1);
+        CHECK(SlotAt( 60, 100, L, T, BOX,    0, N) == -1);
+
+        NOTE("a fourth box is not hittable when only three are on show");
+        // The list can hold more copies than the strip shows - PREVIEW_MAX caps
+        // it - so a click past the last drawn one must miss rather than index
+        // a picture that is not there.
+        CHECK(SlotAt(390, 100, L, T, BOX, CELL, N) == -1);
+    }
+
     void TestDuplicateFinder() {
         using namespace Common::DuplicateFinder;
         auto C = [](const wchar_t *path, unsigned long long size,
@@ -2318,6 +2375,10 @@ int main(int argc, char **argv) {
 
     BeginGroup("Duplicates - what counts as the same picture");
     TestDuplicateFinder();
+    EndGroup();
+
+    BeginGroup("Preview strip - which thumbnail a click landed on");
+    TestPreviewStrip();
     EndGroup();
 
     BeginGroup("AllowList - entry validation and scope");
