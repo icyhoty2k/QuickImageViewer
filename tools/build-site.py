@@ -1043,6 +1043,56 @@ def build_sitemap():
     return text, (existing != text)
 
 
+# ---------------------------------------------------------------------------
+# JOB 4 - THE NUMBERS WRITTEN OUT IN PROSE
+#
+# shortcuts.html is generated and cannot be wrong. The sentences ABOUT it are
+# typed by hand, and on 2026-09-01 and -02 two of them were wrong in public at
+# the same time: the site said 207 shortcuts when the app defined 230, and said
+# 49 file extensions when SUPPORTED_EXTENSIONS[] held 44 - the other 5 were the
+# settings file, the log, the history backup and two of qIV's own list formats.
+#
+# A number in prose is exactly as public as a number in a table, and rots
+# faster, because nothing regenerates it. This compares each one against the
+# source of truth and fails --check when they disagree.
+# ---------------------------------------------------------------------------
+def supported_extension_count():
+    """How many file extensions the app itself says it opens."""
+    src = read(os.path.join(REPO, 'src', 'Platform', 'Constants.h'))
+    i = src.find('SUPPORTED_EXTENSIONS[] = {')
+    if i < 0:
+        return None
+    block = src[i:src.index('};', i)]
+    return len(set(re.findall(r'L"\.([a-z0-9]+)"', block)))
+
+
+def check_public_numbers(total, nsec):
+    """Returns a list of complaints, empty when every prose number is right."""
+    bad = []
+    exts = supported_extension_count()
+
+    # Each entry: file, the phrase as it must read, and what it is counting.
+    # Written as whole phrases rather than bare numbers on purpose - "230"
+    # alone appears in hashes and colours, and a checker with false positives
+    # is one somebody switches off.
+    wanted = [
+        ('index.html',       'The app defines %d shortcuts' % total,          'shortcut count'),
+        ('index.html',       'all %d of them, in %d sections' % (total, nsec), 'shortcut count'),
+        ('index.html',       '<small>%d shortcuts, %d sections</small>' % (total, nsec), 'shortcut count'),
+    ]
+    if exts:
+        wanted.append(('photo-frame.html',
+                       '%d file extensions' % exts, 'file-extension count'))
+
+    for page, phrase, what in wanted:
+        path = os.path.join(DOCS, page)
+        if not os.path.isfile(path):
+            continue
+        if phrase not in read(path):
+            bad.append('%s: the %s is stale - expected "%s"' % (page, what, phrase))
+    return bad
+
+
 def main():
     check = '--check' in sys.argv
     print('QuickImageViewer site build%s' % ('  [check only]' if check else ''))
@@ -1113,6 +1163,13 @@ def main():
             write(STATS_PARTIAL, stats_html)
             print('  wrote _partials/stats.html - %s' % note)
 
+    print('\n== numbers written out in prose ==')
+    prose = check_public_numbers(total, nsec)
+    for b in prose:
+        print('  STALE: %s' % b)
+    if not prose:
+        print('  every hand-written count matches the source')
+
     print('\n== sitemap ==')
     smtext, smstale = build_sitemap()
     npages = smtext.count('<loc>')
@@ -1133,8 +1190,11 @@ def main():
     if not written and not stale:
         print('  every page already matches _partials/')
 
-    if check and (stale or shortcuts_stale or smstale):
+    if check and (stale or shortcuts_stale or smstale or prose):
         print('\nFAIL - run:  python build-site.py')
+        return 1
+    if prose:
+        print('\nFAIL - a published number disagrees with the source above.')
         return 1
     print('\nOK.')
     return 0
