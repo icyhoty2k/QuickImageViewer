@@ -3,88 +3,31 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Turn an Old Phone or Tablet into a Digital Photo Frame — No Cloud, No Subscription</title>
+    <title>Open EXR and HDR Files on Windows — No Plugin, No Photoshop</title>
 
-    <meta name="description" content="Use a spare Android phone or tablet as a digital photo frame driven by your Windows PC. Your photos stay on your own machine — no cloud, no account and no subscription.">
+    <meta name="description" content="Open .exr, .hdr, .qoi and .ppm files on Windows with a single free executable. Decoders built in, no plugin to hunt down, no installer and no subscription.">
     <meta name="robots" content="index, follow">
-    <link rel="canonical" href="https://icyhoty2k.github.io/QuickImageViewer/photo-frame.html">
+    <link rel="canonical" href="https://icyhoty2k.github.io/QuickImageViewer/open-exr-hdr-windows.html">
 
     <link rel="icon" type="image/svg+xml" href="favicon.svg">
     <link rel="icon" type="image/x-icon" href="favicon.ico">
-    <meta name="theme-color" content="#0d1a26">
+    <meta name="theme-color" content="#0f172a">
 
     <link rel="stylesheet" href="site.css?v=2">
 
     <meta property="og:type" content="article">
     <meta property="og:site_name" content="QuickImageViewer">
-    <meta property="og:title" content="Turn an old phone or tablet into a digital photo frame">
-    <meta property="og:description" content="A spare Android device, your Windows PC, and your own Wi-Fi. No cloud, no account, no subscription, and no hardware to buy.">
-    <meta property="og:url" content="https://icyhoty2k.github.io/QuickImageViewer/photo-frame.html">
+    <meta property="og:title" content="Open EXR and HDR files on Windows, without a plugin">
+    <meta property="og:description" content="Double-click an .exr and see it. The decoders are built into one free 9.7 MB executable — no plugin, no installer, no subscription.">
+    <meta property="og:url" content="https://icyhoty2k.github.io/QuickImageViewer/open-exr-hdr-windows.html">
     <meta property="og:image" content="https://icyhoty2k.github.io/QuickImageViewer/qiv-remote-og.png">
-    <meta property="og:image:alt" content="An Android tablet showing a photograph, driven by a Windows PC">
+    <meta property="og:image:alt" content="QuickImageViewer displaying a high dynamic range image">
     <meta property="og:locale" content="en_GB">
     <meta name="twitter:card" content="summary_large_image">
-    <meta name="twitter:title" content="Turn an old phone or tablet into a digital photo frame">
-    <meta name="twitter:description" content="A spare Android device, your Windows PC, and your own Wi-Fi. No cloud, no account, no subscription.">
+    <meta name="twitter:title" content="Open EXR and HDR files on Windows, without a plugin">
+    <meta name="twitter:description" content="The decoders are built into one free 9.7 MB executable — no plugin, no installer, no subscription.">
     <meta name="twitter:image" content="https://icyhoty2k.github.io/QuickImageViewer/qiv-remote-og.png">
 
-<!-- HowTo, because the page IS a how-to and the query behind it is a task
-     rather than a product. FAQPage below it answers the four objections that
-     decide whether somebody bothers: does it cost anything, does it need the
-     internet, does the PC have to stay on, how old can the device be. Both are
-     written from what the page actually says - a schema block that promises
-     steps the page does not contain is the kind of thing that earns a manual
-     action, not a rich result. -->
-<script type="application/ld+json">
-{
-  "@context": "https://schema.org",
-  "@type": "HowTo",
-  "name": "Turn an old phone or tablet into a digital photo frame",
-  "description": "Use a spare Android device as a photo frame driven by a Windows PC over your own network, with no cloud service and no subscription.",
-  "totalTime": "PT10M",
-  "supply": [
-    { "@type": "HowToSupply", "name": "A spare Android phone or tablet, Android 13 or later" },
-    { "@type": "HowToSupply", "name": "A Windows 10 or 11 PC holding your photographs" },
-    { "@type": "HowToSupply", "name": "A Wi-Fi network both devices are on" }
-  ],
-  "tool": [
-    { "@type": "HowToTool", "name": "QuickImageViewer for Windows" },
-    { "@type": "HowToTool", "name": "qIV Remote for Android" }
-  ],
-  "step": [
-    {
-      "@type": "HowToStep",
-      "name": "Install QuickImageViewer on the PC",
-      "text": "Download the single executable and run it. There is no installer and nothing is written outside the registry.",
-      "url": "https://icyhoty2k.github.io/QuickImageViewer/photo-frame.html#step-1"
-    },
-    {
-      "@type": "HowToStep",
-      "name": "Switch on the local server",
-      "text": "Press F9 in QuickImageViewer to start its local server and set a password. The PC now accepts connections from your own network only.",
-      "url": "https://icyhoty2k.github.io/QuickImageViewer/photo-frame.html#step-2"
-    },
-    {
-      "@type": "HowToStep",
-      "name": "Install qIV Remote on the Android device",
-      "text": "Install the companion app from Google Play. It is free to install, with no ads and no account; the Watch screen used as the frame is part of a one-off in-app unlock.",
-      "url": "https://icyhoty2k.github.io/QuickImageViewer/photo-frame.html#step-3"
-    },
-    {
-      "@type": "HowToStep",
-      "name": "Connect the device to the PC",
-      "text": "Enter the PC's address and the password you set. The app finds the viewer on the same Wi-Fi and connects directly to it.",
-      "url": "https://icyhoty2k.github.io/QuickImageViewer/photo-frame.html#step-4"
-    },
-    {
-      "@type": "HowToStep",
-      "name": "Start the slideshow and prop the device up",
-      "text": "Start a slideshow on the PC and the device follows it. Every picture the PC shows appears on the frame.",
-      "url": "https://icyhoty2k.github.io/QuickImageViewer/photo-frame.html#step-5"
-    }
-  ]
-}
-</script>
 <script type="application/ld+json">
 {
   "@context": "https://schema.org",
@@ -92,34 +35,29 @@
   "mainEntity": [
     {
       "@type": "Question",
-      "name": "What is free, and what is not?",
-      "acceptedAnswer": { "@type": "Answer", "text": "QuickImageViewer on the PC is free and open source under the AGPL, with every feature included and nothing to buy. qIV Remote on the phone is free to install, with no ads and no account, and its Simple remote works on one saved PC for free. The Watch screen — the photo frame itself — is part of a one-off in-app unlock, along with the Advanced remote, the Stream screen and saving more than one PC. It is a single purchase rather than a subscription, and the app's demo mode runs every paid screen before you decide." }
+      "name": "Can I open an .exr file on Windows without Photoshop?",
+      "acceptedAnswer": { "@type": "Answer", "text": "Yes. QuickImageViewer decodes OpenEXR itself, through the tinyexr library compiled into the program. There is no plugin to install, no codec pack, and no subscription — it is a single free executable that opens the file when you double-click it." }
     },
     {
       "@type": "Question",
-      "name": "Do my photos go to a cloud service?",
-      "acceptedAnswer": { "@type": "Answer", "text": "No. The phone talks to your PC directly over your own network. There is no server in the middle, no account, and no copy of your pictures anywhere but the machine they were already on." }
+      "name": "Does it need a codec pack or a Windows extension?",
+      "acceptedAnswer": { "@type": "Answer", "text": "Not for EXR, HDR, QOI, PNM or SVG — those decoders are built in. HEIC does need Microsoft's free HEIF Extensions and camera RAW needs the Microsoft Raw Image Extension, because those go through the Windows imaging pipeline rather than through the program's own decoders." }
     },
     {
       "@type": "Question",
-      "name": "Does the PC have to stay switched on?",
-      "acceptedAnswer": { "@type": "Answer", "text": "Yes. The PC holds the photographs and drives the frame, so it has to be running and on the same network. This is a way to use a machine you already leave on, not a standalone photo frame." }
+      "name": "How is a high dynamic range image shown on an ordinary screen?",
+      "acceptedAnswer": { "@type": "Answer", "text": "It is tone-mapped. EXR and Radiance HDR store far more range than a normal display can show, so the image is mapped down with a Reinhard tone-map and gamma 2.2 to produce something viewable. It is a viewer, not a grading tool: there is no exposure slider and no attempt to replace a compositor." }
     },
     {
       "@type": "Question",
-      "name": "How old can the phone or tablet be?",
-      "acceptedAnswer": { "@type": "Answer", "text": "It needs Android 13 or later, which rules out devices older than roughly 2022. The app is small and does no decoding of its own beyond displaying what the PC sends, so an old device is not a problem as long as it meets that." }
-    },
-    {
-      "@type": "Question",
-      "name": "Can I use more than one device at once?",
-      "acceptedAnswer": { "@type": "Answer", "text": "Yes. The PC drives as many connected devices as you have, and they all show the same picture. A phone in the kitchen and a tablet in the hall work from one machine." }
+      "name": "What does it cost?",
+      "acceptedAnswer": { "@type": "Answer", "text": "Nothing. QuickImageViewer is free and open source under the AGPL — no advertising, no telemetry, nothing to buy, and no account." }
     }
   ]
 }
 </script>
 </head>
-<body class="android">
+<body>
 
 <!-- SHARED-HEADER-START -->
 <nav class="sitenav">
@@ -154,7 +92,7 @@
              the query behind it has no incumbent - and because an internal
              link from every page is the strongest signal this site can give
              a crawler on its own. -->
-        <a href="photo-frame.html" class="current"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><rect x="3" y="4.5" width="18" height="15" rx="2"/><circle cx="8.3" cy="9.3" r="1.6"/><path d="m3.6 17.4 4.9-4.6 3.4 3.2 3.1-2.7 5.4 4.7"/></svg>Photo frame</a>
+        <a href="photo-frame.html"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><rect x="3" y="4.5" width="18" height="15" rx="2"/><circle cx="8.3" cy="9.3" r="1.6"/><path d="m3.6 17.4 4.9-4.6 3.4 3.2 3.1-2.7 5.4 4.7"/></svg>Photo frame</a>
         <a href="qiv-remote-privacy.html"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><rect x="4.5" y="10.5" width="15" height="10" rx="2"/><path d="M8 10.5V7.2a4 4 0 0 1 8 0v3.3"/></svg>Privacy — Android</a>
         <!-- The developer site, one level up at the account root. An absolute URL
              on purpose: this project lives at /QuickImageViewer/, so "../" would
@@ -189,178 +127,141 @@
 
 <main class="container">
 
-    <h1>Turn an old phone or tablet into a digital photo frame</h1>
+    <h1>Open EXR and HDR files on Windows &mdash; without a plugin</h1>
 
     <p class="subtitle">
-        A spare Android device, the Windows PC your photographs are already on, and your own
-        Wi-Fi. No cloud service, no account, no subscription, and no hardware to buy.
+        Double-click an <code>.exr</code> and look at it. No plugin to hunt down, no codec
+        pack, no installer, no subscription &mdash; the decoders are compiled into one free
+        9.7&nbsp;MB executable.
     </p>
 
     <div class="callout">
         <p>
-            <strong>The short version.</strong> <a href="./">QuickImageViewer</a> is a free
-            image viewer for Windows. Its companion app, <a href="qiv-remote.html">qIV
-            Remote</a>, connects to it over your own network and mirrors whatever the PC is
-            showing. Start a slideshow on the PC, prop the device up, and it is a photo
-            frame. The pictures never leave your machine.
-        </p>
-        <p>
-            The viewer is free and open source. The Android app is free to install and its
-            <strong>Watch screen — the photo frame itself — is part of a one-off in-app
-            unlock</strong>; the app's demo mode runs that screen in full before you decide.
-            <a href="#cost">What is free and what is not &rarr;</a>
+            Windows itself cannot open <code>.exr</code> or <code>.hdr</code>, and the usual
+            answers are "buy Photoshop", "install a plugin for IrfanView", or "convert it
+            first". <a href="./">QuickImageViewer</a> decodes them itself, along with
+            <code>.qoi</code> and the <code>.ppm</code> / <code>.pgm</code> / <code>.pbm</code>
+            family. Download one file, run it, done.
         </p>
     </div>
 
-    <h2>Why not a real photo frame</h2>
+    <h2>The formats it decodes on its own</h2>
+
+    <table>
+        <thead>
+            <tr><th>Format</th><th>Extensions</th><th>How</th></tr>
+        </thead>
+        <tbody>
+            <tr>
+                <td><strong>OpenEXR</strong></td>
+                <td><code>.exr</code></td>
+                <td>tinyexr, compiled in. Reinhard tone-map and gamma&nbsp;2.2 for display</td>
+            </tr>
+            <tr>
+                <td><strong>Radiance HDR</strong></td>
+                <td><code>.hdr</code></td>
+                <td>Own decoder — RGBE with adaptive run-length, same tone-map</td>
+            </tr>
+            <tr>
+                <td><strong>QOI</strong></td>
+                <td><code>.qoi</code></td>
+                <td>Own decoder. Lossless, and very fast to read</td>
+            </tr>
+            <tr>
+                <td><strong>PNM</strong></td>
+                <td><code>.ppm</code> <code>.pgm</code> <code>.pbm</code></td>
+                <td>Own decoder — P1 to P6, up to 16-bit maxval</td>
+            </tr>
+            <tr>
+                <td><strong>SVG</strong></td>
+                <td><code>.svg</code></td>
+                <td>resvg, on a background thread so a complex file cannot stall the window</td>
+            </tr>
+        </tbody>
+    </table>
 
     <p>
-        Bought photo frames ask you to hand your family pictures to somebody's cloud, pay
-        a subscription to keep them there, and trust a company to still exist next year.
-        The ones that do not want a subscription want an SD card you have to physically
-        carry back and forth every time you take a new photograph.
+        None of those need anything installed. They are in the executable you downloaded.
+    </p>
+
+    <h2>Why these formats are awkward everywhere else</h2>
+
+    <p>
+        <code>.exr</code> and <code>.hdr</code> come out of 3D renderers, compositors and
+        bracketed camera work. They hold far more brightness range than a monitor can show,
+        which is exactly why they exist &mdash; and exactly why an ordinary picture viewer
+        cannot simply put one on screen.
     </p>
 
     <p>
-        The device in your drawer already has a screen, a battery and Wi-Fi. The photographs
-        are already on your PC, in the folders you already keep them in. No new hardware, no
-        recurring cost, and no third party involved at any point.
+        So most viewers do not try, and Windows Photos will not open them at all. You end up
+        launching a compositor to answer "which render is this", which is a slow way to look
+        at a picture.
     </p>
 
-    <h2>What you need</h2>
+    <h2>What it does with the extra range</h2>
+
+    <p>
+        <strong>It tone-maps.</strong> The image is mapped down with a Reinhard tone-map and
+        gamma&nbsp;2.2, which is a reasonable, neutral way to make a high-range image look
+        like the photograph it represents.
+    </p>
+
+    <p>
+        ⚠ <strong>It is a viewer, not a grading tool.</strong> There is no exposure slider, no
+        curve, and no attempt to replace Nuke, Blender or Photoshop. It answers "what is in
+        this file" in the time it takes to let go of the mouse button. If you need to
+        <em>work</em> on the image, open it in the thing you were going to open it in anyway.
+    </p>
+
+    <h2>Two things that genuinely do need an extension</h2>
+
+    <p>
+        Being straight about this, because a page that overstates what it opens is a page you
+        find out about at the worst moment:
+    </p>
 
     <ul>
-        <li><strong>A spare Android phone or tablet</strong> running Android 13 or later.</li>
-        <li><strong>A Windows 10 or 11 PC</strong> with your photographs on it.</li>
-        <li><strong>One Wi-Fi network</strong> that both are connected to.</li>
+        <li>
+            <strong>HEIC / HEIF</strong> &mdash; iPhone photographs. These need Microsoft's
+            free <em>HEIF Image Extensions</em> from the Microsoft Store, because they go
+            through the Windows imaging pipeline rather than a decoder inside the program.
+        </li>
+        <li>
+            <strong>Camera RAW</strong> &mdash; <code>.dng</code>, <code>.cr2</code>,
+            <code>.cr3</code>, <code>.nef</code>, <code>.arw</code> and the rest need the
+            Microsoft <em>Raw Image Extension</em>, for the same reason.
+        </li>
     </ul>
 
     <p>
-        That is the whole list. There is no hub, no bridge, no account, and no cable.
-        See <a href="#cost">what is free and what is not</a> before you start &mdash; the
-        frame itself is the paid half, and the app will show it to you first.
-    </p>
-
-    <h2>How to set it up</h2>
-
-    <h3 id="step-1">1. Install QuickImageViewer on the PC</h3>
-    <p>
-        It is a single executable of about 9.7 MB. Download it, put it wherever you like and
-        run it &mdash; there is no installer, no Visual C++ Redistributable and no background
-        service. To remove it later, delete the file.
-    </p>
-
-    <h3 id="step-2">2. Switch on the local server</h3>
-    <p>
-        Press <kbd>F9</kbd> in QuickImageViewer. That starts its local server and asks you to
-        set a password. The password is compulsory for anything other than the machine
-        itself, it never crosses the network, and five wrong guesses from one address cost
-        that address fifteen minutes.
-    </p>
-
-    <h3 id="step-3">3. Install qIV Remote on the device</h3>
-    <p>
-        It is free on Google Play, has no ads and needs no account. It also has a demo mode,
-        so you can see every screen before connecting it to anything at all.
-    </p>
-
-    <h3 id="step-4">4. Connect the device to the PC</h3>
-    <p>
-        Open the app, enter the PC's address and the password you set. The connection is
-        direct: the phone opens a socket to your PC and nothing else is involved. If the two
-        are on the same Wi-Fi it takes a few seconds.
-    </p>
-
-    <h3 id="step-5">5. Start the slideshow and prop it up</h3>
-    <p>
-        Start a slideshow on the PC. The device follows it &mdash; every picture the PC shows
-        appears on the frame, at the pace you set. Stand the device against something, plug
-        it in, and that is a photo frame showing your own photographs from your own machine.
-    </p>
-
-    <h2>More than one frame at a time</h2>
-
-    <p>
-        The PC drives as many connected devices as you have. A phone in the kitchen and a
-        tablet in the hall both show the same picture from the same machine, and adding a
-        third costs nothing but finding a third old device. Each one can also be told to show
-        a different folder if you would rather they did not agree.
-    </p>
-
-    <h2>It is a remote control too</h2>
-
-    <p>
-        The same app that acts as a frame is a full remote for the viewer: next, previous,
-        zoom, slideshow, a live preview of what the desktop is showing, and a search that
-        opens a picture when you type part of its name. Useful from the sofa, and useful when
-        the PC is plugged into a television.
-        <a href="qiv-remote.html">Every screen, in detail &rarr;</a>
-    </p>
-
-    <h2>What this is not</h2>
-
-    <p>
-        <strong>It is not a standalone frame.</strong> The PC holds the pictures and drives
-        the display, so it has to be switched on and on the same network. If you want
-        something that works with the computer off, this is the wrong tool and a bought frame
-        is the right one.
-    </p>
-
-    <p>
-        <strong>It is not a cloud album.</strong> Nothing is uploaded, which is the point, and
-        it also means the frame does not work from somebody else's house.
+        AVIF works natively on Windows&nbsp;11, and JPEG XL on Windows&nbsp;11 24H2 and later.
+        <a href="./#format-support">The full format table &rarr;</a>
     </p>
 
     <h2>Questions</h2>
 
-    <h3 id="cost">What is free, and what is not?</h3>
+    <h3>What does it cost?</h3>
     <p>
-        <strong>QuickImageViewer, on the PC, is free and open source</strong> under the AGPL.
-        Every feature, no advertising, no telemetry, nothing held back and nothing to buy.
-    </p>
-    <p>
-        <strong>qIV Remote, on the phone, is free to install</strong> &mdash; no ads and no
-        account &mdash; and its Simple remote works on one saved PC without paying anything.
-        <strong>The Watch screen is the photo frame described on this page, and it is part of
-        a one-off in-app unlock</strong>, along with the Advanced remote, the Stream screen
-        and saving more than one PC. It is a single purchase, not a subscription.
-    </p>
-    <p>
-        <strong>You can see it before you buy it.</strong> The app's demo mode runs every
-        paid screen against a viewer that does not exist, so the frame can be judged on the
-        phone in your hand rather than on this description of it.
+        Nothing. QuickImageViewer is free and open source under the AGPL &mdash; no
+        advertising, no telemetry, nothing to buy, no account.
     </p>
 
-    <h3>Do my photos go to a cloud service?</h3>
+    <h3>Do I have to install it?</h3>
     <p>
-        No. The phone talks to your PC directly. There is no server in the middle, no account,
-        and no copy of your pictures anywhere but the machine they were already on.
+        No. One executable, no installer, no Visual C++ Redistributable. To remove it,
+        delete the file. It does keep its settings in the registry by default, so a copy
+        carried on a USB stick leaves that much behind on each machine &mdash; pass
+        <code>-config</code> with a path and it uses an <code>.ini</code> beside itself
+        instead, and touches nothing else.
     </p>
 
-    <h3>Does the PC have to stay switched on?</h3>
+    <h3>Can I make it the default for .exr files?</h3>
     <p>
-        Yes. This turns a machine you already leave running into the engine behind the frame;
-        it does not replace one.
+        Yes, through Windows itself: right-click an <code>.exr</code>, choose
+        <em>Open with &rarr; Choose another app</em>, point it at the executable and tick
+        <em>Always use this app</em>. Windows remembers it from then on.
     </p>
-
-    <h3>How old can the device be?</h3>
-    <p>
-        It needs Android 13, which rules out anything older than roughly 2022. Beyond that,
-        age does not matter much &mdash; the app is small and the PC does the work.
-    </p>
-
-    <h3>What picture formats does it handle?</h3>
-    <p>
-        Whatever the PC can open, which is 49 file extensions across more than twenty formats
-        &mdash; JPEG, PNG, WebP, HEIC from an iPhone, AVIF, JPEG XL, camera RAW and others.
-        <a href="./#format-support">The full list &rarr;</a>
-    </p>
-
-    <h2>More like this</h2>
-    <ul>
-        <li><a href="find-duplicate-photos.html">Find duplicate photos without deleting the wrong one</a></li>
-        <li><a href="open-exr-hdr-windows.html">Open EXR and HDR files on Windows, without a plugin</a></li>
-    </ul>
 
     <!-- SHARED-STOREROW-START -->
 <div class="storerow">

@@ -760,7 +760,13 @@ def build_stats():
         repo = fetch_json(GH_API)
         releases = fetch_json(GH_API + '/releases?per_page=100')
     except Exception as e:
-        return None, None, 'offline or rate-limited (%s)' % type(e).__name__
+        # FOUR values, like the success path at the end of this function. It
+        # returned three, and main() unpacks four - so the entire site build
+        # crashed with a ValueError the first time GitHub was unreachable, which
+        # is precisely the moment the build is supposed to shrug and keep the
+        # numbers already in _partials/. Latent since the raw return value was
+        # added for the history CSV; found 2026-09-02 when the API rate-limited.
+        return None, None, 'offline or rate-limited (%s)' % type(e).__name__, None
 
     downloads = 0
     for rel in releases:
