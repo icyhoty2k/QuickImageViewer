@@ -63,6 +63,7 @@
 #include "Common/DuplicateFinder.h" // what counts as the same picture
 #include "Common/PreviewStrip.h"    // which thumbnail a click landed on
 #include "Platform/FolderIndex.h"   // where a file name starts inside a path
+#include "Common/ToneMap.h"        // HDR to a display byte
 #include "Persistence/HistoryFoldersManager.h" // HistoryPath - untrusted line hygiene
 #include "Persistence/IniFile.h"         // every persisted setting travels through this
 #include "Persistence/RotatingLogFile.h"
@@ -79,6 +80,7 @@
 #include <cctype>    // isdigit / isalnum — parsing AppMenuIds.h
 #include <cstdlib>   // atoi — the same
 #include <cstring>   // strlen — the HMAC test vector's message length
+#include <limits>   // infinity() / quiet_NaN() for the tone-map test
 #include <string>
 #include <vector>
 
@@ -979,6 +981,75 @@ namespace {
             }
             CHECK(offenders == 0);
         }
+    }
+
+    // -------------------------------------------------------------------------
+    //  HDR TO A DISPLAY BYTE.
+    //
+    //  OpenEXR is a float format. Negatives, infinities and NaN are all legal
+    //  and all turn up in real render passes. The decoder clamped negatives
+    //  AFTER the Reinhard tone-map, which is too late, and every one of these
+    //  inputs got through to a cast that is undefined behaviour out of range:
+    //
+    //      -2    ->  -2 / (1 + -2)  =  +2, so the v<0 guard never fired and
+    //                the value reached the cast as 348
+    //      -1    ->  division by zero
+    //      +inf  ->  inf / inf = NaN, and NaN < 0 is false
+    //      NaN   ->  straight through
+    //
+    //  These are the four inputs that broke it, and they are the reason the
+    //  guard is written !(v > 0) rather than v <= 0.
+    // -------------------------------------------------------------------------
+    void TestToneMap() {
+        using Common::ToneMap::HdrToByte;
+        using Common::ToneMap::UnitToByte;
+
+        const float inf = std::numeric_limits<float>::infinity();
+        const float nan = std::numeric_limits<float>::quiet_NaN();
+
+        // ⚠ ONLY THE INFINITY CHECK IS LOAD-BEARING, and the mutation is how
+        // I know. Restoring the original guard - v < 0.0f, with no isfinite -
+        // fails HdrToByte(inf) and NOTHING ELSE: -2 is still caught by v < 0,
+        // and NaN reaches the final clamps, where static_cast<unsigned char>
+        // of a NaN happens to yield 0 on x86.
+        //
+        // "Happens to" is the point. That cast is UNDEFINED BEHAVIOUR, so the
+        // NaN line below pins what the code should do rather than proving the
+        // guard is what does it. The guard earns its place by removing the UB,
+        // which no test can observe - not by changing the byte.
+        NOTE("the four inputs that broke the original");
+        CHECK(HdrToByte(-2.0f) == 0);   // came out as 348 before the fix
+        CHECK(HdrToByte(-1.0f) == 0);   // divided by zero before the fix
+        CHECK(HdrToByte(inf)   == 255); // became NaN before the fix
+        CHECK(HdrToByte(nan)   == 0);   // reached the cast before the fix
+
+        NOTE("black stays black and negative zero is still black");
+        CHECK(HdrToByte(0.0f)  == 0);
+        CHECK(HdrToByte(-0.0f) == 0);
+        CHECK(HdrToByte(-inf)  == 0);
+
+        NOTE("ordinary values are monotonic and inside the range");
+        // ⚠ A LARGE FINITE VALUE DOES REACH 255, and I asserted otherwise
+        // first. At 1e30 the float addition 1 + v returns v, so Reinhard
+        // yields exactly 1.0 and the byte saturates - which is the right
+        // answer for a very bright pixel. The property worth pinning is not
+        // "never 255", it is "never MORE than 255 and never wrapped".
+        const unsigned char dim    = HdrToByte(0.1f);
+        const unsigned char mid    = HdrToByte(1.0f);
+        const unsigned char bright = HdrToByte(100.0f);
+        CHECK(dim < mid);
+        CHECK(mid < bright);
+        CHECK(bright < 255);
+        CHECK(HdrToByte(1.0e30f) == 255); // saturates, and that is correct
+
+        NOTE("alpha is guarded the same way, and saturates rather than wrapping");
+        CHECK(UnitToByte(0.0f)  == 0);
+        CHECK(UnitToByte(1.0f)  == 255);
+        CHECK(UnitToByte(2.0f)  == 255);   // out of range, not 254 by wrapping
+        CHECK(UnitToByte(-1.0f) == 0);
+        CHECK(UnitToByte(nan)   == 0);
+        CHECK(UnitToByte(inf)   == 255);
+        CHECK(UnitToByte(0.5f)  == 128);
     }
 
     void TestNameOffset() {
@@ -2593,6 +2664,10 @@ int main(int argc, char **argv) {
 
     BeginGroup("FolderIndex - where a file name starts inside a path");
     TestNameOffset();
+    EndGroup();
+
+    BeginGroup("Tone map - HDR floats to a display byte");
+    TestToneMap();
     EndGroup();
 
     BeginGroup("Source hygiene - no invalid escape sequences");

@@ -6,6 +6,7 @@
 // License version 3 or later, as published by the Free Software Foundation.
 // It is distributed WITHOUT ANY WARRANTY. See the LICENSE file for details.
 
+#include "Common/ToneMap.h" // HDR to a display byte - the guards run BEFORE the tone-map
 #include "SimpleFormats.h"
 #include <cstring>
 #include <cmath>
@@ -790,24 +791,31 @@ static ComPtr<IWICBitmap> DecodeEXR(
     std::vector<BYTE> bgra(pixCount*4);
 
     for (size_t i = 0; i < pixCount; ++i) {
-        float lr=rgba[i*4+0], lg=rgba[i*4+1], lb=rgba[i*4+2];
-        const float a=rgba[i*4+3];
-        lr=lr/(1.0f+lr); lg=lg/(1.0f+lg); lb=lb/(1.0f+lb);
-        lr=powf(lr<0.f?0.f:lr, 1.0f/2.2f);
-        lg=powf(lg<0.f?0.f:lg, 1.0f/2.2f);
-        lb=powf(lb<0.f?0.f:lb, 1.0f/2.2f);
-        const BYTE ba=static_cast<BYTE>(a*255.0f+0.5f);
+        // Every channel through Common::ToneMap, which guards BEFORE the
+        // Reinhard rather than after it. EXR is a float format: negatives,
+        // infinities and NaN are all legal and all appear in real render
+        // passes, and the previous order let each of them through to a cast
+        // that is undefined behaviour out of range. See the header.
+        const BYTE br = Common::ToneMap::HdrToByte(rgba[i*4+0]);
+        const BYTE bg = Common::ToneMap::HdrToByte(rgba[i*4+1]);
+        const BYTE bb = Common::ToneMap::HdrToByte(rgba[i*4+2]);
+        const float a = rgba[i*4+3];
+        const BYTE ba = Common::ToneMap::UnitToByte(a);
         if (ba==255) {
-            bgra[i*4+0]=static_cast<BYTE>(lb*255.f+0.5f);
-            bgra[i*4+1]=static_cast<BYTE>(lg*255.f+0.5f);
-            bgra[i*4+2]=static_cast<BYTE>(lr*255.f+0.5f);
+            bgra[i*4+0]=bb;
+            bgra[i*4+1]=bg;
+            bgra[i*4+2]=br;
             bgra[i*4+3]=255;
         } else if (ba==0) {
             bgra[i*4+0]=bgra[i*4+1]=bgra[i*4+2]=bgra[i*4+3]=0;
         } else {
-            bgra[i*4+0]=static_cast<BYTE>(lb*a*255.f+0.5f);
-            bgra[i*4+1]=static_cast<BYTE>(lg*a*255.f+0.5f);
-            bgra[i*4+2]=static_cast<BYTE>(lr*a*255.f+0.5f);
+            // PREMULTIPLIED, and the multiply happens on the already-safe
+            // byte rather than on the raw float - so a NaN or an infinity
+            // in a channel cannot come back through the alpha path.
+            const float af = static_cast<float>(ba) / 255.0f;
+            bgra[i*4+0]=static_cast<BYTE>(static_cast<float>(bb)*af+0.5f);
+            bgra[i*4+1]=static_cast<BYTE>(static_cast<float>(bg)*af+0.5f);
+            bgra[i*4+2]=static_cast<BYTE>(static_cast<float>(br)*af+0.5f);
             bgra[i*4+3]=ba;
         }
     }
