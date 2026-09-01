@@ -97,7 +97,15 @@
 
             aria-hidden because the label beside each one already says it.
         -->
-        <a href="./"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><rect x="2.5" y="4" width="19" height="12.5" rx="1.8"/><path d="M12 16.5v3M8 19.5h8"/></svg>QuickImageViewer (qIV)</a>
+        <!-- ⚠ THE LABELS ARE PART OF THE LAYOUT, not just copy. The bar is one
+             row inside 952px of usable width, and the six items come to 884px
+             at 0.95rem - 68px of slack. Adding "Photo frame" took it to 1015px
+             and it wrapped to two rows on the spot; " (qIV)" and "homepage ()"
+             came off to pay for it, both redundant where they stood.
+
+             MEASURE BEFORE ADDING A SEVENTH. A nav is a strip, and a strip that
+             wraps has stopped being one. -->
+        <a href="./"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><rect x="2.5" y="4" width="19" height="12.5" rx="1.8"/><path d="M12 16.5v3M8 19.5h8"/></svg>QuickImageViewer</a>
         <a href="qiv-privacy.html"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><rect x="4.5" y="10.5" width="15" height="10" rx="2"/><path d="M8 10.5V7.2a4 4 0 0 1 8 0v3.3"/></svg>Privacy — Windows</a>
         <a href="qiv-remote.html"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><rect x="7" y="2.5" width="10" height="19" rx="2"/><path d="M10.5 5h3M10 19.2h4"/></svg>qIV Remote</a>
         <!-- The photo-frame guide. In the nav rather than buried in a page,
@@ -133,7 +141,7 @@
              square box would put four fifths of its width of empty space
              between the mark and the label - a gap living inside the image,
              which no amount of CSS can close. -->
-        <a href="https://icyhoty2k.github.io/"><svg width="4" height="17" viewBox="9.6 2.16 4.8 20.16" aria-hidden="true"><defs><clipPath id="navmark"><path d="M9.84 9.6H14.16V20.16a2.16 2.16 0 0 1-4.32 0Z"/></clipPath></defs><g clip-path="url(#navmark)"><rect x="9.84" y="9.6" width="4.32" height="8.01" fill="currentColor"/><rect x="9.84" y="17.61" width="4.32" height="4.71" fill="#38bdf8"/></g><circle cx="12" cy="4.56" r="2.4" fill="#38bdf8"/></svg>homepage (icyhoty2k)</a>
+        <a href="https://icyhoty2k.github.io/"><svg width="4" height="17" viewBox="9.6 2.16 4.8 20.16" aria-hidden="true"><defs><clipPath id="navmark"><path d="M9.84 9.6H14.16V20.16a2.16 2.16 0 0 1-4.32 0Z"/></clipPath></defs><g clip-path="url(#navmark)"><rect x="9.84" y="9.6" width="4.32" height="8.01" fill="currentColor"/><rect x="9.84" y="17.61" width="4.32" height="4.71" fill="#38bdf8"/></g><circle cx="12" cy="4.56" r="2.4" fill="#38bdf8"/></svg>icyhoty2k</a>
     </div>
 </nav>
 <!-- SHARED-HEADER-END -->
