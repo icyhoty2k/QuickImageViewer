@@ -1018,6 +1018,84 @@ namespace {
     //  is a good limit; it is that both files say the same thing, whether that
     //  is a literal or a named constant.
     // -------------------------------------------------------------------------
+    // -------------------------------------------------------------------------
+    //  THE MSIX MANIFEST MUST LIST EXACTLY WHAT THE APP CAN OPEN.
+    //
+    //  packaging/msix/AppxManifest.xml declares the file types the Microsoft
+    //  Store registers for this app. They were copied out of
+    //  Constants.h's SUPPORTED_EXTENSIONS[] by hand, which makes them the newest
+    //  hand-maintained parallel list in the project - added 2026-09-02, and
+    //  guaranteed to rot the first time a format is added or dropped.
+    //
+    //  Both directions matter and they fail differently:
+    //
+    //    missing from the manifest -> a Store install cannot open a format the
+    //      app supports, and nothing anywhere says why
+    //    extra in the manifest     -> the Store registers this app as a handler
+    //      for something it will refuse, which is worse: the user picked it and
+    //      it did not work
+    //
+    //  ⚠ .ini, .log and .bak are in Constants.h too - the settings file, the
+    //  log and the history backup - and must NEVER reach the manifest. Only
+    //  SUPPORTED_EXTENSIONS[] is read here, which is what keeps them out.
+    // -------------------------------------------------------------------------
+    void TestMsixFileTypes() {
+        const std::string consts   = ReadSourceFile("src/Platform/Constants.h");
+        const std::string manifest = ReadSourceFile("packaging/msix/AppxManifest.xml");
+        CHECK(!consts.empty());
+        CHECK(!manifest.empty());
+        if (consts.empty() || manifest.empty()) return;
+
+        // The array is the app's own answer to "what can I open".
+        const size_t at = consts.find("SUPPORTED_EXTENSIONS[] = {");
+        CHECK(at != std::string::npos);
+        if (at == std::string::npos) return;
+        const size_t end = consts.find("};", at);
+        const std::string block = consts.substr(at, end - at);
+
+        std::vector<std::string> wanted;
+        for (size_t i = block.find("L\".");
+             i != std::string::npos;
+             i = block.find("L\".", i + 1)) {
+            const size_t q = block.find('"', i + 2);
+            if (q == std::string::npos) break;
+            wanted.push_back(block.substr(i + 2, q - (i + 2)));  // ".jpg"
+        }
+        CHECK(!wanted.empty());
+
+        // Every <uap:FileType>.ext</uap:FileType> in the manifest.
+        std::vector<std::string> declared;
+        const std::string open  = "<uap:FileType>";
+        const std::string close = "</uap:FileType>";
+        for (size_t i = manifest.find(open);
+             i != std::string::npos;
+             i = manifest.find(open, i + 1)) {
+            const size_t s = i + open.size();
+            const size_t e = manifest.find(close, s);
+            if (e == std::string::npos) break;
+            declared.push_back(manifest.substr(s, e - s));
+        }
+        CHECK(!declared.empty());
+
+        NOTE("every supported extension is registered by the package");
+        for (const std::string &w : wanted) {
+            bool found = false;
+            for (const std::string &d : declared)
+                if (d == w) { found = true; break; }
+            if (!found) NOTE(w.c_str());
+            CHECK(found);
+        }
+
+        NOTE("and the package registers nothing the app cannot open");
+        for (const std::string &d : declared) {
+            bool found = false;
+            for (const std::string &w : wanted)
+                if (d == w) { found = true; break; }
+            if (!found) NOTE(d.c_str());
+            CHECK(found);
+        }
+    }
+
     void TestClampsAgree() {
         const std::string load   = ReadSourceFile("src/Persistence/RegistryManager.cpp");
         const std::string import = ReadSourceFile("src/UI/AppMenu/AppMenuIO.cpp");
@@ -2752,6 +2830,10 @@ int main(int argc, char **argv) {
 
     BeginGroup("Settings - import and load clamp the same");
     TestClampsAgree();
+    EndGroup();
+
+    BeginGroup("MSIX - the package registers what the app opens");
+    TestMsixFileTypes();
     EndGroup();
 
     BeginGroup("Source hygiene - no invalid escape sequences");
