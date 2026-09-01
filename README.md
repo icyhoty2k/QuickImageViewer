@@ -36,7 +36,7 @@ once as you have devices lying around.
 &nbsp;&nbsp;
 <a href="https://play.google.com/store/apps/details?id=net.icyhoty2k.qivremote"><img height="62" alt="Get qIV Remote on Google Play" src="https://img.shields.io/badge/GET%20IT%20ON-Google%20Play-3DDC84?style=for-the-badge&logo=googleplay&logoColor=white&labelColor=01875F"></a>
 
-<sub><b>Windows 10 &amp; 11</b> &mdash; one portable EXE, no installer&nbsp;&nbsp;·&nbsp;&nbsp;<b>Android 13+</b> &mdash; free, no ads, no account</sub>
+<sub><b>Windows 10 &amp; 11</b> &mdash; one portable EXE, no installer&nbsp;&nbsp;·&nbsp;&nbsp;<b>Android 13+</b> &mdash; free to install, no ads, no account</sub>
 
 <br>
 
@@ -1326,10 +1326,12 @@ remains possible. Everything contributed stays AGPLv3 for the public.
 
 <div align="center">
 
-**qIV is one person's work, in the open — no ads, no telemetry, nothing to buy.**
+**QuickImageViewer is one person's work, in the open — no ads, no telemetry, nothing to buy.**
 
-There is no paid tier and no feature behind a wall. Sponsorship is simply what buys
-the time to keep building it.
+The desktop app has no paid tier and no feature behind a wall. (The Android companion is
+free to install, with a one-off unlock for its Watch, Advanced and Stream screens — see
+[Free and full editions](https://icyhoty2k.github.io/QuickImageViewer/qiv-remote.html#editions).)
+Sponsorship is simply what buys the time to keep building it.
 
 [![Sponsor](https://img.shields.io/badge/%E2%99%A5%20Sponsor-GitHub%20Sponsors-EA4AAA?style=for-the-badge&labelColor=bf3a8c)](https://github.com/sponsors/icyhoty2k)
 [![Ko-fi](https://img.shields.io/badge/%E2%98%95%20Ko--fi-buy%20a%20coffee-FF5E5B?style=for-the-badge&labelColor=c94340)](https://ko-fi.com/ivanhristovyanev)
