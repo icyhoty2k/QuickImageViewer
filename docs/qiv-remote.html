@@ -267,14 +267,15 @@
 
                  index.html's hero carries a SECOND copy of this button, in
                  _partials/androidcta.html, and four pages are generated from this
-                 file. Ten surfaces in total, so one maintainer script flips all of
-                 them and refuses a partial job. After any change here:
+                 file. One maintainer script flips EVERY surface and refuses a
+                 partial job -- deliberately no count here, because the last one
+                 written down went stale and a badge was missed. After any change:
 
                      python tools/build-site.py
                      python tools/build-site.py --check -->
-            <a class="cta-button" href="https://groups.google.com/g/qiv-remote-testers">
+            <a class="cta-button" href="https://play.google.com/store/apps/details?id=net.icyhoty2k.qivremote">
                 <span class="glyph"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 4.6a1 1 0 0 1 1.51-.86l11.5 6.9a1 1 0 0 1 0 1.72l-11.5 6.9A1 1 0 0 1 7 18.4V4.6Z"/></svg></span>
-                <span>Help test qIV Remote<small>Android 13+ &mdash; closed test</small></span>
+                <span>Get qIV Remote<small>Android &mdash; Google Play</small></span>
             </a>
             <a class="policy" href="qiv-remote-privacy.html"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><rect x="4.5" y="10.5" width="15" height="10" rx="2"/><path d="M8 10.5V7.2a4 4 0 0 1 8 0v3.3"/></svg>Privacy — Android app</a>
         </div>
@@ -393,9 +394,6 @@
     <h2>What is on this page</h2>
     <ul class="toc">
         <li><a href="#gallery">What it looks like</a></li>
-        <!-- CLOSED-TEST-ONLY-START — deleted at production launch by site-mode.py -->
-        <li><a href="#testing">It is in closed testing — how to join</a></li>
-        <!-- CLOSED-TEST-ONLY-END -->
         <li><a href="#screens">The four screens</a></li>
         <li><a href="#simple">Simple — the picture and nothing else</a></li>
         <li><a href="#find">Find any picture by typing part of its name</a></li>
@@ -408,46 +406,6 @@
         <li><a href="#setup">Setting up the connection</a></li>
     </ul>
 
-    <!-- CLOSED-TEST-ONLY-START — deleted at production launch by site-mode.py -->
-    <h2 id="testing">It is in closed testing — how to join</h2>
-    <p>
-        Google does not let a new app go public until <strong>a group of people has tested it
-        for fourteen days</strong>. Until that is done the Play listing stays invisible to
-        everyone who has not joined the test, which is why there is no ordinary download button
-        above.
-    </p>
-    <p>
-        You need an Android phone on <strong>Android 13 or newer</strong>. Three steps, all
-        three needed, and <strong>the same Google account for each</strong>:
-    </p>
-    <ol>
-        <li>
-            Join the tester group:
-            <a href="https://groups.google.com/g/qiv-remote-testers">groups.google.com/g/qiv-remote-testers</a>
-        </li>
-        <li>
-            Open
-            <a href="https://play.google.com/apps/testing/net.icyhoty2k.qivremote">this link on the phone</a>
-            and tap <strong>Become a tester</strong>.
-        </li>
-        <li>
-            Install from
-            <a href="https://play.google.com/store/apps/details?id=net.icyhoty2k.qivremote">Google Play</a>,
-            and please keep it installed for fourteen days.
-        </li>
-    </ol>
-    <div class="callout">
-        <strong>Joining the group does not enrol you</strong> — step 2 is what does, and it is
-        the step people skip. And if step 3 says the app is not available, that is normal for a
-        few minutes: reopen the step 2 link, which then reads <em>"You are a tester"</em> and
-        offers its own download button.
-    </div>
-    <p>
-        You do not need a Windows PC to try it. Open the app and tap <strong>Try it without a
-        desktop</strong> — demo mode runs every screen, including the paid ones, against a
-        viewer that does not exist, and opens no network connection at all.
-    </p>
-    <!-- CLOSED-TEST-ONLY-END -->
 
     <h2 id="screens">The four screens</h2>
 
