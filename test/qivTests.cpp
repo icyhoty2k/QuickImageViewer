@@ -853,6 +853,77 @@ namespace {
     //  A new file carrying one has to be added here; that is the cost of the
     //  harness having no directory walk, and it is cheaper than the bug.
     // -------------------------------------------------------------------------
+    // -------------------------------------------------------------------------
+    //  EVERY DIRECTORY WALK MUST INCREMENT WITH AN error_code.
+    //
+    //  A range-for over a std::filesystem::directory_iterator calls the THROWING
+    //  operator++. An error_code passed to the CONSTRUCTOR does not cover it, so
+    //  a folder that disappears mid-walk throws out of the loop.
+    //
+    //  Where that lands decides how bad it is. On the UI thread it escapes the
+    //  window procedure and takes the process with it. On a worker it is caught
+    //  and discarded by the pool, which is worse in a quieter way: FolderIndex
+    //  abandoned its half-built list and kept serving the PREVIOUS one, so
+    //  Ctrl+D and cross-folder Find answered from a stale index and said nothing.
+    //
+    //  ⚠ THE RULE WAS ALREADY WRITTEN DOWN AND STILL BROKEN. Four walks in this
+    //  codebase use it.increment(ec), and HistoryListWnd.cpp explains the reason
+    //  at length beside its own loop. FolderIndex.cpp - the newest of the five -
+    //  used a range-for anyway and shipped in 3.0. A convention that lives only
+    //  in the files already obeying it is not a convention; this is.
+    // -------------------------------------------------------------------------
+    void TestDirectoryWalksAreNonThrowing() {
+        const char *files[] = {
+            "src/Platform/FolderIndex.cpp",
+            "src/Platform/FileHandler.cpp",
+            "src/UI/FloatingPanels/HistoryListWnd.cpp",
+            "src/UI/ThumbnailPanels/DirWnd.h",
+        };
+
+        for (const char *rel : files) {
+            const std::string src = ReadSourceFile(rel);
+            NOTE(rel);
+            CHECK(!src.empty());
+
+            // Count the walks, and the manual increments. A file that opens a
+            // directory_iterator without ever calling increment(ec) is either
+            // using a range-for or not iterating at all - and the second case
+            // does not construct one.
+            // Every mention of directory_iterator EXCEPT the bare end sentinel,
+            // which is the loop condition rather than a walk being opened.
+            //
+            // ⚠ THE FIRST VERSION OF THIS LOOKED FOR "fs::directory_iterator("
+            // with the parenthesis attached, and so never saw
+            // "fs::directory_iterator it(...)" - the declaration form, which is
+            // exactly what FolderIndex.cpp uses. The file that HAD the bug
+            // counted zero walks and was skipped, and the test passed while
+            // proving nothing. Caught by mutating the increments away and
+            // watching it stay green.
+            size_t walks = 0;
+            for (size_t i = src.find("directory_iterator");
+                 i != std::string::npos;
+                 i = src.find("directory_iterator", i + 1)) {
+                size_t k = i + std::string("directory_iterator").size();
+                while (k < src.size() && (src[k] == ' ' || src[k] == '	')) ++k;
+                // "directory_iterator()" is the sentinel; anything else - a
+                // construction with arguments, or a named declaration - is a walk.
+                if (k + 1 < src.size() && src[k] == '(' && src[k + 1] == ')') continue;
+                ++walks;
+            }
+
+            size_t increments = 0;
+            for (size_t i = src.find(".increment(");
+                 i != std::string::npos;
+                 i = src.find(".increment(", i + 1)) ++increments;
+
+            // Not "one each": a walk may increment from more than one place, and
+            // FolderIndex does exactly that - once on the skip path and once at
+            // the bottom. What matters is that a file which opens a walk proves
+            // it advances by hand somewhere.
+            if (walks > 0) CHECK(increments > 0);
+        }
+    }
+
     void TestNoInvalidEscapes() {
         // Everything C++ defines, plus the numeric and universal forms.
         const std::string valid = "abfnrtv\\\'\"?01234567xuU";
@@ -2526,6 +2597,10 @@ int main(int argc, char **argv) {
 
     BeginGroup("Source hygiene - no invalid escape sequences");
     TestNoInvalidEscapes();
+    EndGroup();
+
+    BeginGroup("Source hygiene - directory walks cannot throw");
+    TestDirectoryWalksAreNonThrowing();
     EndGroup();
 
     BeginGroup("AllowList - entry validation and scope");
