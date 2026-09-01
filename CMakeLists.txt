@@ -629,7 +629,7 @@ if (QIV_BUILD_TESTS)
     # It surfaced the moment RemoteLog.cpp was added to this target, in CI rather
     # than locally, because the main target's flags never applied here. Any file
     # added below inherits the same requirement.
-    target_compile_options(qivTests PRIVATE /utf-8)
+    target_compile_options(qivTests PRIVATE /utf-8 /W4 /permissive-)
 
     # ws2_32 — InetPtonW and ntohl, which AddressMatch.cpp uses to turn
     # "192.168.0.0/24" into numbers.

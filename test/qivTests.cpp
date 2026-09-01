@@ -526,8 +526,11 @@ namespace {
         full += "/";
         full += relativePath;
 
-        std::FILE *f = std::fopen(full.c_str(), "rb");
-        if (!f) return std::string();
+        // fopen_s rather than fopen: the harness builds at /W4 now, and the
+        // deprecation warning is the compiler being right - a suppression here
+        // would be the first of many.
+        std::FILE *f = nullptr;
+        if (fopen_s(&f, full.c_str(), "rb") != 0 || !f) return std::string();
 
         std::string out;
         char buf[4096];
