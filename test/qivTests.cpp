@@ -62,6 +62,7 @@
 #include "Common/Utf8.h"           // the history files' encoding
 #include "Common/DuplicateFinder.h" // what counts as the same picture
 #include "Common/PreviewStrip.h"    // which thumbnail a click landed on
+#include "Platform/FolderIndex.h"   // where a file name starts inside a path
 #include "Persistence/HistoryFoldersManager.h" // HistoryPath - untrusted line hygiene
 #include "Persistence/IniFile.h"         // every persisted setting travels through this
 #include "Persistence/RotatingLogFile.h"
@@ -817,6 +818,63 @@ namespace {
     //
     //  Boxes are `box` wide, `cell` apart, so cell - box is the gap between them.
     // -------------------------------------------------------------------------
+    // -------------------------------------------------------------------------
+    //  WHERE THE FILE NAME STARTS INSIDE A PATH.
+    //
+    //  Three lines inside a directory walk, and they were WRONG for a whole
+    //  release: the separator set was written L"\/", which is not a valid
+    //  escape. MSVC folds it to "/" alone, so on a Windows path nothing ever
+    //  matched and every offset came back 0.
+    //
+    //  It went unnoticed because the value was computed and never read. Pulling
+    //  it out is what makes it reachable from here at all.
+    // -------------------------------------------------------------------------
+    void TestNameOffset() {
+        using Platform::FolderIndex::NameOffsetOf;
+
+        NOTE("a Windows path - the case that was broken");
+        {
+            const std::wstring p = L"C:\\Users\\me\\holiday.jpg";
+            CHECK(NameOffsetOf(p) == 12); // the last separator sits at index 11
+            CHECK(std::wstring(p.c_str() + NameOffsetOf(p)) == L"holiday.jpg");
+        }
+
+        NOTE("a forward-slash path - what the broken literal happened to handle");
+        {
+            const std::wstring p = L"C:/pics/holiday.jpg";
+            CHECK(std::wstring(p.c_str() + NameOffsetOf(p)) == L"holiday.jpg");
+        }
+
+        NOTE("mixed separators - the LAST one wins, whichever kind it is");
+        {
+            CHECK(std::wstring(L"C:/pics\\a.png" + NameOffsetOf(L"C:/pics\\a.png")) == L"a.png");
+            CHECK(std::wstring(L"C:\\pics/a.png" + NameOffsetOf(L"C:\\pics/a.png")) == L"a.png");
+        }
+
+        NOTE("a bare name has no separator, so the offset is 0");
+        CHECK(NameOffsetOf(L"holiday.jpg") == 0);
+
+        NOTE("an empty path is 0 rather than a crash");
+        CHECK(NameOffsetOf(L"") == 0);
+
+        NOTE("a trailing separator points one past the end, which is the empty name");
+        // Not a case the walk produces - directory_iterator never yields one -
+        // but the offset must stay INSIDE the string, because the caller adds it
+        // to c_str() and reads from there.
+        {
+            const std::wstring p = L"C:\\pics\\";
+            const int off = NameOffsetOf(p);
+            CHECK(off == static_cast<int>(p.size()));
+            CHECK(std::wstring(p.c_str() + off).empty());
+        }
+
+        NOTE("a UNC path keeps its share, and names the file after the last slash");
+        {
+            const std::wstring p = L"\\\\nas\\photos\\a.png";
+            CHECK(std::wstring(p.c_str() + NameOffsetOf(p)) == L"a.png");
+        }
+    }
+
     void TestPreviewStrip() {
         using Common::PreviewStrip::SlotAt;
 
@@ -2379,6 +2437,10 @@ int main(int argc, char **argv) {
 
     BeginGroup("Preview strip - which thumbnail a click landed on");
     TestPreviewStrip();
+    EndGroup();
+
+    BeginGroup("FolderIndex - where a file name starts inside a path");
+    TestNameOffset();
     EndGroup();
 
     BeginGroup("AllowList - entry validation and scope");

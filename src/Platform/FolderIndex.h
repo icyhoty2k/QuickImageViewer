@@ -31,6 +31,23 @@
 
 namespace Platform::FolderIndex {
 
+    // WHERE THE FILE NAME STARTS INSIDE A PATH.
+    //
+    // Pulled out as a pure function for two reasons. It is the whole of a
+    // decision that was silently wrong - the separator set was written as
+    // L"\/" in the .cpp, which is not a valid escape: MSVC folds it to "/"
+    // alone, so on a Windows path nothing matched and every offset came back 0.
+    // And a three-line computation inside a directory walk is unreachable from
+    // a test, which is why nobody noticed for a release.
+    //
+    // BOTH SEPARATORS, deliberately. A path handed to qIV can carry either -
+    // a command line, a drag-drop from a shell that normalises differently, or
+    // a hand-edited history line.
+    inline int NameOffsetOf(const std::wstring &path) {
+        const size_t slash = path.find_last_of(L"\\/");
+        return (slash == std::wstring::npos) ? 0 : static_cast<int>(slash + 1);
+    }
+
     // One picture: the full path, and where its file name starts inside it.
     // The offset is kept so a search does not have to find the last separator
     // again for every candidate on every keystroke.

@@ -189,10 +189,19 @@ void FindWnd::RebuildMatches() {
     hasWildcard = Common::IsWildcardQuery(lq, m_queryLen);
 
     // Helper: match one path and push result if it matches.
-    auto tryMatch = [&](const std::wstring &path, int playlistIdx) {
+    // nameOffset < 0 means "work it out"; the cross-folder loop passes the
+    // value the index already computed during its walk, which is the whole
+    // reason FolderIndex::Entry carries one. It was computed and never used
+    // until 2026-09-02 - and computed wrongly, because the separator set in
+    // that walk was an invalid escape that collapsed to "/" alone.
+    auto tryMatch = [&](const std::wstring &path, int playlistIdx, int nameOffset = -1) {
         const wchar_t *name = path.c_str();
-        size_t sl = path.find_last_of(L"\\/");
-        if (sl != std::wstring::npos) name += sl + 1;
+        if (nameOffset >= 0 && nameOffset <= static_cast<int>(path.size())) {
+            name += nameOffset;
+        } else {
+            size_t sl = path.find_last_of(L"\\/");
+            if (sl != std::wstring::npos) name += sl + 1;
+        }
 
         wchar_t lname[512];
         int nameLen = static_cast<int>(wcsnlen(name, 511));
@@ -252,7 +261,7 @@ void FindWnd::RebuildMatches() {
             if (app.playlistIndexMap.find(e.path) != app.playlistIndexMap.end()) continue;
 
             const size_t before = m_results.size();
-            tryMatch(e.path, -1);
+            tryMatch(e.path, -1, e.nameOffset);
             if (m_results.size() != before) ++crossFolder;
         }
     }

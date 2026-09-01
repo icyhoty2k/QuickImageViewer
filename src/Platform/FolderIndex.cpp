@@ -37,29 +37,55 @@ namespace Platform::FolderIndex {
             fs::directory_iterator it(folder, fs::directory_options::skip_permission_denied, ec);
             if (ec) continue;
 
-            for (const fs::directory_entry &de : it) {
+            // ⚠ INCREMENTED BY HAND, with an error_code.
+            //
+            // A range-for over a directory_iterator uses the THROWING operator++,
+            // and the error_code above only covered construction. A folder that
+            // disappears mid-walk - a network share dropping, a USB stick pulled,
+            // a directory deleted by something else - therefore threw out of
+            // Build().
+            //
+            // That failed SILENTLY and in the worst possible way: the thread pool
+            // catches and discards whatever a task throws, so the exception went
+            // nowhere, `built` was abandoned before the swap, and the index kept
+            // its PREVIOUS contents. Cross-folder Find and Ctrl+D then went on
+            // answering from a stale index with nothing anywhere saying so.
+            //
+            // Stopping this folder and keeping what was collected is the right
+            // answer: the other folders still index, and a partial index is
+            // honest where a stale one is not.
+            for (auto de = it; de != fs::directory_iterator(); ) {
                 if (built.size() >= Constants::FOLDER_INDEX_MAX_FILES) break;
 
+                // ⚠ EVERY SKIP MUST STILL ADVANCE. With a hand-rolled loop a
+                // bare `continue` is an infinite loop on the first non-image
+                // file, so the two skips below advance first and then continue.
                 std::error_code fe;
-                if (!de.is_regular_file(fe) || fe) continue;
-
-                const fs::path &p = de.path();
-                if (!is_image_ext(p.extension().wstring())) continue;
+                const bool regular = de->is_regular_file(fe) && !fe;
+                const fs::path p = de->path();
+                const bool wanted = regular && is_image_ext(p.extension().wstring());
+                if (!wanted) {
+                    std::error_code se2;
+                    de.increment(se2);
+                    if (se2) break;
+                    continue;
+                }
 
                 Entry e;
 
                 // From the directory entry, not a separate stat: the walk
                 // already has it. A failure leaves 0, which means "unknown".
                 std::error_code se;
-                const auto sz = de.file_size(se);
+                const auto sz = de->file_size(se);
                 if (!se) e.size = static_cast<unsigned long long>(sz);
 
                 e.path = p.wstring();
-                const size_t slash = e.path.find_last_of(L"\/");
-                e.nameOffset = (slash == std::wstring::npos)
-                                   ? 0
-                                   : static_cast<int>(slash + 1);
+                e.nameOffset = NameOffsetOf(e.path);
                 built.push_back(std::move(e));
+
+                std::error_code ie;
+                de.increment(ie);
+                if (ie) break; // this folder became unreadable; keep the rest
             }
         }
 
