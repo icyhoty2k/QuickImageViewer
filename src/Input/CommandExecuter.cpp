@@ -1848,6 +1848,25 @@ void InputManager::ExecuteCommand(HWND hWnd, Command cmd) {
             break;
         }
 
+        // ---------------------------------------------------------------------
+        // Cull mode
+        // ---------------------------------------------------------------------
+        case Command::CullModeToggle:
+            AppCommands::ToggleCullMode(hWnd);
+            break;
+
+        case Command::CullKeep:
+            AppCommands::MarkCurrent(hWnd, Common::CullMarks::Mark::Keep);
+            break;
+
+        case Command::CullReject:
+            AppCommands::MarkCurrent(hWnd, Common::CullMarks::Mark::Reject);
+            break;
+
+        case Command::CullUnmark:
+            AppCommands::MarkCurrent(hWnd, Common::CullMarks::Mark::None);
+            break;
+
         case Command::SlideshowToggle: {
             bool wasRunning = app.slideshow.running;
             AppCommands::toggleSlideshow(hWnd);
@@ -2342,6 +2361,16 @@ std::wstring InputManager::GetCommandValue(HWND hWnd, Command cmd) {
                        ? (app.slideshow.paused ? L"paused" : L"running")
                        : L"stopped";
         case Command::SlideshowToggleLoop:      return OnOff(app.slideshow.loop);
+        case Command::CullModeToggle:           return OnOff(app.cullMode);
+        // The counts, not the last key pressed. An observer asking "what is the
+        // state of the cull" wants the tally; the keystroke is already gone.
+        case Command::CullKeep:
+        case Command::CullReject:
+        case Command::CullUnmark:
+            return std::to_wstring(app.cullMarks.Count(Common::CullMarks::Mark::Keep)) +
+                   L" keep, " +
+                   std::to_wstring(app.cullMarks.Count(Common::CullMarks::Mark::Reject)) +
+                   L" reject";
         case Command::SlideshowToggleShuffle:   return OnOff(app.slideshow.shuffle);
         case Command::SlideshowSetInterval:     return std::to_wstring(app.slideshow.intervalMs);
         case Command::SlideshowCycleTransition:

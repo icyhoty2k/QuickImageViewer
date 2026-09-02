@@ -60,6 +60,26 @@ namespace Shortcuts {
     constexpr UINT SC_SLIDESHOW_LOOP_TOGGLE = 'R'; // R       — toggle loop/repeat (slideshow only)
     constexpr UINT SC_SLIDESHOW_SHUFFLE_TOGGLE = 'S'; // S       — toggle shuffle (slideshow only)
     constexpr UINT SC_SLIDESHOW_TRANSITION_CYCLE = 'T'; // T       — cycle transition type (slideshow only)
+
+    // -------------------------------------------------------------------------
+    // CULL MODE - keep / reject while going through a folder.
+    //
+    // Alt+Space rather than a letter, because EVERY LETTER A-Z IS ALREADY
+    // BOUND and the three cull keys have to be plain letters - a hand doing
+    // hundreds of frames cannot hold a modifier. Alt+Space is normally the
+    // system menu, but this window is WS_POPUP with no WS_SYSMENU, so there is
+    // no system menu to shadow. Verified in Platform/DpiAwareInit.cpp.
+    // -------------------------------------------------------------------------
+    constexpr UINT SC_CULL_MODE_TOGGLE = VK_SPACE;  // Alt+Space — enter / leave cull mode
+    constexpr UINT SC_CULL_KEEP = 'K';              // K     — keep      (cull mode only)
+    constexpr UINT SC_CULL_REJECT = 'X';            // X     — reject    (cull mode only)
+    constexpr UINT SC_CULL_UNMARK = 'U';            // U     — unmark    (cull mode only)
+    // NO KEY FOR RESOLVE, DELIBERATELY. Plain Enter is fullscreen, and
+    // culling fullscreen is exactly how this gets used - stealing it would
+    // break the feature inside its own mode. Every Enter with a modifier is
+    // already a remote command. So leaving cull mode with rejects pending is
+    // what asks; see Command::CullModeToggle.
+
     constexpr UINT SC_PANEL_HELP_TOGGLE = VK_F1; // plain F1 — help window
     constexpr UINT SC_PANEL_OPEN_FILE = VK_F2;
     constexpr UINT SC_PANEL_CACHE_TOGGLE = VK_F3;

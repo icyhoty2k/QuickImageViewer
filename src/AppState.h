@@ -24,6 +24,7 @@ namespace fs = std::filesystem;
 #include "Constants.h"
 #include "ConstantsTheme.h"
 #include "SlideshowTransitions.h"
+#include "Common/CullMarks.h"   // keep / reject marks, held in RAM
 
 struct SlideshowState {
     bool running = false;
@@ -393,6 +394,14 @@ struct AppState {
 
     // Slideshow
     SlideshowState slideshow;
+
+    // CULL MODE - going through a folder saying keep or reject.
+    //
+    // The marks are RAM only and nothing is written until the user resolves
+    // them, so closing the app throws the session away. That is the intended
+    // shape: see Common/CullMarks.h.
+    bool cullMode = false;
+    Common::CullMarks::Set cullMarks;
 
     // Persistent main-window overlay shown when the current directory becomes
     // unavailable.  Cleared when the user opens a new folder successfully.

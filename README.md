@@ -51,7 +51,7 @@ once as you have devices lying around.
 
 - ⌨ **[Every keyboard shortcut →](https://icyhoty2k.github.io/QuickImageViewer/shortcuts.html)** — the complete reference, on its own page, generated from the app's own help panel · 🌐 **[Website](https://icyhoty2k.github.io/QuickImageViewer/)** · 📱 **[qIV Remote](https://icyhoty2k.github.io/QuickImageViewer/qiv-remote.html)** · 👤 **[icyhoty2k](https://icyhoty2k.github.io/)** — the developer site
 - [Preview](#preview) · [Download](#download) · [Format Support](#format-support) · [How qIV Compares](#how-qiv-compares) · **[qIV Remote for Android](#qiv-remote--the-android-app)**
-- **Features** — [Performance](#performance) · [Navigation](#navigation) · [Sorting](#sorting) · [UI Panels](#ui-panels) · [Offline Reverse Geocoding](#offline-reverse-geocoding) · [Thumbnail Strips](#thumbnail-strips) · [File Management](#file-management-on-thumbnail-strips) · [History Panel](#history-panel) · [Slideshow](#slideshow) · [Color Effects](#color-effects) · [Overlay System](#overlay-system) · [Window & Chrome](#window--chrome) · [Mouse Shortcuts](#mouse-shortcuts)
+- **Features** — [Performance](#performance) · [Navigation](#navigation) · [Sorting](#sorting) · [UI Panels](#ui-panels) · [Offline Reverse Geocoding](#offline-reverse-geocoding) · [Thumbnail Strips](#thumbnail-strips) · [File Management](#file-management-on-thumbnail-strips) · [History Panel](#history-panel) · [Slideshow](#slideshow) · [Cull Mode](#cull-mode) · [Color Effects](#color-effects) · [Overlay System](#overlay-system) · [Window & Chrome](#window--chrome) · [Mouse Shortcuts](#mouse-shortcuts)
 - [System Tray](#system-tray) · [Dedicated Screens](#dedicated-screens) · [Remote Control & Mirroring](#remote-control--mirroring) · [Command-Line Arguments](#command-line-arguments) · [Architecture](#architecture) · [Build](#build) · [Reporting a Crash](#reporting-a-crash)
 - [Found a bug? Want something added?](#found-a-bug-want-something-added) · [Support the project](#support-the-project) · [License](#license) · [Contributing](#contributing)
 
@@ -525,6 +525,27 @@ Directory strips double as a lightweight file manager:
 | `R` *(while running)* | Toggle loop |
 | `S` *(while running)* | Toggle shuffle |
 | `T` *(while running)* | Step to the next transition (21 available, wraps) |
+
+</details>
+
+<a id="cull-mode"></a>
+<details>
+<summary><b>Cull mode</b> <sub>4</sub></summary>
+
+A pass through a folder saying yes or no to each picture. `Alt+Space` turns it on, then one keystroke per frame — the viewer advances by itself, so a shoot of four hundred is four hundred keys and no mouse.
+
+Marks are held in memory. **Nothing is written to disk while you mark**, and leaving the mode is what asks whether to move the rejects. Say yes and they go into a `_rejected` folder beside them — same drive, same place, undoable with `Ctrl+Z` in Explorer. Say no and you stay in the mode with every mark intact.
+
+While the mode is on, the filename in the top-left carries its mark: a tick for keep, a cross for reject, a dot for one you have not judged yet.
+
+| Shortcut | Action |
+|:---|:---|
+| `Alt+Space` | Enter / leave cull mode |
+| `K` *(in cull mode)* | Keep, and advance |
+| `X` *(in cull mode)* | Reject, and advance |
+| `U` *(in cull mode)* | Clear the mark, and advance |
+
+`K`, `X` and `U` keep their usual jobs — stats, reset window, thumbnail effects — whenever cull mode is off. They are borrowed only while it runs, the way `R`, `S` and `T` are borrowed by the slideshow.
 
 </details>
 

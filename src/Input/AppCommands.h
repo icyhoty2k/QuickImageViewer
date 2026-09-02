@@ -11,6 +11,7 @@
 #include <windows.h>
 #include <string>
 #include <vector>
+#include "Common/CullMarks.h"
 #define WM_TRAYICON (WM_APP + 1)
 #define ID_TRAY_APP_ICON 1001
 
@@ -81,6 +82,20 @@ class AppCommands {
         static void DeleteFilesToRecycleBin(const std::vector<std::wstring> &paths);
         static void PasteFilesFromClipboard(HWND hWnd, const std::wstring &targetDir);
         static bool ClipboardHasFiles();
+
+        // ── Cull mode ────────────────────────────────────────────────────────
+        // Going through a folder saying keep or reject, then acting on the
+        // rejects in one go. The marks are held in AppState and nothing is
+        // written until ResolveCullRejects runs. See Common/CullMarks.h.
+        static void ToggleCullMode(HWND hWnd);
+        static void MarkCurrent(HWND hWnd, Common::CullMarks::Mark mark);
+
+        // Moves every rejected file that is still in the playlist into a
+        // subfolder of its own directory. Returns how many actually moved.
+        //
+        // ⚠ IT ASKS FIRST, and the count it names is the count it moves.
+        // Returns 0 with nothing touched if the user says no.
+        static int ResolveCullRejects(HWND hWnd);
 
         // Put plain text on the clipboard. Returns false when the clipboard
         // could not be opened — another process holds it, which is ordinary and

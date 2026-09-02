@@ -768,6 +768,21 @@ LRESULT CALLBACK MainAppWndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM l
             InputManager::handleKeyboard(hWnd, wParam, lParam);
             return DefWindowProcW(hWnd, message, wParam, lParam);
 
+        case WM_SYSCHAR:
+            // ⚠ SWALLOW ALT+SPACE, OR WINDOWS BEEPS AT IT.
+            //
+            // Alt+Space is the cull-mode toggle. The WM_SYSKEYDOWN above already
+            // handled it, but TranslateMessage then sends this WM_SYSCHAR, and
+            // DefWindowProc answers it by opening the system menu. This window is
+            // WS_POPUP with no WS_SYSMENU, so there is no menu to open - and the
+            // failure mode for "no menu" is MessageBeep, on every single toggle.
+            //
+            // Only the space. Every other Alt+char still goes to DefWindowProc,
+            // which is what keeps Alt+F4 and the accelerator handling intact.
+            if (wParam == VK_SPACE) return 0;
+            return DefWindowProcW(hWnd, message, wParam, lParam);
+
+
         case WM_NCACTIVATE:
         if (wParam == FALSE) break;
             return TRUE;

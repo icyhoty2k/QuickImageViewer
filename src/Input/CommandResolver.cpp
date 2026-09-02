@@ -115,6 +115,31 @@ Command InputManager::ResolveKeyboardKeys(UINT key, LPARAM lParam) {
         return Command::SlideshowToggle;
 
     // -------------------------------------------------------------------------
+    // Alt+Space — cull mode on / off
+    //
+    // Alt because every letter is taken, and Space because it is the one key a
+    // hand already rests on. It does not shadow the system menu: this window is
+    // WS_POPUP without WS_SYSMENU, so there is no menu to open. AppMain also
+    // swallows the WM_SYSCHAR that follows, or Windows beeps at the missing menu.
+    // -------------------------------------------------------------------------
+    if (alt && !ctrl && !shift && key == Shortcuts::SC_CULL_MODE_TOGGLE)
+        return Command::CullModeToggle;
+
+    // -------------------------------------------------------------------------
+    // Cull-mode-only keys (K / X / U) — only intercepted while culling
+    //
+    // Plain letters, and they shadow Stats, Reset-window and Thumbnail-effects
+    // while the mode is on. That is the same trade the slideshow block below
+    // makes with R / S / T, for the same reason: a mode you are pressing
+    // hundreds of times in gets the unmodified keys, and gives them back on exit.
+    // -------------------------------------------------------------------------
+    if (!ctrl && !alt && !shift && app.cullMode) {
+        if (key == Shortcuts::SC_CULL_KEEP) return Command::CullKeep;
+        if (key == Shortcuts::SC_CULL_REJECT) return Command::CullReject;
+        if (key == Shortcuts::SC_CULL_UNMARK) return Command::CullUnmark;
+    }
+
+    // -------------------------------------------------------------------------
     // Slideshow-only keys (Space / R / S) — only intercepted when slideshow is running
     // -------------------------------------------------------------------------
     if (!ctrl && !alt && !shift && app.slideshow.running) {

@@ -440,6 +440,32 @@ void OverlayManager::RecomputeRects() {
 //  Content updates
 // ─────────────────────────────────────────────────────────────────────────────
 
+// The mark on the image now showing, as a prefix for the filename line.
+//
+// Empty unless cull mode is on, so the ordinary overlay is byte-for-byte what
+// it always was. It reads AppState rather than taking an argument because both
+// RebuildTopLeft branches need it and every caller of UpdateInfo would
+// otherwise have to learn about culling.
+static const wchar_t *CullBadge() {
+    if (!app.cullMode) return L"";
+    if (app.playlist.empty() || app.currentIndex < 0 ||
+        app.currentIndex >= static_cast<int>(app.playlist.size()))
+        return L"";
+
+    switch (app.cullMarks.Of(app.playlist[app.currentIndex])) {
+        case Common::CullMarks::Mark::Keep:   return QIV_ICON_CHECK L" ";
+        case Common::CullMarks::Mark::Reject: return QIV_ICON_CLOSE L" ";
+        default: break;
+    }
+    // In the mode but not yet judged. A dot rather than nothing, so "I have not
+    // looked at this one" and "the mode is off" do not render identically.
+    return L"· ";
+}
+
+void OverlayManager::RefreshCullBadge() {
+    RebuildTopLeft();
+}
+
 void OverlayManager::RebuildTopLeft() {
     wchar_t buf[32];
 
@@ -456,6 +482,7 @@ void OverlayManager::RebuildTopLeft() {
         }
         swprintf_s(buf, L"%d / %d  ", m_infoIndex + 1, m_infoTotal);
         text += buf;
+        text += CullBadge();
         text += m_infoFilename;
         text += L"  ";
         text += BuildTopRightText();
@@ -478,6 +505,7 @@ void OverlayManager::RebuildTopLeft() {
         swprintf_s(buf, L"%d / %d\n", m_infoIndex + 1, m_infoTotal);
     }
     std::wstring text = buf;
+    text += CullBadge();
     text += m_infoFilename;
     slotTopLeft.UpdateText(std::move(text));
 }

@@ -808,6 +808,36 @@ namespace Constants::Messages {
     // ZoomPanel::ZOOM_MIN / ZOOM_MAX — otherwise the input looks ignored.
     constexpr const wchar_t *ZOOM_MIN_REACHED = L"Minimum zoom reached";
     constexpr const wchar_t *ZOOM_MAX_REACHED = L"Maximum zoom reached";
+
+    // ── Cull mode ───────────────────────────────────────────────────
+    // The banner names the three keys, because a mode with invisible bindings
+    // is one nobody uses twice. The mark messages carry the running counts,
+    // since the overlay slot that also shows them can be switched off.
+    constexpr const wchar_t *CULL_MODE_ON =
+            QIV_ICON_CHECK L" Cull mode  •  K keep  •  X reject  •  U unmark";
+    constexpr const wchar_t *CULL_MODE_OFF = L"Cull mode off";
+    constexpr const wchar_t *CULL_KEPT = QIV_ICON_CHECK L" Keep";
+    constexpr const wchar_t *CULL_REJECTED = QIV_ICON_CLOSE L" Reject";
+    constexpr const wchar_t *CULL_UNMARKED = L"Unmarked";
+    constexpr const wchar_t *CULL_COUNTS_FMT = L"  •  %d keep, %d reject";
+    // Nothing to act on. Said out loud rather than silently doing nothing,
+    // because silence reads as a key that did not register.
+    constexpr const wchar_t *CULL_NO_IMAGE = QIV_ICON_WARNING L" No image to mark";
+    constexpr const wchar_t *CULL_NOTHING_REJECTED = L"Nothing was rejected";
+    // The confirmation. It names the count and the destination, and the call
+    // behind it is the only place in the whole feature that touches a file.
+    constexpr const wchar_t *CULL_CONFIRM_CAPTION = L"Move rejected files";
+    constexpr const wchar_t *CULL_CONFIRM_FMT =
+            L"Move %d rejected file%s into \"%s\"?\n\n"
+            L"They stay on disk, in a subfolder of the folder they are in now.";
+    constexpr const wchar_t *CULL_MOVED_FMT = QIV_ICON_FOLDER L" Moved %d to %s";
+    constexpr const wchar_t *CULL_MOVE_FAILED =
+            QIV_ICON_WARNING L" Some files could not be moved";
+    // The subfolder the rejects go to. A plain name, in the folder they were
+    // already in, so undoing it is a drag back rather than a hunt through the
+    // Recycle Bin - and a cull of 400 frames is exactly the case where you
+    // want to look at what you threw out before it is really gone.
+    constexpr const wchar_t *CULL_REJECT_FOLDER = L"_rejected";
 }
 
 namespace Constants::Strings {

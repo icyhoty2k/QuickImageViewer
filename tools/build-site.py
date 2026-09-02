@@ -407,6 +407,18 @@ MODIFIER = re.compile(r'^((?:Ctrl\+|Alt\+|Shift\+)+)')
 # The separator is captured so it can be put back between the elements verbatim.
 SEPARATORS = re.compile(r'( / | – | — | • )')
 
+# A trailing "(while running)" / "(in cull mode)" is PROSE, not part of the key.
+#
+# HelpWnd appends it to the label because it draws the whole thing as one line.
+# Left inside the element the page published <kbd>X (in cull mode)</kbd> - a key
+# nobody can press, and one check-help-docs.ps1 cannot match against the bare X
+# it is looking for. That is how cull mode's X reached the site undocumented
+# while the README, which puts the qualifier outside its code span, passed.
+#
+# Only a trailing parenthetical, and only when something precedes it: a label
+# that IS a parenthetical has no key to separate it from.
+QUALIFIER = re.compile(r'^(.*?)\s*(\([^()]*\))\s*$')
+
 
 def kbdify(label):
     """Turn a composite label into one <kbd> PER KEY.
@@ -422,11 +434,18 @@ def kbdify(label):
     across the group: "Alt+W / A / S / D" documents Alt+W, Alt+A, Alt+S and
     Alt+D, which is what the app actually binds and what the checker expects.
     Separators stay outside the elements, where they belong — they are prose,
-    not keys.
+    not keys. So does a trailing "(while running)" or "(in cull mode)", for
+    the same reason and with the same consequence for the checker.
     """
+    qualifier = ''
+    m = QUALIFIER.match(label)
+    if m and m.group(1):
+        label = m.group(1)
+        qualifier = '  ' + esc(m.group(2))
+
     pieces = SEPARATORS.split(label)
     if len(pieces) == 1:
-        return '<kbd>%s</kbd>' % esc(label)
+        return '<kbd>%s</kbd>' % esc(label) + qualifier
 
     mod = MODIFIER.match(pieces[0].strip())
     mod = mod.group(1) if mod else ''
@@ -442,7 +461,7 @@ def kbdify(label):
             part = mod + part
         first = False
         out.append('<kbd>%s</kbd>' % esc(part))
-    return ''.join(out)
+    return ''.join(out) + qualifier
 
 
 # One per section title, because the app's own section glyphs are Segoe MDL2 and

@@ -228,6 +228,12 @@ enum class Command {
     SlideshowToggleShuffle, // S       — toggle shuffle (slideshow only)
     SlideshowCycleTransition, // T       — cycle transition type (slideshow only)
 
+    // --- Cull mode (keep / reject a folder down to size) ---
+    CullModeToggle,   // Alt+Space — enter / leave
+    CullKeep,         // K     — mark keep     (cull mode only)
+    CullReject,       // X     — mark reject   (cull mode only)
+    CullUnmark,       // U     — clear a mark  (cull mode only)
+
     // --- Viewport pan (W/A/S/D, no modifier) ---
     PanLeft,
     PanRight,

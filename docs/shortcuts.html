@@ -24,7 +24,7 @@
     <meta property="og:site_name" content="QuickImageViewer">
     <meta property="og:title" content="Every QuickImageViewer keyboard shortcut">
     <meta property="og:description"
-          content="The complete reference: 230 shortcuts in 16 sections, generated from the application's own help panel.">
+          content="The complete reference: 236 shortcuts in 17 sections, generated from the application's own help panel.">
     <meta property="og:url" content="https://icyhoty2k.github.io/QuickImageViewer/shortcuts.html">
     <meta property="og:image" content="https://icyhoty2k.github.io/QuickImageViewer/screenshots/less300kb/10.webp">
     <meta property="og:image:alt" content="QuickImageViewer showing a photo with a thumbnail strip">
@@ -32,7 +32,7 @@
     <meta name="twitter:card" content="summary_large_image">
     <meta name="twitter:title" content="Every QuickImageViewer keyboard shortcut">
     <meta name="twitter:description"
-          content="The complete reference: 230 shortcuts in 16 sections, generated from the application's own help panel.">
+          content="The complete reference: 236 shortcuts in 17 sections, generated from the application's own help panel.">
     <meta name="twitter:image" content="https://icyhoty2k.github.io/QuickImageViewer/screenshots/less300kb/10.webp">
 
 <script type="application/ld+json">
@@ -132,7 +132,7 @@
     <h1>QuickImageViewer (qIV) — Shortcuts</h1>
     <p class="meta">
         Generated from the app's own help panel — press <kbd>F1</kbd> in QuickImageViewer to see the same list on your
-        machine. 230 shortcuts in 16 sections.
+        machine. 236 shortcuts in 17 sections.
     </p>
 
 <!-- SHARED-STOREROW-START -->
@@ -292,10 +292,21 @@
         <h2><span class="sc-ico">▶</span>Slideshow<span class="sc-count">5</span></h2>
         <div class="sc-cols">
             <div class="sc-row"><div class="sc-keys"><kbd>Ctrl+F1</kbd></div><p class="sc-desc">Start / stop the slideshow.</p></div>
-            <div class="sc-row"><div class="sc-keys"><kbd>Space (while running)</kbd></div><p class="sc-desc">Pause / resume the slideshow.</p></div>
-            <div class="sc-row"><div class="sc-keys"><kbd>R (while running)</kbd></div><p class="sc-desc">Toggle loop — restart from the first image after the last.</p></div>
-            <div class="sc-row"><div class="sc-keys"><kbd>S (while running)</kbd></div><p class="sc-desc">Toggle shuffle — show the playlist in random order.</p></div>
-            <div class="sc-row"><div class="sc-keys"><kbd>T (while running)</kbd></div><p class="sc-desc">Step to the next slide transition ( in total, wraps around). Slideshow › Transition in the tray or right-click menu controls this in two parts: which transitions are in play  <a class="sc-more" href="#slideshow-t-while-running">details</a></p></div>
+            <div class="sc-row"><div class="sc-keys"><kbd>Space</kbd>  (while running)</div><p class="sc-desc">Pause / resume the slideshow.</p></div>
+            <div class="sc-row"><div class="sc-keys"><kbd>R</kbd>  (while running)</div><p class="sc-desc">Toggle loop — restart from the first image after the last.</p></div>
+            <div class="sc-row"><div class="sc-keys"><kbd>S</kbd>  (while running)</div><p class="sc-desc">Toggle shuffle — show the playlist in random order.</p></div>
+            <div class="sc-row"><div class="sc-keys"><kbd>T</kbd>  (while running)</div><p class="sc-desc">Step to the next slide transition ( in total, wraps around). Slideshow › Transition in the tray or right-click menu controls this in two parts: which transitions are in play  <a class="sc-more" href="#slideshow-t-while-running">details</a></p></div>
+        </div>
+    </section>
+    <section class="sc-sec" data-title="Cull Mode">
+        <h2><span class="sc-ico">⌨</span>Cull Mode<span class="sc-count">6</span></h2>
+        <div class="sc-cols">
+            <div class="sc-row"><div class="sc-keys"><kbd>Alt+Space</kbd></div><p class="sc-desc">Enter or leave cull mode — the pass where you say yes or no to each picture. While it is on, the filename in the top-left carries a mark: a tick for keep, a cross for reject, a dot for one you have… <a class="sc-more" href="#cull-mode-alt-space">details</a></p></div>
+            <div class="sc-row"><div class="sc-keys"><kbd>K</kbd>  (in cull mode)</div><p class="sc-desc">Mark the current picture KEEP and move to the next one. Pressing it again on the same picture clears the mark.</p></div>
+            <div class="sc-row"><div class="sc-keys"><kbd>X</kbd>  (in cull mode)</div><p class="sc-desc">Mark the current picture REJECT and move to the next one. Pressing it again clears the mark.</p></div>
+            <div class="sc-row"><div class="sc-keys"><kbd>U</kbd>  (in cull mode)</div><p class="sc-desc">Clear the mark on the current picture and move on.</p></div>
+            <div class="sc-row"><div class="sc-keys"><kbd>Leaving cull mode</kbd></div><p class="sc-desc">If anything is marked reject, you are asked once before any file moves. Say yes and they go into a "_rejected" folder beside them — still on disk, in the same place, undoable with Ctrl+Z in Explorer. <a class="sc-more" href="#cull-mode-leaving-cull-mode">details</a></p></div>
+            <div class="sc-row"><div class="sc-keys"><kbd>Note</kbd></div><p class="sc-desc">K, X and U do their usual jobs — stats, reset window, thumbnail effects — whenever cull mode is off. They are borrowed only while it is running, the same way R, S and T are borrowed by the slideshow.</p></div>
         </div>
     </section>
     <section class="sc-sec" data-title="Info Overlays">
@@ -361,7 +372,7 @@
         <h2><span class="sc-ico">📡</span>Remote Control &amp; Mirroring<span class="sc-count">16</span></h2>
         <div class="sc-cols">
             <div class="sc-row"><div class="sc-keys"><kbd>F9</kbd></div><p class="sc-desc">Open the Local Server panel — the listener THIS instance runs, and nothing else. qIV can listen on a TCP port and be driven over the network — next, goto, zoom, open, slideshow  <a class="sc-more" href="#remote-control-mirroring-f9">details</a></p></div>
-            <div class="sc-row"><div class="sc-keys"><kbd>TCP</kbd> / <kbd>IP menu → Announce (beacon)</kbd></div><p class="sc-desc">Publish this listener on the local network so a phone or another qIV FINDS it in a list instead of being told an address. <a class="sc-more" href="#remote-control-mirroring-tcp-ip-menu-announce-beacon">details</a></p></div>
+            <div class="sc-row"><div class="sc-keys"><kbd>TCP</kbd> / <kbd>IP menu → Announce</kbd>  (beacon)</div><p class="sc-desc">Publish this listener on the local network so a phone or another qIV FINDS it in a list instead of being told an address. <a class="sc-more" href="#remote-control-mirroring-tcp-ip-menu-announce-beacon">details</a></p></div>
             <div class="sc-row"><div class="sc-keys"><kbd>Ctrl+Alt+S</kbd></div><p class="sc-desc">Start or stop that listener without opening its panel. The same two actions as the panel's Start and Stop buttons, on one key  <a class="sc-more" href="#remote-control-mirroring-ctrl-alt-s">details</a></p></div>
             <div class="sc-row"><div class="sc-keys"><kbd>Ctrl+F9</kbd></div><p class="sc-desc">My Clients — every peer currently connected to the listener above, with its address, the name it gave itself, whether it is encrypted, and how long it has been on. <a class="sc-more" href="#remote-control-mirroring-ctrl-f9">details</a></p></div>
             <div class="sc-row"><div class="sc-keys"><kbd>F10</kbd></div><p class="sc-desc">Open Remote Servers — everything about the instances this copy can drive. <a class="sc-more" href="#remote-control-mirroring-f10">details</a></p></div>
@@ -375,7 +386,7 @@
             <div class="sc-row"><div class="sc-keys"><kbd>While connected</kbd></div><p class="sc-desc">A connection — driving another instance, or being driven by one — puts the viewer into a restricted mode, and leaves it when the last connection drops. <a class="sc-more" href="#remote-control-mirroring-while-connected">details</a></p></div>
             <div class="sc-row"><div class="sc-keys"><kbd>Driving another machine</kbd></div><p class="sc-desc">An instance on the SAME computer is mirrored exactly — it shares the folder, so image numbers mean the same picture on both. <a class="sc-more" href="#remote-control-mirroring-driving-another-machine">details</a></p></div>
             <div class="sc-row"><div class="sc-keys"><kbd>F12</kbd></div><p class="sc-desc">While mirroring, also execute the command HERE. Off (the default) makes this viewer a pure remote control: it drives the other screens and its own display stays where it is. <a class="sc-more" href="#remote-control-mirroring-f12">details</a></p></div>
-            <div class="sc-row"><div class="sc-keys"><kbd>qIV Remote (Android)</kbd></div><p class="sc-desc">THE PHONE CLIENT, and the reason F9 is worth switching on even if you never drive a second PC. It speaks this same protocol — the verbs listed by `help`  <a class="sc-more" href="#remote-control-mirroring-qiv-remote-android">details</a></p></div>
+            <div class="sc-row"><div class="sc-keys"><kbd>qIV Remote</kbd>  (Android)</div><p class="sc-desc">THE PHONE CLIENT, and the reason F9 is worth switching on even if you never drive a second PC. It speaks this same protocol — the verbs listed by `help`  <a class="sc-more" href="#remote-control-mirroring-qiv-remote-android">details</a></p></div>
         </div>
     </section>
     <section class="sc-sec" data-title="System Tray">
@@ -487,7 +498,7 @@
     </section>
 
     <h2 class="sc-deep-head">In depth</h2>
-    <p class="sc-deep-intro">The 70 shortcuts above whose behaviour needs more than a line. Every one is linked from its row.</p>
+    <p class="sc-deep-intro">The 72 shortcuts above whose behaviour needs more than a line. Every one is linked from its row.</p>
     <article class="sc-deep" id="image-navigation-ctrl-f">
         <h3><kbd>Ctrl+F</kbd><span class="sc-deep-sec">Image Navigation</span></h3>
         <p>Open the Find panel — fuzzy filename search with wildcard support: * matches any characters, ? matches exactly one (e.g. *.jpg or photo_??_2024.*). Searches THIS folder and the VRAM cache. Typing # inside switches to Jump-to. NARROW BY SIZE OR DATE by typing a comparison alongside the name: &gt;5mb, &lt;500kb, &gt;=2gb, &lt;2024, &gt;2024-06 or &gt;=2024-06-01. They combine with each other and with the name, so "sunset &gt;5mb &lt;2024" is a real query, and a filter on its own lists everything that passes it. A word only becomes a filter when it cannot be anything else, so photo_2024 and IMG_20240817 are still searched as names.</p>
@@ -563,8 +574,16 @@
         <p>Spawn a floating directory strip for the hovered folder without leaving the current one — up to strips (top, left, right, bottom). If a strip is already open for that folder, this hides it instead (toggle). Great for comparing folders.</p>
     </article>
     <article class="sc-deep" id="slideshow-t-while-running">
-        <h3><kbd>T (while running)</kbd><span class="sc-deep-sec">Slideshow</span></h3>
+        <h3><kbd>T</kbd>  (while running)<span class="sc-deep-sec">Slideshow</span></h3>
         <p>Step to the next slide transition ( in total, wraps around). Slideshow › Transition in the tray or right-click menu controls this in two parts: which transitions are in play — None (just the one you tick), All, or List (only the ones you tick) — and the order they play in, Sequential (the menu's numbered order) or Random. In List mode the numbered rows become checkboxes.</p>
+    </article>
+    <article class="sc-deep" id="cull-mode-alt-space">
+        <h3><kbd>Alt+Space</kbd><span class="sc-deep-sec">Cull Mode</span></h3>
+        <p>Enter or leave cull mode — the pass where you say yes or no to each picture. While it is on, the filename in the top-left carries a mark: a tick for keep, a cross for reject, a dot for one you have not judged yet. Nothing is written to disk while you mark, and leaving the mode is what asks whether to move the rejects.</p>
+    </article>
+    <article class="sc-deep" id="cull-mode-leaving-cull-mode">
+        <h3><kbd>Leaving cull mode</kbd><span class="sc-deep-sec">Cull Mode</span></h3>
+        <p>If anything is marked reject, you are asked once before any file moves. Say yes and they go into a "_rejected" folder beside them — still on disk, in the same place, undoable with Ctrl+Z in Explorer. Say no and you stay in the mode with every mark intact. The marks themselves live in memory only: closing the viewer forgets them.</p>
     </article>
     <article class="sc-deep" id="info-overlays-ctrl-1-ctrl-9">
         <h3><kbd>Ctrl+1</kbd> – <kbd>Ctrl+9</kbd><span class="sc-deep-sec">Info Overlays</span></h3>
@@ -602,7 +621,7 @@
         <p>WHO is connected right now is Ctrl+F9, not here.</p>
     </article>
     <article class="sc-deep" id="remote-control-mirroring-tcp-ip-menu-announce-beacon">
-        <h3><kbd>TCP</kbd> / <kbd>IP menu → Announce (beacon)</kbd><span class="sc-deep-sec">Remote Control &amp; Mirroring</span></h3>
+        <h3><kbd>TCP</kbd> / <kbd>IP menu → Announce</kbd>  (beacon)<span class="sc-deep-sec">Remote Control &amp; Mirroring</span></h3>
         <p>Publish this listener on the local network so a phone or another qIV FINDS it in a list instead of being told an address. mDNS / DNS-SD, service type _qiv._tcp, answered by the Android app's own discovery — nothing to install at either end. Off by default.</p>
         <p>IT ANNOUNCES THE INSTANCE NAME AND THE PORT, AND NOTHING ELSE. Never a password, never whether one is set, never a path, never a file name, never the AllowList. A signpost that describes the lock on the door is a worse signpost.</p>
         <p>DISCOVERY IS NOT ACCESS. Being findable changes nothing about who may connect: the AllowList, the password challenge and TLS all still apply, so someone who discovers this instance and is not allowed in gets exactly as far as someone who guessed the address.</p>
@@ -705,7 +724,7 @@
         <p>While mirroring, also execute the command HERE. Off (the default) makes this viewer a pure remote control: it drives the other screens and its own display stays where it is. Has no effect while mirroring is off. Always OFF at startup.</p>
     </article>
     <article class="sc-deep" id="remote-control-mirroring-qiv-remote-android">
-        <h3><kbd>qIV Remote (Android)</kbd><span class="sc-deep-sec">Remote Control &amp; Mirroring</span></h3>
+        <h3><kbd>qIV Remote</kbd>  (Android)<span class="sc-deep-sec">Remote Control &amp; Mirroring</span></h3>
         <p>THE PHONE CLIENT, and the reason F9 is worth switching on even if you never drive a second PC. It speaks this same protocol — the verbs listed by `help` — so it is a real client rather than a screen share.</p>
         <p>IT DRIVES THE VIEWER: next / previous, first / last, slideshow with its interval, pause, loop and shuffle, zoom, rotate, flip, all five view modes, the colour effects, fullscreen, always-on-top, panels and the overlay. This viewer's folder history goes down to the phone too, so a folder here is one tap away there.</p>
         <p>PICTURES TRAVEL BOTH WAYS, which is the part a remote control usually cannot do at all. The phone's live preview asks for the displayed image SCALED and re-encoded before it leaves this machine — 25-40x fewer bytes than the original. Save asks for the ORIGINAL FILE separately and writes it into the phone's gallery, because a re-encoded preview is not the file anyone meant to keep. Pushing the other way sends the phone photo's own bytes here, and it is shown ONCE, over whatever is up: no folder change, no sort order change, no playlist move, and a running slideshow carries on with it occupying a single slide.</p>

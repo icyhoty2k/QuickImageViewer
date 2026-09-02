@@ -26,6 +26,8 @@
 #include "../Overlays/OverlayManager.h"
 #include "../WicDecoder.h"
 #include "../UI/UIManager.h"
+#include "../UI/ThemedDialog.h"    // the cull resolve asks before it moves anything
+#include "../Platform/FileHandler.h" // LoadImageIndex / ReloadCurrentDirectory
 #include "../Dedicated/DedicatedInstance.h" // AppIconId / IsDedicatedProcess
 #include "../Platform/AppLog.h"             // COMP_SLIDESHOW — start/stop go in the General log
 #include <shellapi.h>  // ShellExecuteW — OpenOverlayFolderInExplorer
@@ -435,6 +437,192 @@ void AppCommands::DeleteFilesToRecycleBin(const std::vector<std::wstring> &paths
 
 void AppCommands::DeleteFileToRecycleBin(const std::wstring &path) {
     DeleteFilesToRecycleBin({path});
+}
+
+// =============================================================================
+//  CULL MODE - keep / reject a folder down to size.
+//
+//  Nothing here writes to disk except ResolveCullRejects, and that one asks
+//  first. Everything else moves an entry in a hash map.
+// =============================================================================
+void AppCommands::ToggleCullMode(HWND hWnd) {
+    // LEAVING WITH REJECTS PENDING IS WHAT ASKS. There is no separate resolve
+    // key: plain Enter is fullscreen and every modified Enter is already a
+    // remote command, so the exit carries the question instead. A user who
+    // cancels stays in the mode with their marks intact - a cancel means "not
+    // yet", not "throw the last twenty minutes away".
+    if (app.cullMode) {
+        if (app.cullMarks.Count(Common::CullMarks::Mark::Reject) > 0) {
+            if (ResolveCullRejects(hWnd) < 0) return;   // cancelled - stay in the mode
+        }
+        app.cullMode = false;
+        app.cullMarks.Clear();
+        g_overlayManager.PostCenterMessage(hWnd, Constants::Messages::CULL_MODE_OFF);
+    } else {
+        app.cullMode = true;
+        g_overlayManager.PostCenterMessage(hWnd, Constants::Messages::CULL_MODE_ON);
+    }
+    // The badge sits on the filename line, so it has to be rebuilt on the way
+    // in AND on the way out - or the last mark stays on screen over a mode that
+    // is no longer running.
+    g_overlayManager.RefreshCullBadge();
+    InvalidateRect(hWnd, nullptr, FALSE);
+}
+
+void AppCommands::MarkCurrent(HWND hWnd, Common::CullMarks::Mark mark) {
+    if (app.playlist.empty() || app.currentIndex < 0 ||
+        app.currentIndex >= static_cast<int>(app.playlist.size())) {
+        g_overlayManager.PostCenterMessage(hWnd, Constants::Messages::CULL_NO_IMAGE,
+                                           OverlayManager::MsgSeverity::Warning);
+        return;
+    }
+
+    const std::wstring path = app.playlist[app.currentIndex];
+    app.cullMarks.Toggle(path, mark);
+
+    // WHAT IT REPORTS IS WHAT THE MARK NOW IS, not what was asked for. Pressing
+    // X twice undoes the reject, and announcing "Reject" for the keystroke that
+    // cleared one is how a folder gets culled wrong.
+    const Common::CullMarks::Mark now = app.cullMarks.Of(path);
+    std::wstring msg;
+    if (now == Common::CullMarks::Mark::Keep) {
+        msg = Constants::Messages::CULL_KEPT;
+    } else if (now == Common::CullMarks::Mark::Reject) {
+        msg = Constants::Messages::CULL_REJECTED;
+    } else {
+        msg = Constants::Messages::CULL_UNMARKED;
+    }
+
+    wchar_t counts[64];
+    swprintf_s(counts, Constants::Messages::CULL_COUNTS_FMT,
+               app.cullMarks.Count(Common::CullMarks::Mark::Keep),
+               app.cullMarks.Count(Common::CullMarks::Mark::Reject));
+    msg += counts;
+    g_overlayManager.PostCenterMessage(hWnd, msg);
+
+    // ADVANCE, BECAUSE THAT IS THE WHOLE POINT. A cull is one keystroke per
+    // picture; making it two would double the work the feature exists to halve.
+    //
+    // The LAST image does not wrap. Everywhere else in this app Next wraps, and
+    // that is right for browsing - but a cull that jumps back to frame one after
+    // the final frame starts a second pass nobody asked for, over pictures that
+    // are already marked.
+    const int size = static_cast<int>(app.playlist.size());
+    if (app.currentIndex + 1 < size) {
+        LoadImageIndex(hWnd, app.currentIndex + 1);
+    }
+    // Both paths repaint the badge: the one that moved is showing a different
+    // picture, and the one that did not just changed this picture's mark.
+    g_overlayManager.RefreshCullBadge();
+    InvalidateRect(hWnd, nullptr, FALSE);
+}
+
+// Returns the number moved, or -1 when the user said no.
+//
+// ⚠ THE -1 IS NOT A COUNT. The caller uses it to stay in cull mode with the
+// marks intact. Returning 0 for a refusal would make "you cancelled" and "there
+// was nothing to move" the same answer, and only one of those should drop the
+// marks the user spent the session making.
+int AppCommands::ResolveCullRejects(HWND hWnd) {
+    const std::vector<std::wstring> rejects = app.cullMarks.Rejected(app.playlist);
+    if (rejects.empty()) {
+        g_overlayManager.PostCenterMessage(hWnd, Constants::Messages::CULL_NOTHING_REJECTED);
+        return 0;
+    }
+
+    wchar_t question[512];
+    swprintf_s(question, Constants::Messages::CULL_CONFIRM_FMT,
+               static_cast<int>(rejects.size()),
+               rejects.size() == 1 ? L"" : L"s",
+               Constants::Messages::CULL_REJECT_FOLDER);
+    if (!UI::ThemedDialog::Confirm(hWnd, question,
+                                   Constants::Messages::CULL_CONFIRM_CAPTION))
+        return -1;
+
+    // GROUPED BY DIRECTORY, one SHFileOperation per folder.
+    //
+    // A cull normally runs inside one folder, but "search everywhere" and a
+    // playlist assembled from several folders both break that, and FO_MOVE takes
+    // a single destination. Sending files from two folders into one _rejected is
+    // not what "a subfolder of the folder they are in" means, and it silently
+    // merges two shoots.
+    std::vector<std::wstring> dirs;
+    std::vector<std::vector<std::wstring>> groups;
+    for (const std::wstring &p : rejects) {
+        const size_t slash = p.find_last_of(L"\\/");
+        if (slash == std::wstring::npos) continue;   // no directory part: nowhere to move it
+        const std::wstring dir = p.substr(0, slash);
+
+        int found = -1;
+        for (int i = 0; i < static_cast<int>(dirs.size()); ++i) {
+            if (dirs[i] == dir) { found = i; break; }
+        }
+        if (found < 0) {
+            dirs.push_back(dir);
+            groups.emplace_back();
+            found = static_cast<int>(dirs.size()) - 1;
+        }
+        groups[found].push_back(p);
+    }
+
+    int moved = 0;
+    bool anyFailed = false;
+    for (int g = 0; g < static_cast<int>(dirs.size()); ++g) {
+        const std::wstring dest = dirs[g] + L"\\" +
+                                  Constants::Messages::CULL_REJECT_FOLDER;
+
+        // Double-null-terminated, the way DeleteFilesToRecycleBin above builds
+        // its own. FOF_NOCONFIRMMKDIR is what creates _rejected; making it here
+        // by hand would leave an empty folder behind when the move then failed.
+        std::wstring from;
+        for (const std::wstring &p : groups[g]) {
+            from += p;
+            from += L'\0';
+        }
+        from += L'\0';
+
+        std::wstring to = dest;
+        to += L'\0';
+        to += L'\0';
+
+        SHFILEOPSTRUCTW op = {};
+        op.hwnd = hWnd;
+        op.wFunc = FO_MOVE;
+        op.pFrom = from.c_str();
+        op.pTo = to.c_str();
+        // ⚠ NO FOF_SILENT AND NO FOF_NOERRORUI, unlike the recycle-bin helper
+        // above. A move that hits a name clash or a read-only file has to say
+        // so: this is the one step in the feature that changes the disk, and a
+        // cull that quietly dropped four of forty is worse than one that stopped
+        // and asked.
+        op.fFlags = FOF_ALLOWUNDO | FOF_NOCONFIRMMKDIR;
+
+        const int rc = SHFileOperationW(&op);
+        if (rc != 0 || op.fAnyOperationsAborted) {
+            anyFailed = true;
+            continue;   // the other folders still get their turn
+        }
+        for (const std::wstring &p : groups[g]) {
+            app.cullMarks.Forget(p);
+            ++moved;
+        }
+    }
+
+    if (anyFailed) {
+        g_overlayManager.PostCenterMessage(hWnd, Constants::Messages::CULL_MOVE_FAILED,
+                                           OverlayManager::MsgSeverity::Warning);
+    } else {
+        wchar_t done[192];
+        swprintf_s(done, Constants::Messages::CULL_MOVED_FMT, moved,
+                   Constants::Messages::CULL_REJECT_FOLDER);
+        g_overlayManager.PostCenterMessage(hWnd, done);
+    }
+
+    // The playlist now names files that are no longer where it says. Reloading
+    // the folder is what F5 already does; walking it again by hand here would be
+    // a second, differently-wrong version of the same code.
+    if (moved > 0) ReloadCurrentDirectory(hWnd);
+    return moved;
 }
 
 bool AppCommands::ClipboardHasFiles() {

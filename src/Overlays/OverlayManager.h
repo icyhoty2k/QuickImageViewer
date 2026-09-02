@@ -140,6 +140,13 @@ class OverlayManager {
         // line under Summary, so flipping its toggle has to rebuild both.
         void RefreshFolderNameLine();
 
+        // Repaints TOP_LEFT so the cull badge in front of the filename matches
+        // the mark on the image now showing. Called when a mark changes and
+        // when the mode itself is switched - leaving the mode has to clear the
+        // badge, or the last one stays up over a mode that is no longer on.
+        void RefreshCullBadge();
+
+
         // Panel selection overlay — called by ThumbnailPanelWnd whenever m_selectedPaths
         // changes. Maps panel position to the nearest free overlay slot:
         //   1 (top) → TOP_CENTER,  2 (right) → MID_RIGHT,

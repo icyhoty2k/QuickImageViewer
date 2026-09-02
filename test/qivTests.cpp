@@ -65,6 +65,7 @@
 #include "Platform/FolderIndex.h"   // where a file name starts inside a path
 #include "Common/ToneMap.h"        // HDR to a display byte
 #include "Common/SearchFilter.h"   // >5mb and >2024 in the Find box
+#include "Common/CullMarks.h"      // keep / reject while going through a folder
 #include "Persistence/HistoryFoldersManager.h" // HistoryPath - untrusted line hygiene
 #include "Persistence/IniFile.h"         // every persisted setting travels through this
 #include "Persistence/RotatingLogFile.h"
@@ -1169,6 +1170,173 @@ namespace {
     //  a date shape. Half of the checks below exist to prove the parser REFUSES
     //  things, which is the half that protects what already worked.
     // -------------------------------------------------------------------------
+    // -------------------------------------------------------------------------
+    //  KEEP / REJECT MARKS.
+    //
+    //  The bookkeeping behind cull mode. Nothing here touches a file - which is
+    //  exactly why it is worth testing on its own, because by the time a mark
+    //  reaches the resolve step it decides whether a photograph is moved.
+    // -------------------------------------------------------------------------
+    void TestCullMarks() {
+        using namespace Common::CullMarks;
+
+        NOTE("an unmarked picture is None, and a fresh set is empty");
+        {
+            Set s;
+            CHECK(s.Empty());
+            CHECK(s.Of(L"a.jpg") == Mark::None);
+            CHECK(s.Count(Mark::Keep) == 0);
+            CHECK(s.Count(Mark::Reject) == 0);
+        }
+
+        NOTE("the same key twice undoes the mark");
+        {
+            Set s;
+            s.Toggle(L"a.jpg", Mark::Reject);
+            CHECK(s.Of(L"a.jpg") == Mark::Reject);
+            s.Toggle(L"a.jpg", Mark::Reject);
+            CHECK(s.Of(L"a.jpg") == Mark::None);
+            CHECK(s.Empty());
+        }
+
+        NOTE("the other key switches outright - a changed mind, not a third state");
+        {
+            Set s;
+            s.Toggle(L"a.jpg", Mark::Reject);
+            s.Toggle(L"a.jpg", Mark::Keep);
+            CHECK(s.Of(L"a.jpg") == Mark::Keep);
+            CHECK(s.Count(Mark::Reject) == 0);
+            CHECK(s.Count(Mark::Keep) == 1);
+        }
+
+        NOTE("marks are per PATH, so two pictures never share one");
+        {
+            Set s;
+            s.Toggle(L"a.jpg", Mark::Keep);
+            s.Toggle(L"b.jpg", Mark::Reject);
+            CHECK(s.Of(L"a.jpg") == Mark::Keep);
+            CHECK(s.Of(L"b.jpg") == Mark::Reject);
+            CHECK(s.Of(L"c.jpg") == Mark::None);
+        }
+
+        NOTE("Rejected comes back in the ORDER GIVEN, not in hash order");
+        {
+            // The resolve step shows this list before it moves anything. A list
+            // that reshuffles between one look and the next cannot be checked,
+            // and the thing being checked is which photographs get moved.
+            const std::vector<std::wstring> order = {
+                L"1.jpg", L"2.jpg", L"3.jpg", L"4.jpg", L"5.jpg" };
+            Set s;
+            s.Toggle(L"5.jpg", Mark::Reject);
+            s.Toggle(L"1.jpg", Mark::Reject);
+            s.Toggle(L"3.jpg", Mark::Keep);
+            s.Toggle(L"4.jpg", Mark::Reject);
+
+            const auto r = s.Rejected(order);
+            CHECK(r.size() == 3);
+            CHECK(r[0] == L"1.jpg");
+            CHECK(r[1] == L"4.jpg");
+            CHECK(r[2] == L"5.jpg");
+        }
+
+        NOTE("a mark for a picture no longer in the folder is simply not listed");
+        {
+            // Sorting, or a file deleted by something else, changes what the
+            // playlist holds. The mark survives in the set but cannot be
+            // resolved against a folder that no longer contains it - which is
+            // the safe direction.
+            const std::vector<std::wstring> order = { L"1.jpg" };
+            Set s;
+            s.Toggle(L"gone.jpg", Mark::Reject);
+            s.Toggle(L"1.jpg", Mark::Reject);
+            const auto r = s.Rejected(order);
+            CHECK(r.size() == 1);
+            CHECK(r[0] == L"1.jpg");
+            CHECK(s.Count(Mark::Reject) == 2);   // still remembered, just not listed
+        }
+
+        NOTE("Forget drops one, Clear drops all");
+        {
+            Set s;
+            s.Toggle(L"a.jpg", Mark::Reject);
+            s.Toggle(L"b.jpg", Mark::Reject);
+            s.Forget(L"a.jpg");
+            CHECK(s.Of(L"a.jpg") == Mark::None);
+            CHECK(s.Of(L"b.jpg") == Mark::Reject);
+            s.Clear();
+            CHECK(s.Empty());
+        }
+
+        NOTE("Toggle to None clears whatever was there");
+        {
+            Set s;
+            s.Toggle(L"a.jpg", Mark::Keep);
+            s.Toggle(L"a.jpg", Mark::None);
+            CHECK(s.Of(L"a.jpg") == Mark::None);
+        }
+    }
+
+    // -------------------------------------------------------------------------
+    //  CULL MODE, THE TWO PARTS NO UNIT TEST CAN REACH.
+    //
+    //  CommandResolver.cpp is not linked into this binary - it pulls in AppState,
+    //  a window and a socket. So the two invariants below are checked by reading
+    //  the source, the way the escape-sequence and directory-walk tests already
+    //  do. Both are silent when broken: one makes three keys do nothing, the
+    //  other makes Windows beep on every toggle. Neither shows up in a build.
+    // -------------------------------------------------------------------------
+    void TestCullModeWiring() {
+        NOTE("the cull-mode block runs BEFORE the main switch, or K/X/U never reach it");
+        {
+            // K, X and U are already bound - Stats, Reset window, Thumbnail
+            // effects. The mode-gated block only wins because it is tested first.
+            // Move it below the switch and the three keys keep doing their old
+            // jobs while cull mode is on, which reads as a mode that does nothing.
+            const std::string src = ReadSourceFile("src/Input/CommandResolver.cpp");
+            CHECK(!src.empty());
+
+            const size_t block  = src.find("app.cullMode) {");
+            const size_t sw     = src.find("// All other keys");
+            CHECK(block != std::string::npos);
+            CHECK(sw != std::string::npos);
+            CHECK(block < sw);
+
+            // And all three keys are actually in it, not just the guard.
+            CHECK(src.find("SC_CULL_KEEP") != std::string::npos);
+            CHECK(src.find("SC_CULL_REJECT") != std::string::npos);
+            CHECK(src.find("SC_CULL_UNMARK") != std::string::npos);
+        }
+
+        NOTE("Alt+Space is swallowed in WM_SYSCHAR, or every toggle beeps");
+        {
+            // WM_SYSKEYDOWN handles the key, then TranslateMessage sends a
+            // WM_SYSCHAR that DefWindowProc answers by opening the system menu.
+            // This window is WS_POPUP with no WS_SYSMENU, so there is no menu -
+            // and the failure mode for "no menu" is MessageBeep, once per toggle.
+            const std::string src = ReadSourceFile("src/AppMain.cpp");
+            CHECK(!src.empty());
+
+            const size_t syschar = src.find("case WM_SYSCHAR:");
+            CHECK(syschar != std::string::npos);
+
+            // The guard is inside that case, not somewhere else in the file.
+            const std::string tail = src.substr(syschar, 1200);
+            CHECK(tail.find("wParam == VK_SPACE") != std::string::npos);
+            CHECK(tail.find("return 0;") != std::string::npos);
+        }
+
+        NOTE("the window really has no system menu - the premise the guard rests on");
+        {
+            // If this window ever gains WS_SYSMENU, Alt+Space stops being free:
+            // it becomes a real shortcut the user expects to open a real menu,
+            // and taking it is then a bug rather than a spare key.
+            const std::string src = ReadSourceFile("src/Platform/DpiAwareInit.cpp");
+            CHECK(!src.empty());
+            CHECK(src.find("WS_POPUP") != std::string::npos);
+            CHECK(src.find("WS_SYSMENU") == std::string::npos);
+        }
+    }
+
     void TestSearchFilter() {
         using namespace Common::SearchFilter;
 
@@ -2939,6 +3107,14 @@ int main(int argc, char **argv) {
 
     BeginGroup("Find filters - size and date, without breaking plain text");
     TestSearchFilter();
+    EndGroup();
+
+    BeginGroup("Cull marks - keep and reject, before anything is moved");
+    TestCullMarks();
+    EndGroup();
+
+    BeginGroup("Cull mode - the wiring no unit test can reach");
+    TestCullModeWiring();
     EndGroup();
 
     BeginGroup("Settings - import and load clamp the same");

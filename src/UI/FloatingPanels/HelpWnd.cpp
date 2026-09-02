@@ -573,6 +573,34 @@ namespace UI {
             L"In List mode the numbered rows become checkboxes.", sSlide);
 
         // ---------------------------------------------------------------
+        const int sCull = Sec(Constants::Icon::SECTION_TOOLBOX, L"CULL MODE",
+                              L"Go through a folder keeping and rejecting");
+
+        Add(Alt(SC::SC_CULL_MODE_TOGGLE),
+            L"Enter or leave cull mode — the pass where you say yes or no to each "
+            L"picture. While it is on, the filename in the top-left carries a mark: "
+            L"a tick for keep, a cross for reject, a dot for one you have not judged "
+            L"yet. Nothing is written to disk while you mark, and leaving the mode is "
+            L"what asks whether to move the rejects.", sCull);
+        Add(K(SC::SC_CULL_KEEP) + L"  (in cull mode)",
+            L"Mark the current picture KEEP and move to the next one. Pressing it "
+            L"again on the same picture clears the mark.", sCull);
+        Add(K(SC::SC_CULL_REJECT) + L"  (in cull mode)",
+            L"Mark the current picture REJECT and move to the next one. Pressing it "
+            L"again clears the mark.", sCull);
+        Add(K(SC::SC_CULL_UNMARK) + L"  (in cull mode)",
+            L"Clear the mark on the current picture and move on.", sCull);
+        Add(L"Leaving cull mode",
+            L"If anything is marked reject, you are asked once before any file "
+            L"moves. Say yes and they go into a \"_rejected\" folder beside them — "
+            L"still on disk, in the same place, undoable with Ctrl+Z in Explorer. "
+            L"Say no and you stay in the mode with every mark intact. The marks "
+            L"themselves live in memory only: closing the viewer forgets them.", sCull);
+        Add(L"Note",
+            L"K, X and U do their usual jobs — stats, reset window, thumbnail "
+            L"effects — whenever cull mode is off. They are borrowed only while it "
+            L"is running, the same way R, S and T are borrowed by the slideshow.", sCull);
+        // ---------------------------------------------------------------
         const int sOverlay = Sec(Constants::Icon::SECTION_INFO, L"INFO OVERLAYS",
                                  L"The 3×3 on-screen information grid");
 
