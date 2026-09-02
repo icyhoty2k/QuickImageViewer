@@ -1101,7 +1101,7 @@ def transition_count():
     return int(m.group(1)) if m else None
 
 
-def check_public_numbers(total, nsec):
+def check_public_numbers(total, nsec, exe_kb=None):
     """Returns a list of complaints, empty when every prose number is right."""
     bad = []
     exts = supported_extension_count()
@@ -1143,6 +1143,25 @@ def check_public_numbers(total, nsec):
                        '%d available' % tc, 'transition count'))
         wanted.append(('../README.md',
                        '%d GPU transitions' % tc, 'transition count'))
+
+    # ⚠ THE SIZE CLAIMS, WHICH DRIFT UPWARD ON THEIR OWN.
+    #
+    # Every other number here is wrong only if somebody edits carelessly. These
+    # go stale on their own, one release at a time, and nobody re-reads a size
+    # they wrote eighteen months ago. At 9.75 MB there are 258 KB of headroom
+    # before the "sub-10 MB" line stops being true.
+    if exe_kb:
+        mb = exe_kb / 1024.0
+        wanted.append(('index.html', '%.1f MB' % mb, 'executable size'))
+        wanted.append(('photo-frame.html', '%.1f MB' % mb, 'executable size'))
+        wanted.append(('find-duplicate-photos.html', '%.1f MB' % mb, 'executable size'))
+
+        # "sub-10 MB" is on four surfaces and is an ASSERTION, not a number -
+        # nothing would ever flag it, it would simply become untrue one release
+        # and stay that way. Checked as a claim rather than pinned as a string.
+        if mb >= 10.0:
+            bad.append('the executable is %.2f MB - every "sub-10 MB" claim on the '
+                       'site and in README.md is now FALSE' % mb)
 
     for page, phrase, what in wanted:
         # "../README.md" reaches the repo root: the README is a published
@@ -1227,7 +1246,8 @@ def main():
             print('  wrote _partials/stats.html - %s' % note)
 
     print('\n== numbers written out in prose ==')
-    prose = check_public_numbers(total, nsec)
+    prose = check_public_numbers(total, nsec,
+                                 (raw or {}).get('exe_kb'))
     for b in prose:
         print('  STALE: %s' % b)
     if not prose:
