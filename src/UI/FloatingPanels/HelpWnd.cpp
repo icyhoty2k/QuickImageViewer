@@ -591,11 +591,25 @@ namespace UI {
         Add(K(SC::SC_CULL_UNMARK) + L"  (in cull mode)",
             L"Clear the mark on the current picture and move on.", sCull);
         Add(L"Leaving cull mode",
-            L"If anything is marked reject, you are asked once before any file "
-            L"moves. Say yes and they go into a \"_rejected\" folder beside them — "
-            L"still on disk, in the same place, undoable with Ctrl+Z in Explorer. "
-            L"Say no and you stay in the mode with every mark intact. The marks "
-            L"themselves live in memory only: closing the viewer forgets them.", sCull);
+            L"Whichever mark you used is the one that acts. If anything is marked "
+            L"REJECT, you are asked once and those files move. If you marked only "
+            L"KEEPS, you are asked whether to move everything else instead — which "
+            L"is the way to cull a shoot of four hundred down to the twelve good "
+            L"ones without rejecting the other three hundred and eighty-eight one "
+            L"at a time. Marking both ways resolves as a reject cull; an explicit "
+            L"reject outranks the absence of a keep.", sCull);
+        Add(L"What moves, and where",
+            L"Rejected files move wherever they are, including folders you have "
+            L"since navigated away from — you pointed at each of them by hand. The "
+            L"keep direction is confined to the folder on screen, because it acts "
+            L"on files nobody marked at all, and \"everything I did not keep\" "
+            L"across folders you never opened is not a cull. Either way they go to "
+            L"a \"_rejected\" folder beside them — still on disk, same place, "
+            L"undoable with Ctrl+Z in Explorer.", sCull);
+        Add(L"Saying no",
+            L"Declining the question moves nothing and closes the mode; the marks "
+            L"were only ever in memory. The mode stays open in one case only — a "
+            L"move that actually failed, so you can retry it.", sCull);
         Add(L"On a thumbnail strip",
             L"While cull mode is on, every strip tints its thumbnails by their mark "
             L"— green for keep, red for reject — and its right-click menu grows "

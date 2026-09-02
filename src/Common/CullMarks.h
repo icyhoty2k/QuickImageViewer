@@ -7,6 +7,7 @@
 // It is distributed WITHOUT ANY WARRANTY. See the LICENSE file for details.
 
 #pragma once
+#include <algorithm>
 #include <string>
 #include <unordered_map>
 #include <vector>
@@ -78,17 +79,46 @@ namespace Common::CullMarks {
 
             [[nodiscard]] bool Empty() const { return m_marks.empty(); }
 
-            // The rejected paths, in the order given rather than in hash order.
+            // ── THE TWO DIRECTIONS A CULL CAN RUN ─────────────────────────
             //
-            // ⚠ THE ORDER MATTERS BECAUSE A HUMAN READS IT. The resolve step
-            // lists what it is about to move, and a list that reshuffles between
-            // one look and the next is one nobody can check. Passing the
-            // playlist in is what makes it the folder's own order.
+            // Whichever mark was used is the one that acts: Reject moves what
+            // you marked, Keep moves what you did not. A shoot of four hundred
+            // with twelve good frames is twelve keeps, not three hundred and
+            // eighty-eight rejects, and without the second direction that is the
+            // shape of cull this feature simply could not do.
+            //
+            // ⚠ THEY ARE NOT SYMMETRICAL, AND MUST NOT BE. An explicit mark
+            // travels; an absence does not. AllRejected returns every rejected
+            // path there is, including ones in folders the playlist has since
+            // walked away from - the user pointed at each of those files
+            // individually. NotKept is confined to the playlist on screen,
+            // because it acts on files nobody marked at all, and "everything I
+            // did not keep" across folders never opened is how a cull eats a
+            // library.
+
+            // Every rejected path, sorted. Sorted rather than in playlist order
+            // because it spans folders: a caller groups by directory anyway, and
+            // a hash-order list reshuffles between the confirmation a human
+            // reads and the move that follows it.
+            [[nodiscard]] std::vector<std::wstring> AllRejected() const {
+                std::vector<std::wstring> out;
+                for (const auto &kv : m_marks)
+                    if (kv.second == Mark::Reject) out.push_back(kv.first);
+                std::sort(out.begin(), out.end());
+                return out;
+            }
+
+            // Everything in `order` that is NOT marked Keep - the inverse cull.
+            //
+            // ⚠ THAT INCLUDES PICTURES NOBODY HAS LOOKED AT, which is the whole
+            // point and also the danger: the caller must name the count out loud
+            // before it moves anything. Order is the playlist's own, so the list
+            // a human checks reads the way the folder does.
             [[nodiscard]] std::vector<std::wstring>
-            Rejected(const std::vector<std::wstring> &order) const {
+            NotKept(const std::vector<std::wstring> &order) const {
                 std::vector<std::wstring> out;
                 for (const std::wstring &p : order)
-                    if (Of(p) == Mark::Reject) out.push_back(p);
+                    if (Of(p) != Mark::Keep) out.push_back(p);
                 return out;
             }
 

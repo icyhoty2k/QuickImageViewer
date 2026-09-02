@@ -838,15 +838,24 @@ namespace Constants::Messages {
     // Recycle Bin - and a cull of 400 frames is exactly the case where you
     // want to look at what you threw out before it is really gone.
     constexpr const wchar_t *CULL_REJECT_FOLDER = L"_rejected";
-    // Leaving the mode did not finish the job. Named apart from the move
-    // failure above because the causes differ - a clash, or a folder the
-    // playlist has walked away from - while what to do about it is the same:
-    // look at what is still marked.
+
+    // ── The inverse cull: keep the winners, move the rest ───────────────
+    //
+    // ⚠ THIS DIALOG MOVES PICTURES THE USER MAY NEVER HAVE LOOKED AT, which
+    // is exactly what "everything except my twelve" means and exactly why the
+    // count comes first in the sentence. It is the loudest thing this feature
+    // says, deliberately.
+    constexpr const wchar_t *CULL_CONFIRM_KEEP_CAPTION = L"Move everything else";
+    constexpr const wchar_t *CULL_CONFIRM_KEEP_FMT =
+            L"Move %d file%s into \"%s\", keeping only the %d you marked?\n\n"
+            L"This folder holds %d pictures. Anything you did not mark Keep is "
+            L"moved, including pictures you have not looked at yet. They stay on "
+            L"disk, in a subfolder of the folder they are in now.";
+    // A move FAILED and the files are still where they were. The mode stays
+    // open on this, and only on this - see AppCommands::ToggleCullMode for why
+    // a plain "no thanks" must NOT hold the mode open.
     constexpr const wchar_t *CULL_MARKS_REMAIN =
-            QIV_ICON_WARNING L" Still marked — cull mode stays on";
-    constexpr const wchar_t *CULL_REJECTS_ELSEWHERE =
-            QIV_ICON_WARNING L" Rejects are in another folder — go back to move them";
-    constexpr const wchar_t *CULL_ELSEWHERE_FMT = L"  •  %d left in another folder";
+            QIV_ICON_WARNING L" Not finished — cull mode stays on";
 }
 
 namespace Constants::Strings {

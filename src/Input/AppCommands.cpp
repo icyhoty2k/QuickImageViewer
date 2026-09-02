@@ -442,7 +442,7 @@ void AppCommands::DeleteFileToRecycleBin(const std::wstring &path) {
 // =============================================================================
 //  CULL MODE - keep / reject a folder down to size.
 //
-//  Nothing here writes to disk except ResolveCullRejects, and that one asks
+//  Nothing here writes to disk except ResolveCullMarks, and that one asks
 //  first. Everything else moves an entry in a hash map.
 // =============================================================================
 void AppCommands::ToggleCullMode(HWND hWnd) {
@@ -452,21 +452,23 @@ void AppCommands::ToggleCullMode(HWND hWnd) {
     // cancels stays in the mode with their marks intact - a cancel means "not
     // yet", not "throw the last twenty minutes away".
     if (app.cullMode) {
-        if (app.cullMarks.Count(Common::CullMarks::Mark::Reject) > 0) {
-            if (ResolveCullRejects(hWnd) < 0) return;   // cancelled - stay in the mode
-        }
-
-        // ⚠ A MARK STILL STANDING MEANS THE JOB IS NOT DONE, so the mode does
-        // not close over it. Resolve calls Forget on each file it actually
-        // moved; anything left is either a move that FAILED - a name clash, a
-        // read-only file - or a reject sitting in a folder the playlist has
-        // since walked away from. Clearing unconditionally threw both away
-        // silently, told the user "some files could not be moved", and left no
-        // way to retry: the marks that message referred to were already gone.
-        if (app.cullMarks.Count(Common::CullMarks::Mark::Reject) > 0) {
-            g_overlayManager.PostCenterMessage(hWnd, Constants::Messages::CULL_MARKS_REMAIN,
-                                               OverlayManager::MsgSeverity::Warning);
-            return;
+        if (!app.cullMarks.Empty()) {
+            // ⚠ ONLY A FAILURE HOLDS THE MODE OPEN. An earlier version kept it
+            // open whenever the user declined the dialog, reasoning that a
+            // cancel means "not yet". It also meant there was NO WAY OUT: with
+            // rejects standing, leaving required either moving the files or
+            // finding and unmarking every one of them, and pressing Alt+Space
+            // again just asked the same question. A mode you cannot leave is a
+            // worse bug than a mark you have to make twice.
+            //
+            // Declining costs nothing real - no file is touched, and the marks
+            // were always going to be discarded when the mode closed. "Not yet"
+            // is served by not pressing Alt+Space.
+            if (ResolveCullMarks(hWnd) < 0) {
+                g_overlayManager.PostCenterMessage(hWnd, Constants::Messages::CULL_MARKS_REMAIN,
+                                                   OverlayManager::MsgSeverity::Warning);
+                return;
+            }
         }
 
         app.cullMode = false;
@@ -486,6 +488,7 @@ void AppCommands::ToggleCullMode(HWND hWnd) {
         app.cullMode = true;
         g_overlayManager.PostCenterMessage(hWnd, Constants::Messages::CULL_MODE_ON);
     }
+
     // The badge sits on the filename line, so it has to be rebuilt on the way
     // in AND on the way out - or the last mark stays on screen over a mode that
     // is no longer running.
@@ -541,54 +544,60 @@ void AppCommands::MarkCurrent(HWND hWnd, Common::CullMarks::Mark mark) {
     InvalidateRect(hWnd, nullptr, FALSE);
 }
 
-// Returns the number moved, or -1 when the user said no.
+// WHICH DIRECTION DID THIS CULL RUN IN, and act on it.
 //
-// ⚠ THE -1 IS NOT A COUNT. The caller uses it to stay in cull mode with the
-// marks intact. Returning 0 for a refusal would make "you cancelled" and "there
-// was nothing to move" the same answer, and only one of those should drop the
-// marks the user spent the session making.
-int AppCommands::ResolveCullRejects(HWND hWnd) {
-    const std::vector<std::wstring> rejects = app.cullMarks.Rejected(app.playlist);
+// Reject moves what you marked. Keep moves what you did not. A session that
+// used both is resolved as a REJECT cull: an explicit reject is a stronger
+// statement than the absence of a keep, and sweeping the unjudged away because
+// a few frames were ticked is the one outcome nobody would have asked for.
+int AppCommands::ResolveCullMarks(HWND hWnd) {
+    const int rejectCount = app.cullMarks.Count(Common::CullMarks::Mark::Reject);
+    const int keepCount   = app.cullMarks.Count(Common::CullMarks::Mark::Keep);
 
-    // ⚠ REJECTS OUTSIDE THE CURRENT FOLDER ARE NOT MOVED, AND NOW SAY SO.
-    //
-    // Rejected() lists only what is in the playlist on screen, deliberately:
-    // moving a file the user cannot currently see is the wrong direction for a
-    // mistake. But the difference used to be invisible - mark twenty in one
-    // folder, wander into another, leave the mode, and the answer was "nothing
-    // was rejected" over twenty standing marks.
-    const int total = app.cullMarks.Count(Common::CullMarks::Mark::Reject);
-    const int elsewhere = total - static_cast<int>(rejects.size());
+    std::vector<std::wstring> victims;
+    std::wstring question(512, L'\0');
+    const wchar_t *caption = Constants::Messages::CULL_CONFIRM_CAPTION;
 
-    if (rejects.empty()) {
-        g_overlayManager.PostCenterMessage(
-            hWnd,
-            elsewhere > 0 ? Constants::Messages::CULL_REJECTS_ELSEWHERE
-                          : Constants::Messages::CULL_NOTHING_REJECTED,
-            elsewhere > 0 ? OverlayManager::MsgSeverity::Warning
-                          : OverlayManager::MsgSeverity::Normal);
-        return 0;
+    if (rejectCount > 0) {
+        // Every rejected file, wherever it is. Each was pointed at by hand.
+        victims = app.cullMarks.AllRejected();
+        if (victims.empty()) return 0;
+        swprintf_s(question.data(), question.size(), Constants::Messages::CULL_CONFIRM_FMT,
+                   static_cast<int>(victims.size()),
+                   victims.size() == 1 ? L"" : L"s",
+                   Constants::Messages::CULL_REJECT_FOLDER);
+    } else if (keepCount > 0) {
+        // The inverse. Confined to the folder on screen - see NotKept.
+        victims = app.cullMarks.NotKept(app.playlist);
+        if (victims.empty()) {
+            // Everything on screen is kept, so there is nothing to move. Not a
+            // failure and not worth a dialog.
+            g_overlayManager.PostCenterMessage(hWnd, Constants::Messages::CULL_NOTHING_REJECTED);
+            return 0;
+        }
+        caption = Constants::Messages::CULL_CONFIRM_KEEP_CAPTION;
+        swprintf_s(question.data(), question.size(), Constants::Messages::CULL_CONFIRM_KEEP_FMT,
+                   static_cast<int>(victims.size()),
+                   victims.size() == 1 ? L"" : L"s",
+                   Constants::Messages::CULL_REJECT_FOLDER,
+                   keepCount,
+                   static_cast<int>(app.playlist.size()));
+    } else {
+        return 0;   // marks exist but none of them decide anything
     }
 
-    wchar_t question[512];
-    swprintf_s(question, Constants::Messages::CULL_CONFIRM_FMT,
-               static_cast<int>(rejects.size()),
-               rejects.size() == 1 ? L"" : L"s",
-               Constants::Messages::CULL_REJECT_FOLDER);
-    if (!UI::ThemedDialog::Confirm(hWnd, question,
-                                   Constants::Messages::CULL_CONFIRM_CAPTION))
-        return -1;
+    if (!UI::ThemedDialog::Confirm(hWnd, question.c_str(), caption))
+        return 0;   // declined: nothing moved, and the mode may close
 
     // GROUPED BY DIRECTORY, one SHFileOperation per folder.
     //
-    // A cull normally runs inside one folder, but "search everywhere" and a
-    // playlist assembled from several folders both break that, and FO_MOVE takes
-    // a single destination. Sending files from two folders into one _rejected is
-    // not what "a subfolder of the folder they are in" means, and it silently
-    // merges two shoots.
+    // FO_MOVE takes a single destination, and a reject list can span folders -
+    // marks survive walking away from the folder that made them. Sending files
+    // from two folders into one _rejected is not what "a subfolder of the folder
+    // they are in" means, and it silently merges two shoots.
     std::vector<std::wstring> dirs;
     std::vector<std::vector<std::wstring>> groups;
-    for (const std::wstring &p : rejects) {
+    for (const std::wstring &p : victims) {
         const size_t slash = p.find_last_of(L"\\/");
         if (slash == std::wstring::npos) continue;   // no directory part: nowhere to move it
         const std::wstring dir = p.substr(0, slash);
@@ -648,28 +657,24 @@ int AppCommands::ResolveCullRejects(HWND hWnd) {
         }
     }
 
-    if (anyFailed) {
-        g_overlayManager.PostCenterMessage(hWnd, Constants::Messages::CULL_MOVE_FAILED,
-                                           OverlayManager::MsgSeverity::Warning);
-    } else {
-        wchar_t done[192];
-        swprintf_s(done, Constants::Messages::CULL_MOVED_FMT, moved,
-                   Constants::Messages::CULL_REJECT_FOLDER);
-        std::wstring msg = done;
-        if (elsewhere > 0) {
-            wchar_t rest[96];
-            swprintf_s(rest, Constants::Messages::CULL_ELSEWHERE_FMT, elsewhere);
-            msg += rest;
-        }
-        g_overlayManager.PostCenterMessage(hWnd, msg);
-    }
-
     // The playlist now names files that are no longer where it says. Reloading
     // the folder is what F5 already does; walking it again by hand here would be
     // a second, differently-wrong version of the same code.
     if (moved > 0) ReloadCurrentDirectory(hWnd);
+
+    if (anyFailed) {
+        g_overlayManager.PostCenterMessage(hWnd, Constants::Messages::CULL_MOVE_FAILED,
+                                           OverlayManager::MsgSeverity::Warning);
+        return -1;   // files are still where they were: hold the mode open
+    }
+
+    wchar_t done[192];
+    swprintf_s(done, Constants::Messages::CULL_MOVED_FMT, moved,
+               Constants::Messages::CULL_REJECT_FOLDER);
+    g_overlayManager.PostCenterMessage(hWnd, done);
     return moved;
 }
+
 
 bool AppCommands::ClipboardHasFiles() {
     return IsClipboardFormatAvailable(CF_HDROP) == TRUE;

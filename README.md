@@ -534,7 +534,11 @@ Directory strips double as a lightweight file manager:
 
 A pass through a folder saying yes or no to each picture. `Alt+Space` turns it on, then one keystroke per frame — the viewer advances by itself, so a shoot of four hundred is four hundred keys and no mouse.
 
-Marks are held in memory. **Nothing is written to disk while you mark**, and leaving the mode is what asks whether to move the rejects. Say yes and they go into a `_rejected` folder beside them — same drive, same place, undoable with `Ctrl+Z` in Explorer. Say no and you stay in the mode with every mark intact.
+Marks are held in memory. **Nothing is written to disk while you mark**, and leaving the mode is what asks.
+
+**Whichever mark you used is the one that acts.** Mark rejects and those files move. Mark only keeps and you are asked whether to move *everything else* — which is how you cull four hundred frames down to the twelve good ones without rejecting the other 388 one at a time. Use both and it resolves as a reject cull; an explicit reject outranks the absence of a keep.
+
+Rejected files move wherever they are, including folders you have since navigated away from — you pointed at each by hand. The keep direction stays inside the folder on screen, because it acts on files nobody marked at all. Either way they land in a `_rejected` folder beside them — same drive, same place, undoable with `Ctrl+Z` in Explorer. Saying no moves nothing and closes the mode.
 
 While the mode is on, the filename in the top-left carries its mark: a tick for keep, a cross for reject, a dot for one you have not judged yet.
 

@@ -77,6 +77,8 @@
 #include "UI/AppMenu/AppMenuIds.h"       // the id space the menu tests check
 
 #include <chrono>
+#include <cstdlib>   // _set_error_mode
+#include <crtdbg.h>  // _CrtSetReportMode - the modal box, off
 #include <cmath>
 #include <cstdio>
 #include <cctype>    // isdigit / isalnum — parsing AppMenuIds.h
@@ -1219,40 +1221,106 @@ namespace {
             CHECK(s.Of(L"c.jpg") == Mark::None);
         }
 
-        NOTE("Rejected comes back in the ORDER GIVEN, not in hash order");
+        NOTE("AllRejected spans FOLDERS, and comes back sorted");
         {
-            // The resolve step shows this list before it moves anything. A list
-            // that reshuffles between one look and the next cannot be checked,
-            // and the thing being checked is which photographs get moved.
-            const std::vector<std::wstring> order = {
-                L"1.jpg", L"2.jpg", L"3.jpg", L"4.jpg", L"5.jpg" };
+            // Marks survive walking away from the folder that made them, and
+            // each rejected file was pointed at by hand - so the reject
+            // direction acts on all of them, not just the ones on screen.
+            // Sorted rather than hash order because a human reads this list in
+            // a confirmation before anything moves.
             Set s;
-            s.Toggle(L"5.jpg", Mark::Reject);
-            s.Toggle(L"1.jpg", Mark::Reject);
-            s.Toggle(L"3.jpg", Mark::Keep);
-            s.Toggle(L"4.jpg", Mark::Reject);
+            s.Assign(L"C:\\b\\2.jpg", Mark::Reject);
+            s.Assign(L"C:\\a\\1.jpg", Mark::Reject);
+            s.Assign(L"C:\\a\\9.jpg", Mark::Keep);
+            s.Assign(L"C:\\a\\3.jpg", Mark::Reject);
 
-            const auto r = s.Rejected(order);
+            const auto r = s.AllRejected();
             CHECK(r.size() == 3);
-            CHECK(r[0] == L"1.jpg");
-            CHECK(r[1] == L"4.jpg");
-            CHECK(r[2] == L"5.jpg");
+            // ⚠ INDEXED ONLY IF THE SIZE IS RIGHT. A CHECK records the failure
+            // and carries on, so reading r[2] of a shorter vector is undefined
+            // behaviour - and in a debug build that is a MODAL DIALOG and an
+            // empty log, which loses the very failure being reported.
+            if (r.size() == 3) {
+                CHECK(r[0] == L"C:\\a\\1.jpg");
+                CHECK(r[1] == L"C:\\a\\3.jpg");
+                CHECK(r[2] == L"C:\\b\\2.jpg");
+            }
         }
 
-        NOTE("a mark for a picture no longer in the folder is simply not listed");
+        NOTE("AllRejected is stable across insertion order - it must not hash-shuffle");
         {
-            // Sorting, or a file deleted by something else, changes what the
-            // playlist holds. The mark survives in the set but cannot be
-            // resolved against a folder that no longer contains it - which is
-            // the safe direction.
-            const std::vector<std::wstring> order = { L"1.jpg" };
+            // Two sets built in opposite orders must produce the same list. A
+            // list that reshuffles between the dialog and the move is one
+            // nobody can check, and what it is checking is which photographs
+            // get moved.
+            Set a, b;
+            const wchar_t *paths[] = { L"z.jpg", L"m.jpg", L"a.jpg", L"q.jpg" };
+            for (int i = 0; i < 4; ++i) a.Assign(paths[i], Mark::Reject);
+            for (int i = 3; i >= 0; --i) b.Assign(paths[i], Mark::Reject);
+            CHECK(a.AllRejected() == b.AllRejected());
+            if (!a.AllRejected().empty())
+                CHECK(a.AllRejected()[0] == L"a.jpg");
+        }
+
+        NOTE("NotKept is the INVERSE cull - everything the playlist holds bar the keeps");
+        {
+            // The reason Keep exists. Twelve good frames out of four hundred is
+            // twelve keeps, not three hundred and eighty-eight rejects.
+            const std::vector<std::wstring> playlist = {
+                L"1.jpg", L"2.jpg", L"3.jpg", L"4.jpg", L"5.jpg" };
             Set s;
-            s.Toggle(L"gone.jpg", Mark::Reject);
-            s.Toggle(L"1.jpg", Mark::Reject);
-            const auto r = s.Rejected(order);
-            CHECK(r.size() == 1);
-            CHECK(r[0] == L"1.jpg");
-            CHECK(s.Count(Mark::Reject) == 2);   // still remembered, just not listed
+            s.Assign(L"2.jpg", Mark::Keep);
+            s.Assign(L"4.jpg", Mark::Keep);
+
+            const auto n = s.NotKept(playlist);
+            CHECK(n.size() == 3);
+            if (n.size() == 3) {
+                CHECK(n[0] == L"1.jpg");     // playlist order, not hash order
+                CHECK(n[1] == L"3.jpg");
+                CHECK(n[2] == L"5.jpg");
+            }
+        }
+
+        NOTE("NotKept SWEEPS THE UNJUDGED - that is the point, and the danger");
+        {
+            // A picture nobody has looked at is not kept, so it moves. The
+            // caller has to say the count out loud before it does; this test
+            // exists so nobody "fixes" the behaviour into silently sparing them,
+            // which would leave a cull that never finishes.
+            const std::vector<std::wstring> playlist = { L"seen.jpg", L"unseen.jpg" };
+            Set s;
+            s.Assign(L"seen.jpg", Mark::Keep);
+            const auto n = s.NotKept(playlist);
+            CHECK(n.size() == 1);
+            if (n.size() == 1) CHECK(n[0] == L"unseen.jpg");
+        }
+
+        NOTE("NotKept treats an explicit REJECT as not-kept, and never spans folders");
+        {
+            // Confined to the playlist on screen, unlike AllRejected. An
+            // explicit mark travels; an absence does not, because "everything I
+            // did not keep" across folders never opened is how a cull eats a
+            // library.
+            const std::vector<std::wstring> playlist = { L"here.jpg" };
+            Set s;
+            s.Assign(L"here.jpg", Mark::Reject);
+            s.Assign(L"far-away.jpg", Mark::Reject);
+
+            const auto n = s.NotKept(playlist);
+            CHECK(n.size() == 1);
+            if (n.size() == 1) CHECK(n[0] == L"here.jpg");
+
+            // ...while the reject direction does reach it.
+            CHECK(s.AllRejected().size() == 2);
+        }
+
+        NOTE("everything kept means NOTHING to move - no empty confirmation");
+        {
+            const std::vector<std::wstring> playlist = { L"1.jpg", L"2.jpg" };
+            Set s;
+            s.Assign(L"1.jpg", Mark::Keep);
+            s.Assign(L"2.jpg", Mark::Keep);
+            CHECK(s.NotKept(playlist).empty());
         }
 
         NOTE("Forget drops one, Clear drops all");
@@ -3043,7 +3111,34 @@ namespace {
 
 } // namespace
 
+// ⚠ A TEST HARNESS MUST NEVER POP A DIALOG.
+//
+// A debug-CRT assertion - a vector subscript out of range, say - opens a modal
+// "Debug Assertion Failed" box by default. On a developer's desktop that
+// interrupts whatever they were doing; anywhere unattended it hangs forever.
+// Either way the run produces NO OUTPUT AT ALL and exits 3, so the one thing
+// the harness exists to do - say what broke - is the thing it stops doing at
+// exactly the moment something broke.
+//
+// This happened for real: a deliberate mutation made a CHECK on a vector size
+// fail, the next line indexed past the end, and the box came up on the user's
+// screen with an empty log behind it.
+//
+// Routed to stderr instead. The assertion still fires and the process still
+// dies with a diagnostic - it just says so in the terminal, where the rest of
+// the run already is. Debug builds only; the release CRT has no such box.
+static void SilenceCrtDialogs() {
+#ifdef _DEBUG
+    _set_error_mode(_OUT_TO_STDERR);
+    _CrtSetReportMode(_CRT_ASSERT, _CRTDBG_MODE_FILE);
+    _CrtSetReportFile(_CRT_ASSERT, _CRTDBG_FILE_STDERR);
+    _CrtSetReportMode(_CRT_ERROR, _CRTDBG_MODE_FILE);
+    _CrtSetReportFile(_CRT_ERROR, _CRTDBG_FILE_STDERR);
+#endif
+}
+
 int main(int argc, char **argv) {
+    SilenceCrtDialogs();
     for (int i = 1; i < argc; ++i) {
         const char *a = argv[i];
         if (a[0] == '-' && (a[1] == 'v' || (a[1] == '-' && a[2] == 'v')))

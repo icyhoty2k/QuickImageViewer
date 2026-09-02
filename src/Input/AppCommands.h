@@ -86,16 +86,21 @@ class AppCommands {
         // ── Cull mode ────────────────────────────────────────────────────────
         // Going through a folder saying keep or reject, then acting on the
         // rejects in one go. The marks are held in AppState and nothing is
-        // written until ResolveCullRejects runs. See Common/CullMarks.h.
+        // written until ResolveCullMarks runs. See Common/CullMarks.h.
         static void ToggleCullMode(HWND hWnd);
         static void MarkCurrent(HWND hWnd, Common::CullMarks::Mark mark);
 
-        // Moves every rejected file that is still in the playlist into a
-        // subfolder of its own directory. Returns how many actually moved.
+        // Acts on the marks, in whichever direction they were made: Reject
+        // moves what you marked, Keep moves what you did not. It asks first,
+        // and the count it names is the count it moves.
         //
-        // ⚠ IT ASKS FIRST, and the count it names is the count it moves.
-        // Returns 0 with nothing touched if the user says no.
-        static int ResolveCullRejects(HWND hWnd);
+        // ⚠ RETURN VALUE DECIDES WHETHER THE MODE STAYS OPEN.
+        //   >= 0  finished - that many files moved. Includes 0 for "the user
+        //         said no" and 0 for "there was nothing to do"; both mean the
+        //         mode should close.
+        //   -1    a move FAILED and files are still where they were, so the
+        //         caller keeps the mode open and the user can retry.
+        static int ResolveCullMarks(HWND hWnd);
 
         // Put plain text on the clipboard. Returns false when the clipboard
         // could not be opened — another process holds it, which is ordinary and
