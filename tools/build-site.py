@@ -820,9 +820,18 @@ def build_stats():
                     files += 1
                     loc += read(os.path.join(dirpath, n)).count('\n')
         shortcuts = len(re.findall(r'\bAdd\(', read(HELPWND)))
-        formats = len(set(re.findall(r'L"\.([a-z0-9]{2,5})"',
-                                     read(os.path.join(REPO, 'src', 'Platform',
-                                                       'Constants.h')))))
+        # ⚠ ONE NUMBER, ONE PRODUCER.
+        #
+        # This ran its own regex over the WHOLE of Constants.h and published 49,
+        # because that file also holds L".ini", L".log", L".txt" and two of the
+        # app's own list formats - so the site advertised the settings file and
+        # the crash log as image formats qIV could open.
+        #
+        # supported_extension_count() reads the SUPPORTED_EXTENSIONS block and
+        # nothing else, and photo-frame.html has been quoting it correctly all
+        # along. Two functions counting one thing, one right and one wrong, is a
+        # disagreement waiting to be published - and it had been, for a while.
+        formats = supported_extension_count() or 0
     except Exception:
         pass                      # a missing source tree is not a build failure
 
@@ -1109,6 +1118,12 @@ def check_public_numbers(total, nsec):
     if exts:
         wanted.append(('photo-frame.html',
                        '%d file extensions' % exts, 'file-extension count'))
+        # index.html's FAQ said "17 formats in total" while the structured
+        # data on the same page said "20+" and the stats strip said 49. Three
+        # numbers for one fact, none of them checked. The extension count is
+        # the one that is exactly derivable, so that is the one published.
+        wanted.append(('index.html',
+                       '%d file' % exts, 'file-extension count'))
 
     # ⚠ ADDED AFTER A STALE NUMBER SURVIVED A CLEAN RUN. The structured data
     # in index.html advertised "slideshow with 6 transitions" while the app had
