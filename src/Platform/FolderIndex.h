@@ -66,6 +66,19 @@ namespace Platform::FolderIndex {
         // excluded from duplicate grouping rather than matched against other
         // unknowns.
         unsigned long long size = 0;
+
+        // Last-write time as DAYS SINCE 1970-01-01, not a time_point.
+        //
+        // Free from the same directory entry as the size, and stored already
+        // reduced so the Find panel can compare an integer per candidate per
+        // keystroke instead of converting a file_time_type each time. It is
+        // also what lets Common::SearchFilter stay pure - a header that has to
+        // include <filesystem> to express "older than 2024" is not testable
+        // without a filesystem.
+        //
+        // 0 means unknown, the same convention size uses, and an unknown never
+        // satisfies a date filter.
+        long long day = 0;
     };
 
     // Walks the folders qIV remembers and replaces the index with what it finds.

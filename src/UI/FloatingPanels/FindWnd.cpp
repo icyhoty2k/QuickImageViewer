@@ -23,6 +23,8 @@
 #include <wrl/client.h>
 #include <memory>
 #include <algorithm>
+#include <chrono>
+#include "Common/SearchFilter.h" // >5mb and >2024 narrow the list
 #include "Common/PreviewStrip.h" // which thumbnail a click landed on
 
 extern AppState app;
@@ -157,9 +159,40 @@ void FindWnd::RebuildMatches() {
 
     m_results.reserve(app.playlist.size() + extraPaths.size());
 
-    // Empty query — show every item in playlist order, then VRAM-only extras.
-    if (m_queryLen == 0) {
+    // FILTERS FIRST. ">5mb" and "<2024" are lifted out of the query, leaving the
+    // text that still has to match a name - which is usually all of it, because
+    // a token only becomes a filter when it cannot be anything else. See
+    // Common/SearchFilter.h for why that rule is as strict as it is.
+    const Common::SearchFilter::Filter filter =
+        Common::SearchFilter::Parse(std::wstring(m_query, m_queryLen));
+    const std::wstring filterText = filter.text;
+
+    // What each candidate is measured against. Sizes and dates for the folder
+    // on screen were collected by the scan that built the playlist, so this
+    // costs a hash lookup rather than a stat.
+    auto sizeOf = [](const std::wstring &path) -> unsigned long long {
+        const auto it = app.playlistFileSizes.find(path);
+        return it == app.playlistFileSizes.end() || it->second < 0
+                   ? 0ull : static_cast<unsigned long long>(it->second);
+    };
+    auto dayOf = [](const std::wstring &path) -> long long {
+        const auto it = app.playlistFileTimes.find(path);
+        if (it == app.playlistFileTimes.end()) return 0;
+        const auto sys = std::chrono::clock_cast<std::chrono::system_clock>(it->second);
+        return std::chrono::duration_cast<std::chrono::hours>(
+                   sys.time_since_epoch()).count() / 24;
+    };
+    auto keep = [&](const std::wstring &path) {
+        return !filter.Any() || Common::SearchFilter::Passes(filter, sizeOf(path), dayOf(path));
+    };
+
+    // NO TEXT LEFT IS NOT THE SAME AS NO QUERY. ">5mb" on its own is a real
+    // question - "show me the big ones" - so a query that is nothing but
+    // filters lists everything passing them rather than falling through to the
+    // whole playlist.
+    if (filterText.empty()) {
         for (int i = 0; i < static_cast<int>(app.playlist.size()); ++i) {
+            if (!keep(app.playlist[i])) continue;
             MatchResult r;
             r.playlistIdx = i;
             r.path        = app.playlist[i];
@@ -169,6 +202,7 @@ void FindWnd::RebuildMatches() {
         }
         int extraStart = static_cast<int>(m_results.size());
         for (auto &p : extraPaths) {
+            if (!keep(p)) continue;
             MatchResult r;
             r.playlistIdx = -1;
             r.path        = p;
@@ -177,16 +211,38 @@ void FindWnd::RebuildMatches() {
             m_results.push_back(std::move(r));
         }
         m_cachedExtraCount = static_cast<int>(m_results.size()) - extraStart;
+
+        // A filter-only query still searches everywhere when asked to. The
+        // index carries its own size and day, so nothing is stat'ed here.
+        if (m_searchEverywhere && filter.Any()) {
+            int crossFolder = 0;
+            for (const auto &e : Platform::FolderIndex::Snapshot()) {
+                if (crossFolder >= CROSS_FOLDER_MAX) break;
+                if (app.playlistIndexMap.find(e.path) != app.playlistIndexMap.end()) continue;
+                if (!Common::SearchFilter::Passes(filter, e.size, e.day)) continue;
+                MatchResult r;
+                r.playlistIdx = -1;
+                r.path        = e.path;
+                r.score       = 0;
+                r.posCount    = 0;
+                m_results.push_back(std::move(r));
+                ++crossFolder;
+            }
+        }
         return;
     }
 
-    // Lowercase copy of query
+    // ⚠ THE RESIDUAL TEXT, NOT THE RAW QUERY. With ">5mb sunset" typed, the
+    // name to match is "sunset" - matching the whole string would find nothing
+    // and the filter would look broken rather than helpful.
+    const int textLen = static_cast<int>(
+        filterText.size() > MAX_QUERY ? MAX_QUERY : filterText.size());
     wchar_t lq[MAX_QUERY + 2];
-    Common::LowerCopy(m_query, m_queryLen, lq);
+    Common::LowerCopy(filterText.c_str(), textLen, lq);
 
-    // Wildcard mode: query contains '*' or '?'
+    // Wildcard mode: the text contains '*' or '?'
     bool hasWildcard = false;
-    hasWildcard = Common::IsWildcardQuery(lq, m_queryLen);
+    hasWildcard = Common::IsWildcardQuery(lq, textLen);
 
     // Helper: match one path and push result if it matches.
     // nameOffset < 0 means "work it out"; the cross-folder loop passes the
@@ -194,7 +250,12 @@ void FindWnd::RebuildMatches() {
     // reason FolderIndex::Entry carries one. It was computed and never used
     // until 2026-09-02 - and computed wrongly, because the separator set in
     // that walk was an invalid escape that collapsed to "/" alone.
-    auto tryMatch = [&](const std::wstring &path, int playlistIdx, int nameOffset = -1) {
+    auto tryMatch = [&](const std::wstring &path, int playlistIdx, int nameOffset = -1,
+                        bool prefiltered = false) {
+        // The size/date test runs BEFORE the name match: it is a hash lookup
+        // and an integer compare, while the match is a scan of the name.
+        if (!prefiltered && !keep(path)) return;
+
         const wchar_t *name = path.c_str();
         if (nameOffset >= 0 && nameOffset <= static_cast<int>(path.size())) {
             name += nameOffset;
@@ -220,7 +281,7 @@ void FindWnd::RebuildMatches() {
         }
 
         Common::FuzzyMatchResult fm;
-        if (!Common::FuzzyMatch(lq, m_queryLen, lname, nameLen, fm)) return;
+        if (!Common::FuzzyMatch(lq, textLen, lname, nameLen, fm)) return;
         r.score    = fm.score;
         r.posCount = fm.posCount;
         for (int i = 0; i < fm.posCount; ++i) r.positions[i] = fm.positions[i];
@@ -260,8 +321,13 @@ void FindWnd::RebuildMatches() {
             if (crossFolder >= CROSS_FOLDER_MAX) break;
             if (app.playlistIndexMap.find(e.path) != app.playlistIndexMap.end()) continue;
 
+            // The index knows this file's size and day; the playlist maps do
+            // not, because it is not in the playlist. Tested here and passed
+            // in as already-filtered.
+            if (!Common::SearchFilter::Passes(filter, e.size, e.day)) continue;
+
             const size_t before = m_results.size();
-            tryMatch(e.path, -1, e.nameOffset);
+            tryMatch(e.path, -1, e.nameOffset, /*prefiltered=*/true);
             if (m_results.size() != before) ++crossFolder;
         }
     }

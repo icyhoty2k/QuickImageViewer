@@ -64,6 +64,7 @@
 #include "Common/PreviewStrip.h"    // which thumbnail a click landed on
 #include "Platform/FolderIndex.h"   // where a file name starts inside a path
 #include "Common/ToneMap.h"        // HDR to a display byte
+#include "Common/SearchFilter.h"   // >5mb and >2024 in the Find box
 #include "Persistence/HistoryFoldersManager.h" // HistoryPath - untrusted line hygiene
 #include "Persistence/IniFile.h"         // every persisted setting travels through this
 #include "Persistence/RotatingLogFile.h"
@@ -1155,6 +1156,114 @@ namespace {
             CHECK(!a.empty());
             CHECK(!b.empty());
             CHECK(a == b);
+        }
+    }
+
+    // -------------------------------------------------------------------------
+    //  SIZE AND DATE FILTERS IN THE FIND BOX.
+    //
+    //  ⚠ THE FIRST RULE IS DO NOT BREAK PLAIN TEXT. People already type
+    //  "photo_2024" and "IMG_20240817" into this box. Every one of those must
+    //  still be treated as a name, so a token becomes a filter only when it
+    //  cannot be anything else - an operator, digits, and either a size unit or
+    //  a date shape. Half of the checks below exist to prove the parser REFUSES
+    //  things, which is the half that protects what already worked.
+    // -------------------------------------------------------------------------
+    void TestSearchFilter() {
+        using namespace Common::SearchFilter;
+
+        NOTE("plain text is never a filter");
+        for (const wchar_t *q : { L"photo_2024", L"IMG_20240817", L"sunset",
+                                  L"2024", L"5mb", L"holiday.jpg" }) {
+            const Filter f = Parse(q);
+            CHECK(!f.Any());
+            CHECK(f.text == q);
+        }
+
+        NOTE("an operator alone, or with nothing it understands, is still text");
+        for (const wchar_t *q : { L">", L">abc", L">1000", L"<2024-13",
+                                  L">2024-02-30", L">99999", L"<0.5mb" }) {
+            const Filter f = Parse(q);
+            CHECK(!f.Any());
+            CHECK(f.text == q);
+        }
+
+        NOTE("sizes, with the units people actually type");
+        {
+            CHECK(Parse(L">5mb").sizeBytes  == 5ull * 1024 * 1024);
+            CHECK(Parse(L"<500kb").sizeBytes == 500ull * 1024);
+            CHECK(Parse(L">=2gb").sizeBytes == 2ull * 1024 * 1024 * 1024);
+            CHECK(Parse(L">1024b").sizeBytes == 1024ull);
+            CHECK(Parse(L">5MB").sizeBytes  == 5ull * 1024 * 1024); // case-insensitive
+            CHECK(Parse(L">5m").sizeBytes   == 5ull * 1024 * 1024); // short form
+            CHECK(Parse(L">5mb").sizeOp == Op::Greater);
+            CHECK(Parse(L"<5mb").sizeOp == Op::Less);
+            CHECK(Parse(L">=5mb").sizeOp == Op::GreaterEqual);
+            CHECK(Parse(L"<=5mb").sizeOp == Op::LessEqual);
+        }
+
+        NOTE("a partial date is a RANGE, and the operator picks which end");
+        {
+            // > 2024 must mean "after 2024 ENDED", or a picture from December
+            // 2024 would count as newer than 2024. The mirror rule applies to <.
+            const long long endOf2024   = detail::DaysFromCivil(2024, 12, 31);
+            const long long startOf2024 = detail::DaysFromCivil(2024, 1, 1);
+            CHECK(Parse(L">2024").dateDay == endOf2024);
+            CHECK(Parse(L"<2024").dateDay == startOf2024);
+
+            // The same reasoning one level down: > 2024-02 is after February,
+            // and February 2024 had 29 days.
+            CHECK(Parse(L">2024-02").dateDay == detail::DaysFromCivil(2024, 2, 29));
+            CHECK(Parse(L"<2024-02").dateDay == detail::DaysFromCivil(2024, 2, 1));
+            CHECK(Parse(L"<2023-02").dateDay == detail::DaysFromCivil(2023, 2, 1));
+            CHECK(Parse(L">2023-02").dateDay == detail::DaysFromCivil(2023, 2, 28));
+
+            CHECK(Parse(L">2024-06-15").dateDay == detail::DaysFromCivil(2024, 6, 15));
+        }
+
+        NOTE("filters and text travel together");
+        {
+            const Filter f = Parse(L"sunset >5mb <2024");
+            CHECK(f.text == L"sunset");
+            CHECK(f.sizeOp == Op::Greater);
+            CHECK(f.dateOp == Op::Less);
+        }
+        {
+            // Order does not matter, and neither does extra spacing.
+            const Filter f = Parse(L"  >5mb   holiday  ");
+            CHECK(f.text == L"holiday");
+            CHECK(f.sizeOp == Op::Greater);
+        }
+        {
+            // Nothing but filters is a legitimate query: "everything big".
+            const Filter f = Parse(L">5mb");
+            CHECK(f.text.empty());
+            CHECK(f.Any());
+        }
+
+        NOTE("Passes applies what was parsed");
+        {
+            const Filter big = Parse(L">5mb");
+            CHECK(Passes(big, 6ull * 1024 * 1024, 100));
+            CHECK(!Passes(big, 1ull * 1024 * 1024, 100));
+
+            const Filter old_ = Parse(L"<2024");
+            CHECK(Passes(old_,  1000, detail::DaysFromCivil(2023, 5, 1)));
+            CHECK(!Passes(old_, 1000, detail::DaysFromCivil(2024, 5, 1)));
+
+            const Filter both = Parse(L">1mb >2024");
+            CHECK(Passes(both,  2ull*1024*1024, detail::DaysFromCivil(2025, 1, 1)));
+            CHECK(!Passes(both, 2ull*1024*1024, detail::DaysFromCivil(2024, 1, 1)));
+        }
+
+        NOTE("unknown metadata never passes a filter that asks about it");
+        {
+            // 0 is the "unknown" convention FolderIndex already uses. Showing a
+            // file the user cannot have asked for is worse than omitting one.
+            CHECK(!Passes(Parse(L">1mb"),  0, 100));
+            CHECK(!Passes(Parse(L"<2024"), 1000, 0));
+            // ...but an unfiltered query does not care that they are unknown.
+            CHECK(Passes(Parse(L"sunset"), 0, 0));
         }
     }
 
@@ -2826,6 +2935,10 @@ int main(int argc, char **argv) {
 
     BeginGroup("Tone map - HDR floats to a display byte");
     TestToneMap();
+    EndGroup();
+
+    BeginGroup("Find filters - size and date, without breaking plain text");
+    TestSearchFilter();
     EndGroup();
 
     BeginGroup("Settings - import and load clamp the same");

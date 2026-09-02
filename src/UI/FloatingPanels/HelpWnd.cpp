@@ -267,7 +267,13 @@ namespace UI {
         Add(Ctrl(SC::SC_NAV_FIND),
             L"Open the Find panel — fuzzy filename search with wildcard support: "
             L"* matches any characters, ? matches exactly one (e.g. *.jpg or photo_??_2024.*). "
-            L"Searches THIS folder and the VRAM cache. Typing # inside switches to Jump-to.", sNav);
+            L"Searches THIS folder and the VRAM cache. Typing # inside switches to Jump-to. "
+            L"NARROW BY SIZE OR DATE by typing a comparison alongside the name: >5mb, "
+            L"<500kb, >=2gb, <2024, >2024-06 or >=2024-06-01. They combine with each "
+            L"other and with the name, so \"sunset >5mb <2024\" is a real query, and a "
+            L"filter on its own lists everything that passes it. A word only becomes a "
+            L"filter when it cannot be anything else, so photo_2024 and IMG_20240817 are "
+            L"still searched as names.", sNav);
         Add(Ctrl(SC::SC_PAN_RIGHT),
             L"Find duplicate pictures across every folder qIV knows. Groups by file size "
             L"first, so almost nothing is read; only files that share a size are opened and "

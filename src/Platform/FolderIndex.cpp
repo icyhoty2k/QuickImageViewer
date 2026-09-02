@@ -4,6 +4,7 @@
 #include "Constants.h"
 #include "FileHandler.h" // is_image_ext - ONE definition of "an image"
 
+#include <chrono>
 #include <filesystem>
 #include <mutex>
 
@@ -14,6 +15,18 @@ namespace Platform::FolderIndex {
     namespace {
         std::vector<Entry> g_entries;
         std::mutex         g_mutex;
+    }
+
+    // A file time as days since 1970-01-01.
+    //
+    // ⚠ NOT A CLOCK CALL. file_clock and system_clock have different epochs, so
+    // subtracting file_clock::now() would make "how old is this" depend on when
+    // the index was built. clock_cast converts the value itself, which is what
+    // makes a stored day mean the same thing tomorrow.
+    static long long FileTimeToDay(fs::file_time_type t) {
+        const auto sys = std::chrono::clock_cast<std::chrono::system_clock>(t);
+        return std::chrono::duration_cast<std::chrono::hours>(
+                   sys.time_since_epoch()).count() / 24;
     }
 
     void Build(const std::vector<std::wstring> &folders) {
@@ -78,6 +91,12 @@ namespace Platform::FolderIndex {
                 std::error_code se;
                 const auto sz = de->file_size(se);
                 if (!se) e.size = static_cast<unsigned long long>(sz);
+
+                // The timestamp comes off the same entry, for the same reason,
+                // and is reduced to a day here so the search loop never has to.
+                std::error_code te;
+                const auto tm = de->last_write_time(te);
+                if (!te) e.day = FileTimeToDay(tm);
 
                 e.path = p.wstring();
                 e.nameOffset = NameOffsetOf(e.path);
