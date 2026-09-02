@@ -1085,6 +1085,13 @@ def supported_extension_count():
     return len(set(re.findall(r'L"\.([a-z0-9]+)"', block)))
 
 
+def transition_count():
+    """How many slideshow transitions the app actually has."""
+    src = read(os.path.join(REPO, 'src', 'Platform', 'Constants.h'))
+    m = re.search(r'TRANSITION_COUNT\s*=\s*(\d+)', src)
+    return int(m.group(1)) if m else None
+
+
 def check_public_numbers(total, nsec):
     """Returns a list of complaints, empty when every prose number is right."""
     bad = []
@@ -1103,8 +1110,30 @@ def check_public_numbers(total, nsec):
         wanted.append(('photo-frame.html',
                        '%d file extensions' % exts, 'file-extension count'))
 
+    # ⚠ ADDED AFTER A STALE NUMBER SURVIVED A CLEAN RUN. The structured data
+    # in index.html advertised "slideshow with 6 transitions" while the app had
+    # 21 - and this function reported "every hand-written count matches the
+    # source" with the wrong number two lines away in the same file, because a
+    # checker only covers the rows in its own table.
+    #
+    # The JSON-LD one matters most: prose gets re-read by a human eventually,
+    # machine-readable copy is what search engines quote and nobody proofreads.
+    tc = transition_count()
+    if tc:
+        wanted.append(('index.html',
+                       'slideshow with %d GPU transitions' % tc, 'transition count'))
+        wanted.append(('index.html',
+                       '%d available' % tc, 'transition count'))
+        wanted.append(('../README.md',
+                       '%d available' % tc, 'transition count'))
+        wanted.append(('../README.md',
+                       '%d GPU transitions' % tc, 'transition count'))
+
     for page, phrase, what in wanted:
-        path = os.path.join(DOCS, page)
+        # "../README.md" reaches the repo root: the README is a published
+        # surface too, and a number stale there is stale where most people
+        # actually read it.
+        path = os.path.normpath(os.path.join(DOCS, page))
         if not os.path.isfile(path):
             continue
         if phrase not in read(path):

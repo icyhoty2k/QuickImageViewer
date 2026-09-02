@@ -12,6 +12,9 @@
 Direct2D, WIC and native Win32. One portable sub-10 MB EXE — no installer, no
 telemetry, no background service.
 
+Culls a photo shoot in one pass — **[one keystroke per picture](#cull-mode)**, keep or
+reject, and the rejects move together at the end. Nothing touches the disk until you say so.
+
 Drives other copies of itself over plain TCP, mirrors one screen to many, and has
 **[an Android app](#qiv-remote--the-android-app)** that turns any phone or tablet into a
 remote control, a second screen, or a **photo frame your PC drives** — as many of them at
@@ -372,6 +375,7 @@ through the setup.
 | `J` / `Ctrl+G` | Jump to image by number (type `@` to switch to Find mode) |
 | `Ctrl+F` | Find by filename in **this folder** — wildcard support (`*`, `?`); type `#` to switch to Jump mode |
 | `Ctrl+Shift+F` | The same search across **every folder qIV knows** — find a picture by name without remembering where it lives, and open it straight from the result. Press it while Find is open to widen the search you are already typing; `Ctrl+F` narrows it back |
+| *(typed in the Find box)* | **Narrow by size or date** — `>5mb`, `<500kb`, `>2024`, `<2024-06`, alongside a name or on their own. `>5mb sunset` finds the big ones called sunset; `>5mb` by itself lists everything over five megabytes. A word only becomes a filter when it cannot be anything else, so ordinary filename search is untouched — a file actually named `2024` still matches |
 | `Ctrl+D` | Find **duplicate pictures** across every folder qIV knows — byte-identical copies only. Groups by size first so almost nothing is read; results open in the Find panel with each row numbered by group (`1. 1. 1. 2. 2.`), and a listing is written to `qivDuplicates.txt`. Click a row to see **every copy in its group side by side** with the selected one framed; click a thumbnail to select that copy. **Right-click** a row or a thumbnail to open it, show it in Explorer, or send it to the **Recycle Bin** — never a straight delete |
 | `L` | Reveal current file in Windows Explorer |
 | `PageUp` / `PageDown` | Previous / next folder in your history — walks only the **non-starred** rows |

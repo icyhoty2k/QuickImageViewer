@@ -45,7 +45,7 @@
             "applicationCategory": "MultimediaApplication",
             "applicationSubCategory": "Image Viewer",
             "description": "A free, GPU-accelerated, portable image viewer for Windows 10 and 11. Opens JPEG, PNG, WebP, HEIC, AVIF, JPEG XL, SVG, OpenEXR, Radiance HDR and 20+ formats with zero-flicker Direct2D rendering. Single sub-10 MB executable — no installer, no ads, no telemetry.",
-            "featureList": "GPU VRAM bitmap cache, neighbor image preloading, HEIC/AVIF/JPEG XL/WebP/SVG/OpenEXR support, offline GPS reverse geocoding, slideshow with 6 transitions, non-destructive GPU color effects, floating thumbnail panels, per-monitor DPI awareness V2, system tray resident mode, kiosk mode, file management with drag-and-drop",
+            "featureList": "GPU VRAM bitmap cache, neighbor image preloading, HEIC/AVIF/JPEG XL/WebP/SVG/OpenEXR support, offline GPS reverse geocoding, photo culling with keep/reject marks, filename search filtered by file size and date, duplicate photo finder, slideshow with 21 GPU transitions, non-destructive GPU color effects, floating thumbnail panels, per-monitor DPI awareness V2, system tray resident mode, kiosk mode, file management with drag-and-drop",
             "offers": {
                 "@type": "Offer",
                 "price": "0",
@@ -977,9 +977,11 @@ Version 3.0.0.368 &bull; Size: 9,937.50 KB &bull; Build Date: 2026-09-01
                     <div class="card">
                         <h3>More Than a Viewer</h3>
                         <p>
-                            Thumbnail strips double as a lightweight file manager: <strong>drag &amp; drop
-                            files between folders</strong>, right-click Copy / Cut / Paste / Delete with full
-                            Windows clipboard and Recycle Bin integration, plus offline EXIF GPS geocoding.
+                            Cull a shoot in one pass &mdash; <strong>one keystroke per picture</strong>, keep
+                            or reject, rejects moved together at the end. Thumbnail strips double as a
+                            lightweight file manager: <strong>drag &amp; drop files between folders</strong>,
+                            right-click Copy / Cut / Paste / Delete with full Windows clipboard and Recycle
+                            Bin integration, plus offline EXIF GPS geocoding.
                         </p>
                     </div>
                 </div>
@@ -1168,6 +1170,15 @@ Version 3.0.0.368 &bull; Size: 9,937.50 KB &bull; Build Date: 2026-09-01
                         search you are typing rather than closing the panel.
                     </li>
                     <li>
+                        <strong>Narrow it by size or date</strong> &mdash; type <code>&gt;5mb</code>,
+                        <code>&lt;500kb</code>, <code>&gt;2024</code> or <code>&lt;2024-06</code> into the
+                        same box, next to a name or on their own. <code>&gt;5mb sunset</code> finds the big
+                        ones called sunset; <code>&gt;5mb</code> by itself lists everything over five
+                        megabytes. A word only becomes a filter when it cannot be anything else, so ordinary
+                        filename search is untouched &mdash; a file actually named <code>2024</code> still
+                        matches.
+                    </li>
+                    <li>
                         <strong>Duplicate finder</strong> (<kbd>Ctrl</kbd>+<kbd>D</kbd>) &mdash; identical
                         copies across every folder qIV knows. Files are grouped by size first, so almost
                         nothing is read; only files that share a size are opened and compared
@@ -1186,6 +1197,33 @@ Version 3.0.0.368 &bull; Size: 9,937.50 KB &bull; Build Date: 2026-09-01
                         <strong>Your folders on the taskbar</strong> &mdash; right-click qIV's taskbar button
                         and Windows lists your favourites and recent folders, each opening that folder
                         directly. Built from the same history the Tab panel shows, so the two cannot disagree.
+                    </li>
+                </ul>
+                <h3>Culling a shoot</h3>
+                <ul>
+                    <li>
+                        <strong>One keystroke per picture</strong> &mdash; <kbd>Alt</kbd>+<kbd>Space</kbd>
+                        starts a cull, then <kbd>K</kbd> keeps, <kbd>X</kbd> rejects and <kbd>U</kbd> clears
+                        the mark. Each one advances by itself, so four hundred frames is four hundred keys
+                        and no mouse. The filename carries its mark as you go &mdash; a tick, a cross, or a
+                        dot for one you have not judged yet.
+                    </li>
+                    <li>
+                        <strong>Nothing is written until you say so</strong> &mdash; the marks live in memory.
+                        Leaving the mode is what asks, and the count it names is the count it moves. Files go
+                        to a <code>_rejected</code> folder beside them &mdash; same drive, same place,
+                        undoable with <kbd>Ctrl</kbd>+<kbd>Z</kbd> in Explorer. Say no and nothing moves.
+                    </li>
+                    <li>
+                        <strong>Or keep the winners instead</strong> &mdash; whichever mark you used is the
+                        one that acts. Mark rejects and those move; mark only keeps and you are asked whether
+                        to move <em>everything else</em>. That is how four hundred frames become the twelve
+                        good ones without rejecting the other 388 one at a time.
+                    </li>
+                    <li>
+                        <strong>Or forty at once, from a strip</strong> &mdash; while the mode is on, every
+                        thumbnail strip tints by mark, green for keep and red for reject, and its right-click
+                        menu gains Mark Keep, Mark Reject and Clear Mark. Those act on the whole selection.
                     </li>
                 </ul>
                 <h3>Guides</h3>
