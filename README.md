@@ -545,6 +545,10 @@ While the mode is on, the filename in the top-left carries its mark: a tick for 
 | `X` *(in cull mode)* | Reject, and advance |
 | `U` *(in cull mode)* | Clear the mark, and advance |
 
+**On a thumbnail strip.** While the mode is on, every strip tints its thumbnails by their mark — green for keep, red for reject — and its right-click menu grows **Mark Keep**, **Mark Reject** and **Clear Mark**. Those act on the whole selection, so a strip is how you mark forty pictures at once; the keyboard marks the one on screen. The menu items *set* the mark rather than toggling it.
+
+Entering cull mode stops a running slideshow — a playlist advancing on a timer while you mark would land your keystrokes on the wrong picture.
+
 `K`, `X` and `U` keep their usual jobs — stats, reset window, thumbnail effects — whenever cull mode is off. They are borrowed only while it runs, the way `R`, `S` and `T` are borrowed by the slideshow.
 
 </details>

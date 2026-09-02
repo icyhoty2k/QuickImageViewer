@@ -455,10 +455,34 @@ void AppCommands::ToggleCullMode(HWND hWnd) {
         if (app.cullMarks.Count(Common::CullMarks::Mark::Reject) > 0) {
             if (ResolveCullRejects(hWnd) < 0) return;   // cancelled - stay in the mode
         }
+
+        // ⚠ A MARK STILL STANDING MEANS THE JOB IS NOT DONE, so the mode does
+        // not close over it. Resolve calls Forget on each file it actually
+        // moved; anything left is either a move that FAILED - a name clash, a
+        // read-only file - or a reject sitting in a folder the playlist has
+        // since walked away from. Clearing unconditionally threw both away
+        // silently, told the user "some files could not be moved", and left no
+        // way to retry: the marks that message referred to were already gone.
+        if (app.cullMarks.Count(Common::CullMarks::Mark::Reject) > 0) {
+            g_overlayManager.PostCenterMessage(hWnd, Constants::Messages::CULL_MARKS_REMAIN,
+                                               OverlayManager::MsgSeverity::Warning);
+            return;
+        }
+
         app.cullMode = false;
         app.cullMarks.Clear();
         g_overlayManager.PostCenterMessage(hWnd, Constants::Messages::CULL_MODE_OFF);
     } else {
+        // ⚠ A RUNNING SLIDESHOW ADVANCES BY ITSELF, and this mode moves files.
+        //
+        // Marking is one key per picture with no confirmation per press, so a
+        // timer stepping the playlist underneath means the K pressed for the
+        // frame on screen lands on the one after it. Stopping beats refusing:
+        // the two modes want the same keyboard for opposite reasons, and
+        // somebody pressing Alt+Space during a slideshow has decided to stop
+        // watching and start judging.
+        if (app.slideshow.running) stopSlideshow(hWnd);
+
         app.cullMode = true;
         g_overlayManager.PostCenterMessage(hWnd, Constants::Messages::CULL_MODE_ON);
     }
@@ -525,8 +549,24 @@ void AppCommands::MarkCurrent(HWND hWnd, Common::CullMarks::Mark mark) {
 // marks the user spent the session making.
 int AppCommands::ResolveCullRejects(HWND hWnd) {
     const std::vector<std::wstring> rejects = app.cullMarks.Rejected(app.playlist);
+
+    // ⚠ REJECTS OUTSIDE THE CURRENT FOLDER ARE NOT MOVED, AND NOW SAY SO.
+    //
+    // Rejected() lists only what is in the playlist on screen, deliberately:
+    // moving a file the user cannot currently see is the wrong direction for a
+    // mistake. But the difference used to be invisible - mark twenty in one
+    // folder, wander into another, leave the mode, and the answer was "nothing
+    // was rejected" over twenty standing marks.
+    const int total = app.cullMarks.Count(Common::CullMarks::Mark::Reject);
+    const int elsewhere = total - static_cast<int>(rejects.size());
+
     if (rejects.empty()) {
-        g_overlayManager.PostCenterMessage(hWnd, Constants::Messages::CULL_NOTHING_REJECTED);
+        g_overlayManager.PostCenterMessage(
+            hWnd,
+            elsewhere > 0 ? Constants::Messages::CULL_REJECTS_ELSEWHERE
+                          : Constants::Messages::CULL_NOTHING_REJECTED,
+            elsewhere > 0 ? OverlayManager::MsgSeverity::Warning
+                          : OverlayManager::MsgSeverity::Normal);
         return 0;
     }
 
@@ -615,7 +655,13 @@ int AppCommands::ResolveCullRejects(HWND hWnd) {
         wchar_t done[192];
         swprintf_s(done, Constants::Messages::CULL_MOVED_FMT, moved,
                    Constants::Messages::CULL_REJECT_FOLDER);
-        g_overlayManager.PostCenterMessage(hWnd, done);
+        std::wstring msg = done;
+        if (elsewhere > 0) {
+            wchar_t rest[96];
+            swprintf_s(rest, Constants::Messages::CULL_ELSEWHERE_FMT, elsewhere);
+            msg += rest;
+        }
+        g_overlayManager.PostCenterMessage(hWnd, msg);
     }
 
     // The playlist now names files that are no longer where it says. Reloading

@@ -838,6 +838,15 @@ namespace Constants::Messages {
     // Recycle Bin - and a cull of 400 frames is exactly the case where you
     // want to look at what you threw out before it is really gone.
     constexpr const wchar_t *CULL_REJECT_FOLDER = L"_rejected";
+    // Leaving the mode did not finish the job. Named apart from the move
+    // failure above because the causes differ - a clash, or a folder the
+    // playlist has walked away from - while what to do about it is the same:
+    // look at what is still marked.
+    constexpr const wchar_t *CULL_MARKS_REMAIN =
+            QIV_ICON_WARNING L" Still marked — cull mode stays on";
+    constexpr const wchar_t *CULL_REJECTS_ELSEWHERE =
+            QIV_ICON_WARNING L" Rejects are in another folder — go back to move them";
+    constexpr const wchar_t *CULL_ELSEWHERE_FMT = L"  •  %d left in another folder";
 }
 
 namespace Constants::Strings {

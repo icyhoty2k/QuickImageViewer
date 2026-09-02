@@ -1343,6 +1343,22 @@ namespace UI {
             }
 
             // -----------------------------------------------------------------
+            // ⚠ THE ALT+SPACE BEEP, THE THUMBNAIL-STRIP COPY.
+            //
+            // The key block above forwards Alt+Space to the main window, which
+            // toggles cull mode, and then hands the WM_SYSKEYDOWN to this
+            // window's DefWindowProc so Alt+F4 still closes the strip. Right
+            // for Alt+F4, wrong for Alt+Space: the WM_SYSCHAR that follows is
+            // answered by opening a system menu this window does not have, and
+            // the failure mode for that is MessageBeep.
+            //
+            // The same guard is in AppMain and FloatingPanelWnd. All three are
+            // needed - the beep follows focus.
+            case WM_SYSCHAR:
+                if (wParam == VK_SPACE) return 0;
+                return DefWindowProcW(m_hWnd, message, wParam, lParam);
+
+            // -----------------------------------------------------------------
             case WM_LBUTTONDOWN: {
                 m_justActivated = IsDirPanel() && (&uiManager.getActiveDirWnd() != this);
                 if (IsDirPanel()) uiManager.SetActiveDirWnd(this);
@@ -1784,6 +1800,9 @@ namespace UI {
                 constexpr UINT ID_CTX_COPY_PATH = 10;
                 constexpr UINT ID_CTX_OPEN_WITH = 11;
                 constexpr UINT ID_CTX_REVEAL = 12;
+                constexpr UINT ID_CTX_CULL_KEEP = 13;
+                constexpr UINT ID_CTX_CULL_REJECT = 14;
+                constexpr UINT ID_CTX_CULL_UNMARK = 15;
 
                 const bool hasFiles = !opPaths.empty();
                 const bool canPaste = !pasteDir.empty() && AppCommands::ClipboardHasFiles() &&
@@ -1879,6 +1898,31 @@ namespace UI {
                     AppendMenuW(hMenu, MF_SEPARATOR, 0, nullptr);
                     AppendMenuW(hMenu, MF_STRING, ID_CTX_EXTRA, extraLabel);
                 }
+                // CULL MARKS, only while the mode is on.
+                //
+                // Hidden rather than greyed, unlike the file operations above:
+                // those are permanently part of what a strip does and greying
+                // says "not right now", while these belong to a mode that is
+                // usually not running at all. A permanent trio of dead items
+                // for a feature most sessions never enter is clutter.
+                //
+                // They act on opPaths - the same set Copy and Delete use - so a
+                // multi-selection marks all of it in one go. That is the whole
+                // reason to want this on the strip: the keyboard marks one
+                // picture at a time, and a strip can select forty.
+                if (app.cullMode && hasFiles) {
+                    const std::wstring cnt = opPaths.size() > 1
+                            ? L" (" + std::to_wstring(opPaths.size()) + L" files)"
+                            : L"";
+                    AppendMenuW(hMenu, MF_SEPARATOR, 0, nullptr);
+                    AppendMenuW(hMenu, MF_STRING, ID_CTX_CULL_KEEP,
+                                (L"Mark Keep" + cnt).c_str());
+                    AppendMenuW(hMenu, MF_STRING, ID_CTX_CULL_REJECT,
+                                (L"Mark Reject" + cnt).c_str());
+                    AppendMenuW(hMenu, MF_STRING, ID_CTX_CULL_UNMARK,
+                                (L"Clear Mark" + cnt).c_str());
+                }
+
                 AppendMenuW(hMenu, MF_SEPARATOR, 0, nullptr);
                 AppendMenuW(hMenu, hasAny ? MF_STRING : (MF_STRING | MF_GRAYED), ID_CTX_SELECT_ALL, L"Select All");
                 AppendMenuW(hMenu, hasAny ? MF_STRING : (MF_STRING | MF_GRAYED),
@@ -2029,6 +2073,33 @@ namespace UI {
                         NotifySelectionOverlay();
                         InvalidateRect(m_hWnd, nullptr, FALSE);
                         break;
+                    // The three cull marks. One loop rather than three cases:
+                    // the only thing that differs is which mark is applied.
+                    //
+                    // ⚠ SET, NOT TOGGLE, unlike the keyboard. Toggle is right
+                    // for a key pressed on one picture - press twice, undo. It
+                    // is wrong for a menu acting on a selection of forty: half
+                    // of them already marked keep would flip to unmarked while
+                    // the other half became keep, and "Mark Keep" would leave
+                    // twenty pictures unmarked. A menu item names its outcome.
+                    case ID_CTX_CULL_KEEP:
+                    case ID_CTX_CULL_REJECT:
+                    case ID_CTX_CULL_UNMARK: {
+                        Common::CullMarks::Mark mark = Common::CullMarks::Mark::None;
+                        if (cmd == ID_CTX_CULL_KEEP) mark = Common::CullMarks::Mark::Keep;
+                        else if (cmd == ID_CTX_CULL_REJECT) mark = Common::CullMarks::Mark::Reject;
+
+                        for (const std::wstring &p : opPaths)
+                            app.cullMarks.Assign(p, mark);
+
+                        // Every strip shows the same marks, and so does the
+                        // overlay above them - repainting only this one would
+                        // leave the others displaying a decision that changed.
+                        g_overlayManager.RefreshCullBadge();
+                        uiManager.RepaintAllPanels();
+                        InvalidateRect(m_hOwner, nullptr, FALSE);
+                        break;
+                    }
                     case ID_CTX_CLOSE:
                         Hide();
                         break;
@@ -2284,6 +2355,15 @@ namespace UI {
         // Multi-select: steel blue — distinct from green (viewer selection) and white (hover)
         m_panelContext->CreateSolidColorBrush(
                 D2D1::ColorF(0.28f, 0.56f, 1.0f), &m_multiSelBrush);
+        // Cull marks: green for keep, red for reject. Deliberately NOT the
+        // selection green - selection means "I am pointing at this", a mark
+        // means "I have decided about this", and the strip shows both at once.
+        // The mark is drawn as a tinted fill plus a thick border, so it reads
+        // at thumbnail size without a glyph the strip has no font for.
+        m_panelContext->CreateSolidColorBrush(
+                D2D1::ColorF(0.25f, 0.80f, 0.35f), &m_cullKeepBrush);
+        m_panelContext->CreateSolidColorBrush(
+                D2D1::ColorF(0.95f, 0.30f, 0.28f), &m_cullRejectBrush);
         // Active-panel label: same LightGreen as the selection border — signals focus consistently
         m_panelContext->CreateSolidColorBrush(
                 D2D1::ColorF(D2D1::ColorF::LightGreen), &m_dirLabelActiveBrush);
@@ -2533,6 +2613,35 @@ namespace UI {
                 m_multiSelBrush->SetOpacity(1.0f);
                 strokeRect(drawRect, m_multiSelBrush.Get(),
                            Constants::ThumbnailPanel::SELECTION_BORDER_THICKNESS);
+            }
+
+            // CULL MARK: the decision made about this picture, if any.
+            //
+            // Drawn after multi-select and BEFORE the selection glow, so the
+            // green "this is the one on screen" still wins on the same item -
+            // a mark is a fact about the file, the glow is where you are.
+            //
+            // Only while the mode is on. Marks survive in AppState until the
+            // mode closes, and painting them over a strip nobody is culling
+            // would be a red border on a folder with no explanation for it.
+            if (app.cullMode) {
+                ID2D1SolidColorBrush *markBrush = nullptr;
+                switch (app.cullMarks.Of(thumbPath)) {
+                    case Common::CullMarks::Mark::Keep:   markBrush = m_cullKeepBrush.Get(); break;
+                    case Common::CullMarks::Mark::Reject: markBrush = m_cullRejectBrush.Get(); break;
+                    default: break;
+                }
+                if (markBrush) {
+                    markBrush->SetOpacity(0.30f);
+                    if (roundedOn)
+                        m_panelContext->FillRoundedRectangle(
+                                D2D1::RoundedRect(drawRect, cornerR, cornerR), markBrush);
+                    else
+                        m_panelContext->FillRectangle(drawRect, markBrush);
+                    markBrush->SetOpacity(1.0f);
+                    strokeRect(drawRect, markBrush,
+                               Constants::ThumbnailPanel::SELECTION_BORDER_THICKNESS * 1.5f);
+                }
             }
 
             // EFFECT: Glow border — soft green halo on the selected thumb: three

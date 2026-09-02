@@ -1267,6 +1267,51 @@ namespace {
             CHECK(s.Empty());
         }
 
+
+        NOTE("Assign ASSIGNS - the menu operation, not a wrapper around Toggle");
+        {
+            // The difference is invisible on one file and decisive on forty.
+            // Toggled over a mixed selection, "Mark Keep" would UNMARK every
+            // picture that was already Keep.
+            Set s;
+            s.Toggle(L"a.jpg", Mark::Keep);      // already keep
+            s.Toggle(L"b.jpg", Mark::Reject);    // currently reject
+                                                 // c.jpg unmarked
+            for (const wchar_t *p : {L"a.jpg", L"b.jpg", L"c.jpg"})
+                s.Assign(p, Mark::Keep);
+
+            CHECK(s.Of(L"a.jpg") == Mark::Keep);
+            CHECK(s.Of(L"b.jpg") == Mark::Keep);
+            CHECK(s.Of(L"c.jpg") == Mark::Keep);
+            CHECK(s.Count(Mark::Keep) == 3);
+            CHECK(s.Count(Mark::Reject) == 0);
+        }
+
+        NOTE("Assign twice is Assign once - the property Toggle deliberately lacks");
+        {
+            Set s;
+            s.Assign(L"a.jpg", Mark::Reject);
+            s.Assign(L"a.jpg", Mark::Reject);
+            CHECK(s.Of(L"a.jpg") == Mark::Reject);
+
+            // And the same call on Toggle does the opposite, on purpose.
+            Set t;
+            t.Toggle(L"a.jpg", Mark::Reject);
+            t.Toggle(L"a.jpg", Mark::Reject);
+            CHECK(t.Of(L"a.jpg") == Mark::None);
+        }
+
+        NOTE("Assign to None clears, so \"Clear Mark\" needs no special case");
+        {
+            Set s;
+            s.Assign(L"a.jpg", Mark::Keep);
+            s.Assign(L"b.jpg", Mark::Reject);
+            s.Assign(L"a.jpg", Mark::None);
+            s.Assign(L"b.jpg", Mark::None);
+            s.Assign(L"never-marked.jpg", Mark::None);   // must not create anything
+            CHECK(s.Empty());
+        }
+
         NOTE("Toggle to None clears whatever was there");
         {
             Set s;

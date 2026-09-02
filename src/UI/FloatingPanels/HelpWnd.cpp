@@ -596,6 +596,18 @@ namespace UI {
             L"still on disk, in the same place, undoable with Ctrl+Z in Explorer. "
             L"Say no and you stay in the mode with every mark intact. The marks "
             L"themselves live in memory only: closing the viewer forgets them.", sCull);
+        Add(L"On a thumbnail strip",
+            L"While cull mode is on, every strip tints its thumbnails by their mark "
+            L"— green for keep, red for reject — and its right-click menu grows "
+            L"Mark Keep, Mark Reject and Clear Mark. Those act on the whole "
+            L"selection, so a strip is how you mark forty pictures at once; the "
+            L"keyboard marks the one on screen. Unlike the keys, the menu items "
+            L"SET the mark rather than toggling it — \"Mark Keep\" on a mixed "
+            L"selection leaves all of it keep.", sCull);
+        Add(L"With a slideshow running",
+            L"Entering cull mode stops the slideshow. The two want the same "
+            L"keyboard for opposite reasons, and a playlist advancing on a timer "
+            L"while you mark would land your keystrokes on the wrong picture.", sCull);
         Add(L"Note",
             L"K, X and U do their usual jobs — stats, reset window, thumbnail "
             L"effects — whenever cull mode is off. They are borrowed only while it "

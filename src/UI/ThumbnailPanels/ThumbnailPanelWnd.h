@@ -203,6 +203,11 @@ namespace UI {
             Microsoft::WRL::ComPtr<ID2D1SolidColorBrush>  m_emptyDirWarningBrush;
             Microsoft::WRL::ComPtr<ID2D1SolidColorBrush>  m_multiSelBrush;
             Microsoft::WRL::ComPtr<ID2D1SolidColorBrush>  m_dirLabelActiveBrush;
+            // Cull marks. Two brushes rather than one recoloured on the fly:
+            // a strip can show a keep and a reject in the same frame, and
+            // SetColor between them would be a state change per thumbnail.
+            Microsoft::WRL::ComPtr<ID2D1SolidColorBrush>  m_cullKeepBrush;
+            Microsoft::WRL::ComPtr<ID2D1SolidColorBrush>  m_cullRejectBrush;
             // Visual effects brushes and geometry (U key master toggle)
             Microsoft::WRL::ComPtr<ID2D1SolidColorBrush>  m_glowBrush;       // accent-color border for selected thumb
             Microsoft::WRL::ComPtr<ID2D1SolidColorBrush>  m_cornerBgBrush;   // background color for corner overdraw

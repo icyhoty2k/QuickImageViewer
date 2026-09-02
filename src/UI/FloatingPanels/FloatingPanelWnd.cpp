@@ -109,13 +109,33 @@ namespace UI {
             }
 
             // System keys still go to DefWindowProc, exactly as the main window
-            // does it, so Alt+F4 and Alt+Space keep working. Neither the main
-            // window nor a panel has a menu bar, so F10's own default behaviour
-            // has nothing to open.
+            // does it, so Alt+F4 keeps working. Neither the main window nor a
+            // panel has a menu bar, so F10's own default behaviour has nothing
+            // to open.
+            //
+            // ⚠ ALT+SPACE IS THE EXCEPTION, handled by the WM_SYSCHAR case
+            // below. This comment used to say Alt+Space "keeps working" - true
+            // when it was Windows' key to handle, wrong now that it is ours.
             return (message == WM_SYSKEYDOWN)
                        ? DefWindowProcW(m_hWnd, message, wParam, lParam)
                        : 0;
         }
+        // ⚠ THE ALT+SPACE BEEP, THE PANEL COPY.
+        //
+        // The block above forwarded the keypress to the main window, which
+        // toggles cull mode - and then handed the same WM_SYSKEYDOWN to THIS
+        // window's DefWindowProc, which is right for Alt+F4 and wrong for
+        // Alt+Space: TranslateMessage turns it into a WM_SYSCHAR, DefWindowProc
+        // answers that by opening the system menu, and a panel is
+        // WS_POPUP | WS_CAPTION | WS_BORDER with no WS_SYSMENU. The failure
+        // mode for "there is no menu" is MessageBeep, once per toggle.
+        //
+        // AppMain carries the identical guard for the main window, and
+        // ThumbnailPanelWnd for the strips. All three are needed: the beep
+        // follows whichever window has focus.
+        if (message == WM_SYSCHAR && wParam == VK_SPACE)
+            return 0;
+
         if (message == WM_MBUTTONUP) {
             if (!OnMButtonUp(GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam)))
                 Hide();

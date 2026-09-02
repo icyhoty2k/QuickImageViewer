@@ -24,7 +24,7 @@
     <meta property="og:site_name" content="QuickImageViewer">
     <meta property="og:title" content="Every QuickImageViewer keyboard shortcut">
     <meta property="og:description"
-          content="The complete reference: 236 shortcuts in 17 sections, generated from the application's own help panel.">
+          content="The complete reference: 238 shortcuts in 17 sections, generated from the application's own help panel.">
     <meta property="og:url" content="https://icyhoty2k.github.io/QuickImageViewer/shortcuts.html">
     <meta property="og:image" content="https://icyhoty2k.github.io/QuickImageViewer/screenshots/less300kb/10.webp">
     <meta property="og:image:alt" content="QuickImageViewer showing a photo with a thumbnail strip">
@@ -32,7 +32,7 @@
     <meta name="twitter:card" content="summary_large_image">
     <meta name="twitter:title" content="Every QuickImageViewer keyboard shortcut">
     <meta name="twitter:description"
-          content="The complete reference: 236 shortcuts in 17 sections, generated from the application's own help panel.">
+          content="The complete reference: 238 shortcuts in 17 sections, generated from the application's own help panel.">
     <meta name="twitter:image" content="https://icyhoty2k.github.io/QuickImageViewer/screenshots/less300kb/10.webp">
 
 <script type="application/ld+json">
@@ -132,7 +132,7 @@
     <h1>QuickImageViewer (qIV) — Shortcuts</h1>
     <p class="meta">
         Generated from the app's own help panel — press <kbd>F1</kbd> in QuickImageViewer to see the same list on your
-        machine. 236 shortcuts in 17 sections.
+        machine. 238 shortcuts in 17 sections.
     </p>
 
 <!-- SHARED-STOREROW-START -->
@@ -299,13 +299,15 @@
         </div>
     </section>
     <section class="sc-sec" data-title="Cull Mode">
-        <h2><span class="sc-ico">⌨</span>Cull Mode<span class="sc-count">6</span></h2>
+        <h2><span class="sc-ico">⌨</span>Cull Mode<span class="sc-count">8</span></h2>
         <div class="sc-cols">
             <div class="sc-row"><div class="sc-keys"><kbd>Alt+Space</kbd></div><p class="sc-desc">Enter or leave cull mode — the pass where you say yes or no to each picture. While it is on, the filename in the top-left carries a mark: a tick for keep, a cross for reject, a dot for one you have… <a class="sc-more" href="#cull-mode-alt-space">details</a></p></div>
             <div class="sc-row"><div class="sc-keys"><kbd>K</kbd>  (in cull mode)</div><p class="sc-desc">Mark the current picture KEEP and move to the next one. Pressing it again on the same picture clears the mark.</p></div>
             <div class="sc-row"><div class="sc-keys"><kbd>X</kbd>  (in cull mode)</div><p class="sc-desc">Mark the current picture REJECT and move to the next one. Pressing it again clears the mark.</p></div>
             <div class="sc-row"><div class="sc-keys"><kbd>U</kbd>  (in cull mode)</div><p class="sc-desc">Clear the mark on the current picture and move on.</p></div>
             <div class="sc-row"><div class="sc-keys"><kbd>Leaving cull mode</kbd></div><p class="sc-desc">If anything is marked reject, you are asked once before any file moves. Say yes and they go into a "_rejected" folder beside them — still on disk, in the same place, undoable with Ctrl+Z in Explorer. <a class="sc-more" href="#cull-mode-leaving-cull-mode">details</a></p></div>
+            <div class="sc-row"><div class="sc-keys"><kbd>On a thumbnail strip</kbd></div><p class="sc-desc">While cull mode is on, every strip tints its thumbnails by their mark — green for keep, red for reject — and its right-click menu grows Mark Keep, Mark Reject and Clear Mark. <a class="sc-more" href="#cull-mode-on-a-thumbnail-strip">details</a></p></div>
+            <div class="sc-row"><div class="sc-keys"><kbd>With a slideshow running</kbd></div><p class="sc-desc">Entering cull mode stops the slideshow. The two want the same keyboard for opposite reasons, and a playlist advancing on a timer while you mark would land your keystrokes on the wrong picture.</p></div>
             <div class="sc-row"><div class="sc-keys"><kbd>Note</kbd></div><p class="sc-desc">K, X and U do their usual jobs — stats, reset window, thumbnail effects — whenever cull mode is off. They are borrowed only while it is running, the same way R, S and T are borrowed by the slideshow.</p></div>
         </div>
     </section>
@@ -498,7 +500,7 @@
     </section>
 
     <h2 class="sc-deep-head">In depth</h2>
-    <p class="sc-deep-intro">The 72 shortcuts above whose behaviour needs more than a line. Every one is linked from its row.</p>
+    <p class="sc-deep-intro">The 73 shortcuts above whose behaviour needs more than a line. Every one is linked from its row.</p>
     <article class="sc-deep" id="image-navigation-ctrl-f">
         <h3><kbd>Ctrl+F</kbd><span class="sc-deep-sec">Image Navigation</span></h3>
         <p>Open the Find panel — fuzzy filename search with wildcard support: * matches any characters, ? matches exactly one (e.g. *.jpg or photo_??_2024.*). Searches THIS folder and the VRAM cache. Typing # inside switches to Jump-to. NARROW BY SIZE OR DATE by typing a comparison alongside the name: &gt;5mb, &lt;500kb, &gt;=2gb, &lt;2024, &gt;2024-06 or &gt;=2024-06-01. They combine with each other and with the name, so "sunset &gt;5mb &lt;2024" is a real query, and a filter on its own lists everything that passes it. A word only becomes a filter when it cannot be anything else, so photo_2024 and IMG_20240817 are still searched as names.</p>
@@ -584,6 +586,10 @@
     <article class="sc-deep" id="cull-mode-leaving-cull-mode">
         <h3><kbd>Leaving cull mode</kbd><span class="sc-deep-sec">Cull Mode</span></h3>
         <p>If anything is marked reject, you are asked once before any file moves. Say yes and they go into a "_rejected" folder beside them — still on disk, in the same place, undoable with Ctrl+Z in Explorer. Say no and you stay in the mode with every mark intact. The marks themselves live in memory only: closing the viewer forgets them.</p>
+    </article>
+    <article class="sc-deep" id="cull-mode-on-a-thumbnail-strip">
+        <h3><kbd>On a thumbnail strip</kbd><span class="sc-deep-sec">Cull Mode</span></h3>
+        <p>While cull mode is on, every strip tints its thumbnails by their mark — green for keep, red for reject — and its right-click menu grows Mark Keep, Mark Reject and Clear Mark. Those act on the whole selection, so a strip is how you mark forty pictures at once; the keyboard marks the one on screen. Unlike the keys, the menu items SET the mark rather than toggling it — "Mark Keep" on a mixed selection leaves all of it keep.</p>
     </article>
     <article class="sc-deep" id="info-overlays-ctrl-1-ctrl-9">
         <h3><kbd>Ctrl+1</kbd> – <kbd>Ctrl+9</kbd><span class="sc-deep-sec">Info Overlays</span></h3>

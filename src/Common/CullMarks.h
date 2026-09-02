@@ -47,6 +47,24 @@ namespace Common::CullMarks {
                 m_marks[path] = to;
             }
 
+            // Assigns, with no undo-on-repeat. The menu form.
+            //
+            // Named Assign rather than Set because the CLASS is Set - a member
+            // function of that name is a constructor, which the compiler says
+            // plainly and only once you have written it.
+            //
+            // ⚠ NOT A CONVENIENCE WRAPPER AROUND Toggle - it is the other
+            // operation, and the difference only shows on a SET OF FILES.
+            // Toggle is right for a key pressed on one picture: press twice,
+            // undo. Run it over a selection of forty where half are already
+            // Keep and those forty split - twenty flip to unmarked while twenty
+            // become Keep - so a menu item saying "Mark Keep" leaves half the
+            // selection unmarked. A menu item has to mean its own label.
+            void Assign(const std::wstring &path, Mark to) {
+                if (to == Mark::None) { m_marks.erase(path); return; }
+                m_marks[path] = to;
+            }
+
             [[nodiscard]] Mark Of(const std::wstring &path) const {
                 const auto it = m_marks.find(path);
                 return it == m_marks.end() ? Mark::None : it->second;
