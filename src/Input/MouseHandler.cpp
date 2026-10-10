@@ -562,7 +562,13 @@ void MouseHandler::HandleMouseHWheel(HWND hWnd, WPARAM wParam, LPARAM /*lParam*/
                                                : Command::NextHistoryFolderAll);
 }
 
-void MouseHandler::HandleDoubleClick(HWND hWnd) {
+void MouseHandler::HandleDoubleClick(HWND hWnd, WPARAM wParam) {
+    // Shift+double-click opens a new instance (the same command as Ctrl+N);
+    // a plain double-click stays the fullscreen toggle.
+    if (wParam & MK_SHIFT) {
+        InputManager::ExecuteCommand(hWnd, Command::NewWindow);
+        return;
+    }
     // The redraw suppression stays here rather than moving into the command:
     // it exists because a double-click resizes the window while the mouse still
     // holds capture, which the keyboard path never does.

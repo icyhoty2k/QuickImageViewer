@@ -128,6 +128,10 @@ class OverlayManager {
         // are not a connection: a compact toggle, a layout switch, a blink phase.
         void RefreshRemoteIndicator();
 
+        // Sync Instances switched on or off — the gold SYNC marker that leads
+        // TOP_RIGHT. Repaints the window.
+        void RefreshSyncIndicator(HWND hWnd);
+
         // BOT_RIGHT  — pixel dimensions + file size in bytes
         void UpdateDims(int imgW, int imgH, int64_t fileSizeBytes);
 
@@ -241,6 +245,8 @@ class OverlayManager {
         // RendererD2D — that one is shared with the folder-deleted overlay, so
         // recolouring it would drag unrelated UI along with the user's choice.
         Microsoft::WRL::ComPtr<ID2D1SolidColorBrush> m_pOuterBrush;
+        // Gold, for the SYNC marker. Built and dropped with m_pOuterBrush.
+        Microsoft::WRL::ComPtr<ID2D1SolidColorBrush> m_pAccentBrush;
         // Dedicated semi-transparent background brush — avoids GetColor/SetColor per slot per frame
         Microsoft::WRL::ComPtr<ID2D1SolidColorBrush> m_pBgBrush;
         Microsoft::WRL::ComPtr<IDWriteTextFormat> m_fmtCenter5; // center-center format
@@ -364,7 +370,10 @@ class OverlayManager {
 
         // TOP_RIGHT's text: the zoom, prefixed with the server dot and
         // active/max client count while the listener is running.
-        std::wstring BuildTopRightText() const;
+        std::wstring BuildTopRightText() const;  // SYNC marker + body
+        std::wstring BuildTopRightBody() const;  // server dot + zoom
+        UINT32 SyncAccentLength() const;
+        void ApplyTopRightText();
 
         // Stores the raw data so compact toggle / layout change can re-render
         int m_infoIndex = 0;

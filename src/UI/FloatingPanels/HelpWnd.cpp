@@ -373,6 +373,9 @@ namespace UI {
             L"Quick " + NumF(app.zoomClickMultiplier) + L"× zoom centered on the cursor; "
             L"dragging pans while zoomed. Zoom and pan revert the moment the button is released.", sMouse);
         Add(L"LMB double-click", L"Toggle fullscreen.", sMouse);
+        Add(L"Shift+LMB double-click",
+            L"Open a new independent qIV window — the same as " +
+            Ctrl(SC::SC_APP_NEW_WINDOW) + L".", sMouse);
         Add(L"RMB drag", L"Move the window.", sMouse);
         Add(L"RMB + LMB", L"Reveal the current file in Windows Explorer.", sMouse);
         Add(L"RMB + Wheel", L"Zoom in / out while the right button is held.", sMouse);
@@ -418,6 +421,23 @@ namespace UI {
             L"are carried across proportionally, so a screen of a different resolution "
             L"does not leave the window half off the edge; in fullscreen the window "
             L"simply fills the new monitor.", sWin);
+        Add(L"Ctrl+Alt+" + K(SC::SC_ARRANGE_CYCLE),
+            L"Cycle the arrangement. With 2 windows: Side by Side, Top and Bottom, then "
+            L"restore; 3: Three Columns, Three Rows, then restore; 4: Four Corners, then "
+            L"restore; 5 or more: Grid, then restore. Restore puts every window back where "
+            L"it was before the cycle began — fullscreen included — except one you have "
+            L"moved by hand since. Works from any window and carries on the same cycle. "
+            L"With a single window it walks clockwise from the top: top, top-right, right, "
+            L"bottom-right, bottom, bottom-left, left, top-left, then default size "
+            L"centred, and round again.", sWin);
+        Add(L"Right-click › Window Placement",
+            L"Every move key above as a menu item: the four halves and four quarters "
+            L"(Alt) and the one-step moves (Shift). Arrange All Instances lays out every visible qIV window on this "
+            L"monitor: Side by Side or Top and Bottom for 2, Three Columns or Three Rows "
+            L"for 3, Four Corners for 4, Grid for any number. Layouts that do not fit "
+            L"the number of open windows are greyed out. Each window keeps the slot "
+            L"nearest where it was; dedicated copies and windows hidden in the tray are "
+            L"left alone. Snapping or arranging leaves fullscreen first.", sWin);
         Add(L"Drag near screen edge",
             L"Releasing a window drag within " + NumI(Constants::WINDOW_SNAP_DISTANCE) +
             L" px of a screen edge snaps the window to that edge.", sWin);
@@ -724,7 +744,17 @@ namespace UI {
             L"instant. Extra running instances are closed.", sApp);
         Add(Ctrl(SC::SC_APP_HARD_QUIT),
             L"Hard quit — fully removes the process from memory.", sApp);
-        Add(Ctrl(SC::SC_APP_NEW_WINDOW), L"Open a new independent QIV window.", sApp);
+        Add(Ctrl(SC::SC_APP_NEW_WINDOW),
+            L"Open a new independent QIV window (also Shift+double-click, or "
+            L"right-click › New Instance). Holding Shift while launching qIV does the "
+            L"same from Explorer.", sApp);
+        Add(CtrlShift(SC::SC_SYNC_INSTANCES),
+            L"Sync Instances — one switch for every open qIV window. While it is on, "
+            L"next / previous, first / last, zoom, keyboard pan and rotate / flip pressed "
+            L"in any window happen in all of them, each in its own folder. A gold SYNC "
+            L"leads the top-right overlay. Also right-click › Window Placement › Sync "
+            L"Instances. A window opened with " + Ctrl(SC::SC_APP_NEW_WINDOW) +
+            L" while sync is on starts synced; sync is never saved.", sApp);
         Add(K(SC::SC_PANEL_DEDICATED_TOGGLE),
             L"Open the Dedicated panel: configure a named instance — its own images and "
             L"promotions folders, promotion pacing, monitor and slideshow options — then "

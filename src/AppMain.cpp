@@ -54,6 +54,8 @@ extern void UpdateOverlaysForCurrentImage(HWND hWnd);
 #include "MouseHandler.h"
 #include "Input/Command.h"
 #include "Input/TrayHandler.h"
+#include "Input/WindowArrange.h"         // WM_COPYDATA placement requests from other instances
+#include "Input/WindowSync.h"            // Sync Instances — actions from other instances
 #include "Dedicated/DedicatedInstance.h" // AppIconId — dedicated icon everywhere
 #include "Dedicated/DedicatedSettings.h" // DetectStartupMode — ini vs registry
 #include "Dedicated/DedicatedLists.h"    // image / promotion folder lists
@@ -141,6 +143,14 @@ LRESULT CALLBACK MainAppWndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM l
             default:
                 break;
         }
+    }
+
+    // Sync Instances — an action from another window. A registered message,
+    // so it cannot be a case label below. A failed registration returns 0; the
+    // != 0 test keeps WM_NULL from being taken for it.
+    if (message == WindowSync::Message() && message != 0) {
+        WindowSync::HandleMessage(hWnd, wParam);
+        return 0;
     }
 
     switch (message) {
@@ -253,6 +263,12 @@ LRESULT CALLBACK MainAppWndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM l
             } else if (cds->dwData == 2) {
                 ShowWindow(hWnd, SW_RESTORE);
                 SetForegroundWindow(hWnd);
+            } else if (cds->dwData == WindowArrange::COPYDATA_PLACE) {
+                // Another instance arranging the lot — see WindowArrange.h.
+                return WindowArrange::HandlePlaceRequest(hWnd, *cds);
+            } else if (cds->dwData == WindowArrange::COPYDATA_RESTORE) {
+                // …and the Ctrl+Alt+Space cycle putting them back.
+                return WindowArrange::HandleRestoreRequest(hWnd, *cds);
             }
             return TRUE;
         }
@@ -861,7 +877,7 @@ LRESULT CALLBACK MainAppWndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM l
             return 0;
 
         case WM_LBUTTONDBLCLK:
-            MouseHandler::HandleDoubleClick(hWnd);
+            MouseHandler::HandleDoubleClick(hWnd, wParam);
             return 0;
 
         case WM_CAPTURECHANGED: {
@@ -1555,6 +1571,14 @@ int WINAPI wWinMain(HINSTANCE hInstance, [[maybe_unused]] HINSTANCE hPrevInstanc
     // silently running on defaults with nowhere to save its settings.
     if (startupMode == Dedicated::StartupMode::NeedsSetup)
         uiManager.getDedicatedWindow().Show();
+
+    // Opened with Ctrl+N while Sync Instances was on: join it. Cleared at once
+    // so a copy THIS one opens later decides for itself (WindowSync.h).
+    if (GetEnvironmentVariableW(WindowSync::ENV_START_SYNCED, nullptr, 0) > 0) {
+        SetEnvironmentVariableW(WindowSync::ENV_START_SYNCED, nullptr);
+        app.syncInstances = true;
+        g_overlayManager.RefreshSyncIndicator(hWnd);
+    }
 
     MSG msg{};
     while (GetMessage(&msg, nullptr, 0, 0)) {

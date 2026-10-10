@@ -13,6 +13,7 @@
 #include "AppState.h"
 #include "Dedicated/DedicatedSettings.h" // SettingsUseFile — the Location item
 #include "Input/Command.h"
+#include "Input/WindowArrange.h" // instance count — which Arrange layouts are enabled
 #include "Overlays/OverlayManager.h"
 #include "Platform/Constants.h"
 #include "Platform/ConstantsStrings.h"
@@ -85,6 +86,28 @@ Command CommandForId(int id) {
         case Id::ID_SAVE_AS:         return Command::SaveImage;
         case Id::ID_EXPLORER:        return Command::ShowInExplorer;
         case Id::ID_NEXT_MONITOR:    return Command::MoveToNextMonitor;
+        case Id::ID_NEW_WINDOW:      return Command::NewWindow;
+        // The four halves are the Alt+A/D/W/S snaps — same command, not a copy.
+        case Id::ID_PLACE_LEFT:           return Command::SnapLeft;
+        case Id::ID_PLACE_RIGHT:          return Command::SnapRight;
+        case Id::ID_PLACE_TOP:            return Command::SnapTop;
+        case Id::ID_PLACE_BOTTOM:         return Command::SnapBottom;
+        case Id::ID_PLACE_TOP_LEFT:       return Command::SnapTopLeft;
+        case Id::ID_PLACE_TOP_RIGHT:      return Command::SnapTopRight;
+        case Id::ID_PLACE_BOTTOM_LEFT:    return Command::SnapBottomLeft;
+        case Id::ID_PLACE_BOTTOM_RIGHT:   return Command::SnapBottomRight;
+        case Id::ID_MOVE_LEFT:            return Command::MoveWindowLeft;
+        case Id::ID_MOVE_RIGHT:           return Command::MoveWindowRight;
+        case Id::ID_MOVE_UP:              return Command::MoveWindowUp;
+        case Id::ID_MOVE_DOWN:            return Command::MoveWindowDown;
+        case Id::ID_ARRANGE_SIDE_BY_SIDE: return Command::ArrangeSideBySide;
+        case Id::ID_ARRANGE_STACKED:      return Command::ArrangeStacked;
+        case Id::ID_ARRANGE_COLUMNS:      return Command::ArrangeColumns;
+        case Id::ID_ARRANGE_ROWS:         return Command::ArrangeRows;
+        case Id::ID_ARRANGE_CORNERS:      return Command::ArrangeCorners;
+        case Id::ID_ARRANGE_GRID:         return Command::ArrangeGrid;
+        case Id::ID_ARRANGE_CYCLE:        return Command::ArrangeCycle;
+        case Id::ID_SYNC_INSTANCES:       return Command::ToggleSyncInstances;
         case Id::ID_HELP:            return Command::ToggleHelp;
         case Id::ID_CLOSE_APP:       return Command::HideToTray;
         case Id::ID_CLOSE_PANELS:    return Command::CloseAllPanels;
@@ -660,6 +683,60 @@ static HMENU BuildBackupMenu() {
 // Build — THE menu. Both the tray icon and the main-window right-click show
 // exactly this, so behaviour can never diverge between the two.
 // =============================================================================
+// Window Placement: this window to a half, or every visible instance at once.
+// Every layout is always listed so the menu does not change shape; the ones
+// that do not fit the current count are greyed. Arrange re-checks the count
+// when picked, since a window may open or close while the menu is up.
+static HMENU BuildWindowPlacementMenu() {
+    HMENU m = CreatePopupMenu();
+    AppendMenuW(m, MF_STRING, Id::ID_PLACE_LEFT,   L"Left\tAlt+A");
+    AppendMenuW(m, MF_STRING, Id::ID_PLACE_RIGHT,  L"Right\tAlt+D");
+    AppendMenuW(m, MF_STRING, Id::ID_PLACE_TOP,    L"Top\tAlt+W");
+    AppendMenuW(m, MF_STRING, Id::ID_PLACE_BOTTOM, L"Bottom\tAlt+S");
+    AppendMenuW(m, MF_SEPARATOR, 0, nullptr);
+    AppendMenuW(m, MF_STRING, Id::ID_PLACE_TOP_LEFT,     L"Top Left\tAlt+Q");
+    AppendMenuW(m, MF_STRING, Id::ID_PLACE_TOP_RIGHT,    L"Top Right\tAlt+E");
+    AppendMenuW(m, MF_STRING, Id::ID_PLACE_BOTTOM_LEFT,  L"Bottom Left\tAlt+Z");
+    AppendMenuW(m, MF_STRING, Id::ID_PLACE_BOTTOM_RIGHT, L"Bottom Right\tAlt+C");
+    AppendMenuW(m, MF_SEPARATOR, 0, nullptr);
+    // The Shift nudges, one step per pick — listed so the keys are discoverable.
+    AppendMenuW(m, MF_STRING, Id::ID_MOVE_LEFT,  L"Move Left\tShift+A");
+    AppendMenuW(m, MF_STRING, Id::ID_MOVE_RIGHT, L"Move Right\tShift+D");
+    AppendMenuW(m, MF_STRING, Id::ID_MOVE_UP,    L"Move Up\tShift+W");
+    AppendMenuW(m, MF_STRING, Id::ID_MOVE_DOWN,  L"Move Down\tShift+S");
+    AppendMenuW(m, MF_SEPARATOR, 0, nullptr);
+
+    using WindowArrange::Layout;
+    const size_t n = WindowArrange::FindInstances().size();
+    auto item = [n](HMENU menu, int id, Layout layout, const wchar_t *label) {
+        const UINT state = WindowArrange::IsAvailable(layout, n) ? MF_ENABLED : MF_GRAYED;
+        AppendMenuW(menu, MF_STRING | state, id, label);
+    };
+    HMENU arr = CreatePopupMenu();
+    item(arr, Id::ID_ARRANGE_SIDE_BY_SIDE, Layout::SideBySide, L"Side by Side\t2 windows");
+    item(arr, Id::ID_ARRANGE_STACKED,      Layout::Stacked,    L"Top and Bottom\t2 windows");
+    AppendMenuW(arr, MF_SEPARATOR, 0, nullptr);
+    item(arr, Id::ID_ARRANGE_COLUMNS,      Layout::Columns,    L"Three Columns\t3 windows");
+    item(arr, Id::ID_ARRANGE_ROWS,         Layout::Rows,       L"Three Rows\t3 windows");
+    AppendMenuW(arr, MF_SEPARATOR, 0, nullptr);
+    item(arr, Id::ID_ARRANGE_CORNERS,      Layout::Corners,    L"Four Corners\t4 windows");
+    AppendMenuW(arr, MF_SEPARATOR, 0, nullptr);
+    item(arr, Id::ID_ARRANGE_GRID,         Layout::Grid,       L"Grid\t2+ windows");
+
+    const std::wstring title = L"Arrange All Instances (" + std::to_wstring(n) + L")";
+    AppendMenuW(m, MF_POPUP, reinterpret_cast<UINT_PTR>(arr), title.c_str());
+    // The key's next step: with 2+ windows the next layout or the restore, with
+    // one window the next position clockwise from the top.
+    AppendMenuW(m, MF_STRING, Id::ID_ARRANGE_CYCLE, L"Cycle Arrangement\tCtrl+Alt+Space");
+
+    // Enabled even with one window: switching it on first and then opening
+    // copies with Ctrl+N is a normal order, and they start synced.
+    AppendMenuW(m, MF_SEPARATOR, 0, nullptr);
+    AppendMenuW(m, MF_STRING | (app.syncInstances ? MF_CHECKED : MF_UNCHECKED),
+                Id::ID_SYNC_INSTANCES, L"Sync Instances\tCtrl+Shift+N");
+    return m;
+}
+
 HMENU Build(HWND hWnd) {
     using namespace UI::AppMenu::detail;
 
@@ -692,6 +769,7 @@ HMENU Build(HWND hWnd) {
     AppendMenuW(m, MF_STRING, Id::ID_EXPLORER,    L"Open File in Explorer\tL");
     AppendMenuW(m, MF_STRING, Id::ID_OPEN_WITH,   L"Open With…\tCtrl+Shift+O");
     AppendMenuW(m, MF_STRING, Id::ID_NEXT_MONITOR, L"Move to Next Monitor\tCtrl+M");
+    AppendMenuW(m, MF_POPUP, reinterpret_cast<UINT_PTR>(BuildWindowPlacementMenu()), L"Window Placement");
     AppendMenuW(m, MF_POPUP, reinterpret_cast<UINT_PTR>(BuildWallpaperMenu()), L"Set as Desktop Wallpaper");
     //Group
     AppendMenuW(m, MF_SEPARATOR, 0, nullptr);
@@ -715,6 +793,7 @@ HMENU Build(HWND hWnd) {
     AppendMenuW(m, MF_STRING, Id::ID_CLOSE_PANELS,   L"Close All Panels\tN");
     AppendMenuW(m, MF_STRING, Id::ID_RESTORE_PANELS, L"Restore All Panels\tN");
     AppendMenuW(m, MF_SEPARATOR, 0, nullptr);
+    AppendMenuW(m, MF_STRING, Id::ID_NEW_WINDOW,     L"New Instance\tCtrl+N");
     AppendMenuW(m, MF_STRING, Id::ID_HARD_QUIT,      L"Hard Quit\tCtrl+Q");
 
     return m;

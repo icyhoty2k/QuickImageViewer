@@ -95,6 +95,30 @@ namespace UI::AppMenu::Ids {
         ID_REMOTE_STREAM_IN,      // Ctrl+Alt+Enter   — bytes in
 
         ID_REMOTE_CLIENTS,        // open the My Clients panel      (Ctrl+F9)
+        ID_NEW_WINDOW,            // launch a second, independent instance (Ctrl+N)
+
+        // Window Placement submenu. The four halves are the Alt+A/D/W/S snaps;
+        // the Arrange rows lay out every visible instance of this app.
+        ID_PLACE_LEFT,
+        ID_PLACE_RIGHT,
+        ID_PLACE_TOP,
+        ID_PLACE_BOTTOM,
+        ID_PLACE_TOP_LEFT,        // Alt+Q / E / Z / C quarter snaps
+        ID_PLACE_TOP_RIGHT,
+        ID_PLACE_BOTTOM_LEFT,
+        ID_PLACE_BOTTOM_RIGHT,
+        ID_MOVE_LEFT,             // Shift+A / D / W / S nudges
+        ID_MOVE_RIGHT,
+        ID_MOVE_UP,
+        ID_MOVE_DOWN,
+        ID_ARRANGE_SIDE_BY_SIDE,
+        ID_ARRANGE_STACKED,
+        ID_ARRANGE_COLUMNS,
+        ID_ARRANGE_ROWS,
+        ID_ARRANGE_CORNERS,
+        ID_ARRANGE_GRID,
+        ID_ARRANGE_CYCLE,         // Ctrl+Alt+Space
+        ID_SYNC_INSTANCES,        // Ctrl+Shift+N — last scalar id, see the static_assert below
 
         // Contiguous blocks. Each resolves to its Command by offset, so a block
         // never needs one case per member — see CommandForId.
@@ -125,7 +149,7 @@ namespace UI::AppMenu::Ids {
     // walks one step closer to the first band. Adding the hundredth would land ON
     // ID_WALLPAPER_FIRST and turn a menu click into a wallpaper mode — silently,
     // because both sides are just ints. Fail the build instead.
-    static_assert(ID_REMOTE_CLIENTS < ID_WALLPAPER_FIRST,
+    static_assert(ID_SYNC_INSTANCES < ID_WALLPAPER_FIRST,
                   "the scalar viewer ids have grown into the wallpaper band");
 
     // ── Settings ids (< VIEWER_BASE) ────────────────────────────────────────

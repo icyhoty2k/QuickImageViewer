@@ -315,6 +315,21 @@ namespace Constants::Messages {
     constexpr const wchar_t *SNAP_BOTTOM_LEFT = L"Snap: Bottom-Left Quarter";
     constexpr const wchar_t *SNAP_BOTTOM_RIGHT = L"Snap: Bottom-Right Quarter";
 
+    // Window Placement → Arrange All Instances
+    constexpr const wchar_t *ARRANGE_DONE_PREFIX = L"Arranged ";      // + "3 windows"
+    constexpr const wchar_t *ARRANGE_NEEDS_PREFIX = L"This layout needs "; // + "4 windows, found 3"
+    // Ctrl+Alt+Space
+    constexpr const wchar_t *ARRANGE_CYCLE_PREFIX = L"Arrange: ";        // + layout name
+    constexpr const wchar_t *ARRANGE_RESTORED_PREFIX = L"Arrange: restored "; // + "2 of 3 windows"
+    constexpr const wchar_t *SNAP_CENTER = L"Snap: Center (default size)";
+
+    // Ctrl+Shift+N — Sync Instances
+    constexpr const wchar_t *SYNC_INSTANCES_ON = L"Sync Instances: On";   // + " (3 windows)"
+    constexpr const wchar_t *SYNC_INSTANCES_OFF = L"Sync Instances: Off";
+    // The marker leading the top-right overlay while sync is on, and its gold.
+    constexpr const wchar_t *OVERLAY_SYNC_BADGE = L"SYNC";
+    constexpr unsigned OVERLAY_SYNC_COLOR = 0xFFD700; // gold, 0xRRGGBB
+
     // Ctrl+Space — fill available screen space (work area minus visible panels) / restore
     constexpr const wchar_t *AUTOSIZE_TO_WORK_AREA = L"Fit to Screen";
     constexpr const wchar_t *AUTOSIZE_RESTORE = L"Default Size";

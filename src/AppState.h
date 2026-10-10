@@ -289,6 +289,9 @@ struct AppState {
     // Set once at startup from Dedicated::ResolveWindowClassName().
     std::wstring windowClassName = Constants::WINDOW_CLASS_NAME;
     bool isAlwaysOnTop = Constants::IS_ALWAYS_ON_TOP; // Ctrl+T / -awaysOnTop
+    // Ctrl+Shift+N — navigation/zoom/pan/rotate also run in every other
+    // instance (WindowSync.h). Runtime only, never saved.
+    bool syncInstances = false;
 
     // --- Mirroring to other instances (src/Rem_TCP_IP) ----------------------
     // F11: forward every mirrorable command to the connected targets.

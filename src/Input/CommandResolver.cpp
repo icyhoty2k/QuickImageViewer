@@ -175,6 +175,7 @@ Command InputManager::ResolveKeyboardKeys(UINT key, LPARAM lParam) {
 
         case Shortcuts::SC_NAV_NEXT_SPACE:
             if (ctrl && !alt && !shift) return Command::AutosizeToWorkArea;
+            if (ctrl && alt && !shift) return Command::ArrangeCycle; // SC_ARRANGE_CYCLE
             return shift ? Command::PrevImage : Command::NextImage;
 
         case Shortcuts::SC_NAV_SHOW_IN_EXPLORER: // 'L'
@@ -288,9 +289,11 @@ Command InputManager::ResolveKeyboardKeys(UINT key, LPARAM lParam) {
             if (ctrl) return Command::ToggleHistoryFull;
             return Command::ToggleHistory;
 
-        // --- 'N' — Ctrl+N new window, plain = toggle all panels (close ↔ restore) ---
+        // --- 'N' — Ctrl+N new window, Ctrl+Shift+N sync instances,
+        //           plain = toggle all panels (close ↔ restore) ---
         case Shortcuts::SC_PANEL_OVERLAY_TOGGLE: // 'N' (== SC_TOGGLE_ALL_PANELS)
             if (ctrl && !alt && !shift) return Command::NewWindow;
+            if (ctrl && shift && !alt) return Command::ToggleSyncInstances; // SC_SYNC_INSTANCES
             if (!ctrl && !alt && !shift) return Command::ToggleAllPanels;
             break;
 

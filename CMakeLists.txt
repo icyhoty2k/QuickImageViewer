@@ -145,6 +145,8 @@ set(SOURCES
         src/Input/CommandExecuter.cpp
         src/Input/CommandResolver.cpp
         src/Input/AppCommands.cpp
+        src/Input/WindowArrange.cpp
+        src/Input/WindowSync.cpp
         src/CmdArgsIO.cpp
         src/Dedicated/DedicatedInstance.cpp
         src/Dedicated/DedicatedWnd.cpp

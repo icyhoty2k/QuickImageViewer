@@ -39,6 +39,16 @@ namespace Shortcuts {
     // Ctrl+N  —  Spawn a new blank QIV window
     constexpr UINT SC_APP_NEW_WINDOW = 'N'; // requires ctrl
 
+    // Ctrl+Shift+N  —  Sync Instances: navigation, zoom, pan and rotate/flip
+    //                  run in every instance (WindowSync.h). Beside Ctrl+N
+    //                  because both are about the set of open windows.
+    constexpr UINT SC_SYNC_INSTANCES = 'N'; // requires ctrl+shift
+
+    // Ctrl+Alt+Space  —  cycle the window arrangement, then restore
+    //                    (WindowArrange::Cycle). Beside Ctrl+Space, the other
+    //                    "lay the window out on the screen" key.
+    constexpr UINT SC_ARRANGE_CYCLE = VK_SPACE; // requires ctrl+alt
+
     // N  —  Toggle all panels: close every floating panel + spawned DirWnd if any
     //       is visible, otherwise restore the set the last close hid (main window
     //       stays). Shares the 'N' key with Ctrl+N (new window), split by modifier.

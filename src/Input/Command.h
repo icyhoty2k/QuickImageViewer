@@ -258,6 +258,26 @@ enum class Command {
     SnapBottomLeft,
     SnapBottomRight,
 
+    // --- Arrange every visible instance of this app (Window Placement menu) ---
+    // Lays out all windows of THIS process's window class on the monitor the
+    // command came from — so Ctrl+N copies arrange together and a dedicated
+    // copy, which has its own class, is never moved by the main app. Each
+    // other instance places ITSELF on request (WindowArrange.h), so its own
+    // fullscreen/autosize state stays true. Local only: no table row.
+    ArrangeSideBySide, // 2 windows — left | right
+    ArrangeStacked,    // 2 windows — top / bottom
+    ArrangeColumns,    // 3 windows — three columns, 1/3 width each
+    ArrangeRows,       // 3 windows — three rows, 1/3 height each
+    ArrangeCorners,    // 4 windows — one per quarter
+    ArrangeGrid,       // 2+ windows — even grid, ceil(sqrt(n)) columns
+    // Ctrl+Alt+Space — 2+ windows: this count's layouts in turn, then restore
+    // (WindowArrange::Cycle). One window: the 4 halves, the 4 quarters, then
+    // default size centred, and round again.
+    ArrangeCycle,
+    // Ctrl+Shift+N — one switch for every instance: navigation, zoom, pan and
+    // rotate/flip then run in all of them (WindowSync.h). Local only.
+    ToggleSyncInstances,
+
     // --- Window resize (Shift+Numpad+/- and Shift++/-) ---
     ResizeWindowLarger,
     ResizeWindowSmaller,

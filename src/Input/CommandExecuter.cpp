@@ -22,6 +22,7 @@
 #include "../CMDArgs.h"
 #include <algorithm>
 #include <filesystem>
+#include <iterator> // std::size — the Ctrl+Alt+Space step table
 #include <numeric>
 #include <random>
 #include <cmath>
@@ -29,6 +30,8 @@
 #include <shlobj_core.h>
 #include <shtypes.h>
 #include "AppCommands.h"
+#include "WindowArrange.h" // snaps and Arrange All Instances share one placement path
+#include "WindowSync.h"    // Ctrl+Shift+N — forward actions to the other instances
 #include "TrayHandler.h"   // RestoreWindow — the way back for ToggleAppVisibility
 #include "UIManager.h"
 #include "Rem_TCP_IP/RemoteExec.h"    // ExecutePayload — the shared payload body
@@ -87,10 +90,82 @@ static void SnapWindowToZone(HWND hWnd, int zone) {
             break; // bottom-right quarter
         default: return;
     }
-    SetWindowPos(hWnd, nullptr, t.left, t.top,
-                 t.right - t.left, t.bottom - t.top,
-                 SWP_NOZORDER | SWP_NOACTIVATE | SWP_FRAMECHANGED);
-    InvalidateRect(hWnd, nullptr, FALSE);
+    // Through the shared placement, so a snap from fullscreen leaves fullscreen
+    // instead of shrinking a borderless topmost window that still claims it.
+    WindowArrange::PlaceSelf(hWnd, t);
+}
+
+// Ctrl+Alt+Space. With 2+ windows WindowArrange runs the group cycle; with one,
+// it hands back a step and the walk happens here: clockwise from the top —
+// top, top-right, right, bottom-right, bottom, bottom-left, left, top-left —
+// then default size centred on the monitor, and round again.
+static void CycleArrangement(HWND hWnd) {
+    const WindowArrange::CycleResult r = WindowArrange::Cycle(hWnd);
+    using Kind = WindowArrange::CycleResult::Kind;
+
+    if (r.kind == Kind::Single) {
+        struct Step { int zone; const wchar_t *msg; };
+        static constexpr Step STEPS[] = {
+            {2, Constants::Messages::SNAP_TOP},
+            {5, Constants::Messages::SNAP_TOP_RIGHT},
+            {1, Constants::Messages::SNAP_RIGHT},
+            {7, Constants::Messages::SNAP_BOTTOM_RIGHT},
+            {3, Constants::Messages::SNAP_BOTTOM},
+            {6, Constants::Messages::SNAP_BOTTOM_LEFT},
+            {0, Constants::Messages::SNAP_LEFT},
+            {4, Constants::Messages::SNAP_TOP_LEFT},
+        };
+        static_assert(std::size(STEPS) + 1 == WindowArrange::SINGLE_STEPS,
+                      "eight positions plus the centred default");
+
+        const size_t i = static_cast<size_t>(r.singleStep);
+        if (i < std::size(STEPS)) {
+            SnapWindowToZone(hWnd, STEPS[i].zone);
+            g_overlayManager.PostCenterMessage(hWnd, STEPS[i].msg);
+            return;
+        }
+
+        // The default size, centred — the same rect Ctrl+Space restores to.
+        MONITORINFO mi = {sizeof(mi)};
+        if (!GetMonitorInfo(MonitorFromWindow(hWnd, MONITOR_DEFAULTTONEAREST), &mi)) return;
+        const RECT &wa = mi.rcWork;
+        const int w = std::min(static_cast<int>(app.baseWidth * app.dpiScale),
+                               static_cast<int>(wa.right - wa.left));
+        const int h = std::min(static_cast<int>(app.baseHeight * app.dpiScale),
+                               static_cast<int>(wa.bottom - wa.top));
+        const LONG x = wa.left + (wa.right - wa.left - w) / 2;
+        const LONG y = wa.top + (wa.bottom - wa.top - h) / 2;
+        WindowArrange::PlaceSelf(hWnd, RECT{x, y, x + w, y + h});
+        g_overlayManager.PostCenterMessage(hWnd, Constants::Messages::SNAP_CENTER);
+        return;
+    }
+
+    const std::wstring counts = std::to_wstring(r.placed) + L" of " +
+                                std::to_wstring(r.found) + L" windows";
+    std::wstring msg;
+    if (r.kind == Kind::Restored)
+        msg = std::wstring(Constants::Messages::ARRANGE_RESTORED_PREFIX) + counts;
+    else
+        msg = std::wstring(Constants::Messages::ARRANGE_CYCLE_PREFIX) +
+              WindowArrange::LayoutName(r.layout) + L"  (" + counts + L")";
+    g_overlayManager.PostCenterMessage(hWnd, msg);
+}
+
+// Window Placement → Arrange All Instances. Reports on this window only; the
+// others were moved, not addressed.
+static void ArrangeInstances(HWND hWnd, WindowArrange::Layout layout) {
+    const WindowArrange::Result r = WindowArrange::Arrange(hWnd, layout);
+    std::wstring msg;
+    if (!WindowArrange::IsAvailable(layout, r.found)) {
+        const size_t need = WindowArrange::RequiredCount(layout);
+        msg = std::wstring(Constants::Messages::ARRANGE_NEEDS_PREFIX) +
+              (need == 0 ? L"2 or more" : std::to_wstring(need)) +
+              L" windows, found " + std::to_wstring(r.found);
+    } else {
+        msg = std::wstring(Constants::Messages::ARRANGE_DONE_PREFIX) +
+              std::to_wstring(r.placed) + L" of " + std::to_wstring(r.found) + L" windows";
+    }
+    g_overlayManager.PostCenterMessage(hWnd, msg);
 }
 
 // -----------------------------------------------------------------------------
@@ -385,6 +460,12 @@ void InputManager::ExecuteCommand(HWND hWnd, Command cmd) {
             return;
         }
     }
+
+    // Sync Instances — the other windows on THIS machine. Before the mirror
+    // gate, because F11's "forward only" return below must not also cut the
+    // local windows out; Broadcast itself checks the switch, the action list
+    // and the loop cut, so an unsynced viewer pays one bool test.
+    WindowSync::Broadcast(hWnd, cmd);
 
     // HasLiveTargets() before IsMirrorable(): mirroring stays switched on while
     // the screens are off — the sender threads reconnect and it resumes by
@@ -941,11 +1022,19 @@ void InputManager::ExecuteCommand(HWND hWnd, Command cmd) {
             std::wstring exePath = Persistence::Registry::GetExePathW();
             if (!exePath.empty()) {
                 SetEnvironmentVariableW(L"QIV_NEW_INSTANCE", L"1");
+                // A copy opened while sync is on joins it from the start.
+                SetEnvironmentVariableW(WindowSync::ENV_START_SYNCED,
+                                        app.syncInstances ? L"1" : nullptr);
                 ShellExecuteW(nullptr, L"open", exePath.c_str(), nullptr, nullptr, SW_SHOW);
                 SetEnvironmentVariableW(L"QIV_NEW_INSTANCE", nullptr);
+                SetEnvironmentVariableW(WindowSync::ENV_START_SYNCED, nullptr);
             }
             break;
         }
+
+        case Command::ToggleSyncInstances:
+            WindowSync::SetEnabled(hWnd, !app.syncInstances);
+            break;
 
         case Command::CloseAllPanels:
             uiManager.HideAllPanelWindows();
@@ -2054,6 +2143,31 @@ void InputManager::ExecuteCommand(HWND hWnd, Command cmd) {
         case Command::SnapBottomRight:
             SnapWindowToZone(hWnd, 7);
             g_overlayManager.PostCenterMessage(hWnd, Constants::Messages::SNAP_BOTTOM_RIGHT);
+            break;
+
+        // -----------------------------------------------------------------------
+        // Arrange every visible instance  (Window Placement menu)
+        // -----------------------------------------------------------------------
+        case Command::ArrangeSideBySide:
+            ArrangeInstances(hWnd, WindowArrange::Layout::SideBySide);
+            break;
+        case Command::ArrangeStacked:
+            ArrangeInstances(hWnd, WindowArrange::Layout::Stacked);
+            break;
+        case Command::ArrangeColumns:
+            ArrangeInstances(hWnd, WindowArrange::Layout::Columns);
+            break;
+        case Command::ArrangeRows:
+            ArrangeInstances(hWnd, WindowArrange::Layout::Rows);
+            break;
+        case Command::ArrangeCorners:
+            ArrangeInstances(hWnd, WindowArrange::Layout::Corners);
+            break;
+        case Command::ArrangeGrid:
+            ArrangeInstances(hWnd, WindowArrange::Layout::Grid);
+            break;
+        case Command::ArrangeCycle:
+            CycleArrangement(hWnd);
             break;
 
         // -----------------------------------------------------------------------

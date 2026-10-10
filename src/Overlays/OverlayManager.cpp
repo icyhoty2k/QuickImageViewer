@@ -198,6 +198,11 @@ void OverlayManager::BuildOuterBrush(ID2D1DeviceContext *ctx) {
     if (!ctx) return;
     m_pOuterBrush.Reset();
     ctx->CreateSolidColorBrush(OuterTextColor(), &m_pOuterBrush);
+    m_pAccentBrush.Reset();
+    ctx->CreateSolidColorBrush(D2D1::ColorF(Constants::Messages::OVERLAY_SYNC_COLOR),
+                               &m_pAccentBrush);
+    // Layouts carry the old brush as their drawing effect.
+    InvalidateLayouts();
 }
 
 void OverlayManager::ApplyTextColor() {
@@ -467,6 +472,7 @@ void OverlayManager::RefreshCullBadge() {
 }
 
 void OverlayManager::RebuildTopLeft() {
+    slotTopLeft.SetAccent(0, 0); // only the summary layout carries the SYNC marker
     wchar_t buf[32];
 
     // ── Summary: folder name alone on line 1, everything else on line 2 ──────
@@ -485,6 +491,8 @@ void OverlayManager::RebuildTopLeft() {
         text += CullBadge();
         text += m_infoFilename;
         text += L"  ";
+        // The SYNC marker leads the folded TOP_RIGHT text; keep it gold here too.
+        slotTopLeft.SetAccent(static_cast<UINT32>(text.length()), SyncAccentLength());
         text += BuildTopRightText();
         text += L"  ";
         wchar_t dimBuf[32];
@@ -560,7 +568,7 @@ void OverlayManager::ApplyLayoutMode(HWND /*hWnd*/) {
     // All three depend on the mode: TOP_LEFT switches between the summary block
     // and the plain index/filename, and BOT_LEFT moves the folder-name line.
     RebuildTopLeft();
-    slotTopRight.UpdateText(BuildTopRightText());
+    ApplyTopRightText();
     UpdateEffects();                                // BOT_LEFT
     UpdateDims(m_imgW, m_imgH, m_fileSizeBytes);    // BOT_RIGHT
 }
@@ -571,7 +579,34 @@ void OverlayManager::ApplyLayoutMode(HWND /*hWnd*/) {
 //
 // The figures are read live rather than cached: this is called on a zoom change
 // or a connect/disconnect, never per frame, so two atomic loads cost nothing.
+// Characters of the gold SYNC marker at the front of BuildTopRightText(), or 0.
+UINT32 OverlayManager::SyncAccentLength() const {
+    return app.syncInstances
+               ? static_cast<UINT32>(wcslen(Constants::Messages::OVERLAY_SYNC_BADGE))
+               : 0u;
+}
+
+// TOP_RIGHT's text and its gold range together, so they cannot disagree.
+void OverlayManager::ApplyTopRightText() {
+    slotTopRight.UpdateText(BuildTopRightText());
+    slotTopRight.SetAccent(0, SyncAccentLength());
+}
+
+void OverlayManager::RefreshSyncIndicator(HWND hWnd) {
+    RefreshRemoteIndicator(); // rebuilds TOP_RIGHT, and TOP_LEFT in summary mode
+    if (hWnd) InvalidateRect(hWnd, nullptr, FALSE);
+}
+
+// Sync Instances goes FIRST, ahead of the server dot: it changes what every
+// keypress does, so it is the one thing on this corner worth reading first.
 std::wstring OverlayManager::BuildTopRightText() const {
+    const std::wstring sync = app.syncInstances
+                                  ? std::wstring(Constants::Messages::OVERLAY_SYNC_BADGE) + L"  "
+                                  : std::wstring();
+    return sync + BuildTopRightBody();
+}
+
+std::wstring OverlayManager::BuildTopRightBody() const {
     const std::wstring zoom = Converters::FormatZoomPercent(m_zoom);
     if (!Remote::IsRunning()) return zoom;
 
@@ -615,7 +650,7 @@ std::wstring OverlayManager::BuildTopRightText() const {
 // TOP_RIGHT redrawn for a reason that is NOT somebody connecting — a compact
 // toggle, a layout change, a blink phase.
 void OverlayManager::RefreshRemoteIndicator() {
-    slotTopRight.UpdateText(BuildTopRightText());
+    ApplyTopRightText();
     // Summary mode folds TOP_RIGHT into TOP_LEFT's second line.
     if (app.overlayLayoutMode == 2)
         RebuildTopLeft();
@@ -691,7 +726,7 @@ void OverlayManager::UpdateZoom(float /*zoom*/, HWND /*hWnd*/) {
     if (newZoom == m_zoom && !slotTopRight.text.empty())
         return;
     m_zoom = newZoom;
-    slotTopRight.UpdateText(BuildTopRightText());
+    ApplyTopRightText();
     // Summary mode mirrors the zoom into TOP_LEFT's second line.
     if (app.overlayLayoutMode == 2)
         RebuildTopLeft();
@@ -1243,7 +1278,7 @@ void OverlayManager::RenderAll(ID2D1DeviceContext *ctx) const {
         const TextOverlay *ov = meta.overlay;
 
         IDWriteTextLayout *layout = const_cast<TextOverlay *>(ov)->GetLayout(
-                m_pDWriteFactory, meta.fmt);
+                m_pDWriteFactory, meta.fmt, m_pAccentBrush.Get());
         if (!layout) continue;
 
         const DWRITE_TEXT_METRICS &tm = ov->GetCachedMetrics();
@@ -1311,6 +1346,7 @@ void OverlayManager::OnDeviceLost() {
     m_pCenterBrush.Reset();
     m_pCenterBgBrush.Reset();
     m_pOuterBrush.Reset();
+    m_pAccentBrush.Reset();
     m_pBgBrush.Reset();
     m_centerBrushSet = false;
     InvalidateLayouts();

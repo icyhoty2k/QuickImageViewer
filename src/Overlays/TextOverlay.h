@@ -52,11 +52,24 @@ class TextOverlay {
             }
         }
 
+        // A character range drawn with its own brush (the `accent` passed to
+        // GetLayout) instead of the slot colour — the gold SYNC marker. Length
+        // 0 means none. Applied on layout rebuild, so changing it marks dirty.
+        void SetAccent(UINT32 start, UINT32 len) {
+            if (start != m_accentStart || len != m_accentLen) {
+                m_accentStart = start;
+                m_accentLen = len;
+                m_layoutDirty = true;
+            }
+        }
+
         // Returns the cached layout, (re)creating it if text or rect changed.
         // Returns nullptr if factory/format are null or CreateTextLayout fails.
         // Side effect: GetMetrics is called once on rebuild and cached.
+        // `accent` is the drawing effect (a D2D brush) for the SetAccent range.
         [[nodiscard]]
-        IDWriteTextLayout *GetLayout(IDWriteFactory *factory, IDWriteTextFormat *format) {
+        IDWriteTextLayout *GetLayout(IDWriteFactory *factory, IDWriteTextFormat *format,
+                                     IUnknown *accent = nullptr) {
             if (!m_layoutDirty && m_layout) return m_layout.Get();
             if (!factory || !format || text.empty()) return nullptr;
 
@@ -75,6 +88,10 @@ class TextOverlay {
                 return nullptr;
 
             ForceEmojiFaceOnIcons();
+
+            if (accent && m_accentLen > 0 && m_accentStart < text.length())
+                (void) m_layout->SetDrawingEffect(accent,
+                                                  DWRITE_TEXT_RANGE{m_accentStart, m_accentLen});
 
             m_layout->GetMetrics(&m_cachedMetrics);
             m_layoutDirty = false;
@@ -131,6 +148,8 @@ class TextOverlay {
         Microsoft::WRL::ComPtr<IDWriteTextLayout> m_layout;
         DWRITE_TEXT_METRICS m_cachedMetrics{};
         bool m_layoutDirty = true;
+        UINT32 m_accentStart = 0;
+        UINT32 m_accentLen = 0;
 
         static bool RectsAreDifferent(const D2D1_RECT_F &a, const D2D1_RECT_F &b) {
             return a.left != b.left || a.top != b.top ||

@@ -39,5 +39,5 @@ namespace MouseHandler {
 
     void HandleMouseHWheel(HWND hWnd, WPARAM wParam, LPARAM lParam);
 
-    void HandleDoubleClick(HWND hWnd);
+    void HandleDoubleClick(HWND hWnd, WPARAM wParam);
 }
