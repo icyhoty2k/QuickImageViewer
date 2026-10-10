@@ -21,13 +21,53 @@ jobs:
           sed -i "s/\"dateModified\": \"[0-9]\{4\}-[0-9]\{2\}-[0-9]\{2\}\"/\"dateModified\": \"$TODAY\"/" docs/index.html
           echo "dateModified → $TODAY"
 
+      # README badge data. The live shields.io GitHub badges (downloads, last
+      # commit) go "invalid" whenever shields' shared GitHub API quota runs dry,
+      # and GitHub's image proxy then caches the error. These files are read by
+      # shields' /endpoint badge instead, so the numbers come from THIS run's
+      # token and the date from the commit just pushed. An unreachable API
+      # keeps the previous files rather than writing a broken badge.
+      - name: Write README badge data
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          mkdir -p docs/badges
+          human='def h: if . >= 1000000 then "\((./100000|floor)/10)M" elif . >= 1000 then "\((./100|floor)/10)k" else tostring end;'
+
+          if rel=$(curl -fsSL -H "Authorization: Bearer $GH_TOKEN" \
+                     -H "Accept: application/vnd.github+json" \
+                     "https://api.github.com/repos/${{ github.repository }}/releases?per_page=100"); then
+            total=$(jq '[.[].assets[]?.download_count] | add // 0' <<<"$rel")
+            latest=$(jq '[.[] | select((.prerelease or .draft) | not)][0] // {} | [.assets[]?.download_count] | add // 0' <<<"$rel")
+            jq -n --argjson n "$total" "$human"'{schemaVersion:1, label:"downloads", message:($n|h), color:"1f6feb"}' \
+              > docs/badges/downloads.json
+            jq -n --argjson n "$latest" "$human"'{schemaVersion:1, label:"latest release", message:($n|h), color:"1f6feb"}' \
+              > docs/badges/downloads-latest.json
+            echo "downloads $total, latest release $latest"
+          else
+            echo "::warning::GitHub API unreachable - keeping the previous download badges."
+          fi
+
+          jq -n --arg d "$(git log -1 --format=%cs)" \
+            '{schemaVersion:1, label:"last commit", message:$d, color:"d29922"}' \
+            > docs/badges/last-commit.json
+
       - name: Commit if changed
         run: |
           # Repository owner, not github-actions[bot] — a bot author shows up in
           # the Contributors sidebar. See the same note in release.yml.
           git config user.name "icyhoty2k"
           git config user.email "icyhoty2k@gmail.com"
-          git diff --quiet docs/index.html || git commit -am "chore: update dateModified to $(date -u +%Y-%m-%d) [skip ci]"
+          git add docs/index.html docs/badges
+          if git diff --cached --quiet; then
+            echo "Nothing changed."
+            exit 0
+          fi
+          git commit -m "chore: update dateModified and README badges [skip ci]"
+          # refresh-stats.yml and release.yml push to main too; rebase over
+          # them instead of failing (they touch different files).
+          git pull --rebase origin main
           git push
 
       - name: Notify IndexNow

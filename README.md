@@ -21,13 +21,13 @@ remote control, a second screen, or a **photo frame your PC drives** — as many
 once as you have devices lying around.
 
 [![Latest release](https://img.shields.io/github/v/release/icyhoty2k/QuickImageViewer?style=for-the-badge&logo=github&label=release&color=2ea44f)](https://github.com/icyhoty2k/QuickImageViewer/releases/latest)
-[![Downloads](https://img.shields.io/github/downloads/icyhoty2k/QuickImageViewer/total?style=for-the-badge&color=1f6feb)](https://github.com/icyhoty2k/QuickImageViewer/releases)
+[![Downloads](https://img.shields.io/endpoint?url=https%3A%2F%2Fraw.githubusercontent.com%2Ficyhoty2k%2FQuickImageViewer%2Fmain%2Fdocs%2Fbadges%2Fdownloads.json&style=for-the-badge)](https://github.com/icyhoty2k/QuickImageViewer/releases)
 [![Windows 10 | 11](https://img.shields.io/badge/Windows-10%20%7C%2011-0078D6?style=for-the-badge&logo=windows&logoColor=white)](#download)
 [![Licence AGPLv3](https://img.shields.io/badge/licence-AGPLv3-d29922?style=for-the-badge)](LICENSE)
 [![Stars](https://img.shields.io/github/stars/icyhoty2k/QuickImageViewer?style=for-the-badge&color=8957e5)](https://github.com/icyhoty2k/QuickImageViewer/stargazers)
 [![Android companion app](https://img.shields.io/badge/companion%20app-Android-3DDC84?style=for-the-badge&logo=android&logoColor=white)](#qiv-remote--the-android-app)
-[![Downloads of the latest release](https://img.shields.io/github/downloads/icyhoty2k/QuickImageViewer/latest/total?style=for-the-badge&logo=github&label=latest%20release&color=1f6feb)](https://github.com/icyhoty2k/QuickImageViewer/releases/latest)
-[![Last commit](https://img.shields.io/github/last-commit/icyhoty2k/QuickImageViewer?style=for-the-badge&logo=git&logoColor=white&color=d29922)](https://github.com/icyhoty2k/QuickImageViewer/commits)
+[![Downloads of the latest release](https://img.shields.io/endpoint?url=https%3A%2F%2Fraw.githubusercontent.com%2Ficyhoty2k%2FQuickImageViewer%2Fmain%2Fdocs%2Fbadges%2Fdownloads-latest.json&style=for-the-badge&logo=github)](https://github.com/icyhoty2k/QuickImageViewer/releases/latest)
+[![Last commit](https://img.shields.io/endpoint?url=https%3A%2F%2Fraw.githubusercontent.com%2Ficyhoty2k%2FQuickImageViewer%2Fmain%2Fdocs%2Fbadges%2Flast-commit.json&style=for-the-badge&logo=git&logoColor=white)](https://github.com/icyhoty2k/QuickImageViewer/commits)
 [![Commit activity](https://img.shields.io/github/commit-activity/m/icyhoty2k/QuickImageViewer?style=for-the-badge&label=commits%2Fmonth&color=2ea44f)](https://github.com/icyhoty2k/QuickImageViewer/pulse)
 [![Open issues](https://img.shields.io/github/issues/icyhoty2k/QuickImageViewer?style=for-the-badge&color=d1242f)](https://github.com/icyhoty2k/QuickImageViewer/issues)
 [![Code size](https://img.shields.io/github/languages/code-size/icyhoty2k/QuickImageViewer?style=for-the-badge&color=8957e5)](https://github.com/icyhoty2k/QuickImageViewer)
