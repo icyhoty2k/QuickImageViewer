@@ -92,6 +92,11 @@ linked in. Unblock it if SmartScreen asks, put it anywhere, run it — settings 
 in the registry (or an `.ini` beside the EXE with `-config`), and nothing else is
 written to your machine unless you switch logging on. To remove qIV, delete the file.
 
+**Older PC?** `QuickImageViewer.exe` is built for processors with AVX2 — Intel Core 4th
+generation, AMD Ryzen, or newer — and says so if yours is not one. Every release also
+carries **`QuickImageViewer-LegacyCPU.exe`**: the same program, built to start on any
+64-bit processor.
+
 ---
 
 ## Format Support

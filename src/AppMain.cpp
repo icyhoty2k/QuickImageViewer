@@ -1104,6 +1104,10 @@ LRESULT CALLBACK MainAppWndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM l
 //////////////////////////////////////////////////////
 //////////////////// Main entry point /////////////////
 ////////////////////////////////////////////////////////
+// The normal edition is compiled /arch:AVX2 and would crash on the first AVX2
+// instruction, so it checks up front and says so. The legacy-CPU edition
+// (QIV_LEGACY_CPU) is built for the x64 baseline and has nothing to check.
+#if !defined(QIV_LEGACY_CPU)
 static bool HasAVX2Support() {
     int cpu[4] = {};
     __cpuid(cpu, 1);
@@ -1113,6 +1117,7 @@ static bool HasAVX2Support() {
     __cpuidex(cpu, 7, 0);
     return (cpu[1] & (1 << 5)) != 0; // EBX bit 5 = AVX2
 }
+#endif
 
 int WINAPI wWinMain(HINSTANCE hInstance, [[maybe_unused]] HINSTANCE hPrevInstance, [[maybe_unused]] PWSTR pCmdLine, int nCmdShow) {
     // FIRST STATEMENT IN THE PROGRAM, before the CPU check and before OLE.
@@ -1120,16 +1125,19 @@ int WINAPI wWinMain(HINSTANCE hInstance, [[maybe_unused]] HINSTANCE hPrevInstanc
     // qIV was in until now — see CrashHandler.h.
     Platform::Crash::Install();
 
+#if !defined(QIV_LEGACY_CPU)
     if (!HasAVX2Support()) {
         TaskDialog(nullptr, nullptr,
                    L"QuickImageViewer — CPU not supported",
-                   L"AVX2 instructions are required",
-                   L"Your CPU does not support AVX2 instructions.\n\n"
-                   L"QIV requires a processor with AVX2 support\n"
-                   L"(Intel Core 4th gen / AMD Ryzen or newer).",
+                   L"This edition needs AVX2",
+                   L"Your CPU does not support AVX2 instructions, which this build of "
+                   L"qIV is optimised for (Intel Core 4th gen / AMD Ryzen or newer).\n\n"
+                   L"Download QuickImageViewer-LegacyCPU.exe from the same release "
+                   L"instead — the same program, built to run on older processors.",
                    TDCBF_OK_BUTTON, TD_ERROR_ICON, nullptr);
         return 1;
     }
+#endif
 
     // COM IS NOT INITIALISED HERE. It moved below the single-instance check —
     // see the note there. Nothing between this point and that check touches COM.

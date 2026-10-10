@@ -220,5 +220,8 @@ jobs:
         with:
           identifier: IcyHotY2K.QuickImageViewer
           token: ${{ secrets.WINGET_TOKEN }}
-          installers-regex: '\.exe$'
+          # The normal exe only. A release can also carry
+          # QuickImageViewer-LegacyCPU.exe; '\.exe$' would hand WinGet two
+          # installers for one architecture.
+          installers-regex: '(^|/)QuickImageViewer\.exe$'
           release-tag: ${{ steps.rel.outputs.tag }}

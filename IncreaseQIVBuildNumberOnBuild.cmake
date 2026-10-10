@@ -13,6 +13,7 @@
 #                  wiping the build directory (which is a ramdisk here)
 #   OUTPUT_HEADER  generated header, written into the BUILD tree
 #   SKIP_MARKER    if this file exists, DO NOT increment — see below
+#   NO_INCREMENT   ON = never increment (the legacy-CPU edition, see below)
 #
 # ---------------------------------------------------------------------------
 # SKIPPING THE INCREMENT (the "Run" case)
@@ -58,6 +59,13 @@ if (EXISTS "${COUNTER_FILE}")
     if (NOT _counter MATCHES "^[0-9]+$")
         set(_counter 0)
     endif ()
+endif ()
+
+# NO_INCREMENT: the legacy-CPU edition (QIV_LEGACY_CPU) is a second build of
+# the SAME release, made after the normal one. It must carry that release's
+# number, not the next one, so it reads the counter and never bumps it.
+if (DEFINED NO_INCREMENT AND NO_INCREMENT)
+    set(_skip TRUE)
 endif ()
 
 if (NOT _skip)

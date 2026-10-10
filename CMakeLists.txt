@@ -54,6 +54,27 @@ set(CMAKE_CXX_SCAN_FOR_MODULES OFF)
 # far from its cause.
 option(QIV_STATIC_RUNTIME "Statically link the MSVC C/C++ runtime (/MT instead of /MD). Required for any published binary; the /MT openjp2 it needs is vendored in libs/lib/static-mt." OFF)
 
+# --- Legacy-CPU edition -----------------------------------------------------
+# The published exe is compiled /arch:AVX2 and refuses to start without it —
+# which shuts out every CPU before Intel Haswell / AMD Excavator (2013-15), and
+# the Pentium and Celeron parts that shipped without AVX until about 2020.
+#
+# ON builds the same program for the x64 baseline (SSE2, no /arch flag), drops
+# the AVX2 startup gate, and names the output QuickImageViewer-LegacyCPU.exe so
+# it can sit beside the normal exe on a release. Rendering is Direct2D on the
+# GPU and decoding is mostly WIC, so the cost is in qIV's own CPU loops only.
+#
+# Publish it with the static runtime too, from its own build directory:
+#
+#     cmake -B build-legacy -DCMAKE_BUILD_TYPE=Release -DQIV_STATIC_RUNTIME=ON -DQIV_LEGACY_CPU=ON
+#
+# Same window class, settings and registry as the normal exe — only the file
+# name differs, and only a name containing "dedicated" changes how a copy
+# behaves — so the two editions are interchangeable on one machine.
+option(QIV_LEGACY_CPU "Build for the x64 baseline (no AVX2) as QuickImageViewer-LegacyCPU.exe, for older processors." OFF)
+# Builds BOTH editions in one go, with one build number — see step 9 at the end.
+option(QIV_BUILD_BOTH_EDITIONS "Also build QuickImageViewer-LegacyCPU.exe, with the same build number, beside QuickImageViewer.exe." OFF)
+
 # --- Fast edit-build-run iteration ---------------------------------------
 # The link, not the compile, is what a rebuild-to-test loop actually pays for
 # here: BuildNumber.h is rewritten every build, so every build relinks, and a
@@ -104,6 +125,7 @@ add_custom_target(QIV_IncreaseBuildNumber ALL
         -DCOUNTER_FILE=${QIV_BUILD_COUNTER}
         -DOUTPUT_HEADER=${QIV_BUILD_HEADER}
         -DSKIP_MARKER=${QIV_SKIP_MARKER}
+        -DNO_INCREMENT=${QIV_LEGACY_CPU}
         -P ${CMAKE_CURRENT_SOURCE_DIR}/IncreaseQIVBuildNumberOnBuild.cmake
         BYPRODUCTS ${QIV_BUILD_HEADER}
         COMMENT "Incrementing build number"
@@ -221,6 +243,13 @@ set_source_files_properties(
 # WIN32 implicitly handles /SUBSYSTEM:WINDOWS
 add_executable(QuickImageViewer WIN32 ${SOURCES})
 
+if (QIV_LEGACY_CPU)
+    # Its own file name, so both editions can be attached to one release, and a
+    # define that drops the AVX2 startup gate (AppMain.cpp).
+    set_target_properties(QuickImageViewer PROPERTIES OUTPUT_NAME "QuickImageViewer-LegacyCPU")
+    target_compile_definitions(QuickImageViewer PRIVATE QIV_LEGACY_CPU=1)
+endif ()
+
 # Guarantees the counter is bumped and the header rewritten BEFORE anything that
 # includes it is compiled.
 add_dependencies(QuickImageViewer QIV_IncreaseBuildNumber)
@@ -315,7 +344,9 @@ target_compile_options(QuickImageViewer PRIVATE
         $<$<CONFIG:Release>:/O2>         # Maximize speed (implies /Ot)
         $<$<CONFIG:Release>:/Oi>         # Enable intrinsic functions
         $<$<CONFIG:Release>:/fp:fast>    # Fast floating-point math
-        $<$<CONFIG:Release>:/arch:AVX2>  # Hardware acceleration
+        # Hardware acceleration — not in the legacy-CPU edition, which stays on
+        # the x64 baseline (SSE2) so it starts on any 64-bit processor.
+        $<$<AND:$<CONFIG:Release>,$<NOT:$<BOOL:${QIV_LEGACY_CPU}>>>:/arch:AVX2>
         $<$<CONFIG:Release>:/Gw>         # Optimize global data
         $<$<CONFIG:Release>:/Gy>         # Function-level linking
         $<$<CONFIG:Release>:/GF>         # Pool identical string literals
@@ -546,6 +577,42 @@ add_custom_command(
         COMMAND ${CMAKE_COMMAND} -E echo "--------------------------------------------------------"
         VERBATIM
 )
+
+# 9. Both editions from one build (QIV_BUILD_BOTH_EDITIONS)
+#
+# A release carries QuickImageViewer.exe AND QuickImageViewer-LegacyCPU.exe with
+# the SAME build number. This build bumps the counter once, for the normal exe;
+# the legacy one is then configured and built in a nested tree under this one —
+# QIV_LEGACY_CPU never increments, so it reads the number just written — and
+# copied beside the normal exe, so the folder holds both files to upload.
+#
+# A nested build rather than a second target here: the legacy edition differs in
+# one compile flag, one define and its file name, and a second copy of every
+# target setting above is how two editions would slowly stop matching.
+if (QIV_BUILD_BOTH_EDITIONS AND NOT QIV_LEGACY_CPU)
+    set(QIV_LEGACY_DIR "${CMAKE_BINARY_DIR}/legacy-cpu")
+    add_custom_target(QIV_LegacyEdition ALL
+            COMMAND ${CMAKE_COMMAND}
+                -S ${CMAKE_CURRENT_SOURCE_DIR} -B ${QIV_LEGACY_DIR}
+                -G ${CMAKE_GENERATOR}
+                -DCMAKE_MAKE_PROGRAM=${CMAKE_MAKE_PROGRAM}
+                -DCMAKE_C_COMPILER=${CMAKE_C_COMPILER}
+                -DCMAKE_CXX_COMPILER=${CMAKE_CXX_COMPILER}
+                -DCMAKE_BUILD_TYPE=${CMAKE_BUILD_TYPE}
+                -DQIV_STATIC_RUNTIME=${QIV_STATIC_RUNTIME}
+                -DQIV_LEGACY_CPU=ON
+                -DQIV_BUILD_BOTH_EDITIONS=OFF
+                -DQIV_BUILD_TESTS=OFF
+            COMMAND ${CMAKE_COMMAND} --build ${QIV_LEGACY_DIR} --target QuickImageViewer
+            COMMAND ${CMAKE_COMMAND} -E copy_if_different
+                ${QIV_LEGACY_DIR}/QuickImageViewer-LegacyCPU.exe
+                $<TARGET_FILE_DIR:QuickImageViewer>
+            COMMENT "Building the legacy-CPU edition (same build number)"
+            USES_TERMINAL
+            VERBATIM)
+    # After the normal exe, so the counter has already been bumped.
+    add_dependencies(QIV_LegacyEdition QuickImageViewer)
+endif ()
 
 # =============================================================================
 # Unit tests — a SECOND, tiny target. `ctest` in the build directory runs it.

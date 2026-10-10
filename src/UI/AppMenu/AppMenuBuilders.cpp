@@ -759,7 +759,13 @@ HMENU Build(HWND hWnd) {
     AppendMenuW(m, MF_POPUP,
                 reinterpret_cast<UINT_PTR>(BuildTcpIpMenu()), L"TCP / IP");
     // Help
+#if defined(QIV_LEGACY_CPU)
+    // Says which edition is running. Not in APP_VERSION itself: that string
+    // also travels to qIV Remote, which parses it.
+    const std::wstring help = std::wstring(L"Help v") + Constants::APP_VERSION + L" (Legacy CPU)\tF1";
+#else
     const std::wstring help = std::wstring(L"Help v") + Constants::APP_VERSION + L"\tF1";
+#endif
     AppendMenuW(m, MF_STRING, Id::ID_HELP, help.c_str());
 
     AppendMenuW(m, MF_SEPARATOR, 0, nullptr);
