@@ -3,6 +3,13 @@ name: Update dateModified
 on:
   push:
     branches: [main]
+  # A new release starts the "latest release" download count again at zero,
+  # and release.yml's own metadata commit is pushed with GITHUB_TOKEN, which
+  # never triggers another workflow — so without this the badge kept showing
+  # the previous release's count until the next manual push.
+  release:
+    types: [published]
+  workflow_dispatch:
 
 jobs:
   update-date:
@@ -13,6 +20,9 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
+          # main, not the event's ref: a release event checks out the TAG,
+          # detached, and the commit below could not be pushed from there.
+          ref: main
           token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Stamp today's date into docs/index.html
