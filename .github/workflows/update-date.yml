@@ -75,10 +75,18 @@ jobs:
             exit 0
           fi
           git commit -m "chore: update dateModified and README badges [skip ci]"
-          # refresh-stats.yml and release.yml push to main too; rebase over
-          # them instead of failing (they touch different files).
-          git pull --rebase origin main
-          git push
+          # refresh-stats.yml and release.yml push to main too, and on a release
+          # this job starts in the SAME second as release.yml — its metadata
+          # commit landed between our pull and our push on the first release
+          # run. Rebase and retry instead of failing; they touch other files.
+          for attempt in 1 2 3 4 5; do
+            git pull --rebase origin main
+            if git push; then exit 0; fi
+            echo "Push rejected (attempt $attempt) - main moved; retrying."
+            sleep $((attempt * 5))
+          done
+          echo "::error::Could not push after 5 attempts."
+          exit 1
 
       - name: Notify IndexNow
         run: |
