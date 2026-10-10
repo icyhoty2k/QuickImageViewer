@@ -584,14 +584,23 @@ add_custom_command(
 # the SAME build number. This build bumps the counter once, for the normal exe;
 # the legacy one is then configured and built in a nested tree under this one —
 # QIV_LEGACY_CPU never increments, so it reads the number just written — and
-# copied beside the normal exe, so the folder holds both files to upload.
+# copied beside the normal exe, so the folder holds both files to upload. The
+# counter was bumped before the normal exe compiled, so the nested build — run
+# after it links — reads the same number.
 #
 # A nested build rather than a second target here: the legacy edition differs in
 # one compile flag, one define and its file name, and a second copy of every
 # target setting above is how two editions would slowly stop matching.
 if (QIV_BUILD_BOTH_EDITIONS AND NOT QIV_LEGACY_CPU)
     set(QIV_LEGACY_DIR "${CMAKE_BINARY_DIR}/legacy-cpu")
-    add_custom_target(QIV_LegacyEdition ALL
+    # POST_BUILD on the exe itself, not a separate ALL target: CLion's Build
+    # builds the run configuration's target only, so an extra target was never
+    # reached. The exe relinks on every build (the build number changes), so
+    # this runs every time too.
+    add_custom_command(
+            TARGET QuickImageViewer
+            POST_BUILD
+            COMMAND ${CMAKE_COMMAND} -E echo "Building the legacy-CPU edition (same build number)"
             COMMAND ${CMAKE_COMMAND}
                 -S ${CMAKE_CURRENT_SOURCE_DIR} -B ${QIV_LEGACY_DIR}
                 -G ${CMAKE_GENERATOR}
@@ -607,11 +616,7 @@ if (QIV_BUILD_BOTH_EDITIONS AND NOT QIV_LEGACY_CPU)
             COMMAND ${CMAKE_COMMAND} -E copy_if_different
                 ${QIV_LEGACY_DIR}/QuickImageViewer-LegacyCPU.exe
                 $<TARGET_FILE_DIR:QuickImageViewer>
-            COMMENT "Building the legacy-CPU edition (same build number)"
-            USES_TERMINAL
             VERBATIM)
-    # After the normal exe, so the counter has already been bumped.
-    add_dependencies(QIV_LegacyEdition QuickImageViewer)
 endif ()
 
 # =============================================================================
