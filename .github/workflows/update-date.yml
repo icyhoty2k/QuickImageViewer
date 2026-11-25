@@ -51,6 +51,12 @@ jobs:
         run: |
           set -euo pipefail
           mkdir -p docs/badges
+          # First: the download block below may stop early (exit 0) to keep the
+          # previous counts, and must not take this badge with it.
+          jq -n --arg d "$(git log -1 --format=%cs)" \
+            '{schemaVersion:1, label:"last commit", message:$d, color:"d29922"}' \
+            > docs/badges/last-commit.json
+
           human='def h: if . >= 1000000 then "\((./100000|floor)/10)M" elif . >= 1000 then "\((./100|floor)/10)k" else tostring end;'
 
           if rel=$(curl -fsSL -H "Authorization: Bearer $GH_TOKEN" \
@@ -58,18 +64,46 @@ jobs:
                      "https://api.github.com/repos/${{ github.repository }}/releases?per_page=100"); then
             total=$(jq '[.[].assets[]?.download_count] | add // 0' <<<"$rel")
             latest=$(jq '[.[] | select((.prerelease or .draft) | not)][0] // {} | [.assets[]?.download_count] | add // 0' <<<"$rel")
+            tag=$(jq -r '[.[] | select((.prerelease or .draft) | not)][0].tag_name // ""' <<<"$rel")
+
+            # SourceForge mirror (sourceforge-publish.yml uploads every release
+            # into a folder named after its tag). Winget needs nothing extra: its
+            # manifest points at the GitHub asset, so those are counted above.
+            # Public stats API, no key. If SourceForge is down, keep the previous
+            # badges rather than publish a total that suddenly drops.
+            sf="https://sourceforge.net/projects/quickimageviewer/files"
+            range="start_date=2020-01-01&end_date=$(date -u +%Y-%m-%d)"
+            if ! sf_total=$(curl -fsSL --max-time 30 "$sf/stats/json?$range" | jq -e '.total'); then
+              echo "::warning::SourceForge stats unreachable - keeping the previous download badges."
+              exit 0
+            fi
+            # The newest tag's folder 404s until its SourceForge upload finishes:
+            # that is a real 0, any other failure is not.
+            code=$(curl -sSL --max-time 30 -o sf_latest.json -w '%{http_code}' "$sf/$tag/stats/json?$range" || echo 000)
+            if [ "$code" = 200 ]; then
+              sf_latest=$(jq -e '.total' sf_latest.json)
+            elif [ "$code" = 404 ]; then
+              sf_latest=0
+            else
+              echo "::warning::SourceForge stats for $tag returned $code - keeping the previous download badges."
+              rm -f sf_latest.json
+              exit 0
+            fi
+            rm -f sf_latest.json
+            echo "GitHub: downloads $total, latest $latest; SourceForge: downloads $sf_total, $tag $sf_latest"
+            total=$((total + sf_total))
+            latest=$((latest + sf_latest))
+
             jq -n --argjson n "$total" "$human"'{schemaVersion:1, label:"downloads", message:($n|h), color:"1f6feb"}' \
               > docs/badges/downloads.json
-            jq -n --argjson n "$latest" "$human"'{schemaVersion:1, label:"latest release", message:($n|h), color:"1f6feb"}' \
+            # The label names the version: a bare "latest release | 762" reads as
+            # if 762 were the version, not the download count.
+            jq -n --argjson n "$latest" --arg t "$tag" "$human"'{schemaVersion:1, label:"\($t) downloads", message:($n|h), color:"1f6feb"}' \
               > docs/badges/downloads-latest.json
             echo "downloads $total, latest release $latest"
           else
             echo "::warning::GitHub API unreachable - keeping the previous download badges."
           fi
-
-          jq -n --arg d "$(git log -1 --format=%cs)" \
-            '{schemaVersion:1, label:"last commit", message:$d, color:"d29922"}' \
-            > docs/badges/last-commit.json
 
       - name: Commit if changed
         run: |
