@@ -9,6 +9,12 @@ on:
   # the previous release's count until the next manual push.
   release:
     types: [published]
+  # Downloads happen without any push: after v3.2.0.452 nothing reached main
+  # for weeks, so both download badges stayed frozen (latest release at 0
+  # while it had 748). The daily run refreshes only the badge data — it does
+  # not stamp dateModified, and commits only when a number actually moved.
+  schedule:
+    - cron: '37 5 * * *'
   workflow_dispatch:
 
 jobs:
@@ -26,6 +32,8 @@ jobs:
           token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Stamp today's date into docs/index.html
+        # Not on the schedule: the page did not change, only the counters did.
+        if: github.event_name != 'schedule'
         run: |
           TODAY=$(date -u +%Y-%m-%d)
           sed -i "s/\"dateModified\": \"[0-9]\{4\}-[0-9]\{2\}-[0-9]\{2\}\"/\"dateModified\": \"$TODAY\"/" docs/index.html
@@ -89,6 +97,7 @@ jobs:
           exit 1
 
       - name: Notify IndexNow
+        if: github.event_name != 'schedule'
         run: |
           curl -s -o /dev/null -w "%{http_code}" -X POST "https://api.indexnow.org/IndexNow" \
             -H "Content-Type: application/json; charset=utf-8" \
