@@ -66,6 +66,18 @@ jobs:
             latest=$(jq '[.[] | select((.prerelease or .draft) | not)][0] // {} | [.assets[]?.download_count] | add // 0' <<<"$rel")
             tag=$(jq -r '[.[] | select((.prerelease or .draft) | not)][0].tag_name // ""' <<<"$rel")
 
+            # What users download, not GitHub's "code size" (bytes of source in
+            # the repo, which said 5.4 MiB while the EXE was 9.8). Written before
+            # SourceForge is asked, so an outage there cannot hold it back.
+            exe=$(jq '[.[] | select((.prerelease or .draft) | not)][0].assets // [] | map(select(.name == "QuickImageViewer.exe"))[0].size // 0' <<<"$rel")
+            if [ "$exe" -gt 0 ]; then
+              jq -n --argjson b "$exe" \
+                '{schemaVersion:1, label:"exe size", message:("\((($b/1048576)*10|round)/10) MiB"), color:"8957e5"}' \
+                > docs/badges/exe-size.json
+            else
+              echo "::warning::QuickImageViewer.exe missing from $tag - keeping the previous size badge."
+            fi
+
             # SourceForge mirror (sourceforge-publish.yml uploads every release
             # into a folder named after its tag). Winget needs nothing extra: its
             # manifest points at the GitHub asset, so those are counted above.

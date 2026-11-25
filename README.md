@@ -30,7 +30,7 @@ once as you have devices lying around.
 [![Last commit](https://img.shields.io/endpoint?url=https%3A%2F%2Fraw.githubusercontent.com%2Ficyhoty2k%2FQuickImageViewer%2Fmain%2Fdocs%2Fbadges%2Flast-commit.json&style=for-the-badge&logo=git&logoColor=white)](https://github.com/icyhoty2k/QuickImageViewer/commits)
 [![Commit activity](https://img.shields.io/github/commit-activity/m/icyhoty2k/QuickImageViewer?style=for-the-badge&label=commits%2Fmonth&color=2ea44f)](https://github.com/icyhoty2k/QuickImageViewer/pulse)
 [![Open issues](https://img.shields.io/github/issues/icyhoty2k/QuickImageViewer?style=for-the-badge&color=d1242f)](https://github.com/icyhoty2k/QuickImageViewer/issues)
-[![Code size](https://img.shields.io/github/languages/code-size/icyhoty2k/QuickImageViewer?style=for-the-badge&color=8957e5)](https://github.com/icyhoty2k/QuickImageViewer)
+[![EXE size](https://img.shields.io/endpoint?url=https%3A%2F%2Fraw.githubusercontent.com%2Ficyhoty2k%2FQuickImageViewer%2Fmain%2Fdocs%2Fbadges%2Fexe-size.json&style=for-the-badge)](https://github.com/icyhoty2k/QuickImageViewer/releases/latest)
 [![Written in C++](https://img.shields.io/badge/written%20in-C%2B%2B23-00599C?style=for-the-badge&logo=cplusplus&logoColor=white)](https://github.com/icyhoty2k/QuickImageViewer)
 
 <br>
