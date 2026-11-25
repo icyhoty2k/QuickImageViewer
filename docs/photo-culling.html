@@ -1,0 +1,366 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Cull a Photo Shoot on Windows — One Key per Picture, Free</title>
+
+    <meta name="description" content="Free photo culling for Windows: one keystroke per frame, keep or reject, and the rejects move into a _rejected folder at the end. Nothing touches the disk while you mark. Portable, no installer.">
+    <meta name="robots" content="index, follow">
+    <link rel="canonical" href="https://icyhoty2k.github.io/QuickImageViewer/photo-culling.html">
+
+    <link rel="icon" type="image/svg+xml" href="favicon.svg">
+    <link rel="icon" type="image/x-icon" href="favicon.ico">
+    <meta name="theme-color" content="#0f172a">
+
+    <link rel="stylesheet" href="site.css?v=2">
+
+    <meta property="og:type" content="article">
+    <meta property="og:site_name" content="QuickImageViewer">
+    <meta property="og:title" content="Cull a photo shoot on Windows — one key per picture">
+    <meta property="og:description" content="Keep or reject with one keystroke, the viewer advances by itself, and the rejects move together at the end. Free, portable, no installer.">
+    <meta property="og:url" content="https://icyhoty2k.github.io/QuickImageViewer/photo-culling.html">
+    <meta property="og:image" content="https://icyhoty2k.github.io/QuickImageViewer/qiv-remote-og.png">
+    <meta property="og:image:alt" content="QuickImageViewer culling a folder of photographs">
+    <meta property="og:locale" content="en_GB">
+    <meta name="twitter:card" content="summary_large_image">
+    <meta name="twitter:title" content="Cull a photo shoot on Windows — one key per picture">
+    <meta name="twitter:description" content="Keep or reject with one keystroke; the rejects move together at the end. Free, portable, no installer.">
+    <meta name="twitter:image" content="https://icyhoty2k.github.io/QuickImageViewer/qiv-remote-og.png">
+
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "FAQPage",
+  "mainEntity": [
+    {
+      "@type": "Question",
+      "name": "Is there free photo culling software for Windows?",
+      "acceptedAnswer": { "@type": "Answer", "text": "Yes. QuickImageViewer has a cull mode: Alt+Space turns it on, K keeps, X rejects, and the viewer advances by itself. When you leave the mode, the rejected files move into a _rejected folder beside them. It is free, open source and a single portable executable." }
+    },
+    {
+      "@type": "Question",
+      "name": "Does culling delete my photos?",
+      "acceptedAnswer": { "@type": "Answer", "text": "No. Marks are held in memory and nothing is written while you mark. Leaving the mode asks first, and the answer moves files into a _rejected folder on the same drive — nothing is deleted, and Ctrl+Z in Explorer undoes the move." }
+    },
+    {
+      "@type": "Question",
+      "name": "Can I keep only the good ones instead of rejecting the bad ones?",
+      "acceptedAnswer": { "@type": "Answer", "text": "Yes. Mark only keeps and, on leaving, you are asked whether to move everything else in the folder. That is how four hundred frames become the twelve good ones without rejecting 388 by hand." }
+    },
+    {
+      "@type": "Question",
+      "name": "Does it cull camera RAW files?",
+      "acceptedAnswer": { "@type": "Answer", "text": "Yes, once Microsoft's free Raw Image Extension is installed — .dng, .cr2, .cr3, .nef and .arw go through the Windows imaging pipeline. JPEG, HEIC (with the free HEIF Extensions), AVIF, WebP and the rest work the same way." }
+    }
+  ]
+}
+</script>
+</head>
+<body>
+
+<!-- SHARED-HEADER-START -->
+<nav class="sitenav">
+    <div class="inner">
+        <!--
+            INLINE SVG, NOT EMOJI. These were emoji, and an emoji is a font
+            glyph: it renders as Apple's cartoon on a Mac, Microsoft's flat one on
+            Windows, something else again on Android, and as a box on whatever is
+            missing the font. Five icons drawn by five different vendors do not
+            look like a set.
+
+            These are the same shapes as the glyph row on icyhoty2k.github.io, so
+            the two sites share one icon language. They inherit currentColor, so
+            they take the link colour and the hover colour for free, and they cost
+            no extra request.
+
+            aria-hidden because the label beside each one already says it.
+        -->
+        <!-- ⚠ THE LABELS ARE PART OF THE LAYOUT, not just copy. The bar is one
+             row inside 952px of usable width, and the six items come to 884px
+             at 0.95rem - 68px of slack. Adding "Photo frame" took it to 1015px
+             and it wrapped to two rows on the spot; " (qIV)" and "homepage ()"
+             came off to pay for it, both redundant where they stood.
+
+             MEASURE BEFORE ADDING A SEVENTH. A nav is a strip, and a strip that
+             wraps has stopped being one. -->
+        <a href="./"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><rect x="2.5" y="4" width="19" height="12.5" rx="1.8"/><path d="M12 16.5v3M8 19.5h8"/></svg>QuickImageViewer</a>
+        <a href="qiv-privacy.html"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><rect x="4.5" y="10.5" width="15" height="10" rx="2"/><path d="M8 10.5V7.2a4 4 0 0 1 8 0v3.3"/></svg>Privacy — Windows</a>
+        <a href="qiv-remote.html"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><rect x="7" y="2.5" width="10" height="19" rx="2"/><path d="M10.5 5h3M10 19.2h4"/></svg>qIV Remote</a>
+        <!-- The photo-frame guide. In the nav rather than buried in a page,
+             because it is the one thing here no other image viewer does and
+             the query behind it has no incumbent - and because an internal
+             link from every page is the strongest signal this site can give
+             a crawler on its own. -->
+        <a href="photo-frame.html"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><rect x="3" y="4.5" width="18" height="15" rx="2"/><circle cx="8.3" cy="9.3" r="1.6"/><path d="m3.6 17.4 4.9-4.6 3.4 3.2 3.1-2.7 5.4 4.7"/></svg>Photo frame</a>
+        <a href="qiv-remote-privacy.html"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><rect x="4.5" y="10.5" width="15" height="10" rx="2"/><path d="M8 10.5V7.2a4 4 0 0 1 8 0v3.3"/></svg>Privacy — Android</a>
+        <!-- The developer site, one level up at the account root. An absolute URL
+             on purpose: this project lives at /QuickImageViewer/, so "../" would
+             work from a page but breaks the moment anything is previewed from a
+             file path or served from a different prefix.
+
+             THE MARK, NOT A PERSON ICON. This was a generic head-and-shoulders,
+             which said "an account" rather than "this account" — every site on
+             the web has that icon. The `i` is the mark used on the developer
+             site, the Play developer icon and the Play header, so the same
+             letter identifies the account everywhere.
+
+             Two-tone on purpose while the other four icons are plain strokes:
+             the stem takes currentColor so it follows the link and hover states,
+             and the dot and foot keep the accent so the mark reads as a brand
+             rather than as an information symbol — which is exactly what a thin
+             single-colour `i` looks like at 17 px.
+
+             Flat shoulder, rounded foot. A fully rounded top turns the letter
+             into a capsule. Geometry is the mark's, scaled to a 24 box:
+             stem 0.36 R wide, colour split at 0.63, dot 0.20 R at -0.62 R.
+
+             THE viewBox IS CROPPED TO THE INK, unlike the four stroke icons
+             beside it. Those fill their square; this letter is narrow, so a
+             square box would put four fifths of its width of empty space
+             between the mark and the label - a gap living inside the image,
+             which no amount of CSS can close. -->
+        <a href="https://icyhoty2k.github.io/"><svg width="4" height="17" viewBox="9.6 2.16 4.8 20.16" aria-hidden="true"><defs><clipPath id="navmark"><path d="M9.84 9.6H14.16V20.16a2.16 2.16 0 0 1-4.32 0Z"/></clipPath></defs><g clip-path="url(#navmark)"><rect x="9.84" y="9.6" width="4.32" height="8.01" fill="currentColor"/><rect x="9.84" y="17.61" width="4.32" height="4.71" fill="#38bdf8"/></g><circle cx="12" cy="4.56" r="2.4" fill="#38bdf8"/></svg>icyhoty2k</a>
+    </div>
+</nav>
+<!-- SHARED-HEADER-END -->
+
+<main class="container">
+
+    <h1>Cull a photo shoot on Windows &mdash; one key per picture</h1>
+
+    <p class="subtitle">
+        Keep or reject with a single keystroke, and the viewer moves to the next frame by itself.
+        Four hundred pictures is four hundred keys and no mouse. Free, and nothing to install.
+    </p>
+
+    <div class="callout">
+        <p>
+            After a shoot the slow part is not choosing &mdash; it is the clicking around the
+            choosing. Dedicated culling tools are paid, and a general viewer makes you delete
+            or drag each file by hand. <a href="./">QuickImageViewer</a> has a cull mode built in:
+            mark as fast as you can look, decide what happens to the files once, at the end.
+        </p>
+    </div>
+
+    <h2>How it works</h2>
+
+    <table>
+        <thead>
+            <tr><th>Key</th><th>What it does</th></tr>
+        </thead>
+        <tbody>
+            <tr><td><code>Alt+Space</code></td><td>Enter or leave cull mode</td></tr>
+            <tr><td><code>K</code></td><td>Keep, and advance</td></tr>
+            <tr><td><code>X</code></td><td>Reject, and advance</td></tr>
+            <tr><td><code>U</code></td><td>Clear the mark, and advance</td></tr>
+        </tbody>
+    </table>
+
+    <p>
+        While the mode is on, the filename in the corner carries its mark: a tick for keep, a cross
+        for reject, a dot for a frame you have not judged yet.
+    </p>
+
+    <h2>Nothing touches the disk while you mark</h2>
+
+    <p>
+        Marks live in memory. Change your mind as often as you like &mdash; only leaving the mode
+        asks what to do, and saying no moves nothing.
+    </p>
+
+    <p>
+        Saying yes <strong>moves, never deletes</strong>: the files go into a <code>_rejected</code>
+        folder beside them, on the same drive, and <code>Ctrl+Z</code> in Explorer puts them back.
+    </p>
+
+    <h2>Reject the bad ones, or keep the good ones</h2>
+
+    <p>
+        <strong>Whichever mark you used is the one that acts.</strong> Mark rejects and those files
+        move. Mark only keeps and you are asked whether to move <em>everything else</em> &mdash;
+        which is how four hundred frames become the twelve good ones without rejecting the other
+        388 one at a time.
+    </p>
+
+    <h2>Forty at once, from a thumbnail strip</h2>
+
+    <p>
+        While cull mode is on, every thumbnail strip tints its pictures green for keep and red for
+        reject, and its right-click menu gains <strong>Mark Keep</strong>,
+        <strong>Mark Reject</strong> and <strong>Clear Mark</strong>. Select a run of near-identical
+        burst frames and mark them in one go; the keyboard handles the picture on screen.
+    </p>
+
+    <h2>Why it is fast enough to cull with</h2>
+
+    <p>
+        Decoded pictures are kept on the graphics card and the neighbours either side are decoded
+        ahead of time, so the next frame is already there when you press the key. Culling is
+        exactly the job where a visible load between pictures adds up.
+    </p>
+
+    <h2>What it is not</h2>
+
+    <p>
+        ⚠ It is a viewer with a cull mode, not a catalogue. There are no star ratings written into
+        the files, no colour labels and no Lightroom sync. If your workflow lives in a catalogue,
+        cull there. If you want a folder of four hundred frames down to the keepers before anything
+        else opens, this is the quick way.
+    </p>
+
+    <h2>Questions</h2>
+
+    <h3>Which files can it cull?</h3>
+    <p>
+        Anything it opens: JPEG, PNG, WebP, GIF, TIFF, AVIF, HEIC and JPEG XL among them. Camera
+        RAW (<code>.dng</code>, <code>.cr2</code>, <code>.cr3</code>, <code>.nef</code>,
+        <code>.arw</code>) and HEIC need Microsoft's free Raw Image and HEIF extensions, because
+        those go through the Windows imaging pipeline.
+        <a href="./#format-support">The full format table &rarr;</a>
+    </p>
+
+    <h3>What does it cost?</h3>
+    <p>
+        Nothing. QuickImageViewer is free and open source under the AGPL &mdash; no advertising,
+        no telemetry, nothing to buy, no account.
+    </p>
+
+    <h3>Do I have to install it?</h3>
+    <p>
+        No. One portable executable, no installer, no Visual C++ Redistributable. It is also on
+        <code>winget</code>: <code>winget install IcyHotY2K.QuickImageViewer</code>.
+    </p>
+
+    <p>
+        <a href="shortcuts.html">Every keyboard shortcut &rarr;</a>
+    </p>
+
+    <!-- SHARED-STOREROW-START -->
+<div class="storerow">
+        <div class="store-col">
+            <!-- THE FILE ITSELF, not the releases page. GitHub resolves
+                 /releases/latest/download/<name> to the newest release's asset
+                 and serves it, so this needs no update per release — but only
+                 because the asset name never changes. If a version ever gets
+                 into the filename, this URL 404s silently and the download
+                 button dies without anything else looking wrong. -->
+            <a class="cta-button" href="https://github.com/icyhoty2k/QuickImageViewer/releases/latest/download/QuickImageViewer.exe">
+                <span class="glyph"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3a1 1 0 0 1 1 1v8.6l2.3-2.3a1 1 0 1 1 1.4 1.4l-4 4a1 1 0 0 1-1.4 0l-4-4a1 1 0 1 1 1.4-1.4l2.3 2.3V4a1 1 0 0 1 1-1Z"/><path d="M4 14a1 1 0 0 1 1 1v3a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-3a1 1 0 1 1 2 0v3a3 3 0 0 1-3 3H6a3 3 0 0 1-3-3v-3a1 1 0 0 1 1-1Z"/></svg></span>
+                <span>Download QuickImageViewer<small>Windows 10 &amp; 11 &mdash; free</small></span>
+            </a>
+            <a class="policy" href="qiv-privacy.html"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><rect x="4.5" y="10.5" width="15" height="10" rx="2"/><path d="M8 10.5V7.2a4 4 0 0 1 8 0v3.3"/></svg>Privacy — Windows app</a>
+        </div>
+        <div class="store-col">
+            <!-- THIS BUTTON'S TARGET IS MODE-DEPENDENT AND IS NOT HAND-MAINTAINED.
+                 In closed testing it points at the tester group, because the store
+                 URL returns "item not found" to anyone who is not enrolled.
+
+                 index.html's hero carries a SECOND copy of this button, in
+                 _partials/androidcta.html, and four pages are generated from this
+                 file. One maintainer script flips EVERY surface and refuses a
+                 partial job -- deliberately no count here, because the last one
+                 written down went stale and a badge was missed. After any change:
+
+                     python tools/build-site.py
+                     python tools/build-site.py --check -->
+            <a class="cta-button play" href="https://play.google.com/store/apps/details?id=net.icyhoty2k.qivremote">
+                <span class="glyph"><svg width="18" height="18" viewBox="0 0 24 24" aria-hidden="true"><path fill="#00d3ff" d="M3.6 2.3a1.5 1.5 0 0 0-.5 1.1v17.2c0 .45.19.85.5 1.1l9.03-9.7L3.6 2.3Z"/><path fill="#00f076" d="M3.6 2.3 16.1 9.3l-3.47 3.7L3.6 2.3Z"/><path fill="#ffce00" d="M16.1 9.3l3.9 2.18c.86.48.86 1.56 0 2.04l-3.9 2.18-3.47-3.2 3.47-3.2Z"/><path fill="#ff3a44" d="M3.6 21.7 12.63 13l3.47 3.7-12.5 5Z"/></svg></span>
+                <span>GET IT ON<small>Google Play &mdash; qIV Remote, free to install</small></span>
+            </a>
+            <a class="policy" href="qiv-remote-privacy.html"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><rect x="4.5" y="10.5" width="15" height="10" rx="2"/><path d="M8 10.5V7.2a4 4 0 0 1 8 0v3.3"/></svg>Privacy — Android app</a>
+        </div>
+    </div>
+<!-- SHARED-STOREROW-END -->
+
+</main>
+
+<!-- SHARED-FOOTER-START -->
+<footer>
+    <div class="footer-inner">
+        <div class="footer-apps">
+            <p class="footer-pages">
+                <a href="./"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><rect x="2.5" y="4" width="19" height="12.5" rx="1.8"/><path d="M12 16.5v3M8 19.5h8"/></svg>QuickImageViewer (qIV)</a>
+                <a href="qiv-privacy.html"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><rect x="4.5" y="10.5" width="15" height="10" rx="2"/><path d="M8 10.5V7.2a4 4 0 0 1 8 0v3.3"/></svg>Privacy — Windows app</a>
+            </p>
+            <p class="footer-pages">
+                <a href="qiv-remote.html"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><rect x="7" y="2.5" width="10" height="19" rx="2"/><path d="M10.5 5h3M10 19.2h4"/></svg>qIV Remote</a>
+                <a href="qiv-remote-privacy.html"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><rect x="4.5" y="10.5" width="15" height="10" rx="2"/><path d="M8 10.5V7.2a4 4 0 0 1 8 0v3.3"/></svg>Privacy — Android app</a>
+            </p>
+        </div>
+        <!-- The account signature, not just a name. `icyhoty2k productions` is
+             the label the Play developer page and the developer site both carry,
+             and the handle is lowercase everywhere else — it was written
+             "IcyHoty2k" here and nowhere else, which is the kind of drift that
+             makes one person look like two.
+
+             The mark repeats here in the same two-tone as the nav. Its clip path
+             needs an id of its own: two <clipPath id="navmark"> on one page and
+             the second silently loses its clip. -->
+        <p class="footer-sig">
+            <svg width="4" height="18" viewBox="9.6 2.16 4.8 20.16" aria-hidden="true"><defs><clipPath id="footmark"><path d="M9.84 9.6H14.16V20.16a2.16 2.16 0 0 1-4.32 0Z"/></clipPath></defs><g clip-path="url(#footmark)"><rect x="9.84" y="9.6" width="4.32" height="8.01" fill="currentColor"/><rect x="9.84" y="17.61" width="4.32" height="4.71" fill="#38bdf8"/></g><circle cx="12" cy="4.56" r="2.4" fill="#38bdf8"/></svg>
+            <span>
+                <a href="https://icyhoty2k.github.io/">icyhoty2k productions</a>
+                &mdash; developed by <strong>Ivan Hristov Yanev</strong>.
+                Licensed under the AGPLv3.
+            </span>
+        </p>
+        <p>
+            <a href="https://github.com/icyhoty2k/QuickImageViewer">GitHub repository</a>
+            &bull;
+            <a href="https://github.com/icyhoty2k/QuickImageViewer/releases">Releases</a>
+            &bull;
+            <a href="https://github.com/icyhoty2k/QuickImageViewer/issues/new?template=bug_report.yml">Report a bug</a>
+            &bull;
+            <a href="https://github.com/icyhoty2k/QuickImageViewer/issues/new?template=android_remote.yml">Report an Android problem</a>
+            &bull;
+            <a href="https://github.com/icyhoty2k/QuickImageViewer/issues/new?template=feature_request.yml">Request a feature</a>
+        </p>
+
+        <!-- ONE funding look on every surface. Sponsor and Ko-fi used to be two more
+             bullet-separated text links in the row above, which made asking for money
+             look like a footnote. This is the same two-tone button, with the same
+             labels and the same hex values, as the shields.io badges in README.md and
+             the pair on icyhoty2k.github.io.
+
+             Rebuilt in CSS rather than using the shields images: an <img> from
+             img.shields.io is a third-party request from every visitor, and this site
+             says it contacts nobody. In the README the same badge is fine, because
+             GitHub proxies README images through camo and shields.io never sees a
+             reader. Keep the three in sync. -->
+        <div class="fundrow">
+            <a class="fund gh" href="https://github.com/sponsors/icyhoty2k">
+                <span class="fund-k"><svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 20.3l-1.1-1C6.1 15 3 12.2 3 8.8 3 6.1 5.1 4 7.8 4c1.5 0 3 .7 3.9 1.9l.3.4.3-.4C13.2 4.7 14.7 4 16.2 4 18.9 4 21 6.1 21 8.8c0 3.4-3.1 6.2-7.9 10.5l-1.1 1z"/></svg>Sponsor</span>
+                <span class="fund-v">GitHub Sponsors</span>
+            </a>
+            <a class="fund kofi" href="https://ko-fi.com/ivanhristovyanev">
+                <span class="fund-k"><svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M4 6h11a2 2 0 0 1 2 2v1h1.8a3.2 3.2 0 0 1 0 6.4H17A5 5 0 0 1 12 20H9a5 5 0 0 1-5-5V6zm13 5v3.4h1.8a1.7 1.7 0 0 0 0-3.4H17z"/></svg>Ko-fi</span>
+                <span class="fund-v">Buy a coffee</span>
+            </a>
+        </div>
+        <!--
+            BUSINESS SPONSORS GO HERE. The $100/month tier promises a name or logo
+            "on the project website", and this is the spot — a line of links above
+            the funding sentence below.
+
+            Left as a comment rather than an empty heading on purpose: a section
+            headed "Sponsors" with nothing under it advertises that nobody
+            sponsors this project, which is the opposite of what it is for. Turn
+            it into real markup when the first one arrives.
+
+            Ask before listing anyone. The tier wording promises them the choice.
+        -->
+        <p>
+            qIV is free, has no advertising and collects nothing.
+            <a href="https://github.com/sponsors/icyhoty2k">Sponsorship</a>
+            is what keeps it being worked on.
+            Building it into a closed product?
+            <a href="mailto:icyhoty2k@gmail.com">Commercial licensing</a>
+            is available.
+        </p>
+    </div>
+</footer>
+<!-- SHARED-FOOTER-END -->
+
+</body>
+</html>

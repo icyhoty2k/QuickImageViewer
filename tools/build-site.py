@@ -1155,6 +1155,9 @@ def check_public_numbers(total, nsec, exe_kb=None):
         wanted.append(('index.html', '%.1f MB' % mb, 'executable size'))
         wanted.append(('photo-frame.html', '%.1f MB' % mb, 'executable size'))
         wanted.append(('find-duplicate-photos.html', '%.1f MB' % mb, 'executable size'))
+        # Was missing, and said 9.7 MB in its social cards and body for weeks
+        # after the executable reached 9.8.
+        wanted.append(('open-exr-hdr-windows.html', '%.1f MB' % mb, 'executable size'))
 
         # "sub-10 MB" is on four surfaces and is an ASSERTION, not a number -
         # nothing would ever flag it, it would simply become untrue one release
